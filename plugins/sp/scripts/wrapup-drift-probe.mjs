@@ -114,13 +114,13 @@ function runDriftProbe(env, options = {}, spur = defaultSpurRunner(env, options.
   mkdirSync(abs(join(".spur", "run")), { recursive: true });
   writeFileSync(abs(relModeFile), `
 `);
-  const finish = (clean, reasons2, paths) => {
-    writeFileSync(abs(relProbeFile), `${JSON.stringify({ clean, reasons: reasons2, paths })}
+  const finish = (clean, reasons, paths) => {
+    writeFileSync(abs(relProbeFile), `${JSON.stringify({ clean, reasons, paths })}
 `);
     writeFileSync(abs(relModeFile), clean ? `fast
 ` : `
 `);
-    return { clean, reasons: reasons2, paths, probeFile: relProbeFile, modeFile: relModeFile, exitCode: 0 };
+    return { clean, reasons, paths, probeFile: relProbeFile, modeFile: relModeFile, exitCode: 0 };
   };
   let tasks;
   try {
@@ -180,11 +180,11 @@ function main(argv, env = getEnvVars(), options = {}) {
   process.exit(main(process.argv.slice(2)));
 }
 export {
-  solutionSectionOf,
-  runDriftProbe,
-  main,
-  driftReasonForPath,
-  changedPathsOf,
+  DOC_OWNED_SURFACES,
   WRAPUP_DRIFT_PROBE_USAGE,
-  DOC_OWNED_SURFACES
+  changedPathsOf,
+  driftReasonForPath,
+  main,
+  runDriftProbe,
+  solutionSectionOf
 };

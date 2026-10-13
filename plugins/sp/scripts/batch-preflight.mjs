@@ -332,7 +332,7 @@ function runPreflightCli(argv) {
     return { exitCode: 0, stdout: body, stderr: "" };
   }
   if (args.operation !== null) {
-    const result2 = quickReadiness({
+    const result = quickReadiness({
       wbs: args.wbs,
       status: args.status,
       operation: args.operation,
@@ -343,14 +343,14 @@ function runPreflightCli(argv) {
       ...args.presentSections.length > 0 ? { presentSections: args.presentSections } : {},
       ...args.force ? { force: true } : {}
     });
-    const runnable = result2.action === "runnable" || result2.action === "needs-refinement";
+    const runnable = result.action === "runnable" || result.action === "needs-refinement";
     if (args.json) {
-      return { exitCode: runnable ? 0 : 2, stdout: `${JSON.stringify(result2, null, 2)}
+      return { exitCode: runnable ? 0 : 2, stdout: `${JSON.stringify(result, null, 2)}
 `, stderr: "" };
     }
     return {
       exitCode: runnable ? 0 : 2,
-      stdout: `${result2.action}${result2.code ? ` ${result2.code}` : ""}: ${result2.reason}
+      stdout: `${result.action}${result.code ? ` ${result.code}` : ""}: ${result.reason}
 `,
       stderr: ""
     };
@@ -390,12 +390,12 @@ function runPreflightCli(argv) {
   process.exit(exitCode);
 }
 export {
-  runPreflightCli,
-  recoveryHint,
-  quickReadiness,
-  preflightTask,
-  parsePreflightCliArgs,
-  classifyFeaturePreflightFindings,
+  NON_ABORTING_PREFLIGHT_CODES,
   PREFLIGHT_CLI_USAGE,
-  NON_ABORTING_PREFLIGHT_CODES
+  classifyFeaturePreflightFindings,
+  parsePreflightCliArgs,
+  preflightTask,
+  quickReadiness,
+  recoveryHint,
+  runPreflightCli
 };

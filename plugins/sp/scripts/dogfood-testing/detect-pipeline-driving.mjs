@@ -196,16 +196,16 @@ function runCli(argv) {
   process.exit(exitCode);
 }
 export {
-  runCli,
-  parseCliArgs,
-  isImplementHeavyStep,
-  hasMutatingFixMode,
-  evaluateDogfoodGate,
-  detectPipelineDriving,
-  detectImplementHeavy,
-  PIPELINE_TOKENS,
-  PIPELINE_DRIVING_REFUSE_MESSAGE,
-  MUTATING_FIX_REFUSE_MESSAGE,
+  CLI_USAGE,
   IMPLEMENT_HEAVY_ADVISORY_MESSAGE,
-  CLI_USAGE
+  MUTATING_FIX_REFUSE_MESSAGE,
+  PIPELINE_DRIVING_REFUSE_MESSAGE,
+  PIPELINE_TOKENS,
+  detectImplementHeavy,
+  detectPipelineDriving,
+  evaluateDogfoodGate,
+  hasMutatingFixMode,
+  isImplementHeavyStep,
+  parseCliArgs,
+  runCli
 };

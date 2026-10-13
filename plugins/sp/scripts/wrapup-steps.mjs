@@ -296,7 +296,7 @@ function runMetrics(env, options = {}) {
     const parsed = JSON.parse(shown.stdout);
     const frontmatter = parsed.frontmatter !== null && typeof parsed.frontmatter === "object" ? parsed.frontmatter : {};
     const featureId = String(jqPick(frontmatter.feature_id, parsed.feature_id, ""));
-    const status2 = String(jqPick(frontmatter.status, parsed.status, "unknown"));
+    const status = String(jqPick(frontmatter.status, parsed.status, "unknown"));
     const durable = join(".spur", "memory", "evidence", `${wbs}-verdict.json`);
     const hasDurable = existsSync(abs(durable));
     const verdictPath = hasDurable ? durable : join(".spur", "run", `${wbs}-verdict.json`);
@@ -308,7 +308,7 @@ function runMetrics(env, options = {}) {
 `);
     }
     const timestamp = new Date().toISOString().replace(/\.\d{3}Z$/, "Z");
-    const row = { wbs, feature_id: featureId, status: status2, verdict, timestamp };
+    const row = { wbs, feature_id: featureId, status, verdict, timestamp };
     try {
       appendFileSync(abs(relMetricsFile), `${JSON.stringify(row)}
 `);
@@ -600,28 +600,28 @@ function main(argv, env = getEnvVars(), options = {}) {
   process.exit(main(process.argv.slice(2)));
 }
 export {
-  writeRouteReason,
-  verdictFromTestingSection,
-  taskStatusOf,
-  runMetrics,
-  runFeatureTransition,
-  runDocSyncSnapshot,
-  runDocSyncScope,
-  runDocSupersessionCheck,
-  resolveTasks,
-  preflightFeature,
-  porcelainPath,
-  main,
-  jqPick,
-  isDocSyncAllowedPath,
-  docSyncScopeViolations,
-  classifySync,
-  WRAPUP_STEPS_USAGE,
-  WBS_PATTERN,
-  SUPERSESSION_PIN,
-  SNAPSHOT_MISSING,
-  GIT_UNAVAILABLE_MARKER,
-  DOC_SYNC_SUPERSESSION_STATUS_SUFFIX,
+  DOC_SYNC_SCOPE_STATUS_SUFFIX,
   DOC_SYNC_SNAPSHOT_SUFFIX,
-  DOC_SYNC_SCOPE_STATUS_SUFFIX
+  DOC_SYNC_SUPERSESSION_STATUS_SUFFIX,
+  GIT_UNAVAILABLE_MARKER,
+  SNAPSHOT_MISSING,
+  SUPERSESSION_PIN,
+  WBS_PATTERN,
+  WRAPUP_STEPS_USAGE,
+  classifySync,
+  docSyncScopeViolations,
+  isDocSyncAllowedPath,
+  jqPick,
+  main,
+  porcelainPath,
+  preflightFeature,
+  resolveTasks,
+  runDocSupersessionCheck,
+  runDocSyncScope,
+  runDocSyncSnapshot,
+  runFeatureTransition,
+  runMetrics,
+  taskStatusOf,
+  verdictFromTestingSection,
+  writeRouteReason
 };

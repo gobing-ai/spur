@@ -34,8 +34,8 @@ function resolveAppEntry(spurBin) {
   }
   return { entry, portable: true };
 }
-async function loadInlineApp(spurBin, resolveAppEntry2, required) {
-  const { entry, portable } = resolveAppEntry2(spurBin);
+async function loadInlineApp(spurBin, resolveAppEntry, required) {
+  const { entry, portable } = resolveAppEntry(spurBin);
   const app = await import(entry);
   const missing = portable ? required.filter((name) => typeof app[name] !== "function") : [];
   if (missing.length > 0) {
@@ -149,21 +149,21 @@ function accumulate(acc, row, ts) {
   if (row.type === "message") {
     const m = row.message;
     if (m?.role === "assistant") {
-      const blocks2 = Array.isArray(m.content) ? m.content : [];
-      for (const b of blocks2) {
+      const blocks = Array.isArray(m.content) ? m.content : [];
+      for (const b of blocks) {
         if (b.type === "toolCall" && b.id) {
           acc.toolIds.add(b.id);
           if (b.name && OPERATOR_TOOLS.has(b.name))
             acc.asks.set(b.id, ts);
         }
       }
-      const u2 = m.usage;
-      if (u2 && row.id)
+      const u = m.usage;
+      if (u && row.id)
         acc.messages.set(row.id, {
-          input: u2.input ?? 0,
-          cacheCreate: u2.cacheWrite ?? 0,
-          cacheRead: u2.cacheRead ?? 0,
-          output: u2.output ?? 0
+          input: u.input ?? 0,
+          cacheCreate: u.cacheWrite ?? 0,
+          cacheRead: u.cacheRead ?? 0,
+          output: u.output ?? 0
         });
     } else if (m?.role === "toolResult" && m.toolCallId && acc.asks.has(m.toolCallId)) {
       acc.askMs += ts - (acc.asks.get(m.toolCallId) ?? ts);
@@ -658,8 +658,8 @@ async function main() {
   if (fingerprint) {
     if (runId !== "" || file !== "" || taskFiles.length !== 1 || (taskFiles[0] ?? "").trim() === "")
       usage();
-    const { app: app2 } = await loadInlineApp(spurBin, resolveAppEntry, ["runInlineRunFingerprint"]);
-    process.exit(await app2.runInlineRunFingerprint({ taskFile: taskFiles[0] ?? "", featureFile }));
+    const { app } = await loadInlineApp(spurBin, resolveAppEntry, ["runInlineRunFingerprint"]);
+    process.exit(await app.runInlineRunFingerprint({ taskFile: taskFiles[0] ?? "", featureFile }));
   }
   if (decide) {
     if (action || close || fingerprint || file !== "" || taskFiles.length > 0)
@@ -669,14 +669,14 @@ async function main() {
     if (!SAFE_RUN_ID_RE.test(runId))
       refuseUnsafeRunId(runId);
     try {
-      const { app: app2, portable: portable2 } = await loadInlineApp(spurBin, resolveAppEntry, ["runInlineRunDecide"]);
-      const { app: lib } = await loadInlineApp(spurBin, () => ({ entry: fileURLToPath2(new URL("../lib/inline-run.generated.mjs", import.meta.url)), portable: portable2 }), ["resolveDecideDecisionMakerEnabled", "loadSpurConfig"]);
-      const loadOpts = portable2 ? { embeddedSchemas: lib.EMBEDDED_SPUR_SCHEMAS } : undefined;
+      const { app, portable } = await loadInlineApp(spurBin, resolveAppEntry, ["runInlineRunDecide"]);
+      const { app: lib } = await loadInlineApp(spurBin, () => ({ entry: fileURLToPath2(new URL("../lib/inline-run.generated.mjs", import.meta.url)), portable }), ["resolveDecideDecisionMakerEnabled", "loadSpurConfig"]);
+      const loadOpts = portable ? { embeddedSchemas: lib.EMBEDDED_SPUR_SCHEMAS } : undefined;
       const [enabled, spurConfig] = await Promise.all([
         lib.resolveDecideDecisionMakerEnabled(process.cwd(), loadOpts),
         lib.loadSpurConfig(process.cwd(), loadOpts)
       ]);
-      process.exit(await app2.runInlineRunDecide({ runId, node, optionsFile: optionsJson, enabled, spurConfig }));
+      process.exit(await app.runInlineRunDecide({ runId, node, optionsFile: optionsJson, enabled, spurConfig }));
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
       process.stdout.write(`${JSON.stringify({ ok: false, runId, error: message })}
@@ -689,15 +689,15 @@ async function main() {
       usage();
     if (from.trim() === "" || taskFiles.some((taskFile) => taskFile.trim() === ""))
       usage();
-    const { app: app2 } = await loadInlineApp(spurBin, resolveAppEntry, ["runInlineRunPersistOut"]);
-    process.exit(await app2.runInlineRunPersistOut({ from, taskFiles }));
+    const { app } = await loadInlineApp(spurBin, resolveAppEntry, ["runInlineRunPersistOut"]);
+    process.exit(await app.runInlineRunPersistOut({ from, taskFiles }));
   }
   if (nodeEnter || actionsFile !== "" || action || close) {
     if (!SAFE_RUN_ID_RE.test(runId))
       refuseUnsafeRunId(runId);
     const mode = nodeEnter ? "node-enter" : actionsFile !== "" ? "actions-file" : close ? "close" : "action";
-    const { app: app2 } = await loadInlineApp(spurBin, resolveAppEntry, ["runInlineRunTraceMode"]);
-    const code = await app2.runInlineRunTraceMode({
+    const { app } = await loadInlineApp(spurBin, resolveAppEntry, ["runInlineRunTraceMode"]);
+    const code = await app.runInlineRunTraceMode({
       mode,
       runId,
       node,

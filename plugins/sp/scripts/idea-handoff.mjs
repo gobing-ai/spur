@@ -26,7 +26,7 @@ async function main(argv, env = getEnvVars()) {
   process.exit(await main(process.argv.slice(2)));
 }
 export {
-  main,
+  IDEA_HANDOFF_USAGE,
   loadHandoffLib,
-  IDEA_HANDOFF_USAGE
+  main
 };

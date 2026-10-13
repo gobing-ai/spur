@@ -45,7 +45,17 @@ var __export = (target, all) => {
       set: __exportSetter.bind(all, name)
     });
 };
-var __esm = (fn, res) => () => (fn && (res = fn(fn = 0)), res);
+var __esm = (fn, res, err) => () => {
+  if (fn)
+    try {
+      res = fn(fn = 0);
+    } catch (e) {
+      err = [e];
+    }
+  if (err)
+    throw err[0];
+  return res;
+};
 var __require = /* @__PURE__ */ createRequire(import.meta.url);
 var ErrorCode;
 var init_errors = __esm(() => {
@@ -122,10 +132,10 @@ function $constructor(name, initializer, params) {
   }
   Object.defineProperty(Definition, "name", { value: name });
   function _(def) {
-    var _a2;
+    var _a;
     const inst = params?.Parent ? new Definition : this;
     init(inst, def);
-    (_a2 = inst._zod).deferred ?? (_a2.deferred = []);
+    (_a = inst._zod).deferred ?? (_a.deferred = []);
     for (const fn of inst._zod.deferred) {
       fn();
     }
@@ -158,12 +168,12 @@ var init_core = __esm(() => {
     status: "aborted"
   });
   $brand = Symbol("zod_brand");
-  $ZodAsyncError = class $ZodAsyncError2 extends Error {
+  $ZodAsyncError = class $ZodAsyncError extends Error {
     constructor() {
       super(`Encountered Promise during synchronous parse. Use .parseAsync() instead.`);
     }
   };
-  $ZodEncodeError = class $ZodEncodeError2 extends Error {
+  $ZodEncodeError = class $ZodEncodeError extends Error {
     constructor(name) {
       super(`Encountered unidirectional transform during encode: ${name}`);
       this.name = "ZodEncodeError";
@@ -174,69 +184,69 @@ var init_core = __esm(() => {
 });
 var exports_util = {};
 __export(exports_util, {
-  unwrapMessage: () => unwrapMessage,
-  uint8ArrayToHex: () => uint8ArrayToHex,
-  uint8ArrayToBase64url: () => uint8ArrayToBase64url,
-  uint8ArrayToBase64: () => uint8ArrayToBase64,
-  stringifyPrimitive: () => stringifyPrimitive,
-  slugify: () => slugify,
-  shallowClone: () => shallowClone,
-  safeExtend: () => safeExtend,
-  required: () => required,
-  randomString: () => randomString,
-  propertyKeyTypes: () => propertyKeyTypes,
-  promiseAllObject: () => promiseAllObject,
-  primitiveTypes: () => primitiveTypes,
-  prefixIssues: () => prefixIssues,
-  pick: () => pick,
-  partial: () => partial,
-  parsedType: () => parsedType,
-  optionalKeys: () => optionalKeys,
-  omit: () => omit,
-  objectClone: () => objectClone,
-  numKeys: () => numKeys,
-  nullish: () => nullish,
-  normalizeParams: () => normalizeParams,
-  mergeDefs: () => mergeDefs,
-  merge: () => merge,
-  jsonStringifyReplacer: () => jsonStringifyReplacer,
-  joinValues: () => joinValues,
-  issue: () => issue,
-  isPlainObject: () => isPlainObject,
-  isObject: () => isObject,
-  hexToUint8Array: () => hexToUint8Array,
-  getSizableOrigin: () => getSizableOrigin,
-  getParsedType: () => getParsedType,
-  getLengthableOrigin: () => getLengthableOrigin,
-  getEnumValues: () => getEnumValues,
-  getElementAtPath: () => getElementAtPath,
-  floatSafeRemainder: () => floatSafeRemainder,
-  finalizeIssue: () => finalizeIssue,
-  extend: () => extend,
-  explicitlyAborted: () => explicitlyAborted,
-  escapeRegex: () => escapeRegex,
-  esc: () => esc,
-  defineLazy: () => defineLazy,
-  createTransparentProxy: () => createTransparentProxy,
-  cloneDef: () => cloneDef,
-  clone: () => clone,
-  cleanRegex: () => cleanRegex,
-  cleanEnum: () => cleanEnum,
-  captureStackTrace: () => captureStackTrace,
-  cached: () => cached,
-  base64urlToUint8Array: () => base64urlToUint8Array,
-  base64ToUint8Array: () => base64ToUint8Array,
-  assignProp: () => assignProp,
-  assertNotEqual: () => assertNotEqual,
-  assertNever: () => assertNever,
-  assertIs: () => assertIs,
-  assertEqual: () => assertEqual,
-  assert: () => assert,
-  allowsEval: () => allowsEval,
-  aborted: () => aborted,
-  NUMBER_FORMAT_RANGES: () => NUMBER_FORMAT_RANGES,
+  BIGINT_FORMAT_RANGES: () => BIGINT_FORMAT_RANGES,
   Class: () => Class,
-  BIGINT_FORMAT_RANGES: () => BIGINT_FORMAT_RANGES
+  NUMBER_FORMAT_RANGES: () => NUMBER_FORMAT_RANGES,
+  aborted: () => aborted,
+  allowsEval: () => allowsEval,
+  assert: () => assert,
+  assertEqual: () => assertEqual,
+  assertIs: () => assertIs,
+  assertNever: () => assertNever,
+  assertNotEqual: () => assertNotEqual,
+  assignProp: () => assignProp,
+  base64ToUint8Array: () => base64ToUint8Array,
+  base64urlToUint8Array: () => base64urlToUint8Array,
+  cached: () => cached,
+  captureStackTrace: () => captureStackTrace,
+  cleanEnum: () => cleanEnum,
+  cleanRegex: () => cleanRegex,
+  clone: () => clone,
+  cloneDef: () => cloneDef,
+  createTransparentProxy: () => createTransparentProxy,
+  defineLazy: () => defineLazy,
+  esc: () => esc,
+  escapeRegex: () => escapeRegex,
+  explicitlyAborted: () => explicitlyAborted,
+  extend: () => extend,
+  finalizeIssue: () => finalizeIssue,
+  floatSafeRemainder: () => floatSafeRemainder,
+  getElementAtPath: () => getElementAtPath,
+  getEnumValues: () => getEnumValues,
+  getLengthableOrigin: () => getLengthableOrigin,
+  getParsedType: () => getParsedType,
+  getSizableOrigin: () => getSizableOrigin,
+  hexToUint8Array: () => hexToUint8Array,
+  isObject: () => isObject,
+  isPlainObject: () => isPlainObject,
+  issue: () => issue,
+  joinValues: () => joinValues,
+  jsonStringifyReplacer: () => jsonStringifyReplacer,
+  merge: () => merge,
+  mergeDefs: () => mergeDefs,
+  normalizeParams: () => normalizeParams,
+  nullish: () => nullish,
+  numKeys: () => numKeys,
+  objectClone: () => objectClone,
+  omit: () => omit,
+  optionalKeys: () => optionalKeys,
+  parsedType: () => parsedType,
+  partial: () => partial,
+  pick: () => pick,
+  prefixIssues: () => prefixIssues,
+  primitiveTypes: () => primitiveTypes,
+  promiseAllObject: () => promiseAllObject,
+  propertyKeyTypes: () => propertyKeyTypes,
+  randomString: () => randomString,
+  required: () => required,
+  safeExtend: () => safeExtend,
+  shallowClone: () => shallowClone,
+  slugify: () => slugify,
+  stringifyPrimitive: () => stringifyPrimitive,
+  uint8ArrayToBase64: () => uint8ArrayToBase64,
+  uint8ArrayToBase64url: () => uint8ArrayToBase64url,
+  uint8ArrayToHex: () => uint8ArrayToHex,
+  unwrapMessage: () => unwrapMessage
 });
 function assertEqual(val) {
   return val;
@@ -291,9 +301,9 @@ function floatSafeRemainder(val, step) {
     return 0;
   return ratio - roundedRatio;
 }
-function defineLazy(object2, key, getter) {
+function defineLazy(object, key, getter) {
   let value = undefined;
-  Object.defineProperty(object2, key, {
+  Object.defineProperty(object, key, {
     get() {
       if (value === EVALUATING) {
         return;
@@ -305,7 +315,7 @@ function defineLazy(object2, key, getter) {
       return value;
     },
     set(v) {
-      Object.defineProperty(object2, key, {
+      Object.defineProperty(object, key, {
         value: v
       });
     },
@@ -576,7 +586,7 @@ function merge(a, b) {
   });
   return clone(a, def);
 }
-function partial(Class, schema, mask) {
+function partial(Class2, schema, mask) {
   const currDef = schema._zod.def;
   const checks = currDef.checks;
   const hasChecks = checks && checks.length > 0;
@@ -594,14 +604,14 @@ function partial(Class, schema, mask) {
           }
           if (!mask[key])
             continue;
-          shape[key] = Class ? new Class({
+          shape[key] = Class2 ? new Class2({
             type: "optional",
             innerType: oldShape[key]
           }) : oldShape[key];
         }
       } else {
         for (const key in oldShape) {
-          shape[key] = Class ? new Class({
+          shape[key] = Class2 ? new Class2({
             type: "optional",
             innerType: oldShape[key]
           }) : oldShape[key];
@@ -614,7 +624,7 @@ function partial(Class, schema, mask) {
   });
   return clone(schema, def);
 }
-function required(Class, schema, mask) {
+function required(Class2, schema, mask) {
   const def = mergeDefs(schema._zod.def, {
     get shape() {
       const oldShape = schema._zod.def.shape;
@@ -626,14 +636,14 @@ function required(Class, schema, mask) {
           }
           if (!mask[key])
             continue;
-          shape[key] = new Class({
+          shape[key] = new Class2({
             type: "nonoptional",
             innerType: oldShape[key]
           });
         }
       } else {
         for (const key in oldShape) {
-          shape[key] = new Class({
+          shape[key] = new Class2({
             type: "nonoptional",
             innerType: oldShape[key]
           });
@@ -667,8 +677,8 @@ function explicitlyAborted(x, startIndex = 0) {
 }
 function prefixIssues(path, issues) {
   return issues.map((iss) => {
-    var _a2;
-    (_a2 = iss).path ?? (_a2.path = []);
+    var _a;
+    (_a = iss).path ?? (_a.path = []);
     iss.path.unshift(path);
     return iss;
   });
@@ -676,8 +686,8 @@ function prefixIssues(path, issues) {
 function unwrapMessage(message) {
   return typeof message === "string" ? message : message?.message;
 }
-function finalizeIssue(iss, ctx, config2) {
-  const message = iss.message ? iss.message : unwrapMessage(iss.inst?._zod.def?.error?.(iss)) ?? unwrapMessage(ctx?.error?.(iss)) ?? unwrapMessage(config2.customError?.(iss)) ?? unwrapMessage(config2.localeError?.(iss)) ?? "Invalid input";
+function finalizeIssue(iss, ctx, config) {
+  const message = iss.message ? iss.message : unwrapMessage(iss.inst?._zod.def?.error?.(iss)) ?? unwrapMessage(ctx?.error?.(iss)) ?? unwrapMessage(config.customError?.(iss)) ?? unwrapMessage(config.localeError?.(iss)) ?? "Invalid input";
   const { inst: _inst, continue: _continue, input: _input, ...rest } = iss;
   rest.path ?? (rest.path = []);
   rest.message = message;
@@ -872,7 +882,7 @@ var init_util = __esm(() => {
     uint64: [/* @__PURE__ */ BigInt(0), /* @__PURE__ */ BigInt("18446744073709551615")]
   };
 });
-function flattenError(error, mapper = (issue2) => issue2.message) {
+function flattenError(error, mapper = (issue) => issue.message) {
   const fieldErrors = {};
   const formErrors = [];
   for (const sub of error.issues) {
@@ -885,20 +895,20 @@ function flattenError(error, mapper = (issue2) => issue2.message) {
   }
   return { formErrors, fieldErrors };
 }
-function formatError(error, mapper = (issue2) => issue2.message) {
+function formatError(error, mapper = (issue) => issue.message) {
   const fieldErrors = { _errors: [] };
-  const processError = (error2, path = []) => {
-    for (const issue2 of error2.issues) {
-      if (issue2.code === "invalid_union" && issue2.errors.length) {
-        issue2.errors.map((issues) => processError({ issues }, [...path, ...issue2.path]));
-      } else if (issue2.code === "invalid_key") {
-        processError({ issues: issue2.issues }, [...path, ...issue2.path]);
-      } else if (issue2.code === "invalid_element") {
-        processError({ issues: issue2.issues }, [...path, ...issue2.path]);
+  const processError = (error, path = []) => {
+    for (const issue of error.issues) {
+      if (issue.code === "invalid_union" && issue.errors.length) {
+        issue.errors.map((issues) => processError({ issues }, [...path, ...issue.path]));
+      } else if (issue.code === "invalid_key") {
+        processError({ issues: issue.issues }, [...path, ...issue.path]);
+      } else if (issue.code === "invalid_element") {
+        processError({ issues: issue.issues }, [...path, ...issue.path]);
       } else {
-        const fullpath = [...path, ...issue2.path];
+        const fullpath = [...path, ...issue.path];
         if (fullpath.length === 0) {
-          fieldErrors._errors.push(mapper(issue2));
+          fieldErrors._errors.push(mapper(issue));
         } else {
           let curr = fieldErrors;
           let i = 0;
@@ -909,7 +919,7 @@ function formatError(error, mapper = (issue2) => issue2.message) {
               curr[el] = curr[el] || { _errors: [] };
             } else {
               curr[el] = curr[el] || { _errors: [] };
-              curr[el]._errors.push(mapper(issue2));
+              curr[el]._errors.push(mapper(issue));
             }
             curr = curr[el];
             i++;
@@ -921,21 +931,21 @@ function formatError(error, mapper = (issue2) => issue2.message) {
   processError(error);
   return fieldErrors;
 }
-function treeifyError(error, mapper = (issue2) => issue2.message) {
+function treeifyError(error, mapper = (issue) => issue.message) {
   const result = { errors: [] };
-  const processError = (error2, path = []) => {
-    var _a2, _b;
-    for (const issue2 of error2.issues) {
-      if (issue2.code === "invalid_union" && issue2.errors.length) {
-        issue2.errors.map((issues) => processError({ issues }, [...path, ...issue2.path]));
-      } else if (issue2.code === "invalid_key") {
-        processError({ issues: issue2.issues }, [...path, ...issue2.path]);
-      } else if (issue2.code === "invalid_element") {
-        processError({ issues: issue2.issues }, [...path, ...issue2.path]);
+  const processError = (error, path = []) => {
+    var _a, _b;
+    for (const issue of error.issues) {
+      if (issue.code === "invalid_union" && issue.errors.length) {
+        issue.errors.map((issues) => processError({ issues }, [...path, ...issue.path]));
+      } else if (issue.code === "invalid_key") {
+        processError({ issues: issue.issues }, [...path, ...issue.path]);
+      } else if (issue.code === "invalid_element") {
+        processError({ issues: issue.issues }, [...path, ...issue.path]);
       } else {
-        const fullpath = [...path, ...issue2.path];
+        const fullpath = [...path, ...issue.path];
         if (fullpath.length === 0) {
-          result.errors.push(mapper(issue2));
+          result.errors.push(mapper(issue));
           continue;
         }
         let curr = result;
@@ -945,7 +955,7 @@ function treeifyError(error, mapper = (issue2) => issue2.message) {
           const terminal = i === fullpath.length - 1;
           if (typeof el === "string") {
             curr.properties ?? (curr.properties = {});
-            (_a2 = curr.properties)[el] ?? (_a2[el] = { errors: [] });
+            (_a = curr.properties)[el] ?? (_a[el] = { errors: [] });
             curr = curr.properties[el];
           } else {
             curr.items ?? (curr.items = []);
@@ -953,7 +963,7 @@ function treeifyError(error, mapper = (issue2) => issue2.message) {
             curr = curr.items[el];
           }
           if (terminal) {
-            curr.errors.push(mapper(issue2));
+            curr.errors.push(mapper(issue));
           }
           i++;
         }
@@ -984,10 +994,10 @@ function toDotPath(_path) {
 function prettifyError(error) {
   const lines = [];
   const issues = [...error.issues].sort((a, b) => (a.path ?? []).length - (b.path ?? []).length);
-  for (const issue2 of issues) {
-    lines.push(`✖ ${issue2.message}`);
-    if (issue2.path?.length)
-      lines.push(`  → at ${toDotPath(issue2.path)}`);
+  for (const issue of issues) {
+    lines.push(`✖ ${issue.message}`);
+    if (issue.path?.length)
+      lines.push(`  → at ${toDotPath(issue.path)}`);
   }
   return lines.join(`
 `);
@@ -1121,65 +1131,65 @@ var init_parse = __esm(() => {
 });
 var exports_regexes = {};
 __export(exports_regexes, {
-  xid: () => xid,
-  uuid7: () => uuid7,
-  uuid6: () => uuid6,
-  uuid4: () => uuid4,
-  uuid: () => uuid,
-  uppercase: () => uppercase,
-  unicodeEmail: () => unicodeEmail,
-  undefined: () => _undefined,
-  ulid: () => ulid,
-  time: () => time,
-  string: () => string,
-  sha512_hex: () => sha512_hex,
-  sha512_base64url: () => sha512_base64url,
-  sha512_base64: () => sha512_base64,
-  sha384_hex: () => sha384_hex,
-  sha384_base64url: () => sha384_base64url,
-  sha384_base64: () => sha384_base64,
-  sha256_hex: () => sha256_hex,
-  sha256_base64url: () => sha256_base64url,
-  sha256_base64: () => sha256_base64,
-  sha1_hex: () => sha1_hex,
-  sha1_base64url: () => sha1_base64url,
-  sha1_base64: () => sha1_base64,
-  rfc5322Email: () => rfc5322Email,
-  number: () => number,
-  null: () => _null,
-  nanoid: () => nanoid,
-  md5_hex: () => md5_hex,
-  md5_base64url: () => md5_base64url,
-  md5_base64: () => md5_base64,
-  mac: () => mac,
-  lowercase: () => lowercase,
-  ksuid: () => ksuid,
-  ipv6: () => ipv6,
-  ipv4: () => ipv4,
-  integer: () => integer,
-  idnEmail: () => idnEmail,
-  httpProtocol: () => httpProtocol,
-  html5Email: () => html5Email,
-  hostname: () => hostname,
-  hex: () => hex,
-  guid: () => guid,
-  extendedDuration: () => extendedDuration,
-  emoji: () => emoji,
-  email: () => email,
-  e164: () => e164,
-  duration: () => duration,
-  domain: () => domain,
-  datetime: () => datetime,
-  date: () => date2,
-  cuid2: () => cuid2,
-  cuid: () => cuid,
-  cidrv6: () => cidrv6,
-  cidrv4: () => cidrv4,
-  browserEmail: () => browserEmail,
-  boolean: () => boolean,
-  bigint: () => bigint,
+  base64: () => base64,
   base64url: () => base64url,
-  base64: () => base64
+  bigint: () => bigint,
+  boolean: () => boolean,
+  browserEmail: () => browserEmail,
+  cidrv4: () => cidrv4,
+  cidrv6: () => cidrv6,
+  cuid: () => cuid,
+  cuid2: () => cuid2,
+  date: () => date2,
+  datetime: () => datetime,
+  domain: () => domain,
+  duration: () => duration,
+  e164: () => e164,
+  email: () => email,
+  emoji: () => emoji,
+  extendedDuration: () => extendedDuration,
+  guid: () => guid,
+  hex: () => hex,
+  hostname: () => hostname,
+  html5Email: () => html5Email,
+  httpProtocol: () => httpProtocol,
+  idnEmail: () => idnEmail,
+  integer: () => integer,
+  ipv4: () => ipv4,
+  ipv6: () => ipv6,
+  ksuid: () => ksuid,
+  lowercase: () => lowercase,
+  mac: () => mac,
+  md5_base64: () => md5_base64,
+  md5_base64url: () => md5_base64url,
+  md5_hex: () => md5_hex,
+  nanoid: () => nanoid,
+  null: () => _null,
+  number: () => number,
+  rfc5322Email: () => rfc5322Email,
+  sha1_base64: () => sha1_base64,
+  sha1_base64url: () => sha1_base64url,
+  sha1_hex: () => sha1_hex,
+  sha256_base64: () => sha256_base64,
+  sha256_base64url: () => sha256_base64url,
+  sha256_hex: () => sha256_hex,
+  sha384_base64: () => sha384_base64,
+  sha384_base64url: () => sha384_base64url,
+  sha384_hex: () => sha384_hex,
+  sha512_base64: () => sha512_base64,
+  sha512_base64url: () => sha512_base64url,
+  sha512_hex: () => sha512_hex,
+  string: () => string,
+  time: () => time,
+  ulid: () => ulid,
+  undefined: () => _undefined,
+  unicodeEmail: () => unicodeEmail,
+  uppercase: () => uppercase,
+  uuid: () => uuid,
+  uuid4: () => uuid4,
+  uuid6: () => uuid6,
+  uuid7: () => uuid7,
+  xid: () => xid
 });
 function emoji() {
   return new RegExp(_emoji, "u");
@@ -1365,10 +1375,10 @@ var init_checks = __esm(() => {
   init_regexes();
   init_util();
   $ZodCheck = /* @__PURE__ */ $constructor("$ZodCheck", (inst, def) => {
-    var _a2;
+    var _a;
     inst._zod ?? (inst._zod = {});
     inst._zod.def = def;
-    (_a2 = inst._zod).onattach ?? (_a2.onattach = []);
+    (_a = inst._zod).onattach ?? (_a.onattach = []);
   });
   numericOriginMap = {
     number: "number",
@@ -1377,9 +1387,9 @@ var init_checks = __esm(() => {
   };
   $ZodCheckLessThan = /* @__PURE__ */ $constructor("$ZodCheckLessThan", (inst, def) => {
     $ZodCheck.init(inst, def);
-    const origin2 = numericOriginMap[typeof def.value];
-    inst._zod.onattach.push((inst2) => {
-      const bag = inst2._zod.bag;
+    const origin = numericOriginMap[typeof def.value];
+    inst._zod.onattach.push((inst) => {
+      const bag = inst._zod.bag;
       const curr = (def.inclusive ? bag.maximum : bag.exclusiveMaximum) ?? Number.POSITIVE_INFINITY;
       if (def.value < curr) {
         if (def.inclusive)
@@ -1393,7 +1403,7 @@ var init_checks = __esm(() => {
         return;
       }
       payload.issues.push({
-        origin: origin2,
+        origin,
         code: "too_big",
         maximum: typeof def.value === "object" ? def.value.getTime() : def.value,
         input: payload.value,
@@ -1405,9 +1415,9 @@ var init_checks = __esm(() => {
   });
   $ZodCheckGreaterThan = /* @__PURE__ */ $constructor("$ZodCheckGreaterThan", (inst, def) => {
     $ZodCheck.init(inst, def);
-    const origin2 = numericOriginMap[typeof def.value];
-    inst._zod.onattach.push((inst2) => {
-      const bag = inst2._zod.bag;
+    const origin = numericOriginMap[typeof def.value];
+    inst._zod.onattach.push((inst) => {
+      const bag = inst._zod.bag;
       const curr = (def.inclusive ? bag.minimum : bag.exclusiveMinimum) ?? Number.NEGATIVE_INFINITY;
       if (def.value > curr) {
         if (def.inclusive)
@@ -1421,7 +1431,7 @@ var init_checks = __esm(() => {
         return;
       }
       payload.issues.push({
-        origin: origin2,
+        origin,
         code: "too_small",
         minimum: typeof def.value === "object" ? def.value.getTime() : def.value,
         input: payload.value,
@@ -1433,9 +1443,9 @@ var init_checks = __esm(() => {
   });
   $ZodCheckMultipleOf = /* @__PURE__ */ $constructor("$ZodCheckMultipleOf", (inst, def) => {
     $ZodCheck.init(inst, def);
-    inst._zod.onattach.push((inst2) => {
-      var _a2;
-      (_a2 = inst2._zod.bag).multipleOf ?? (_a2.multipleOf = def.value);
+    inst._zod.onattach.push((inst) => {
+      var _a;
+      (_a = inst._zod.bag).multipleOf ?? (_a.multipleOf = def.value);
     });
     inst._zod.check = (payload) => {
       if (typeof payload.value !== typeof def.value)
@@ -1457,10 +1467,10 @@ var init_checks = __esm(() => {
     $ZodCheck.init(inst, def);
     def.format = def.format || "float64";
     const isInt = def.format?.includes("int");
-    const origin2 = isInt ? "int" : "number";
+    const origin = isInt ? "int" : "number";
     const [minimum, maximum] = NUMBER_FORMAT_RANGES[def.format];
-    inst._zod.onattach.push((inst2) => {
-      const bag = inst2._zod.bag;
+    inst._zod.onattach.push((inst) => {
+      const bag = inst._zod.bag;
       bag.format = def.format;
       bag.minimum = minimum;
       bag.maximum = maximum;
@@ -1472,7 +1482,7 @@ var init_checks = __esm(() => {
       if (isInt) {
         if (!Number.isInteger(input)) {
           payload.issues.push({
-            expected: origin2,
+            expected: origin,
             format: def.format,
             code: "invalid_type",
             continue: false,
@@ -1489,7 +1499,7 @@ var init_checks = __esm(() => {
               maximum: Number.MAX_SAFE_INTEGER,
               note: "Integers must be within the safe integer range.",
               inst,
-              origin: origin2,
+              origin,
               inclusive: true,
               continue: !def.abort
             });
@@ -1500,7 +1510,7 @@ var init_checks = __esm(() => {
               minimum: Number.MIN_SAFE_INTEGER,
               note: "Integers must be within the safe integer range.",
               inst,
-              origin: origin2,
+              origin,
               inclusive: true,
               continue: !def.abort
             });
@@ -1535,8 +1545,8 @@ var init_checks = __esm(() => {
   $ZodCheckBigIntFormat = /* @__PURE__ */ $constructor("$ZodCheckBigIntFormat", (inst, def) => {
     $ZodCheck.init(inst, def);
     const [minimum, maximum] = BIGINT_FORMAT_RANGES[def.format];
-    inst._zod.onattach.push((inst2) => {
-      const bag = inst2._zod.bag;
+    inst._zod.onattach.push((inst) => {
+      const bag = inst._zod.bag;
       bag.format = def.format;
       bag.minimum = minimum;
       bag.maximum = maximum;
@@ -1568,16 +1578,16 @@ var init_checks = __esm(() => {
     };
   });
   $ZodCheckMaxSize = /* @__PURE__ */ $constructor("$ZodCheckMaxSize", (inst, def) => {
-    var _a2;
+    var _a;
     $ZodCheck.init(inst, def);
-    (_a2 = inst._zod.def).when ?? (_a2.when = (payload) => {
+    (_a = inst._zod.def).when ?? (_a.when = (payload) => {
       const val = payload.value;
       return !nullish(val) && val.size !== undefined;
     });
-    inst._zod.onattach.push((inst2) => {
-      const curr = inst2._zod.bag.maximum ?? Number.POSITIVE_INFINITY;
+    inst._zod.onattach.push((inst) => {
+      const curr = inst._zod.bag.maximum ?? Number.POSITIVE_INFINITY;
       if (def.maximum < curr)
-        inst2._zod.bag.maximum = def.maximum;
+        inst._zod.bag.maximum = def.maximum;
     });
     inst._zod.check = (payload) => {
       const input = payload.value;
@@ -1596,16 +1606,16 @@ var init_checks = __esm(() => {
     };
   });
   $ZodCheckMinSize = /* @__PURE__ */ $constructor("$ZodCheckMinSize", (inst, def) => {
-    var _a2;
+    var _a;
     $ZodCheck.init(inst, def);
-    (_a2 = inst._zod.def).when ?? (_a2.when = (payload) => {
+    (_a = inst._zod.def).when ?? (_a.when = (payload) => {
       const val = payload.value;
       return !nullish(val) && val.size !== undefined;
     });
-    inst._zod.onattach.push((inst2) => {
-      const curr = inst2._zod.bag.minimum ?? Number.NEGATIVE_INFINITY;
+    inst._zod.onattach.push((inst) => {
+      const curr = inst._zod.bag.minimum ?? Number.NEGATIVE_INFINITY;
       if (def.minimum > curr)
-        inst2._zod.bag.minimum = def.minimum;
+        inst._zod.bag.minimum = def.minimum;
     });
     inst._zod.check = (payload) => {
       const input = payload.value;
@@ -1624,14 +1634,14 @@ var init_checks = __esm(() => {
     };
   });
   $ZodCheckSizeEquals = /* @__PURE__ */ $constructor("$ZodCheckSizeEquals", (inst, def) => {
-    var _a2;
+    var _a;
     $ZodCheck.init(inst, def);
-    (_a2 = inst._zod.def).when ?? (_a2.when = (payload) => {
+    (_a = inst._zod.def).when ?? (_a.when = (payload) => {
       const val = payload.value;
       return !nullish(val) && val.size !== undefined;
     });
-    inst._zod.onattach.push((inst2) => {
-      const bag = inst2._zod.bag;
+    inst._zod.onattach.push((inst) => {
+      const bag = inst._zod.bag;
       bag.minimum = def.size;
       bag.maximum = def.size;
       bag.size = def.size;
@@ -1654,25 +1664,25 @@ var init_checks = __esm(() => {
     };
   });
   $ZodCheckMaxLength = /* @__PURE__ */ $constructor("$ZodCheckMaxLength", (inst, def) => {
-    var _a2;
+    var _a;
     $ZodCheck.init(inst, def);
-    (_a2 = inst._zod.def).when ?? (_a2.when = (payload) => {
+    (_a = inst._zod.def).when ?? (_a.when = (payload) => {
       const val = payload.value;
       return !nullish(val) && val.length !== undefined;
     });
-    inst._zod.onattach.push((inst2) => {
-      const curr = inst2._zod.bag.maximum ?? Number.POSITIVE_INFINITY;
+    inst._zod.onattach.push((inst) => {
+      const curr = inst._zod.bag.maximum ?? Number.POSITIVE_INFINITY;
       if (def.maximum < curr)
-        inst2._zod.bag.maximum = def.maximum;
+        inst._zod.bag.maximum = def.maximum;
     });
     inst._zod.check = (payload) => {
       const input = payload.value;
       const length = input.length;
       if (length <= def.maximum)
         return;
-      const origin2 = getLengthableOrigin(input);
+      const origin = getLengthableOrigin(input);
       payload.issues.push({
-        origin: origin2,
+        origin,
         code: "too_big",
         maximum: def.maximum,
         inclusive: true,
@@ -1683,25 +1693,25 @@ var init_checks = __esm(() => {
     };
   });
   $ZodCheckMinLength = /* @__PURE__ */ $constructor("$ZodCheckMinLength", (inst, def) => {
-    var _a2;
+    var _a;
     $ZodCheck.init(inst, def);
-    (_a2 = inst._zod.def).when ?? (_a2.when = (payload) => {
+    (_a = inst._zod.def).when ?? (_a.when = (payload) => {
       const val = payload.value;
       return !nullish(val) && val.length !== undefined;
     });
-    inst._zod.onattach.push((inst2) => {
-      const curr = inst2._zod.bag.minimum ?? Number.NEGATIVE_INFINITY;
+    inst._zod.onattach.push((inst) => {
+      const curr = inst._zod.bag.minimum ?? Number.NEGATIVE_INFINITY;
       if (def.minimum > curr)
-        inst2._zod.bag.minimum = def.minimum;
+        inst._zod.bag.minimum = def.minimum;
     });
     inst._zod.check = (payload) => {
       const input = payload.value;
       const length = input.length;
       if (length >= def.minimum)
         return;
-      const origin2 = getLengthableOrigin(input);
+      const origin = getLengthableOrigin(input);
       payload.issues.push({
-        origin: origin2,
+        origin,
         code: "too_small",
         minimum: def.minimum,
         inclusive: true,
@@ -1712,14 +1722,14 @@ var init_checks = __esm(() => {
     };
   });
   $ZodCheckLengthEquals = /* @__PURE__ */ $constructor("$ZodCheckLengthEquals", (inst, def) => {
-    var _a2;
+    var _a;
     $ZodCheck.init(inst, def);
-    (_a2 = inst._zod.def).when ?? (_a2.when = (payload) => {
+    (_a = inst._zod.def).when ?? (_a.when = (payload) => {
       const val = payload.value;
       return !nullish(val) && val.length !== undefined;
     });
-    inst._zod.onattach.push((inst2) => {
-      const bag = inst2._zod.bag;
+    inst._zod.onattach.push((inst) => {
+      const bag = inst._zod.bag;
       bag.minimum = def.length;
       bag.maximum = def.length;
       bag.length = def.length;
@@ -1729,10 +1739,10 @@ var init_checks = __esm(() => {
       const length = input.length;
       if (length === def.length)
         return;
-      const origin2 = getLengthableOrigin(input);
+      const origin = getLengthableOrigin(input);
       const tooBig = length > def.length;
       payload.issues.push({
-        origin: origin2,
+        origin,
         ...tooBig ? { code: "too_big", maximum: def.length } : { code: "too_small", minimum: def.length },
         inclusive: true,
         exact: true,
@@ -1743,10 +1753,10 @@ var init_checks = __esm(() => {
     };
   });
   $ZodCheckStringFormat = /* @__PURE__ */ $constructor("$ZodCheckStringFormat", (inst, def) => {
-    var _a2, _b;
+    var _a, _b;
     $ZodCheck.init(inst, def);
-    inst._zod.onattach.push((inst2) => {
-      const bag = inst2._zod.bag;
+    inst._zod.onattach.push((inst) => {
+      const bag = inst._zod.bag;
       bag.format = def.format;
       if (def.pattern) {
         bag.patterns ?? (bag.patterns = new Set);
@@ -1754,7 +1764,7 @@ var init_checks = __esm(() => {
       }
     });
     if (def.pattern)
-      (_a2 = inst._zod).check ?? (_a2.check = (payload) => {
+      (_a = inst._zod).check ?? (_a.check = (payload) => {
         def.pattern.lastIndex = 0;
         if (def.pattern.test(payload.value))
           return;
@@ -1801,8 +1811,8 @@ var init_checks = __esm(() => {
     const escapedRegex = escapeRegex(def.includes);
     const pattern = new RegExp(typeof def.position === "number" ? `^.{${def.position}}${escapedRegex}` : escapedRegex);
     def.pattern = pattern;
-    inst._zod.onattach.push((inst2) => {
-      const bag = inst2._zod.bag;
+    inst._zod.onattach.push((inst) => {
+      const bag = inst._zod.bag;
       bag.patterns ?? (bag.patterns = new Set);
       bag.patterns.add(pattern);
     });
@@ -1824,8 +1834,8 @@ var init_checks = __esm(() => {
     $ZodCheck.init(inst, def);
     const pattern = new RegExp(`^${escapeRegex(def.prefix)}.*`);
     def.pattern ?? (def.pattern = pattern);
-    inst._zod.onattach.push((inst2) => {
-      const bag = inst2._zod.bag;
+    inst._zod.onattach.push((inst) => {
+      const bag = inst._zod.bag;
       bag.patterns ?? (bag.patterns = new Set);
       bag.patterns.add(pattern);
     });
@@ -1847,8 +1857,8 @@ var init_checks = __esm(() => {
     $ZodCheck.init(inst, def);
     const pattern = new RegExp(`.*${escapeRegex(def.suffix)}$`);
     def.pattern ?? (def.pattern = pattern);
-    inst._zod.onattach.push((inst2) => {
-      const bag = inst2._zod.bag;
+    inst._zod.onattach.push((inst) => {
+      const bag = inst._zod.bag;
       bag.patterns ?? (bag.patterns = new Set);
       bag.patterns.add(pattern);
     });
@@ -1874,7 +1884,7 @@ var init_checks = __esm(() => {
         issues: []
       }, {});
       if (result instanceof Promise) {
-        return result.then((result2) => handleCheckPropertyResult(result2, payload, def.property));
+        return result.then((result) => handleCheckPropertyResult(result, payload, def.property));
       }
       handleCheckPropertyResult(result, payload, def.property);
       return;
@@ -1883,8 +1893,8 @@ var init_checks = __esm(() => {
   $ZodCheckMimeType = /* @__PURE__ */ $constructor("$ZodCheckMimeType", (inst, def) => {
     $ZodCheck.init(inst, def);
     const mimeSet = new Set(def.mime);
-    inst._zod.onattach.push((inst2) => {
-      inst2._zod.bag.mime = def.mime;
+    inst._zod.onattach.push((inst) => {
+      inst._zod.bag.mime = def.mime;
     });
     inst._zod.check = (payload) => {
       if (mimeSet.has(payload.value.type))
@@ -1967,8 +1977,8 @@ function isValidBase64(data) {
 function isValidBase64URL(data) {
   if (!base64url.test(data))
     return false;
-  const base642 = data.replace(/[-_]/g, (c) => c === "-" ? "+" : "/");
-  const padded = base642.padEnd(Math.ceil(base642.length / 4) * 4, "=");
+  const base64 = data.replace(/[-_]/g, (c) => c === "-" ? "+" : "/");
+  const padded = base64.padEnd(Math.ceil(base64.length / 4) * 4, "=");
   return isValidBase64(padded);
 }
 function isValidJWT(token, algorithm = null) {
@@ -2058,7 +2068,7 @@ function handleCatchall(proms, input, payload, ctx, def, inst) {
     }
     const r = _catchall.run({ value: input[key], issues: [] }, ctx);
     if (r instanceof Promise) {
-      proms.push(r.then((r2) => handlePropertyResult(r2, payload, key, input, isOptionalIn, isOptionalOut)));
+      proms.push(r.then((r) => handlePropertyResult(r, payload, key, input, isOptionalIn, isOptionalOut)));
     } else {
       handlePropertyResult(r, payload, key, input, isOptionalIn, isOptionalOut);
     }
@@ -2433,7 +2443,7 @@ var init_schemas = __esm(() => {
   init_versions();
   init_util();
   $ZodType = /* @__PURE__ */ $constructor("$ZodType", (inst, def) => {
-    var _a2;
+    var _a;
     inst ?? (inst = {});
     inst._zod.def = def;
     inst._zod.bag = inst._zod.bag || {};
@@ -2448,15 +2458,15 @@ var init_schemas = __esm(() => {
       }
     }
     if (checks.length === 0) {
-      (_a2 = inst._zod).deferred ?? (_a2.deferred = []);
+      (_a = inst._zod).deferred ?? (_a.deferred = []);
       inst._zod.deferred?.push(() => {
         inst._zod.run = inst._zod.parse;
       });
     } else {
-      const runChecks = (payload, checks2, ctx) => {
+      const runChecks = (payload, checks, ctx) => {
         let isAborted = aborted(payload);
         let asyncResult;
-        for (const ch of checks2) {
+        for (const ch of checks) {
           if (ch._zod.def.when) {
             if (explicitlyAborted(payload))
               continue;
@@ -2504,7 +2514,7 @@ var init_schemas = __esm(() => {
         if (checkResult instanceof Promise) {
           if (ctx.async === false)
             throw new $ZodAsyncError;
-          return checkResult.then((checkResult2) => inst._zod.parse(checkResult2, ctx));
+          return checkResult.then((checkResult) => inst._zod.parse(checkResult, ctx));
         }
         return inst._zod.parse(checkResult, ctx);
       };
@@ -2515,8 +2525,8 @@ var init_schemas = __esm(() => {
         if (ctx.direction === "backward") {
           const canary = inst._zod.parse({ value: payload.value, issues: [] }, { ...ctx, skipChecks: true });
           if (canary instanceof Promise) {
-            return canary.then((canary2) => {
-              return handleCanaryResult(canary2, payload, ctx);
+            return canary.then((canary) => {
+              return handleCanaryResult(canary, payload, ctx);
             });
           }
           return handleCanaryResult(canary, payload, ctx);
@@ -2525,7 +2535,7 @@ var init_schemas = __esm(() => {
         if (result instanceof Promise) {
           if (ctx.async === false)
             throw new $ZodAsyncError;
-          return result.then((result2) => runChecks(result2, checks, ctx));
+          return result.then((result) => runChecks(result, checks, ctx));
         }
         return runChecks(result, checks, ctx);
       };
@@ -2550,7 +2560,7 @@ var init_schemas = __esm(() => {
       if (def.coerce)
         try {
           payload.value = String(payload.value);
-        } catch (_2) {}
+        } catch (_) {}
       if (typeof payload.value === "string")
         return payload;
       payload.issues.push({
@@ -3025,7 +3035,7 @@ var init_schemas = __esm(() => {
           issues: []
         }, ctx);
         if (result instanceof Promise) {
-          proms.push(result.then((result2) => handleArrayResult(result2, payload, i)));
+          proms.push(result.then((result) => handleArrayResult(result, payload, i)));
         } else {
           handleArrayResult(result, payload, i);
         }
@@ -3089,7 +3099,7 @@ var init_schemas = __esm(() => {
         const isOptionalOut = el._zod.optout === "optional";
         const r = el._zod.run({ value: input[key], issues: [] }, ctx);
         if (r instanceof Promise) {
-          proms.push(r.then((r2) => handlePropertyResult(r2, payload, key, input, isOptionalIn, isOptionalOut)));
+          proms.push(r.then((r) => handlePropertyResult(r, payload, key, input, isOptionalIn, isOptionalOut)));
         } else {
           handlePropertyResult(r, payload, key, input, isOptionalIn, isOptionalOut);
         }
@@ -3267,8 +3277,8 @@ var init_schemas = __esm(() => {
       }
       if (!async)
         return handleUnionResults(results, payload, inst, ctx);
-      return Promise.all(results).then((results2) => {
-        return handleUnionResults(results2, payload, inst, ctx);
+      return Promise.all(results).then((results) => {
+        return handleUnionResults(results, payload, inst, ctx);
       });
     };
   });
@@ -3296,8 +3306,8 @@ var init_schemas = __esm(() => {
       }
       if (!async)
         return handleExclusiveUnionResults(results, payload, inst, ctx);
-      return Promise.all(results).then((results2) => {
-        return handleExclusiveUnionResults(results2, payload, inst, ctx);
+      return Promise.all(results).then((results) => {
+        return handleExclusiveUnionResults(results, payload, inst, ctx);
       });
     };
   });
@@ -3376,8 +3386,8 @@ var init_schemas = __esm(() => {
       const right = def.right._zod.run({ value: input, issues: [] }, ctx);
       const async = left instanceof Promise || right instanceof Promise;
       if (async) {
-        return Promise.all([left, right]).then(([left2, right2]) => {
-          return handleIntersectionResults(payload, left2, right2);
+        return Promise.all([left, right]).then(([left, right]) => {
+          return handleIntersectionResults(payload, left, right);
         });
       }
       return handleIntersectionResults(payload, left, right);
@@ -3493,11 +3503,11 @@ var init_schemas = __esm(() => {
             const outKey = keyResult.value;
             const result = def.valueType._zod.run({ value: input[key], issues: [] }, ctx);
             if (result instanceof Promise) {
-              proms.push(result.then((result2) => {
-                if (result2.issues.length) {
-                  payload.issues.push(...prefixIssues(key, result2.issues));
+              proms.push(result.then((result) => {
+                if (result.issues.length) {
+                  payload.issues.push(...prefixIssues(key, result.issues));
                 }
-                payload.value[outKey] = result2.value;
+                payload.value[outKey] = result.value;
               }));
             } else {
               if (result.issues.length) {
@@ -3560,11 +3570,11 @@ var init_schemas = __esm(() => {
           }
           const result = def.valueType._zod.run({ value: input[key], issues: [] }, ctx);
           if (result instanceof Promise) {
-            proms.push(result.then((result2) => {
-              if (result2.issues.length) {
-                payload.issues.push(...prefixIssues(key, result2.issues));
+            proms.push(result.then((result) => {
+              if (result.issues.length) {
+                payload.issues.push(...prefixIssues(key, result.issues));
               }
-              payload.value[keyResult.value] = result2.value;
+              payload.value[keyResult.value] = result.value;
             }));
           } else {
             if (result.issues.length) {
@@ -3599,8 +3609,8 @@ var init_schemas = __esm(() => {
         const keyResult = def.keyType._zod.run({ value: key, issues: [] }, ctx);
         const valueResult = def.valueType._zod.run({ value, issues: [] }, ctx);
         if (keyResult instanceof Promise || valueResult instanceof Promise) {
-          proms.push(Promise.all([keyResult, valueResult]).then(([keyResult2, valueResult2]) => {
-            handleMapResult(keyResult2, valueResult2, payload, key, input, inst, ctx);
+          proms.push(Promise.all([keyResult, valueResult]).then(([keyResult, valueResult]) => {
+            handleMapResult(keyResult, valueResult, payload, key, input, inst, ctx);
           }));
         } else {
           handleMapResult(keyResult, valueResult, payload, key, input, inst, ctx);
@@ -3629,7 +3639,7 @@ var init_schemas = __esm(() => {
       for (const item of input) {
         const result = def.valueType._zod.run({ value: item, issues: [] }, ctx);
         if (result instanceof Promise) {
-          proms.push(result.then((result2) => handleSetResult(result2, payload)));
+          proms.push(result.then((result) => handleSetResult(result, payload)));
         } else
           handleSetResult(result, payload);
       }
@@ -3704,9 +3714,9 @@ var init_schemas = __esm(() => {
       }
       const _out = def.transform(payload.value, payload);
       if (ctx.async) {
-        const output2 = _out instanceof Promise ? _out : Promise.resolve(_out);
-        return output2.then((output3) => {
-          payload.value = output3;
+        const output = _out instanceof Promise ? _out : Promise.resolve(_out);
+        return output.then((output) => {
+          payload.value = output;
           payload.fallback = true;
           return payload;
         });
@@ -3783,7 +3793,7 @@ var init_schemas = __esm(() => {
       }
       const result = def.innerType._zod.run(payload, ctx);
       if (result instanceof Promise) {
-        return result.then((result2) => handleDefaultResult(result2, def));
+        return result.then((result) => handleDefaultResult(result, def));
       }
       return handleDefaultResult(result, def);
     };
@@ -3811,7 +3821,7 @@ var init_schemas = __esm(() => {
     inst._zod.parse = (payload, ctx) => {
       const result = def.innerType._zod.run(payload, ctx);
       if (result instanceof Promise) {
-        return result.then((result2) => handleNonOptionalResult(result2, inst));
+        return result.then((result) => handleNonOptionalResult(result, inst));
       }
       return handleNonOptionalResult(result, inst);
     };
@@ -3824,8 +3834,8 @@ var init_schemas = __esm(() => {
       }
       const result = def.innerType._zod.run(payload, ctx);
       if (result instanceof Promise) {
-        return result.then((result2) => {
-          payload.value = result2.issues.length === 0;
+        return result.then((result) => {
+          payload.value = result.issues.length === 0;
           return payload;
         });
       }
@@ -3844,13 +3854,13 @@ var init_schemas = __esm(() => {
       }
       const result = def.innerType._zod.run(payload, ctx);
       if (result instanceof Promise) {
-        return result.then((result2) => {
-          payload.value = result2.value;
-          if (result2.issues.length) {
+        return result.then((result) => {
+          payload.value = result.value;
+          if (result.issues.length) {
             payload.value = def.catchValue({
               ...payload,
               error: {
-                issues: result2.issues.map((iss) => finalizeIssue(iss, ctx, config()))
+                issues: result.issues.map((iss) => finalizeIssue(iss, ctx, config()))
               },
               input: payload.value
             });
@@ -3900,13 +3910,13 @@ var init_schemas = __esm(() => {
       if (ctx.direction === "backward") {
         const right = def.out._zod.run(payload, ctx);
         if (right instanceof Promise) {
-          return right.then((right2) => handlePipeResult(right2, def.in, ctx));
+          return right.then((right) => handlePipeResult(right, def.in, ctx));
         }
         return handlePipeResult(right, def.in, ctx);
       }
       const left = def.in._zod.run(payload, ctx);
       if (left instanceof Promise) {
-        return left.then((left2) => handlePipeResult(left2, def.out, ctx));
+        return left.then((left) => handlePipeResult(left, def.out, ctx));
       }
       return handlePipeResult(left, def.out, ctx);
     };
@@ -3922,13 +3932,13 @@ var init_schemas = __esm(() => {
       if (direction === "forward") {
         const left = def.in._zod.run(payload, ctx);
         if (left instanceof Promise) {
-          return left.then((left2) => handleCodecAResult(left2, def, ctx));
+          return left.then((left) => handleCodecAResult(left, def, ctx));
         }
         return handleCodecAResult(left, def, ctx);
       } else {
         const right = def.out._zod.run(payload, ctx);
         if (right instanceof Promise) {
-          return right.then((right2) => handleCodecAResult(right2, def, ctx));
+          return right.then((right) => handleCodecAResult(right, def, ctx));
         }
         return handleCodecAResult(right, def, ctx);
       }
@@ -4066,12 +4076,12 @@ var init_schemas = __esm(() => {
         output: inst._def.output
       });
     };
-    inst.output = (output2) => {
+    inst.output = (output) => {
       const F = inst.constructor;
       return new F({
         type: "function",
         input: inst._def.input,
-        output: output2
+        output
       });
     };
     return inst;
@@ -4109,7 +4119,7 @@ var init_schemas = __esm(() => {
       const input = payload.value;
       const r = def.fn(input);
       if (r instanceof Promise) {
-        return r.then((r2) => handleRefineResult(r2, payload, input, inst));
+        return r.then((r) => handleRefineResult(r, payload, input, inst));
       }
       handleRefineResult(r, payload, input, inst);
       return;
@@ -4128,8 +4138,8 @@ var error = () => {
     array: { unit: "عنصر", verb: "أن يحوي" },
     set: { unit: "عنصر", verb: "أن يحوي" }
   };
-  function getSizing(origin2) {
-    return Sizable[origin2] ?? null;
+  function getSizing(origin) {
+    return Sizable[origin] ?? null;
   }
   const FormatDictionary = {
     regex: "مدخل",
@@ -4164,58 +4174,58 @@ var error = () => {
   const TypeDictionary = {
     nan: "NaN"
   };
-  return (issue2) => {
-    switch (issue2.code) {
+  return (issue) => {
+    switch (issue.code) {
       case "invalid_type": {
-        const expected = TypeDictionary[issue2.expected] ?? issue2.expected;
-        const receivedType = parsedType(issue2.input);
+        const expected = TypeDictionary[issue.expected] ?? issue.expected;
+        const receivedType = parsedType(issue.input);
         const received = TypeDictionary[receivedType] ?? receivedType;
-        if (/^[A-Z]/.test(issue2.expected)) {
-          return `مدخلات غير مقبولة: يفترض إدخال instanceof ${issue2.expected}، ولكن تم إدخال ${received}`;
+        if (/^[A-Z]/.test(issue.expected)) {
+          return `مدخلات غير مقبولة: يفترض إدخال instanceof ${issue.expected}، ولكن تم إدخال ${received}`;
         }
         return `مدخلات غير مقبولة: يفترض إدخال ${expected}، ولكن تم إدخال ${received}`;
       }
       case "invalid_value":
-        if (issue2.values.length === 1)
-          return `مدخلات غير مقبولة: يفترض إدخال ${stringifyPrimitive(issue2.values[0])}`;
-        return `اختيار غير مقبول: يتوقع انتقاء أحد هذه الخيارات: ${joinValues(issue2.values, "|")}`;
+        if (issue.values.length === 1)
+          return `مدخلات غير مقبولة: يفترض إدخال ${stringifyPrimitive(issue.values[0])}`;
+        return `اختيار غير مقبول: يتوقع انتقاء أحد هذه الخيارات: ${joinValues(issue.values, "|")}`;
       case "too_big": {
-        const adj = issue2.inclusive ? "<=" : "<";
-        const sizing = getSizing(issue2.origin);
+        const adj = issue.inclusive ? "<=" : "<";
+        const sizing = getSizing(issue.origin);
         if (sizing)
-          return ` أكبر من اللازم: يفترض أن تكون ${issue2.origin ?? "القيمة"} ${adj} ${issue2.maximum.toString()} ${sizing.unit ?? "عنصر"}`;
-        return `أكبر من اللازم: يفترض أن تكون ${issue2.origin ?? "القيمة"} ${adj} ${issue2.maximum.toString()}`;
+          return ` أكبر من اللازم: يفترض أن تكون ${issue.origin ?? "القيمة"} ${adj} ${issue.maximum.toString()} ${sizing.unit ?? "عنصر"}`;
+        return `أكبر من اللازم: يفترض أن تكون ${issue.origin ?? "القيمة"} ${adj} ${issue.maximum.toString()}`;
       }
       case "too_small": {
-        const adj = issue2.inclusive ? ">=" : ">";
-        const sizing = getSizing(issue2.origin);
+        const adj = issue.inclusive ? ">=" : ">";
+        const sizing = getSizing(issue.origin);
         if (sizing) {
-          return `أصغر من اللازم: يفترض لـ ${issue2.origin} أن يكون ${adj} ${issue2.minimum.toString()} ${sizing.unit}`;
+          return `أصغر من اللازم: يفترض لـ ${issue.origin} أن يكون ${adj} ${issue.minimum.toString()} ${sizing.unit}`;
         }
-        return `أصغر من اللازم: يفترض لـ ${issue2.origin} أن يكون ${adj} ${issue2.minimum.toString()}`;
+        return `أصغر من اللازم: يفترض لـ ${issue.origin} أن يكون ${adj} ${issue.minimum.toString()}`;
       }
       case "invalid_format": {
-        const _issue = issue2;
+        const _issue = issue;
         if (_issue.format === "starts_with")
-          return `نَص غير مقبول: يجب أن يبدأ بـ "${issue2.prefix}"`;
+          return `نَص غير مقبول: يجب أن يبدأ بـ "${issue.prefix}"`;
         if (_issue.format === "ends_with")
           return `نَص غير مقبول: يجب أن ينتهي بـ "${_issue.suffix}"`;
         if (_issue.format === "includes")
           return `نَص غير مقبول: يجب أن يتضمَّن "${_issue.includes}"`;
         if (_issue.format === "regex")
           return `نَص غير مقبول: يجب أن يطابق النمط ${_issue.pattern}`;
-        return `${FormatDictionary[_issue.format] ?? issue2.format} غير مقبول`;
+        return `${FormatDictionary[_issue.format] ?? issue.format} غير مقبول`;
       }
       case "not_multiple_of":
-        return `رقم غير مقبول: يجب أن يكون من مضاعفات ${issue2.divisor}`;
+        return `رقم غير مقبول: يجب أن يكون من مضاعفات ${issue.divisor}`;
       case "unrecognized_keys":
-        return `معرف${issue2.keys.length > 1 ? "ات" : ""} غريب${issue2.keys.length > 1 ? "ة" : ""}: ${joinValues(issue2.keys, "، ")}`;
+        return `معرف${issue.keys.length > 1 ? "ات" : ""} غريب${issue.keys.length > 1 ? "ة" : ""}: ${joinValues(issue.keys, "، ")}`;
       case "invalid_key":
-        return `معرف غير مقبول في ${issue2.origin}`;
+        return `معرف غير مقبول في ${issue.origin}`;
       case "invalid_union":
         return "مدخل غير مقبول";
       case "invalid_element":
-        return `مدخل غير مقبول في ${issue2.origin}`;
+        return `مدخل غير مقبول في ${issue.origin}`;
       default:
         return "مدخل غير مقبول";
     }
@@ -4236,8 +4246,8 @@ var error2 = () => {
     array: { unit: "element", verb: "olmalıdır" },
     set: { unit: "element", verb: "olmalıdır" }
   };
-  function getSizing(origin2) {
-    return Sizable[origin2] ?? null;
+  function getSizing(origin) {
+    return Sizable[origin] ?? null;
   }
   const FormatDictionary = {
     regex: "input",
@@ -4272,37 +4282,37 @@ var error2 = () => {
   const TypeDictionary = {
     nan: "NaN"
   };
-  return (issue2) => {
-    switch (issue2.code) {
+  return (issue) => {
+    switch (issue.code) {
       case "invalid_type": {
-        const expected = TypeDictionary[issue2.expected] ?? issue2.expected;
-        const receivedType = parsedType(issue2.input);
+        const expected = TypeDictionary[issue.expected] ?? issue.expected;
+        const receivedType = parsedType(issue.input);
         const received = TypeDictionary[receivedType] ?? receivedType;
-        if (/^[A-Z]/.test(issue2.expected)) {
-          return `Yanlış dəyər: gözlənilən instanceof ${issue2.expected}, daxil olan ${received}`;
+        if (/^[A-Z]/.test(issue.expected)) {
+          return `Yanlış dəyər: gözlənilən instanceof ${issue.expected}, daxil olan ${received}`;
         }
         return `Yanlış dəyər: gözlənilən ${expected}, daxil olan ${received}`;
       }
       case "invalid_value":
-        if (issue2.values.length === 1)
-          return `Yanlış dəyər: gözlənilən ${stringifyPrimitive(issue2.values[0])}`;
-        return `Yanlış seçim: aşağıdakılardan biri olmalıdır: ${joinValues(issue2.values, "|")}`;
+        if (issue.values.length === 1)
+          return `Yanlış dəyər: gözlənilən ${stringifyPrimitive(issue.values[0])}`;
+        return `Yanlış seçim: aşağıdakılardan biri olmalıdır: ${joinValues(issue.values, "|")}`;
       case "too_big": {
-        const adj = issue2.inclusive ? "<=" : "<";
-        const sizing = getSizing(issue2.origin);
+        const adj = issue.inclusive ? "<=" : "<";
+        const sizing = getSizing(issue.origin);
         if (sizing)
-          return `Çox böyük: gözlənilən ${issue2.origin ?? "dəyər"} ${adj}${issue2.maximum.toString()} ${sizing.unit ?? "element"}`;
-        return `Çox böyük: gözlənilən ${issue2.origin ?? "dəyər"} ${adj}${issue2.maximum.toString()}`;
+          return `Çox böyük: gözlənilən ${issue.origin ?? "dəyər"} ${adj}${issue.maximum.toString()} ${sizing.unit ?? "element"}`;
+        return `Çox böyük: gözlənilən ${issue.origin ?? "dəyər"} ${adj}${issue.maximum.toString()}`;
       }
       case "too_small": {
-        const adj = issue2.inclusive ? ">=" : ">";
-        const sizing = getSizing(issue2.origin);
+        const adj = issue.inclusive ? ">=" : ">";
+        const sizing = getSizing(issue.origin);
         if (sizing)
-          return `Çox kiçik: gözlənilən ${issue2.origin} ${adj}${issue2.minimum.toString()} ${sizing.unit}`;
-        return `Çox kiçik: gözlənilən ${issue2.origin} ${adj}${issue2.minimum.toString()}`;
+          return `Çox kiçik: gözlənilən ${issue.origin} ${adj}${issue.minimum.toString()} ${sizing.unit}`;
+        return `Çox kiçik: gözlənilən ${issue.origin} ${adj}${issue.minimum.toString()}`;
       }
       case "invalid_format": {
-        const _issue = issue2;
+        const _issue = issue;
         if (_issue.format === "starts_with")
           return `Yanlış mətn: "${_issue.prefix}" ilə başlamalıdır`;
         if (_issue.format === "ends_with")
@@ -4311,18 +4321,18 @@ var error2 = () => {
           return `Yanlış mətn: "${_issue.includes}" daxil olmalıdır`;
         if (_issue.format === "regex")
           return `Yanlış mətn: ${_issue.pattern} şablonuna uyğun olmalıdır`;
-        return `Yanlış ${FormatDictionary[_issue.format] ?? issue2.format}`;
+        return `Yanlış ${FormatDictionary[_issue.format] ?? issue.format}`;
       }
       case "not_multiple_of":
-        return `Yanlış ədəd: ${issue2.divisor} ilə bölünə bilən olmalıdır`;
+        return `Yanlış ədəd: ${issue.divisor} ilə bölünə bilən olmalıdır`;
       case "unrecognized_keys":
-        return `Tanınmayan açar${issue2.keys.length > 1 ? "lar" : ""}: ${joinValues(issue2.keys, ", ")}`;
+        return `Tanınmayan açar${issue.keys.length > 1 ? "lar" : ""}: ${joinValues(issue.keys, ", ")}`;
       case "invalid_key":
-        return `${issue2.origin} daxilində yanlış açar`;
+        return `${issue.origin} daxilində yanlış açar`;
       case "invalid_union":
         return "Yanlış dəyər";
       case "invalid_element":
-        return `${issue2.origin} daxilində yanlış dəyər`;
+        return `${issue.origin} daxilində yanlış dəyər`;
       default:
         return `Yanlış dəyər`;
     }
@@ -4386,8 +4396,8 @@ var error3 = () => {
       verb: "мець"
     }
   };
-  function getSizing(origin2) {
-    return Sizable[origin2] ?? null;
+  function getSizing(origin) {
+    return Sizable[origin] ?? null;
   }
   const FormatDictionary = {
     regex: "увод",
@@ -4424,43 +4434,43 @@ var error3 = () => {
     number: "лік",
     array: "масіў"
   };
-  return (issue2) => {
-    switch (issue2.code) {
+  return (issue) => {
+    switch (issue.code) {
       case "invalid_type": {
-        const expected = TypeDictionary[issue2.expected] ?? issue2.expected;
-        const receivedType = parsedType(issue2.input);
+        const expected = TypeDictionary[issue.expected] ?? issue.expected;
+        const receivedType = parsedType(issue.input);
         const received = TypeDictionary[receivedType] ?? receivedType;
-        if (/^[A-Z]/.test(issue2.expected)) {
-          return `Няправільны ўвод: чакаўся instanceof ${issue2.expected}, атрымана ${received}`;
+        if (/^[A-Z]/.test(issue.expected)) {
+          return `Няправільны ўвод: чакаўся instanceof ${issue.expected}, атрымана ${received}`;
         }
         return `Няправільны ўвод: чакаўся ${expected}, атрымана ${received}`;
       }
       case "invalid_value":
-        if (issue2.values.length === 1)
-          return `Няправільны ўвод: чакалася ${stringifyPrimitive(issue2.values[0])}`;
-        return `Няправільны варыянт: чакаўся адзін з ${joinValues(issue2.values, "|")}`;
+        if (issue.values.length === 1)
+          return `Няправільны ўвод: чакалася ${stringifyPrimitive(issue.values[0])}`;
+        return `Няправільны варыянт: чакаўся адзін з ${joinValues(issue.values, "|")}`;
       case "too_big": {
-        const adj = issue2.inclusive ? "<=" : "<";
-        const sizing = getSizing(issue2.origin);
+        const adj = issue.inclusive ? "<=" : "<";
+        const sizing = getSizing(issue.origin);
         if (sizing) {
-          const maxValue = Number(issue2.maximum);
+          const maxValue = Number(issue.maximum);
           const unit = getBelarusianPlural(maxValue, sizing.unit.one, sizing.unit.few, sizing.unit.many);
-          return `Занадта вялікі: чакалася, што ${issue2.origin ?? "значэнне"} павінна ${sizing.verb} ${adj}${issue2.maximum.toString()} ${unit}`;
+          return `Занадта вялікі: чакалася, што ${issue.origin ?? "значэнне"} павінна ${sizing.verb} ${adj}${issue.maximum.toString()} ${unit}`;
         }
-        return `Занадта вялікі: чакалася, што ${issue2.origin ?? "значэнне"} павінна быць ${adj}${issue2.maximum.toString()}`;
+        return `Занадта вялікі: чакалася, што ${issue.origin ?? "значэнне"} павінна быць ${adj}${issue.maximum.toString()}`;
       }
       case "too_small": {
-        const adj = issue2.inclusive ? ">=" : ">";
-        const sizing = getSizing(issue2.origin);
+        const adj = issue.inclusive ? ">=" : ">";
+        const sizing = getSizing(issue.origin);
         if (sizing) {
-          const minValue = Number(issue2.minimum);
+          const minValue = Number(issue.minimum);
           const unit = getBelarusianPlural(minValue, sizing.unit.one, sizing.unit.few, sizing.unit.many);
-          return `Занадта малы: чакалася, што ${issue2.origin} павінна ${sizing.verb} ${adj}${issue2.minimum.toString()} ${unit}`;
+          return `Занадта малы: чакалася, што ${issue.origin} павінна ${sizing.verb} ${adj}${issue.minimum.toString()} ${unit}`;
         }
-        return `Занадта малы: чакалася, што ${issue2.origin} павінна быць ${adj}${issue2.minimum.toString()}`;
+        return `Занадта малы: чакалася, што ${issue.origin} павінна быць ${adj}${issue.minimum.toString()}`;
       }
       case "invalid_format": {
-        const _issue = issue2;
+        const _issue = issue;
         if (_issue.format === "starts_with")
           return `Няправільны радок: павінен пачынацца з "${_issue.prefix}"`;
         if (_issue.format === "ends_with")
@@ -4469,18 +4479,18 @@ var error3 = () => {
           return `Няправільны радок: павінен змяшчаць "${_issue.includes}"`;
         if (_issue.format === "regex")
           return `Няправільны радок: павінен адпавядаць шаблону ${_issue.pattern}`;
-        return `Няправільны ${FormatDictionary[_issue.format] ?? issue2.format}`;
+        return `Няправільны ${FormatDictionary[_issue.format] ?? issue.format}`;
       }
       case "not_multiple_of":
-        return `Няправільны лік: павінен быць кратным ${issue2.divisor}`;
+        return `Няправільны лік: павінен быць кратным ${issue.divisor}`;
       case "unrecognized_keys":
-        return `Нераспазнаны ${issue2.keys.length > 1 ? "ключы" : "ключ"}: ${joinValues(issue2.keys, ", ")}`;
+        return `Нераспазнаны ${issue.keys.length > 1 ? "ключы" : "ключ"}: ${joinValues(issue.keys, ", ")}`;
       case "invalid_key":
-        return `Няправільны ключ у ${issue2.origin}`;
+        return `Няправільны ключ у ${issue.origin}`;
       case "invalid_union":
         return "Няправільны ўвод";
       case "invalid_element":
-        return `Няправільнае значэнне ў ${issue2.origin}`;
+        return `Няправільнае значэнне ў ${issue.origin}`;
       default:
         return `Няправільны ўвод`;
     }
@@ -4501,8 +4511,8 @@ var error4 = () => {
     array: { unit: "елемента", verb: "да съдържа" },
     set: { unit: "елемента", verb: "да съдържа" }
   };
-  function getSizing(origin2) {
-    return Sizable[origin2] ?? null;
+  function getSizing(origin) {
+    return Sizable[origin] ?? null;
   }
   const FormatDictionary = {
     regex: "вход",
@@ -4539,38 +4549,38 @@ var error4 = () => {
     number: "число",
     array: "масив"
   };
-  return (issue2) => {
-    switch (issue2.code) {
+  return (issue) => {
+    switch (issue.code) {
       case "invalid_type": {
-        const expected = TypeDictionary[issue2.expected] ?? issue2.expected;
-        const receivedType = parsedType(issue2.input);
+        const expected = TypeDictionary[issue.expected] ?? issue.expected;
+        const receivedType = parsedType(issue.input);
         const received = TypeDictionary[receivedType] ?? receivedType;
-        if (/^[A-Z]/.test(issue2.expected)) {
-          return `Невалиден вход: очакван instanceof ${issue2.expected}, получен ${received}`;
+        if (/^[A-Z]/.test(issue.expected)) {
+          return `Невалиден вход: очакван instanceof ${issue.expected}, получен ${received}`;
         }
         return `Невалиден вход: очакван ${expected}, получен ${received}`;
       }
       case "invalid_value":
-        if (issue2.values.length === 1)
-          return `Невалиден вход: очакван ${stringifyPrimitive(issue2.values[0])}`;
-        return `Невалидна опция: очаквано едно от ${joinValues(issue2.values, "|")}`;
+        if (issue.values.length === 1)
+          return `Невалиден вход: очакван ${stringifyPrimitive(issue.values[0])}`;
+        return `Невалидна опция: очаквано едно от ${joinValues(issue.values, "|")}`;
       case "too_big": {
-        const adj = issue2.inclusive ? "<=" : "<";
-        const sizing = getSizing(issue2.origin);
+        const adj = issue.inclusive ? "<=" : "<";
+        const sizing = getSizing(issue.origin);
         if (sizing)
-          return `Твърде голямо: очаква се ${issue2.origin ?? "стойност"} да съдържа ${adj}${issue2.maximum.toString()} ${sizing.unit ?? "елемента"}`;
-        return `Твърде голямо: очаква се ${issue2.origin ?? "стойност"} да бъде ${adj}${issue2.maximum.toString()}`;
+          return `Твърде голямо: очаква се ${issue.origin ?? "стойност"} да съдържа ${adj}${issue.maximum.toString()} ${sizing.unit ?? "елемента"}`;
+        return `Твърде голямо: очаква се ${issue.origin ?? "стойност"} да бъде ${adj}${issue.maximum.toString()}`;
       }
       case "too_small": {
-        const adj = issue2.inclusive ? ">=" : ">";
-        const sizing = getSizing(issue2.origin);
+        const adj = issue.inclusive ? ">=" : ">";
+        const sizing = getSizing(issue.origin);
         if (sizing) {
-          return `Твърде малко: очаква се ${issue2.origin} да съдържа ${adj}${issue2.minimum.toString()} ${sizing.unit}`;
+          return `Твърде малко: очаква се ${issue.origin} да съдържа ${adj}${issue.minimum.toString()} ${sizing.unit}`;
         }
-        return `Твърде малко: очаква се ${issue2.origin} да бъде ${adj}${issue2.minimum.toString()}`;
+        return `Твърде малко: очаква се ${issue.origin} да бъде ${adj}${issue.minimum.toString()}`;
       }
       case "invalid_format": {
-        const _issue = issue2;
+        const _issue = issue;
         if (_issue.format === "starts_with") {
           return `Невалиден низ: трябва да започва с "${_issue.prefix}"`;
         }
@@ -4591,18 +4601,18 @@ var error4 = () => {
           invalid_adj = "Невалидно";
         if (_issue.format === "duration")
           invalid_adj = "Невалидна";
-        return `${invalid_adj} ${FormatDictionary[_issue.format] ?? issue2.format}`;
+        return `${invalid_adj} ${FormatDictionary[_issue.format] ?? issue.format}`;
       }
       case "not_multiple_of":
-        return `Невалидно число: трябва да бъде кратно на ${issue2.divisor}`;
+        return `Невалидно число: трябва да бъде кратно на ${issue.divisor}`;
       case "unrecognized_keys":
-        return `Неразпознат${issue2.keys.length > 1 ? "и" : ""} ключ${issue2.keys.length > 1 ? "ове" : ""}: ${joinValues(issue2.keys, ", ")}`;
+        return `Неразпознат${issue.keys.length > 1 ? "и" : ""} ключ${issue.keys.length > 1 ? "ове" : ""}: ${joinValues(issue.keys, ", ")}`;
       case "invalid_key":
-        return `Невалиден ключ в ${issue2.origin}`;
+        return `Невалиден ключ в ${issue.origin}`;
       case "invalid_union":
         return "Невалиден вход";
       case "invalid_element":
-        return `Невалидна стойност в ${issue2.origin}`;
+        return `Невалидна стойност в ${issue.origin}`;
       default:
         return `Невалиден вход`;
     }
@@ -4623,8 +4633,8 @@ var error5 = () => {
     array: { unit: "elements", verb: "contenir" },
     set: { unit: "elements", verb: "contenir" }
   };
-  function getSizing(origin2) {
-    return Sizable[origin2] ?? null;
+  function getSizing(origin) {
+    return Sizable[origin] ?? null;
   }
   const FormatDictionary = {
     regex: "entrada",
@@ -4659,38 +4669,38 @@ var error5 = () => {
   const TypeDictionary = {
     nan: "NaN"
   };
-  return (issue2) => {
-    switch (issue2.code) {
+  return (issue) => {
+    switch (issue.code) {
       case "invalid_type": {
-        const expected = TypeDictionary[issue2.expected] ?? issue2.expected;
-        const receivedType = parsedType(issue2.input);
+        const expected = TypeDictionary[issue.expected] ?? issue.expected;
+        const receivedType = parsedType(issue.input);
         const received = TypeDictionary[receivedType] ?? receivedType;
-        if (/^[A-Z]/.test(issue2.expected)) {
-          return `Tipus invàlid: s'esperava instanceof ${issue2.expected}, s'ha rebut ${received}`;
+        if (/^[A-Z]/.test(issue.expected)) {
+          return `Tipus invàlid: s'esperava instanceof ${issue.expected}, s'ha rebut ${received}`;
         }
         return `Tipus invàlid: s'esperava ${expected}, s'ha rebut ${received}`;
       }
       case "invalid_value":
-        if (issue2.values.length === 1)
-          return `Valor invàlid: s'esperava ${stringifyPrimitive(issue2.values[0])}`;
-        return `Opció invàlida: s'esperava una de ${joinValues(issue2.values, " o ")}`;
+        if (issue.values.length === 1)
+          return `Valor invàlid: s'esperava ${stringifyPrimitive(issue.values[0])}`;
+        return `Opció invàlida: s'esperava una de ${joinValues(issue.values, " o ")}`;
       case "too_big": {
-        const adj = issue2.inclusive ? "com a màxim" : "menys de";
-        const sizing = getSizing(issue2.origin);
+        const adj = issue.inclusive ? "com a màxim" : "menys de";
+        const sizing = getSizing(issue.origin);
         if (sizing)
-          return `Massa gran: s'esperava que ${issue2.origin ?? "el valor"} contingués ${adj} ${issue2.maximum.toString()} ${sizing.unit ?? "elements"}`;
-        return `Massa gran: s'esperava que ${issue2.origin ?? "el valor"} fos ${adj} ${issue2.maximum.toString()}`;
+          return `Massa gran: s'esperava que ${issue.origin ?? "el valor"} contingués ${adj} ${issue.maximum.toString()} ${sizing.unit ?? "elements"}`;
+        return `Massa gran: s'esperava que ${issue.origin ?? "el valor"} fos ${adj} ${issue.maximum.toString()}`;
       }
       case "too_small": {
-        const adj = issue2.inclusive ? "com a mínim" : "més de";
-        const sizing = getSizing(issue2.origin);
+        const adj = issue.inclusive ? "com a mínim" : "més de";
+        const sizing = getSizing(issue.origin);
         if (sizing) {
-          return `Massa petit: s'esperava que ${issue2.origin} contingués ${adj} ${issue2.minimum.toString()} ${sizing.unit}`;
+          return `Massa petit: s'esperava que ${issue.origin} contingués ${adj} ${issue.minimum.toString()} ${sizing.unit}`;
         }
-        return `Massa petit: s'esperava que ${issue2.origin} fos ${adj} ${issue2.minimum.toString()}`;
+        return `Massa petit: s'esperava que ${issue.origin} fos ${adj} ${issue.minimum.toString()}`;
       }
       case "invalid_format": {
-        const _issue = issue2;
+        const _issue = issue;
         if (_issue.format === "starts_with") {
           return `Format invàlid: ha de començar amb "${_issue.prefix}"`;
         }
@@ -4700,18 +4710,18 @@ var error5 = () => {
           return `Format invàlid: ha d'incloure "${_issue.includes}"`;
         if (_issue.format === "regex")
           return `Format invàlid: ha de coincidir amb el patró ${_issue.pattern}`;
-        return `Format invàlid per a ${FormatDictionary[_issue.format] ?? issue2.format}`;
+        return `Format invàlid per a ${FormatDictionary[_issue.format] ?? issue.format}`;
       }
       case "not_multiple_of":
-        return `Número invàlid: ha de ser múltiple de ${issue2.divisor}`;
+        return `Número invàlid: ha de ser múltiple de ${issue.divisor}`;
       case "unrecognized_keys":
-        return `Clau${issue2.keys.length > 1 ? "s" : ""} no reconeguda${issue2.keys.length > 1 ? "s" : ""}: ${joinValues(issue2.keys, ", ")}`;
+        return `Clau${issue.keys.length > 1 ? "s" : ""} no reconeguda${issue.keys.length > 1 ? "s" : ""}: ${joinValues(issue.keys, ", ")}`;
       case "invalid_key":
-        return `Clau invàlida a ${issue2.origin}`;
+        return `Clau invàlida a ${issue.origin}`;
       case "invalid_union":
         return "Entrada invàlida";
       case "invalid_element":
-        return `Element invàlid a ${issue2.origin}`;
+        return `Element invàlid a ${issue.origin}`;
       default:
         return `Entrada invàlida`;
     }
@@ -4732,8 +4742,8 @@ var error6 = () => {
     array: { unit: "prvků", verb: "mít" },
     set: { unit: "prvků", verb: "mít" }
   };
-  function getSizing(origin2) {
-    return Sizable[origin2] ?? null;
+  function getSizing(origin) {
+    return Sizable[origin] ?? null;
   }
   const FormatDictionary = {
     regex: "regulární výraz",
@@ -4772,39 +4782,39 @@ var error6 = () => {
     function: "funkce",
     array: "pole"
   };
-  return (issue2) => {
-    switch (issue2.code) {
+  return (issue) => {
+    switch (issue.code) {
       case "invalid_type": {
-        const expected = TypeDictionary[issue2.expected] ?? issue2.expected;
-        const receivedType = parsedType(issue2.input);
+        const expected = TypeDictionary[issue.expected] ?? issue.expected;
+        const receivedType = parsedType(issue.input);
         const received = TypeDictionary[receivedType] ?? receivedType;
-        if (/^[A-Z]/.test(issue2.expected)) {
-          return `Neplatný vstup: očekáváno instanceof ${issue2.expected}, obdrženo ${received}`;
+        if (/^[A-Z]/.test(issue.expected)) {
+          return `Neplatný vstup: očekáváno instanceof ${issue.expected}, obdrženo ${received}`;
         }
         return `Neplatný vstup: očekáváno ${expected}, obdrženo ${received}`;
       }
       case "invalid_value":
-        if (issue2.values.length === 1)
-          return `Neplatný vstup: očekáváno ${stringifyPrimitive(issue2.values[0])}`;
-        return `Neplatná možnost: očekávána jedna z hodnot ${joinValues(issue2.values, "|")}`;
+        if (issue.values.length === 1)
+          return `Neplatný vstup: očekáváno ${stringifyPrimitive(issue.values[0])}`;
+        return `Neplatná možnost: očekávána jedna z hodnot ${joinValues(issue.values, "|")}`;
       case "too_big": {
-        const adj = issue2.inclusive ? "<=" : "<";
-        const sizing = getSizing(issue2.origin);
+        const adj = issue.inclusive ? "<=" : "<";
+        const sizing = getSizing(issue.origin);
         if (sizing) {
-          return `Hodnota je příliš velká: ${issue2.origin ?? "hodnota"} musí mít ${adj}${issue2.maximum.toString()} ${sizing.unit ?? "prvků"}`;
+          return `Hodnota je příliš velká: ${issue.origin ?? "hodnota"} musí mít ${adj}${issue.maximum.toString()} ${sizing.unit ?? "prvků"}`;
         }
-        return `Hodnota je příliš velká: ${issue2.origin ?? "hodnota"} musí být ${adj}${issue2.maximum.toString()}`;
+        return `Hodnota je příliš velká: ${issue.origin ?? "hodnota"} musí být ${adj}${issue.maximum.toString()}`;
       }
       case "too_small": {
-        const adj = issue2.inclusive ? ">=" : ">";
-        const sizing = getSizing(issue2.origin);
+        const adj = issue.inclusive ? ">=" : ">";
+        const sizing = getSizing(issue.origin);
         if (sizing) {
-          return `Hodnota je příliš malá: ${issue2.origin ?? "hodnota"} musí mít ${adj}${issue2.minimum.toString()} ${sizing.unit ?? "prvků"}`;
+          return `Hodnota je příliš malá: ${issue.origin ?? "hodnota"} musí mít ${adj}${issue.minimum.toString()} ${sizing.unit ?? "prvků"}`;
         }
-        return `Hodnota je příliš malá: ${issue2.origin ?? "hodnota"} musí být ${adj}${issue2.minimum.toString()}`;
+        return `Hodnota je příliš malá: ${issue.origin ?? "hodnota"} musí být ${adj}${issue.minimum.toString()}`;
       }
       case "invalid_format": {
-        const _issue = issue2;
+        const _issue = issue;
         if (_issue.format === "starts_with")
           return `Neplatný řetězec: musí začínat na "${_issue.prefix}"`;
         if (_issue.format === "ends_with")
@@ -4813,18 +4823,18 @@ var error6 = () => {
           return `Neplatný řetězec: musí obsahovat "${_issue.includes}"`;
         if (_issue.format === "regex")
           return `Neplatný řetězec: musí odpovídat vzoru ${_issue.pattern}`;
-        return `Neplatný formát ${FormatDictionary[_issue.format] ?? issue2.format}`;
+        return `Neplatný formát ${FormatDictionary[_issue.format] ?? issue.format}`;
       }
       case "not_multiple_of":
-        return `Neplatné číslo: musí být násobkem ${issue2.divisor}`;
+        return `Neplatné číslo: musí být násobkem ${issue.divisor}`;
       case "unrecognized_keys":
-        return `Neznámé klíče: ${joinValues(issue2.keys, ", ")}`;
+        return `Neznámé klíče: ${joinValues(issue.keys, ", ")}`;
       case "invalid_key":
-        return `Neplatný klíč v ${issue2.origin}`;
+        return `Neplatný klíč v ${issue.origin}`;
       case "invalid_union":
         return "Neplatný vstup";
       case "invalid_element":
-        return `Neplatná hodnota v ${issue2.origin}`;
+        return `Neplatná hodnota v ${issue.origin}`;
       default:
         return `Neplatný vstup`;
     }
@@ -4845,8 +4855,8 @@ var error7 = () => {
     array: { unit: "elementer", verb: "indeholdt" },
     set: { unit: "elementer", verb: "indeholdt" }
   };
-  function getSizing(origin2) {
-    return Sizable[origin2] ?? null;
+  function getSizing(origin) {
+    return Sizable[origin] ?? null;
   }
   const FormatDictionary = {
     regex: "input",
@@ -4888,40 +4898,40 @@ var error7 = () => {
     set: "sæt",
     file: "fil"
   };
-  return (issue2) => {
-    switch (issue2.code) {
+  return (issue) => {
+    switch (issue.code) {
       case "invalid_type": {
-        const expected = TypeDictionary[issue2.expected] ?? issue2.expected;
-        const receivedType = parsedType(issue2.input);
+        const expected = TypeDictionary[issue.expected] ?? issue.expected;
+        const receivedType = parsedType(issue.input);
         const received = TypeDictionary[receivedType] ?? receivedType;
-        if (/^[A-Z]/.test(issue2.expected)) {
-          return `Ugyldigt input: forventede instanceof ${issue2.expected}, fik ${received}`;
+        if (/^[A-Z]/.test(issue.expected)) {
+          return `Ugyldigt input: forventede instanceof ${issue.expected}, fik ${received}`;
         }
         return `Ugyldigt input: forventede ${expected}, fik ${received}`;
       }
       case "invalid_value":
-        if (issue2.values.length === 1)
-          return `Ugyldig værdi: forventede ${stringifyPrimitive(issue2.values[0])}`;
-        return `Ugyldigt valg: forventede en af følgende ${joinValues(issue2.values, "|")}`;
+        if (issue.values.length === 1)
+          return `Ugyldig værdi: forventede ${stringifyPrimitive(issue.values[0])}`;
+        return `Ugyldigt valg: forventede en af følgende ${joinValues(issue.values, "|")}`;
       case "too_big": {
-        const adj = issue2.inclusive ? "<=" : "<";
-        const sizing = getSizing(issue2.origin);
-        const origin2 = TypeDictionary[issue2.origin] ?? issue2.origin;
+        const adj = issue.inclusive ? "<=" : "<";
+        const sizing = getSizing(issue.origin);
+        const origin = TypeDictionary[issue.origin] ?? issue.origin;
         if (sizing)
-          return `For stor: forventede ${origin2 ?? "value"} ${sizing.verb} ${adj} ${issue2.maximum.toString()} ${sizing.unit ?? "elementer"}`;
-        return `For stor: forventede ${origin2 ?? "value"} havde ${adj} ${issue2.maximum.toString()}`;
+          return `For stor: forventede ${origin ?? "value"} ${sizing.verb} ${adj} ${issue.maximum.toString()} ${sizing.unit ?? "elementer"}`;
+        return `For stor: forventede ${origin ?? "value"} havde ${adj} ${issue.maximum.toString()}`;
       }
       case "too_small": {
-        const adj = issue2.inclusive ? ">=" : ">";
-        const sizing = getSizing(issue2.origin);
-        const origin2 = TypeDictionary[issue2.origin] ?? issue2.origin;
+        const adj = issue.inclusive ? ">=" : ">";
+        const sizing = getSizing(issue.origin);
+        const origin = TypeDictionary[issue.origin] ?? issue.origin;
         if (sizing) {
-          return `For lille: forventede ${origin2} ${sizing.verb} ${adj} ${issue2.minimum.toString()} ${sizing.unit}`;
+          return `For lille: forventede ${origin} ${sizing.verb} ${adj} ${issue.minimum.toString()} ${sizing.unit}`;
         }
-        return `For lille: forventede ${origin2} havde ${adj} ${issue2.minimum.toString()}`;
+        return `For lille: forventede ${origin} havde ${adj} ${issue.minimum.toString()}`;
       }
       case "invalid_format": {
-        const _issue = issue2;
+        const _issue = issue;
         if (_issue.format === "starts_with")
           return `Ugyldig streng: skal starte med "${_issue.prefix}"`;
         if (_issue.format === "ends_with")
@@ -4930,18 +4940,18 @@ var error7 = () => {
           return `Ugyldig streng: skal indeholde "${_issue.includes}"`;
         if (_issue.format === "regex")
           return `Ugyldig streng: skal matche mønsteret ${_issue.pattern}`;
-        return `Ugyldig ${FormatDictionary[_issue.format] ?? issue2.format}`;
+        return `Ugyldig ${FormatDictionary[_issue.format] ?? issue.format}`;
       }
       case "not_multiple_of":
-        return `Ugyldigt tal: skal være deleligt med ${issue2.divisor}`;
+        return `Ugyldigt tal: skal være deleligt med ${issue.divisor}`;
       case "unrecognized_keys":
-        return `${issue2.keys.length > 1 ? "Ukendte nøgler" : "Ukendt nøgle"}: ${joinValues(issue2.keys, ", ")}`;
+        return `${issue.keys.length > 1 ? "Ukendte nøgler" : "Ukendt nøgle"}: ${joinValues(issue.keys, ", ")}`;
       case "invalid_key":
-        return `Ugyldig nøgle i ${issue2.origin}`;
+        return `Ugyldig nøgle i ${issue.origin}`;
       case "invalid_union":
         return "Ugyldigt input: matcher ingen af de tilladte typer";
       case "invalid_element":
-        return `Ugyldig værdi i ${issue2.origin}`;
+        return `Ugyldig værdi i ${issue.origin}`;
       default:
         return `Ugyldigt input`;
     }
@@ -4962,8 +4972,8 @@ var error8 = () => {
     array: { unit: "Elemente", verb: "zu haben" },
     set: { unit: "Elemente", verb: "zu haben" }
   };
-  function getSizing(origin2) {
-    return Sizable[origin2] ?? null;
+  function getSizing(origin) {
+    return Sizable[origin] ?? null;
   }
   const FormatDictionary = {
     regex: "Eingabe",
@@ -5000,38 +5010,38 @@ var error8 = () => {
     number: "Zahl",
     array: "Array"
   };
-  return (issue2) => {
-    switch (issue2.code) {
+  return (issue) => {
+    switch (issue.code) {
       case "invalid_type": {
-        const expected = TypeDictionary[issue2.expected] ?? issue2.expected;
-        const receivedType = parsedType(issue2.input);
+        const expected = TypeDictionary[issue.expected] ?? issue.expected;
+        const receivedType = parsedType(issue.input);
         const received = TypeDictionary[receivedType] ?? receivedType;
-        if (/^[A-Z]/.test(issue2.expected)) {
-          return `Ungültige Eingabe: erwartet instanceof ${issue2.expected}, erhalten ${received}`;
+        if (/^[A-Z]/.test(issue.expected)) {
+          return `Ungültige Eingabe: erwartet instanceof ${issue.expected}, erhalten ${received}`;
         }
         return `Ungültige Eingabe: erwartet ${expected}, erhalten ${received}`;
       }
       case "invalid_value":
-        if (issue2.values.length === 1)
-          return `Ungültige Eingabe: erwartet ${stringifyPrimitive(issue2.values[0])}`;
-        return `Ungültige Option: erwartet eine von ${joinValues(issue2.values, "|")}`;
+        if (issue.values.length === 1)
+          return `Ungültige Eingabe: erwartet ${stringifyPrimitive(issue.values[0])}`;
+        return `Ungültige Option: erwartet eine von ${joinValues(issue.values, "|")}`;
       case "too_big": {
-        const adj = issue2.inclusive ? "<=" : "<";
-        const sizing = getSizing(issue2.origin);
+        const adj = issue.inclusive ? "<=" : "<";
+        const sizing = getSizing(issue.origin);
         if (sizing)
-          return `Zu groß: erwartet, dass ${issue2.origin ?? "Wert"} ${adj}${issue2.maximum.toString()} ${sizing.unit ?? "Elemente"} hat`;
-        return `Zu groß: erwartet, dass ${issue2.origin ?? "Wert"} ${adj}${issue2.maximum.toString()} ist`;
+          return `Zu groß: erwartet, dass ${issue.origin ?? "Wert"} ${adj}${issue.maximum.toString()} ${sizing.unit ?? "Elemente"} hat`;
+        return `Zu groß: erwartet, dass ${issue.origin ?? "Wert"} ${adj}${issue.maximum.toString()} ist`;
       }
       case "too_small": {
-        const adj = issue2.inclusive ? ">=" : ">";
-        const sizing = getSizing(issue2.origin);
+        const adj = issue.inclusive ? ">=" : ">";
+        const sizing = getSizing(issue.origin);
         if (sizing) {
-          return `Zu klein: erwartet, dass ${issue2.origin} ${adj}${issue2.minimum.toString()} ${sizing.unit} hat`;
+          return `Zu klein: erwartet, dass ${issue.origin} ${adj}${issue.minimum.toString()} ${sizing.unit} hat`;
         }
-        return `Zu klein: erwartet, dass ${issue2.origin} ${adj}${issue2.minimum.toString()} ist`;
+        return `Zu klein: erwartet, dass ${issue.origin} ${adj}${issue.minimum.toString()} ist`;
       }
       case "invalid_format": {
-        const _issue = issue2;
+        const _issue = issue;
         if (_issue.format === "starts_with")
           return `Ungültiger String: muss mit "${_issue.prefix}" beginnen`;
         if (_issue.format === "ends_with")
@@ -5040,18 +5050,18 @@ var error8 = () => {
           return `Ungültiger String: muss "${_issue.includes}" enthalten`;
         if (_issue.format === "regex")
           return `Ungültiger String: muss dem Muster ${_issue.pattern} entsprechen`;
-        return `Ungültig: ${FormatDictionary[_issue.format] ?? issue2.format}`;
+        return `Ungültig: ${FormatDictionary[_issue.format] ?? issue.format}`;
       }
       case "not_multiple_of":
-        return `Ungültige Zahl: muss ein Vielfaches von ${issue2.divisor} sein`;
+        return `Ungültige Zahl: muss ein Vielfaches von ${issue.divisor} sein`;
       case "unrecognized_keys":
-        return `${issue2.keys.length > 1 ? "Unbekannte Schlüssel" : "Unbekannter Schlüssel"}: ${joinValues(issue2.keys, ", ")}`;
+        return `${issue.keys.length > 1 ? "Unbekannte Schlüssel" : "Unbekannter Schlüssel"}: ${joinValues(issue.keys, ", ")}`;
       case "invalid_key":
-        return `Ungültiger Schlüssel in ${issue2.origin}`;
+        return `Ungültiger Schlüssel in ${issue.origin}`;
       case "invalid_union":
         return "Ungültige Eingabe";
       case "invalid_element":
-        return `Ungültiger Wert in ${issue2.origin}`;
+        return `Ungültiger Wert in ${issue.origin}`;
       default:
         return `Ungültige Eingabe`;
     }
@@ -5073,8 +5083,8 @@ var error9 = () => {
     set: { unit: "στοιχεία", verb: "να έχει" },
     map: { unit: "καταχωρήσεις", verb: "να έχει" }
   };
-  function getSizing(origin2) {
-    return Sizable[origin2] ?? null;
+  function getSizing(origin) {
+    return Sizable[origin] ?? null;
   }
   const FormatDictionary = {
     regex: "είσοδος",
@@ -5110,38 +5120,38 @@ var error9 = () => {
   const TypeDictionary = {
     nan: "NaN"
   };
-  return (issue2) => {
-    switch (issue2.code) {
+  return (issue) => {
+    switch (issue.code) {
       case "invalid_type": {
-        const expected = TypeDictionary[issue2.expected] ?? issue2.expected;
-        const receivedType = parsedType(issue2.input);
+        const expected = TypeDictionary[issue.expected] ?? issue.expected;
+        const receivedType = parsedType(issue.input);
         const received = TypeDictionary[receivedType] ?? receivedType;
-        if (typeof issue2.expected === "string" && /^[A-Z]/.test(issue2.expected)) {
-          return `Μη έγκυρη είσοδος: αναμενόταν instanceof ${issue2.expected}, λήφθηκε ${received}`;
+        if (typeof issue.expected === "string" && /^[A-Z]/.test(issue.expected)) {
+          return `Μη έγκυρη είσοδος: αναμενόταν instanceof ${issue.expected}, λήφθηκε ${received}`;
         }
         return `Μη έγκυρη είσοδος: αναμενόταν ${expected}, λήφθηκε ${received}`;
       }
       case "invalid_value":
-        if (issue2.values.length === 1)
-          return `Μη έγκυρη είσοδος: αναμενόταν ${stringifyPrimitive(issue2.values[0])}`;
-        return `Μη έγκυρη επιλογή: αναμενόταν ένα από ${joinValues(issue2.values, "|")}`;
+        if (issue.values.length === 1)
+          return `Μη έγκυρη είσοδος: αναμενόταν ${stringifyPrimitive(issue.values[0])}`;
+        return `Μη έγκυρη επιλογή: αναμενόταν ένα από ${joinValues(issue.values, "|")}`;
       case "too_big": {
-        const adj = issue2.inclusive ? "<=" : "<";
-        const sizing = getSizing(issue2.origin);
+        const adj = issue.inclusive ? "<=" : "<";
+        const sizing = getSizing(issue.origin);
         if (sizing)
-          return `Πολύ μεγάλο: αναμενόταν ${issue2.origin ?? "τιμή"} να έχει ${adj}${issue2.maximum.toString()} ${sizing.unit ?? "στοιχεία"}`;
-        return `Πολύ μεγάλο: αναμενόταν ${issue2.origin ?? "τιμή"} να είναι ${adj}${issue2.maximum.toString()}`;
+          return `Πολύ μεγάλο: αναμενόταν ${issue.origin ?? "τιμή"} να έχει ${adj}${issue.maximum.toString()} ${sizing.unit ?? "στοιχεία"}`;
+        return `Πολύ μεγάλο: αναμενόταν ${issue.origin ?? "τιμή"} να είναι ${adj}${issue.maximum.toString()}`;
       }
       case "too_small": {
-        const adj = issue2.inclusive ? ">=" : ">";
-        const sizing = getSizing(issue2.origin);
+        const adj = issue.inclusive ? ">=" : ">";
+        const sizing = getSizing(issue.origin);
         if (sizing) {
-          return `Πολύ μικρό: αναμενόταν ${issue2.origin} να έχει ${adj}${issue2.minimum.toString()} ${sizing.unit}`;
+          return `Πολύ μικρό: αναμενόταν ${issue.origin} να έχει ${adj}${issue.minimum.toString()} ${sizing.unit}`;
         }
-        return `Πολύ μικρό: αναμενόταν ${issue2.origin} να είναι ${adj}${issue2.minimum.toString()}`;
+        return `Πολύ μικρό: αναμενόταν ${issue.origin} να είναι ${adj}${issue.minimum.toString()}`;
       }
       case "invalid_format": {
-        const _issue = issue2;
+        const _issue = issue;
         if (_issue.format === "starts_with") {
           return `Μη έγκυρη συμβολοσειρά: πρέπει να ξεκινά με "${_issue.prefix}"`;
         }
@@ -5151,18 +5161,18 @@ var error9 = () => {
           return `Μη έγκυρη συμβολοσειρά: πρέπει να περιέχει "${_issue.includes}"`;
         if (_issue.format === "regex")
           return `Μη έγκυρη συμβολοσειρά: πρέπει να ταιριάζει με το μοτίβο ${_issue.pattern}`;
-        return `Μη έγκυρο: ${FormatDictionary[_issue.format] ?? issue2.format}`;
+        return `Μη έγκυρο: ${FormatDictionary[_issue.format] ?? issue.format}`;
       }
       case "not_multiple_of":
-        return `Μη έγκυρος αριθμός: πρέπει να είναι πολλαπλάσιο του ${issue2.divisor}`;
+        return `Μη έγκυρος αριθμός: πρέπει να είναι πολλαπλάσιο του ${issue.divisor}`;
       case "unrecognized_keys":
-        return `Άγνωστ${issue2.keys.length > 1 ? "α" : "ο"} κλειδ${issue2.keys.length > 1 ? "ιά" : "ί"}: ${joinValues(issue2.keys, ", ")}`;
+        return `Άγνωστ${issue.keys.length > 1 ? "α" : "ο"} κλειδ${issue.keys.length > 1 ? "ιά" : "ί"}: ${joinValues(issue.keys, ", ")}`;
       case "invalid_key":
-        return `Μη έγκυρο κλειδί στο ${issue2.origin}`;
+        return `Μη έγκυρο κλειδί στο ${issue.origin}`;
       case "invalid_union":
         return "Μη έγκυρη είσοδος";
       case "invalid_element":
-        return `Μη έγκυρη τιμή στο ${issue2.origin}`;
+        return `Μη έγκυρη τιμή στο ${issue.origin}`;
       default:
         return `Μη έγκυρη είσοδος`;
     }
@@ -5184,8 +5194,8 @@ var error10 = () => {
     set: { unit: "items", verb: "to have" },
     map: { unit: "entries", verb: "to have" }
   };
-  function getSizing(origin2) {
-    return Sizable[origin2] ?? null;
+  function getSizing(origin) {
+    return Sizable[origin] ?? null;
   }
   const FormatDictionary = {
     regex: "input",
@@ -5221,35 +5231,35 @@ var error10 = () => {
   const TypeDictionary = {
     nan: "NaN"
   };
-  return (issue2) => {
-    switch (issue2.code) {
+  return (issue) => {
+    switch (issue.code) {
       case "invalid_type": {
-        const expected = TypeDictionary[issue2.expected] ?? issue2.expected;
-        const receivedType = parsedType(issue2.input);
+        const expected = TypeDictionary[issue.expected] ?? issue.expected;
+        const receivedType = parsedType(issue.input);
         const received = TypeDictionary[receivedType] ?? receivedType;
         return `Invalid input: expected ${expected}, received ${received}`;
       }
       case "invalid_value":
-        if (issue2.values.length === 1)
-          return `Invalid input: expected ${stringifyPrimitive(issue2.values[0])}`;
-        return `Invalid option: expected one of ${joinValues(issue2.values, "|")}`;
+        if (issue.values.length === 1)
+          return `Invalid input: expected ${stringifyPrimitive(issue.values[0])}`;
+        return `Invalid option: expected one of ${joinValues(issue.values, "|")}`;
       case "too_big": {
-        const adj = issue2.inclusive ? "<=" : "<";
-        const sizing = getSizing(issue2.origin);
+        const adj = issue.inclusive ? "<=" : "<";
+        const sizing = getSizing(issue.origin);
         if (sizing)
-          return `Too big: expected ${issue2.origin ?? "value"} to have ${adj}${issue2.maximum.toString()} ${sizing.unit ?? "elements"}`;
-        return `Too big: expected ${issue2.origin ?? "value"} to be ${adj}${issue2.maximum.toString()}`;
+          return `Too big: expected ${issue.origin ?? "value"} to have ${adj}${issue.maximum.toString()} ${sizing.unit ?? "elements"}`;
+        return `Too big: expected ${issue.origin ?? "value"} to be ${adj}${issue.maximum.toString()}`;
       }
       case "too_small": {
-        const adj = issue2.inclusive ? ">=" : ">";
-        const sizing = getSizing(issue2.origin);
+        const adj = issue.inclusive ? ">=" : ">";
+        const sizing = getSizing(issue.origin);
         if (sizing) {
-          return `Too small: expected ${issue2.origin} to have ${adj}${issue2.minimum.toString()} ${sizing.unit}`;
+          return `Too small: expected ${issue.origin} to have ${adj}${issue.minimum.toString()} ${sizing.unit}`;
         }
-        return `Too small: expected ${issue2.origin} to be ${adj}${issue2.minimum.toString()}`;
+        return `Too small: expected ${issue.origin} to be ${adj}${issue.minimum.toString()}`;
       }
       case "invalid_format": {
-        const _issue = issue2;
+        const _issue = issue;
         if (_issue.format === "starts_with") {
           return `Invalid string: must start with "${_issue.prefix}"`;
         }
@@ -5259,22 +5269,22 @@ var error10 = () => {
           return `Invalid string: must include "${_issue.includes}"`;
         if (_issue.format === "regex")
           return `Invalid string: must match pattern ${_issue.pattern}`;
-        return `Invalid ${FormatDictionary[_issue.format] ?? issue2.format}`;
+        return `Invalid ${FormatDictionary[_issue.format] ?? issue.format}`;
       }
       case "not_multiple_of":
-        return `Invalid number: must be a multiple of ${issue2.divisor}`;
+        return `Invalid number: must be a multiple of ${issue.divisor}`;
       case "unrecognized_keys":
-        return `Unrecognized key${issue2.keys.length > 1 ? "s" : ""}: ${joinValues(issue2.keys, ", ")}`;
+        return `Unrecognized key${issue.keys.length > 1 ? "s" : ""}: ${joinValues(issue.keys, ", ")}`;
       case "invalid_key":
-        return `Invalid key in ${issue2.origin}`;
+        return `Invalid key in ${issue.origin}`;
       case "invalid_union":
-        if (issue2.options && Array.isArray(issue2.options) && issue2.options.length > 0) {
-          const opts = issue2.options.map((o) => `'${o}'`).join(" | ");
+        if (issue.options && Array.isArray(issue.options) && issue.options.length > 0) {
+          const opts = issue.options.map((o) => `'${o}'`).join(" | ");
           return `Invalid discriminator value. Expected ${opts}`;
         }
         return "Invalid input";
       case "invalid_element":
-        return `Invalid value in ${issue2.origin}`;
+        return `Invalid value in ${issue.origin}`;
       default:
         return `Invalid input`;
     }
@@ -5295,8 +5305,8 @@ var error11 = () => {
     array: { unit: "elementojn", verb: "havi" },
     set: { unit: "elementojn", verb: "havi" }
   };
-  function getSizing(origin2) {
-    return Sizable[origin2] ?? null;
+  function getSizing(origin) {
+    return Sizable[origin] ?? null;
   }
   const FormatDictionary = {
     regex: "enigo",
@@ -5334,38 +5344,38 @@ var error11 = () => {
     array: "tabelo",
     null: "senvalora"
   };
-  return (issue2) => {
-    switch (issue2.code) {
+  return (issue) => {
+    switch (issue.code) {
       case "invalid_type": {
-        const expected = TypeDictionary[issue2.expected] ?? issue2.expected;
-        const receivedType = parsedType(issue2.input);
+        const expected = TypeDictionary[issue.expected] ?? issue.expected;
+        const receivedType = parsedType(issue.input);
         const received = TypeDictionary[receivedType] ?? receivedType;
-        if (/^[A-Z]/.test(issue2.expected)) {
-          return `Nevalida enigo: atendiĝis instanceof ${issue2.expected}, riceviĝis ${received}`;
+        if (/^[A-Z]/.test(issue.expected)) {
+          return `Nevalida enigo: atendiĝis instanceof ${issue.expected}, riceviĝis ${received}`;
         }
         return `Nevalida enigo: atendiĝis ${expected}, riceviĝis ${received}`;
       }
       case "invalid_value":
-        if (issue2.values.length === 1)
-          return `Nevalida enigo: atendiĝis ${stringifyPrimitive(issue2.values[0])}`;
-        return `Nevalida opcio: atendiĝis unu el ${joinValues(issue2.values, "|")}`;
+        if (issue.values.length === 1)
+          return `Nevalida enigo: atendiĝis ${stringifyPrimitive(issue.values[0])}`;
+        return `Nevalida opcio: atendiĝis unu el ${joinValues(issue.values, "|")}`;
       case "too_big": {
-        const adj = issue2.inclusive ? "<=" : "<";
-        const sizing = getSizing(issue2.origin);
+        const adj = issue.inclusive ? "<=" : "<";
+        const sizing = getSizing(issue.origin);
         if (sizing)
-          return `Tro granda: atendiĝis ke ${issue2.origin ?? "valoro"} havu ${adj}${issue2.maximum.toString()} ${sizing.unit ?? "elementojn"}`;
-        return `Tro granda: atendiĝis ke ${issue2.origin ?? "valoro"} havu ${adj}${issue2.maximum.toString()}`;
+          return `Tro granda: atendiĝis ke ${issue.origin ?? "valoro"} havu ${adj}${issue.maximum.toString()} ${sizing.unit ?? "elementojn"}`;
+        return `Tro granda: atendiĝis ke ${issue.origin ?? "valoro"} havu ${adj}${issue.maximum.toString()}`;
       }
       case "too_small": {
-        const adj = issue2.inclusive ? ">=" : ">";
-        const sizing = getSizing(issue2.origin);
+        const adj = issue.inclusive ? ">=" : ">";
+        const sizing = getSizing(issue.origin);
         if (sizing) {
-          return `Tro malgranda: atendiĝis ke ${issue2.origin} havu ${adj}${issue2.minimum.toString()} ${sizing.unit}`;
+          return `Tro malgranda: atendiĝis ke ${issue.origin} havu ${adj}${issue.minimum.toString()} ${sizing.unit}`;
         }
-        return `Tro malgranda: atendiĝis ke ${issue2.origin} estu ${adj}${issue2.minimum.toString()}`;
+        return `Tro malgranda: atendiĝis ke ${issue.origin} estu ${adj}${issue.minimum.toString()}`;
       }
       case "invalid_format": {
-        const _issue = issue2;
+        const _issue = issue;
         if (_issue.format === "starts_with")
           return `Nevalida karaktraro: devas komenciĝi per "${_issue.prefix}"`;
         if (_issue.format === "ends_with")
@@ -5374,18 +5384,18 @@ var error11 = () => {
           return `Nevalida karaktraro: devas inkluzivi "${_issue.includes}"`;
         if (_issue.format === "regex")
           return `Nevalida karaktraro: devas kongrui kun la modelo ${_issue.pattern}`;
-        return `Nevalida ${FormatDictionary[_issue.format] ?? issue2.format}`;
+        return `Nevalida ${FormatDictionary[_issue.format] ?? issue.format}`;
       }
       case "not_multiple_of":
-        return `Nevalida nombro: devas esti oblo de ${issue2.divisor}`;
+        return `Nevalida nombro: devas esti oblo de ${issue.divisor}`;
       case "unrecognized_keys":
-        return `Nekonata${issue2.keys.length > 1 ? "j" : ""} ŝlosilo${issue2.keys.length > 1 ? "j" : ""}: ${joinValues(issue2.keys, ", ")}`;
+        return `Nekonata${issue.keys.length > 1 ? "j" : ""} ŝlosilo${issue.keys.length > 1 ? "j" : ""}: ${joinValues(issue.keys, ", ")}`;
       case "invalid_key":
-        return `Nevalida ŝlosilo en ${issue2.origin}`;
+        return `Nevalida ŝlosilo en ${issue.origin}`;
       case "invalid_union":
         return "Nevalida enigo";
       case "invalid_element":
-        return `Nevalida valoro en ${issue2.origin}`;
+        return `Nevalida valoro en ${issue.origin}`;
       default:
         return `Nevalida enigo`;
     }
@@ -5406,8 +5416,8 @@ var error12 = () => {
     array: { unit: "elementos", verb: "tener" },
     set: { unit: "elementos", verb: "tener" }
   };
-  function getSizing(origin2) {
-    return Sizable[origin2] ?? null;
+  function getSizing(origin) {
+    return Sizable[origin] ?? null;
   }
   const FormatDictionary = {
     regex: "entrada",
@@ -5466,40 +5476,40 @@ var error12 = () => {
     unknown: "desconocido",
     any: "cualquiera"
   };
-  return (issue2) => {
-    switch (issue2.code) {
+  return (issue) => {
+    switch (issue.code) {
       case "invalid_type": {
-        const expected = TypeDictionary[issue2.expected] ?? issue2.expected;
-        const receivedType = parsedType(issue2.input);
+        const expected = TypeDictionary[issue.expected] ?? issue.expected;
+        const receivedType = parsedType(issue.input);
         const received = TypeDictionary[receivedType] ?? receivedType;
-        if (/^[A-Z]/.test(issue2.expected)) {
-          return `Entrada inválida: se esperaba instanceof ${issue2.expected}, recibido ${received}`;
+        if (/^[A-Z]/.test(issue.expected)) {
+          return `Entrada inválida: se esperaba instanceof ${issue.expected}, recibido ${received}`;
         }
         return `Entrada inválida: se esperaba ${expected}, recibido ${received}`;
       }
       case "invalid_value":
-        if (issue2.values.length === 1)
-          return `Entrada inválida: se esperaba ${stringifyPrimitive(issue2.values[0])}`;
-        return `Opción inválida: se esperaba una de ${joinValues(issue2.values, "|")}`;
+        if (issue.values.length === 1)
+          return `Entrada inválida: se esperaba ${stringifyPrimitive(issue.values[0])}`;
+        return `Opción inválida: se esperaba una de ${joinValues(issue.values, "|")}`;
       case "too_big": {
-        const adj = issue2.inclusive ? "<=" : "<";
-        const sizing = getSizing(issue2.origin);
-        const origin2 = TypeDictionary[issue2.origin] ?? issue2.origin;
+        const adj = issue.inclusive ? "<=" : "<";
+        const sizing = getSizing(issue.origin);
+        const origin = TypeDictionary[issue.origin] ?? issue.origin;
         if (sizing)
-          return `Demasiado grande: se esperaba que ${origin2 ?? "valor"} tuviera ${adj}${issue2.maximum.toString()} ${sizing.unit ?? "elementos"}`;
-        return `Demasiado grande: se esperaba que ${origin2 ?? "valor"} fuera ${adj}${issue2.maximum.toString()}`;
+          return `Demasiado grande: se esperaba que ${origin ?? "valor"} tuviera ${adj}${issue.maximum.toString()} ${sizing.unit ?? "elementos"}`;
+        return `Demasiado grande: se esperaba que ${origin ?? "valor"} fuera ${adj}${issue.maximum.toString()}`;
       }
       case "too_small": {
-        const adj = issue2.inclusive ? ">=" : ">";
-        const sizing = getSizing(issue2.origin);
-        const origin2 = TypeDictionary[issue2.origin] ?? issue2.origin;
+        const adj = issue.inclusive ? ">=" : ">";
+        const sizing = getSizing(issue.origin);
+        const origin = TypeDictionary[issue.origin] ?? issue.origin;
         if (sizing) {
-          return `Demasiado pequeño: se esperaba que ${origin2} tuviera ${adj}${issue2.minimum.toString()} ${sizing.unit}`;
+          return `Demasiado pequeño: se esperaba que ${origin} tuviera ${adj}${issue.minimum.toString()} ${sizing.unit}`;
         }
-        return `Demasiado pequeño: se esperaba que ${origin2} fuera ${adj}${issue2.minimum.toString()}`;
+        return `Demasiado pequeño: se esperaba que ${origin} fuera ${adj}${issue.minimum.toString()}`;
       }
       case "invalid_format": {
-        const _issue = issue2;
+        const _issue = issue;
         if (_issue.format === "starts_with")
           return `Cadena inválida: debe comenzar con "${_issue.prefix}"`;
         if (_issue.format === "ends_with")
@@ -5508,18 +5518,18 @@ var error12 = () => {
           return `Cadena inválida: debe incluir "${_issue.includes}"`;
         if (_issue.format === "regex")
           return `Cadena inválida: debe coincidir con el patrón ${_issue.pattern}`;
-        return `Inválido ${FormatDictionary[_issue.format] ?? issue2.format}`;
+        return `Inválido ${FormatDictionary[_issue.format] ?? issue.format}`;
       }
       case "not_multiple_of":
-        return `Número inválido: debe ser múltiplo de ${issue2.divisor}`;
+        return `Número inválido: debe ser múltiplo de ${issue.divisor}`;
       case "unrecognized_keys":
-        return `Llave${issue2.keys.length > 1 ? "s" : ""} desconocida${issue2.keys.length > 1 ? "s" : ""}: ${joinValues(issue2.keys, ", ")}`;
+        return `Llave${issue.keys.length > 1 ? "s" : ""} desconocida${issue.keys.length > 1 ? "s" : ""}: ${joinValues(issue.keys, ", ")}`;
       case "invalid_key":
-        return `Llave inválida en ${TypeDictionary[issue2.origin] ?? issue2.origin}`;
+        return `Llave inválida en ${TypeDictionary[issue.origin] ?? issue.origin}`;
       case "invalid_union":
         return "Entrada inválida";
       case "invalid_element":
-        return `Valor inválido en ${TypeDictionary[issue2.origin] ?? issue2.origin}`;
+        return `Valor inválido en ${TypeDictionary[issue.origin] ?? issue.origin}`;
       default:
         return `Entrada inválida`;
     }
@@ -5540,8 +5550,8 @@ var error13 = () => {
     array: { unit: "آیتم", verb: "داشته باشد" },
     set: { unit: "آیتم", verb: "داشته باشد" }
   };
-  function getSizing(origin2) {
-    return Sizable[origin2] ?? null;
+  function getSizing(origin) {
+    return Sizable[origin] ?? null;
   }
   const FormatDictionary = {
     regex: "ورودی",
@@ -5578,40 +5588,40 @@ var error13 = () => {
     number: "عدد",
     array: "آرایه"
   };
-  return (issue2) => {
-    switch (issue2.code) {
+  return (issue) => {
+    switch (issue.code) {
       case "invalid_type": {
-        const expected = TypeDictionary[issue2.expected] ?? issue2.expected;
-        const receivedType = parsedType(issue2.input);
+        const expected = TypeDictionary[issue.expected] ?? issue.expected;
+        const receivedType = parsedType(issue.input);
         const received = TypeDictionary[receivedType] ?? receivedType;
-        if (/^[A-Z]/.test(issue2.expected)) {
-          return `ورودی نامعتبر: می‌بایست instanceof ${issue2.expected} می‌بود، ${received} دریافت شد`;
+        if (/^[A-Z]/.test(issue.expected)) {
+          return `ورودی نامعتبر: می‌بایست instanceof ${issue.expected} می‌بود، ${received} دریافت شد`;
         }
         return `ورودی نامعتبر: می‌بایست ${expected} می‌بود، ${received} دریافت شد`;
       }
       case "invalid_value":
-        if (issue2.values.length === 1) {
-          return `ورودی نامعتبر: می‌بایست ${stringifyPrimitive(issue2.values[0])} می‌بود`;
+        if (issue.values.length === 1) {
+          return `ورودی نامعتبر: می‌بایست ${stringifyPrimitive(issue.values[0])} می‌بود`;
         }
-        return `گزینه نامعتبر: می‌بایست یکی از ${joinValues(issue2.values, "|")} می‌بود`;
+        return `گزینه نامعتبر: می‌بایست یکی از ${joinValues(issue.values, "|")} می‌بود`;
       case "too_big": {
-        const adj = issue2.inclusive ? "<=" : "<";
-        const sizing = getSizing(issue2.origin);
+        const adj = issue.inclusive ? "<=" : "<";
+        const sizing = getSizing(issue.origin);
         if (sizing) {
-          return `خیلی بزرگ: ${issue2.origin ?? "مقدار"} باید ${adj}${issue2.maximum.toString()} ${sizing.unit ?? "عنصر"} باشد`;
+          return `خیلی بزرگ: ${issue.origin ?? "مقدار"} باید ${adj}${issue.maximum.toString()} ${sizing.unit ?? "عنصر"} باشد`;
         }
-        return `خیلی بزرگ: ${issue2.origin ?? "مقدار"} باید ${adj}${issue2.maximum.toString()} باشد`;
+        return `خیلی بزرگ: ${issue.origin ?? "مقدار"} باید ${adj}${issue.maximum.toString()} باشد`;
       }
       case "too_small": {
-        const adj = issue2.inclusive ? ">=" : ">";
-        const sizing = getSizing(issue2.origin);
+        const adj = issue.inclusive ? ">=" : ">";
+        const sizing = getSizing(issue.origin);
         if (sizing) {
-          return `خیلی کوچک: ${issue2.origin} باید ${adj}${issue2.minimum.toString()} ${sizing.unit} باشد`;
+          return `خیلی کوچک: ${issue.origin} باید ${adj}${issue.minimum.toString()} ${sizing.unit} باشد`;
         }
-        return `خیلی کوچک: ${issue2.origin} باید ${adj}${issue2.minimum.toString()} باشد`;
+        return `خیلی کوچک: ${issue.origin} باید ${adj}${issue.minimum.toString()} باشد`;
       }
       case "invalid_format": {
-        const _issue = issue2;
+        const _issue = issue;
         if (_issue.format === "starts_with") {
           return `رشته نامعتبر: باید با "${_issue.prefix}" شروع شود`;
         }
@@ -5624,18 +5634,18 @@ var error13 = () => {
         if (_issue.format === "regex") {
           return `رشته نامعتبر: باید با الگوی ${_issue.pattern} مطابقت داشته باشد`;
         }
-        return `${FormatDictionary[_issue.format] ?? issue2.format} نامعتبر`;
+        return `${FormatDictionary[_issue.format] ?? issue.format} نامعتبر`;
       }
       case "not_multiple_of":
-        return `عدد نامعتبر: باید مضرب ${issue2.divisor} باشد`;
+        return `عدد نامعتبر: باید مضرب ${issue.divisor} باشد`;
       case "unrecognized_keys":
-        return `کلید${issue2.keys.length > 1 ? "های" : ""} ناشناس: ${joinValues(issue2.keys, ", ")}`;
+        return `کلید${issue.keys.length > 1 ? "های" : ""} ناشناس: ${joinValues(issue.keys, ", ")}`;
       case "invalid_key":
-        return `کلید ناشناس در ${issue2.origin}`;
+        return `کلید ناشناس در ${issue.origin}`;
       case "invalid_union":
         return `ورودی نامعتبر`;
       case "invalid_element":
-        return `مقدار نامعتبر در ${issue2.origin}`;
+        return `مقدار نامعتبر در ${issue.origin}`;
       default:
         return `ورودی نامعتبر`;
     }
@@ -5660,8 +5670,8 @@ var error14 = () => {
     int: { unit: "", subject: "kokonaisluvun" },
     date: { unit: "", subject: "päivämäärän" }
   };
-  function getSizing(origin2) {
-    return Sizable[origin2] ?? null;
+  function getSizing(origin) {
+    return Sizable[origin] ?? null;
   }
   const FormatDictionary = {
     regex: "säännöllinen lauseke",
@@ -5696,39 +5706,39 @@ var error14 = () => {
   const TypeDictionary = {
     nan: "NaN"
   };
-  return (issue2) => {
-    switch (issue2.code) {
+  return (issue) => {
+    switch (issue.code) {
       case "invalid_type": {
-        const expected = TypeDictionary[issue2.expected] ?? issue2.expected;
-        const receivedType = parsedType(issue2.input);
+        const expected = TypeDictionary[issue.expected] ?? issue.expected;
+        const receivedType = parsedType(issue.input);
         const received = TypeDictionary[receivedType] ?? receivedType;
-        if (/^[A-Z]/.test(issue2.expected)) {
-          return `Virheellinen tyyppi: odotettiin instanceof ${issue2.expected}, oli ${received}`;
+        if (/^[A-Z]/.test(issue.expected)) {
+          return `Virheellinen tyyppi: odotettiin instanceof ${issue.expected}, oli ${received}`;
         }
         return `Virheellinen tyyppi: odotettiin ${expected}, oli ${received}`;
       }
       case "invalid_value":
-        if (issue2.values.length === 1)
-          return `Virheellinen syöte: täytyy olla ${stringifyPrimitive(issue2.values[0])}`;
-        return `Virheellinen valinta: täytyy olla yksi seuraavista: ${joinValues(issue2.values, "|")}`;
+        if (issue.values.length === 1)
+          return `Virheellinen syöte: täytyy olla ${stringifyPrimitive(issue.values[0])}`;
+        return `Virheellinen valinta: täytyy olla yksi seuraavista: ${joinValues(issue.values, "|")}`;
       case "too_big": {
-        const adj = issue2.inclusive ? "<=" : "<";
-        const sizing = getSizing(issue2.origin);
+        const adj = issue.inclusive ? "<=" : "<";
+        const sizing = getSizing(issue.origin);
         if (sizing) {
-          return `Liian suuri: ${sizing.subject} täytyy olla ${adj}${issue2.maximum.toString()} ${sizing.unit}`.trim();
+          return `Liian suuri: ${sizing.subject} täytyy olla ${adj}${issue.maximum.toString()} ${sizing.unit}`.trim();
         }
-        return `Liian suuri: arvon täytyy olla ${adj}${issue2.maximum.toString()}`;
+        return `Liian suuri: arvon täytyy olla ${adj}${issue.maximum.toString()}`;
       }
       case "too_small": {
-        const adj = issue2.inclusive ? ">=" : ">";
-        const sizing = getSizing(issue2.origin);
+        const adj = issue.inclusive ? ">=" : ">";
+        const sizing = getSizing(issue.origin);
         if (sizing) {
-          return `Liian pieni: ${sizing.subject} täytyy olla ${adj}${issue2.minimum.toString()} ${sizing.unit}`.trim();
+          return `Liian pieni: ${sizing.subject} täytyy olla ${adj}${issue.minimum.toString()} ${sizing.unit}`.trim();
         }
-        return `Liian pieni: arvon täytyy olla ${adj}${issue2.minimum.toString()}`;
+        return `Liian pieni: arvon täytyy olla ${adj}${issue.minimum.toString()}`;
       }
       case "invalid_format": {
-        const _issue = issue2;
+        const _issue = issue;
         if (_issue.format === "starts_with")
           return `Virheellinen syöte: täytyy alkaa "${_issue.prefix}"`;
         if (_issue.format === "ends_with")
@@ -5738,12 +5748,12 @@ var error14 = () => {
         if (_issue.format === "regex") {
           return `Virheellinen syöte: täytyy vastata säännöllistä lauseketta ${_issue.pattern}`;
         }
-        return `Virheellinen ${FormatDictionary[_issue.format] ?? issue2.format}`;
+        return `Virheellinen ${FormatDictionary[_issue.format] ?? issue.format}`;
       }
       case "not_multiple_of":
-        return `Virheellinen luku: täytyy olla luvun ${issue2.divisor} monikerta`;
+        return `Virheellinen luku: täytyy olla luvun ${issue.divisor} monikerta`;
       case "unrecognized_keys":
-        return `${issue2.keys.length > 1 ? "Tuntemattomat avaimet" : "Tuntematon avain"}: ${joinValues(issue2.keys, ", ")}`;
+        return `${issue.keys.length > 1 ? "Tuntemattomat avaimet" : "Tuntematon avain"}: ${joinValues(issue.keys, ", ")}`;
       case "invalid_key":
         return "Virheellinen avain tietueessa";
       case "invalid_union":
@@ -5770,8 +5780,8 @@ var error15 = () => {
     array: { unit: "éléments", verb: "avoir" },
     set: { unit: "éléments", verb: "avoir" }
   };
-  function getSizing(origin2) {
-    return Sizable[origin2] ?? null;
+  function getSizing(origin) {
+    return Sizable[origin] ?? null;
   }
   const FormatDictionary = {
     regex: "entrée",
@@ -5826,37 +5836,37 @@ var error15 = () => {
     nan: "NaN",
     function: "fonction"
   };
-  return (issue2) => {
-    switch (issue2.code) {
+  return (issue) => {
+    switch (issue.code) {
       case "invalid_type": {
-        const expected = TypeDictionary[issue2.expected] ?? issue2.expected;
-        const receivedType = parsedType(issue2.input);
+        const expected = TypeDictionary[issue.expected] ?? issue.expected;
+        const receivedType = parsedType(issue.input);
         const received = TypeDictionary[receivedType] ?? receivedType;
-        if (/^[A-Z]/.test(issue2.expected)) {
-          return `Entrée invalide : instanceof ${issue2.expected} attendu, ${received} reçu`;
+        if (/^[A-Z]/.test(issue.expected)) {
+          return `Entrée invalide : instanceof ${issue.expected} attendu, ${received} reçu`;
         }
         return `Entrée invalide : ${expected} attendu, ${received} reçu`;
       }
       case "invalid_value":
-        if (issue2.values.length === 1)
-          return `Entrée invalide : ${stringifyPrimitive(issue2.values[0])} attendu`;
-        return `Option invalide : une valeur parmi ${joinValues(issue2.values, "|")} attendue`;
+        if (issue.values.length === 1)
+          return `Entrée invalide : ${stringifyPrimitive(issue.values[0])} attendu`;
+        return `Option invalide : une valeur parmi ${joinValues(issue.values, "|")} attendue`;
       case "too_big": {
-        const adj = issue2.inclusive ? "<=" : "<";
-        const sizing = getSizing(issue2.origin);
+        const adj = issue.inclusive ? "<=" : "<";
+        const sizing = getSizing(issue.origin);
         if (sizing)
-          return `Trop grand : ${TypeDictionary[issue2.origin] ?? "valeur"} doit ${sizing.verb} ${adj}${issue2.maximum.toString()} ${sizing.unit ?? "élément(s)"}`;
-        return `Trop grand : ${TypeDictionary[issue2.origin] ?? "valeur"} doit être ${adj}${issue2.maximum.toString()}`;
+          return `Trop grand : ${TypeDictionary[issue.origin] ?? "valeur"} doit ${sizing.verb} ${adj}${issue.maximum.toString()} ${sizing.unit ?? "élément(s)"}`;
+        return `Trop grand : ${TypeDictionary[issue.origin] ?? "valeur"} doit être ${adj}${issue.maximum.toString()}`;
       }
       case "too_small": {
-        const adj = issue2.inclusive ? ">=" : ">";
-        const sizing = getSizing(issue2.origin);
+        const adj = issue.inclusive ? ">=" : ">";
+        const sizing = getSizing(issue.origin);
         if (sizing)
-          return `Trop petit : ${TypeDictionary[issue2.origin] ?? "valeur"} doit ${sizing.verb} ${adj}${issue2.minimum.toString()} ${sizing.unit}`;
-        return `Trop petit : ${TypeDictionary[issue2.origin] ?? "valeur"} doit être ${adj}${issue2.minimum.toString()}`;
+          return `Trop petit : ${TypeDictionary[issue.origin] ?? "valeur"} doit ${sizing.verb} ${adj}${issue.minimum.toString()} ${sizing.unit}`;
+        return `Trop petit : ${TypeDictionary[issue.origin] ?? "valeur"} doit être ${adj}${issue.minimum.toString()}`;
       }
       case "invalid_format": {
-        const _issue = issue2;
+        const _issue = issue;
         if (_issue.format === "starts_with")
           return `Chaîne invalide : doit commencer par "${_issue.prefix}"`;
         if (_issue.format === "ends_with")
@@ -5865,18 +5875,18 @@ var error15 = () => {
           return `Chaîne invalide : doit inclure "${_issue.includes}"`;
         if (_issue.format === "regex")
           return `Chaîne invalide : doit correspondre au modèle ${_issue.pattern}`;
-        return `${FormatDictionary[_issue.format] ?? issue2.format} invalide`;
+        return `${FormatDictionary[_issue.format] ?? issue.format} invalide`;
       }
       case "not_multiple_of":
-        return `Nombre invalide : doit être un multiple de ${issue2.divisor}`;
+        return `Nombre invalide : doit être un multiple de ${issue.divisor}`;
       case "unrecognized_keys":
-        return `Clé${issue2.keys.length > 1 ? "s" : ""} non reconnue${issue2.keys.length > 1 ? "s" : ""} : ${joinValues(issue2.keys, ", ")}`;
+        return `Clé${issue.keys.length > 1 ? "s" : ""} non reconnue${issue.keys.length > 1 ? "s" : ""} : ${joinValues(issue.keys, ", ")}`;
       case "invalid_key":
-        return `Clé invalide dans ${issue2.origin}`;
+        return `Clé invalide dans ${issue.origin}`;
       case "invalid_union":
         return "Entrée invalide";
       case "invalid_element":
-        return `Valeur invalide dans ${issue2.origin}`;
+        return `Valeur invalide dans ${issue.origin}`;
       default:
         return `Entrée invalide`;
     }
@@ -5897,8 +5907,8 @@ var error16 = () => {
     array: { unit: "éléments", verb: "avoir" },
     set: { unit: "éléments", verb: "avoir" }
   };
-  function getSizing(origin2) {
-    return Sizable[origin2] ?? null;
+  function getSizing(origin) {
+    return Sizable[origin] ?? null;
   }
   const FormatDictionary = {
     regex: "entrée",
@@ -5933,38 +5943,38 @@ var error16 = () => {
   const TypeDictionary = {
     nan: "NaN"
   };
-  return (issue2) => {
-    switch (issue2.code) {
+  return (issue) => {
+    switch (issue.code) {
       case "invalid_type": {
-        const expected = TypeDictionary[issue2.expected] ?? issue2.expected;
-        const receivedType = parsedType(issue2.input);
+        const expected = TypeDictionary[issue.expected] ?? issue.expected;
+        const receivedType = parsedType(issue.input);
         const received = TypeDictionary[receivedType] ?? receivedType;
-        if (/^[A-Z]/.test(issue2.expected)) {
-          return `Entrée invalide : attendu instanceof ${issue2.expected}, reçu ${received}`;
+        if (/^[A-Z]/.test(issue.expected)) {
+          return `Entrée invalide : attendu instanceof ${issue.expected}, reçu ${received}`;
         }
         return `Entrée invalide : attendu ${expected}, reçu ${received}`;
       }
       case "invalid_value":
-        if (issue2.values.length === 1)
-          return `Entrée invalide : attendu ${stringifyPrimitive(issue2.values[0])}`;
-        return `Option invalide : attendu l'une des valeurs suivantes ${joinValues(issue2.values, "|")}`;
+        if (issue.values.length === 1)
+          return `Entrée invalide : attendu ${stringifyPrimitive(issue.values[0])}`;
+        return `Option invalide : attendu l'une des valeurs suivantes ${joinValues(issue.values, "|")}`;
       case "too_big": {
-        const adj = issue2.inclusive ? "≤" : "<";
-        const sizing = getSizing(issue2.origin);
+        const adj = issue.inclusive ? "≤" : "<";
+        const sizing = getSizing(issue.origin);
         if (sizing)
-          return `Trop grand : attendu que ${issue2.origin ?? "la valeur"} ait ${adj}${issue2.maximum.toString()} ${sizing.unit}`;
-        return `Trop grand : attendu que ${issue2.origin ?? "la valeur"} soit ${adj}${issue2.maximum.toString()}`;
+          return `Trop grand : attendu que ${issue.origin ?? "la valeur"} ait ${adj}${issue.maximum.toString()} ${sizing.unit}`;
+        return `Trop grand : attendu que ${issue.origin ?? "la valeur"} soit ${adj}${issue.maximum.toString()}`;
       }
       case "too_small": {
-        const adj = issue2.inclusive ? "≥" : ">";
-        const sizing = getSizing(issue2.origin);
+        const adj = issue.inclusive ? "≥" : ">";
+        const sizing = getSizing(issue.origin);
         if (sizing) {
-          return `Trop petit : attendu que ${issue2.origin} ait ${adj}${issue2.minimum.toString()} ${sizing.unit}`;
+          return `Trop petit : attendu que ${issue.origin} ait ${adj}${issue.minimum.toString()} ${sizing.unit}`;
         }
-        return `Trop petit : attendu que ${issue2.origin} soit ${adj}${issue2.minimum.toString()}`;
+        return `Trop petit : attendu que ${issue.origin} soit ${adj}${issue.minimum.toString()}`;
       }
       case "invalid_format": {
-        const _issue = issue2;
+        const _issue = issue;
         if (_issue.format === "starts_with") {
           return `Chaîne invalide : doit commencer par "${_issue.prefix}"`;
         }
@@ -5974,18 +5984,18 @@ var error16 = () => {
           return `Chaîne invalide : doit inclure "${_issue.includes}"`;
         if (_issue.format === "regex")
           return `Chaîne invalide : doit correspondre au motif ${_issue.pattern}`;
-        return `${FormatDictionary[_issue.format] ?? issue2.format} invalide`;
+        return `${FormatDictionary[_issue.format] ?? issue.format} invalide`;
       }
       case "not_multiple_of":
-        return `Nombre invalide : doit être un multiple de ${issue2.divisor}`;
+        return `Nombre invalide : doit être un multiple de ${issue.divisor}`;
       case "unrecognized_keys":
-        return `Clé${issue2.keys.length > 1 ? "s" : ""} non reconnue${issue2.keys.length > 1 ? "s" : ""} : ${joinValues(issue2.keys, ", ")}`;
+        return `Clé${issue.keys.length > 1 ? "s" : ""} non reconnue${issue.keys.length > 1 ? "s" : ""} : ${joinValues(issue.keys, ", ")}`;
       case "invalid_key":
-        return `Clé invalide dans ${issue2.origin}`;
+        return `Clé invalide dans ${issue.origin}`;
       case "invalid_union":
         return "Entrée invalide";
       case "invalid_element":
-        return `Valeur invalide dans ${issue2.origin}`;
+        return `Valeur invalide dans ${issue.origin}`;
       default:
         return `Entrée invalide`;
     }
@@ -6040,10 +6050,10 @@ var error17 = () => {
     const gender = e?.gender ?? "m";
     return gender === "f" ? "צריכה להיות" : "צריך להיות";
   };
-  const getSizing = (origin2) => {
-    if (!origin2)
+  const getSizing = (origin) => {
+    if (!origin)
       return null;
-    return Sizable[origin2] ?? null;
+    return Sizable[origin] ?? null;
   };
   const FormatDictionary = {
     regex: { label: "קלט", gender: "m" },
@@ -6080,24 +6090,24 @@ var error17 = () => {
   const TypeDictionary = {
     nan: "NaN"
   };
-  return (issue2) => {
-    switch (issue2.code) {
+  return (issue) => {
+    switch (issue.code) {
       case "invalid_type": {
-        const expectedKey = issue2.expected;
+        const expectedKey = issue.expected;
         const expected = TypeDictionary[expectedKey ?? ""] ?? typeLabel(expectedKey);
-        const receivedType = parsedType(issue2.input);
+        const receivedType = parsedType(issue.input);
         const received = TypeDictionary[receivedType] ?? TypeNames[receivedType]?.label ?? receivedType;
-        if (/^[A-Z]/.test(issue2.expected)) {
-          return `קלט לא תקין: צריך להיות instanceof ${issue2.expected}, התקבל ${received}`;
+        if (/^[A-Z]/.test(issue.expected)) {
+          return `קלט לא תקין: צריך להיות instanceof ${issue.expected}, התקבל ${received}`;
         }
         return `קלט לא תקין: צריך להיות ${expected}, התקבל ${received}`;
       }
       case "invalid_value": {
-        if (issue2.values.length === 1) {
-          return `ערך לא תקין: הערך חייב להיות ${stringifyPrimitive(issue2.values[0])}`;
+        if (issue.values.length === 1) {
+          return `ערך לא תקין: הערך חייב להיות ${stringifyPrimitive(issue.values[0])}`;
         }
-        const stringified = issue2.values.map((v) => stringifyPrimitive(v));
-        if (issue2.values.length === 2) {
+        const stringified = issue.values.map((v) => stringifyPrimitive(v));
+        if (issue.values.length === 2) {
           return `ערך לא תקין: האפשרויות המתאימות הן ${stringified[0]} או ${stringified[1]}`;
         }
         const lastValue = stringified[stringified.length - 1];
@@ -6105,55 +6115,55 @@ var error17 = () => {
         return `ערך לא תקין: האפשרויות המתאימות הן ${restValues} או ${lastValue}`;
       }
       case "too_big": {
-        const sizing = getSizing(issue2.origin);
-        const subject = withDefinite(issue2.origin ?? "value");
-        if (issue2.origin === "string") {
-          return `${sizing?.longLabel ?? "ארוך"} מדי: ${subject} צריכה להכיל ${issue2.maximum.toString()} ${sizing?.unit ?? ""} ${issue2.inclusive ? "או פחות" : "לכל היותר"}`.trim();
+        const sizing = getSizing(issue.origin);
+        const subject = withDefinite(issue.origin ?? "value");
+        if (issue.origin === "string") {
+          return `${sizing?.longLabel ?? "ארוך"} מדי: ${subject} צריכה להכיל ${issue.maximum.toString()} ${sizing?.unit ?? ""} ${issue.inclusive ? "או פחות" : "לכל היותר"}`.trim();
         }
-        if (issue2.origin === "number") {
-          const comparison = issue2.inclusive ? `קטן או שווה ל-${issue2.maximum}` : `קטן מ-${issue2.maximum}`;
+        if (issue.origin === "number") {
+          const comparison = issue.inclusive ? `קטן או שווה ל-${issue.maximum}` : `קטן מ-${issue.maximum}`;
           return `גדול מדי: ${subject} צריך להיות ${comparison}`;
         }
-        if (issue2.origin === "array" || issue2.origin === "set") {
-          const verb = issue2.origin === "set" ? "צריכה" : "צריך";
-          const comparison = issue2.inclusive ? `${issue2.maximum} ${sizing?.unit ?? ""} או פחות` : `פחות מ-${issue2.maximum} ${sizing?.unit ?? ""}`;
+        if (issue.origin === "array" || issue.origin === "set") {
+          const verb = issue.origin === "set" ? "צריכה" : "צריך";
+          const comparison = issue.inclusive ? `${issue.maximum} ${sizing?.unit ?? ""} או פחות` : `פחות מ-${issue.maximum} ${sizing?.unit ?? ""}`;
           return `גדול מדי: ${subject} ${verb} להכיל ${comparison}`.trim();
         }
-        const adj = issue2.inclusive ? "<=" : "<";
-        const be = verbFor(issue2.origin ?? "value");
+        const adj = issue.inclusive ? "<=" : "<";
+        const be = verbFor(issue.origin ?? "value");
         if (sizing?.unit) {
-          return `${sizing.longLabel} מדי: ${subject} ${be} ${adj}${issue2.maximum.toString()} ${sizing.unit}`;
+          return `${sizing.longLabel} מדי: ${subject} ${be} ${adj}${issue.maximum.toString()} ${sizing.unit}`;
         }
-        return `${sizing?.longLabel ?? "גדול"} מדי: ${subject} ${be} ${adj}${issue2.maximum.toString()}`;
+        return `${sizing?.longLabel ?? "גדול"} מדי: ${subject} ${be} ${adj}${issue.maximum.toString()}`;
       }
       case "too_small": {
-        const sizing = getSizing(issue2.origin);
-        const subject = withDefinite(issue2.origin ?? "value");
-        if (issue2.origin === "string") {
-          return `${sizing?.shortLabel ?? "קצר"} מדי: ${subject} צריכה להכיל ${issue2.minimum.toString()} ${sizing?.unit ?? ""} ${issue2.inclusive ? "או יותר" : "לפחות"}`.trim();
+        const sizing = getSizing(issue.origin);
+        const subject = withDefinite(issue.origin ?? "value");
+        if (issue.origin === "string") {
+          return `${sizing?.shortLabel ?? "קצר"} מדי: ${subject} צריכה להכיל ${issue.minimum.toString()} ${sizing?.unit ?? ""} ${issue.inclusive ? "או יותר" : "לפחות"}`.trim();
         }
-        if (issue2.origin === "number") {
-          const comparison = issue2.inclusive ? `גדול או שווה ל-${issue2.minimum}` : `גדול מ-${issue2.minimum}`;
+        if (issue.origin === "number") {
+          const comparison = issue.inclusive ? `גדול או שווה ל-${issue.minimum}` : `גדול מ-${issue.minimum}`;
           return `קטן מדי: ${subject} צריך להיות ${comparison}`;
         }
-        if (issue2.origin === "array" || issue2.origin === "set") {
-          const verb = issue2.origin === "set" ? "צריכה" : "צריך";
-          if (issue2.minimum === 1 && issue2.inclusive) {
-            const singularPhrase = issue2.origin === "set" ? "לפחות פריט אחד" : "לפחות פריט אחד";
+        if (issue.origin === "array" || issue.origin === "set") {
+          const verb = issue.origin === "set" ? "צריכה" : "צריך";
+          if (issue.minimum === 1 && issue.inclusive) {
+            const singularPhrase = issue.origin === "set" ? "לפחות פריט אחד" : "לפחות פריט אחד";
             return `קטן מדי: ${subject} ${verb} להכיל ${singularPhrase}`;
           }
-          const comparison = issue2.inclusive ? `${issue2.minimum} ${sizing?.unit ?? ""} או יותר` : `יותר מ-${issue2.minimum} ${sizing?.unit ?? ""}`;
+          const comparison = issue.inclusive ? `${issue.minimum} ${sizing?.unit ?? ""} או יותר` : `יותר מ-${issue.minimum} ${sizing?.unit ?? ""}`;
           return `קטן מדי: ${subject} ${verb} להכיל ${comparison}`.trim();
         }
-        const adj = issue2.inclusive ? ">=" : ">";
-        const be = verbFor(issue2.origin ?? "value");
+        const adj = issue.inclusive ? ">=" : ">";
+        const be = verbFor(issue.origin ?? "value");
         if (sizing?.unit) {
-          return `${sizing.shortLabel} מדי: ${subject} ${be} ${adj}${issue2.minimum.toString()} ${sizing.unit}`;
+          return `${sizing.shortLabel} מדי: ${subject} ${be} ${adj}${issue.minimum.toString()} ${sizing.unit}`;
         }
-        return `${sizing?.shortLabel ?? "קטן"} מדי: ${subject} ${be} ${adj}${issue2.minimum.toString()}`;
+        return `${sizing?.shortLabel ?? "קטן"} מדי: ${subject} ${be} ${adj}${issue.minimum.toString()}`;
       }
       case "invalid_format": {
-        const _issue = issue2;
+        const _issue = issue;
         if (_issue.format === "starts_with")
           return `המחרוזת חייבת להתחיל ב "${_issue.prefix}"`;
         if (_issue.format === "ends_with")
@@ -6169,16 +6179,16 @@ var error17 = () => {
         return `${noun} לא ${adjective}`;
       }
       case "not_multiple_of":
-        return `מספר לא תקין: חייב להיות מכפלה של ${issue2.divisor}`;
+        return `מספר לא תקין: חייב להיות מכפלה של ${issue.divisor}`;
       case "unrecognized_keys":
-        return `מפתח${issue2.keys.length > 1 ? "ות" : ""} לא מזוה${issue2.keys.length > 1 ? "ים" : "ה"}: ${joinValues(issue2.keys, ", ")}`;
+        return `מפתח${issue.keys.length > 1 ? "ות" : ""} לא מזוה${issue.keys.length > 1 ? "ים" : "ה"}: ${joinValues(issue.keys, ", ")}`;
       case "invalid_key": {
         return `שדה לא תקין באובייקט`;
       }
       case "invalid_union":
         return "קלט לא תקין";
       case "invalid_element": {
-        const place = withDefinite(issue2.origin ?? "array");
+        const place = withDefinite(issue.origin ?? "array");
         return `ערך לא תקין ב${place}`;
       }
       default:
@@ -6201,8 +6211,8 @@ var error18 = () => {
     array: { unit: "stavki", verb: "imati" },
     set: { unit: "stavki", verb: "imati" }
   };
-  function getSizing(origin2) {
-    return Sizable[origin2] ?? null;
+  function getSizing(origin) {
+    return Sizable[origin] ?? null;
   }
   const FormatDictionary = {
     regex: "unos",
@@ -6251,40 +6261,40 @@ var error18 = () => {
     function: "funkcija",
     map: "mapa"
   };
-  return (issue2) => {
-    switch (issue2.code) {
+  return (issue) => {
+    switch (issue.code) {
       case "invalid_type": {
-        const expected = TypeDictionary[issue2.expected] ?? issue2.expected;
-        const receivedType = parsedType(issue2.input);
+        const expected = TypeDictionary[issue.expected] ?? issue.expected;
+        const receivedType = parsedType(issue.input);
         const received = TypeDictionary[receivedType] ?? receivedType;
-        if (/^[A-Z]/.test(issue2.expected)) {
-          return `Neispravan unos: očekuje se instanceof ${issue2.expected}, a primljeno je ${received}`;
+        if (/^[A-Z]/.test(issue.expected)) {
+          return `Neispravan unos: očekuje se instanceof ${issue.expected}, a primljeno je ${received}`;
         }
         return `Neispravan unos: očekuje se ${expected}, a primljeno je ${received}`;
       }
       case "invalid_value":
-        if (issue2.values.length === 1)
-          return `Neispravna vrijednost: očekivano ${stringifyPrimitive(issue2.values[0])}`;
-        return `Neispravna opcija: očekivano jedno od ${joinValues(issue2.values, "|")}`;
+        if (issue.values.length === 1)
+          return `Neispravna vrijednost: očekivano ${stringifyPrimitive(issue.values[0])}`;
+        return `Neispravna opcija: očekivano jedno od ${joinValues(issue.values, "|")}`;
       case "too_big": {
-        const adj = issue2.inclusive ? "<=" : "<";
-        const sizing = getSizing(issue2.origin);
-        const origin2 = TypeDictionary[issue2.origin] ?? issue2.origin;
+        const adj = issue.inclusive ? "<=" : "<";
+        const sizing = getSizing(issue.origin);
+        const origin = TypeDictionary[issue.origin] ?? issue.origin;
         if (sizing)
-          return `Preveliko: očekivano da ${origin2 ?? "vrijednost"} ima ${adj}${issue2.maximum.toString()} ${sizing.unit ?? "elemenata"}`;
-        return `Preveliko: očekivano da ${origin2 ?? "vrijednost"} bude ${adj}${issue2.maximum.toString()}`;
+          return `Preveliko: očekivano da ${origin ?? "vrijednost"} ima ${adj}${issue.maximum.toString()} ${sizing.unit ?? "elemenata"}`;
+        return `Preveliko: očekivano da ${origin ?? "vrijednost"} bude ${adj}${issue.maximum.toString()}`;
       }
       case "too_small": {
-        const adj = issue2.inclusive ? ">=" : ">";
-        const sizing = getSizing(issue2.origin);
-        const origin2 = TypeDictionary[issue2.origin] ?? issue2.origin;
+        const adj = issue.inclusive ? ">=" : ">";
+        const sizing = getSizing(issue.origin);
+        const origin = TypeDictionary[issue.origin] ?? issue.origin;
         if (sizing) {
-          return `Premalo: očekivano da ${origin2} ima ${adj}${issue2.minimum.toString()} ${sizing.unit}`;
+          return `Premalo: očekivano da ${origin} ima ${adj}${issue.minimum.toString()} ${sizing.unit}`;
         }
-        return `Premalo: očekivano da ${origin2} bude ${adj}${issue2.minimum.toString()}`;
+        return `Premalo: očekivano da ${origin} bude ${adj}${issue.minimum.toString()}`;
       }
       case "invalid_format": {
-        const _issue = issue2;
+        const _issue = issue;
         if (_issue.format === "starts_with")
           return `Neispravan tekst: mora započinjati s "${_issue.prefix}"`;
         if (_issue.format === "ends_with")
@@ -6293,18 +6303,18 @@ var error18 = () => {
           return `Neispravan tekst: mora sadržavati "${_issue.includes}"`;
         if (_issue.format === "regex")
           return `Neispravan tekst: mora odgovarati uzorku ${_issue.pattern}`;
-        return `Neispravna ${FormatDictionary[_issue.format] ?? issue2.format}`;
+        return `Neispravna ${FormatDictionary[_issue.format] ?? issue.format}`;
       }
       case "not_multiple_of":
-        return `Neispravan broj: mora biti višekratnik od ${issue2.divisor}`;
+        return `Neispravan broj: mora biti višekratnik od ${issue.divisor}`;
       case "unrecognized_keys":
-        return `Neprepoznat${issue2.keys.length > 1 ? "i ključevi" : " ključ"}: ${joinValues(issue2.keys, ", ")}`;
+        return `Neprepoznat${issue.keys.length > 1 ? "i ključevi" : " ključ"}: ${joinValues(issue.keys, ", ")}`;
       case "invalid_key":
-        return `Neispravan ključ u ${TypeDictionary[issue2.origin] ?? issue2.origin}`;
+        return `Neispravan ključ u ${TypeDictionary[issue.origin] ?? issue.origin}`;
       case "invalid_union":
         return "Neispravan unos";
       case "invalid_element":
-        return `Neispravna vrijednost u ${TypeDictionary[issue2.origin] ?? issue2.origin}`;
+        return `Neispravna vrijednost u ${TypeDictionary[issue.origin] ?? issue.origin}`;
       default:
         return `Neispravan unos`;
     }
@@ -6325,8 +6335,8 @@ var error19 = () => {
     array: { unit: "elem", verb: "legyen" },
     set: { unit: "elem", verb: "legyen" }
   };
-  function getSizing(origin2) {
-    return Sizable[origin2] ?? null;
+  function getSizing(origin) {
+    return Sizable[origin] ?? null;
   }
   const FormatDictionary = {
     regex: "bemenet",
@@ -6363,38 +6373,38 @@ var error19 = () => {
     number: "szám",
     array: "tömb"
   };
-  return (issue2) => {
-    switch (issue2.code) {
+  return (issue) => {
+    switch (issue.code) {
       case "invalid_type": {
-        const expected = TypeDictionary[issue2.expected] ?? issue2.expected;
-        const receivedType = parsedType(issue2.input);
+        const expected = TypeDictionary[issue.expected] ?? issue.expected;
+        const receivedType = parsedType(issue.input);
         const received = TypeDictionary[receivedType] ?? receivedType;
-        if (/^[A-Z]/.test(issue2.expected)) {
-          return `Érvénytelen bemenet: a várt érték instanceof ${issue2.expected}, a kapott érték ${received}`;
+        if (/^[A-Z]/.test(issue.expected)) {
+          return `Érvénytelen bemenet: a várt érték instanceof ${issue.expected}, a kapott érték ${received}`;
         }
         return `Érvénytelen bemenet: a várt érték ${expected}, a kapott érték ${received}`;
       }
       case "invalid_value":
-        if (issue2.values.length === 1)
-          return `Érvénytelen bemenet: a várt érték ${stringifyPrimitive(issue2.values[0])}`;
-        return `Érvénytelen opció: valamelyik érték várt ${joinValues(issue2.values, "|")}`;
+        if (issue.values.length === 1)
+          return `Érvénytelen bemenet: a várt érték ${stringifyPrimitive(issue.values[0])}`;
+        return `Érvénytelen opció: valamelyik érték várt ${joinValues(issue.values, "|")}`;
       case "too_big": {
-        const adj = issue2.inclusive ? "<=" : "<";
-        const sizing = getSizing(issue2.origin);
+        const adj = issue.inclusive ? "<=" : "<";
+        const sizing = getSizing(issue.origin);
         if (sizing)
-          return `Túl nagy: ${issue2.origin ?? "érték"} mérete túl nagy ${adj}${issue2.maximum.toString()} ${sizing.unit ?? "elem"}`;
-        return `Túl nagy: a bemeneti érték ${issue2.origin ?? "érték"} túl nagy: ${adj}${issue2.maximum.toString()}`;
+          return `Túl nagy: ${issue.origin ?? "érték"} mérete túl nagy ${adj}${issue.maximum.toString()} ${sizing.unit ?? "elem"}`;
+        return `Túl nagy: a bemeneti érték ${issue.origin ?? "érték"} túl nagy: ${adj}${issue.maximum.toString()}`;
       }
       case "too_small": {
-        const adj = issue2.inclusive ? ">=" : ">";
-        const sizing = getSizing(issue2.origin);
+        const adj = issue.inclusive ? ">=" : ">";
+        const sizing = getSizing(issue.origin);
         if (sizing) {
-          return `Túl kicsi: a bemeneti érték ${issue2.origin} mérete túl kicsi ${adj}${issue2.minimum.toString()} ${sizing.unit}`;
+          return `Túl kicsi: a bemeneti érték ${issue.origin} mérete túl kicsi ${adj}${issue.minimum.toString()} ${sizing.unit}`;
         }
-        return `Túl kicsi: a bemeneti érték ${issue2.origin} túl kicsi ${adj}${issue2.minimum.toString()}`;
+        return `Túl kicsi: a bemeneti érték ${issue.origin} túl kicsi ${adj}${issue.minimum.toString()}`;
       }
       case "invalid_format": {
-        const _issue = issue2;
+        const _issue = issue;
         if (_issue.format === "starts_with")
           return `Érvénytelen string: "${_issue.prefix}" értékkel kell kezdődnie`;
         if (_issue.format === "ends_with")
@@ -6403,18 +6413,18 @@ var error19 = () => {
           return `Érvénytelen string: "${_issue.includes}" értéket kell tartalmaznia`;
         if (_issue.format === "regex")
           return `Érvénytelen string: ${_issue.pattern} mintának kell megfelelnie`;
-        return `Érvénytelen ${FormatDictionary[_issue.format] ?? issue2.format}`;
+        return `Érvénytelen ${FormatDictionary[_issue.format] ?? issue.format}`;
       }
       case "not_multiple_of":
-        return `Érvénytelen szám: ${issue2.divisor} többszörösének kell lennie`;
+        return `Érvénytelen szám: ${issue.divisor} többszörösének kell lennie`;
       case "unrecognized_keys":
-        return `Ismeretlen kulcs${issue2.keys.length > 1 ? "s" : ""}: ${joinValues(issue2.keys, ", ")}`;
+        return `Ismeretlen kulcs${issue.keys.length > 1 ? "s" : ""}: ${joinValues(issue.keys, ", ")}`;
       case "invalid_key":
-        return `Érvénytelen kulcs ${issue2.origin}`;
+        return `Érvénytelen kulcs ${issue.origin}`;
       case "invalid_union":
         return "Érvénytelen bemenet";
       case "invalid_element":
-        return `Érvénytelen érték: ${issue2.origin}`;
+        return `Érvénytelen érték: ${issue.origin}`;
       default:
         return `Érvénytelen bemenet`;
     }
@@ -6469,8 +6479,8 @@ var error20 = () => {
       verb: "ունենալ"
     }
   };
-  function getSizing(origin2) {
-    return Sizable[origin2] ?? null;
+  function getSizing(origin) {
+    return Sizable[origin] ?? null;
   }
   const FormatDictionary = {
     regex: "մուտք",
@@ -6507,43 +6517,43 @@ var error20 = () => {
     number: "թիվ",
     array: "զանգված"
   };
-  return (issue2) => {
-    switch (issue2.code) {
+  return (issue) => {
+    switch (issue.code) {
       case "invalid_type": {
-        const expected = TypeDictionary[issue2.expected] ?? issue2.expected;
-        const receivedType = parsedType(issue2.input);
+        const expected = TypeDictionary[issue.expected] ?? issue.expected;
+        const receivedType = parsedType(issue.input);
         const received = TypeDictionary[receivedType] ?? receivedType;
-        if (/^[A-Z]/.test(issue2.expected)) {
-          return `Սխալ մուտքագրում․ սպասվում էր instanceof ${issue2.expected}, ստացվել է ${received}`;
+        if (/^[A-Z]/.test(issue.expected)) {
+          return `Սխալ մուտքագրում․ սպասվում էր instanceof ${issue.expected}, ստացվել է ${received}`;
         }
         return `Սխալ մուտքագրում․ սպասվում էր ${expected}, ստացվել է ${received}`;
       }
       case "invalid_value":
-        if (issue2.values.length === 1)
-          return `Սխալ մուտքագրում․ սպասվում էր ${stringifyPrimitive(issue2.values[1])}`;
-        return `Սխալ տարբերակ․ սպասվում էր հետևյալներից մեկը՝ ${joinValues(issue2.values, "|")}`;
+        if (issue.values.length === 1)
+          return `Սխալ մուտքագրում․ սպասվում էր ${stringifyPrimitive(issue.values[1])}`;
+        return `Սխալ տարբերակ․ սպասվում էր հետևյալներից մեկը՝ ${joinValues(issue.values, "|")}`;
       case "too_big": {
-        const adj = issue2.inclusive ? "<=" : "<";
-        const sizing = getSizing(issue2.origin);
+        const adj = issue.inclusive ? "<=" : "<";
+        const sizing = getSizing(issue.origin);
         if (sizing) {
-          const maxValue = Number(issue2.maximum);
+          const maxValue = Number(issue.maximum);
           const unit = getArmenianPlural(maxValue, sizing.unit.one, sizing.unit.many);
-          return `Չափազանց մեծ արժեք․ սպասվում է, որ ${withDefiniteArticle(issue2.origin ?? "արժեք")} կունենա ${adj}${issue2.maximum.toString()} ${unit}`;
+          return `Չափազանց մեծ արժեք․ սպասվում է, որ ${withDefiniteArticle(issue.origin ?? "արժեք")} կունենա ${adj}${issue.maximum.toString()} ${unit}`;
         }
-        return `Չափազանց մեծ արժեք․ սպասվում է, որ ${withDefiniteArticle(issue2.origin ?? "արժեք")} լինի ${adj}${issue2.maximum.toString()}`;
+        return `Չափազանց մեծ արժեք․ սպասվում է, որ ${withDefiniteArticle(issue.origin ?? "արժեք")} լինի ${adj}${issue.maximum.toString()}`;
       }
       case "too_small": {
-        const adj = issue2.inclusive ? ">=" : ">";
-        const sizing = getSizing(issue2.origin);
+        const adj = issue.inclusive ? ">=" : ">";
+        const sizing = getSizing(issue.origin);
         if (sizing) {
-          const minValue = Number(issue2.minimum);
+          const minValue = Number(issue.minimum);
           const unit = getArmenianPlural(minValue, sizing.unit.one, sizing.unit.many);
-          return `Չափազանց փոքր արժեք․ սպասվում է, որ ${withDefiniteArticle(issue2.origin)} կունենա ${adj}${issue2.minimum.toString()} ${unit}`;
+          return `Չափազանց փոքր արժեք․ սպասվում է, որ ${withDefiniteArticle(issue.origin)} կունենա ${adj}${issue.minimum.toString()} ${unit}`;
         }
-        return `Չափազանց փոքր արժեք․ սպասվում է, որ ${withDefiniteArticle(issue2.origin)} լինի ${adj}${issue2.minimum.toString()}`;
+        return `Չափազանց փոքր արժեք․ սպասվում է, որ ${withDefiniteArticle(issue.origin)} լինի ${adj}${issue.minimum.toString()}`;
       }
       case "invalid_format": {
-        const _issue = issue2;
+        const _issue = issue;
         if (_issue.format === "starts_with")
           return `Սխալ տող․ պետք է սկսվի "${_issue.prefix}"-ով`;
         if (_issue.format === "ends_with")
@@ -6552,18 +6562,18 @@ var error20 = () => {
           return `Սխալ տող․ պետք է պարունակի "${_issue.includes}"`;
         if (_issue.format === "regex")
           return `Սխալ տող․ պետք է համապատասխանի ${_issue.pattern} ձևաչափին`;
-        return `Սխալ ${FormatDictionary[_issue.format] ?? issue2.format}`;
+        return `Սխալ ${FormatDictionary[_issue.format] ?? issue.format}`;
       }
       case "not_multiple_of":
-        return `Սխալ թիվ․ պետք է բազմապատիկ լինի ${issue2.divisor}-ի`;
+        return `Սխալ թիվ․ պետք է բազմապատիկ լինի ${issue.divisor}-ի`;
       case "unrecognized_keys":
-        return `Չճանաչված բանալի${issue2.keys.length > 1 ? "ներ" : ""}. ${joinValues(issue2.keys, ", ")}`;
+        return `Չճանաչված բանալի${issue.keys.length > 1 ? "ներ" : ""}. ${joinValues(issue.keys, ", ")}`;
       case "invalid_key":
-        return `Սխալ բանալի ${withDefiniteArticle(issue2.origin)}-ում`;
+        return `Սխալ բանալի ${withDefiniteArticle(issue.origin)}-ում`;
       case "invalid_union":
         return "Սխալ մուտքագրում";
       case "invalid_element":
-        return `Սխալ արժեք ${withDefiniteArticle(issue2.origin)}-ում`;
+        return `Սխալ արժեք ${withDefiniteArticle(issue.origin)}-ում`;
       default:
         return `Սխալ մուտքագրում`;
     }
@@ -6584,8 +6594,8 @@ var error21 = () => {
     array: { unit: "item", verb: "memiliki" },
     set: { unit: "item", verb: "memiliki" }
   };
-  function getSizing(origin2) {
-    return Sizable[origin2] ?? null;
+  function getSizing(origin) {
+    return Sizable[origin] ?? null;
   }
   const FormatDictionary = {
     regex: "input",
@@ -6620,38 +6630,38 @@ var error21 = () => {
   const TypeDictionary = {
     nan: "NaN"
   };
-  return (issue2) => {
-    switch (issue2.code) {
+  return (issue) => {
+    switch (issue.code) {
       case "invalid_type": {
-        const expected = TypeDictionary[issue2.expected] ?? issue2.expected;
-        const receivedType = parsedType(issue2.input);
+        const expected = TypeDictionary[issue.expected] ?? issue.expected;
+        const receivedType = parsedType(issue.input);
         const received = TypeDictionary[receivedType] ?? receivedType;
-        if (/^[A-Z]/.test(issue2.expected)) {
-          return `Input tidak valid: diharapkan instanceof ${issue2.expected}, diterima ${received}`;
+        if (/^[A-Z]/.test(issue.expected)) {
+          return `Input tidak valid: diharapkan instanceof ${issue.expected}, diterima ${received}`;
         }
         return `Input tidak valid: diharapkan ${expected}, diterima ${received}`;
       }
       case "invalid_value":
-        if (issue2.values.length === 1)
-          return `Input tidak valid: diharapkan ${stringifyPrimitive(issue2.values[0])}`;
-        return `Pilihan tidak valid: diharapkan salah satu dari ${joinValues(issue2.values, "|")}`;
+        if (issue.values.length === 1)
+          return `Input tidak valid: diharapkan ${stringifyPrimitive(issue.values[0])}`;
+        return `Pilihan tidak valid: diharapkan salah satu dari ${joinValues(issue.values, "|")}`;
       case "too_big": {
-        const adj = issue2.inclusive ? "<=" : "<";
-        const sizing = getSizing(issue2.origin);
+        const adj = issue.inclusive ? "<=" : "<";
+        const sizing = getSizing(issue.origin);
         if (sizing)
-          return `Terlalu besar: diharapkan ${issue2.origin ?? "value"} memiliki ${adj}${issue2.maximum.toString()} ${sizing.unit ?? "elemen"}`;
-        return `Terlalu besar: diharapkan ${issue2.origin ?? "value"} menjadi ${adj}${issue2.maximum.toString()}`;
+          return `Terlalu besar: diharapkan ${issue.origin ?? "value"} memiliki ${adj}${issue.maximum.toString()} ${sizing.unit ?? "elemen"}`;
+        return `Terlalu besar: diharapkan ${issue.origin ?? "value"} menjadi ${adj}${issue.maximum.toString()}`;
       }
       case "too_small": {
-        const adj = issue2.inclusive ? ">=" : ">";
-        const sizing = getSizing(issue2.origin);
+        const adj = issue.inclusive ? ">=" : ">";
+        const sizing = getSizing(issue.origin);
         if (sizing) {
-          return `Terlalu kecil: diharapkan ${issue2.origin} memiliki ${adj}${issue2.minimum.toString()} ${sizing.unit}`;
+          return `Terlalu kecil: diharapkan ${issue.origin} memiliki ${adj}${issue.minimum.toString()} ${sizing.unit}`;
         }
-        return `Terlalu kecil: diharapkan ${issue2.origin} menjadi ${adj}${issue2.minimum.toString()}`;
+        return `Terlalu kecil: diharapkan ${issue.origin} menjadi ${adj}${issue.minimum.toString()}`;
       }
       case "invalid_format": {
-        const _issue = issue2;
+        const _issue = issue;
         if (_issue.format === "starts_with")
           return `String tidak valid: harus dimulai dengan "${_issue.prefix}"`;
         if (_issue.format === "ends_with")
@@ -6660,18 +6670,18 @@ var error21 = () => {
           return `String tidak valid: harus menyertakan "${_issue.includes}"`;
         if (_issue.format === "regex")
           return `String tidak valid: harus sesuai pola ${_issue.pattern}`;
-        return `${FormatDictionary[_issue.format] ?? issue2.format} tidak valid`;
+        return `${FormatDictionary[_issue.format] ?? issue.format} tidak valid`;
       }
       case "not_multiple_of":
-        return `Angka tidak valid: harus kelipatan dari ${issue2.divisor}`;
+        return `Angka tidak valid: harus kelipatan dari ${issue.divisor}`;
       case "unrecognized_keys":
-        return `Kunci tidak dikenali ${issue2.keys.length > 1 ? "s" : ""}: ${joinValues(issue2.keys, ", ")}`;
+        return `Kunci tidak dikenali ${issue.keys.length > 1 ? "s" : ""}: ${joinValues(issue.keys, ", ")}`;
       case "invalid_key":
-        return `Kunci tidak valid di ${issue2.origin}`;
+        return `Kunci tidak valid di ${issue.origin}`;
       case "invalid_union":
         return "Input tidak valid";
       case "invalid_element":
-        return `Nilai tidak valid di ${issue2.origin}`;
+        return `Nilai tidak valid di ${issue.origin}`;
       default:
         return `Input tidak valid`;
     }
@@ -6692,8 +6702,8 @@ var error22 = () => {
     array: { unit: "hluti", verb: "að hafa" },
     set: { unit: "hluti", verb: "að hafa" }
   };
-  function getSizing(origin2) {
-    return Sizable[origin2] ?? null;
+  function getSizing(origin) {
+    return Sizable[origin] ?? null;
   }
   const FormatDictionary = {
     regex: "gildi",
@@ -6730,38 +6740,38 @@ var error22 = () => {
     number: "númer",
     array: "fylki"
   };
-  return (issue2) => {
-    switch (issue2.code) {
+  return (issue) => {
+    switch (issue.code) {
       case "invalid_type": {
-        const expected = TypeDictionary[issue2.expected] ?? issue2.expected;
-        const receivedType = parsedType(issue2.input);
+        const expected = TypeDictionary[issue.expected] ?? issue.expected;
+        const receivedType = parsedType(issue.input);
         const received = TypeDictionary[receivedType] ?? receivedType;
-        if (/^[A-Z]/.test(issue2.expected)) {
-          return `Rangt gildi: Þú slóst inn ${received} þar sem á að vera instanceof ${issue2.expected}`;
+        if (/^[A-Z]/.test(issue.expected)) {
+          return `Rangt gildi: Þú slóst inn ${received} þar sem á að vera instanceof ${issue.expected}`;
         }
         return `Rangt gildi: Þú slóst inn ${received} þar sem á að vera ${expected}`;
       }
       case "invalid_value":
-        if (issue2.values.length === 1)
-          return `Rangt gildi: gert ráð fyrir ${stringifyPrimitive(issue2.values[0])}`;
-        return `Ógilt val: má vera eitt af eftirfarandi ${joinValues(issue2.values, "|")}`;
+        if (issue.values.length === 1)
+          return `Rangt gildi: gert ráð fyrir ${stringifyPrimitive(issue.values[0])}`;
+        return `Ógilt val: má vera eitt af eftirfarandi ${joinValues(issue.values, "|")}`;
       case "too_big": {
-        const adj = issue2.inclusive ? "<=" : "<";
-        const sizing = getSizing(issue2.origin);
+        const adj = issue.inclusive ? "<=" : "<";
+        const sizing = getSizing(issue.origin);
         if (sizing)
-          return `Of stórt: gert er ráð fyrir að ${issue2.origin ?? "gildi"} hafi ${adj}${issue2.maximum.toString()} ${sizing.unit ?? "hluti"}`;
-        return `Of stórt: gert er ráð fyrir að ${issue2.origin ?? "gildi"} sé ${adj}${issue2.maximum.toString()}`;
+          return `Of stórt: gert er ráð fyrir að ${issue.origin ?? "gildi"} hafi ${adj}${issue.maximum.toString()} ${sizing.unit ?? "hluti"}`;
+        return `Of stórt: gert er ráð fyrir að ${issue.origin ?? "gildi"} sé ${adj}${issue.maximum.toString()}`;
       }
       case "too_small": {
-        const adj = issue2.inclusive ? ">=" : ">";
-        const sizing = getSizing(issue2.origin);
+        const adj = issue.inclusive ? ">=" : ">";
+        const sizing = getSizing(issue.origin);
         if (sizing) {
-          return `Of lítið: gert er ráð fyrir að ${issue2.origin} hafi ${adj}${issue2.minimum.toString()} ${sizing.unit}`;
+          return `Of lítið: gert er ráð fyrir að ${issue.origin} hafi ${adj}${issue.minimum.toString()} ${sizing.unit}`;
         }
-        return `Of lítið: gert er ráð fyrir að ${issue2.origin} sé ${adj}${issue2.minimum.toString()}`;
+        return `Of lítið: gert er ráð fyrir að ${issue.origin} sé ${adj}${issue.minimum.toString()}`;
       }
       case "invalid_format": {
-        const _issue = issue2;
+        const _issue = issue;
         if (_issue.format === "starts_with") {
           return `Ógildur strengur: verður að byrja á "${_issue.prefix}"`;
         }
@@ -6771,18 +6781,18 @@ var error22 = () => {
           return `Ógildur strengur: verður að innihalda "${_issue.includes}"`;
         if (_issue.format === "regex")
           return `Ógildur strengur: verður að fylgja mynstri ${_issue.pattern}`;
-        return `Rangt ${FormatDictionary[_issue.format] ?? issue2.format}`;
+        return `Rangt ${FormatDictionary[_issue.format] ?? issue.format}`;
       }
       case "not_multiple_of":
-        return `Röng tala: verður að vera margfeldi af ${issue2.divisor}`;
+        return `Röng tala: verður að vera margfeldi af ${issue.divisor}`;
       case "unrecognized_keys":
-        return `Óþekkt ${issue2.keys.length > 1 ? "ir lyklar" : "ur lykill"}: ${joinValues(issue2.keys, ", ")}`;
+        return `Óþekkt ${issue.keys.length > 1 ? "ir lyklar" : "ur lykill"}: ${joinValues(issue.keys, ", ")}`;
       case "invalid_key":
-        return `Rangur lykill í ${issue2.origin}`;
+        return `Rangur lykill í ${issue.origin}`;
       case "invalid_union":
         return "Rangt gildi";
       case "invalid_element":
-        return `Rangt gildi í ${issue2.origin}`;
+        return `Rangt gildi í ${issue.origin}`;
       default:
         return `Rangt gildi`;
     }
@@ -6803,8 +6813,8 @@ var error23 = () => {
     array: { unit: "elementi", verb: "avere" },
     set: { unit: "elementi", verb: "avere" }
   };
-  function getSizing(origin2) {
-    return Sizable[origin2] ?? null;
+  function getSizing(origin) {
+    return Sizable[origin] ?? null;
   }
   const FormatDictionary = {
     regex: "input",
@@ -6841,38 +6851,38 @@ var error23 = () => {
     number: "numero",
     array: "vettore"
   };
-  return (issue2) => {
-    switch (issue2.code) {
+  return (issue) => {
+    switch (issue.code) {
       case "invalid_type": {
-        const expected = TypeDictionary[issue2.expected] ?? issue2.expected;
-        const receivedType = parsedType(issue2.input);
+        const expected = TypeDictionary[issue.expected] ?? issue.expected;
+        const receivedType = parsedType(issue.input);
         const received = TypeDictionary[receivedType] ?? receivedType;
-        if (/^[A-Z]/.test(issue2.expected)) {
-          return `Input non valido: atteso instanceof ${issue2.expected}, ricevuto ${received}`;
+        if (/^[A-Z]/.test(issue.expected)) {
+          return `Input non valido: atteso instanceof ${issue.expected}, ricevuto ${received}`;
         }
         return `Input non valido: atteso ${expected}, ricevuto ${received}`;
       }
       case "invalid_value":
-        if (issue2.values.length === 1)
-          return `Input non valido: atteso ${stringifyPrimitive(issue2.values[0])}`;
-        return `Opzione non valida: atteso uno tra ${joinValues(issue2.values, "|")}`;
+        if (issue.values.length === 1)
+          return `Input non valido: atteso ${stringifyPrimitive(issue.values[0])}`;
+        return `Opzione non valida: atteso uno tra ${joinValues(issue.values, "|")}`;
       case "too_big": {
-        const adj = issue2.inclusive ? "<=" : "<";
-        const sizing = getSizing(issue2.origin);
+        const adj = issue.inclusive ? "<=" : "<";
+        const sizing = getSizing(issue.origin);
         if (sizing)
-          return `Troppo grande: ${issue2.origin ?? "valore"} deve avere ${adj}${issue2.maximum.toString()} ${sizing.unit ?? "elementi"}`;
-        return `Troppo grande: ${issue2.origin ?? "valore"} deve essere ${adj}${issue2.maximum.toString()}`;
+          return `Troppo grande: ${issue.origin ?? "valore"} deve avere ${adj}${issue.maximum.toString()} ${sizing.unit ?? "elementi"}`;
+        return `Troppo grande: ${issue.origin ?? "valore"} deve essere ${adj}${issue.maximum.toString()}`;
       }
       case "too_small": {
-        const adj = issue2.inclusive ? ">=" : ">";
-        const sizing = getSizing(issue2.origin);
+        const adj = issue.inclusive ? ">=" : ">";
+        const sizing = getSizing(issue.origin);
         if (sizing) {
-          return `Troppo piccolo: ${issue2.origin} deve avere ${adj}${issue2.minimum.toString()} ${sizing.unit}`;
+          return `Troppo piccolo: ${issue.origin} deve avere ${adj}${issue.minimum.toString()} ${sizing.unit}`;
         }
-        return `Troppo piccolo: ${issue2.origin} deve essere ${adj}${issue2.minimum.toString()}`;
+        return `Troppo piccolo: ${issue.origin} deve essere ${adj}${issue.minimum.toString()}`;
       }
       case "invalid_format": {
-        const _issue = issue2;
+        const _issue = issue;
         if (_issue.format === "starts_with")
           return `Stringa non valida: deve iniziare con "${_issue.prefix}"`;
         if (_issue.format === "ends_with")
@@ -6881,18 +6891,18 @@ var error23 = () => {
           return `Stringa non valida: deve includere "${_issue.includes}"`;
         if (_issue.format === "regex")
           return `Stringa non valida: deve corrispondere al pattern ${_issue.pattern}`;
-        return `Input non valido: ${FormatDictionary[_issue.format] ?? issue2.format}`;
+        return `Input non valido: ${FormatDictionary[_issue.format] ?? issue.format}`;
       }
       case "not_multiple_of":
-        return `Numero non valido: deve essere un multiplo di ${issue2.divisor}`;
+        return `Numero non valido: deve essere un multiplo di ${issue.divisor}`;
       case "unrecognized_keys":
-        return `Chiav${issue2.keys.length > 1 ? "i" : "e"} non riconosciut${issue2.keys.length > 1 ? "e" : "a"}: ${joinValues(issue2.keys, ", ")}`;
+        return `Chiav${issue.keys.length > 1 ? "i" : "e"} non riconosciut${issue.keys.length > 1 ? "e" : "a"}: ${joinValues(issue.keys, ", ")}`;
       case "invalid_key":
-        return `Chiave non valida in ${issue2.origin}`;
+        return `Chiave non valida in ${issue.origin}`;
       case "invalid_union":
         return "Input non valido";
       case "invalid_element":
-        return `Valore non valido in ${issue2.origin}`;
+        return `Valore non valido in ${issue.origin}`;
       default:
         return `Input non valido`;
     }
@@ -6913,8 +6923,8 @@ var error24 = () => {
     array: { unit: "要素", verb: "である" },
     set: { unit: "要素", verb: "である" }
   };
-  function getSizing(origin2) {
-    return Sizable[origin2] ?? null;
+  function getSizing(origin) {
+    return Sizable[origin] ?? null;
   }
   const FormatDictionary = {
     regex: "入力値",
@@ -6951,37 +6961,37 @@ var error24 = () => {
     number: "数値",
     array: "配列"
   };
-  return (issue2) => {
-    switch (issue2.code) {
+  return (issue) => {
+    switch (issue.code) {
       case "invalid_type": {
-        const expected = TypeDictionary[issue2.expected] ?? issue2.expected;
-        const receivedType = parsedType(issue2.input);
+        const expected = TypeDictionary[issue.expected] ?? issue.expected;
+        const receivedType = parsedType(issue.input);
         const received = TypeDictionary[receivedType] ?? receivedType;
-        if (/^[A-Z]/.test(issue2.expected)) {
-          return `無効な入力: instanceof ${issue2.expected}が期待されましたが、${received}が入力されました`;
+        if (/^[A-Z]/.test(issue.expected)) {
+          return `無効な入力: instanceof ${issue.expected}が期待されましたが、${received}が入力されました`;
         }
         return `無効な入力: ${expected}が期待されましたが、${received}が入力されました`;
       }
       case "invalid_value":
-        if (issue2.values.length === 1)
-          return `無効な入力: ${stringifyPrimitive(issue2.values[0])}が期待されました`;
-        return `無効な選択: ${joinValues(issue2.values, "、")}のいずれかである必要があります`;
+        if (issue.values.length === 1)
+          return `無効な入力: ${stringifyPrimitive(issue.values[0])}が期待されました`;
+        return `無効な選択: ${joinValues(issue.values, "、")}のいずれかである必要があります`;
       case "too_big": {
-        const adj = issue2.inclusive ? "以下である" : "より小さい";
-        const sizing = getSizing(issue2.origin);
+        const adj = issue.inclusive ? "以下である" : "より小さい";
+        const sizing = getSizing(issue.origin);
         if (sizing)
-          return `大きすぎる値: ${issue2.origin ?? "値"}は${issue2.maximum.toString()}${sizing.unit ?? "要素"}${adj}必要があります`;
-        return `大きすぎる値: ${issue2.origin ?? "値"}は${issue2.maximum.toString()}${adj}必要があります`;
+          return `大きすぎる値: ${issue.origin ?? "値"}は${issue.maximum.toString()}${sizing.unit ?? "要素"}${adj}必要があります`;
+        return `大きすぎる値: ${issue.origin ?? "値"}は${issue.maximum.toString()}${adj}必要があります`;
       }
       case "too_small": {
-        const adj = issue2.inclusive ? "以上である" : "より大きい";
-        const sizing = getSizing(issue2.origin);
+        const adj = issue.inclusive ? "以上である" : "より大きい";
+        const sizing = getSizing(issue.origin);
         if (sizing)
-          return `小さすぎる値: ${issue2.origin}は${issue2.minimum.toString()}${sizing.unit}${adj}必要があります`;
-        return `小さすぎる値: ${issue2.origin}は${issue2.minimum.toString()}${adj}必要があります`;
+          return `小さすぎる値: ${issue.origin}は${issue.minimum.toString()}${sizing.unit}${adj}必要があります`;
+        return `小さすぎる値: ${issue.origin}は${issue.minimum.toString()}${adj}必要があります`;
       }
       case "invalid_format": {
-        const _issue = issue2;
+        const _issue = issue;
         if (_issue.format === "starts_with")
           return `無効な文字列: "${_issue.prefix}"で始まる必要があります`;
         if (_issue.format === "ends_with")
@@ -6990,18 +7000,18 @@ var error24 = () => {
           return `無効な文字列: "${_issue.includes}"を含む必要があります`;
         if (_issue.format === "regex")
           return `無効な文字列: パターン${_issue.pattern}に一致する必要があります`;
-        return `無効な${FormatDictionary[_issue.format] ?? issue2.format}`;
+        return `無効な${FormatDictionary[_issue.format] ?? issue.format}`;
       }
       case "not_multiple_of":
-        return `無効な数値: ${issue2.divisor}の倍数である必要があります`;
+        return `無効な数値: ${issue.divisor}の倍数である必要があります`;
       case "unrecognized_keys":
-        return `認識されていないキー${issue2.keys.length > 1 ? "群" : ""}: ${joinValues(issue2.keys, "、")}`;
+        return `認識されていないキー${issue.keys.length > 1 ? "群" : ""}: ${joinValues(issue.keys, "、")}`;
       case "invalid_key":
-        return `${issue2.origin}内の無効なキー`;
+        return `${issue.origin}内の無効なキー`;
       case "invalid_union":
         return "無効な入力";
       case "invalid_element":
-        return `${issue2.origin}内の無効な値`;
+        return `${issue.origin}内の無効な値`;
       default:
         return `無効な入力`;
     }
@@ -7022,8 +7032,8 @@ var error25 = () => {
     array: { unit: "ელემენტი", verb: "უნდა შეიცავდეს" },
     set: { unit: "ელემენტი", verb: "უნდა შეიცავდეს" }
   };
-  function getSizing(origin2) {
-    return Sizable[origin2] ?? null;
+  function getSizing(origin) {
+    return Sizable[origin] ?? null;
   }
   const FormatDictionary = {
     regex: "შეყვანა",
@@ -7063,38 +7073,38 @@ var error25 = () => {
     function: "ფუნქცია",
     array: "მასივი"
   };
-  return (issue2) => {
-    switch (issue2.code) {
+  return (issue) => {
+    switch (issue.code) {
       case "invalid_type": {
-        const expected = TypeDictionary[issue2.expected] ?? issue2.expected;
-        const receivedType = parsedType(issue2.input);
+        const expected = TypeDictionary[issue.expected] ?? issue.expected;
+        const receivedType = parsedType(issue.input);
         const received = TypeDictionary[receivedType] ?? receivedType;
-        if (/^[A-Z]/.test(issue2.expected)) {
-          return `არასწორი შეყვანა: მოსალოდნელი instanceof ${issue2.expected}, მიღებული ${received}`;
+        if (/^[A-Z]/.test(issue.expected)) {
+          return `არასწორი შეყვანა: მოსალოდნელი instanceof ${issue.expected}, მიღებული ${received}`;
         }
         return `არასწორი შეყვანა: მოსალოდნელი ${expected}, მიღებული ${received}`;
       }
       case "invalid_value":
-        if (issue2.values.length === 1)
-          return `არასწორი შეყვანა: მოსალოდნელი ${stringifyPrimitive(issue2.values[0])}`;
-        return `არასწორი ვარიანტი: მოსალოდნელია ერთ-ერთი ${joinValues(issue2.values, "|")}-დან`;
+        if (issue.values.length === 1)
+          return `არასწორი შეყვანა: მოსალოდნელი ${stringifyPrimitive(issue.values[0])}`;
+        return `არასწორი ვარიანტი: მოსალოდნელია ერთ-ერთი ${joinValues(issue.values, "|")}-დან`;
       case "too_big": {
-        const adj = issue2.inclusive ? "<=" : "<";
-        const sizing = getSizing(issue2.origin);
+        const adj = issue.inclusive ? "<=" : "<";
+        const sizing = getSizing(issue.origin);
         if (sizing)
-          return `ზედმეტად დიდი: მოსალოდნელი ${issue2.origin ?? "მნიშვნელობა"} ${sizing.verb} ${adj}${issue2.maximum.toString()} ${sizing.unit}`;
-        return `ზედმეტად დიდი: მოსალოდნელი ${issue2.origin ?? "მნიშვნელობა"} იყოს ${adj}${issue2.maximum.toString()}`;
+          return `ზედმეტად დიდი: მოსალოდნელი ${issue.origin ?? "მნიშვნელობა"} ${sizing.verb} ${adj}${issue.maximum.toString()} ${sizing.unit}`;
+        return `ზედმეტად დიდი: მოსალოდნელი ${issue.origin ?? "მნიშვნელობა"} იყოს ${adj}${issue.maximum.toString()}`;
       }
       case "too_small": {
-        const adj = issue2.inclusive ? ">=" : ">";
-        const sizing = getSizing(issue2.origin);
+        const adj = issue.inclusive ? ">=" : ">";
+        const sizing = getSizing(issue.origin);
         if (sizing) {
-          return `ზედმეტად პატარა: მოსალოდნელი ${issue2.origin} ${sizing.verb} ${adj}${issue2.minimum.toString()} ${sizing.unit}`;
+          return `ზედმეტად პატარა: მოსალოდნელი ${issue.origin} ${sizing.verb} ${adj}${issue.minimum.toString()} ${sizing.unit}`;
         }
-        return `ზედმეტად პატარა: მოსალოდნელი ${issue2.origin} იყოს ${adj}${issue2.minimum.toString()}`;
+        return `ზედმეტად პატარა: მოსალოდნელი ${issue.origin} იყოს ${adj}${issue.minimum.toString()}`;
       }
       case "invalid_format": {
-        const _issue = issue2;
+        const _issue = issue;
         if (_issue.format === "starts_with") {
           return `არასწორი ველი: უნდა იწყებოდეს "${_issue.prefix}"-ით`;
         }
@@ -7104,18 +7114,18 @@ var error25 = () => {
           return `არასწორი ველი: უნდა შეიცავდეს "${_issue.includes}"-ს`;
         if (_issue.format === "regex")
           return `არასწორი ველი: უნდა შეესაბამებოდეს შაბლონს ${_issue.pattern}`;
-        return `არასწორი ${FormatDictionary[_issue.format] ?? issue2.format}`;
+        return `არასწორი ${FormatDictionary[_issue.format] ?? issue.format}`;
       }
       case "not_multiple_of":
-        return `არასწორი რიცხვი: უნდა იყოს ${issue2.divisor}-ის ჯერადი`;
+        return `არასწორი რიცხვი: უნდა იყოს ${issue.divisor}-ის ჯერადი`;
       case "unrecognized_keys":
-        return `უცნობი გასაღებ${issue2.keys.length > 1 ? "ები" : "ი"}: ${joinValues(issue2.keys, ", ")}`;
+        return `უცნობი გასაღებ${issue.keys.length > 1 ? "ები" : "ი"}: ${joinValues(issue.keys, ", ")}`;
       case "invalid_key":
-        return `არასწორი გასაღები ${issue2.origin}-ში`;
+        return `არასწორი გასაღები ${issue.origin}-ში`;
       case "invalid_union":
         return "არასწორი შეყვანა";
       case "invalid_element":
-        return `არასწორი მნიშვნელობა ${issue2.origin}-ში`;
+        return `არასწორი მნიშვნელობა ${issue.origin}-ში`;
       default:
         return `არასწორი შეყვანა`;
     }
@@ -7136,8 +7146,8 @@ var error26 = () => {
     array: { unit: "ធាតុ", verb: "គួរមាន" },
     set: { unit: "ធាតុ", verb: "គួរមាន" }
   };
-  function getSizing(origin2) {
-    return Sizable[origin2] ?? null;
+  function getSizing(origin) {
+    return Sizable[origin] ?? null;
   }
   const FormatDictionary = {
     regex: "ទិន្នន័យបញ្ចូល",
@@ -7175,38 +7185,38 @@ var error26 = () => {
     array: "អារេ (Array)",
     null: "គ្មានតម្លៃ (null)"
   };
-  return (issue2) => {
-    switch (issue2.code) {
+  return (issue) => {
+    switch (issue.code) {
       case "invalid_type": {
-        const expected = TypeDictionary[issue2.expected] ?? issue2.expected;
-        const receivedType = parsedType(issue2.input);
+        const expected = TypeDictionary[issue.expected] ?? issue.expected;
+        const receivedType = parsedType(issue.input);
         const received = TypeDictionary[receivedType] ?? receivedType;
-        if (/^[A-Z]/.test(issue2.expected)) {
-          return `ទិន្នន័យបញ្ចូលមិនត្រឹមត្រូវ៖ ត្រូវការ instanceof ${issue2.expected} ប៉ុន្តែទទួលបាន ${received}`;
+        if (/^[A-Z]/.test(issue.expected)) {
+          return `ទិន្នន័យបញ្ចូលមិនត្រឹមត្រូវ៖ ត្រូវការ instanceof ${issue.expected} ប៉ុន្តែទទួលបាន ${received}`;
         }
         return `ទិន្នន័យបញ្ចូលមិនត្រឹមត្រូវ៖ ត្រូវការ ${expected} ប៉ុន្តែទទួលបាន ${received}`;
       }
       case "invalid_value":
-        if (issue2.values.length === 1)
-          return `ទិន្នន័យបញ្ចូលមិនត្រឹមត្រូវ៖ ត្រូវការ ${stringifyPrimitive(issue2.values[0])}`;
-        return `ជម្រើសមិនត្រឹមត្រូវ៖ ត្រូវជាមួយក្នុងចំណោម ${joinValues(issue2.values, "|")}`;
+        if (issue.values.length === 1)
+          return `ទិន្នន័យបញ្ចូលមិនត្រឹមត្រូវ៖ ត្រូវការ ${stringifyPrimitive(issue.values[0])}`;
+        return `ជម្រើសមិនត្រឹមត្រូវ៖ ត្រូវជាមួយក្នុងចំណោម ${joinValues(issue.values, "|")}`;
       case "too_big": {
-        const adj = issue2.inclusive ? "<=" : "<";
-        const sizing = getSizing(issue2.origin);
+        const adj = issue.inclusive ? "<=" : "<";
+        const sizing = getSizing(issue.origin);
         if (sizing)
-          return `ធំពេក៖ ត្រូវការ ${issue2.origin ?? "តម្លៃ"} ${adj} ${issue2.maximum.toString()} ${sizing.unit ?? "ធាតុ"}`;
-        return `ធំពេក៖ ត្រូវការ ${issue2.origin ?? "តម្លៃ"} ${adj} ${issue2.maximum.toString()}`;
+          return `ធំពេក៖ ត្រូវការ ${issue.origin ?? "តម្លៃ"} ${adj} ${issue.maximum.toString()} ${sizing.unit ?? "ធាតុ"}`;
+        return `ធំពេក៖ ត្រូវការ ${issue.origin ?? "តម្លៃ"} ${adj} ${issue.maximum.toString()}`;
       }
       case "too_small": {
-        const adj = issue2.inclusive ? ">=" : ">";
-        const sizing = getSizing(issue2.origin);
+        const adj = issue.inclusive ? ">=" : ">";
+        const sizing = getSizing(issue.origin);
         if (sizing) {
-          return `តូចពេក៖ ត្រូវការ ${issue2.origin} ${adj} ${issue2.minimum.toString()} ${sizing.unit}`;
+          return `តូចពេក៖ ត្រូវការ ${issue.origin} ${adj} ${issue.minimum.toString()} ${sizing.unit}`;
         }
-        return `តូចពេក៖ ត្រូវការ ${issue2.origin} ${adj} ${issue2.minimum.toString()}`;
+        return `តូចពេក៖ ត្រូវការ ${issue.origin} ${adj} ${issue.minimum.toString()}`;
       }
       case "invalid_format": {
-        const _issue = issue2;
+        const _issue = issue;
         if (_issue.format === "starts_with") {
           return `ខ្សែអក្សរមិនត្រឹមត្រូវ៖ ត្រូវចាប់ផ្តើមដោយ "${_issue.prefix}"`;
         }
@@ -7216,18 +7226,18 @@ var error26 = () => {
           return `ខ្សែអក្សរមិនត្រឹមត្រូវ៖ ត្រូវមាន "${_issue.includes}"`;
         if (_issue.format === "regex")
           return `ខ្សែអក្សរមិនត្រឹមត្រូវ៖ ត្រូវតែផ្គូផ្គងនឹងទម្រង់ដែលបានកំណត់ ${_issue.pattern}`;
-        return `មិនត្រឹមត្រូវ៖ ${FormatDictionary[_issue.format] ?? issue2.format}`;
+        return `មិនត្រឹមត្រូវ៖ ${FormatDictionary[_issue.format] ?? issue.format}`;
       }
       case "not_multiple_of":
-        return `លេខមិនត្រឹមត្រូវ៖ ត្រូវតែជាពហុគុណនៃ ${issue2.divisor}`;
+        return `លេខមិនត្រឹមត្រូវ៖ ត្រូវតែជាពហុគុណនៃ ${issue.divisor}`;
       case "unrecognized_keys":
-        return `រកឃើញសោមិនស្គាល់៖ ${joinValues(issue2.keys, ", ")}`;
+        return `រកឃើញសោមិនស្គាល់៖ ${joinValues(issue.keys, ", ")}`;
       case "invalid_key":
-        return `សោមិនត្រឹមត្រូវនៅក្នុង ${issue2.origin}`;
+        return `សោមិនត្រឹមត្រូវនៅក្នុង ${issue.origin}`;
       case "invalid_union":
         return `ទិន្នន័យមិនត្រឹមត្រូវ`;
       case "invalid_element":
-        return `ទិន្នន័យមិនត្រឹមត្រូវនៅក្នុង ${issue2.origin}`;
+        return `ទិន្នន័យមិនត្រឹមត្រូវនៅក្នុង ${issue.origin}`;
       default:
         return `ទិន្នន័យមិនត្រឹមត្រូវ`;
     }
@@ -7254,8 +7264,8 @@ var error27 = () => {
     array: { unit: "개", verb: "to have" },
     set: { unit: "개", verb: "to have" }
   };
-  function getSizing(origin2) {
-    return Sizable[origin2] ?? null;
+  function getSizing(origin) {
+    return Sizable[origin] ?? null;
   }
   const FormatDictionary = {
     regex: "입력",
@@ -7290,42 +7300,42 @@ var error27 = () => {
   const TypeDictionary = {
     nan: "NaN"
   };
-  return (issue2) => {
-    switch (issue2.code) {
+  return (issue) => {
+    switch (issue.code) {
       case "invalid_type": {
-        const expected = TypeDictionary[issue2.expected] ?? issue2.expected;
-        const receivedType = parsedType(issue2.input);
+        const expected = TypeDictionary[issue.expected] ?? issue.expected;
+        const receivedType = parsedType(issue.input);
         const received = TypeDictionary[receivedType] ?? receivedType;
-        if (/^[A-Z]/.test(issue2.expected)) {
-          return `잘못된 입력: 예상 타입은 instanceof ${issue2.expected}, 받은 타입은 ${received}입니다`;
+        if (/^[A-Z]/.test(issue.expected)) {
+          return `잘못된 입력: 예상 타입은 instanceof ${issue.expected}, 받은 타입은 ${received}입니다`;
         }
         return `잘못된 입력: 예상 타입은 ${expected}, 받은 타입은 ${received}입니다`;
       }
       case "invalid_value":
-        if (issue2.values.length === 1)
-          return `잘못된 입력: 값은 ${stringifyPrimitive(issue2.values[0])} 이어야 합니다`;
-        return `잘못된 옵션: ${joinValues(issue2.values, "또는 ")} 중 하나여야 합니다`;
+        if (issue.values.length === 1)
+          return `잘못된 입력: 값은 ${stringifyPrimitive(issue.values[0])} 이어야 합니다`;
+        return `잘못된 옵션: ${joinValues(issue.values, "또는 ")} 중 하나여야 합니다`;
       case "too_big": {
-        const adj = issue2.inclusive ? "이하" : "미만";
+        const adj = issue.inclusive ? "이하" : "미만";
         const suffix = adj === "미만" ? "이어야 합니다" : "여야 합니다";
-        const sizing = getSizing(issue2.origin);
+        const sizing = getSizing(issue.origin);
         const unit = sizing?.unit ?? "요소";
         if (sizing)
-          return `${issue2.origin ?? "값"}이 너무 큽니다: ${issue2.maximum.toString()}${unit} ${adj}${suffix}`;
-        return `${issue2.origin ?? "값"}이 너무 큽니다: ${issue2.maximum.toString()} ${adj}${suffix}`;
+          return `${issue.origin ?? "값"}이 너무 큽니다: ${issue.maximum.toString()}${unit} ${adj}${suffix}`;
+        return `${issue.origin ?? "값"}이 너무 큽니다: ${issue.maximum.toString()} ${adj}${suffix}`;
       }
       case "too_small": {
-        const adj = issue2.inclusive ? "이상" : "초과";
+        const adj = issue.inclusive ? "이상" : "초과";
         const suffix = adj === "이상" ? "이어야 합니다" : "여야 합니다";
-        const sizing = getSizing(issue2.origin);
+        const sizing = getSizing(issue.origin);
         const unit = sizing?.unit ?? "요소";
         if (sizing) {
-          return `${issue2.origin ?? "값"}이 너무 작습니다: ${issue2.minimum.toString()}${unit} ${adj}${suffix}`;
+          return `${issue.origin ?? "값"}이 너무 작습니다: ${issue.minimum.toString()}${unit} ${adj}${suffix}`;
         }
-        return `${issue2.origin ?? "값"}이 너무 작습니다: ${issue2.minimum.toString()} ${adj}${suffix}`;
+        return `${issue.origin ?? "값"}이 너무 작습니다: ${issue.minimum.toString()} ${adj}${suffix}`;
       }
       case "invalid_format": {
-        const _issue = issue2;
+        const _issue = issue;
         if (_issue.format === "starts_with") {
           return `잘못된 문자열: "${_issue.prefix}"(으)로 시작해야 합니다`;
         }
@@ -7335,18 +7345,18 @@ var error27 = () => {
           return `잘못된 문자열: "${_issue.includes}"을(를) 포함해야 합니다`;
         if (_issue.format === "regex")
           return `잘못된 문자열: 정규식 ${_issue.pattern} 패턴과 일치해야 합니다`;
-        return `잘못된 ${FormatDictionary[_issue.format] ?? issue2.format}`;
+        return `잘못된 ${FormatDictionary[_issue.format] ?? issue.format}`;
       }
       case "not_multiple_of":
-        return `잘못된 숫자: ${issue2.divisor}의 배수여야 합니다`;
+        return `잘못된 숫자: ${issue.divisor}의 배수여야 합니다`;
       case "unrecognized_keys":
-        return `인식할 수 없는 키: ${joinValues(issue2.keys, ", ")}`;
+        return `인식할 수 없는 키: ${joinValues(issue.keys, ", ")}`;
       case "invalid_key":
-        return `잘못된 키: ${issue2.origin}`;
+        return `잘못된 키: ${issue.origin}`;
       case "invalid_union":
         return `잘못된 입력`;
       case "invalid_element":
-        return `잘못된 값: ${issue2.origin}`;
+        return `잘못된 값: ${issue.origin}`;
       default:
         return `잘못된 입력`;
     }
@@ -7355,8 +7365,8 @@ var error27 = () => {
 var init_ko = __esm(() => {
   init_util();
 });
-function getUnitTypeFromNumber(number2) {
-  const abs = Math.abs(number2);
+function getUnitTypeFromNumber(number) {
+  const abs = Math.abs(number);
   const last = abs % 10;
   const last2 = abs % 100;
   if (last2 >= 11 && last2 <= 19 || last === 0)
@@ -7444,8 +7454,8 @@ var error28 = () => {
       }
     }
   };
-  function getSizing(origin2, unitType, inclusive, targetShouldBe) {
-    const result = Sizable[origin2] ?? null;
+  function getSizing(origin, unitType, inclusive, targetShouldBe) {
+    const result = Sizable[origin] ?? null;
     if (result === null)
       return result;
     return {
@@ -7496,39 +7506,39 @@ var error28 = () => {
     object: "objektas",
     null: "nulinė reikšmė"
   };
-  return (issue2) => {
-    switch (issue2.code) {
+  return (issue) => {
+    switch (issue.code) {
       case "invalid_type": {
-        const expected = TypeDictionary[issue2.expected] ?? issue2.expected;
-        const receivedType = parsedType(issue2.input);
+        const expected = TypeDictionary[issue.expected] ?? issue.expected;
+        const receivedType = parsedType(issue.input);
         const received = TypeDictionary[receivedType] ?? receivedType;
-        if (/^[A-Z]/.test(issue2.expected)) {
-          return `Gautas tipas ${received}, o tikėtasi - instanceof ${issue2.expected}`;
+        if (/^[A-Z]/.test(issue.expected)) {
+          return `Gautas tipas ${received}, o tikėtasi - instanceof ${issue.expected}`;
         }
         return `Gautas tipas ${received}, o tikėtasi - ${expected}`;
       }
       case "invalid_value":
-        if (issue2.values.length === 1)
-          return `Privalo būti ${stringifyPrimitive(issue2.values[0])}`;
-        return `Privalo būti vienas iš ${joinValues(issue2.values, "|")} pasirinkimų`;
+        if (issue.values.length === 1)
+          return `Privalo būti ${stringifyPrimitive(issue.values[0])}`;
+        return `Privalo būti vienas iš ${joinValues(issue.values, "|")} pasirinkimų`;
       case "too_big": {
-        const origin2 = TypeDictionary[issue2.origin] ?? issue2.origin;
-        const sizing = getSizing(issue2.origin, getUnitTypeFromNumber(Number(issue2.maximum)), issue2.inclusive ?? false, "smaller");
+        const origin = TypeDictionary[issue.origin] ?? issue.origin;
+        const sizing = getSizing(issue.origin, getUnitTypeFromNumber(Number(issue.maximum)), issue.inclusive ?? false, "smaller");
         if (sizing?.verb)
-          return `${capitalizeFirstCharacter(origin2 ?? issue2.origin ?? "reikšmė")} ${sizing.verb} ${issue2.maximum.toString()} ${sizing.unit ?? "elementų"}`;
-        const adj = issue2.inclusive ? "ne didesnis kaip" : "mažesnis kaip";
-        return `${capitalizeFirstCharacter(origin2 ?? issue2.origin ?? "reikšmė")} turi būti ${adj} ${issue2.maximum.toString()} ${sizing?.unit}`;
+          return `${capitalizeFirstCharacter(origin ?? issue.origin ?? "reikšmė")} ${sizing.verb} ${issue.maximum.toString()} ${sizing.unit ?? "elementų"}`;
+        const adj = issue.inclusive ? "ne didesnis kaip" : "mažesnis kaip";
+        return `${capitalizeFirstCharacter(origin ?? issue.origin ?? "reikšmė")} turi būti ${adj} ${issue.maximum.toString()} ${sizing?.unit}`;
       }
       case "too_small": {
-        const origin2 = TypeDictionary[issue2.origin] ?? issue2.origin;
-        const sizing = getSizing(issue2.origin, getUnitTypeFromNumber(Number(issue2.minimum)), issue2.inclusive ?? false, "bigger");
+        const origin = TypeDictionary[issue.origin] ?? issue.origin;
+        const sizing = getSizing(issue.origin, getUnitTypeFromNumber(Number(issue.minimum)), issue.inclusive ?? false, "bigger");
         if (sizing?.verb)
-          return `${capitalizeFirstCharacter(origin2 ?? issue2.origin ?? "reikšmė")} ${sizing.verb} ${issue2.minimum.toString()} ${sizing.unit ?? "elementų"}`;
-        const adj = issue2.inclusive ? "ne mažesnis kaip" : "didesnis kaip";
-        return `${capitalizeFirstCharacter(origin2 ?? issue2.origin ?? "reikšmė")} turi būti ${adj} ${issue2.minimum.toString()} ${sizing?.unit}`;
+          return `${capitalizeFirstCharacter(origin ?? issue.origin ?? "reikšmė")} ${sizing.verb} ${issue.minimum.toString()} ${sizing.unit ?? "elementų"}`;
+        const adj = issue.inclusive ? "ne mažesnis kaip" : "didesnis kaip";
+        return `${capitalizeFirstCharacter(origin ?? issue.origin ?? "reikšmė")} turi būti ${adj} ${issue.minimum.toString()} ${sizing?.unit}`;
       }
       case "invalid_format": {
-        const _issue = issue2;
+        const _issue = issue;
         if (_issue.format === "starts_with") {
           return `Eilutė privalo prasidėti "${_issue.prefix}"`;
         }
@@ -7538,19 +7548,19 @@ var error28 = () => {
           return `Eilutė privalo įtraukti "${_issue.includes}"`;
         if (_issue.format === "regex")
           return `Eilutė privalo atitikti ${_issue.pattern}`;
-        return `Neteisingas ${FormatDictionary[_issue.format] ?? issue2.format}`;
+        return `Neteisingas ${FormatDictionary[_issue.format] ?? issue.format}`;
       }
       case "not_multiple_of":
-        return `Skaičius privalo būti ${issue2.divisor} kartotinis.`;
+        return `Skaičius privalo būti ${issue.divisor} kartotinis.`;
       case "unrecognized_keys":
-        return `Neatpažint${issue2.keys.length > 1 ? "i" : "as"} rakt${issue2.keys.length > 1 ? "ai" : "as"}: ${joinValues(issue2.keys, ", ")}`;
+        return `Neatpažint${issue.keys.length > 1 ? "i" : "as"} rakt${issue.keys.length > 1 ? "ai" : "as"}: ${joinValues(issue.keys, ", ")}`;
       case "invalid_key":
         return "Rastas klaidingas raktas";
       case "invalid_union":
         return "Klaidinga įvestis";
       case "invalid_element": {
-        const origin2 = TypeDictionary[issue2.origin] ?? issue2.origin;
-        return `${capitalizeFirstCharacter(origin2 ?? issue2.origin ?? "reikšmė")} turi klaidingą įvestį`;
+        const origin = TypeDictionary[issue.origin] ?? issue.origin;
+        return `${capitalizeFirstCharacter(origin ?? issue.origin ?? "reikšmė")} turi klaidingą įvestį`;
       }
       default:
         return "Klaidinga įvestis";
@@ -7572,8 +7582,8 @@ var error29 = () => {
     array: { unit: "ставки", verb: "да имаат" },
     set: { unit: "ставки", verb: "да имаат" }
   };
-  function getSizing(origin2) {
-    return Sizable[origin2] ?? null;
+  function getSizing(origin) {
+    return Sizable[origin] ?? null;
   }
   const FormatDictionary = {
     regex: "внес",
@@ -7610,38 +7620,38 @@ var error29 = () => {
     number: "број",
     array: "низа"
   };
-  return (issue2) => {
-    switch (issue2.code) {
+  return (issue) => {
+    switch (issue.code) {
       case "invalid_type": {
-        const expected = TypeDictionary[issue2.expected] ?? issue2.expected;
-        const receivedType = parsedType(issue2.input);
+        const expected = TypeDictionary[issue.expected] ?? issue.expected;
+        const receivedType = parsedType(issue.input);
         const received = TypeDictionary[receivedType] ?? receivedType;
-        if (/^[A-Z]/.test(issue2.expected)) {
-          return `Грешен внес: се очекува instanceof ${issue2.expected}, примено ${received}`;
+        if (/^[A-Z]/.test(issue.expected)) {
+          return `Грешен внес: се очекува instanceof ${issue.expected}, примено ${received}`;
         }
         return `Грешен внес: се очекува ${expected}, примено ${received}`;
       }
       case "invalid_value":
-        if (issue2.values.length === 1)
-          return `Invalid input: expected ${stringifyPrimitive(issue2.values[0])}`;
-        return `Грешана опција: се очекува една ${joinValues(issue2.values, "|")}`;
+        if (issue.values.length === 1)
+          return `Invalid input: expected ${stringifyPrimitive(issue.values[0])}`;
+        return `Грешана опција: се очекува една ${joinValues(issue.values, "|")}`;
       case "too_big": {
-        const adj = issue2.inclusive ? "<=" : "<";
-        const sizing = getSizing(issue2.origin);
+        const adj = issue.inclusive ? "<=" : "<";
+        const sizing = getSizing(issue.origin);
         if (sizing)
-          return `Премногу голем: се очекува ${issue2.origin ?? "вредноста"} да има ${adj}${issue2.maximum.toString()} ${sizing.unit ?? "елементи"}`;
-        return `Премногу голем: се очекува ${issue2.origin ?? "вредноста"} да биде ${adj}${issue2.maximum.toString()}`;
+          return `Премногу голем: се очекува ${issue.origin ?? "вредноста"} да има ${adj}${issue.maximum.toString()} ${sizing.unit ?? "елементи"}`;
+        return `Премногу голем: се очекува ${issue.origin ?? "вредноста"} да биде ${adj}${issue.maximum.toString()}`;
       }
       case "too_small": {
-        const adj = issue2.inclusive ? ">=" : ">";
-        const sizing = getSizing(issue2.origin);
+        const adj = issue.inclusive ? ">=" : ">";
+        const sizing = getSizing(issue.origin);
         if (sizing) {
-          return `Премногу мал: се очекува ${issue2.origin} да има ${adj}${issue2.minimum.toString()} ${sizing.unit}`;
+          return `Премногу мал: се очекува ${issue.origin} да има ${adj}${issue.minimum.toString()} ${sizing.unit}`;
         }
-        return `Премногу мал: се очекува ${issue2.origin} да биде ${adj}${issue2.minimum.toString()}`;
+        return `Премногу мал: се очекува ${issue.origin} да биде ${adj}${issue.minimum.toString()}`;
       }
       case "invalid_format": {
-        const _issue = issue2;
+        const _issue = issue;
         if (_issue.format === "starts_with") {
           return `Неважечка низа: мора да започнува со "${_issue.prefix}"`;
         }
@@ -7651,18 +7661,18 @@ var error29 = () => {
           return `Неважечка низа: мора да вклучува "${_issue.includes}"`;
         if (_issue.format === "regex")
           return `Неважечка низа: мора да одгоара на патернот ${_issue.pattern}`;
-        return `Invalid ${FormatDictionary[_issue.format] ?? issue2.format}`;
+        return `Invalid ${FormatDictionary[_issue.format] ?? issue.format}`;
       }
       case "not_multiple_of":
-        return `Грешен број: мора да биде делив со ${issue2.divisor}`;
+        return `Грешен број: мора да биде делив со ${issue.divisor}`;
       case "unrecognized_keys":
-        return `${issue2.keys.length > 1 ? "Непрепознаени клучеви" : "Непрепознаен клуч"}: ${joinValues(issue2.keys, ", ")}`;
+        return `${issue.keys.length > 1 ? "Непрепознаени клучеви" : "Непрепознаен клуч"}: ${joinValues(issue.keys, ", ")}`;
       case "invalid_key":
-        return `Грешен клуч во ${issue2.origin}`;
+        return `Грешен клуч во ${issue.origin}`;
       case "invalid_union":
         return "Грешен внес";
       case "invalid_element":
-        return `Грешна вредност во ${issue2.origin}`;
+        return `Грешна вредност во ${issue.origin}`;
       default:
         return `Грешен внес`;
     }
@@ -7683,8 +7693,8 @@ var error30 = () => {
     array: { unit: "elemen", verb: "mempunyai" },
     set: { unit: "elemen", verb: "mempunyai" }
   };
-  function getSizing(origin2) {
-    return Sizable[origin2] ?? null;
+  function getSizing(origin) {
+    return Sizable[origin] ?? null;
   }
   const FormatDictionary = {
     regex: "input",
@@ -7720,38 +7730,38 @@ var error30 = () => {
     nan: "NaN",
     number: "nombor"
   };
-  return (issue2) => {
-    switch (issue2.code) {
+  return (issue) => {
+    switch (issue.code) {
       case "invalid_type": {
-        const expected = TypeDictionary[issue2.expected] ?? issue2.expected;
-        const receivedType = parsedType(issue2.input);
+        const expected = TypeDictionary[issue.expected] ?? issue.expected;
+        const receivedType = parsedType(issue.input);
         const received = TypeDictionary[receivedType] ?? receivedType;
-        if (/^[A-Z]/.test(issue2.expected)) {
-          return `Input tidak sah: dijangka instanceof ${issue2.expected}, diterima ${received}`;
+        if (/^[A-Z]/.test(issue.expected)) {
+          return `Input tidak sah: dijangka instanceof ${issue.expected}, diterima ${received}`;
         }
         return `Input tidak sah: dijangka ${expected}, diterima ${received}`;
       }
       case "invalid_value":
-        if (issue2.values.length === 1)
-          return `Input tidak sah: dijangka ${stringifyPrimitive(issue2.values[0])}`;
-        return `Pilihan tidak sah: dijangka salah satu daripada ${joinValues(issue2.values, "|")}`;
+        if (issue.values.length === 1)
+          return `Input tidak sah: dijangka ${stringifyPrimitive(issue.values[0])}`;
+        return `Pilihan tidak sah: dijangka salah satu daripada ${joinValues(issue.values, "|")}`;
       case "too_big": {
-        const adj = issue2.inclusive ? "<=" : "<";
-        const sizing = getSizing(issue2.origin);
+        const adj = issue.inclusive ? "<=" : "<";
+        const sizing = getSizing(issue.origin);
         if (sizing)
-          return `Terlalu besar: dijangka ${issue2.origin ?? "nilai"} ${sizing.verb} ${adj}${issue2.maximum.toString()} ${sizing.unit ?? "elemen"}`;
-        return `Terlalu besar: dijangka ${issue2.origin ?? "nilai"} adalah ${adj}${issue2.maximum.toString()}`;
+          return `Terlalu besar: dijangka ${issue.origin ?? "nilai"} ${sizing.verb} ${adj}${issue.maximum.toString()} ${sizing.unit ?? "elemen"}`;
+        return `Terlalu besar: dijangka ${issue.origin ?? "nilai"} adalah ${adj}${issue.maximum.toString()}`;
       }
       case "too_small": {
-        const adj = issue2.inclusive ? ">=" : ">";
-        const sizing = getSizing(issue2.origin);
+        const adj = issue.inclusive ? ">=" : ">";
+        const sizing = getSizing(issue.origin);
         if (sizing) {
-          return `Terlalu kecil: dijangka ${issue2.origin} ${sizing.verb} ${adj}${issue2.minimum.toString()} ${sizing.unit}`;
+          return `Terlalu kecil: dijangka ${issue.origin} ${sizing.verb} ${adj}${issue.minimum.toString()} ${sizing.unit}`;
         }
-        return `Terlalu kecil: dijangka ${issue2.origin} adalah ${adj}${issue2.minimum.toString()}`;
+        return `Terlalu kecil: dijangka ${issue.origin} adalah ${adj}${issue.minimum.toString()}`;
       }
       case "invalid_format": {
-        const _issue = issue2;
+        const _issue = issue;
         if (_issue.format === "starts_with")
           return `String tidak sah: mesti bermula dengan "${_issue.prefix}"`;
         if (_issue.format === "ends_with")
@@ -7760,18 +7770,18 @@ var error30 = () => {
           return `String tidak sah: mesti mengandungi "${_issue.includes}"`;
         if (_issue.format === "regex")
           return `String tidak sah: mesti sepadan dengan corak ${_issue.pattern}`;
-        return `${FormatDictionary[_issue.format] ?? issue2.format} tidak sah`;
+        return `${FormatDictionary[_issue.format] ?? issue.format} tidak sah`;
       }
       case "not_multiple_of":
-        return `Nombor tidak sah: perlu gandaan ${issue2.divisor}`;
+        return `Nombor tidak sah: perlu gandaan ${issue.divisor}`;
       case "unrecognized_keys":
-        return `Kunci tidak dikenali: ${joinValues(issue2.keys, ", ")}`;
+        return `Kunci tidak dikenali: ${joinValues(issue.keys, ", ")}`;
       case "invalid_key":
-        return `Kunci tidak sah dalam ${issue2.origin}`;
+        return `Kunci tidak sah dalam ${issue.origin}`;
       case "invalid_union":
         return "Input tidak sah";
       case "invalid_element":
-        return `Nilai tidak sah dalam ${issue2.origin}`;
+        return `Nilai tidak sah dalam ${issue.origin}`;
       default:
         return `Input tidak sah`;
     }
@@ -7792,8 +7802,8 @@ var error31 = () => {
     array: { unit: "elementen", verb: "heeft" },
     set: { unit: "elementen", verb: "heeft" }
   };
-  function getSizing(origin2) {
-    return Sizable[origin2] ?? null;
+  function getSizing(origin) {
+    return Sizable[origin] ?? null;
   }
   const FormatDictionary = {
     regex: "invoer",
@@ -7829,40 +7839,40 @@ var error31 = () => {
     nan: "NaN",
     number: "getal"
   };
-  return (issue2) => {
-    switch (issue2.code) {
+  return (issue) => {
+    switch (issue.code) {
       case "invalid_type": {
-        const expected = TypeDictionary[issue2.expected] ?? issue2.expected;
-        const receivedType = parsedType(issue2.input);
+        const expected = TypeDictionary[issue.expected] ?? issue.expected;
+        const receivedType = parsedType(issue.input);
         const received = TypeDictionary[receivedType] ?? receivedType;
-        if (/^[A-Z]/.test(issue2.expected)) {
-          return `Ongeldige invoer: verwacht instanceof ${issue2.expected}, ontving ${received}`;
+        if (/^[A-Z]/.test(issue.expected)) {
+          return `Ongeldige invoer: verwacht instanceof ${issue.expected}, ontving ${received}`;
         }
         return `Ongeldige invoer: verwacht ${expected}, ontving ${received}`;
       }
       case "invalid_value":
-        if (issue2.values.length === 1)
-          return `Ongeldige invoer: verwacht ${stringifyPrimitive(issue2.values[0])}`;
-        return `Ongeldige optie: verwacht één van ${joinValues(issue2.values, "|")}`;
+        if (issue.values.length === 1)
+          return `Ongeldige invoer: verwacht ${stringifyPrimitive(issue.values[0])}`;
+        return `Ongeldige optie: verwacht één van ${joinValues(issue.values, "|")}`;
       case "too_big": {
-        const adj = issue2.inclusive ? "<=" : "<";
-        const sizing = getSizing(issue2.origin);
-        const longName = issue2.origin === "date" ? "laat" : issue2.origin === "string" ? "lang" : "groot";
+        const adj = issue.inclusive ? "<=" : "<";
+        const sizing = getSizing(issue.origin);
+        const longName = issue.origin === "date" ? "laat" : issue.origin === "string" ? "lang" : "groot";
         if (sizing)
-          return `Te ${longName}: verwacht dat ${issue2.origin ?? "waarde"} ${adj}${issue2.maximum.toString()} ${sizing.unit ?? "elementen"} ${sizing.verb}`;
-        return `Te ${longName}: verwacht dat ${issue2.origin ?? "waarde"} ${adj}${issue2.maximum.toString()} is`;
+          return `Te ${longName}: verwacht dat ${issue.origin ?? "waarde"} ${adj}${issue.maximum.toString()} ${sizing.unit ?? "elementen"} ${sizing.verb}`;
+        return `Te ${longName}: verwacht dat ${issue.origin ?? "waarde"} ${adj}${issue.maximum.toString()} is`;
       }
       case "too_small": {
-        const adj = issue2.inclusive ? ">=" : ">";
-        const sizing = getSizing(issue2.origin);
-        const shortName = issue2.origin === "date" ? "vroeg" : issue2.origin === "string" ? "kort" : "klein";
+        const adj = issue.inclusive ? ">=" : ">";
+        const sizing = getSizing(issue.origin);
+        const shortName = issue.origin === "date" ? "vroeg" : issue.origin === "string" ? "kort" : "klein";
         if (sizing) {
-          return `Te ${shortName}: verwacht dat ${issue2.origin} ${adj}${issue2.minimum.toString()} ${sizing.unit} ${sizing.verb}`;
+          return `Te ${shortName}: verwacht dat ${issue.origin} ${adj}${issue.minimum.toString()} ${sizing.unit} ${sizing.verb}`;
         }
-        return `Te ${shortName}: verwacht dat ${issue2.origin} ${adj}${issue2.minimum.toString()} is`;
+        return `Te ${shortName}: verwacht dat ${issue.origin} ${adj}${issue.minimum.toString()} is`;
       }
       case "invalid_format": {
-        const _issue = issue2;
+        const _issue = issue;
         if (_issue.format === "starts_with") {
           return `Ongeldige tekst: moet met "${_issue.prefix}" beginnen`;
         }
@@ -7872,18 +7882,18 @@ var error31 = () => {
           return `Ongeldige tekst: moet "${_issue.includes}" bevatten`;
         if (_issue.format === "regex")
           return `Ongeldige tekst: moet overeenkomen met patroon ${_issue.pattern}`;
-        return `Ongeldig: ${FormatDictionary[_issue.format] ?? issue2.format}`;
+        return `Ongeldig: ${FormatDictionary[_issue.format] ?? issue.format}`;
       }
       case "not_multiple_of":
-        return `Ongeldig getal: moet een veelvoud van ${issue2.divisor} zijn`;
+        return `Ongeldig getal: moet een veelvoud van ${issue.divisor} zijn`;
       case "unrecognized_keys":
-        return `Onbekende key${issue2.keys.length > 1 ? "s" : ""}: ${joinValues(issue2.keys, ", ")}`;
+        return `Onbekende key${issue.keys.length > 1 ? "s" : ""}: ${joinValues(issue.keys, ", ")}`;
       case "invalid_key":
-        return `Ongeldige key in ${issue2.origin}`;
+        return `Ongeldige key in ${issue.origin}`;
       case "invalid_union":
         return "Ongeldige invoer";
       case "invalid_element":
-        return `Ongeldige waarde in ${issue2.origin}`;
+        return `Ongeldige waarde in ${issue.origin}`;
       default:
         return `Ongeldige invoer`;
     }
@@ -7904,8 +7914,8 @@ var error32 = () => {
     array: { unit: "elementer", verb: "å inneholde" },
     set: { unit: "elementer", verb: "å inneholde" }
   };
-  function getSizing(origin2) {
-    return Sizable[origin2] ?? null;
+  function getSizing(origin) {
+    return Sizable[origin] ?? null;
   }
   const FormatDictionary = {
     regex: "input",
@@ -7942,38 +7952,38 @@ var error32 = () => {
     number: "tall",
     array: "liste"
   };
-  return (issue2) => {
-    switch (issue2.code) {
+  return (issue) => {
+    switch (issue.code) {
       case "invalid_type": {
-        const expected = TypeDictionary[issue2.expected] ?? issue2.expected;
-        const receivedType = parsedType(issue2.input);
+        const expected = TypeDictionary[issue.expected] ?? issue.expected;
+        const receivedType = parsedType(issue.input);
         const received = TypeDictionary[receivedType] ?? receivedType;
-        if (/^[A-Z]/.test(issue2.expected)) {
-          return `Ugyldig input: forventet instanceof ${issue2.expected}, fikk ${received}`;
+        if (/^[A-Z]/.test(issue.expected)) {
+          return `Ugyldig input: forventet instanceof ${issue.expected}, fikk ${received}`;
         }
         return `Ugyldig input: forventet ${expected}, fikk ${received}`;
       }
       case "invalid_value":
-        if (issue2.values.length === 1)
-          return `Ugyldig verdi: forventet ${stringifyPrimitive(issue2.values[0])}`;
-        return `Ugyldig valg: forventet en av ${joinValues(issue2.values, "|")}`;
+        if (issue.values.length === 1)
+          return `Ugyldig verdi: forventet ${stringifyPrimitive(issue.values[0])}`;
+        return `Ugyldig valg: forventet en av ${joinValues(issue.values, "|")}`;
       case "too_big": {
-        const adj = issue2.inclusive ? "<=" : "<";
-        const sizing = getSizing(issue2.origin);
+        const adj = issue.inclusive ? "<=" : "<";
+        const sizing = getSizing(issue.origin);
         if (sizing)
-          return `For stor(t): forventet ${issue2.origin ?? "value"} til å ha ${adj}${issue2.maximum.toString()} ${sizing.unit ?? "elementer"}`;
-        return `For stor(t): forventet ${issue2.origin ?? "value"} til å ha ${adj}${issue2.maximum.toString()}`;
+          return `For stor(t): forventet ${issue.origin ?? "value"} til å ha ${adj}${issue.maximum.toString()} ${sizing.unit ?? "elementer"}`;
+        return `For stor(t): forventet ${issue.origin ?? "value"} til å ha ${adj}${issue.maximum.toString()}`;
       }
       case "too_small": {
-        const adj = issue2.inclusive ? ">=" : ">";
-        const sizing = getSizing(issue2.origin);
+        const adj = issue.inclusive ? ">=" : ">";
+        const sizing = getSizing(issue.origin);
         if (sizing) {
-          return `For lite(n): forventet ${issue2.origin} til å ha ${adj}${issue2.minimum.toString()} ${sizing.unit}`;
+          return `For lite(n): forventet ${issue.origin} til å ha ${adj}${issue.minimum.toString()} ${sizing.unit}`;
         }
-        return `For lite(n): forventet ${issue2.origin} til å ha ${adj}${issue2.minimum.toString()}`;
+        return `For lite(n): forventet ${issue.origin} til å ha ${adj}${issue.minimum.toString()}`;
       }
       case "invalid_format": {
-        const _issue = issue2;
+        const _issue = issue;
         if (_issue.format === "starts_with")
           return `Ugyldig streng: må starte med "${_issue.prefix}"`;
         if (_issue.format === "ends_with")
@@ -7982,18 +7992,18 @@ var error32 = () => {
           return `Ugyldig streng: må inneholde "${_issue.includes}"`;
         if (_issue.format === "regex")
           return `Ugyldig streng: må matche mønsteret ${_issue.pattern}`;
-        return `Ugyldig ${FormatDictionary[_issue.format] ?? issue2.format}`;
+        return `Ugyldig ${FormatDictionary[_issue.format] ?? issue.format}`;
       }
       case "not_multiple_of":
-        return `Ugyldig tall: må være et multiplum av ${issue2.divisor}`;
+        return `Ugyldig tall: må være et multiplum av ${issue.divisor}`;
       case "unrecognized_keys":
-        return `${issue2.keys.length > 1 ? "Ukjente nøkler" : "Ukjent nøkkel"}: ${joinValues(issue2.keys, ", ")}`;
+        return `${issue.keys.length > 1 ? "Ukjente nøkler" : "Ukjent nøkkel"}: ${joinValues(issue.keys, ", ")}`;
       case "invalid_key":
-        return `Ugyldig nøkkel i ${issue2.origin}`;
+        return `Ugyldig nøkkel i ${issue.origin}`;
       case "invalid_union":
         return "Ugyldig input";
       case "invalid_element":
-        return `Ugyldig verdi i ${issue2.origin}`;
+        return `Ugyldig verdi i ${issue.origin}`;
       default:
         return `Ugyldig input`;
     }
@@ -8014,8 +8024,8 @@ var error33 = () => {
     array: { unit: "unsur", verb: "olmalıdır" },
     set: { unit: "unsur", verb: "olmalıdır" }
   };
-  function getSizing(origin2) {
-    return Sizable[origin2] ?? null;
+  function getSizing(origin) {
+    return Sizable[origin] ?? null;
   }
   const FormatDictionary = {
     regex: "giren",
@@ -8053,38 +8063,38 @@ var error33 = () => {
     array: "saf",
     null: "gayb"
   };
-  return (issue2) => {
-    switch (issue2.code) {
+  return (issue) => {
+    switch (issue.code) {
       case "invalid_type": {
-        const expected = TypeDictionary[issue2.expected] ?? issue2.expected;
-        const receivedType = parsedType(issue2.input);
+        const expected = TypeDictionary[issue.expected] ?? issue.expected;
+        const receivedType = parsedType(issue.input);
         const received = TypeDictionary[receivedType] ?? receivedType;
-        if (/^[A-Z]/.test(issue2.expected)) {
-          return `Fâsit giren: umulan instanceof ${issue2.expected}, alınan ${received}`;
+        if (/^[A-Z]/.test(issue.expected)) {
+          return `Fâsit giren: umulan instanceof ${issue.expected}, alınan ${received}`;
         }
         return `Fâsit giren: umulan ${expected}, alınan ${received}`;
       }
       case "invalid_value":
-        if (issue2.values.length === 1)
-          return `Fâsit giren: umulan ${stringifyPrimitive(issue2.values[0])}`;
-        return `Fâsit tercih: mûteberler ${joinValues(issue2.values, "|")}`;
+        if (issue.values.length === 1)
+          return `Fâsit giren: umulan ${stringifyPrimitive(issue.values[0])}`;
+        return `Fâsit tercih: mûteberler ${joinValues(issue.values, "|")}`;
       case "too_big": {
-        const adj = issue2.inclusive ? "<=" : "<";
-        const sizing = getSizing(issue2.origin);
+        const adj = issue.inclusive ? "<=" : "<";
+        const sizing = getSizing(issue.origin);
         if (sizing)
-          return `Fazla büyük: ${issue2.origin ?? "value"}, ${adj}${issue2.maximum.toString()} ${sizing.unit ?? "elements"} sahip olmalıydı.`;
-        return `Fazla büyük: ${issue2.origin ?? "value"}, ${adj}${issue2.maximum.toString()} olmalıydı.`;
+          return `Fazla büyük: ${issue.origin ?? "value"}, ${adj}${issue.maximum.toString()} ${sizing.unit ?? "elements"} sahip olmalıydı.`;
+        return `Fazla büyük: ${issue.origin ?? "value"}, ${adj}${issue.maximum.toString()} olmalıydı.`;
       }
       case "too_small": {
-        const adj = issue2.inclusive ? ">=" : ">";
-        const sizing = getSizing(issue2.origin);
+        const adj = issue.inclusive ? ">=" : ">";
+        const sizing = getSizing(issue.origin);
         if (sizing) {
-          return `Fazla küçük: ${issue2.origin}, ${adj}${issue2.minimum.toString()} ${sizing.unit} sahip olmalıydı.`;
+          return `Fazla küçük: ${issue.origin}, ${adj}${issue.minimum.toString()} ${sizing.unit} sahip olmalıydı.`;
         }
-        return `Fazla küçük: ${issue2.origin}, ${adj}${issue2.minimum.toString()} olmalıydı.`;
+        return `Fazla küçük: ${issue.origin}, ${adj}${issue.minimum.toString()} olmalıydı.`;
       }
       case "invalid_format": {
-        const _issue = issue2;
+        const _issue = issue;
         if (_issue.format === "starts_with")
           return `Fâsit metin: "${_issue.prefix}" ile başlamalı.`;
         if (_issue.format === "ends_with")
@@ -8093,18 +8103,18 @@ var error33 = () => {
           return `Fâsit metin: "${_issue.includes}" ihtivâ etmeli.`;
         if (_issue.format === "regex")
           return `Fâsit metin: ${_issue.pattern} nakşına uymalı.`;
-        return `Fâsit ${FormatDictionary[_issue.format] ?? issue2.format}`;
+        return `Fâsit ${FormatDictionary[_issue.format] ?? issue.format}`;
       }
       case "not_multiple_of":
-        return `Fâsit sayı: ${issue2.divisor} katı olmalıydı.`;
+        return `Fâsit sayı: ${issue.divisor} katı olmalıydı.`;
       case "unrecognized_keys":
-        return `Tanınmayan anahtar ${issue2.keys.length > 1 ? "s" : ""}: ${joinValues(issue2.keys, ", ")}`;
+        return `Tanınmayan anahtar ${issue.keys.length > 1 ? "s" : ""}: ${joinValues(issue.keys, ", ")}`;
       case "invalid_key":
-        return `${issue2.origin} için tanınmayan anahtar var.`;
+        return `${issue.origin} için tanınmayan anahtar var.`;
       case "invalid_union":
         return "Giren tanınamadı.";
       case "invalid_element":
-        return `${issue2.origin} için tanınmayan kıymet var.`;
+        return `${issue.origin} için tanınmayan kıymet var.`;
       default:
         return `Kıymet tanınamadı.`;
     }
@@ -8125,8 +8135,8 @@ var error34 = () => {
     array: { unit: "توکي", verb: "ولري" },
     set: { unit: "توکي", verb: "ولري" }
   };
-  function getSizing(origin2) {
-    return Sizable[origin2] ?? null;
+  function getSizing(origin) {
+    return Sizable[origin] ?? null;
   }
   const FormatDictionary = {
     regex: "ورودي",
@@ -8163,40 +8173,40 @@ var error34 = () => {
     number: "عدد",
     array: "ارې"
   };
-  return (issue2) => {
-    switch (issue2.code) {
+  return (issue) => {
+    switch (issue.code) {
       case "invalid_type": {
-        const expected = TypeDictionary[issue2.expected] ?? issue2.expected;
-        const receivedType = parsedType(issue2.input);
+        const expected = TypeDictionary[issue.expected] ?? issue.expected;
+        const receivedType = parsedType(issue.input);
         const received = TypeDictionary[receivedType] ?? receivedType;
-        if (/^[A-Z]/.test(issue2.expected)) {
-          return `ناسم ورودي: باید instanceof ${issue2.expected} وای, مګر ${received} ترلاسه شو`;
+        if (/^[A-Z]/.test(issue.expected)) {
+          return `ناسم ورودي: باید instanceof ${issue.expected} وای, مګر ${received} ترلاسه شو`;
         }
         return `ناسم ورودي: باید ${expected} وای, مګر ${received} ترلاسه شو`;
       }
       case "invalid_value":
-        if (issue2.values.length === 1) {
-          return `ناسم ورودي: باید ${stringifyPrimitive(issue2.values[0])} وای`;
+        if (issue.values.length === 1) {
+          return `ناسم ورودي: باید ${stringifyPrimitive(issue.values[0])} وای`;
         }
-        return `ناسم انتخاب: باید یو له ${joinValues(issue2.values, "|")} څخه وای`;
+        return `ناسم انتخاب: باید یو له ${joinValues(issue.values, "|")} څخه وای`;
       case "too_big": {
-        const adj = issue2.inclusive ? "<=" : "<";
-        const sizing = getSizing(issue2.origin);
+        const adj = issue.inclusive ? "<=" : "<";
+        const sizing = getSizing(issue.origin);
         if (sizing) {
-          return `ډیر لوی: ${issue2.origin ?? "ارزښت"} باید ${adj}${issue2.maximum.toString()} ${sizing.unit ?? "عنصرونه"} ولري`;
+          return `ډیر لوی: ${issue.origin ?? "ارزښت"} باید ${adj}${issue.maximum.toString()} ${sizing.unit ?? "عنصرونه"} ولري`;
         }
-        return `ډیر لوی: ${issue2.origin ?? "ارزښت"} باید ${adj}${issue2.maximum.toString()} وي`;
+        return `ډیر لوی: ${issue.origin ?? "ارزښت"} باید ${adj}${issue.maximum.toString()} وي`;
       }
       case "too_small": {
-        const adj = issue2.inclusive ? ">=" : ">";
-        const sizing = getSizing(issue2.origin);
+        const adj = issue.inclusive ? ">=" : ">";
+        const sizing = getSizing(issue.origin);
         if (sizing) {
-          return `ډیر کوچنی: ${issue2.origin} باید ${adj}${issue2.minimum.toString()} ${sizing.unit} ولري`;
+          return `ډیر کوچنی: ${issue.origin} باید ${adj}${issue.minimum.toString()} ${sizing.unit} ولري`;
         }
-        return `ډیر کوچنی: ${issue2.origin} باید ${adj}${issue2.minimum.toString()} وي`;
+        return `ډیر کوچنی: ${issue.origin} باید ${adj}${issue.minimum.toString()} وي`;
       }
       case "invalid_format": {
-        const _issue = issue2;
+        const _issue = issue;
         if (_issue.format === "starts_with") {
           return `ناسم متن: باید د "${_issue.prefix}" سره پیل شي`;
         }
@@ -8209,18 +8219,18 @@ var error34 = () => {
         if (_issue.format === "regex") {
           return `ناسم متن: باید د ${_issue.pattern} سره مطابقت ولري`;
         }
-        return `${FormatDictionary[_issue.format] ?? issue2.format} ناسم دی`;
+        return `${FormatDictionary[_issue.format] ?? issue.format} ناسم دی`;
       }
       case "not_multiple_of":
-        return `ناسم عدد: باید د ${issue2.divisor} مضرب وي`;
+        return `ناسم عدد: باید د ${issue.divisor} مضرب وي`;
       case "unrecognized_keys":
-        return `ناسم ${issue2.keys.length > 1 ? "کلیډونه" : "کلیډ"}: ${joinValues(issue2.keys, ", ")}`;
+        return `ناسم ${issue.keys.length > 1 ? "کلیډونه" : "کلیډ"}: ${joinValues(issue.keys, ", ")}`;
       case "invalid_key":
-        return `ناسم کلیډ په ${issue2.origin} کې`;
+        return `ناسم کلیډ په ${issue.origin} کې`;
       case "invalid_union":
         return `ناسمه ورودي`;
       case "invalid_element":
-        return `ناسم عنصر په ${issue2.origin} کې`;
+        return `ناسم عنصر په ${issue.origin} کې`;
       default:
         return `ناسمه ورودي`;
     }
@@ -8241,8 +8251,8 @@ var error35 = () => {
     array: { unit: "elementów", verb: "mieć" },
     set: { unit: "elementów", verb: "mieć" }
   };
-  function getSizing(origin2) {
-    return Sizable[origin2] ?? null;
+  function getSizing(origin) {
+    return Sizable[origin] ?? null;
   }
   const FormatDictionary = {
     regex: "wyrażenie",
@@ -8279,39 +8289,39 @@ var error35 = () => {
     number: "liczba",
     array: "tablica"
   };
-  return (issue2) => {
-    switch (issue2.code) {
+  return (issue) => {
+    switch (issue.code) {
       case "invalid_type": {
-        const expected = TypeDictionary[issue2.expected] ?? issue2.expected;
-        const receivedType = parsedType(issue2.input);
+        const expected = TypeDictionary[issue.expected] ?? issue.expected;
+        const receivedType = parsedType(issue.input);
         const received = TypeDictionary[receivedType] ?? receivedType;
-        if (/^[A-Z]/.test(issue2.expected)) {
-          return `Nieprawidłowe dane wejściowe: oczekiwano instanceof ${issue2.expected}, otrzymano ${received}`;
+        if (/^[A-Z]/.test(issue.expected)) {
+          return `Nieprawidłowe dane wejściowe: oczekiwano instanceof ${issue.expected}, otrzymano ${received}`;
         }
         return `Nieprawidłowe dane wejściowe: oczekiwano ${expected}, otrzymano ${received}`;
       }
       case "invalid_value":
-        if (issue2.values.length === 1)
-          return `Nieprawidłowe dane wejściowe: oczekiwano ${stringifyPrimitive(issue2.values[0])}`;
-        return `Nieprawidłowa opcja: oczekiwano jednej z wartości ${joinValues(issue2.values, "|")}`;
+        if (issue.values.length === 1)
+          return `Nieprawidłowe dane wejściowe: oczekiwano ${stringifyPrimitive(issue.values[0])}`;
+        return `Nieprawidłowa opcja: oczekiwano jednej z wartości ${joinValues(issue.values, "|")}`;
       case "too_big": {
-        const adj = issue2.inclusive ? "<=" : "<";
-        const sizing = getSizing(issue2.origin);
+        const adj = issue.inclusive ? "<=" : "<";
+        const sizing = getSizing(issue.origin);
         if (sizing) {
-          return `Za duża wartość: oczekiwano, że ${issue2.origin ?? "wartość"} będzie mieć ${adj}${issue2.maximum.toString()} ${sizing.unit ?? "elementów"}`;
+          return `Za duża wartość: oczekiwano, że ${issue.origin ?? "wartość"} będzie mieć ${adj}${issue.maximum.toString()} ${sizing.unit ?? "elementów"}`;
         }
-        return `Zbyt duż(y/a/e): oczekiwano, że ${issue2.origin ?? "wartość"} będzie wynosić ${adj}${issue2.maximum.toString()}`;
+        return `Zbyt duż(y/a/e): oczekiwano, że ${issue.origin ?? "wartość"} będzie wynosić ${adj}${issue.maximum.toString()}`;
       }
       case "too_small": {
-        const adj = issue2.inclusive ? ">=" : ">";
-        const sizing = getSizing(issue2.origin);
+        const adj = issue.inclusive ? ">=" : ">";
+        const sizing = getSizing(issue.origin);
         if (sizing) {
-          return `Za mała wartość: oczekiwano, że ${issue2.origin ?? "wartość"} będzie mieć ${adj}${issue2.minimum.toString()} ${sizing.unit ?? "elementów"}`;
+          return `Za mała wartość: oczekiwano, że ${issue.origin ?? "wartość"} będzie mieć ${adj}${issue.minimum.toString()} ${sizing.unit ?? "elementów"}`;
         }
-        return `Zbyt mał(y/a/e): oczekiwano, że ${issue2.origin ?? "wartość"} będzie wynosić ${adj}${issue2.minimum.toString()}`;
+        return `Zbyt mał(y/a/e): oczekiwano, że ${issue.origin ?? "wartość"} będzie wynosić ${adj}${issue.minimum.toString()}`;
       }
       case "invalid_format": {
-        const _issue = issue2;
+        const _issue = issue;
         if (_issue.format === "starts_with")
           return `Nieprawidłowy ciąg znaków: musi zaczynać się od "${_issue.prefix}"`;
         if (_issue.format === "ends_with")
@@ -8320,18 +8330,18 @@ var error35 = () => {
           return `Nieprawidłowy ciąg znaków: musi zawierać "${_issue.includes}"`;
         if (_issue.format === "regex")
           return `Nieprawidłowy ciąg znaków: musi odpowiadać wzorcowi ${_issue.pattern}`;
-        return `Nieprawidłow(y/a/e) ${FormatDictionary[_issue.format] ?? issue2.format}`;
+        return `Nieprawidłow(y/a/e) ${FormatDictionary[_issue.format] ?? issue.format}`;
       }
       case "not_multiple_of":
-        return `Nieprawidłowa liczba: musi być wielokrotnością ${issue2.divisor}`;
+        return `Nieprawidłowa liczba: musi być wielokrotnością ${issue.divisor}`;
       case "unrecognized_keys":
-        return `Nierozpoznane klucze${issue2.keys.length > 1 ? "s" : ""}: ${joinValues(issue2.keys, ", ")}`;
+        return `Nierozpoznane klucze${issue.keys.length > 1 ? "s" : ""}: ${joinValues(issue.keys, ", ")}`;
       case "invalid_key":
-        return `Nieprawidłowy klucz w ${issue2.origin}`;
+        return `Nieprawidłowy klucz w ${issue.origin}`;
       case "invalid_union":
         return "Nieprawidłowe dane wejściowe";
       case "invalid_element":
-        return `Nieprawidłowa wartość w ${issue2.origin}`;
+        return `Nieprawidłowa wartość w ${issue.origin}`;
       default:
         return `Nieprawidłowe dane wejściowe`;
     }
@@ -8352,8 +8362,8 @@ var error36 = () => {
     array: { unit: "itens", verb: "ter" },
     set: { unit: "itens", verb: "ter" }
   };
-  function getSizing(origin2) {
-    return Sizable[origin2] ?? null;
+  function getSizing(origin) {
+    return Sizable[origin] ?? null;
   }
   const FormatDictionary = {
     regex: "padrão",
@@ -8390,38 +8400,38 @@ var error36 = () => {
     number: "número",
     null: "nulo"
   };
-  return (issue2) => {
-    switch (issue2.code) {
+  return (issue) => {
+    switch (issue.code) {
       case "invalid_type": {
-        const expected = TypeDictionary[issue2.expected] ?? issue2.expected;
-        const receivedType = parsedType(issue2.input);
+        const expected = TypeDictionary[issue.expected] ?? issue.expected;
+        const receivedType = parsedType(issue.input);
         const received = TypeDictionary[receivedType] ?? receivedType;
-        if (/^[A-Z]/.test(issue2.expected)) {
-          return `Tipo inválido: esperado instanceof ${issue2.expected}, recebido ${received}`;
+        if (/^[A-Z]/.test(issue.expected)) {
+          return `Tipo inválido: esperado instanceof ${issue.expected}, recebido ${received}`;
         }
         return `Tipo inválido: esperado ${expected}, recebido ${received}`;
       }
       case "invalid_value":
-        if (issue2.values.length === 1)
-          return `Entrada inválida: esperado ${stringifyPrimitive(issue2.values[0])}`;
-        return `Opção inválida: esperada uma das ${joinValues(issue2.values, "|")}`;
+        if (issue.values.length === 1)
+          return `Entrada inválida: esperado ${stringifyPrimitive(issue.values[0])}`;
+        return `Opção inválida: esperada uma das ${joinValues(issue.values, "|")}`;
       case "too_big": {
-        const adj = issue2.inclusive ? "<=" : "<";
-        const sizing = getSizing(issue2.origin);
+        const adj = issue.inclusive ? "<=" : "<";
+        const sizing = getSizing(issue.origin);
         if (sizing)
-          return `Muito grande: esperado que ${issue2.origin ?? "valor"} tivesse ${adj}${issue2.maximum.toString()} ${sizing.unit ?? "elementos"}`;
-        return `Muito grande: esperado que ${issue2.origin ?? "valor"} fosse ${adj}${issue2.maximum.toString()}`;
+          return `Muito grande: esperado que ${issue.origin ?? "valor"} tivesse ${adj}${issue.maximum.toString()} ${sizing.unit ?? "elementos"}`;
+        return `Muito grande: esperado que ${issue.origin ?? "valor"} fosse ${adj}${issue.maximum.toString()}`;
       }
       case "too_small": {
-        const adj = issue2.inclusive ? ">=" : ">";
-        const sizing = getSizing(issue2.origin);
+        const adj = issue.inclusive ? ">=" : ">";
+        const sizing = getSizing(issue.origin);
         if (sizing) {
-          return `Muito pequeno: esperado que ${issue2.origin} tivesse ${adj}${issue2.minimum.toString()} ${sizing.unit}`;
+          return `Muito pequeno: esperado que ${issue.origin} tivesse ${adj}${issue.minimum.toString()} ${sizing.unit}`;
         }
-        return `Muito pequeno: esperado que ${issue2.origin} fosse ${adj}${issue2.minimum.toString()}`;
+        return `Muito pequeno: esperado que ${issue.origin} fosse ${adj}${issue.minimum.toString()}`;
       }
       case "invalid_format": {
-        const _issue = issue2;
+        const _issue = issue;
         if (_issue.format === "starts_with")
           return `Texto inválido: deve começar com "${_issue.prefix}"`;
         if (_issue.format === "ends_with")
@@ -8430,18 +8440,18 @@ var error36 = () => {
           return `Texto inválido: deve incluir "${_issue.includes}"`;
         if (_issue.format === "regex")
           return `Texto inválido: deve corresponder ao padrão ${_issue.pattern}`;
-        return `${FormatDictionary[_issue.format] ?? issue2.format} inválido`;
+        return `${FormatDictionary[_issue.format] ?? issue.format} inválido`;
       }
       case "not_multiple_of":
-        return `Número inválido: deve ser múltiplo de ${issue2.divisor}`;
+        return `Número inválido: deve ser múltiplo de ${issue.divisor}`;
       case "unrecognized_keys":
-        return `Chave${issue2.keys.length > 1 ? "s" : ""} desconhecida${issue2.keys.length > 1 ? "s" : ""}: ${joinValues(issue2.keys, ", ")}`;
+        return `Chave${issue.keys.length > 1 ? "s" : ""} desconhecida${issue.keys.length > 1 ? "s" : ""}: ${joinValues(issue.keys, ", ")}`;
       case "invalid_key":
-        return `Chave inválida em ${issue2.origin}`;
+        return `Chave inválida em ${issue.origin}`;
       case "invalid_union":
         return "Entrada inválida";
       case "invalid_element":
-        return `Valor inválido em ${issue2.origin}`;
+        return `Valor inválido em ${issue.origin}`;
       default:
         return `Campo inválido`;
     }
@@ -8463,8 +8473,8 @@ var error37 = () => {
     set: { unit: "elemente", verb: "să aibă" },
     map: { unit: "intrări", verb: "să aibă" }
   };
-  function getSizing(origin2) {
-    return Sizable[origin2] ?? null;
+  function getSizing(origin) {
+    return Sizable[origin] ?? null;
   }
   const FormatDictionary = {
     regex: "intrare",
@@ -8513,35 +8523,35 @@ var error37 = () => {
     map: "hartă",
     set: "set"
   };
-  return (issue2) => {
-    switch (issue2.code) {
+  return (issue) => {
+    switch (issue.code) {
       case "invalid_type": {
-        const expected = TypeDictionary[issue2.expected] ?? issue2.expected;
-        const receivedType = parsedType(issue2.input);
+        const expected = TypeDictionary[issue.expected] ?? issue.expected;
+        const receivedType = parsedType(issue.input);
         const received = TypeDictionary[receivedType] ?? receivedType;
         return `Intrare invalidă: așteptat ${expected}, primit ${received}`;
       }
       case "invalid_value":
-        if (issue2.values.length === 1)
-          return `Intrare invalidă: așteptat ${stringifyPrimitive(issue2.values[0])}`;
-        return `Opțiune invalidă: așteptat una dintre ${joinValues(issue2.values, "|")}`;
+        if (issue.values.length === 1)
+          return `Intrare invalidă: așteptat ${stringifyPrimitive(issue.values[0])}`;
+        return `Opțiune invalidă: așteptat una dintre ${joinValues(issue.values, "|")}`;
       case "too_big": {
-        const adj = issue2.inclusive ? "<=" : "<";
-        const sizing = getSizing(issue2.origin);
+        const adj = issue.inclusive ? "<=" : "<";
+        const sizing = getSizing(issue.origin);
         if (sizing)
-          return `Prea mare: așteptat ca ${issue2.origin ?? "valoarea"} ${sizing.verb} ${adj}${issue2.maximum.toString()} ${sizing.unit ?? "elemente"}`;
-        return `Prea mare: așteptat ca ${issue2.origin ?? "valoarea"} să fie ${adj}${issue2.maximum.toString()}`;
+          return `Prea mare: așteptat ca ${issue.origin ?? "valoarea"} ${sizing.verb} ${adj}${issue.maximum.toString()} ${sizing.unit ?? "elemente"}`;
+        return `Prea mare: așteptat ca ${issue.origin ?? "valoarea"} să fie ${adj}${issue.maximum.toString()}`;
       }
       case "too_small": {
-        const adj = issue2.inclusive ? ">=" : ">";
-        const sizing = getSizing(issue2.origin);
+        const adj = issue.inclusive ? ">=" : ">";
+        const sizing = getSizing(issue.origin);
         if (sizing) {
-          return `Prea mic: așteptat ca ${issue2.origin} ${sizing.verb} ${adj}${issue2.minimum.toString()} ${sizing.unit}`;
+          return `Prea mic: așteptat ca ${issue.origin} ${sizing.verb} ${adj}${issue.minimum.toString()} ${sizing.unit}`;
         }
-        return `Prea mic: așteptat ca ${issue2.origin} să fie ${adj}${issue2.minimum.toString()}`;
+        return `Prea mic: așteptat ca ${issue.origin} să fie ${adj}${issue.minimum.toString()}`;
       }
       case "invalid_format": {
-        const _issue = issue2;
+        const _issue = issue;
         if (_issue.format === "starts_with") {
           return `Șir invalid: trebuie să înceapă cu "${_issue.prefix}"`;
         }
@@ -8551,18 +8561,18 @@ var error37 = () => {
           return `Șir invalid: trebuie să includă "${_issue.includes}"`;
         if (_issue.format === "regex")
           return `Șir invalid: trebuie să se potrivească cu modelul ${_issue.pattern}`;
-        return `Format invalid: ${FormatDictionary[_issue.format] ?? issue2.format}`;
+        return `Format invalid: ${FormatDictionary[_issue.format] ?? issue.format}`;
       }
       case "not_multiple_of":
-        return `Număr invalid: trebuie să fie multiplu de ${issue2.divisor}`;
+        return `Număr invalid: trebuie să fie multiplu de ${issue.divisor}`;
       case "unrecognized_keys":
-        return `Chei nerecunoscute: ${joinValues(issue2.keys, ", ")}`;
+        return `Chei nerecunoscute: ${joinValues(issue.keys, ", ")}`;
       case "invalid_key":
-        return `Cheie invalidă în ${issue2.origin}`;
+        return `Cheie invalidă în ${issue.origin}`;
       case "invalid_union":
         return "Intrare invalidă";
       case "invalid_element":
-        return `Valoare invalidă în ${issue2.origin}`;
+        return `Valoare invalidă în ${issue.origin}`;
       default:
         return `Intrare invalidă`;
     }
@@ -8626,8 +8636,8 @@ var error38 = () => {
       verb: "иметь"
     }
   };
-  function getSizing(origin2) {
-    return Sizable[origin2] ?? null;
+  function getSizing(origin) {
+    return Sizable[origin] ?? null;
   }
   const FormatDictionary = {
     regex: "ввод",
@@ -8664,43 +8674,43 @@ var error38 = () => {
     number: "число",
     array: "массив"
   };
-  return (issue2) => {
-    switch (issue2.code) {
+  return (issue) => {
+    switch (issue.code) {
       case "invalid_type": {
-        const expected = TypeDictionary[issue2.expected] ?? issue2.expected;
-        const receivedType = parsedType(issue2.input);
+        const expected = TypeDictionary[issue.expected] ?? issue.expected;
+        const receivedType = parsedType(issue.input);
         const received = TypeDictionary[receivedType] ?? receivedType;
-        if (/^[A-Z]/.test(issue2.expected)) {
-          return `Неверный ввод: ожидалось instanceof ${issue2.expected}, получено ${received}`;
+        if (/^[A-Z]/.test(issue.expected)) {
+          return `Неверный ввод: ожидалось instanceof ${issue.expected}, получено ${received}`;
         }
         return `Неверный ввод: ожидалось ${expected}, получено ${received}`;
       }
       case "invalid_value":
-        if (issue2.values.length === 1)
-          return `Неверный ввод: ожидалось ${stringifyPrimitive(issue2.values[0])}`;
-        return `Неверный вариант: ожидалось одно из ${joinValues(issue2.values, "|")}`;
+        if (issue.values.length === 1)
+          return `Неверный ввод: ожидалось ${stringifyPrimitive(issue.values[0])}`;
+        return `Неверный вариант: ожидалось одно из ${joinValues(issue.values, "|")}`;
       case "too_big": {
-        const adj = issue2.inclusive ? "<=" : "<";
-        const sizing = getSizing(issue2.origin);
+        const adj = issue.inclusive ? "<=" : "<";
+        const sizing = getSizing(issue.origin);
         if (sizing) {
-          const maxValue = Number(issue2.maximum);
+          const maxValue = Number(issue.maximum);
           const unit = getRussianPlural(maxValue, sizing.unit.one, sizing.unit.few, sizing.unit.many);
-          return `Слишком большое значение: ожидалось, что ${issue2.origin ?? "значение"} будет иметь ${adj}${issue2.maximum.toString()} ${unit}`;
+          return `Слишком большое значение: ожидалось, что ${issue.origin ?? "значение"} будет иметь ${adj}${issue.maximum.toString()} ${unit}`;
         }
-        return `Слишком большое значение: ожидалось, что ${issue2.origin ?? "значение"} будет ${adj}${issue2.maximum.toString()}`;
+        return `Слишком большое значение: ожидалось, что ${issue.origin ?? "значение"} будет ${adj}${issue.maximum.toString()}`;
       }
       case "too_small": {
-        const adj = issue2.inclusive ? ">=" : ">";
-        const sizing = getSizing(issue2.origin);
+        const adj = issue.inclusive ? ">=" : ">";
+        const sizing = getSizing(issue.origin);
         if (sizing) {
-          const minValue = Number(issue2.minimum);
+          const minValue = Number(issue.minimum);
           const unit = getRussianPlural(minValue, sizing.unit.one, sizing.unit.few, sizing.unit.many);
-          return `Слишком маленькое значение: ожидалось, что ${issue2.origin} будет иметь ${adj}${issue2.minimum.toString()} ${unit}`;
+          return `Слишком маленькое значение: ожидалось, что ${issue.origin} будет иметь ${adj}${issue.minimum.toString()} ${unit}`;
         }
-        return `Слишком маленькое значение: ожидалось, что ${issue2.origin} будет ${adj}${issue2.minimum.toString()}`;
+        return `Слишком маленькое значение: ожидалось, что ${issue.origin} будет ${adj}${issue.minimum.toString()}`;
       }
       case "invalid_format": {
-        const _issue = issue2;
+        const _issue = issue;
         if (_issue.format === "starts_with")
           return `Неверная строка: должна начинаться с "${_issue.prefix}"`;
         if (_issue.format === "ends_with")
@@ -8709,18 +8719,18 @@ var error38 = () => {
           return `Неверная строка: должна содержать "${_issue.includes}"`;
         if (_issue.format === "regex")
           return `Неверная строка: должна соответствовать шаблону ${_issue.pattern}`;
-        return `Неверный ${FormatDictionary[_issue.format] ?? issue2.format}`;
+        return `Неверный ${FormatDictionary[_issue.format] ?? issue.format}`;
       }
       case "not_multiple_of":
-        return `Неверное число: должно быть кратным ${issue2.divisor}`;
+        return `Неверное число: должно быть кратным ${issue.divisor}`;
       case "unrecognized_keys":
-        return `Нераспознанн${issue2.keys.length > 1 ? "ые" : "ый"} ключ${issue2.keys.length > 1 ? "и" : ""}: ${joinValues(issue2.keys, ", ")}`;
+        return `Нераспознанн${issue.keys.length > 1 ? "ые" : "ый"} ключ${issue.keys.length > 1 ? "и" : ""}: ${joinValues(issue.keys, ", ")}`;
       case "invalid_key":
-        return `Неверный ключ в ${issue2.origin}`;
+        return `Неверный ключ в ${issue.origin}`;
       case "invalid_union":
         return "Неверные входные данные";
       case "invalid_element":
-        return `Неверное значение в ${issue2.origin}`;
+        return `Неверное значение в ${issue.origin}`;
       default:
         return `Неверные входные данные`;
     }
@@ -8741,8 +8751,8 @@ var error39 = () => {
     array: { unit: "elementov", verb: "imeti" },
     set: { unit: "elementov", verb: "imeti" }
   };
-  function getSizing(origin2) {
-    return Sizable[origin2] ?? null;
+  function getSizing(origin) {
+    return Sizable[origin] ?? null;
   }
   const FormatDictionary = {
     regex: "vnos",
@@ -8779,38 +8789,38 @@ var error39 = () => {
     number: "število",
     array: "tabela"
   };
-  return (issue2) => {
-    switch (issue2.code) {
+  return (issue) => {
+    switch (issue.code) {
       case "invalid_type": {
-        const expected = TypeDictionary[issue2.expected] ?? issue2.expected;
-        const receivedType = parsedType(issue2.input);
+        const expected = TypeDictionary[issue.expected] ?? issue.expected;
+        const receivedType = parsedType(issue.input);
         const received = TypeDictionary[receivedType] ?? receivedType;
-        if (/^[A-Z]/.test(issue2.expected)) {
-          return `Neveljaven vnos: pričakovano instanceof ${issue2.expected}, prejeto ${received}`;
+        if (/^[A-Z]/.test(issue.expected)) {
+          return `Neveljaven vnos: pričakovano instanceof ${issue.expected}, prejeto ${received}`;
         }
         return `Neveljaven vnos: pričakovano ${expected}, prejeto ${received}`;
       }
       case "invalid_value":
-        if (issue2.values.length === 1)
-          return `Neveljaven vnos: pričakovano ${stringifyPrimitive(issue2.values[0])}`;
-        return `Neveljavna možnost: pričakovano eno izmed ${joinValues(issue2.values, "|")}`;
+        if (issue.values.length === 1)
+          return `Neveljaven vnos: pričakovano ${stringifyPrimitive(issue.values[0])}`;
+        return `Neveljavna možnost: pričakovano eno izmed ${joinValues(issue.values, "|")}`;
       case "too_big": {
-        const adj = issue2.inclusive ? "<=" : "<";
-        const sizing = getSizing(issue2.origin);
+        const adj = issue.inclusive ? "<=" : "<";
+        const sizing = getSizing(issue.origin);
         if (sizing)
-          return `Preveliko: pričakovano, da bo ${issue2.origin ?? "vrednost"} imelo ${adj}${issue2.maximum.toString()} ${sizing.unit ?? "elementov"}`;
-        return `Preveliko: pričakovano, da bo ${issue2.origin ?? "vrednost"} ${adj}${issue2.maximum.toString()}`;
+          return `Preveliko: pričakovano, da bo ${issue.origin ?? "vrednost"} imelo ${adj}${issue.maximum.toString()} ${sizing.unit ?? "elementov"}`;
+        return `Preveliko: pričakovano, da bo ${issue.origin ?? "vrednost"} ${adj}${issue.maximum.toString()}`;
       }
       case "too_small": {
-        const adj = issue2.inclusive ? ">=" : ">";
-        const sizing = getSizing(issue2.origin);
+        const adj = issue.inclusive ? ">=" : ">";
+        const sizing = getSizing(issue.origin);
         if (sizing) {
-          return `Premajhno: pričakovano, da bo ${issue2.origin} imelo ${adj}${issue2.minimum.toString()} ${sizing.unit}`;
+          return `Premajhno: pričakovano, da bo ${issue.origin} imelo ${adj}${issue.minimum.toString()} ${sizing.unit}`;
         }
-        return `Premajhno: pričakovano, da bo ${issue2.origin} ${adj}${issue2.minimum.toString()}`;
+        return `Premajhno: pričakovano, da bo ${issue.origin} ${adj}${issue.minimum.toString()}`;
       }
       case "invalid_format": {
-        const _issue = issue2;
+        const _issue = issue;
         if (_issue.format === "starts_with") {
           return `Neveljaven niz: mora se začeti z "${_issue.prefix}"`;
         }
@@ -8820,18 +8830,18 @@ var error39 = () => {
           return `Neveljaven niz: mora vsebovati "${_issue.includes}"`;
         if (_issue.format === "regex")
           return `Neveljaven niz: mora ustrezati vzorcu ${_issue.pattern}`;
-        return `Neveljaven ${FormatDictionary[_issue.format] ?? issue2.format}`;
+        return `Neveljaven ${FormatDictionary[_issue.format] ?? issue.format}`;
       }
       case "not_multiple_of":
-        return `Neveljavno število: mora biti večkratnik ${issue2.divisor}`;
+        return `Neveljavno število: mora biti večkratnik ${issue.divisor}`;
       case "unrecognized_keys":
-        return `Neprepoznan${issue2.keys.length > 1 ? "i ključi" : " ključ"}: ${joinValues(issue2.keys, ", ")}`;
+        return `Neprepoznan${issue.keys.length > 1 ? "i ključi" : " ključ"}: ${joinValues(issue.keys, ", ")}`;
       case "invalid_key":
-        return `Neveljaven ključ v ${issue2.origin}`;
+        return `Neveljaven ključ v ${issue.origin}`;
       case "invalid_union":
         return "Neveljaven vnos";
       case "invalid_element":
-        return `Neveljavna vrednost v ${issue2.origin}`;
+        return `Neveljavna vrednost v ${issue.origin}`;
       default:
         return "Neveljaven vnos";
     }
@@ -8852,8 +8862,8 @@ var error40 = () => {
     array: { unit: "objekt", verb: "att innehålla" },
     set: { unit: "objekt", verb: "att innehålla" }
   };
-  function getSizing(origin2) {
-    return Sizable[origin2] ?? null;
+  function getSizing(origin) {
+    return Sizable[origin] ?? null;
   }
   const FormatDictionary = {
     regex: "reguljärt uttryck",
@@ -8890,39 +8900,39 @@ var error40 = () => {
     number: "antal",
     array: "lista"
   };
-  return (issue2) => {
-    switch (issue2.code) {
+  return (issue) => {
+    switch (issue.code) {
       case "invalid_type": {
-        const expected = TypeDictionary[issue2.expected] ?? issue2.expected;
-        const receivedType = parsedType(issue2.input);
+        const expected = TypeDictionary[issue.expected] ?? issue.expected;
+        const receivedType = parsedType(issue.input);
         const received = TypeDictionary[receivedType] ?? receivedType;
-        if (/^[A-Z]/.test(issue2.expected)) {
-          return `Ogiltig inmatning: förväntat instanceof ${issue2.expected}, fick ${received}`;
+        if (/^[A-Z]/.test(issue.expected)) {
+          return `Ogiltig inmatning: förväntat instanceof ${issue.expected}, fick ${received}`;
         }
         return `Ogiltig inmatning: förväntat ${expected}, fick ${received}`;
       }
       case "invalid_value":
-        if (issue2.values.length === 1)
-          return `Ogiltig inmatning: förväntat ${stringifyPrimitive(issue2.values[0])}`;
-        return `Ogiltigt val: förväntade en av ${joinValues(issue2.values, "|")}`;
+        if (issue.values.length === 1)
+          return `Ogiltig inmatning: förväntat ${stringifyPrimitive(issue.values[0])}`;
+        return `Ogiltigt val: förväntade en av ${joinValues(issue.values, "|")}`;
       case "too_big": {
-        const adj = issue2.inclusive ? "<=" : "<";
-        const sizing = getSizing(issue2.origin);
+        const adj = issue.inclusive ? "<=" : "<";
+        const sizing = getSizing(issue.origin);
         if (sizing) {
-          return `För stor(t): förväntade ${issue2.origin ?? "värdet"} att ha ${adj}${issue2.maximum.toString()} ${sizing.unit ?? "element"}`;
+          return `För stor(t): förväntade ${issue.origin ?? "värdet"} att ha ${adj}${issue.maximum.toString()} ${sizing.unit ?? "element"}`;
         }
-        return `För stor(t): förväntat ${issue2.origin ?? "värdet"} att ha ${adj}${issue2.maximum.toString()}`;
+        return `För stor(t): förväntat ${issue.origin ?? "värdet"} att ha ${adj}${issue.maximum.toString()}`;
       }
       case "too_small": {
-        const adj = issue2.inclusive ? ">=" : ">";
-        const sizing = getSizing(issue2.origin);
+        const adj = issue.inclusive ? ">=" : ">";
+        const sizing = getSizing(issue.origin);
         if (sizing) {
-          return `För lite(t): förväntade ${issue2.origin ?? "värdet"} att ha ${adj}${issue2.minimum.toString()} ${sizing.unit}`;
+          return `För lite(t): förväntade ${issue.origin ?? "värdet"} att ha ${adj}${issue.minimum.toString()} ${sizing.unit}`;
         }
-        return `För lite(t): förväntade ${issue2.origin ?? "värdet"} att ha ${adj}${issue2.minimum.toString()}`;
+        return `För lite(t): förväntade ${issue.origin ?? "värdet"} att ha ${adj}${issue.minimum.toString()}`;
       }
       case "invalid_format": {
-        const _issue = issue2;
+        const _issue = issue;
         if (_issue.format === "starts_with") {
           return `Ogiltig sträng: måste börja med "${_issue.prefix}"`;
         }
@@ -8932,18 +8942,18 @@ var error40 = () => {
           return `Ogiltig sträng: måste innehålla "${_issue.includes}"`;
         if (_issue.format === "regex")
           return `Ogiltig sträng: måste matcha mönstret "${_issue.pattern}"`;
-        return `Ogiltig(t) ${FormatDictionary[_issue.format] ?? issue2.format}`;
+        return `Ogiltig(t) ${FormatDictionary[_issue.format] ?? issue.format}`;
       }
       case "not_multiple_of":
-        return `Ogiltigt tal: måste vara en multipel av ${issue2.divisor}`;
+        return `Ogiltigt tal: måste vara en multipel av ${issue.divisor}`;
       case "unrecognized_keys":
-        return `${issue2.keys.length > 1 ? "Okända nycklar" : "Okänd nyckel"}: ${joinValues(issue2.keys, ", ")}`;
+        return `${issue.keys.length > 1 ? "Okända nycklar" : "Okänd nyckel"}: ${joinValues(issue.keys, ", ")}`;
       case "invalid_key":
-        return `Ogiltig nyckel i ${issue2.origin ?? "värdet"}`;
+        return `Ogiltig nyckel i ${issue.origin ?? "värdet"}`;
       case "invalid_union":
         return "Ogiltig input";
       case "invalid_element":
-        return `Ogiltigt värde i ${issue2.origin ?? "värdet"}`;
+        return `Ogiltigt värde i ${issue.origin ?? "värdet"}`;
       default:
         return `Ogiltig input`;
     }
@@ -8964,8 +8974,8 @@ var error41 = () => {
     array: { unit: "உறுப்புகள்", verb: "கொண்டிருக்க வேண்டும்" },
     set: { unit: "உறுப்புகள்", verb: "கொண்டிருக்க வேண்டும்" }
   };
-  function getSizing(origin2) {
-    return Sizable[origin2] ?? null;
+  function getSizing(origin) {
+    return Sizable[origin] ?? null;
   }
   const FormatDictionary = {
     regex: "உள்ளீடு",
@@ -9003,39 +9013,39 @@ var error41 = () => {
     array: "அணி",
     null: "வெறுமை"
   };
-  return (issue2) => {
-    switch (issue2.code) {
+  return (issue) => {
+    switch (issue.code) {
       case "invalid_type": {
-        const expected = TypeDictionary[issue2.expected] ?? issue2.expected;
-        const receivedType = parsedType(issue2.input);
+        const expected = TypeDictionary[issue.expected] ?? issue.expected;
+        const receivedType = parsedType(issue.input);
         const received = TypeDictionary[receivedType] ?? receivedType;
-        if (/^[A-Z]/.test(issue2.expected)) {
-          return `தவறான உள்ளீடு: எதிர்பார்க்கப்பட்டது instanceof ${issue2.expected}, பெறப்பட்டது ${received}`;
+        if (/^[A-Z]/.test(issue.expected)) {
+          return `தவறான உள்ளீடு: எதிர்பார்க்கப்பட்டது instanceof ${issue.expected}, பெறப்பட்டது ${received}`;
         }
         return `தவறான உள்ளீடு: எதிர்பார்க்கப்பட்டது ${expected}, பெறப்பட்டது ${received}`;
       }
       case "invalid_value":
-        if (issue2.values.length === 1)
-          return `தவறான உள்ளீடு: எதிர்பார்க்கப்பட்டது ${stringifyPrimitive(issue2.values[0])}`;
-        return `தவறான விருப்பம்: எதிர்பார்க்கப்பட்டது ${joinValues(issue2.values, "|")} இல் ஒன்று`;
+        if (issue.values.length === 1)
+          return `தவறான உள்ளீடு: எதிர்பார்க்கப்பட்டது ${stringifyPrimitive(issue.values[0])}`;
+        return `தவறான விருப்பம்: எதிர்பார்க்கப்பட்டது ${joinValues(issue.values, "|")} இல் ஒன்று`;
       case "too_big": {
-        const adj = issue2.inclusive ? "<=" : "<";
-        const sizing = getSizing(issue2.origin);
+        const adj = issue.inclusive ? "<=" : "<";
+        const sizing = getSizing(issue.origin);
         if (sizing) {
-          return `மிக பெரியது: எதிர்பார்க்கப்பட்டது ${issue2.origin ?? "மதிப்பு"} ${adj}${issue2.maximum.toString()} ${sizing.unit ?? "உறுப்புகள்"} ஆக இருக்க வேண்டும்`;
+          return `மிக பெரியது: எதிர்பார்க்கப்பட்டது ${issue.origin ?? "மதிப்பு"} ${adj}${issue.maximum.toString()} ${sizing.unit ?? "உறுப்புகள்"} ஆக இருக்க வேண்டும்`;
         }
-        return `மிக பெரியது: எதிர்பார்க்கப்பட்டது ${issue2.origin ?? "மதிப்பு"} ${adj}${issue2.maximum.toString()} ஆக இருக்க வேண்டும்`;
+        return `மிக பெரியது: எதிர்பார்க்கப்பட்டது ${issue.origin ?? "மதிப்பு"} ${adj}${issue.maximum.toString()} ஆக இருக்க வேண்டும்`;
       }
       case "too_small": {
-        const adj = issue2.inclusive ? ">=" : ">";
-        const sizing = getSizing(issue2.origin);
+        const adj = issue.inclusive ? ">=" : ">";
+        const sizing = getSizing(issue.origin);
         if (sizing) {
-          return `மிகச் சிறியது: எதிர்பார்க்கப்பட்டது ${issue2.origin} ${adj}${issue2.minimum.toString()} ${sizing.unit} ஆக இருக்க வேண்டும்`;
+          return `மிகச் சிறியது: எதிர்பார்க்கப்பட்டது ${issue.origin} ${adj}${issue.minimum.toString()} ${sizing.unit} ஆக இருக்க வேண்டும்`;
         }
-        return `மிகச் சிறியது: எதிர்பார்க்கப்பட்டது ${issue2.origin} ${adj}${issue2.minimum.toString()} ஆக இருக்க வேண்டும்`;
+        return `மிகச் சிறியது: எதிர்பார்க்கப்பட்டது ${issue.origin} ${adj}${issue.minimum.toString()} ஆக இருக்க வேண்டும்`;
       }
       case "invalid_format": {
-        const _issue = issue2;
+        const _issue = issue;
         if (_issue.format === "starts_with")
           return `தவறான சரம்: "${_issue.prefix}" இல் தொடங்க வேண்டும்`;
         if (_issue.format === "ends_with")
@@ -9044,18 +9054,18 @@ var error41 = () => {
           return `தவறான சரம்: "${_issue.includes}" ஐ உள்ளடக்க வேண்டும்`;
         if (_issue.format === "regex")
           return `தவறான சரம்: ${_issue.pattern} முறைபாட்டுடன் பொருந்த வேண்டும்`;
-        return `தவறான ${FormatDictionary[_issue.format] ?? issue2.format}`;
+        return `தவறான ${FormatDictionary[_issue.format] ?? issue.format}`;
       }
       case "not_multiple_of":
-        return `தவறான எண்: ${issue2.divisor} இன் பலமாக இருக்க வேண்டும்`;
+        return `தவறான எண்: ${issue.divisor} இன் பலமாக இருக்க வேண்டும்`;
       case "unrecognized_keys":
-        return `அடையாளம் தெரியாத விசை${issue2.keys.length > 1 ? "கள்" : ""}: ${joinValues(issue2.keys, ", ")}`;
+        return `அடையாளம் தெரியாத விசை${issue.keys.length > 1 ? "கள்" : ""}: ${joinValues(issue.keys, ", ")}`;
       case "invalid_key":
-        return `${issue2.origin} இல் தவறான விசை`;
+        return `${issue.origin} இல் தவறான விசை`;
       case "invalid_union":
         return "தவறான உள்ளீடு";
       case "invalid_element":
-        return `${issue2.origin} இல் தவறான மதிப்பு`;
+        return `${issue.origin} இல் தவறான மதிப்பு`;
       default:
         return `தவறான உள்ளீடு`;
     }
@@ -9076,8 +9086,8 @@ var error42 = () => {
     array: { unit: "รายการ", verb: "ควรมี" },
     set: { unit: "รายการ", verb: "ควรมี" }
   };
-  function getSizing(origin2) {
-    return Sizable[origin2] ?? null;
+  function getSizing(origin) {
+    return Sizable[origin] ?? null;
   }
   const FormatDictionary = {
     regex: "ข้อมูลที่ป้อน",
@@ -9115,38 +9125,38 @@ var error42 = () => {
     array: "อาร์เรย์ (Array)",
     null: "ไม่มีค่า (null)"
   };
-  return (issue2) => {
-    switch (issue2.code) {
+  return (issue) => {
+    switch (issue.code) {
       case "invalid_type": {
-        const expected = TypeDictionary[issue2.expected] ?? issue2.expected;
-        const receivedType = parsedType(issue2.input);
+        const expected = TypeDictionary[issue.expected] ?? issue.expected;
+        const receivedType = parsedType(issue.input);
         const received = TypeDictionary[receivedType] ?? receivedType;
-        if (/^[A-Z]/.test(issue2.expected)) {
-          return `ประเภทข้อมูลไม่ถูกต้อง: ควรเป็น instanceof ${issue2.expected} แต่ได้รับ ${received}`;
+        if (/^[A-Z]/.test(issue.expected)) {
+          return `ประเภทข้อมูลไม่ถูกต้อง: ควรเป็น instanceof ${issue.expected} แต่ได้รับ ${received}`;
         }
         return `ประเภทข้อมูลไม่ถูกต้อง: ควรเป็น ${expected} แต่ได้รับ ${received}`;
       }
       case "invalid_value":
-        if (issue2.values.length === 1)
-          return `ค่าไม่ถูกต้อง: ควรเป็น ${stringifyPrimitive(issue2.values[0])}`;
-        return `ตัวเลือกไม่ถูกต้อง: ควรเป็นหนึ่งใน ${joinValues(issue2.values, "|")}`;
+        if (issue.values.length === 1)
+          return `ค่าไม่ถูกต้อง: ควรเป็น ${stringifyPrimitive(issue.values[0])}`;
+        return `ตัวเลือกไม่ถูกต้อง: ควรเป็นหนึ่งใน ${joinValues(issue.values, "|")}`;
       case "too_big": {
-        const adj = issue2.inclusive ? "ไม่เกิน" : "น้อยกว่า";
-        const sizing = getSizing(issue2.origin);
+        const adj = issue.inclusive ? "ไม่เกิน" : "น้อยกว่า";
+        const sizing = getSizing(issue.origin);
         if (sizing)
-          return `เกินกำหนด: ${issue2.origin ?? "ค่า"} ควรมี${adj} ${issue2.maximum.toString()} ${sizing.unit ?? "รายการ"}`;
-        return `เกินกำหนด: ${issue2.origin ?? "ค่า"} ควรมี${adj} ${issue2.maximum.toString()}`;
+          return `เกินกำหนด: ${issue.origin ?? "ค่า"} ควรมี${adj} ${issue.maximum.toString()} ${sizing.unit ?? "รายการ"}`;
+        return `เกินกำหนด: ${issue.origin ?? "ค่า"} ควรมี${adj} ${issue.maximum.toString()}`;
       }
       case "too_small": {
-        const adj = issue2.inclusive ? "อย่างน้อย" : "มากกว่า";
-        const sizing = getSizing(issue2.origin);
+        const adj = issue.inclusive ? "อย่างน้อย" : "มากกว่า";
+        const sizing = getSizing(issue.origin);
         if (sizing) {
-          return `น้อยกว่ากำหนด: ${issue2.origin} ควรมี${adj} ${issue2.minimum.toString()} ${sizing.unit}`;
+          return `น้อยกว่ากำหนด: ${issue.origin} ควรมี${adj} ${issue.minimum.toString()} ${sizing.unit}`;
         }
-        return `น้อยกว่ากำหนด: ${issue2.origin} ควรมี${adj} ${issue2.minimum.toString()}`;
+        return `น้อยกว่ากำหนด: ${issue.origin} ควรมี${adj} ${issue.minimum.toString()}`;
       }
       case "invalid_format": {
-        const _issue = issue2;
+        const _issue = issue;
         if (_issue.format === "starts_with") {
           return `รูปแบบไม่ถูกต้อง: ข้อความต้องขึ้นต้นด้วย "${_issue.prefix}"`;
         }
@@ -9156,18 +9166,18 @@ var error42 = () => {
           return `รูปแบบไม่ถูกต้อง: ข้อความต้องมี "${_issue.includes}" อยู่ในข้อความ`;
         if (_issue.format === "regex")
           return `รูปแบบไม่ถูกต้อง: ต้องตรงกับรูปแบบที่กำหนด ${_issue.pattern}`;
-        return `รูปแบบไม่ถูกต้อง: ${FormatDictionary[_issue.format] ?? issue2.format}`;
+        return `รูปแบบไม่ถูกต้อง: ${FormatDictionary[_issue.format] ?? issue.format}`;
       }
       case "not_multiple_of":
-        return `ตัวเลขไม่ถูกต้อง: ต้องเป็นจำนวนที่หารด้วย ${issue2.divisor} ได้ลงตัว`;
+        return `ตัวเลขไม่ถูกต้อง: ต้องเป็นจำนวนที่หารด้วย ${issue.divisor} ได้ลงตัว`;
       case "unrecognized_keys":
-        return `พบคีย์ที่ไม่รู้จัก: ${joinValues(issue2.keys, ", ")}`;
+        return `พบคีย์ที่ไม่รู้จัก: ${joinValues(issue.keys, ", ")}`;
       case "invalid_key":
-        return `คีย์ไม่ถูกต้องใน ${issue2.origin}`;
+        return `คีย์ไม่ถูกต้องใน ${issue.origin}`;
       case "invalid_union":
         return "ข้อมูลไม่ถูกต้อง: ไม่ตรงกับรูปแบบยูเนียนที่กำหนดไว้";
       case "invalid_element":
-        return `ข้อมูลไม่ถูกต้องใน ${issue2.origin}`;
+        return `ข้อมูลไม่ถูกต้องใน ${issue.origin}`;
       default:
         return `ข้อมูลไม่ถูกต้อง`;
     }
@@ -9188,8 +9198,8 @@ var error43 = () => {
     array: { unit: "öğe", verb: "olmalı" },
     set: { unit: "öğe", verb: "olmalı" }
   };
-  function getSizing(origin2) {
-    return Sizable[origin2] ?? null;
+  function getSizing(origin) {
+    return Sizable[origin] ?? null;
   }
   const FormatDictionary = {
     regex: "girdi",
@@ -9224,37 +9234,37 @@ var error43 = () => {
   const TypeDictionary = {
     nan: "NaN"
   };
-  return (issue2) => {
-    switch (issue2.code) {
+  return (issue) => {
+    switch (issue.code) {
       case "invalid_type": {
-        const expected = TypeDictionary[issue2.expected] ?? issue2.expected;
-        const receivedType = parsedType(issue2.input);
+        const expected = TypeDictionary[issue.expected] ?? issue.expected;
+        const receivedType = parsedType(issue.input);
         const received = TypeDictionary[receivedType] ?? receivedType;
-        if (/^[A-Z]/.test(issue2.expected)) {
-          return `Geçersiz değer: beklenen instanceof ${issue2.expected}, alınan ${received}`;
+        if (/^[A-Z]/.test(issue.expected)) {
+          return `Geçersiz değer: beklenen instanceof ${issue.expected}, alınan ${received}`;
         }
         return `Geçersiz değer: beklenen ${expected}, alınan ${received}`;
       }
       case "invalid_value":
-        if (issue2.values.length === 1)
-          return `Geçersiz değer: beklenen ${stringifyPrimitive(issue2.values[0])}`;
-        return `Geçersiz seçenek: aşağıdakilerden biri olmalı: ${joinValues(issue2.values, "|")}`;
+        if (issue.values.length === 1)
+          return `Geçersiz değer: beklenen ${stringifyPrimitive(issue.values[0])}`;
+        return `Geçersiz seçenek: aşağıdakilerden biri olmalı: ${joinValues(issue.values, "|")}`;
       case "too_big": {
-        const adj = issue2.inclusive ? "<=" : "<";
-        const sizing = getSizing(issue2.origin);
+        const adj = issue.inclusive ? "<=" : "<";
+        const sizing = getSizing(issue.origin);
         if (sizing)
-          return `Çok büyük: beklenen ${issue2.origin ?? "değer"} ${adj}${issue2.maximum.toString()} ${sizing.unit ?? "öğe"}`;
-        return `Çok büyük: beklenen ${issue2.origin ?? "değer"} ${adj}${issue2.maximum.toString()}`;
+          return `Çok büyük: beklenen ${issue.origin ?? "değer"} ${adj}${issue.maximum.toString()} ${sizing.unit ?? "öğe"}`;
+        return `Çok büyük: beklenen ${issue.origin ?? "değer"} ${adj}${issue.maximum.toString()}`;
       }
       case "too_small": {
-        const adj = issue2.inclusive ? ">=" : ">";
-        const sizing = getSizing(issue2.origin);
+        const adj = issue.inclusive ? ">=" : ">";
+        const sizing = getSizing(issue.origin);
         if (sizing)
-          return `Çok küçük: beklenen ${issue2.origin} ${adj}${issue2.minimum.toString()} ${sizing.unit}`;
-        return `Çok küçük: beklenen ${issue2.origin} ${adj}${issue2.minimum.toString()}`;
+          return `Çok küçük: beklenen ${issue.origin} ${adj}${issue.minimum.toString()} ${sizing.unit}`;
+        return `Çok küçük: beklenen ${issue.origin} ${adj}${issue.minimum.toString()}`;
       }
       case "invalid_format": {
-        const _issue = issue2;
+        const _issue = issue;
         if (_issue.format === "starts_with")
           return `Geçersiz metin: "${_issue.prefix}" ile başlamalı`;
         if (_issue.format === "ends_with")
@@ -9263,18 +9273,18 @@ var error43 = () => {
           return `Geçersiz metin: "${_issue.includes}" içermeli`;
         if (_issue.format === "regex")
           return `Geçersiz metin: ${_issue.pattern} desenine uymalı`;
-        return `Geçersiz ${FormatDictionary[_issue.format] ?? issue2.format}`;
+        return `Geçersiz ${FormatDictionary[_issue.format] ?? issue.format}`;
       }
       case "not_multiple_of":
-        return `Geçersiz sayı: ${issue2.divisor} ile tam bölünebilmeli`;
+        return `Geçersiz sayı: ${issue.divisor} ile tam bölünebilmeli`;
       case "unrecognized_keys":
-        return `Tanınmayan anahtar${issue2.keys.length > 1 ? "lar" : ""}: ${joinValues(issue2.keys, ", ")}`;
+        return `Tanınmayan anahtar${issue.keys.length > 1 ? "lar" : ""}: ${joinValues(issue.keys, ", ")}`;
       case "invalid_key":
-        return `${issue2.origin} içinde geçersiz anahtar`;
+        return `${issue.origin} içinde geçersiz anahtar`;
       case "invalid_union":
         return "Geçersiz değer";
       case "invalid_element":
-        return `${issue2.origin} içinde geçersiz değer`;
+        return `${issue.origin} içinde geçersiz değer`;
       default:
         return `Geçersiz değer`;
     }
@@ -9295,8 +9305,8 @@ var error44 = () => {
     array: { unit: "елементів", verb: "матиме" },
     set: { unit: "елементів", verb: "матиме" }
   };
-  function getSizing(origin2) {
-    return Sizable[origin2] ?? null;
+  function getSizing(origin) {
+    return Sizable[origin] ?? null;
   }
   const FormatDictionary = {
     regex: "вхідні дані",
@@ -9333,38 +9343,38 @@ var error44 = () => {
     number: "число",
     array: "масив"
   };
-  return (issue2) => {
-    switch (issue2.code) {
+  return (issue) => {
+    switch (issue.code) {
       case "invalid_type": {
-        const expected = TypeDictionary[issue2.expected] ?? issue2.expected;
-        const receivedType = parsedType(issue2.input);
+        const expected = TypeDictionary[issue.expected] ?? issue.expected;
+        const receivedType = parsedType(issue.input);
         const received = TypeDictionary[receivedType] ?? receivedType;
-        if (/^[A-Z]/.test(issue2.expected)) {
-          return `Неправильні вхідні дані: очікується instanceof ${issue2.expected}, отримано ${received}`;
+        if (/^[A-Z]/.test(issue.expected)) {
+          return `Неправильні вхідні дані: очікується instanceof ${issue.expected}, отримано ${received}`;
         }
         return `Неправильні вхідні дані: очікується ${expected}, отримано ${received}`;
       }
       case "invalid_value":
-        if (issue2.values.length === 1)
-          return `Неправильні вхідні дані: очікується ${stringifyPrimitive(issue2.values[0])}`;
-        return `Неправильна опція: очікується одне з ${joinValues(issue2.values, "|")}`;
+        if (issue.values.length === 1)
+          return `Неправильні вхідні дані: очікується ${stringifyPrimitive(issue.values[0])}`;
+        return `Неправильна опція: очікується одне з ${joinValues(issue.values, "|")}`;
       case "too_big": {
-        const adj = issue2.inclusive ? "<=" : "<";
-        const sizing = getSizing(issue2.origin);
+        const adj = issue.inclusive ? "<=" : "<";
+        const sizing = getSizing(issue.origin);
         if (sizing)
-          return `Занадто велике: очікується, що ${issue2.origin ?? "значення"} ${sizing.verb} ${adj}${issue2.maximum.toString()} ${sizing.unit ?? "елементів"}`;
-        return `Занадто велике: очікується, що ${issue2.origin ?? "значення"} буде ${adj}${issue2.maximum.toString()}`;
+          return `Занадто велике: очікується, що ${issue.origin ?? "значення"} ${sizing.verb} ${adj}${issue.maximum.toString()} ${sizing.unit ?? "елементів"}`;
+        return `Занадто велике: очікується, що ${issue.origin ?? "значення"} буде ${adj}${issue.maximum.toString()}`;
       }
       case "too_small": {
-        const adj = issue2.inclusive ? ">=" : ">";
-        const sizing = getSizing(issue2.origin);
+        const adj = issue.inclusive ? ">=" : ">";
+        const sizing = getSizing(issue.origin);
         if (sizing) {
-          return `Занадто мале: очікується, що ${issue2.origin} ${sizing.verb} ${adj}${issue2.minimum.toString()} ${sizing.unit}`;
+          return `Занадто мале: очікується, що ${issue.origin} ${sizing.verb} ${adj}${issue.minimum.toString()} ${sizing.unit}`;
         }
-        return `Занадто мале: очікується, що ${issue2.origin} буде ${adj}${issue2.minimum.toString()}`;
+        return `Занадто мале: очікується, що ${issue.origin} буде ${adj}${issue.minimum.toString()}`;
       }
       case "invalid_format": {
-        const _issue = issue2;
+        const _issue = issue;
         if (_issue.format === "starts_with")
           return `Неправильний рядок: повинен починатися з "${_issue.prefix}"`;
         if (_issue.format === "ends_with")
@@ -9373,18 +9383,18 @@ var error44 = () => {
           return `Неправильний рядок: повинен містити "${_issue.includes}"`;
         if (_issue.format === "regex")
           return `Неправильний рядок: повинен відповідати шаблону ${_issue.pattern}`;
-        return `Неправильний ${FormatDictionary[_issue.format] ?? issue2.format}`;
+        return `Неправильний ${FormatDictionary[_issue.format] ?? issue.format}`;
       }
       case "not_multiple_of":
-        return `Неправильне число: повинно бути кратним ${issue2.divisor}`;
+        return `Неправильне число: повинно бути кратним ${issue.divisor}`;
       case "unrecognized_keys":
-        return `Нерозпізнаний ключ${issue2.keys.length > 1 ? "і" : ""}: ${joinValues(issue2.keys, ", ")}`;
+        return `Нерозпізнаний ключ${issue.keys.length > 1 ? "і" : ""}: ${joinValues(issue.keys, ", ")}`;
       case "invalid_key":
-        return `Неправильний ключ у ${issue2.origin}`;
+        return `Неправильний ключ у ${issue.origin}`;
       case "invalid_union":
         return "Неправильні вхідні дані";
       case "invalid_element":
-        return `Неправильне значення у ${issue2.origin}`;
+        return `Неправильне значення у ${issue.origin}`;
       default:
         return `Неправильні вхідні дані`;
     }
@@ -9411,8 +9421,8 @@ var error45 = () => {
     array: { unit: "آئٹمز", verb: "ہونا" },
     set: { unit: "آئٹمز", verb: "ہونا" }
   };
-  function getSizing(origin2) {
-    return Sizable[origin2] ?? null;
+  function getSizing(origin) {
+    return Sizable[origin] ?? null;
   }
   const FormatDictionary = {
     regex: "ان پٹ",
@@ -9450,38 +9460,38 @@ var error45 = () => {
     array: "آرے",
     null: "نل"
   };
-  return (issue2) => {
-    switch (issue2.code) {
+  return (issue) => {
+    switch (issue.code) {
       case "invalid_type": {
-        const expected = TypeDictionary[issue2.expected] ?? issue2.expected;
-        const receivedType = parsedType(issue2.input);
+        const expected = TypeDictionary[issue.expected] ?? issue.expected;
+        const receivedType = parsedType(issue.input);
         const received = TypeDictionary[receivedType] ?? receivedType;
-        if (/^[A-Z]/.test(issue2.expected)) {
-          return `غلط ان پٹ: instanceof ${issue2.expected} متوقع تھا، ${received} موصول ہوا`;
+        if (/^[A-Z]/.test(issue.expected)) {
+          return `غلط ان پٹ: instanceof ${issue.expected} متوقع تھا، ${received} موصول ہوا`;
         }
         return `غلط ان پٹ: ${expected} متوقع تھا، ${received} موصول ہوا`;
       }
       case "invalid_value":
-        if (issue2.values.length === 1)
-          return `غلط ان پٹ: ${stringifyPrimitive(issue2.values[0])} متوقع تھا`;
-        return `غلط آپشن: ${joinValues(issue2.values, "|")} میں سے ایک متوقع تھا`;
+        if (issue.values.length === 1)
+          return `غلط ان پٹ: ${stringifyPrimitive(issue.values[0])} متوقع تھا`;
+        return `غلط آپشن: ${joinValues(issue.values, "|")} میں سے ایک متوقع تھا`;
       case "too_big": {
-        const adj = issue2.inclusive ? "<=" : "<";
-        const sizing = getSizing(issue2.origin);
+        const adj = issue.inclusive ? "<=" : "<";
+        const sizing = getSizing(issue.origin);
         if (sizing)
-          return `بہت بڑا: ${issue2.origin ?? "ویلیو"} کے ${adj}${issue2.maximum.toString()} ${sizing.unit ?? "عناصر"} ہونے متوقع تھے`;
-        return `بہت بڑا: ${issue2.origin ?? "ویلیو"} کا ${adj}${issue2.maximum.toString()} ہونا متوقع تھا`;
+          return `بہت بڑا: ${issue.origin ?? "ویلیو"} کے ${adj}${issue.maximum.toString()} ${sizing.unit ?? "عناصر"} ہونے متوقع تھے`;
+        return `بہت بڑا: ${issue.origin ?? "ویلیو"} کا ${adj}${issue.maximum.toString()} ہونا متوقع تھا`;
       }
       case "too_small": {
-        const adj = issue2.inclusive ? ">=" : ">";
-        const sizing = getSizing(issue2.origin);
+        const adj = issue.inclusive ? ">=" : ">";
+        const sizing = getSizing(issue.origin);
         if (sizing) {
-          return `بہت چھوٹا: ${issue2.origin} کے ${adj}${issue2.minimum.toString()} ${sizing.unit} ہونے متوقع تھے`;
+          return `بہت چھوٹا: ${issue.origin} کے ${adj}${issue.minimum.toString()} ${sizing.unit} ہونے متوقع تھے`;
         }
-        return `بہت چھوٹا: ${issue2.origin} کا ${adj}${issue2.minimum.toString()} ہونا متوقع تھا`;
+        return `بہت چھوٹا: ${issue.origin} کا ${adj}${issue.minimum.toString()} ہونا متوقع تھا`;
       }
       case "invalid_format": {
-        const _issue = issue2;
+        const _issue = issue;
         if (_issue.format === "starts_with") {
           return `غلط سٹرنگ: "${_issue.prefix}" سے شروع ہونا چاہیے`;
         }
@@ -9491,18 +9501,18 @@ var error45 = () => {
           return `غلط سٹرنگ: "${_issue.includes}" شامل ہونا چاہیے`;
         if (_issue.format === "regex")
           return `غلط سٹرنگ: پیٹرن ${_issue.pattern} سے میچ ہونا چاہیے`;
-        return `غلط ${FormatDictionary[_issue.format] ?? issue2.format}`;
+        return `غلط ${FormatDictionary[_issue.format] ?? issue.format}`;
       }
       case "not_multiple_of":
-        return `غلط نمبر: ${issue2.divisor} کا مضاعف ہونا چاہیے`;
+        return `غلط نمبر: ${issue.divisor} کا مضاعف ہونا چاہیے`;
       case "unrecognized_keys":
-        return `غیر تسلیم شدہ کی${issue2.keys.length > 1 ? "ز" : ""}: ${joinValues(issue2.keys, "، ")}`;
+        return `غیر تسلیم شدہ کی${issue.keys.length > 1 ? "ز" : ""}: ${joinValues(issue.keys, "، ")}`;
       case "invalid_key":
-        return `${issue2.origin} میں غلط کی`;
+        return `${issue.origin} میں غلط کی`;
       case "invalid_union":
         return "غلط ان پٹ";
       case "invalid_element":
-        return `${issue2.origin} میں غلط ویلیو`;
+        return `${issue.origin} میں غلط ویلیو`;
       default:
         return `غلط ان پٹ`;
     }
@@ -9524,8 +9534,8 @@ var error46 = () => {
     set: { unit: "element", verb: "bo‘lishi kerak" },
     map: { unit: "yozuv", verb: "bo‘lishi kerak" }
   };
-  function getSizing(origin2) {
-    return Sizable[origin2] ?? null;
+  function getSizing(origin) {
+    return Sizable[origin] ?? null;
   }
   const FormatDictionary = {
     regex: "kirish",
@@ -9563,38 +9573,38 @@ var error46 = () => {
     number: "raqam",
     array: "massiv"
   };
-  return (issue2) => {
-    switch (issue2.code) {
+  return (issue) => {
+    switch (issue.code) {
       case "invalid_type": {
-        const expected = TypeDictionary[issue2.expected] ?? issue2.expected;
-        const receivedType = parsedType(issue2.input);
+        const expected = TypeDictionary[issue.expected] ?? issue.expected;
+        const receivedType = parsedType(issue.input);
         const received = TypeDictionary[receivedType] ?? receivedType;
-        if (/^[A-Z]/.test(issue2.expected)) {
-          return `Noto‘g‘ri kirish: kutilgan instanceof ${issue2.expected}, qabul qilingan ${received}`;
+        if (/^[A-Z]/.test(issue.expected)) {
+          return `Noto‘g‘ri kirish: kutilgan instanceof ${issue.expected}, qabul qilingan ${received}`;
         }
         return `Noto‘g‘ri kirish: kutilgan ${expected}, qabul qilingan ${received}`;
       }
       case "invalid_value":
-        if (issue2.values.length === 1)
-          return `Noto‘g‘ri kirish: kutilgan ${stringifyPrimitive(issue2.values[0])}`;
-        return `Noto‘g‘ri variant: quyidagilardan biri kutilgan ${joinValues(issue2.values, "|")}`;
+        if (issue.values.length === 1)
+          return `Noto‘g‘ri kirish: kutilgan ${stringifyPrimitive(issue.values[0])}`;
+        return `Noto‘g‘ri variant: quyidagilardan biri kutilgan ${joinValues(issue.values, "|")}`;
       case "too_big": {
-        const adj = issue2.inclusive ? "<=" : "<";
-        const sizing = getSizing(issue2.origin);
+        const adj = issue.inclusive ? "<=" : "<";
+        const sizing = getSizing(issue.origin);
         if (sizing)
-          return `Juda katta: kutilgan ${issue2.origin ?? "qiymat"} ${adj}${issue2.maximum.toString()} ${sizing.unit} ${sizing.verb}`;
-        return `Juda katta: kutilgan ${issue2.origin ?? "qiymat"} ${adj}${issue2.maximum.toString()}`;
+          return `Juda katta: kutilgan ${issue.origin ?? "qiymat"} ${adj}${issue.maximum.toString()} ${sizing.unit} ${sizing.verb}`;
+        return `Juda katta: kutilgan ${issue.origin ?? "qiymat"} ${adj}${issue.maximum.toString()}`;
       }
       case "too_small": {
-        const adj = issue2.inclusive ? ">=" : ">";
-        const sizing = getSizing(issue2.origin);
+        const adj = issue.inclusive ? ">=" : ">";
+        const sizing = getSizing(issue.origin);
         if (sizing) {
-          return `Juda kichik: kutilgan ${issue2.origin} ${adj}${issue2.minimum.toString()} ${sizing.unit} ${sizing.verb}`;
+          return `Juda kichik: kutilgan ${issue.origin} ${adj}${issue.minimum.toString()} ${sizing.unit} ${sizing.verb}`;
         }
-        return `Juda kichik: kutilgan ${issue2.origin} ${adj}${issue2.minimum.toString()}`;
+        return `Juda kichik: kutilgan ${issue.origin} ${adj}${issue.minimum.toString()}`;
       }
       case "invalid_format": {
-        const _issue = issue2;
+        const _issue = issue;
         if (_issue.format === "starts_with")
           return `Noto‘g‘ri satr: "${_issue.prefix}" bilan boshlanishi kerak`;
         if (_issue.format === "ends_with")
@@ -9603,18 +9613,18 @@ var error46 = () => {
           return `Noto‘g‘ri satr: "${_issue.includes}" ni o‘z ichiga olishi kerak`;
         if (_issue.format === "regex")
           return `Noto‘g‘ri satr: ${_issue.pattern} shabloniga mos kelishi kerak`;
-        return `Noto‘g‘ri ${FormatDictionary[_issue.format] ?? issue2.format}`;
+        return `Noto‘g‘ri ${FormatDictionary[_issue.format] ?? issue.format}`;
       }
       case "not_multiple_of":
-        return `Noto‘g‘ri raqam: ${issue2.divisor} ning karralisi bo‘lishi kerak`;
+        return `Noto‘g‘ri raqam: ${issue.divisor} ning karralisi bo‘lishi kerak`;
       case "unrecognized_keys":
-        return `Noma’lum kalit${issue2.keys.length > 1 ? "lar" : ""}: ${joinValues(issue2.keys, ", ")}`;
+        return `Noma’lum kalit${issue.keys.length > 1 ? "lar" : ""}: ${joinValues(issue.keys, ", ")}`;
       case "invalid_key":
-        return `${issue2.origin} dagi kalit noto‘g‘ri`;
+        return `${issue.origin} dagi kalit noto‘g‘ri`;
       case "invalid_union":
         return "Noto‘g‘ri kirish";
       case "invalid_element":
-        return `${issue2.origin} da noto‘g‘ri qiymat`;
+        return `${issue.origin} da noto‘g‘ri qiymat`;
       default:
         return `Noto‘g‘ri kirish`;
     }
@@ -9635,8 +9645,8 @@ var error47 = () => {
     array: { unit: "phần tử", verb: "có" },
     set: { unit: "phần tử", verb: "có" }
   };
-  function getSizing(origin2) {
-    return Sizable[origin2] ?? null;
+  function getSizing(origin) {
+    return Sizable[origin] ?? null;
   }
   const FormatDictionary = {
     regex: "đầu vào",
@@ -9673,38 +9683,38 @@ var error47 = () => {
     number: "số",
     array: "mảng"
   };
-  return (issue2) => {
-    switch (issue2.code) {
+  return (issue) => {
+    switch (issue.code) {
       case "invalid_type": {
-        const expected = TypeDictionary[issue2.expected] ?? issue2.expected;
-        const receivedType = parsedType(issue2.input);
+        const expected = TypeDictionary[issue.expected] ?? issue.expected;
+        const receivedType = parsedType(issue.input);
         const received = TypeDictionary[receivedType] ?? receivedType;
-        if (/^[A-Z]/.test(issue2.expected)) {
-          return `Đầu vào không hợp lệ: mong đợi instanceof ${issue2.expected}, nhận được ${received}`;
+        if (/^[A-Z]/.test(issue.expected)) {
+          return `Đầu vào không hợp lệ: mong đợi instanceof ${issue.expected}, nhận được ${received}`;
         }
         return `Đầu vào không hợp lệ: mong đợi ${expected}, nhận được ${received}`;
       }
       case "invalid_value":
-        if (issue2.values.length === 1)
-          return `Đầu vào không hợp lệ: mong đợi ${stringifyPrimitive(issue2.values[0])}`;
-        return `Tùy chọn không hợp lệ: mong đợi một trong các giá trị ${joinValues(issue2.values, "|")}`;
+        if (issue.values.length === 1)
+          return `Đầu vào không hợp lệ: mong đợi ${stringifyPrimitive(issue.values[0])}`;
+        return `Tùy chọn không hợp lệ: mong đợi một trong các giá trị ${joinValues(issue.values, "|")}`;
       case "too_big": {
-        const adj = issue2.inclusive ? "<=" : "<";
-        const sizing = getSizing(issue2.origin);
+        const adj = issue.inclusive ? "<=" : "<";
+        const sizing = getSizing(issue.origin);
         if (sizing)
-          return `Quá lớn: mong đợi ${issue2.origin ?? "giá trị"} ${sizing.verb} ${adj}${issue2.maximum.toString()} ${sizing.unit ?? "phần tử"}`;
-        return `Quá lớn: mong đợi ${issue2.origin ?? "giá trị"} ${adj}${issue2.maximum.toString()}`;
+          return `Quá lớn: mong đợi ${issue.origin ?? "giá trị"} ${sizing.verb} ${adj}${issue.maximum.toString()} ${sizing.unit ?? "phần tử"}`;
+        return `Quá lớn: mong đợi ${issue.origin ?? "giá trị"} ${adj}${issue.maximum.toString()}`;
       }
       case "too_small": {
-        const adj = issue2.inclusive ? ">=" : ">";
-        const sizing = getSizing(issue2.origin);
+        const adj = issue.inclusive ? ">=" : ">";
+        const sizing = getSizing(issue.origin);
         if (sizing) {
-          return `Quá nhỏ: mong đợi ${issue2.origin} ${sizing.verb} ${adj}${issue2.minimum.toString()} ${sizing.unit}`;
+          return `Quá nhỏ: mong đợi ${issue.origin} ${sizing.verb} ${adj}${issue.minimum.toString()} ${sizing.unit}`;
         }
-        return `Quá nhỏ: mong đợi ${issue2.origin} ${adj}${issue2.minimum.toString()}`;
+        return `Quá nhỏ: mong đợi ${issue.origin} ${adj}${issue.minimum.toString()}`;
       }
       case "invalid_format": {
-        const _issue = issue2;
+        const _issue = issue;
         if (_issue.format === "starts_with")
           return `Chuỗi không hợp lệ: phải bắt đầu bằng "${_issue.prefix}"`;
         if (_issue.format === "ends_with")
@@ -9713,18 +9723,18 @@ var error47 = () => {
           return `Chuỗi không hợp lệ: phải bao gồm "${_issue.includes}"`;
         if (_issue.format === "regex")
           return `Chuỗi không hợp lệ: phải khớp với mẫu ${_issue.pattern}`;
-        return `${FormatDictionary[_issue.format] ?? issue2.format} không hợp lệ`;
+        return `${FormatDictionary[_issue.format] ?? issue.format} không hợp lệ`;
       }
       case "not_multiple_of":
-        return `Số không hợp lệ: phải là bội số của ${issue2.divisor}`;
+        return `Số không hợp lệ: phải là bội số của ${issue.divisor}`;
       case "unrecognized_keys":
-        return `Khóa không được nhận dạng: ${joinValues(issue2.keys, ", ")}`;
+        return `Khóa không được nhận dạng: ${joinValues(issue.keys, ", ")}`;
       case "invalid_key":
-        return `Khóa không hợp lệ trong ${issue2.origin}`;
+        return `Khóa không hợp lệ trong ${issue.origin}`;
       case "invalid_union":
         return "Đầu vào không hợp lệ";
       case "invalid_element":
-        return `Giá trị không hợp lệ trong ${issue2.origin}`;
+        return `Giá trị không hợp lệ trong ${issue.origin}`;
       default:
         return `Đầu vào không hợp lệ`;
     }
@@ -9745,8 +9755,8 @@ var error48 = () => {
     array: { unit: "项", verb: "包含" },
     set: { unit: "项", verb: "包含" }
   };
-  function getSizing(origin2) {
-    return Sizable[origin2] ?? null;
+  function getSizing(origin) {
+    return Sizable[origin] ?? null;
   }
   const FormatDictionary = {
     regex: "输入",
@@ -9784,38 +9794,38 @@ var error48 = () => {
     array: "数组",
     null: "空值(null)"
   };
-  return (issue2) => {
-    switch (issue2.code) {
+  return (issue) => {
+    switch (issue.code) {
       case "invalid_type": {
-        const expected = TypeDictionary[issue2.expected] ?? issue2.expected;
-        const receivedType = parsedType(issue2.input);
+        const expected = TypeDictionary[issue.expected] ?? issue.expected;
+        const receivedType = parsedType(issue.input);
         const received = TypeDictionary[receivedType] ?? receivedType;
-        if (/^[A-Z]/.test(issue2.expected)) {
-          return `无效输入：期望 instanceof ${issue2.expected}，实际接收 ${received}`;
+        if (/^[A-Z]/.test(issue.expected)) {
+          return `无效输入：期望 instanceof ${issue.expected}，实际接收 ${received}`;
         }
         return `无效输入：期望 ${expected}，实际接收 ${received}`;
       }
       case "invalid_value":
-        if (issue2.values.length === 1)
-          return `无效输入：期望 ${stringifyPrimitive(issue2.values[0])}`;
-        return `无效选项：期望以下之一 ${joinValues(issue2.values, "|")}`;
+        if (issue.values.length === 1)
+          return `无效输入：期望 ${stringifyPrimitive(issue.values[0])}`;
+        return `无效选项：期望以下之一 ${joinValues(issue.values, "|")}`;
       case "too_big": {
-        const adj = issue2.inclusive ? "<=" : "<";
-        const sizing = getSizing(issue2.origin);
+        const adj = issue.inclusive ? "<=" : "<";
+        const sizing = getSizing(issue.origin);
         if (sizing)
-          return `数值过大：期望 ${issue2.origin ?? "值"} ${adj}${issue2.maximum.toString()} ${sizing.unit ?? "个元素"}`;
-        return `数值过大：期望 ${issue2.origin ?? "值"} ${adj}${issue2.maximum.toString()}`;
+          return `数值过大：期望 ${issue.origin ?? "值"} ${adj}${issue.maximum.toString()} ${sizing.unit ?? "个元素"}`;
+        return `数值过大：期望 ${issue.origin ?? "值"} ${adj}${issue.maximum.toString()}`;
       }
       case "too_small": {
-        const adj = issue2.inclusive ? ">=" : ">";
-        const sizing = getSizing(issue2.origin);
+        const adj = issue.inclusive ? ">=" : ">";
+        const sizing = getSizing(issue.origin);
         if (sizing) {
-          return `数值过小：期望 ${issue2.origin} ${adj}${issue2.minimum.toString()} ${sizing.unit}`;
+          return `数值过小：期望 ${issue.origin} ${adj}${issue.minimum.toString()} ${sizing.unit}`;
         }
-        return `数值过小：期望 ${issue2.origin} ${adj}${issue2.minimum.toString()}`;
+        return `数值过小：期望 ${issue.origin} ${adj}${issue.minimum.toString()}`;
       }
       case "invalid_format": {
-        const _issue = issue2;
+        const _issue = issue;
         if (_issue.format === "starts_with")
           return `无效字符串：必须以 "${_issue.prefix}" 开头`;
         if (_issue.format === "ends_with")
@@ -9824,18 +9834,18 @@ var error48 = () => {
           return `无效字符串：必须包含 "${_issue.includes}"`;
         if (_issue.format === "regex")
           return `无效字符串：必须满足正则表达式 ${_issue.pattern}`;
-        return `无效${FormatDictionary[_issue.format] ?? issue2.format}`;
+        return `无效${FormatDictionary[_issue.format] ?? issue.format}`;
       }
       case "not_multiple_of":
-        return `无效数字：必须是 ${issue2.divisor} 的倍数`;
+        return `无效数字：必须是 ${issue.divisor} 的倍数`;
       case "unrecognized_keys":
-        return `出现未知的键(key): ${joinValues(issue2.keys, ", ")}`;
+        return `出现未知的键(key): ${joinValues(issue.keys, ", ")}`;
       case "invalid_key":
-        return `${issue2.origin} 中的键(key)无效`;
+        return `${issue.origin} 中的键(key)无效`;
       case "invalid_union":
         return "无效输入";
       case "invalid_element":
-        return `${issue2.origin} 中包含无效值(value)`;
+        return `${issue.origin} 中包含无效值(value)`;
       default:
         return `无效输入`;
     }
@@ -9856,8 +9866,8 @@ var error49 = () => {
     array: { unit: "項目", verb: "擁有" },
     set: { unit: "項目", verb: "擁有" }
   };
-  function getSizing(origin2) {
-    return Sizable[origin2] ?? null;
+  function getSizing(origin) {
+    return Sizable[origin] ?? null;
   }
   const FormatDictionary = {
     regex: "輸入",
@@ -9892,38 +9902,38 @@ var error49 = () => {
   const TypeDictionary = {
     nan: "NaN"
   };
-  return (issue2) => {
-    switch (issue2.code) {
+  return (issue) => {
+    switch (issue.code) {
       case "invalid_type": {
-        const expected = TypeDictionary[issue2.expected] ?? issue2.expected;
-        const receivedType = parsedType(issue2.input);
+        const expected = TypeDictionary[issue.expected] ?? issue.expected;
+        const receivedType = parsedType(issue.input);
         const received = TypeDictionary[receivedType] ?? receivedType;
-        if (/^[A-Z]/.test(issue2.expected)) {
-          return `無效的輸入值：預期為 instanceof ${issue2.expected}，但收到 ${received}`;
+        if (/^[A-Z]/.test(issue.expected)) {
+          return `無效的輸入值：預期為 instanceof ${issue.expected}，但收到 ${received}`;
         }
         return `無效的輸入值：預期為 ${expected}，但收到 ${received}`;
       }
       case "invalid_value":
-        if (issue2.values.length === 1)
-          return `無效的輸入值：預期為 ${stringifyPrimitive(issue2.values[0])}`;
-        return `無效的選項：預期為以下其中之一 ${joinValues(issue2.values, "|")}`;
+        if (issue.values.length === 1)
+          return `無效的輸入值：預期為 ${stringifyPrimitive(issue.values[0])}`;
+        return `無效的選項：預期為以下其中之一 ${joinValues(issue.values, "|")}`;
       case "too_big": {
-        const adj = issue2.inclusive ? "<=" : "<";
-        const sizing = getSizing(issue2.origin);
+        const adj = issue.inclusive ? "<=" : "<";
+        const sizing = getSizing(issue.origin);
         if (sizing)
-          return `數值過大：預期 ${issue2.origin ?? "值"} 應為 ${adj}${issue2.maximum.toString()} ${sizing.unit ?? "個元素"}`;
-        return `數值過大：預期 ${issue2.origin ?? "值"} 應為 ${adj}${issue2.maximum.toString()}`;
+          return `數值過大：預期 ${issue.origin ?? "值"} 應為 ${adj}${issue.maximum.toString()} ${sizing.unit ?? "個元素"}`;
+        return `數值過大：預期 ${issue.origin ?? "值"} 應為 ${adj}${issue.maximum.toString()}`;
       }
       case "too_small": {
-        const adj = issue2.inclusive ? ">=" : ">";
-        const sizing = getSizing(issue2.origin);
+        const adj = issue.inclusive ? ">=" : ">";
+        const sizing = getSizing(issue.origin);
         if (sizing) {
-          return `數值過小：預期 ${issue2.origin} 應為 ${adj}${issue2.minimum.toString()} ${sizing.unit}`;
+          return `數值過小：預期 ${issue.origin} 應為 ${adj}${issue.minimum.toString()} ${sizing.unit}`;
         }
-        return `數值過小：預期 ${issue2.origin} 應為 ${adj}${issue2.minimum.toString()}`;
+        return `數值過小：預期 ${issue.origin} 應為 ${adj}${issue.minimum.toString()}`;
       }
       case "invalid_format": {
-        const _issue = issue2;
+        const _issue = issue;
         if (_issue.format === "starts_with") {
           return `無效的字串：必須以 "${_issue.prefix}" 開頭`;
         }
@@ -9933,18 +9943,18 @@ var error49 = () => {
           return `無效的字串：必須包含 "${_issue.includes}"`;
         if (_issue.format === "regex")
           return `無效的字串：必須符合格式 ${_issue.pattern}`;
-        return `無效的 ${FormatDictionary[_issue.format] ?? issue2.format}`;
+        return `無效的 ${FormatDictionary[_issue.format] ?? issue.format}`;
       }
       case "not_multiple_of":
-        return `無效的數字：必須為 ${issue2.divisor} 的倍數`;
+        return `無效的數字：必須為 ${issue.divisor} 的倍數`;
       case "unrecognized_keys":
-        return `無法識別的鍵值${issue2.keys.length > 1 ? "們" : ""}：${joinValues(issue2.keys, "、")}`;
+        return `無法識別的鍵值${issue.keys.length > 1 ? "們" : ""}：${joinValues(issue.keys, "、")}`;
       case "invalid_key":
-        return `${issue2.origin} 中有無效的鍵值`;
+        return `${issue.origin} 中有無效的鍵值`;
       case "invalid_union":
         return "無效的輸入值";
       case "invalid_element":
-        return `${issue2.origin} 中有無效的值`;
+        return `${issue.origin} 中有無效的值`;
       default:
         return `無效的輸入值`;
     }
@@ -9965,8 +9975,8 @@ var error50 = () => {
     array: { unit: "nkan", verb: "ní" },
     set: { unit: "nkan", verb: "ní" }
   };
-  function getSizing(origin2) {
-    return Sizable[origin2] ?? null;
+  function getSizing(origin) {
+    return Sizable[origin] ?? null;
   }
   const FormatDictionary = {
     regex: "ẹ̀rọ ìbáwọlé",
@@ -10003,37 +10013,37 @@ var error50 = () => {
     number: "nọ́mbà",
     array: "akopọ"
   };
-  return (issue2) => {
-    switch (issue2.code) {
+  return (issue) => {
+    switch (issue.code) {
       case "invalid_type": {
-        const expected = TypeDictionary[issue2.expected] ?? issue2.expected;
-        const receivedType = parsedType(issue2.input);
+        const expected = TypeDictionary[issue.expected] ?? issue.expected;
+        const receivedType = parsedType(issue.input);
         const received = TypeDictionary[receivedType] ?? receivedType;
-        if (/^[A-Z]/.test(issue2.expected)) {
-          return `Ìbáwọlé aṣìṣe: a ní láti fi instanceof ${issue2.expected}, àmọ̀ a rí ${received}`;
+        if (/^[A-Z]/.test(issue.expected)) {
+          return `Ìbáwọlé aṣìṣe: a ní láti fi instanceof ${issue.expected}, àmọ̀ a rí ${received}`;
         }
         return `Ìbáwọlé aṣìṣe: a ní láti fi ${expected}, àmọ̀ a rí ${received}`;
       }
       case "invalid_value":
-        if (issue2.values.length === 1)
-          return `Ìbáwọlé aṣìṣe: a ní láti fi ${stringifyPrimitive(issue2.values[0])}`;
-        return `Àṣàyàn aṣìṣe: yan ọ̀kan lára ${joinValues(issue2.values, "|")}`;
+        if (issue.values.length === 1)
+          return `Ìbáwọlé aṣìṣe: a ní láti fi ${stringifyPrimitive(issue.values[0])}`;
+        return `Àṣàyàn aṣìṣe: yan ọ̀kan lára ${joinValues(issue.values, "|")}`;
       case "too_big": {
-        const adj = issue2.inclusive ? "<=" : "<";
-        const sizing = getSizing(issue2.origin);
+        const adj = issue.inclusive ? "<=" : "<";
+        const sizing = getSizing(issue.origin);
         if (sizing)
-          return `Tó pọ̀ jù: a ní láti jẹ́ pé ${issue2.origin ?? "iye"} ${sizing.verb} ${adj}${issue2.maximum} ${sizing.unit}`;
-        return `Tó pọ̀ jù: a ní láti jẹ́ ${adj}${issue2.maximum}`;
+          return `Tó pọ̀ jù: a ní láti jẹ́ pé ${issue.origin ?? "iye"} ${sizing.verb} ${adj}${issue.maximum} ${sizing.unit}`;
+        return `Tó pọ̀ jù: a ní láti jẹ́ ${adj}${issue.maximum}`;
       }
       case "too_small": {
-        const adj = issue2.inclusive ? ">=" : ">";
-        const sizing = getSizing(issue2.origin);
+        const adj = issue.inclusive ? ">=" : ">";
+        const sizing = getSizing(issue.origin);
         if (sizing)
-          return `Kéré ju: a ní láti jẹ́ pé ${issue2.origin} ${sizing.verb} ${adj}${issue2.minimum} ${sizing.unit}`;
-        return `Kéré ju: a ní láti jẹ́ ${adj}${issue2.minimum}`;
+          return `Kéré ju: a ní láti jẹ́ pé ${issue.origin} ${sizing.verb} ${adj}${issue.minimum} ${sizing.unit}`;
+        return `Kéré ju: a ní láti jẹ́ ${adj}${issue.minimum}`;
       }
       case "invalid_format": {
-        const _issue = issue2;
+        const _issue = issue;
         if (_issue.format === "starts_with")
           return `Ọ̀rọ̀ aṣìṣe: gbọ́dọ̀ bẹ̀rẹ̀ pẹ̀lú "${_issue.prefix}"`;
         if (_issue.format === "ends_with")
@@ -10042,18 +10052,18 @@ var error50 = () => {
           return `Ọ̀rọ̀ aṣìṣe: gbọ́dọ̀ ní "${_issue.includes}"`;
         if (_issue.format === "regex")
           return `Ọ̀rọ̀ aṣìṣe: gbọ́dọ̀ bá àpẹẹrẹ mu ${_issue.pattern}`;
-        return `Aṣìṣe: ${FormatDictionary[_issue.format] ?? issue2.format}`;
+        return `Aṣìṣe: ${FormatDictionary[_issue.format] ?? issue.format}`;
       }
       case "not_multiple_of":
-        return `Nọ́mbà aṣìṣe: gbọ́dọ̀ jẹ́ èyà pípín ti ${issue2.divisor}`;
+        return `Nọ́mbà aṣìṣe: gbọ́dọ̀ jẹ́ èyà pípín ti ${issue.divisor}`;
       case "unrecognized_keys":
-        return `Bọtìnì àìmọ̀: ${joinValues(issue2.keys, ", ")}`;
+        return `Bọtìnì àìmọ̀: ${joinValues(issue.keys, ", ")}`;
       case "invalid_key":
-        return `Bọtìnì aṣìṣe nínú ${issue2.origin}`;
+        return `Bọtìnì aṣìṣe nínú ${issue.origin}`;
       case "invalid_union":
         return "Ìbáwọlé aṣìṣe";
       case "invalid_element":
-        return `Iye aṣìṣe nínú ${issue2.origin}`;
+        return `Iye aṣìṣe nínú ${issue.origin}`;
       default:
         return "Ìbáwọlé aṣìṣe";
     }
@@ -10064,58 +10074,58 @@ var init_yo = __esm(() => {
 });
 var exports_locales = {};
 __export(exports_locales, {
-  zhTW: () => zh_TW_default,
-  zhCN: () => zh_CN_default,
-  yo: () => yo_default,
-  vi: () => vi_default,
-  uz: () => uz_default,
-  ur: () => ur_default,
-  uk: () => uk_default,
-  ua: () => ua_default,
-  tr: () => tr_default,
-  th: () => th_default,
-  ta: () => ta_default,
-  sv: () => sv_default,
-  sl: () => sl_default,
-  ru: () => ru_default,
-  ro: () => ro_default,
-  pt: () => pt_default,
-  ps: () => ps_default,
-  pl: () => pl_default,
-  ota: () => ota_default,
-  no: () => no_default,
-  nl: () => nl_default,
-  ms: () => ms_default,
-  mk: () => mk_default,
-  lt: () => lt_default,
-  ko: () => ko_default,
-  km: () => km_default,
-  kh: () => kh_default,
-  ka: () => ka_default,
-  ja: () => ja_default,
-  it: () => it_default,
-  is: () => is_default,
-  id: () => id_default,
-  hy: () => hy_default,
-  hu: () => hu_default,
-  hr: () => hr_default,
-  he: () => he_default,
-  frCA: () => fr_CA_default,
-  fr: () => fr_default,
-  fi: () => fi_default,
-  fa: () => fa_default,
-  es: () => es_default,
-  eo: () => eo_default,
-  en: () => en_default,
-  el: () => el_default,
-  de: () => de_default,
-  da: () => da_default,
-  cs: () => cs_default,
-  ca: () => ca_default,
-  bg: () => bg_default,
-  be: () => be_default,
+  ar: () => ar_default,
   az: () => az_default,
-  ar: () => ar_default
+  be: () => be_default,
+  bg: () => bg_default,
+  ca: () => ca_default,
+  cs: () => cs_default,
+  da: () => da_default,
+  de: () => de_default,
+  el: () => el_default,
+  en: () => en_default,
+  eo: () => eo_default,
+  es: () => es_default,
+  fa: () => fa_default,
+  fi: () => fi_default,
+  fr: () => fr_default,
+  frCA: () => fr_CA_default,
+  he: () => he_default,
+  hr: () => hr_default,
+  hu: () => hu_default,
+  hy: () => hy_default,
+  id: () => id_default,
+  is: () => is_default,
+  it: () => it_default,
+  ja: () => ja_default,
+  ka: () => ka_default,
+  kh: () => kh_default,
+  km: () => km_default,
+  ko: () => ko_default,
+  lt: () => lt_default,
+  mk: () => mk_default,
+  ms: () => ms_default,
+  nl: () => nl_default,
+  no: () => no_default,
+  ota: () => ota_default,
+  pl: () => pl_default,
+  ps: () => ps_default,
+  pt: () => pt_default,
+  ro: () => ro_default,
+  ru: () => ru_default,
+  sl: () => sl_default,
+  sv: () => sv_default,
+  ta: () => ta_default,
+  th: () => th_default,
+  tr: () => tr_default,
+  ua: () => ua_default,
+  uk: () => uk_default,
+  ur: () => ur_default,
+  uz: () => uz_default,
+  vi: () => vi_default,
+  yo: () => yo_default,
+  zhCN: () => zh_CN_default,
+  zhTW: () => zh_TW_default
 });
 var init_locales = __esm(() => {
   init_ar();
@@ -10225,21 +10235,21 @@ var init_registries = __esm(() => {
   (_a2 = globalThis).__zod_globalRegistry ?? (_a2.__zod_globalRegistry = registry());
   globalRegistry = globalThis.__zod_globalRegistry;
 });
-function _string(Class2, params) {
-  return new Class2({
+function _string(Class, params) {
+  return new Class({
     type: "string",
     ...normalizeParams(params)
   });
 }
-function _coercedString(Class2, params) {
-  return new Class2({
+function _coercedString(Class, params) {
+  return new Class({
     type: "string",
     coerce: true,
     ...normalizeParams(params)
   });
 }
-function _email(Class2, params) {
-  return new Class2({
+function _email(Class, params) {
+  return new Class({
     type: "string",
     format: "email",
     check: "string_format",
@@ -10247,8 +10257,8 @@ function _email(Class2, params) {
     ...normalizeParams(params)
   });
 }
-function _guid(Class2, params) {
-  return new Class2({
+function _guid(Class, params) {
+  return new Class({
     type: "string",
     format: "guid",
     check: "string_format",
@@ -10256,8 +10266,8 @@ function _guid(Class2, params) {
     ...normalizeParams(params)
   });
 }
-function _uuid(Class2, params) {
-  return new Class2({
+function _uuid(Class, params) {
+  return new Class({
     type: "string",
     format: "uuid",
     check: "string_format",
@@ -10265,8 +10275,8 @@ function _uuid(Class2, params) {
     ...normalizeParams(params)
   });
 }
-function _uuidv4(Class2, params) {
-  return new Class2({
+function _uuidv4(Class, params) {
+  return new Class({
     type: "string",
     format: "uuid",
     check: "string_format",
@@ -10275,8 +10285,8 @@ function _uuidv4(Class2, params) {
     ...normalizeParams(params)
   });
 }
-function _uuidv6(Class2, params) {
-  return new Class2({
+function _uuidv6(Class, params) {
+  return new Class({
     type: "string",
     format: "uuid",
     check: "string_format",
@@ -10285,8 +10295,8 @@ function _uuidv6(Class2, params) {
     ...normalizeParams(params)
   });
 }
-function _uuidv7(Class2, params) {
-  return new Class2({
+function _uuidv7(Class, params) {
+  return new Class({
     type: "string",
     format: "uuid",
     check: "string_format",
@@ -10295,8 +10305,8 @@ function _uuidv7(Class2, params) {
     ...normalizeParams(params)
   });
 }
-function _url(Class2, params) {
-  return new Class2({
+function _url(Class, params) {
+  return new Class({
     type: "string",
     format: "url",
     check: "string_format",
@@ -10304,8 +10314,8 @@ function _url(Class2, params) {
     ...normalizeParams(params)
   });
 }
-function _emoji2(Class2, params) {
-  return new Class2({
+function _emoji2(Class, params) {
+  return new Class({
     type: "string",
     format: "emoji",
     check: "string_format",
@@ -10313,8 +10323,8 @@ function _emoji2(Class2, params) {
     ...normalizeParams(params)
   });
 }
-function _nanoid(Class2, params) {
-  return new Class2({
+function _nanoid(Class, params) {
+  return new Class({
     type: "string",
     format: "nanoid",
     check: "string_format",
@@ -10322,8 +10332,8 @@ function _nanoid(Class2, params) {
     ...normalizeParams(params)
   });
 }
-function _cuid(Class2, params) {
-  return new Class2({
+function _cuid(Class, params) {
+  return new Class({
     type: "string",
     format: "cuid",
     check: "string_format",
@@ -10331,8 +10341,8 @@ function _cuid(Class2, params) {
     ...normalizeParams(params)
   });
 }
-function _cuid2(Class2, params) {
-  return new Class2({
+function _cuid2(Class, params) {
+  return new Class({
     type: "string",
     format: "cuid2",
     check: "string_format",
@@ -10340,8 +10350,8 @@ function _cuid2(Class2, params) {
     ...normalizeParams(params)
   });
 }
-function _ulid(Class2, params) {
-  return new Class2({
+function _ulid(Class, params) {
+  return new Class({
     type: "string",
     format: "ulid",
     check: "string_format",
@@ -10349,8 +10359,8 @@ function _ulid(Class2, params) {
     ...normalizeParams(params)
   });
 }
-function _xid(Class2, params) {
-  return new Class2({
+function _xid(Class, params) {
+  return new Class({
     type: "string",
     format: "xid",
     check: "string_format",
@@ -10358,8 +10368,8 @@ function _xid(Class2, params) {
     ...normalizeParams(params)
   });
 }
-function _ksuid(Class2, params) {
-  return new Class2({
+function _ksuid(Class, params) {
+  return new Class({
     type: "string",
     format: "ksuid",
     check: "string_format",
@@ -10367,8 +10377,8 @@ function _ksuid(Class2, params) {
     ...normalizeParams(params)
   });
 }
-function _ipv4(Class2, params) {
-  return new Class2({
+function _ipv4(Class, params) {
+  return new Class({
     type: "string",
     format: "ipv4",
     check: "string_format",
@@ -10376,8 +10386,8 @@ function _ipv4(Class2, params) {
     ...normalizeParams(params)
   });
 }
-function _ipv6(Class2, params) {
-  return new Class2({
+function _ipv6(Class, params) {
+  return new Class({
     type: "string",
     format: "ipv6",
     check: "string_format",
@@ -10385,8 +10395,8 @@ function _ipv6(Class2, params) {
     ...normalizeParams(params)
   });
 }
-function _mac(Class2, params) {
-  return new Class2({
+function _mac(Class, params) {
+  return new Class({
     type: "string",
     format: "mac",
     check: "string_format",
@@ -10394,8 +10404,8 @@ function _mac(Class2, params) {
     ...normalizeParams(params)
   });
 }
-function _cidrv4(Class2, params) {
-  return new Class2({
+function _cidrv4(Class, params) {
+  return new Class({
     type: "string",
     format: "cidrv4",
     check: "string_format",
@@ -10403,8 +10413,8 @@ function _cidrv4(Class2, params) {
     ...normalizeParams(params)
   });
 }
-function _cidrv6(Class2, params) {
-  return new Class2({
+function _cidrv6(Class, params) {
+  return new Class({
     type: "string",
     format: "cidrv6",
     check: "string_format",
@@ -10412,8 +10422,8 @@ function _cidrv6(Class2, params) {
     ...normalizeParams(params)
   });
 }
-function _base64(Class2, params) {
-  return new Class2({
+function _base64(Class, params) {
+  return new Class({
     type: "string",
     format: "base64",
     check: "string_format",
@@ -10421,8 +10431,8 @@ function _base64(Class2, params) {
     ...normalizeParams(params)
   });
 }
-function _base64url(Class2, params) {
-  return new Class2({
+function _base64url(Class, params) {
+  return new Class({
     type: "string",
     format: "base64url",
     check: "string_format",
@@ -10430,8 +10440,8 @@ function _base64url(Class2, params) {
     ...normalizeParams(params)
   });
 }
-function _e164(Class2, params) {
-  return new Class2({
+function _e164(Class, params) {
+  return new Class({
     type: "string",
     format: "e164",
     check: "string_format",
@@ -10439,8 +10449,8 @@ function _e164(Class2, params) {
     ...normalizeParams(params)
   });
 }
-function _jwt(Class2, params) {
-  return new Class2({
+function _jwt(Class, params) {
+  return new Class({
     type: "string",
     format: "jwt",
     check: "string_format",
@@ -10448,8 +10458,8 @@ function _jwt(Class2, params) {
     ...normalizeParams(params)
   });
 }
-function _isoDateTime(Class2, params) {
-  return new Class2({
+function _isoDateTime(Class, params) {
+  return new Class({
     type: "string",
     format: "datetime",
     check: "string_format",
@@ -10459,16 +10469,16 @@ function _isoDateTime(Class2, params) {
     ...normalizeParams(params)
   });
 }
-function _isoDate(Class2, params) {
-  return new Class2({
+function _isoDate(Class, params) {
+  return new Class({
     type: "string",
     format: "date",
     check: "string_format",
     ...normalizeParams(params)
   });
 }
-function _isoTime(Class2, params) {
-  return new Class2({
+function _isoTime(Class, params) {
+  return new Class({
     type: "string",
     format: "time",
     check: "string_format",
@@ -10476,31 +10486,31 @@ function _isoTime(Class2, params) {
     ...normalizeParams(params)
   });
 }
-function _isoDuration(Class2, params) {
-  return new Class2({
+function _isoDuration(Class, params) {
+  return new Class({
     type: "string",
     format: "duration",
     check: "string_format",
     ...normalizeParams(params)
   });
 }
-function _number(Class2, params) {
-  return new Class2({
+function _number(Class, params) {
+  return new Class({
     type: "number",
     checks: [],
     ...normalizeParams(params)
   });
 }
-function _coercedNumber(Class2, params) {
-  return new Class2({
+function _coercedNumber(Class, params) {
+  return new Class({
     type: "number",
     coerce: true,
     checks: [],
     ...normalizeParams(params)
   });
 }
-function _int(Class2, params) {
-  return new Class2({
+function _int(Class, params) {
+  return new Class({
     type: "number",
     check: "number_format",
     abort: false,
@@ -10508,8 +10518,8 @@ function _int(Class2, params) {
     ...normalizeParams(params)
   });
 }
-function _float32(Class2, params) {
-  return new Class2({
+function _float32(Class, params) {
+  return new Class({
     type: "number",
     check: "number_format",
     abort: false,
@@ -10517,8 +10527,8 @@ function _float32(Class2, params) {
     ...normalizeParams(params)
   });
 }
-function _float64(Class2, params) {
-  return new Class2({
+function _float64(Class, params) {
+  return new Class({
     type: "number",
     check: "number_format",
     abort: false,
@@ -10526,8 +10536,8 @@ function _float64(Class2, params) {
     ...normalizeParams(params)
   });
 }
-function _int32(Class2, params) {
-  return new Class2({
+function _int32(Class, params) {
+  return new Class({
     type: "number",
     check: "number_format",
     abort: false,
@@ -10535,8 +10545,8 @@ function _int32(Class2, params) {
     ...normalizeParams(params)
   });
 }
-function _uint32(Class2, params) {
-  return new Class2({
+function _uint32(Class, params) {
+  return new Class({
     type: "number",
     check: "number_format",
     abort: false,
@@ -10544,34 +10554,34 @@ function _uint32(Class2, params) {
     ...normalizeParams(params)
   });
 }
-function _boolean(Class2, params) {
-  return new Class2({
+function _boolean(Class, params) {
+  return new Class({
     type: "boolean",
     ...normalizeParams(params)
   });
 }
-function _coercedBoolean(Class2, params) {
-  return new Class2({
+function _coercedBoolean(Class, params) {
+  return new Class({
     type: "boolean",
     coerce: true,
     ...normalizeParams(params)
   });
 }
-function _bigint(Class2, params) {
-  return new Class2({
+function _bigint(Class, params) {
+  return new Class({
     type: "bigint",
     ...normalizeParams(params)
   });
 }
-function _coercedBigint(Class2, params) {
-  return new Class2({
+function _coercedBigint(Class, params) {
+  return new Class({
     type: "bigint",
     coerce: true,
     ...normalizeParams(params)
   });
 }
-function _int64(Class2, params) {
-  return new Class2({
+function _int64(Class, params) {
+  return new Class({
     type: "bigint",
     check: "bigint_format",
     abort: false,
@@ -10579,8 +10589,8 @@ function _int64(Class2, params) {
     ...normalizeParams(params)
   });
 }
-function _uint64(Class2, params) {
-  return new Class2({
+function _uint64(Class, params) {
+  return new Class({
     type: "bigint",
     check: "bigint_format",
     abort: false,
@@ -10588,61 +10598,61 @@ function _uint64(Class2, params) {
     ...normalizeParams(params)
   });
 }
-function _symbol(Class2, params) {
-  return new Class2({
+function _symbol(Class, params) {
+  return new Class({
     type: "symbol",
     ...normalizeParams(params)
   });
 }
-function _undefined2(Class2, params) {
-  return new Class2({
+function _undefined2(Class, params) {
+  return new Class({
     type: "undefined",
     ...normalizeParams(params)
   });
 }
-function _null2(Class2, params) {
-  return new Class2({
+function _null2(Class, params) {
+  return new Class({
     type: "null",
     ...normalizeParams(params)
   });
 }
-function _any(Class2) {
-  return new Class2({
+function _any(Class) {
+  return new Class({
     type: "any"
   });
 }
-function _unknown(Class2) {
-  return new Class2({
+function _unknown(Class) {
+  return new Class({
     type: "unknown"
   });
 }
-function _never(Class2, params) {
-  return new Class2({
+function _never(Class, params) {
+  return new Class({
     type: "never",
     ...normalizeParams(params)
   });
 }
-function _void(Class2, params) {
-  return new Class2({
+function _void(Class, params) {
+  return new Class({
     type: "void",
     ...normalizeParams(params)
   });
 }
-function _date(Class2, params) {
-  return new Class2({
+function _date(Class, params) {
+  return new Class({
     type: "date",
     ...normalizeParams(params)
   });
 }
-function _coercedDate(Class2, params) {
-  return new Class2({
+function _coercedDate(Class, params) {
+  return new Class({
     type: "date",
     coerce: true,
     ...normalizeParams(params)
   });
 }
-function _nan(Class2, params) {
-  return new Class2({
+function _nan(Class, params) {
+  return new Class({
     type: "nan",
     ...normalizeParams(params)
   });
@@ -10823,125 +10833,125 @@ function _toUpperCase() {
 function _slugify() {
   return _overwrite((input) => slugify(input));
 }
-function _array(Class2, element, params) {
-  return new Class2({
+function _array(Class, element, params) {
+  return new Class({
     type: "array",
     element,
     ...normalizeParams(params)
   });
 }
-function _union(Class2, options, params) {
-  return new Class2({
+function _union(Class, options, params) {
+  return new Class({
     type: "union",
     options,
     ...normalizeParams(params)
   });
 }
-function _xor(Class2, options, params) {
-  return new Class2({
+function _xor(Class, options, params) {
+  return new Class({
     type: "union",
     options,
     inclusive: false,
     ...normalizeParams(params)
   });
 }
-function _discriminatedUnion(Class2, discriminator, options, params) {
-  return new Class2({
+function _discriminatedUnion(Class, discriminator, options, params) {
+  return new Class({
     type: "union",
     options,
     discriminator,
     ...normalizeParams(params)
   });
 }
-function _intersection(Class2, left, right) {
-  return new Class2({
+function _intersection(Class, left, right) {
+  return new Class({
     type: "intersection",
     left,
     right
   });
 }
-function _tuple(Class2, items, _paramsOrRest, _params) {
+function _tuple(Class, items, _paramsOrRest, _params) {
   const hasRest = _paramsOrRest instanceof $ZodType;
   const params = hasRest ? _params : _paramsOrRest;
   const rest = hasRest ? _paramsOrRest : null;
-  return new Class2({
+  return new Class({
     type: "tuple",
     items,
     rest,
     ...normalizeParams(params)
   });
 }
-function _record(Class2, keyType, valueType, params) {
-  return new Class2({
+function _record(Class, keyType, valueType, params) {
+  return new Class({
     type: "record",
     keyType,
     valueType,
     ...normalizeParams(params)
   });
 }
-function _map(Class2, keyType, valueType, params) {
-  return new Class2({
+function _map(Class, keyType, valueType, params) {
+  return new Class({
     type: "map",
     keyType,
     valueType,
     ...normalizeParams(params)
   });
 }
-function _set(Class2, valueType, params) {
-  return new Class2({
+function _set(Class, valueType, params) {
+  return new Class({
     type: "set",
     valueType,
     ...normalizeParams(params)
   });
 }
-function _enum(Class2, values, params) {
+function _enum(Class, values, params) {
   const entries = Array.isArray(values) ? Object.fromEntries(values.map((v) => [v, v])) : values;
-  return new Class2({
+  return new Class({
     type: "enum",
     entries,
     ...normalizeParams(params)
   });
 }
-function _nativeEnum(Class2, entries, params) {
-  return new Class2({
+function _nativeEnum(Class, entries, params) {
+  return new Class({
     type: "enum",
     entries,
     ...normalizeParams(params)
   });
 }
-function _literal(Class2, value, params) {
-  return new Class2({
+function _literal(Class, value, params) {
+  return new Class({
     type: "literal",
     values: Array.isArray(value) ? value : [value],
     ...normalizeParams(params)
   });
 }
-function _file(Class2, params) {
-  return new Class2({
+function _file(Class, params) {
+  return new Class({
     type: "file",
     ...normalizeParams(params)
   });
 }
-function _transform(Class2, fn) {
-  return new Class2({
+function _transform(Class, fn) {
+  return new Class({
     type: "transform",
     transform: fn
   });
 }
-function _optional(Class2, innerType) {
-  return new Class2({
+function _optional(Class, innerType) {
+  return new Class({
     type: "optional",
     innerType
   });
 }
-function _nullable(Class2, innerType) {
-  return new Class2({
+function _nullable(Class, innerType) {
+  return new Class({
     type: "nullable",
     innerType
   });
 }
-function _default(Class2, innerType, defaultValue) {
-  return new Class2({
+function _default(Class, innerType, defaultValue) {
+  return new Class({
     type: "default",
     innerType,
     get defaultValue() {
@@ -10949,62 +10959,62 @@ function _default(Class2, innerType, defaultValue) {
     }
   });
 }
-function _nonoptional(Class2, innerType, params) {
-  return new Class2({
+function _nonoptional(Class, innerType, params) {
+  return new Class({
     type: "nonoptional",
     innerType,
     ...normalizeParams(params)
   });
 }
-function _success(Class2, innerType) {
-  return new Class2({
+function _success(Class, innerType) {
+  return new Class({
     type: "success",
     innerType
   });
 }
-function _catch(Class2, innerType, catchValue) {
-  return new Class2({
+function _catch(Class, innerType, catchValue) {
+  return new Class({
     type: "catch",
     innerType,
     catchValue: typeof catchValue === "function" ? catchValue : () => catchValue
   });
 }
-function _pipe(Class2, in_, out) {
-  return new Class2({
+function _pipe(Class, in_, out) {
+  return new Class({
     type: "pipe",
     in: in_,
     out
   });
 }
-function _readonly(Class2, innerType) {
-  return new Class2({
+function _readonly(Class, innerType) {
+  return new Class({
     type: "readonly",
     innerType
   });
 }
-function _templateLiteral(Class2, parts, params) {
-  return new Class2({
+function _templateLiteral(Class, parts, params) {
+  return new Class({
     type: "template_literal",
     parts,
     ...normalizeParams(params)
   });
 }
-function _lazy(Class2, getter) {
-  return new Class2({
+function _lazy(Class, getter) {
+  return new Class({
     type: "lazy",
     getter
   });
 }
-function _promise(Class2, innerType) {
-  return new Class2({
+function _promise(Class, innerType) {
+  return new Class({
     type: "promise",
     innerType
   });
 }
-function _custom(Class2, fn, _params) {
+function _custom(Class, fn, _params) {
   const norm = normalizeParams(_params);
   norm.abort ?? (norm.abort = true);
-  const schema = new Class2({
+  const schema = new Class({
     type: "custom",
     check: "custom",
     fn,
@@ -11012,8 +11022,8 @@ function _custom(Class2, fn, _params) {
   });
   return schema;
 }
-function _refine(Class2, fn, _params) {
-  const schema = new Class2({
+function _refine(Class, fn, _params) {
+  const schema = new Class({
     type: "custom",
     check: "custom",
     fn,
@@ -11121,7 +11131,7 @@ function _stringbool(Classes, _params) {
   });
   return codec;
 }
-function _stringFormat(Class2, format, fnOrRegex, _params = {}) {
+function _stringFormat(Class, format, fnOrRegex, _params = {}) {
   const params = normalizeParams(_params);
   const def = {
     ...normalizeParams(_params),
@@ -11134,7 +11144,7 @@ function _stringFormat(Class2, format, fnOrRegex, _params = {}) {
   if (fnOrRegex instanceof RegExp) {
     def.pattern = fnOrRegex;
   }
-  const inst = new Class2(def);
+  const inst = new Class(def);
   return inst;
 }
 var TimePrecision;
@@ -11172,7 +11182,7 @@ function initializeContext(params) {
   };
 }
 function process2(schema, ctx, _params = { path: [], schemaPath: [] }) {
-  var _a3;
+  var _a;
   const def = schema._zod.def;
   const seen = ctx.seen.get(schema);
   if (seen) {
@@ -11212,15 +11222,15 @@ function process2(schema, ctx, _params = { path: [], schemaPath: [] }) {
       ctx.seen.get(parent).isParent = true;
     }
   }
-  const meta2 = ctx.metadataRegistry.get(schema);
-  if (meta2)
-    Object.assign(result.schema, meta2);
+  const meta = ctx.metadataRegistry.get(schema);
+  if (meta)
+    Object.assign(result.schema, meta);
   if (ctx.io === "input" && isTransforming(schema)) {
     delete result.schema.examples;
     delete result.schema.default;
   }
   if (ctx.io === "input" && "_prefault" in result.schema)
-    (_a3 = result.schema).default ?? (_a3.default = result.schema._prefault);
+    (_a = result.schema).default ?? (_a.default = result.schema._prefault);
   delete result.schema._prefault;
   const _result = ctx.seen.get(schema);
   return _result.schema;
@@ -11244,7 +11254,7 @@ function extractDefs(ctx, schema) {
     const defsSegment = ctx.target === "draft-2020-12" ? "$defs" : "definitions";
     if (ctx.external) {
       const externalId = ctx.external.registry.get(entry[0])?.id;
-      const uriGenerator = ctx.external.uri ?? ((id2) => id2);
+      const uriGenerator = ctx.external.uri ?? ((id) => id);
       if (externalId) {
         return { ref: uriGenerator(externalId) };
       }
@@ -11269,11 +11279,11 @@ function extractDefs(ctx, schema) {
     seen.def = { ...seen.schema };
     if (defId)
       seen.defId = defId;
-    const schema2 = seen.schema;
-    for (const key in schema2) {
-      delete schema2[key];
+    const schema = seen.schema;
+    for (const key in schema) {
+      delete schema[key];
     }
-    schema2.$ref = ref;
+    schema.$ref = ref;
   };
   if (ctx.cycles === "throw") {
     for (const entry of ctx.seen.entries()) {
@@ -11321,8 +11331,8 @@ function finalize(ctx, schema) {
     const seen = ctx.seen.get(zodSchema);
     if (seen.ref === null)
       return;
-    const schema2 = seen.def ?? seen.schema;
-    const _cached = { ...schema2 };
+    const schema = seen.def ?? seen.schema;
+    const _cached = { ...schema };
     const ref = seen.ref;
     seen.ref = null;
     if (ref) {
@@ -11330,28 +11340,28 @@ function finalize(ctx, schema) {
       const refSeen = ctx.seen.get(ref);
       const refSchema = refSeen.schema;
       if (refSchema.$ref && (ctx.target === "draft-07" || ctx.target === "draft-04" || ctx.target === "openapi-3.0")) {
-        schema2.allOf = schema2.allOf ?? [];
-        schema2.allOf.push(refSchema);
+        schema.allOf = schema.allOf ?? [];
+        schema.allOf.push(refSchema);
       } else {
-        Object.assign(schema2, refSchema);
+        Object.assign(schema, refSchema);
       }
-      Object.assign(schema2, _cached);
+      Object.assign(schema, _cached);
       const isParentRef = zodSchema._zod.parent === ref;
       if (isParentRef) {
-        for (const key in schema2) {
+        for (const key in schema) {
           if (key === "$ref" || key === "allOf")
             continue;
           if (!(key in _cached)) {
-            delete schema2[key];
+            delete schema[key];
           }
         }
       }
       if (refSchema.$ref && refSeen.def) {
-        for (const key in schema2) {
+        for (const key in schema) {
           if (key === "$ref" || key === "allOf")
             continue;
-          if (key in refSeen.def && JSON.stringify(schema2[key]) === JSON.stringify(refSeen.def[key])) {
-            delete schema2[key];
+          if (key in refSeen.def && JSON.stringify(schema[key]) === JSON.stringify(refSeen.def[key])) {
+            delete schema[key];
           }
         }
       }
@@ -11361,13 +11371,13 @@ function finalize(ctx, schema) {
       flattenRef(parent);
       const parentSeen = ctx.seen.get(parent);
       if (parentSeen?.schema.$ref) {
-        schema2.$ref = parentSeen.schema.$ref;
+        schema.$ref = parentSeen.schema.$ref;
         if (parentSeen.def) {
-          for (const key in schema2) {
+          for (const key in schema) {
             if (key === "$ref" || key === "allOf")
               continue;
-            if (key in parentSeen.def && JSON.stringify(schema2[key]) === JSON.stringify(parentSeen.def[key])) {
-              delete schema2[key];
+            if (key in parentSeen.def && JSON.stringify(schema[key]) === JSON.stringify(parentSeen.def[key])) {
+              delete schema[key];
             }
           }
         }
@@ -11375,7 +11385,7 @@ function finalize(ctx, schema) {
     }
     ctx.override({
       zodSchema,
-      jsonSchema: schema2,
+      jsonSchema: schema,
       path: seen.path ?? []
     });
   };
@@ -11507,27 +11517,27 @@ var init_to_json_schema = __esm(() => {
 });
 function toJSONSchema(input, params) {
   if ("_idmap" in input) {
-    const registry2 = input;
-    const ctx2 = initializeContext({ ...params, processors: allProcessors });
+    const registry = input;
+    const ctx = initializeContext({ ...params, processors: allProcessors });
     const defs = {};
-    for (const entry of registry2._idmap.entries()) {
+    for (const entry of registry._idmap.entries()) {
       const [_, schema] = entry;
-      process2(schema, ctx2);
+      process2(schema, ctx);
     }
     const schemas = {};
     const external = {
-      registry: registry2,
+      registry,
       uri: params?.uri,
       defs
     };
-    ctx2.external = external;
-    for (const entry of registry2._idmap.entries()) {
+    ctx.external = external;
+    for (const entry of registry._idmap.entries()) {
       const [key, schema] = entry;
-      extractDefs(ctx2, schema);
-      schemas[key] = finalize(ctx2, schema);
+      extractDefs(ctx, schema);
+      schemas[key] = finalize(ctx, schema);
     }
     if (Object.keys(defs).length > 0) {
-      const defsSegment = ctx2.target === "draft-2020-12" ? "$defs" : "definitions";
+      const defsSegment = ctx.target === "draft-2020-12" ? "$defs" : "definitions";
       schemas.__shared = {
         [defsSegment]: defs
       };
@@ -12115,280 +12125,280 @@ var exports_json_schema = {};
 var init_json_schema = () => {};
 var exports_core2 = {};
 __export(exports_core2, {
-  version: () => version,
-  util: () => exports_util,
-  treeifyError: () => treeifyError,
-  toJSONSchema: () => toJSONSchema,
-  toDotPath: () => toDotPath,
-  safeParseAsync: () => safeParseAsync,
-  safeParse: () => safeParse,
-  safeEncodeAsync: () => safeEncodeAsync,
-  safeEncode: () => safeEncode,
-  safeDecodeAsync: () => safeDecodeAsync,
-  safeDecode: () => safeDecode,
-  registry: () => registry,
-  regexes: () => exports_regexes,
-  process: () => process2,
-  prettifyError: () => prettifyError,
-  parseAsync: () => parseAsync,
-  parse: () => parse,
-  meta: () => meta,
-  locales: () => exports_locales,
-  isValidJWT: () => isValidJWT,
-  isValidBase64URL: () => isValidBase64URL,
-  isValidBase64: () => isValidBase64,
-  initializeContext: () => initializeContext,
-  globalRegistry: () => globalRegistry,
-  globalConfig: () => globalConfig,
-  formatError: () => formatError,
-  flattenError: () => flattenError,
-  finalize: () => finalize,
-  extractDefs: () => extractDefs,
-  encodeAsync: () => encodeAsync,
-  encode: () => encode,
-  describe: () => describe,
-  decodeAsync: () => decodeAsync,
-  decode: () => decode,
-  createToJSONSchemaMethod: () => createToJSONSchemaMethod,
-  createStandardJSONSchemaMethod: () => createStandardJSONSchemaMethod,
-  config: () => config,
-  clone: () => clone,
-  _xor: () => _xor,
-  _xid: () => _xid,
-  _void: () => _void,
-  _uuidv7: () => _uuidv7,
-  _uuidv6: () => _uuidv6,
-  _uuidv4: () => _uuidv4,
-  _uuid: () => _uuid,
-  _url: () => _url,
-  _uppercase: () => _uppercase,
-  _unknown: () => _unknown,
-  _union: () => _union,
-  _undefined: () => _undefined2,
-  _ulid: () => _ulid,
-  _uint64: () => _uint64,
-  _uint32: () => _uint32,
-  _tuple: () => _tuple,
-  _trim: () => _trim,
-  _transform: () => _transform,
-  _toUpperCase: () => _toUpperCase,
-  _toLowerCase: () => _toLowerCase,
-  _templateLiteral: () => _templateLiteral,
-  _symbol: () => _symbol,
-  _superRefine: () => _superRefine,
-  _success: () => _success,
-  _stringbool: () => _stringbool,
-  _stringFormat: () => _stringFormat,
-  _string: () => _string,
-  _startsWith: () => _startsWith,
-  _slugify: () => _slugify,
-  _size: () => _size,
-  _set: () => _set,
-  _safeParseAsync: () => _safeParseAsync,
-  _safeParse: () => _safeParse,
-  _safeEncodeAsync: () => _safeEncodeAsync,
-  _safeEncode: () => _safeEncode,
-  _safeDecodeAsync: () => _safeDecodeAsync,
-  _safeDecode: () => _safeDecode,
-  _regex: () => _regex,
-  _refine: () => _refine,
-  _record: () => _record,
-  _readonly: () => _readonly,
-  _property: () => _property,
-  _promise: () => _promise,
-  _positive: () => _positive,
-  _pipe: () => _pipe,
-  _parseAsync: () => _parseAsync,
-  _parse: () => _parse,
-  _overwrite: () => _overwrite,
-  _optional: () => _optional,
-  _number: () => _number,
-  _nullable: () => _nullable,
-  _null: () => _null2,
-  _normalize: () => _normalize,
-  _nonpositive: () => _nonpositive,
-  _nonoptional: () => _nonoptional,
-  _nonnegative: () => _nonnegative,
-  _never: () => _never,
-  _negative: () => _negative,
-  _nativeEnum: () => _nativeEnum,
-  _nanoid: () => _nanoid,
-  _nan: () => _nan,
-  _multipleOf: () => _multipleOf,
-  _minSize: () => _minSize,
-  _minLength: () => _minLength,
-  _min: () => _gte,
-  _mime: () => _mime,
-  _maxSize: () => _maxSize,
-  _maxLength: () => _maxLength,
-  _max: () => _lte,
-  _map: () => _map,
-  _mac: () => _mac,
-  _lte: () => _lte,
-  _lt: () => _lt,
-  _lowercase: () => _lowercase,
-  _literal: () => _literal,
-  _length: () => _length,
-  _lazy: () => _lazy,
-  _ksuid: () => _ksuid,
-  _jwt: () => _jwt,
-  _isoTime: () => _isoTime,
-  _isoDuration: () => _isoDuration,
-  _isoDateTime: () => _isoDateTime,
-  _isoDate: () => _isoDate,
-  _ipv6: () => _ipv6,
-  _ipv4: () => _ipv4,
-  _intersection: () => _intersection,
-  _int64: () => _int64,
-  _int32: () => _int32,
-  _int: () => _int,
-  _includes: () => _includes,
-  _guid: () => _guid,
-  _gte: () => _gte,
-  _gt: () => _gt,
-  _float64: () => _float64,
-  _float32: () => _float32,
-  _file: () => _file,
-  _enum: () => _enum,
-  _endsWith: () => _endsWith,
-  _encodeAsync: () => _encodeAsync,
-  _encode: () => _encode,
-  _emoji: () => _emoji2,
-  _email: () => _email,
-  _e164: () => _e164,
-  _discriminatedUnion: () => _discriminatedUnion,
-  _default: () => _default,
-  _decodeAsync: () => _decodeAsync,
-  _decode: () => _decode,
-  _date: () => _date,
-  _custom: () => _custom,
-  _cuid2: () => _cuid2,
-  _cuid: () => _cuid,
-  _coercedString: () => _coercedString,
-  _coercedNumber: () => _coercedNumber,
-  _coercedDate: () => _coercedDate,
-  _coercedBoolean: () => _coercedBoolean,
-  _coercedBigint: () => _coercedBigint,
-  _cidrv6: () => _cidrv6,
-  _cidrv4: () => _cidrv4,
-  _check: () => _check,
-  _catch: () => _catch,
-  _boolean: () => _boolean,
-  _bigint: () => _bigint,
-  _base64url: () => _base64url,
-  _base64: () => _base64,
-  _array: () => _array,
-  _any: () => _any,
-  TimePrecision: () => TimePrecision,
-  NEVER: () => NEVER,
-  JSONSchemaGenerator: () => JSONSchemaGenerator,
-  JSONSchema: () => exports_json_schema,
-  Doc: () => Doc,
-  $output: () => $output,
-  $input: () => $input,
-  $constructor: () => $constructor,
-  $brand: () => $brand,
-  $ZodXor: () => $ZodXor,
-  $ZodXID: () => $ZodXID,
-  $ZodVoid: () => $ZodVoid,
-  $ZodUnknown: () => $ZodUnknown,
-  $ZodUnion: () => $ZodUnion,
-  $ZodUndefined: () => $ZodUndefined,
-  $ZodUUID: () => $ZodUUID,
-  $ZodURL: () => $ZodURL,
-  $ZodULID: () => $ZodULID,
-  $ZodType: () => $ZodType,
-  $ZodTuple: () => $ZodTuple,
-  $ZodTransform: () => $ZodTransform,
-  $ZodTemplateLiteral: () => $ZodTemplateLiteral,
-  $ZodSymbol: () => $ZodSymbol,
-  $ZodSuccess: () => $ZodSuccess,
-  $ZodStringFormat: () => $ZodStringFormat,
-  $ZodString: () => $ZodString,
-  $ZodSet: () => $ZodSet,
-  $ZodRegistry: () => $ZodRegistry,
-  $ZodRecord: () => $ZodRecord,
-  $ZodRealError: () => $ZodRealError,
-  $ZodReadonly: () => $ZodReadonly,
-  $ZodPromise: () => $ZodPromise,
-  $ZodPreprocess: () => $ZodPreprocess,
-  $ZodPrefault: () => $ZodPrefault,
-  $ZodPipe: () => $ZodPipe,
-  $ZodOptional: () => $ZodOptional,
-  $ZodObjectJIT: () => $ZodObjectJIT,
-  $ZodObject: () => $ZodObject,
-  $ZodNumberFormat: () => $ZodNumberFormat,
-  $ZodNumber: () => $ZodNumber,
-  $ZodNullable: () => $ZodNullable,
-  $ZodNull: () => $ZodNull,
-  $ZodNonOptional: () => $ZodNonOptional,
-  $ZodNever: () => $ZodNever,
-  $ZodNanoID: () => $ZodNanoID,
-  $ZodNaN: () => $ZodNaN,
-  $ZodMap: () => $ZodMap,
-  $ZodMAC: () => $ZodMAC,
-  $ZodLiteral: () => $ZodLiteral,
-  $ZodLazy: () => $ZodLazy,
-  $ZodKSUID: () => $ZodKSUID,
-  $ZodJWT: () => $ZodJWT,
-  $ZodIntersection: () => $ZodIntersection,
-  $ZodISOTime: () => $ZodISOTime,
-  $ZodISODuration: () => $ZodISODuration,
-  $ZodISODateTime: () => $ZodISODateTime,
-  $ZodISODate: () => $ZodISODate,
-  $ZodIPv6: () => $ZodIPv6,
-  $ZodIPv4: () => $ZodIPv4,
-  $ZodGUID: () => $ZodGUID,
-  $ZodFunction: () => $ZodFunction,
-  $ZodFile: () => $ZodFile,
-  $ZodExactOptional: () => $ZodExactOptional,
-  $ZodError: () => $ZodError,
-  $ZodEnum: () => $ZodEnum,
-  $ZodEncodeError: () => $ZodEncodeError,
-  $ZodEmoji: () => $ZodEmoji,
-  $ZodEmail: () => $ZodEmail,
-  $ZodE164: () => $ZodE164,
-  $ZodDiscriminatedUnion: () => $ZodDiscriminatedUnion,
-  $ZodDefault: () => $ZodDefault,
-  $ZodDate: () => $ZodDate,
-  $ZodCustomStringFormat: () => $ZodCustomStringFormat,
-  $ZodCustom: () => $ZodCustom,
-  $ZodCodec: () => $ZodCodec,
-  $ZodCheckUpperCase: () => $ZodCheckUpperCase,
-  $ZodCheckStringFormat: () => $ZodCheckStringFormat,
-  $ZodCheckStartsWith: () => $ZodCheckStartsWith,
-  $ZodCheckSizeEquals: () => $ZodCheckSizeEquals,
-  $ZodCheckRegex: () => $ZodCheckRegex,
-  $ZodCheckProperty: () => $ZodCheckProperty,
-  $ZodCheckOverwrite: () => $ZodCheckOverwrite,
-  $ZodCheckNumberFormat: () => $ZodCheckNumberFormat,
-  $ZodCheckMultipleOf: () => $ZodCheckMultipleOf,
-  $ZodCheckMinSize: () => $ZodCheckMinSize,
-  $ZodCheckMinLength: () => $ZodCheckMinLength,
-  $ZodCheckMimeType: () => $ZodCheckMimeType,
-  $ZodCheckMaxSize: () => $ZodCheckMaxSize,
-  $ZodCheckMaxLength: () => $ZodCheckMaxLength,
-  $ZodCheckLowerCase: () => $ZodCheckLowerCase,
-  $ZodCheckLessThan: () => $ZodCheckLessThan,
-  $ZodCheckLengthEquals: () => $ZodCheckLengthEquals,
-  $ZodCheckIncludes: () => $ZodCheckIncludes,
-  $ZodCheckGreaterThan: () => $ZodCheckGreaterThan,
-  $ZodCheckEndsWith: () => $ZodCheckEndsWith,
-  $ZodCheckBigIntFormat: () => $ZodCheckBigIntFormat,
-  $ZodCheck: () => $ZodCheck,
-  $ZodCatch: () => $ZodCatch,
-  $ZodCUID2: () => $ZodCUID2,
-  $ZodCUID: () => $ZodCUID,
-  $ZodCIDRv6: () => $ZodCIDRv6,
-  $ZodCIDRv4: () => $ZodCIDRv4,
-  $ZodBoolean: () => $ZodBoolean,
-  $ZodBigIntFormat: () => $ZodBigIntFormat,
-  $ZodBigInt: () => $ZodBigInt,
-  $ZodBase64URL: () => $ZodBase64URL,
-  $ZodBase64: () => $ZodBase64,
-  $ZodAsyncError: () => $ZodAsyncError,
+  $ZodAny: () => $ZodAny,
   $ZodArray: () => $ZodArray,
-  $ZodAny: () => $ZodAny
+  $ZodAsyncError: () => $ZodAsyncError,
+  $ZodBase64: () => $ZodBase64,
+  $ZodBase64URL: () => $ZodBase64URL,
+  $ZodBigInt: () => $ZodBigInt,
+  $ZodBigIntFormat: () => $ZodBigIntFormat,
+  $ZodBoolean: () => $ZodBoolean,
+  $ZodCIDRv4: () => $ZodCIDRv4,
+  $ZodCIDRv6: () => $ZodCIDRv6,
+  $ZodCUID: () => $ZodCUID,
+  $ZodCUID2: () => $ZodCUID2,
+  $ZodCatch: () => $ZodCatch,
+  $ZodCheck: () => $ZodCheck,
+  $ZodCheckBigIntFormat: () => $ZodCheckBigIntFormat,
+  $ZodCheckEndsWith: () => $ZodCheckEndsWith,
+  $ZodCheckGreaterThan: () => $ZodCheckGreaterThan,
+  $ZodCheckIncludes: () => $ZodCheckIncludes,
+  $ZodCheckLengthEquals: () => $ZodCheckLengthEquals,
+  $ZodCheckLessThan: () => $ZodCheckLessThan,
+  $ZodCheckLowerCase: () => $ZodCheckLowerCase,
+  $ZodCheckMaxLength: () => $ZodCheckMaxLength,
+  $ZodCheckMaxSize: () => $ZodCheckMaxSize,
+  $ZodCheckMimeType: () => $ZodCheckMimeType,
+  $ZodCheckMinLength: () => $ZodCheckMinLength,
+  $ZodCheckMinSize: () => $ZodCheckMinSize,
+  $ZodCheckMultipleOf: () => $ZodCheckMultipleOf,
+  $ZodCheckNumberFormat: () => $ZodCheckNumberFormat,
+  $ZodCheckOverwrite: () => $ZodCheckOverwrite,
+  $ZodCheckProperty: () => $ZodCheckProperty,
+  $ZodCheckRegex: () => $ZodCheckRegex,
+  $ZodCheckSizeEquals: () => $ZodCheckSizeEquals,
+  $ZodCheckStartsWith: () => $ZodCheckStartsWith,
+  $ZodCheckStringFormat: () => $ZodCheckStringFormat,
+  $ZodCheckUpperCase: () => $ZodCheckUpperCase,
+  $ZodCodec: () => $ZodCodec,
+  $ZodCustom: () => $ZodCustom,
+  $ZodCustomStringFormat: () => $ZodCustomStringFormat,
+  $ZodDate: () => $ZodDate,
+  $ZodDefault: () => $ZodDefault,
+  $ZodDiscriminatedUnion: () => $ZodDiscriminatedUnion,
+  $ZodE164: () => $ZodE164,
+  $ZodEmail: () => $ZodEmail,
+  $ZodEmoji: () => $ZodEmoji,
+  $ZodEncodeError: () => $ZodEncodeError,
+  $ZodEnum: () => $ZodEnum,
+  $ZodError: () => $ZodError,
+  $ZodExactOptional: () => $ZodExactOptional,
+  $ZodFile: () => $ZodFile,
+  $ZodFunction: () => $ZodFunction,
+  $ZodGUID: () => $ZodGUID,
+  $ZodIPv4: () => $ZodIPv4,
+  $ZodIPv6: () => $ZodIPv6,
+  $ZodISODate: () => $ZodISODate,
+  $ZodISODateTime: () => $ZodISODateTime,
+  $ZodISODuration: () => $ZodISODuration,
+  $ZodISOTime: () => $ZodISOTime,
+  $ZodIntersection: () => $ZodIntersection,
+  $ZodJWT: () => $ZodJWT,
+  $ZodKSUID: () => $ZodKSUID,
+  $ZodLazy: () => $ZodLazy,
+  $ZodLiteral: () => $ZodLiteral,
+  $ZodMAC: () => $ZodMAC,
+  $ZodMap: () => $ZodMap,
+  $ZodNaN: () => $ZodNaN,
+  $ZodNanoID: () => $ZodNanoID,
+  $ZodNever: () => $ZodNever,
+  $ZodNonOptional: () => $ZodNonOptional,
+  $ZodNull: () => $ZodNull,
+  $ZodNullable: () => $ZodNullable,
+  $ZodNumber: () => $ZodNumber,
+  $ZodNumberFormat: () => $ZodNumberFormat,
+  $ZodObject: () => $ZodObject,
+  $ZodObjectJIT: () => $ZodObjectJIT,
+  $ZodOptional: () => $ZodOptional,
+  $ZodPipe: () => $ZodPipe,
+  $ZodPrefault: () => $ZodPrefault,
+  $ZodPreprocess: () => $ZodPreprocess,
+  $ZodPromise: () => $ZodPromise,
+  $ZodReadonly: () => $ZodReadonly,
+  $ZodRealError: () => $ZodRealError,
+  $ZodRecord: () => $ZodRecord,
+  $ZodRegistry: () => $ZodRegistry,
+  $ZodSet: () => $ZodSet,
+  $ZodString: () => $ZodString,
+  $ZodStringFormat: () => $ZodStringFormat,
+  $ZodSuccess: () => $ZodSuccess,
+  $ZodSymbol: () => $ZodSymbol,
+  $ZodTemplateLiteral: () => $ZodTemplateLiteral,
+  $ZodTransform: () => $ZodTransform,
+  $ZodTuple: () => $ZodTuple,
+  $ZodType: () => $ZodType,
+  $ZodULID: () => $ZodULID,
+  $ZodURL: () => $ZodURL,
+  $ZodUUID: () => $ZodUUID,
+  $ZodUndefined: () => $ZodUndefined,
+  $ZodUnion: () => $ZodUnion,
+  $ZodUnknown: () => $ZodUnknown,
+  $ZodVoid: () => $ZodVoid,
+  $ZodXID: () => $ZodXID,
+  $ZodXor: () => $ZodXor,
+  $brand: () => $brand,
+  $constructor: () => $constructor,
+  $input: () => $input,
+  $output: () => $output,
+  Doc: () => Doc,
+  JSONSchema: () => exports_json_schema,
+  JSONSchemaGenerator: () => JSONSchemaGenerator,
+  NEVER: () => NEVER,
+  TimePrecision: () => TimePrecision,
+  _any: () => _any,
+  _array: () => _array,
+  _base64: () => _base64,
+  _base64url: () => _base64url,
+  _bigint: () => _bigint,
+  _boolean: () => _boolean,
+  _catch: () => _catch,
+  _check: () => _check,
+  _cidrv4: () => _cidrv4,
+  _cidrv6: () => _cidrv6,
+  _coercedBigint: () => _coercedBigint,
+  _coercedBoolean: () => _coercedBoolean,
+  _coercedDate: () => _coercedDate,
+  _coercedNumber: () => _coercedNumber,
+  _coercedString: () => _coercedString,
+  _cuid: () => _cuid,
+  _cuid2: () => _cuid2,
+  _custom: () => _custom,
+  _date: () => _date,
+  _decode: () => _decode,
+  _decodeAsync: () => _decodeAsync,
+  _default: () => _default,
+  _discriminatedUnion: () => _discriminatedUnion,
+  _e164: () => _e164,
+  _email: () => _email,
+  _emoji: () => _emoji2,
+  _encode: () => _encode,
+  _encodeAsync: () => _encodeAsync,
+  _endsWith: () => _endsWith,
+  _enum: () => _enum,
+  _file: () => _file,
+  _float32: () => _float32,
+  _float64: () => _float64,
+  _gt: () => _gt,
+  _gte: () => _gte,
+  _guid: () => _guid,
+  _includes: () => _includes,
+  _int: () => _int,
+  _int32: () => _int32,
+  _int64: () => _int64,
+  _intersection: () => _intersection,
+  _ipv4: () => _ipv4,
+  _ipv6: () => _ipv6,
+  _isoDate: () => _isoDate,
+  _isoDateTime: () => _isoDateTime,
+  _isoDuration: () => _isoDuration,
+  _isoTime: () => _isoTime,
+  _jwt: () => _jwt,
+  _ksuid: () => _ksuid,
+  _lazy: () => _lazy,
+  _length: () => _length,
+  _literal: () => _literal,
+  _lowercase: () => _lowercase,
+  _lt: () => _lt,
+  _lte: () => _lte,
+  _mac: () => _mac,
+  _map: () => _map,
+  _max: () => _lte,
+  _maxLength: () => _maxLength,
+  _maxSize: () => _maxSize,
+  _mime: () => _mime,
+  _min: () => _gte,
+  _minLength: () => _minLength,
+  _minSize: () => _minSize,
+  _multipleOf: () => _multipleOf,
+  _nan: () => _nan,
+  _nanoid: () => _nanoid,
+  _nativeEnum: () => _nativeEnum,
+  _negative: () => _negative,
+  _never: () => _never,
+  _nonnegative: () => _nonnegative,
+  _nonoptional: () => _nonoptional,
+  _nonpositive: () => _nonpositive,
+  _normalize: () => _normalize,
+  _null: () => _null2,
+  _nullable: () => _nullable,
+  _number: () => _number,
+  _optional: () => _optional,
+  _overwrite: () => _overwrite,
+  _parse: () => _parse,
+  _parseAsync: () => _parseAsync,
+  _pipe: () => _pipe,
+  _positive: () => _positive,
+  _promise: () => _promise,
+  _property: () => _property,
+  _readonly: () => _readonly,
+  _record: () => _record,
+  _refine: () => _refine,
+  _regex: () => _regex,
+  _safeDecode: () => _safeDecode,
+  _safeDecodeAsync: () => _safeDecodeAsync,
+  _safeEncode: () => _safeEncode,
+  _safeEncodeAsync: () => _safeEncodeAsync,
+  _safeParse: () => _safeParse,
+  _safeParseAsync: () => _safeParseAsync,
+  _set: () => _set,
+  _size: () => _size,
+  _slugify: () => _slugify,
+  _startsWith: () => _startsWith,
+  _string: () => _string,
+  _stringFormat: () => _stringFormat,
+  _stringbool: () => _stringbool,
+  _success: () => _success,
+  _superRefine: () => _superRefine,
+  _symbol: () => _symbol,
+  _templateLiteral: () => _templateLiteral,
+  _toLowerCase: () => _toLowerCase,
+  _toUpperCase: () => _toUpperCase,
+  _transform: () => _transform,
+  _trim: () => _trim,
+  _tuple: () => _tuple,
+  _uint32: () => _uint32,
+  _uint64: () => _uint64,
+  _ulid: () => _ulid,
+  _undefined: () => _undefined2,
+  _union: () => _union,
+  _unknown: () => _unknown,
+  _uppercase: () => _uppercase,
+  _url: () => _url,
+  _uuid: () => _uuid,
+  _uuidv4: () => _uuidv4,
+  _uuidv6: () => _uuidv6,
+  _uuidv7: () => _uuidv7,
+  _void: () => _void,
+  _xid: () => _xid,
+  _xor: () => _xor,
+  clone: () => clone,
+  config: () => config,
+  createStandardJSONSchemaMethod: () => createStandardJSONSchemaMethod,
+  createToJSONSchemaMethod: () => createToJSONSchemaMethod,
+  decode: () => decode,
+  decodeAsync: () => decodeAsync,
+  describe: () => describe,
+  encode: () => encode,
+  encodeAsync: () => encodeAsync,
+  extractDefs: () => extractDefs,
+  finalize: () => finalize,
+  flattenError: () => flattenError,
+  formatError: () => formatError,
+  globalConfig: () => globalConfig,
+  globalRegistry: () => globalRegistry,
+  initializeContext: () => initializeContext,
+  isValidBase64: () => isValidBase64,
+  isValidBase64URL: () => isValidBase64URL,
+  isValidJWT: () => isValidJWT,
+  locales: () => exports_locales,
+  meta: () => meta,
+  parse: () => parse,
+  parseAsync: () => parseAsync,
+  prettifyError: () => prettifyError,
+  process: () => process2,
+  regexes: () => exports_regexes,
+  registry: () => registry,
+  safeDecode: () => safeDecode,
+  safeDecodeAsync: () => safeDecodeAsync,
+  safeEncode: () => safeEncode,
+  safeEncodeAsync: () => safeEncodeAsync,
+  safeParse: () => safeParse,
+  safeParseAsync: () => safeParseAsync,
+  toDotPath: () => toDotPath,
+  toJSONSchema: () => toJSONSchema,
+  treeifyError: () => treeifyError,
+  util: () => exports_util,
+  version: () => version
 });
 var init_core2 = __esm(() => {
   init_util();
@@ -12409,49 +12419,49 @@ var init_core2 = __esm(() => {
 });
 var exports_checks2 = {};
 __export(exports_checks2, {
-  uppercase: () => _uppercase,
-  trim: () => _trim,
-  toUpperCase: () => _toUpperCase,
-  toLowerCase: () => _toLowerCase,
-  startsWith: () => _startsWith,
-  slugify: () => _slugify,
-  size: () => _size,
-  regex: () => _regex,
-  property: () => _property,
-  positive: () => _positive,
-  overwrite: () => _overwrite,
-  normalize: () => _normalize,
-  nonpositive: () => _nonpositive,
-  nonnegative: () => _nonnegative,
-  negative: () => _negative,
-  multipleOf: () => _multipleOf,
-  minSize: () => _minSize,
-  minLength: () => _minLength,
-  mime: () => _mime,
-  maxSize: () => _maxSize,
-  maxLength: () => _maxLength,
-  lte: () => _lte,
-  lt: () => _lt,
-  lowercase: () => _lowercase,
-  length: () => _length,
-  includes: () => _includes,
-  gte: () => _gte,
+  endsWith: () => _endsWith,
   gt: () => _gt,
-  endsWith: () => _endsWith
+  gte: () => _gte,
+  includes: () => _includes,
+  length: () => _length,
+  lowercase: () => _lowercase,
+  lt: () => _lt,
+  lte: () => _lte,
+  maxLength: () => _maxLength,
+  maxSize: () => _maxSize,
+  mime: () => _mime,
+  minLength: () => _minLength,
+  minSize: () => _minSize,
+  multipleOf: () => _multipleOf,
+  negative: () => _negative,
+  nonnegative: () => _nonnegative,
+  nonpositive: () => _nonpositive,
+  normalize: () => _normalize,
+  overwrite: () => _overwrite,
+  positive: () => _positive,
+  property: () => _property,
+  regex: () => _regex,
+  size: () => _size,
+  slugify: () => _slugify,
+  startsWith: () => _startsWith,
+  toLowerCase: () => _toLowerCase,
+  toUpperCase: () => _toUpperCase,
+  trim: () => _trim,
+  uppercase: () => _uppercase
 });
 var init_checks2 = __esm(() => {
   init_core2();
 });
 var exports_iso = {};
 __export(exports_iso, {
-  time: () => time2,
-  duration: () => duration2,
-  datetime: () => datetime2,
-  date: () => date3,
-  ZodISOTime: () => ZodISOTime,
-  ZodISODuration: () => ZodISODuration,
+  ZodISODate: () => ZodISODate,
   ZodISODateTime: () => ZodISODateTime,
-  ZodISODate: () => ZodISODate
+  ZodISODuration: () => ZodISODuration,
+  ZodISOTime: () => ZodISOTime,
+  date: () => date3,
+  datetime: () => datetime2,
+  duration: () => duration2,
+  time: () => time2
 });
 function datetime2(params) {
   return _isoDateTime(ZodISODateTime, params);
@@ -12500,14 +12510,14 @@ var initializer2 = (inst, issues) => {
       value: (mapper) => flattenError(inst, mapper)
     },
     addIssue: {
-      value: (issue2) => {
-        inst.issues.push(issue2);
+      value: (issue) => {
+        inst.issues.push(issue);
         inst.message = JSON.stringify(inst.issues, jsonStringifyReplacer, 2);
       }
     },
     addIssues: {
-      value: (issues2) => {
-        inst.issues.push(...issues2);
+      value: (issues) => {
+        inst.issues.push(...issues);
         inst.message = JSON.stringify(inst.issues, jsonStringifyReplacer, 2);
       }
     },
@@ -12559,172 +12569,172 @@ var init_parse2 = __esm(() => {
 });
 var exports_schemas2 = {};
 __export(exports_schemas2, {
-  xor: () => xor,
-  xid: () => xid2,
-  void: () => _void2,
-  uuidv7: () => uuidv7,
-  uuidv6: () => uuidv6,
-  uuidv4: () => uuidv4,
-  uuid: () => uuid2,
-  url: () => url,
-  unknown: () => unknown,
-  union: () => union,
-  undefined: () => _undefined3,
-  ulid: () => ulid2,
-  uint64: () => uint64,
-  uint32: () => uint32,
-  tuple: () => tuple,
-  transform: () => transform,
-  templateLiteral: () => templateLiteral,
-  symbol: () => symbol,
-  superRefine: () => superRefine,
-  success: () => success,
-  stringbool: () => stringbool,
-  stringFormat: () => stringFormat,
-  string: () => string2,
-  strictObject: () => strictObject,
-  set: () => set,
-  refine: () => refine,
-  record: () => record,
-  readonly: () => readonly,
-  promise: () => promise,
-  preprocess: () => preprocess,
-  prefault: () => prefault,
-  pipe: () => pipe,
-  partialRecord: () => partialRecord,
-  optional: () => optional,
-  object: () => object2,
-  number: () => number2,
-  nullish: () => nullish2,
-  nullable: () => nullable,
-  null: () => _null3,
-  nonoptional: () => nonoptional,
-  never: () => never,
-  nativeEnum: () => nativeEnum,
-  nanoid: () => nanoid2,
-  nan: () => nan,
-  meta: () => meta2,
-  map: () => map,
-  mac: () => mac2,
-  looseRecord: () => looseRecord,
-  looseObject: () => looseObject,
-  literal: () => literal,
-  lazy: () => lazy,
-  ksuid: () => ksuid2,
-  keyof: () => keyof,
-  jwt: () => jwt,
-  json: () => json,
-  ipv6: () => ipv62,
-  ipv4: () => ipv42,
-  invertCodec: () => invertCodec,
-  intersection: () => intersection,
-  int64: () => int64,
-  int32: () => int32,
-  int: () => int,
-  instanceof: () => _instanceof,
-  httpUrl: () => httpUrl,
-  hostname: () => hostname2,
-  hex: () => hex2,
-  hash: () => hash,
-  guid: () => guid2,
-  function: () => _function,
-  float64: () => float64,
-  float32: () => float32,
-  file: () => file,
-  exactOptional: () => exactOptional,
-  enum: () => _enum2,
-  emoji: () => emoji2,
-  email: () => email2,
-  e164: () => e1642,
-  discriminatedUnion: () => discriminatedUnion,
-  describe: () => describe2,
-  date: () => date4,
-  custom: () => custom,
-  cuid2: () => cuid22,
-  cuid: () => cuid3,
-  codec: () => codec,
-  cidrv6: () => cidrv62,
-  cidrv4: () => cidrv42,
-  check: () => check,
-  catch: () => _catch2,
-  boolean: () => boolean2,
-  bigint: () => bigint2,
-  base64url: () => base64url2,
-  base64: () => base642,
-  array: () => array,
-  any: () => any,
-  _function: () => _function,
-  _default: () => _default2,
-  _ZodString: () => _ZodString,
-  ZodXor: () => ZodXor,
-  ZodXID: () => ZodXID,
-  ZodVoid: () => ZodVoid,
-  ZodUnknown: () => ZodUnknown,
-  ZodUnion: () => ZodUnion,
-  ZodUndefined: () => ZodUndefined,
-  ZodUUID: () => ZodUUID,
-  ZodURL: () => ZodURL,
-  ZodULID: () => ZodULID,
-  ZodType: () => ZodType,
-  ZodTuple: () => ZodTuple,
-  ZodTransform: () => ZodTransform,
-  ZodTemplateLiteral: () => ZodTemplateLiteral,
-  ZodSymbol: () => ZodSymbol,
-  ZodSuccess: () => ZodSuccess,
-  ZodStringFormat: () => ZodStringFormat,
-  ZodString: () => ZodString,
-  ZodSet: () => ZodSet,
-  ZodRecord: () => ZodRecord,
-  ZodReadonly: () => ZodReadonly,
-  ZodPromise: () => ZodPromise,
-  ZodPreprocess: () => ZodPreprocess,
-  ZodPrefault: () => ZodPrefault,
-  ZodPipe: () => ZodPipe,
-  ZodOptional: () => ZodOptional,
-  ZodObject: () => ZodObject,
-  ZodNumberFormat: () => ZodNumberFormat,
-  ZodNumber: () => ZodNumber,
-  ZodNullable: () => ZodNullable,
-  ZodNull: () => ZodNull,
-  ZodNonOptional: () => ZodNonOptional,
-  ZodNever: () => ZodNever,
-  ZodNanoID: () => ZodNanoID,
-  ZodNaN: () => ZodNaN,
-  ZodMap: () => ZodMap,
-  ZodMAC: () => ZodMAC,
-  ZodLiteral: () => ZodLiteral,
-  ZodLazy: () => ZodLazy,
-  ZodKSUID: () => ZodKSUID,
-  ZodJWT: () => ZodJWT,
-  ZodIntersection: () => ZodIntersection,
-  ZodIPv6: () => ZodIPv6,
-  ZodIPv4: () => ZodIPv4,
-  ZodGUID: () => ZodGUID,
-  ZodFunction: () => ZodFunction,
-  ZodFile: () => ZodFile,
-  ZodExactOptional: () => ZodExactOptional,
-  ZodEnum: () => ZodEnum,
-  ZodEmoji: () => ZodEmoji,
-  ZodEmail: () => ZodEmail,
-  ZodE164: () => ZodE164,
-  ZodDiscriminatedUnion: () => ZodDiscriminatedUnion,
-  ZodDefault: () => ZodDefault,
-  ZodDate: () => ZodDate,
-  ZodCustomStringFormat: () => ZodCustomStringFormat,
-  ZodCustom: () => ZodCustom,
-  ZodCodec: () => ZodCodec,
-  ZodCatch: () => ZodCatch,
-  ZodCUID2: () => ZodCUID2,
-  ZodCUID: () => ZodCUID,
-  ZodCIDRv6: () => ZodCIDRv6,
-  ZodCIDRv4: () => ZodCIDRv4,
-  ZodBoolean: () => ZodBoolean,
-  ZodBigIntFormat: () => ZodBigIntFormat,
-  ZodBigInt: () => ZodBigInt,
-  ZodBase64URL: () => ZodBase64URL,
-  ZodBase64: () => ZodBase64,
+  ZodAny: () => ZodAny,
   ZodArray: () => ZodArray,
-  ZodAny: () => ZodAny
+  ZodBase64: () => ZodBase64,
+  ZodBase64URL: () => ZodBase64URL,
+  ZodBigInt: () => ZodBigInt,
+  ZodBigIntFormat: () => ZodBigIntFormat,
+  ZodBoolean: () => ZodBoolean,
+  ZodCIDRv4: () => ZodCIDRv4,
+  ZodCIDRv6: () => ZodCIDRv6,
+  ZodCUID: () => ZodCUID,
+  ZodCUID2: () => ZodCUID2,
+  ZodCatch: () => ZodCatch,
+  ZodCodec: () => ZodCodec,
+  ZodCustom: () => ZodCustom,
+  ZodCustomStringFormat: () => ZodCustomStringFormat,
+  ZodDate: () => ZodDate,
+  ZodDefault: () => ZodDefault,
+  ZodDiscriminatedUnion: () => ZodDiscriminatedUnion,
+  ZodE164: () => ZodE164,
+  ZodEmail: () => ZodEmail,
+  ZodEmoji: () => ZodEmoji,
+  ZodEnum: () => ZodEnum,
+  ZodExactOptional: () => ZodExactOptional,
+  ZodFile: () => ZodFile,
+  ZodFunction: () => ZodFunction,
+  ZodGUID: () => ZodGUID,
+  ZodIPv4: () => ZodIPv4,
+  ZodIPv6: () => ZodIPv6,
+  ZodIntersection: () => ZodIntersection,
+  ZodJWT: () => ZodJWT,
+  ZodKSUID: () => ZodKSUID,
+  ZodLazy: () => ZodLazy,
+  ZodLiteral: () => ZodLiteral,
+  ZodMAC: () => ZodMAC,
+  ZodMap: () => ZodMap,
+  ZodNaN: () => ZodNaN,
+  ZodNanoID: () => ZodNanoID,
+  ZodNever: () => ZodNever,
+  ZodNonOptional: () => ZodNonOptional,
+  ZodNull: () => ZodNull,
+  ZodNullable: () => ZodNullable,
+  ZodNumber: () => ZodNumber,
+  ZodNumberFormat: () => ZodNumberFormat,
+  ZodObject: () => ZodObject,
+  ZodOptional: () => ZodOptional,
+  ZodPipe: () => ZodPipe,
+  ZodPrefault: () => ZodPrefault,
+  ZodPreprocess: () => ZodPreprocess,
+  ZodPromise: () => ZodPromise,
+  ZodReadonly: () => ZodReadonly,
+  ZodRecord: () => ZodRecord,
+  ZodSet: () => ZodSet,
+  ZodString: () => ZodString,
+  ZodStringFormat: () => ZodStringFormat,
+  ZodSuccess: () => ZodSuccess,
+  ZodSymbol: () => ZodSymbol,
+  ZodTemplateLiteral: () => ZodTemplateLiteral,
+  ZodTransform: () => ZodTransform,
+  ZodTuple: () => ZodTuple,
+  ZodType: () => ZodType,
+  ZodULID: () => ZodULID,
+  ZodURL: () => ZodURL,
+  ZodUUID: () => ZodUUID,
+  ZodUndefined: () => ZodUndefined,
+  ZodUnion: () => ZodUnion,
+  ZodUnknown: () => ZodUnknown,
+  ZodVoid: () => ZodVoid,
+  ZodXID: () => ZodXID,
+  ZodXor: () => ZodXor,
+  _ZodString: () => _ZodString,
+  _default: () => _default2,
+  _function: () => _function,
+  any: () => any,
+  array: () => array,
+  base64: () => base642,
+  base64url: () => base64url2,
+  bigint: () => bigint2,
+  boolean: () => boolean2,
+  catch: () => _catch2,
+  check: () => check,
+  cidrv4: () => cidrv42,
+  cidrv6: () => cidrv62,
+  codec: () => codec,
+  cuid: () => cuid3,
+  cuid2: () => cuid22,
+  custom: () => custom,
+  date: () => date4,
+  describe: () => describe2,
+  discriminatedUnion: () => discriminatedUnion,
+  e164: () => e1642,
+  email: () => email2,
+  emoji: () => emoji2,
+  enum: () => _enum2,
+  exactOptional: () => exactOptional,
+  file: () => file,
+  float32: () => float32,
+  float64: () => float64,
+  function: () => _function,
+  guid: () => guid2,
+  hash: () => hash,
+  hex: () => hex2,
+  hostname: () => hostname2,
+  httpUrl: () => httpUrl,
+  instanceof: () => _instanceof,
+  int: () => int,
+  int32: () => int32,
+  int64: () => int64,
+  intersection: () => intersection,
+  invertCodec: () => invertCodec,
+  ipv4: () => ipv42,
+  ipv6: () => ipv62,
+  json: () => json,
+  jwt: () => jwt,
+  keyof: () => keyof,
+  ksuid: () => ksuid2,
+  lazy: () => lazy,
+  literal: () => literal,
+  looseObject: () => looseObject,
+  looseRecord: () => looseRecord,
+  mac: () => mac2,
+  map: () => map,
+  meta: () => meta2,
+  nan: () => nan,
+  nanoid: () => nanoid2,
+  nativeEnum: () => nativeEnum,
+  never: () => never,
+  nonoptional: () => nonoptional,
+  null: () => _null3,
+  nullable: () => nullable,
+  nullish: () => nullish2,
+  number: () => number2,
+  object: () => object2,
+  optional: () => optional,
+  partialRecord: () => partialRecord,
+  pipe: () => pipe,
+  prefault: () => prefault,
+  preprocess: () => preprocess,
+  promise: () => promise,
+  readonly: () => readonly,
+  record: () => record,
+  refine: () => refine,
+  set: () => set,
+  strictObject: () => strictObject,
+  string: () => string2,
+  stringFormat: () => stringFormat,
+  stringbool: () => stringbool,
+  success: () => success,
+  superRefine: () => superRefine,
+  symbol: () => symbol,
+  templateLiteral: () => templateLiteral,
+  transform: () => transform,
+  tuple: () => tuple,
+  uint32: () => uint32,
+  uint64: () => uint64,
+  ulid: () => ulid2,
+  undefined: () => _undefined3,
+  union: () => union,
+  unknown: () => unknown,
+  url: () => url,
+  uuid: () => uuid2,
+  uuidv4: () => uuidv4,
+  uuidv6: () => uuidv6,
+  uuidv7: () => uuidv7,
+  void: () => _void2,
+  xid: () => xid2,
+  xor: () => xor
 });
 function _installLazyMethods(inst, group, methods) {
   const proto = Object.getPrototypeOf(inst);
@@ -12788,9 +12798,9 @@ function url(params) {
 }
 function httpUrl(params) {
   return _url(ZodURL, {
-    protocol: exports_regexes.httpProtocol,
-    hostname: exports_regexes.domain,
-    ...exports_util.normalizeParams(params)
+    protocol: httpProtocol,
+    hostname: domain,
+    ...normalizeParams(params)
   });
 }
 function emoji2(params) {
@@ -12845,10 +12855,10 @@ function stringFormat(format, fnOrRegex, _params = {}) {
   return _stringFormat(ZodCustomStringFormat, format, fnOrRegex, _params);
 }
 function hostname2(_params) {
-  return _stringFormat(ZodCustomStringFormat, "hostname", exports_regexes.hostname, _params);
+  return _stringFormat(ZodCustomStringFormat, "hostname", hostname, _params);
 }
 function hex2(_params) {
-  return _stringFormat(ZodCustomStringFormat, "hex", exports_regexes.hex, _params);
+  return _stringFormat(ZodCustomStringFormat, "hex", hex, _params);
 }
 function hash(alg, params) {
   const enc = params?.enc ?? "hex";
@@ -12923,7 +12933,7 @@ function object2(shape, params) {
   const def = {
     type: "object",
     shape: shape ?? {},
-    ...exports_util.normalizeParams(params)
+    ...normalizeParams(params)
   };
   return new ZodObject(def);
 }
@@ -12932,7 +12942,7 @@ function strictObject(shape, params) {
     type: "object",
     shape,
     catchall: never(),
-    ...exports_util.normalizeParams(params)
+    ...normalizeParams(params)
   });
 }
 function looseObject(shape, params) {
@@ -12940,14 +12950,14 @@ function looseObject(shape, params) {
     type: "object",
     shape,
     catchall: unknown(),
-    ...exports_util.normalizeParams(params)
+    ...normalizeParams(params)
   });
 }
 function union(options, params) {
   return new ZodUnion({
     type: "union",
     options,
-    ...exports_util.normalizeParams(params)
+    ...normalizeParams(params)
   });
 }
 function xor(options, params) {
@@ -12955,7 +12965,7 @@ function xor(options, params) {
     type: "union",
     options,
     inclusive: false,
-    ...exports_util.normalizeParams(params)
+    ...normalizeParams(params)
   });
 }
 function discriminatedUnion(discriminator, options, params) {
@@ -12963,7 +12973,7 @@ function discriminatedUnion(discriminator, options, params) {
     type: "union",
     options,
     discriminator,
-    ...exports_util.normalizeParams(params)
+    ...normalizeParams(params)
   });
 }
 function intersection(left, right) {
@@ -12981,7 +12991,7 @@ function tuple(items, _paramsOrRest, _params) {
     type: "tuple",
     items,
     rest,
-    ...exports_util.normalizeParams(params)
+    ...normalizeParams(params)
   });
 }
 function record(keyType, valueType, params) {
@@ -12990,14 +13000,14 @@ function record(keyType, valueType, params) {
       type: "record",
       keyType: string2(),
       valueType: keyType,
-      ...exports_util.normalizeParams(valueType)
+      ...normalizeParams(valueType)
     });
   }
   return new ZodRecord({
     type: "record",
     keyType,
     valueType,
-    ...exports_util.normalizeParams(params)
+    ...normalizeParams(params)
   });
 }
 function partialRecord(keyType, valueType, params) {
@@ -13007,7 +13017,7 @@ function partialRecord(keyType, valueType, params) {
     type: "record",
     keyType: k,
     valueType,
-    ...exports_util.normalizeParams(params)
+    ...normalizeParams(params)
   });
 }
 function looseRecord(keyType, valueType, params) {
@@ -13016,7 +13026,7 @@ function looseRecord(keyType, valueType, params) {
     keyType,
     valueType,
     mode: "loose",
-    ...exports_util.normalizeParams(params)
+    ...normalizeParams(params)
   });
 }
 function map(keyType, valueType, params) {
@@ -13024,14 +13034,14 @@ function map(keyType, valueType, params) {
     type: "map",
     keyType,
     valueType,
-    ...exports_util.normalizeParams(params)
+    ...normalizeParams(params)
   });
 }
 function set(valueType, params) {
   return new ZodSet({
     type: "set",
     valueType,
-    ...exports_util.normalizeParams(params)
+    ...normalizeParams(params)
   });
 }
 function _enum2(values, params) {
@@ -13039,21 +13049,21 @@ function _enum2(values, params) {
   return new ZodEnum({
     type: "enum",
     entries,
-    ...exports_util.normalizeParams(params)
+    ...normalizeParams(params)
   });
 }
 function nativeEnum(entries, params) {
   return new ZodEnum({
     type: "enum",
     entries,
-    ...exports_util.normalizeParams(params)
+    ...normalizeParams(params)
   });
 }
 function literal(value, params) {
   return new ZodLiteral({
     type: "literal",
     values: Array.isArray(value) ? value : [value],
-    ...exports_util.normalizeParams(params)
+    ...normalizeParams(params)
   });
 }
 function file(params) {
@@ -13091,7 +13101,7 @@ function _default2(innerType, defaultValue) {
     type: "default",
     innerType,
     get defaultValue() {
-      return typeof defaultValue === "function" ? defaultValue() : exports_util.shallowClone(defaultValue);
+      return typeof defaultValue === "function" ? defaultValue() : shallowClone(defaultValue);
     }
   });
 }
@@ -13100,7 +13110,7 @@ function prefault(innerType, defaultValue) {
     type: "prefault",
     innerType,
     get defaultValue() {
-      return typeof defaultValue === "function" ? defaultValue() : exports_util.shallowClone(defaultValue);
+      return typeof defaultValue === "function" ? defaultValue() : shallowClone(defaultValue);
     }
   });
 }
@@ -13108,7 +13118,7 @@ function nonoptional(innerType, params) {
   return new ZodNonOptional({
     type: "nonoptional",
     innerType,
-    ...exports_util.normalizeParams(params)
+    ...normalizeParams(params)
   });
 }
 function success(innerType) {
@@ -13163,7 +13173,7 @@ function templateLiteral(parts, params) {
   return new ZodTemplateLiteral({
     type: "template_literal",
     parts,
-    ...exports_util.normalizeParams(params)
+    ...normalizeParams(params)
   });
 }
 function lazy(getter) {
@@ -13207,7 +13217,7 @@ function _instanceof(cls, params = {}) {
     check: "custom",
     fn: (data) => data instanceof cls,
     abort: true,
-    ...exports_util.normalizeParams(params)
+    ...normalizeParams(params)
   });
   inst._zod.bag.Class = cls;
   inst._zod.check = (payload) => {
@@ -13350,10 +13360,10 @@ var init_schemas2 = __esm(() => {
     inst.safeDecodeAsync = async (data, params) => safeDecodeAsync2(inst, data, params);
     _installLazyMethods(inst, "ZodType", {
       check(...chks) {
-        const def2 = this.def;
-        return this.clone(exports_util.mergeDefs(def2, {
+        const def = this.def;
+        return this.clone(mergeDefs(def, {
           checks: [
-            ...def2.checks ?? [],
+            ...def.checks ?? [],
             ...chks.map((ch) => typeof ch === "function" ? { _zod: { check: ch, def: { check: "custom" }, onattach: [] } } : ch)
           ]
         }), { parent: true });
@@ -13361,14 +13371,14 @@ var init_schemas2 = __esm(() => {
       with(...chks) {
         return this.check(...chks);
       },
-      clone(def2, params) {
-        return clone(this, def2, params);
+      clone(def, params) {
+        return clone(this, def, params);
       },
       brand() {
         return this;
       },
-      register(reg, meta22) {
-        reg.add(this, meta22);
+      register(reg, meta) {
+        reg.add(this, meta);
         return this;
       },
       refine(check2, params) {
@@ -13792,7 +13802,7 @@ var init_schemas2 = __esm(() => {
     $ZodObjectJIT.init(inst, def);
     ZodType.init(inst, def);
     inst._zod.processJSONSchema = (ctx, json2, params) => objectProcessor(inst, ctx, json2, params);
-    exports_util.defineLazy(inst, "shape", () => {
+    defineLazy(inst, "shape", () => {
       return def.shape;
     });
     _installLazyMethods(inst, "ZodObject", {
@@ -13815,25 +13825,25 @@ var init_schemas2 = __esm(() => {
         return this.clone({ ...this._zod.def, catchall: undefined });
       },
       extend(incoming) {
-        return exports_util.extend(this, incoming);
+        return extend(this, incoming);
       },
       safeExtend(incoming) {
-        return exports_util.safeExtend(this, incoming);
+        return safeExtend(this, incoming);
       },
       merge(other) {
-        return exports_util.merge(this, other);
+        return merge(this, other);
       },
       pick(mask) {
-        return exports_util.pick(this, mask);
+        return pick(this, mask);
       },
       omit(mask) {
-        return exports_util.omit(this, mask);
+        return omit(this, mask);
       },
       partial(...args) {
-        return exports_util.partial(ZodOptional, this, args[0]);
+        return partial(ZodOptional, this, args[0]);
       },
       required(...args) {
-        return exports_util.required(ZodNonOptional, this, args[0]);
+        return required(ZodNonOptional, this, args[0]);
       }
     });
   });
@@ -13912,7 +13922,7 @@ var init_schemas2 = __esm(() => {
       return new ZodEnum({
         ...def,
         checks: [],
-        ...exports_util.normalizeParams(params),
+        ...normalizeParams(params),
         entries: newEntries
       });
     };
@@ -13927,7 +13937,7 @@ var init_schemas2 = __esm(() => {
       return new ZodEnum({
         ...def,
         checks: [],
-        ...exports_util.normalizeParams(params),
+        ...normalizeParams(params),
         entries: newEntries
       });
     };
@@ -13964,7 +13974,7 @@ var init_schemas2 = __esm(() => {
       }
       payload.addIssue = (issue2) => {
         if (typeof issue2 === "string") {
-          payload.issues.push(exports_util.issue(issue2, payload.value, def));
+          payload.issues.push(issue(issue2, payload.value, def));
         } else {
           const _issue = issue2;
           if (_issue.fatal)
@@ -13972,18 +13982,18 @@ var init_schemas2 = __esm(() => {
           _issue.code ?? (_issue.code = "custom");
           _issue.input ?? (_issue.input = payload.value);
           _issue.inst ?? (_issue.inst = inst);
-          payload.issues.push(exports_util.issue(_issue));
+          payload.issues.push(issue(_issue));
         }
       };
-      const output2 = def.transform(payload.value, payload);
-      if (output2 instanceof Promise) {
-        return output2.then((output3) => {
-          payload.value = output3;
+      const output = def.transform(payload.value, payload);
+      if (output instanceof Promise) {
+        return output.then((output) => {
+          payload.value = output;
           payload.fallback = true;
           return payload;
         });
       }
-      payload.value = output2;
+      payload.value = output;
       payload.fallback = true;
       return payload;
     };
@@ -14094,9 +14104,9 @@ var init_schemas2 = __esm(() => {
   describe2 = describe;
   meta2 = meta;
 });
-function setErrorMap(map2) {
+function setErrorMap(map) {
   config({
-    customError: map2
+    customError: map
   });
 }
 function getErrorMap() {
@@ -14119,7 +14129,7 @@ var init_compat = __esm(() => {
     invalid_value: "invalid_value",
     custom: "custom"
   };
-  (function(ZodFirstPartyTypeKind2) {})(ZodFirstPartyTypeKind || (ZodFirstPartyTypeKind = {}));
+  (function(ZodFirstPartyTypeKind) {})(ZodFirstPartyTypeKind || (ZodFirstPartyTypeKind = {}));
 });
 function detectVersion(schema, defaultTarget) {
   const $schema = schema.$schema;
@@ -14186,10 +14196,10 @@ function convertBaseSchema(schema, ctx) {
     }
     ctx.processing.add(refPath);
     const resolved = resolveRef(refPath, ctx);
-    const zodSchema2 = convertSchema(resolved, ctx);
-    ctx.refs.set(refPath, zodSchema2);
+    const zodSchema = convertSchema(resolved, ctx);
+    ctx.refs.set(refPath, zodSchema);
     ctx.processing.delete(refPath);
-    return zodSchema2;
+    return zodSchema;
   }
   if (schema.enum !== undefined) {
     const enumValues = schema.enum;
@@ -14345,9 +14355,9 @@ function convertBaseSchema(schema, ctx) {
           zodSchema = z.record(keySchema, valueSchema);
           break;
         }
-        const objectSchema2 = z.object(shape).passthrough();
+        const objectSchema = z.object(shape).passthrough();
         const recordSchema = z.looseRecord(keySchema, valueSchema);
-        zodSchema = z.intersection(objectSchema2, recordSchema);
+        zodSchema = z.intersection(objectSchema, recordSchema);
         break;
       }
       if (schema.patternProperties) {
@@ -14511,10 +14521,10 @@ function fromJSONSchema(schema, params) {
   } catch {
     throw new Error("fromJSONSchema input is not valid JSON (possibly cyclic); use $defs/$ref for recursive schemas");
   }
-  const version2 = detectVersion(normalized, params?.defaultTarget);
+  const version = detectVersion(normalized, params?.defaultTarget);
   const defs = normalized.$defs || normalized.definitions || {};
   const ctx = {
-    version: version2,
+    version,
     defs,
     refs: new Map,
     processing: new Set,
@@ -14597,11 +14607,11 @@ var init_from_json_schema = __esm(() => {
 });
 var exports_coerce = {};
 __export(exports_coerce, {
-  string: () => string3,
-  number: () => number3,
-  date: () => date5,
+  bigint: () => bigint3,
   boolean: () => boolean3,
-  bigint: () => bigint3
+  date: () => date5,
+  number: () => number3,
+  string: () => string3
 });
 function string3(params) {
   return _coercedString(ZodString, params);
@@ -14624,244 +14634,244 @@ var init_coerce = __esm(() => {
 });
 var exports_external = {};
 __export(exports_external, {
-  xor: () => xor,
-  xid: () => xid2,
-  void: () => _void2,
-  uuidv7: () => uuidv7,
-  uuidv6: () => uuidv6,
-  uuidv4: () => uuidv4,
-  uuid: () => uuid2,
-  util: () => exports_util,
-  url: () => url,
-  uppercase: () => _uppercase,
-  unknown: () => unknown,
-  union: () => union,
-  undefined: () => _undefined3,
-  ulid: () => ulid2,
-  uint64: () => uint64,
-  uint32: () => uint32,
-  tuple: () => tuple,
-  trim: () => _trim,
-  treeifyError: () => treeifyError,
-  transform: () => transform,
-  toUpperCase: () => _toUpperCase,
-  toLowerCase: () => _toLowerCase,
-  toJSONSchema: () => toJSONSchema,
-  templateLiteral: () => templateLiteral,
-  symbol: () => symbol,
-  superRefine: () => superRefine,
-  success: () => success,
-  stringbool: () => stringbool,
-  stringFormat: () => stringFormat,
-  string: () => string2,
-  strictObject: () => strictObject,
-  startsWith: () => _startsWith,
-  slugify: () => _slugify,
-  size: () => _size,
-  setErrorMap: () => setErrorMap,
-  set: () => set,
-  safeParseAsync: () => safeParseAsync2,
-  safeParse: () => safeParse2,
-  safeEncodeAsync: () => safeEncodeAsync2,
-  safeEncode: () => safeEncode2,
-  safeDecodeAsync: () => safeDecodeAsync2,
-  safeDecode: () => safeDecode2,
-  registry: () => registry,
-  regexes: () => exports_regexes,
-  regex: () => _regex,
-  refine: () => refine,
-  record: () => record,
-  readonly: () => readonly,
-  property: () => _property,
-  promise: () => promise,
-  prettifyError: () => prettifyError,
-  preprocess: () => preprocess,
-  prefault: () => prefault,
-  positive: () => _positive,
-  pipe: () => pipe,
-  partialRecord: () => partialRecord,
-  parseAsync: () => parseAsync2,
-  parse: () => parse3,
-  overwrite: () => _overwrite,
-  optional: () => optional,
-  object: () => object2,
-  number: () => number2,
-  nullish: () => nullish2,
-  nullable: () => nullable,
-  null: () => _null3,
-  normalize: () => _normalize,
-  nonpositive: () => _nonpositive,
-  nonoptional: () => nonoptional,
-  nonnegative: () => _nonnegative,
-  never: () => never,
-  negative: () => _negative,
-  nativeEnum: () => nativeEnum,
-  nanoid: () => nanoid2,
-  nan: () => nan,
-  multipleOf: () => _multipleOf,
-  minSize: () => _minSize,
-  minLength: () => _minLength,
-  mime: () => _mime,
-  meta: () => meta2,
-  maxSize: () => _maxSize,
-  maxLength: () => _maxLength,
-  map: () => map,
-  mac: () => mac2,
-  lte: () => _lte,
-  lt: () => _lt,
-  lowercase: () => _lowercase,
-  looseRecord: () => looseRecord,
-  looseObject: () => looseObject,
-  locales: () => exports_locales,
-  literal: () => literal,
-  length: () => _length,
-  lazy: () => lazy,
-  ksuid: () => ksuid2,
-  keyof: () => keyof,
-  jwt: () => jwt,
-  json: () => json,
-  iso: () => exports_iso,
-  ipv6: () => ipv62,
-  ipv4: () => ipv42,
-  invertCodec: () => invertCodec,
-  intersection: () => intersection,
-  int64: () => int64,
-  int32: () => int32,
-  int: () => int,
-  instanceof: () => _instanceof,
-  includes: () => _includes,
-  httpUrl: () => httpUrl,
-  hostname: () => hostname2,
-  hex: () => hex2,
-  hash: () => hash,
-  guid: () => guid2,
-  gte: () => _gte,
-  gt: () => _gt,
-  globalRegistry: () => globalRegistry,
-  getErrorMap: () => getErrorMap,
-  function: () => _function,
-  fromJSONSchema: () => fromJSONSchema,
-  formatError: () => formatError,
-  float64: () => float64,
-  float32: () => float32,
-  flattenError: () => flattenError,
-  file: () => file,
-  exactOptional: () => exactOptional,
-  enum: () => _enum2,
-  endsWith: () => _endsWith,
-  encodeAsync: () => encodeAsync2,
-  encode: () => encode2,
-  emoji: () => emoji2,
-  email: () => email2,
-  e164: () => e1642,
-  discriminatedUnion: () => discriminatedUnion,
-  describe: () => describe2,
-  decodeAsync: () => decodeAsync2,
-  decode: () => decode2,
-  date: () => date4,
-  custom: () => custom,
-  cuid2: () => cuid22,
-  cuid: () => cuid3,
-  core: () => exports_core2,
-  config: () => config,
-  coerce: () => exports_coerce,
-  codec: () => codec,
-  clone: () => clone,
-  cidrv6: () => cidrv62,
-  cidrv4: () => cidrv42,
-  check: () => check,
-  catch: () => _catch2,
-  boolean: () => boolean2,
-  bigint: () => bigint2,
-  base64url: () => base64url2,
-  base64: () => base642,
-  array: () => array,
-  any: () => any,
-  _function: () => _function,
-  _default: () => _default2,
-  _ZodString: () => _ZodString,
-  ZodXor: () => ZodXor,
-  ZodXID: () => ZodXID,
-  ZodVoid: () => ZodVoid,
-  ZodUnknown: () => ZodUnknown,
-  ZodUnion: () => ZodUnion,
-  ZodUndefined: () => ZodUndefined,
-  ZodUUID: () => ZodUUID,
-  ZodURL: () => ZodURL,
-  ZodULID: () => ZodULID,
-  ZodType: () => ZodType,
-  ZodTuple: () => ZodTuple,
-  ZodTransform: () => ZodTransform,
-  ZodTemplateLiteral: () => ZodTemplateLiteral,
-  ZodSymbol: () => ZodSymbol,
-  ZodSuccess: () => ZodSuccess,
-  ZodStringFormat: () => ZodStringFormat,
-  ZodString: () => ZodString,
-  ZodSet: () => ZodSet,
-  ZodRecord: () => ZodRecord,
-  ZodRealError: () => ZodRealError,
-  ZodReadonly: () => ZodReadonly,
-  ZodPromise: () => ZodPromise,
-  ZodPreprocess: () => ZodPreprocess,
-  ZodPrefault: () => ZodPrefault,
-  ZodPipe: () => ZodPipe,
-  ZodOptional: () => ZodOptional,
-  ZodObject: () => ZodObject,
-  ZodNumberFormat: () => ZodNumberFormat,
-  ZodNumber: () => ZodNumber,
-  ZodNullable: () => ZodNullable,
-  ZodNull: () => ZodNull,
-  ZodNonOptional: () => ZodNonOptional,
-  ZodNever: () => ZodNever,
-  ZodNanoID: () => ZodNanoID,
-  ZodNaN: () => ZodNaN,
-  ZodMap: () => ZodMap,
-  ZodMAC: () => ZodMAC,
-  ZodLiteral: () => ZodLiteral,
-  ZodLazy: () => ZodLazy,
-  ZodKSUID: () => ZodKSUID,
-  ZodJWT: () => ZodJWT,
-  ZodIssueCode: () => ZodIssueCode,
-  ZodIntersection: () => ZodIntersection,
-  ZodISOTime: () => ZodISOTime,
-  ZodISODuration: () => ZodISODuration,
-  ZodISODateTime: () => ZodISODateTime,
-  ZodISODate: () => ZodISODate,
-  ZodIPv6: () => ZodIPv6,
-  ZodIPv4: () => ZodIPv4,
-  ZodGUID: () => ZodGUID,
-  ZodFunction: () => ZodFunction,
-  ZodFirstPartyTypeKind: () => ZodFirstPartyTypeKind,
-  ZodFile: () => ZodFile,
-  ZodExactOptional: () => ZodExactOptional,
-  ZodError: () => ZodError,
-  ZodEnum: () => ZodEnum,
-  ZodEmoji: () => ZodEmoji,
-  ZodEmail: () => ZodEmail,
-  ZodE164: () => ZodE164,
-  ZodDiscriminatedUnion: () => ZodDiscriminatedUnion,
-  ZodDefault: () => ZodDefault,
-  ZodDate: () => ZodDate,
-  ZodCustomStringFormat: () => ZodCustomStringFormat,
-  ZodCustom: () => ZodCustom,
-  ZodCodec: () => ZodCodec,
-  ZodCatch: () => ZodCatch,
-  ZodCUID2: () => ZodCUID2,
-  ZodCUID: () => ZodCUID,
-  ZodCIDRv6: () => ZodCIDRv6,
-  ZodCIDRv4: () => ZodCIDRv4,
-  ZodBoolean: () => ZodBoolean,
-  ZodBigIntFormat: () => ZodBigIntFormat,
-  ZodBigInt: () => ZodBigInt,
-  ZodBase64URL: () => ZodBase64URL,
-  ZodBase64: () => ZodBase64,
-  ZodArray: () => ZodArray,
-  ZodAny: () => ZodAny,
-  TimePrecision: () => TimePrecision,
-  NEVER: () => NEVER,
-  $output: () => $output,
+  $brand: () => $brand,
   $input: () => $input,
-  $brand: () => $brand
+  $output: () => $output,
+  NEVER: () => NEVER,
+  TimePrecision: () => TimePrecision,
+  ZodAny: () => ZodAny,
+  ZodArray: () => ZodArray,
+  ZodBase64: () => ZodBase64,
+  ZodBase64URL: () => ZodBase64URL,
+  ZodBigInt: () => ZodBigInt,
+  ZodBigIntFormat: () => ZodBigIntFormat,
+  ZodBoolean: () => ZodBoolean,
+  ZodCIDRv4: () => ZodCIDRv4,
+  ZodCIDRv6: () => ZodCIDRv6,
+  ZodCUID: () => ZodCUID,
+  ZodCUID2: () => ZodCUID2,
+  ZodCatch: () => ZodCatch,
+  ZodCodec: () => ZodCodec,
+  ZodCustom: () => ZodCustom,
+  ZodCustomStringFormat: () => ZodCustomStringFormat,
+  ZodDate: () => ZodDate,
+  ZodDefault: () => ZodDefault,
+  ZodDiscriminatedUnion: () => ZodDiscriminatedUnion,
+  ZodE164: () => ZodE164,
+  ZodEmail: () => ZodEmail,
+  ZodEmoji: () => ZodEmoji,
+  ZodEnum: () => ZodEnum,
+  ZodError: () => ZodError,
+  ZodExactOptional: () => ZodExactOptional,
+  ZodFile: () => ZodFile,
+  ZodFirstPartyTypeKind: () => ZodFirstPartyTypeKind,
+  ZodFunction: () => ZodFunction,
+  ZodGUID: () => ZodGUID,
+  ZodIPv4: () => ZodIPv4,
+  ZodIPv6: () => ZodIPv6,
+  ZodISODate: () => ZodISODate,
+  ZodISODateTime: () => ZodISODateTime,
+  ZodISODuration: () => ZodISODuration,
+  ZodISOTime: () => ZodISOTime,
+  ZodIntersection: () => ZodIntersection,
+  ZodIssueCode: () => ZodIssueCode,
+  ZodJWT: () => ZodJWT,
+  ZodKSUID: () => ZodKSUID,
+  ZodLazy: () => ZodLazy,
+  ZodLiteral: () => ZodLiteral,
+  ZodMAC: () => ZodMAC,
+  ZodMap: () => ZodMap,
+  ZodNaN: () => ZodNaN,
+  ZodNanoID: () => ZodNanoID,
+  ZodNever: () => ZodNever,
+  ZodNonOptional: () => ZodNonOptional,
+  ZodNull: () => ZodNull,
+  ZodNullable: () => ZodNullable,
+  ZodNumber: () => ZodNumber,
+  ZodNumberFormat: () => ZodNumberFormat,
+  ZodObject: () => ZodObject,
+  ZodOptional: () => ZodOptional,
+  ZodPipe: () => ZodPipe,
+  ZodPrefault: () => ZodPrefault,
+  ZodPreprocess: () => ZodPreprocess,
+  ZodPromise: () => ZodPromise,
+  ZodReadonly: () => ZodReadonly,
+  ZodRealError: () => ZodRealError,
+  ZodRecord: () => ZodRecord,
+  ZodSet: () => ZodSet,
+  ZodString: () => ZodString,
+  ZodStringFormat: () => ZodStringFormat,
+  ZodSuccess: () => ZodSuccess,
+  ZodSymbol: () => ZodSymbol,
+  ZodTemplateLiteral: () => ZodTemplateLiteral,
+  ZodTransform: () => ZodTransform,
+  ZodTuple: () => ZodTuple,
+  ZodType: () => ZodType,
+  ZodULID: () => ZodULID,
+  ZodURL: () => ZodURL,
+  ZodUUID: () => ZodUUID,
+  ZodUndefined: () => ZodUndefined,
+  ZodUnion: () => ZodUnion,
+  ZodUnknown: () => ZodUnknown,
+  ZodVoid: () => ZodVoid,
+  ZodXID: () => ZodXID,
+  ZodXor: () => ZodXor,
+  _ZodString: () => _ZodString,
+  _default: () => _default2,
+  _function: () => _function,
+  any: () => any,
+  array: () => array,
+  base64: () => base642,
+  base64url: () => base64url2,
+  bigint: () => bigint2,
+  boolean: () => boolean2,
+  catch: () => _catch2,
+  check: () => check,
+  cidrv4: () => cidrv42,
+  cidrv6: () => cidrv62,
+  clone: () => clone,
+  codec: () => codec,
+  coerce: () => exports_coerce,
+  config: () => config,
+  core: () => exports_core2,
+  cuid: () => cuid3,
+  cuid2: () => cuid22,
+  custom: () => custom,
+  date: () => date4,
+  decode: () => decode2,
+  decodeAsync: () => decodeAsync2,
+  describe: () => describe2,
+  discriminatedUnion: () => discriminatedUnion,
+  e164: () => e1642,
+  email: () => email2,
+  emoji: () => emoji2,
+  encode: () => encode2,
+  encodeAsync: () => encodeAsync2,
+  endsWith: () => _endsWith,
+  enum: () => _enum2,
+  exactOptional: () => exactOptional,
+  file: () => file,
+  flattenError: () => flattenError,
+  float32: () => float32,
+  float64: () => float64,
+  formatError: () => formatError,
+  fromJSONSchema: () => fromJSONSchema,
+  function: () => _function,
+  getErrorMap: () => getErrorMap,
+  globalRegistry: () => globalRegistry,
+  gt: () => _gt,
+  gte: () => _gte,
+  guid: () => guid2,
+  hash: () => hash,
+  hex: () => hex2,
+  hostname: () => hostname2,
+  httpUrl: () => httpUrl,
+  includes: () => _includes,
+  instanceof: () => _instanceof,
+  int: () => int,
+  int32: () => int32,
+  int64: () => int64,
+  intersection: () => intersection,
+  invertCodec: () => invertCodec,
+  ipv4: () => ipv42,
+  ipv6: () => ipv62,
+  iso: () => exports_iso,
+  json: () => json,
+  jwt: () => jwt,
+  keyof: () => keyof,
+  ksuid: () => ksuid2,
+  lazy: () => lazy,
+  length: () => _length,
+  literal: () => literal,
+  locales: () => exports_locales,
+  looseObject: () => looseObject,
+  looseRecord: () => looseRecord,
+  lowercase: () => _lowercase,
+  lt: () => _lt,
+  lte: () => _lte,
+  mac: () => mac2,
+  map: () => map,
+  maxLength: () => _maxLength,
+  maxSize: () => _maxSize,
+  meta: () => meta2,
+  mime: () => _mime,
+  minLength: () => _minLength,
+  minSize: () => _minSize,
+  multipleOf: () => _multipleOf,
+  nan: () => nan,
+  nanoid: () => nanoid2,
+  nativeEnum: () => nativeEnum,
+  negative: () => _negative,
+  never: () => never,
+  nonnegative: () => _nonnegative,
+  nonoptional: () => nonoptional,
+  nonpositive: () => _nonpositive,
+  normalize: () => _normalize,
+  null: () => _null3,
+  nullable: () => nullable,
+  nullish: () => nullish2,
+  number: () => number2,
+  object: () => object2,
+  optional: () => optional,
+  overwrite: () => _overwrite,
+  parse: () => parse3,
+  parseAsync: () => parseAsync2,
+  partialRecord: () => partialRecord,
+  pipe: () => pipe,
+  positive: () => _positive,
+  prefault: () => prefault,
+  preprocess: () => preprocess,
+  prettifyError: () => prettifyError,
+  promise: () => promise,
+  property: () => _property,
+  readonly: () => readonly,
+  record: () => record,
+  refine: () => refine,
+  regex: () => _regex,
+  regexes: () => exports_regexes,
+  registry: () => registry,
+  safeDecode: () => safeDecode2,
+  safeDecodeAsync: () => safeDecodeAsync2,
+  safeEncode: () => safeEncode2,
+  safeEncodeAsync: () => safeEncodeAsync2,
+  safeParse: () => safeParse2,
+  safeParseAsync: () => safeParseAsync2,
+  set: () => set,
+  setErrorMap: () => setErrorMap,
+  size: () => _size,
+  slugify: () => _slugify,
+  startsWith: () => _startsWith,
+  strictObject: () => strictObject,
+  string: () => string2,
+  stringFormat: () => stringFormat,
+  stringbool: () => stringbool,
+  success: () => success,
+  superRefine: () => superRefine,
+  symbol: () => symbol,
+  templateLiteral: () => templateLiteral,
+  toJSONSchema: () => toJSONSchema,
+  toLowerCase: () => _toLowerCase,
+  toUpperCase: () => _toUpperCase,
+  transform: () => transform,
+  treeifyError: () => treeifyError,
+  trim: () => _trim,
+  tuple: () => tuple,
+  uint32: () => uint32,
+  uint64: () => uint64,
+  ulid: () => ulid2,
+  undefined: () => _undefined3,
+  union: () => union,
+  unknown: () => unknown,
+  uppercase: () => _uppercase,
+  url: () => url,
+  util: () => exports_util,
+  uuid: () => uuid2,
+  uuidv4: () => uuidv4,
+  uuidv6: () => uuidv6,
+  uuidv7: () => uuidv7,
+  void: () => _void2,
+  xid: () => xid2,
+  xor: () => xor
 });
 var init_external = __esm(() => {
   init_core2();
@@ -14915,25 +14925,25 @@ var init_entity = __esm(() => {
 var Column;
 var init_column = __esm(() => {
   init_entity();
-  Column = class Column2 {
-    constructor(table, config2) {
+  Column = class Column {
+    constructor(table, config) {
       this.table = table;
-      this.config = config2;
-      this.name = config2.name;
-      this.keyAsName = config2.keyAsName;
-      this.notNull = config2.notNull;
-      this.default = config2.default;
-      this.defaultFn = config2.defaultFn;
-      this.onUpdateFn = config2.onUpdateFn;
-      this.hasDefault = config2.hasDefault;
-      this.primary = config2.primaryKey;
-      this.isUnique = config2.isUnique;
-      this.uniqueName = config2.uniqueName;
-      this.uniqueType = config2.uniqueType;
-      this.dataType = config2.dataType;
-      this.columnType = config2.columnType;
-      this.generated = config2.generated;
-      this.generatedIdentity = config2.generatedIdentity;
+      this.config = config;
+      this.name = config.name;
+      this.keyAsName = config.keyAsName;
+      this.notNull = config.notNull;
+      this.default = config.default;
+      this.defaultFn = config.defaultFn;
+      this.onUpdateFn = config.onUpdateFn;
+      this.hasDefault = config.hasDefault;
+      this.primary = config.primaryKey;
+      this.isUnique = config.isUnique;
+      this.uniqueName = config.uniqueName;
+      this.uniqueType = config.uniqueType;
+      this.dataType = config.dataType;
+      this.columnType = config.columnType;
+      this.generated = config.generated;
+      this.generatedIdentity = config.generatedIdentity;
     }
     static [entityKind] = "Column";
     name;
@@ -14967,7 +14977,7 @@ var init_column = __esm(() => {
 var ColumnBuilder;
 var init_column_builder = __esm(() => {
   init_entity();
-  ColumnBuilder = class ColumnBuilder2 {
+  ColumnBuilder = class ColumnBuilder {
     static [entityKind] = "ColumnBuilder";
     config;
     constructor(name, dataType, columnType) {
@@ -15030,104 +15040,17 @@ function iife(fn, ...args) {
   return fn(...args);
 }
 var init_tracing_utils = () => {};
-function uniqueKeyName(table, columns) {
-  return `${table[TableName]}_${columns.join("_")}_unique`;
-}
-var init_unique_constraint = __esm(() => {
-  init_table_utils();
-});
-var PgColumn;
-var ExtraConfigColumn;
-var init_common = __esm(() => {
-  init_column();
-  init_entity();
-  init_unique_constraint();
-  PgColumn = class PgColumn2 extends Column {
-    constructor(table, config2) {
-      if (!config2.uniqueName) {
-        config2.uniqueName = uniqueKeyName(table, [config2.name]);
-      }
-      super(table, config2);
-      this.table = table;
-    }
-    static [entityKind] = "PgColumn";
-  };
-  ExtraConfigColumn = class ExtraConfigColumn2 extends PgColumn {
-    static [entityKind] = "ExtraConfigColumn";
-    getSQLType() {
-      return this.getSQLType();
-    }
-    indexConfig = {
-      order: this.config.order ?? "asc",
-      nulls: this.config.nulls ?? "last",
-      opClass: this.config.opClass
-    };
-    defaultConfig = {
-      order: "asc",
-      nulls: "last",
-      opClass: undefined
-    };
-    asc() {
-      this.indexConfig.order = "asc";
-      return this;
-    }
-    desc() {
-      this.indexConfig.order = "desc";
-      return this;
-    }
-    nullsFirst() {
-      this.indexConfig.nulls = "first";
-      return this;
-    }
-    nullsLast() {
-      this.indexConfig.nulls = "last";
-      return this;
-    }
-    op(opClass) {
-      this.indexConfig.opClass = opClass;
-      return this;
-    }
-  };
-});
 function isPgEnum(obj) {
   return !!obj && typeof obj === "function" && isPgEnumSym in obj && obj[isPgEnumSym] === true;
 }
-var PgEnumObjectColumn;
 var isPgEnumSym;
-var PgEnumColumn;
 var init_enum = __esm(() => {
-  init_entity();
-  init_common();
-  PgEnumObjectColumn = class PgEnumObjectColumn2 extends PgColumn {
-    static [entityKind] = "PgEnumObjectColumn";
-    enum;
-    enumValues = this.config.enum.enumValues;
-    constructor(table, config2) {
-      super(table, config2);
-      this.enum = config2.enum;
-    }
-    getSQLType() {
-      return this.enum.enumName;
-    }
-  };
   isPgEnumSym = Symbol.for("drizzle:isPgEnum");
-  PgEnumColumn = class PgEnumColumn2 extends PgColumn {
-    static [entityKind] = "PgEnumColumn";
-    enum = this.config.enum;
-    enumValues = this.config.enum.enumValues;
-    constructor(table, config2) {
-      super(table, config2);
-      this.enum = config2.enum;
-    }
-    getSQLType() {
-      return this.enum.enumName;
-    }
-  };
 });
 var Subquery;
 var init_subquery = __esm(() => {
   init_entity();
-  Subquery = class Subquery2 {
+  Subquery = class Subquery {
     static [entityKind] = "Subquery";
     constructor(sql, fields, alias, isWith = false, usedTables = []) {
       this._ = {
@@ -15200,7 +15123,7 @@ var init_table = __esm(() => {
   IsAlias = Symbol.for("drizzle:IsAlias");
   ExtraConfigBuilder = Symbol.for("drizzle:ExtraConfigBuilder");
   IsDrizzleTable = Symbol.for("drizzle:IsDrizzleTable");
-  Table = class Table2 {
+  Table = class Table {
     static [entityKind] = "Table";
     static Symbol = {
       Name: TableName,
@@ -15276,7 +15199,7 @@ var init_sql = __esm(() => {
   init_view_common();
   init_column();
   init_table();
-  StringChunk = class StringChunk2 {
+  StringChunk = class StringChunk {
     static [entityKind] = "StringChunk";
     value;
     constructor(value) {
@@ -15286,7 +15209,7 @@ var init_sql = __esm(() => {
       return new SQL([this]);
     }
   };
-  SQL = class SQL2 {
+  SQL = class SQL {
     constructor(queryChunks) {
       this.queryChunks = queryChunks;
       for (const chunk of queryChunks) {
@@ -15304,9 +15227,9 @@ var init_sql = __esm(() => {
       this.queryChunks.push(...query.queryChunks);
       return this;
     }
-    toQuery(config2) {
+    toQuery(config) {
       return tracer.startActiveSpan("drizzle.buildSQL", (span) => {
-        const query = this.buildQueryFromSourceParams(this.queryChunks, config2);
+        const query = this.buildQueryFromSourceParams(this.queryChunks, config);
         span?.setAttributes({
           "drizzle.query.text": query.sql,
           "drizzle.query.params": JSON.stringify(query.params)
@@ -15315,7 +15238,7 @@ var init_sql = __esm(() => {
       });
     }
     buildQueryFromSourceParams(chunks, _config) {
-      const config2 = Object.assign({}, _config, {
+      const config = Object.assign({}, _config, {
         inlineParams: _config.inlineParams || this.shouldInlineParams,
         paramStartIndex: _config.paramStartIndex || { value: 0 }
       });
@@ -15326,7 +15249,7 @@ var init_sql = __esm(() => {
         prepareTyping,
         inlineParams,
         paramStartIndex
-      } = config2;
+      } = config;
       return mergeQueries(chunks.map((chunk) => {
         if (is(chunk, StringChunk)) {
           return { sql: chunk.value.join(""), params: [] };
@@ -15346,11 +15269,11 @@ var init_sql = __esm(() => {
             }
           }
           result.push(new StringChunk(")"));
-          return this.buildQueryFromSourceParams(result, config2);
+          return this.buildQueryFromSourceParams(result, config);
         }
-        if (is(chunk, SQL2)) {
+        if (is(chunk, SQL)) {
           return this.buildQueryFromSourceParams(chunk.queryChunks, {
-            ...config2,
+            ...config,
             inlineParams: inlineParams || chunk.shouldInlineParams
           });
         }
@@ -15386,11 +15309,11 @@ var init_sql = __esm(() => {
             return { sql: escapeParam(paramStartIndex.value++, chunk), params: [chunk], typings: ["none"] };
           }
           const mappedValue = chunk.value === null ? null : chunk.encoder.mapToDriverValue(chunk.value);
-          if (is(mappedValue, SQL2)) {
-            return this.buildQueryFromSourceParams([mappedValue], config2);
+          if (is(mappedValue, SQL)) {
+            return this.buildQueryFromSourceParams([mappedValue], config);
           }
           if (inlineParams) {
-            return { sql: this.mapInlineParam(mappedValue, config2), params: [] };
+            return { sql: this.mapInlineParam(mappedValue, config), params: [] };
           }
           let typings = ["none"];
           if (prepareTyping) {
@@ -15401,7 +15324,7 @@ var init_sql = __esm(() => {
         if (is(chunk, Placeholder)) {
           return { sql: escapeParam(paramStartIndex.value++, chunk), params: [chunk], typings: ["none"] };
         }
-        if (is(chunk, SQL2.Aliased) && chunk.fieldAlias !== undefined) {
+        if (is(chunk, SQL.Aliased) && chunk.fieldAlias !== undefined) {
           return { sql: escapeName(chunk.fieldAlias), params: [] };
         }
         if (is(chunk, Subquery)) {
@@ -15413,7 +15336,7 @@ var init_sql = __esm(() => {
             chunk._.sql,
             new StringChunk(") "),
             new Name(chunk._.alias)
-          ], config2);
+          ], config);
         }
         if (isPgEnum(chunk)) {
           if (chunk.schema) {
@@ -15423,16 +15346,16 @@ var init_sql = __esm(() => {
         }
         if (isSQLWrapper(chunk)) {
           if (chunk.shouldOmitSQLParens?.()) {
-            return this.buildQueryFromSourceParams([chunk.getSQL()], config2);
+            return this.buildQueryFromSourceParams([chunk.getSQL()], config);
           }
           return this.buildQueryFromSourceParams([
             new StringChunk("("),
             chunk.getSQL(),
             new StringChunk(")")
-          ], config2);
+          ], config);
         }
         if (inlineParams) {
-          return { sql: this.mapInlineParam(chunk, config2), params: [] };
+          return { sql: this.mapInlineParam(chunk, config), params: [] };
         }
         return { sql: escapeParam(paramStartIndex.value++, chunk), params: [chunk], typings: ["none"] };
       }));
@@ -15463,7 +15386,7 @@ var init_sql = __esm(() => {
       if (alias === undefined) {
         return this;
       }
-      return new SQL2.Aliased(this, alias);
+      return new SQL.Aliased(this, alias);
     }
     mapWith(decoder) {
       this.decoder = typeof decoder === "function" ? { mapFromDriverValue: decoder } : decoder;
@@ -15477,7 +15400,7 @@ var init_sql = __esm(() => {
       return condition ? this : undefined;
     }
   };
-  Name = class Name2 {
+  Name = class Name {
     constructor(value) {
       this.value = value;
     }
@@ -15497,7 +15420,7 @@ var init_sql = __esm(() => {
     ...noopDecoder,
     ...noopEncoder
   };
-  Param = class Param2 {
+  Param = class Param {
     constructor(value, encoder = noopEncoder) {
       this.value = value;
       this.encoder = encoder;
@@ -15521,7 +15444,7 @@ var init_sql = __esm(() => {
       return new SQL([new StringChunk(str)]);
     }
     sql2.raw = raw;
-    function join2(chunks, separator) {
+    function join(chunks, separator) {
       const result = [];
       for (const [i, chunk] of chunks.entries()) {
         if (i > 0 && separator !== undefined) {
@@ -15531,7 +15454,7 @@ var init_sql = __esm(() => {
       }
       return new SQL(result);
     }
-    sql2.join = join2;
+    sql2.join = join;
     function identifier(value) {
       return new Name(value);
     }
@@ -15563,7 +15486,7 @@ var init_sql = __esm(() => {
     }
     SQL2.Aliased = Aliased;
   })(SQL || (SQL = {}));
-  Placeholder = class Placeholder2 {
+  Placeholder = class Placeholder {
     constructor(name2) {
       this.name = name2;
     }
@@ -15573,7 +15496,7 @@ var init_sql = __esm(() => {
     }
   };
   IsDrizzleView = Symbol.for("drizzle:IsDrizzleView");
-  View = class View2 {
+  View = class View {
     static [entityKind] = "View";
     [ViewBaseConfig];
     [IsDrizzleView] = true;
@@ -15609,7 +15532,7 @@ var init_alias = __esm(() => {
   init_entity();
   init_table();
   init_view_common();
-  ColumnAliasProxyHandler = class ColumnAliasProxyHandler2 {
+  ColumnAliasProxyHandler = class ColumnAliasProxyHandler {
     constructor(table) {
       this.table = table;
     }
@@ -15621,7 +15544,7 @@ var init_alias = __esm(() => {
       return columnObj[prop];
     }
   };
-  TableAliasProxyHandler = class TableAliasProxyHandler2 {
+  TableAliasProxyHandler = class TableAliasProxyHandler {
     constructor(alias, replaceOriginalName) {
       this.alias = alias;
       this.replaceOriginalName = replaceOriginalName;
@@ -15668,7 +15591,7 @@ var init_logger = () => {};
 var QueryPromise;
 var init_query_promise = __esm(() => {
   init_entity();
-  QueryPromise = class QueryPromise2 {
+  QueryPromise = class QueryPromise {
     static [entityKind] = "QueryPromise";
     [Symbol.toStringTag] = "QueryPromise";
     catch(onRejected) {
@@ -15789,20 +15712,20 @@ var CheckBuilder;
 var Check;
 var init_checks3 = __esm(() => {
   init_entity();
-  CheckBuilder = class CheckBuilder2 {
+  CheckBuilder = class CheckBuilder {
     constructor(name, value) {
       this.name = name;
       this.value = value;
     }
     static [entityKind] = "SQLiteCheckBuilder";
     brand;
-    build(table2) {
-      return new Check(table2, this);
+    build(table) {
+      return new Check(table, this);
     }
   };
-  Check = class Check2 {
-    constructor(table2, builder) {
-      this.table = table2;
+  Check = class Check {
+    constructor(table, builder) {
+      this.table = table;
       this.name = builder.name;
       this.value = builder.value;
     }
@@ -15816,14 +15739,14 @@ var ForeignKey;
 var init_foreign_keys = __esm(() => {
   init_entity();
   init_table_utils();
-  ForeignKeyBuilder = class ForeignKeyBuilder2 {
+  ForeignKeyBuilder = class ForeignKeyBuilder {
     static [entityKind] = "SQLiteForeignKeyBuilder";
     reference;
     _onUpdate;
     _onDelete;
-    constructor(config2, actions) {
+    constructor(config, actions) {
       this.reference = () => {
-        const { name, columns, foreignColumns } = config2();
+        const { name, columns, foreignColumns } = config();
         return { name, columns, foreignTable: foreignColumns[0].table, foreignColumns };
       };
       if (actions) {
@@ -15839,13 +15762,13 @@ var init_foreign_keys = __esm(() => {
       this._onDelete = action;
       return this;
     }
-    build(table2) {
-      return new ForeignKey(table2, this);
+    build(table) {
+      return new ForeignKey(table, this);
     }
   };
-  ForeignKey = class ForeignKey2 {
-    constructor(table2, builder) {
-      this.table = table2;
+  ForeignKey = class ForeignKey {
+    constructor(table, builder) {
+      this.table = table;
       this.reference = builder.reference;
       this.onUpdate = builder._onUpdate;
       this.onDelete = builder._onDelete;
@@ -15856,8 +15779,8 @@ var init_foreign_keys = __esm(() => {
     onDelete;
     getName() {
       const { name, columns, foreignColumns } = this.reference();
-      const columnNames = columns.map((column2) => column2.name);
-      const foreignColumnNames = foreignColumns.map((column2) => column2.name);
+      const columnNames = columns.map((column) => column.name);
+      const foreignColumnNames = foreignColumns.map((column) => column.name);
       const chunks = [
         this.table[TableName],
         ...columnNames,
@@ -15868,30 +15791,30 @@ var init_foreign_keys = __esm(() => {
     }
   };
 });
-function uniqueKeyName2(table2, columns) {
-  return `${table2[TableName]}_${columns.join("_")}_unique`;
+function uniqueKeyName(table, columns) {
+  return `${table[TableName]}_${columns.join("_")}_unique`;
 }
 var UniqueConstraintBuilder;
 var UniqueConstraint;
-var init_unique_constraint2 = __esm(() => {
+var init_unique_constraint = __esm(() => {
   init_entity();
   init_table_utils();
-  UniqueConstraintBuilder = class UniqueConstraintBuilder2 {
+  UniqueConstraintBuilder = class UniqueConstraintBuilder {
     constructor(columns, name) {
       this.name = name;
       this.columns = columns;
     }
     static [entityKind] = "SQLiteUniqueConstraintBuilder";
     columns;
-    build(table2) {
-      return new UniqueConstraint(table2, this.columns, this.name);
+    build(table) {
+      return new UniqueConstraint(table, this.columns, this.name);
     }
   };
-  UniqueConstraint = class UniqueConstraint2 {
-    constructor(table2, columns, name) {
-      this.table = table2;
+  UniqueConstraint = class UniqueConstraint {
+    constructor(table, columns, name) {
+      this.table = table;
       this.columns = columns;
-      this.name = name ?? uniqueKeyName2(this.table, this.columns.map((column2) => column2.name));
+      this.name = name ?? uniqueKeyName(this.table, this.columns.map((column) => column.name));
     }
     static [entityKind] = "SQLiteUniqueConstraint";
     columns;
@@ -15903,13 +15826,13 @@ var init_unique_constraint2 = __esm(() => {
 });
 var SQLiteColumnBuilder;
 var SQLiteColumn;
-var init_common2 = __esm(() => {
+var init_common = __esm(() => {
   init_column_builder();
   init_column();
   init_entity();
   init_foreign_keys();
-  init_unique_constraint2();
-  SQLiteColumnBuilder = class SQLiteColumnBuilder2 extends ColumnBuilder {
+  init_unique_constraint();
+  SQLiteColumnBuilder = class SQLiteColumnBuilder extends ColumnBuilder {
     static [entityKind] = "SQLiteColumnBuilder";
     foreignKeyConfigs = [];
     references(ref, actions = {}) {
@@ -15921,20 +15844,20 @@ var init_common2 = __esm(() => {
       this.config.uniqueName = name;
       return this;
     }
-    generatedAlwaysAs(as, config2) {
+    generatedAlwaysAs(as, config) {
       this.config.generated = {
         as,
         type: "always",
-        mode: config2?.mode ?? "virtual"
+        mode: config?.mode ?? "virtual"
       };
       return this;
     }
-    buildForeignKeys(column2, table2) {
+    buildForeignKeys(column, table) {
       return this.foreignKeyConfigs.map(({ ref, actions }) => {
         return ((ref2, actions2) => {
           const builder = new ForeignKeyBuilder(() => {
             const foreignColumn = ref2();
-            return { columns: [column2], foreignColumns: [foreignColumn] };
+            return { columns: [column], foreignColumns: [foreignColumn] };
           });
           if (actions2.onUpdate) {
             builder.onUpdate(actions2.onUpdate);
@@ -15942,28 +15865,28 @@ var init_common2 = __esm(() => {
           if (actions2.onDelete) {
             builder.onDelete(actions2.onDelete);
           }
-          return builder.build(table2);
+          return builder.build(table);
         })(ref, actions);
       });
     }
   };
-  SQLiteColumn = class SQLiteColumn2 extends Column {
-    constructor(table2, config2) {
-      if (!config2.uniqueName) {
-        config2.uniqueName = uniqueKeyName2(table2, [config2.name]);
+  SQLiteColumn = class SQLiteColumn extends Column {
+    constructor(table, config) {
+      if (!config.uniqueName) {
+        config.uniqueName = uniqueKeyName(table, [config.name]);
       }
-      super(table2, config2);
-      this.table = table2;
+      super(table, config);
+      this.table = table;
     }
     static [entityKind] = "SQLiteColumn";
   };
 });
 function blob(a, b) {
-  const { name, config: config2 } = getColumnNameAndConfig(a, b);
-  if (config2?.mode === "json") {
+  const { name, config } = getColumnNameAndConfig(a, b);
+  if (config?.mode === "json") {
     return new SQLiteBlobJsonBuilder(name);
   }
-  if (config2?.mode === "bigint") {
+  if (config?.mode === "bigint") {
     return new SQLiteBigIntBuilder(name);
   }
   return new SQLiteBlobBufferBuilder(name);
@@ -15977,17 +15900,17 @@ var SQLiteBlobBuffer;
 var init_blob = __esm(() => {
   init_entity();
   init_utils();
-  init_common2();
-  SQLiteBigIntBuilder = class SQLiteBigIntBuilder2 extends SQLiteColumnBuilder {
+  init_common();
+  SQLiteBigIntBuilder = class SQLiteBigIntBuilder extends SQLiteColumnBuilder {
     static [entityKind] = "SQLiteBigIntBuilder";
     constructor(name) {
       super(name, "bigint", "SQLiteBigInt");
     }
-    build(table2) {
-      return new SQLiteBigInt(table2, this.config);
+    build(table) {
+      return new SQLiteBigInt(table, this.config);
     }
   };
-  SQLiteBigInt = class SQLiteBigInt2 extends SQLiteColumn {
+  SQLiteBigInt = class SQLiteBigInt extends SQLiteColumn {
     static [entityKind] = "SQLiteBigInt";
     getSQLType() {
       return "blob";
@@ -16003,16 +15926,16 @@ var init_blob = __esm(() => {
       return Buffer.from(value.toString());
     }
   };
-  SQLiteBlobJsonBuilder = class SQLiteBlobJsonBuilder2 extends SQLiteColumnBuilder {
+  SQLiteBlobJsonBuilder = class SQLiteBlobJsonBuilder extends SQLiteColumnBuilder {
     static [entityKind] = "SQLiteBlobJsonBuilder";
     constructor(name) {
       super(name, "json", "SQLiteBlobJson");
     }
-    build(table2) {
-      return new SQLiteBlobJson(table2, this.config);
+    build(table) {
+      return new SQLiteBlobJson(table, this.config);
     }
   };
-  SQLiteBlobJson = class SQLiteBlobJson2 extends SQLiteColumn {
+  SQLiteBlobJson = class SQLiteBlobJson extends SQLiteColumn {
     static [entityKind] = "SQLiteBlobJson";
     getSQLType() {
       return "blob";
@@ -16028,16 +15951,16 @@ var init_blob = __esm(() => {
       return Buffer.from(JSON.stringify(value));
     }
   };
-  SQLiteBlobBufferBuilder = class SQLiteBlobBufferBuilder2 extends SQLiteColumnBuilder {
+  SQLiteBlobBufferBuilder = class SQLiteBlobBufferBuilder extends SQLiteColumnBuilder {
     static [entityKind] = "SQLiteBlobBufferBuilder";
     constructor(name) {
       super(name, "buffer", "SQLiteBlobBuffer");
     }
-    build(table2) {
-      return new SQLiteBlobBuffer(table2, this.config);
+    build(table) {
+      return new SQLiteBlobBuffer(table, this.config);
     }
   };
-  SQLiteBlobBuffer = class SQLiteBlobBuffer2 extends SQLiteColumn {
+  SQLiteBlobBuffer = class SQLiteBlobBuffer extends SQLiteColumn {
     static [entityKind] = "SQLiteBlobBuffer";
     mapFromDriverValue(value) {
       if (Buffer.isBuffer(value)) {
@@ -16052,8 +15975,8 @@ var init_blob = __esm(() => {
 });
 function customType(customTypeParams) {
   return (a, b) => {
-    const { name, config: config2 } = getColumnNameAndConfig(a, b);
-    return new SQLiteCustomColumnBuilder(name, config2, customTypeParams);
+    const { name, config } = getColumnNameAndConfig(a, b);
+    return new SQLiteCustomColumnBuilder(name, config, customTypeParams);
   };
 }
 var SQLiteCustomColumnBuilder;
@@ -16061,28 +15984,28 @@ var SQLiteCustomColumn;
 var init_custom = __esm(() => {
   init_entity();
   init_utils();
-  init_common2();
-  SQLiteCustomColumnBuilder = class SQLiteCustomColumnBuilder2 extends SQLiteColumnBuilder {
+  init_common();
+  SQLiteCustomColumnBuilder = class SQLiteCustomColumnBuilder extends SQLiteColumnBuilder {
     static [entityKind] = "SQLiteCustomColumnBuilder";
     constructor(name, fieldConfig, customTypeParams) {
       super(name, "custom", "SQLiteCustomColumn");
       this.config.fieldConfig = fieldConfig;
       this.config.customTypeParams = customTypeParams;
     }
-    build(table2) {
-      return new SQLiteCustomColumn(table2, this.config);
+    build(table) {
+      return new SQLiteCustomColumn(table, this.config);
     }
   };
-  SQLiteCustomColumn = class SQLiteCustomColumn2 extends SQLiteColumn {
+  SQLiteCustomColumn = class SQLiteCustomColumn extends SQLiteColumn {
     static [entityKind] = "SQLiteCustomColumn";
     sqlName;
     mapTo;
     mapFrom;
-    constructor(table2, config2) {
-      super(table2, config2);
-      this.sqlName = config2.customTypeParams.dataType(config2.fieldConfig);
-      this.mapTo = config2.customTypeParams.toDriver;
-      this.mapFrom = config2.customTypeParams.fromDriver;
+    constructor(table, config) {
+      super(table, config);
+      this.sqlName = config.customTypeParams.dataType(config.fieldConfig);
+      this.mapTo = config.customTypeParams.toDriver;
+      this.mapFrom = config.customTypeParams.fromDriver;
     }
     getSQLType() {
       return this.sqlName;
@@ -16096,12 +16019,12 @@ var init_custom = __esm(() => {
   };
 });
 function integer2(a, b) {
-  const { name, config: config2 } = getColumnNameAndConfig(a, b);
-  if (config2?.mode === "timestamp" || config2?.mode === "timestamp_ms") {
-    return new SQLiteTimestampBuilder(name, config2.mode);
+  const { name, config } = getColumnNameAndConfig(a, b);
+  if (config?.mode === "timestamp" || config?.mode === "timestamp_ms") {
+    return new SQLiteTimestampBuilder(name, config.mode);
   }
-  if (config2?.mode === "boolean") {
-    return new SQLiteBooleanBuilder(name, config2.mode);
+  if (config?.mode === "boolean") {
+    return new SQLiteBooleanBuilder(name, config.mode);
   }
   return new SQLiteIntegerBuilder(name);
 }
@@ -16117,41 +16040,41 @@ var init_integer = __esm(() => {
   init_entity();
   init_sql();
   init_utils();
-  init_common2();
-  SQLiteBaseIntegerBuilder = class SQLiteBaseIntegerBuilder2 extends SQLiteColumnBuilder {
+  init_common();
+  SQLiteBaseIntegerBuilder = class SQLiteBaseIntegerBuilder extends SQLiteColumnBuilder {
     static [entityKind] = "SQLiteBaseIntegerBuilder";
     constructor(name, dataType, columnType) {
       super(name, dataType, columnType);
       this.config.autoIncrement = false;
     }
-    primaryKey(config2) {
-      if (config2?.autoIncrement) {
+    primaryKey(config) {
+      if (config?.autoIncrement) {
         this.config.autoIncrement = true;
       }
       this.config.hasDefault = true;
       return super.primaryKey();
     }
   };
-  SQLiteBaseInteger = class SQLiteBaseInteger2 extends SQLiteColumn {
+  SQLiteBaseInteger = class SQLiteBaseInteger extends SQLiteColumn {
     static [entityKind] = "SQLiteBaseInteger";
     autoIncrement = this.config.autoIncrement;
     getSQLType() {
       return "integer";
     }
   };
-  SQLiteIntegerBuilder = class SQLiteIntegerBuilder2 extends SQLiteBaseIntegerBuilder {
+  SQLiteIntegerBuilder = class SQLiteIntegerBuilder extends SQLiteBaseIntegerBuilder {
     static [entityKind] = "SQLiteIntegerBuilder";
     constructor(name) {
       super(name, "number", "SQLiteInteger");
     }
-    build(table2) {
-      return new SQLiteInteger(table2, this.config);
+    build(table) {
+      return new SQLiteInteger(table, this.config);
     }
   };
-  SQLiteInteger = class SQLiteInteger2 extends SQLiteBaseInteger {
+  SQLiteInteger = class SQLiteInteger extends SQLiteBaseInteger {
     static [entityKind] = "SQLiteInteger";
   };
-  SQLiteTimestampBuilder = class SQLiteTimestampBuilder2 extends SQLiteBaseIntegerBuilder {
+  SQLiteTimestampBuilder = class SQLiteTimestampBuilder extends SQLiteBaseIntegerBuilder {
     static [entityKind] = "SQLiteTimestampBuilder";
     constructor(name, mode) {
       super(name, "date", "SQLiteTimestamp");
@@ -16160,11 +16083,11 @@ var init_integer = __esm(() => {
     defaultNow() {
       return this.default(sql`(cast((julianday('now') - 2440587.5)*86400000 as integer))`);
     }
-    build(table2) {
-      return new SQLiteTimestamp(table2, this.config);
+    build(table) {
+      return new SQLiteTimestamp(table, this.config);
     }
   };
-  SQLiteTimestamp = class SQLiteTimestamp2 extends SQLiteBaseInteger {
+  SQLiteTimestamp = class SQLiteTimestamp extends SQLiteBaseInteger {
     static [entityKind] = "SQLiteTimestamp";
     mode = this.config.mode;
     mapFromDriverValue(value) {
@@ -16181,17 +16104,17 @@ var init_integer = __esm(() => {
       return unix;
     }
   };
-  SQLiteBooleanBuilder = class SQLiteBooleanBuilder2 extends SQLiteBaseIntegerBuilder {
+  SQLiteBooleanBuilder = class SQLiteBooleanBuilder extends SQLiteBaseIntegerBuilder {
     static [entityKind] = "SQLiteBooleanBuilder";
     constructor(name, mode) {
       super(name, "boolean", "SQLiteBoolean");
       this.config.mode = mode;
     }
-    build(table2) {
-      return new SQLiteBoolean(table2, this.config);
+    build(table) {
+      return new SQLiteBoolean(table, this.config);
     }
   };
-  SQLiteBoolean = class SQLiteBoolean2 extends SQLiteBaseInteger {
+  SQLiteBoolean = class SQLiteBoolean extends SQLiteBaseInteger {
     static [entityKind] = "SQLiteBoolean";
     mode = this.config.mode;
     mapFromDriverValue(value) {
@@ -16203,8 +16126,8 @@ var init_integer = __esm(() => {
   };
 });
 function numeric(a, b) {
-  const { name, config: config2 } = getColumnNameAndConfig(a, b);
-  const mode = config2?.mode;
+  const { name, config } = getColumnNameAndConfig(a, b);
+  const mode = config?.mode;
   return mode === "number" ? new SQLiteNumericNumberBuilder(name) : mode === "bigint" ? new SQLiteNumericBigIntBuilder(name) : new SQLiteNumericBuilder(name);
 }
 var SQLiteNumericBuilder;
@@ -16216,17 +16139,17 @@ var SQLiteNumericBigInt;
 var init_numeric = __esm(() => {
   init_entity();
   init_utils();
-  init_common2();
-  SQLiteNumericBuilder = class SQLiteNumericBuilder2 extends SQLiteColumnBuilder {
+  init_common();
+  SQLiteNumericBuilder = class SQLiteNumericBuilder extends SQLiteColumnBuilder {
     static [entityKind] = "SQLiteNumericBuilder";
     constructor(name) {
       super(name, "string", "SQLiteNumeric");
     }
-    build(table2) {
-      return new SQLiteNumeric(table2, this.config);
+    build(table) {
+      return new SQLiteNumeric(table, this.config);
     }
   };
-  SQLiteNumeric = class SQLiteNumeric2 extends SQLiteColumn {
+  SQLiteNumeric = class SQLiteNumeric extends SQLiteColumn {
     static [entityKind] = "SQLiteNumeric";
     mapFromDriverValue(value) {
       if (typeof value === "string")
@@ -16237,16 +16160,16 @@ var init_numeric = __esm(() => {
       return "numeric";
     }
   };
-  SQLiteNumericNumberBuilder = class SQLiteNumericNumberBuilder2 extends SQLiteColumnBuilder {
+  SQLiteNumericNumberBuilder = class SQLiteNumericNumberBuilder extends SQLiteColumnBuilder {
     static [entityKind] = "SQLiteNumericNumberBuilder";
     constructor(name) {
       super(name, "number", "SQLiteNumericNumber");
     }
-    build(table2) {
-      return new SQLiteNumericNumber(table2, this.config);
+    build(table) {
+      return new SQLiteNumericNumber(table, this.config);
     }
   };
-  SQLiteNumericNumber = class SQLiteNumericNumber2 extends SQLiteColumn {
+  SQLiteNumericNumber = class SQLiteNumericNumber extends SQLiteColumn {
     static [entityKind] = "SQLiteNumericNumber";
     mapFromDriverValue(value) {
       if (typeof value === "number")
@@ -16258,16 +16181,16 @@ var init_numeric = __esm(() => {
       return "numeric";
     }
   };
-  SQLiteNumericBigIntBuilder = class SQLiteNumericBigIntBuilder2 extends SQLiteColumnBuilder {
+  SQLiteNumericBigIntBuilder = class SQLiteNumericBigIntBuilder extends SQLiteColumnBuilder {
     static [entityKind] = "SQLiteNumericBigIntBuilder";
     constructor(name) {
       super(name, "bigint", "SQLiteNumericBigInt");
     }
-    build(table2) {
-      return new SQLiteNumericBigInt(table2, this.config);
+    build(table) {
+      return new SQLiteNumericBigInt(table, this.config);
     }
   };
-  SQLiteNumericBigInt = class SQLiteNumericBigInt2 extends SQLiteColumn {
+  SQLiteNumericBigInt = class SQLiteNumericBigInt extends SQLiteColumn {
     static [entityKind] = "SQLiteNumericBigInt";
     mapFromDriverValue = BigInt;
     mapToDriverValue = String;
@@ -16283,17 +16206,17 @@ var SQLiteRealBuilder;
 var SQLiteReal;
 var init_real = __esm(() => {
   init_entity();
-  init_common2();
-  SQLiteRealBuilder = class SQLiteRealBuilder2 extends SQLiteColumnBuilder {
+  init_common();
+  SQLiteRealBuilder = class SQLiteRealBuilder extends SQLiteColumnBuilder {
     static [entityKind] = "SQLiteRealBuilder";
     constructor(name) {
       super(name, "number", "SQLiteReal");
     }
-    build(table2) {
-      return new SQLiteReal(table2, this.config);
+    build(table) {
+      return new SQLiteReal(table, this.config);
     }
   };
-  SQLiteReal = class SQLiteReal2 extends SQLiteColumn {
+  SQLiteReal = class SQLiteReal extends SQLiteColumn {
     static [entityKind] = "SQLiteReal";
     getSQLType() {
       return "real";
@@ -16301,11 +16224,11 @@ var init_real = __esm(() => {
   };
 });
 function text(a, b = {}) {
-  const { name, config: config2 } = getColumnNameAndConfig(a, b);
-  if (config2.mode === "json") {
+  const { name, config } = getColumnNameAndConfig(a, b);
+  if (config.mode === "json") {
     return new SQLiteTextJsonBuilder(name);
   }
-  return new SQLiteTextBuilder(name, config2);
+  return new SQLiteTextBuilder(name, config);
 }
 var SQLiteTextBuilder;
 var SQLiteText;
@@ -16314,39 +16237,39 @@ var SQLiteTextJson;
 var init_text = __esm(() => {
   init_entity();
   init_utils();
-  init_common2();
-  SQLiteTextBuilder = class SQLiteTextBuilder2 extends SQLiteColumnBuilder {
+  init_common();
+  SQLiteTextBuilder = class SQLiteTextBuilder extends SQLiteColumnBuilder {
     static [entityKind] = "SQLiteTextBuilder";
-    constructor(name, config2) {
+    constructor(name, config) {
       super(name, "string", "SQLiteText");
-      this.config.enumValues = config2.enum;
-      this.config.length = config2.length;
+      this.config.enumValues = config.enum;
+      this.config.length = config.length;
     }
-    build(table2) {
-      return new SQLiteText(table2, this.config);
+    build(table) {
+      return new SQLiteText(table, this.config);
     }
   };
-  SQLiteText = class SQLiteText2 extends SQLiteColumn {
+  SQLiteText = class SQLiteText extends SQLiteColumn {
     static [entityKind] = "SQLiteText";
     enumValues = this.config.enumValues;
     length = this.config.length;
-    constructor(table2, config2) {
-      super(table2, config2);
+    constructor(table, config) {
+      super(table, config);
     }
     getSQLType() {
       return `text${this.config.length ? `(${this.config.length})` : ""}`;
     }
   };
-  SQLiteTextJsonBuilder = class SQLiteTextJsonBuilder2 extends SQLiteColumnBuilder {
+  SQLiteTextJsonBuilder = class SQLiteTextJsonBuilder extends SQLiteColumnBuilder {
     static [entityKind] = "SQLiteTextJsonBuilder";
     constructor(name) {
       super(name, "json", "SQLiteTextJson");
     }
-    build(table2) {
-      return new SQLiteTextJson(table2, this.config);
+    build(table) {
+      return new SQLiteTextJson(table, this.config);
     }
   };
-  SQLiteTextJson = class SQLiteTextJson2 extends SQLiteColumn {
+  SQLiteTextJson = class SQLiteTextJson extends SQLiteColumn {
     static [entityKind] = "SQLiteTextJson";
     getSQLType() {
       return "text";
@@ -16361,7 +16284,7 @@ var init_text = __esm(() => {
 });
 var init_columns = __esm(() => {
   init_blob();
-  init_common2();
+  init_common();
   init_custom();
   init_integer();
   init_numeric();
@@ -16376,29 +16299,29 @@ var init_selection_proxy = __esm(() => {
   init_sql();
   init_subquery();
   init_view_common();
-  SelectionProxyHandler = class SelectionProxyHandler2 {
+  SelectionProxyHandler = class SelectionProxyHandler {
     static [entityKind] = "SelectionProxyHandler";
     config;
-    constructor(config2) {
-      this.config = { ...config2 };
+    constructor(config) {
+      this.config = { ...config };
     }
-    get(subquery2, prop) {
+    get(subquery, prop) {
       if (prop === "_") {
         return {
-          ...subquery2["_"],
-          selectedFields: new Proxy(subquery2._.selectedFields, this)
+          ...subquery["_"],
+          selectedFields: new Proxy(subquery._.selectedFields, this)
         };
       }
       if (prop === ViewBaseConfig) {
         return {
-          ...subquery2[ViewBaseConfig],
-          selectedFields: new Proxy(subquery2[ViewBaseConfig].selectedFields, this)
+          ...subquery[ViewBaseConfig],
+          selectedFields: new Proxy(subquery[ViewBaseConfig].selectedFields, this)
         };
       }
       if (typeof prop === "symbol") {
-        return subquery2[prop];
+        return subquery[prop];
       }
-      const columns = is(subquery2, Subquery) ? subquery2._.selectedFields : is(subquery2, View) ? subquery2[ViewBaseConfig].selectedFields : subquery2;
+      const columns = is(subquery, Subquery) ? subquery._.selectedFields : is(subquery, View) ? subquery[ViewBaseConfig].selectedFields : subquery;
       const value = columns[prop];
       if (is(value, SQL.Aliased)) {
         if (this.config.sqlAliasedBehavior === "sql" && !value.isSelectionField) {
@@ -16423,7 +16346,7 @@ var init_selection_proxy = __esm(() => {
       if (typeof value !== "object" || value === null) {
         return value;
       }
-      return new Proxy(value, new SelectionProxyHandler2(this.config));
+      return new Proxy(value, new SelectionProxyHandler(this.config));
     }
   };
 });
@@ -16451,17 +16374,17 @@ function sqliteTableBase(name, columns, extraConfig, schema, baseName = name) {
   const builtColumns = Object.fromEntries(Object.entries(parsedColumns).map(([name2, colBuilderBase]) => {
     const colBuilder = colBuilderBase;
     colBuilder.setName(name2);
-    const column2 = colBuilder.build(rawTable);
-    rawTable[InlineForeignKeys].push(...colBuilder.buildForeignKeys(column2, rawTable));
-    return [name2, column2];
+    const column = colBuilder.build(rawTable);
+    rawTable[InlineForeignKeys].push(...colBuilder.buildForeignKeys(column, rawTable));
+    return [name2, column];
   }));
-  const table2 = Object.assign(rawTable, builtColumns);
-  table2[Table.Symbol.Columns] = builtColumns;
-  table2[Table.Symbol.ExtraConfigColumns] = builtColumns;
+  const table = Object.assign(rawTable, builtColumns);
+  table[Table.Symbol.Columns] = builtColumns;
+  table[Table.Symbol.ExtraConfigColumns] = builtColumns;
   if (extraConfig) {
-    table2[SQLiteTable.Symbol.ExtraConfigBuilder] = extraConfig;
+    table[SQLiteTable.Symbol.ExtraConfigBuilder] = extraConfig;
   }
-  return table2;
+  return table;
 }
 var InlineForeignKeys;
 var SQLiteTable;
@@ -16473,7 +16396,7 @@ var init_table2 = __esm(() => {
   init_table();
   init_all();
   InlineForeignKeys = Symbol.for("drizzle:SQLiteInlineForeignKeys");
-  SQLiteTable = class SQLiteTable2 extends Table {
+  SQLiteTable = class SQLiteTable extends Table {
     static [entityKind] = "SQLiteTable";
     static Symbol = Object.assign({}, Table.Symbol, {
       InlineForeignKeys
@@ -16487,7 +16410,7 @@ var IndexBuilder;
 var Index;
 var init_indexes = __esm(() => {
   init_entity();
-  IndexBuilder = class IndexBuilder2 {
+  IndexBuilder = class IndexBuilder {
     static [entityKind] = "SQLiteIndexBuilder";
     config;
     constructor(name, columns, unique) {
@@ -16502,15 +16425,15 @@ var init_indexes = __esm(() => {
       this.config.where = condition;
       return this;
     }
-    build(table2) {
-      return new Index(this.config, table2);
+    build(table) {
+      return new Index(this.config, table);
     }
   };
-  Index = class Index2 {
+  Index = class Index {
     static [entityKind] = "SQLiteIndex";
     config;
-    constructor(config2, table2) {
-      this.config = { ...config2, table: table2 };
+    constructor(config, table) {
+      this.config = { ...config, table };
     }
   };
 });
@@ -16519,7 +16442,7 @@ var PrimaryKey;
 var init_primary_keys = __esm(() => {
   init_entity();
   init_table2();
-  PrimaryKeyBuilder = class PrimaryKeyBuilder2 {
+  PrimaryKeyBuilder = class PrimaryKeyBuilder {
     static [entityKind] = "SQLitePrimaryKeyBuilder";
     columns;
     name;
@@ -16527,13 +16450,13 @@ var init_primary_keys = __esm(() => {
       this.columns = columns;
       this.name = name;
     }
-    build(table2) {
-      return new PrimaryKey(table2, this.columns, this.name);
+    build(table) {
+      return new PrimaryKey(table, this.columns, this.name);
     }
   };
-  PrimaryKey = class PrimaryKey2 {
-    constructor(table2, columns, name) {
-      this.table = table2;
+  PrimaryKey = class PrimaryKey {
+    constructor(table, columns, name) {
+      this.table = table;
       this.columns = columns;
       this.name = name;
     }
@@ -16541,33 +16464,33 @@ var init_primary_keys = __esm(() => {
     columns;
     name;
     getName() {
-      return this.name ?? `${this.table[SQLiteTable.Symbol.Name]}_${this.columns.map((column2) => column2.name).join("_")}_pk`;
+      return this.name ?? `${this.table[SQLiteTable.Symbol.Name]}_${this.columns.map((column) => column.name).join("_")}_pk`;
     }
   };
 });
-function getTableConfig(table2) {
-  const columns = Object.values(table2[SQLiteTable.Symbol.Columns]);
+function getTableConfig(table) {
+  const columns = Object.values(table[SQLiteTable.Symbol.Columns]);
   const indexes = [];
-  const checks3 = [];
+  const checks = [];
   const primaryKeys = [];
   const uniqueConstraints = [];
-  const foreignKeys = Object.values(table2[SQLiteTable.Symbol.InlineForeignKeys]);
-  const name = table2[Table.Symbol.Name];
-  const extraConfigBuilder = table2[SQLiteTable.Symbol.ExtraConfigBuilder];
+  const foreignKeys = Object.values(table[SQLiteTable.Symbol.InlineForeignKeys]);
+  const name = table[Table.Symbol.Name];
+  const extraConfigBuilder = table[SQLiteTable.Symbol.ExtraConfigBuilder];
   if (extraConfigBuilder !== undefined) {
-    const extraConfig = extraConfigBuilder(table2[SQLiteTable.Symbol.Columns]);
+    const extraConfig = extraConfigBuilder(table[SQLiteTable.Symbol.Columns]);
     const extraValues = Array.isArray(extraConfig) ? extraConfig.flat(1) : Object.values(extraConfig);
     for (const builder of Object.values(extraValues)) {
       if (is(builder, IndexBuilder)) {
-        indexes.push(builder.build(table2));
+        indexes.push(builder.build(table));
       } else if (is(builder, CheckBuilder)) {
-        checks3.push(builder.build(table2));
+        checks.push(builder.build(table));
       } else if (is(builder, UniqueConstraintBuilder)) {
-        uniqueConstraints.push(builder.build(table2));
+        uniqueConstraints.push(builder.build(table));
       } else if (is(builder, PrimaryKeyBuilder)) {
-        primaryKeys.push(builder.build(table2));
+        primaryKeys.push(builder.build(table));
       } else if (is(builder, ForeignKeyBuilder)) {
-        foreignKeys.push(builder.build(table2));
+        foreignKeys.push(builder.build(table));
       }
     }
   }
@@ -16575,21 +16498,21 @@ function getTableConfig(table2) {
     columns,
     indexes,
     foreignKeys,
-    checks: checks3,
+    checks,
     primaryKeys,
     uniqueConstraints,
     name
   };
 }
-function extractUsedTable(table2) {
-  if (is(table2, SQLiteTable)) {
-    return [`${table2[Table.Symbol.BaseName]}`];
+function extractUsedTable(table) {
+  if (is(table, SQLiteTable)) {
+    return [`${table[Table.Symbol.BaseName]}`];
   }
-  if (is(table2, Subquery)) {
-    return table2._.usedTables ?? [];
+  if (is(table, Subquery)) {
+    return table._.usedTables ?? [];
   }
-  if (is(table2, SQL)) {
-    return table2.usedTables ?? [];
+  if (is(table, SQL)) {
+    return table.usedTables ?? [];
   }
   return [];
 }
@@ -16603,22 +16526,14 @@ var init_utils2 = __esm(() => {
   init_indexes();
   init_primary_keys();
   init_table2();
-  init_unique_constraint2();
+  init_unique_constraint();
 });
 var init_delete = () => {};
-var SQLiteViewBase;
-var init_view_base = __esm(() => {
-  init_entity();
-  init_sql();
-  SQLiteViewBase = class SQLiteViewBase2 extends View {
-    static [entityKind] = "SQLiteViewBase";
-  };
-});
 var init_dialect = () => {};
 var TypedQueryBuilder;
 var init_query_builder = __esm(() => {
   init_entity();
-  TypedQueryBuilder = class TypedQueryBuilder2 {
+  TypedQueryBuilder = class TypedQueryBuilder {
     static [entityKind] = "TypedQueryBuilder";
     getSelectedFields() {
       return this._.selectedFields;
@@ -16627,10 +16542,10 @@ var init_query_builder = __esm(() => {
 });
 function createSetOperator(type, isAll) {
   return (leftSelect, rightSelect, ...restSelects) => {
-    const setOperators = [rightSelect, ...restSelects].map((select2) => ({
+    const setOperators = [rightSelect, ...restSelects].map((select) => ({
       type,
       isAll,
-      rightSelect: select2
+      rightSelect: select
     }));
     for (const setOperator of setOperators) {
       if (!haveSameKeys(leftSelect.getSelectedFields(), setOperator.rightSelect.getSelectedFields())) {
@@ -16663,7 +16578,7 @@ var init_select2 = __esm(() => {
   init_utils();
   init_view_common();
   init_utils2();
-  SQLiteSelectQueryBuilderBase = class SQLiteSelectQueryBuilderBase2 extends TypedQueryBuilder {
+  SQLiteSelectQueryBuilderBase = class SQLiteSelectQueryBuilderBase extends TypedQueryBuilder {
     static [entityKind] = "SQLiteSelectQueryBuilder";
     _;
     config;
@@ -16674,11 +16589,11 @@ var init_select2 = __esm(() => {
     dialect;
     cacheConfig = undefined;
     usedTables = /* @__PURE__ */ new Set;
-    constructor({ table: table2, fields, isPartialSelect, session, dialect, withList, distinct }) {
+    constructor({ table, fields, isPartialSelect, session, dialect, withList, distinct }) {
       super();
       this.config = {
         withList,
-        table: table2,
+        table,
         fields: { ...fields },
         distinct,
         setOperators: []
@@ -16690,21 +16605,21 @@ var init_select2 = __esm(() => {
         selectedFields: fields,
         config: this.config
       };
-      this.tableName = getTableLikeName(table2);
+      this.tableName = getTableLikeName(table);
       this.joinsNotNullableMap = typeof this.tableName === "string" ? { [this.tableName]: true } : {};
-      for (const item of extractUsedTable(table2))
+      for (const item of extractUsedTable(table))
         this.usedTables.add(item);
     }
     getUsedTables() {
       return [...this.usedTables];
     }
     createJoin(joinType) {
-      return (table2, on) => {
+      return (table, on) => {
         const baseTableName = this.tableName;
-        const tableName = getTableLikeName(table2);
-        for (const item of extractUsedTable(table2))
+        const tableName = getTableLikeName(table);
+        for (const item of extractUsedTable(table))
           this.usedTables.add(item);
-        if (typeof tableName === "string" && this.config.joins?.some((join2) => join2.alias === tableName)) {
+        if (typeof tableName === "string" && this.config.joins?.some((join) => join.alias === tableName)) {
           throw new Error(`Alias "${tableName}" is already used in this query`);
         }
         if (!this.isPartialSelect) {
@@ -16713,8 +16628,8 @@ var init_select2 = __esm(() => {
               [baseTableName]: this.config.fields
             };
           }
-          if (typeof tableName === "string" && !is(table2, SQL)) {
-            const selection = is(table2, Subquery) ? table2._.selectedFields : is(table2, View) ? table2[ViewBaseConfig].selectedFields : table2[Table.Symbol.Columns];
+          if (typeof tableName === "string" && !is(table, SQL)) {
+            const selection = is(table, Subquery) ? table._.selectedFields : is(table, View) ? table[ViewBaseConfig].selectedFields : table[Table.Symbol.Columns];
             this.config.fields[tableName] = selection;
           }
         }
@@ -16724,7 +16639,7 @@ var init_select2 = __esm(() => {
         if (!this.config.joins) {
           this.config.joins = [];
         }
-        this.config.joins.push({ on, table: table2, joinType, alias: tableName });
+        this.config.joins.push({ on, table, joinType, alias: tableName });
         if (typeof tableName === "string") {
           switch (joinType) {
             case "left": {
@@ -16839,14 +16754,14 @@ var init_select2 = __esm(() => {
       const { typings: _typings, ...rest } = this.dialect.sqlToQuery(this.getSQL());
       return rest;
     }
-    as(alias2) {
+    as(alias) {
       const usedTables = [];
       usedTables.push(...extractUsedTable(this.config.table));
       if (this.config.joins) {
         for (const it of this.config.joins)
           usedTables.push(...extractUsedTable(it.table));
       }
-      return new Proxy(new Subquery(this.getSQL(), this.config.fields, alias2, false, [...new Set(usedTables)]), new SelectionProxyHandler({ alias: alias2, sqlAliasedBehavior: "alias", sqlBehavior: "error" }));
+      return new Proxy(new Subquery(this.getSQL(), this.config.fields, alias, false, [...new Set(usedTables)]), new SelectionProxyHandler({ alias, sqlAliasedBehavior: "alias", sqlBehavior: "error" }));
     }
     getSelectedFields() {
       return new Proxy(this.config.fields, new SelectionProxyHandler({ alias: this.tableName, sqlAliasedBehavior: "alias", sqlBehavior: "error" }));
@@ -16855,7 +16770,7 @@ var init_select2 = __esm(() => {
       return this;
     }
   };
-  SQLiteSelectBase = class SQLiteSelectBase2 extends SQLiteSelectQueryBuilderBase {
+  SQLiteSelectBase = class SQLiteSelectBase extends SQLiteSelectQueryBuilderBase {
     static [entityKind] = "SQLiteSelect";
     _prepare(isOneTimeQuery = true) {
       if (!this.session) {
@@ -16869,8 +16784,8 @@ var init_select2 = __esm(() => {
       query.joinsNotNullableMap = this.joinsNotNullableMap;
       return query;
     }
-    $withCache(config2) {
-      this.cacheConfig = config2 === undefined ? { config: {}, enable: true, autoInvalidate: true } : config2 === false ? { enable: false } : { enable: true, autoInvalidate: true, ...config2 };
+    $withCache(config) {
+      this.cacheConfig = config === undefined ? { config: {}, enable: true, autoInvalidate: true } : config === false ? { enable: false } : { enable: true, autoInvalidate: true, ...config };
       return this;
     }
     prepare() {
@@ -16900,108 +16815,7 @@ var init_select2 = __esm(() => {
 });
 var init_query_builder2 = () => {};
 var init_insert = () => {};
-var SQLiteUpdateBase;
-var init_update = __esm(() => {
-  init_entity();
-  init_query_promise();
-  init_selection_proxy();
-  init_table2();
-  init_subquery();
-  init_table();
-  init_utils();
-  init_view_common();
-  init_utils2();
-  init_view_base();
-  SQLiteUpdateBase = class SQLiteUpdateBase2 extends QueryPromise {
-    constructor(table2, set2, session, dialect, withList) {
-      super();
-      this.session = session;
-      this.dialect = dialect;
-      this.config = { set: set2, table: table2, withList, joins: [] };
-    }
-    static [entityKind] = "SQLiteUpdate";
-    config;
-    from(source) {
-      this.config.from = source;
-      return this;
-    }
-    createJoin(joinType) {
-      return (table2, on) => {
-        const tableName = getTableLikeName(table2);
-        if (typeof tableName === "string" && this.config.joins.some((join2) => join2.alias === tableName)) {
-          throw new Error(`Alias "${tableName}" is already used in this query`);
-        }
-        if (typeof on === "function") {
-          const from = this.config.from ? is(table2, SQLiteTable) ? table2[Table.Symbol.Columns] : is(table2, Subquery) ? table2._.selectedFields : is(table2, SQLiteViewBase) ? table2[ViewBaseConfig].selectedFields : undefined : undefined;
-          on = on(new Proxy(this.config.table[Table.Symbol.Columns], new SelectionProxyHandler({ sqlAliasedBehavior: "sql", sqlBehavior: "sql" })), from && new Proxy(from, new SelectionProxyHandler({ sqlAliasedBehavior: "sql", sqlBehavior: "sql" })));
-        }
-        this.config.joins.push({ on, table: table2, joinType, alias: tableName });
-        return this;
-      };
-    }
-    leftJoin = this.createJoin("left");
-    rightJoin = this.createJoin("right");
-    innerJoin = this.createJoin("inner");
-    fullJoin = this.createJoin("full");
-    where(where) {
-      this.config.where = where;
-      return this;
-    }
-    orderBy(...columns) {
-      if (typeof columns[0] === "function") {
-        const orderBy = columns[0](new Proxy(this.config.table[Table.Symbol.Columns], new SelectionProxyHandler({ sqlAliasedBehavior: "alias", sqlBehavior: "sql" })));
-        const orderByArray = Array.isArray(orderBy) ? orderBy : [orderBy];
-        this.config.orderBy = orderByArray;
-      } else {
-        const orderByArray = columns;
-        this.config.orderBy = orderByArray;
-      }
-      return this;
-    }
-    limit(limit) {
-      this.config.limit = limit;
-      return this;
-    }
-    returning(fields = this.config.table[SQLiteTable.Symbol.Columns]) {
-      this.config.returning = orderSelectedFields(fields);
-      return this;
-    }
-    getSQL() {
-      return this.dialect.buildUpdateQuery(this.config);
-    }
-    toSQL() {
-      const { typings: _typings, ...rest } = this.dialect.sqlToQuery(this.getSQL());
-      return rest;
-    }
-    _prepare(isOneTimeQuery = true) {
-      return this.session[isOneTimeQuery ? "prepareOneTimeQuery" : "prepareQuery"](this.dialect.sqlToQuery(this.getSQL()), this.config.returning, this.config.returning ? "all" : "run", true, undefined, {
-        type: "insert",
-        tables: extractUsedTable(this.config.table)
-      });
-    }
-    prepare() {
-      return this._prepare(false);
-    }
-    run = (placeholderValues) => {
-      return this._prepare().run(placeholderValues);
-    };
-    all = (placeholderValues) => {
-      return this._prepare().all(placeholderValues);
-    };
-    get = (placeholderValues) => {
-      return this._prepare().get(placeholderValues);
-    };
-    values = (placeholderValues) => {
-      return this._prepare().values(placeholderValues);
-    };
-    async execute() {
-      return this.config.returning ? this.all() : this.run();
-    }
-    $dynamic() {
-      return this;
-    }
-  };
-});
+var init_update = () => {};
 var init_query_builders = __esm(() => {
   init_delete();
   init_insert();
@@ -17024,11 +16838,470 @@ var init_sqlite_core = __esm(() => {
   init_query_builders();
   init_session();
   init_table2();
-  init_unique_constraint2();
+  init_unique_constraint();
   init_utils2();
   init_view();
 });
-var require_identity = __commonJS((exports) => {
+function nowTimestamp() {
+  return Date.now();
+}
+function buildStandardColumns() {
+  return {
+    createdAt: integer2("created_at").notNull().$defaultFn(nowTimestamp).default(0),
+    updatedAt: integer2("updated_at").notNull().$defaultFn(nowTimestamp).default(0)
+  };
+}
+function buildStandardColumnsWithSoftDelete() {
+  return {
+    ...buildStandardColumns(),
+    inUsed: integer2("in_used").notNull().default(1)
+  };
+}
+function buildAppendOnlyColumns() {
+  return {
+    createdAt: integer2("created_at").notNull().$defaultFn(nowTimestamp).default(0)
+  };
+}
+var standardColumns;
+var standardColumnsWithSoftDelete;
+var appendOnlyColumns;
+var init_common2 = __esm(() => {
+  init_sqlite_core();
+  standardColumns = buildStandardColumns();
+  standardColumnsWithSoftDelete = buildStandardColumnsWithSoftDelete();
+  appendOnlyColumns = buildAppendOnlyColumns();
+});
+var init_classic = __esm(() => {
+  init_external();
+  init_external();
+});
+var init_v4 = __esm(() => {
+  init_classic();
+});
+function isColumnType(column, columnTypes) {
+  return columnTypes.includes(column.columnType);
+}
+function isWithEnum(column) {
+  return "enumValues" in column && Array.isArray(column.enumValues) && column.enumValues.length > 0;
+}
+function columnToSchema(column, factory) {
+  const z$1 = factory?.zodInstance ?? exports_external;
+  const coerce = factory?.coerce ?? {};
+  let schema;
+  if (isWithEnum(column)) {
+    schema = column.enumValues.length ? z$1.enum(column.enumValues) : z$1.string();
+  }
+  if (!schema) {
+    if (isColumnType(column, ["PgGeometry", "PgPointTuple"])) {
+      schema = z$1.tuple([z$1.number(), z$1.number()]);
+    } else if (isColumnType(column, ["PgGeometryObject", "PgPointObject"])) {
+      schema = z$1.object({ x: z$1.number(), y: z$1.number() });
+    } else if (isColumnType(column, ["PgHalfVector", "PgVector"])) {
+      schema = z$1.array(z$1.number());
+      schema = column.dimensions ? schema.length(column.dimensions) : schema;
+    } else if (isColumnType(column, ["PgLine"])) {
+      schema = z$1.tuple([z$1.number(), z$1.number(), z$1.number()]);
+    } else if (isColumnType(column, ["PgLineABC"])) {
+      schema = z$1.object({
+        a: z$1.number(),
+        b: z$1.number(),
+        c: z$1.number()
+      });
+    } else if (isColumnType(column, ["PgArray"])) {
+      schema = z$1.array(columnToSchema(column.baseColumn, factory));
+      schema = column.size ? schema.length(column.size) : schema;
+    } else if (column.dataType === "array") {
+      schema = z$1.array(z$1.any());
+    } else if (column.dataType === "number") {
+      schema = numberColumnToSchema(column, z$1, coerce);
+    } else if (column.dataType === "bigint") {
+      schema = bigintColumnToSchema(column, z$1, coerce);
+    } else if (column.dataType === "boolean") {
+      schema = coerce === true || coerce.boolean ? z$1.coerce.boolean() : z$1.boolean();
+    } else if (column.dataType === "date") {
+      schema = coerce === true || coerce.date ? z$1.coerce.date() : z$1.date();
+    } else if (column.dataType === "string") {
+      schema = stringColumnToSchema(column, z$1, coerce);
+    } else if (column.dataType === "json") {
+      schema = jsonSchema;
+    } else if (column.dataType === "custom") {
+      schema = z$1.any();
+    } else if (column.dataType === "buffer") {
+      schema = bufferSchema;
+    }
+  }
+  if (!schema) {
+    schema = z$1.any();
+  }
+  return schema;
+}
+function numberColumnToSchema(column, z, coerce) {
+  let unsigned = column.getSQLType().includes("unsigned");
+  let min;
+  let max;
+  let integer = false;
+  if (isColumnType(column, ["MySqlTinyInt", "SingleStoreTinyInt"])) {
+    min = unsigned ? 0 : CONSTANTS.INT8_MIN;
+    max = unsigned ? CONSTANTS.INT8_UNSIGNED_MAX : CONSTANTS.INT8_MAX;
+    integer = true;
+  } else if (isColumnType(column, [
+    "PgSmallInt",
+    "PgSmallSerial",
+    "MySqlSmallInt",
+    "SingleStoreSmallInt"
+  ])) {
+    min = unsigned ? 0 : CONSTANTS.INT16_MIN;
+    max = unsigned ? CONSTANTS.INT16_UNSIGNED_MAX : CONSTANTS.INT16_MAX;
+    integer = true;
+  } else if (isColumnType(column, [
+    "PgReal",
+    "MySqlFloat",
+    "MySqlMediumInt",
+    "SingleStoreMediumInt",
+    "SingleStoreFloat"
+  ])) {
+    min = unsigned ? 0 : CONSTANTS.INT24_MIN;
+    max = unsigned ? CONSTANTS.INT24_UNSIGNED_MAX : CONSTANTS.INT24_MAX;
+    integer = isColumnType(column, ["MySqlMediumInt", "SingleStoreMediumInt"]);
+  } else if (isColumnType(column, [
+    "PgInteger",
+    "PgSerial",
+    "MySqlInt",
+    "SingleStoreInt"
+  ])) {
+    min = unsigned ? 0 : CONSTANTS.INT32_MIN;
+    max = unsigned ? CONSTANTS.INT32_UNSIGNED_MAX : CONSTANTS.INT32_MAX;
+    integer = true;
+  } else if (isColumnType(column, [
+    "PgDoublePrecision",
+    "MySqlReal",
+    "MySqlDouble",
+    "SingleStoreReal",
+    "SingleStoreDouble",
+    "SQLiteReal"
+  ])) {
+    min = unsigned ? 0 : CONSTANTS.INT48_MIN;
+    max = unsigned ? CONSTANTS.INT48_UNSIGNED_MAX : CONSTANTS.INT48_MAX;
+  } else if (isColumnType(column, [
+    "PgBigInt53",
+    "PgBigSerial53",
+    "MySqlBigInt53",
+    "MySqlSerial",
+    "SingleStoreBigInt53",
+    "SingleStoreSerial",
+    "SQLiteInteger"
+  ])) {
+    unsigned = unsigned || isColumnType(column, ["MySqlSerial", "SingleStoreSerial"]);
+    min = unsigned ? 0 : Number.MIN_SAFE_INTEGER;
+    max = Number.MAX_SAFE_INTEGER;
+    integer = true;
+  } else if (isColumnType(column, ["MySqlYear", "SingleStoreYear"])) {
+    min = 1901;
+    max = 2155;
+    integer = true;
+  } else {
+    min = Number.MIN_SAFE_INTEGER;
+    max = Number.MAX_SAFE_INTEGER;
+  }
+  let schema = coerce === true || coerce?.number ? integer ? z.coerce.number() : z.coerce.number().int() : integer ? z.int() : z.number();
+  schema = schema.gte(min).lte(max);
+  return schema;
+}
+function bigintColumnToSchema(column, z, coerce) {
+  const unsigned = column.getSQLType().includes("unsigned");
+  const min = unsigned ? 0n : CONSTANTS.INT64_MIN;
+  const max = unsigned ? CONSTANTS.INT64_UNSIGNED_MAX : CONSTANTS.INT64_MAX;
+  const schema = coerce === true || coerce?.bigint ? z.coerce.bigint() : z.bigint();
+  return schema.gte(min).lte(max);
+}
+function stringColumnToSchema(column, z, coerce) {
+  if (isColumnType(column, ["PgUUID"])) {
+    return z.uuid();
+  }
+  let max;
+  let regex;
+  let fixed = false;
+  if (isColumnType(column, ["PgVarchar", "SQLiteText"])) {
+    max = column.length;
+  } else if (isColumnType(column, ["MySqlVarChar", "SingleStoreVarChar"])) {
+    max = column.length ?? CONSTANTS.INT16_UNSIGNED_MAX;
+  } else if (isColumnType(column, ["MySqlText", "SingleStoreText"])) {
+    if (column.textType === "longtext") {
+      max = CONSTANTS.INT32_UNSIGNED_MAX;
+    } else if (column.textType === "mediumtext") {
+      max = CONSTANTS.INT24_UNSIGNED_MAX;
+    } else if (column.textType === "text") {
+      max = CONSTANTS.INT16_UNSIGNED_MAX;
+    } else {
+      max = CONSTANTS.INT8_UNSIGNED_MAX;
+    }
+  }
+  if (isColumnType(column, [
+    "PgChar",
+    "MySqlChar",
+    "SingleStoreChar"
+  ])) {
+    max = column.length;
+    fixed = true;
+  }
+  if (isColumnType(column, ["PgBinaryVector"])) {
+    regex = /^[01]+$/;
+    max = column.dimensions;
+  }
+  let schema = coerce === true || coerce?.string ? z.coerce.string() : z.string();
+  schema = regex ? schema.regex(regex) : schema;
+  return max && fixed ? schema.length(max) : max ? schema.max(max) : schema;
+}
+function getColumns(tableLike) {
+  return isTable(tableLike) ? getTableColumns(tableLike) : getViewSelectedFields(tableLike);
+}
+function handleColumns(columns, refinements, conditions, factory) {
+  const columnSchemas = {};
+  for (const [key, selected] of Object.entries(columns)) {
+    if (!is(selected, Column) && !is(selected, SQL) && !is(selected, SQL.Aliased) && typeof selected === "object") {
+      const columns = isTable(selected) || isView(selected) ? getColumns(selected) : selected;
+      columnSchemas[key] = handleColumns(columns, refinements[key] ?? {}, conditions, factory);
+      continue;
+    }
+    const refinement = refinements[key];
+    if (refinement !== undefined && typeof refinement !== "function") {
+      columnSchemas[key] = refinement;
+      continue;
+    }
+    const column = is(selected, Column) ? selected : undefined;
+    const schema = column ? columnToSchema(column, factory) : any();
+    const refined = typeof refinement === "function" ? refinement(schema) : schema;
+    if (conditions.never(column)) {
+      continue;
+    } else {
+      columnSchemas[key] = refined;
+    }
+    if (column) {
+      if (conditions.nullable(column)) {
+        columnSchemas[key] = columnSchemas[key].nullable();
+      }
+      if (conditions.optional(column)) {
+        columnSchemas[key] = columnSchemas[key].optional();
+      }
+    }
+  }
+  return object2(columnSchemas);
+}
+function handleEnum(enum_, factory) {
+  const zod = factory?.zodInstance ?? exports_external;
+  return zod.enum(enum_.enumValues);
+}
+var CONSTANTS;
+var isPgEnum2;
+var literalSchema;
+var jsonSchema;
+var bufferSchema;
+var selectConditions;
+var insertConditions;
+var createSelectSchema = (entity, refine) => {
+  if (isPgEnum2(entity)) {
+    return handleEnum(entity);
+  }
+  const columns = getColumns(entity);
+  return handleColumns(columns, refine ?? {}, selectConditions);
+};
+var createInsertSchema = (entity, refine) => {
+  const columns = getColumns(entity);
+  return handleColumns(columns, refine ?? {}, insertConditions);
+};
+var init_drizzle_zod = __esm(() => {
+  init_v4();
+  init_drizzle_orm();
+  CONSTANTS = {
+    INT8_MIN: -128,
+    INT8_MAX: 127,
+    INT8_UNSIGNED_MAX: 255,
+    INT16_MIN: -32768,
+    INT16_MAX: 32767,
+    INT16_UNSIGNED_MAX: 65535,
+    INT24_MIN: -8388608,
+    INT24_MAX: 8388607,
+    INT24_UNSIGNED_MAX: 16777215,
+    INT32_MIN: -2147483648,
+    INT32_MAX: 2147483647,
+    INT32_UNSIGNED_MAX: 4294967295,
+    INT48_MIN: -140737488355328,
+    INT48_MAX: 140737488355327,
+    INT48_UNSIGNED_MAX: 281474976710655,
+    INT64_MIN: -9223372036854775808n,
+    INT64_MAX: 9223372036854775807n,
+    INT64_UNSIGNED_MAX: 18446744073709551615n
+  };
+  isPgEnum2 = isWithEnum;
+  literalSchema = union([string2(), number2(), boolean2(), _null3()]);
+  jsonSchema = union([
+    literalSchema,
+    record(string2(), any()),
+    array(any())
+  ]);
+  bufferSchema = custom((v) => v instanceof Buffer);
+  selectConditions = {
+    never: () => false,
+    optional: () => false,
+    nullable: (column) => !column.notNull
+  };
+  insertConditions = {
+    never: (column) => column?.generated?.type === "always" || column?.generatedIdentity?.type === "always",
+    optional: (column) => !column.notNull || column.notNull && column.hasDefault,
+    nullable: (column) => !column.notNull
+  };
+});
+function sqlExpressionToText(value) {
+  if (typeof value !== "object" || value === null || !("queryChunks" in value)) {
+    return;
+  }
+  const chunks = value.queryChunks;
+  if (!chunks)
+    return;
+  return chunks.map((chunk) => {
+    if ("value" in chunk && typeof chunk.value === "string") {
+      return chunk.value;
+    }
+    if ("input" in chunk && chunk.input !== undefined) {
+      return String(chunk.input);
+    }
+    return String(chunk.value ?? "?");
+  }).join("");
+}
+function getDrizzleTableName(table) {
+  const nameSym = Symbol.for("drizzle:Name");
+  return String(table[nameSym]);
+}
+function quoteIdent(name) {
+  return `"${name.replace(/"/g, '""')}"`;
+}
+function defaultToSql(value) {
+  if (value == null) {
+    return value === null ? "NULL" : undefined;
+  }
+  if (typeof value === "number") {
+    return String(value);
+  }
+  if (typeof value === "string") {
+    return `'${value.replace(/'/g, "''")}'`;
+  }
+  if (typeof value === "boolean") {
+    return value ? "1" : "0";
+  }
+  return sqlExpressionToText(value) ?? String(value);
+}
+function generateCreateTableSql(table) {
+  const config = getTableConfig(table);
+  const columnDefs = [];
+  const tableConstraints = [];
+  const compositeUniqueCols = new Set;
+  for (const uc of config.uniqueConstraints) {
+    if (uc.columns.length > 1) {
+      for (const col of uc.columns) {
+        compositeUniqueCols.add(col.name);
+      }
+    }
+  }
+  const compositePkCols = new Set;
+  for (const pk of config.primaryKeys) {
+    if (pk.columns.length > 1) {
+      for (const col of pk.columns) {
+        compositePkCols.add(col.name);
+      }
+    }
+  }
+  for (const col of config.columns) {
+    const parts = [quoteIdent(col.name), col.getSQLType()];
+    if (col.primary && !compositePkCols.has(col.name)) {
+      parts.push("PRIMARY KEY");
+    }
+    if (col.notNull) {
+      parts.push("NOT NULL");
+    }
+    if (col.hasDefault && col.default !== undefined) {
+      const sqlDefault = defaultToSql(col.default);
+      if (sqlDefault !== undefined) {
+        parts.push(`DEFAULT ${sqlDefault}`);
+      }
+    }
+    if (col.isUnique && !compositeUniqueCols.has(col.name)) {
+      parts.push("UNIQUE");
+    }
+    columnDefs.push(parts.join(" "));
+  }
+  for (const pk of config.primaryKeys) {
+    if (pk.columns.length > 1) {
+      const pkCols = pk.columns.map((c) => quoteIdent(c.name)).join(", ");
+      tableConstraints.push(`PRIMARY KEY (${pkCols})`);
+    }
+  }
+  for (const uc of config.uniqueConstraints) {
+    if (uc.columns.length > 1) {
+      const cols = uc.columns.map((c) => quoteIdent(c.name)).join(", ");
+      tableConstraints.push(`UNIQUE (${cols})`);
+    }
+  }
+  for (const fk of config.foreignKeys) {
+    const ref = fk.reference();
+    const localCols = ref.columns.map((c) => quoteIdent(c.name)).join(", ");
+    const foreignCols = ref.foreignColumns.map((c) => quoteIdent(c.name)).join(", ");
+    const foreignTableName = getDrizzleTableName(ref.foreignTable);
+    let constraint = `FOREIGN KEY (${localCols}) REFERENCES ${quoteIdent(foreignTableName)} (${foreignCols})`;
+    if (fk.onDelete) {
+      constraint += ` ON DELETE ${fk.onDelete}`;
+    }
+    if (fk.onUpdate) {
+      constraint += ` ON UPDATE ${fk.onUpdate}`;
+    }
+    tableConstraints.push(constraint);
+  }
+  const allDefs = [...columnDefs, ...tableConstraints];
+  return `CREATE TABLE IF NOT EXISTS ${quoteIdent(config.name)} (
+  ${allDefs.join(`,
+  `)}
+)`;
+}
+var init_ddl = __esm(() => {
+  init_sqlite_core();
+});
+function defineTable(name, columns) {
+  const table = sqliteTable(name, columns);
+  let insert;
+  let select;
+  let ddl;
+  return {
+    table,
+    get insertSchema() {
+      if (insert === undefined) {
+        insert = createInsertSchema(table);
+      }
+      return insert;
+    },
+    get selectSchema() {
+      if (select === undefined) {
+        select = createSelectSchema(table);
+      }
+      return select;
+    },
+    get createTableSql() {
+      if (ddl === undefined) {
+        ddl = generateCreateTableSql(table);
+      }
+      return ddl;
+    }
+  };
+}
+var init_define_table = __esm(() => {
+  init_sqlite_core();
+  init_drizzle_zod();
+  init_ddl();
+});
+var init_schema = __esm(() => {
+  init_sqlite_core();
+  init_define_table();
+  init_common2();
+});
+var require_identity = __commonJS(function(exports) {
   var ALIAS = Symbol.for("yaml.alias");
   var DOC = Symbol.for("yaml.document");
   var MAP = Symbol.for("yaml.map");
@@ -17080,7 +17353,7 @@ var require_identity = __commonJS((exports) => {
   exports.isScalar = isScalar;
   exports.isSeq = isSeq;
 });
-var require_visit = __commonJS((exports) => {
+var require_visit = __commonJS(function(exports) {
   var identity = require_identity();
   var BREAK = Symbol("break visit");
   var SKIP = Symbol("skip children");
@@ -17233,7 +17506,7 @@ var require_visit = __commonJS((exports) => {
   exports.visit = visit;
   exports.visitAsync = visitAsync;
 });
-var require_directives = __commonJS((exports) => {
+var require_directives = __commonJS(function(exports) {
   var identity = require_identity();
   var visit = require_visit();
   var escapeChars = {
@@ -17300,13 +17573,13 @@ var require_directives = __commonJS((exports) => {
             onError(0, "%YAML directive should contain exactly one part");
             return false;
           }
-          const [version3] = parts;
-          if (version3 === "1.1" || version3 === "1.2") {
-            this.yaml.version = version3;
+          const [version] = parts;
+          if (version === "1.1" || version === "1.2") {
+            this.yaml.version = version;
             return true;
           } else {
-            const isValid = /^\d+\.\d+$/.test(version3);
-            onError(6, `Unsupported YAML version ${version3}`, isValid);
+            const isValid = /^\d+\.\d+$/.test(version);
+            onError(6, `Unsupported YAML version ${version}`, isValid);
             return false;
           }
         }
@@ -17339,8 +17612,8 @@ var require_directives = __commonJS((exports) => {
       if (prefix) {
         try {
           return prefix + decodeURIComponent(suffix);
-        } catch (error51) {
-          onError(String(error51));
+        } catch (error) {
+          onError(String(error));
           return null;
         }
       }
@@ -17356,13 +17629,13 @@ var require_directives = __commonJS((exports) => {
       }
       return tag[0] === "!" ? tag : `!<${tag}>`;
     }
-    toString(doc2) {
+    toString(doc) {
       const lines = this.yaml.explicit ? [`%YAML ${this.yaml.version || "1.2"}`] : [];
       const tagEntries = Object.entries(this.tags);
       let tagNames;
-      if (doc2 && tagEntries.length > 0 && identity.isNode(doc2.contents)) {
+      if (doc && tagEntries.length > 0 && identity.isNode(doc.contents)) {
         const tags = {};
-        visit.visit(doc2.contents, (_key, node) => {
+        visit.visit(doc.contents, (_key, node) => {
           if (identity.isNode(node) && node.tag)
             tags[node.tag] = true;
         });
@@ -17372,7 +17645,7 @@ var require_directives = __commonJS((exports) => {
       for (const [handle, prefix] of tagEntries) {
         if (handle === "!!" && prefix === "tag:yaml.org,2002:")
           continue;
-        if (!doc2 || tagNames.some((tn) => tn.startsWith(prefix)))
+        if (!doc || tagNames.some((tn) => tn.startsWith(prefix)))
           lines.push(`%TAG ${handle} ${prefix}`);
       }
       return lines.join(`
@@ -17383,7 +17656,7 @@ var require_directives = __commonJS((exports) => {
   Directives.defaultTags = { "!!": "tag:yaml.org,2002:" };
   exports.Directives = Directives;
 });
-var require_anchors = __commonJS((exports) => {
+var require_anchors = __commonJS(function(exports) {
   var identity = require_identity();
   var visit = require_visit();
   function anchorIsValid(anchor) {
@@ -17411,14 +17684,14 @@ var require_anchors = __commonJS((exports) => {
         return name;
     }
   }
-  function createNodeAnchors(doc2, prefix) {
+  function createNodeAnchors(doc, prefix) {
     const aliasObjects = [];
     const sourceObjects = new Map;
     let prevAnchors = null;
     return {
       onAnchor: (source) => {
         aliasObjects.push(source);
-        prevAnchors ?? (prevAnchors = anchorNames(doc2));
+        prevAnchors ?? (prevAnchors = anchorNames(doc));
         const anchor = findNewAnchor(prefix, prevAnchors);
         prevAnchors.add(anchor);
         return anchor;
@@ -17429,9 +17702,9 @@ var require_anchors = __commonJS((exports) => {
           if (typeof ref === "object" && ref.anchor && (identity.isScalar(ref.node) || identity.isCollection(ref.node))) {
             ref.node.anchor = ref.anchor;
           } else {
-            const error51 = new Error("Failed to resolve repeated object (this should not happen)");
-            error51.source = source;
-            throw error51;
+            const error = new Error("Failed to resolve repeated object (this should not happen)");
+            error.source = source;
+            throw error;
           }
         }
       },
@@ -17443,7 +17716,7 @@ var require_anchors = __commonJS((exports) => {
   exports.createNodeAnchors = createNodeAnchors;
   exports.findNewAnchor = findNewAnchor;
 });
-var require_applyReviver = __commonJS((exports) => {
+var require_applyReviver = __commonJS(function(exports) {
   function applyReviver(reviver, obj, key, val) {
     if (val && typeof val === "object") {
       if (Array.isArray(val)) {
@@ -17488,7 +17761,7 @@ var require_applyReviver = __commonJS((exports) => {
   }
   exports.applyReviver = applyReviver;
 });
-var require_toJS = __commonJS((exports) => {
+var require_toJS = __commonJS(function(exports) {
   var identity = require_identity();
   function toJS(value, arg, ctx) {
     if (Array.isArray(value))
@@ -17498,8 +17771,8 @@ var require_toJS = __commonJS((exports) => {
         return value.toJSON(arg, ctx);
       const data = { aliasCount: 0, count: 1, res: undefined };
       ctx.anchors.set(value, data);
-      ctx.onCreate = (res2) => {
-        data.res = res2;
+      ctx.onCreate = (res) => {
+        data.res = res;
         delete ctx.onCreate;
       };
       const res = value.toJSON(arg, ctx);
@@ -17513,7 +17786,7 @@ var require_toJS = __commonJS((exports) => {
   }
   exports.toJS = toJS;
 });
-var require_Node = __commonJS((exports) => {
+var require_Node = __commonJS(function(exports) {
   var applyReviver = require_applyReviver();
   var identity = require_identity();
   var toJS = require_toJS();
@@ -17528,12 +17801,12 @@ var require_Node = __commonJS((exports) => {
         copy.range = this.range.slice();
       return copy;
     }
-    toJS(doc2, { mapAsMap, maxAliasCount, onAnchor, reviver } = {}) {
-      if (!identity.isDocument(doc2))
+    toJS(doc, { mapAsMap, maxAliasCount, onAnchor, reviver } = {}) {
+      if (!identity.isDocument(doc))
         throw new TypeError("A document argument is required");
       const ctx = {
         anchors: new Map,
-        doc: doc2,
+        doc,
         keep: true,
         mapAsMap: mapAsMap === true,
         mapKeyWarned: false,
@@ -17541,14 +17814,14 @@ var require_Node = __commonJS((exports) => {
       };
       const res = toJS.toJS(this, "", ctx);
       if (typeof onAnchor === "function")
-        for (const { count, res: res2 } of ctx.anchors.values())
-          onAnchor(res2, count);
+        for (const { count, res } of ctx.anchors.values())
+          onAnchor(res, count);
       return typeof reviver === "function" ? applyReviver.applyReviver(reviver, { "": res }, "", res) : res;
     }
   }
   exports.NodeBase = NodeBase;
 });
-var require_Alias = __commonJS((exports) => {
+var require_Alias = __commonJS(function(exports) {
   var anchors = require_anchors();
   var visit = require_visit();
   var identity = require_identity();
@@ -17565,7 +17838,7 @@ var require_Alias = __commonJS((exports) => {
         }
       });
     }
-    resolve(doc2, ctx) {
+    resolve(doc, ctx) {
       if (ctx?.maxAliasCount === 0)
         throw new ReferenceError("Alias resolution is disabled");
       let nodes;
@@ -17573,7 +17846,7 @@ var require_Alias = __commonJS((exports) => {
         nodes = ctx.aliasResolveCache;
       } else {
         nodes = [];
-        visit.visit(doc2, {
+        visit.visit(doc, {
           Node: (_key, node) => {
             if (identity.isAlias(node) || identity.hasAnchor(node))
               nodes.push(node);
@@ -17594,16 +17867,16 @@ var require_Alias = __commonJS((exports) => {
     toJSON(_arg, ctx) {
       if (!ctx)
         return { source: this.source };
-      const { anchors: anchors2, doc: doc2, maxAliasCount } = ctx;
-      const source = this.resolve(doc2, ctx);
+      const { anchors, doc, maxAliasCount } = ctx;
+      const source = this.resolve(doc, ctx);
       if (!source) {
         const msg = `Unresolved alias (the anchor must be set before the alias): ${this.source}`;
         throw new ReferenceError(msg);
       }
-      let data = anchors2.get(source);
+      let data = anchors.get(source);
       if (!data) {
         toJS.toJS(source, null, ctx);
-        data = anchors2.get(source);
+        data = anchors.get(source);
       }
       if (data?.res === undefined) {
         const msg = "This should not happen: Alias anchor was not resolved?";
@@ -17612,7 +17885,7 @@ var require_Alias = __commonJS((exports) => {
       if (maxAliasCount >= 0) {
         data.count += 1;
         if (data.aliasCount === 0)
-          data.aliasCount = getAliasCount(doc2, source, anchors2);
+          data.aliasCount = getAliasCount(doc, source, anchors);
         if (data.count * data.aliasCount > maxAliasCount) {
           const msg = "Excessive alias count indicates a resource exhaustion attack";
           throw new ReferenceError(msg);
@@ -17634,29 +17907,29 @@ var require_Alias = __commonJS((exports) => {
       return src;
     }
   }
-  function getAliasCount(doc2, node, anchors2) {
+  function getAliasCount(doc, node, anchors) {
     if (identity.isAlias(node)) {
-      const source = node.resolve(doc2);
-      const anchor = anchors2 && source && anchors2.get(source);
+      const source = node.resolve(doc);
+      const anchor = anchors && source && anchors.get(source);
       return anchor ? anchor.count * anchor.aliasCount : 0;
     } else if (identity.isCollection(node)) {
       let count = 0;
       for (const item of node.items) {
-        const c = getAliasCount(doc2, item, anchors2);
+        const c = getAliasCount(doc, item, anchors);
         if (c > count)
           count = c;
       }
       return count;
     } else if (identity.isPair(node)) {
-      const kc = getAliasCount(doc2, node.key, anchors2);
-      const vc = getAliasCount(doc2, node.value, anchors2);
+      const kc = getAliasCount(doc, node.key, anchors);
+      const vc = getAliasCount(doc, node.value, anchors);
       return Math.max(kc, vc);
     }
     return 1;
   }
   exports.Alias = Alias;
 });
-var require_Scalar = __commonJS((exports) => {
+var require_Scalar = __commonJS(function(exports) {
   var identity = require_identity();
   var Node = require_Node();
   var toJS = require_toJS();
@@ -17682,7 +17955,7 @@ var require_Scalar = __commonJS((exports) => {
   exports.Scalar = Scalar;
   exports.isScalarValue = isScalarValue;
 });
-var require_createNode = __commonJS((exports) => {
+var require_createNode = __commonJS(function(exports) {
   var Alias = require_Alias();
   var identity = require_identity();
   var Scalar = require_Scalar();
@@ -17703,9 +17976,9 @@ var require_createNode = __commonJS((exports) => {
     if (identity.isNode(value))
       return value;
     if (identity.isPair(value)) {
-      const map2 = ctx.schema[identity.MAP].createNode?.(ctx.schema, null, ctx);
-      map2.items.push(value);
-      return map2;
+      const map = ctx.schema[identity.MAP].createNode?.(ctx.schema, null, ctx);
+      map.items.push(value);
+      return map;
     }
     if (value instanceof String || value instanceof Number || value instanceof Boolean || typeof BigInt !== "undefined" && value instanceof BigInt) {
       value = value.valueOf();
@@ -17730,10 +18003,10 @@ var require_createNode = __commonJS((exports) => {
         value = value.toJSON();
       }
       if (!value || typeof value !== "object") {
-        const node2 = new Scalar.Scalar(value);
+        const node = new Scalar.Scalar(value);
         if (ref)
-          ref.node = node2;
-        return node2;
+          ref.node = node;
+        return node;
       }
       tagObj = value instanceof Map ? schema[identity.MAP] : (Symbol.iterator in Object(value)) ? schema[identity.SEQ] : schema[identity.MAP];
     }
@@ -17752,7 +18025,7 @@ var require_createNode = __commonJS((exports) => {
   }
   exports.createNode = createNode;
 });
-var require_Collection = __commonJS((exports) => {
+var require_Collection = __commonJS(function(exports) {
   var createNode = require_createNode();
   var identity = require_identity();
   var Node = require_Node();
@@ -17865,7 +18138,7 @@ var require_Collection = __commonJS((exports) => {
   exports.collectionFromPath = collectionFromPath;
   exports.isEmptyPath = isEmptyPath;
 });
-var require_stringifyComment = __commonJS((exports) => {
+var require_stringifyComment = __commonJS(function(exports) {
   var stringifyComment = (str) => str.replace(/^(?!$)(?: $)?/gm, "#");
   function indentComment(comment, indent) {
     if (/^\n+$/.test(comment))
@@ -17880,18 +18153,18 @@ var require_stringifyComment = __commonJS((exports) => {
   exports.lineComment = lineComment;
   exports.stringifyComment = stringifyComment;
 });
-var require_foldFlowLines = __commonJS((exports) => {
+var require_foldFlowLines = __commonJS(function(exports) {
   var FOLD_FLOW = "flow";
   var FOLD_BLOCK = "block";
   var FOLD_QUOTED = "quoted";
-  function foldFlowLines(text3, indent, mode = "flow", { indentAtStart, lineWidth = 80, minContentWidth = 20, onFold, onOverflow } = {}) {
+  function foldFlowLines(text, indent, mode = "flow", { indentAtStart, lineWidth = 80, minContentWidth = 20, onFold, onOverflow } = {}) {
     if (!lineWidth || lineWidth < 0)
-      return text3;
+      return text;
     if (lineWidth < minContentWidth)
       minContentWidth = 0;
     const endStep = Math.max(1 + minContentWidth, 1 + lineWidth - indent.length);
-    if (text3.length <= endStep)
-      return text3;
+    if (text.length <= endStep)
+      return text;
     const folds = [];
     const escapedFolds = {};
     let end = lineWidth - indent.length;
@@ -17908,14 +18181,14 @@ var require_foldFlowLines = __commonJS((exports) => {
     let escStart = -1;
     let escEnd = -1;
     if (mode === FOLD_BLOCK) {
-      i = consumeMoreIndentedLines(text3, i, indent.length);
+      i = consumeMoreIndentedLines(text, i, indent.length);
       if (i !== -1)
         end = i + endStep;
     }
-    for (let ch;ch = text3[i += 1]; ) {
+    for (let ch;ch = text[i += 1]; ) {
       if (mode === FOLD_QUOTED && ch === "\\") {
         escStart = i;
-        switch (text3[i + 1]) {
+        switch (text[i + 1]) {
           case "x":
             i += 3;
             break;
@@ -17933,13 +18206,13 @@ var require_foldFlowLines = __commonJS((exports) => {
       if (ch === `
 `) {
         if (mode === FOLD_BLOCK)
-          i = consumeMoreIndentedLines(text3, i, indent.length);
+          i = consumeMoreIndentedLines(text, i, indent.length);
         end = i + indent.length + endStep;
         split = undefined;
       } else {
         if (ch === " " && prev && prev !== " " && prev !== `
 ` && prev !== "\t") {
-          const next = text3[i + 1];
+          const next = text[i + 1];
           if (next && next !== " " && next !== `
 ` && next !== "\t")
             split = i;
@@ -17952,12 +18225,12 @@ var require_foldFlowLines = __commonJS((exports) => {
           } else if (mode === FOLD_QUOTED) {
             while (prev === " " || prev === "\t") {
               prev = ch;
-              ch = text3[i += 1];
+              ch = text[i += 1];
               overflow = true;
             }
             const j = i > escEnd + 1 ? i - 2 : escStart - 1;
             if (escapedFolds[j])
-              return text3;
+              return text;
             folds.push(j);
             escapedFolds[j] = true;
             end = j + endStep;
@@ -17972,40 +18245,40 @@ var require_foldFlowLines = __commonJS((exports) => {
     if (overflow && onOverflow)
       onOverflow();
     if (folds.length === 0)
-      return text3;
+      return text;
     if (onFold)
       onFold();
-    let res = text3.slice(0, folds[0]);
-    for (let i2 = 0;i2 < folds.length; ++i2) {
-      const fold = folds[i2];
-      const end2 = folds[i2 + 1] || text3.length;
+    let res = text.slice(0, folds[0]);
+    for (let i = 0;i < folds.length; ++i) {
+      const fold = folds[i];
+      const end = folds[i + 1] || text.length;
       if (fold === 0)
         res = `
-${indent}${text3.slice(0, end2)}`;
+${indent}${text.slice(0, end)}`;
       else {
         if (mode === FOLD_QUOTED && escapedFolds[fold])
-          res += `${text3[fold]}\\`;
+          res += `${text[fold]}\\`;
         res += `
-${indent}${text3.slice(fold + 1, end2)}`;
+${indent}${text.slice(fold + 1, end)}`;
       }
     }
     return res;
   }
-  function consumeMoreIndentedLines(text3, i, indent) {
+  function consumeMoreIndentedLines(text, i, indent) {
     let end = i;
     let start = i + 1;
-    let ch = text3[start];
+    let ch = text[start];
     while (ch === " " || ch === "\t") {
       if (i < start + indent) {
-        ch = text3[++i];
+        ch = text[++i];
       } else {
         do {
-          ch = text3[++i];
+          ch = text[++i];
         } while (ch && ch !== `
 `);
         end = i;
         start = i + 1;
-        ch = text3[start];
+        ch = text[start];
       }
     }
     return end;
@@ -18015,7 +18288,7 @@ ${indent}${text3.slice(fold + 1, end2)}`;
   exports.FOLD_QUOTED = FOLD_QUOTED;
   exports.foldFlowLines = foldFlowLines;
 });
-var require_stringifyString = __commonJS((exports) => {
+var require_stringifyString = __commonJS(function(exports) {
   var Scalar = require_Scalar();
   var foldFlowLines = require_foldFlowLines();
   var getFoldOptions = (ctx, isBlock) => ({
@@ -18044,27 +18317,27 @@ var require_stringifyString = __commonJS((exports) => {
     return true;
   }
   function doubleQuotedString(value, ctx) {
-    const json2 = JSON.stringify(value);
+    const json = JSON.stringify(value);
     if (ctx.options.doubleQuotedAsJSON)
-      return json2;
+      return json;
     const { implicitKey } = ctx;
     const minMultiLineLength = ctx.options.doubleQuotedMinMultiLineLength;
     const indent = ctx.indent || (containsDocumentMarker(value) ? "  " : "");
     let str = "";
     let start = 0;
-    for (let i = 0, ch = json2[i];ch; ch = json2[++i]) {
-      if (ch === " " && json2[i + 1] === "\\" && json2[i + 2] === "n") {
-        str += json2.slice(start, i) + "\\ ";
+    for (let i = 0, ch = json[i];ch; ch = json[++i]) {
+      if (ch === " " && json[i + 1] === "\\" && json[i + 2] === "n") {
+        str += json.slice(start, i) + "\\ ";
         i += 1;
         start = i;
         ch = "\\";
       }
       if (ch === "\\")
-        switch (json2[i + 1]) {
+        switch (json[i + 1]) {
           case "u":
             {
-              str += json2.slice(start, i);
-              const code = json2.substr(i + 2, 4);
+              str += json.slice(start, i);
+              const code = json.substr(i + 2, 4);
               switch (code) {
                 case "0000":
                   str += "\\0";
@@ -18094,26 +18367,26 @@ var require_stringifyString = __commonJS((exports) => {
                   if (code.substr(0, 2) === "00")
                     str += "\\x" + code.substr(2);
                   else
-                    str += json2.substr(i, 6);
+                    str += json.substr(i, 6);
               }
               i += 5;
               start = i + 1;
             }
             break;
           case "n":
-            if (implicitKey || json2[i + 2] === '"' || json2.length < minMultiLineLength) {
+            if (implicitKey || json[i + 2] === '"' || json.length < minMultiLineLength) {
               i += 1;
             } else {
-              str += json2.slice(start, i) + `
+              str += json.slice(start, i) + `
 
 `;
-              while (json2[i + 2] === "\\" && json2[i + 3] === "n" && json2[i + 4] !== '"') {
+              while (json[i + 2] === "\\" && json[i + 3] === "n" && json[i + 4] !== '"') {
                 str += `
 `;
                 i += 2;
               }
               str += indent;
-              if (json2[i + 2] === " ")
+              if (json[i + 2] === " ")
                 str += "\\";
               i += 1;
               start = i + 1;
@@ -18123,7 +18396,7 @@ var require_stringifyString = __commonJS((exports) => {
             i += 1;
         }
     }
-    str = start ? str + json2.slice(start) : json2;
+    str = start ? str + json.slice(start) : json;
     return implicitKey ? str : foldFlowLines.foldFlowLines(str, indent, foldFlowLines.FOLD_QUOTED, getFoldOptions(ctx, false));
   }
   function singleQuotedString(value, ctx) {
@@ -18167,9 +18440,9 @@ ${indent}`) + "'";
       return quotedString(value, ctx);
     }
     const indent = ctx.indent || (ctx.forceBlockIndent || containsDocumentMarker(value) ? "  " : "");
-    const literal2 = blockQuote === "literal" ? true : blockQuote === "folded" || type === Scalar.Scalar.BLOCK_FOLDED ? false : type === Scalar.Scalar.BLOCK_LITERAL ? true : !lineLengthOverLimit(value, lineWidth, indent.length);
+    const literal = blockQuote === "literal" ? true : blockQuote === "folded" || type === Scalar.Scalar.BLOCK_FOLDED ? false : type === Scalar.Scalar.BLOCK_LITERAL ? true : !lineLengthOverLimit(value, lineWidth, indent.length);
     if (!value)
-      return literal2 ? `|
+      return literal ? `|
 ` : `>
 `;
     let chomp;
@@ -18224,7 +18497,7 @@ ${indent}`) + "'";
       if (onComment)
         onComment();
     }
-    if (!literal2) {
+    if (!literal) {
       const foldedValue = value.replace(/\n+/g, `
 $&`).replace(/(?:^|\n)([\t ].*)(?:([\n\t ]*)\n(?![\n\t ]))?/g, "$1$2").replace(/\n+/g, `$&${indent}`);
       let literalFallback = false;
@@ -18270,8 +18543,8 @@ ${indent}${start}${value}${end}`;
 ${indent}`);
     if (actualString) {
       const test = (tag) => tag.default && tag.tag !== "tag:yaml.org,2002:str" && tag.test?.test(str);
-      const { compat: compat2, tags } = ctx.doc.schema;
-      if (tags.some(test) || compat2?.some(test))
+      const { compat, tags } = ctx.doc.schema;
+      if (tags.some(test) || compat?.some(test))
         return quotedString(value, ctx);
     }
     return implicitKey ? str : foldFlowLines.foldFlowLines(str, indent, foldFlowLines.FOLD_FLOW, getFoldOptions(ctx, false));
@@ -18311,12 +18584,12 @@ ${indent}`);
   }
   exports.stringifyString = stringifyString;
 });
-var require_stringify = __commonJS((exports) => {
+var require_stringify = __commonJS(function(exports) {
   var anchors = require_anchors();
   var identity = require_identity();
   var stringifyComment = require_stringifyComment();
   var stringifyString = require_stringifyString();
-  function createStringifyContext(doc2, options) {
+  function createStringifyContext(doc, options) {
     const opt = Object.assign({
       blockQuote: true,
       commentString: stringifyComment.stringifyComment,
@@ -18336,7 +18609,7 @@ var require_stringify = __commonJS((exports) => {
       trailingComma: false,
       trueStr: "true",
       verifyAliasOrder: true
-    }, doc2.schema.toStringOptions, options);
+    }, doc.schema.toStringOptions, options);
     let inFlow;
     switch (opt.collectionStyle) {
       case "block":
@@ -18350,7 +18623,7 @@ var require_stringify = __commonJS((exports) => {
     }
     return {
       anchors: new Set,
-      doc: doc2,
+      doc,
       flowCollectionPadding: opt.flowCollectionPadding ? " " : "",
       indent: "",
       indentStep: typeof opt.indent === "number" ? " ".repeat(opt.indent) : "  ",
@@ -18385,8 +18658,8 @@ var require_stringify = __commonJS((exports) => {
     }
     return tagObj;
   }
-  function stringifyProps(node, tagObj, { anchors: anchors$1, doc: doc2 }) {
-    if (!doc2.directives)
+  function stringifyProps(node, tagObj, { anchors: anchors$1, doc }) {
+    if (!doc.directives)
       return "";
     const props = [];
     const anchor = (identity.isScalar(node) || identity.isCollection(node)) && node.anchor;
@@ -18396,7 +18669,7 @@ var require_stringify = __commonJS((exports) => {
     }
     const tag = node.tag ?? (tagObj.default ? null : tagObj.tag);
     if (tag)
-      props.push(doc2.directives.tagString(tag));
+      props.push(doc.directives.tagString(tag));
     return props.join(" ");
   }
   function stringify(item, ctx, onComment, onChompKeep) {
@@ -18416,7 +18689,7 @@ var require_stringify = __commonJS((exports) => {
       }
     }
     let tagObj = undefined;
-    const node = identity.isNode(item) ? item : ctx.doc.createNode(item, { onTagObj: (o2) => tagObj = o2 });
+    const node = identity.isNode(item) ? item : ctx.doc.createNode(item, { onTagObj: (o) => tagObj = o });
     tagObj ?? (tagObj = getTagObject(ctx.doc.schema.tags, node));
     const props = stringifyProps(node, tagObj, ctx);
     if (props.length > 0)
@@ -18430,13 +18703,13 @@ ${ctx.indent}${str}`;
   exports.createStringifyContext = createStringifyContext;
   exports.stringify = stringify;
 });
-var require_stringifyPair = __commonJS((exports) => {
+var require_stringifyPair = __commonJS(function(exports) {
   var identity = require_identity();
   var Scalar = require_Scalar();
   var stringify = require_stringify();
   var stringifyComment = require_stringifyComment();
   function stringifyPair({ key, value }, ctx, onComment, onChompKeep) {
-    const { allNullValues, doc: doc2, indent, indentStep, options: { commentString, indentSeq, simpleKeys } } = ctx;
+    const { allNullValues, doc, indent, indentStep, options: { commentString, indentSeq, simpleKeys } } = ctx;
     let keyComment = identity.isNode(key) && key.comment || null;
     if (simpleKeys) {
       if (keyComment) {
@@ -18497,7 +18770,7 @@ ${indent}:`;
       vcb = null;
       valueComment = null;
       if (value && typeof value === "object")
-        value = doc2.createNode(value);
+        value = doc.createNode(value);
     }
     ctx.implicitKey = false;
     if (!explicitKey && !keyComment && identity.isScalar(value))
@@ -18564,7 +18837,7 @@ ${ctx.indent}`;
   }
   exports.stringifyPair = stringifyPair;
 });
-var require_log = __commonJS((exports) => {
+var require_log = __commonJS(function(exports) {
   var node_process = __require("process");
   function debug(logLevel, ...messages) {
     if (logLevel === "debug")
@@ -18581,11 +18854,11 @@ var require_log = __commonJS((exports) => {
   exports.debug = debug;
   exports.warn = warn;
 });
-var require_merge = __commonJS((exports) => {
+var require_merge = __commonJS(function(exports) {
   var identity = require_identity();
   var Scalar = require_Scalar();
   var MERGE_KEY = "<<";
-  var merge2 = {
+  var merge = {
     identify: (value) => value === MERGE_KEY || typeof value === "symbol" && value.description === MERGE_KEY,
     default: "key",
     tag: "tag:yaml.org,2002:merge",
@@ -18595,79 +18868,79 @@ var require_merge = __commonJS((exports) => {
     }),
     stringify: () => MERGE_KEY
   };
-  var isMergeKey = (ctx, key) => (merge2.identify(key) || identity.isScalar(key) && (!key.type || key.type === Scalar.Scalar.PLAIN) && merge2.identify(key.value)) && ctx?.doc.schema.tags.some((tag) => tag.tag === merge2.tag && tag.default);
-  function addMergeToJSMap(ctx, map2, value) {
+  var isMergeKey = (ctx, key) => (merge.identify(key) || identity.isScalar(key) && (!key.type || key.type === Scalar.Scalar.PLAIN) && merge.identify(key.value)) && ctx?.doc.schema.tags.some((tag) => tag.tag === merge.tag && tag.default);
+  function addMergeToJSMap(ctx, map, value) {
     const source = resolveAliasValue(ctx, value);
     if (identity.isSeq(source))
       for (const it of source.items)
-        mergeValue(ctx, map2, it);
+        mergeValue(ctx, map, it);
     else if (Array.isArray(source))
       for (const it of source)
-        mergeValue(ctx, map2, it);
+        mergeValue(ctx, map, it);
     else
-      mergeValue(ctx, map2, source);
+      mergeValue(ctx, map, source);
   }
-  function mergeValue(ctx, map2, value) {
+  function mergeValue(ctx, map, value) {
     const source = resolveAliasValue(ctx, value);
     if (!identity.isMap(source))
       throw new Error("Merge sources must be maps or map aliases");
     const srcMap = source.toJSON(null, ctx, Map);
-    for (const [key, value2] of srcMap) {
-      if (map2 instanceof Map) {
-        if (!map2.has(key))
-          map2.set(key, value2);
-      } else if (map2 instanceof Set) {
-        map2.add(key);
-      } else if (!Object.prototype.hasOwnProperty.call(map2, key)) {
-        Object.defineProperty(map2, key, {
-          value: value2,
+    for (const [key, value] of srcMap) {
+      if (map instanceof Map) {
+        if (!map.has(key))
+          map.set(key, value);
+      } else if (map instanceof Set) {
+        map.add(key);
+      } else if (!Object.prototype.hasOwnProperty.call(map, key)) {
+        Object.defineProperty(map, key, {
+          value,
           writable: true,
           enumerable: true,
           configurable: true
         });
       }
     }
-    return map2;
+    return map;
   }
   function resolveAliasValue(ctx, value) {
     return ctx && identity.isAlias(value) ? value.resolve(ctx.doc, ctx) : value;
   }
   exports.addMergeToJSMap = addMergeToJSMap;
   exports.isMergeKey = isMergeKey;
-  exports.merge = merge2;
+  exports.merge = merge;
 });
-var require_addPairToJSMap = __commonJS((exports) => {
+var require_addPairToJSMap = __commonJS(function(exports) {
   var log = require_log();
-  var merge2 = require_merge();
+  var merge = require_merge();
   var stringify = require_stringify();
   var identity = require_identity();
   var toJS = require_toJS();
-  function addPairToJSMap(ctx, map2, { key, value }) {
+  function addPairToJSMap(ctx, map, { key, value }) {
     if (identity.isNode(key) && key.addToJSMap)
-      key.addToJSMap(ctx, map2, value);
-    else if (merge2.isMergeKey(ctx, key))
-      merge2.addMergeToJSMap(ctx, map2, value);
+      key.addToJSMap(ctx, map, value);
+    else if (merge.isMergeKey(ctx, key))
+      merge.addMergeToJSMap(ctx, map, value);
     else {
       const jsKey = toJS.toJS(key, "", ctx);
-      if (map2 instanceof Map) {
-        map2.set(jsKey, toJS.toJS(value, jsKey, ctx));
-      } else if (map2 instanceof Set) {
-        map2.add(jsKey);
+      if (map instanceof Map) {
+        map.set(jsKey, toJS.toJS(value, jsKey, ctx));
+      } else if (map instanceof Set) {
+        map.add(jsKey);
       } else {
         const stringKey = stringifyKey(key, jsKey, ctx);
         const jsValue = toJS.toJS(value, stringKey, ctx);
-        if (stringKey in map2)
-          Object.defineProperty(map2, stringKey, {
+        if (stringKey in map)
+          Object.defineProperty(map, stringKey, {
             value: jsValue,
             writable: true,
             enumerable: true,
             configurable: true
           });
         else
-          map2[stringKey] = jsValue;
+          map[stringKey] = jsValue;
       }
     }
-    return map2;
+    return map;
   }
   function stringifyKey(key, jsKey, ctx) {
     if (jsKey === null)
@@ -18695,7 +18968,7 @@ var require_addPairToJSMap = __commonJS((exports) => {
   }
   exports.addPairToJSMap = addPairToJSMap;
 });
-var require_Pair = __commonJS((exports) => {
+var require_Pair = __commonJS(function(exports) {
   var createNode = require_createNode();
   var stringifyPair = require_stringifyPair();
   var addPairToJSMap = require_addPairToJSMap();
@@ -18731,14 +19004,14 @@ var require_Pair = __commonJS((exports) => {
   exports.Pair = Pair;
   exports.createPair = createPair;
 });
-var require_stringifyCollection = __commonJS((exports) => {
+var require_stringifyCollection = __commonJS(function(exports) {
   var identity = require_identity();
   var stringify = require_stringify();
   var stringifyComment = require_stringifyComment();
   function stringifyCollection(collection, ctx, options) {
     const flow = ctx.inFlow ?? collection.flow;
-    const stringify2 = flow ? stringifyFlowCollection : stringifyBlockCollection;
-    return stringify2(collection, ctx, options);
+    const stringify = flow ? stringifyFlowCollection : stringifyBlockCollection;
+    return stringify(collection, ctx, options);
   }
   function stringifyBlockCollection({ comment, items }, ctx, { blockItemPrefix, flowChars, itemIndent, onChompKeep, onComment }) {
     const { indent, options: { commentString } } = ctx;
@@ -18747,13 +19020,13 @@ var require_stringifyCollection = __commonJS((exports) => {
     const lines = [];
     for (let i = 0;i < items.length; ++i) {
       const item = items[i];
-      let comment2 = null;
+      let comment = null;
       if (identity.isNode(item)) {
         if (!chompKeep && item.spaceBefore)
           lines.push("");
         addCommentBefore(ctx, lines, item.commentBefore, chompKeep);
         if (item.comment)
-          comment2 = item.comment;
+          comment = item.comment;
       } else if (identity.isPair(item)) {
         const ik = identity.isNode(item.key) ? item.key : null;
         if (ik) {
@@ -18763,12 +19036,12 @@ var require_stringifyCollection = __commonJS((exports) => {
         }
       }
       chompKeep = false;
-      let str2 = stringify.stringify(item, itemCtx, () => comment2 = null, () => chompKeep = true);
-      if (comment2)
-        str2 += stringifyComment.lineComment(str2, itemIndent, commentString(comment2));
-      if (chompKeep && comment2)
+      let str = stringify.stringify(item, itemCtx, () => comment = null, () => chompKeep = true);
+      if (comment)
+        str += stringifyComment.lineComment(str, itemIndent, commentString(comment));
+      if (chompKeep && comment)
         chompKeep = false;
-      lines.push(blockItemPrefix + str2);
+      lines.push(blockItemPrefix + str);
     }
     let str;
     if (lines.length === 0) {
@@ -18881,7 +19154,7 @@ ${indent}${end}`;
   }
   exports.stringifyCollection = stringifyCollection;
 });
-var require_YAMLMap = __commonJS((exports) => {
+var require_YAMLMap = __commonJS(function(exports) {
   var stringifyCollection = require_stringifyCollection();
   var addPairToJSMap = require_addPairToJSMap();
   var Collection = require_Collection();
@@ -18911,14 +19184,14 @@ var require_YAMLMap = __commonJS((exports) => {
     }
     static from(schema, obj, ctx) {
       const { keepUndefined, replacer } = ctx;
-      const map2 = new this(schema);
+      const map = new this(schema);
       const add = (key, value) => {
         if (typeof replacer === "function")
           value = replacer.call(obj, key, value);
         else if (Array.isArray(replacer) && !replacer.includes(key))
           return;
         if (value !== undefined || keepUndefined)
-          map2.items.push(Pair.createPair(key, value, ctx));
+          map.items.push(Pair.createPair(key, value, ctx));
       };
       if (obj instanceof Map) {
         for (const [key, value] of obj)
@@ -18928,9 +19201,9 @@ var require_YAMLMap = __commonJS((exports) => {
           add(key, obj[key]);
       }
       if (typeof schema.sortMapEntries === "function") {
-        map2.items.sort(schema.sortMapEntries);
+        map.items.sort(schema.sortMapEntries);
       }
-      return map2;
+      return map;
     }
     add(pair, overwrite) {
       let _pair;
@@ -18978,12 +19251,12 @@ var require_YAMLMap = __commonJS((exports) => {
       this.add(new Pair.Pair(key, value), true);
     }
     toJSON(_, ctx, Type) {
-      const map2 = Type ? new Type : ctx?.mapAsMap ? new Map : {};
+      const map = Type ? new Type : ctx?.mapAsMap ? new Map : {};
       if (ctx?.onCreate)
-        ctx.onCreate(map2);
+        ctx.onCreate(map);
       for (const item of this.items)
-        addPairToJSMap.addPairToJSMap(ctx, map2, item);
-      return map2;
+        addPairToJSMap.addPairToJSMap(ctx, map, item);
+      return map;
     }
     toString(ctx, onComment, onChompKeep) {
       if (!ctx)
@@ -19006,24 +19279,24 @@ var require_YAMLMap = __commonJS((exports) => {
   exports.YAMLMap = YAMLMap;
   exports.findPair = findPair;
 });
-var require_map = __commonJS((exports) => {
+var require_map = __commonJS(function(exports) {
   var identity = require_identity();
   var YAMLMap = require_YAMLMap();
-  var map2 = {
+  var map = {
     collection: "map",
     default: true,
     nodeClass: YAMLMap.YAMLMap,
     tag: "tag:yaml.org,2002:map",
-    resolve(map3, onError) {
-      if (!identity.isMap(map3))
+    resolve(map, onError) {
+      if (!identity.isMap(map))
         onError("Expected a mapping for this tag");
-      return map3;
+      return map;
     },
     createNode: (schema, obj, ctx) => YAMLMap.YAMLMap.from(schema, obj, ctx)
   };
-  exports.map = map2;
+  exports.map = map;
 });
-var require_YAMLSeq = __commonJS((exports) => {
+var require_YAMLSeq = __commonJS(function(exports) {
   var createNode = require_createNode();
   var stringifyCollection = require_stringifyCollection();
   var Collection = require_Collection();
@@ -19114,7 +19387,7 @@ var require_YAMLSeq = __commonJS((exports) => {
   }
   exports.YAMLSeq = YAMLSeq;
 });
-var require_seq = __commonJS((exports) => {
+var require_seq = __commonJS(function(exports) {
   var identity = require_identity();
   var YAMLSeq = require_YAMLSeq();
   var seq = {
@@ -19122,18 +19395,18 @@ var require_seq = __commonJS((exports) => {
     default: true,
     nodeClass: YAMLSeq.YAMLSeq,
     tag: "tag:yaml.org,2002:seq",
-    resolve(seq2, onError) {
-      if (!identity.isSeq(seq2))
+    resolve(seq, onError) {
+      if (!identity.isSeq(seq))
         onError("Expected a sequence for this tag");
-      return seq2;
+      return seq;
     },
     createNode: (schema, obj, ctx) => YAMLSeq.YAMLSeq.from(schema, obj, ctx)
   };
   exports.seq = seq;
 });
-var require_string = __commonJS((exports) => {
+var require_string = __commonJS(function(exports) {
   var stringifyString = require_stringifyString();
-  var string4 = {
+  var string = {
     identify: (value) => typeof value === "string",
     default: true,
     tag: "tag:yaml.org,2002:str",
@@ -19143,9 +19416,9 @@ var require_string = __commonJS((exports) => {
       return stringifyString.stringifyString(item, ctx, onComment, onChompKeep);
     }
   };
-  exports.string = string4;
+  exports.string = string;
 });
-var require_null = __commonJS((exports) => {
+var require_null = __commonJS(function(exports) {
   var Scalar = require_Scalar();
   var nullTag = {
     identify: (value) => value == null,
@@ -19158,7 +19431,7 @@ var require_null = __commonJS((exports) => {
   };
   exports.nullTag = nullTag;
 });
-var require_bool = __commonJS((exports) => {
+var require_bool = __commonJS(function(exports) {
   var Scalar = require_Scalar();
   var boolTag = {
     identify: (value) => typeof value === "boolean",
@@ -19177,7 +19450,7 @@ var require_bool = __commonJS((exports) => {
   };
   exports.boolTag = boolTag;
 });
-var require_stringifyNumber = __commonJS((exports) => {
+var require_stringifyNumber = __commonJS(function(exports) {
   function stringifyNumber({ format, minFractionDigits, tag, value }) {
     if (typeof value === "bigint")
       return String(value);
@@ -19199,7 +19472,7 @@ var require_stringifyNumber = __commonJS((exports) => {
   }
   exports.stringifyNumber = stringifyNumber;
 });
-var require_float = __commonJS((exports) => {
+var require_float = __commonJS(function(exports) {
   var Scalar = require_Scalar();
   var stringifyNumber = require_stringifyNumber();
   var floatNaN = {
@@ -19240,7 +19513,7 @@ var require_float = __commonJS((exports) => {
   exports.floatExp = floatExp;
   exports.floatNaN = floatNaN;
 });
-var require_int = __commonJS((exports) => {
+var require_int = __commonJS(function(exports) {
   var stringifyNumber = require_stringifyNumber();
   var intIdentify = (value) => typeof value === "bigint" || Number.isInteger(value);
   var intResolve = (str, offset, radix, { intAsBigInt }) => intAsBigInt ? BigInt(str) : parseInt(str.substring(offset), radix);
@@ -19259,7 +19532,7 @@ var require_int = __commonJS((exports) => {
     resolve: (str, _onError, opt) => intResolve(str, 2, 8, opt),
     stringify: (node) => intStringify(node, 8, "0o")
   };
-  var int2 = {
+  var int = {
     identify: intIdentify,
     default: true,
     tag: "tag:yaml.org,2002:int",
@@ -19276,36 +19549,36 @@ var require_int = __commonJS((exports) => {
     resolve: (str, _onError, opt) => intResolve(str, 2, 16, opt),
     stringify: (node) => intStringify(node, 16, "0x")
   };
-  exports.int = int2;
+  exports.int = int;
   exports.intHex = intHex;
   exports.intOct = intOct;
 });
-var require_schema = __commonJS((exports) => {
-  var map2 = require_map();
-  var _null4 = require_null();
+var require_schema = __commonJS(function(exports) {
+  var map = require_map();
+  var _null = require_null();
   var seq = require_seq();
-  var string4 = require_string();
+  var string = require_string();
   var bool = require_bool();
   var float = require_float();
-  var int2 = require_int();
+  var int = require_int();
   var schema = [
-    map2.map,
+    map.map,
     seq.seq,
-    string4.string,
-    _null4.nullTag,
+    string.string,
+    _null.nullTag,
     bool.boolTag,
-    int2.intOct,
-    int2.int,
-    int2.intHex,
+    int.intOct,
+    int.int,
+    int.intHex,
     float.floatNaN,
     float.floatExp,
     float.float
   ];
   exports.schema = schema;
 });
-var require_schema2 = __commonJS((exports) => {
+var require_schema2 = __commonJS(function(exports) {
   var Scalar = require_Scalar();
-  var map2 = require_map();
+  var map = require_map();
   var seq = require_seq();
   function intIdentify(value) {
     return typeof value === "bigint" || Number.isInteger(value);
@@ -19362,10 +19635,10 @@ var require_schema2 = __commonJS((exports) => {
       return str;
     }
   };
-  var schema = [map2.map, seq.seq].concat(jsonScalars, jsonError);
+  var schema = [map.map, seq.seq].concat(jsonScalars, jsonError);
   exports.schema = schema;
 });
-var require_binary = __commonJS((exports) => {
+var require_binary = __commonJS(function(exports) {
   var node_buffer = __require("buffer");
   var Scalar = require_Scalar();
   var stringifyString = require_stringifyString();
@@ -19395,10 +19668,10 @@ var require_binary = __commonJS((exports) => {
       if (typeof node_buffer.Buffer === "function") {
         str = buf instanceof node_buffer.Buffer ? buf.toString("base64") : node_buffer.Buffer.from(buf.buffer).toString("base64");
       } else if (typeof btoa === "function") {
-        let s2 = "";
+        let s = "";
         for (let i = 0;i < buf.length; ++i)
-          s2 += String.fromCharCode(buf[i]);
-        str = btoa(s2);
+          s += String.fromCharCode(buf[i]);
+        str = btoa(s);
       } else {
         throw new Error("This environment does not support writing binary tags; either Buffer or btoa is required");
       }
@@ -19407,8 +19680,8 @@ var require_binary = __commonJS((exports) => {
         const lineWidth = Math.max(ctx.options.lineWidth - ctx.indent.length, ctx.options.minContentWidth);
         const n = Math.ceil(str.length / lineWidth);
         const lines = new Array(n);
-        for (let i = 0, o2 = 0;i < n; ++i, o2 += lineWidth) {
-          lines[i] = str.substr(o2, lineWidth);
+        for (let i = 0, o = 0;i < n; ++i, o += lineWidth) {
+          lines[i] = str.substr(o, lineWidth);
         }
         str = lines.join(type === Scalar.Scalar.BLOCK_LITERAL ? `
 ` : " ");
@@ -19418,7 +19691,7 @@ var require_binary = __commonJS((exports) => {
   };
   exports.binary = binary;
 });
-var require_pairs = __commonJS((exports) => {
+var require_pairs = __commonJS(function(exports) {
   var identity = require_identity();
   var Pair = require_Pair();
   var Scalar = require_Scalar();
@@ -19451,8 +19724,8 @@ ${cn.comment}` : item.comment;
   }
   function createPairs(schema, iterable, ctx) {
     const { replacer } = ctx;
-    const pairs2 = new YAMLSeq.YAMLSeq(schema);
-    pairs2.tag = "tag:yaml.org,2002:pairs";
+    const pairs = new YAMLSeq.YAMLSeq(schema);
+    pairs.tag = "tag:yaml.org,2002:pairs";
     let i = 0;
     if (iterable && Symbol.iterator in Object(iterable))
       for (let it of iterable) {
@@ -19476,9 +19749,9 @@ ${cn.comment}` : item.comment;
         } else {
           key = it;
         }
-        pairs2.items.push(Pair.createPair(key, value, ctx));
+        pairs.items.push(Pair.createPair(key, value, ctx));
       }
-    return pairs2;
+    return pairs;
   }
   var pairs = {
     collection: "seq",
@@ -19491,7 +19764,7 @@ ${cn.comment}` : item.comment;
   exports.pairs = pairs;
   exports.resolvePairs = resolvePairs;
 });
-var require_omap = __commonJS((exports) => {
+var require_omap = __commonJS(function(exports) {
   var identity = require_identity();
   var toJS = require_toJS();
   var YAMLMap = require_YAMLMap();
@@ -19511,9 +19784,9 @@ var require_omap = __commonJS((exports) => {
     toJSON(_, ctx) {
       if (!ctx)
         return super.toJSON(_);
-      const map2 = new Map;
+      const map = new Map;
       if (ctx?.onCreate)
-        ctx.onCreate(map2);
+        ctx.onCreate(map);
       for (const pair of this.items) {
         let key, value;
         if (identity.isPair(pair)) {
@@ -19522,17 +19795,17 @@ var require_omap = __commonJS((exports) => {
         } else {
           key = toJS.toJS(pair, "", ctx);
         }
-        if (map2.has(key))
+        if (map.has(key))
           throw new Error("Ordered maps must not include duplicate keys");
-        map2.set(key, value);
+        map.set(key, value);
       }
-      return map2;
+      return map;
     }
     static from(schema, iterable, ctx) {
       const pairs$1 = pairs.createPairs(schema, iterable, ctx);
-      const omap2 = new this;
-      omap2.items = pairs$1.items;
-      return omap2;
+      const omap = new this;
+      omap.items = pairs$1.items;
+      return omap;
     }
   }
   YAMLOMap.tag = "tag:yaml.org,2002:omap";
@@ -19561,7 +19834,7 @@ var require_omap = __commonJS((exports) => {
   exports.YAMLOMap = YAMLOMap;
   exports.omap = omap;
 });
-var require_bool2 = __commonJS((exports) => {
+var require_bool2 = __commonJS(function(exports) {
   var Scalar = require_Scalar();
   function boolStringify({ value, source }, ctx) {
     const boolObj = value ? trueTag : falseTag;
@@ -19588,7 +19861,7 @@ var require_bool2 = __commonJS((exports) => {
   exports.falseTag = falseTag;
   exports.trueTag = trueTag;
 });
-var require_float2 = __commonJS((exports) => {
+var require_float2 = __commonJS(function(exports) {
   var Scalar = require_Scalar();
   var stringifyNumber = require_stringifyNumber();
   var floatNaN = {
@@ -19632,7 +19905,7 @@ var require_float2 = __commonJS((exports) => {
   exports.floatExp = floatExp;
   exports.floatNaN = floatNaN;
 });
-var require_int2 = __commonJS((exports) => {
+var require_int2 = __commonJS(function(exports) {
   var stringifyNumber = require_stringifyNumber();
   var intIdentify = (value) => typeof value === "bigint" || Number.isInteger(value);
   function intResolve(str, offset, radix, { intAsBigInt }) {
@@ -19652,8 +19925,8 @@ var require_int2 = __commonJS((exports) => {
           str = `0x${str}`;
           break;
       }
-      const n2 = BigInt(str);
-      return sign === "-" ? BigInt(-1) * n2 : n2;
+      const n = BigInt(str);
+      return sign === "-" ? BigInt(-1) * n : n;
     }
     const n = parseInt(str, radix);
     return sign === "-" ? -1 * n : n;
@@ -19684,7 +19957,7 @@ var require_int2 = __commonJS((exports) => {
     resolve: (str, _onError, opt) => intResolve(str, 1, 8, opt),
     stringify: (node) => intStringify(node, 8, "0")
   };
-  var int2 = {
+  var int = {
     identify: intIdentify,
     default: true,
     tag: "tag:yaml.org,2002:int",
@@ -19701,12 +19974,12 @@ var require_int2 = __commonJS((exports) => {
     resolve: (str, _onError, opt) => intResolve(str, 2, 16, opt),
     stringify: (node) => intStringify(node, 16, "0x")
   };
-  exports.int = int2;
+  exports.int = int;
   exports.intBin = intBin;
   exports.intHex = intHex;
   exports.intOct = intOct;
 });
-var require_set = __commonJS((exports) => {
+var require_set = __commonJS(function(exports) {
   var identity = require_identity();
   var Pair = require_Pair();
   var YAMLMap = require_YAMLMap();
@@ -19755,45 +20028,45 @@ var require_set = __commonJS((exports) => {
     }
     static from(schema, iterable, ctx) {
       const { replacer } = ctx;
-      const set3 = new this(schema);
+      const set = new this(schema);
       if (iterable && Symbol.iterator in Object(iterable))
         for (let value of iterable) {
           if (typeof replacer === "function")
             value = replacer.call(iterable, value, value);
-          set3.items.push(Pair.createPair(value, null, ctx));
+          set.items.push(Pair.createPair(value, null, ctx));
         }
-      return set3;
+      return set;
     }
   }
   YAMLSet.tag = "tag:yaml.org,2002:set";
-  var set2 = {
+  var set = {
     collection: "map",
     identify: (value) => value instanceof Set,
     nodeClass: YAMLSet,
     default: false,
     tag: "tag:yaml.org,2002:set",
     createNode: (schema, iterable, ctx) => YAMLSet.from(schema, iterable, ctx),
-    resolve(map2, onError) {
-      if (identity.isMap(map2)) {
-        if (map2.hasAllNullValues(true))
-          return Object.assign(new YAMLSet, map2);
+    resolve(map, onError) {
+      if (identity.isMap(map)) {
+        if (map.hasAllNullValues(true))
+          return Object.assign(new YAMLSet, map);
         else
           onError("Set items must all have null values");
       } else
         onError("Expected a mapping for this tag");
-      return map2;
+      return map;
     }
   };
   exports.YAMLSet = YAMLSet;
-  exports.set = set2;
+  exports.set = set;
 });
-var require_timestamp = __commonJS((exports) => {
+var require_timestamp = __commonJS(function(exports) {
   var stringifyNumber = require_stringifyNumber();
   function parseSexagesimal(str, asBigInt) {
     const sign = str[0];
     const parts = sign === "-" || sign === "+" ? str.substring(1) : str;
     const num = (n) => asBigInt ? BigInt(n) : Number(n);
-    const res = parts.replace(/_/g, "").split(":").reduce((res2, p) => res2 * num(60) + num(p), num(0));
+    const res = parts.replace(/_/g, "").split(":").reduce((res, p) => res * num(60) + num(p), num(0));
     return sign === "-" ? num(-1) * res : res;
   }
   function stringifySexagesimal(node) {
@@ -19851,15 +20124,15 @@ var require_timestamp = __commonJS((exports) => {
         throw new Error("!!timestamp expects a date, starting with yyyy-mm-dd");
       const [, year, month, day, hour, minute, second] = match.map(Number);
       const millisec = match[7] ? Number((match[7] + "00").substr(1, 3)) : 0;
-      let date6 = Date.UTC(year, month - 1, day, hour || 0, minute || 0, second || 0, millisec);
+      let date = Date.UTC(year, month - 1, day, hour || 0, minute || 0, second || 0, millisec);
       const tz = match[8];
       if (tz && tz !== "Z") {
         let d = parseSexagesimal(tz, false);
         if (Math.abs(d) < 30)
           d *= 60;
-        date6 -= 60000 * d;
+        date -= 60000 * d;
       }
-      return new Date(date6);
+      return new Date(date);
     },
     stringify: ({ value }) => value?.toISOString().replace(/(T00:00:00)?\.000Z$/, "") ?? ""
   };
@@ -19867,65 +20140,65 @@ var require_timestamp = __commonJS((exports) => {
   exports.intTime = intTime;
   exports.timestamp = timestamp;
 });
-var require_schema3 = __commonJS((exports) => {
-  var map2 = require_map();
-  var _null4 = require_null();
+var require_schema3 = __commonJS(function(exports) {
+  var map = require_map();
+  var _null = require_null();
   var seq = require_seq();
-  var string4 = require_string();
+  var string = require_string();
   var binary = require_binary();
   var bool = require_bool2();
   var float = require_float2();
-  var int2 = require_int2();
-  var merge2 = require_merge();
+  var int = require_int2();
+  var merge = require_merge();
   var omap = require_omap();
   var pairs = require_pairs();
-  var set2 = require_set();
+  var set = require_set();
   var timestamp = require_timestamp();
   var schema = [
-    map2.map,
+    map.map,
     seq.seq,
-    string4.string,
-    _null4.nullTag,
+    string.string,
+    _null.nullTag,
     bool.trueTag,
     bool.falseTag,
-    int2.intBin,
-    int2.intOct,
-    int2.int,
-    int2.intHex,
+    int.intBin,
+    int.intOct,
+    int.int,
+    int.intHex,
     float.floatNaN,
     float.floatExp,
     float.float,
     binary.binary,
-    merge2.merge,
+    merge.merge,
     omap.omap,
     pairs.pairs,
-    set2.set,
+    set.set,
     timestamp.intTime,
     timestamp.floatTime,
     timestamp.timestamp
   ];
   exports.schema = schema;
 });
-var require_tags = __commonJS((exports) => {
-  var map2 = require_map();
-  var _null4 = require_null();
+var require_tags = __commonJS(function(exports) {
+  var map = require_map();
+  var _null = require_null();
   var seq = require_seq();
-  var string4 = require_string();
+  var string = require_string();
   var bool = require_bool();
   var float = require_float();
-  var int2 = require_int();
+  var int = require_int();
   var schema = require_schema();
   var schema$1 = require_schema2();
   var binary = require_binary();
-  var merge2 = require_merge();
+  var merge = require_merge();
   var omap = require_omap();
   var pairs = require_pairs();
   var schema$2 = require_schema3();
-  var set2 = require_set();
+  var set = require_set();
   var timestamp = require_timestamp();
-  var schemas3 = new Map([
+  var schemas = new Map([
     ["core", schema.schema],
-    ["failsafe", [map2.map, seq.seq, string4.string]],
+    ["failsafe", [map.map, seq.seq, string.string]],
     ["json", schema$1.schema],
     ["yaml11", schema$2.schema],
     ["yaml-1.1", schema$2.schema]
@@ -19937,38 +20210,38 @@ var require_tags = __commonJS((exports) => {
     floatExp: float.floatExp,
     floatNaN: float.floatNaN,
     floatTime: timestamp.floatTime,
-    int: int2.int,
-    intHex: int2.intHex,
-    intOct: int2.intOct,
+    int: int.int,
+    intHex: int.intHex,
+    intOct: int.intOct,
     intTime: timestamp.intTime,
-    map: map2.map,
-    merge: merge2.merge,
-    null: _null4.nullTag,
+    map: map.map,
+    merge: merge.merge,
+    null: _null.nullTag,
     omap: omap.omap,
     pairs: pairs.pairs,
     seq: seq.seq,
-    set: set2.set,
+    set: set.set,
     timestamp: timestamp.timestamp
   };
   var coreKnownTags = {
     "tag:yaml.org,2002:binary": binary.binary,
-    "tag:yaml.org,2002:merge": merge2.merge,
+    "tag:yaml.org,2002:merge": merge.merge,
     "tag:yaml.org,2002:omap": omap.omap,
     "tag:yaml.org,2002:pairs": pairs.pairs,
-    "tag:yaml.org,2002:set": set2.set,
+    "tag:yaml.org,2002:set": set.set,
     "tag:yaml.org,2002:timestamp": timestamp.timestamp
   };
   function getTags(customTags, schemaName, addMergeTag) {
-    const schemaTags = schemas3.get(schemaName);
+    const schemaTags = schemas.get(schemaName);
     if (schemaTags && !customTags) {
-      return addMergeTag && !schemaTags.includes(merge2.merge) ? schemaTags.concat(merge2.merge) : schemaTags.slice();
+      return addMergeTag && !schemaTags.includes(merge.merge) ? schemaTags.concat(merge.merge) : schemaTags.slice();
     }
     let tags = schemaTags;
     if (!tags) {
       if (Array.isArray(customTags))
         tags = [];
       else {
-        const keys = Array.from(schemas3.keys()).filter((key) => key !== "yaml11").map((key) => JSON.stringify(key)).join(", ");
+        const keys = Array.from(schemas.keys()).filter((key) => key !== "yaml11").map((key) => JSON.stringify(key)).join(", ");
         throw new Error(`Unknown schema "${schemaName}"; use one of ${keys} or define customTags array`);
       }
     }
@@ -19979,90 +20252,90 @@ var require_tags = __commonJS((exports) => {
       tags = customTags(tags.slice());
     }
     if (addMergeTag)
-      tags = tags.concat(merge2.merge);
-    return tags.reduce((tags2, tag) => {
+      tags = tags.concat(merge.merge);
+    return tags.reduce((tags, tag) => {
       const tagObj = typeof tag === "string" ? tagsByName[tag] : tag;
       if (!tagObj) {
         const tagName = JSON.stringify(tag);
         const keys = Object.keys(tagsByName).map((key) => JSON.stringify(key)).join(", ");
         throw new Error(`Unknown custom tag ${tagName}; use one of ${keys}`);
       }
-      if (!tags2.includes(tagObj))
-        tags2.push(tagObj);
-      return tags2;
+      if (!tags.includes(tagObj))
+        tags.push(tagObj);
+      return tags;
     }, []);
   }
   exports.coreKnownTags = coreKnownTags;
   exports.getTags = getTags;
 });
-var require_Schema = __commonJS((exports) => {
+var require_Schema = __commonJS(function(exports) {
   var identity = require_identity();
-  var map2 = require_map();
+  var map = require_map();
   var seq = require_seq();
-  var string4 = require_string();
+  var string = require_string();
   var tags = require_tags();
   var sortMapEntriesByKey = (a, b) => a.key < b.key ? -1 : a.key > b.key ? 1 : 0;
 
-  class Schema2 {
-    constructor({ compat: compat2, customTags, merge: merge2, resolveKnownTags, schema, sortMapEntries, toStringDefaults }) {
-      this.compat = Array.isArray(compat2) ? tags.getTags(compat2, "compat") : compat2 ? tags.getTags(null, compat2) : null;
+  class Schema {
+    constructor({ compat, customTags, merge, resolveKnownTags, schema, sortMapEntries, toStringDefaults }) {
+      this.compat = Array.isArray(compat) ? tags.getTags(compat, "compat") : compat ? tags.getTags(null, compat) : null;
       this.name = typeof schema === "string" && schema || "core";
       this.knownTags = resolveKnownTags ? tags.coreKnownTags : {};
-      this.tags = tags.getTags(customTags, this.name, merge2);
+      this.tags = tags.getTags(customTags, this.name, merge);
       this.toStringOptions = toStringDefaults ?? null;
-      Object.defineProperty(this, identity.MAP, { value: map2.map });
-      Object.defineProperty(this, identity.SCALAR, { value: string4.string });
+      Object.defineProperty(this, identity.MAP, { value: map.map });
+      Object.defineProperty(this, identity.SCALAR, { value: string.string });
       Object.defineProperty(this, identity.SEQ, { value: seq.seq });
       this.sortMapEntries = typeof sortMapEntries === "function" ? sortMapEntries : sortMapEntries === true ? sortMapEntriesByKey : null;
     }
     clone() {
-      const copy = Object.create(Schema2.prototype, Object.getOwnPropertyDescriptors(this));
+      const copy = Object.create(Schema.prototype, Object.getOwnPropertyDescriptors(this));
       copy.tags = this.tags.slice();
       return copy;
     }
   }
-  exports.Schema = Schema2;
+  exports.Schema = Schema;
 });
-var require_stringifyDocument = __commonJS((exports) => {
+var require_stringifyDocument = __commonJS(function(exports) {
   var identity = require_identity();
   var stringify = require_stringify();
   var stringifyComment = require_stringifyComment();
-  function stringifyDocument(doc2, options) {
+  function stringifyDocument(doc, options) {
     const lines = [];
     let hasDirectives = options.directives === true;
-    if (options.directives !== false && doc2.directives) {
-      const dir = doc2.directives.toString(doc2);
+    if (options.directives !== false && doc.directives) {
+      const dir = doc.directives.toString(doc);
       if (dir) {
         lines.push(dir);
         hasDirectives = true;
-      } else if (doc2.directives.docStart)
+      } else if (doc.directives.docStart)
         hasDirectives = true;
     }
     if (hasDirectives)
       lines.push("---");
-    const ctx = stringify.createStringifyContext(doc2, options);
+    const ctx = stringify.createStringifyContext(doc, options);
     const { commentString } = ctx.options;
-    if (doc2.commentBefore) {
+    if (doc.commentBefore) {
       if (lines.length !== 1)
         lines.unshift("");
-      const cs = commentString(doc2.commentBefore);
+      const cs = commentString(doc.commentBefore);
       lines.unshift(stringifyComment.indentComment(cs, ""));
     }
     let chompKeep = false;
     let contentComment = null;
-    if (doc2.contents) {
-      if (identity.isNode(doc2.contents)) {
-        if (doc2.contents.spaceBefore && hasDirectives)
+    if (doc.contents) {
+      if (identity.isNode(doc.contents)) {
+        if (doc.contents.spaceBefore && hasDirectives)
           lines.push("");
-        if (doc2.contents.commentBefore) {
-          const cs = commentString(doc2.contents.commentBefore);
+        if (doc.contents.commentBefore) {
+          const cs = commentString(doc.contents.commentBefore);
           lines.push(stringifyComment.indentComment(cs, ""));
         }
-        ctx.forceBlockIndent = !!doc2.comment;
-        contentComment = doc2.contents.comment;
+        ctx.forceBlockIndent = !!doc.comment;
+        contentComment = doc.contents.comment;
       }
       const onChompKeep = contentComment ? undefined : () => chompKeep = true;
-      let body = stringify.stringify(doc2.contents, ctx, () => contentComment = null, onChompKeep);
+      let body = stringify.stringify(doc.contents, ctx, () => contentComment = null, onChompKeep);
       if (contentComment)
         body += stringifyComment.lineComment(body, "", commentString(contentComment));
       if ((body[0] === "|" || body[0] === ">") && lines[lines.length - 1] === "---") {
@@ -20070,11 +20343,11 @@ var require_stringifyDocument = __commonJS((exports) => {
       } else
         lines.push(body);
     } else {
-      lines.push(stringify.stringify(doc2.contents, ctx));
+      lines.push(stringify.stringify(doc.contents, ctx));
     }
-    if (doc2.directives?.docEnd) {
-      if (doc2.comment) {
-        const cs = commentString(doc2.comment);
+    if (doc.directives?.docEnd) {
+      if (doc.comment) {
+        const cs = commentString(doc.comment);
         if (cs.includes(`
 `)) {
           lines.push("...");
@@ -20086,7 +20359,7 @@ var require_stringifyDocument = __commonJS((exports) => {
         lines.push("...");
       }
     } else {
-      let dc = doc2.comment;
+      let dc = doc.comment;
       if (dc && chompKeep)
         dc = dc.replace(/^\n+/, "");
       if (dc) {
@@ -20101,13 +20374,13 @@ var require_stringifyDocument = __commonJS((exports) => {
   }
   exports.stringifyDocument = stringifyDocument;
 });
-var require_Document = __commonJS((exports) => {
+var require_Document = __commonJS(function(exports) {
   var Alias = require_Alias();
   var Collection = require_Collection();
   var identity = require_identity();
   var Pair = require_Pair();
   var toJS = require_toJS();
-  var Schema2 = require_Schema();
+  var Schema = require_Schema();
   var stringifyDocument = require_stringifyDocument();
   var anchors = require_anchors();
   var applyReviver = require_applyReviver();
@@ -20139,14 +20412,14 @@ var require_Document = __commonJS((exports) => {
         version: "1.2"
       }, options);
       this.options = opt;
-      let { version: version3 } = opt;
+      let { version } = opt;
       if (options?._directives) {
         this.directives = options._directives.atDocument();
         if (this.directives.yaml.explicit)
-          version3 = this.directives.yaml.version;
+          version = this.directives.yaml.version;
       } else
-        this.directives = new directives.Directives({ version: version3 });
-      this.setSchema(version3, options);
+        this.directives = new directives.Directives({ version });
+      this.setSchema(version, options);
       this.contents = value === undefined ? null : this.createNode(value, _replacer, options);
     }
     clone() {
@@ -20262,11 +20535,11 @@ var require_Document = __commonJS((exports) => {
         this.contents.setIn(path, value);
       }
     }
-    setSchema(version3, options = {}) {
-      if (typeof version3 === "number")
-        version3 = String(version3);
+    setSchema(version, options = {}) {
+      if (typeof version === "number")
+        version = String(version);
       let opt;
-      switch (version3) {
+      switch (version) {
         case "1.1":
           if (this.directives)
             this.directives.yaml.version = "1.1";
@@ -20277,9 +20550,9 @@ var require_Document = __commonJS((exports) => {
         case "1.2":
         case "next":
           if (this.directives)
-            this.directives.yaml.version = version3;
+            this.directives.yaml.version = version;
           else
-            this.directives = new directives.Directives({ version: version3 });
+            this.directives = new directives.Directives({ version });
           opt = { resolveKnownTags: true, schema: "core" };
           break;
         case null:
@@ -20288,30 +20561,30 @@ var require_Document = __commonJS((exports) => {
           opt = null;
           break;
         default: {
-          const sv = JSON.stringify(version3);
+          const sv = JSON.stringify(version);
           throw new Error(`Expected '1.1', '1.2' or null as first argument, but found: ${sv}`);
         }
       }
       if (options.schema instanceof Object)
         this.schema = options.schema;
       else if (opt)
-        this.schema = new Schema2.Schema(Object.assign(opt, options));
+        this.schema = new Schema.Schema(Object.assign(opt, options));
       else
         throw new Error(`With a null YAML version, the { schema: Schema } option is required`);
     }
-    toJS({ json: json2, jsonArg, mapAsMap, maxAliasCount, onAnchor, reviver } = {}) {
+    toJS({ json, jsonArg, mapAsMap, maxAliasCount, onAnchor, reviver } = {}) {
       const ctx = {
         anchors: new Map,
         doc: this,
-        keep: !json2,
+        keep: !json,
         mapAsMap: mapAsMap === true,
         mapKeyWarned: false,
         maxAliasCount: typeof maxAliasCount === "number" ? maxAliasCount : 100
       };
       const res = toJS.toJS(this.contents, jsonArg ?? "", ctx);
       if (typeof onAnchor === "function")
-        for (const { count, res: res2 } of ctx.anchors.values())
-          onAnchor(res2, count);
+        for (const { count, res } of ctx.anchors.values())
+          onAnchor(res, count);
       return typeof reviver === "function" ? applyReviver.applyReviver(reviver, { "": res }, "", res) : res;
     }
     toJSON(jsonArg, onAnchor) {
@@ -20321,8 +20594,8 @@ var require_Document = __commonJS((exports) => {
       if (this.errors.length > 0)
         throw new Error("Document with errors cannot be stringified");
       if ("indent" in options && (!Number.isInteger(options.indent) || Number(options.indent) <= 0)) {
-        const s2 = JSON.stringify(options.indent);
-        throw new Error(`"indent" option must be a positive integer, not ${s2}`);
+        const s = JSON.stringify(options.indent);
+        throw new Error(`"indent" option must be a positive integer, not ${s}`);
       }
       return stringifyDocument.stringifyDocument(this, options);
     }
@@ -20334,7 +20607,7 @@ var require_Document = __commonJS((exports) => {
   }
   exports.Document = Document;
 });
-var require_errors = __commonJS((exports) => {
+var require_errors = __commonJS(function(exports) {
 
   class YAMLError extends Error {
     constructor(name, pos, code, message) {
@@ -20357,12 +20630,12 @@ var require_errors = __commonJS((exports) => {
       super("YAMLWarning", pos, code, message);
     }
   }
-  var prettifyError2 = (src, lc) => (error51) => {
-    if (error51.pos[0] === -1)
+  var prettifyError = (src, lc) => (error) => {
+    if (error.pos[0] === -1)
       return;
-    error51.linePos = error51.pos.map((pos) => lc.linePos(pos));
-    const { line, col } = error51.linePos[0];
-    error51.message += ` at line ${line}, column ${col}`;
+    error.linePos = error.pos.map((pos) => lc.linePos(pos));
+    const { line, col } = error.linePos[0];
+    error.message += ` at line ${line}, column ${col}`;
     let ci = col - 1;
     let lineStr = src.substring(lc.lineStarts[line - 1], lc.lineStarts[line]).replace(/[\n\r]+$/, "");
     if (ci >= 60 && lineStr.length > 80) {
@@ -20381,12 +20654,12 @@ var require_errors = __commonJS((exports) => {
     }
     if (/[^ ]/.test(lineStr)) {
       let count = 1;
-      const end = error51.linePos[1];
+      const end = error.linePos[1];
       if (end?.line === line && end.col > col) {
         count = Math.max(1, Math.min(end.col - col, 80 - ci));
       }
       const pointer = " ".repeat(ci) + "^".repeat(count);
-      error51.message += `:
+      error.message += `:
 
 ${lineStr}
 ${pointer}
@@ -20396,9 +20669,9 @@ ${pointer}
   exports.YAMLError = YAMLError;
   exports.YAMLParseError = YAMLParseError;
   exports.YAMLWarning = YAMLWarning;
-  exports.prettifyError = prettifyError2;
+  exports.prettifyError = prettifyError;
 });
-var require_resolve_props = __commonJS((exports) => {
+var require_resolve_props = __commonJS(function(exports) {
   function resolveProps(tokens, { flow, indicator, next, offset, onError, parentIndent, startOnNewline }) {
     let spaceBefore = false;
     let atNewline = startOnNewline;
@@ -20526,7 +20799,7 @@ var require_resolve_props = __commonJS((exports) => {
   }
   exports.resolveProps = resolveProps;
 });
-var require_util_contains_newline = __commonJS((exports) => {
+var require_util_contains_newline = __commonJS(function(exports) {
   function containsNewline(key) {
     if (!key)
       return null;
@@ -20564,7 +20837,7 @@ var require_util_contains_newline = __commonJS((exports) => {
   }
   exports.containsNewline = containsNewline;
 });
-var require_util_flow_indent_check = __commonJS((exports) => {
+var require_util_flow_indent_check = __commonJS(function(exports) {
   var utilContainsNewline = require_util_contains_newline();
   function flowIndentCheck(indent, fc, onError) {
     if (fc?.type === "flow-collection") {
@@ -20577,7 +20850,7 @@ var require_util_flow_indent_check = __commonJS((exports) => {
   }
   exports.flowIndentCheck = flowIndentCheck;
 });
-var require_util_map_includes = __commonJS((exports) => {
+var require_util_map_includes = __commonJS(function(exports) {
   var identity = require_identity();
   function mapIncludes(ctx, items, search) {
     const { uniqueKeys } = ctx.options;
@@ -20588,7 +20861,7 @@ var require_util_map_includes = __commonJS((exports) => {
   }
   exports.mapIncludes = mapIncludes;
 });
-var require_resolve_block_map = __commonJS((exports) => {
+var require_resolve_block_map = __commonJS(function(exports) {
   var Pair = require_Pair();
   var YAMLMap = require_YAMLMap();
   var resolveProps = require_resolve_props();
@@ -20598,7 +20871,7 @@ var require_resolve_block_map = __commonJS((exports) => {
   var startColMsg = "All mapping items must start at the same column";
   function resolveBlockMap({ composeNode, composeEmptyNode }, ctx, bm, onError, tag) {
     const NodeClass = tag?.nodeClass ?? YAMLMap.YAMLMap;
-    const map2 = new NodeClass(ctx.schema);
+    const map = new NodeClass(ctx.schema);
     if (ctx.atRoot)
       ctx.atRoot = false;
     let offset = bm.offset;
@@ -20624,11 +20897,11 @@ var require_resolve_block_map = __commonJS((exports) => {
         if (!keyProps.anchor && !keyProps.tag && !sep) {
           commentEnd = keyProps.end;
           if (keyProps.comment) {
-            if (map2.comment)
-              map2.comment += `
+            if (map.comment)
+              map.comment += `
 ` + keyProps.comment;
             else
-              map2.comment = keyProps.comment;
+              map.comment = keyProps.comment;
           }
           continue;
         }
@@ -20644,7 +20917,7 @@ var require_resolve_block_map = __commonJS((exports) => {
       if (ctx.schema.compat)
         utilFlowIndentCheck.flowIndentCheck(bm.indent, key, onError);
       ctx.atKey = false;
-      if (utilMapIncludes.mapIncludes(ctx, map2.items, keyNode))
+      if (utilMapIncludes.mapIncludes(ctx, map.items, keyNode))
         onError(keyStart, "DUPLICATE_KEY", "Map keys must be unique");
       const valueProps = resolveProps.resolveProps(sep ?? [], {
         indicator: "map-value-ind",
@@ -20669,7 +20942,7 @@ var require_resolve_block_map = __commonJS((exports) => {
         const pair = new Pair.Pair(keyNode, valueNode);
         if (ctx.options.keepSourceTokens)
           pair.srcToken = collItem;
-        map2.items.push(pair);
+        map.items.push(pair);
       } else {
         if (implicitKey)
           onError(keyNode.range, "MISSING_CHAR", "Implicit map keys need to be followed by map values");
@@ -20683,17 +20956,17 @@ var require_resolve_block_map = __commonJS((exports) => {
         const pair = new Pair.Pair(keyNode);
         if (ctx.options.keepSourceTokens)
           pair.srcToken = collItem;
-        map2.items.push(pair);
+        map.items.push(pair);
       }
     }
     if (commentEnd && commentEnd < offset)
       onError(commentEnd, "IMPOSSIBLE", "Map comment with trailing content");
-    map2.range = [bm.offset, offset, commentEnd ?? offset];
-    return map2;
+    map.range = [bm.offset, offset, commentEnd ?? offset];
+    return map;
   }
   exports.resolveBlockMap = resolveBlockMap;
 });
-var require_resolve_block_seq = __commonJS((exports) => {
+var require_resolve_block_seq = __commonJS(function(exports) {
   var YAMLSeq = require_YAMLSeq();
   var resolveProps = require_resolve_props();
   var utilFlowIndentCheck = require_util_flow_indent_check();
@@ -20739,7 +21012,7 @@ var require_resolve_block_seq = __commonJS((exports) => {
   }
   exports.resolveBlockSeq = resolveBlockSeq;
 });
-var require_resolve_end = __commonJS((exports) => {
+var require_resolve_end = __commonJS(function(exports) {
   function resolveEnd(end, offset, reqSpace, onError) {
     let comment = "";
     if (end) {
@@ -20777,7 +21050,7 @@ var require_resolve_end = __commonJS((exports) => {
   }
   exports.resolveEnd = resolveEnd;
 });
-var require_resolve_flow_collection = __commonJS((exports) => {
+var require_resolve_flow_collection = __commonJS(function(exports) {
   var identity = require_identity();
   var Pair = require_Pair();
   var YAMLMap = require_YAMLMap();
@@ -20922,17 +21195,17 @@ var require_resolve_flow_collection = __commonJS((exports) => {
         if (ctx.options.keepSourceTokens)
           pair.srcToken = collItem;
         if (isMap) {
-          const map2 = coll;
-          if (utilMapIncludes.mapIncludes(ctx, map2.items, keyNode))
+          const map = coll;
+          if (utilMapIncludes.mapIncludes(ctx, map.items, keyNode))
             onError(keyStart, "DUPLICATE_KEY", "Map keys must be unique");
-          map2.items.push(pair);
+          map.items.push(pair);
         } else {
-          const map2 = new YAMLMap.YAMLMap(ctx.schema);
-          map2.flow = true;
-          map2.items.push(pair);
+          const map = new YAMLMap.YAMLMap(ctx.schema);
+          map.flow = true;
+          map.items.push(pair);
           const endRange = (valueNode ?? keyNode).range;
-          map2.range = [keyNode.range[0], endRange[1], endRange[2]];
-          coll.items.push(map2);
+          map.range = [keyNode.range[0], endRange[1], endRange[2]];
+          coll.items.push(map);
         }
         offset = valueNode ? valueNode.range[2] : valueProps.end;
       }
@@ -20966,7 +21239,7 @@ var require_resolve_flow_collection = __commonJS((exports) => {
   }
   exports.resolveFlowCollection = resolveFlowCollection;
 });
-var require_compose_collection = __commonJS((exports) => {
+var require_compose_collection = __commonJS(function(exports) {
   var identity = require_identity();
   var Scalar = require_Scalar();
   var YAMLMap = require_YAMLMap();
@@ -21026,7 +21299,7 @@ var require_compose_collection = __commonJS((exports) => {
   }
   exports.composeCollection = composeCollection;
 });
-var require_resolve_block_scalar = __commonJS((exports) => {
+var require_resolve_block_scalar = __commonJS(function(exports) {
   var Scalar = require_Scalar();
   function resolveBlockScalar(ctx, scalar, onError) {
     const start = scalar.offset;
@@ -21044,12 +21317,12 @@ var require_resolve_block_scalar = __commonJS((exports) => {
         break;
     }
     if (chompStart === 0) {
-      const value2 = header.chomp === "+" && lines.length > 0 ? `
+      const value = header.chomp === "+" && lines.length > 0 ? `
 `.repeat(Math.max(1, lines.length - 1)) : "";
-      let end2 = start + header.length;
+      let end = start + header.length;
       if (scalar.source)
-        end2 += scalar.source.length;
-      return { value: value2, type, comment: header.comment, range: [start, end2, end2] };
+        end += scalar.source.length;
+      return { value, type, comment: header.comment, range: [start, end, end] };
     }
     let trimIndent = scalar.indent + header.indent;
     let offset = scalar.offset + header.length;
@@ -21156,7 +21429,7 @@ var require_resolve_block_scalar = __commonJS((exports) => {
     const mode = source[0];
     let indent = 0;
     let chomp = "";
-    let error51 = -1;
+    let error = -1;
     for (let i = 1;i < source.length; ++i) {
       const ch = source[i];
       if (!chomp && (ch === "-" || ch === "+"))
@@ -21165,12 +21438,12 @@ var require_resolve_block_scalar = __commonJS((exports) => {
         const n = Number(ch);
         if (!indent && n)
           indent = n;
-        else if (error51 === -1)
-          error51 = offset + i;
+        else if (error === -1)
+          error = offset + i;
       }
     }
-    if (error51 !== -1)
-      onError(error51, "UNEXPECTED_TOKEN", `Block scalar header includes extra characters: ${source}`);
+    if (error !== -1)
+      onError(error, "UNEXPECTED_TOKEN", `Block scalar header includes extra characters: ${source}`);
     let hasSpace = false;
     let comment = "";
     let length = source.length;
@@ -21217,7 +21490,7 @@ var require_resolve_block_scalar = __commonJS((exports) => {
   }
   exports.resolveBlockScalar = resolveBlockScalar;
 });
-var require_resolve_flow_scalar = __commonJS((exports) => {
+var require_resolve_flow_scalar = __commonJS(function(exports) {
   var Scalar = require_Scalar();
   var resolveEnd = require_resolve_end();
   function resolveFlowScalar(scalar, strict, onError) {
@@ -21432,7 +21705,7 @@ var require_resolve_flow_scalar = __commonJS((exports) => {
   }
   exports.resolveFlowScalar = resolveFlowScalar;
 });
-var require_compose_scalar = __commonJS((exports) => {
+var require_compose_scalar = __commonJS(function(exports) {
   var identity = require_identity();
   var Scalar = require_Scalar();
   var resolveBlockScalar = require_resolve_block_scalar();
@@ -21453,8 +21726,8 @@ var require_compose_scalar = __commonJS((exports) => {
     try {
       const res = tag.resolve(value, (msg) => onError(tagToken ?? token, "TAG_RESOLVE_FAILED", msg), ctx.options);
       scalar = identity.isScalar(res) ? res : new Scalar.Scalar(res);
-    } catch (error51) {
-      const msg = error51 instanceof Error ? error51.message : String(error51);
+    } catch (error) {
+      const msg = error instanceof Error ? error.message : String(error);
       onError(tagToken ?? token, "TAG_RESOLVE_FAILED", msg);
       scalar = new Scalar.Scalar(value);
     }
@@ -21494,12 +21767,12 @@ var require_compose_scalar = __commonJS((exports) => {
     return schema[identity.SCALAR];
   }
   function findScalarTagByTest({ atKey, directives, schema }, value, token, onError) {
-    const tag = schema.tags.find((tag2) => (tag2.default === true || atKey && tag2.default === "key") && tag2.test?.test(value)) || schema[identity.SCALAR];
+    const tag = schema.tags.find((tag) => (tag.default === true || atKey && tag.default === "key") && tag.test?.test(value)) || schema[identity.SCALAR];
     if (schema.compat) {
-      const compat2 = schema.compat.find((tag2) => tag2.default && tag2.test?.test(value)) ?? schema[identity.SCALAR];
-      if (tag.tag !== compat2.tag) {
+      const compat = schema.compat.find((tag) => tag.default && tag.test?.test(value)) ?? schema[identity.SCALAR];
+      if (tag.tag !== compat.tag) {
         const ts = directives.tagString(tag.tag);
-        const cs = directives.tagString(compat2.tag);
+        const cs = directives.tagString(compat.tag);
         const msg = `Value may be parsed as either ${ts} or ${cs}`;
         onError(token, "TAG_RESOLVE_FAILED", msg, true);
       }
@@ -21508,7 +21781,7 @@ var require_compose_scalar = __commonJS((exports) => {
   }
   exports.composeScalar = composeScalar;
 });
-var require_util_empty_scalar_position = __commonJS((exports) => {
+var require_util_empty_scalar_position = __commonJS(function(exports) {
   function emptyScalarPosition(offset, before, pos) {
     if (before) {
       pos ?? (pos = before.length);
@@ -21533,7 +21806,7 @@ var require_util_empty_scalar_position = __commonJS((exports) => {
   }
   exports.emptyScalarPosition = emptyScalarPosition;
 });
-var require_compose_node = __commonJS((exports) => {
+var require_compose_node = __commonJS(function(exports) {
   var Alias = require_Alias();
   var identity = require_identity();
   var composeCollection = require_compose_collection();
@@ -21567,8 +21840,8 @@ var require_compose_node = __commonJS((exports) => {
           node = composeCollection.composeCollection(CN, ctx, token, props, onError);
           if (anchor)
             node.anchor = anchor.source.substring(1);
-        } catch (error51) {
-          const message = error51 instanceof Error ? error51.message : String(error51);
+        } catch (error) {
+          const message = error instanceof Error ? error.message : String(error);
           onError(token, "RESOURCE_EXHAUSTION", message);
         }
         break;
@@ -21619,35 +21892,35 @@ var require_compose_node = __commonJS((exports) => {
     return node;
   }
   function composeAlias({ options }, { offset, source, end }, onError) {
-    const alias3 = new Alias.Alias(source.substring(1));
-    if (alias3.source === "")
+    const alias = new Alias.Alias(source.substring(1));
+    if (alias.source === "")
       onError(offset, "BAD_ALIAS", "Alias cannot be an empty string");
-    if (alias3.source.endsWith(":"))
+    if (alias.source.endsWith(":"))
       onError(offset + source.length - 1, "BAD_ALIAS", "Alias ending in : is ambiguous", true);
     const valueEnd = offset + source.length;
     const re = resolveEnd.resolveEnd(end, valueEnd, options.strict, onError);
-    alias3.range = [offset, valueEnd, re.offset];
+    alias.range = [offset, valueEnd, re.offset];
     if (re.comment)
-      alias3.comment = re.comment;
-    return alias3;
+      alias.comment = re.comment;
+    return alias;
   }
   exports.composeEmptyNode = composeEmptyNode;
   exports.composeNode = composeNode;
 });
-var require_compose_doc = __commonJS((exports) => {
+var require_compose_doc = __commonJS(function(exports) {
   var Document = require_Document();
   var composeNode = require_compose_node();
   var resolveEnd = require_resolve_end();
   var resolveProps = require_resolve_props();
   function composeDoc(options, directives, { offset, start, value, end }, onError) {
     const opts = Object.assign({ _directives: directives }, options);
-    const doc2 = new Document.Document(undefined, opts);
+    const doc = new Document.Document(undefined, opts);
     const ctx = {
       atKey: false,
       atRoot: true,
-      directives: doc2.directives,
-      options: doc2.options,
-      schema: doc2.schema
+      directives: doc.directives,
+      options: doc.options,
+      schema: doc.schema
     };
     const props = resolveProps.resolveProps(start, {
       indicator: "doc-start",
@@ -21658,25 +21931,25 @@ var require_compose_doc = __commonJS((exports) => {
       startOnNewline: true
     });
     if (props.found) {
-      doc2.directives.docStart = true;
+      doc.directives.docStart = true;
       if (value && (value.type === "block-map" || value.type === "block-seq") && !props.hasNewline)
         onError(props.end, "MISSING_CHAR", "Block collection cannot start on same line with directives-end marker");
     }
-    doc2.contents = value ? composeNode.composeNode(ctx, value, props, onError) : composeNode.composeEmptyNode(ctx, props.end, start, null, props, onError);
-    const contentEnd = doc2.contents.range[2];
+    doc.contents = value ? composeNode.composeNode(ctx, value, props, onError) : composeNode.composeEmptyNode(ctx, props.end, start, null, props, onError);
+    const contentEnd = doc.contents.range[2];
     const re = resolveEnd.resolveEnd(end, contentEnd, false, onError);
     if (re.comment)
-      doc2.comment = re.comment;
-    doc2.range = [offset, contentEnd, re.offset];
-    return doc2;
+      doc.comment = re.comment;
+    doc.range = [offset, contentEnd, re.offset];
+    return doc;
   }
   exports.composeDoc = composeDoc;
 });
-var require_composer = __commonJS((exports) => {
+var require_composer = __commonJS(function(exports) {
   var node_process = __require("process");
   var directives = require_directives();
   var Document = require_Document();
-  var errors5 = require_errors();
+  var errors = require_errors();
   var identity = require_identity();
   var composeDoc = require_compose_doc();
   var resolveEnd = require_resolve_end();
@@ -21727,22 +22000,22 @@ var require_composer = __commonJS((exports) => {
       this.onError = (source, code, message, warning) => {
         const pos = getErrorPos(source);
         if (warning)
-          this.warnings.push(new errors5.YAMLWarning(pos, code, message));
+          this.warnings.push(new errors.YAMLWarning(pos, code, message));
         else
-          this.errors.push(new errors5.YAMLParseError(pos, code, message));
+          this.errors.push(new errors.YAMLParseError(pos, code, message));
       };
       this.directives = new directives.Directives({ version: options.version || "1.2" });
       this.options = options;
     }
-    decorate(doc2, afterDoc) {
+    decorate(doc, afterDoc) {
       const { comment, afterEmptyLine } = parsePrelude(this.prelude);
       if (comment) {
-        const dc = doc2.contents;
+        const dc = doc.contents;
         if (afterDoc) {
-          doc2.comment = doc2.comment ? `${doc2.comment}
+          doc.comment = doc.comment ? `${doc.comment}
 ${comment}` : comment;
-        } else if (afterEmptyLine || doc2.directives.docStart || !dc) {
-          doc2.commentBefore = comment;
+        } else if (afterEmptyLine || doc.directives.docStart || !dc) {
+          doc.commentBefore = comment;
         } else if (identity.isCollection(dc) && !dc.flow && dc.items.length > 0) {
           let it = dc.items[0];
           if (identity.isPair(it))
@@ -21758,12 +22031,12 @@ ${cb}` : comment;
       }
       if (afterDoc) {
         for (let i = 0;i < this.errors.length; ++i)
-          doc2.errors.push(this.errors[i]);
+          doc.errors.push(this.errors[i]);
         for (let i = 0;i < this.warnings.length; ++i)
-          doc2.warnings.push(this.warnings[i]);
+          doc.warnings.push(this.warnings[i]);
       } else {
-        doc2.errors = this.errors;
-        doc2.warnings = this.warnings;
+        doc.errors = this.errors;
+        doc.warnings = this.warnings;
       }
       this.prelude = [];
       this.errors = [];
@@ -21796,13 +22069,13 @@ ${cb}` : comment;
           this.atDirectives = true;
           break;
         case "document": {
-          const doc2 = composeDoc.composeDoc(this.options, this.directives, token, this.onError);
-          if (this.atDirectives && !doc2.directives.docStart)
+          const doc = composeDoc.composeDoc(this.options, this.directives, token, this.onError);
+          if (this.atDirectives && !doc.directives.docStart)
             this.onError(token, "MISSING_CHAR", "Missing directives-end/doc-start indicator line");
-          this.decorate(doc2, false);
+          this.decorate(doc, false);
           if (this.doc)
             yield this.doc;
-          this.doc = doc2;
+          this.doc = doc;
           this.atDirectives = false;
           break;
         }
@@ -21815,17 +22088,17 @@ ${cb}` : comment;
           break;
         case "error": {
           const msg = token.source ? `${token.message}: ${JSON.stringify(token.source)}` : token.message;
-          const error51 = new errors5.YAMLParseError(getErrorPos(token), "UNEXPECTED_TOKEN", msg);
+          const error = new errors.YAMLParseError(getErrorPos(token), "UNEXPECTED_TOKEN", msg);
           if (this.atDirectives || !this.doc)
-            this.errors.push(error51);
+            this.errors.push(error);
           else
-            this.doc.errors.push(error51);
+            this.doc.errors.push(error);
           break;
         }
         case "doc-end": {
           if (!this.doc) {
             const msg = "Unexpected doc-end without preceding document";
-            this.errors.push(new errors5.YAMLParseError(getErrorPos(token), "UNEXPECTED_TOKEN", msg));
+            this.errors.push(new errors.YAMLParseError(getErrorPos(token), "UNEXPECTED_TOKEN", msg));
             break;
           }
           this.doc.directives.docEnd = true;
@@ -21840,7 +22113,7 @@ ${end.comment}` : end.comment;
           break;
         }
         default:
-          this.errors.push(new errors5.YAMLParseError(getErrorPos(token), "UNEXPECTED_TOKEN", `Unsupported token ${token.type}`));
+          this.errors.push(new errors.YAMLParseError(getErrorPos(token), "UNEXPECTED_TOKEN", `Unsupported token ${token.type}`));
       }
     }
     *end(forceDoc = false, endOffset = -1) {
@@ -21850,21 +22123,21 @@ ${end.comment}` : end.comment;
         this.doc = null;
       } else if (forceDoc) {
         const opts = Object.assign({ _directives: this.directives }, this.options);
-        const doc2 = new Document.Document(undefined, opts);
+        const doc = new Document.Document(undefined, opts);
         if (this.atDirectives)
           this.onError(endOffset, "MISSING_CHAR", "Missing directives-end indicator line");
-        doc2.range = [0, endOffset, endOffset];
-        this.decorate(doc2, false);
-        yield doc2;
+        doc.range = [0, endOffset, endOffset];
+        this.decorate(doc, false);
+        yield doc;
       }
     }
   }
   exports.Composer = Composer;
 });
-var require_cst_scalar = __commonJS((exports) => {
+var require_cst_scalar = __commonJS(function(exports) {
   var resolveBlockScalar = require_resolve_block_scalar();
   var resolveFlowScalar = require_resolve_flow_scalar();
-  var errors5 = require_errors();
+  var errors = require_errors();
   var stringifyString = require_stringifyString();
   function resolveAsScalar(token, strict = true, onError) {
     if (token) {
@@ -21873,7 +22146,7 @@ var require_cst_scalar = __commonJS((exports) => {
         if (onError)
           onError(offset, code, message);
         else
-          throw new errors5.YAMLParseError([offset, offset + 1], code, message);
+          throw new errors.YAMLParseError([offset, offset + 1], code, message);
       };
       switch (token.type) {
         case "scalar":
@@ -22049,7 +22322,7 @@ var require_cst_scalar = __commonJS((exports) => {
   exports.resolveAsScalar = resolveAsScalar;
   exports.setScalarValue = setScalarValue;
 });
-var require_cst_stringify = __commonJS((exports) => {
+var require_cst_stringify = __commonJS(function(exports) {
   var stringify = (cst) => ("type" in cst) ? stringifyToken(cst) : stringifyItem(cst);
   function stringifyToken(token) {
     switch (token.type) {
@@ -22105,7 +22378,7 @@ var require_cst_stringify = __commonJS((exports) => {
   }
   exports.stringify = stringify;
 });
-var require_cst_visit = __commonJS((exports) => {
+var require_cst_visit = __commonJS(function(exports) {
   var BREAK = Symbol("break visit");
   var SKIP = Symbol("skip children");
   var REMOVE = Symbol("remove item");
@@ -22162,7 +22435,7 @@ var require_cst_visit = __commonJS((exports) => {
   }
   exports.visit = visit;
 });
-var require_cst = __commonJS((exports) => {
+var require_cst = __commonJS(function(exports) {
   var cstScalar = require_cst_scalar();
   var cstStringify = require_cst_stringify();
   var cstVisit = require_cst_visit();
@@ -22261,7 +22534,7 @@ var require_cst = __commonJS((exports) => {
   exports.prettyToken = prettyToken;
   exports.tokenType = tokenType;
 });
-var require_lexer = __commonJS((exports) => {
+var require_lexer = __commonJS(function(exports) {
   var cst = require_cst();
   function isEmpty(ch) {
     switch (ch) {
@@ -22441,12 +22714,12 @@ var require_lexer = __commonJS((exports) => {
       if (ch === "-" || ch === ".") {
         if (!this.atEnd && !this.hasChars(4))
           return this.setNext("line-start");
-        const s2 = this.peek(3);
-        if ((s2 === "---" || s2 === "...") && isEmpty(this.charAt(3))) {
+        const s = this.peek(3);
+        if ((s === "---" || s === "...") && isEmpty(this.charAt(3))) {
           yield* this.pushCount(3);
           this.indentValue = 0;
           this.indentNext = 0;
-          return s2 === "---" ? "doc" : "stream";
+          return s === "---" ? "doc" : "stream";
         }
       }
       this.indentValue = yield* this.pushSpaces(false);
@@ -22634,18 +22907,18 @@ var require_lexer = __commonJS((exports) => {
       let indent = 0;
       let ch;
       loop:
-        for (let i2 = this.pos;ch = this.buffer[i2]; ++i2) {
+        for (let i = this.pos;ch = this.buffer[i]; ++i) {
           switch (ch) {
             case " ":
               indent += 1;
               break;
             case `
 `:
-              nl = i2;
+              nl = i;
               indent = 0;
               break;
             case "\r": {
-              const next = this.buffer[i2 + 1];
+              const next = this.buffer[i + 1];
               if (!next && !this.atEnd)
                 return this.setNext("block-scalar");
               if (next === `
@@ -22688,16 +22961,16 @@ var require_lexer = __commonJS((exports) => {
         nl = i - 1;
       } else if (!this.blockScalarKeep) {
         do {
-          let i2 = nl - 1;
-          let ch2 = this.buffer[i2];
-          if (ch2 === "\r")
-            ch2 = this.buffer[--i2];
-          const lastChar = i2;
-          while (ch2 === " ")
-            ch2 = this.buffer[--i2];
-          if (ch2 === `
-` && i2 >= this.pos && i2 + 1 + indent > lastChar)
-            nl = i2;
+          let i = nl - 1;
+          let ch = this.buffer[i];
+          if (ch === "\r")
+            ch = this.buffer[--i];
+          const lastChar = i;
+          while (ch === " ")
+            ch = this.buffer[--i];
+          if (ch === `
+` && i >= this.pos && i + 1 + indent > lastChar)
+            nl = i;
           else
             break;
         } while (true);
@@ -22759,11 +23032,11 @@ var require_lexer = __commonJS((exports) => {
       return 0;
     }
     *pushToIndex(i, allowEmpty) {
-      const s2 = this.buffer.slice(this.pos, i);
-      if (s2) {
-        yield s2;
-        this.pos += s2.length;
-        return s2.length;
+      const s = this.buffer.slice(this.pos, i);
+      if (s) {
+        yield s;
+        this.pos += s.length;
+        return s.length;
       } else if (allowEmpty)
         yield "";
       return 0;
@@ -22856,7 +23129,7 @@ var require_lexer = __commonJS((exports) => {
   }
   exports.Lexer = Lexer;
 });
-var require_line_counter = __commonJS((exports) => {
+var require_line_counter = __commonJS(function(exports) {
 
   class LineCounter {
     constructor() {
@@ -22883,7 +23156,7 @@ var require_line_counter = __commonJS((exports) => {
   }
   exports.LineCounter = LineCounter;
 });
-var require_parser = __commonJS((exports) => {
+var require_parser = __commonJS(function(exports) {
   var node_process = __require("process");
   var cst = require_cst();
   var lexer = require_lexer();
@@ -23097,8 +23370,8 @@ var require_parser = __commonJS((exports) => {
     peek(n) {
       return this.stack[this.stack.length - n];
     }
-    *pop(error51) {
-      const token = error51 ?? this.stack.pop();
+    *pop(error) {
+      const token = error ?? this.stack.pop();
       if (!token) {
         const message = "Tried to pop an empty stack";
         yield { type: "error", offset: this.offset, source: "", message };
@@ -23182,14 +23455,14 @@ var require_parser = __commonJS((exports) => {
           return;
         case "doc-mode":
         case "doc-start": {
-          const doc2 = {
+          const doc = {
             type: "document",
             offset: this.offset,
             start: []
           };
           if (this.type === "doc-start")
-            doc2.start.push(this.sourceToken);
-          this.stack.push(doc2);
+            doc.start.push(this.sourceToken);
+          this.stack.push(doc);
           return;
         }
       }
@@ -23200,16 +23473,16 @@ var require_parser = __commonJS((exports) => {
         source: this.source
       };
     }
-    *document(doc2) {
-      if (doc2.value)
-        return yield* this.lineEnd(doc2);
+    *document(doc) {
+      if (doc.value)
+        return yield* this.lineEnd(doc);
       switch (this.type) {
         case "doc-start": {
-          if (findNonEmptyIndex(doc2.start) !== -1) {
+          if (findNonEmptyIndex(doc.start) !== -1) {
             yield* this.pop();
             yield* this.step();
           } else
-            doc2.start.push(this.sourceToken);
+            doc.start.push(this.sourceToken);
           return;
         }
         case "anchor":
@@ -23217,10 +23490,10 @@ var require_parser = __commonJS((exports) => {
         case "space":
         case "comment":
         case "newline":
-          doc2.start.push(this.sourceToken);
+          doc.start.push(this.sourceToken);
           return;
       }
-      const bv = this.startBlockValue(doc2);
+      const bv = this.startBlockValue(doc);
       if (bv)
         this.stack.push(bv);
       else {
@@ -23243,14 +23516,14 @@ var require_parser = __commonJS((exports) => {
           delete scalar.end;
         } else
           sep = [this.sourceToken];
-        const map2 = {
+        const map = {
           type: "block-map",
           offset: scalar.offset,
           indent: scalar.indent,
           items: [{ start, key: scalar, sep }]
         };
         this.onKeyLine = true;
-        this.stack[this.stack.length - 1] = map2;
+        this.stack[this.stack.length - 1] = map;
       } else
         yield* this.lineEnd(scalar);
     }
@@ -23281,8 +23554,8 @@ var require_parser = __commonJS((exports) => {
           yield* this.step();
       }
     }
-    *blockMap(map2) {
-      const it = map2.items[map2.items.length - 1];
+    *blockMap(map) {
+      const it = map.items[map.items.length - 1];
       switch (this.type) {
         case "newline":
           this.onKeyLine = false;
@@ -23292,7 +23565,7 @@ var require_parser = __commonJS((exports) => {
             if (last?.type === "comment")
               end?.push(this.sourceToken);
             else
-              map2.items.push({ start: [this.sourceToken] });
+              map.items.push({ start: [this.sourceToken] });
           } else if (it.sep) {
             it.sep.push(this.sourceToken);
           } else {
@@ -23302,17 +23575,17 @@ var require_parser = __commonJS((exports) => {
         case "space":
         case "comment":
           if (it.value) {
-            map2.items.push({ start: [this.sourceToken] });
+            map.items.push({ start: [this.sourceToken] });
           } else if (it.sep) {
             it.sep.push(this.sourceToken);
           } else {
-            if (this.atIndentedComment(it.start, map2.indent)) {
-              const prev = map2.items[map2.items.length - 2];
+            if (this.atIndentedComment(it.start, map.indent)) {
+              const prev = map.items[map.items.length - 2];
               const end = prev?.value?.end;
               if (Array.isArray(end)) {
                 arrayPushArray(end, it.start);
                 end.push(this.sourceToken);
-                map2.items.pop();
+                map.items.pop();
                 return;
               }
             }
@@ -23320,8 +23593,8 @@ var require_parser = __commonJS((exports) => {
           }
           return;
       }
-      if (this.indent >= map2.indent) {
-        const atMapIndent = !this.onKeyLine && this.indent === map2.indent;
+      if (this.indent >= map.indent) {
+        const atMapIndent = !this.onKeyLine && this.indent === map.indent;
         const atNextItem = atMapIndent && (it.sep || it.explicitKey) && this.type !== "seq-item-ind";
         let start = [];
         if (atNextItem && it.sep && !it.value) {
@@ -23335,7 +23608,7 @@ var require_parser = __commonJS((exports) => {
               case "space":
                 break;
               case "comment":
-                if (st.indent > map2.indent)
+                if (st.indent > map.indent)
                   nl.length = 0;
                 break;
               default:
@@ -23350,7 +23623,7 @@ var require_parser = __commonJS((exports) => {
           case "tag":
             if (atNextItem || it.value) {
               start.push(this.sourceToken);
-              map2.items.push({ start });
+              map.items.push({ start });
               this.onKeyLine = true;
             } else if (it.sep) {
               it.sep.push(this.sourceToken);
@@ -23364,7 +23637,7 @@ var require_parser = __commonJS((exports) => {
               it.explicitKey = true;
             } else if (atNextItem || it.value) {
               start.push(this.sourceToken);
-              map2.items.push({ start, explicitKey: true });
+              map.items.push({ start, explicitKey: true });
             } else {
               this.stack.push({
                 type: "block-map",
@@ -23381,16 +23654,16 @@ var require_parser = __commonJS((exports) => {
                 if (includesToken(it.start, "newline")) {
                   Object.assign(it, { key: null, sep: [this.sourceToken] });
                 } else {
-                  const start2 = getFirstKeyStartProps(it.start);
+                  const start = getFirstKeyStartProps(it.start);
                   this.stack.push({
                     type: "block-map",
                     offset: this.offset,
                     indent: this.indent,
-                    items: [{ start: start2, key: null, sep: [this.sourceToken] }]
+                    items: [{ start, key: null, sep: [this.sourceToken] }]
                   });
                 }
               } else if (it.value) {
-                map2.items.push({ start: [], key: null, sep: [this.sourceToken] });
+                map.items.push({ start: [], key: null, sep: [this.sourceToken] });
               } else if (includesToken(it.sep, "map-value-ind")) {
                 this.stack.push({
                   type: "block-map",
@@ -23399,7 +23672,7 @@ var require_parser = __commonJS((exports) => {
                   items: [{ start, key: null, sep: [this.sourceToken] }]
                 });
               } else if (isFlowToken(it.key) && !includesToken(it.sep, "newline")) {
-                const start2 = getFirstKeyStartProps(it.start);
+                const start = getFirstKeyStartProps(it.start);
                 const key = it.key;
                 const sep = it.sep;
                 sep.push(this.sourceToken);
@@ -23409,7 +23682,7 @@ var require_parser = __commonJS((exports) => {
                   type: "block-map",
                   offset: this.offset,
                   indent: this.indent,
-                  items: [{ start: start2, key, sep }]
+                  items: [{ start, key, sep }]
                 });
               } else if (start.length > 0) {
                 it.sep = it.sep.concat(start, this.sourceToken);
@@ -23420,7 +23693,7 @@ var require_parser = __commonJS((exports) => {
               if (!it.sep) {
                 Object.assign(it, { key: null, sep: [this.sourceToken] });
               } else if (it.value || atNextItem) {
-                map2.items.push({ start, key: null, sep: [this.sourceToken] });
+                map.items.push({ start, key: null, sep: [this.sourceToken] });
               } else if (includesToken(it.sep, "map-value-ind")) {
                 this.stack.push({
                   type: "block-map",
@@ -23440,7 +23713,7 @@ var require_parser = __commonJS((exports) => {
           case "double-quoted-scalar": {
             const fs = this.flowScalar(this.type);
             if (atNextItem || it.value) {
-              map2.items.push({ start, key: fs, sep: [] });
+              map.items.push({ start, key: fs, sep: [] });
               this.onKeyLine = true;
             } else if (it.sep) {
               this.stack.push(fs);
@@ -23451,7 +23724,7 @@ var require_parser = __commonJS((exports) => {
             return;
           }
           default: {
-            const bv = this.startBlockValue(map2);
+            const bv = this.startBlockValue(map);
             if (bv) {
               if (bv.type === "block-seq") {
                 if (!it.explicitKey && it.sep && !includesToken(it.sep, "newline")) {
@@ -23464,7 +23737,7 @@ var require_parser = __commonJS((exports) => {
                   return;
                 }
               } else if (atMapIndent) {
-                map2.items.push({ start });
+                map.items.push({ start });
               }
               this.stack.push(bv);
               return;
@@ -23605,14 +23878,14 @@ var require_parser = __commonJS((exports) => {
           fixFlowSeqItems(fc);
           const sep = fc.end.splice(1, fc.end.length);
           sep.push(this.sourceToken);
-          const map2 = {
+          const map = {
             type: "block-map",
             offset: fc.offset,
             indent: fc.indent,
             items: [{ start, key: fc, sep }]
           };
           this.onKeyLine = true;
-          this.stack[this.stack.length - 1] = map2;
+          this.stack[this.stack.length - 1] = map;
         } else {
           yield* this.lineEnd(fc);
         }
@@ -23737,10 +24010,10 @@ var require_parser = __commonJS((exports) => {
   }
   exports.Parser = Parser;
 });
-var require_public_api = __commonJS((exports) => {
+var require_public_api = __commonJS(function(exports) {
   var composer = require_composer();
   var Document = require_Document();
-  var errors5 = require_errors();
+  var errors = require_errors();
   var log = require_log();
   var identity = require_identity();
   var lineCounter = require_line_counter();
@@ -23751,56 +24024,56 @@ var require_public_api = __commonJS((exports) => {
     return { lineCounter: lineCounter$1, prettyErrors };
   }
   function parseAllDocuments(source, options = {}) {
-    const { lineCounter: lineCounter2, prettyErrors } = parseOptions(options);
-    const parser$1 = new parser.Parser(lineCounter2?.addNewLine);
+    const { lineCounter, prettyErrors } = parseOptions(options);
+    const parser$1 = new parser.Parser(lineCounter?.addNewLine);
     const composer$1 = new composer.Composer(options);
     const docs = Array.from(composer$1.compose(parser$1.parse(source)));
-    if (prettyErrors && lineCounter2)
-      for (const doc2 of docs) {
-        doc2.errors.forEach(errors5.prettifyError(source, lineCounter2));
-        doc2.warnings.forEach(errors5.prettifyError(source, lineCounter2));
+    if (prettyErrors && lineCounter)
+      for (const doc of docs) {
+        doc.errors.forEach(errors.prettifyError(source, lineCounter));
+        doc.warnings.forEach(errors.prettifyError(source, lineCounter));
       }
     if (docs.length > 0)
       return docs;
     return Object.assign([], { empty: true }, composer$1.streamInfo());
   }
   function parseDocument(source, options = {}) {
-    const { lineCounter: lineCounter2, prettyErrors } = parseOptions(options);
-    const parser$1 = new parser.Parser(lineCounter2?.addNewLine);
+    const { lineCounter, prettyErrors } = parseOptions(options);
+    const parser$1 = new parser.Parser(lineCounter?.addNewLine);
     const composer$1 = new composer.Composer(options);
-    let doc2 = null;
+    let doc = null;
     for (const _doc of composer$1.compose(parser$1.parse(source), true, source.length)) {
-      if (!doc2)
-        doc2 = _doc;
-      else if (doc2.options.logLevel !== "silent") {
-        doc2.errors.push(new errors5.YAMLParseError(_doc.range.slice(0, 2), "MULTIPLE_DOCS", "Source contains multiple documents; please use YAML.parseAllDocuments()"));
+      if (!doc)
+        doc = _doc;
+      else if (doc.options.logLevel !== "silent") {
+        doc.errors.push(new errors.YAMLParseError(_doc.range.slice(0, 2), "MULTIPLE_DOCS", "Source contains multiple documents; please use YAML.parseAllDocuments()"));
         break;
       }
     }
-    if (prettyErrors && lineCounter2) {
-      doc2.errors.forEach(errors5.prettifyError(source, lineCounter2));
-      doc2.warnings.forEach(errors5.prettifyError(source, lineCounter2));
+    if (prettyErrors && lineCounter) {
+      doc.errors.forEach(errors.prettifyError(source, lineCounter));
+      doc.warnings.forEach(errors.prettifyError(source, lineCounter));
     }
-    return doc2;
+    return doc;
   }
-  function parse5(src, reviver, options) {
+  function parse(src, reviver, options) {
     let _reviver = undefined;
     if (typeof reviver === "function") {
       _reviver = reviver;
     } else if (options === undefined && reviver && typeof reviver === "object") {
       options = reviver;
     }
-    const doc2 = parseDocument(src, options);
-    if (!doc2)
+    const doc = parseDocument(src, options);
+    if (!doc)
       return null;
-    doc2.warnings.forEach((warning) => log.warn(doc2.options.logLevel, warning));
-    if (doc2.errors.length > 0) {
-      if (doc2.options.logLevel !== "silent")
-        throw doc2.errors[0];
+    doc.warnings.forEach((warning) => log.warn(doc.options.logLevel, warning));
+    if (doc.errors.length > 0) {
+      if (doc.options.logLevel !== "silent")
+        throw doc.errors[0];
       else
-        doc2.errors = [];
+        doc.errors = [];
     }
-    return doc2.toJS(Object.assign({ reviver: _reviver }, options));
+    return doc.toJS(Object.assign({ reviver: _reviver }, options));
   }
   function stringify(value, replacer, options) {
     let _replacer = null;
@@ -23824,7 +24097,7 @@ var require_public_api = __commonJS((exports) => {
       return value.toString(options);
     return new Document.Document(value, _replacer, options).toString(options);
   }
-  exports.parse = parse5;
+  exports.parse = parse;
   exports.parseAllDocuments = parseAllDocuments;
   exports.parseDocument = parseDocument;
   exports.stringify = stringify;
@@ -23919,465 +24192,6 @@ var init_dist2 = __esm(() => {
   $visit = visit.visit;
   $visitAsync = visit.visitAsync;
 });
-function nowTimestamp() {
-  return Date.now();
-}
-function buildStandardColumns() {
-  return {
-    createdAt: integer2("created_at").notNull().$defaultFn(nowTimestamp).default(0),
-    updatedAt: integer2("updated_at").notNull().$defaultFn(nowTimestamp).default(0)
-  };
-}
-function buildStandardColumnsWithSoftDelete() {
-  return {
-    ...buildStandardColumns(),
-    inUsed: integer2("in_used").notNull().default(1)
-  };
-}
-function buildAppendOnlyColumns() {
-  return {
-    createdAt: integer2("created_at").notNull().$defaultFn(nowTimestamp).default(0)
-  };
-}
-var standardColumns;
-var standardColumnsWithSoftDelete;
-var appendOnlyColumns;
-var init_common3 = __esm(() => {
-  init_sqlite_core();
-  standardColumns = buildStandardColumns();
-  standardColumnsWithSoftDelete = buildStandardColumnsWithSoftDelete();
-  appendOnlyColumns = buildAppendOnlyColumns();
-});
-function sqlExpressionToText(value) {
-  if (typeof value !== "object" || value === null || !("queryChunks" in value)) {
-    return;
-  }
-  const chunks = value.queryChunks;
-  if (!chunks)
-    return;
-  return chunks.map((chunk) => {
-    if ("value" in chunk && typeof chunk.value === "string") {
-      return chunk.value;
-    }
-    if ("input" in chunk && chunk.input !== undefined) {
-      return String(chunk.input);
-    }
-    return String(chunk.value ?? "?");
-  }).join("");
-}
-function getDrizzleTableName(table3) {
-  const nameSym = Symbol.for("drizzle:Name");
-  return String(table3[nameSym]);
-}
-function quoteIdent(name) {
-  return `"${name.replace(/"/g, '""')}"`;
-}
-function defaultToSql(value) {
-  if (value == null) {
-    return value === null ? "NULL" : undefined;
-  }
-  if (typeof value === "number") {
-    return String(value);
-  }
-  if (typeof value === "string") {
-    return `'${value.replace(/'/g, "''")}'`;
-  }
-  if (typeof value === "boolean") {
-    return value ? "1" : "0";
-  }
-  return sqlExpressionToText(value) ?? String(value);
-}
-function generateCreateTableSql(table3) {
-  const config2 = getTableConfig(table3);
-  const columnDefs = [];
-  const tableConstraints = [];
-  const compositeUniqueCols = new Set;
-  for (const uc of config2.uniqueConstraints) {
-    if (uc.columns.length > 1) {
-      for (const col of uc.columns) {
-        compositeUniqueCols.add(col.name);
-      }
-    }
-  }
-  const compositePkCols = new Set;
-  for (const pk of config2.primaryKeys) {
-    if (pk.columns.length > 1) {
-      for (const col of pk.columns) {
-        compositePkCols.add(col.name);
-      }
-    }
-  }
-  for (const col of config2.columns) {
-    const parts = [quoteIdent(col.name), col.getSQLType()];
-    if (col.primary && !compositePkCols.has(col.name)) {
-      parts.push("PRIMARY KEY");
-    }
-    if (col.notNull) {
-      parts.push("NOT NULL");
-    }
-    if (col.hasDefault && col.default !== undefined) {
-      const sqlDefault = defaultToSql(col.default);
-      if (sqlDefault !== undefined) {
-        parts.push(`DEFAULT ${sqlDefault}`);
-      }
-    }
-    if (col.isUnique && !compositeUniqueCols.has(col.name)) {
-      parts.push("UNIQUE");
-    }
-    columnDefs.push(parts.join(" "));
-  }
-  for (const pk of config2.primaryKeys) {
-    if (pk.columns.length > 1) {
-      const pkCols = pk.columns.map((c) => quoteIdent(c.name)).join(", ");
-      tableConstraints.push(`PRIMARY KEY (${pkCols})`);
-    }
-  }
-  for (const uc of config2.uniqueConstraints) {
-    if (uc.columns.length > 1) {
-      const cols = uc.columns.map((c) => quoteIdent(c.name)).join(", ");
-      tableConstraints.push(`UNIQUE (${cols})`);
-    }
-  }
-  for (const fk of config2.foreignKeys) {
-    const ref = fk.reference();
-    const localCols = ref.columns.map((c) => quoteIdent(c.name)).join(", ");
-    const foreignCols = ref.foreignColumns.map((c) => quoteIdent(c.name)).join(", ");
-    const foreignTableName = getDrizzleTableName(ref.foreignTable);
-    let constraint = `FOREIGN KEY (${localCols}) REFERENCES ${quoteIdent(foreignTableName)} (${foreignCols})`;
-    if (fk.onDelete) {
-      constraint += ` ON DELETE ${fk.onDelete}`;
-    }
-    if (fk.onUpdate) {
-      constraint += ` ON UPDATE ${fk.onUpdate}`;
-    }
-    tableConstraints.push(constraint);
-  }
-  const allDefs = [...columnDefs, ...tableConstraints];
-  return `CREATE TABLE IF NOT EXISTS ${quoteIdent(config2.name)} (
-  ${allDefs.join(`,
-  `)}
-)`;
-}
-var init_ddl = __esm(() => {
-  init_sqlite_core();
-});
-var init_classic = __esm(() => {
-  init_external();
-  init_external();
-});
-var init_v4 = __esm(() => {
-  init_classic();
-});
-function isColumnType(column2, columnTypes) {
-  return columnTypes.includes(column2.columnType);
-}
-function isWithEnum(column2) {
-  return "enumValues" in column2 && Array.isArray(column2.enumValues) && column2.enumValues.length > 0;
-}
-function columnToSchema(column2, factory) {
-  const z$1 = factory?.zodInstance ?? exports_external;
-  const coerce = factory?.coerce ?? {};
-  let schema;
-  if (isWithEnum(column2)) {
-    schema = column2.enumValues.length ? z$1.enum(column2.enumValues) : z$1.string();
-  }
-  if (!schema) {
-    if (isColumnType(column2, ["PgGeometry", "PgPointTuple"])) {
-      schema = z$1.tuple([z$1.number(), z$1.number()]);
-    } else if (isColumnType(column2, ["PgGeometryObject", "PgPointObject"])) {
-      schema = z$1.object({ x: z$1.number(), y: z$1.number() });
-    } else if (isColumnType(column2, ["PgHalfVector", "PgVector"])) {
-      schema = z$1.array(z$1.number());
-      schema = column2.dimensions ? schema.length(column2.dimensions) : schema;
-    } else if (isColumnType(column2, ["PgLine"])) {
-      schema = z$1.tuple([z$1.number(), z$1.number(), z$1.number()]);
-    } else if (isColumnType(column2, ["PgLineABC"])) {
-      schema = z$1.object({
-        a: z$1.number(),
-        b: z$1.number(),
-        c: z$1.number()
-      });
-    } else if (isColumnType(column2, ["PgArray"])) {
-      schema = z$1.array(columnToSchema(column2.baseColumn, factory));
-      schema = column2.size ? schema.length(column2.size) : schema;
-    } else if (column2.dataType === "array") {
-      schema = z$1.array(z$1.any());
-    } else if (column2.dataType === "number") {
-      schema = numberColumnToSchema(column2, z$1, coerce);
-    } else if (column2.dataType === "bigint") {
-      schema = bigintColumnToSchema(column2, z$1, coerce);
-    } else if (column2.dataType === "boolean") {
-      schema = coerce === true || coerce.boolean ? z$1.coerce.boolean() : z$1.boolean();
-    } else if (column2.dataType === "date") {
-      schema = coerce === true || coerce.date ? z$1.coerce.date() : z$1.date();
-    } else if (column2.dataType === "string") {
-      schema = stringColumnToSchema(column2, z$1, coerce);
-    } else if (column2.dataType === "json") {
-      schema = jsonSchema;
-    } else if (column2.dataType === "custom") {
-      schema = z$1.any();
-    } else if (column2.dataType === "buffer") {
-      schema = bufferSchema;
-    }
-  }
-  if (!schema) {
-    schema = z$1.any();
-  }
-  return schema;
-}
-function numberColumnToSchema(column2, z2, coerce) {
-  let unsigned = column2.getSQLType().includes("unsigned");
-  let min;
-  let max;
-  let integer4 = false;
-  if (isColumnType(column2, ["MySqlTinyInt", "SingleStoreTinyInt"])) {
-    min = unsigned ? 0 : CONSTANTS.INT8_MIN;
-    max = unsigned ? CONSTANTS.INT8_UNSIGNED_MAX : CONSTANTS.INT8_MAX;
-    integer4 = true;
-  } else if (isColumnType(column2, [
-    "PgSmallInt",
-    "PgSmallSerial",
-    "MySqlSmallInt",
-    "SingleStoreSmallInt"
-  ])) {
-    min = unsigned ? 0 : CONSTANTS.INT16_MIN;
-    max = unsigned ? CONSTANTS.INT16_UNSIGNED_MAX : CONSTANTS.INT16_MAX;
-    integer4 = true;
-  } else if (isColumnType(column2, [
-    "PgReal",
-    "MySqlFloat",
-    "MySqlMediumInt",
-    "SingleStoreMediumInt",
-    "SingleStoreFloat"
-  ])) {
-    min = unsigned ? 0 : CONSTANTS.INT24_MIN;
-    max = unsigned ? CONSTANTS.INT24_UNSIGNED_MAX : CONSTANTS.INT24_MAX;
-    integer4 = isColumnType(column2, ["MySqlMediumInt", "SingleStoreMediumInt"]);
-  } else if (isColumnType(column2, [
-    "PgInteger",
-    "PgSerial",
-    "MySqlInt",
-    "SingleStoreInt"
-  ])) {
-    min = unsigned ? 0 : CONSTANTS.INT32_MIN;
-    max = unsigned ? CONSTANTS.INT32_UNSIGNED_MAX : CONSTANTS.INT32_MAX;
-    integer4 = true;
-  } else if (isColumnType(column2, [
-    "PgDoublePrecision",
-    "MySqlReal",
-    "MySqlDouble",
-    "SingleStoreReal",
-    "SingleStoreDouble",
-    "SQLiteReal"
-  ])) {
-    min = unsigned ? 0 : CONSTANTS.INT48_MIN;
-    max = unsigned ? CONSTANTS.INT48_UNSIGNED_MAX : CONSTANTS.INT48_MAX;
-  } else if (isColumnType(column2, [
-    "PgBigInt53",
-    "PgBigSerial53",
-    "MySqlBigInt53",
-    "MySqlSerial",
-    "SingleStoreBigInt53",
-    "SingleStoreSerial",
-    "SQLiteInteger"
-  ])) {
-    unsigned = unsigned || isColumnType(column2, ["MySqlSerial", "SingleStoreSerial"]);
-    min = unsigned ? 0 : Number.MIN_SAFE_INTEGER;
-    max = Number.MAX_SAFE_INTEGER;
-    integer4 = true;
-  } else if (isColumnType(column2, ["MySqlYear", "SingleStoreYear"])) {
-    min = 1901;
-    max = 2155;
-    integer4 = true;
-  } else {
-    min = Number.MIN_SAFE_INTEGER;
-    max = Number.MAX_SAFE_INTEGER;
-  }
-  let schema = coerce === true || coerce?.number ? integer4 ? z2.coerce.number() : z2.coerce.number().int() : integer4 ? z2.int() : z2.number();
-  schema = schema.gte(min).lte(max);
-  return schema;
-}
-function bigintColumnToSchema(column2, z2, coerce) {
-  const unsigned = column2.getSQLType().includes("unsigned");
-  const min = unsigned ? 0n : CONSTANTS.INT64_MIN;
-  const max = unsigned ? CONSTANTS.INT64_UNSIGNED_MAX : CONSTANTS.INT64_MAX;
-  const schema = coerce === true || coerce?.bigint ? z2.coerce.bigint() : z2.bigint();
-  return schema.gte(min).lte(max);
-}
-function stringColumnToSchema(column2, z2, coerce) {
-  if (isColumnType(column2, ["PgUUID"])) {
-    return z2.uuid();
-  }
-  let max;
-  let regex;
-  let fixed = false;
-  if (isColumnType(column2, ["PgVarchar", "SQLiteText"])) {
-    max = column2.length;
-  } else if (isColumnType(column2, ["MySqlVarChar", "SingleStoreVarChar"])) {
-    max = column2.length ?? CONSTANTS.INT16_UNSIGNED_MAX;
-  } else if (isColumnType(column2, ["MySqlText", "SingleStoreText"])) {
-    if (column2.textType === "longtext") {
-      max = CONSTANTS.INT32_UNSIGNED_MAX;
-    } else if (column2.textType === "mediumtext") {
-      max = CONSTANTS.INT24_UNSIGNED_MAX;
-    } else if (column2.textType === "text") {
-      max = CONSTANTS.INT16_UNSIGNED_MAX;
-    } else {
-      max = CONSTANTS.INT8_UNSIGNED_MAX;
-    }
-  }
-  if (isColumnType(column2, [
-    "PgChar",
-    "MySqlChar",
-    "SingleStoreChar"
-  ])) {
-    max = column2.length;
-    fixed = true;
-  }
-  if (isColumnType(column2, ["PgBinaryVector"])) {
-    regex = /^[01]+$/;
-    max = column2.dimensions;
-  }
-  let schema = coerce === true || coerce?.string ? z2.coerce.string() : z2.string();
-  schema = regex ? schema.regex(regex) : schema;
-  return max && fixed ? schema.length(max) : max ? schema.max(max) : schema;
-}
-function getColumns(tableLike) {
-  return isTable(tableLike) ? getTableColumns(tableLike) : getViewSelectedFields(tableLike);
-}
-function handleColumns(columns2, refinements, conditions2, factory) {
-  const columnSchemas = {};
-  for (const [key, selected] of Object.entries(columns2)) {
-    if (!is(selected, Column) && !is(selected, SQL) && !is(selected, SQL.Aliased) && typeof selected === "object") {
-      const columns3 = isTable(selected) || isView(selected) ? getColumns(selected) : selected;
-      columnSchemas[key] = handleColumns(columns3, refinements[key] ?? {}, conditions2, factory);
-      continue;
-    }
-    const refinement = refinements[key];
-    if (refinement !== undefined && typeof refinement !== "function") {
-      columnSchemas[key] = refinement;
-      continue;
-    }
-    const column2 = is(selected, Column) ? selected : undefined;
-    const schema = column2 ? columnToSchema(column2, factory) : exports_external.any();
-    const refined = typeof refinement === "function" ? refinement(schema) : schema;
-    if (conditions2.never(column2)) {
-      continue;
-    } else {
-      columnSchemas[key] = refined;
-    }
-    if (column2) {
-      if (conditions2.nullable(column2)) {
-        columnSchemas[key] = columnSchemas[key].nullable();
-      }
-      if (conditions2.optional(column2)) {
-        columnSchemas[key] = columnSchemas[key].optional();
-      }
-    }
-  }
-  return exports_external.object(columnSchemas);
-}
-function handleEnum(enum_, factory) {
-  const zod = factory?.zodInstance ?? exports_external;
-  return zod.enum(enum_.enumValues);
-}
-var CONSTANTS;
-var isPgEnum2;
-var literalSchema;
-var jsonSchema;
-var bufferSchema;
-var selectConditions;
-var insertConditions;
-var createSelectSchema = (entity2, refine2) => {
-  if (isPgEnum2(entity2)) {
-    return handleEnum(entity2);
-  }
-  const columns2 = getColumns(entity2);
-  return handleColumns(columns2, refine2 ?? {}, selectConditions);
-};
-var createInsertSchema = (entity2, refine2) => {
-  const columns2 = getColumns(entity2);
-  return handleColumns(columns2, refine2 ?? {}, insertConditions);
-};
-var init_drizzle_zod = __esm(() => {
-  init_v4();
-  init_drizzle_orm();
-  CONSTANTS = {
-    INT8_MIN: -128,
-    INT8_MAX: 127,
-    INT8_UNSIGNED_MAX: 255,
-    INT16_MIN: -32768,
-    INT16_MAX: 32767,
-    INT16_UNSIGNED_MAX: 65535,
-    INT24_MIN: -8388608,
-    INT24_MAX: 8388607,
-    INT24_UNSIGNED_MAX: 16777215,
-    INT32_MIN: -2147483648,
-    INT32_MAX: 2147483647,
-    INT32_UNSIGNED_MAX: 4294967295,
-    INT48_MIN: -140737488355328,
-    INT48_MAX: 140737488355327,
-    INT48_UNSIGNED_MAX: 281474976710655,
-    INT64_MIN: -9223372036854775808n,
-    INT64_MAX: 9223372036854775807n,
-    INT64_UNSIGNED_MAX: 18446744073709551615n
-  };
-  isPgEnum2 = isWithEnum;
-  literalSchema = exports_external.union([exports_external.string(), exports_external.number(), exports_external.boolean(), exports_external.null()]);
-  jsonSchema = exports_external.union([
-    literalSchema,
-    exports_external.record(exports_external.string(), exports_external.any()),
-    exports_external.array(exports_external.any())
-  ]);
-  bufferSchema = exports_external.custom((v) => v instanceof Buffer);
-  selectConditions = {
-    never: () => false,
-    optional: () => false,
-    nullable: (column2) => !column2.notNull
-  };
-  insertConditions = {
-    never: (column2) => column2?.generated?.type === "always" || column2?.generatedIdentity?.type === "always",
-    optional: (column2) => !column2.notNull || column2.notNull && column2.hasDefault,
-    nullable: (column2) => !column2.notNull
-  };
-});
-function defineTable(name, columns2) {
-  const table3 = sqliteTable(name, columns2);
-  let insert2;
-  let select3;
-  let ddl;
-  return {
-    table: table3,
-    get insertSchema() {
-      if (insert2 === undefined) {
-        insert2 = createInsertSchema(table3);
-      }
-      return insert2;
-    },
-    get selectSchema() {
-      if (select3 === undefined) {
-        select3 = createSelectSchema(table3);
-      }
-      return select3;
-    },
-    get createTableSql() {
-      if (ddl === undefined) {
-        ddl = generateCreateTableSql(table3);
-      }
-      return ddl;
-    }
-  };
-}
-var init_define_table = __esm(() => {
-  init_sqlite_core();
-  init_drizzle_zod();
-  init_ddl();
-});
-var init_schema = __esm(() => {
-  init_sqlite_core();
-  init_define_table();
-  init_common3();
-});
 init_dist();
 function canonicalJsonStringify(obj) {
   if (obj === null || typeof obj !== "object") {
@@ -24405,31 +24219,31 @@ function isSafeFrameUrl(value) {
   return parsed.username === "" && parsed.password === "";
 }
 var sharedDeclarationFields = {
-  id: exports_external.string().regex(BOARD_MODULE_ID_PATTERN, "module id must match ^[a-z][a-z0-9-]*$"),
-  name: exports_external.string().min(1, "module name must not be empty"),
-  icon: exports_external.string().min(1, "module icon must not be empty"),
-  sidebarLabel: exports_external.string().optional(),
-  description: exports_external.string().optional(),
-  order: exports_external.number().refine((value) => Number.isFinite(value), { message: "module order must be a finite number" }).optional(),
-  enabled: exports_external.boolean().optional().default(true)
+  id: string2().regex(BOARD_MODULE_ID_PATTERN, "module id must match ^[a-z][a-z0-9-]*$"),
+  name: string2().min(1, "module name must not be empty"),
+  icon: string2().min(1, "module icon must not be empty"),
+  sidebarLabel: string2().optional(),
+  description: string2().optional(),
+  order: number2().refine((value) => Number.isFinite(value), { message: "module order must be a finite number" }).optional(),
+  enabled: boolean2().optional().default(true)
 };
-var boardModuleDeclarationSchema = exports_external.discriminatedUnion("type", [
-  exports_external.object({
+var boardModuleDeclarationSchema = discriminatedUnion("type", [
+  object2({
     ...sharedDeclarationFields,
-    type: exports_external.literal("react"),
-    directory: exports_external.string().min(1),
-    entry: exports_external.string().min(1),
-    styles: exports_external.array(exports_external.string().min(1)).optional().default(() => [])
+    type: literal("react"),
+    directory: string2().min(1),
+    entry: string2().min(1),
+    styles: array(string2().min(1)).optional().default(() => [])
   }).strict(),
-  exports_external.object({
+  object2({
     ...sharedDeclarationFields,
-    type: exports_external.literal("iframe"),
-    url: exports_external.string().refine(isSafeFrameUrl, {
+    type: literal("iframe"),
+    url: string2().refine(isSafeFrameUrl, {
       message: "iframe url must be an absolute http(s) URL without embedded credentials (relative URLs and other schemes are rejected)"
     })
   }).strict()
 ]);
-var boardModuleDeclarationsSchema = exports_external.array(boardModuleDeclarationSchema);
+var boardModuleDeclarationsSchema = array(boardModuleDeclarationSchema);
 var RFC3339_PATTERN = /^\d{4}-\d{2}-\d{2}[Tt]\d{2}:\d{2}:\d{2}(\.\d+)?([Zz]|[+-]\d{2}:\d{2})$/;
 function isRfc3339Timestamp(value) {
   return RFC3339_PATTERN.test(value) && Number.isFinite(Date.parse(value));
@@ -24509,52 +24323,52 @@ function isFindingCode(code) {
   return ALL_FINDING_CODES.includes(code);
 }
 init_zod();
-var projectEntrySchema = exports_external.object({
-  name: exports_external.string().min(1),
-  path: exports_external.string().min(1),
-  port: exports_external.number().int().nonnegative().default(0)
+var projectEntrySchema = object2({
+  name: string2().min(1),
+  path: string2().min(1),
+  port: number2().int().nonnegative().default(0)
 });
-var projectsFileSchema = exports_external.object({
-  schema_version: exports_external.literal(1).default(1),
-  projects: exports_external.array(projectEntrySchema).default([])
+var projectsFileSchema = object2({
+  schema_version: literal(1).default(1),
+  projects: array(projectEntrySchema).default([])
 });
 init_zod();
-var slashCommandCategorySchema = exports_external.enum(["git", "dev", "sys", "harness"]);
-var slashCommandItemSchema = exports_external.object({
-  name: exports_external.string().min(1),
-  description: exports_external.string().min(1),
+var slashCommandCategorySchema = _enum2(["git", "dev", "sys", "harness"]);
+var slashCommandItemSchema = object2({
+  name: string2().min(1),
+  description: string2().min(1),
   category: slashCommandCategorySchema.default("dev"),
-  argumentHint: exports_external.string().optional(),
-  tags: exports_external.array(exports_external.string()).default([]),
-  role: exports_external.string().optional(),
-  source: exports_external.string().optional()
+  argumentHint: string2().optional(),
+  tags: array(string2()).default([]),
+  role: string2().optional(),
+  source: string2().optional()
 });
-var slashCommandsFileSchema = exports_external.object({
-  version: exports_external.number().int().default(1),
-  updatedAt: exports_external.string().optional(),
-  commands: exports_external.array(slashCommandItemSchema).default([])
+var slashCommandsFileSchema = object2({
+  version: number2().int().default(1),
+  updatedAt: string2().optional(),
+  commands: array(slashCommandItemSchema).default([])
 });
 var SPUR_LOG_LEVELS = ["debug", "info", "warn", "error"];
 var DEFAULT_TASKS_DIR = "docs/tasks";
 var DEFAULT_FEATURES_DIR = "docs/features";
 var DEFAULT_DATABASE_URL = ".spur/spur.db";
-var folderConfigSchema = exports_external.object({
-  baseCounter: exports_external.number().int().nonnegative().default(0),
-  label: exports_external.string().optional()
+var folderConfigSchema = object2({
+  baseCounter: number2().int().nonnegative().default(0),
+  label: string2().optional()
 });
 function folderPathWithDefault(defaultPath) {
-  return exports_external.preprocess((v) => v == null ? undefined : v, exports_external.string().default(defaultPath));
+  return preprocess((v) => v == null ? undefined : v, string2().default(defaultPath));
 }
-var tasksConfigSchema = exports_external.object({
-  folders: exports_external.record(exports_external.string(), folderConfigSchema).default({}),
+var tasksConfigSchema = object2({
+  folders: record(string2(), folderConfigSchema).default({}),
   active: folderPathWithDefault(DEFAULT_TASKS_DIR),
-  severity: exports_external.record(exports_external.string(), exports_external.enum(["error", "warning", "off"])).optional()
+  severity: record(string2(), _enum2(["error", "warning", "off"])).optional()
 }).superRefine((data, ctx) => {
   if (data.severity) {
     for (const code of Object.keys(data.severity)) {
       if (!isFindingCode(code)) {
         ctx.addIssue({
-          code: exports_external.ZodIssueCode.custom,
+          code: ZodIssueCode.custom,
           path: ["severity", code],
           message: `Unknown finding code "${code}" in severity overrides map`
         });
@@ -24562,18 +24376,18 @@ var tasksConfigSchema = exports_external.object({
     }
   }
 });
-var featuresConfigSchema = exports_external.object({
+var featuresConfigSchema = object2({
   dir: folderPathWithDefault(DEFAULT_FEATURES_DIR)
 });
 var EXECUTOR_CAPABILITY_TIERS = ["cheap", "standard", "capable-1", "capable-2", "capable-3"];
 function normalizeExecutorTier(value) {
   return value === "capable" ? "capable-1" : value;
 }
-var executorCapabilityTierSchema = exports_external.preprocess((value) => {
+var executorCapabilityTierSchema = preprocess((value) => {
   if (value === undefined || value === null)
     return;
   return typeof value === "string" ? normalizeExecutorTier(value) : value;
-}, exports_external.enum(EXECUTOR_CAPABILITY_TIERS).optional());
+}, _enum2(EXECUTOR_CAPABILITY_TIERS).optional());
 var AGENT_ROLE_NAMES = ["scribe", "coder", "reviewer", "planner"];
 var DEFAULT_AGENT_ROLES = new Map([
   ["scribe", { tier: "cheap", stages: ["changelog"] }],
@@ -24592,74 +24406,74 @@ var SESSION_CAPABILITY_AXES = ["resumeById", "sessionDir", "persistentStdin", "s
 var AGENT_RUN_CAPABILITY_AXES = [...EXECUTION_CAPABILITY_AXES, ...SESSION_CAPABILITY_AXES];
 var EXECUTION_CAPABILITY_STATES = ["enforced", "available", "unavailable", "unknown"];
 var EXECUTION_CAPABILITY_PROVENANCES = ["native-known", "operator-configured", "unattested"];
-var ExecutionCapabilityAttestationSchema = exports_external.object({
-  state: exports_external.enum(EXECUTION_CAPABILITY_STATES),
-  provenance: exports_external.enum(EXECUTION_CAPABILITY_PROVENANCES)
+var ExecutionCapabilityAttestationSchema = object2({
+  state: _enum2(EXECUTION_CAPABILITY_STATES),
+  provenance: _enum2(EXECUTION_CAPABILITY_PROVENANCES)
 });
-var ExecutionCapabilitiesSchema = exports_external.object({
-  version: exports_external.literal(1),
-  axes: exports_external.partialRecord(exports_external.enum(EXECUTION_CAPABILITY_AXES), ExecutionCapabilityAttestationSchema)
+var ExecutionCapabilitiesSchema = object2({
+  version: literal(1),
+  axes: partialRecord(_enum2(EXECUTION_CAPABILITY_AXES), ExecutionCapabilityAttestationSchema)
 });
 var EXECUTION_CAPABILITY_REQUIREMENTS = ["available", "enforced"];
-var RequiresCapabilitiesSchema = exports_external.partialRecord(exports_external.enum(AGENT_RUN_CAPABILITY_AXES), exports_external.enum(EXECUTION_CAPABILITY_REQUIREMENTS));
-var executorAvailabilityOwnerSchema = exports_external.enum(["operator", "quota", "probe"]);
-var executorDisabledObjectSchema = exports_external.object({
+var RequiresCapabilitiesSchema = partialRecord(_enum2(AGENT_RUN_CAPABILITY_AXES), _enum2(EXECUTION_CAPABILITY_REQUIREMENTS));
+var executorAvailabilityOwnerSchema = _enum2(["operator", "quota", "probe"]);
+var executorDisabledObjectSchema = object2({
   owner: executorAvailabilityOwnerSchema,
-  since: exports_external.string().refine(isRfc3339Timestamp, { message: "since must be an RFC 3339 timestamp" }),
-  reason: exports_external.string().min(1)
+  since: string2().refine(isRfc3339Timestamp, { message: "since must be an RFC 3339 timestamp" }),
+  reason: string2().min(1)
 });
-var AgentExecutorConfigSchema = exports_external.object({
-  name: exports_external.string().min(1),
-  agent: exports_external.string().min(1),
-  model: exports_external.string().min(1).optional(),
+var AgentExecutorConfigSchema = object2({
+  name: string2().min(1),
+  agent: string2().min(1),
+  model: string2().min(1).optional(),
   tier: executorCapabilityTierSchema.optional(),
   executionCapabilities: ExecutionCapabilitiesSchema.optional(),
-  disabled: exports_external.union([exports_external.boolean(), executorDisabledObjectSchema]).default(false)
+  disabled: union([boolean2(), executorDisabledObjectSchema]).default(false)
 });
-var AgentRoleConfigSchema = exports_external.object({
-  tier: exports_external.enum(EXECUTOR_CAPABILITY_TIERS).optional(),
-  stages: exports_external.array(exports_external.string().min(1)).min(1).optional()
+var AgentRoleConfigSchema = object2({
+  tier: _enum2(EXECUTOR_CAPABILITY_TIERS).optional(),
+  stages: array(string2().min(1)).min(1).optional()
 });
-var FleetMemberSchema = exports_external.object({
-  id: exports_external.string().min(1).optional(),
-  role: exports_external.enum(AGENT_ROLE_NAMES, {
-    error: (issue2) => new Error(`Unknown role "${issue2.input}" — expected one of: ${AGENT_ROLE_NAMES.join(", ")}`)
+var FleetMemberSchema = object2({
+  id: string2().min(1).optional(),
+  role: _enum2(AGENT_ROLE_NAMES, {
+    error: (issue) => new Error(`Unknown role "${issue.input}" — expected one of: ${AGENT_ROLE_NAMES.join(", ")}`)
   }).optional(),
-  executor: exports_external.string().min(1).optional(),
-  purpose: exports_external.string().optional(),
-  enabled: exports_external.boolean().optional()
+  executor: string2().min(1).optional(),
+  purpose: string2().optional(),
+  enabled: boolean2().optional()
 });
 var FLEET_STRATEGIES = ["rest", "gtd"];
 var FleetMemberEntrySchema = FleetMemberSchema.superRefine((member, ctx) => {
   if (member.role === undefined && member.executor === undefined) {
     ctx.addIssue({
-      code: exports_external.ZodIssueCode.custom,
+      code: ZodIssueCode.custom,
       message: "must declare a role or an executor — at least one is required"
     });
   }
 });
-var AgentFleetSchema = exports_external.object({
-  enabled: exports_external.boolean().default(false),
-  strategy: exports_external.enum(FLEET_STRATEGIES).default("rest"),
-  orchestrator: exports_external.string().min(1).optional(),
-  members: exports_external.array(FleetMemberEntrySchema).default([])
+var AgentFleetSchema = object2({
+  enabled: boolean2().default(false),
+  strategy: _enum2(FLEET_STRATEGIES).default("rest"),
+  orchestrator: string2().min(1).optional(),
+  members: array(FleetMemberEntrySchema).default([])
 });
-var AgentOutputConfigSchema = exports_external.object({
-  "max-bytes": exports_external.number().int().positive().optional(),
-  "max-lines": exports_external.number().int().positive().optional()
+var AgentOutputConfigSchema = object2({
+  "max-bytes": number2().int().positive().optional(),
+  "max-lines": number2().int().positive().optional()
 });
-var AgentConfigSchema = exports_external.object({
-  default: exports_external.string().optional(),
-  executors: exports_external.array(AgentExecutorConfigSchema).optional(),
-  roles: exports_external.record(exports_external.string(), AgentRoleConfigSchema).optional(),
+var AgentConfigSchema = object2({
+  default: string2().optional(),
+  executors: array(AgentExecutorConfigSchema).optional(),
+  roles: record(string2(), AgentRoleConfigSchema).optional(),
   output: AgentOutputConfigSchema.optional(),
-  sessionAffinity: exports_external.boolean().optional(),
+  sessionAffinity: boolean2().optional(),
   fleet: AgentFleetSchema.optional()
 }).superRefine((value, ctx) => {
   for (const key of Object.keys(value.roles ?? {})) {
     if (!AGENT_ROLE_NAMES.includes(key)) {
       ctx.addIssue({
-        code: exports_external.ZodIssueCode.custom,
+        code: ZodIssueCode.custom,
         path: ["roles", key],
         message: `Unknown role "${key}" — expected one of: ${AGENT_ROLE_NAMES.join(", ")}`
       });
@@ -24672,21 +24486,21 @@ var AgentConfigSchema = exports_external.object({
     for (const [index, executor] of executors.entries()) {
       if (seen.has(executor.name)) {
         ctx.addIssue({
-          code: exports_external.ZodIssueCode.custom,
+          code: ZodIssueCode.custom,
           message: `Duplicate executor name: ${executor.name}`,
           path: ["executors", index, "name"]
         });
       }
       if (executor.name === "inline" || executor.name === "auto") {
         ctx.addIssue({
-          code: exports_external.ZodIssueCode.custom,
+          code: ZodIssueCode.custom,
           message: `Executor name "${executor.name}" is reserved (the --agent selector value '${executor.name}' has fixed semantics); rename executor at index ${index}.`,
           path: ["executors", index, "name"]
         });
       }
       if (AGENT_ROLE_NAMES.includes(executor.name)) {
         ctx.addIssue({
-          code: exports_external.ZodIssueCode.custom,
+          code: ZodIssueCode.custom,
           message: `Executor name "${executor.name}" collides with the role selector namespace ("${executor.name}"); rename executor at index ${index}.`,
           path: ["executors", index, "name"]
         });
@@ -24696,53 +24510,53 @@ var AgentConfigSchema = exports_external.object({
     }
   }
 });
-var RulesConfigSchema = exports_external.object({
-  paths: exports_external.array(exports_external.string()).optional()
+var RulesConfigSchema = object2({
+  paths: array(string2()).optional()
 });
-var WorkflowsConfigSchema = exports_external.object({
-  paths: exports_external.array(exports_external.string()).optional(),
-  hitlDecisionMaker: exports_external.boolean().optional(),
-  decideDecisionMaker: exports_external.boolean().optional(),
-  logRetentionDays: exports_external.number().int().positive().default(30)
+var WorkflowsConfigSchema = object2({
+  paths: array(string2()).optional(),
+  hitlDecisionMaker: boolean2().optional(),
+  decideDecisionMaker: boolean2().optional(),
+  logRetentionDays: number2().int().positive().default(30)
 });
-var DecisionsConfigSchema = exports_external.object({
-  paths: exports_external.array(exports_external.string()).optional(),
-  maker: exports_external.string().optional(),
-  makers: exports_external.record(exports_external.string(), exports_external.string()).optional(),
-  log: exports_external.enum(["full", "metadata", "off"]).optional()
+var DecisionsConfigSchema = object2({
+  paths: array(string2()).optional(),
+  maker: string2().optional(),
+  makers: record(string2(), string2()).optional(),
+  log: _enum2(["full", "metadata", "off"]).optional()
 });
-var RedactionConfigSchema = exports_external.object({
-  enabled: exports_external.boolean().optional()
+var RedactionConfigSchema = object2({
+  enabled: boolean2().optional()
 });
-var HistoryRefreshConfigSchema = exports_external.object({
-  on_completion: exports_external.boolean().default(false),
-  debounce_ms: exports_external.number().int().min(1000).default(600000)
+var HistoryRefreshConfigSchema = object2({
+  on_completion: boolean2().default(false),
+  debounce_ms: number2().int().min(1000).default(600000)
 });
-var HistoryConfigSchema = exports_external.object({
+var HistoryConfigSchema = object2({
   refresh: HistoryRefreshConfigSchema.optional()
 });
-var VersionCarrierEntrySchema = exports_external.looseObject({ type: exports_external.string().min(1) });
-var BuilderBumpVerConfigSchema = exports_external.object({
-  tagVersionSeparator: exports_external.string().min(1).default("-v"),
-  aggregatePackage: exports_external.string().min(1).optional(),
-  publishWorkflow: exports_external.string().min(1).default("publish.yml"),
-  releaseCommitType: exports_external.string().min(1).default("chore"),
-  releaseCommitScope: exports_external.string().min(1).default("release"),
-  ghRunListLimit: exports_external.number().int().positive().default(5),
-  versionCarriers: exports_external.array(VersionCarrierEntrySchema).default([])
+var VersionCarrierEntrySchema = looseObject({ type: string2().min(1) });
+var BuilderBumpVerConfigSchema = object2({
+  tagVersionSeparator: string2().min(1).default("-v"),
+  aggregatePackage: string2().min(1).optional(),
+  publishWorkflow: string2().min(1).default("publish.yml"),
+  releaseCommitType: string2().min(1).default("chore"),
+  releaseCommitScope: string2().min(1).default("release"),
+  ghRunListLimit: number2().int().positive().default(5),
+  versionCarriers: array(VersionCarrierEntrySchema).default([])
 });
-var BuilderConfigSchema = exports_external.object({
+var BuilderConfigSchema = object2({
   "bump-ver": BuilderBumpVerConfigSchema.optional()
 });
-var bootstrapOptionsSchema = exports_external.object({
-  options: exports_external.record(exports_external.string(), exports_external.unknown()).optional()
+var bootstrapOptionsSchema = object2({
+  options: record(string2(), unknown()).optional()
 });
 var bootstrapSectionSchema = bootstrapOptionsSchema.extend({
   modules: boardModuleDeclarationsSchema.optional()
 });
-var spurConfigSchema = exports_external.object({
-  version: exports_external.string().optional(),
-  name: exports_external.string().optional(),
+var spurConfigSchema = object2({
+  version: string2().optional(),
+  name: string2().optional(),
   bootstrap: bootstrapSectionSchema.optional(),
   agent: AgentConfigSchema.optional(),
   rules: RulesConfigSchema.optional(),
@@ -24754,22 +24568,22 @@ var spurConfigSchema = exports_external.object({
   tasks: tasksConfigSchema.optional(),
   features: featuresConfigSchema.optional()
 });
-var configSchema = exports_external.object({
-  database: exports_external.object({
-    url: exports_external.string().default(DEFAULT_DATABASE_URL)
+var configSchema = object2({
+  database: object2({
+    url: string2().default(DEFAULT_DATABASE_URL)
   }).default({ url: DEFAULT_DATABASE_URL }),
-  server: exports_external.object({
-    port: exports_external.coerce.number().int().positive().default(3000),
-    host: exports_external.string().default("localhost"),
-    openBrowser: exports_external.boolean().default(true),
-    webDistPath: exports_external.string().nullable().default(null)
+  server: object2({
+    port: exports_coerce.number().int().positive().default(3000),
+    host: string2().default("localhost"),
+    openBrowser: boolean2().default(true),
+    webDistPath: string2().nullable().default(null)
   }).default({ port: 3000, host: "localhost", openBrowser: true, webDistPath: null }),
-  telemetry: exports_external.object({
-    enabled: exports_external.boolean().default(false),
-    endpoint: exports_external.string().optional()
+  telemetry: object2({
+    enabled: boolean2().default(false),
+    endpoint: string2().optional()
   }).default({ enabled: false }),
-  logging: exports_external.object({
-    level: exports_external.enum(SPUR_LOG_LEVELS).default("info")
+  logging: object2({
+    level: _enum2(SPUR_LOG_LEVELS).default("info")
   }).default({ level: "info" })
 });
 var ARTIFACT_ARRAY_CLASSIFICATION = {
@@ -25036,28 +24850,28 @@ function stableJson(value) {
     return `[${value.map((entry) => entry === undefined ? "null" : stableJson(entry)).join(",")}]`;
   }
   if (value !== null && typeof value === "object") {
-    const record2 = value;
-    return `{${Object.keys(record2).filter((key) => record2[key] !== undefined).sort().map((key) => `${JSON.stringify(key)}:${stableJson(record2[key])}`).join(",")}}`;
+    const record = value;
+    return `{${Object.keys(record).filter((key) => record[key] !== undefined).sort().map((key) => `${JSON.stringify(key)}:${stableJson(record[key])}`).join(",")}}`;
   }
   return JSON.stringify(value) ?? "null";
 }
 function sha256(value) {
   return createHash("sha256").update(stableJson(value)).digest("hex");
 }
-function sha256Text(text2) {
-  return createHash("sha256").update(text2, "utf8").digest("hex");
+function sha256Text(text) {
+  return createHash("sha256").update(text, "utf8").digest("hex");
 }
 function matchCapabilityOrigin(origins, source, canonicalName, observable) {
-  let candidates = origins.filter((origin2) => origin2.source === source && origin2.skillName === canonicalName);
+  let candidates = origins.filter((origin) => origin.source === source && origin.skillName === canonicalName);
   if (candidates.length === 0)
     return { origin: undefined, conflict: null };
   if (observable.skillPath != null && observable.skillPath !== "") {
-    const byPath = candidates.filter((origin2) => origin2.skillPath !== undefined && origin2.skillPath === observable.skillPath);
+    const byPath = candidates.filter((origin) => origin.skillPath !== undefined && origin.skillPath === observable.skillPath);
     if (byPath.length > 0)
       candidates = byPath;
   }
   if (observable.artifactDigest != null && observable.artifactDigest !== "") {
-    const byDigest = candidates.filter((origin2) => origin2.artifactDigest === observable.artifactDigest);
+    const byDigest = candidates.filter((origin) => origin.artifactDigest === observable.artifactDigest);
     if (byDigest.length === 1)
       return { origin: byDigest[0], conflict: null };
     if (byDigest.length > 1) {
@@ -25299,9 +25113,9 @@ function extractNestedExecCommandLiterals(payloadText) {
     while (match !== null) {
       const before = line.slice(0, match.index);
       if (statementStart.test(before)) {
-        const literal2 = match[1] ?? "";
-        const quote = literal2[0] ?? '"';
-        const body = literal2.slice(1, -1).replaceAll(`\\${quote}`, quote).replaceAll("\\\\", "\\").replaceAll("\\n", `
+        const literal = match[1] ?? "";
+        const quote = literal[0] ?? '"';
+        const body = literal.slice(1, -1).replaceAll(`\\${quote}`, quote).replaceAll("\\\\", "\\").replaceAll("\\n", `
 `).replaceAll("\\t", "\t");
         literals.push(body);
       }
@@ -25409,11 +25223,11 @@ var SKILL_CALL_MAPPER_KEYS = [
   "_capabilityConflict"
 ];
 function identityFieldMap(keys) {
-  const map2 = {};
+  const map = {};
   for (const key of keys) {
-    map2[key] = key;
+    map[key] = key;
   }
-  return map2;
+  return map;
 }
 var HARNESS_SKILL_PACKAGES = new Set(["sp", "rd3"]);
 function canonicalizeSkillName(raw) {
@@ -25430,34 +25244,34 @@ function canonicalizeSkillName(raw) {
     return `${dialect[1]}:${dialect[2]}`;
   return name;
 }
-function extractSkillCalls(raw, context, identity2) {
+function extractSkillCalls(raw, context, identity) {
   switch (context?.source) {
     case "claude":
-      return detectClaudeSkillCalls(raw, identity2, context);
+      return detectClaudeSkillCalls(raw, identity, context);
     case "pi":
-      return detectPiSkillCalls(raw, identity2, context);
+      return detectPiSkillCalls(raw, identity, context);
     case "omp":
-      return detectOmpSkillCalls(raw, identity2, context);
+      return detectOmpSkillCalls(raw, identity, context);
     case "codex":
-      return detectCodexSkillCalls(raw, identity2, context);
+      return detectCodexSkillCalls(raw, identity, context);
     case "agy":
-      return detectAgySkillCalls(raw, identity2, context);
+      return detectAgySkillCalls(raw, identity, context);
     case "gemini":
-      return detectGeminiSkillCalls(raw, identity2, context);
+      return detectGeminiSkillCalls(raw, identity, context);
     case "grok":
-      return detectGrokSkillCalls(raw, identity2, context);
+      return detectGrokSkillCalls(raw, identity, context);
     default:
       return [];
   }
 }
-function skillCallEntry(record2) {
-  return { targetTable: "history_skill_call", record: record2 };
+function skillCallEntry(record) {
+  return { targetTable: "history_skill_call", record };
 }
-function skillRecord(identity2, skillName, invocationKind, extra = {}) {
+function skillRecord(identity, skillName, invocationKind, extra = {}) {
   return {
-    _messageSplitIndex: identity2.messageSplitIndex,
-    session_id: identity2.sessionId,
-    seq: identity2.seq,
+    _messageSplitIndex: identity.messageSplitIndex,
+    session_id: identity.sessionId,
+    seq: identity.seq,
     skill_name: canonicalizeSkillName(skillName),
     invocation_kind: invocationKind,
     skill_path: null,
@@ -25532,7 +25346,7 @@ function skillNameFromPath(path) {
   const stem = normalized.slice(0, normalized.length - "/SKILL.md".length);
   return stem.split("/").pop() ?? stem;
 }
-function detectClaudeSkillCalls(raw, identity2, context) {
+function detectClaudeSkillCalls(raw, identity, context) {
   const contentBlocks = raw.content ?? o(raw.message).content;
   if (!Array.isArray(contentBlocks))
     return [];
@@ -25555,21 +25369,21 @@ function detectClaudeSkillCalls(raw, identity2, context) {
       if (skill === undefined)
         continue;
       const canonical = canonicalizeSkillName(skill);
-      rows.push(skillRecord(identity2, skill, s(o(b.caller).type) === "direct" ? "user" : "model", {
+      rows.push(skillRecord(identity, skill, s(o(b.caller).type) === "direct" ? "user" : "model", {
         args_raw: maybeArgsRaw("claude", "Skill", input) ?? null,
         args_digest: argsDigest(input),
         call_id: callId ?? null,
         started_at: ts,
         evidence_kind: "load",
         status: "unknown",
-        invocation_id: invocationIdFor(context, identity2.sessionId, invocation),
+        invocation_id: invocationIdFor(context, identity.sessionId, invocation),
         ...originFields(context, canonical, {})
       }));
       continue;
     }
     if (b.name === "Task") {
       const subagent = s(input.subagent_type, input.agent_type, input.agent) ?? "subagent";
-      rows.push(skillRecord(identity2, subagent, "model", {
+      rows.push(skillRecord(identity, subagent, "model", {
         args_raw: maybeArgsRaw("claude", "Task", input) ?? null,
         args_digest: argsDigest(input),
         call_id: callId ?? null,
@@ -25578,7 +25392,7 @@ function detectClaudeSkillCalls(raw, identity2, context) {
         capability_kind: "subagent",
         evidence_kind: "delegation",
         status: "unknown",
-        invocation_id: invocationIdFor(context, identity2.sessionId, invocation)
+        invocation_id: invocationIdFor(context, identity.sessionId, invocation)
       }));
       continue;
     }
@@ -25587,7 +25401,7 @@ function detectClaudeSkillCalls(raw, identity2, context) {
       if (filePath === undefined || lastPathSegmentNorm(filePath) !== "SKILL.md")
         continue;
       const canonical = canonicalizeSkillName(skillNameFromPath(filePath));
-      rows.push(skillRecord(identity2, skillNameFromPath(filePath), "model", {
+      rows.push(skillRecord(identity, skillNameFromPath(filePath), "model", {
         skill_path: filePath,
         args_raw: maybeArgsRaw("claude", "Read", input) ?? null,
         args_digest: argsDigest(input),
@@ -25595,7 +25409,7 @@ function detectClaudeSkillCalls(raw, identity2, context) {
         started_at: ts,
         evidence_kind: "load",
         status: "unknown",
-        invocation_id: invocationIdFor(context, identity2.sessionId, invocation),
+        invocation_id: invocationIdFor(context, identity.sessionId, invocation),
         ...originFields(context, canonical, { skillPath: filePath })
       }));
       continue;
@@ -25608,7 +25422,7 @@ function detectClaudeSkillCalls(raw, identity2, context) {
       for (let i = 0;i < targets.length; i += 1) {
         const target = targets[i] ?? "";
         const canonical = canonicalizeSkillName(skillNameFromPath(target));
-        rows.push(skillRecord(identity2, skillNameFromPath(target), "model", {
+        rows.push(skillRecord(identity, skillNameFromPath(target), "model", {
           skill_path: target,
           args_raw: maybeArgsRaw("claude", "Bash", input) ?? null,
           args_digest: argsDigest(input),
@@ -25616,27 +25430,27 @@ function detectClaudeSkillCalls(raw, identity2, context) {
           started_at: ts,
           evidence_kind: "load",
           status: "unknown",
-          invocation_id: invocationIdFor(context, identity2.sessionId, { ...invocation, ordinal: i }),
+          invocation_id: invocationIdFor(context, identity.sessionId, { ...invocation, ordinal: i }),
           ...originFields(context, canonical, { skillPath: target })
         }));
       }
     }
   }
   if (role === "user") {
-    const text2 = extractUserTextClaude(contentBlocks);
-    if (text2 !== undefined) {
-      const envelope = leadingInjectionMatch(text2, CLAUDE_COMMAND_NAME_ANCHORED);
+    const text = extractUserTextClaude(contentBlocks);
+    if (text !== undefined) {
+      const envelope = leadingInjectionMatch(text, CLAUDE_COMMAND_NAME_ANCHORED);
       const rawName = envelope?.[1] ?? "";
       if (rawName.length > 0) {
         const canonical = canonicalizeSkillName(rawName);
         if (canonical.length > 0) {
-          rows.push(skillRecord(identity2, canonical, "user", {
-            args_raw: text2.match(CLAUDE_COMMAND_ARGS)?.[1]?.trim() || null,
+          rows.push(skillRecord(identity, canonical, "user", {
+            args_raw: text.match(CLAUDE_COMMAND_ARGS)?.[1]?.trim() || null,
             started_at: ts,
             capability_kind: "command",
             evidence_kind: "request",
             status: "unknown",
-            invocation_id: invocationIdFor(context, identity2.sessionId, {
+            invocation_id: invocationIdFor(context, identity.sessionId, {
               recordId,
               ordinal: ordinal(`cmd:${canonical}`)
             })
@@ -25668,13 +25482,13 @@ function lastPathSegmentNorm(path) {
   const idx = normalized.lastIndexOf("/");
   return idx === -1 ? normalized : normalized.slice(idx + 1);
 }
-function isQuotedSignatureContext(text2, matchIndex) {
-  const lineStart = text2.lastIndexOf(`
+function isQuotedSignatureContext(text, matchIndex) {
+  const lineStart = text.lastIndexOf(`
 `, matchIndex - 1) + 1;
-  if (text2.slice(lineStart, matchIndex).trim().length > 0)
+  if (text.slice(lineStart, matchIndex).trim().length > 0)
     return true;
   let openFence = "";
-  for (const line of text2.slice(0, lineStart).split(`
+  for (const line of text.slice(0, lineStart).split(`
 `)) {
     const fence = /^\s{0,3}(`{3,}|~{3,})/.exec(line);
     if (fence === null)
@@ -25691,11 +25505,11 @@ function isCodexMarkerLine(line) {
   const trimmed = line.trim();
   return CODEX_DOLLAR_MARKER.test(trimmed) || CODEX_SLASH_MARKER.test(trimmed) || /^-\s+skill:\s*\S+/.test(trimmed);
 }
-function isCodexWrapperLeadPosition(text2, matchIndex, chainStart) {
-  const before = text2.slice(0, matchIndex);
+function isCodexWrapperLeadPosition(text, matchIndex, chainStart) {
+  const before = text.slice(0, matchIndex);
   if (before.trim().length === 0)
     return true;
-  if (chainStart !== undefined && text2.slice(chainStart, matchIndex).trim().length === 0)
+  if (chainStart !== undefined && text.slice(chainStart, matchIndex).trim().length === 0)
     return true;
   const lines = before.split(`
 `);
@@ -25705,40 +25519,40 @@ function isCodexWrapperLeadPosition(text2, matchIndex, chainStart) {
     return false;
   return isCodexMarkerLine(lines[lines.length - 2] ?? "");
 }
-function leadingInjectionMatch(text2, pattern) {
-  const trimmed = text2.trimStart();
-  const offset = text2.length - trimmed.length;
+function leadingInjectionMatch(text, pattern) {
+  const trimmed = text.trimStart();
+  const offset = text.length - trimmed.length;
   const match = trimmed.match(pattern);
   if (match === null || match.index === undefined)
     return null;
-  if (isQuotedSignatureContext(text2, offset + match.index))
+  if (isQuotedSignatureContext(text, offset + match.index))
     return null;
   return match;
 }
 var PI_SKILL_WRAPPER_ANCHORED = /^<skill\s+name="([^"]+)"(?:\s+location="([^"]*)")?\s*>/;
 var READ_FAMILY_TOOLS = new Set(["read", "read_file", "view"]);
-function detectPiSkillCalls(raw, identity2, context) {
+function detectPiSkillCalls(raw, identity, context) {
   const msg = raw.message;
   const role = piRole(msg?.role ?? raw.role ?? raw.recordType ?? raw.type);
   const recordId = s(raw.id, raw.uuid, raw.requestId);
   const ts = timestampOf(raw.timestamp, raw.ts, o(msg).timestamp) ?? null;
   const rows = [];
   if (role === "user") {
-    const text2 = extractContentText(msg?.content ?? raw.content);
-    if (text2 === undefined)
+    const text = extractContentText(msg?.content ?? raw.content);
+    if (text === undefined)
       return [];
     const ordinal = createOrdinalAllocator();
-    const wrapper = leadingInjectionMatch(text2, PI_SKILL_WRAPPER_ANCHORED);
+    const wrapper = leadingInjectionMatch(text, PI_SKILL_WRAPPER_ANCHORED);
     if (wrapper !== null) {
       const skillPath = wrapper[2] || null;
       const canonical = canonicalizeSkillName(wrapper[1] ?? "");
       if (canonical.length > 0) {
-        rows.push(skillRecord(identity2, canonical, "user", {
+        rows.push(skillRecord(identity, canonical, "user", {
           skill_path: skillPath,
           started_at: ts,
           evidence_kind: "load",
           status: "ok",
-          invocation_id: invocationIdFor(context, identity2.sessionId, {
+          invocation_id: invocationIdFor(context, identity.sessionId, {
             recordId,
             ordinal: ordinal(`skill:${canonical}`)
           }),
@@ -25764,7 +25578,7 @@ function detectPiSkillCalls(raw, identity2, context) {
         continue;
       const callId = s(call.id);
       const canonical = canonicalizeSkillName(skillNameFromPath(filePath));
-      rows.push(skillRecord(identity2, canonical, "model", {
+      rows.push(skillRecord(identity, canonical, "model", {
         skill_path: filePath,
         args_raw: maybeArgsRaw("pi", String(call.name ?? "read"), args) ?? null,
         args_digest: argsDigest(args),
@@ -25772,7 +25586,7 @@ function detectPiSkillCalls(raw, identity2, context) {
         started_at: ts,
         evidence_kind: "load",
         status: "unknown",
-        invocation_id: invocationIdFor(context, identity2.sessionId, {
+        invocation_id: invocationIdFor(context, identity.sessionId, {
           callId,
           recordId: callId === undefined ? recordId : undefined,
           ordinal: rows.length
@@ -25783,7 +25597,7 @@ function detectPiSkillCalls(raw, identity2, context) {
   }
   return rows;
 }
-function detectOmpSkillCalls(raw, identity2, context) {
+function detectOmpSkillCalls(raw, identity, context) {
   const msg = raw.message;
   const role = mapRole(msg?.role ?? raw.type ?? raw.role);
   const recordId = s(raw.id, raw.uuid, raw.requestId);
@@ -25803,14 +25617,14 @@ function detectOmpSkillCalls(raw, identity2, context) {
         if (skill === undefined)
           continue;
         const callId = s(call.id);
-        rows.push(skillRecord(identity2, skill, "model", {
+        rows.push(skillRecord(identity, skill, "model", {
           args_raw: maybeArgsRaw("omp", "Skill", input) ?? null,
           args_digest: argsDigest(input),
           call_id: callId ?? null,
           started_at: ts,
           evidence_kind: "load",
           status: "unknown",
-          invocation_id: invocationIdFor(context, identity2.sessionId, {
+          invocation_id: invocationIdFor(context, identity.sessionId, {
             callId,
             recordId: callId === undefined ? recordId : undefined,
             ordinal: rows.length
@@ -25826,7 +25640,7 @@ function detectOmpSkillCalls(raw, identity2, context) {
           continue;
         const callId = s(call.id);
         const canonical = canonicalizeSkillName(skillNameFromPath(filePath));
-        rows.push(skillRecord(identity2, canonical, "model", {
+        rows.push(skillRecord(identity, canonical, "model", {
           skill_path: filePath,
           args_raw: maybeArgsRaw("omp", String(call.name ?? "read"), args) ?? null,
           args_digest: argsDigest(args),
@@ -25834,7 +25648,7 @@ function detectOmpSkillCalls(raw, identity2, context) {
           started_at: ts,
           evidence_kind: "load",
           status: "unknown",
-          invocation_id: invocationIdFor(context, identity2.sessionId, {
+          invocation_id: invocationIdFor(context, identity.sessionId, {
             callId,
             recordId: callId === undefined ? recordId : undefined,
             ordinal: rows.length
@@ -25846,21 +25660,21 @@ function detectOmpSkillCalls(raw, identity2, context) {
     return rows;
   }
   if (role === "user") {
-    const text2 = extractContentText(msg?.content ?? raw.content);
-    if (text2 === undefined)
+    const text = extractContentText(msg?.content ?? raw.content);
+    if (text === undefined)
       return [];
     const ordinal = createOrdinalAllocator();
-    const wrapper = leadingInjectionMatch(text2, PI_SKILL_WRAPPER_ANCHORED);
+    const wrapper = leadingInjectionMatch(text, PI_SKILL_WRAPPER_ANCHORED);
     if (wrapper !== null) {
       const skillPath = wrapper[2] || null;
       const canonical = canonicalizeSkillName(wrapper[1] ?? "");
       if (canonical.length > 0) {
-        rows.push(skillRecord(identity2, canonical, "user", {
+        rows.push(skillRecord(identity, canonical, "user", {
           skill_path: skillPath,
           started_at: ts,
           evidence_kind: "load",
           status: "ok",
-          invocation_id: invocationIdFor(context, identity2.sessionId, {
+          invocation_id: invocationIdFor(context, identity.sessionId, {
             recordId,
             ordinal: ordinal(`skill:${canonical}`)
           }),
@@ -25875,7 +25689,7 @@ var CODEX_SKILL_BLOCK = /<skill>\s*<name>([^<]+)<\/name>\s*<path>([^<]+)<\/path>
 var CODEX_DOLLAR_MARKER = /^\$([a-z][a-z0-9]*(?:-[a-z0-9]+)*)(?![\w./:])/;
 var CODEX_SLASH_MARKER = /^\/([a-z][a-z0-9]*(?:-[a-z0-9]+)*)(?![\w./:])/;
 var CODEX_SHELL_TOOLS = new Set(["shell", "exec_command", "exec"]);
-function detectCodexSkillCalls(raw, identity2, context) {
+function detectCodexSkillCalls(raw, identity, context) {
   const payload = raw.payload ?? raw;
   const recordType = String(raw.type ?? "");
   const payloadType = String(payload.type ?? "");
@@ -25897,8 +25711,8 @@ function detectCodexSkillCalls(raw, identity2, context) {
     const argsText = s(payload.arguments, payload.input);
     if (argsText === undefined)
       return [];
-    const rows2 = [];
-    const ts2 = timestampOf(raw.timestamp, raw.ts, payload.created_at) ?? null;
+    const rows = [];
+    const ts = timestampOf(raw.timestamp, raw.ts, payload.created_at) ?? null;
     let command = null;
     try {
       const parsed = JSON.parse(argsText);
@@ -25912,19 +25726,19 @@ function detectCodexSkillCalls(raw, identity2, context) {
     } catch {
       command = null;
     }
-    const pushRead = (target, ordinal2) => {
+    const pushRead = (target, ordinal) => {
       const canonical = canonicalizeSkillName(skillNameFromPath(target));
-      rows2.push(skillRecord(identity2, canonical, "model", {
+      rows.push(skillRecord(identity, canonical, "model", {
         skill_path: target,
         args_raw: argsText,
         args_digest: sha256Text(argsText),
         call_id: callId ?? null,
-        started_at: ts2,
+        started_at: ts,
         evidence_kind: "load",
         status: "unknown",
-        invocation_id: invocationIdFor(context, identity2.sessionId, {
+        invocation_id: invocationIdFor(context, identity.sessionId, {
           callId: callId ?? recordIdFallback(raw),
-          ordinal: ordinal2
+          ordinal
         }),
         ...originFields(context, canonical, { skillPath: target })
       }));
@@ -25936,18 +25750,18 @@ function detectCodexSkillCalls(raw, identity2, context) {
     }
     const nestedLiterals = extractNestedExecCommandLiterals(argsText);
     let nestedOrdinal = 0;
-    for (const literal2 of nestedLiterals) {
-      for (const target of parseLiteralReadTargets(literal2)) {
+    for (const literal of nestedLiterals) {
+      for (const target of parseLiteralReadTargets(literal)) {
         pushRead(target, 1000 + nestedOrdinal);
         nestedOrdinal += 1;
       }
     }
-    return rows2;
+    return rows;
   }
   if (role !== "user")
     return [];
-  const text2 = extractContentText(payload.content ?? raw.content) ?? s(payload.text, raw.text);
-  if (text2 === undefined)
+  const text = extractContentText(payload.content ?? raw.content) ?? s(payload.text, raw.text);
+  if (text === undefined)
     return [];
   const rows = [];
   const recordId = s(raw.id, payload.id, raw.uuid);
@@ -25955,11 +25769,11 @@ function detectCodexSkillCalls(raw, identity2, context) {
   const ordinal = createOrdinalAllocator();
   const wrappers = [];
   let acceptedWrapperEnd;
-  for (const match of text2.matchAll(CODEX_SKILL_BLOCK)) {
+  for (const match of text.matchAll(CODEX_SKILL_BLOCK)) {
     const start = match.index ?? 0;
-    if (isQuotedSignatureContext(text2, start))
+    if (isQuotedSignatureContext(text, start))
       continue;
-    if (!isCodexWrapperLeadPosition(text2, start, acceptedWrapperEnd))
+    if (!isCodexWrapperLeadPosition(text, start, acceptedWrapperEnd))
       continue;
     acceptedWrapperEnd = start + match[0].length;
     const body = (match[3] ?? "").trim();
@@ -25975,27 +25789,27 @@ function detectCodexSkillCalls(raw, identity2, context) {
     const occurrence = (wrapperOccurrences.get(wrapper.name) ?? 0) + 1;
     wrapperOccurrences.set(wrapper.name, occurrence);
     const ordinalKey = occurrence === 1 ? `skill:${wrapper.name}` : `skill:${wrapper.name}#${occurrence}`;
-    rows.push(skillRecord(identity2, wrapper.name, "user", {
+    rows.push(skillRecord(identity, wrapper.name, "user", {
       skill_path: wrapper.path,
       args_digest: wrapper.digest,
       started_at: ts,
       evidence_kind: "load",
       status: "ok",
-      invocation_id: invocationIdFor(context, identity2.sessionId, {
+      invocation_id: invocationIdFor(context, identity.sessionId, {
         recordId,
         ordinal: ordinal(ordinalKey)
       }),
       ...originFields(context, wrapper.name, { skillPath: wrapper.path, artifactDigest: wrapper.digest })
     }));
   }
-  const leadingMarker = text2.match(CODEX_DOLLAR_MARKER) ?? text2.match(CODEX_SLASH_MARKER);
+  const leadingMarker = text.match(CODEX_DOLLAR_MARKER) ?? text.match(CODEX_SLASH_MARKER);
   if (leadingMarker !== null) {
     const markerName = canonicalizeSkillName(leadingMarker[1] ?? "");
-    rows.push(skillRecord(identity2, markerName, "user", {
+    rows.push(skillRecord(identity, markerName, "user", {
       started_at: ts,
       evidence_kind: "request",
       status: "unknown",
-      invocation_id: invocationIdFor(context, identity2.sessionId, {
+      invocation_id: invocationIdFor(context, identity.sessionId, {
         recordId,
         ordinal: ordinal(`skill:${markerName}`)
       }),
@@ -26007,7 +25821,7 @@ function detectCodexSkillCalls(raw, identity2, context) {
 function recordIdFallback(raw) {
   return s(raw.id, raw.uuid) ?? "codex-record";
 }
-function detectAgySkillCalls(raw, identity2, context) {
+function detectAgySkillCalls(raw, identity, context) {
   const recordType = String(raw.type ?? "");
   const recordId = s(raw.id, raw.event_id, raw.request_id);
   const ts = timestampOf(raw.created_at, raw.timestamp, raw.ts) ?? null;
@@ -26026,7 +25840,7 @@ function detectAgySkillCalls(raw, identity2, context) {
         const skillName = summary?.match(/SKILL\.md for (.+)$/)?.[1] ?? skillNameFromPath(path);
         const canonical = canonicalizeSkillName(skillName);
         const callId = s(tc.id, tc.call_id);
-        rows.push(skillRecord(identity2, canonical, "model", {
+        rows.push(skillRecord(identity, canonical, "model", {
           skill_path: path,
           args_raw: maybeArgsRaw("agy", "view_file", args) ?? null,
           args_digest: argsDigest(args),
@@ -26034,7 +25848,7 @@ function detectAgySkillCalls(raw, identity2, context) {
           started_at: ts,
           evidence_kind: "load",
           status: "unknown",
-          invocation_id: invocationIdFor(context, identity2.sessionId, {
+          invocation_id: invocationIdFor(context, identity.sessionId, {
             callId,
             recordId: callId === undefined ? recordId : undefined,
             ordinal: rows.length
@@ -26047,7 +25861,7 @@ function detectAgySkillCalls(raw, identity2, context) {
         const args = tc.args ?? tc.arguments ?? {};
         const subagent = s(args.subagent_type, args.subagent, args.agent_name, args.agent, args.name) ?? "subagent";
         const callId = s(tc.id, tc.call_id);
-        rows.push(skillRecord(identity2, subagent, "model", {
+        rows.push(skillRecord(identity, subagent, "model", {
           args_raw: maybeArgsRaw("agy", "INVOKE_SUBAGENT", args) ?? null,
           args_digest: argsDigest(args),
           call_id: callId ?? null,
@@ -26056,7 +25870,7 @@ function detectAgySkillCalls(raw, identity2, context) {
           capability_kind: "subagent",
           evidence_kind: "delegation",
           status: "unknown",
-          invocation_id: invocationIdFor(context, identity2.sessionId, {
+          invocation_id: invocationIdFor(context, identity.sessionId, {
             callId,
             recordId: callId === undefined ? recordId : undefined,
             ordinal: rows.length
@@ -26070,12 +25884,12 @@ function detectAgySkillCalls(raw, identity2, context) {
     if (display !== undefined) {
       const commandName = s(raw.command, raw.name) ?? display.match(/(?:^|\s)\/([a-z][a-z0-9:-]*)/)?.[1];
       if (commandName !== undefined) {
-        rows.push(skillRecord(identity2, canonicalizeSkillName(commandName), "user", {
+        rows.push(skillRecord(identity, canonicalizeSkillName(commandName), "user", {
           started_at: ts,
           capability_kind: "command",
           evidence_kind: "request",
           status: "unknown",
-          invocation_id: invocationIdFor(context, identity2.sessionId, { recordId, ordinal: 0 })
+          invocation_id: invocationIdFor(context, identity.sessionId, { recordId, ordinal: 0 })
         }));
       }
     }
@@ -26083,7 +25897,7 @@ function detectAgySkillCalls(raw, identity2, context) {
   return rows;
 }
 var GEMINI_L0_PREFIX = /^\s*\/((?:sp|rd3)-[a-z0-9-]+)/;
-function detectGeminiSkillCalls(raw, identity2, context) {
+function detectGeminiSkillCalls(raw, identity, context) {
   if (String(raw.type ?? "") !== "user")
     return [];
   const content = geminiContent(raw);
@@ -26096,21 +25910,21 @@ function detectGeminiSkillCalls(raw, identity2, context) {
   const recordId = s(raw.id, raw.uuid);
   const ts = timestampOf(raw.timestamp, raw.ts) ?? null;
   return [
-    skillRecord(identity2, canonical, "user", {
+    skillRecord(identity, canonical, "user", {
       started_at: ts,
       evidence_kind: "request",
       status: "unknown",
-      invocation_id: invocationIdFor(context, identity2.sessionId, { recordId, ordinal: 0 }),
+      invocation_id: invocationIdFor(context, identity.sessionId, { recordId, ordinal: 0 }),
       ...originFields(context, canonical, {})
     })
   ];
 }
-function detectGrokSkillCalls(raw, identity2, context) {
+function detectGrokSkillCalls(raw, identity, context) {
   const n = normalizeGrokRecord(raw);
   if (n.recordType !== "tool_call" || n.toolName !== "read_file")
     return [];
-  const meta3 = n.body._meta ?? raw._meta ?? {};
-  if (o(meta3["x.ai/tool"]).namespace !== "grok_build")
+  const meta = n.body._meta ?? raw._meta ?? {};
+  if (o(meta["x.ai/tool"]).namespace !== "grok_build")
     return [];
   const targetFile = s(o(n.toolArgs).target_file);
   if (targetFile === undefined || lastPathSegmentNorm(targetFile) !== "SKILL.md")
@@ -26120,7 +25934,7 @@ function detectGrokSkillCalls(raw, identity2, context) {
   const callId = s(n.body.call_id, n.body.itemId, recordId);
   const status = grokOutcomeStatus(typeof n.body.status === "string" ? n.body.status : undefined);
   return [
-    skillRecord(identity2, canonical, "model", {
+    skillRecord(identity, canonical, "model", {
       skill_path: targetFile,
       args_raw: maybeArgsRaw("grok", "read_file", n.toolArgs) ?? null,
       args_digest: argsDigest(n.toolArgs),
@@ -26128,7 +25942,7 @@ function detectGrokSkillCalls(raw, identity2, context) {
       started_at: n.ts ?? null,
       status,
       evidence_kind: "load",
-      invocation_id: invocationIdFor(context, identity2.sessionId, { callId, ordinal: 0 }),
+      invocation_id: invocationIdFor(context, identity.sessionId, { callId, ordinal: 0 }),
       ...originFields(context, canonical, { skillPath: targetFile })
     })
   ];
@@ -26342,8 +26156,8 @@ function claudeSplit(raw, context) {
       }
     }
   }
-  for (const record2 of extractSkillCalls(raw, context, { sessionId, seq, messageSplitIndex })) {
-    entries.push(skillCallEntry(record2));
+  for (const record of extractSkillCalls(raw, context, { sessionId, seq, messageSplitIndex })) {
+    entries.push(skillCallEntry(record));
   }
   return entries;
 }
@@ -26429,8 +26243,8 @@ function piSplit(raw, context) {
       });
     }
   }
-  for (const record2 of extractSkillCalls(raw, context, { sessionId, seq, messageSplitIndex })) {
-    entries.push(skillCallEntry(record2));
+  for (const record of extractSkillCalls(raw, context, { sessionId, seq, messageSplitIndex })) {
+    entries.push(skillCallEntry(record));
   }
   return entries;
 }
@@ -26525,8 +26339,8 @@ function ompSplit(raw, context) {
       });
     }
   }
-  for (const record2 of extractSkillCalls(raw, context, { sessionId, seq, messageSplitIndex })) {
-    entries.push(skillCallEntry(record2));
+  for (const record of extractSkillCalls(raw, context, { sessionId, seq, messageSplitIndex })) {
+    entries.push(skillCallEntry(record));
   }
   return entries;
 }
@@ -26686,8 +26500,8 @@ function codexSplit(raw, context) {
       }
     });
   }
-  for (const record2 of extractSkillCalls(raw, context, { sessionId, seq, messageSplitIndex })) {
-    entries.push(skillCallEntry(record2));
+  for (const record of extractSkillCalls(raw, context, { sessionId, seq, messageSplitIndex })) {
+    entries.push(skillCallEntry(record));
   }
   return entries;
 }
@@ -26803,8 +26617,8 @@ function agySplit(raw, context) {
       });
     }
   }
-  for (const record2 of extractSkillCalls(raw, context, { sessionId, seq, messageSplitIndex })) {
-    entries.push(skillCallEntry(record2));
+  for (const record of extractSkillCalls(raw, context, { sessionId, seq, messageSplitIndex })) {
+    entries.push(skillCallEntry(record));
   }
   return entries;
 }
@@ -26884,20 +26698,20 @@ function geminiSplit(raw, context) {
       });
     }
   }
-  for (const record2 of extractSkillCalls(raw, context, { sessionId, seq, messageSplitIndex: 0 })) {
-    entries.push(skillCallEntry(record2));
+  for (const record of extractSkillCalls(raw, context, { sessionId, seq, messageSplitIndex: 0 })) {
+    entries.push(skillCallEntry(record));
   }
   return entries;
 }
 function dshSplit(raw, context) {
   const recordType = String(raw.type ?? "");
   if (recordType === "session") {
-    const sessionId2 = s(raw.id) ?? sessionIdFromSourcePath("deepseek", context?.sourceFile ?? "") ?? "unknown";
+    const sessionId = s(raw.id) ?? sessionIdFromSourcePath("deepseek", context?.sourceFile ?? "") ?? "unknown";
     return [
       {
         targetTable: "history_message",
         record: {
-          session_id: sessionId2,
+          session_id: sessionId,
           seq: 0,
           role: "meta",
           record_type: "session",
@@ -26973,9 +26787,9 @@ function sessionIdFromSourcePath(source, sourceFile) {
 }
 function sessionIdFromContext(context, raw) {
   if (context !== undefined) {
-    const file2 = context.sourceFile.split("/").at(-1);
-    if (file2 !== undefined)
-      return file2.replace(/\.jsonl$/, "");
+    const file = context.sourceFile.split("/").at(-1);
+    if (file !== undefined)
+      return file.replace(/\.jsonl$/, "");
   }
   return s(raw.sessionId, raw.id) ?? "unknown";
 }
@@ -26998,12 +26812,12 @@ function normalizeGrokRecord(raw) {
   const sessionId = s(params?.sessionId, raw.session_id, raw.sessionId, raw.parentSessionId, raw.btwSessionId, raw.params?.sessionId) ?? "unknown";
   const ts = normalizeTs(raw.ts ?? raw.timestamp ?? raw.created_at ?? raw.askedAt ?? body.ts ?? body.timestamp);
   const seq = typeof raw.seq === "number" ? raw.seq : typeof body.seq === "number" ? body.seq : 0;
-  const meta3 = body._meta ?? params?._meta ?? raw._meta;
-  const model = s(meta3?.modelId, body.model, raw.model);
+  const meta = body._meta ?? params?._meta ?? raw._meta;
+  const model = s(meta?.modelId, body.model, raw.model);
   const contentText = extractGrokContent(body.content ?? body.text ?? raw.content ?? raw.text ?? raw.prompt ?? (raw.answer !== undefined || raw.question !== undefined ? [raw.question, raw.answer].filter((value) => typeof value === "string").join(`
 `) : undefined));
   const usage = body.usage ?? raw.usage;
-  const toolMeta = meta3?.["x.ai/tool"];
+  const toolMeta = meta?.["x.ai/tool"];
   const titleFallback = s(body.title)?.split("`")[0]?.trim();
   const toolName = s(toolMeta?.name, body.kind, body.tool_name, body.name, raw.tool_name, raw.name) ?? (titleFallback !== undefined && titleFallback.length > 0 && titleFallback.length <= 40 ? titleFallback : "");
   const toolArgs = body.rawInput ?? body.input ?? body.arguments ?? toolMeta?.input ?? raw.input ?? raw.arguments;
@@ -27245,8 +27059,8 @@ function grokSplit(raw, context) {
         error_text: n.errorText
       }
     });
-    for (const record2 of extractSkillCalls(raw, context, { sessionId, seq, messageSplitIndex })) {
-      entries.push(skillCallEntry(record2));
+    for (const record of extractSkillCalls(raw, context, { sessionId, seq, messageSplitIndex })) {
+      entries.push(skillCallEntry(record));
     }
     return entries;
   }
@@ -27445,7 +27259,7 @@ var AGY_FIELD_MAP = identityFieldMap(MESSAGE_MAPPER_KEYS.concat(TOOL_CALL_MAPPER
 var GROK_FIELD_MAP = identityFieldMap(MESSAGE_MAPPER_KEYS.concat(TOOL_CALL_MAPPER_KEYS, SKILL_CALL_MAPPER_KEYS));
 var GEMINI_FIELD_MAP = identityFieldMap(MESSAGE_MAPPER_KEYS.concat(TOOL_CALL_MAPPER_KEYS, SKILL_CALL_MAPPER_KEYS));
 var DSH_FIELD_MAP = identityFieldMap(MESSAGE_MAPPER_KEYS.concat(["source_record_id"]));
-var passthroughSchema = exports_external.object({}).passthrough();
+var passthroughSchema = object2({}).passthrough();
 var CLAUDE_SCHEMA = passthroughSchema;
 var PI_SCHEMA = passthroughSchema;
 var OMP_SCHEMA = passthroughSchema;
@@ -27454,12 +27268,12 @@ var AGY_SCHEMA = passthroughSchema;
 var GROK_SCHEMA = passthroughSchema;
 var GEMINI_SCHEMA = passthroughSchema;
 var DSH_SCHEMA = passthroughSchema;
-var sourceRecordSchema = exports_external.object({
-  source_record_id: exports_external.string().min(1),
-  created_at: exports_external.string().min(1),
-  content: exports_external.string().min(1),
-  role: exports_external.string().optional(),
-  model: exports_external.string().optional()
+var sourceRecordSchema = object2({
+  source_record_id: string2().min(1),
+  created_at: string2().min(1),
+  content: string2().min(1),
+  role: string2().optional(),
+  model: string2().optional()
 }).passthrough();
 function firstString(...values) {
   for (const value of values) {
@@ -27819,7 +27633,7 @@ var taskRunLinksTable = defineTable("task_run_links", {
   createdAt: text("created_at").notNull()
 });
 var taskRunLinks = taskRunLinksTable.table;
-var PLANNING_SCHEMA_SQL = [planningEventsTable.createTableSql, taskRunLinksTable.createTableSql].map((sql4) => `${sql4};`).join(`
+var PLANNING_SCHEMA_SQL = [planningEventsTable.createTableSql, taskRunLinksTable.createTableSql].map((sql) => `${sql};`).join(`
 
 `);
 var DOMAIN_SCHEMA_SQL = [
@@ -27829,7 +27643,7 @@ var DOMAIN_SCHEMA_SQL = [
   transitionRunsTable.createTableSql,
   workflowStatesTable.createTableSql,
   artifactsTable.createTableSql
-].map((sql4) => `${sql4};`).join(`
+].map((sql) => `${sql};`).join(`
 
 `);
 var INBOX_MESSAGES_SCHEMA_SQL = `
@@ -28887,9 +28701,9 @@ var STAGE_REGISTRY_SCHEMA_VERSION = {
   major: 1,
   minor: 3
 };
-var stageSchemaVersionSchema = exports_external.object({
-  major: exports_external.number().int().nonnegative(),
-  minor: exports_external.number().int().nonnegative()
+var stageSchemaVersionSchema = object2({
+  major: number2().int().nonnegative(),
+  minor: number2().int().nonnegative()
 }).strict();
 var MUTATION_CLASSES = [
   "none",
@@ -28901,33 +28715,33 @@ var MUTATION_CLASSES = [
   "driver",
   "irreversible"
 ];
-var inlineExecutionSchema = exports_external.object({
-  kind: exports_external.literal("inline"),
-  current_agent_allowed: exports_external.literal(true),
-  may_reuse_captured_layers: exports_external.boolean().optional()
+var inlineExecutionSchema = object2({
+  kind: literal("inline"),
+  current_agent_allowed: literal(true),
+  may_reuse_captured_layers: boolean2().optional()
 }).strict();
-var subprocessExecutionSchema = exports_external.object({
-  kind: exports_external.literal("subprocess"),
-  current_agent_allowed: exports_external.literal(false),
-  via: exports_external.literal("spur-agent-run")
+var subprocessExecutionSchema = object2({
+  kind: literal("subprocess"),
+  current_agent_allowed: literal(false),
+  via: literal("spur-agent-run")
 }).strict();
-var deterministicExecutionSchema = exports_external.object({
-  kind: exports_external.literal("deterministic"),
-  current_agent_allowed: exports_external.literal(false),
-  executor: exports_external.enum(["cli", "script"])
+var deterministicExecutionSchema = object2({
+  kind: literal("deterministic"),
+  current_agent_allowed: literal(false),
+  executor: _enum2(["cli", "script"])
 }).strict();
-var hitlExecutionSchema = exports_external.object({
-  kind: exports_external.literal("hitl"),
-  current_agent_allowed: exports_external.literal(true),
-  gate_timing: exports_external.enum(["pre", "post", "both"])
+var hitlExecutionSchema = object2({
+  kind: literal("hitl"),
+  current_agent_allowed: literal(true),
+  gate_timing: _enum2(["pre", "post", "both"])
 }).strict();
-var irreversibleExecutionSchema = exports_external.object({
-  kind: exports_external.literal("irreversible"),
-  requires_operator_intent: exports_external.literal(true),
-  current_agent_allowed: exports_external.boolean(),
-  rollback_disclaimer: exports_external.string().min(1)
+var irreversibleExecutionSchema = object2({
+  kind: literal("irreversible"),
+  requires_operator_intent: literal(true),
+  current_agent_allowed: boolean2(),
+  rollback_disclaimer: string2().min(1)
 }).strict();
-var executionKindSchema = exports_external.discriminatedUnion("kind", [
+var executionKindSchema = discriminatedUnion("kind", [
   inlineExecutionSchema,
   subprocessExecutionSchema,
   deterministicExecutionSchema,
@@ -28935,31 +28749,31 @@ var executionKindSchema = exports_external.discriminatedUnion("kind", [
   irreversibleExecutionSchema
 ]);
 var ARTIFACT_DIRECTIONS = ["input", "output"];
-var stageArtifactSchema = exports_external.object({
-  kind: exports_external.string().min(1),
-  direction: exports_external.enum(ARTIFACT_DIRECTIONS),
-  identity: exports_external.string().optional(),
-  description: exports_external.string().optional(),
-  required: exports_external.boolean().optional().default(true)
+var stageArtifactSchema = object2({
+  kind: string2().min(1),
+  direction: _enum2(ARTIFACT_DIRECTIONS),
+  identity: string2().optional(),
+  description: string2().optional(),
+  required: boolean2().optional().default(true)
 }).strict();
-var stageGateSchema = exports_external.object({
-  name: exports_external.string().min(1),
-  timing: exports_external.enum(["pre", "post", "transition"]),
-  min_verdict: exports_external.enum(["pass", "partial", "fail"]).optional(),
-  description: exports_external.string().optional()
+var stageGateSchema = object2({
+  name: string2().min(1),
+  timing: _enum2(["pre", "post", "transition"]),
+  min_verdict: _enum2(["pass", "partial", "fail"]).optional(),
+  description: string2().optional()
 }).strict();
-var stageRetryPolicySchema = exports_external.object({
-  max_attempts: exports_external.number().int().min(1),
-  terminal_stop: exports_external.enum(["block", "escalate", "fail"]),
-  timeout_seconds: exports_external.number().int().positive().optional()
+var stageRetryPolicySchema = object2({
+  max_attempts: number2().int().min(1),
+  terminal_stop: _enum2(["block", "escalate", "fail"]),
+  timeout_seconds: number2().int().positive().optional()
 }).strict();
 var CAPABILITY_TIERS = ["cheap", "standard", "capable-1", "capable-2", "capable-3"];
 var LEGACY_CAPABLE_ALIAS = "capable";
 function normalizeCapabilityTier(value) {
   return value === LEGACY_CAPABLE_ALIAS ? "capable-1" : value;
 }
-var capabilityTierSchema = exports_external.preprocess(normalizeCapabilityTier, exports_external.enum(CAPABILITY_TIERS));
-var objectiveEscalationTriggerSchema = exports_external.enum([
+var capabilityTierSchema = preprocess(normalizeCapabilityTier, _enum2(CAPABILITY_TIERS));
+var objectiveEscalationTriggerSchema = _enum2([
   "gate-fail",
   "timeout",
   "insufficient-evidence",
@@ -28967,13 +28781,13 @@ var objectiveEscalationTriggerSchema = exports_external.enum([
   "resource-exhaustion",
   "auth"
 ]);
-var stageModelPolicySchema = exports_external.object({
+var stageModelPolicySchema = object2({
   min_tier: capabilityTierSchema,
-  fallback: exports_external.array(exports_external.object({
+  fallback: array(object2({
     tier: capabilityTierSchema,
     trigger: objectiveEscalationTriggerSchema
   }).strict()),
-  override_key: exports_external.string().optional()
+  override_key: string2().optional()
 }).strict();
 var CONTEXT_LAYER_NAMES = [
   "harness-policy",
@@ -28984,31 +28798,31 @@ var CONTEXT_LAYER_NAMES = [
   "run-state",
   "tool-observations"
 ];
-var stageContextLayerSchema = exports_external.object({
-  layer: exports_external.enum(CONTEXT_LAYER_NAMES),
-  required: exports_external.literal(true)
+var stageContextLayerSchema = object2({
+  layer: _enum2(CONTEXT_LAYER_NAMES),
+  required: literal(true)
 }).strict();
-var stageEventSchema = exports_external.object({
-  name: exports_external.string().min(1),
-  description: exports_external.string().optional()
+var stageEventSchema = object2({
+  name: string2().min(1),
+  description: string2().optional()
 }).strict();
 var STAGE_ID_PATTERN = /^[a-z][a-z0-9-]*$/;
-var stageRecordSchema = exports_external.object({
+var stageRecordSchema = object2({
   schema_version: stageSchemaVersionSchema,
-  id: exports_external.string().regex(STAGE_ID_PATTERN, {
+  id: string2().regex(STAGE_ID_PATTERN, {
     message: "stage id must be lowercase kebab-case"
   }),
-  aliases: exports_external.array(exports_external.string().min(1)).optional().default([]),
-  description: exports_external.string().min(1),
-  artifacts: exports_external.array(stageArtifactSchema).min(1),
-  reasoning_skill: exports_external.string().min(1),
-  required_references: exports_external.array(exports_external.string().min(1)).optional().default([]),
-  gates: exports_external.array(stageGateSchema).optional().default([]),
-  mutation_class: exports_external.enum(MUTATION_CLASSES),
+  aliases: array(string2().min(1)).optional().default([]),
+  description: string2().min(1),
+  artifacts: array(stageArtifactSchema).min(1),
+  reasoning_skill: string2().min(1),
+  required_references: array(string2().min(1)).optional().default([]),
+  gates: array(stageGateSchema).optional().default([]),
+  mutation_class: _enum2(MUTATION_CLASSES),
   retry: stageRetryPolicySchema,
   model_policy: stageModelPolicySchema,
-  context_layers: exports_external.array(stageContextLayerSchema).optional().default([]),
-  observability: exports_external.array(stageEventSchema).optional().default([]),
+  context_layers: array(stageContextLayerSchema).optional().default([]),
+  observability: array(stageEventSchema).optional().default([]),
   execution: executionKindSchema
 }).strict();
 var REGISTERED_CANONICAL_STAGES = [
@@ -29292,33 +29106,33 @@ var REGISTERED_CANONICAL_STAGES = [
   }
 ];
 var CANONICAL_STAGE_BY_KEY = new Map;
-for (const s2 of REGISTERED_CANONICAL_STAGES) {
-  CANONICAL_STAGE_BY_KEY.set(s2.id, s2);
-  for (const a of s2.aliases ?? []) {
-    CANONICAL_STAGE_BY_KEY.set(a, s2);
+for (const s of REGISTERED_CANONICAL_STAGES) {
+  CANONICAL_STAGE_BY_KEY.set(s.id, s);
+  for (const a of s.aliases ?? []) {
+    CANONICAL_STAGE_BY_KEY.set(a, s);
   }
 }
 var CACHEABILITY_CLASSES = ["stable-prefix-eligible", "volatile"];
 var SENSITIVITY_CLASSES = ["public", "internal", "confidential"];
-var envelopeProvenanceSchema = exports_external.object({
-  owner: exports_external.string().min(1),
-  schema_version: exports_external.string().min(1),
-  source_revision: exports_external.string().nullable().optional(),
-  generated_at: exports_external.string().datetime()
+var envelopeProvenanceSchema = object2({
+  owner: string2().min(1),
+  schema_version: string2().min(1),
+  source_revision: string2().nullable().optional(),
+  generated_at: string2().datetime()
 }).strict();
-var envelopeSizeBudgetSchema = exports_external.object({
-  max_bytes: exports_external.number().int().positive()
+var envelopeSizeBudgetSchema = object2({
+  max_bytes: number2().int().positive()
 }).strict();
-var envelopeLayerSchema = exports_external.object({
-  layer: exports_external.enum(CONTEXT_LAYER_NAMES),
-  content: exports_external.string(),
-  size_bytes: exports_external.number().int().nonnegative(),
-  content_hash: exports_external.string().length(64),
+var envelopeLayerSchema = object2({
+  layer: _enum2(CONTEXT_LAYER_NAMES),
+  content: string2(),
+  size_bytes: number2().int().nonnegative(),
+  content_hash: string2().length(64),
   provenance: envelopeProvenanceSchema,
-  cacheability: exports_external.enum(CACHEABILITY_CLASSES),
-  sensitivity: exports_external.enum(SENSITIVITY_CLASSES).default("internal"),
+  cacheability: _enum2(CACHEABILITY_CLASSES),
+  sensitivity: _enum2(SENSITIVITY_CLASSES).default("internal"),
   size_budget: envelopeSizeBudgetSchema.optional(),
-  disclosure_handle: exports_external.string().optional()
+  disclosure_handle: string2().optional()
 }).strict();
 var STABLE_LAYER_NAMES = [
   "harness-policy",
@@ -29328,92 +29142,61 @@ var STABLE_LAYER_NAMES = [
   "indexed-evidence"
 ];
 var VOLATILE_LAYER_NAMES = ["run-state", "tool-observations"];
-var envelopeSchema = exports_external.object({
-  schema_version: exports_external.string().default("1.0"),
-  layers: exports_external.array(envelopeLayerSchema).min(1),
-  stage_id: exports_external.string().optional(),
-  run_id: exports_external.string().optional(),
-  assembled_at: exports_external.string().datetime(),
-  total_size_bytes: exports_external.number().int().nonnegative()
+var envelopeSchema = object2({
+  schema_version: string2().default("1.0"),
+  layers: array(envelopeLayerSchema).min(1),
+  stage_id: string2().optional(),
+  run_id: string2().optional(),
+  assembled_at: string2().datetime(),
+  total_size_bytes: number2().int().nonnegative()
 }).strict();
-var projectSnapshotSchema = exports_external.object({
-  name: exports_external.string(),
-  version: exports_external.string(),
-  task_counts: exports_external.object({
-    backlog: exports_external.number().int().nonnegative(),
-    todo: exports_external.number().int().nonnegative(),
-    wip: exports_external.number().int().nonnegative(),
-    testing: exports_external.number().int().nonnegative(),
-    done: exports_external.number().int().nonnegative(),
-    blocked: exports_external.number().int().nonnegative(),
-    cancelled: exports_external.number().int().nonnegative()
+var projectSnapshotSchema = object2({
+  name: string2(),
+  version: string2(),
+  task_counts: object2({
+    backlog: number2().int().nonnegative(),
+    todo: number2().int().nonnegative(),
+    wip: number2().int().nonnegative(),
+    testing: number2().int().nonnegative(),
+    done: number2().int().nonnegative(),
+    blocked: number2().int().nonnegative(),
+    cancelled: number2().int().nonnegative()
   }).strict(),
-  feature_counts: exports_external.object({
-    backlog: exports_external.number().int().nonnegative(),
-    active: exports_external.number().int().nonnegative(),
-    verifying: exports_external.number().int().nonnegative(),
-    done: exports_external.number().int().nonnegative(),
-    blocked: exports_external.number().int().nonnegative(),
-    cancelled: exports_external.number().int().nonnegative()
+  feature_counts: object2({
+    backlog: number2().int().nonnegative(),
+    active: number2().int().nonnegative(),
+    verifying: number2().int().nonnegative(),
+    done: number2().int().nonnegative(),
+    blocked: number2().int().nonnegative(),
+    cancelled: number2().int().nonnegative()
   }).strict(),
-  active_features: exports_external.array(exports_external.string()),
-  content_hash: exports_external.string().length(64).optional()
+  active_features: array(string2()),
+  content_hash: string2().length(64).optional()
 }).strict();
-var taskSnapshotSchema = exports_external.object({
-  wbs: exports_external.string().regex(/^\d{4}$/),
-  name: exports_external.string(),
-  status: exports_external.string(),
-  priority: exports_external.string().optional(),
-  feature_id: exports_external.string().optional(),
-  acceptance_criteria: exports_external.string().optional(),
-  locked_qa: exports_external.array(exports_external.string()).optional(),
-  solution: exports_external.string().optional(),
-  content_hash: exports_external.string().length(64).optional()
+var taskSnapshotSchema = object2({
+  wbs: string2().regex(/^\d{4}$/),
+  name: string2(),
+  status: string2(),
+  priority: string2().optional(),
+  feature_id: string2().optional(),
+  acceptance_criteria: string2().optional(),
+  locked_qa: array(string2()).optional(),
+  solution: string2().optional(),
+  content_hash: string2().length(64).optional()
 }).strict();
-var featureSnapshotSchema = exports_external.object({
-  id: exports_external.string(),
-  name: exports_external.string(),
-  status: exports_external.string(),
-  priority: exports_external.string().optional(),
-  scenarios: exports_external.array(exports_external.string()).optional(),
-  content_hash: exports_external.string().length(64).optional()
+var featureSnapshotSchema = object2({
+  id: string2(),
+  name: string2(),
+  status: string2(),
+  priority: string2().optional(),
+  scenarios: array(string2()).optional(),
+  content_hash: string2().length(64).optional()
 }).strict();
 var ALL_LAYER_NAMES = [...STABLE_LAYER_NAMES, ...VOLATILE_LAYER_NAMES];
 var LAYER_ORDER = {};
 ALL_LAYER_NAMES.forEach((name, idx) => {
   LAYER_ORDER[name] = idx;
 });
-
-class InlineContext {
-  _capturedStable = new Map;
-  _dispatchId;
-  constructor(dispatchId) {
-    this._dispatchId = dispatchId;
-  }
-  get dispatchId() {
-    return this._dispatchId;
-  }
-  captureLayer(layer) {
-    if (layer.cacheability === "stable-prefix-eligible") {
-      this._capturedStable.set(layer.layer, layer);
-    }
-  }
-  getCapturedLayer(name) {
-    return this._capturedStable.get(name);
-  }
-  isStableLayerFresh(name, freshFingerprint) {
-    const captured = this._capturedStable.get(name);
-    if (!captured || freshFingerprint === null)
-      return false;
-    return captured.content_hash === freshFingerprint;
-  }
-  reset() {
-    this._capturedStable.clear();
-  }
-  get size() {
-    return this._capturedStable.size;
-  }
-}
 var DAY_MS = 24 * 60 * 60 * 1000;
 init_dist2();
 var TASK_CANONICAL_SECTIONS = [
@@ -29465,17 +29248,17 @@ function findHeadings(body, hashes) {
   }
   return hits;
 }
-function findUnclosedFenceLine(text3) {
+function findUnclosedFenceLine(text) {
   let inCodeBlock = false;
   let openLine = 0;
   let lineNo = 0;
   let lineStart = 0;
-  for (let i = 0;i <= text3.length; i++) {
-    const atEnd = i === text3.length;
-    if (!atEnd && text3[i] !== `
+  for (let i = 0;i <= text.length; i++) {
+    const atEnd = i === text.length;
+    if (!atEnd && text[i] !== `
 `)
       continue;
-    const line = text3.slice(lineStart, i);
+    const line = text.slice(lineStart, i);
     lineNo++;
     if (line.startsWith("```")) {
       if (inCodeBlock) {
@@ -29512,16 +29295,16 @@ class MarkdownDocument {
   _demotedHeadings = [];
   _duplicateSectionNames = [];
   _unclosedFenceLine;
-  constructor(domain2, frontmatterBlock, frontmatter, preamble, sections, unclosedFenceLine) {
-    this._domain = domain2;
+  constructor(domain, frontmatterBlock, frontmatter, preamble, sections, unclosedFenceLine) {
+    this._domain = domain;
     this._frontmatterBlock = frontmatterBlock;
     this._frontmatter = frontmatter;
     this._preamble = preamble;
     this._sections = sections;
     this._unclosedFenceLine = unclosedFenceLine;
   }
-  static parse(content, domain2) {
-    const level = HEADING_LEVELS[domain2];
+  static parse(content, domain) {
+    const level = HEADING_LEVELS[domain];
     const hashes = "#".repeat(level);
     let frontmatterBlock = "";
     let frontmatter = null;
@@ -29559,17 +29342,17 @@ class MarkdownDocument {
     const seen = new Set;
     const sections = [];
     const duplicateNames = [];
-    for (const s2 of allSections) {
-      if (seen.has(s2.name)) {
-        duplicateNames.push(s2.name);
+    for (const s of allSections) {
+      if (seen.has(s.name)) {
+        duplicateNames.push(s.name);
       } else {
-        seen.add(s2.name);
-        sections.push(s2);
+        seen.add(s.name);
+        sections.push(s);
       }
     }
-    const doc2 = new MarkdownDocument(domain2, frontmatterBlock, frontmatter, preamble, sections, unclosedFenceLine);
-    doc2._duplicateSectionNames.push(...duplicateNames);
-    return doc2;
+    const doc = new MarkdownDocument(domain, frontmatterBlock, frontmatter, preamble, sections, unclosedFenceLine);
+    doc._duplicateSectionNames.push(...duplicateNames);
+    return doc;
   }
   get domain() {
     return this._domain;
@@ -29594,7 +29377,7 @@ class MarkdownDocument {
     return result;
   }
   get sectionNames() {
-    return this._sections.map((s2) => s2.name);
+    return this._sections.map((s) => s.name);
   }
   get demotedHeadings() {
     return this._demotedHeadings;
@@ -29621,7 +29404,7 @@ class MarkdownDocument {
   }
   get canonicalSections() {
     const base = this._domain === "task" ? TASK_CANONICAL_SECTIONS : FEATURE_CANONICAL_SECTIONS;
-    const extra = UNIVERSAL_SECTIONS.filter((s2) => !base.includes(s2));
+    const extra = UNIVERSAL_SECTIONS.filter((s) => !base.includes(s));
     return [...base, ...extra];
   }
   validateSectionName(name) {
@@ -29630,7 +29413,7 @@ class MarkdownDocument {
     }
   }
   findSection(name) {
-    return this._sections.find((s2) => s2.name === name);
+    return this._sections.find((s) => s.name === name);
   }
   hasSection(name) {
     return this.findSection(name) !== undefined;
@@ -29640,10 +29423,10 @@ class MarkdownDocument {
     const section = this.findSection(name);
     if (section === undefined)
       return null;
-    const text3 = section.modifiedText ?? section.originalText;
-    const newlineIdx = text3.indexOf(`
+    const text = section.modifiedText ?? section.originalText;
+    const newlineIdx = text.indexOf(`
 `);
-    return newlineIdx === -1 ? "" : text3.slice(newlineIdx + 1);
+    return newlineIdx === -1 ? "" : text.slice(newlineIdx + 1);
   }
   replaceSection(name, body) {
     this.validateSectionName(name);
@@ -29716,14 +29499,14 @@ ${body.trimEnd()}
     if (section === undefined) {
       throw new Error(`Section "${name}" does not exist in this document.`);
     }
-    const text3 = section.modifiedText ?? section.originalText;
-    const startMatch = MARKER_START_RE.exec(text3);
-    const endMatch = MARKER_END_RE.exec(text3);
+    const text = section.modifiedText ?? section.originalText;
+    const startMatch = MARKER_START_RE.exec(text);
+    const endMatch = MARKER_END_RE.exec(text);
     if (startMatch === null || endMatch === null || startMatch.index >= endMatch.index) {
       throw new Error(`No marker region found in section "${name}".`);
     }
-    const before = text3.slice(0, startMatch.index);
-    const after = text3.slice(endMatch.index + endMatch[0].length);
+    const before = text.slice(0, startMatch.index);
+    const after = text.slice(endMatch.index + endMatch[0].length);
     section.modifiedText = `${before}${START_MARKER}
 ${content}
 ${END_MARKER}${after}`;
@@ -29731,10 +29514,10 @@ ${END_MARKER}${after}`;
   setFrontmatterField(key, value) {
     const fieldLine = `${key}: ${typeof value === "number" ? String(value) : escapeYamlValue(value)}`;
     if (this._frontmatter === null) {
-      const raw2 = fieldLine;
-      this._frontmatter = { raw: raw2, data: { [key]: value } };
+      const raw = fieldLine;
+      this._frontmatter = { raw, data: { [key]: value } };
       this._frontmatterBlock = `---
-${raw2}
+${raw}
 ---
 
 `;
@@ -29875,89 +29658,89 @@ function normalizeTaskStatus(raw) {
   }
   return resolved;
 }
-var isoDateString = exports_external.string().min(1).refine((value) => !Number.isNaN(Date.parse(value)), {
+var isoDateString = string2().min(1).refine((value) => !Number.isNaN(Date.parse(value)), {
   message: "must be an ISO 8601 timestamp"
 });
-var featureId = exports_external.string().regex(FEATURE_ID_PATTERN, {
+var featureId = string2().regex(FEATURE_ID_PATTERN, {
   message: "feature id must match ^[A-Z][1-9]*$ (DD-14)"
 }).nullable().optional();
-var wbsString = exports_external.string().regex(/^\d{4}$/, { message: "parent_wbs must be a 4-digit WBS string" }).nullable().optional();
-var taskFrontmatterSchema = exports_external.object({
-  schema_version: exports_external.literal(1),
-  name: exports_external.string().min(1),
-  description: exports_external.string().optional(),
-  status: exports_external.preprocess((val) => {
+var wbsString = string2().regex(/^\d{4}$/, { message: "parent_wbs must be a 4-digit WBS string" }).nullable().optional();
+var taskFrontmatterSchema = object2({
+  schema_version: literal(1),
+  name: string2().min(1),
+  description: string2().optional(),
+  status: preprocess((val) => {
     if (typeof val === "string") {
       try {
         return normalizeTaskStatus(val);
       } catch {}
     }
     return val;
-  }, exports_external.enum(TASK_STATUSES)),
-  type: exports_external.enum(TASK_TYPES).optional().default("task"),
-  template: exports_external.enum(TASK_VARIANTS).optional(),
-  profile: exports_external.enum(PROFILES).optional(),
+  }, _enum2(TASK_STATUSES)),
+  type: _enum2(TASK_TYPES).optional().default("task"),
+  template: _enum2(TASK_VARIANTS).optional(),
+  profile: _enum2(PROFILES).optional(),
   feature_id: featureId,
   parent_wbs: wbsString,
-  priority: exports_external.enum(PRIORITIES).optional(),
-  tags: exports_external.array(exports_external.string()).optional(),
-  dependencies: exports_external.array(exports_external.string()).optional(),
-  ac_numbering: exports_external.literal("task-local").optional(),
-  ac_altitude: exports_external.enum(["graduating", "task-local"]).optional(),
-  done_forced: exports_external.preprocess((v) => typeof v === "string" ? v === "true" : v, exports_external.boolean().optional()),
-  done_reason: exports_external.string().optional(),
-  feature_link_declined: exports_external.preprocess((v) => typeof v === "string" ? v === "true" : v, exports_external.boolean().optional()),
-  estimate_hours: exports_external.preprocess((v) => typeof v === "string" && v.trim() !== "" ? Number(v) : v, exports_external.number().positive().optional()),
+  priority: _enum2(PRIORITIES).optional(),
+  tags: array(string2()).optional(),
+  dependencies: array(string2()).optional(),
+  ac_numbering: literal("task-local").optional(),
+  ac_altitude: _enum2(["graduating", "task-local"]).optional(),
+  done_forced: preprocess((v) => typeof v === "string" ? v === "true" : v, boolean2().optional()),
+  done_reason: string2().optional(),
+  feature_link_declined: preprocess((v) => typeof v === "string" ? v === "true" : v, boolean2().optional()),
+  estimate_hours: preprocess((v) => typeof v === "string" && v.trim() !== "" ? Number(v) : v, number2().positive().optional()),
   created_at: isoDateString,
   updated_at: isoDateString
 });
-var featureFrontmatterSchema = exports_external.object({
-  schema_version: exports_external.literal(1),
-  id: exports_external.string().regex(FEATURE_ID_PATTERN, {
+var featureFrontmatterSchema = object2({
+  schema_version: literal(1),
+  id: string2().regex(FEATURE_ID_PATTERN, {
     message: "feature id must match ^[A-Z][1-9]*$ (DD-14)"
   }),
-  name: exports_external.string().min(1),
-  status: exports_external.enum(FEATURE_STATUSES),
-  priority: exports_external.enum(PRIORITIES).optional(),
-  tags: exports_external.array(exports_external.string()).optional(),
+  name: string2().min(1),
+  status: _enum2(FEATURE_STATUSES),
+  priority: _enum2(PRIORITIES).optional(),
+  tags: array(string2()).optional(),
   created_at: isoDateString,
   updated_at: isoDateString
 });
-var taskBatchItemSchema = exports_external.object({
-  name: exports_external.string().min(1, "name is required"),
-  background: exports_external.string().optional(),
-  requirements: exports_external.string().optional(),
-  design: exports_external.string().optional(),
-  plan: exports_external.string().optional(),
-  acceptance_criteria: exports_external.string().optional(),
+var taskBatchItemSchema = object2({
+  name: string2().min(1, "name is required"),
+  background: string2().optional(),
+  requirements: string2().optional(),
+  design: string2().optional(),
+  plan: string2().optional(),
+  acceptance_criteria: string2().optional(),
   feature_id: featureId,
   parent_wbs: wbsString,
-  priority: exports_external.enum(PRIORITIES).optional(),
-  tags: exports_external.array(exports_external.string()).optional(),
-  template: exports_external.enum(TASK_VARIANTS).optional(),
-  estimate_hours: exports_external.number().positive().optional()
+  priority: _enum2(PRIORITIES).optional(),
+  tags: array(string2()).optional(),
+  template: _enum2(TASK_VARIANTS).optional(),
+  estimate_hours: number2().positive().optional()
 }).strict();
-var taskBatchSchema = exports_external.array(taskBatchItemSchema).min(1, "batch must contain at least one task");
+var taskBatchSchema = array(taskBatchItemSchema).min(1, "batch must contain at least one task");
 init_dist2();
 init_zod();
-var sectionNameSchema = exports_external.enum(TASK_CANONICAL_SECTIONS);
-var matrixEntrySchema = exports_external.object({
-  required: exports_external.array(sectionNameSchema).optional(),
-  optional: exports_external.array(sectionNameSchema).optional(),
-  forbidden: exports_external.array(sectionNameSchema).optional(),
-  gate: exports_external.boolean().optional()
+var sectionNameSchema = _enum2(TASK_CANONICAL_SECTIONS);
+var matrixEntrySchema = object2({
+  required: array(sectionNameSchema).optional(),
+  optional: array(sectionNameSchema).optional(),
+  forbidden: array(sectionNameSchema).optional(),
+  gate: boolean2().optional()
 }).strict();
-var matrixStatusSchema = exports_external.enum(["backlog", "todo", "wip", "testing", "blocked", "done", "cancelled"]);
-var sectionMatrixSchema = exports_external.object({
-  variants: exports_external.record(exports_external.string(), exports_external.partialRecord(matrixStatusSchema, matrixEntrySchema))
+var matrixStatusSchema = _enum2(["backlog", "todo", "wip", "testing", "blocked", "done", "cancelled"]);
+var sectionMatrixSchema = object2({
+  variants: record(string2(), partialRecord(matrixStatusSchema, matrixEntrySchema))
 }).strict();
-var CANONICAL_INDEX = new Map(TASK_CANONICAL_SECTIONS.map((s2, i) => [s2, i]));
+var CANONICAL_INDEX = new Map(TASK_CANONICAL_SECTIONS.map((s, i) => [s, i]));
 function canonicalizeCheckboxMarkers(body) {
   return body.replace(/^([ \t]*)[-*+][ \t]+\[[ xX]\]/gm, "$1- [x]");
 }
 function extractTaskProofData(content) {
-  const doc2 = MarkdownDocument.parse(content, "task");
-  const fm = doc2.frontmatterData ?? {};
+  const doc = MarkdownDocument.parse(content, "task");
+  const fm = doc.frontmatterData ?? {};
   const wbs = typeof fm.wbs === "string" ? fm.wbs : undefined;
   const name = typeof fm.name === "string" ? fm.name : undefined;
   const feature_id = typeof fm.feature_id === "string" ? fm.feature_id : undefined;
@@ -29970,8 +29753,8 @@ function extractTaskProofData(content) {
   const sections = {};
   const taskSections = ["Background", "Requirements", "Acceptance Criteria", "Design", "Plan"];
   for (const sec of taskSections) {
-    if (doc2.hasSection(sec)) {
-      const body = doc2.getSection(sec);
+    if (doc.hasSection(sec)) {
+      const body = doc.getSection(sec);
       if (body !== null) {
         sections[sec] = canonicalizeCheckboxMarkers(body.trim());
       }
@@ -29986,15 +29769,15 @@ function extractTaskProofData(content) {
   };
 }
 function extractFeatureProofData(content) {
-  const doc2 = MarkdownDocument.parse(content, "feature");
-  const fm = doc2.frontmatterData ?? {};
+  const doc = MarkdownDocument.parse(content, "feature");
+  const fm = doc.frontmatterData ?? {};
   const id = typeof fm.id === "string" ? fm.id : undefined;
   const name = typeof fm.name === "string" ? fm.name : undefined;
   const sections = {};
   const featureSections = ["Goal", "Scope", "Acceptance Criteria"];
   for (const sec of featureSections) {
-    if (doc2.hasSection(sec)) {
-      const body = doc2.getSection(sec);
+    if (doc.hasSection(sec)) {
+      const body = doc.getSection(sec);
       if (body !== null) {
         sections[sec] = canonicalizeCheckboxMarkers(body.trim());
       }
@@ -30022,8 +29805,8 @@ function extractFindings(logText) {
     found.add(match[0]);
   return [...found].sort().slice(0, MAX_FINDINGS).map((anchor) => `${anchor} `).join("");
 }
-function tailLines(text3, count) {
-  const lines = text3.split(`
+function tailLines(text, count) {
+  const lines = text.split(`
 `);
   if (lines.length > 0 && lines[lines.length - 1] === "")
     lines.pop();
@@ -30110,11 +29893,11 @@ function readReceiptStatus(receiptPath, currentDigest) {
   }
   return { reuse: true, reason: "ok" };
 }
-function resolveReceiptReuse(receiptPath, env2, cwd, recomputeFn = recomputeGateProofFingerprint) {
+function resolveReceiptReuse(receiptPath, env, cwd, recomputeFn = recomputeGateProofFingerprint) {
   if (!existsSync(receiptPath)) {
-    return { reuse: false, receiptStatus: readReceiptStatus(receiptPath, env2.proofDigest ?? "") };
+    return { reuse: false, receiptStatus: readReceiptStatus(receiptPath, env.proofDigest ?? "") };
   }
-  const recomputed = recomputeFn(cwd, env2);
+  const recomputed = recomputeFn(cwd, env);
   if (!recomputed.ok) {
     return {
       reuse: false,
@@ -30122,11 +29905,11 @@ function resolveReceiptReuse(receiptPath, env2, cwd, recomputeFn = recomputeGate
       refusal: `recompute failed: ${recomputed.error}`
     };
   }
-  if ((env2.proofDigest ?? "") !== recomputed.digest) {
+  if ((env.proofDigest ?? "") !== recomputed.digest) {
     return {
       reuse: false,
       receiptStatus: { reuse: false, reason: "stale" },
-      refusal: `supplied ${env2.proofDigest ?? ""} != current ${recomputed.digest}`,
+      refusal: `supplied ${env.proofDigest ?? ""} != current ${recomputed.digest}`,
       recomputedDigest: recomputed.digest
     };
   }
@@ -30137,8 +29920,8 @@ function resolveReceiptReuse(receiptPath, env2, cwd, recomputeFn = recomputeGate
   };
 }
 var TEST_FILE_PATTERN = /\.test\.tsx?$/;
-function workspaceOf(file2, exists) {
-  const segments = file2.split("/");
+function workspaceOf(file, exists) {
+  const segments = file.split("/");
   for (let depth = 1;depth < segments.length; depth++) {
     const prefix = segments.slice(0, depth).join("/");
     if (exists(`${prefix}/package.json`))
@@ -30148,55 +29931,55 @@ function workspaceOf(file2, exists) {
 }
 function lightScope(changedFiles, exists = existsSync) {
   const files = [];
-  const workspaces2 = new Set;
+  const workspaces = new Set;
   const tests = new Set;
-  for (const file2 of changedFiles) {
-    files.push(file2);
-    if (file2.startsWith("plugins/sp/")) {
-      const rest2 = file2.slice("plugins/sp/".length);
+  for (const file of changedFiles) {
+    files.push(file);
+    if (file.startsWith("plugins/sp/")) {
+      const rest = file.slice("plugins/sp/".length);
       let matched = false;
-      if (rest2.startsWith("skills/") || rest2.startsWith("commands/") || rest2.startsWith("agents/") || rest2.startsWith("references/")) {
+      if (rest.startsWith("skills/") || rest.startsWith("commands/") || rest.startsWith("agents/") || rest.startsWith("references/")) {
         const structTest = "plugins/sp/tests/skill-structure.test.ts";
         if (exists(structTest)) {
           tests.add(structTest);
           matched = true;
         }
-        if (rest2.startsWith("commands/")) {
+        if (rest.startsWith("commands/")) {
           const flagTest = "plugins/sp/tests/flag-contract-parity.test.ts";
           if (exists(flagTest)) {
             tests.add(flagTest);
             matched = true;
           }
         }
-      } else if (rest2.startsWith("scripts/")) {
-        const scriptBase = rest2.slice("scripts/".length).replace(/\.tsx?$/, "");
+      } else if (rest.startsWith("scripts/")) {
+        const scriptBase = rest.slice("scripts/".length).replace(/\.tsx?$/, "");
         const candidate = `plugins/sp/tests/${scriptBase}.test.ts`;
         if (exists(candidate)) {
           tests.add(candidate);
           matched = true;
         }
-      } else if (rest2.startsWith("tests/") && TEST_FILE_PATTERN.test(rest2)) {
-        tests.add(file2);
+      } else if (rest.startsWith("tests/") && TEST_FILE_PATTERN.test(rest)) {
+        tests.add(file);
         matched = true;
       }
       if (matched)
-        workspaces2.add("plugins/sp");
+        workspaces.add("plugins/sp");
       continue;
     }
-    const workspace = workspaceOf(file2, exists);
+    const workspace = workspaceOf(file, exists);
     if (workspace === null)
       continue;
-    workspaces2.add(workspace);
-    const rest = file2.slice(workspace.length + 1);
+    workspaces.add(workspace);
+    const rest = file.slice(workspace.length + 1);
     if (rest.startsWith("src/")) {
       const candidate = `${workspace}/tests/${rest.slice("src/".length).replace(/\.tsx?$/, (ext) => `.test${ext}`)}`;
       if (exists(candidate))
         tests.add(candidate);
     } else if (rest.startsWith("tests/") && TEST_FILE_PATTERN.test(rest)) {
-      tests.add(file2);
+      tests.add(file);
     }
   }
-  return { files, workspaces: [...workspaces2].sort(), tests: [...tests].sort() };
+  return { files, workspaces: [...workspaces].sort(), tests: [...tests].sort() };
 }
 var scopeFromFiles = lightScope;
 function shQuote(arg) {
@@ -30244,24 +30027,24 @@ function gitChangedFiles(cwd) {
     const result = runShellCommand(cmd, cwd);
     for (const line of result.output.split(`
 `)) {
-      const file2 = line.trim();
-      if (file2.length > 0 && existsSync(abs(file2)))
-        changed.add(file2);
+      const file = line.trim();
+      if (file.length > 0 && existsSync(abs(file)))
+        changed.add(file);
     }
   }
   return [...changed].sort();
 }
-function receiptRunId(env2) {
-  return (env2.runId ?? "").length > 0 ? env2.runId : `pipeline-${env2.wbs}`;
+function receiptRunId(env) {
+  return (env.runId ?? "").length > 0 ? env.runId : `pipeline-${env.wbs}`;
 }
-function runDeferredGate(env2, options = {}) {
+function runDeferredGate(env, options = {}) {
   const cwd = options.cwd;
-  const light = runLightGate(env2, options);
+  const light = runLightGate(env, options);
   const status = light.status === "PASS" ? "DEFERRED" : "FAIL";
   const runDir = join(".spur", "run");
   const abs = (p) => cwd ? join(cwd, p) : p;
   mkdirSync(abs(runDir), { recursive: true });
-  const statusFile = join(runDir, `${env2.wbs}-test-gate.status`);
+  const statusFile = join(runDir, `${env.wbs}-test-gate.status`);
   writeFileSync(abs(statusFile), `${status}
 `);
   const note = status === "DEFERRED" ? `deferred gate: light tier PASS — the integrated full gate is owed on the batch base ref (1111 R3)
@@ -30272,15 +30055,15 @@ function runDeferredGate(env2, options = {}) {
 `);
   return { status, light, statusFile };
 }
-function runLightGate(env2, options = {}) {
+function runLightGate(env, options = {}) {
   const cwd = options.cwd;
   const abs = (p) => cwd ? join(cwd, p) : p;
   const runDir = join(".spur", "run");
   mkdirSync(abs(runDir), { recursive: true });
-  const logFile = join(runDir, `${env2.wbs}-light-gate.log`);
-  const receiptFile = join(runDir, `${env2.wbs}-check-receipt.json`);
+  const logFile = join(runDir, `${env.wbs}-light-gate.log`);
+  const receiptFile = join(runDir, `${env.wbs}-check-receipt.json`);
   writeFileSync(abs(logFile), "");
-  const digest = env2.proofDigest ?? "";
+  const digest = env.proofDigest ?? "";
   const scope = lightScope(gitChangedFiles(cwd), (p) => existsSync(abs(p)));
   const plans = planLightChecks(scope, (workspace) => workspaceHasTypecheck(abs(workspace)));
   const reusable = new Map;
@@ -30299,12 +30082,12 @@ function runLightGate(env2, options = {}) {
       }
     } catch {}
   }
-  const checks4 = [];
+  const checks = [];
   let skipped = 0;
   for (const plan of plans) {
     const priorRow = reusable.get(plan.id);
     if (priorRow !== undefined) {
-      checks4.push(priorRow);
+      checks.push(priorRow);
       skipped++;
       const line = `--- light ${plan.id}: check.reused — skipped (PASS at the same input digest)
 `;
@@ -30318,31 +30101,31 @@ function runLightGate(env2, options = {}) {
     const status = result.code === 0 ? "PASS" : "FAIL";
     appendFileSync(abs(logFile), `--- light ${plan.id}: ${status} (${durationMs}ms)
 ${result.output}`);
-    checks4.push({ id: plan.id, cmd: plan.cmd, status, durationMs, logPath: logFile });
+    checks.push({ id: plan.id, cmd: plan.cmd, status, durationMs, logPath: logFile });
   }
   const receipt = buildReceipt({
-    wbs: env2.wbs,
-    runId: receiptRunId(env2),
+    wbs: env.wbs,
+    runId: receiptRunId(env),
     tier: "light",
     inputDigest: digest,
-    checks: checks4,
+    checks,
     completedAt: new Date().toISOString()
   });
   if (preserveFullReceipt) {
     appendFileSync(abs(logFile), `--- light receipt: not written — the full-tier receipt at the same input digest is preserved
 `);
-    process.stdout.write(`light gate ${receipt.status} (${scope.files.length} changed files; checks: ${checks4.length},` + ` skipped: ${skipped}; receipt: ${receiptFile} preserved (full tier); log: ${logFile})
+    process.stdout.write(`light gate ${receipt.status} (${scope.files.length} changed files; checks: ${checks.length},` + ` skipped: ${skipped}; receipt: ${receiptFile} preserved (full tier); log: ${logFile})
 `);
   } else {
     writeFileSync(abs(receiptFile), `${JSON.stringify(receipt, null, 2)}
 `);
-    process.stdout.write(`light gate ${receipt.status} (${scope.files.length} changed files; checks: ${checks4.length},` + ` skipped: ${skipped}; receipt: ${receiptFile}; log: ${logFile})
+    process.stdout.write(`light gate ${receipt.status} (${scope.files.length} changed files; checks: ${checks.length},` + ` skipped: ${skipped}; receipt: ${receiptFile}; log: ${logFile})
 `);
   }
-  return { status: receipt.status, scope, checks: checks4, logFile, receiptFile };
+  return { status: receipt.status, scope, checks, logFile, receiptFile };
 }
-function retryDelayMs(env2) {
-  const raw = Number.parseInt(env2[RETRY_DELAY_MS_ENV] ?? "", 10);
+function retryDelayMs(env) {
+  const raw = Number.parseInt(env[RETRY_DELAY_MS_ENV] ?? "", 10);
   return Number.isFinite(raw) && raw >= 0 ? raw : RETRY_DELAY_MS_DEFAULT;
 }
 function gateSleep(ms) {
@@ -30375,8 +30158,8 @@ function runShellCommand(cmd, cwd, extraEnv) {
     rmSync(dir, { recursive: true, force: true });
   }
 }
-function recomputeGateProofFingerprint(cwd, env2) {
-  const taskSpecPath = env2.taskSpecPath ?? env2.taskFile;
+function recomputeGateProofFingerprint(cwd, env) {
+  const taskSpecPath = env.taskSpecPath ?? env.taskFile;
   if (!taskSpecPath || taskSpecPath.trim() === "") {
     return { ok: false, error: "missing task path" };
   }
@@ -30390,7 +30173,7 @@ function recomputeGateProofFingerprint(cwd, env2) {
   } catch (err) {
     return { ok: false, error: `cannot read task file: ${err instanceof Error ? err.message : String(err)}` };
   }
-  const featureSpecPath = env2.featureSpecPath ?? env2.featureFile;
+  const featureSpecPath = env.featureSpecPath ?? env.featureFile;
   let featureContent;
   if (featureSpecPath && featureSpecPath.trim() !== "") {
     const fullFeaturePath = resolve(cwd, featureSpecPath);
@@ -30425,8 +30208,8 @@ function recomputeGateProofFingerprint(cwd, env2) {
       ...task !== undefined ? { task } : {},
       ...feature !== undefined ? { feature } : {}
     });
-    const hash2 = createHash2("sha256").update(canonical, "utf8").digest("hex");
-    return { ok: true, digest: `sha256:${hash2}` };
+    const hash = createHash2("sha256").update(canonical, "utf8").digest("hex");
+    return { ok: true, digest: `sha256:${hash}` };
   } catch (err) {
     return {
       ok: false,
@@ -30440,11 +30223,11 @@ function recomputeGateProofFingerprint(cwd, env2) {
     }
   }
 }
-function runQualityGate(mode, env2, options = {}) {
+function runQualityGate(mode, env, options = {}) {
   const cwd = options.cwd;
   const runDir = join(".spur", "run");
   mkdirSync(cwd ? join(cwd, runDir) : runDir, { recursive: true });
-  const rel = (name) => join(runDir, `${env2.wbs}${name}`);
+  const rel = (name) => join(runDir, `${env.wbs}${name}`);
   const logFile = rel("-test-gate.log");
   const findingsFile = rel("-test-gate.findings");
   const statusFile = rel("-test-gate.status");
@@ -30455,7 +30238,7 @@ function runQualityGate(mode, env2, options = {}) {
     writeFileSync(abs(attemptFile), `0
 `);
   const gateStartedAtMs = Date.now();
-  const commandPresent = (env2.qualityGateCmd ?? "").trim().length > 0;
+  const commandPresent = (env.qualityGateCmd ?? "").trim().length > 0;
   let gateRc = commandPresent ? 0 : 1;
   let gateAttempt = 0;
   if (!commandPresent)
@@ -30464,7 +30247,7 @@ function runQualityGate(mode, env2, options = {}) {
   const receiptPath = abs(rel("-check-receipt.json"));
   let reusePass = false;
   if (commandPresent) {
-    const decision = resolveReceiptReuse(receiptPath, env2, abs("."), options.recomputeFingerprint);
+    const decision = resolveReceiptReuse(receiptPath, env, abs("."), options.recomputeFingerprint);
     if (decision.refusal !== undefined) {
       const refuseLine = `check.reuse-refused — ${decision.refusal}
 `;
@@ -30474,7 +30257,7 @@ function runQualityGate(mode, env2, options = {}) {
     reusePass = decision.reuse;
   }
   if (reusePass) {
-    const line = `check.reused — full-tier PASS receipt at input digest ${env2.proofDigest ?? ""}; gate skipped
+    const line = `check.reused — full-tier PASS receipt at input digest ${env.proofDigest ?? ""}; gate skipped
 `;
     process.stdout.write(line);
     appendFileSync(abs(logFile), line);
@@ -30483,16 +30266,16 @@ function runQualityGate(mode, env2, options = {}) {
 `);
     return { status: "PASS", attempts: 0, logFile, findingsFile, statusFile, attemptFile };
   }
-  const noProgressSkip = commandPresent && mode === "recheck" && receiptFailsAtDigest(readReceipt(abs(rel("-check-receipt.json"))), env2.proofDigest ?? "");
+  const noProgressSkip = commandPresent && mode === "recheck" && receiptFailsAtDigest(readReceipt(abs(rel("-check-receipt.json"))), env.proofDigest ?? "");
   if (noProgressSkip) {
-    const line = `check.skipped-no-progress — full-tier FAIL receipt at input digest ${env2.proofDigest ?? ""}; recheck skipped
+    const line = `check.skipped-no-progress — full-tier FAIL receipt at input digest ${env.proofDigest ?? ""}; recheck skipped
 `;
     process.stdout.write(line);
     appendFileSync(abs(logFile), line);
     gateRc = 1;
   }
-  if (mode === "recheck" && gateRc === 0 && (env2.gateProbeCmd ?? "").length > 0) {
-    const probe = runShellCommand(env2.gateProbeCmd ?? "", cwd);
+  if (mode === "recheck" && gateRc === 0 && (env.gateProbeCmd ?? "").length > 0) {
+    const probe = runShellCommand(env.gateProbeCmd ?? "", cwd);
     writeFileSync(abs(`${logFile}.probe`), probe.output);
     gateRc = probe.code;
     appendFileSync(abs(logFile), probe.output);
@@ -30500,11 +30283,11 @@ function runQualityGate(mode, env2, options = {}) {
   }
   let gateRuntimeMs = 0;
   if (gateRc === 0) {
-    const delayMs = retryDelayMs(env2);
+    const delayMs = retryDelayMs(env);
     const gateRuntimeStartMs = Date.now();
     for (gateAttempt = 1;gateAttempt <= MAX_GATE_ATTEMPTS; gateAttempt++) {
       const attemptLogPath = `${logFile}.attempt-${gateAttempt}`;
-      const attempt = runShellCommand(env2.qualityGateCmd ?? "", cwd);
+      const attempt = runShellCommand(env.qualityGateCmd ?? "", cwd);
       writeFileSync(abs(attemptLogPath), attempt.output);
       const locked = isTransientLock(attempt.output);
       appendFileSync(abs(logFile), attempt.output);
@@ -30550,21 +30333,21 @@ function runQualityGate(mode, env2, options = {}) {
   const status = gateRc === 0 ? "PASS" : "FAIL";
   writeFileSync(abs(statusFile), `${status}
 `);
-  appendFileSync(abs(logFile), `proof-digest: ${env2.proofDigest ?? ""}
+  appendFileSync(abs(logFile), `proof-digest: ${env.proofDigest ?? ""}
 `);
   let receiptFile;
   if (!noProgressSkip && commandPresent) {
-    if ((env2.proofDigest ?? "").length > 0) {
-      receiptFile = join(runDir, `${env2.wbs}-check-receipt.json`);
+    if ((env.proofDigest ?? "").length > 0) {
+      receiptFile = join(runDir, `${env.wbs}-check-receipt.json`);
       const receipt = buildReceipt({
-        wbs: env2.wbs,
-        runId: receiptRunId(env2),
+        wbs: env.wbs,
+        runId: receiptRunId(env),
         tier: "full",
-        inputDigest: env2.proofDigest ?? "",
+        inputDigest: env.proofDigest ?? "",
         checks: [
           {
             id: "test",
-            cmd: env2.qualityGateCmd ?? "",
+            cmd: env.qualityGateCmd ?? "",
             status,
             durationMs: Date.now() - gateStartedAtMs,
             logPath: logFile
@@ -30627,34 +30410,34 @@ function main(argv, rawEnv = getEnvVars(), options = {}) {
   process.exit(main(process.argv.slice(2)));
 }
 export {
-  workspaceHasTypecheck,
-  tailLines,
-  shQuote,
-  scopeFromFiles,
-  scanCoverageShortfalls,
-  runShellCommand,
-  runQualityGate,
-  runLightGate,
-  runDeferredGate,
-  retryMessage,
-  resolveReceiptReuse,
-  recomputeGateProofFingerprint,
-  receiptFailsAtDigest,
-  readReceiptStatus,
-  planLightChecks,
-  parseCoverageThreshold,
-  main,
-  lightScope,
-  isTransientLock,
-  extractFindings,
-  buildReceipt,
-  RETRY_DELAY_MS_ENV,
-  RETRY_DELAY_MS_DEFAULT,
-  RECEIPT_SCHEMA_VERSION,
-  QUALITY_GATE_USAGE,
-  MAX_GATE_ATTEMPTS,
-  MAX_FINDINGS,
-  LOCKED_PATTERN,
+  COVERAGE_ROW_PATTERN,
   FINDINGS_PATTERN,
-  COVERAGE_ROW_PATTERN
+  LOCKED_PATTERN,
+  MAX_FINDINGS,
+  MAX_GATE_ATTEMPTS,
+  QUALITY_GATE_USAGE,
+  RECEIPT_SCHEMA_VERSION,
+  RETRY_DELAY_MS_DEFAULT,
+  RETRY_DELAY_MS_ENV,
+  buildReceipt,
+  extractFindings,
+  isTransientLock,
+  lightScope,
+  main,
+  parseCoverageThreshold,
+  planLightChecks,
+  readReceiptStatus,
+  receiptFailsAtDigest,
+  recomputeGateProofFingerprint,
+  resolveReceiptReuse,
+  retryMessage,
+  runDeferredGate,
+  runLightGate,
+  runQualityGate,
+  runShellCommand,
+  scanCoverageShortfalls,
+  scopeFromFiles,
+  shQuote,
+  tailLines,
+  workspaceHasTypecheck
 };

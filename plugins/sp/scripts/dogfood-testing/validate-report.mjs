@@ -274,9 +274,9 @@ function mainCli(argv = process.argv.slice(2)) {
   process.exit(mainCli());
 }
 export {
-  validateReport,
-  runValidateCli,
-  parseValidateCliArgs,
+  VALIDATE_CLI_USAGE,
   mainCli,
-  VALIDATE_CLI_USAGE
+  parseValidateCliArgs,
+  runValidateCli,
+  validateReport
 };
