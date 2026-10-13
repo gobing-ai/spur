@@ -4,7 +4,7 @@ name: Board deprecated icon, filter and actions
 status: done
 template: feature-impl
 created_at: 2026-10-12T05:21:53.040Z
-updated_at: "2026-10-12T20:52:27.087Z"
+updated_at: "2026-10-13T03:21:30.360Z"
 feature_id: F42
 priority: P2
 tags:
@@ -203,18 +203,18 @@ above.
 **Pipeline verify results**
 
 - Verdict: PASS (from verdict artifact)
-- Confidence: MEDIUM
+- Confidence: HIGH
 
 | Requirement | Status | Evidence |
 |-------------|--------|----------|
-| R1 | MET | `apps/web/src/modules/features/status-icons.tsx:140` — Deprecated Archive icon has muted class and preserves accessible label/class props; web focused suite 94 pass / 0 fail. Verification artifacts refreshed: `.spur/run/1181-verify-answer.txt:1-34`; `.spur/run/1181-verdict.json:1-10` (verdict header, requirements and AC rows re-derived by CLI). |
-| R2 | MET | `apps/web/tests/modules/features/components.test.tsx:1270` — New behavioral filter check selects deprecated, retains Frozen and hides Live; web focused suite 94 pass / 0 fail. |
-| R3 | MET | `apps/web/src/modules/features/feature-actions.ts:3` — All five entry statuses offer deprecate; deprecated offers undeprecate/cancel; labels, tiers and FSM targets asserted; web focused suite 94 pass / 0 fail. |
-| R4 | MET | `apps/server/tests/modules/feature/transition-gate.test.ts:266` — Real oRPC endpoint returns 409 GUARD_DENIED and preserves deprecated file; server focused suite 33 pass / 0 fail. Component click rerenders active and denial shows error; typed-client decoder tests also pass; web focused suite 94 pass / 0 fail. |
+| R1 | MET | `apps/web/src/modules/features/status-icons.tsx:140` — deprecated Archive icon, muted class, accessible label; `apps/web/tests/modules/features/components.test.tsx:175` covers all 7 statuses; web suites 94 pass / 0 fail this run. |
+| R2 | MET | `apps/web/tests/modules/features/components.test.tsx:1271` — deprecated filter lists Deprecated and shows only frozen features; web suites 94 pass. |
+| R3 | MET | `apps/web/src/modules/features/feature-actions.ts:3` — entry statuses offer deprecate; done offers Deprecate only (`apps/web/tests/modules/features/components.test.tsx:677`); deprecated offers Un-deprecate + Cancel (line 706). |
+| R4 | MET | `apps/server/tests/modules/feature/transition-gate.test.ts:266` — real oRPC path returns 409 GUARD_DENIED and preserves the file; server suites 50 pass / 0 fail; UI denial path at `apps/web/tests/modules/features/components.test.tsx:754`. |
 
 | Acceptance Criteria | Status | Evidence Type | Evidence |
 |---------------------|--------|---------------|----------|
-| Scenario: R6 — The Board shows deprecated features and offers deprecate and undeprecate actions | MET | test | `apps/web/tests/modules/features/components.test.tsx:175`, `apps/web/tests/modules/features/components.test.tsx:677`, `apps/web/tests/modules/features/components.test.tsx:706`, `apps/web/tests/modules/features/components.test.tsx:1270`, `apps/server/tests/modules/feature/transition-gate.test.ts:266` — icon, filter, actions, click rerender and guard-denial path: web suite 94 pass / 0 fail; server suite 33 pass / 0 fail. |
+| Scenario: R6 — The Board shows deprecated features and offers deprecate and undeprecate actions | MET | test | `apps/web/tests/modules/features/components.test.tsx:175`, `apps/web/tests/modules/features/components.test.tsx:677`, `apps/web/tests/modules/features/components.test.tsx:706`, `apps/web/tests/modules/features/components.test.tsx:1271`, `apps/server/tests/modules/feature/transition-gate.test.ts:266` — web 94 pass, server 50 pass this run. |
 - Coverage: N/A (verdict-based; verify pipeline does not measure code coverage)
 
 ### Review

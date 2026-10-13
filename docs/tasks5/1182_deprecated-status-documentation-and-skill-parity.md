@@ -4,7 +4,7 @@ name: Deprecated status documentation and skill parity
 status: done
 template: meta
 created_at: 2026-10-12T05:21:53.041Z
-updated_at: "2026-10-12T20:52:28.637Z"
+updated_at: "2026-10-13T03:21:39.231Z"
 feature_id: F42
 priority: P2
 tags:
@@ -201,19 +201,19 @@ $ git diff --name-only | grep -E "03_ARCHITECTURE|99_PROJECT_CONSTITUTION|dev-op
 **Pipeline verify results**
 
 - Verdict: PASS (from verdict artifact)
-- Confidence: MEDIUM
+- Confidence: HIGH
 
 | Requirement | Status | Evidence |
 |-------------|--------|----------|
-| R1 | MET | `docs/design/planning-workflow-contracts.md:31` — Vocabulary and five-entry/two-exit graph checked in owning satellites; documentation assertion sweep exit 0. Verification artifacts refreshed: `.spur/run/1182-verify-answer.txt:1-35`; `.spur/run/1182-verdict.json:1-10` (verdict header, requirements and AC rows re-derived by CLI). |
-| R2 | MET | `plugins/sp/skills/spur-cli/references/features.md:98` — All five shipped freeze messages compared verbatim; sticky sync and advance guidance present; doc parity assertions exit 0. |
-| R3 | MET | `docs/00_ADR.md:2259` — ADR-136 accepted; satellite current at docs/design/feature-deprecated-status.md:4 and shipped wording at line 23, read this run. |
-| R4 | MET | `CHANGELOG.md:5` — Release note requires project-layer graph overrides to be re-synced, read this run. |
-| R5 | MET | `config/workflows/feature-lifecycle.yaml:151` — Source and bundled graph byte-identical; cmp exit 0 this run. |
+| R1 | MET | `docs/design/planning-workflow-contracts.md:31` — states column lists deprecated with its entry edges and two exits; read this run. |
+| R2 | MET | `plugins/sp/skills/spur-cli/references/features.md:98` — link refusal; lines 106, 112, 116 and 121 carry the warning, section-write note, sticky proposal and advance refusal; each matches the source strings re-read this run and the strings emitted by the scratch E2E. |
+| R3 | MET | `docs/00_ADR.md:2259` — ADR-136 Accepted (implemented); `docs/design/feature-deprecated-status.md:4` status current; line 23 states F42 shipped. |
+| R4 | MET | `CHANGELOG.md:6` — release note: project-layer feature-lifecycle overrides must be re-synced to gain the deprecated edges. |
+| R5 | MET | `config/workflows/feature-lifecycle.yaml:151` — source and bundled graph byte-identical; cmp exit 0 this run. |
 
 | Acceptance Criteria | Status | Evidence Type | Evidence |
 |---------------------|--------|---------------|----------|
-| Scenario: R7 — Owning documents and skills describe the deprecated status and its affected surfaces | MET | command | `docs/design/feature-deprecated-status.md:43`, `plugins/sp/skills/spur-cli/references/features.md:98`, `docs/design/planning-workflow-contracts.md:31`, `CHANGELOG.md:5` — documentation presence and five quoted messages assertion sweep exit 0; source/bundle cmp exit 0; ADR accepted and satellite current read back. |
+| Scenario: R7 — Owning documents and skills describe the deprecated status and its affected surfaces | MET | command | `docs/design/feature-deprecated-status.md:43`, `plugins/sp/skills/spur-cli/references/features.md:98`, `docs/design/planning-workflow-contracts.md:31`, `CHANGELOG.md:6` — anchors re-read this run; cmp exit 0. |
 - Coverage: N/A (verdict-based; verify pipeline does not measure code coverage)
 
 ### Review

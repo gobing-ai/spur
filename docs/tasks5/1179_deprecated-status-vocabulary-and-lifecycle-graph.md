@@ -4,7 +4,7 @@ name: Deprecated status vocabulary and lifecycle graph
 status: done
 template: feature-impl
 created_at: 2026-10-12T05:21:53.033Z
-updated_at: "2026-10-12T20:52:23.910Z"
+updated_at: "2026-10-13T03:21:13.794Z"
 feature_id: F42
 priority: P1
 tags:
@@ -168,19 +168,19 @@ feature update A cancelled            → exit 0, "A: deprecated → cancelled"
 **Pipeline verify results**
 
 - Verdict: PASS (from verdict artifact)
-- Confidence: MEDIUM
+- Confidence: HIGH
 
 | Requirement | Status | Evidence |
 |-------------|--------|----------|
-| R1 | MET | `packages/domain/src/planning/schema.ts:23` — Enum, archive icon, identity alias and unknown-status validation; domain targeted suite 82 pass / 0 fail. Verification artifacts refreshed: `.spur/run/1179-verify-answer.txt:1-35`; `.spur/run/1179-verdict.json:1-10` (verdict header, requirements and AC rows re-derived by CLI). |
-| R2 | MET | `config/workflows/feature-lifecycle.yaml:151` — Five always entry edges and two exits; version 3 and deprecated non-terminal; source/bundle cmp exit 0; lifecycle-drift suite passed. |
-| R3 | MET | `packages/app/tests/services/feature-transition.test.ts:319` — All five entries append History; both exits succeed; all four forbidden exits throw and preserve bytes; 20 pass / 0 fail. Fresh source-CLI probe exit 0 confirms legal exits, four refusals and byte equality. |
-| R4 | MET | `packages/contracts/tests/contract.test.ts:450` — Deprecated round-trips through transition input/output; contracts suite 62 pass / 0 fail; real server transition tests 33 pass / 0 fail. |
+| R1 | MET | `packages/domain/src/planning/schema.ts:23` — enum ends with deprecated; archive icon at line 57, identity alias at line 182; domain suites 82 pass / 0 fail this run. |
+| R2 | MET | `config/workflows/feature-lifecycle.yaml:151` — deprecate entry edges and two exits; version 3 at line 12, state at line 67; source vs bundled cmp exit 0 this run. |
+| R3 | MET | `packages/app/tests/services/feature-transition.test.ts:319` — entry edges append History, both exits succeed, forbidden exits refused with bytes preserved; app suites 314 pass / 0 fail. fresh source-CLI scratch E2E in $TMPDIR this run: done/verifying/blocked/backlog refused exit 1, file hash unchanged; active and cancelled exits exit 0. |
+| R4 | MET | `packages/contracts/tests/contract.test.ts:450` — deprecated round-trips through the transition schemas with no contract edit; contracts suite 62 pass / 0 fail; server feature suites 50 pass / 0 fail. |
 
 | Acceptance Criteria | Status | Evidence Type | Evidence |
 |---------------------|--------|---------------|----------|
-| Scenario: R1 — Deprecated is a canonical feature status across domain and contracts | MET | test | `packages/domain/tests/planning-schema.test.ts:241` and `packages/contracts/tests/contract.test.ts:450` — domain suite 82 pass / 0 fail; contracts suite 62 pass / 0 fail; enum/schema round trip verified. |
-| Scenario: R2 — The lifecycle graph retains a deprecated feature and allows only un-deprecation or removal exits | MET | test | `packages/app/tests/services/feature-transition.test.ts:319` — transition suite 20 pass / 0 fail; source CLI round trip exit 0, four forbidden exits exit 1 with byte-unchanged files; source/bundle cmp exit 0. |
+| Scenario: R1 — Deprecated is a canonical feature status across domain and contracts | MET | test | `packages/domain/tests/planning-schema.test.ts:241` and `packages/contracts/tests/contract.test.ts:450` — domain 82 pass, contracts 62 pass this run. |
+| Scenario: R2 — The lifecycle graph retains a deprecated feature and allows only un-deprecation or removal exits | MET | test | `packages/app/tests/services/feature-transition.test.ts:319` — app suites 314 pass; fresh source-CLI scratch E2E in $TMPDIR this run confirms the four refusals (message names legal path active → cancelled) and both exits; cmp exit 0. |
 - Coverage: N/A (verdict-based; verify pipeline does not measure code coverage)
 
 ### Review
