@@ -4,7 +4,7 @@ name: Unify workflow and history measurements used by repo and skill tools
 status: done
 template: feature-impl
 created_at: 2026-10-12T03:34:10.720Z
-updated_at: "2026-10-13T02:52:27.275Z"
+updated_at: "2026-10-13T04:39:41.168Z"
 feature_id: A91
 priority: P1
 tags:
@@ -218,6 +218,25 @@ What this branch adds on the gate front instead:
 |---------------------|--------|---------------|----------|
 | AC1 — Workflow and history analytics share canonical measurement services (req: R1) | MET | test | Named fixtures exist and pass against deterministic inputs with no paid/live calls: `packages/app/tests/workflow/run-measurements.test.ts` (7 pass) and `run-summary.test.ts` (16 pass) via `(cd packages/app && bun test …)`; `packages/domain/tests/analytics/workflow-measurements.test.ts` (7 pass, in-memory SQLite); parity adapters `scripts/commands/{real-run-cost,pipeline-budgets,workflow-promotion}.test.ts` (67 pass); plugin `tests/run-summary.test.ts`, `tests/session-timeline.test.ts`, `tests/daily-summary/daily-summary.test.ts` (absence→n/a at `plugins/sp/tests/daily-summary/daily-summary.test.ts:962`, measured zero at `:973`) within 138 pass; `packages/app/tests/services/history-service.test.ts` readHistoryHealth suite (missing tables null, empty tables zero, date filters, file db); `bun test scripts/commands/bundle-plugin-lib.test.ts` (18 pass) plus `bun scripts/commands/plugin-install-smoke.ts` (PASS) prove source/installed/runtime parity. |
 - Coverage: N/A (verdict-based; verify pipeline does not measure code coverage)
+
+
+**Post-rebase re-verification (driver — 2026-10-12).** The evidence above certifies the pre-rebase tree at
+digest `sha256:1bd6e66b0146b849570f6c58812acef5180e892466114f2581202f7d640a124a`. The branch was then rebased
+onto `main`'s tip (`3e1251018`) so it can fast-forward, which took `main`'s copies of the four test files it
+had repaired independently and regenerated the plugin twins (`bun run build:scripts`, byte-idempotent). The
+R1–R4 source files rebased without conflict, so the reviewed implementation is unchanged — only the base and
+the test-harness copies moved. Re-verified afterwards: full `bun run spur-check` **PASS**, `11287 pass /
+0 fail` across 652 files, 0 coverage shortfalls, receipt `PASS` at digest
+`sha256:1179ff0e5fd976db5c812f7f28bcf899481fce49cd0f91e4b6efc4ad260a9e02`. That run also carries the one-line
+gate change below.
+
+**Gate budget (operator-approved, 2026-10-12).** `package.json`'s `test` script now passes `--timeout 20000`.
+It declared no timeout before, so every test ran on bun's 5 s default and the gate could not pass on a busy
+host: across four consecutive full runs a *different* innocent test stalled at 5003–6417 ms (CorpusMigrator
+migration case; inline-pipeline-driver non-PASS guard; `workflow run --from` AC7 and AC3; `runLightGate` 0940
+R3), each passing in isolation within seconds, with host load average 6–18 from concurrent sessions. A
+11287-test run at the 20 s floor finished 0 fail. The floor bounds the budget and changes no assertion; it is
+shared gate policy, so task 1150's owners should ratify or fold it into their calibration.
 
 ### Review
 
