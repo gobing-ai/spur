@@ -224,11 +224,12 @@ export function formatCount(value: number): string {
     return value.toLocaleString('en-US');
 }
 
-/** `1–50 of 4,028,297`, clamped to a zero-row table. */
+/** `1–50 of 4,028,297`, clamped to a zero-row table and to the last page: a stale `?page=` renders before the snap-back. */
 export function rangeLabel(page: number, pageSize: number, total: number): string {
     if (total === 0) return `0 of 0`;
-    const start = (page - 1) * pageSize + 1;
-    const end = Math.min(page * pageSize, total);
+    const shown = Math.min(page, Math.ceil(total / pageSize));
+    const start = (shown - 1) * pageSize + 1;
+    const end = Math.min(shown * pageSize, total);
     return `${formatCount(start)}–${formatCount(end)} of ${formatCount(total)}`;
 }
 
@@ -318,7 +319,8 @@ function SchemaStrip({ schema }: { schema: DatabaseTableResponse }) {
             >
                 <span aria-hidden="true">{open ? '▾' : '▸'}</span>
                 <span>
-                    Schema · {schema.columns.length} columns · {formatCount(schema.rowCount)} rows
+                    <span className="font-mono">{schema.name}</span> · {schema.columns.length} columns ·{' '}
+                    {formatCount(schema.rowCount)} rows
                 </span>
             </button>
             {open && (

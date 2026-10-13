@@ -26,7 +26,7 @@ import type { DatabaseCell, DatabaseColumn } from '@gobing-ai/spur-contracts';
 import { act, cleanup, fireEvent, render, waitFor } from '@testing-library/react';
 import { MemoryRouter } from 'react-router';
 import { resetFetchForTesting, setFetchForTesting } from '../../../src/lib/rpc-client';
-import DatabaseView from '../../../src/modules/projects/DatabaseView';
+import DatabaseView, { rangeLabel } from '../../../src/modules/projects/DatabaseView';
 import { registerHappyDom, teardownHappyDom } from '../../happy-dom';
 
 afterEach(() => {
@@ -661,5 +661,30 @@ describe('DatabaseView truncated-cell affordance (AC6)', () => {
 
         // An intact cell keeps the plain value: the marker must not be unconditional.
         expect(cells[1]?.closest('[data-tip]')?.getAttribute('data-tip')).toBe('short');
+    });
+});
+
+// ── 1184 review findings #2 and #3 ───────────────────────────────────────────
+// #2: a deep link or reload showed schema and rows with no visible table name.
+// #3: a hand-typed ?page=99 rendered `4,901–120 of 120` until the snap-back ran.
+describe('DatabaseView names the browsed table and never shows an impossible range', () => {
+    test('the schema strip header names the selected table', async () => {
+        setFetchForTesting(
+            databaseRouter({
+                tables: ['history_message', 'tasks'],
+                schema: (name) => jsonResponse({ name, columns: COLUMN_DEFS, rowCount: 1 }),
+                rows: (_name, params) => jsonResponse(rowsPayload(params, [], 1)),
+            }),
+        );
+        const view = renderView('/board/projects/database?table=history_message');
+        await waitFor(() => expect(view.container.querySelector('[data-database-schema-toggle]')).not.toBeNull());
+        const header = view.container.querySelector('[data-database-schema-toggle]');
+        expect(header?.textContent).toContain('history_message');
+    });
+
+    test('a page past the last one is labelled as the last page', () => {
+        expect(rangeLabel(99, 50, 120)).toBe('101–120 of 120');
+        expect(rangeLabel(2, 50, 120)).toBe('51–100 of 120');
+        expect(rangeLabel(1, 50, 0)).toBe('0 of 0');
     });
 });
