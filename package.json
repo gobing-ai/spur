@@ -127,7 +127,7 @@
         "@gobing-ai/ts-utils": "catalog:"
     },
     "devDependencies": {
-        "@biomejs/biome": "2.4.16",
+        "@biomejs/biome": "2.5.15",
         "@earendil-works/pi-coding-agent": "0.87.1",
         "@gobing-ai/spur": "workspace:*",
         "@gobing-ai/superskill": "catalog:",
@@ -141,7 +141,7 @@
         "@opentelemetry/semantic-conventions": "1.41.1",
         "@types/bun": "catalog:",
         "drizzle-zod": "0.8.3",
-        "lefthook": "1.13.0",
+        "lefthook": "2.2.2",
         "typescript": "catalog:",
         "yaml": "2.9.0",
         "zod": "4.4.3"

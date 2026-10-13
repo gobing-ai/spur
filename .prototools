@@ -1,8 +1,8 @@
 bun = "1.4.3"
-node = "24.11.1"
-biome = "2.4.16"
-cog = "6.5.0"
-lefthook = "2.1.10"
+node = "24.21.0"
+biome = "2.5.15"
+cog = "7.0.0"
+lefthook = "2.2.2"
 act = "0.2.89"
 actionlint = "1.7.12"
 

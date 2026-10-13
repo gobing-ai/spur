@@ -203,7 +203,7 @@ detail.
 | --------------------------------------- | ---------------------------------------------------------------------------- |
 | Runtime / package manager / test runner | [Bun](https://bun.sh/) `1.4.3` (prefer `bun:*` over `node:*`)               |
 | Language                                | TypeScript (strict)                                                          |
-| Lint + format                           | [Biome](https://biomejs.dev/) `2.4.16` (no ESLint, no Prettier)              |
+| Lint + format                           | [Biome](https://biomejs.dev/) `2.5.15` (no ESLint, no Prettier)              |
 | Type seam                               | [oRPC](https://orpc.unnoq.com/) `1.14.x` (contract-first, OpenAPI generated) |
 | HTTP                                    | [Hono](https://hono.dev/) on `Bun.serve` / Cloudflare Workers                |
 | Web                                     | [Astro](https://astro.build/) + Cloudflare adapter                           |

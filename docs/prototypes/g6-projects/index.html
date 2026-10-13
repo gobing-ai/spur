@@ -90,6 +90,7 @@
     z-index:15;font-size:12px}
   .fixture-bar .eyebrow{display:block;margin:8px 0 4px}
   .fixture-bar > .eyebrow:first-child{margin-top:0}
+  /* biome-ignore lint/style/noDescendingSpecificity: class ordering is cosmetic here */
   .fixture-bar .btn{display:block;width:100%;text-align:left;margin-bottom:4px;padding:4px 8px;font-size:12px}
   .fixture-bar .btn[aria-pressed="true"]{background:var(--primary);border-color:var(--primary);color:var(--on-primary)}
   .fixture-note{color:var(--ink-tertiary);font-size:10.5px;margin:6px 0 0}
@@ -147,11 +148,11 @@
   <div class="appbar-note subtle" id="hdr-storage-note"></div>
 </header>
 
-<nav class="tabs" id="g6-tabs" role="tablist" aria-label="Projects views">
+<div class="tabs" id="g6-tabs" role="tablist" aria-label="Projects views">
   <button class="g6-tab" id="tab-conversation" type="button" role="tab" aria-selected="true" aria-controls="view-conversation" data-g6-view="conversation">Conversation</button>
   <button class="g6-tab" id="tab-agents" type="button" role="tab" aria-selected="false" aria-controls="view-agents" data-g6-view="agents" tabindex="-1">Agents<span id="agents-count" class="count"></span></button>
   <button class="g6-tab" id="tab-work" type="button" role="tab" aria-selected="false" aria-controls="view-work" data-g6-view="work" tabindex="-1">Work</button>
-</nav>
+</div>
 
 <div class="composer">
   <div class="composer-inner">
@@ -174,7 +175,7 @@
         <h2 style="margin-bottom:6px">Conversation</h2>
         <p class="subtle" id="convo-sub" style="font-size:13px;margin:0 0 var(--s-sm)"></p>
         <div id="state-cards"></div>
-        <div id="conversation" aria-label="Conversation history (mock) — one conversation per project"></div>
+        <section id="conversation" aria-label="Conversation history (mock) — one conversation per project"></section>
       </div>
       <div>
         <div class="card">
@@ -192,7 +193,7 @@
     <div class="roster" id="agent-roster"></div>
     <div id="agent-detail" hidden>
       <div style="display:flex;justify-content:space-between;align-items:center">
-        <h3 id="agent-detail-title"></h3>
+        <h3 id="agent-detail-title">Agent detail</h3>
         <button class="btn" id="agent-detail-close" type="button">Close (Esc)</button>
       </div>
       <p class="subtle" id="agent-detail-sub" style="font-size:12.5px;margin:4px 0 8px"></p>

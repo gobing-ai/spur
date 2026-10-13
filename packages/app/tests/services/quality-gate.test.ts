@@ -458,29 +458,29 @@ describe('PASS receipt reuse (1016 R1)', () => {
         return path;
     }
 
-    test.each([
-        'run',
-        'recheck',
-    ] as const)('%s: a full-tier PASS receipt at the current digest skips the probe and the gate', (mode) => {
-        const { dir, cleanup } = scratch('spur-qg-reuse-');
-        try {
-            const receiptPath = writeReceipt(dir, fullPassReceipt());
-            const receiptBefore = readFileSync(receiptPath, 'utf8');
-            const sentinel = join(dir, 'sentinel');
-            const script = executable(dir, 'gate.sh', `touch "${sentinel}"`);
-            const result = gate(mode, dir, script, { proofDigest: 'digest-1' });
-            // The gate command never ran: the sentinel file it writes is absent.
-            expect(existsSync(sentinel)).toBe(false);
-            expect(result.status).toBe('PASS');
-            expect(readFileSync(join(dir, '.spur/run/0823-test-gate.status'), 'utf8')).toBe('PASS\n');
-            const log = readFileSync(join(dir, '.spur/run/0823-test-gate.log'), 'utf8');
-            expect(log).toContain('check.reused — full-tier PASS receipt at input digest digest-1; gate skipped');
-            // Reuse leaves the receipt untouched: the next re-entry can reuse it again.
-            expect(readFileSync(receiptPath, 'utf8')).toBe(receiptBefore);
-        } finally {
-            cleanup();
-        }
-    });
+    test.each(['run', 'recheck'] as const)(
+        '%s: a full-tier PASS receipt at the current digest skips the probe and the gate',
+        (mode) => {
+            const { dir, cleanup } = scratch('spur-qg-reuse-');
+            try {
+                const receiptPath = writeReceipt(dir, fullPassReceipt());
+                const receiptBefore = readFileSync(receiptPath, 'utf8');
+                const sentinel = join(dir, 'sentinel');
+                const script = executable(dir, 'gate.sh', `touch "${sentinel}"`);
+                const result = gate(mode, dir, script, { proofDigest: 'digest-1' });
+                // The gate command never ran: the sentinel file it writes is absent.
+                expect(existsSync(sentinel)).toBe(false);
+                expect(result.status).toBe('PASS');
+                expect(readFileSync(join(dir, '.spur/run/0823-test-gate.status'), 'utf8')).toBe('PASS\n');
+                const log = readFileSync(join(dir, '.spur/run/0823-test-gate.log'), 'utf8');
+                expect(log).toContain('check.reused — full-tier PASS receipt at input digest digest-1; gate skipped');
+                // Reuse leaves the receipt untouched: the next re-entry can reuse it again.
+                expect(readFileSync(receiptPath, 'utf8')).toBe(receiptBefore);
+            } finally {
+                cleanup();
+            }
+        },
+    );
 
     test('any other receipt state still runs the gate (1016 R2)', () => {
         const scenarios: Array<{

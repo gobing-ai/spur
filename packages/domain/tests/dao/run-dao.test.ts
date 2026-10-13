@@ -150,27 +150,25 @@ describe('RunDao', () => {
             );
         }
 
-        test.each([
-            'running',
-            'pending',
-            'paused',
-            'interrupted',
-        ])('finalizes %s with terminal_reason cancelled', async (status) => {
-            const adapter = await setup();
-            const dao = new RunDao(adapter);
-            await insertRun(adapter, `run_${status}`, status);
+        test.each(['running', 'pending', 'paused', 'interrupted'])(
+            'finalizes %s with terminal_reason cancelled',
+            async (status) => {
+                const adapter = await setup();
+                const dao = new RunDao(adapter);
+                await insertRun(adapter, `run_${status}`, status);
 
-            await dao.cancelRun(`run_${status}`);
+                await dao.cancelRun(`run_${status}`);
 
-            const row = await dao.traceRowById(`run_${status}`);
-            expect(row?.status).toBe('failed');
-            expect(row?.terminal_reason).toBe('cancelled');
-            expect(row?.completed_at).not.toBeNull();
-            expect(JSON.parse(row?.metadata_json ?? '{}').staleReason).toBe(
-                'cancelled by operator (spur workflow cancel)',
-            );
-            adapter.close();
-        });
+                const row = await dao.traceRowById(`run_${status}`);
+                expect(row?.status).toBe('failed');
+                expect(row?.terminal_reason).toBe('cancelled');
+                expect(row?.completed_at).not.toBeNull();
+                expect(JSON.parse(row?.metadata_json ?? '{}').staleReason).toBe(
+                    'cancelled by operator (spur workflow cancel)',
+                );
+                adapter.close();
+            },
+        );
 
         test('preserves pre-existing metadata keys', async () => {
             const adapter = await setup();

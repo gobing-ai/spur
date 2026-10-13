@@ -60,24 +60,23 @@ describe('bundleWeb', () => {
         if (target) await rm(target, { recursive: true, force: true });
     });
 
-    test.each([
-        'same',
-        'ancestor',
-        'descendant',
-        'symlink',
-    ])('rejects %s source/destination overlap without deleting assets', async (kind) => {
-        target = await mkdtemp(join(tmpdir(), 'spur-web-overlap-'));
-        source = join(target, 'source');
-        await mkdir(source);
-        await writeBoardFixture(source);
-        let destination = kind === 'same' ? source : kind === 'ancestor' ? target : join(source, 'nested', 'output');
-        if (kind === 'symlink') {
-            await symlink(target, join(target, 'alias'));
-            destination = join(target, 'alias', 'source', 'nested', 'output');
-        }
-        await expect(bundleWeb(destination, source)).rejects.toThrow(/overlap/);
-        expect(await Bun.file(join(source, 'index.html')).exists()).toBe(true);
-    });
+    test.each(['same', 'ancestor', 'descendant', 'symlink'])(
+        'rejects %s source/destination overlap without deleting assets',
+        async (kind) => {
+            target = await mkdtemp(join(tmpdir(), 'spur-web-overlap-'));
+            source = join(target, 'source');
+            await mkdir(source);
+            await writeBoardFixture(source);
+            let destination =
+                kind === 'same' ? source : kind === 'ancestor' ? target : join(source, 'nested', 'output');
+            if (kind === 'symlink') {
+                await symlink(target, join(target, 'alias'));
+                destination = join(target, 'alias', 'source', 'nested', 'output');
+            }
+            await expect(bundleWeb(destination, source)).rejects.toThrow(/overlap/);
+            expect(await Bun.file(join(source, 'index.html')).exists()).toBe(true);
+        },
+    );
 
     test.each([
         'catalogVersion',

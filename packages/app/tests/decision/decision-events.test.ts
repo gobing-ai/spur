@@ -400,7 +400,7 @@ describe('DecisionService decision events (task 1095 R6/R7)', () => {
             { instructions: 'evidence text' },
             { bus: bus as never, context: { caller: 'cli' } },
         );
-        const digest = (events[0]?.payload as Record<string, unknown>).evidenceDigest;
+        const digest = (events[0]?.payload as Record<string, unknown> | undefined)?.evidenceDigest;
         expect(digest).toBe(`sha256:${createHash('sha256').update('evidence text', 'utf8').digest('hex')}`);
 
         const second = capture();
@@ -412,7 +412,7 @@ describe('DecisionService decision events (task 1095 R6/R7)', () => {
                 context: { caller: 'cli' },
             },
         );
-        const digest2 = (second.events[0]?.payload as Record<string, unknown>).evidenceDigest;
+        const digest2 = (second.events[0]?.payload as Record<string, unknown> | undefined)?.evidenceDigest;
         expect(digest2).toBe(`sha256:${createHash('sha256').update('raw evidence', 'utf8').digest('hex')}`);
     });
 });
