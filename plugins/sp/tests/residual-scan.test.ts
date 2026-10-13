@@ -475,6 +475,25 @@ describe('CLI modes', () => {
         }
     });
 
+    test('report mode is a no-op without a verdict artifact (gate-exhaustion path)', () => {
+        // Task 1178 run 1 (2026-10-12): a run that exhausts the fixed budget at the quality gate
+        // never reaches `verify`, so `.spur/run/<wbs>-verdict.json` does not exist. The failed
+        // state's report action then threw ENOENT and produced nothing; it must exit 0 instead.
+        const { dir, cleanup } = scratch('rs-report-noverdict-');
+        try {
+            const stub = join(dir, 'stub-spur.sh');
+            writeFileSync(
+                stub,
+                `#!/bin/sh\ncase "$2" in\n  show) echo '{"content":"","frontmatter":{"feature_id":"F96"}}' ;;\nesac\n`,
+            );
+            chmodSync(stub, 0o755);
+            expect(main(['report', '0949', '--spur-bin', stub, '--root', dir], {}, SILENT)).toBe(0);
+            expect(existsSync(join(dir, '.spur', 'run', '0949-residual-report.md'))).toBe(false);
+        } finally {
+            cleanup();
+        }
+    });
+
     test('fold via main rewrites verdict + findings files', () => {
         const { dir, cleanup } = scratch('rs-fold-');
         try {

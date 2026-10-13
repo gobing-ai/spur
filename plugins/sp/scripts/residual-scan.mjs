@@ -578,6 +578,12 @@ function settleMode(opts, env, io) {
 }
 function reportMode(opts, env, io) {
   const runDir = join2(opts.root, ".spur", "run");
+  const verdictPath = recordedVerdictPath(runDir, opts.wbs, fs);
+  if (!fs.existsSync(verdictPath)) {
+    io.err(`residual-report: no verdict at ${verdictPath}; nothing to report for ${opts.wbs}
+`);
+    return 0;
+  }
   const sweep = loadVerdict(runDir, opts.wbs).checks.find((c) => c.name === "residual-sweep");
   if (sweep === undefined || sweep.status !== "fail")
     return 0;

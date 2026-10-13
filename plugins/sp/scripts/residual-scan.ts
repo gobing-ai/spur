@@ -206,6 +206,15 @@ function settleMode(opts: ParsedArgs, env: ScanEnv, io: ScanIo): number {
 }
 function reportMode(opts: ParsedArgs, env: ScanEnv, io: ScanIo): number {
     const runDir = join(opts.root, '.spur', 'run');
+    // A run that exhausted its fix budget never reaches `verify`, so it has no verdict artifact —
+    // parsing one unconditionally threw ENOENT out of the failed state and lost the recovery
+    // report the state exists to produce (task 1178 run 1, 2026-10-12). Absent evidence is a
+    // no-op, not an abort.
+    const verdictPath = core.recordedVerdictPath(runDir, opts.wbs, fs);
+    if (!fs.existsSync(verdictPath)) {
+        io.err(`residual-report: no verdict at ${verdictPath}; nothing to report for ${opts.wbs}\n`);
+        return 0;
+    }
     const sweep = loadVerdict(runDir, opts.wbs).checks.find((c) => c.name === 'residual-sweep');
     if (sweep === undefined || sweep.status !== 'fail') return 0;
     const { content } = loadTask(env, opts.spurBin, opts.wbs, opts.root);
