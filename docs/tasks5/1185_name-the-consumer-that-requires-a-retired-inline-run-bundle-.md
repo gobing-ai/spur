@@ -1,16 +1,18 @@
 ---
 schema_version: 1
 name: Name the consumer that requires a retired inline-run bundle export instead of a bare guard denial
-status: testing
+status: done
 template: issue
 created_at: 2026-10-12T21:12:25.453Z
-updated_at: "2026-10-13T02:11:30.161Z"
+updated_at: "2026-10-13T03:01:54.975Z"
 feature_id: A33
 
 ac_altitude: task-local
 ac_numbering: task-local
 priority: P2
 estimate_hours: 4
+done_forced: "false"
+done_reason: unforced close; PASS artifact at .spur/memory/evidence/1185-verdict.json
 ---
 
 ## 1185. Name the consumer that requires a retired inline-run bundle export instead of a bare guard denial
@@ -293,7 +295,7 @@ Boundary respected: no re-export of `openInlineRunProjectDb`/`ArtifactDao`, no m
 
 **Pipeline verify results**
 
-- Verdict: PARTIAL (from verdict artifact)
+- Verdict: PASS (from verdict artifact)
 - Confidence: MEDIUM
 
 | Requirement | Status | Evidence |
@@ -355,4 +357,7 @@ R1 traceability is exact only for `.spur/`-rooted consumers; a multi-script over
 
 - 2026-10-12T23:03:49.659Z todo → wip (system)
 - 2026-10-13T02:10:46.295Z wip → testing (system)
+- 2026-10-13T02:18:43.847Z testing → wip (system)
+- 2026-10-13T03:01:31.251Z wip → testing (system)
+- 2026-10-13T03:01:54.957Z testing → done (system)
 
