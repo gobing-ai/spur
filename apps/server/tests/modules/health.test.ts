@@ -54,7 +54,6 @@ describe('healthModule', () => {
         setPortProbeForTests(undefined);
         ProjectRegistry.prototype.allocatePort = origAllocate;
         removeEnvVar('SPUR_PROJECTS_FILE');
-        removeEnvVar('SPUR_SKIP_GLOBAL_CONFIG');
         if (existsSync(tempDir)) {
             rmSync(tempDir, { recursive: true, force: true });
         }

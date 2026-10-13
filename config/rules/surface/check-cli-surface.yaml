@@ -9,9 +9,7 @@ include:
   - "apps/cli/src/commands/*.ts"
 
 exclude:
-  # Not command files: stubs.ts is an empty module shim (consistency.test.ts
-  # excludes it too); shared-options.ts is the option registry.
-  - "apps/cli/src/commands/stubs.ts"
+  # Not a command file: shared-options.ts is the option registry.
   - "apps/cli/src/commands/shared-options.ts"
 
 rules:

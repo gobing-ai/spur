@@ -731,8 +731,11 @@ execution time to stderr (e.g. `✓ passed - 0.12s`). Rule roots resolve highest
 `SPUR_RULES_PATH`, local `.spur/rules`, the user-global `~/.config/spur/rules`, then the generic demo
 rules bundled with `ts-rule-engine` as a fallback so a preset's categories resolve before `spur init`
 seeds the global layer. A run that resolves **zero rules** exits 1. Setting `SPUR_GLOBAL_RULES_DIR`
-overrides the global root and suppresses the bundled fallback for a hermetic run. Backed by
-`ts-rule-engine`.
+overrides the global root and suppresses the bundled fallback for a hermetic run. With
+`SPUR_SKIP_GLOBAL_CONFIG=true` and no `SPUR_GLOBAL_RULES_DIR`, the user-global `~/.config/spur/rules`
+layer is skipped entirely (the same switch that skips `~/.config/spur/config.yaml`), so a stale operator
+copy cannot shadow the bundled presets; the bundled fallback still applies. An explicit
+`SPUR_GLOBAL_RULES_DIR` always wins over the skip. Backed by `ts-rule-engine`.
 
 <a id="spur-rule-validate---file-path--preset-namepath---kind-type---no-schema---json--spur-rule-list---preset-name---json--spur-rule-trace-run-id---preset-name---status-s---since-date---last-n---json"></a>
 
