@@ -1,10 +1,9 @@
 /** Event payload retention policy before persistence or streaming. */
-import {
-    projectSystemEventData,
-    type SystemEventCorrelationContext,
-    type SystemEventProducerPackage,
-    type SystemEventRemediationKind,
-    type SystemEventSeverity,
+import type {
+    SystemEventCorrelationContext,
+    SystemEventProducerPackage,
+    SystemEventRemediationKind,
+    SystemEventSeverity,
 } from './system-event-envelope';
 
 /** Persistence/streaming policy applied to one cataloged system-event payload. */
@@ -1886,39 +1885,3 @@ export const SYSTEM_EVENT_CATALOG_METADATA: SystemEventCatalogMetadata[] = SYSTE
 export function systemEventCatalogEntry(name: string): SystemEventCatalogEntry | undefined {
     return SYSTEM_EVENT_CATALOG.find((entry) => entry.name === name);
 }
-
-/** Apply the catalog payload policy before persistence or streaming.
- *
- * Preserves the 0365 observability envelope's correlation and metadata fields
- * (schemaVersion, eventId, sequence, runId, executionId, actionId, node, kind,
- * metadata, durationMs, usage, outcome, reason) under every payload policy (R3).
- * Redaction runs strictly ahead of persistence: the 0365 SECRET_PATTERN is
- * applied to every string value as defense-in-depth, and high-volume text fields
- * are bounded so truncation can never expose redacted material (R4). */
-export function normalizeSystemEventPayload(
-    entry: SystemEventCatalogEntry,
-    eventPayload: unknown,
-    secretValues: readonly string[] = [],
-): Record<string, unknown> | null {
-    return projectSystemEventData(entry, eventPayload, secretValues);
-}
-
-export type {
-    SystemEventAction,
-    SystemEventActionKind,
-    SystemEventCorrelationContext,
-    SystemEventEnvelopeV2,
-    SystemEventProducerPackage,
-    SystemEventProjectContext,
-    SystemEventRemediationKind,
-    SystemEventSeverity,
-    SystemEventTablePresentationInput,
-} from './system-event-envelope';
-export {
-    buildSystemEventEnvelope,
-    isSystemEventEnvelopeV2,
-    projectStoredSystemEventEnvelope,
-    projectTablePresentation,
-    SYSTEM_EVENT_ENVELOPE_SCHEMA_VERSION,
-    systemEventProjectContext,
-} from './system-event-envelope';

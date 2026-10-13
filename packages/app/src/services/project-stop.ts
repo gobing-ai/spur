@@ -6,7 +6,7 @@ import {
     normalizeProjectPath,
     sendSignalToPid,
     type TerminatedProcessInfo,
-} from './project-registry';
+} from './project-process';
 
 /**
  * Verified ownership-based stop for a registered project's listener (1156).

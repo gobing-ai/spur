@@ -1,7 +1,7 @@
 import { join } from 'node:path';
 import type { ActionResult, ActionRunContext, ActionRunner } from '@gobing-ai/ts-dual-workflow-engine';
 import { type FileSystem, NodeProcessExecutor, type ProcessExecutor } from '@gobing-ai/ts-runtime';
-import { appendInlineRunLogLine } from '../../services/inline-run-setup';
+import { appendInlineRunLogLine } from '../../services/inline-run-log';
 import type { WorkflowObservabilityBus, WorkflowTripwireFiredEvent } from '../observability';
 import {
     computeProofInputFingerprint,

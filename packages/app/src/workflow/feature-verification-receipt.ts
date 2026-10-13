@@ -43,7 +43,7 @@
 
 import { basename, dirname, join } from 'node:path';
 import type { FileSystem } from '@gobing-ai/ts-runtime';
-import { ensureDurablePlaneIgnored } from '../services/run-storage';
+import { ensureDurablePlaneIgnored } from '../services/durable-plane-ignore';
 import { resolveDurableArtifactPath } from './actions/run-path';
 import { ProofCaptureError, ProofInputFingerprint } from './proof-input-fingerprint';
 

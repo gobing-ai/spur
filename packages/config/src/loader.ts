@@ -15,7 +15,6 @@
  *   core stays CF-safe — they use `node:fs`).
  */
 import { existsSync, statSync } from 'node:fs';
-import { homedir } from 'node:os';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import type { FileSystem } from '@gobing-ai/ts-runtime';
@@ -23,6 +22,13 @@ import { createNodeFileSystem, loadStructuredConfig, validateDeclaredJsonSchema 
 import { getEnvVar } from '@gobing-ai/ts-utils';
 import { parse as parseYaml } from 'yaml';
 import { ZodError } from 'zod';
+import {
+    type ResolvedConfigLayers,
+    resolveConfigLayers,
+    SPUR_CONFIG_DIR,
+    SPUR_CONFIG_FILE,
+    spurConfigCache,
+} from './config-layers';
 import {
     DEFAULT_FEATURES_DIR,
     DEFAULT_TASKS_DIR,
@@ -96,17 +102,10 @@ export interface LoadSpurConfigOptions {
     schemaManifestSpecifier?: string;
 }
 
-/** Directory layout constant — the `.spur/` config directory. */
-const SPUR_CONFIG_DIR = '.spur';
-/** Project config file name. */
-const SPUR_CONFIG_FILE = 'config.yaml';
-/** Global user config file path (relative to home). */
-const GLOBAL_CONFIG_FILE = join(homedir(), '.config', 'spur', 'config.yaml');
 const LOADER_DIR = dirname(fileURLToPath(import.meta.url));
 
 let nextEmbeddedSchemasId = 1;
 const embeddedSchemasIds = new WeakMap<ReadonlyMap<string, string>, number>();
-const spurConfigCache = new Map<string, Promise<SpurConfig>>();
 const planningFoldersCache = new WeakMap<FileSystem, Promise<PlanningFolders>>();
 
 function embeddedSchemasId(embeddedSchemas: ReadonlyMap<string, string> | undefined): string {
@@ -145,51 +144,6 @@ function resolveSchemaSpecifier(specifier: string, manifestSpecifier: string): s
         }
         return specifier;
     }
-}
-
-/**
- * Resolve both config layers following the layered contract (ADR-015 ladder, task 0640).
- *
- * - Project layer: `<cwd>/.spur/config.yaml`.
- * - Global layer: `~/.config/spur/config.yaml` (skipped when `SPUR_SKIP_GLOBAL_CONFIG=true`,
- *   which under layering means *project layer only*).
- * - Project layer: additionally suppressed when `SPUR_SKIP_PROJECT_CONFIG=true` and the
- *   caller did not pass `cwd` (task 0817) — an explicit `cwd` always wins.
- *
- * Both keys are present when both files exist; a missing file leaves the key `undefined`.
- * When neither exists (pre-`spur init`), both are `undefined`.
- */
-export interface ResolvedConfigLayers {
-    /** `~/.config/spur/config.yaml` when it exists (and the skip env is unset). */
-    global?: string;
-    /** `<cwd>/.spur/config.yaml` when it exists (and the project-skip env did not fire). */
-    project?: string;
-}
-
-/**
- * Resolve both config layer paths for a working directory: the project layer
- * (`<cwd>/.spur/config.yaml`) and the global layer (`~/.config/spur/config.yaml`).
- * Each layer is included only when its file exists; `SPUR_SKIP_GLOBAL_CONFIG=true`
- * suppresses the global layer (tests and hermetic environments).
- *
- * `SPUR_SKIP_PROJECT_CONFIG=true` suppresses the project layer, but only when the
- * caller did not pin `cwd` (task 0817): the precedence is explicit `cwd` > env skip
- * > `process.cwd()`. An explicitly-passed `cwd` names the project the caller asked
- * for and is never skipped; an unpinned call would otherwise bind the loader to
- * whatever `process.cwd()` happens to be — including a test harness's repository
- * root and its live `.spur/config.yaml`.
- */
-export function resolveConfigLayers(cwd?: string): ResolvedConfigLayers {
-    const layers: ResolvedConfigLayers = {};
-    const skipProject = cwd === undefined && getEnvVar('SPUR_SKIP_PROJECT_CONFIG') === 'true';
-    if (!skipProject) {
-        const projectConfig = join(cwd ?? process.cwd(), SPUR_CONFIG_DIR, SPUR_CONFIG_FILE);
-        if (existsSync(projectConfig)) layers.project = projectConfig;
-    }
-    if (getEnvVar('SPUR_SKIP_GLOBAL_CONFIG') !== 'true' && existsSync(GLOBAL_CONFIG_FILE)) {
-        layers.global = GLOBAL_CONFIG_FILE;
-    }
-    return layers;
 }
 
 /**
@@ -316,9 +270,8 @@ export async function resolveDecideDecisionMakerEnabled(cwd?: string, opts?: Loa
 }
 
 // Task 0797 / ADR-111: filesystem updater rides the node-only `./loader` subpath.
-// (Re-exported here because the package `exports` map points `./loader` at this file;
-// the import cycle executor-update → loader is safe — the shared symbols are used
-// lazily at call time, never at module init.)
+// (Re-exported here because the package `exports` map points `./loader` at this file.
+// executor-update depends only on the `config-layers` leaf, so there is no cycle.)
 export {
     declaresExecutor,
     type ExecutorConfigLayer,
@@ -330,20 +283,6 @@ export {
     type SetExecutorAvailabilityResult,
     setExecutorAvailability,
 } from './executor-update';
-
-/** Drop cached loader entries so the next {@link loadSpurConfig} re-reads from disk. */
-export function invalidateSpurConfig(configPath?: string): void {
-    if (configPath === undefined) {
-        spurConfigCache.clear();
-        return;
-    }
-    for (const key of spurConfigCache.keys()) {
-        // The path may sit at the key head (primary layer) or in the global slot.
-        if (key.startsWith(`${configPath}\0`) || key.includes(`\0${configPath}\0`)) {
-            spurConfigCache.delete(key);
-        }
-    }
-}
 
 // ---- Config-shape guards (0857 R2 / 0858 R2) ----
 
@@ -845,3 +784,5 @@ async function resolvePlanningFoldersUncached(fs: FileSystem): Promise<PlanningF
         return defaultPlanningFolders();
     }
 }
+
+export { invalidateSpurConfig, type ResolvedConfigLayers, resolveConfigLayers } from './config-layers';

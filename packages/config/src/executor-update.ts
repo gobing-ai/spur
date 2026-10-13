@@ -11,7 +11,7 @@
 import { chmod, lstat, open, readFile, rename, stat, unlink, writeFile } from 'node:fs/promises';
 import { basename, dirname, join } from 'node:path';
 import { isAlias, isMap, isScalar, isSeq, parseDocument, type YAMLMap } from 'yaml';
-import { invalidateSpurConfig, resolveConfigLayers } from './loader';
+import { invalidateSpurConfig, resolveConfigLayers } from './config-layers';
 import { isRfc3339Timestamp } from './rfc3339';
 
 /** Stable rejection codes for {@link ExecutorUpdateError}; callers branch on these, never on prose. */

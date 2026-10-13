@@ -24,7 +24,8 @@ import {
     UNIVERSAL_SECTIONS,
 } from '@gobing-ai/spur-domain';
 
-import { type CheckFindings, FINDING_CODES, type MatrixEntry } from './planning-check-base';
+import { FINDING_CODES } from './finding-codes';
+import type { CheckFindings, MatrixEntry } from './planning-check-base';
 
 /** One applied repair, rendered by the CLI in the per-file report. */
 export interface StructuralRepair {

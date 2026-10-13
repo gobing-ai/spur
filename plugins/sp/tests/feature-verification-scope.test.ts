@@ -16,6 +16,7 @@ import { chmodSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync 
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { getEnvVar, getEnvVars } from '@gobing-ai/ts-utils';
+import ts from 'typescript';
 import { parse as parseYaml } from 'yaml';
 
 const REPO_ROOT = join(import.meta.dir, '../../..');
@@ -71,14 +72,42 @@ describe('feature-verification scope split (task 0872)', () => {
     });
 
     test('1154 R3: default test scripts do not pass --parallel on Bun 1.3.14', () => {
-        // Upgrade bar: Bun 1.3.14 does not honor --no-isolate under --parallel, causing workers
-        // to wedge under full-suite concurrency. An upgrade requires a Bun version whose help
-        // lists --no-isolate and whose workers are not started with --isolate, plus a quiet-machine
-        // run that finishes faster than serial baseline, maintains the 90/90 floor, and never wedges.
+        // Upgrade bar: Bun 1.3.14 --parallel implies --isolate. The TDZ/wedge failures were caused
+        // by top-level await (guarded below) and are fixed, but 1.3.14 still mis-merges coverage
+        // across workers (function hits split over workers are undercounted), so the per-file
+        // 90/90 threshold cannot be enforced from a parallel run. Re-evaluate on a Bun upgrade.
         const scripts = readScripts();
         for (const key of ['test', 'test:coverage', 'test:full']) {
             expect(scripts[key], `${key} must not pass --parallel on Bun 1.3.14`).not.toContain('--parallel');
         }
+    });
+
+    test('1154 R3: no top-level await in the test preload or app sources (breaks --isolate)', () => {
+        const files = ['tests/setup.ts', ...new Bun.Glob('{packages,apps}/*/src/**/*.{ts,tsx}').scanSync(REPO_ROOT)];
+        const offenders = files.filter((f) => hasTopLevelAwait(f, readFileSync(join(REPO_ROOT, f), 'utf8')));
+        expect(offenders).toEqual([]);
+    });
+
+    test('1154 R3: the top-level-await detector catches every form, including multiline destructures', () => {
+        // The exact shape that broke --isolate (inline-run-setup.ts before the fix).
+        expect(
+            hasTopLevelAwait('a.ts', "const {\n    mkdirSync,\n    readFileSync,\n} = await import('node:fs');"),
+        ).toBe(true);
+        expect(hasTopLevelAwait('a.ts', 'await reset();')).toBe(true);
+        expect(hasTopLevelAwait('a.ts', 'export const x = (await load()).y;')).toBe(true);
+        expect(hasTopLevelAwait('a.ts', 'for await (const x of xs) {}')).toBe(true);
+        expect(hasTopLevelAwait('a.ts', 'if (ok) { const m = await import("m"); }')).toBe(true);
+        // Awaits inside functions, methods, and arrows are fine.
+        expect(hasTopLevelAwait('a.ts', 'async function f() { await g(); }')).toBe(false);
+        expect(hasTopLevelAwait('a.ts', 'const f = async () => {\n    const { a } = await import("m");\n};')).toBe(
+            false,
+        );
+        expect(hasTopLevelAwait('a.ts', 'class C { async m() { for await (const x of y) {} } }')).toBe(false);
+        expect(hasTopLevelAwait('a.ts', 'if (import.meta.main) {\n    process.exitCode = await runCli();\n}')).toBe(
+            false,
+        );
+        expect(hasTopLevelAwait('a.ts', 'if (import.meta.main) {} else { await x(); }')).toBe(true);
+        expect(hasTopLevelAwait('a.ts', '// await in a comment\nconst s = "await x";')).toBe(false);
     });
 
     test('R3: feature-verification is a shell-only pass with no agent.run nodes', () => {
@@ -191,3 +220,24 @@ describe('feature-verification scope split (task 0872)', () => {
         }
     });
 });
+
+/**
+ * True when the module evaluates an `await` outside any function (top-level await, including
+ * `for await`). Bun 1.3.14 leaves such modules uninitialized under `bun test --isolate`.
+ * Awaits guarded by `if (import.meta.main)` are exempt: they never run when imported.
+ * AST-based, so multiline destructures, comments and strings are handled exactly.
+ */
+function hasTopLevelAwait(fileName: string, source: string): boolean {
+    const sf = ts.createSourceFile(fileName, source, ts.ScriptTarget.Latest, true, ts.ScriptKind.TSX);
+    const visit = (node: ts.Node): boolean => {
+        if (ts.isFunctionLike(node) || ts.isClassStaticBlockDeclaration(node)) return false;
+        // `if (import.meta.main) { await main(); }` entry points never evaluate the await on import.
+        if (ts.isIfStatement(node) && node.expression.getText(sf) === 'import.meta.main') {
+            return node.elseStatement !== undefined && visit(node.elseStatement);
+        }
+        if (ts.isAwaitExpression(node)) return true;
+        if (ts.isForOfStatement(node) && node.awaitModifier !== undefined) return true;
+        return ts.forEachChild(node, visit) === true;
+    };
+    return ts.forEachChild(sf, visit) === true;
+}

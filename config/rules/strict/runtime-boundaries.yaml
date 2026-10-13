@@ -69,6 +69,7 @@ rules:
             - "packages/app/src/services/token-ledger-service.ts" # FD byte-window log tailing
             - "packages/app/src/services/token-ledger-watcher.ts" # node:fs watch() live watcher
             - "packages/app/src/services/project-registry.ts" # atomic projects.json persistence
+            - "packages/app/src/services/project-process.ts" # port/pid probes moved verbatim out of project-registry.ts to break the registry↔stop import cycle (same exemption)
             - "packages/app/src/services/project-server-owner.ts" # atomic mkdir lifetime claim + unique-marker stale recovery; FileSystem has no exclusive mkdir primitive (1082)
             - "packages/app/src/services/slash-commands-service.ts" # synchronous ~/.config/spur/slash_commands.json persistence (mirrors project-registry.ts)
             - "packages/app/src/services/agent-usage-producer.ts" # atomic agent-usage snapshot write (tmp + rename, mirrors project-registry.ts; task 0892 R1)
@@ -81,6 +82,7 @@ rules:
             - "packages/app/src/services/quality-gate.ts" # gate artifacts (log/findings/receipt) written directly; merged-fd gate log and fsync-free atomic writes must stay byte-stable; bundled standalone for the bare-node plugin twin (task 1006 R1; mirrors history-anatomy.ts)
             - "packages/app/src/workflow/feature-verification-run.ts" # the pass opens the run's single merged log fd (`openSync(path,'a')`) and mkdirs the run dir beside the receipt writer, exactly as the plugin entry did before the move; the fd cannot be expressed through the FileSystem seam (task 1176 R2; same class as the quality-gate exemption above)
             - "packages/app/src/services/run-storage.ts" # durable-evidence migration core (task 1025 R4): atomic tmp+rename byte copies with digest reread and atomic manifest publish must stay byte-stable (mirrors agent-usage-producer.ts / project-registry.ts exemptions)
+            - "packages/app/src/services/durable-plane-ignore.ts" # .git/info/exclude append moved verbatim out of run-storage.ts to break an import cycle (same exemption)
 
             # Electron Node adapters cannot load Bun runtime implementations; keep the
             # synchronous existence/directory probes injected for unit testing (desktop contract).
@@ -90,6 +92,7 @@ rules:
             # Synchronous bootstrap & path resolution:
             - "packages/config/src/bundled-config.ts" # sync bundledConfigRoot() directory walk
             - "packages/config/src/loader.ts" # sync resolveConfigFile() / schema specifier lookup
+            - "packages/config/src/config-layers.ts" # sync resolveConfigLayers() existence probes moved verbatim out of loader.ts to break the loader↔executor-update cycle (same exemption)
             - "packages/config/src/executor-update.ts" # atomic single-entry config update (task 0797): O_EXCL lock, fsync'd tmp+rename commit, lstat symlink refusal, mode preservation — ts-runtime FileSystem seam has no lstat/fsync/chmod/O_EXCL
             - "packages/app/src/services/project-start.ts" # sync CLI binary path checks before daemon spawn
             - "apps/cli/src/commands/serve.ts" # sync resolveServeCwd() directory validation before server startup (task 0805 R2); mirrors task.ts sync-template exemption
