@@ -25,12 +25,13 @@
 import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { delimiter, join } from 'node:path';
+import { getEnvVar, getEnvVars } from '@gobing-ai/spur-config';
 
 // One disposable registry for the whole run: registry paths must be visible to children,
 // and a per-file path would drift between workers.
 const registryDir = mkdtempSync(join(tmpdir(), 'spur-test-env-'));
 const env: Record<string, string | undefined> = {
-    ...process.env,
+    ...getEnvVars(),
     // Config layers: never read the operator's ~/.config/spur or this checkout's live
     // .spur/config.yaml.
     SPUR_SKIP_GLOBAL_CONFIG: 'true',
@@ -42,7 +43,7 @@ const env: Record<string, string | undefined> = {
     // Bare `spur` inside a test must resolve to this checkout's source-local CLI. A stale
     // global spur writes with its own older ts-db provisioning (buglog 2026-09-09: it
     // stamped a false importer_schema@ row into a worktree DB mid-gate).
-    PATH: `${join(import.meta.dir, '..', 'test-shims')}${delimiter}${process.env.PATH ?? ''}`,
+    PATH: `${join(import.meta.dir, '..', 'test-shims')}${delimiter}${getEnvVar('PATH') ?? ''}`,
 };
 
 // A gate run is a child of the workflow process, so it inherits SPUR_WORKFLOW_RUN_ACTIVE;
