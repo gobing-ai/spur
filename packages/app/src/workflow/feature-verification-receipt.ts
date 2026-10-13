@@ -104,10 +104,10 @@ export interface FeatureVerificationReceipt {
     /** Outcome of the verification pass. Only PASS satisfies completion. */
     status: FeatureReceiptStatus;
     /**
-     * Derived confidence in a PASS: `HIGH` when the selected definition's own command exited 0
-     * with an unchanged proof-input digest, `MEDIUM` when that clean pass ran under a caller
+     * Derived confidence in a completed pass — `HIGH` when the selected definition's own command
+     * exited 0 with an unchanged proof-input digest, `MEDIUM` when that clean pass ran under a caller
      * command override, `LOW` otherwise (or when the operator declared it). Absent on receipts
-     * written before this field existed — such a PASS is refused at completion.
+     * written before this field existed, and a receipt without it is refused at completion.
      */
     confidence?: FeatureReceiptConfidence;
     /** Non-empty evidence the level rests on, e.g. `verification command exited 0`. */

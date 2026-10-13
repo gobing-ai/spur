@@ -62,13 +62,19 @@ function served(overrides: Partial<Record<string, unknown>> = {}): Record<string
     };
 }
 
-function fakeService(description: Record<string, unknown>, decideResult?: Record<string, unknown>): DecisionService {
+/** `record.input` captures the resolved input the service receives below the path-resolution seam (task 1193). */
+function fakeService(
+    description: Record<string, unknown>,
+    decideResult?: Record<string, unknown>,
+    record?: { input?: Record<string, unknown> },
+): DecisionService {
     return {
         describe: (id: string) => {
             if (id === 'unknown-id') throw new Error(`unknown decision: ${id}`);
             return description;
         },
-        decide: async () => {
+        decide: async (_id: string, input: Record<string, unknown>) => {
+            if (record !== undefined) record.input = input;
             if (decideResult === undefined) throw new Error('decide not expected');
             return decideResult;
         },
@@ -224,6 +230,43 @@ describe('DecideActionRunner catalog path (task 1094 R4)', () => {
         expect(result.ok).toBe(true);
         const row = JSON.parse(writes['/repo/worktree/out/lane.decision.json'] ?? '{}') as Record<string, unknown>;
         expect(row).toMatchObject({ value: 'retry', degraded: false });
+    });
+
+    // 1193 AC2/R2: workdir `.` must keep the relative key (`join('.', 'notes.md')` is `notes.md`),
+    // never `resolve('.', …)` which would become cwd-absolute.
+    test('AC2: relative evidence under workdir `.` is read at the relative key', async () => {
+        const record: { input?: Record<string, unknown> } = {};
+        const { fs } = fakeFs({ 'notes.md': 'relative body' });
+        const runner = new DecideActionRunner(fs, {
+            enabled: true,
+            decisionService: async () =>
+                fakeService({ id: 'pick-lane', type: 'choice', fallback: 'slow', parameters: [] }, served(), record),
+        });
+        const result = await runner.execute({ ...catalogOptions, evidence: ['notes.md'] }, makeContext('.'));
+        expect(result.ok).toBe(true);
+        expect(record.input?.instructions).toBe('relative body');
+    });
+
+    // 1193 AC3/R3 (catalog half): a mixed absolute+relative evidence list joins in declaration
+    // order into `instructions` (`\n\n`), at the real resolved keys. The unreadable-entry fallback
+    // half of AC3 is pinned by 'unreadable evidence degrades to the declared fallback row' below.
+    test('AC3: a mixed evidence list joins in declaration order into instructions', async () => {
+        const record: { input?: Record<string, unknown> } = {};
+        const { fs } = fakeFs({
+            '/var/evidence/task.md': 'absolute body',
+            '/tmp/decide-workdir/notes.md': 'relative body',
+        });
+        const runner = new DecideActionRunner(fs, {
+            enabled: true,
+            decisionService: async () =>
+                fakeService({ id: 'pick-lane', type: 'choice', fallback: 'slow', parameters: [] }, served(), record),
+        });
+        const result = await runner.execute(
+            { ...catalogOptions, evidence: ['/var/evidence/task.md', 'notes.md'] },
+            makeContext('/tmp/decide-workdir'),
+        );
+        expect(result.ok).toBe(true);
+        expect(record.input?.instructions).toBe('absolute body\n\nrelative body');
     });
 
     test('an absolute resultFile is written as-is too', async () => {
