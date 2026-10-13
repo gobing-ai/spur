@@ -51,8 +51,4 @@ describe('openUrl', () => {
         await openUrl('http://localhost:9999', { executor });
         expect(calls).toEqual([{ command: 'xdg-open', args: ['http://localhost:9999'] }]);
     });
-
-    test('exports as a function', () => {
-        expect(typeof openUrl).toBe('function');
-    });
 });

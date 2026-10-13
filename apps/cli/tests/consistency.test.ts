@@ -144,9 +144,7 @@ function parseVerbsFromHeading(section: string, noun: string): VerbSurface[] {
 // ── Parse code surface ────────────────────────────────────────────────────
 
 async function parseCodeSurface(cmdsDir: string): Promise<NounSurface[]> {
-    const entries = (await readdir(cmdsDir)).filter(
-        (f) => f.endsWith('.ts') && f !== 'stubs.ts' && f !== 'shared-options.ts',
-    );
+    const entries = (await readdir(cmdsDir)).filter((f) => f.endsWith('.ts') && f !== 'shared-options.ts');
     const nouns: NounSurface[] = [];
 
     for (const file of entries) {

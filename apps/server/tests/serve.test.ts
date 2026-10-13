@@ -298,10 +298,6 @@ describe('startServer', () => {
         }
     });
 
-    test('exports as a function', () => {
-        expect(typeof startServer).toBe('function');
-    });
-
     test('0848 + G72 R2: derives the fleet roster before serving and preserves its registered mailbox prefix', async () => {
         const { sigHandlers, exitCalled } = installProcessMocks();
         const originalCwd = process.cwd();
