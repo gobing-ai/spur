@@ -622,3 +622,44 @@ describe('DatabaseView filter debounce (1188)', () => {
         expect(filterValuesSent(requests)).toEqual(['start', 'abcd']);
     });
 });
+
+// ── AC6: the server's 4 KiB cut must not read as the whole value ─────────────
+// The route cuts text at 4096 bytes and flags it with `truncated: true`
+// (packages/contracts/src/database.ts:17). `GridCell` ignored the flag, so the
+// tooltip — the only place a reader sees the value in the grid — presented the
+// cut text as if it were complete. Confirmed live against a scratch server
+// (tooltip length 4096 for a 6000-byte cell).
+describe('DatabaseView truncated-cell affordance (AC6)', () => {
+    test('a server-truncated cell says the value was cut, an intact one does not', async () => {
+        const cut = 'x'.repeat(4096);
+        setFetchForTesting(
+            databaseRouter({
+                tables: ['t'],
+                schema: (name) => jsonResponse({ name, columns: COLUMN_DEFS, rowCount: 1 }),
+                rows: (_name, params) =>
+                    jsonResponse(
+                        rowsPayload(
+                            params,
+                            [
+                                [
+                                    { t: 'text', v: cut, truncated: true },
+                                    { t: 'text', v: 'short' },
+                                ],
+                            ],
+                            1,
+                        ),
+                    ),
+            }),
+        );
+        const view = renderView('/board/projects/database?table=t');
+        await waitFor(() => expect(view.container.querySelector('[data-database-text]')).not.toBeNull());
+
+        const cells = view.container.querySelectorAll('[data-database-text]');
+        const truncatedTip = cells[0]?.closest('[data-tip]')?.getAttribute('data-tip') ?? '';
+        expect(truncatedTip).toContain(cut);
+        expect(truncatedTip).toMatch(/truncated/i);
+
+        // An intact cell keeps the plain value: the marker must not be unconditional.
+        expect(cells[1]?.closest('[data-tip]')?.getAttribute('data-tip')).toBe('short');
+    });
+});

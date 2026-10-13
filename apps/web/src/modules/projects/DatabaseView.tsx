@@ -270,8 +270,12 @@ function GridCell({ cell }: { cell: DatabaseCell }) {
     if (cell.t === 'null') return <NullBadge />;
     if (cell.t === 'blob') return <BlobBadge bytes={cell.bytes} />;
     if (cell.t === 'num') return <span className="font-mono text-xs">{String(cell.v)}</span>;
+    // A paged read cuts text at 4 KiB and flags it (contracts `truncated`). The tooltip is the
+    // only place a reader sees the value in the grid, so without this note the cut text reads as
+    // the complete value; the row detail carries the untruncated one.
+    const tip = cell.truncated === true ? `${cell.v} … [truncated — open the row for the full value]` : cell.v;
     return (
-        <Tooltip tip={cell.v} className="w-full">
+        <Tooltip tip={tip} className="w-full">
             <span className="block max-w-[28rem] truncate font-mono text-xs" data-database-text>
                 {cell.v}
             </span>
