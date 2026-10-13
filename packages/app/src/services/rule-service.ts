@@ -486,11 +486,17 @@ export class RuleService {
         layers.push({ id: 'local', path: resolve(cwd, LOCAL_RULES_DIR), priority: 0 });
         const globalOverride = env.SPUR_GLOBAL_RULES_DIR;
         const hasGlobalOverride = globalOverride !== undefined && globalOverride.length > 0;
-        layers.push({
-            id: 'global',
-            path: hasGlobalOverride ? resolve(cwd, globalOverride) : join(homedir(), GLOBAL_RULES_DIR),
-            priority: 10,
-        });
+        // `SPUR_SKIP_GLOBAL_CONFIG=true` skips `~/.config/spur/config.yaml` in the config loader;
+        // the global rules dir lives under the same root and must honour the same switch, or a
+        // stale operator `~/.config/spur/rules` silently shadows the bundled presets.
+        const skipGlobal = (env.SPUR_SKIP_GLOBAL_CONFIG ?? process.env.SPUR_SKIP_GLOBAL_CONFIG) === 'true';
+        if (hasGlobalOverride || !skipGlobal) {
+            layers.push({
+                id: 'global',
+                path: hasGlobalOverride ? resolve(cwd, globalOverride) : join(homedir(), GLOBAL_RULES_DIR),
+                priority: 10,
+            });
+        }
         if (opts.includeBundled && !hasGlobalOverride) {
             // Spur's own bundled config presets (recommended-pre-check, etc.) at priority 15,
             // between global and the ts-rule-engine demo categories at priority 20.

@@ -21,6 +21,7 @@ import { join, resolve } from 'node:path';
 const REPO_ROOT = resolve(import.meta.dir, '..', '..', '..', '..');
 const CLI_ENTRY = join(REPO_ROOT, 'apps', 'cli', 'src', 'index.ts');
 const INLINE_RUN_ENTRY = join(REPO_ROOT, 'plugins', 'sp', 'lib', 'inline-run.generated.mjs');
+const STATE_MACHINE_SCHEMA = join(REPO_ROOT, 'apps', 'cli', 'schemas', 'state-machine-workflow.schema.json');
 const FEATURE_ID = 'F1';
 
 /** One spawned CLI invocation against a throwaway project root. */
@@ -94,7 +95,10 @@ const taskBody = (): string =>
 /** The project-layer override: its `onEnter` runs the project-rooted consumer, as ts-libs does. */
 const overrideBody = (verificationCmd: string): string =>
     [
-        '"$schema": "@gobing-ai/spur/schemas/state-machine-workflow.schema.json"',
+        // Absolute repo path, not the `@gobing-ai/spur/...` package specifier: the throwaway root
+        // has no node_modules, so a bare specifier only resolved through Bun auto-install from
+        // the npm registry (network, and the *published* schema rather than this checkout's).
+        `"$schema": ${JSON.stringify(STATE_MACHINE_SCHEMA)}`,
         'kind: state-machine',
         'name: feature-verification',
         'version: "1"',

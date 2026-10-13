@@ -63,9 +63,18 @@ export const defaultLiteralProbe: LiteralProbe = { file: 'src/config.ts', identi
 
 const registry = new Map<string, CarrierTypeDef>();
 
-/** Register a carrier type. Re-registering a name replaces the previous definition. */
-export function registerCarrierType<T extends JsonRecord>(type: string, def: CarrierTypeDef<T>): void {
+/**
+ * Register a carrier type. Re-registering a name replaces the previous definition. Returns a
+ * disposer that restores the prior state (the previous definition, or no entry) — the registry
+ * is process-global, so a registration that is never undone leaks into every later caller.
+ */
+export function registerCarrierType<T extends JsonRecord>(type: string, def: CarrierTypeDef<T>): () => void {
+    const previous = registry.get(type);
     registry.set(type, def as CarrierTypeDef);
+    return () => {
+        if (previous === undefined) registry.delete(type);
+        else registry.set(type, previous);
+    };
 }
 
 /** Sorted names of all registered carrier types (used in error messages). */

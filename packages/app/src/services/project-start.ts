@@ -264,21 +264,45 @@ function readOwnerClaimPid(projectRoot: string): number | null {
     }
 }
 
-/** First TCP port this pid listens on (lsof; null when lsof fails or there is no listener). */
-async function findPidListenPort(pid: number): Promise<number | null> {
+/** Parse `lsof -nP -iTCP -sTCP:LISTEN` output: first listening port, or null. */
+export function parseLsofListenPort(stdout: string): number | null {
+    const port = stdout.match(/TCP [^ ]*:(\d+) \(LISTEN\)/)?.[1];
+    return port === undefined ? null : Number(port);
+}
+
+/** Parse `ss -Hltnp` output: first port whose `users:(...)` names `pid`, or null. */
+export function parseSsListenPort(stdout: string, pid: number): number | null {
+    for (const line of stdout.split('\n')) {
+        if (!line.includes(`pid=${pid},`)) continue;
+        const port = line
+            .trim()
+            .split(/\s+/)[3]
+            ?.match(/:(\d+)$/)?.[1];
+        if (port !== undefined) return Number(port);
+    }
+    return null;
+}
+
+async function runListenProbe(command: string, args: string[]): Promise<string | null> {
     try {
-        const res = await new NodeProcessExecutor().run({
-            command: 'lsof',
-            args: ['-nP', '-a', '-p', String(pid), '-iTCP', '-sTCP:LISTEN'],
-            forceBuffered: true,
-            rejectOnError: false,
-        });
-        if (res.exitCode !== 0) return null;
-        const port = res.stdout.match(/TCP [^ ]*:(\d+) \(LISTEN\)/)?.[1];
-        return port === undefined ? null : Number(port);
+        const res = await new NodeProcessExecutor().run({ command, args, forceBuffered: true, rejectOnError: false });
+        return res.exitCode === 0 ? res.stdout : null;
     } catch {
         return null;
     }
+}
+
+/**
+ * First TCP port this pid listens on — null when no probe works or there is no listener.
+ * lsof first; on Linux hosts without lsof (slim containers, CI images) fall back to iproute2 `ss`
+ * so owner adoption does not silently degrade into a duplicate spawn.
+ */
+async function findPidListenPort(pid: number): Promise<number | null> {
+    const lsof = await runListenProbe('lsof', ['-nP', '-a', '-p', String(pid), '-iTCP', '-sTCP:LISTEN']);
+    if (lsof !== null) return parseLsofListenPort(lsof);
+    if (process.platform !== 'linux') return null;
+    const ss = await runListenProbe('ss', ['-Hltnp']);
+    return ss === null ? null : parseSsListenPort(ss, pid);
 }
 
 /**
