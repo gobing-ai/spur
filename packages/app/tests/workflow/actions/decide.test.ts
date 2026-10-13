@@ -31,11 +31,18 @@ function makeContext(workdir: string): ActionRunContext {
     return { runId: 'run-1', stateOrNodeId: 'classify', workdir, vars: {}, env: {} };
 }
 
-function fakeMaker(answer: { label: string; confidence: number }): () => Promise<DecisionMaker> {
+/** `record.evidence` captures the `state.evidence` the maker receives below the path-resolution seam (task 1193). */
+function fakeMaker(
+    answer: { label: string; confidence: number },
+    record?: { evidence: string[] },
+): () => Promise<DecisionMaker> {
     const maker = {
         driver: 'fake',
         ask: () => Promise.reject(new Error('not used')),
-        choice: () => Promise.resolve({ ...answer, kind: 'choice' as const, probabilities: {} }),
+        choice: (state: { evidence: string[] }) => {
+            if (record !== undefined) record.evidence = state.evidence;
+            return Promise.resolve({ ...answer, kind: 'choice' as const, probabilities: {} });
+        },
         score: () => Promise.reject(new Error('not used')),
         noul: () => Promise.reject(new Error('not used')),
     };
@@ -145,6 +152,47 @@ describe('DecideActionRunner', () => {
         // The action writes the receipt verbatim: the derived level travels with it.
         expect(row.confidence).toBe(0.91);
         expect(row.confidenceLevel).toBe('HIGH');
+    });
+
+    // 1193 AC1/R1: `spur task path --json` yields an absolute taskSpecPath; the inline runner
+    // must read it as given, not join it with the workdir (`<workdir><absolute>` is unreadable).
+    test('AC1: an absolute evidence path is read as given, not joined with the workdir', async () => {
+        const record: { evidence: string[] } = { evidence: [] };
+        // The fake fs holds ONLY the absolute key; a join would resolve to the absent workdir key.
+        const { fs } = fakeFs({ '/var/evidence/task.md': 'absolute body' });
+        const runner = new DecideActionRunner(fs, {
+            enabled: true,
+            decisionMaker: fakeMaker({ label: 'retry', confidence: 0.91 }, record),
+        });
+        const result = await runner.execute(
+            { ...validOptions, evidence: ['/var/evidence/task.md'] },
+            makeContext('/tmp/decide-workdir'),
+        );
+        expect(result.ok).toBe(true);
+        expect(record.evidence).toEqual(['absolute body']);
+        const decision = result.data?.decision as { degraded: boolean; reason: string };
+        expect(decision.degraded).toBe(false);
+        expect(decision.reason).toBe('accepted');
+    });
+
+    // 1193 AC3/R3 (inline half): a mixed absolute+relative list reaches the maker in declaration
+    // order with both bodies.
+    test('AC3: a mixed evidence list reaches the maker in declaration order', async () => {
+        const record: { evidence: string[] } = { evidence: [] };
+        const { fs } = fakeFs({
+            '/var/evidence/task.md': 'absolute body',
+            '/tmp/decide-workdir/notes.md': 'relative body',
+        });
+        const runner = new DecideActionRunner(fs, {
+            enabled: true,
+            decisionMaker: fakeMaker({ label: 'retry', confidence: 0.91 }, record),
+        });
+        const result = await runner.execute(
+            { ...validOptions, evidence: ['/var/evidence/task.md', 'notes.md'] },
+            makeContext('/tmp/decide-workdir'),
+        );
+        expect(result.ok).toBe(true);
+        expect(record.evidence).toEqual(['absolute body', 'relative body']);
     });
 
     test('a below-floor answer still reports its own MEDIUM level, not the gate decision', async () => {

@@ -1,10 +1,10 @@
 ---
 schema_version: 1
 name: "Fix decide action evidence path resolution: an absolute evidence path is joined with the workdir"
-status: todo
+status: wip
 template: standard
 created_at: 2026-10-13T17:44:16.262Z
-updated_at: "2026-10-13T19:01:36.893Z"
+updated_at: "2026-10-13T19:32:17.580Z"
 
 ac_altitude: task-local
 ac_numbering: task-local
@@ -152,7 +152,15 @@ Test observability: all four scenarios are observed in `packages/app/tests/workf
 
 ### Solution
 
-<!-- Filled during implementation: file:line change map and concise rationale. -->
+**Scope.** Task 1193's source fix already landed in `eb57f0a40`; this implement stage adds regression coverage only, no source change.
+
+**Change map (one file:line anchor per row).**
+
+- `packages/app/tests/workflow/actions/decide.test.ts:159` — inline AC1: with workdir `/tmp/decide-workdir` and a fake fs holding only `/var/evidence/task.md` (`absolute body`), the maker receives `state.evidence` `['absolute body']` and the row stays `accepted`/not degraded; this file also adds the inline half of AC3 (mixed `['/var/evidence/task.md', 'notes.md']` reaches the maker as `['absolute body', 'relative body']`), and `fakeMaker` now records the `state.evidence` it receives below the path-resolution seam.
+- `packages/app/tests/workflow/actions/decide-catalog.test.ts:237` — AC2: workdir `.` with fake fs key `notes.md` (`relative body`) gives `decisionService.decide` instructions `relative body`, proving the relative branch keeps node `join` rather than `resolve('.', …)`; this file also adds the catalog half of AC3 (`instructions` is `absolute body\n\nrelative body` for `['/var/evidence/task.md', 'notes.md']`), and `fakeService` now records the resolved input it receives.
+- `packages/app/src/workflow/actions/decide.ts:39` — no source change: `resolveWorkdirPath` from `eb57f0a40` already routes both evidence maps and all three resultFile sites; the new tests pass against it unchanged.
+
+**AC4.** No new test needed: the existing relative-key assertions (`.spur/run/x-recovery.decision.json`, `out/lane.decision.json`) and the existing absolute-`resultFile` case (`/abs/out/lane.decision.json` written as-is) already pin the absolute/relative write rule.
 
 ### Testing
 
@@ -178,4 +186,5 @@ Test observability: all four scenarios are observed in `packages/app/tests/workf
 ### History
 
 - 2026-10-13T17:51:05.359Z backlog → todo (system)
+- 2026-10-13T19:32:17.580Z todo → wip (system)
 
