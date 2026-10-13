@@ -10,7 +10,7 @@ import { computeProofInputFingerprint, readProofInputContents } from '../proof-i
 import { resolveDurableArtifactPath, resolveRunArtifactPath } from './run-path';
 
 // runtime-boundaries fs rule (no-direct-fs-io): dynamic destructure, not a static import.
-const { copyFile, link, mkdir, readFile, unlink, writeFile } = await import('node:fs/promises');
+const { copyFile, link, mkdir, readFile, unlink, writeFile } = process.getBuiltinModule('node:fs/promises');
 
 const KIND = 'run.artifact';
 /** Canonical proof-input digest shape produced by `proof.fingerprint` (ADR-071). */

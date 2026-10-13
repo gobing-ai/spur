@@ -26,11 +26,12 @@
 
 // Hoisted to module scope per task 0809 R5 ("replace the shadowed dynamic path/fs imports
 // with module-level imports"): the binding lives at module scope, not inside
-// `openInlineRunProjectDb`. The top-level-await dynamic form is deliberate — the standing
+// `openInlineRunProjectDb`. The synchronous `process.getBuiltinModule` form is deliberate — the standing
 // runtime-boundaries fs rule (recommended pre-check preset) forbids a static node:fs
 // import in application sources. Task 1006 R3 widens the destructure for the driver
 // bookkeeping moved here from plugins/sp/scripts/inline-run-setup.ts (run-record pair
-// writes, run-log appends).
+// writes, run-log appends). It replaces a top-level `await import()`: Bun 1.3.14 leaves
+// TLA modules uninitialized (TDZ) under `bun test --isolate`/`--parallel`.
 const {
     appendFileSync,
     closeSync,
@@ -44,8 +45,8 @@ const {
     unlinkSync,
     writeFileSync,
     writeSync,
-} = await import('node:fs');
-const { lstat, mkdir, readdir, readFile } = await import('node:fs/promises');
+} = process.getBuiltinModule('node:fs');
+const { lstat, mkdir, readdir, readFile } = process.getBuiltinModule('node:fs/promises');
 
 import { basename, dirname, join, resolve } from 'node:path';
 import type { SpurConfig } from '@gobing-ai/spur-config';
