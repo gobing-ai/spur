@@ -92,7 +92,8 @@ Before declaring a task `done`, run this lightweight checklist. It catches the m
 - [ ] Solution section contains `file:line` citations for every changed file.
 - [ ] API/library claims in changed docs carry a source citation (URL or `path:line`) and an honest
       confidence level (HIGH/MEDIUM/LOW) per source-driven-development; the deterministic advisory backstop is
-      the `cited-version-strings` / `cited-api-claims` rules (`.spur/rules/docs/sourced-api-claims.yaml`).
+      the `cited-version-strings` / `cited-api-claims` / `cited-api-claims-confidence` rules
+      (`.spur/rules/docs/sourced-api-claims.yaml`, run ad hoc — not wired into a preset).
 - [ ] Review section has P1–P4 findings table (even if all rows are empty — the table itself proves review happened).
 
 This checklist runs as part of the verify step when the task reaches `testing` status. It does not replace the formal gates — it augments them with between-pipeline hygiene checks.
