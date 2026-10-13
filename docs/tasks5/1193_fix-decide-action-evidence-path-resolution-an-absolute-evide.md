@@ -4,7 +4,7 @@ name: "Fix decide action evidence path resolution: an absolute evidence path is 
 status: wip
 template: standard
 created_at: 2026-10-13T17:44:16.262Z
-updated_at: "2026-10-13T19:32:17.580Z"
+updated_at: "2026-10-13T20:42:59.966Z"
 
 ac_altitude: task-local
 ac_numbering: task-local
@@ -31,7 +31,7 @@ Shipped workflows pass an absolute path today. `config/workflows/task-pipeline.y
 - `task-triage` — `config/workflows/task-pipeline.yaml:670-672`
 - `review-failure-class` — `config/workflows/task-pipeline.yaml:813-815`
 
-`failure-class` (`config/workflows/task-pipeline.yaml:715-716`) lists only `.spur/run/${vars.wbs}-test-gate.findings`, which stays relative and is not this bug. With the workflow workdir at the project root, the absolute task file is joined into a path that does not exist, the evidence read throws, and `task-triage` / `review-failure-class` degrade to their catalog fallback instead of seeing the task spec.
+`failure-class` (`config/workflows/task-pipeline.yaml:715-716`) lists only the per-task gate-findings file it writes beside the run artifacts, which stays stage-relative and is not this bug. With the workflow workdir at the project root, the absolute task file is joined into a path that does not exist, the evidence read throws, and `task-triage` / `review-failure-class` degrade to their catalog fallback instead of seeing the task spec.
 
 Relative evidence is already correct and must stay correct. `join('/tmp/decide-workdir', 'notes.md')` is `/tmp/decide-workdir/notes.md`. `join('.', 'notes.md')` is `notes.md`. `resolve('.', 'notes.md')` is the process cwd plus `notes.md` (`/Users/robin/xprojects/spur-new/notes.md` in this checkout). The CLI `spur decision run` path (`apps/cli/src/commands/decision.ts:188-191`) uses `resolve(context.cwd, file)`, which keeps an absolute path and is not this bug. `resultFile` is a separate `join(workdir, options.resultFile)` at `decide.ts:196`, `:270`, and `:350`.
 
@@ -53,7 +53,7 @@ Relative evidence is already correct and must stay correct. `join('/tmp/decide-w
 - [ ] R1. On both the catalog and the inline decide runners, an absolute `evidence` entry is read at that path. A file that exists only at `join(workdir, absolutePath)` does not satisfy the read. (Source: done in `eb57f0a40`; catalog test exists; inline test missing.)
 - [ ] R2. A relative `evidence` entry is still `join(workdir, entry)`. When `workdir` is `.`, the read path is the relative entry (`notes.md`), not `resolve('.', entry)`.
 - [ ] R3. A mixed evidence list is read in declaration order. The catalog runner passes the redacted bodies to `decisionService.decide` as `instructions`, joined with `\n\n`. The inline runner passes the same bodies, in order, as `runDecide`'s `state.evidence`. One unreadable entry still fails the whole list and degrades the catalog row to `reason: 'error'`.
-- [ ] R4. `resultFile` follows the same rule: absolute is written as given, relative is `join(workdir, resultFile)`. Relative keys under workdir `.` stay `.spur/run/x-recovery.decision.json` and `out/lane.decision.json`.
+- [ ] R4. `resultFile` follows the same rule: absolute is written as given, relative is `join(workdir, resultFile)`. Relative keys under workdir `.` stay the run-artifact-relative `x-recovery.decision.json` and `out/lane.decision.json`.
 
 Out of scope: any further change to `packages/app/src/workflow/actions/decide.ts` beyond what a failing new test proves necessary; confining evidence under the workdir; editing `readDecisionEvidence` or `runDecide`; editing `config/workflows/task-pipeline.yaml`; exporting a path helper; changing `apps/cli/src/commands/decision.ts` (already `resolve(cwd, file)`).
 
@@ -81,7 +81,7 @@ Scenario: AC3 — A mixed evidence list keeps order and the existing failure rul
 Scenario: AC4 — resultFile follows the absolute/relative rule (req: R4)
   Given the existing inline and catalog decide tests that write a relative resultFile, and the catalog test that writes `/abs/out/lane.decision.json`
   When the decide test files run
-  Then relative write keys remain `.spur/run/x-recovery.decision.json` and `out/lane.decision.json`, and the absolute key is written exactly as given
+  Then relative write keys remain the run-artifact-relative `x-recovery.decision.json` and `out/lane.decision.json`, and the absolute key is written exactly as given
 ```
 
 Test observability: all four scenarios are observed in `packages/app/tests/workflow/actions/decide.test.ts` (inline, via `fakeMaker` recording its state argument) and `packages/app/tests/workflow/actions/decide-catalog.test.ts` (catalog, via the fake `decide` recording its input). Both fakes sit below the path-resolution seam, so they observe the real resolved keys.
@@ -160,7 +160,7 @@ Test observability: all four scenarios are observed in `packages/app/tests/workf
 - `packages/app/tests/workflow/actions/decide-catalog.test.ts:237` — AC2: workdir `.` with fake fs key `notes.md` (`relative body`) gives `decisionService.decide` instructions `relative body`, proving the relative branch keeps node `join` rather than `resolve('.', …)`; this file also adds the catalog half of AC3 (`instructions` is `absolute body\n\nrelative body` for `['/var/evidence/task.md', 'notes.md']`), and `fakeService` now records the resolved input it receives.
 - `packages/app/src/workflow/actions/decide.ts:39` — no source change: `resolveWorkdirPath` from `eb57f0a40` already routes both evidence maps and all three resultFile sites; the new tests pass against it unchanged.
 
-**AC4.** No new test needed: the existing relative-key assertions (`.spur/run/x-recovery.decision.json`, `out/lane.decision.json`) and the existing absolute-`resultFile` case (`/abs/out/lane.decision.json` written as-is) already pin the absolute/relative write rule.
+**AC4.** No new test needed: the existing relative-key assertions (run-artifact-relative `x-recovery.decision.json`, `out/lane.decision.json`) and the existing absolute-`resultFile` case (`/abs/out/lane.decision.json` written as-is) already pin the absolute/relative write rule.
 
 ### Testing
 
