@@ -13,11 +13,16 @@
 # noise" — 593 findings. The audit split them 580 `cited-version-strings` /
 # 13 `cited-api-claims`, and 579 of the 580 were false positives on two shapes
 # that are not external claims at all: a document's own version
-# (`docs/00_ADR.md:5` → `version: 1.69.0`) and a section number in a heading
-# (`docs/04_DESIGN.md:116` → `### 1.0.1 Shared option registry`). Both shapes are
-# excluded by the pattern below. The second source was a stale exclude list that
-# stopped at `docs/tasks4/` while the active corpus folder is `docs/tasks5/`,
-# which alone produced 226 findings; it is now one `docs/tasks*/` glob.
+# (`docs/00_ADR.md:5` → `version: 1.69.0`), a section number in a heading
+# (`docs/04_DESIGN.md:116` → `### 1.0.1 Shared option registry`) and a
+# `§`-numbered cross-reference (`docs/00_ADR.md:1118` → `§1.2.1`). All three are
+# excluded by the pattern below — the first two on the line's shape, the third on
+# the token itself. The remaining source was a stale exclude list that stopped at
+# `docs/tasks4/` while the active corpus folder is `docs/tasks5/`, which alone
+# produced 226 findings; it is now one `docs/tasks*/**` glob. 593 → 330 after those
+# two fixes, then 277 once the `§` shape was excluded too — the residual are
+# version-pinned package claims that genuinely lack a same-line anchor, and they
+# stay visible rather than suppressed.
 #
 # The semantic contract — every external API/library claim carries a source
 # citation (URL or path:line) AND a confidence level (HIGH/MEDIUM/LOW) — is
@@ -57,11 +62,14 @@ rules:
         mode: forbid
         # Fire when the line has NO citation anchor (no URL, no path:line) AND
         # contains a semver-ish token. Lookarounds exclude IPs (127.0.0.1),
-        # longer dotted numerics, a heading's section number (`### 1.0.1 Title`)
-        # and a document-version metadata line (`version: 1.69.0`), none of which
-        # is an external claim; fenced-code lines are out of regex reach — that
-        # residual noise is why this is info, not warning.
-        pattern: "^(?!.*(?:https?://|(?:[\\w.-]+/)+[\\w.-]+:\\d+))(?!\\s*#{1,6}\\s+\\d+\\.\\d+\\.\\d+)(?!\\s*[\\w-]+:\\s*\\d+\\.\\d+\\.\\d+\\s*$).*(?<![\\d.])\\d+\\.\\d+\\.\\d+(?!\\.\\d)"
+        # longer dotted numerics, a heading's section number (`### 1.0.1 Title`),
+        # a document-version metadata line (`version: 1.69.0`) and a `§`-numbered
+        # section reference (`§7.3.1`) — none of which is an external claim;
+        # fenced-code lines are out of regex reach — that residual noise is why
+        # this is info, not warning. The `§` guard sits on the token itself, not on
+        # the line, so a line carrying both a section reference and a real version
+        # still fires on the version.
+        pattern: "^(?!.*(?:https?://|(?:[\\w.-]+/)+[\\w.-]+:\\d+))(?!\\s*#{1,6}\\s+\\d+\\.\\d+\\.\\d+)(?!\\s*[\\w-]+:\\s*\\d+\\.\\d+\\.\\d+\\s*$).*(?<![\\d.§])\\d+\\.\\d+\\.\\d+(?!\\.\\d)"
   - id: cited-api-claims
     description: >
       A markdown line making a time- or version-anchored external API claim
