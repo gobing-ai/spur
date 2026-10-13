@@ -28,7 +28,6 @@
 
 import { createHash, randomUUID } from 'node:crypto';
 import {
-    appendFileSync,
     existsSync,
     linkSync,
     lstatSync,
@@ -41,7 +40,7 @@ import {
     writeFileSync,
 } from 'node:fs';
 import { tmpdir } from 'node:os';
-import { basename, dirname, isAbsolute, join, relative, resolve, sep } from 'node:path';
+import { basename, dirname, join, relative, resolve, sep } from 'node:path';
 import { createNodeFileSystem } from '@gobing-ai/ts-runtime';
 import { resolveDurableArtifactPath, resolveRunArtifactPath } from '../workflow/actions/run-path';
 import {
@@ -49,6 +48,7 @@ import {
     parseFeatureVerificationReceipt,
 } from '../workflow/feature-verification-receipt';
 import { InvalidWorkflowRunIdError } from '../workflow/run-record';
+import { ensureDurablePlaneIgnored } from './durable-plane-ignore';
 import { parseVerifyVerdict } from './verify-verdict';
 
 /** Resolved run-storage layout for one project root. */
@@ -939,66 +939,6 @@ function assertRunId(runId: string): void {
     }
 }
 
-/** Repo-local ignore entry that keeps the durable run-record plane out of the git tree. */
-const DURABLE_PLANE_EXCLUDE = '.spur/memory/';
-
-/**
- * 1026: durable run-record writes must never move the proof-input git tree —
- * `computeProofInputFingerprint` runs `git add -A`, so an untracked record under
- * `.spur/memory/` would shift every subsequent fresh capture mid-run. The plane is
- * therefore excluded via the repo-local `.git/info/exclude` (no tracked `.gitignore`
- * edit, idempotent, once per repo). Best-effort by contract: outside a normal
- * checkout (`.git` is a worktree pointer file) the plain join path is unusable, so the
- * real gitdir is parsed from the pointer line and the common exclude file used —
- * without this, managed-worktree receipts stale instantly and deadlock verifying→done
- * gates. If the layout is unexpected the exclusion cannot be installed and durable
- * files stay tree-visible — the run proceeds; only fingerprint stability is degraded.
- */
-export function ensureDurablePlaneIgnored(workdir: string): void {
-    try {
-        const gitPath = join(workdir, '.git');
-        if (!existsSync(gitPath)) return; // not a git checkout — nothing to exclude from
-        let excludePath = join(gitPath, 'info', 'exclude');
-        try {
-            if (statSync(gitPath).isFile()) {
-                // Managed worktrees carry `.git` as a `gitdir: <path>` pointer file.
-                const gitdir = readFileSync(gitPath, 'utf8')
-                    .split(/\r?\n/)
-                    .find((line) => line.startsWith('gitdir:'))
-                    ?.slice('gitdir:'.length)
-                    .trim();
-                if (gitdir) {
-                    const resolved = isAbsolute(gitdir) ? gitdir : resolve(workdir, gitdir);
-                    // Standard linked-worktree layout: <common>/.git/worktrees/<name>
-                    // shares the common excludes; otherwise use the resolved gitdir's own.
-                    const common = /[/\\]worktrees[/\\][^/\\]+$/.test(resolved)
-                        ? resolve(resolved, '..', '..')
-                        : resolved;
-                    excludePath = join(common, 'info', 'exclude');
-                }
-            }
-        } catch {
-            // keep the plain-join fallback for normal checkouts or unreadable pointers
-        }
-        let current = '';
-        try {
-            current = readFileSync(excludePath, 'utf8');
-        } catch {
-            current = ''; // first install in this repo
-        }
-        if (current.includes(DURABLE_PLANE_EXCLUDE)) return; // idempotent
-        mkdirSync(dirname(excludePath), { recursive: true });
-        const sep = current === '' || current.endsWith('\n') ? '' : '\n';
-        appendFileSync(
-            excludePath,
-            `${sep}# spur durable run-record plane (E71/1026): must stay proof-fingerprint-inert\n${DURABLE_PLANE_EXCLUDE}\n`,
-            'utf8',
-        );
-    } catch {
-        // best-effort: an unwritable info dir leaves durable files untracked-visible; never fail a run
-    }
-}
-
 /**
  * Read-side record resolution (1026 R1): the durable records dir when any of
  * the run's record files already live there, else the legacy scratch dir.
@@ -1012,3 +952,5 @@ export function resolveRunRecordDir(cwd: string, runId: string): string {
     );
     return durable ? dirs.recordsDir : dirs.scratchDir;
 }
+
+export { ensureDurablePlaneIgnored } from './durable-plane-ignore';

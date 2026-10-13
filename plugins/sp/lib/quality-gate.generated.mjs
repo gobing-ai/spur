@@ -24854,7 +24854,6 @@ var ALIASED_TOOL_NAME_SQL = `CASE
     THEN tc.tool_name_alias
     ELSE ${RESOLVED_TOOL_NAME_SQL}
 END`;
-
 // packages/domain/src/analytics/forensic-query.ts
 var HISTORY_SKILL_NAME_SQL = `CASE
     WHEN LOWER(${RESOLVED_TOOL_NAME_SQL}) IN ('skill', 'use_skill', 'invoke_skill', 'slashcommand', 'slash_command', 'run_skill', 'call_skill', 'execute_skill') AND json_valid(tc.args_raw)

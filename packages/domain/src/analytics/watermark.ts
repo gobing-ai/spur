@@ -1,6 +1,6 @@
 import type { DbAdapter, DbBatchOp } from '@gobing-ai/ts-db';
 import type { ArtifactSelector } from './artifact';
-import { buildMessageWhereClauses } from './forensic-query';
+import { buildMessageWhereClauses } from './message-where';
 
 /**
  * Watermark policy for still-appending sessions (task 0550).
