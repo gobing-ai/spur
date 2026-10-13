@@ -922,7 +922,9 @@ verdict artifact exists (tasks 0617, 0619 — the clobbering spiral).
 
 ## Running the full gate (task 0872 / 1127 R7)
 
-The full gate legitimately runs 10-25 minutes. Two rules keep it from becoming a hazard (both
+The full gate legitimately runs minutes, not seconds — measured 1.8-3.1 min for `bun run spur-check`
+on an idle 10-core host (2026-10-13), and far longer when other agents' suites run concurrently.
+Two rules keep it from becoming a hazard (both
 violated once on 2026-10-10, aborting the run's own verification):
 
 - **Never wrap it in an external `timeout`, and never treat its runtime as a hang.** An outer bound

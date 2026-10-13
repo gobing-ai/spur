@@ -87,7 +87,12 @@ describe('resolveRepoRoot', () => {
         expect(root).toBe('/custom/project/root');
     });
 
-    test('resolves git repo root when projectRoot is omitted', async () => {
+    /**
+     * Load-flake budget (cross-cutting.md § Isolation rerun for load-flakes): this case resolves the live checkout's git root; it timed out at 5s in 2 of 5 loaded rounds (2026-10-13), green alone.
+     */
+    const loadFlakeTest = (name: string, fn: () => Promise<void> | void): void => void test(name, fn, 60_000);
+
+    loadFlakeTest('resolves git repo root when projectRoot is omitted', async () => {
         // 0713 R3b: assert the git toplevel, not `process.cwd()` — they coincide only when the
         // suite is launched from the repo root, which made this test cwd-dependent.
         const toplevel = Bun.spawnSync(['git', 'rev-parse', '--show-toplevel'], { cwd: process.cwd() })

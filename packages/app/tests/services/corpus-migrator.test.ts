@@ -605,7 +605,12 @@ describe('serializeFrontmatter', () => {
 // ── Integration: CorpusMigrator ─────────────────────────────────────────────
 
 describe('CorpusMigrator integration', () => {
-    test('migrates a standard legacy task file', async () => {
+    /**
+     * Load-flake budget (cross-cutting.md § Isolation rerun for load-flakes): this case migrates a whole corpus and passes in under a second on an idle host, but it exceeded bun's 5s default in 3 of 3 loaded rounds and 60s inside a loaded full-suite run (2026-10-13).
+     */
+    const loadFlakeTest = (name: string, fn: () => Promise<void> | void): void => void test(name, fn, 60_000);
+
+    loadFlakeTest('migrates a standard legacy task file', async () => {
         const dir = makeTempCorpus();
         makeCorpusFile(dir, '0050_Sample_legacy_task.md', LEGACY_TASK);
         const fs = makeFs(dir);
