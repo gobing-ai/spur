@@ -14,7 +14,9 @@ import { verifyPackExtract } from './verify-pack';
 describe('findMarketplaceVersionDrift', () => {
     test('returns empty when marketplace and plugin versions match the package', async () => {
         const drift = await findMarketplaceVersionDrift();
-        const pkg = JSON.parse(await Bun.file('apps/cli/package.json').text()) as { version?: string };
+        const pkg = JSON.parse(await Bun.file(new URL('../../apps/cli/package.json', import.meta.url)).text()) as {
+            version?: string;
+        };
         expect(pkg.version).toBeDefined();
         expect(drift).toEqual([]);
     });
