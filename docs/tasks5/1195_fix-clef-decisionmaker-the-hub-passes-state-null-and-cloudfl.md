@@ -4,12 +4,13 @@ name: "Fix clef DecisionMaker: the hub passes state null and Cloudflare rejects 
 status: todo
 template: standard
 created_at: 2026-10-13T18:11:35.494Z
-updated_at: "2026-10-13T18:22:22.147Z"
+updated_at: "2026-10-13T18:23:20.591Z"
 
 ac_altitude: task-local
 ac_numbering: task-local
 priority: P1
 estimate_hours: 2
+feature_id: P1
 ---
 
 ## 1195. Fix clef DecisionMaker: the hub passes state null and Cloudflare rejects the request with 422
