@@ -1136,3 +1136,27 @@ describe('main entrypoint (in-process)', () => {
         await expect(defaultProcessSpawner('__non_existent_binary_for_test__', [], getEnvVars())).rejects.toThrow();
     });
 });
+
+describe('installed twin under node without Bun on PATH (task 1178 review P4)', () => {
+    const nodeBin = Bun.which('node');
+
+    test.skipIf(nodeBin === null)('degrades history to unavailable instead of exiting 1', () => {
+        // PATH holds only a node symlink, so the Bun re-exec fails with ENOENT.
+        const binDir = mkdtempSync(join(tmpdir(), 'daily-summary-nobun-'));
+        try {
+            symlinkSync(nodeBin as string, join(binDir, 'node'));
+            const twin = join(import.meta.dir, '../../scripts/daily-summary/daily-summary.mjs');
+            const run = spawnSync(
+                join(binDir, 'node'),
+                [twin, '--date', todayLocal(), '--dry-run', '--no-ccusage', '--no-git'],
+                { cwd: binDir, env: { PATH: binDir, HOME: binDir }, encoding: 'utf8' },
+            );
+            expect(run.status).toBe(0);
+            expect(run.stderr).toContain('Bun not on PATH');
+            expect(run.stdout).toContain('# Daily Summary');
+            expect(run.stdout).not.toContain('## Execution Loops & Health Findings');
+        } finally {
+            rmSync(binDir, { recursive: true, force: true });
+        }
+    });
+});

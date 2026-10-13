@@ -804,12 +804,14 @@ export async function buildDailySummary(options: CliOptions): Promise<DailySumma
 export async function main(): Promise<void> {
     // The generated app entry read by getSpurHistoryHealth needs Bun (SQLite); the installed
     // `.mjs` twin may be launched with plain node, so re-enter Bun before any app import.
+    // Without Bun on PATH, keep running under node: the history reader degrades to unavailable
+    // (n/a) instead of failing the whole report (task 1178 review P4).
     if (!process.versions.bun) {
         const child = spawnSync('bun', [fileURLToPath(import.meta.url), ...process.argv.slice(2)], {
             stdio: 'inherit',
         });
-        if (child.error) console.error(`daily-summary requires Bun on PATH: ${child.error.message}`);
-        process.exit(child.status ?? 1);
+        if (!child.error) process.exit(child.status ?? 1);
+        console.error(`daily-summary: Bun not on PATH (${child.error.message}); history health unavailable`);
     }
     const options = parseArgs();
 

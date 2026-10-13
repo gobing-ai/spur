@@ -563,9 +563,9 @@ async function main() {
     const child = spawnSync("bun", [fileURLToPath2(import.meta.url), ...process.argv.slice(2)], {
       stdio: "inherit"
     });
-    if (child.error)
-      console.error(`daily-summary requires Bun on PATH: ${child.error.message}`);
-    process.exit(child.status ?? 1);
+    if (!child.error)
+      process.exit(child.status ?? 1);
+    console.error(`daily-summary: Bun not on PATH (${child.error.message}); history health unavailable`);
   }
   const options = parseArgs();
   logger.info(`Generating daily summary for ${options.date}...`);
