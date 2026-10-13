@@ -1,5 +1,4 @@
 import { expect, test } from 'bun:test';
-import { spawnSync } from 'node:child_process';
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -14,11 +13,30 @@ import { join } from 'node:path';
 
 const SCRIPT = join(import.meta.dir, '..', 'scripts', 'inline-run-setup.ts');
 
-test('an unsafe run id refuses with exit 1 and writes no outcome artifact', () => {
+/**
+ * Async stand-in for `await spawnAsync(cmd, args, { cwd, stdio: 'pipe', encoding: 'utf8' })` so the
+ * file's tests can run as `test.concurrent`: each test owns its temp tree, and the ~0.4 s
+ * per-spawn bundle load made the serial file one of the slowest in the gate.
+ */
+async function spawnAsync(
+    cmd: string,
+    args: readonly string[],
+    options: { cwd?: string; stdio?: 'pipe'; encoding?: 'utf8' } = {},
+): Promise<{ status: number | null; stdout: string; stderr: string }> {
+    const proc = Bun.spawn([cmd, ...args], { cwd: options.cwd, stdout: 'pipe', stderr: 'pipe' });
+    const [stdout, stderr, status] = await Promise.all([
+        new Response(proc.stdout).text(),
+        new Response(proc.stderr).text(),
+        proc.exited,
+    ]);
+    return { status, stdout, stderr };
+}
+
+test.concurrent('an unsafe run id refuses with exit 1 and writes no outcome artifact', async () => {
     const dir = mkdtempSync(join(tmpdir(), 'inline-run-setup-guard-'));
     try {
         for (const unsafeId of ['../evil', 'a/b', '$(id)', 'run..../../escape', '..']) {
-            const proc = spawnSync('bun', [SCRIPT, '--run-id', unsafeId, '--file', 'whatever'], {
+            const proc = await spawnAsync('bun', [SCRIPT, '--run-id', unsafeId, '--file', 'whatever'], {
                 cwd: dir,
                 stdio: 'pipe',
                 encoding: 'utf8',
@@ -35,11 +53,11 @@ test('an unsafe run id refuses with exit 1 and writes no outcome artifact', () =
     }
 });
 
-test('a valid run id passes the guard and reaches the normal fail-closed path (no false refusal)', () => {
+test.concurrent('a valid run id passes the guard and reaches the normal fail-closed path (no false refusal)', async () => {
     const dir = mkdtempSync(join(tmpdir(), 'inline-run-setup-guard-valid-'));
     try {
         const runId = '0804-run-setup-guard-valid';
-        const proc = spawnSync('bun', [SCRIPT, '--run-id', runId, '--file', 'no-such-workflow'], {
+        const proc = await spawnAsync('bun', [SCRIPT, '--run-id', runId, '--file', 'no-such-workflow'], {
             cwd: dir,
             stdio: 'pipe',
             encoding: 'utf8',
@@ -77,7 +95,7 @@ transitions:
       kind: always
 `;
 
-test('0948 R7: a successful re-setup drops the stale error key and projects ok', () => {
+test.concurrent('0948 R7: a successful re-setup drops the stale error key and projects ok', async () => {
     const dir = mkdtempSync(join(tmpdir(), 'inline-run-setup-r7-'));
     try {
         const runId = 'r7-resetup';
@@ -85,7 +103,7 @@ test('0948 R7: a successful re-setup drops the stale error key and projects ok',
         const markdownPath = join(dir, '.spur', 'memory', 'runs', `${runId}.md`);
 
         // 1. A failing setup records the failure.
-        const failed = spawnSync('bun', [SCRIPT, '--run-id', runId, '--file', 'no-such-workflow'], {
+        const failed = await spawnAsync('bun', [SCRIPT, '--run-id', runId, '--file', 'no-such-workflow'], {
             cwd: dir,
             stdio: 'pipe',
             encoding: 'utf8',
@@ -97,7 +115,7 @@ test('0948 R7: a successful re-setup drops the stale error key and projects ok',
 
         // 2. A successful re-setup under the SAME run id must not carry the old error.
         writeFileSync(join(dir, 'wf.yaml'), MINIMAL_WF);
-        const ok = spawnSync('bun', [SCRIPT, '--run-id', runId, '--file', 'wf.yaml'], {
+        const ok = await spawnAsync('bun', [SCRIPT, '--run-id', runId, '--file', 'wf.yaml'], {
             cwd: dir,
             stdio: 'pipe',
             encoding: 'utf8',
@@ -212,8 +230,8 @@ function makeDelegateFixture(behavior: DelegateBehavior) {
     };
 }
 
-function runDelegate(workdir: string, runId: string, appEntry: string) {
-    return spawnSync(
+async function runDelegate(workdir: string, runId: string, appEntry: string) {
+    return await spawnAsync(
         'bun',
         [SCRIPT, '--run-id', runId, '--file', 'task-pipeline.yaml', '--spur-bin', `bun ${appEntry}`],
         {
@@ -229,12 +247,12 @@ function makeDelegateWorkdir(): { workdir: string; cleanup: () => void } {
     return { workdir, cleanup: () => rmSync(workdir, { recursive: true, force: true }) };
 }
 
-test('delegate cleanup: setup success closes the DB exactly once and exits 0 (0809 R2)', () => {
+test.concurrent('delegate cleanup: setup success closes the DB exactly once and exits 0 (0809 R2)', async () => {
     const stub = makeDelegateFixture('ok');
     const { workdir, cleanup } = makeDelegateWorkdir();
     try {
         const runId = '0809-delegate-ok';
-        const proc = runDelegate(workdir, runId, stub.appEntry);
+        const proc = await runDelegate(workdir, runId, stub.appEntry);
         expect(proc.status).toBe(0);
         expect(proc.stderr).toContain('created run');
         expect(stub.markers()).toEqual(['open', 'setup', 'close']);
@@ -277,7 +295,7 @@ test('delegate cleanup: setup success closes the DB exactly once and exits 0 (08
         ) as Record<string, unknown>;
         seeded.error = 'stale failure';
         writeFileSync(join(workdir, '.spur', 'memory', 'runs', `${runId}.state.json`), `${JSON.stringify(seeded)}\n`);
-        const rerun = runDelegate(workdir, runId, stub.appEntry);
+        const rerun = await runDelegate(workdir, runId, stub.appEntry);
         expect(rerun.status).toBe(0);
         const headers = readFileSync(join(workdir, '.spur', 'memory', 'runs', `${runId}.md`), 'utf8')
             .split('\n')
@@ -298,12 +316,12 @@ test('delegate cleanup: setup success closes the DB exactly once and exits 0 (08
     }
 }, 30_000);
 
-test('delegate cleanup: a returned ok:false refusal closes the DB exactly once and exits 1 (0809 R2)', () => {
+test.concurrent('delegate cleanup: a returned ok:false refusal closes the DB exactly once and exits 1 (0809 R2)', async () => {
     const stub = makeDelegateFixture('refuse');
     const { workdir, cleanup } = makeDelegateWorkdir();
     try {
         const runId = '0809-delegate-refuse';
-        const proc = runDelegate(workdir, runId, stub.appEntry);
+        const proc = await runDelegate(workdir, runId, stub.appEntry);
         expect(proc.status).toBe(1);
         expect(proc.stderr).toContain('fixture returned refusal');
         expect(stub.markers()).toEqual(['open', 'setup', 'close']);
@@ -321,11 +339,11 @@ test('delegate cleanup: a returned ok:false refusal closes the DB exactly once a
     }
 }, 30_000);
 
-test('delegate cleanup: a thrown failure after the DB opens still closes it exactly once and exits 1 (0809 R2)', () => {
+test.concurrent('delegate cleanup: a thrown failure after the DB opens still closes it exactly once and exits 1 (0809 R2)', async () => {
     const stub = makeDelegateFixture('throw');
     const { workdir, cleanup } = makeDelegateWorkdir();
     try {
-        const proc = runDelegate(workdir, '0809-delegate-throw', stub.appEntry);
+        const proc = await runDelegate(workdir, '0809-delegate-throw', stub.appEntry);
         expect(proc.status).toBe(1);
         expect(proc.stderr).toContain('fixture thrown failure');
         expect(stub.markers()).toEqual(['open', 'setup', 'close']);
@@ -338,11 +356,11 @@ test('delegate cleanup: a thrown failure after the DB opens still closes it exac
     }
 }, 30_000);
 
-test('delegate cleanup: an unsafe run id never opens the DB and writes no artifact (0809 R2)', () => {
+test.concurrent('delegate cleanup: an unsafe run id never opens the DB and writes no artifact (0809 R2)', async () => {
     const stub = makeDelegateFixture('ok');
     const { workdir, cleanup } = makeDelegateWorkdir();
     try {
-        const proc = runDelegate(workdir, '../evil', stub.appEntry);
+        const proc = await runDelegate(workdir, '../evil', stub.appEntry);
         expect(proc.status).toBe(1);
         expect(proc.stderr).toContain('refusing unsafe run id');
         expect(stub.markers()).toEqual([]);
@@ -362,13 +380,13 @@ const REAL_APP_ENTRY = join(REPO_ROOT, 'apps', 'cli', 'src', 'index.ts');
 const APP_ENTRY = join(REPO_ROOT, 'packages', 'app', 'src', 'index.ts');
 
 /** Temp git repo holding one real task-spec file (the digest capture needs `HEAD` plus a task shape). */
-function makeFingerprintFixture(): { dir: string; cleanup: () => void } {
+async function makeFingerprintFixture(): Promise<{ dir: string; cleanup: () => void }> {
     const dir = mkdtempSync(join(tmpdir(), 'inline-run-setup-fingerprint-'));
     writeFileSync(
         join(dir, 'task.md'),
         '## 0862. Fixture task\n\n### Requirements\n\n- **R1** — fixture requirement\n',
     );
-    spawnSync(
+    await spawnAsync(
         'sh',
         [
             '-c',
@@ -379,18 +397,18 @@ function makeFingerprintFixture(): { dir: string; cleanup: () => void } {
     return { dir, cleanup: () => rmSync(dir, { recursive: true, force: true }) };
 }
 
-function runFingerprint(dir: string, args: string[]) {
-    return spawnSync('bun', [SCRIPT, '--fingerprint', ...args, '--spur-bin', `bun ${REAL_APP_ENTRY}`], {
+async function runFingerprint(dir: string, args: string[]) {
+    return await spawnAsync('bun', [SCRIPT, '--fingerprint', ...args, '--spur-bin', `bun ${REAL_APP_ENTRY}`], {
         cwd: dir,
         stdio: 'pipe',
         encoding: 'utf8',
     });
 }
 
-test('--fingerprint prints the same digest as a direct computeProofInputFingerprint (0862 R5)', async () => {
-    const { dir, cleanup } = makeFingerprintFixture();
+test.concurrent('--fingerprint prints the same digest as a direct computeProofInputFingerprint (0862 R5)', async () => {
+    const { dir, cleanup } = await makeFingerprintFixture();
     try {
-        const proc = runFingerprint(dir, ['--task-file', 'task.md']);
+        const proc = await runFingerprint(dir, ['--task-file', 'task.md']);
         expect(proc.status).toBe(0);
         expect(proc.stdout.trim()).toMatch(/^sha256:[a-f0-9]{64}$/);
 
@@ -412,10 +430,10 @@ test('--fingerprint prints the same digest as a direct computeProofInputFingerpr
     }
 }, 30_000);
 
-test('--fingerprint fails closed on an unreadable task file and creates no run', () => {
-    const { dir, cleanup } = makeFingerprintFixture();
+test.concurrent('--fingerprint fails closed on an unreadable task file and creates no run', async () => {
+    const { dir, cleanup } = await makeFingerprintFixture();
     try {
-        const proc = runFingerprint(dir, ['--task-file', 'no-such-task.md']);
+        const proc = await runFingerprint(dir, ['--task-file', 'no-such-task.md']);
         expect(proc.status).toBe(1);
         expect(proc.stderr).toContain('taskFile does not exist');
         expect(existsSync(join(dir, '.spur'))).toBe(false);
@@ -424,11 +442,11 @@ test('--fingerprint fails closed on an unreadable task file and creates no run',
     }
 });
 
-test('--fingerprint refuses a mixed invocation and a missing task file with usage (exit 2)', () => {
-    const { dir, cleanup } = makeFingerprintFixture();
+test.concurrent('--fingerprint refuses a mixed invocation and a missing task file with usage (exit 2)', async () => {
+    const { dir, cleanup } = await makeFingerprintFixture();
     try {
-        expect(runFingerprint(dir, ['--task-file', 'task.md', '--run-id', 'x']).status).toBe(2);
-        expect(runFingerprint(dir, []).status).toBe(2);
+        expect((await runFingerprint(dir, ['--task-file', 'task.md', '--run-id', 'x'])).status).toBe(2);
+        expect((await runFingerprint(dir, [])).status).toBe(2);
         expect(existsSync(join(dir, '.spur'))).toBe(false);
     } finally {
         cleanup();
@@ -438,8 +456,8 @@ test('--fingerprint refuses a mixed invocation and a missing task file with usag
 // ─── --decide mode (0941 R5) ─────────────────────────────────────────────────
 
 /** Run the delegate in --decide mode inside `dir` (options paths resolve against the cwd). */
-function runDecideMode(dir: string, args: string[]) {
-    return spawnSync('bun', [SCRIPT, '--decide', ...args, '--spur-bin', `bun ${REAL_APP_ENTRY}`], {
+async function runDecideMode(dir: string, args: string[]) {
+    return await spawnAsync('bun', [SCRIPT, '--decide', ...args, '--spur-bin', `bun ${REAL_APP_ENTRY}`], {
         cwd: dir,
         stdio: 'pipe',
         encoding: 'utf8',
@@ -452,7 +470,7 @@ function writeDecideOptions(dir: string, options: Record<string, unknown>): stri
     return 'decide-options.json';
 }
 
-test('--decide executes through the app runner: degraded default with the switch off, resultFile written (0941 R4/R5)', () => {
+test.concurrent('--decide executes through the app runner: degraded default with the switch off, resultFile written (0941 R4/R5)', async () => {
     const dir = mkdtempSync(join(tmpdir(), 'inline-run-setup-decide-'));
     try {
         const optionsFile = writeDecideOptions(dir, {
@@ -463,7 +481,7 @@ test('--decide executes through the app runner: degraded default with the switch
             default: 'stop',
             resultFile: '.spur/run/decide-test-recovery.decision.json',
         });
-        const proc = runDecideMode(dir, [
+        const proc = await runDecideMode(dir, [
             '--run-id',
             'decide-test-1',
             '--node',
@@ -495,7 +513,7 @@ test('--decide executes through the app runner: degraded default with the switch
     }
 }, 30_000);
 
-test('--decide threads the config switch through the driver boundary: switch on gets past disabled (0941 gate fix)', () => {
+test.concurrent('--decide threads the config switch through the driver boundary: switch on gets past disabled (0941 gate fix)', async () => {
     const dir = mkdtempSync(join(tmpdir(), 'inline-run-setup-decide-cfg-'));
     try {
         // The delegate resolves workflows.decideDecisionMaker at its own boundary; a switched-on
@@ -513,7 +531,7 @@ test('--decide threads the config switch through the driver boundary: switch on 
             evidence: ['missing-evidence.txt'],
             resultFile: '.spur/run/decide-test-cfg.decision.json',
         });
-        const proc = runDecideMode(dir, [
+        const proc = await runDecideMode(dir, [
             '--run-id',
             'decide-test-4',
             '--node',
@@ -537,7 +555,7 @@ test('--decide threads the config switch through the driver boundary: switch on 
     }
 }, 30_000);
 
-test('--decide fails closed on an invalid options schema (exit 1, ok:false) (0941 R3)', () => {
+test.concurrent('--decide fails closed on an invalid options schema (exit 1, ok:false) (0941 R3)', async () => {
     const dir = mkdtempSync(join(tmpdir(), 'inline-run-setup-decide-bad-'));
     try {
         const optionsFile = writeDecideOptions(dir, {
@@ -548,7 +566,7 @@ test('--decide fails closed on an invalid options schema (exit 1, ok:false) (094
             default: 'pause',
             resultFile: 'd.json',
         });
-        const proc = runDecideMode(dir, [
+        const proc = await runDecideMode(dir, [
             '--run-id',
             'decide-test-2',
             '--node',
@@ -566,7 +584,7 @@ test('--decide fails closed on an invalid options schema (exit 1, ok:false) (094
     }
 }, 30_000);
 
-test('--decide refuses usage errors and unsafe run ids', () => {
+test.concurrent('--decide refuses usage errors and unsafe run ids', async () => {
     const dir = mkdtempSync(join(tmpdir(), 'inline-run-setup-decide-usage-'));
     try {
         const optionsFile = writeDecideOptions(dir, {
@@ -577,12 +595,13 @@ test('--decide refuses usage errors and unsafe run ids', () => {
             resultFile: 'd.json',
         });
         // Missing --options-json → usage (exit 2).
-        expect(runDecideMode(dir, ['--run-id', 'decide-test-3', '--node', 'classify']).status).toBe(2);
+        expect((await runDecideMode(dir, ['--run-id', 'decide-test-3', '--node', 'classify'])).status).toBe(2);
         // Missing --node → usage (exit 2).
-        expect(runDecideMode(dir, ['--run-id', 'decide-test-3', '--options-json', optionsFile]).status).toBe(2);
+        expect((await runDecideMode(dir, ['--run-id', 'decide-test-3', '--options-json', optionsFile])).status).toBe(2);
         // Unsafe run id (path traversal) → refusal (exit 1).
         expect(
-            runDecideMode(dir, ['--run-id', '../escape', '--node', 'classify', '--options-json', optionsFile]).status,
+            (await runDecideMode(dir, ['--run-id', '../escape', '--node', 'classify', '--options-json', optionsFile]))
+                .status,
         ).toBe(1);
     } finally {
         rmSync(dir, { recursive: true, force: true });
@@ -608,14 +627,14 @@ transitions:
 `;
 
 /** Worktree with one fully-traced inline run (setup row + record files + one action row). */
-function makeWorktree(prefix: string, runId: string): { dir: string; cleanup: () => void } {
+async function makeWorktree(prefix: string, runId: string): Promise<{ dir: string; cleanup: () => void }> {
     const dir = mkdtempSync(join(tmpdir(), prefix));
     mkdirSync(join(dir, '.spur', 'workflows'), { recursive: true });
     writeFileSync(join(dir, '.spur', 'workflows', 'persist-out-smoke.yaml'), PERSIST_WF);
-    const run = (args: string[]) => spawnSync('bun', [SCRIPT, ...args], { cwd: dir, stdio: 'pipe', encoding: 'utf8' });
-    const setup = run(['--run-id', runId, '--file', '.spur/workflows/persist-out-smoke.yaml']);
+    const run = (args: string[]) => spawnAsync('bun', [SCRIPT, ...args], { cwd: dir, stdio: 'pipe', encoding: 'utf8' });
+    const setup = await run(['--run-id', runId, '--file', '.spur/workflows/persist-out-smoke.yaml']);
     if (setup.status !== 0) throw new Error(`fixture setup failed: ${setup.stderr}`);
-    const action = run([
+    const action = await run([
         '--action',
         '--run-id',
         runId,
@@ -634,11 +653,11 @@ function makeWorktree(prefix: string, runId: string): { dir: string; cleanup: ()
     return { dir, cleanup: () => rmSync(dir, { recursive: true, force: true }) };
 }
 
-test('0975 --persist-out: copies the run row, its action rows and the run records into the invoking tree', () => {
-    const from = makeWorktree('persist-out-from-', 'run-0975-out');
+test.concurrent('0975 --persist-out: copies the run row, its action rows and the run records into the invoking tree', async () => {
+    const from = await makeWorktree('persist-out-from-', 'run-0975-out');
     const to = mkdtempSync(join(tmpdir(), 'persist-out-to-'));
     try {
-        const proc = spawnSync('bun', [SCRIPT, '--persist-out', '--from', from.dir], {
+        const proc = await spawnAsync('bun', [SCRIPT, '--persist-out', '--from', from.dir], {
             cwd: to,
             stdio: 'pipe',
             encoding: 'utf8',
@@ -666,14 +685,14 @@ test('0975 --persist-out: copies the run row, its action rows and the run record
     }
 }, 60_000);
 
-test('0975 --persist-out: persisting the same worktree twice skips id-exists and leaves counts unchanged', () => {
-    const from = makeWorktree('persist-out-idem-from-', 'run-0975-idem');
+test.concurrent('0975 --persist-out: persisting the same worktree twice skips id-exists and leaves counts unchanged', async () => {
+    const from = await makeWorktree('persist-out-idem-from-', 'run-0975-idem');
     const to = mkdtempSync(join(tmpdir(), 'persist-out-idem-to-'));
     try {
         const argv = ['--persist-out', '--from', from.dir];
-        const first = spawnSync('bun', [SCRIPT, ...argv], { cwd: to, stdio: 'pipe', encoding: 'utf8' });
+        const first = await spawnAsync('bun', [SCRIPT, ...argv], { cwd: to, stdio: 'pipe', encoding: 'utf8' });
         expect(first.status).toBe(0);
-        const second = spawnSync('bun', [SCRIPT, ...argv], { cwd: to, stdio: 'pipe', encoding: 'utf8' });
+        const second = await spawnAsync('bun', [SCRIPT, ...argv], { cwd: to, stdio: 'pipe', encoding: 'utf8' });
         expect(second.status).toBe(0);
         const out = JSON.parse(second.stdout) as { ok: boolean; persisted: number; skipped: unknown[] };
         expect(out).toEqual({ ok: true, persisted: 0, skipped: [{ id: 'run-0975-idem', reason: 'id-exists' }] });
@@ -691,13 +710,13 @@ test('0975 --persist-out: persisting the same worktree twice skips id-exists and
     }
 }, 60_000);
 
-test('0975 --persist-out: an unreadable worktree DB exits 1 with {ok:false}', () => {
+test.concurrent('0975 --persist-out: an unreadable worktree DB exits 1 with {ok:false}', async () => {
     const to = mkdtempSync(join(tmpdir(), 'persist-out-fail-to-'));
     const from = mkdtempSync(join(tmpdir(), 'persist-out-fail-from-'));
     try {
         mkdirSync(join(from, '.spur'), { recursive: true });
         writeFileSync(join(from, '.spur', 'spur.db'), 'not a database');
-        const proc = spawnSync('bun', [SCRIPT, '--persist-out', '--from', from], {
+        const proc = await spawnAsync('bun', [SCRIPT, '--persist-out', '--from', from], {
             cwd: to,
             stdio: 'pipe',
             encoding: 'utf8',
@@ -712,7 +731,7 @@ test('0975 --persist-out: an unreadable worktree DB exits 1 with {ok:false}', ()
     }
 }, 60_000);
 
-test('0975 --persist-out: usage errors exit 2', () => {
+test.concurrent('0975 --persist-out: usage errors exit 2', async () => {
     const to = mkdtempSync(join(tmpdir(), 'persist-out-usage-'));
     try {
         for (const args of [
@@ -726,7 +745,7 @@ test('0975 --persist-out: usage errors exit 2', () => {
             // occurrence collapses to an empty path — a usage error, never a silent skip.
             ['--persist-out', '--from', '/tmp/x', '--task-file'],
         ]) {
-            const proc = spawnSync('bun', [SCRIPT, ...args], { cwd: to, stdio: 'pipe', encoding: 'utf8' });
+            const proc = await spawnAsync('bun', [SCRIPT, ...args], { cwd: to, stdio: 'pipe', encoding: 'utf8' });
             expect(proc.status, `expected usage exit 2 for ${args.join(' ')}`).toBe(2);
         }
     } finally {
@@ -734,8 +753,8 @@ test('0975 --persist-out: usage errors exit 2', () => {
     }
 });
 
-test('0984 --persist-out: --task-file copies the evidence the merged task file cites into the invoking tree', () => {
-    const from = makeWorktree('persist-out-cited-from-', 'run-0984-cited');
+test.concurrent('0984 --persist-out: --task-file copies the evidence the merged task file cites into the invoking tree', async () => {
+    const from = await makeWorktree('persist-out-cited-from-', 'run-0984-cited');
     const to = mkdtempSync(join(tmpdir(), 'persist-out-cited-to-'));
     try {
         mkdirSync(join(from.dir, '.spur', 'run'), { recursive: true });
@@ -745,7 +764,7 @@ test('0984 --persist-out: --task-file copies the evidence the merged task file c
             join(to, 'docs', 'task-0984.md'),
             '## Testing\n\nEvidence: `.spur/run/run-0984-cited.md`, `.spur/run/0984-check-receipt.json`\n',
         );
-        const proc = spawnSync(
+        const proc = await spawnAsync(
             'bun',
             [SCRIPT, '--persist-out', '--from', from.dir, '--task-file', 'docs/task-0984.md'],
             { cwd: to, stdio: 'pipe', encoding: 'utf8' },
@@ -761,13 +780,13 @@ test('0984 --persist-out: --task-file copies the evidence the merged task file c
     }
 }, 60_000);
 
-test('0984 --persist-out: a citation missing in both trees exits 1 with {ok:false}', () => {
-    const from = makeWorktree('persist-out-dangle-from-', 'run-0984-dangle');
+test.concurrent('0984 --persist-out: a citation missing in both trees exits 1 with {ok:false}', async () => {
+    const from = await makeWorktree('persist-out-dangle-from-', 'run-0984-dangle');
     const to = mkdtempSync(join(tmpdir(), 'persist-out-dangle-to-'));
     try {
         mkdirSync(join(to, 'docs'), { recursive: true });
         writeFileSync(join(to, 'docs', 'task-0984.md'), '## Testing\n\nEvidence: `.spur/run/0984-vanished.json`\n');
-        const proc = spawnSync(
+        const proc = await spawnAsync(
             'bun',
             [SCRIPT, '--persist-out', '--from', from.dir, '--task-file', 'docs/task-0984.md'],
             { cwd: to, stdio: 'pipe', encoding: 'utf8' },
@@ -782,8 +801,8 @@ test('0984 --persist-out: a citation missing in both trees exits 1 with {ok:fals
     }
 }, 60_000);
 
-test('1012 --persist-out: --task-file copies uncited <wbs>- and <runId>- evidence; unrelated files stay behind', () => {
-    const from = makeWorktree('persist-out-owned-from-', 'run-1012-owned');
+test.concurrent('1012 --persist-out: --task-file copies uncited <wbs>- and <runId>- evidence; unrelated files stay behind', async () => {
+    const from = await makeWorktree('persist-out-owned-from-', 'run-1012-owned');
     const to = mkdtempSync(join(tmpdir(), 'persist-out-owned-to-'));
     try {
         mkdirSync(join(from.dir, '.spur', 'run'), { recursive: true });
@@ -792,11 +811,15 @@ test('1012 --persist-out: --task-file copies uncited <wbs>- and <runId>- evidenc
         writeFileSync(join(from.dir, '.spur', 'run', '9999-verdict.json'), '{"verdict":"FAIL"}\n');
         mkdirSync(join(to, 'docs'), { recursive: true });
         writeFileSync(join(to, 'docs', '1234_x.md'), '## Testing\n\nno citations here\n');
-        const proc = spawnSync('bun', [SCRIPT, '--persist-out', '--from', from.dir, '--task-file', 'docs/1234_x.md'], {
-            cwd: to,
-            stdio: 'pipe',
-            encoding: 'utf8',
-        });
+        const proc = await spawnAsync(
+            'bun',
+            [SCRIPT, '--persist-out', '--from', from.dir, '--task-file', 'docs/1234_x.md'],
+            {
+                cwd: to,
+                stdio: 'pipe',
+                encoding: 'utf8',
+            },
+        );
         expect(proc.status, proc.stderr).toBe(0);
         expect(JSON.parse(proc.stdout)).toEqual({ ok: true, persisted: 1, skipped: [] });
         expect(readFileSync(join(to, '.spur', 'run', '1234-verdict.json'), 'utf8')).toBe('{"verdict":"PASS"}\n');
@@ -808,8 +831,8 @@ test('1012 --persist-out: --task-file copies uncited <wbs>- and <runId>- evidenc
     }
 }, 60_000);
 
-test('1012 --persist-out: a source evidence dir that cannot be listed exits 1 with {ok:false} and writes nothing', () => {
-    const from = makeWorktree('persist-out-enotdir-from-', 'run-1012-enotdir');
+test.concurrent('1012 --persist-out: a source evidence dir that cannot be listed exits 1 with {ok:false} and writes nothing', async () => {
+    const from = await makeWorktree('persist-out-enotdir-from-', 'run-1012-enotdir');
     const to = mkdtempSync(join(tmpdir(), 'persist-out-enotdir-to-'));
     try {
         // Replace the evidence dir with a regular file: listing fails ENOTDIR.
@@ -817,11 +840,15 @@ test('1012 --persist-out: a source evidence dir that cannot be listed exits 1 wi
         writeFileSync(join(from.dir, '.spur', 'run'), 'not a directory\n');
         mkdirSync(join(to, 'docs'), { recursive: true });
         writeFileSync(join(to, 'docs', '1234_x.md'), '## Testing\n\nno citations here\n');
-        const proc = spawnSync('bun', [SCRIPT, '--persist-out', '--from', from.dir, '--task-file', 'docs/1234_x.md'], {
-            cwd: to,
-            stdio: 'pipe',
-            encoding: 'utf8',
-        });
+        const proc = await spawnAsync(
+            'bun',
+            [SCRIPT, '--persist-out', '--from', from.dir, '--task-file', 'docs/1234_x.md'],
+            {
+                cwd: to,
+                stdio: 'pipe',
+                encoding: 'utf8',
+            },
+        );
         expect(proc.status).toBe(1);
         const out = JSON.parse(proc.stdout) as { ok: boolean; error?: string };
         expect(out.ok).toBe(false);

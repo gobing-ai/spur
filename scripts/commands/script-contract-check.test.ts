@@ -14,8 +14,6 @@ import {
     validateContract,
 } from './script-contract-check';
 
-const SCRIPT = join(import.meta.dir, 'script-contract-check.ts');
-
 function createTempEnv() {
     const root = mkdtempSync(join(tmpdir(), 'script-contract-test-'));
     const configDir = join(root, 'config');
@@ -394,17 +392,6 @@ test('Clean setup with standard twins and repo-only scripts passes', () => {
     }
 });
 
-test('CLI runner exits 0 for live repo manifest and scripts', () => {
-    const proc = Bun.spawnSync(['bun', SCRIPT], {
-        cwd: join(import.meta.dir, '../..'),
-        stdout: 'pipe',
-        stderr: 'pipe',
-    });
-    const stdout = new TextDecoder().decode(proc.stdout);
-    expect(proc.exitCode).toBe(0);
-    expect(stdout).toContain('PASS');
-}, 30_000);
-
 test('in-process run() handles success, manifest error, and validation failure', () => {
     const logSpy = spyOn(console, 'log').mockImplementation(() => {});
     const errSpy = spyOn(console, 'error').mockImplementation(() => {});
@@ -415,7 +402,8 @@ test('in-process run() handles success, manifest error, and validation failure',
 
         // repo-only: run() supplies the real spawn-based converter, so a standard entry here
         // would need a genuine `superskill script convert` twin. Rule 1's content check is
-        // covered by the validateContract tests and the live-repo runner test.
+        // covered by the validateContract tests; the live repo itself is checked by
+        // `bun run script-contract-check` (spur-check-feature / spur-check:full).
         writeFileSync(join(env.scriptsDir, 'ship.ts'), 'console.log("ship");\n');
         const manifestPath = join(env.configDir, 'plugin-scripts.json');
         writeFileSync(manifestPath, JSON.stringify({ entries: [{ rel: 'ship.ts', contract: 'repo-only' }] }));

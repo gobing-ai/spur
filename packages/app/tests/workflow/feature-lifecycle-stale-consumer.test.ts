@@ -25,14 +25,15 @@ const STATE_MACHINE_SCHEMA = join(REPO_ROOT, 'apps', 'cli', 'schemas', 'state-ma
 const FEATURE_ID = 'F1';
 
 /** One spawned CLI invocation against a throwaway project root. */
-function runCli(root: string, args: string[]): { status: number; stdout: string; output: string } {
-    const result = Bun.spawnSync([process.execPath, CLI_ENTRY, ...args], { cwd: root });
-    const stdout = result.stdout.toString();
-    return {
-        status: result.exitCode ?? -1,
-        stdout,
-        output: `${stdout}${result.stderr.toString()}`,
-    };
+async function runCli(root: string, args: string[]): Promise<{ status: number; stdout: string; output: string }> {
+    // Async spawn so the four independent fixtures run as `test.concurrent` (each owns its root).
+    const proc = Bun.spawn([process.execPath, CLI_ENTRY, ...args], { cwd: root, stdout: 'pipe', stderr: 'pipe' });
+    const [stdout, stderr, exitCode] = await Promise.all([
+        new Response(proc.stdout).text(),
+        new Response(proc.stderr).text(),
+        proc.exited,
+    ]);
+    return { status: exitCode ?? -1, stdout, output: `${stdout}${stderr}` };
 }
 
 const featureBody = (): string =>
@@ -245,13 +246,13 @@ const withProject = async (kind: keyof typeof FIXTURES, body: (root: string) => 
 
 const FIXTURE_TIMEOUT_MS = 60_000;
 const testFixture = (label: string, fn: () => Promise<void>): void => {
-    test(label, fn, FIXTURE_TIMEOUT_MS);
+    test.concurrent(label, fn, FIXTURE_TIMEOUT_MS);
 };
 
 describe('feature-lifecycle verifying entry: stale consumer diagnosis (1185)', () => {
     testFixture('AC3: a stale consumer is named and the feature does not complete', async () => {
         await withProject('stale', async (root) => {
-            const sync = runCli(root, ['feature', 'sync', FEATURE_ID, '--json']);
+            const sync = await runCli(root, ['feature', 'sync', FEATURE_ID, '--json']);
             expect(sync.status).not.toBe(0);
             // The bare denial is widened, not replaced: state/exit facts stay.
             expect(sync.output).toContain('State "verifying" onEnter shell failed (exit 1)');
@@ -276,7 +277,7 @@ describe('feature-lifecycle verifying entry: stale consumer diagnosis (1185)', (
 
     testFixture('R1: the nested pass failure carries the same diagnosis', async () => {
         await withProject('stale', async (root) => {
-            const run = runCli(root, [
+            const run = await runCli(root, [
                 'workflow',
                 'run',
                 'feature-verification.yaml',
@@ -296,7 +297,7 @@ describe('feature-lifecycle verifying entry: stale consumer diagnosis (1185)', (
 
     testFixture('AC2/AC3: a genuine verification FAIL keeps its own message and records FAIL', async () => {
         await withProject('failing', async (root) => {
-            const sync = runCli(root, ['feature', 'sync', FEATURE_ID, '--json']);
+            const sync = await runCli(root, ['feature', 'sync', FEATURE_ID, '--json']);
             expect(sync.status).not.toBe(0);
             expect(recordedStatus(root)).toBe('FAIL');
             // Distinguishable from a stale consumer: no consumer diagnosis is fabricated.
@@ -309,12 +310,12 @@ describe('feature-lifecycle verifying entry: stale consumer diagnosis (1185)', (
     testFixture('AC3: a migrated consumer records PASS and reaches done', async () => {
         await withProject('migrated', async (root) => {
             // Hop 1 runs the pass (verifying's onEnter); hop 2 completes it against the receipt.
-            const enter = runCli(root, ['feature', 'sync', FEATURE_ID, '--json']);
+            const enter = await runCli(root, ['feature', 'sync', FEATURE_ID, '--json']);
             expect(enter.status).toBe(0);
             expect(featureStatus(root)).toBe('verifying');
             expect(recordedStatus(root)).toBe('PASS');
 
-            const complete = runCli(root, ['feature', 'sync', FEATURE_ID, '--json']);
+            const complete = await runCli(root, ['feature', 'sync', FEATURE_ID, '--json']);
             expect(complete.status).toBe(0);
             expect(featureStatus(root)).toBe('done');
         });
