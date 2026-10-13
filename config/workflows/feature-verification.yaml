@@ -51,6 +51,14 @@ vars:
   featureId: "X"
   spurBin: "spur"
   verificationCmd: "bun run spur-check-feature"
+  # Operator-declared confidence level; empty derives it from the pass (HIGH when the selected
+  # definition's own command exited 0 with an unchanged proof-input digest, MEDIUM under a caller
+  # `--cmd` override, LOW otherwise). The completion boundary refuses a PASS carrying no level or
+  # LOW unless the receipt records the acknowledgement below.
+  confidence: ""
+  # Operator acknowledgement of a LOW level. It rides the receipt, so the transition reads it from
+  # the evidence rather than from whatever flags a later command happens to pass.
+  ackLowConfidence: "false"
   __runId: ""
 
 states:
@@ -70,7 +78,7 @@ states:
       - kind: shell
         options:
           command: >-
-            mkdir -p .spur/run; eval "$(jq -r 'if .mode=="source-repo" then "S="+@sh"\(.dir)/feature-verification-steps.ts"+" RUNNER=bun" elif .mode=="installed" then "S="+@sh"\(.dir)/feature-verification-steps.mjs"+" RUNNER=node" else empty end' ".spur/run/$__runId-script-root.json" 2>/dev/null)"; [ -f "$S" ] && "$RUNNER" "$S" verify --feature-id "$featureId" --run-id "$__runId" --spur-bin "$spurBin" || printf 'FAIL feature-verification failed closed — script not found — run superskill install sp --marketplace gobing-ai/spur\n' > ".spur/run/$__runId-feature-verification.status"; exit 0
+            mkdir -p .spur/run; eval "$(jq -r 'if .mode=="source-repo" then "S="+@sh"\(.dir)/feature-verification-steps.ts"+" RUNNER=bun" elif .mode=="installed" then "S="+@sh"\(.dir)/feature-verification-steps.mjs"+" RUNNER=node" else empty end' ".spur/run/$__runId-script-root.json" 2>/dev/null)"; ACK=""; [ "$ackLowConfidence" = "true" ] && ACK="--ack-low-confidence"; [ -f "$S" ] && "$RUNNER" "$S" verify --feature-id "$featureId" --run-id "$__runId" --spur-bin "$spurBin" --confidence "$confidence" $ACK || printf 'FAIL feature-verification failed closed — script not found — run superskill install sp --marketplace gobing-ai/spur\n' > ".spur/run/$__runId-feature-verification.status"; exit 0
 
   - id: done
     description: Terminal — repo-wide checks passed and the receipt is bound.
