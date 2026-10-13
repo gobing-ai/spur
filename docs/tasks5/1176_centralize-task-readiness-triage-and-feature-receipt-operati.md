@@ -4,7 +4,7 @@ name: Centralize task readiness triage and feature receipt operations
 status: done
 template: feature-impl
 created_at: 2026-10-12T03:34:10.717Z
-updated_at: "2026-10-12T18:10:01.647Z"
+updated_at: "2026-10-13T05:40:16.076Z"
 feature_id: A91
 priority: P1
 tags:
@@ -126,17 +126,17 @@ Deferred: retiring the two boundary exemptions needs a merged-fd/timeout option 
 **Pipeline verify results**
 
 - Verdict: PASS (from verdict artifact)
-- Confidence: MEDIUM
+- Confidence: HIGH
 
 | Requirement | Status | Evidence |
 |-------------|--------|----------|
-| R1 | MET | Readiness, admission and sensitive-path policy are application-owned: `packages/app/src/services/planning-admission.ts:1` (`quickReadiness`, `preflightTask`, `classifyFeaturePreflightFindings`, their pure types and `NON_ABORTING_PREFLIGHT_CODES`) and `packages/app/src/workflow/task-triage.ts:1` (`sensitiveReasonForPath` + the frozen pattern lists). They ride the existing generated pure bundle entry — `packages/app/src/workflow/plan-projection.ts:22` re-exports them and `scripts/commands/bundle-plugin-lib.ts:590` declares the surface — while the plugin adapters keep their entry contracts and re-export the moved names (`plugins/sp/scripts/batch-preflight.ts:1`, `plugins/sp/scripts/task-diffstat.ts:1`). Direct policy coverage: `packages/app/tests/services/planning-admission.test.ts:1`, `packages/app/tests/workflow/task-triage.test.ts:1` |
-| R2 | MET | One app operation owns the whole receipt lifecycle: `packages/app/src/workflow/feature-verification-run.ts:155` (`runFeatureVerification`), `:64` (`createFeatureLookup`, the app-owned feature resolution over the configured planning folders) and `:40` (`assertSafeReceiptId`). It is exported through the existing inline generated entry (`scripts/commands/bundle-plugin-lib.ts:835`) and the plugin entry is now argv-only — it opens no DB, constructs no `ArtifactDao` and scans no feature directory, asserted by the source scan `plugins/sp/tests/feature-verification-steps.test.ts:47`. Real temp-file lifecycle (RUNNING → PASS/FAIL, both copies, status file), path/id refusals, selected-definition recording, launcher failure and digest mismatch are covered in `packages/app/tests/workflow/feature-verification-run.test.ts:1`, with in-memory artifact backing plus one case that drives the real defaults (log fd, launcher, DB-backed artifact registration) |
-| R3 | MET | Consumers and tests moved with the ownership: the planner adapter suites remain contract tests (`plugins/sp/tests/batch-preflight.test.ts:1`, `plugins/sp/tests/task-diffstat.test.ts:1`), both feature-verification suites still pin source-mode refusal and installed launch (`plugins/sp/tests/feature-verification-steps.test.ts:1`, `plugins/sp/tests/feature-verification-steps-mode.test.ts:1`), and the triage routing fixture now carries the generated policy bundle and re-points its diff base so the scaffolding is not counted as fixture diff (`packages/app/tests/workflow/task-pipeline-triage-routing.test.ts:165` and `:176`). The two boundary rules the promotion surfaced are satisfied by documented exemptions of the same class as `quality-gate` (`config/rules/strict/runtime-boundaries.yaml:45` and `:82`), and the now-thin entry's stale budget row left the shrinking baseline (`config/script-placement-baseline.json:1`) |
+| R1 | MET | Admission owner `packages/app/src/services/planning-admission.ts:120` (`quickReadiness`), `:258` (`preflightTask`), `:55` (`classifyFeaturePreflightFindings`), `:33` (`NON_ABORTING_PREFLIGHT_CODES`); triage owner `packages/app/src/workflow/task-triage.ts:38` (`sensitiveReasonForPath`) with frozen lists `:10`, `:12`. Pure bundle entry `packages/app/src/workflow/plan-projection.ts:22`; declarations `scripts/commands/bundle-plugin-lib.ts:689`, `:693`. Verifier-run: app planning-admission/task-triage/receipt/routing 72 pass / 0 fail. |
+| R2 | MET | `packages/app/src/workflow/feature-verification-run.ts:155` (`runFeatureVerification`), `:64` (`createFeatureLookup`), `:40` (`assertSafeReceiptId`); exported via the inline entry `scripts/commands/bundle-plugin-lib.ts:942-943`. Plugin source scan: no `openInlineRunProjectDb`/`ArtifactDao`/`findFeatureFile` code in `plugins/sp/{scripts,hooks,lib}` outside generated bundles (only a doc comment at `plugins/sp/scripts/feature-verification-steps.ts:12`), pinned by `plugins/sp/tests/feature-verification-steps.test.ts:47`. Lifecycle tests `packages/app/tests/workflow/feature-verification-run.test.ts:91`, `:114`, `:125`, `:134`, `:149`, `:159`, `:189`, `:203`. |
+| R3 | MET | Adapter contracts `plugins/sp/tests/batch-preflight.test.ts:1`, `plugins/sp/tests/task-diffstat.test.ts:1`, `plugins/sp/tests/feature-verification-steps-mode.test.ts:1`; routing fixture carries the generated bundle `packages/app/tests/workflow/task-pipeline-triage-routing.test.ts:165` and re-bases the diff `:176`; documented boundary exemptions `config/rules/strict/runtime-boundaries.yaml:45`, `:82`. Verifier-run plugin adapter suites 69 pass / 0 fail; operator-run `bun run spur-check` all pass. |
 
 | Acceptance Criteria | Status | Evidence Type | Evidence |
 |---------------------|--------|---------------|----------|
-| AC1 — Task and feature decisions use their application owners (req: R1) | MET | command | Full gate through the sanctioned primitive (`wbs=1176 bun plugins/sp/scripts/quality-gate.ts run`) → `quality gate PASS (attempts: 1)`; durable `.spur/run/1176-test-gate.status` (`PASS`) and `.spur/run/1176-test-gate.log:458` (`11124 pass`, `0 fail`), `:15` (51 pre-check rules), `:463` (2 post-check rules), `:3` (1363 files formatted/linted); coverage for the two touched sources is 100% functions / 100% lines (`feature-verification-run.ts`) and 97.74% lines (`batch-preflight.ts`, above the 90% floor) |
+| AC1 — Task and feature decisions use their application owners (req: R1) | MET | test | `packages/app/tests/services/planning-admission.test.ts:1`, `packages/app/tests/workflow/task-triage.test.ts:1`, `packages/app/tests/workflow/feature-verification-run.test.ts:91-203`, `plugins/sp/tests/feature-verification-steps.test.ts:47`; verifier-run 72 + 69 pass / 0 fail. |
 - Coverage: N/A (verdict-based; verify pipeline does not measure code coverage)
 
 ### Review
@@ -148,13 +148,6 @@ Deferred: retiring the two boundary exemptions needs a merged-fd/timeout option 
 | Priority | Dimension | Location | Finding |
 |----------|-----------|----------|----------|
 | P4 | — | — | No findings (verify verdict PASS) |
-
-**Confidence:** MEDIUM
-
-The gap: the ownership moves and the receipt operation were verified by the tree’s own full gate, with per-file coverage on the new operation, but these hops ran out of band from the pipeline. So the `test` hop never captured `proofDigest` and no digest-bound
-`.spur/run/1176-check-receipt.json` exists; the deciding evidence is
-`.spur/run/1176-test-gate.status` plus its log. A pipeline-driven run that writes that receipt
-is what raises this to HIGH.
 
 ### References
 
