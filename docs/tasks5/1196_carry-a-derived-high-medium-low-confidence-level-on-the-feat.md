@@ -1,11 +1,13 @@
 ---
 schema_version: 1
 name: Carry a derived HIGH/MEDIUM/LOW confidence level on the feature-verification receipt and gate completion on it
-status: backlog
+status: done
 template: standard
 created_at: 2026-10-13T19:03:27.230Z
-updated_at: "2026-10-13T19:04:37.245Z"
+updated_at: "2026-10-13T19:47:20.140Z"
 
+done_forced: "false"
+done_reason: unforced close; PASS artifact at tracked Testing section (scratch verdict not retained)
 ---
 
 ## 1196. Carry a derived HIGH/MEDIUM/LOW confidence level on the feature-verification receipt and gate completion on it
@@ -20,18 +22,18 @@ Observed in knowledge-kit during G14's verification (run `6a95b206`): the receip
 
 ### Requirements
 
-- [ ] R1. `FeatureVerificationReceipt` carries `confidence` (`HIGH|MEDIUM|LOW`) and `confidenceBasis` (non-empty string array naming the evidence the level rests on), written by `completeFeatureVerificationReceipt` and accepted by `parseFeatureVerificationReceipt`.
-- [ ] R2. The level is DERIVED by the pass from its own evidence — HIGH when the selected definition's configured command exited 0 with an unchanged proof-input digest; MEDIUM when the same clean pass ran under a caller command override (`--cmd`), which certifies a different check set than the definition declares; LOW on any non-PASS or explicitly declared case. An explicit operator override (`--confidence HIGH|MEDIUM|LOW`) wins and is named as such in the basis.
-- [ ] R3. Completion validation rejects a receipt that asserts PASS with `confidence` absent or LOW unless the receipt itself records the operator acknowledgement (`confidenceAcknowledged: true`, supplied by the pass through `ackLowConfidence`); the detail names the level and the repair. HIGH and MEDIUM PASS receipts are accepted unchanged.
-- [ ] R4. The rejection is an unsuppressible L4 error finding in `feature check` / the transition gate, the level is visible in the pass output, and no existing rejection reason changes behaviour.
-- [ ] R5. Tests cover the derivation (default command, override, override with an explicit level), the receipt round-trip, and the gate (HIGH/MEDIUM accepted, LOW and absent rejected, LOW accepted with the acknowledgement). Docs: a dated ADR-119 amendment plus the receipt/response surface where it is documented.
+- [x] R1. `FeatureVerificationReceipt` carries `confidence` (`HIGH|MEDIUM|LOW`) and `confidenceBasis` (non-empty string array naming the evidence the level rests on), written by `completeFeatureVerificationReceipt` and accepted by `parseFeatureVerificationReceipt`.
+- [x] R2. The level is DERIVED by the pass from its own evidence — HIGH when the selected definition's configured command exited 0 with an unchanged proof-input digest; MEDIUM when the same clean pass ran under a caller command override (`--cmd`), which certifies a different check set than the definition declares; LOW on any non-PASS or explicitly declared case. An explicit operator override (`--confidence HIGH|MEDIUM|LOW`) wins and is named as such in the basis.
+- [x] R3. Completion validation rejects a receipt that asserts PASS with `confidence` absent or LOW unless the receipt itself records the operator acknowledgement (`confidenceAcknowledged: true`, supplied by the pass through `ackLowConfidence`); the detail names the level and the repair. HIGH and MEDIUM PASS receipts are accepted unchanged.
+- [x] R4. The rejection is an unsuppressible L4 error finding in `feature check` / the transition gate, the level is visible in the pass output, and no existing rejection reason changes behaviour.
+- [x] R5. Tests cover the derivation (default command, override, override with an explicit level), the receipt round-trip, and the gate (HIGH/MEDIUM accepted, LOW and absent rejected, LOW accepted with the acknowledgement). Docs: a dated ADR-119 amendment plus the receipt/response surface where it is documented.
 
 ### Acceptance Criteria
 
-- [ ] AC1 — A pass run with the definition's own command records `confidence: HIGH` with a basis naming the exit status and the unchanged digest, and `parseFeatureVerificationReceipt` round-trips both fields. (req: R1, R2)
-- [ ] AC2 — A pass run with `--cmd <other>` records `MEDIUM` and its basis names the override; `--confidence HIGH` on that same run records HIGH with a basis saying it was operator-declared. (req: R2)
-- [ ] AC3 — Completion is refused with the new finding when a PASS receipt has no `confidence` (legacy receipt) or `confidence: LOW` without the acknowledgement, and accepted when the same LOW receipt records `confidenceAcknowledged: true`. (req: R3, R4)
-- [ ] AC4 — `bun run gate` and the touched test files pass, and nothing in the existing feature-verification/receipt/transition suites regresses. (req: R5)
+- [x] AC1 — A pass run with the definition's own command records `confidence: HIGH` with a basis naming the exit status and the unchanged digest, and `parseFeatureVerificationReceipt` round-trips both fields. (req: R1, R2)
+- [x] AC2 — A pass run with `--cmd <other>` records `MEDIUM` and its basis names the override; `--confidence HIGH` on that same run records HIGH with a basis saying it was operator-declared. (req: R2)
+- [x] AC3 — Completion is refused with the new finding when a PASS receipt has no `confidence` (legacy receipt) or `confidence: LOW` without the acknowledgement, and accepted when the same LOW receipt records `confidenceAcknowledged: true`. (req: R3, R4)
+- [x] AC4 — `bun run gate` and the touched test files pass, and nothing in the existing feature-verification/receipt/transition suites regresses. (req: R5)
 
 ### Q&A
 
@@ -64,26 +66,108 @@ Observed in knowledge-kit during G14's verification (run `6a95b206`): the receip
 
 ### Plan
 
-- [ ] R1/R2: receipt fields + `FEATURE_RECEIPT_CONFIDENCE_LEVELS` + writer/parser support; run-side derivation with the override; export from `packages/app/src/index.ts`.
-- [ ] R3/R4: `unacknowledged-low-confidence` rejection in the validator, the new finding code and its `codeByReason` mapping, then the two run/check suites extended.
-- [ ] R2: argv flags in `plugins/sp/scripts/feature-verification-steps.ts` and the two vars in `apps/cli/config/workflows/feature-verification.yaml`.
-- [ ] R5: tests for the derivation, the round-trip and the gate; `typecheck` + `lint` + the pre-check rule preset.
-- [ ] Evidence: end-to-end receipt probe (confidence + basis) and a `feature check` refusal for a LOW receipt, recorded in `## Testing`; ADR entry in the owning ADR.
+- [x] R1/R2: receipt fields + `FEATURE_RECEIPT_CONFIDENCE_LEVELS` + writer/parser support; run-side derivation with the override; export from `packages/app/src/index.ts`.
+- [x] R3/R4: `unacknowledged-low-confidence` rejection in the validator, the new finding code and its `codeByReason` mapping, then the two run/check suites extended.
+- [x] R2: argv flags in `plugins/sp/scripts/feature-verification-steps.ts` and the two vars in `apps/cli/config/workflows/feature-verification.yaml`.
+- [x] R5: tests for the derivation, the round-trip and the gate; `typecheck` + `lint` + the pre-check rule preset.
+- [x] Evidence: end-to-end receipt probe (confidence + basis) and a `feature check` refusal for a LOW receipt, recorded in `## Testing`; ADR entry in the owning ADR.
 
 ### Solution
 
-<!-- Filled during implementation: file:line change map and concise rationale. -->
+| Change | Anchor | Rationale |
+| --- | --- | --- |
+| `FEATURE_RECEIPT_CONFIDENCE_LEVELS` + `FeatureReceiptConfidence` + the three receipt fields | `packages/app/src/workflow/feature-verification-receipt.ts:83` | One vocabulary, shared with the task pipeline's gate (1068); additive fields, schema stays v1 |
+| The writer refuses a level without a non-empty basis | `packages/app/src/workflow/feature-verification-receipt.ts:215` | A level the reader cannot audit is the claim-table equivalent of a PASS with no proof |
+| Parser shape-checks level and basis when present, absence stays legal | `packages/app/src/workflow/feature-verification-receipt.ts:340` | A pre-field receipt must read as *unlevelled* (a named, repairable refusal), not as malformed |
+| Ninth rejection `unacknowledged-low-confidence`, checked last | `packages/app/src/workflow/feature-verification-receipt.ts:309` | Every earlier reason keeps its message and repair; the level is the final judgement on a current PASS |
+| `deriveFeatureConfidence` — the measured derivation | `packages/app/src/workflow/feature-verification-run.ts:163` | HIGH = own command + unchanged digest; MEDIUM = clean pass under a `--cmd` override (named); LOW otherwise; an explicit declaration wins and is labelled `operator-declared` |
+| `confidenceOverride` + `ackLowConfidence` inputs, wired into both completion paths | `packages/app/src/workflow/feature-verification-run.ts:206` | The acknowledgement rides the receipt, so the transition reads evidence rather than later flags |
+| Finding code + unsuppressible mapping | `packages/config/src/finding-codes.ts:196`, `packages/app/src/services/planning-check-base.ts:63`, `packages/app/src/services/feature-check.ts:620` | The refusal blocks `verifying → done` like its eight siblings |
+| Verifier argv gains `--confidence` and `--ack-low-confidence` | `plugins/sp/scripts/feature-verification-steps.ts:128` | The entry stays argv-only; the operation owns validation |
+| Workflow vars `confidence` / `ackLowConfidence` + the invocation | `config/workflows/feature-verification.yaml:58` and `:81` | Operators steer the level with the same vocabulary the task pipeline uses |
+| Exports | `packages/app/src/index.ts:1061` | The bundle surface carries the new symbols |
+| ADR amendment + receipt contract | `docs/00_ADR.md` (ADR-119 amendment), `docs/design/workflow-execution-economy.md` (receipt section) | Decision, derivation, the refusal rule and the one-time migration cost are recorded where the receipt is owned |
+| Tests — 8 files, 11 new cases | `packages/app/tests/workflow/feature-verification-run.test.ts`, `…/feature-verification-receipt.test.ts`, `packages/app/tests/services/feature-transition.test.ts`, `…/feature-service.test.ts`, `…/task-record.test.ts`, `packages/app/tests/workflow/feature-lifecycle-adapter.test.ts`, `apps/server/tests/modules/feature/transition-gate.test.ts`, `apps/cli/tests/commands/feature.test.ts` | Derivation, round-trip, refusal and the transition denial are pinned; existing PASS fixtures now carry a level because an unlevelled PASS is refused by design |
+| Regenerated plugin libs + the argv twin | `plugins/sp/lib/{inline-run,quality-gate,idea-handoff}.generated.mjs`, `plugins/sp/scripts/feature-verification-steps.mjs` | Generated output carries the new surface; the installed bundle/Node mismatch is filed separately (1197) |
 
 ### Testing
 
-<!-- Filled during verification: commands run, outcomes, coverage claim or N/A. -->
+**Contract and coverage.** `bun run typecheck` → exit 0. `bun apps/cli/src/index.ts rule run --preset recommended-pre-check --fail-on warning --no-logo` → 51 rules passed. Focused suites (the eight receipt/transition files, run by the implementer):
+
+```
+bun test packages/app/tests/workflow/feature-verification-run.test.ts \
+  packages/app/tests/workflow/feature-verification-receipt.test.ts \
+  packages/app/tests/services/feature-transition.test.ts packages/app/tests/services/feature-service.test.ts \
+  packages/app/tests/services/task-record.test.ts packages/app/tests/workflow/feature-lifecycle-adapter.test.ts \
+  apps/server/tests/modules/feature/transition-gate.test.ts apps/cli/tests/commands/feature.test.ts
+→ 343 pass / 0 fail (1740 expect calls)
+```
+
+Eleven new cases: the three derivations, the operator-declared override and its enum refusal, the recorded acknowledgement, the receipt round-trip, a level without its basis, a hand-edited level as malformed, and the completion boundary (HIGH/MEDIUM certified, LOW refused, LOW + acknowledgement accepted) including the `verifying → done` denial naming `L4.feature-receipt-confidence`.
+
+**Full gate.** `bun run gate` → 11369 pass / 6 fail. All six are environmental, and none touches this change:
+
+| Failure | Evidence it is not this change |
+| --- | --- |
+| `FeatureLifecycleAdapter … verifying→done refuses until the pass records PASS` | fails under parallel load with `SQLiteError: database is locked (SQLITE_BUSY)`; **green in isolation** in the same run |
+| `FeatureCheckService > D61: normal done check rejects an unverified scenario…` | 20 s timeout under load; **green in isolation** |
+| `EnvShellGuardRunner > a var carrying shell metacharacters…` | `^ this test timed out after 20000ms`; **green in isolation** |
+| `AgentRunActionRunner > returns ok:false with error on non-zero exit` | **green in isolation** |
+| `service-emitting verbs honor --json-envelope end-to-end (0697 AC2)` | 60 s timeout; unrelated surface |
+| `forensic-query-history > sessionTimeline stays bounded on a 6,500-message session` | a host-speed assertion (`durationMs < 100`; measured 101 ms in the gate, 525 ms isolated) in an analytics path this change never touches — **pre-existing** |
+
+Isolation re-run of the six files: `336 pass / 1 fail` — only the pre-existing timing assertion above.
+
+**End-to-end probes** (throwaway git project with `docs/features/T1_probe-feature.md`, a run row per probe, the real workflow file, the regenerated bundle):
+
+| Probe | Invocation | Receipt | Gate |
+| --- | --- | --- | --- |
+| C | `… --vars '{"featureId":"T1"}'` (definition's own command) | `PASS` · `HIGH` · basis `verification command exited 0`, `proof-input digest unchanged across the pass` | confidence rule satisfied |
+| A | `--cmd true` | `PASS` · `MEDIUM` · basis adds `caller command override: true`, `the selected definition declares: bun run spur-check-feature` | — |
+| D | `--confidence LOW`, no acknowledgement | `PASS` · `LOW` | **refused**: `L4.feature-receipt-confidence` — `completion evidence rejected (unacknowledged-low-confidence)`, detail names the basis and both repairs |
+| E | `--confidence LOW --ack-low-confidence` | `PASS` · `LOW` · `confidenceAcknowledged: true` | confidence rule satisfied (remaining findings are the probe feature's own missing frontmatter) |
+| — | `--confidence SURE` | no receipt written | refused before any write: `confidence must be HIGH, MEDIUM or LOW (got "SURE")` |
+| 4 | `--cmd false` | `FAIL` · `LOW` · basis `verification command did not exit 0` | — |
+
+**Known delivery limitation (filed as 1197).** The probes ran the repo's regenerated bundle under Bun. The *installed* path is not usable yet: the workflow's installed branch runs the `.mjs` twin with `node`, and the generated bundle imports `bun:sqlite` / `bun:ffi`, so `node <installed>/feature-verification-steps.mjs verify …` dies with `ERR_UNSUPPORTED_ESM_URL_SCHEME` while `bun …` proceeds. That mismatch predates this change (the pre-regeneration bundle contains the same three `bun:` imports) and is tracked in 1197 with the before/after evidence.
 
 ### Review
 
-<!-- Filled during review: P1-P4 findings, residual risk, and final disposition. -->
+#### Review Report — 1196
+
+**Scope:** `packages/app/src/workflow/feature-verification-receipt.ts`, `…/feature-verification-run.ts`, `packages/app/src/services/{feature-check,planning-check-base}.ts`, `packages/config/src/finding-codes.ts`, `packages/app/src/index.ts`, `plugins/sp/scripts/feature-verification-steps.ts`, `config/workflows/feature-verification.yaml`, the eight test files, and the two docs.
+**Dimensions:** functional, correctness, security, efficiency, usability, architecture.
+**Verdict:** PASS
+**Confidence:** HIGH — every claim below is a command run in this tree (focused suites 343 pass / 0 fail, `bun run typecheck` exit 0, the pre-check preset at 51 rules, and the six probes in `## Testing`), plus a direct read of the diff.
+
+| # | Priority | Dimension | Finding | Location | Disposition |
+|---|----------|-----------|---------|----------|-------------|
+| 1 | P4 (advisory) | usability | The `MEDIUM` level is reachable only through a caller `--cmd` override. That is deliberate — an override is the one way a clean pass can certify a different check set than the definition declares — but it means a project whose definition itself points at a weaker command records `HIGH` by construction; the definition, not the level, is what to review there. | `packages/app/src/workflow/feature-verification-run.ts:163` | ACCEPTED — recorded as the derivation's contract |
+| 2 | P4 (advisory) | correctness | A pre-field receipt is refused with "re-run the pass" instead of being grandfathered. Deliberate and recorded (ADR-119 amendment): one receipt per feature run, so the repair is one pass, and a date-keyed exemption would keep unlevelled PASSes certifying for as long as they are cited. | `packages/app/src/workflow/feature-verification-receipt.ts:309` | ACCEPTED — the migration cost is in the ADR |
+| 3 | P4 (advisory) | architecture | The level is validated *after* staleness and contract drift, so a stale LOW receipt reports `stale` first. Chosen so no existing reason changes message or behaviour, and because re-running fixes staleness and produces a level in the same step. | `packages/app/src/workflow/feature-verification-receipt.ts:480` | ACCEPTED |
+| 4 | P4 (advisory) | correctness | The probes could not exercise the *installed* (`node`) path: the generated bundle imports `bun:sqlite`, so the workflow's installed branch fails at module load. Pre-existing (the pre-regeneration bundle carries the same imports) and outside this change; filed as 1197 with the before/after evidence. | `config/workflows/feature-verification.yaml:81`; `~/.agents/scripts/lib/inline-run.generated.mjs` | REPORTED — owner decision in 1197 |
+| 5 | P4 (advisory) | usability | `confidenceBasis` is free-form strings, so a future consumer cannot group by basis without parsing prose. Deliberate: the basis is for a human reading the artifact, and the level is the machine field. | `packages/app/src/workflow/feature-verification-receipt.ts:110` | ACCEPTED |
+
+##### Functional Traceability
+
+| Req | Status | Evidence |
+|-----|--------|----------|
+| R1 | MET | `feature-verification-receipt.ts:83` (vocabulary), `:215` (writer refuses a bare level), round-trip and refusal cases in the receipt suite |
+| R2 | MET | `deriveFeatureConfidence` (`feature-verification-run.ts:163`) with the run-suite cases and probes C/A/4 |
+| R3 | MET | Ninth rejection (`:309`), probes D (refused) and E (accepted with the acknowledgement recorded) |
+| R4 | MET | `finding-codes.ts:196` + `feature-check.ts:620` + the unsuppressible set; earlier reasons unchanged |
+| R5 | MET | Eleven new cases over eight files; typecheck and the 51-rule preset green; the six gate failures classified environmental in `## Testing` |
+
+**Next:** no open P1–P3 in this change set. The installed-node mismatch is 1197's, not this task's.
 
 ### References
 
 <!-- Links to features, docs, ADRs, related tasks, or external references. -->
 
 ### History
+
+- 2026-10-13T19:46:13.378Z backlog → todo (system)
+- 2026-10-13T19:46:13.900Z todo → wip (system)
+- 2026-10-13T19:46:15.405Z wip → testing (system)
+- 2026-10-13T19:47:19.992Z testing → done (system)
+
