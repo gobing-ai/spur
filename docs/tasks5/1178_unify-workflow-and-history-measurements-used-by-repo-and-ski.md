@@ -1,10 +1,10 @@
 ---
 schema_version: 1
 name: Unify workflow and history measurements used by repo and skill tools
-status: todo
+status: done
 template: feature-impl
 created_at: 2026-10-12T03:34:10.720Z
-updated_at: "2026-10-12T04:01:54.962Z"
+updated_at: "2026-10-13T02:43:56.004Z"
 feature_id: A91
 priority: P1
 tags:
@@ -12,6 +12,8 @@ tags:
 estimate_hours: 10
 
 dependencies: ["1177"]
+done_forced: "false"
+done_reason: unforced close; PASS artifact at .spur/memory/evidence/1178-verdict.json
 ---
 
 ## 1178. Unify workflow and history measurements used by repo and skill tools
@@ -32,16 +34,16 @@ Plan and detailed dispositions: docs/plans/2026-10-11-harness-script-consolidati
 
 ### Requirements
 
-- [ ] R1. Move reusable workflow run/state query and cost aggregation out of repository commands into domain query ownership plus app workflow measurement; preserve repo cohort, budget and promotion policy locally.
-- [ ] R2. Move pure actor/window/run-summary aggregation into app workflow ownership while retaining host transcript resolution/normalization and summary file presentation in plugin adapters.
-- [ ] R3. Replace daily-summary SQLite access with a high-level app history-health reader using existing domain history rollups; retain skill report composition and explicitly distinguish unavailable measurements from measured zero.
-- [ ] R4. Preserve installed source/Node/Bun contracts, deterministic reports and provenance without new public reporting flags, migrations or paid/live-agent calls.
+- [x] R1. Move reusable workflow run/state query and cost aggregation out of repository commands into domain query ownership plus app workflow measurement; preserve repo cohort, budget and promotion policy locally.
+- [x] R2. Move pure actor/window/run-summary aggregation into app workflow ownership while retaining host transcript resolution/normalization and summary file presentation in plugin adapters.
+- [x] R3. Replace daily-summary SQLite access with a high-level app history-health reader using existing domain history rollups; retain skill report composition and explicitly distinguish unavailable measurements from measured zero.
+- [x] R4. Preserve installed source/Node/Bun contracts, deterministic reports and provenance without new public reporting flags, migrations or paid/live-agent calls.
 
 Out of scope: No new public CLI API: do not add/change a spur noun, verb, flag, hidden command, output/error contract or implicit automation. Use current services and the explicitly documented standalone packaging exception. Do not edit generated adapters by hand. Preserve supported installed argv and exit behavior, redaction, validation, run identities and durable evidence. No new dependency, generic runner, lock manager or unrelated refactor. Only planning sections are changed by this refinement; implementation owns Solution/Testing/Review.
 
 ### Acceptance Criteria
 
-- [ ] AC1 — Workflow and history analytics share canonical measurement services (req: R1)
+- [x] AC1 — Workflow and history analytics share canonical measurement services (req: R1)
 
 Given the frozen supported source and installed contracts, when this slice runs against deterministic fixtures, then new app tests/workflow/run-measurements.test.ts and run-summary.test.ts observe real query/aggregation behavior with in-memory SQLite and normalized transcript fixtures; keep scripts/commands/real-run-cost.test.ts, pipeline-budgets.test.ts and workflow-promotion.test.ts as adapter/cohort-policy parity tests. Plugin tests/run-summary.test.ts, session-timeline.test.ts and daily-summary/daily-summary.test.ts observe rendering, absence/zero distinctions and close callback behavior. Extend app history-service/history-board-service tests to observe real rollup health reads, including missing tables, empty tables and date filters. Bundle tests and isolated plugin-smoke prove source/installed/runtime parity without paid models or real history DB access.
 
@@ -77,23 +79,188 @@ No new public CLI API: do not add/change a spur noun, verb, flag, hidden command
 
 ### Plan
 
-- [ ] 1. R1: inventory real-run-cost, pipeline-budgets and workflow-promotion queries/callers; freeze deterministic outputs and cohort/statistics semantics with in-memory SQLite fixtures.
-- [ ] 2. R1: move queries to domain and reusable aggregation to app run-measurements; update all repository imports while leaving candidate/budget/config policy local.
-- [ ] 3. R2: move pure run-summary aggregation/types to app; normalize host rows in plugin, update run-summary/timeline/close callers and use existing pure generated export entry.
-- [ ] 4. R3: add readHistoryHealth using current app/domain history queries; replace daily-summary direct SQLite with high-level call and explicit unavailable/empty handling.
-- [ ] 5. R4: regenerate affected bundles/twins; test unknowns, overlap partitions, skew, installed summary/daily behavior, deterministic reports, placement/standalone and task-local gate. Update ownership docs and shrink baseline only after current scans prove removal.
+- [x] 1. R1: inventory real-run-cost, pipeline-budgets and workflow-promotion queries/callers; freeze deterministic outputs and cohort/statistics semantics with in-memory SQLite fixtures.
+- [x] 2. R1: move queries to domain and reusable aggregation to app run-measurements; update all repository imports while leaving candidate/budget/config policy local.
+- [x] 3. R2: move pure run-summary aggregation/types to app; normalize host rows in plugin, update run-summary/timeline/close callers and use existing pure generated export entry.
+- [x] 4. R3: add readHistoryHealth using current app/domain history queries; replace daily-summary direct SQLite with high-level call and explicit unavailable/empty handling.
+- [x] 5. R4: regenerate affected bundles/twins; test unknowns, overlap partitions, skew, installed summary/daily behavior, deterministic reports, placement/standalone and task-local gate. Update ownership docs and shrink baseline only after current scans prove removal.
 
 ### Solution
 
-<!-- Filled during implementation: file:line change map and concise rationale. -->
+One measurement implementation, one SQL owner, adapters keep host/policy concerns. SQL moved to `packages/domain` (ADR-011 keeps `bun:sqlite` there); reusable folding moved to `packages/app/src/workflow`; repository scripts keep cohort/budget/promotion policy and stable output; plugin adapters keep transcript resolution, rendering and the close callback. The pure aggregation rides the existing generated pure entry (`plan-projection`) and the Bun-capable `inline-run` entry — no new bundle, registry, flag, migration or public CLI surface.
+
+**R1 — reusable run/state queries + cost aggregation out of repository commands**
+
+| `file:line` | Change |
+| --- | --- |
+| `packages/domain/src/analytics/workflow-measurements.ts:76` | `readWorkflowRuns` — the runs SQL (terminal/non-dry population, typed cost/token columns, `sinceMs` on epoch-ms `created_at`) now lives in domain, returning null for unmeasured cost/tokens instead of 0 |
+| `packages/domain/src/analytics/workflow-measurements.ts:178` | `readWorkflowStateActionRows` — per-state action/wall folds moved out of the repo script |
+| `packages/domain/src/analytics/workflow-measurements.ts:210` | `readWorkflowStateVisitRows` — per-(state, run) visit query moved out of the repo script |
+| `packages/domain/src/analytics/workflow-measurements.ts:251` | `readAgentRunHistoryRows` — workflow-promotion's read-only agent-run query; keeps its distinct predicate (rejects numeric `dryRun=1`, requires valid timestamps) |
+| `packages/domain/src/analytics/workflow-measurements.ts:287` | `readRealTerminalRunCounts` — the retirement count with its own predicate (no timestamp gate; accepts only absent/false/zero dry-run forms); the two predicates stay deliberately unaligned |
+| `packages/domain/src/analytics/index.ts:281` | Domain analytics barrel re-exports the moved `readWorkflowRuns`/state/promotion query entry points to their consumers |
+| `packages/app/src/workflow/run-measurements.ts:155` | `readWorkflowMetrics` — reusable folding (excluded-row coverage, independent cost/token folds, transition active-time bound) now in app workflow ownership |
+| `packages/app/src/workflow/run-measurements.ts:198` | `readStateMetrics` — per-state visit/retry/agent.run and wall-percentile fold in app |
+| `packages/app/src/workflow/run-measurements.ts:88` | `nearestRankPercentile` reused unchanged (nearest-rank, no interpolation) rather than re-estimated |
+| `packages/app/src/workflow/run-measurements.ts:21` | `WorkflowMetrics` result contract preserved for existing callers |
+| `scripts/commands/real-run-cost.ts:53` | Repository wrapper delegates to the app measurement owner (`readWorkflowMetrics`); the module carries no reader of its own |
+| `scripts/commands/real-run-cost.ts:41` | Re-export of `nearestRankPercentile`/metric types keeps the script's prior import surface |
+| `scripts/commands/pipeline-budgets.ts:252` | Budget threshold decisions stay local; the module only consumes the shared `readWorkflowMetrics` |
+| `scripts/commands/workflow-promotion.ts:242` | Promotion adapter delegates `readAgentRunHistoryRows` to domain; workflow cohort selection for this path is unchanged |
+| `scripts/commands/workflow-promotion.ts:445` | Retirement count delegates to domain; candidate/baseline policy local |
+| `scripts/commands/workflow-promotion.ts:317` | Incumbent-baseline promote/delete decision and the stable report bytes remain in the repository adapter |
+
+**R2 — pure actor/window/summary aggregation in app; host handling in plugin**
+
+| `file:line` | Change |
+| --- | --- |
+| `packages/app/src/workflow/run-summary.ts:391` | `actorSplit` — clipped/unioned spans, priority subtraction, exact window partition; app-owned |
+| `packages/app/src/workflow/run-summary.ts:518` | `buildRunSummary` — pure run-summary projection over normalized rows |
+| `packages/app/src/workflow/run-summary.ts:200` | `accumulate` — token/wall/wait interval aggregation (total vs noncached semantics preserved) |
+| `packages/app/src/workflow/run-summary.ts:299` | `RunSummary`/`SummaryRow`/`ActorSplit`/`GateTime` structural shapes unchanged so renderers keep working |
+| `packages/app/src/workflow/plan-projection.ts:25` | Pure aggregation exported through the existing generated pure entry — no second bundle or registry |
+| `plugins/sp/lib/transcript.ts:81` | `resolveTranscript` — host path/env resolution stays in the plugin adapter |
+| `plugins/sp/lib/transcript.ts:57` | `parseRows` — host format detection and normalization happen once, in the adapter |
+| `plugins/sp/lib/transcript.ts:18` | Re-export block keeps the plugin's single import path to the app-owned pure aggregation |
+| `plugins/sp/lib/run-summary-core.ts:34` | Adapter re-exports `actorSplit`/`buildRunSummary`/types from the generated entry; the implementation is delegated, never duplicated |
+| `plugins/sp/lib/run-summary-core.ts:42` | Markdown rendering stays in the plugin |
+| `plugins/sp/lib/run-summary-core.ts:168` | `writeCloseSummary` — receipt read and durable/scratch report writing stay host-side |
+| `plugins/sp/lib/run-summary-core.ts:212` | `gateFromReceipt` — receipt `runId` match and missing-receipt reason n/a path unchanged |
+| `plugins/sp/lib/plan-projection.generated.d.mts:193` | Generated declaration for the app-owned `buildRunSummary` |
+| `plugins/sp/lib/plan-projection.generated.mjs:1` | Committed generated twin carries the moved pure code; the bundle source is the pure plan-projection entry, regenerated never hand-edited |
+| `scripts/commands/bundle-plugin-lib.ts:694` | Bundle comment/doc records the shared pure entry; regenerated, not hand-edited |
+
+**R3 — daily-summary reads history health through the app service**
+
+| `file:line` | Change |
+| --- | --- |
+| `packages/app/src/services/history-service.ts:1249` | `HistoryService.readHistoryHealth` — high-level health reading over existing domain rollups |
+| `packages/app/src/services/history-service.ts:1676` | `readHistoryHealth({ date, dbPath })` — file-database entry used by the installed adapter |
+| `packages/app/src/services/history-service.ts:294` | `HistoryHealthReading` / input types carry the n/a-vs-zero distinction explicitly |
+| `packages/domain/src/db.ts:50` | `openExistingDb` — opens an existing file without migrations, so an absent schema cannot be migrated into a fake empty table |
+| `packages/domain/src/analytics/history-board-rollup.ts:1091` | `historyHealthSchemaPresent` — required-table presence check; absent ⇒ unavailable (`null`) |
+| `packages/domain/src/analytics/history-board-rollup.ts:1105` | `historyBoardDailyLoopFindings` — loop findings from existing rollups |
+| `packages/domain/src/analytics/history-board-rollup.ts:1123` | `historyBoardDailyToolTotals` — tool call/error totals from existing rollups |
+| `packages/domain/src/analytics/index.ts:144` | Domain barrel exports the new rollup readers |
+| `packages/app/src/index.ts:467` | App service export; the plugin reaches it through the documented generated-entry exception |
+| `plugins/sp/lib/inline-run.generated.d.mts:24` | Bun-capable generated entry declares `readHistoryHealth` for the adapter |
+| `plugins/sp/scripts/daily-summary/daily-summary.ts:380` | `getSpurHistoryHealth` calls the app operation; the adapter opens no SQLite and holds no SQL |
+| `plugins/sp/scripts/daily-summary/daily-summary.ts:795` | `null` leaves `historyHealth` unset (existing n/a path); a measured zero is composed and rendered |
+| `plugins/sp/scripts/daily-summary/daily-summary.ts:806` | Bun re-entry when the installed twin runs under plain node |
+| `config/script-placement-baseline.json:24` | Placement baseline drops the retired daily-summary database-import exception |
+
+**R4 — installed/Node/Bun contracts, determinism, provenance preserved**
+
+| `file:line` | Change |
+| --- | --- |
+| `plugins/sp/lib/inline-run.generated.mjs:3147` | Installed bundle export list includes the app operation, so the staged plugin resolves it |
+| `plugins/sp/tests/inline-run-app.test.ts:11` | `resolveAppEntry` — source checkout vs staged bundle resolution and stale-export naming |
+| `plugins/sp/tests/inline-run-app.test.ts:27` | `loadInlineApp` — portable bundle export check names skew instead of failing as `is not a function` |
+| `plugins/sp/tests/daily-summary/daily-summary.test.ts:962` | Unavailable database omits `historyHealth` (the n/a path) |
+| `plugins/sp/tests/daily-summary/daily-summary.test.ts:973` | Empty tables keep a measured-zero history section |
+| `apps/cli/tests/output-envelope.test.ts:41` | Byte-identity assertions freeze the clock so deterministic-report parity is a real assertion, not a same-instant artifact |
+
+**Tests pinning the moved behavior**
+
+| `file:line` | Change |
+| --- | --- |
+| `packages/domain/tests/analytics/workflow-measurements.test.ts:62` | Domain query fixtures against an in-memory database: unmapped cost/tokens null, dry-run metadata, time-bound gate |
+| `packages/domain/tests/analytics/workflow-measurements.test.ts:120` | Per-state visit/action folds and promotion predicates in domain |
+| `packages/domain/tests/analytics/workflow-measurements.test.ts:161` | `readAgentRunHistoryRows` vs `readRealTerminalRunCounts` predicate divergence pinned |
+| `packages/app/tests/workflow/run-measurements.test.ts:71` | App folding (`readWorkflowMetrics`) over real query results: wall/active/cost/tokens/coverage and the since window narrowing |
+| `packages/app/tests/workflow/run-measurements.test.ts:139` | Per-state metrics over the domain query |
+| `plugins/sp/tests/run-summary.test.ts:91` | Pure summary aggregation on normalized transcript rows |
+| `plugins/sp/tests/run-summary.test.ts:136` | `actorSplit` window partition (no overlap double-count) |
+| `packages/app/tests/services/history-service.test.ts:1854` | Health read: missing table ⇒ null, empty tables ⇒ zero, day filtering, and a real file database |
+| `scripts/commands/real-run-cost.test.ts:112` | Adapter parity: measurement repairs, cohort scope, deterministic serialization preserved |
+| `scripts/commands/pipeline-budgets.test.ts:23` | Budget decisions stay local and keep their thresholds |
+| `scripts/commands/workflow-promotion.test.ts:129` | Cohort/promotion policy parity across the delegated query boundary |
+| `plugins/sp/tests/run-summary.test.ts:69` | Adapter rendering/close behavior over app-owned aggregation |
+| `plugins/sp/tests/session-timeline.test.ts:96` | Timeline rendering over the adapter's normalized rows |
+| `plugins/sp/tests/daily-summary/daily-summary.test.ts:343` | Report composition for loops/remediation and the clean-status path |
+
+**Gate-hygiene edits (operator-authorised, 2026-10-12; test-only, no product behaviour change)**
+
+The full gate could not go green on this host until four test-harness defects were repaired (two of them real
+defects, not flakes). They are inside the certified digest and ship with this task.
+
+| `file:line` | Change |
+| --- | --- |
+| `apps/web/tests/modules/task-kanban/new-task-panel.test.tsx:66` | Removed `mock.module('@/ui', …)`: Bun's module mock is process-wide and irreversible, so its stripped uncontrolled `Input` leaked into every later test file in the process and broke DatabaseView. The panel's Name input is now driven through the real React `onChange` prop. |
+| `apps/web/tests/modules/observability/decisions-tab.test.tsx:16` | Same leak, same fix for the run-id filter input (the second `@/ui` mocker). |
+| `apps/web/tests/modules/projects/DatabaseView.test.tsx:132` | `setControlValue` waits for the React `__reactProps$` handle instead of throwing on the first look, and names the element in its failure message. |
+| `apps/cli/tests/output-envelope.test.ts:49` | Freezes the wall clock for the two byte-identity comparisons: `agent doctor --json` embeds a live `usage.age`, so two captures can never match while the clock advances. Also covers the feature-doc status sync and the `## Solution`/`## Review` corpus writes of this run. |
+| `packages/app/tests/workflow/feature-lifecycle-adapter.test.ts:207` | `CLI_GUARD_TIMEOUT_MS` 20s to 60s: the R4 guard cases spawn a real CLI child, which starved past 20s while three full suites ran concurrently. |
+| `plugins/sp/tests/run-summary.test.ts:366` | New evidence for the `writeCloseSummary` success path (via `PI_SESSION_FILE`) and the unreadable-receipt branch: the old "success" assertion also held for the `n/a` branch, so the body was never executed and the file failed the coverage gate at 85.52%. |
+| `plugins/sp/tests/inline-run-app.test.ts:13` | New file pinning the portable bundle fallback and the stale-bundle refusal (coverage gate: `inline-run-app.ts` was 75.76%). |
 
 ### Testing
 
-<!-- Filled during verification: commands run, outcomes, coverage claim or N/A. -->
+**Pipeline verify results**
+
+- Verdict: PASS (from verdict artifact)
+- Confidence: HIGH
+
+| Requirement | Status | Evidence |
+|-------------|--------|----------|
+| R1 | MET | SQL now lives in `packages/domain/src/analytics/workflow-measurements.ts` (`readWorkflowRuns:81`, `readWorkflowStateActionRows:183`, `readWorkflowStateVisitRows:215`, `readAgentRunHistoryRows:257`, `readRealTerminalRunCounts:289`); app measurement folding in `packages/app/src/workflow/run-measurements.ts:160,203-204` delegates to domain with no SQL of its own (`rg -n "SELECT \|queryAll" packages/app/src/workflow/run-measurements.ts` → none); repo adapters delegate (`scripts/commands/real-run-cost.ts:60` calls `readWorkflowMetricsWithDb`; `scripts/commands/workflow-promotion.ts:242,445` call the domain readers) and hold no SQL (`rg -n "SELECT \|json_extract" scripts/commands/real-run-cost.ts scripts/commands/workflow-promotion.ts scripts/commands/pipeline-budgets.ts` → 0 hits); the two promotion predicates stay distinct (`readAgentRunHistoryRows` rejects numeric `dryRun=1` + requires timestamps, `readRealTerminalRunCounts` has no timestamp gate). Verified: `(cd packages/domain && bun test tests/analytics/workflow-measurements.test.ts)` → 7 pass 0 fail; `(cd packages/app && bun test tests/workflow/run-measurements.test.ts)` → 7 pass 0 fail; `bun test scripts/commands/real-run-cost.test.ts scripts/commands/pipeline-budgets.test.ts scripts/commands/workflow-promotion.test.ts` → 67 pass 0 fail. |
+| R2 | MET | Pure aggregation is app-owned: `packages/app/src/workflow/run-summary.ts` (`ActorSplit:282`, `RunSummary:299`, `actorSplit:391`, `buildRunSummary:518`); plugin adapters delegate through the existing generated pure entry — `plugins/sp/lib/run-summary-core.ts:17,26,34-35,186` re-imports `actorSplit`/`buildRunSummary` from `./plan-projection.generated.mjs`; host handling stays in `plugins/sp/lib/transcript.ts:18,57,81` (`parseRows`/`resolveTranscript`); generated twin carries the moved code (`rg -o "actorSplit |
+| R3 | MET | `HistoryService.readHistoryHealth` added at `packages/app/src/services/history-service.ts:1249` with the file-db entry at `:1676`; daily-summary calls the app operation at `plugins/sp/scripts/daily-summary/daily-summary.ts:380-389` and imports no SQLite (`rg -n "bun:sqlite\|SELECT \|json_extract" plugins/sp/scripts/daily-summary/daily-summary.ts` → none); unavailable (`null`) leaves `historyHealth` unset/n-a while a measured zero is composed (`:795-797`, plugin tests `plugins/sp/tests/daily-summary/daily-summary.test.ts:962` unavailable vs `:973` measured zero). Verified: `(cd packages/app && bun test tests/services/history-service.test.ts)` → readHistoryHealth suite (missing table → null, empty table → measured zero, date filter, file db) passes within 92 pass 0 fail. |
+| R4 | MET | `rg -n "bun:sqlite" packages/app apps/web --glob '!node_modules'` → no non-test hits; `rg -n "scripts/commands" packages/app/src packages/domain/src` → comment references only, no value import; `git status --porcelain` shows no new public CLI noun/verb/flag, no migration, no `package.json` change; installed contracts carried by generated twins (`plugins/sp/lib/inline-run.generated.d.mts:24` declares `readHistoryHealth`, exported in `inline-run.generated.mjs` export list). Verified: `bun test scripts/commands/bundle-plugin-lib.test.ts` → 18 pass 0 fail; `bun scripts/commands/plugin-install-smoke.ts` → `plugin-install-smoke PASS — plugin surface is standalone and installs clean`. |
+
+| Acceptance Criteria | Status | Evidence Type | Evidence |
+|---------------------|--------|---------------|----------|
+| AC1 — Workflow and history analytics share canonical measurement services (req: R1) | MET | test | Named fixtures exist and pass against deterministic inputs with no paid/live calls: `packages/app/tests/workflow/run-measurements.test.ts` (7 pass) and `run-summary.test.ts` (16 pass) via `(cd packages/app && bun test …)`; `packages/domain/tests/analytics/workflow-measurements.test.ts` (7 pass, in-memory SQLite); parity adapters `scripts/commands/{real-run-cost,pipeline-budgets,workflow-promotion}.test.ts` (67 pass); plugin `tests/run-summary.test.ts`, `tests/session-timeline.test.ts`, `tests/daily-summary/daily-summary.test.ts` (absence→n/a at `plugins/sp/tests/daily-summary/daily-summary.test.ts:962`, measured zero at `:973`) within 138 pass; `packages/app/tests/services/history-service.test.ts` readHistoryHealth suite (missing tables null, empty tables zero, date filters, file db); `bun test scripts/commands/bundle-plugin-lib.test.ts` (18 pass) plus `bun scripts/commands/plugin-install-smoke.ts` (PASS) prove source/installed/runtime parity. |
+- Coverage: N/A (verdict-based; verify pipeline does not measure code coverage)
 
 ### Review
 
-<!-- Filled during review: P1-P4 findings, residual risk, and final disposition. -->
+**Verdict: PASS** — Confidence: HIGH.
+
+Confidence: HIGH
+
+Fresh reviewer session; review-only (no product/test edit, no worktree, no pipeline re-entry). Reviewed the uncommitted tree on `sp/run-1178-6066` at the certified digest `sha256:1bd6e66b0146b849570f6c58812acef5180e892466114f2581202f7d640a124a`.
+
+Dimensions: functional traceability R1–R4 met and the `## Solution` map is accurate in substance; SECUA clean (no SQL/`bun:sqlite` outside `packages/domain`, no secret or shell-interpolation change, no new public surface, no paid/live call); architecture ownership holds (ADR-011, ADR-130 glue budget, plugin standalone contract).
+
+| Priority | Finding | Location | Disposition |
+| --- | --- | --- | --- |
+| P3 (minor) | Four R2 change-map rows (`:115`–`:118`) name `plugins/sp/scripts/run-summary.ts` as the home of `actorSplit`/`buildRunSummary`/`accumulate`/`RunSummary`, but that file is 107 lines and holds none of them; the quoted line numbers (391 `actorSplit`, 518 `buildRunSummary`, 200 `accumulate`, 299 `RunSummary`) match `packages/app/src/workflow/run-summary.ts` exactly, so only the path in the map is wrong, not the code. | `docs/tasks5/1178_unify-workflow-and-history-measurements-used-by-repo-and-ski.md:115` | DEFER — documentation-only; correct the path in the Solution map after this run (the digest is frozen). No code or test impact. |
+| P4 (advisory) | Seven changed paths are absent from the Solution change map (3 `apps/web/tests` files removing a process-wide `mock.module('@/ui')` leak, `apps/cli/tests/output-envelope.test.ts` clock freeze, `feature-lifecycle-adapter.test.ts` 20s→60s subprocess budget, feature-doc status). All are test-hygiene/gate-contention edits with no product behavior change; they are part of the certified digest (e.g. the leak site `apps/web/tests/modules/observability/decisions-tab.test.tsx:16`). | `apps/web/tests/modules/observability/decisions-tab.test.tsx:1` | DEFER — operator decides whether to keep them as in-run gate hygiene or split them; no correctness impact either way. |
+| P4 (advisory) | `daily-summary` `main()` now re-execs `bun` when not running under Bun, so the documented `node …/n.mjs` invocation exits 1 on a host without `bun` on PATH, where it previously degraded to an unavailable history section (precedent `plugins/sp/scripts/inline-run-setup.ts:53`). | `plugins/sp/scripts/daily-summary/daily-summary.ts:807` | ACCEPT — identical precedent already shipped by 1177 in `plugins/sp/scripts/inline-run-setup.ts:53` and `inline-run-dispatch.ts:36`; the installed runtime contract is unchanged in kind. |
+
+Evidence (all run in this tree on 2026-10-12; no gate re-run):
+
+- `rg -n "bun:sqlite" packages/app apps/web plugins --glob '!node_modules'` → hits only in the generated `plugins/sp/lib/inline-run.generated.mjs` bundle and plugin tests; no `packages/app/src`, no `apps/web/src`.
+- `rg -n "scripts/commands" packages/app/src packages/domain/src` → comment references only, no value import.
+- `bun scripts/commands/script-contract-check.ts` → `22 script(s) baselined (22 standard, 0 repo-only), 0 violation(s) — PASS` (proves each `.mjs` twin is byte-identical to a fresh convert of its `.ts` source, and that no plugin script carries an `@gobing-ai/*` value import).
+- Behaviour preservation by normalized body diff of `HEAD:plugins/sp/lib/run-summary-core.ts`, `HEAD:plugins/sp/lib/transcript.ts`, `HEAD:plugins/sp/scripts/run-summary.ts` against `packages/app/src/workflow/run-summary.ts`: `actorSplit`, `buildRunSummary` internals, `accumulate`, `sumSpans`, `formatTokenSplit`, `formatDuration`, `formatTokens`, `isCompaction`, `promptText`, `skillInvocationPrompt`, `subtract`, `summaryRow`, `unionMs`, `attemptWindow` are byte-identical after comment/whitespace normalization; the only textual delta is `actorOf` reading the renamed `LOWERCASE_OPERATOR_TOOLS` (`{askuserquestion, ask_user_question}` — same members as the old `OPERATOR_TOOLS`), while the case-sensitive `OPERATOR_TOOLS` used by `accumulate` is preserved verbatim.
+- Domain SQL vs `HEAD:scripts/commands/real-run-cost.ts` and `HEAD:scripts/commands/workflow-promotion.ts`: identical predicates/subqueries (`json_extract(metadata_json,'$.dryRun') IS NOT 1`, `started_at/completed_at` bounds, `completed_at >= started_at`, `s.exactness = 'exact'`, `transition_runs`, `action_runs`, `r.created_at >= ?` for `sinceMs`), with the parameter order matching the placeholder order — a move, not a re-query. No second query path is left in the repo adapters (`rg "SELECT |json_extract" scripts/commands/real-run-cost.ts workflow-promotion.ts pipeline-budgets.ts` → 0 hits).
+- The two promotion predicates stay distinct: `packages/domain/src/analytics/workflow-measurements.ts:251` rejects numeric `dryRun=1` and requires both timestamps (`readAgentRunHistoryRows`), while `:287` (`readRealTerminalRunCounts`) has no timestamp gate and accepts only absent/`0`/`'0'`/`'false'`; the domain test pins the divergence (`packages/domain/tests/analytics/workflow-measurements.test.ts:161`).
+- `nearestRankPercentile` is reused unchanged (`packages/app/src/workflow/run-measurements.ts:88`, nearest-rank, `null` on an empty sample); unmapped cost/tokens stay `null` (`:155` fold), measured zero stays 0, and the daily report keeps `n/a` for an unavailable reading (`plugins/sp/scripts/daily-summary/daily-summary.ts:795`, tests at `:962` unavailable vs `:973` measured zero).
+- `buildRunSummary` signature change (`lines[]` → normalized `rows`) is threaded by both callers with `skippedLines` (`plugins/sp/scripts/run-summary.ts:94`, `plugins/sp/lib/run-summary-core.ts:185`); no caller still passes raw lines.
+- Generated twins carry the moved code and agree with their declarations: `actorSplit`/`buildRunSummary` in `plugins/sp/lib/plan-projection.generated.mjs:371,472`; `readHistoryHealth` declared in `plugins/sp/lib/inline-run.generated.d.mts:24` and exported by the `.mjs`; every declared-but-unexported name in the `.d.mts` is a type-only declaration.
+- No new public surface, migration or dependency: `git status --porcelain` touches no `apps/cli/src`, no `package.json`, no `drizzle/`; the only `apps/cli` change is a test.
+- Tests run green in this tree: `packages/app` `run-measurements`/`run-summary`/`history-service` → 92 pass/0 fail; `packages/domain` `workflow-measurements` → 7 pass/0 fail; `scripts/commands` `real-run-cost`/`pipeline-budgets`/`workflow-promotion` → 67 pass/0 fail; `plugins/sp` `run-summary`/`daily-summary`/`session-timeline`/`inline-run-app` → 138 pass/0 fail.
+
+Residual risk (accepted, non-blocking): the pure aggregation now rides `plan-projection.generated.mjs`, so converted twins that import that entry inline it — `plugins/sp/scripts/batch-plan.mjs` grew +381 lines, `inline-run-setup.mjs`/`run-summary.mjs`/`session-timeline.mjs` carry it too. This is build-output duplication in one-shot Node scripts, not a second source implementation, and no generated lib bundle has an automated freshness check (the gate covers script twins only). `daily-summary` also pays one ~0.3 s app-bundle import per invocation instead of a direct `bun:sqlite` open. Second, an ad-hoc combined plugin test invocation (`bun test tests/run-summary.test.ts tests/daily-summary/... tests/session-timeline.test.ts tests/inline-run-app.test.ts`) failed `parseArgs > ignores --date when no value follows` once and passed on two re-runs — the argv-mutating tests in that file are pre-existing and untouched by this diff.
+
+Not checked (out of scope for this review): `bun run test:heavy` / installed `plugin-smoke` runtime parity; the full 9-minute `bun run spur-check` (the stated digest is trusted, and re-running it is forbidden here); the three `apps/web` test files were inspected as diffs only, and the pre-fix gate red they claim to repair was not reproduced; no live-history comparison of the pre/post `daily-summary` numbers on a real database (only fixtures); no paid/live model call was exercised or needed.
+
+#### Post-review corrections (driver, record stage — 2026-10-12)
+
+Applied after the reviewer signed off, in the corpus only (no code, no test, so the certified digest
+`sha256:1bd6e66b…` is unchanged and no re-review is owed):
+
+- **P3 (minor) — RESOLVED.** The four R2 change-map rows now cite `packages/app/src/workflow/run-summary.ts`
+  (`:391` `actorSplit`, `:518` `buildRunSummary`, `:200` `accumulate`, `:299` `RunSummary`), the file that
+  actually holds them; the line numbers were already the reviewer's verified ones. This also clears the
+  invalid-anchor class the `done` probe would otherwise report.
+- **P4 (advisory), unlisted paths — RESOLVED.** The `## Solution` map gained a "Gate-hygiene edits" subsection
+  listing all seven previously-unlisted paths with `file:line` anchors and their reasons (three `apps/web`
+  test files, two `apps/cli`/`packages/app` test files, two `plugins/sp` test files — one of them new).
+- **P4 (advisory), `daily-summary` node re-exec — ACCEPTED as authored** (precedent: 1177 shipped the same
+  contract in `inline-run-setup.ts`); recorded as an accepted residual, not a deferral.
 
 ### References
 
@@ -114,3 +281,8 @@ Premise sources:
 - `packages/app/src/services/history-board-service.ts:1`
 
 ### History
+
+- 2026-10-12T23:53:36.225Z todo → wip (system)
+- 2026-10-13T02:40:17.781Z wip → testing (system)
+- 2026-10-13T02:43:55.993Z testing → done (system)
+

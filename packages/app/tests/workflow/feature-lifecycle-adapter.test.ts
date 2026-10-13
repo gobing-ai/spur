@@ -200,7 +200,11 @@ function makeFixtureAdapter(root: string, db: DbAdapter): LifecycleAdapter {
 // The two R4 guard tests below spawn the real CLI guard as a child process.
 // Under a saturated full-suite run that child can outlive Bun's 5000 ms default
 // per-test timeout (observed at 5001 ms), so they carry an explicit budget.
-const CLI_GUARD_TIMEOUT_MS = 20_000;
+// Raised 20_000 → 60_000 on 2026-10-12 (task 1178 gate): the same test passes in ~1.3 s in
+// isolation but exceeded 20 s while three full gates ran concurrently on one host, and a
+// floored subprocess (`{"exitCode":null}`) turned a load spike into a red gate. The budget
+// bounds a REAL child process, so it tracks host contention, not the assertion strength.
+const CLI_GUARD_TIMEOUT_MS = 60_000;
 const testCliGuard = (label: string, fn: () => Promise<void>): void => {
     test(label, fn, CLI_GUARD_TIMEOUT_MS);
 };
