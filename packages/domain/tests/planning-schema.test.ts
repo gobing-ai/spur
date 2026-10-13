@@ -75,6 +75,12 @@ describe('taskFrontmatterSchema', () => {
         if (result.success) expect(result.data.status).toBe('backlog');
     });
 
+    test('accepts the canonical `deprecated` status (ADR-137)', () => {
+        const result = taskFrontmatterSchema.safeParse({ ...baseTaskFrontmatter, status: 'deprecated' });
+        expect(result.success).toBe(true);
+        if (result.success) expect(result.data.status).toBe('deprecated');
+    });
+
     test('rejects truly unknown status values', () => {
         const result = taskFrontmatterSchema.safeParse({ ...baseTaskFrontmatter, status: 'bogus' });
         expect(result.success).toBe(false);
@@ -175,6 +181,13 @@ describe('normalizeTaskStatus', () => {
         expect(normalizeTaskStatus('new')).toBe('backlog');
     });
 
+    test('resolves the identity alias for the canonical `deprecated` status (ADR-137)', () => {
+        // The alias map is the throw-path SSOT: a canonical status missing from it would make
+        // normalizeTaskStatus throw on its own vocabulary. `deprecated` must round-trip.
+        expect(normalizeTaskStatus('deprecated')).toBe('deprecated');
+        expect(normalizeTaskStatus('DEPRECATED')).toBe('deprecated');
+    });
+
     test('throws on values outside the alias map', () => {
         expect(() => normalizeTaskStatus('done-ish')).toThrow(/Unknown task status/);
     });
@@ -237,7 +250,16 @@ describe('round-trip property', () => {
 
 describe('vocabulary exports', () => {
     test('status enums cover the design contracts', () => {
-        expect(TASK_STATUSES).toEqual(['backlog', 'todo', 'wip', 'testing', 'blocked', 'done', 'cancelled']);
+        expect(TASK_STATUSES).toEqual([
+            'backlog',
+            'todo',
+            'wip',
+            'testing',
+            'blocked',
+            'done',
+            'cancelled',
+            'deprecated',
+        ]);
         expect(FEATURE_STATUSES).toEqual([
             'backlog',
             'active',
@@ -281,6 +303,11 @@ describe('status icon maps', () => {
 
     test('taskStatusIcon returns the mapped emoji for a known status', () => {
         expect(taskStatusIcon('todo')).toBe(TASK_STATUS_ICONS.todo);
+    });
+
+    test('TASK_STATUS_ICONS.deprecated is defined and taskStatusIcon resolves it (ADR-137)', () => {
+        expect(TASK_STATUS_ICONS.deprecated).toBeDefined();
+        expect(taskStatusIcon('deprecated')).toBe(TASK_STATUS_ICONS.deprecated);
     });
 
     test('taskStatusIcon returns empty string for unknown status', () => {

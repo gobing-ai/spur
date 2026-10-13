@@ -17,7 +17,16 @@
 import { z } from 'zod';
 
 /** Canonical task statuses (lowercase). Lowercase-only on output. */
-export const TASK_STATUSES = ['backlog', 'todo', 'wip', 'testing', 'blocked', 'done', 'cancelled'] as const;
+export const TASK_STATUSES = [
+    'backlog',
+    'todo',
+    'wip',
+    'testing',
+    'blocked',
+    'done',
+    'cancelled',
+    'deprecated',
+] as const;
 
 /** Canonical feature statuses (lowercase). Lowercase-only on output. */
 export const FEATURE_STATUSES = [
@@ -44,6 +53,7 @@ export const TASK_STATUS_ICONS: Record<TaskStatus, string> = {
     blocked: '🚫',
     done: '✅',
     cancelled: '⛔',
+    deprecated: '🗄️',
 };
 
 /** Canonical feature status→emoji map (presentation-only; never persisted — DD-01). */
@@ -156,6 +166,7 @@ const TASK_STATUS_ALIASES: Readonly<Record<string, TaskStatus>> = {
     cancelled: 'cancelled',
     backlog: 'backlog',
     todo: 'todo',
+    deprecated: 'deprecated',
 };
 
 const FEATURE_STATUS_ALIASES: Readonly<Record<string, FeatureStatus>> = {

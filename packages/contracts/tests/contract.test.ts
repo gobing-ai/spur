@@ -415,7 +415,7 @@ describe('contract composition', () => {
 
 describe('domain-type purity', () => {
     test('TASK_STATUSES enum values are valid in task list schema', () => {
-        const statuses = ['backlog', 'todo', 'wip', 'testing', 'blocked', 'done', 'cancelled'] as const;
+        const statuses = ['backlog', 'todo', 'wip', 'testing', 'blocked', 'done', 'cancelled', 'deprecated'] as const;
         for (const status of statuses) {
             const result = taskListResponseSchema.parse({
                 ok: true,
@@ -423,6 +423,15 @@ describe('domain-type purity', () => {
             });
             expect(result.data[0]?.status).toBe(status);
         }
+    });
+
+    test('ADR-137: `deprecated` round-trips through the task transition schemas (no contract edit)', () => {
+        // The enum flows from TASK_STATUSES into every contract site, so the transition
+        // input/output accept `deprecated` verbatim with no local edit to src/task.ts.
+        const input = taskTransitionInputSchema.parse({ wbs: '0001', toStatus: 'deprecated' });
+        expect(input.toStatus).toBe('deprecated');
+        const output = taskTransitionResponseSchema.parse({ ok: true, data: { wbs: '0001', status: 'deprecated' } });
+        expect(output.data.status).toBe('deprecated');
     });
 
     test('PRIORITIES enum values are valid in task list schema', () => {

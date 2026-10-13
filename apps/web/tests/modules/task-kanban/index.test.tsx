@@ -1,4 +1,5 @@
 import { afterAll, afterEach, beforeEach, describe, expect, mock, test } from 'bun:test';
+import { TASK_STATUSES } from '@gobing-ai/spur-domain/schema';
 import { cleanup, render, waitFor } from '@testing-library/react';
 import { MemoryRouter } from 'react-router';
 
@@ -80,7 +81,7 @@ describe('TaskKanbanView scoping', () => {
             expect(getByTestId('tasks-live-chip')).toBeDefined();
             expect(getByRole('button', { name: 'Kanban' })).toBeDefined();
             expect(getAllByRole('textbox')).toHaveLength(1);
-            expect(getAllByRole('checkbox')).toHaveLength(7);
+            expect(getAllByRole('checkbox')).toHaveLength(TASK_STATUSES.length);
             expect((container.querySelector('#tasks-status-todo') as HTMLInputElement).checked).toBe(true);
             expect((container.querySelector('#tasks-status-wip') as HTMLInputElement).checked).toBe(true);
             // ADR-081 (amended 2026-08-26): the header rides History's centered 1600px rail

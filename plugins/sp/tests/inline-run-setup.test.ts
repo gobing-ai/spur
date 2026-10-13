@@ -455,6 +455,13 @@ function writeDecideOptions(dir: string, options: Record<string, unknown>): stri
 test('--decide executes through the app runner: degraded default with the switch off, resultFile written (0941 R4/R5)', () => {
     const dir = mkdtempSync(join(tmpdir(), 'inline-run-setup-decide-'));
     try {
+        // Pin the premise this test's name claims. The merged loader reads the machine-global
+        // ~/.config/spur/config.yaml first, so on a host that enabled workflows.decideDecisionMaker
+        // the run no longer degrades as 'disabled' and this test fails for an environment reason
+        // rather than a behaviour change. A project layer wins over the global one, so the switch
+        // is off here on every host — the assertion is now stronger, not weaker.
+        mkdirSync(join(dir, '.spur'), { recursive: true });
+        writeFileSync(join(dir, '.spur', 'config.yaml'), 'workflows:\n  decideDecisionMaker: false\n');
         const optionsFile = writeDecideOptions(dir, {
             id: 'recovery-classify',
             method: 'choice',

@@ -540,6 +540,10 @@ const NOT_STARTED_STATUSES: Record<TaskStatus, boolean> = {
     blocked: true, // blocked has no verifiable work yet — distinct from FAIL
     done: false,
     cancelled: false,
+    // ADR-137: deprecated is retained-and-frozen — it never starts or advances, so it
+    // carries no verifiable work to roll up. Excluded from the batch rollup like the
+    // other not-started states rather than reported as a misleading FAIL.
+    deprecated: true,
 };
 
 /**

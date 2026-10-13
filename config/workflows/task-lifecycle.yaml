@@ -64,6 +64,11 @@ states:
       Completed. Re-enterable (reopen with warning + mandatory History entry).
   - id: cancelled
     description: Terminal — abandoned.
+  - id: deprecated
+    description: >
+      Retained and frozen (ADR-137). Non-terminal: the record stays readable and
+      countable, nothing new may attach to it, and leaving it is explicit —
+      un-deprecate to todo, or cancelled once the task is removed.
 
 transitions:
   # Forward path: backlog → todo → wip → testing → done
@@ -155,5 +160,50 @@ transitions:
   - from: blocked
     to: cancelled
     description: Cancel task
+    guard:
+      kind: always
+
+  # Deprecate: any non-terminal-or-done state → deprecated (frozen, retained — ADR-137)
+  - from: backlog
+    to: deprecated
+    description: Deprecate task (frozen, retained)
+    guard:
+      kind: always
+  - from: todo
+    to: deprecated
+    description: Deprecate task (frozen, retained)
+    guard:
+      kind: always
+  - from: wip
+    to: deprecated
+    description: Deprecate task (frozen, retained)
+    guard:
+      kind: always
+  - from: testing
+    to: deprecated
+    description: Deprecate task (frozen, retained)
+    guard:
+      kind: always
+  - from: blocked
+    to: deprecated
+    description: Deprecate task (frozen, retained)
+    guard:
+      kind: always
+  - from: done
+    to: deprecated
+    description: Deprecate task (frozen, retained)
+    guard:
+      kind: always
+
+  # Exits out of deprecated: un-deprecate or remove only. Any other edge is
+  # undeclared and refused by the graph (ADR-135).
+  - from: deprecated
+    to: todo
+    description: Un-deprecate (mandatory History entry)
+    guard:
+      kind: always
+  - from: deprecated
+    to: cancelled
+    description: Remove deprecated task
     guard:
       kind: always

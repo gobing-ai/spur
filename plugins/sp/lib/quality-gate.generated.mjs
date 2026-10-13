@@ -29889,7 +29889,16 @@ function escapeYamlValue(value) {
 }
 // packages/domain/src/planning/schema.ts
 init_zod();
-var TASK_STATUSES = ["backlog", "todo", "wip", "testing", "blocked", "done", "cancelled"];
+var TASK_STATUSES = [
+  "backlog",
+  "todo",
+  "wip",
+  "testing",
+  "blocked",
+  "done",
+  "cancelled",
+  "deprecated"
+];
 var FEATURE_STATUSES = [
   "backlog",
   "active",
@@ -29931,7 +29940,8 @@ var TASK_STATUS_ALIASES = {
   done: "done",
   cancelled: "cancelled",
   backlog: "backlog",
-  todo: "todo"
+  todo: "todo",
+  deprecated: "deprecated"
 };
 function normalizeTaskStatus(raw) {
   const key = raw.trim().toLowerCase();

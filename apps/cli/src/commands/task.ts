@@ -77,6 +77,7 @@ const STATUS_TITLE: Record<(typeof TASK_STATUSES)[number], string> = {
     blocked: 'Blocked',
     done: 'Done',
     cancelled: 'Canceled',
+    deprecated: 'Deprecated',
 };
 
 /**

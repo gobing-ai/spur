@@ -59,6 +59,49 @@ describe('lifecycle workflow drift prevention (task 0046 R3)', () => {
             expect(reopen.length).toBe(1);
         });
 
+        // ── ADR-137: deprecated is a non-terminal frozen state ──────────────────
+        test('deprecated is a declared state and is NOT terminal', () => {
+            expect(yaml.states.some((s) => s.id === 'deprecated')).toBe(true);
+            expect(yaml.terminalStates).toEqual(['cancelled']);
+            expect(yaml.terminalStates).not.toContain('deprecated');
+        });
+
+        test('deprecated is accepted as a target from every listed source (one edge each)', () => {
+            for (const from of ['backlog', 'todo', 'wip', 'testing', 'blocked', 'done']) {
+                const edges = yaml.transitions.filter((t) => t.from === from && t.to === 'deprecated');
+                expect(edges.length, `${from} → deprecated must be declared exactly once`).toBe(1);
+            }
+        });
+
+        test('deprecated exits only to todo (un-deprecate) and cancelled (removal)', () => {
+            const outbound = yaml.transitions.filter((t) => t.from === 'deprecated').map((t) => t.to);
+            expect([...outbound].sort()).toEqual(['cancelled', 'todo']);
+        });
+
+        test('any target other than todo/cancelled is refused from deprecated (undeclared edge)', () => {
+            // The adapter derives the refusal's legal-path list from exactly the declared
+            // outbound edges, so "refused naming the legal edges" reduces to this graph
+            // invariant: no other target is declared, and the legal set is exactly these two.
+            const outbound = yaml.transitions.filter((t) => t.from === 'deprecated').map((t) => t.to);
+            const legal = ['cancelled', 'todo'];
+            expect([...outbound].sort()).toEqual(legal);
+            for (const refused of ['backlog', 'wip', 'testing', 'blocked', 'done', 'deprecated']) {
+                expect(
+                    yaml.transitions.some((t) => t.from === 'deprecated' && t.to === refused),
+                    `deprecated → ${refused} must stay undeclared`,
+                ).toBe(false);
+            }
+        });
+
+        test('exactly one transition per (from, to) pair (externally-driven FSM [CRITICAL] note)', () => {
+            const seen = new Set<string>();
+            for (const t of yaml.transitions) {
+                const key = `${t.from}→${t.to}`;
+                expect(seen.has(key), `duplicate transition pair ${key}`).toBe(false);
+                seen.add(key);
+            }
+        });
+
         test('every transition endpoint is a declared state', () => {
             const stateIds = new Set(yaml.states.map((s) => s.id));
             for (const t of yaml.transitions) {
