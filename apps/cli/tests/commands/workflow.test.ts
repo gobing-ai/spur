@@ -4,7 +4,7 @@
  */
 import { beforeEach, describe, expect, spyOn, test } from 'bun:test';
 import { readdirSync, readFileSync } from 'node:fs';
-import { appendFile, chmod, exists, mkdir, mkdtemp, readFile, realpath, rm, utimes, writeFile } from 'node:fs/promises';
+import { access, appendFile, chmod, mkdir, mkdtemp, readFile, realpath, rm, utimes, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import {
@@ -40,6 +40,13 @@ import { main } from '../../src/index';
 import type { CommandOutput } from '../../src/output';
 import { renderWorkflowMermaid } from '../../src/workflow/mermaid-render';
 import { createCapturedOutput, createTempProject, runCli } from '../helpers';
+
+/** `fs/promises.exists` is Bun-only and absent from the @types/node shipped with @types/bun 1.4.x. */
+const exists = (path: string): Promise<boolean> =>
+    access(path).then(
+        () => true,
+        () => false,
+    );
 
 // Warn-once shim markers (bare-binary, legacy executor) are process-global; bun
 // batches test files per worker process — never inherit another file's state.
