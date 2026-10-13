@@ -80,6 +80,9 @@ export const ALL_FINDING_CODES = [
     'L4.feature-receipt-run',
     'L4.feature-receipt-stale',
     'L4.feature-receipt-contract',
+    // A PASS must say how much it can be trusted (task 1196): a receipt carrying no level, or a LOW
+    // level without the operator's recorded acknowledgement, cannot satisfy the done boundary.
+    'L4.feature-receipt-confidence',
     // Implement-readiness prechecks (1002 R1) — `task check <wbs> --precheck` only.
     'precheck-size',
     'precheck-evidence',
@@ -186,6 +189,11 @@ export const FINDING_CODES = {
     L4_FEATURE_RECEIPT_RUN: 'L4.feature-receipt-run',
     L4_FEATURE_RECEIPT_STALE: 'L4.feature-receipt-stale',
     L4_FEATURE_RECEIPT_CONTRACT: 'L4.feature-receipt-contract',
+    // A PASS must say how much it can be trusted (task-pipeline's confidence gate, 1068, carried to
+    // the feature boundary): the receipt's derived HIGH|MEDIUM level certifies as before, a LOW level
+    // needs the operator's recorded acknowledgement, and an absent level (a pre-field receipt) is the
+    // same refusal with "re-run the pass" as the repair. Unsuppressible like its siblings.
+    L4_FEATURE_RECEIPT_CONFIDENCE: 'L4.feature-receipt-confidence',
     // Implement-readiness prechecks (1002 R1): emitted by `task check --precheck` only.
     // Error severity is fixed at emit time and the codes are unsuppressible — they gate
     // the pipeline precheck→implement transition exactly as the deleted plugin scripts did.

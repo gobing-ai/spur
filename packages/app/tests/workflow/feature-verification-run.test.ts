@@ -183,6 +183,61 @@ describe('runFeatureVerification — receipt lifecycle (task 1176 R2)', () => {
             'bun run lint',
         );
     });
+
+    test('a clean default pass derives HIGH with its measured basis on the receipt', async () => {
+        const h = harness();
+        const result = await runFeatureVerification(h.input);
+        expect(result.status).toBe('PASS');
+        expect(result.confidence).toBe('HIGH');
+        expect(result.confidenceBasis).toContain('verification command exited 0');
+        expect(result.confidenceBasis).toContain('proof-input digest unchanged across the pass');
+        const paths = featureReceiptPaths(join(h.workdir, '.spur', 'run'), 'H99', 'run-h99');
+        const receipt = JSON.parse(readFileSync(paths.runScoped, 'utf8')) as {
+            confidence: string;
+            confidenceBasis: string[];
+        };
+        expect(receipt.confidence).toBe('HIGH');
+        expect(receipt.confidenceBasis).toEqual(result.confidenceBasis);
+    });
+
+    test('a clean pass under a command override derives MEDIUM and names the override', async () => {
+        const h = harness({ cmdOverride: 'bun run other' });
+        const result = await runFeatureVerification(h.input);
+        expect(result.status).toBe('PASS');
+        expect(result.confidence).toBe('MEDIUM');
+        expect(result.confidenceBasis).toContain('caller command override: bun run other');
+        expect(result.confidenceBasis).toContain('the selected definition declares: bun run spur-check-feature');
+    });
+
+    test('an operator-declared level is recorded first, over the derived one', async () => {
+        const h = harness({ cmdOverride: 'bun run other', confidenceOverride: 'HIGH' });
+        const result = await runFeatureVerification(h.input);
+        expect(result.confidence).toBe('HIGH');
+        expect(result.confidenceBasis[0]).toBe('operator-declared HIGH');
+    });
+
+    test('an unknown operator-declared level is refused before any write', async () => {
+        const h = harness({ confidenceOverride: 'SURE' });
+        await expect(runFeatureVerification(h.input)).rejects.toThrow(/confidence must be HIGH, MEDIUM or LOW/);
+    });
+
+    test('a non-zero exit derives LOW', async () => {
+        const h = harness({}, 2);
+        const result = await runFeatureVerification(h.input);
+        expect(result.status).toBe('FAIL');
+        expect(result.confidence).toBe('LOW');
+        expect(result.confidenceBasis).toContain('verification command did not exit 0');
+    });
+
+    test('the operator acknowledgement of a LOW level is recorded on the receipt', async () => {
+        const h = harness({ confidenceOverride: 'LOW', ackLowConfidence: true });
+        const result = await runFeatureVerification(h.input);
+        expect(result.status).toBe('PASS');
+        expect(result.confidence).toBe('LOW');
+        const paths = featureReceiptPaths(join(h.workdir, '.spur', 'run'), 'H99', 'run-h99');
+        const receipt = JSON.parse(readFileSync(paths.runScoped, 'utf8')) as { confidenceAcknowledged?: boolean };
+        expect(receipt.confidenceAcknowledged).toBe(true);
+    });
 });
 
 describe('runFeatureVerification — refusals and lookup (task 1176 R2)', () => {

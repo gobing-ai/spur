@@ -110,6 +110,7 @@ async function recordValidReceipt(
     featureId: string,
     runDir: string,
     workdir: string,
+    confidence: 'HIGH' | 'MEDIUM' | 'LOW' = 'HIGH',
 ): Promise<void> {
     const raw = readFileSync(featFile, 'utf8');
     let learnings: string | undefined;
@@ -139,7 +140,12 @@ async function recordValidReceipt(
         verificationCmd,
         inputDigest,
     });
-    await completeFeatureVerificationReceipt(fs, runDir, running, { status: 'PASS', inputDigest });
+    await completeFeatureVerificationReceipt(fs, runDir, running, {
+        status: 'PASS',
+        inputDigest,
+        confidence,
+        confidenceBasis: ['verification command exited 0', 'proof-input digest unchanged across the pass'],
+    });
 }
 
 describe('1137 R2 — transitionFeatureGuarded', () => {
@@ -272,6 +278,30 @@ describe('1137 R2 — transitionFeatureGuarded', () => {
         const { root, featFile, deps, cleanup } = setup('verifying', undefined, strictCleanFeature('F9', 'verifying'));
         try {
             await recordValidReceipt(createNodeFileSystem(), featFile, 'F9', deps.runDir, root);
+            const result = await transitionFeatureGuarded(deps, { id: 'F9', to: 'done' });
+            expect(result.toStatus).toBe('done');
+            expect(readFileSync(featFile, 'utf8')).toContain('status: done');
+        } finally {
+            cleanup();
+        }
+    });
+
+    test('P2 remediation: a current PASS receipt at LOW without acknowledgement is denied at done; at HIGH it passes', async () => {
+        const { root, featFile, deps, cleanup } = setup('verifying', undefined, strictCleanFeature('F9', 'verifying'));
+        try {
+            const fs = createNodeFileSystem();
+            await recordValidReceipt(fs, featFile, 'F9', deps.runDir, root, 'LOW');
+            const before = readFileSync(featFile, 'utf8');
+            await expect(transitionFeatureGuarded(deps, { id: 'F9', to: 'done' })).rejects.toThrow(GuardDeniedError);
+            await expect(transitionFeatureGuarded(deps, { id: 'F9', to: 'done' })).rejects.toThrow(
+                /L4\.feature-receipt-confidence/,
+            );
+            await expect(transitionFeatureGuarded(deps, { id: 'F9', to: 'done' })).rejects.toThrow(
+                /completion evidence rejected \(unacknowledged-low-confidence\)/,
+            );
+            expect(readFileSync(featFile, 'utf8')).toBe(before);
+            // The same pass, recorded at the derived HIGH, certifies the hop.
+            await recordValidReceipt(fs, featFile, 'F9', deps.runDir, root);
             const result = await transitionFeatureGuarded(deps, { id: 'F9', to: 'done' });
             expect(result.toStatus).toBe('done');
             expect(readFileSync(featFile, 'utf8')).toContain('status: done');

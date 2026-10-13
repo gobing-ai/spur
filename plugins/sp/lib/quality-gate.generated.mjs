@@ -24312,6 +24312,7 @@ var ALL_FINDING_CODES = [
   "L4.feature-receipt-run",
   "L4.feature-receipt-stale",
   "L4.feature-receipt-contract",
+  "L4.feature-receipt-confidence",
   "precheck-size",
   "precheck-evidence",
   "inventory-coverage",

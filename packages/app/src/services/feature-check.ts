@@ -617,6 +617,7 @@ export class FeatureCheckService extends PlanningCheckService {
             run: FINDING_CODES.L4_FEATURE_RECEIPT_RUN,
             stale: FINDING_CODES.L4_FEATURE_RECEIPT_STALE,
             'contract-mismatch': FINDING_CODES.L4_FEATURE_RECEIPT_CONTRACT,
+            'unacknowledged-low-confidence': FINDING_CODES.L4_FEATURE_RECEIPT_CONFIDENCE,
         };
         findings.push({
             layer: 'L4',

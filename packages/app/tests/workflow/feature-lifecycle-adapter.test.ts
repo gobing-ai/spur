@@ -78,6 +78,8 @@ async function recordReceipt(
     await completeFeatureVerificationReceipt(fs, runDir, running, {
         status: verdict,
         inputDigest,
+        confidence: verdict === 'PASS' ? 'HIGH' : 'LOW',
+        confidenceBasis: ['verification command exited 0', 'proof-input digest unchanged across the pass'],
     });
     // Run-store mirror: the CLI's receipt port refuses a receipt whose run row
     // is absent or still running, so the fixture records what the engine would.

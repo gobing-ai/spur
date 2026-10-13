@@ -23,6 +23,8 @@ import { openInlineRunProjectDb } from '../services/inline-run-setup';
 import {
     captureFeatureReceiptDigest,
     completeFeatureVerificationReceipt,
+    FEATURE_RECEIPT_CONFIDENCE_LEVELS,
+    type FeatureReceiptConfidence,
     type FeatureVerificationReceipt,
     featureReceiptPaths,
     startFeatureVerificationReceipt,
@@ -117,6 +119,17 @@ export interface FeatureVerificationRunInput {
     resolveFeatureSpec?: FeatureSpecLookup;
     readLearnings?: (workdir: string) => Promise<string | undefined>;
     registerArtifact?: (input: { runId: string; path: string; kind: string }) => Promise<void>;
+    /**
+     * Operator-declared level, overriding the derivation. Useful when the honest level is not the
+     * derived one (e.g. the check set ran green but the operator knows the evidence is thin).
+     * An unknown value is refused, like every other contract violation in this module.
+     */
+    confidenceOverride?: string;
+    /**
+     * Operator acknowledgement of a LOW level. Recorded on the receipt — the completion boundary
+     * accepts LOW exactly when the receipt carries it.
+     */
+    ackLowConfidence?: boolean;
 }
 
 /** The pass outcome: its status plus the paths and message the caller reports. */
@@ -128,6 +141,64 @@ export interface FeatureVerificationRunResult {
     logPath: string;
     receiptPath: string;
     message: string;
+    /** Derived (or operator-declared) level recorded on the receipt. */
+    confidence: FeatureReceiptConfidence;
+    /** Evidence the level rests on, recorded on the receipt. */
+    confidenceBasis: string[];
+}
+
+/**
+ * Derive the completion level from what the pass actually measured.
+ *
+ * The level is never a model's opinion: it is a function of the pass's own evidence — whether the
+ * command the selected definition declares is the one that ran, whether it exited 0, and whether
+ * the proof-input digest was unchanged across the pass (a change already records FAIL).
+ *
+ * - `HIGH` — the declared command exited 0 and the checked inputs did not move.
+ * - `MEDIUM` — the same clean pass, but under a caller command override: evidence is real, yet it
+ *   certifies a different check set than the definition declares (the override is recorded on the
+ *   receipt as `verificationCmd` and cannot complete alone).
+ * - `LOW` — any non-PASS, or an explicit operator declaration below the derived level.
+ */
+export function deriveFeatureConfidence(input: {
+    status: 'PASS' | 'FAIL';
+    configuredCmd: string;
+    effectiveCmd: string;
+    inputDigest: string;
+    afterDigest?: string;
+    override?: string;
+}): { confidence: FeatureReceiptConfidence; basis: string[] } {
+    const override = input.override === undefined || input.override === '' ? undefined : input.override;
+    const measured: string[] = [];
+    if (input.status === 'PASS') measured.push('verification command exited 0');
+    else measured.push('verification command did not exit 0');
+    if (input.afterDigest !== undefined) {
+        measured.push(
+            input.afterDigest === input.inputDigest
+                ? 'proof-input digest unchanged across the pass'
+                : 'proof-input digest changed across the pass',
+        );
+    }
+    if (input.status !== 'PASS') return { confidence: 'LOW', basis: measured };
+    const derived: FeatureReceiptConfidence = input.effectiveCmd === input.configuredCmd ? 'HIGH' : 'MEDIUM';
+    if (input.effectiveCmd !== input.configuredCmd) {
+        measured.push(`caller command override: ${input.effectiveCmd}`);
+        measured.push(`the selected definition declares: ${input.configuredCmd}`);
+    }
+    if (override === undefined) return { confidence: derived, basis: measured };
+    // The declaration is recorded first so a reader sees a human decision before the measurements
+    // that would otherwise have decided it — and never mistakes a declared level for a derived one.
+    return { confidence: override as FeatureReceiptConfidence, basis: [`operator-declared ${override}`, ...measured] };
+}
+
+/** Refuse an operator-declared level outside the enum (mirrors the other contract refusals here). */
+function assertConfidenceOverride(raw: string | undefined): FeatureReceiptConfidence | undefined {
+    if (raw === undefined || raw === '') return undefined;
+    const upper = raw.toUpperCase();
+    if (!(FEATURE_RECEIPT_CONFIDENCE_LEVELS as readonly string[]).includes(upper)) {
+        throw new Error(`confidence must be HIGH, MEDIUM or LOW (got ${JSON.stringify(raw)})`);
+    }
+    return upper as FeatureReceiptConfidence;
 }
 
 /** Record the run-scoped receipt as a run artifact through the application's own DB facade. */
@@ -186,6 +257,7 @@ export async function runFeatureVerification(
             : 'bun run spur-check-feature';
     const effectiveCmd =
         input.cmdOverride !== undefined && input.cmdOverride !== '' ? input.cmdOverride : configuredCmd;
+    const confidenceOverride = assertConfidenceOverride(input.confidenceOverride);
 
     const spec = await lookup(input.featureId);
     if (spec === null) {
@@ -217,8 +289,27 @@ export async function runFeatureVerification(
     // 3. Run the effective command via the safe splitter (no `sh -c` interpolation).
     const launchSplit = split(effectiveCmd, 'feature-verification verificationCmd');
     if ('error' in launchSplit) {
-        await receipts.complete(fileSystem, runDir, receipt, { status: 'FAIL', inputDigest: beforeDigest });
-        return { ...base, status: 'FAIL', message: `verification FAIL (${launchSplit.error})` };
+        const { confidence, basis } = deriveFeatureConfidence({
+            status: 'FAIL',
+            configuredCmd,
+            effectiveCmd,
+            inputDigest: beforeDigest,
+            override: confidenceOverride,
+        });
+        await receipts.complete(fileSystem, runDir, receipt, {
+            status: 'FAIL',
+            inputDigest: beforeDigest,
+            confidence,
+            confidenceBasis: basis,
+            confidenceAcknowledged: input.ackLowConfidence === true,
+        });
+        return {
+            ...base,
+            status: 'FAIL',
+            confidence,
+            confidenceBasis: basis,
+            message: `verification FAIL (${launchSplit.error})`,
+        };
     }
 
     const logFd = openLog(logPath);
@@ -234,8 +325,28 @@ export async function runFeatureVerification(
         // behind); otherwise the exit code decides.
         const afterDigest = await receipts.captureDigest(input.workdir, spec.content, learningsContent);
         const status: 'PASS' | 'FAIL' = exit === 0 && afterDigest === beforeDigest ? 'PASS' : 'FAIL';
-        await receipts.complete(fileSystem, runDir, receipt, { status, inputDigest: afterDigest });
-        return { ...base, status, message: `verification ${status} (run ${input.runId}, log ${logPath})` };
+        const { confidence, basis } = deriveFeatureConfidence({
+            status,
+            configuredCmd,
+            effectiveCmd,
+            inputDigest: beforeDigest,
+            afterDigest,
+            override: confidenceOverride,
+        });
+        await receipts.complete(fileSystem, runDir, receipt, {
+            status,
+            inputDigest: afterDigest,
+            confidence,
+            confidenceBasis: basis,
+            confidenceAcknowledged: input.ackLowConfidence === true,
+        });
+        return {
+            ...base,
+            status,
+            confidence,
+            confidenceBasis: basis,
+            message: `verification ${status} (run ${input.runId}, confidence ${confidence}, log ${logPath})`,
+        };
     } finally {
         closeLog(logFd);
     }

@@ -812,7 +812,12 @@ Feature: Disposal
                 verificationCmd: DEFAULT_FEATURE_VERIFICATION_CMD,
                 inputDigest: digest,
             });
-            await completeFeatureVerificationReceipt(fs, runDir, running, { status: 'PASS', inputDigest: digest });
+            await completeFeatureVerificationReceipt(fs, runDir, running, {
+                status: 'PASS',
+                inputDigest: digest,
+                confidence: 'HIGH',
+                confidenceBasis: ['verification command exited 0', 'proof-input digest unchanged across the pass'],
+            });
             const checker = new FeatureCheckService(fs);
             const check = () =>
                 checker.check(featurePath, 'T1', { tasksDir: tasks, featuresDir: features, runDir, asStatus: 'done' });

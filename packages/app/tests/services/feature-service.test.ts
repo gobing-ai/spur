@@ -74,7 +74,12 @@ async function recordPassReceipt(featureId: string): Promise<void> {
         verificationCmd: cmd,
         inputDigest,
     });
-    await completeFeatureVerificationReceipt(receiptFs, runDir, running, { status: 'PASS', inputDigest });
+    await completeFeatureVerificationReceipt(receiptFs, runDir, running, {
+        status: 'PASS',
+        inputDigest,
+        confidence: 'HIGH',
+        confidenceBasis: ['verification command exited 0', 'proof-input digest unchanged across the pass'],
+    });
 }
 
 beforeAll(async () => {

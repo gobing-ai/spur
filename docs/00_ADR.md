@@ -1883,6 +1883,40 @@ descriptions above record earlier stages, not supported configuration.
   a boundary no existing pipeline owns, rather than duplicating one).
 - **Detail:** [workflow execution economy](design/workflow-execution-economy.md) §4.
 
+**Amendment (2026-10-13 · task 1196) — a feature PASS carries a derived confidence level, and the
+completion boundary reads it.** The feature-scoped pass recorded a bound PASS/FAIL receipt and
+nothing about how much that PASS can be trusted, so `verifying → done` treated a run of the selected
+definition's own check set exactly like a run of a caller `--cmd` override that checked something
+else. Task-pipeline has refused that silent equivalence since 1068 (a verify answer carries
+`Confidence: HIGH|MEDIUM|LOW`, and both completion boundaries refuse LOW or absent unless the run was
+launched with `ackLowConfidence=true`); the feature boundary now carries the same contract.
+
+- **Decision:** a receipt records `confidence` (`HIGH`/`MEDIUM`/`LOW`) plus `confidenceBasis`
+  (non-empty) and, only when the operator acknowledged one, `confidenceAcknowledged`. The level is
+  **derived from what the pass measured**, never asserted by a model: the selected definition's own
+  command exiting 0 with an unchanged proof-input digest is `HIGH`; the same clean pass under a
+  caller `--cmd` override is `MEDIUM` (real evidence, but it certifies a different check set than
+  the definition declares); anything else is `LOW`. Workflow vars `confidence` (explicit declaration,
+  named `operator-declared …` in the basis) and `ackLowConfidence` (the acknowledgement) steer it.
+  Validation gains a ninth, last-checked rejection `unacknowledged-low-confidence`: a PASS whose
+  level is neither HIGH nor MEDIUM is refused unless the receipt records the acknowledgement.
+- **Why refuse rather than warn:** a level nobody reads is what it replaced. The task boundary
+  already proved the shape works (a LOW certification is a real operator decision, not a silent
+  downgrade), and the feature pass is the slow gate whose green result everything else leans on.
+- **Why the level is derived, not declared:** the pass already measures exactly the three facts a
+  level needs (which command ran, its exit status, whether the checked inputs moved). A declared-only
+  level would put a human attestation where a measurement exists, and would make every automated
+  lifecycle entry hand-supply a value it cannot know.
+- **Consequence (deliberate, one-time):** a receipt written before this field exists is refused at
+  its next `verifying → done`, and the repair is one re-run of the pass — no date-keyed cutoff is
+  added. Unlike the verdict-artifact rule (ADR-131's disposable plane, hundreds of historical
+  artifacts) there is one receipt per feature run, so refuse-and-re-run is cheaper and more honest
+  than an exemption that would keep unlevelled PASSes certifying indefinitely.
+- **Retains:** ADR-119's scope rule (the check stays feature-scoped and the boundary owns it),
+  ADR-108 (no corpus-wide backfill), ADR-118 (a contract violation routes to a named outcome).
+- **Detail:** [workflow execution economy](design/workflow-execution-economy.md) § Feature verification
+  receipt — v1 service contract (fields, derivation, and the nine ordered rejection reasons).
+
 ## ADR-120: Environment Variables Are a Restricted External Surface Behind the ts-utils Gateway
 
 - **Status:** Accepted · **Date:** 2026-09-16

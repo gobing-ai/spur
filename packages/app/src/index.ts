@@ -1058,6 +1058,7 @@ export {
     captureFeatureReceiptDigest,
     completeFeatureVerificationReceipt,
     DEFAULT_FEATURE_VERIFICATION_CMD,
+    FEATURE_RECEIPT_CONFIDENCE_LEVELS,
     FEATURE_RECEIPT_SCHEMA_VERSION,
     featureReceiptPaths,
     isProofCaptureError,
@@ -1066,6 +1067,7 @@ export {
 } from './workflow/feature-verification-receipt';
 export {
     createFeatureLookup,
+    deriveFeatureConfidence,
     type FeatureSpec,
     type FeatureSpecLookup,
     type FeatureVerificationRunInput,

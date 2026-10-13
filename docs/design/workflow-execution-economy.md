@@ -327,23 +327,34 @@ schema `feature-verification-receipt/v1`):
 Receipt fields: `schemaVersion`, `featureId`, `runId`, `workdir` (diagnostic; the
 digest is path-relative), `verifier` (`name`, `sourcePath`, `layer`, `definitionDigest`),
 `verificationCmd`, `status` (`PASS`/`FAIL`/`RUNNING`), `startedAt`, `completedAt`
-(null while `RUNNING`) and `inputDigest` — the proof-input fingerprint (feature
+(null while `RUNNING`), `inputDigest` — the proof-input fingerprint (feature
 markdown + git tree of tracked sources, shared `ProofInputFingerprint` engine)
 captured at completion, i.e. the tree *after* the pass; completion re-checks it
-against current inputs. The script additionally captures a before digest around
+against current inputs — and, since task 1196, the confidence triple
+`confidence` (`HIGH`/`MEDIUM`/`LOW`), `confidenceBasis` (non-empty evidence strings) and
+`confidenceAcknowledged` (present only when the operator acknowledged a LOW level). The script additionally captures a before digest around
 the pass and fails it when they disagree, but only the after-side digest is bound
 into the receipt.
 
+**Derived confidence (task 1196, operator request 2026-10-13).** The level is a function of what the
+pass measured, never a model's opinion: the selected definition's own command exiting 0 with an
+unchanged proof-input digest is `HIGH`, the same clean pass under a caller `--cmd` override is
+`MEDIUM` (real evidence, but it certifies a different check set than the definition declares), and
+anything else is `LOW`. Two workflow vars steer it: `confidence` declares a level explicitly (wins
+over the derivation, named `operator-declared …` in the basis) and `ackLowConfidence` records the
+operator's acknowledgement of a LOW level. The acknowledgement rides the receipt, so the transition
+reads it from the evidence instead of from flags supplied later.
+
 **Completion boundary.** `FeatureCheckService.check` validates the feature-latest copy
 when the transition target is `--as done` (plain on-disk `done` reads stay advisory —
-no backfill burden on pre-receipt features). Eight unsuppressible `L4.feature-receipt-*`
+no backfill burden on pre-receipt features). Nine unsuppressible `L4.feature-receipt-*`
 error reasons, checked in order: `missing`, `malformed`, `cross-feature`, `divergent`
 (the two copies disagree), `failed`, `run` (run-store binding broken: run row absent,
 not done, verifier digest mismatch, or receipt not registered as a run artifact —
 skipped when no run port is supplied), `contract-mismatch` (recorded verifier name/
 layer/digest or `verificationCmd` differs from the currently resolved `feature-verification`
 definition — `--cmd` overrides cannot forge a contract; `sourcePath` is diagnostic only, since
-bundled and source-local CLIs resolve the same shared definition from different paths), and `stale` (digest drift: the recorded `inputDigest` no longer matches the current tree). Git failure during digest capture is
+bundled and source-local CLIs resolve the same shared definition from different paths), and `stale` (digest drift: the recorded `inputDigest` no longer matches the current tree), and `unacknowledged-low-confidence` (a PASS carrying no level or `LOW` without the receipt's recorded acknowledgement — task 1196; checked last so every earlier reason keeps its message and its repair). Git failure during digest capture is
 fail-closed (0751 R1). All completion paths enforce: `feature advance`'s done hop, the engine `verifying→done` guard (`feature check --strict --as done`), and `feature sync`'s receipt-pending stop at `verifying` (1119 — sync holds a feature at `verifying` when its feature-verification receipt is missing, without persisting a BLOCKED replay).
 
 **Stale-consumer diagnosis (task 1185, A33).** A project-layer `feature-verification.yaml` override whose

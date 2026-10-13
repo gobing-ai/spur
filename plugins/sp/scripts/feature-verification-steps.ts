@@ -97,6 +97,8 @@ async function verify(
     cmdOverride: string,
     spurBin: string,
     mode: ModuleMode,
+    confidenceOverride: string,
+    ackLowConfidence: boolean,
 ): Promise<void> {
     const mod = await loadModule(spurBin, mode);
     const result = await mod.runFeatureVerification({
@@ -104,6 +106,11 @@ async function verify(
         featureId,
         runId,
         cmdOverride,
+        // Operator-declared level (empty = derive from the pass) and the acknowledgement of a LOW
+        // level. Both ride the receipt, so the completion boundary reads them from the evidence
+        // rather than from whatever flags a later transition happens to pass.
+        confidenceOverride,
+        ackLowConfidence,
     });
     console.log(`feature-verification-steps: ${featureId} ${result.message}`);
 }
@@ -116,7 +123,10 @@ function main(): void {
         return i >= 0 && i + 1 < args.length ? (args[i + 1] ?? '') : '';
     };
     if (command !== 'verify') {
-        console.error('Usage: feature-verification-steps.ts verify --feature-id <id> --run-id <id> [--cmd <command>]');
+        console.error(
+            'Usage: feature-verification-steps.ts verify --feature-id <id> --run-id <id> [--cmd <command>] ' +
+                '[--confidence HIGH|MEDIUM|LOW] [--ack-low-confidence]',
+        );
         process.exit(2);
     }
     verify(
@@ -125,6 +135,8 @@ function main(): void {
         flag('--cmd') || getEnvVar('verificationCmd') || '',
         flag('--spur-bin') || getEnvVar('spurBin') || '',
         resolveModuleMode(flag('--module-mode')),
+        flag('--confidence') || getEnvVar('confidence') || '',
+        args.includes('--ack-low-confidence') || getEnvVar('ackLowConfidence') === 'true',
     )
         .then(() => process.exit(0))
         .catch((err: unknown) => {

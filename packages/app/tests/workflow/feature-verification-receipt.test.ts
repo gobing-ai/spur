@@ -11,6 +11,7 @@ import {
     type FeatureVerificationReceipt,
     featureReceiptPaths,
     isProofCaptureError,
+    parseFeatureVerificationReceipt,
     startFeatureVerificationReceipt,
     validateFeatureVerificationReceipt,
 } from '../../src/workflow/feature-verification-receipt';
@@ -69,6 +70,10 @@ async function recordPass(
     return completeFeatureVerificationReceipt(fs, runDir, running, {
         status: 'PASS',
         inputDigest: digest,
+        // A PASS carries the level it rests on (schema v1 additive fields); HIGH is what the
+        // production script derives for a clean pass of the definition's own command.
+        confidence: 'HIGH',
+        confidenceBasis: ['verification command exited 0', 'proof-input digest unchanged across the pass'],
     });
 }
 
@@ -353,6 +358,8 @@ describe('feature verification receipt (0915, v1 contract)', () => {
             const receipt = await completeFeatureVerificationReceipt(fs, runDir, running, {
                 status: 'PASS',
                 inputDigest: after,
+                confidence: 'HIGH',
+                confidenceBasis: ['verification command exited 0', 'proof-input digest unchanged across the pass'],
             });
             expect(receipt.inputDigest).toBe(after);
             const result = await validate(repo);
@@ -599,6 +606,128 @@ describe('feature verification receipt (0915, v1 contract)', () => {
                 sourcePath: ['apps', 'cli', 'config', 'workflows', 'feature-verification.yaml'].join('/'),
             });
             expect(result.ok).toBe(true);
+        } finally {
+            rmSync(repo, { recursive: true, force: true });
+        }
+    });
+
+    test('a MEDIUM level round-trips through the run-scoped copy (confidence, schema v1)', async () => {
+        const repo = makeTempGitRepo();
+        try {
+            const digest = await captureFeatureReceiptDigest(repo, FEATURE_MD);
+            const runDir = join(repo, '.spur', 'run');
+            const running = await startFeatureVerificationReceipt(fs, runDir, {
+                featureId: 'T1',
+                runId: 'run-1',
+                workdir: repo,
+                verifier: VERIFIER,
+                verificationCmd: DEFAULT_FEATURE_VERIFICATION_CMD,
+                inputDigest: digest,
+            });
+            const basis = ['verification command exited 0', 'caller command override: bun run other'];
+            await completeFeatureVerificationReceipt(fs, runDir, running, {
+                status: 'PASS',
+                inputDigest: digest,
+                confidence: 'MEDIUM',
+                confidenceBasis: basis,
+            });
+            const reread = parseFeatureVerificationReceipt(
+                await fs.readFile(featureReceiptPaths(runDir, 'T1', 'run-1').runScoped),
+            );
+            expect(reread.confidence).toBe('MEDIUM');
+            expect(reread.confidenceBasis).toEqual(basis);
+            expect((await validate(repo)).ok).toBe(true);
+        } finally {
+            rmSync(repo, { recursive: true, force: true });
+        }
+    });
+
+    test('a level without its basis is refused by the writer', async () => {
+        const repo = makeTempGitRepo();
+        try {
+            const digest = await captureFeatureReceiptDigest(repo, FEATURE_MD);
+            const runDir = join(repo, '.spur', 'run');
+            const running = await startFeatureVerificationReceipt(fs, runDir, {
+                featureId: 'T1',
+                runId: 'run-1',
+                workdir: repo,
+                verifier: VERIFIER,
+                verificationCmd: DEFAULT_FEATURE_VERIFICATION_CMD,
+                inputDigest: digest,
+            });
+            expect(
+                completeFeatureVerificationReceipt(fs, runDir, running, {
+                    status: 'PASS',
+                    inputDigest: digest,
+                    confidence: 'HIGH',
+                }),
+            ).rejects.toThrow(/non-empty confidenceBasis/);
+        } finally {
+            rmSync(repo, { recursive: true, force: true });
+        }
+    });
+
+    test('a hand-edited level outside the enum is malformed, not a certified PASS', async () => {
+        const repo = makeTempGitRepo();
+        try {
+            const digest = await captureFeatureReceiptDigest(repo, FEATURE_MD);
+            await recordPass(repo, digest);
+            const paths = featureReceiptPaths(join(repo, '.spur', 'run'), 'T1', 'run-1');
+            const edited = `${JSON.stringify(
+                {
+                    ...(JSON.parse(await fs.readFile(paths.runScoped)) as FeatureVerificationReceipt),
+                    confidence: 'SURE',
+                },
+                null,
+                4,
+            )}\n`;
+            await fs.writeFile(paths.runScoped, edited);
+            await fs.writeFile(paths.featureScoped, edited);
+            expect(() => parseFeatureVerificationReceipt(edited)).toThrow(/confidence must be HIGH, MEDIUM or LOW/);
+            const result = await validate(repo);
+            expect(result.ok).toBe(false);
+            if (!result.ok) expect(result.reason).toBe('malformed');
+        } finally {
+            rmSync(repo, { recursive: true, force: true });
+        }
+    });
+
+    test('the completion boundary certifies HIGH/MEDIUM, and LOW only with a recorded acknowledgement', async () => {
+        const repo = makeTempGitRepo();
+        try {
+            const digest = await captureFeatureReceiptDigest(repo, FEATURE_MD);
+            await recordPass(repo, digest);
+            const paths = featureReceiptPaths(join(repo, '.spur', 'run'), 'T1', 'run-1');
+            const original = JSON.parse(await fs.readFile(paths.runScoped)) as FeatureVerificationReceipt;
+            expect(original.confidence).toBe('HIGH');
+            expect((await validate(repo)).ok).toBe(true);
+            const rewrite = async (edit: (receipt: Partial<FeatureVerificationReceipt>) => void) => {
+                const clone = JSON.parse(JSON.stringify(original)) as Partial<FeatureVerificationReceipt>;
+                edit(clone);
+                const body = `${JSON.stringify(clone, null, 4)}\n`;
+                await fs.writeFile(paths.runScoped, body);
+                await fs.writeFile(paths.featureScoped, body);
+            };
+            await rewrite((receipt) => {
+                receipt.confidence = 'LOW';
+            });
+            const refused = await validate(repo);
+            expect(refused.ok).toBe(false);
+            if (!refused.ok) expect(refused.reason).toBe('unacknowledged-low-confidence');
+            await rewrite((receipt) => {
+                receipt.confidence = 'LOW';
+                receipt.confidenceAcknowledged = true;
+            });
+            expect((await validate(repo)).ok).toBe(true);
+            // A PASS written before the field existed is the same refusal, with "re-run the pass" as
+            // the repair: absent is refused, never silently certified.
+            await rewrite((receipt) => {
+                receipt.confidence = undefined;
+                receipt.confidenceBasis = undefined;
+            });
+            const absent = await validate(repo);
+            expect(absent.ok).toBe(false);
+            if (!absent.ok) expect(absent.reason).toBe('unacknowledged-low-confidence');
         } finally {
             rmSync(repo, { recursive: true, force: true });
         }
