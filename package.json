@@ -41,7 +41,7 @@
             "@gobing-ai/ts-rule-engine": "^0.5.24",
             "@gobing-ai/ts-runtime": "^0.5.24",
             "@gobing-ai/ts-utils": "^0.5.24",
-            "@gobing-ai/superskill": "0.3.35",
+            "@gobing-ai/superskill": "0.3.37",
             "@orpc/client": "1.14.4",
             "@orpc/contract": "1.14.4",
             "@orpc/openapi": "1.14.4",
