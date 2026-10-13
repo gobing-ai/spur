@@ -162,11 +162,8 @@ function settleMode(opts: ParsedArgs, env: ScanEnv, io: ScanIo): number {
     if (fs.existsSync(residualsPath)) prior = JSON.parse(fs.readFileSync(residualsPath, 'utf8'));
     const deferred = scan.items.filter((i) => i.class === 'deferrable');
     if (deferred.length > 0 && prior.followUp === undefined) {
-        // The follow-up is filed UNLINKED: carrying a feature edge to the feature whose run produced
-        // it made that feature's done-gate fail with `L4.verifying-incomplete-tasks` the moment a
-        // residual was deferred (2026-10-04 session, E72/1086→1087), so a deferral must not be able
-        // to block the completing feature. The source task and its feature stay named in the
-        // Background, which keeps the traceability without the lifecycle coupling.
+        // Filed UNLINKED: a feature edge failed that feature's done-gate (`L4.verifying-incomplete-tasks`,
+        // E72/1086→1087); the Background still names the source task and feature for traceability.
         const args = ['task', 'create', `Residuals from ${wbs}`, '--skip-ready', '--json'];
         const created = spur(env, opts.spurBin, args, opts.root);
         let wbsNew = '';
@@ -206,10 +203,7 @@ function settleMode(opts: ParsedArgs, env: ScanEnv, io: ScanIo): number {
 }
 function reportMode(opts: ParsedArgs, env: ScanEnv, io: ScanIo): number {
     const runDir = join(opts.root, '.spur', 'run');
-    // A run that exhausted its fix budget never reaches `verify`, so it has no verdict artifact —
-    // parsing one unconditionally threw ENOENT out of the failed state and lost the recovery
-    // report the state exists to produce (task 1178 run 1, 2026-10-12). Absent evidence is a
-    // no-op, not an abort.
+    // A fix-budget-exhausted run never reaches verify: no verdict is a no-op, not ENOENT (1178 run 1).
     const verdictPath = core.recordedVerdictPath(runDir, opts.wbs, fs);
     if (!fs.existsSync(verdictPath)) {
         io.err(`residual-report: no verdict at ${verdictPath}; nothing to report for ${opts.wbs}\n`);
