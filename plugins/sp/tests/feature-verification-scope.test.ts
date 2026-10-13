@@ -70,14 +70,15 @@ describe('feature-verification scope split (task 0872)', () => {
         expect(scripts['test-repo-wide']).toContain('repo-wide-tests');
     });
 
-    test('1154 R3: default test scripts do not pass --parallel on Bun 1.3.14', () => {
-        // Upgrade bar: Bun 1.3.14 --parallel implies --isolate. The TDZ/wedge failures were caused
-        // by top-level await (guarded below) and are fixed, but 1.3.14 still mis-merges coverage
-        // across workers (function hits split over workers are undercounted), so the per-file
-        // 90/90 threshold cannot be enforced from a parallel run. Re-evaluate on a Bun upgrade.
+    test('1154 R3: the gate test script runs --parallel; coverage/full scripts stay serial', () => {
+        // Upgrade bar met on Bun 1.4.3: --parallel (implies --isolate) passes the full suite and
+        // merges per-worker coverage correctly (per-file numbers match the serial run; 1.3.14
+        // undercounted functions split across workers, failing 219 files spuriously). The
+        // earlier TDZ/wedge failures were top-level await, guarded below.
         const scripts = readScripts();
-        for (const key of ['test', 'test:coverage', 'test:full']) {
-            expect(scripts[key], `${key} must not pass --parallel on Bun 1.3.14`).not.toContain('--parallel');
+        expect(scripts.test).toContain('--parallel');
+        for (const key of ['test:coverage', 'test:full']) {
+            expect(scripts[key], `${key} must not pass --parallel`).not.toContain('--parallel');
         }
     });
 
