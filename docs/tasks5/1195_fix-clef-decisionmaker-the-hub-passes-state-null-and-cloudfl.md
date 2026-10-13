@@ -4,7 +4,7 @@ name: "Fix clef DecisionMaker: the hub passes state null and Cloudflare rejects 
 status: todo
 template: standard
 created_at: 2026-10-13T18:11:35.494Z
-updated_at: "2026-10-13T19:04:33.466Z"
+updated_at: "2026-10-13T21:37:18.396Z"
 
 ac_altitude: task-local
 ac_numbering: task-local
@@ -81,6 +81,12 @@ report says it is fine.
 - AC4 cited `decide-catalog.test.ts:170-217` → shifted by `eb57f0a40`; level assertions are now at `:172-173` and `:263` → cited by content. `decision-service.test.ts` cannot inject a fetch (clef options come from env via `clefCredentials`, `decision-service.ts:678`) → AC4 observed in `packages/app/tests/workflow/actions/decide.test.ts` with an injected-fetch clef driver passed as `decisionMaker`.
 - Publishing the ts-libs patch is an external action → Plan carries an explicit operator gate before publish.
 
+**Refine corrections (2026-10-13, refineall ready re-audit)**
+
+- Issue triage: one issue (clef sends `state: null` → HTTP 422) → `valid`: `packages/app/node_modules/@gobing-ai/ts-decision-clef/dist/driver.js:213` and `ts-libs/packages/decision-clef/src/driver.ts:295` still read `state ?? null` at 0.5.24; catalog pin `package.json:34` unchanged → kept.
+- Concurrency note "spur-new has one worktree, no `wip` tasks; run 1193 first" → a `runall-1190-1191-1192` worktree exists and 1193's `decide.test.ts` cases are already merged (`9ecda20e7`) → Design concurrency line rewritten; no ordering constraint.
+- `confidence-level.ts:17-21` → thresholds and `confidenceLevel()` sit at `:15-20` → Design/References re-cited.
+
 ### Requirements
 
 - [ ] R1. `createClefDriver().ask()` sends `state: ''` on the wire when the caller's `state` is `null` or `undefined`; the fix lives in `ts-libs/packages/decision-clef/src/driver.ts` (upstream driver, not Spur).
@@ -154,7 +160,7 @@ Test observability: AC1/AC2 observe the real POST body through the injected-fetc
 - `ts-libs/packages/decision-clef/tests/driver.test.ts` — AC1 cases using the existing recorder (`:56-72`); AC2 already pinned in the "default route" test.
 - `spur-new/package.json` — root `workspaces.catalog` `"@gobing-ai/ts-decision-clef": "^0.5.24"` (`:34`) → the published patch; then `bun.lock`.
 - `spur-new/packages/app/tests/workflow/actions/decide.test.ts` — AC4 integration case: `createDecisionMaker({ driver: createClefDriver({ accountId, apiToken, fetch }) })` passed as `decisionMaker`; reuse the success-envelope shape from the ts-libs recorder's `respond`.
-- Read-only seams: `packages/app/src/workflow/decide.ts:154`, `packages/app/src/decision/decision-log-query.ts:140`, `packages/app/src/decision/confidence-level.ts:17-21`.
+- Read-only seams: `packages/app/src/workflow/decide.ts:154`, `packages/app/src/decision/decision-log-query.ts:140`, `packages/app/src/decision/confidence-level.ts:15-20`.
 
 **Frozen names** — wire field `state`; mapping `state ?? ''`; levels `HIGH | MEDIUM | LOW` with `CONFIDENCE_HIGH_THRESHOLD = 0.8`, `CONFIDENCE_MEDIUM_THRESHOLD = 0.5`. No new types, flags, env vars or API; `ask()` signature unchanged.
 
@@ -168,7 +174,7 @@ Test observability: AC1/AC2 observe the real POST body through the injected-fetc
 - Do not add readiness logic to `spur decision status`; `--probe` is the truth surface.
 - Do not duplicate thresholds; use `confidenceLevel()`.
 
-**Concurrency** — 2026-10-13: ts-libs has one worktree (`main` at `067b5f47`, clean); spur-new has one worktree (`main`), no `wip` tasks. Sibling 1193 edits `decide.test.ts` too — run 1193 first or rebase the AC4 case onto it.
+**Concurrency** — re-audited 2026-10-13: ts-libs has one worktree (`main` at `067b5f47`, clean). spur-new has `main` plus `spur-new-runall-1190-1191-1192-c4a1` (tasks 1190–1192, not touching these files). 1193's `decide.test.ts` cases are already on `main` (`91473cfb2`); add the AC4 case after them, no ordering constraint remains.
 
 **Handoff/dependencies** — single-owner ordered chain across repos: ts-libs change + test → operator-approved publish → spur-new bump. No spur `dependencies[]` edge (1193 overlap is a file, not a contract).
 
@@ -203,7 +209,7 @@ Test observability: AC1/AC2 observe the real POST body through the injected-fetc
 - `spur-new/package.json:34` — catalog pin `^0.5.24`.
 - `spur-new/packages/app/node_modules/@gobing-ai/ts-decision-clef/dist/driver.js:213` — installed defect.
 - `spur-new/packages/app/src/decision/decision-service.ts:219`, `:239-241`, `:371-373`, `:678` — probe hub, clef registration, `clefCredentials`.
-- `spur-new/packages/app/src/decision/confidence-level.ts:17-21`; `packages/app/src/workflow/decide.ts:154`; `packages/app/src/decision/decision-log-query.ts:140` — level derivation.
+- `spur-new/packages/app/src/decision/confidence-level.ts:15-20`; `packages/app/src/workflow/decide.ts:154`; `packages/app/src/decision/decision-log-query.ts:140` — level derivation.
 - `spur-new/packages/app/tests/decision/confidence-level.test.ts` — threshold edges.
 - `docs/design/decision-catalog.md` §5 — TypeSafe precedent; §3.6 clef maker.
 

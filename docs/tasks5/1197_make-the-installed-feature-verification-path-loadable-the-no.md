@@ -1,11 +1,13 @@
 ---
 schema_version: 1
 name: "Make the installed feature-verification path loadable: the Node twin cannot import the Bun-target inline bundle"
-status: backlog
+status: todo
 template: standard
 created_at: 2026-10-13T19:44:53.347Z
-updated_at: "2026-10-13T19:45:29.968Z"
+updated_at: "2026-10-13T21:40:11.213Z"
 
+priority: P1
+estimate_hours: 2
 ---
 
 ## 1197. Make the installed feature-verification path loadable: the Node twin cannot import the Bun-target inline bundle
@@ -24,17 +26,26 @@ So any project whose feature-verification resolves the **global install** (i.e. 
 
 Two candidate remedies, for the owner to choose: (a) the plugin-lib build emits a Node-safe variant for installed mode (shimming or externalizing `bun:sqlite`/`bun:ffi`), or (b) the workflow selects the runtime from the bundle's actual target — bun for the current bundle, node only for a Node-built one — and the install refuses a mismatched pair instead of copying it silently.
 
+**Refine corrections (2026-10-13, refineall ready re-audit)**
+
+- Issue triage: one issue (installed `node` twin cannot import the bundle) → `valid`: `node -e "import('./plugins/sp/lib/inline-run.generated.mjs')"` → `ERR_UNSUPPORTED_ESM_URL_SCHEME`; under `bun` it loads. The bundle carries 3 `bun:` specifiers (`bun:sqlite` ×2, `bun:ffi` ×1).
+- "The bundle is built for Bun" → it is built with `target: 'node'` but keeps `external: ['bun:sqlite']` on purpose (`scripts/commands/bundle-plugin-lib.ts:1002-1005`; `:929-930` "needs the Bun-capable inline entry (SQLite)") → the bundle is correct; the defect is the consumer.
+- "Two candidate remedies (a) Node-safe bundle / (b) runtime from the bundle's target" → a third, existing mechanism exists: the `.mjs` twins of `inline-run-setup.ts:53-59`, `inline-run-dispatch.ts:36-42` and `daily-summary.ts:809-815` re-enter Bun in `main()` when `process.versions.bun` is unset. `feature-verification-steps.ts` is the only bundle consumer without it → decision closed on reuse (Q&A); (a) and (b) rejected.
+- Sibling check: `daily-summary.mjs` is also run with `node` and also imports the bundle, but already re-enters Bun → not affected.
+
 ### Requirements
 
-- [ ] R1. Reproduce the mismatch from a clean state: after `superskill install sp` from a local checkout, `node <installed>/feature-verification-steps.mjs verify …` fails on module load while `bun …` proceeds, and the workflow's `verify → failed` names the cause rather than a bare failure.
-- [ ] R2. Fix the pair so the runtime the workflow selects can load what it selects — either a Node-safe bundle for installed mode or a runtime chosen from the bundle's real target; the install must refuse (or regenerate) a mismatched pair instead of shipping it.
-- [ ] R3. One regression check pins the decision: a test or check that fails when the selected runtime cannot import the selected bundle, so a future build-target change cannot silently break the installed path again.
+- [ ] R1. `feature-verification-steps.ts` re-enters Bun at the top of `main()` when `process.versions.bun` is unset, with the same shape as `inline-run-setup.ts:53-59`: `spawnSync('bun', [fileURLToPath(import.meta.url), ...process.argv.slice(2)], { stdio: 'inherit' })`, exit with the child's status, and on spawn error print `feature-verification-steps requires Bun on PATH: <message>` and exit 1.
+- [ ] R2. The regenerated `plugins/sp/scripts/feature-verification-steps.mjs` twin carries the re-entry, so `node <twin> verify …` reaches the verifier instead of failing on module load.
+- [ ] R3. One regression pin: every `plugins/sp/scripts/**/*.ts` that loads the inline bundle (`inline-run.generated` or `loadInlineApp`) contains the `process.versions.bun` re-entry, so a new bundle consumer cannot ship a Node-unloadable twin.
+
+Out of scope: changing the bundle target or shimming `bun:sqlite` (would need a Node SQLite dependency); changing `config/workflows/feature-verification.yaml` runner selection (`installed → node` stays valid once the twin re-enters Bun); rewording the workflow's `script not found` fallback status line.
 
 ### Acceptance Criteria
 
-- [ ] AC1 — After an install from a local checkout, the verifier the workflow selects runs: the same `verify` invocation succeeds under whichever runtime the definition chose, in a scratch project with a run row. (req: R2)
-- [ ] AC2 — The mismatch is detected before it ships: a test or check fails when the selected bundle's imports are not loadable by the selected runtime. (req: R1, R3)
-- [ ] AC3 — The failure mode is actionable: a mismatched pair names the bundle, the runtime and the fix instead of surfacing a bare `ERR_UNSUPPORTED_ESM_URL_SCHEME`. (req: R1)
+- [ ] AC1 — The installed Node twin runs the verifier: in a scratch layout with the twin under `scripts/` and the bundle under `lib/`, `node scripts/feature-verification-steps.mjs verify --feature-id T1 --run-id r1 --cmd true` gets past module load (stderr has no `ERR_UNSUPPORTED_ESM_URL_SCHEME`; it fails only on the missing run row, as the Bun run does today). (req: R1, R2)
+- [ ] AC2 — A missing Bun is named: with `PATH` lacking `bun`, the Node twin exits 1 and stderr contains `feature-verification-steps requires Bun on PATH`. (req: R1)
+- [ ] AC3 — The pin fails on a consumer without re-entry: the contract test lists `feature-verification-steps.ts` (and the three existing consumers) as passing, and fails when the re-entry block is removed from any of them. (req: R3)
 
 ### Q&A
 
@@ -42,26 +53,33 @@ Two candidate remedies, for the owner to choose: (a) the plugin-lib build emits 
      condition. Not a parking lot for open questions — an unanswered question here means the task
      is not ready to hand off. Keep empty if none. -->
 
+- CLOSED (2026-10-13, refineall ready re-audit): remedy — reuse the Bun re-entry already in `inline-run-setup.ts`, `inline-run-dispatch.ts` and `daily-summary.ts`. Rejected (a) a Node-safe bundle: needs a Node SQLite dependency and a second build target for one consumer. Rejected (b) choosing the runtime from a bundle marker: changes every workflow's runner contract when one script is the outlier.
+- CLOSED: AC1 needs no run row — reaching the "missing run row" failure proves the module loaded, matching the Bun-side evidence in Background.
+
 ### Design
 
-**WHAT.** Make the installed `feature-verification` pass loadable, and make a runtime/bundle mismatch impossible to ship silently. No behaviour change to the pass itself.
+**WHAT.** Add the established Bun re-entry to `feature-verification-steps.ts`, regenerate its `.mjs` twin, and pin the pattern for every inline-bundle consumer. No change to the pass, the bundle, or the workflow.
 
-**WHERE.** `config/workflows/feature-verification.yaml` (the runner selection in the two `verify` shells: `RUNNER=bun` for the `.ts` twin, `RUNNER=node` for the `.mjs` twin), `scripts/bundle-plugin-lib.ts` (the bundle's target), and the install path that copies `plugins/sp/lib/*.generated.mjs` into `~/.agents/scripts/lib/`.
+**WHY.** The inline bundle keeps `bun:sqlite` external by design (`scripts/commands/bundle-plugin-lib.ts:1002-1005`). Every other `.mjs` consumer re-enters Bun before the dynamic import (`inline-run-setup.ts:53-59`, `inline-run-dispatch.ts:36-42`, `daily-summary.ts:809-815`); `feature-verification-steps.ts` (`main()` at `:118-146`) was added later without it, so the workflow's `installed → node` branch (`config/workflows/feature-verification.yaml:81`) fails on load.
 
-**Two candidate fixes, pick one and record why.**
-- *(a) Emit a Node-safe bundle for installed mode* — externalize or shim `bun:sqlite` / `bun:ffi` behind the same ports the file system seam already uses, so `node <twin>.mjs` works. Cost: a second build target to keep honest; benefit: the documented `source-repo → bun / installed → node` contract keeps its meaning.
-- *(b) Select the runtime from the bundle's real target* — detect the target at install (e.g. a marker written by the bundler) and have the definition use bun for a Bun-target bundle. Cost: the definition no longer implies a runtime; benefit: no second bundle, and the mismatch becomes impossible by construction if the install also refuses a pair it cannot classify.
+**WHERE.**
+- `plugins/sp/scripts/feature-verification-steps.ts` — `main()`: insert the re-entry block before argv parsing; add `import { spawnSync } from 'node:child_process'`.
+- `plugins/sp/scripts/feature-verification-steps.mjs` — regenerated twin, never hand-edited: `superskill script convert sp feature-verification-steps.ts --out plugins/sp/scripts/feature-verification-steps.mjs` from the repo root; `bun run script-contract-check` proves byte-identity.
+- `plugins/sp/tests/feature-verification-steps.test.ts` — AC1/AC2 cases spawning `node` on the twin in a temp layout (copy twin + `lib/inline-run.generated.mjs`, as `inline-run-installed.heavy.test.ts:44-54` does).
+- `plugins/sp/tests/` (new `bun-reentry-contract.test.ts`, or a case in an existing contract test) — AC3 static scan.
 
-**Anti-patterns.** Do not silently copy a mismatched pair, do not swallow the load error behind a generic "script not found", and do not make the checks optional to get a green pass.
+**Frozen names.** Error text `feature-verification-steps requires Bun on PATH: <message>`. No new flags, exports or env vars.
 
-**Evidence required.** In a scratch git project with a run row: the `verify` invocation succeeding under the chosen runtime, and a deliberate mismatch failing with the new named message. Record the commands and their output in `## Testing`.
+**Anti-patterns.** Do not change the bundle target or add a SQLite shim. Do not switch the workflow to `RUNNER=bun` (fixes one caller, leaves the twin broken for direct use). Do not copy daily-summary's degrade-and-continue branch — a verifier must fail closed when Bun is missing.
+
+**Concurrency.** spur-new `main` has uncommitted edits by another session in `plugins/sp/skills/spur-dev/references/*.md` and several `packages/app/tests/**`; none touch the files above. Worktree `spur-new-runall-1190-1191-1192-c4a1` is separate.
 
 ### Plan
 
-- [ ] R1: reproduce from a clean install (node twin + current bundle fails; bun twin + current bundle proceeds) and keep both outputs as the before-evidence.
-- [ ] R2: apply the chosen fix at the build/definition boundary; re-install into the scratch location and re-run the same invocation.
-- [ ] R3: add the pin (a check or test that fails on an unloadable pair) and prove it fails when the mismatch is reintroduced.
-- [ ] Close out with the measured before/after outputs in `## Testing`.
+- [ ] Step 1 (R1, AC1, AC2): add the failing AC1/AC2 tests in `plugins/sp/tests/feature-verification-steps.test.ts`; confirm AC1 fails with `ERR_UNSUPPORTED_ESM_URL_SCHEME` on today's twin.
+- [ ] Step 2 (R1, R2): add the re-entry block to `feature-verification-steps.ts` `main()`; regenerate the `.mjs` twin; AC1/AC2 pass.
+- [ ] Step 3 (R3, AC3): add the static contract scan; prove it fails by temporarily removing the block, then restore.
+- [ ] Step 4: `bun run script-contract-check` and `bun run spur-check`; record the node-twin before/after stderr in `## Testing`.
 
 ### Solution
 
@@ -77,6 +95,14 @@ Two candidate remedies, for the owner to choose: (a) the plugin-lib build emits 
 
 ### References
 
-<!-- Links to features, docs, ADRs, related tasks, or external references. -->
+- `plugins/sp/scripts/inline-run-setup.ts:53-59`, `plugins/sp/scripts/inline-run-dispatch.ts:36-42`, `plugins/sp/scripts/daily-summary/daily-summary.ts:809-815` — existing Bun re-entry.
+- `plugins/sp/scripts/feature-verification-steps.ts:118-148` — `main()` without re-entry.
+- `scripts/commands/bundle-plugin-lib.ts:929-930`, `:1002-1005` — Bun-capable bundle by design.
+- `config/workflows/feature-verification.yaml:81` — `installed → node` runner.
+- `plugins/sp/tests/inline-run-installed.heavy.test.ts` — installed Node-twin layout precedent.
+- Candidate owning feature (proposal, not linked): A91 — owns 1176, which moved this script onto the bundle.
 
 ### History
+
+- 2026-10-13T21:40:11.213Z backlog → todo (system)
+

@@ -1,10 +1,10 @@
 ---
 schema_version: 1
 name: Recover the pipeline from a host-contended (timeout-shaped) gate FAIL instead of a sticky no-progress skip
-status: backlog
+status: todo
 template: standard
 created_at: 2026-10-13T21:13:56.059Z
-updated_at: "2026-10-13T21:14:18.100Z"
+updated_at: "2026-10-13T21:42:08.371Z"
 
 priority: P2
 estimate_hours: 3
@@ -20,19 +20,29 @@ Mechanism: `packages/app/src/services/quality-gate.ts:893-905` computes `noProgr
 
 Root cause of the underlying flakes is tracked separately (suite isolation); this task is the **recovery** half: the pipeline must be able to retry a contended FAIL once, bounded, without inventing a verdict. Evidence artifacts: `.spur/run/1193-check-receipt.json` (status FAIL, digest sha256:e297af31...), `.spur/run/1193-test-gate.log` (contains the `timed out after 20000ms` lines and the skip line), `.spur/run/1193-check-receipt.false-fail-contention*.json` (the earlier contended receipts, preserved deliberately).
 
+**Refine corrections (2026-10-13, refineall ready re-audit)**
+
+- Issue triage: one issue (a contended FAIL receipt makes every later recheck at the same digest skip) → `valid`: `receiptFailsAtDigest` (`quality-gate.ts:281-290`) and the skip (`:893-907`) are unchanged. `4dab6bcc0` raised the per-test budget 20s → 60s and made the digest tests hermetic, which lowers the frequency but does not remove the stickiness.
+- Design step "read the receipt's gate log (`checks[].logPath`)" → `runQualityGate` truncates that same log for **every** mode at `quality-gate.ts:853-854`, before the skip decision, so a log read at skip time is always empty and the retry could never fire → Design now captures the prior log text before the truncation.
+- Predicate "every failure line matches `/timed out after \d+ms/`" → Bun prints a timeout as two lines, `(fail) <name> [<n>ms]` then `^ this test timed out after <n>ms.` (reproduced with `bun test` 1.4.3), so no single failure line matches → predicate restated as a pairing count.
+- Evidence "`.spur/run/1193-test-gate.log` contains the `timed out after 20000ms` lines and the skip line" → the log was overwritten by later runs; it now holds one assertion failure (`proof.fingerprint action > rejects a non-string expect…`) and no timeout line → tests build their own fixture log; the 1193 artifacts stay as history only.
+- Test location `packages/app/tests/services/quality-gate*.test.ts` → the no-progress tests live in `plugins/sp/tests/quality-gate-receipt.test.ts:576-639` (`describe('recheck no-progress skip (0940 R2)')`) → new cases go there.
+
 ### Requirements
 
-- [ ] R1. A `recheck` whose prior full-tier FAIL receipt is bound to the current proof digest AND whose gate log records only timeout-shaped failures (`timed out after <n>ms`) re-runs the chain once instead of skipping, and records that decision in the gate log with the literal line `check.retry-contended`.
-- [ ] R2. The contended retry is bounded to one per input digest: a second FAIL at the same digest (retry already used) skips exactly as today (`check.skipped-no-progress`).
-- [ ] R3. The retry never fabricates a verdict: PASS is still earned from a real green chain, and a red retry writes findings/status/verdict by the existing FAIL path unchanged.
-- [ ] R4. A receipt whose log carries any non-timeout failure keeps today's skip; a receipt with no readable log fails closed to today's skip.
+- [ ] R1. A `recheck` whose prior full-tier FAIL receipt is bound to the current proof digest re-runs the chain once instead of skipping when the **prior** gate log is timeout-shaped, and tees the literal line `check.retry-contended` to stdout and the new log. Timeout-shaped means: at least one `(fail) ` line, and the number of `(fail) ` lines equals the number of lines matching `/this test timed out after \d+ms/`.
+- [ ] R2. The contended retry is bounded to one per input digest: the used digest is recorded in `.spur/run/<wbs>-contended-retry` (one line, the digest), and a recheck whose digest equals that record skips exactly as today (`check.skipped-no-progress`).
+- [ ] R3. The retry never fabricates a verdict: PASS is earned only from a green chain, and a red retry writes findings/status/verdict/receipt through the existing FAIL path unchanged.
+- [ ] R4. A prior log with any non-timeout failure, no `(fail) ` line, or no readable file keeps today's skip.
+
+Out of scope: the flakes themselves (task 1199 owns suite isolation); `MAX_GATE_ATTEMPTS` and the SQLite-lock retry loop; the pipeline-owned test-fix attempt counter; any CLI flag, env var, workflow var or YAML key.
 
 ### Acceptance Criteria
 
-- [ ] AC1 — A timeout-only FAIL receipt re-runs the recheck instead of skipping (req: R1)
-- [ ] AC2 — A second FAIL at the same digest skips with `check.skipped-no-progress` (req: R2)
-- [ ] AC3 — A green retry yields PASS and the gate log names the contended retry (req: R3)
-- [ ] AC4 — A log with any non-timeout failure, or a missing log, skips as today (req: R4)
+- [ ] AC1 — A timeout-only FAIL receipt re-runs the recheck instead of skipping: with a FAIL full receipt at `digest-1` and a prior log holding two `(fail)` + two `this test timed out after 60000ms.` lines, `runQualityGate('recheck', …)` runs the full command and the new log contains `check.retry-contended`, not `check.skipped-no-progress`. (req: R1)
+- [ ] AC2 — The retry is spent once per digest: a second recheck at `digest-1` after a red retry skips with `check.skipped-no-progress`, and `.spur/run/<wbs>-contended-retry` holds `digest-1`. (req: R2)
+- [ ] AC3 — A green retry yields PASS: when the full command exits 0 on the retry, the status file reads `PASS`, the receipt is PASS, and the log names `check.retry-contended`. (req: R3)
+- [ ] AC4 — Non-timeout or unreadable prior logs keep the skip: a prior log with one timeout plus one assertion failure, a log with no `(fail)` line, and a missing log each produce `check.skipped-no-progress` without running the full command. (req: R4)
 
 ### Q&A
 
@@ -40,27 +50,33 @@ Root cause of the underlying flakes is tracked separately (suite isolation); thi
      condition. Not a parking lot for open questions — an unanswered question here means the task
      is not ready to hand off. Keep empty if none. -->
 
+- CLOSED (2026-10-13, refineall ready re-audit): log source — capture the prior log before the truncation at `quality-gate.ts:854`; rejected adding a failure-shape field to the receipt schema (a `RECEIPT_SCHEMA_VERSION` bump invalidates every stored receipt for one boolean).
+- CLOSED: retry bound — a per-wbs marker file holding the spent digest. A fresh digest naturally resets it; no cleanup step is needed.
+
 ### Design
 
-**WHERE.** `packages/app/src/services/quality-gate.ts` — the `noProgressSkip` block in `runQualityGate` (`:893-905`) and its helpers (`receiptFailsAtDigest`, receipt reading).
+**WHERE.** `packages/app/src/services/quality-gate.ts` — `runQualityGate`: the log truncation (`:853-854`) and the no-progress skip (`:893-907`); a new exported pure helper beside `receiptFailsAtDigest` (`:281`). Tests: `plugins/sp/tests/quality-gate-receipt.test.ts`, inside `describe('recheck no-progress skip (0940 R2)')` (`:578`).
 
-**HOW.** (1) Add a predicate over the gate log text: timeout-shaped iff every failure line matches `/timed out after \d+ms/` and there is at least one (a green-looking log must not qualify). (2) Resolve the receipt's gate log path the same way the receipt records it (`checks[].logPath`) and read it relative to the run cwd. (3) Make the skip `receiptFailsAtDigest(...) && !(timeoutOnly && retryBudgetLeft)`; persist the used-retry state per digest (e.g. `.spur/run/<wbs>-contended-retry.json` keyed by digest) so the bound survives a process restart. (4) Tee `check.retry-contended — <n> timeout-shaped failure(s) at digest <d>; retry 1/1` to stdout and the log.
+**HOW.**
+1. Before `writeFileSync(abs(logFile), '')`, when `mode === 'recheck'`, read the existing log into `priorLog` (`''` when the file is missing).
+2. Add `export function isTimeoutShapedLog(text: string): boolean` — count lines starting with `(fail) ` and lines matching `/this test timed out after \d+ms/`; return `fails > 0 && fails === timeouts`.
+3. Compute `retryContended = noProgressSkip && isTimeoutShapedLog(priorLog) && readMarker() !== env.proofDigest`, where the marker is `rel('-contended-retry')`. When true: write the digest to the marker, tee `check.retry-contended — <n> timeout-shaped failure(s) at input digest <d>; retry 1/1\n` to stdout and the log, and leave `gateRc` at 0 so the normal probe → full path runs. Otherwise the skip block runs unchanged.
 
-**Frozen names.** Log line literal `check.retry-contended`. No new CLI flag, env var, workflow var, or YAML key. No change to `MAX_GATE_ATTEMPTS` or the SQLite-lock retry loop (a different, in-loop mechanism).
+**Frozen names.** `isTimeoutShapedLog`; marker file `.spur/run/<wbs>-contended-retry`; log literal `check.retry-contended`. No new CLI flag, env var, workflow var, YAML key or receipt field.
 
-**Anti-patterns.** Do not make every FAIL retryable (a deterministic red must keep skipping). Do not touch the pipeline-owned test-fix attempt counter. Do not relax the skip when the receipt binds to a *different* digest. Do not convert a retry into a PASS.
+**Anti-patterns.** Do not make every FAIL retryable. Do not read the log after the truncation. Do not touch the test-fix attempt counter or `MAX_GATE_ATTEMPTS`. Do not relax the skip for a receipt at a different digest. Do not turn a retry into a PASS.
 
-**Test requirement.** `quality-gate.ts` is coverage-measured (`bunfig.toml` 90/90 per file), so write the failing test first — a fixture receipt + gate log pair in `packages/app/tests/services/quality-gate*.test.ts` — and keep the new branches covered.
+**Coverage.** `quality-gate.ts` is per-file coverage-measured (`bunfig.toml`), so the AC1–AC4 cases must cover both helper branches and the marker read/write.
 
-**Evidence.** `.spur/run/1193-test-gate.log` (real timeout lines + the skip line) and `.spur/run/1193-check-receipt.json` are the fixture shape to copy.
+**Concurrency.** Sibling 1199 (suite isolation) removes the flakes' cause; this task only recovers from them. No file overlap with 1199/1200 beyond reading test logs.
 
 ### Plan
 
-1. Read `packages/app/tests/services/quality-gate*.test.ts` for the existing no-progress fixture pattern; add a test that fails today: FAIL receipt at digest D + log with only `timed out after 20000ms` lines -> the chain must run and the log must carry `check.retry-contended`.
-2. Implement the timeout-only predicate, the per-digest retry marker, and the log line in `quality-gate.ts`.
-3. Add the R2 test (second FAIL at the same digest skips) and the R4 tests (non-timeout failure skips; missing log skips).
-4. Focused run: `(cd packages/app && bun test tests/services/quality-gate.test.ts)`.
-5. Full gate once, quiet host: `bun run spur-check`.
+1. In `plugins/sp/tests/quality-gate-receipt.test.ts` (no-progress describe), add AC1 with a fixture prior log; confirm it fails today (log shows `check.skipped-no-progress`).
+2. Implement `isTimeoutShapedLog`, the pre-truncation `priorLog` read, and the marker + log line in `quality-gate.ts`.
+3. Add AC2, AC3 and the three AC4 cases.
+4. Focused run: `(cd plugins/sp && bun test tests/quality-gate-receipt.test.ts)`.
+5. Full gate once on a quiet host: `bun run spur-check`.
 
 ### Solution
 
@@ -79,3 +95,6 @@ Root cause of the underlying flakes is tracked separately (suite isolation); thi
 <!-- Links to features, docs, ADRs, related tasks, or external references. -->
 
 ### History
+
+- 2026-10-13T21:42:08.371Z backlog → todo (system)
+

@@ -1,13 +1,13 @@
 ---
 schema_version: 1
 name: Isolate the parallel suite's shared resources (live git tree, project DB) so a contended host cannot fail it
-status: backlog
+status: todo
 template: standard
 created_at: 2026-10-13T21:14:35.289Z
-updated_at: "2026-10-13T21:14:37.482Z"
+updated_at: "2026-10-13T21:45:54.974Z"
 
 priority: P1
-estimate_hours: 6
+estimate_hours: 2
 ---
 
 ## 1199. Isolate the parallel suite's shared resources (live git tree, project DB) so a contended host cannot fail it
@@ -23,18 +23,25 @@ Evidence (2026-10-13, host = 10 cores): a single full-suite run while ~20 spinne
 
 The pipeline needs the suite to be trustworthy on a *busy* host: sibling agents run gates in other worktrees, so "wait until the host is quiet" is not a durable contract.
 
+**Refine corrections (2026-10-13)** — ready audit against HEAD `4a3649ae1`; issues triaged one by one:
+
+- **Live checkout (R1) — valid.** `anchor-qualifier.test.ts` still reads the real repo: `resolveRepoRoot` with no `projectRoot` (`:90-103`), `buildTrackedBasenameIndex(process.cwd())` (`:124`), `createNodeFileSystem(process.cwd())` (`:142`) and `projectRoot: process.cwd()` (`:206`, `:243`, `:419`, `:438`). The R4 case also calls `process.chdir` (`:112`), which is this task's own anti-pattern.
+- **Shared project DB (R2) — invalid, dropped with AC2.** No target test opens `.spur/spur.db` of the repo. `corpus-migrator.test.ts` works in `mkdtemp` corpora (`:25-27`), and its `git log` lookup runs in that temp dir. `inline-run-setup.test.ts` uses a temp DB (`:219`). Every other `spur.db` open in `plugins/sp/tests` is under a per-test fixture `workdir`. Their slowness under load is subprocess and CPU cost, not a shared resource.
+- **Leftovers after a kill (R3) — already fixed, dropped with AC3.** The probe file was the only repo write, and `4dab6bcc0` moved it into a fixture repo. The remaining targets write only under `tmpdir()`. The `command-gate.test.ts` cases with `workdir: process.cwd()` (`:30`, `:95`, `:109`, `:119`, `:129`, `:213`) mock the executor and never spawn.
+- **Host context header (R4) — valid.** `scripts/commands/run-tests.ts` has no `loadavg` or `availableParallelism` call.
+- **Scope cut.** `corpus-migrator`, `inline-run-setup` and `command-gate` leave WHERE because they hold no shared resource. Their load timeouts belong to the load-flake budget contract (`cross-cutting.md` § Isolation rerun for load-flakes).
+- **Concurrent work (uncommitted at audit time).** Another session is adding 60s per-test `loadFlakeTest` budgets to `anchor-qualifier`, `corpus-migrator`, `agent-run`, `command-gate` and `daily-summary` tests. It is also moving the `package.json` `test` budget from 60000 back to 20000. Rebase on that work before you edit `anchor-qualifier.test.ts`, and keep its budget wrapper.
+
+- **Re-estimate.** `estimate_hours` drops from 6 to 2: one test file plus one advisory line. The title still names "project DB", which R2 dropped; the CLI cannot rename a task, so read the title as "live git tree" only.
+
 ### Requirements
 
-- [ ] R1. No test hashes or mutates the live checkout: every test that needs a git tree builds one under `mkdtemp` and passes it explicitly (`cwd`), including `proof-input-fingerprint`, `proof-fingerprint` (done, keep) and `anchor-qualifier`'s `resolveRepoRoot` case.
-- [ ] R2. Tests that open the project DB use an isolated database (temp file or `:memory:`) or a temp project root, so parallel test files cannot contend on one SQLite file; tests that only need a migrated DB must not touch `.spur/spur.db`.
-- [ ] R3. A test killed by its timeout leaves nothing behind in the repo: no probe files, no stray `.git/index.lock`, no temp corpus. Cleanup is registered in `afterEach`/`try-finally` and the probe paths live under `tmpdir()`.
-- [ ] R4. `scripts/commands/run-tests.ts` prints the host context (load1 vs cores) once per run, so a timeout-shaped failure is readable as contention rather than as a regression.
+- [ ] R1. No test reads or mutates the live checkout: every test that needs a git tree builds one under `mkdtemp` and passes it explicitly, including every `anchor-qualifier.test.ts` case that now uses `process.cwd()`, and no test calls `process.chdir`.
+- [ ] R4. `scripts/commands/run-tests.ts` prints the host context (load1 vs cores) once per run when load1 exceeds cores, so a timeout-shaped failure reads as contention rather than as a regression.
 
 ### Acceptance Criteria
 
-- [ ] AC1 — The proof/anchor digest tests pass while the host is oversubscribed 10x (req: R1)
-- [ ] AC2 — Two concurrent full-suite runs in the same tree report the same verdict (req: R2)
-- [ ] AC3 — A killed digest/migrator test leaves `git status --porcelain` clean (req: R3)
+- [ ] AC1 — The anchor-qualifier tests pass from a cwd outside the repo and while the host is oversubscribed (req: R1)
 - [ ] AC4 — The suite header names load1/cores when load1 exceeds cores (req: R4)
 
 ### Q&A
@@ -45,21 +52,25 @@ The pipeline needs the suite to be trustworthy on a *busy* host: sibling agents 
 
 ### Design
 
-**WHERE.** `packages/app/tests/workflow/proof-input-fingerprint.test.ts` (done — keep as the pattern), `packages/app/tests/workflow/actions/proof-fingerprint.test.ts` (done), `packages/app/tests/services/anchor-qualifier.test.ts`, `packages/app/tests/services/corpus-migrator.test.ts`, `packages/app/tests/services/inline-run-setup.test.ts`, `packages/app/tests/workflow/actions/command-gate.test.ts`, `scripts/commands/run-tests.ts`.
+**WHERE.** `packages/app/tests/services/anchor-qualifier.test.ts` and `scripts/commands/run-tests.ts`. The fixture pattern to copy is `packages/app/tests/workflow/actions/proof-fingerprint.test.ts` (from `4dab6bcc0`).
 
-**HOW.** (1) Follow the fixture-repo pattern already in `proof-fingerprint.test.ts`: `mkdtemp(join(tmpdir(), ...))` + `git init`/commit in `beforeAll`, `ctx.workdir = fixture`, `rm` in `afterAll`. (2) For `resolveRepoRoot`, build the fixture repo and call the helper with an explicit `projectRoot`; where the test must prove cwd derivation, run the probe in a subshell process (`bun -e`) rather than `process.chdir` (a process-global that breaks parallel test files). (3) For DB-touching tests, prefer the existing in-memory/temp-DB helper over the project DB; a shared `.spur/spur.db` is the contended resource. (4) `run-tests.ts` already owns the environment contract — add one advisory line there when `os.loadavg()[0] > os.availableParallelism()`.
+**HOW.**
+1. Build one fixture repo in `beforeAll`: `mkdtemp(join(tmpdir(), 'spur-anchor-'))`, `git init -q`, write a few tracked files (one under `.spur/`, so the `.spur/` filter case still proves something), then `git add` and `git commit`. Remove it in `afterAll`.
+2. Point `buildTrackedBasenameIndex`, `createNodeFileSystem` and every `projectRoot` at the fixture.
+3. Two cases prove derivation from the process cwd: "resolves git repo root when projectRoot is omitted" (`:90`) and the R4 hint case (`:105-118`). Run each in a child process: `Bun.spawnSync(['bun', '-e', <probe>], { cwd })`, where the probe imports `resolveRepoRoot` and prints the result. Assert on stdout. This replaces `process.chdir`, which is process-global and unsafe across parallel test files.
+4. `run-tests.ts`: compute `const [load1] = os.loadavg(); const cores = os.availableParallelism();`. When `load1 > cores`, write one line to stderr, `run-tests: host load1=<x.x> cores=<n> — timeouts may be contention`, before it spawns bun. The line is advisory. It never changes the forwarded argv or the exit code.
 
-**Anti-patterns.** Do not raise the timeout further as the primary fix (mitigation only, measured). Do not `process.chdir` in a test file. Do not weaken an assertion to make a loaded run green. Do not re-introduce a host-wide gate lock without an ADR (task 1173 removed it deliberately).
+**Anti-patterns.** Do not raise a timeout as the fix. Do not `process.chdir` in a test file. Do not weaken an assertion to get a loaded run green. Do not re-introduce a host-wide gate lock without an ADR; task 1173 removed it on purpose.
 
-**Test requirement.** This is a test-infrastructure change: prove it by running the affected files under a deliberately loaded host (background spinners) and at idle, and record both numbers in the task's `## Testing`.
+**Test requirement.** Run `anchor-qualifier.test.ts` from `$TMPDIR` as cwd, and once with background spinners (`yes > /dev/null` × 2×cores). Then run `run-tests.ts` under the same load and confirm the header line appears. Record both in `## Testing`.
 
 ### Plan
 
-1. `anchor-qualifier.test.ts`: fixture repo + explicit `projectRoot`; keep the cwd-derivation claim covered by a child-process probe.
-2. `corpus-migrator.test.ts` / `inline-run-setup.test.ts` / `command-gate.test.ts`: find the shared-DB and real-git dependency per test, replace with temp root/DB; add `try-finally` cleanup (R3).
-3. `run-tests.ts`: one advisory header line with load1/cores (R4). Keep the verbatim-forwarding contract: the line is informational, never an arg injection.
-4. Verify: for each touched file, idle run + a run with background spinners; then two concurrent full-suite runs in one tree (AC2) and a `git status` check after a killed test (AC3).
-5. Full gate once on a quiet host, then record the before/after numbers in `## Testing`.
+1. Rebase on the concurrent `loadFlakeTest` edit to `anchor-qualifier.test.ts` if it has landed.
+2. `anchor-qualifier.test.ts`: add the fixture repo, point every live-tree reference at it, and move the two cwd-derivation cases into `bun -e` child probes (R1).
+3. `run-tests.ts`: add the advisory load1/cores line (R4).
+4. Verify: run `(cd packages/app && bun test tests/services/anchor-qualifier.test.ts)` idle and under spinners. Run the same file with `$TMPDIR` as cwd, using an absolute path. Run `bun run test` under load to see the header.
+5. Run `bun run spur-check` once on a quiet host.
 
 ### Solution
 
@@ -78,3 +89,6 @@ The pipeline needs the suite to be trustworthy on a *busy* host: sibling agents 
 <!-- Links to features, docs, ADRs, related tasks, or external references. -->
 
 ### History
+
+- 2026-10-13T21:44:29.239Z backlog → todo (system)
+
