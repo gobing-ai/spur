@@ -4,7 +4,7 @@ name: "Fix clef DecisionMaker: the hub passes state null and Cloudflare rejects 
 status: todo
 template: standard
 created_at: 2026-10-13T18:11:35.494Z
-updated_at: "2026-10-13T18:23:20.591Z"
+updated_at: "2026-10-13T19:04:33.466Z"
 
 ac_altitude: task-local
 ac_numbering: task-local
@@ -70,40 +70,55 @@ report says it is fine.
    `createClefDriver`, then bump the catalog pin. Preferred if a ts-libs change is in scope, because
    the defect is the driver's, not the caller's.
 
+**Refine corrections (2026-10-13, ready re-audit)**
+
+- "Two candidate fixes (the implementer picks)" → Q&A already closed the location as the upstream `ts-decision-clef` driver → Requirements/Plan now state the chosen layer; the Spur-side wrapper option is rejected (see Design anti-patterns).
+- Design WHY "the wire drops a null field and answers 422 `state: Field required`" → that wording is the TypeSafe SDK case (`ts-libs/packages/ai-runner/src/decision/typesafe-driver.ts:73-83`). The clef evidence above shows the explicit `"state":null` reaching Cloudflare and failing with `Input should be a valid string / dictionary / list` → WHY rewritten to the clef evidence; the fix (`state ?? ''`) is the same.
+- Installed dist line `dist/driver.js:212` → `packages/app/node_modules/@gobing-ai/ts-decision-clef/dist/driver.js:213` (`state: state ?? null`, 0.5.24); source `ts-libs/packages/decision-clef/src/driver.ts:295` confirmed.
+- R3 "make `spur decision status` honest" had no AC (AC3 cited R3 but tests release consumption) → `status` never calls a backend by design (`packages/app/src/decision/decision-service.ts:219`, probe hub "never by `status`"), and `status --probe` already reports clef `✗ … errored` (Background evidence), so the probe surface is truthful today → R3 restated: no new readiness logic; after the bump the probe flips to `✓` (operator-run live check, deferred).
+- R4 "no new public surface" was cited by AC4, which is about confidence levels → requirements renumbered: R4 = no new surface + degraded-fallback contract, R5 = clef answer derives its level.
+- AC note "(no feature_id …)" → frontmatter carries `feature_id: P1` (P1 `verifying`) → note corrected; refine does not write `feature_id`; `ac_altitude: task-local` keeps the AC valid.
+- AC4 cited `decide-catalog.test.ts:170-217` → shifted by `eb57f0a40`; level assertions are now at `:172-173` and `:263` → cited by content. `decision-service.test.ts` cannot inject a fetch (clef options come from env via `clefCredentials`, `decision-service.ts:678`) → AC4 observed in `packages/app/tests/workflow/actions/decide.test.ts` with an injected-fetch clef driver passed as `decisionMaker`.
+- Publishing the ts-libs patch is an external action → Plan carries an explicit operator gate before publish.
+
 ### Requirements
 
-- [ ] R1. Decide and implement the normalization (Spur-side wrapper or the upstream driver) so a parameterless catalog decision served by `clef` reaches the backend and returns `source: model`.
-- [ ] R2. Add a regression check that fails today: a parameterless decision (e.g. `maker-liveness`) served by `clef` must not report `reason: error`.
-- [ ] R3. Make the readiness surface honest: if a registered maker cannot answer for any parameterless decision, `spur decision status` must not present it as healthy.
-- [ ] R4. No new public surface; keep the degraded-fallback contract for genuine backend failures.
+- [ ] R1. `createClefDriver().ask()` sends `state: ''` on the wire when the caller's `state` is `null` or `undefined`; the fix lives in `ts-libs/packages/decision-clef/src/driver.ts` (upstream driver, not Spur).
+- [ ] R2. A regression test in `ts-libs/packages/decision-clef/tests/driver.test.ts` fails on 0.5.24 (`state: null` on the wire) and passes after the fix; structured state still passes through unchanged.
+- [ ] R3. spur-new consumes the patched release: root `workspaces.catalog` pins `@gobing-ai/ts-decision-clef` to the new patch and the installed dist maps absent state to `''`. No new readiness logic in `spur decision status`; the existing `--probe` is the truth surface.
+- [ ] R4. No new public surface (types, flags, env vars, driver signature); genuine backend failures still degrade to the declared fallback.
+- [ ] R5. A clef answer with confidence c flows through the existing derivation to HIGH (c ≥ 0.8) / MEDIUM (c ≥ 0.5) / LOW otherwise; absent or out-of-[0,1] → LOW.
+
+Out of scope: hub/`buildState` changes; omitting the `state` key; a Spur-side shim in `packages/app`; changing the level thresholds; changing `status` to call backends. Live 422/200 confirmation is env-gated and deferred to the operator.
 
 ### Acceptance Criteria
 
-```gherkin
-Declared: `ac_altitude: task-local`, `ac_numbering: task-local` (no feature_id; regression criteria owned by this task).
+Declared: `ac_altitude: task-local`, `ac_numbering: task-local` (regression criteria owned by this task; `feature_id: P1` is present but the scenarios are not P1 ship scenarios).
 
+```gherkin
 Scenario: AC1 — stateless ask reaches the wire as empty-string state (req: R1, R2)
-Given a clef driver built with valid options and an injected fetch capturing the POST body,
-When `ask()` is called with no `state` (undefined) and again with explicit `state: null`,
-Then each captured wire body has `state === ''` while `model` and `questions` are unchanged.
+  Given a clef driver built with valid options and the injected-fetch recorder in `driver.test.ts`
+  When `ask()` is called with `state: null` and again with `state` omitted
+  Then each captured wire body has `state === ''` while `model` and `questions` are unchanged
 
 Scenario: AC2 — structured state passes through unchanged (req: R1, R2)
-Given a call with structured state `{ context: 'test' }`,
-When `ask()` runs,
-Then the captured wire `state` equals `{ context: 'test' }` (regression: existing assertion in `ts-libs/packages/decision-clef/tests/driver.test.ts:193` stays green).
+  Given a call with structured state `{ context: 'test' }`
+  When `ask()` runs
+  Then the captured wire `state` equals `{ context: 'test' }` (existing assertion in "default route is clef-flash and the body model matches the route" stays green)
 
-Scenario: AC3 — spur-new consumes the fixed release (req: R3)
-Given ts-libs publishes the patched patch release and spur-new's catalog pins it,
-When `bun install` runs in spur-new,
-Then the installed `ts-decision-clef` dist maps absent state to `''` and `bun run build` plus the decision-service tests (`packages/app/tests/decision/decision-service.test.ts`) pass.
+Scenario: AC3 — spur-new consumes the fixed release (req: R3, R4)
+  Given ts-libs has published the patched `@gobing-ai/ts-decision-clef` and spur-new's root catalog pins it
+  When `bun install` runs in spur-new
+  Then `packages/app/node_modules/@gobing-ai/ts-decision-clef/dist/driver.js` contains `state ?? ''`
+  And `bun run build` and `packages/app/tests/decision/decision-service.test.ts` pass with no public-surface diff
 
-Scenario: AC4 — a clef-served answer derives its HIGH/MEDIUM/LOW level (req: R4)
-Given the fixed clef driver parses a successful answer envelope whose answer carries confidence c,
-When that answer flows through the existing derivation seams (`confidenceLevel()` at `packages/app/src/workflow/decide.ts:154` for the receipt and `packages/app/src/decision/decision-log-query.ts:140` for the log row),
-Then c ≥ 0.8 reads HIGH, c ≥ 0.5 reads MEDIUM, anything lower reads LOW, and an absent or out-of-[0,1] confidence reads LOW (fail-conservative).
-
-Test observability: AC1/AC2 are observed in `ts-libs/packages/decision-clef/tests/driver.test.ts` through the injected-fetch wire capture (the real POST body, no network mock of the behavior under test). AC3 is observed via the installed dist in spur-new's tree plus build/tests. AC4 is observed by a spur-new integration case chaining the injected-fetch clef driver through `createDecisionMaker` into the decide receipt — the full parse → validate → derive chain minus network; the thresholds themselves are already pinned by `packages/app/tests/workflow/actions/decide-catalog.test.ts:170-217` with stub makers. The live 422 itself is env-gated (requires real Cloudflare credentials) and is not asserted by any AC; see Plan step 6 for the optional live confirmation.
+Scenario: AC4 — a clef-served answer derives its HIGH/MEDIUM/LOW level (req: R5)
+  Given an injected-fetch clef driver wrapped by `createDecisionMaker` and passed as `decisionMaker` to the inline `DecideActionRunner`
+  When the stubbed backend answers with confidence 0.91, 0.6 and 0.2
+  Then the receipt's `confidenceLevel` is HIGH, MEDIUM and LOW respectively, with `degraded: false`
 ```
+
+Test observability: AC1/AC2 observe the real POST body through the injected-fetch recorder (`driver.test.ts:56-72`), not a mock of the mapping. AC3 observes the installed dist plus build/tests. AC4 runs the real driver parse → maker → `runDecide` → `confidenceLevel()` (`packages/app/src/workflow/decide.ts:154`) chain with only the network stubbed; threshold edges stay pinned by `packages/app/tests/decision/confidence-level.test.ts`.
 
 ### Q&A
 
@@ -120,36 +135,52 @@ Test observability: AC1/AC2 are observed in `ts-libs/packages/decision-clef/test
 
 - CLOSED (2026-10-13, operator request): confidence-level verification added (R4/AC4). The HIGH/MEDIUM/LOW vocabulary and thresholds already exist and are unit-tested (`packages/app/src/decision/confidence-level.ts`, `packages/app/tests/decision/confidence-level.test.ts`, seam tests `packages/app/tests/workflow/actions/decide-catalog.test.ts:170-217`); what the 422 bug blocked is any clef answer reaching those seams. This task therefore verifies the clef→level path only — no new mapping code, thresholds stay 0.8/0.5, driver answers keep carrying numeric confidence.
 
+#### Q&A entry — 2026-10-13 (ready re-audit)
+
+- CLOSED: R3 readiness — no new `status` logic. `status` never calls backends by design (`decision-service.ts:219`); `--probe` already reports clef as errored, so it is truthful. After the bump the probe is the confirmation (deferred, operator-run).
+- CLOSED: AC4 test location — `decide.test.ts` with an injected-fetch clef maker, because `DecisionService` builds clef from env and cannot inject `fetch`.
+- DEFERRED (owner: operator): ts-libs patch publish approval (Plan step 3) and the live-credential probe (Plan step 7).
+- Superseded: "no feature_id" — frontmatter has `feature_id: P1`; refine leaves the edge to the operator.
+
 ### Design
 
-**WHAT** — one wire-mapping line in the clef driver plus its regression test, then release, consume the patch, and verify the confidence-level derivation on the reopened clef path.
+**WHAT** — one wire-mapping change in the upstream clef driver plus its regression test; an operator-gated patch release; the spur-new catalog bump; one spur-new integration test proving a clef answer reaches the level derivation.
 
-**WHY** — Cloudflare's Workers AI REST endpoint drops a `null` state field and answers 422 "state: Field required" (documented from the identical, already-fixed defect in `ts-libs/packages/ai-runner/src/decision/typesafe-driver.ts:73-83`). The neutral driver contract legitimately allows `null` state in-memory; only the wire shape is wrong. The 422 also meant no clef answer ever reached the HIGH/MEDIUM/LOW derivation, so that path needs verification, not new code.
+**WHY** — `ts-decision-clef` 0.5.24 sends `state: state ?? null` (`src/driver.ts:295`). The hub produces `null` for a parameterless decision (`ts-ai-decision` `buildState`, `params.ts:165`), and Cloudflare's Clef endpoint rejects `"state": null` with HTTP 422 (`Input should be a valid string / dictionary / list`), while `"state": {}` and `''` are accepted. Every parameterless clef decision therefore degrades to its fallback. TypeSafe hit the same class and ships `state ?? ''` (`ai-runner/src/decision/typesafe-driver.ts:73-83`); laya/fm map null→`''` too.
 
-**WHERE** (primary targets)
-- `ts-libs/packages/decision-clef/src/driver.ts:295` — `state: state ?? null` → `state: state ?? ''`.
-- `ts-libs/packages/decision-clef/tests/driver.test.ts` — wire-capture assertions (AC1/AC2); the injected-fetch harness already captures the body (`tests/driver.test.ts:61-72`).
-- `spur-new/package.json` — root `workspaces.catalog` entry `"@gobing-ai/ts-decision-clef": "^0.5.24"` → `^0.5.25`; then `bun.lock`.
-- `packages/app/tests/decision/decision-service.test.ts` — new AC4 integration case (clef driver → `createDecisionMaker` → decide receipt level); derivation seams read-only: `packages/app/src/workflow/decide.ts:154`, `packages/app/src/decision/decision-log-query.ts:140`.
+**WHERE**
 
-**Frozen names** — body field `state`; mapping expression `state ?? ''`; level vocabulary `HIGH | MEDIUM | LOW` with thresholds `CONFIDENCE_HIGH_THRESHOLD = 0.8`, `CONFIDENCE_MEDIUM_THRESHOLD = 0.5` (`packages/app/src/decision/confidence-level.ts:17-21`); no new types, flags, env vars, or API surface; driver `ask()` signature unchanged. No new API.
+- `ts-libs/packages/decision-clef/src/driver.ts:295` — `state: state ?? null` → `state: state ?? ''`, with a one-line comment citing the 422.
+- `ts-libs/packages/decision-clef/tests/driver.test.ts` — AC1 cases using the existing recorder (`:56-72`); AC2 already pinned in the "default route" test.
+- `spur-new/package.json` — root `workspaces.catalog` `"@gobing-ai/ts-decision-clef": "^0.5.24"` (`:34`) → the published patch; then `bun.lock`.
+- `spur-new/packages/app/tests/workflow/actions/decide.test.ts` — AC4 integration case: `createDecisionMaker({ driver: createClefDriver({ accountId, apiToken, fetch }) })` passed as `decisionMaker`; reuse the success-envelope shape from the ts-libs recorder's `respond`.
+- Read-only seams: `packages/app/src/workflow/decide.ts:154`, `packages/app/src/decision/decision-log-query.ts:140`, `packages/app/src/decision/confidence-level.ts:17-21`.
 
-**Precedence/algorithm** — state mapping: `undefined`/`null` → `''`; any structured JSON value (already validated by `assertJsonSerializable`, driver.ts:287) passes through. Level derivation is existing code and total: absent, NaN or out-of-[0,1] confidence → LOW.
+**Frozen names** — wire field `state`; mapping `state ?? ''`; levels `HIGH | MEDIUM | LOW` with `CONFIDENCE_HIGH_THRESHOLD = 0.8`, `CONFIDENCE_MEDIUM_THRESHOLD = 0.5`. No new types, flags, env vars or API; `ask()` signature unchanged.
 
-**Anti-patterns (do not implement)**
-- Do not default hub state or `buildState` to `{}`/`''` — masks the driver defect; non-hub callers still 422.
-- Do not conditionally omit the `state` key — the API treats a missing field as missing-required and still 422s.
-- Do not add a Spur-side shim in `packages/app` — engine fixes belong in the released package (AGENTS.md reuse policy).
-- Do not duplicate the level thresholds in the driver or tests — import/reuse `confidenceLevel()`; driver answers carry numeric confidence only.
+**Algorithm** — `undefined`/`null` → `''`; any structured JSON value (validated by `assertJsonSerializable`, `driver.ts:287`) passes through. Level derivation is existing and total.
 
-**Handoff/dependencies** — single-owner ordered chain: ts-libs change+test+publish must precede the spur-new catalog bump. No spur `dependencies[]` edges (cross-repo precondition lives in Plan ordering).
+**Anti-patterns**
+
+- Do not default hub state / `buildState` to `{}` or `''` — masks the driver defect for non-hub callers.
+- Do not omit the `state` key — the backend treats it as required.
+- Do not add a Spur-side shim in `packages/app` (engine fixes go in the released package).
+- Do not add readiness logic to `spur decision status`; `--probe` is the truth surface.
+- Do not duplicate thresholds; use `confidenceLevel()`.
+
+**Concurrency** — 2026-10-13: ts-libs has one worktree (`main` at `067b5f47`, clean); spur-new has one worktree (`main`), no `wip` tasks. Sibling 1193 edits `decide.test.ts` too — run 1193 first or rebase the AC4 case onto it.
+
+**Handoff/dependencies** — single-owner ordered chain across repos: ts-libs change + test → operator-approved publish → spur-new bump. No spur `dependencies[]` edge (1193 overlap is a file, not a contract).
 
 ### Plan
 
-1. Confirm the reproducibility chain (probe, direct driver ask, curl with state:null vs state:{}).
-2. Implement the normalization at the chosen layer.
-3. Re-run `spur decision run maker-liveness --maker clef --json` and `spur decision status --probe`.
-4. Re-run the task-pipeline triage with `decisions.makers.task-triage: clef` and confirm a real answer reaches the lane decision.
+1. ts-libs: add AC1 tests to `packages/decision-clef/tests/driver.test.ts`; confirm they fail on `state ?? null`.
+2. ts-libs: change `src/driver.ts:295` to `state ?? ''`; run the package tests (AC1/AC2) and the repo gate.
+3. **Operator gate:** publishing the ts-libs patch is an external action — stop for explicit approval, then release via the ts-libs release procedure.
+4. spur-new: bump `@gobing-ai/ts-decision-clef` in root `workspaces.catalog`, `bun install`, confirm the dist contains `state ?? ''` (AC3).
+5. spur-new: add the AC4 injected-fetch integration case in `packages/app/tests/workflow/actions/decide.test.ts`.
+6. spur-new: `bun run build` and `bun run spur-check`.
+7. Deferred, operator-run (needs Cloudflare creds): `spur decision run maker-liveness --maker clef --json` returns `source: model`, and `spur decision status --probe` shows clef `✓`.
 
 ### Solution
 
@@ -165,13 +196,16 @@ Test observability: AC1/AC2 are observed in `ts-libs/packages/decision-clef/test
 
 ### References
 
-- `ts-libs/packages/decision-clef/src/driver.ts:295` — defective wire mapping (`state: state ?? null`), 0.5.24.
-- `ts-libs/packages/ai-runner/src/decision/typesafe-driver.ts:73-83` — the same defect, its 422 "state: Field required" evidence, and the `state ?? ''` fix this task ports.
-- `ts-libs/packages/ai-decision/src/params.ts:165` — `buildState` returns `Record<string, Json> | null` (hub can produce null state).
-- `spur-new/packages/app/src/decision/decision-service.ts:184,239-241,516` — probe passes no state; clef maker registration; hub routing.
-- `spur-new/packages/app/node_modules/@gobing-ai/ts-decision-clef/dist/driver.js:213` — installed 0.5.24 dist with the defect.
-- `spur-new/packages/app/tests/decision/decision-service.test.ts` — decision-service tests (AC3 gate).
-- ts-libs feature `A3_cloudflare-clef-decision-backend-in-ts-decision-clef.md` + `docs/design/decision-clef-backend.md` — backend contract (body `{ model, state, questions }`; null is JSON-serializable in-memory).
+- `ts-libs/packages/decision-clef/src/driver.ts:287`, `:295` — `assertJsonSerializable(state)` and the defective `state ?? null` (0.5.24).
+- `ts-libs/packages/decision-clef/tests/driver.test.ts:56-72` — injected-fetch recorder; "default route…" test pins structured state.
+- `ts-libs/packages/ai-runner/src/decision/typesafe-driver.ts:73-83` — same defect class, `state ?? ''` fix.
+- `ts-libs/packages/ai-decision/src/params.ts:165` — `buildState` returns `Record<string, Json> | null`.
+- `spur-new/package.json:34` — catalog pin `^0.5.24`.
+- `spur-new/packages/app/node_modules/@gobing-ai/ts-decision-clef/dist/driver.js:213` — installed defect.
+- `spur-new/packages/app/src/decision/decision-service.ts:219`, `:239-241`, `:371-373`, `:678` — probe hub, clef registration, `clefCredentials`.
+- `spur-new/packages/app/src/decision/confidence-level.ts:17-21`; `packages/app/src/workflow/decide.ts:154`; `packages/app/src/decision/decision-log-query.ts:140` — level derivation.
+- `spur-new/packages/app/tests/decision/confidence-level.test.ts` — threshold edges.
+- `docs/design/decision-catalog.md` §5 — TypeSafe precedent; §3.6 clef maker.
 
 ### History
 
