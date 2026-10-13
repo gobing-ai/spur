@@ -1,6 +1,7 @@
 import type { ActionRedactor, ActionResult, ActionRunContext, ActionRunner } from '@gobing-ai/ts-dual-workflow-engine';
 import type { ProcessExecutor } from '@gobing-ai/ts-runtime';
 import { redactAndBound, redactStreamingValue } from '../../observability/agent-execution';
+import { projectConsumerFailure } from '../consumer-compat';
 import { bounded, type WorkflowActionOutputEvent, type WorkflowObservabilityBus } from '../observability';
 import { childProcessEnv } from './child-env';
 
@@ -181,10 +182,25 @@ export class StreamingShellActionRunner implements ActionRunner {
         consume('stderr', pipe.stderr);
         const exitCode = await pipe.exited;
         await Promise.allSettled(readers);
+        const failed = exitCode !== 0;
+        // 1185 R1: a failed *project-rooted consumer* (a port under `.spur/`, the class a project
+        // workflow override invokes) whose own compat complaint names the entry exports it needs is
+        // diagnosed by name instead of leaving the operator with a bare exit code. `null` for every
+        // other failure, so those keep their exact previous message.
+        const diagnosis = failed
+            ? projectConsumerFailure(command, cwd ?? context.workdir, `${stdout}\n${stderr}`)
+            : null;
         return {
-            ok: exitCode === 0,
+            ok: !failed,
             data: { stdout, stderr, exitCode },
-            ...(exitCode === 0 ? {} : { error: `Command "${command}" exited with ${exitCode}` }),
+            ...(failed
+                ? {
+                      error:
+                          diagnosis === null
+                              ? `Command "${command}" exited with ${exitCode}`
+                              : `Command "${command}" exited with ${exitCode}. ${diagnosis}`,
+                  }
+                : {}),
         };
     }
 }

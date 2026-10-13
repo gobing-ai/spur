@@ -27,7 +27,14 @@ import type { EntityRef, LifecyclePort, TransitionResult } from '../services/pla
 import { extractReviewSectionBody, hasPopulatedPriorityTable } from '../services/task-check';
 import { createRunLogTraceFailureRecorder, withActionTrace } from './action-trace';
 import { StreamingShellActionRunner, utf8SafeByteTail } from './actions/shell';
+import {
+    consumerBundleSkew,
+    definitionConsumerScript,
+    nestedWorkflowRunTarget,
+    staleConsumerDiagnosis,
+} from './consumer-compat';
 import { EnvShellGuardRunner } from './guards/shell';
+import { type ResolvedWorkflowDefinition, resolveWorkflowDefinition } from './workflow-resolver';
 
 /**
  * stderr bytes retained from a failed `onEnter` shell in the denial report (1147 R3). The tail is
@@ -355,12 +362,52 @@ export class LifecycleAdapter implements LifecyclePort {
                 const redacted = redactAndBound(stderr, this.opts.secrets ?? [], Number.MAX_SAFE_INTEGER);
                 const tail = utf8SafeByteTail(redacted, ENTER_STDERR_TAIL_BYTES).tail.trim();
                 const exitCode = result.data?.exitCode ?? 'unknown';
-                return [`State "${to}" onEnter shell failed (exit ${String(exitCode)}).`, result.error ?? '', tail]
+                const report = [
+                    `State "${to}" onEnter shell failed (exit ${String(exitCode)}).`,
+                    result.error ?? '',
+                    tail,
+                ]
                     .filter((part) => part !== '')
                     .join(' ');
+                const diagnosis = await this.staleConsumerDenial(command, result.data);
+                return diagnosis === null ? report : `${report} ${diagnosis}`;
             }
         }
         return null;
+    }
+
+    /**
+     * 1185 R1/R3: the named diagnosis for a failed `onEnter` shell that reached a project-layer
+     * override whose consumer requires an export the shipped inline-run entry no longer provides.
+     * The nested definition is resolved exactly as bare-name resolution selects it (project first),
+     * so the path named is the override that actually ran; the consumer comes from the resolved
+     * definition's own `onEnter` commands, never from the child's prose. `null` for every other
+     * failure — those keep today's message and today's fail-closed semantics, so a stale-consumer
+     * failure stays distinguishable from a genuine verification FAIL (which denies the hop with the
+     * verification command's own output).
+     */
+    private async staleConsumerDenial(
+        command: string,
+        data: Record<string, unknown> | undefined,
+    ): Promise<string | null> {
+        const target = nestedWorkflowRunTarget(command);
+        if (target === null) return null;
+        let resolved: ResolvedWorkflowDefinition;
+        try {
+            // Schema validation is deliberately off: the diagnosis only reads the definition's
+            // `onEnter` commands, and must not depend on the embedded schema map being wired here.
+            resolved = await resolveWorkflowDefinition(this.opts.cwd, target, { validateSchema: false });
+        } catch {
+            return null;
+        }
+        if (resolved.layer !== 'project') return null;
+        const consumer = definitionConsumerScript(resolved.workflow, this.opts.cwd);
+        if (consumer === null) return null;
+        const output = [data?.stdout, data?.stderr]
+            .filter((part): part is string => typeof part === 'string')
+            .join('\n');
+        const skew = consumerBundleSkew(output, consumer);
+        return skew === null ? null : staleConsumerDiagnosis(skew, resolved.path);
     }
 
     /**

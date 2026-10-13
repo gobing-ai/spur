@@ -10,6 +10,17 @@
 #
 # Run: spur workflow run feature-verification.yaml --vars '{"featureId":"D63"}'
 #
+# No project-side override is required (task 1185, A33). Since the pass moved into the
+# application (1176 / efd78f058) the bundled definition owns it end to end, so a
+# project-layer copy of this file (plus a rooted port under `.spur/scripts/`) is a
+# leftover — the port was written against an entry export contract that has since
+# changed. Remove the override so this definition applies, or migrate the port to the
+# current app-owned operation `runFeatureVerification` (the generated inline bundle's
+# export). If a stale consumer is still reached, feature-lifecycle's `verifying` entry
+# names it: the override path, the consumer script, the export it requires that the
+# shipped entry no longer provides, and the entry path. Reinstalling or upgrading the
+# plugin cannot supply a retired export — only the two remedies above can.
+#
 # Shape: verify -> done | failed. The onEnter step runs the standard script
 # `feature-verification-steps.ts` (no public CLI verb, D63 task 0915): it
 # resolves this very definition for the verifier identity (name, source path,

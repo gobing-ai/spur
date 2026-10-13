@@ -1,10 +1,10 @@
 ---
 schema_version: 1
 name: Name the consumer that requires a retired inline-run bundle export instead of a bare guard denial
-status: todo
+status: testing
 template: issue
 created_at: 2026-10-12T21:12:25.453Z
-updated_at: "2026-10-12T21:13:50.524Z"
+updated_at: "2026-10-13T02:11:30.161Z"
 feature_id: A33
 
 ac_altitude: task-local
@@ -90,10 +90,10 @@ the diagnosis, the guidance and the compatibility check, not rewriting a downstr
 
 ### Requirements
 
-- [ ] R1. When a project-layer workflow override invokes a script that requires a generated-bundle export the shipped entry no longer provides, the failure names the override path, the consumer script path, the required-but-missing export name(s), and the bundle that lacks them — never a bare guard denial or an unqualified "exited with 1".
-- [ ] R2. The diagnosis offers only remedies that can work: remove the project-layer override so the bundled definition applies, or migrate the consumer to the current app-owned operation. The shipped guidance must not tell a consumer to reinstall/upgrade when the installed bundle is already current.
-- [ ] R3. `feature-lifecycle`'s `verifying` entry surfaces that diagnosis to the operator while keeping today's fail-closed semantics: `verifying → done` still requires a bound PASS receipt (ADR-119), and a stale-consumer failure is distinguishable from a genuine verification FAIL.
-- [ ] R4. A regression fixture pins the behaviour end-to-end: a project whose `feature-verification.yaml` override invokes a script requiring a retired export produces the named diagnosis, a non-`done` terminal state, and the unchanged refusal to complete the feature — while a project with no override (or a migrated one) still reaches PASS.
+- [x] R1. When a project-layer workflow override invokes a script that requires a generated-bundle export the shipped entry no longer provides, the failure names the override path, the consumer script path, the required-but-missing export name(s), and the bundle that lacks them — never a bare guard denial or an unqualified "exited with 1".
+- [x] R2. The diagnosis offers only remedies that can work: remove the project-layer override so the bundled definition applies, or migrate the consumer to the current app-owned operation. The shipped guidance must not tell a consumer to reinstall/upgrade when the installed bundle is already current.
+- [x] R3. `feature-lifecycle`'s `verifying` entry surfaces that diagnosis to the operator while keeping today's fail-closed semantics: `verifying → done` still requires a bound PASS receipt (ADR-119), and a stale-consumer failure is distinguishable from a genuine verification FAIL.
+- [x] R4. A regression fixture pins the behaviour end-to-end: a project whose `feature-verification.yaml` override invokes a script requiring a retired export produces the named diagnosis, a non-`done` terminal state, and the unchanged refusal to complete the feature — while a project with no override (or a migrated one) still reaches PASS.
 
 ### Acceptance Criteria
 
@@ -190,14 +190,31 @@ still needs a bound PASS receipt.
 Keep the change inside the existing generated-bundle/guard surface (A33's boundary); no new public CLI verb,
 no schema change, no workflow-graph change.
 
+**Declared execution surfaces (escalation answer, 2026-10-12 — operator chose to widen, not to bypass the guard).**
+The Design's item-2 hook points and the R4 fixture live outside the surfaces this body named before,
+so the implement hop's diff-scope guard (0487 R1, default on) would reject them as `out-of-scope`.
+This task is authorised to touch, in addition to the paths already named above:
+`packages/app/src/workflow/lifecycle-adapter.ts` (the `verifying` onEnter denial report —
+`State "<to>" onEnter shell failed (exit N)`, where the child's diagnosable stderr dies),
+`packages/app/src/workflow/actions/shell.ts` (the nested-run failure composition
+`Command "<cmd>" exited with <code>`, which is what the outer denial echoes),
+`packages/app/tests/workflow/` (app-side regression tests),
+`plugins/sp/tests/` (plugin-side unit tests for the reciprocal helper),
+`config/workflows/feature-verification.yaml` (the packaged definition's guidance header),
+`config/workflows/feature-lifecycle.yaml` (the `verifying` entry that must surface the diagnosis).
+Rationale: AC1 requires the *outer* `feature sync` denial to name the override path, the consumer
+script path, the missing export(s) and the bundle path. Only the app-side denial/nested-run
+composition can produce that string, so those hook points must be inside the declared surface
+rather than reached around it.
+
 ### Plan
 
-- [ ] 1. Reproduce on a fixture, not on the downstream project: build a temp project carrying a project-layer `feature-verification.yaml` whose `onEnter` runs a stub consumer script requiring a name the entry does not export, then drive `spur feature sync` and capture the current bare denial (this is the regression the fixture must later flip).
-- [ ] 2. Add the reciprocal compatibility helper beside `resolveAppEntry`/`loadInlineApp` in `plugins/sp/lib/inline-run-app.ts`: name the consumer path, the missing export(s), the bundle path and the two actionable remedies; unit-test it with a stub consumer.
-- [ ] 3. Lift the diagnosis into the outer failure (`feature-lifecycle`'s `verifying` entry + the nested-workflow failure path): classify the child's output, emit the named diagnosis for a consumer-compat signature, and leave every other failure's message unchanged.
-- [ ] 4. Extend the regression fixture to assert both directions: the stale-consumer project reports the named diagnosis and does not reach `done`, and a migrated/no-override project still records a PASS receipt and reaches `done`.
-- [ ] 5. Update the shipped guidance that a consumer would read before writing such an override (packaged workflow header and the consumer-facing migration note): state that a project-layer override is no longer required, and give the two remedies for an existing one.
-- [ ] 6. Run the affected plugin tests and the repo gate; confirm no public CLI verb, schema or workflow-graph change was introduced.
+- [x] 1. Reproduce on a fixture, not on the downstream project: build a temp project carrying a project-layer `feature-verification.yaml` whose `onEnter` runs a stub consumer script requiring a name the entry does not export, then drive `spur feature sync` and capture the current bare denial (this is the regression the fixture must later flip).
+- [x] 2. Add the reciprocal compatibility helper beside `resolveAppEntry`/`loadInlineApp` in `plugins/sp/lib/inline-run-app.ts`: name the consumer path, the missing export(s), the bundle path and the two actionable remedies; unit-test it with a stub consumer.
+- [x] 3. Lift the diagnosis into the outer failure (`feature-lifecycle`'s `verifying` entry + the nested-workflow failure path): classify the child's output, emit the named diagnosis for a consumer-compat signature, and leave every other failure's message unchanged.
+- [x] 4. Extend the regression fixture to assert both directions: the stale-consumer project reports the named diagnosis and does not reach `done`, and a migrated/no-override project still records a PASS receipt and reaches `done`.
+- [x] 5. Update the shipped guidance that a consumer would read before writing such an override (packaged workflow header and the consumer-facing migration note): state that a project-layer override is no longer required, and give the two remedies for an existing one.
+- [x] 6. Run the affected plugin tests and the repo gate; confirm no public CLI verb, schema or workflow-graph change was introduced.
 
 ### Root Cause
 
@@ -248,18 +265,94 @@ Not the root cause (checked, to keep the fix honest):
 
 ### Solution
 
-<!-- Filled during implementation: file:line change map and concise rationale. -->
+R1/R2/R3/R4 landed as the Design's two bounded edits plus one shared helper and the packaged guidance. Change map (repo-root paths):
+
+- `packages/app/src/workflow/consumer-compat.ts:55` — `consumerBundleSkew`: the reciprocal of the 1120 stale-*bundle* guard. Reads the missing export names and the entry path out of a consumer's own compat complaint (`<module|entry|bundle> <path> is missing <label> (<name>, …)`), bounded to `MAX_MISSING_EXPORTS` names (`:48`). The consumer's own complaint is the only place those names exist; static analysis of an interpolated shell command or of a consumer's imports is rejected (task Design).
+- `packages/app/src/workflow/consumer-compat.ts:70` — `staleConsumerDiagnosis`: the operator-facing text — consumer path, missing export(s), entry path, override path when known — offering only the two remedies that can work (remove the project-layer override so the bundled definition applies; migrate the consumer to the current app-owned operation), and retiring the reinstall/upgrade advice the consumer's own message carried (R2).
+- `packages/app/src/workflow/consumer-compat.ts:98` — `projectConsumerScript`: which script a shell command invokes, project-rooted only (`<workdir>/.spur/`, the tree a project override owns). A plugin-shipped script is deliberately not classified here — for it a stale generated bundle IS the right diagnosis (1120).
+- `packages/app/src/workflow/consumer-compat.ts:113` — `nestedWorkflowRunTarget`: the `workflow run <file>` target an `onEnter` shell invokes, so the denial resolves the override the way bare-name resolution selected it.
+- `packages/app/src/workflow/consumer-compat.ts:125` — `definitionConsumerScript`: the consumer read from the resolved definition's own `onEnter` commands (authoritative), never from the child's prose.
+- `packages/app/src/workflow/consumer-compat.ts:146` — `projectConsumerFailure`: the classification the nested-run boundary consumes; `null` for every failure that is not a project-rooted consumer with a compat complaint.
+- `packages/app/src/workflow/actions/shell.ts:191` — the nested shell failure path: `Command "<cmd>" exited with <code>` keeps its prefix and gains the diagnosis only for a failing project-rooted consumer whose output carries the compat signature; every other failure keeps its exact previous message (R1, second surface).
+- `packages/app/src/workflow/lifecycle-adapter.ts:366` — the denial line `State "${to}" onEnter shell failed (exit N).` is unchanged; the diagnosis is appended to it (`:372`), so the operator's failure is widened rather than replaced.
+- `packages/app/src/workflow/lifecycle-adapter.ts:389` — `staleConsumerDenial`: resolves the nested definition project-first, fires only when the resolved layer is the project layer (an override), and names the override path, consumer path, missing export(s) and entry path. Fail-closed semantics untouched: the hop is still denied, and `verifying → done` still requires a bound PASS receipt (ADR-119).
+- `config/workflows/feature-verification.yaml:18` — packaged guidance header (R2): a project-layer override is no longer required since the pass moved into the application; remove the override so the bundled definition applies, or migrate the port to the app-owned operation `runFeatureVerification`; a reinstall cannot supply a retired export.
+
+Tests:
+
+- `packages/app/tests/workflow/consumer-compat.test.ts:55` — unit pins for `consumerBundleSkew` (complaint parsing, the shipped script's wording, the `MAX_MISSING_EXPORTS` bound) and, in the blocks that follow, `staleConsumerDiagnosis` (both remedies present, reinstall retired), `projectConsumerScript`, `nestedWorkflowRunTarget`, `definitionConsumerScript`, `projectConsumerFailure` (`null` for every other failure).
+- `packages/app/tests/workflow/feature-lifecycle-stale-consumer.test.ts:247` — R4 fixture over the real CLI and the real `verifying` entry, four scenarios: (a) stale consumer → the denial names the override path, the consumer path, `openInlineRunProjectDb` and the entry path, offers both remedies, carries no reinstall advice, and the feature stays `active`; (b) the nested `workflow run --json` reason carries the same diagnosis with `transitionsTaken: 0`; (c) a genuine verification FAIL (`verificationCmd: false`) records FAIL and fabricates no consumer diagnosis (R3 distinguishability); (d) a migrated consumer records a PASS receipt and reaches `done`.
+
+Acceptance trace: AC1 by (a)+(b) (all four facts named on the surface failure, no reinstall advice offered); AC2 by the two-remedy diagnosis, the remedy-only packaged guidance, and (c); AC3 by (a) and (d).
+
+Scope note (design deviation, explicit): the Plan placed the reciprocal helper in `plugins/sp/lib/inline-run-app.ts`, but both hook points the same Design names live in `packages/app`, and plugin code is not importable from app code (`sp-plugin-standalone`, ADR-065/130) — the Design's "one shared helper" therefore lives once in `packages/app/src/workflow/consumer-compat.ts` so both boundaries share a single spelling. `plugins/sp/lib/inline-run-app.ts` and the generated bundle are untouched, and the stale-*bundle* contract keeps its 1120 behaviour.
+
+Boundary respected: no re-export of `openInlineRunProjectDb`/`ArtifactDao`, no migration or deletion of the downstream port, no new public CLI verb, no schema change, no workflow-graph change (the packaged header is a comment).
 
 ### Testing
 
-<!-- Filled during verification: regression command(s), outcomes, coverage claim or N/A. -->
+**Pipeline verify results**
+
+- Verdict: PARTIAL (from verdict artifact)
+- Confidence: MEDIUM
+
+| Requirement | Status | Evidence |
+|-------------|--------|----------|
+| R1 | MET | `packages/app/src/workflow/lifecycle-adapter.ts:366-373` keeps the `State "<to>" onEnter shell failed (exit N).` denial verbatim and appends the named diagnosis; `packages/app/src/workflow/lifecycle-adapter.ts:389-411` resolves the nested target project-first, fires only when `resolved.layer !== 'project'` is false, and reads the consumer from the resolved definition's own `onEnter` commands; text composed at `packages/app/src/workflow/consumer-compat.ts:70-80` (consumer path, missing exports, entry path, override path). Second surface: `packages/app/src/workflow/actions/shell.ts:186-203` composes `Command "..." exited with N` plus the diagnosis for a failing project-rooted consumer and keeps the previous string otherwise. Executable proof: `spur feature sync F1 --json` on a throwaway project with a project-layer override runs the full chain and the surface failure names all four facts — `packages/app/tests/workflow/feature-lifecycle-stale-consumer.test.ts:248-265` (override path, consumer path, `openInlineRunProjectDb`, entry path on the outer denial) and `:268-285` (the nested failure `reason` carries the same three names with `transitionsTaken: 0`). Premise: the shipped entry exports `runFeatureVerification` and does not export `openInlineRunProjectDb` or `ArtifactDao` — `plugins/sp/lib/inline-run.generated.mjs` export list, retirement documented at `scripts/commands/bundle-plugin-lib.ts:836-842`. |
+| R2 | MET | `config/workflows/feature-verification.yaml:13-24` is the packaged guidance a consumer reads before writing an override: it states no project-side override is required, gives exactly the two remedies (remove the override so this definition applies; migrate the port to `runFeatureVerification`, the bundled export), and states a reinstall cannot supply a retired export. The runtime diagnosis carries the same two remedies and retires the reinstall advice at `packages/app/src/workflow/consumer-compat.ts:70-80`. Executable proof: `packages/app/tests/workflow/consumer-compat.test.ts:77-88` requires the two remedies and exactly one reinstall mention, the one that says it does not add the names; `packages/app/tests/workflow/feature-lifecycle-stale-consumer.test.ts:259-264` asserts the real CLI output contains both remedies and matches no reinstall-or-upgrade advice. |
+| R3 | MET | Distinguishability is structural: classification requires the consumer's compat complaint (`packages/app/src/workflow/consumer-compat.ts:55-67`), so a genuine verification FAIL keeps the child's own output — pinned at `packages/app/tests/workflow/feature-lifecycle-stale-consumer.test.ts:288-297` (records FAIL, output carries no consumer diagnosis, feature stays `active` at `:297`). Fail-closed is unchanged: the stale consumer's hop is still denied and the feature stays `active` at `:264`; `verifying -> done` still runs `$spurBin feature check $featureId --strict --as done` at `config/workflows/feature-lifecycle.yaml:88-98` (unmodified — ADR-119 bound PASS receipt), and the migrated direction only reaches `done` after a PASS receipt records: `packages/app/tests/workflow/feature-lifecycle-stale-consumer.test.ts:300-311`. |
+| R4 | MET | The regression fixture is real-CLI end to end over throwaway project roots under the OS tmp dir, and pins all four behaviours: stale consumer -> named diagnosis plus non-done terminal state (`packages/app/tests/workflow/feature-lifecycle-stale-consumer.test.ts:248-265`), nested reason (`:268-285`), genuine FAIL still FAIL (`:288-297`), migrated consumer -> PASS receipt then `done` (`:300-311`). Verifier-run command: `(cd packages/app && bun test tests/workflow/consumer-compat.test.ts tests/workflow/feature-lifecycle-stale-consumer.test.ts)` -> 19 pass, 0 fail, 63 expect() calls across 2 files, 8.92s. |
+
+| Acceptance Criteria | Status | Evidence Type | Evidence |
+|---------------------|--------|---------------|----------|
+| AC1 — A stale consumer override is named, not merely denied (req: R1) | MET | test | `packages/app/tests/workflow/feature-lifecycle-stale-consumer.test.ts:248-265` drives the real `spur feature sync F1 --json` against a throwaway project root carrying a project-layer override plus a `.spur/scripts/feature-verify.mjs` requiring the retired export, and asserts the failure contains the override path, the consumer script path, `openInlineRunProjectDb`, and the entry path, plus that the output matches no reinstall-or-upgrade advice. Same-chain nested surface: `:268-285`. Unit pins of the composition: `packages/app/tests/workflow/consumer-compat.test.ts:32-57` and `:149-152`. Verifier-run result: 19 pass, 0 fail. |
+| AC2 — Remedies are actionable and distinguishable (req: R2, R3) | MET | test | Remedies pinned at `packages/app/tests/workflow/feature-lifecycle-stale-consumer.test.ts:259-263` and `packages/app/tests/workflow/consumer-compat.test.ts:77-88` (both remedies offered, the only reinstall mention is the one retiring it); remedy-only packaged prose at `config/workflows/feature-verification.yaml:13-24`. Distinguishable from a genuine verification FAIL at `packages/app/tests/workflow/feature-lifecycle-stale-consumer.test.ts:288-297`: that run records `FAIL`, fabricates no consumer diagnosis, and the feature stays `active`; fail-closed completion is pinned by the two-hop migrated run at `:300-311`, where `verifying -> done` is reached only after the PASS receipt. Verifier-run result: 19 pass, 0 fail. |
+| AC3 — The fixture pins diagnosis and fail-closed behaviour together (req: R4) | MET | test | `packages/app/tests/workflow/feature-lifecycle-stale-consumer.test.ts:248-265` asserts the named diagnosis and the non-done state together (`expect(featureStatus(root)).toBe('active')` at `:264`); `:300-311` asserts the migrated consumer records a PASS receipt and reaches `done`. Verifier-run command over both fixture files: 19 pass, 0 fail, 63 expect() calls, 2 files, 8.92s. Supporting gate receipt: `.spur/run/1185-check-receipt.json` -> PASS at `inputDigest` sha256:81b732b2d17564dc835b7cb1027bc74ee74c2a2f1921c3963cdfc4b6cc0acfc8, which equals the working-tree fingerprint recomputed by the verifier. |
+- Coverage: N/A (verdict-based; verify pipeline does not measure code coverage)
 
 ### Review
 
-<!-- Filled during review: P1-P4 findings, residual risk, and final disposition. -->
+**Verdict: PASS** — no P1/P2 findings. Review run by the pipeline's `review` stage on the working tree at proof digest `sha256:81b732b2…` (three dimensions: functional traceability, SECUA, architectural depth).
+
+**Confidence:** MEDIUM
+
+The level is MEDIUM because the gap below is real: every requirement row is MET with `file:line` evidence and every finding is dispositioned, but the diagnosis was exercised against the R4 fixture's re-created consumer rather than the live downstream `ts-libs` port, and no reviewer-run command backs the green suite (that is the pipeline's attested gate receipt, `sha256:81b732b2…`).
+
+#### Requirements traceability
+
+| Req | Status | Evidence |
+| --- | --- | --- |
+| R1 — a project-layer override whose consumer needs a retired export names override + consumer + missing export(s) + bundle | MET | `packages/app/src/workflow/lifecycle-adapter.ts:366` (denial kept verbatim) + `:372` (diagnosis appended); `:389-412` `staleConsumerDenial` resolves the nested target, fires only when `resolved.layer === 'project'` (`:403`), and reads the consumer from the resolved definition's own `onEnter` (`:404`); message composed at `packages/app/src/workflow/consumer-compat.ts:70-79`. Premise verified: `openInlineRunProjectDb`/`ArtifactDao` are absent from `plugins/sp/lib/inline-run.generated.d.mts`; the retirement is documented at `scripts/commands/bundle-plugin-lib.ts:836-842`. |
+| R1 (second surface) | MET | `packages/app/src/workflow/actions/shell.ts:188-203` composes `Command "…" exited with N` + the diagnosis for a failing project-rooted consumer, and reproduces the exact previous string otherwise (`:198-201`). |
+| R2 — only remedies that can work | MET | `config/workflows/feature-verification.yaml:13-24` states the override is no longer required, gives both remedies (remove the override; migrate to `runFeatureVerification`), and the diagnosis itself retires the reinstall advice at `packages/app/src/workflow/consumer-compat.ts:78`. `runFeatureVerification` is a real export (`scripts/commands/bundle-plugin-lib.ts:838-842`, `plugins/sp/lib/inline-run.generated.d.mts:26`) and the migrated fixture consumer calls it successfully. |
+| R3 — surfaced to the operator, fail-closed unchanged, distinguishable from a genuine FAIL | MET | Classification is gated on the compat complaint shape (`packages/app/src/workflow/consumer-compat.ts:40,55-67`), so a verification FAIL keeps the child's own output; the transition is still denied and the feature stays `active` (fixture `packages/app/tests/workflow/feature-lifecycle-stale-consumer.test.ts:288-297`); `verifying → done` still needs a bound PASS receipt. |
+| R4 — both directions pinned end to end | MET | Same fixture over the real CLI and the real `verifying` entry: stale (`:248-265`), nested reason (`:268-285`), genuine FAIL (`:288-297`), migrated → PASS → `done` (`:300-311`). |
+
+#### Findings
+
+| Priority | Location | Finding | Disposition |
+| --- | --- | --- | --- |
+| P3 | `packages/app/src/workflow/consumer-compat.ts:98-107` | Recognition is bounded to `<workdir>/.spur/`, documented as a `shortcut:` at `:96`. R1's antecedent is any project-layer override script, so a port at `<workdir>/scripts/verify.mjs` still gets the bare `exited with N`. Fail-open (the old message), never a wrong one. | DEFER — the observed instance and the R4 fixture both live under `.spur/scripts/` (`docs/tasks5/1185_name-the-consumer-that-requires-a-retired-inline-run-bundle-.md` Background); widening the bound is a follow-up. |
+| P3 | `packages/app/src/workflow/consumer-compat.ts:125-143` | A multi-script override can name the WRONG consumer: `definitionConsumerScript` returns the first project-rooted script (`:139-141`) while the export names come from the actually failing child (`:147-149`). No case covers >1 consumer (`packages/app/tests/workflow/consumer-compat.test.ts:126-144` is single-command). | DEFER — smallest fix is to fail open when the resolved definition holds more than one distinct project-rooted consumer; recorded in the wrap residuals. |
+| P4 | `packages/app/src/workflow/consumer-compat.ts:33-35` | The comment claims the recognised shape is what "every generated-bundle consumer emits", but the plugin's own 1120 guard emits a different one (`plugins/sp/lib/inline-run-app.ts:57-62`), so such a consumer is silently unclassified. | DEFER — soften the comment or extend the regex. |
+| P4 | `packages/app/src/workflow/consumer-compat.ts:41` | The captured `entry` is unbounded (only the export names are bounded, `:48`) and is embedded verbatim at `:76`. | DEFER — bound it or validate it as a path. |
+| P4 | `packages/app/src/workflow/consumer-compat.ts:99-104` | `projectConsumerScript` compares an unresolved `join(workdir,'.spur')+sep` against `resolve(workdir, token)`, so a relative `workdir` silently disables recognition. Both call sites are absolute today (`packages/app/src/workflow/lifecycle-adapter.ts:350`, `packages/app/src/workflow/actions/shell.ts:189`). | DEFER — one-line hardening: `resolve(workdir)` once. |
+| P4 | `packages/app/src/workflow/lifecycle-adapter.ts:399` | `staleConsumerDenial` resolves without the `registered` layer while the real run passes `resolveWorkflowPaths(...)` (`apps/cli/src/commands/workflow.ts:772-774`). Only a `workflows.paths`-registered copy can be missed, and never as a wrong path (`packages/app/src/workflow/workflow-resolver.ts:215-243` probes `<cwd>/<file>` then `<cwd>/.spur/workflows/<file>` before the shared layer). | DEFER — pass the registered layer when convenient. |
+
+#### Architectural depth
+
+The Design placed the helper beside the task-1120 `resolveAppEntry`/`loadInlineApp` guard in `plugins/sp/lib/inline-run-app.ts`; it landed in `packages/app/src/workflow/consumer-compat.ts`. The deviation is **justified** (both hook points are app-side, and one shared spelling beats two copies) and **recorded** in `## Solution` ("Scope note (design deviation, explicit)"). The 1120 bundle-side guard keeps its behaviour (`plugins/sp/lib/inline-run-app.ts` unmodified). Contract ownership is linked only by comment, which the P4 above addresses. No workflow-graph or schema change: the YAML edit is a comment block and `resolveWorkflowDefinition` digests the parsed object (`packages/app/src/workflow/composition-baseline.ts:30-34`), so digests and baselines are unchanged. No golden/byte-identity baseline breaks (`onEnter shell failed` appears only in the new test and this task; the one shell-message assertion is `toContain` at `packages/app/tests/workflow/actions/shell.test.ts:102`).
+
+#### Residual risk
+
+R1 traceability is exact only for `.spur/`-rooted consumers; a multi-script override can name the wrong consumer; a consumer emitting the 1120 wording stays unclassified (all fail-open to the pre-1185 message). The diagnosis is proven against the fixture's re-created consumer, not the live downstream port. Merge verdict: **OK**.
 
 ### References
 
 <!-- Links to failing logs, related issues, tasks, docs, or external references. -->
 
 ### History
+
+- 2026-10-12T23:03:49.659Z todo → wip (system)
+- 2026-10-13T02:10:46.295Z wip → testing (system)
+
