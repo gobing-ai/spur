@@ -742,6 +742,48 @@ describe('review-gate mode (task 1122 R2/AC1)', () => {
             cleanup();
         }
     });
+
+    // Task 1070 R1 on the review side makes the confidence line a blocking review-contract
+    // violation, but every fixture above states a valid level — so only the rule and its exit
+    // mapping were covered, never the wiring from a violating `### Review` through the script to
+    // its exit code. This closes that: the level is machine-verified end to end on the review
+    // plane, exactly as `task verdict`'s answer lint verifies it on the verify plane.
+    test('a review with no single valid Confidence line fails the gate closed', () => {
+        const { dir, cleanup } = scratch('rs-gate-conf-');
+        try {
+            const rows = '| P4 (advisory) | Fuzzy name | src/a.ts:20 | ACCEPTED |\n';
+            const table = '| Priority | Finding | Location | Disposition |\n| --- | --- | --- | --- |\n';
+            const cases: ReadonlyArray<readonly [string, string]> = [
+                ['no line', `### Review\n\n${table}${rows}`],
+                ['out of vocabulary', `### Review\n\n**Confidence:** PROBABLY\n\n${table}${rows}`],
+                ['duplicated', `### Review\n\n**Confidence:** HIGH\n\n**Confidence:** LOW\n\n${table}${rows}`],
+            ];
+            for (const [name, content] of cases) {
+                const stub = stubSpurShow(dir, content);
+                const cap = capture();
+                expect(main(['review-gate', '1122', '--spur-bin', stub, '--root', dir], {}, { io: cap.io }), name).toBe(
+                    1,
+                );
+                const art = JSON.parse(
+                    readFileSync(join(dir, '.spur', 'run', '1122-residuals.json'), 'utf8'),
+                ) as ResidualArtifact;
+                expect(
+                    art.items.some((i) => i.category === 'review-contract' && i.class === 'blocking'),
+                    name,
+                ).toBe(true);
+                expect(
+                    art.items.some((i) => i.text.includes('no single valid')),
+                    name,
+                ).toBe(true);
+            }
+            // Paired control: the same P4-only rows with a valid level clear the gate, so the
+            // assertions above are driven by the confidence line and not by the P4 row.
+            const okStub = stubSpurShow(dir, `${REVIEW_TABLE_HEAD}${rows}`);
+            expect(main(['review-gate', '1122', '--spur-bin', okStub, '--root', dir], {}, SILENT)).toBe(0);
+        } finally {
+            cleanup();
+        }
+    });
 });
 
 describe('renderReport', () => {
