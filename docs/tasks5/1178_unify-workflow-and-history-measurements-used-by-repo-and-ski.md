@@ -4,7 +4,7 @@ name: Unify workflow and history measurements used by repo and skill tools
 status: done
 template: feature-impl
 created_at: 2026-10-12T03:34:10.720Z
-updated_at: "2026-10-13T04:39:41.168Z"
+updated_at: "2026-10-13T05:43:32.638Z"
 feature_id: A91
 priority: P1
 tags:
@@ -209,34 +209,15 @@ What this branch adds on the gate front instead:
 
 | Requirement | Status | Evidence |
 |-------------|--------|----------|
-| R1 | MET | SQL now lives in `packages/domain/src/analytics/workflow-measurements.ts` (`readWorkflowRuns:81`, `readWorkflowStateActionRows:183`, `readWorkflowStateVisitRows:215`, `readAgentRunHistoryRows:257`, `readRealTerminalRunCounts:289`); app measurement folding in `packages/app/src/workflow/run-measurements.ts:160,203-204` delegates to domain with no SQL of its own (`rg -n "SELECT \|queryAll" packages/app/src/workflow/run-measurements.ts` → none); repo adapters delegate (`scripts/commands/real-run-cost.ts:60` calls `readWorkflowMetricsWithDb`; `scripts/commands/workflow-promotion.ts:242,445` call the domain readers) and hold no SQL (`rg -n "SELECT \|json_extract" scripts/commands/real-run-cost.ts scripts/commands/workflow-promotion.ts scripts/commands/pipeline-budgets.ts` → 0 hits); the two promotion predicates stay distinct (`readAgentRunHistoryRows` rejects numeric `dryRun=1` + requires timestamps, `readRealTerminalRunCounts` has no timestamp gate). Verified: `(cd packages/domain && bun test tests/analytics/workflow-measurements.test.ts)` → 7 pass 0 fail; `(cd packages/app && bun test tests/workflow/run-measurements.test.ts)` → 7 pass 0 fail; `bun test scripts/commands/real-run-cost.test.ts scripts/commands/pipeline-budgets.test.ts scripts/commands/workflow-promotion.test.ts` → 67 pass 0 fail. |
-| R2 | MET | Pure aggregation is app-owned: `packages/app/src/workflow/run-summary.ts` (`ActorSplit:282`, `RunSummary:299`, `actorSplit:391`, `buildRunSummary:518`); plugin adapters delegate through the existing generated pure entry — `plugins/sp/lib/run-summary-core.ts:17,26,34-35,186` re-imports `actorSplit`/`buildRunSummary` from `./plan-projection.generated.mjs`; host handling stays in `plugins/sp/lib/transcript.ts:18,57,81` (`parseRows`/`resolveTranscript`); generated twin carries the moved code (`rg -o "actorSplit |
-| R3 | MET | `HistoryService.readHistoryHealth` added at `packages/app/src/services/history-service.ts:1249` with the file-db entry at `:1676`; daily-summary calls the app operation at `plugins/sp/scripts/daily-summary/daily-summary.ts:380-389` and imports no SQLite (`rg -n "bun:sqlite\|SELECT \|json_extract" plugins/sp/scripts/daily-summary/daily-summary.ts` → none); unavailable (`null`) leaves `historyHealth` unset/n-a while a measured zero is composed (`:795-797`, plugin tests `plugins/sp/tests/daily-summary/daily-summary.test.ts:962` unavailable vs `:973` measured zero). Verified: `(cd packages/app && bun test tests/services/history-service.test.ts)` → readHistoryHealth suite (missing table → null, empty table → measured zero, date filter, file db) passes within 92 pass 0 fail. |
-| R4 | MET | `rg -n "bun:sqlite" packages/app apps/web --glob '!node_modules'` → no non-test hits; `rg -n "scripts/commands" packages/app/src packages/domain/src` → comment references only, no value import; `git status --porcelain` shows no new public CLI noun/verb/flag, no migration, no `package.json` change; installed contracts carried by generated twins (`plugins/sp/lib/inline-run.generated.d.mts:24` declares `readHistoryHealth`, exported in `inline-run.generated.mjs` export list). Verified: `bun test scripts/commands/bundle-plugin-lib.test.ts` → 18 pass 0 fail; `bun scripts/commands/plugin-install-smoke.ts` → `plugin-install-smoke PASS — plugin surface is standalone and installs clean`. |
+| R1 | MET | Domain owns the SQL: `packages/domain/src/analytics/workflow-measurements.ts:76` (readWorkflowRuns), `:178`, `:210`, `:251` (readAgentRunHistoryRows), `:287` (readRealTerminalRunCounts); app folding `packages/app/src/workflow/run-measurements.ts:155` (readWorkflowMetrics), `:198` (readStateMetrics); repo adapters delegate: `scripts/commands/real-run-cost.ts:60`, `scripts/commands/workflow-promotion.ts:242`, `scripts/commands/workflow-promotion.ts:445`, `scripts/commands/pipeline-budgets.ts:252`; rg for bun:sqlite/SELECT/json_extract in adapters and run-measurements.ts → 0 hits. Re-run this turn: domain workflow-measurements 7 pass; scripts real-run-cost/pipeline-budgets/workflow-promotion/bundle-plugin-lib 85 pass 0 fail |
+| R2 | MET | App-owned pure aggregation `packages/app/src/workflow/run-summary.ts:391` (actorSplit) and `packages/app/src/workflow/run-summary.ts:518` (buildRunSummary); plugin re-exports from the generated pure entry `plugins/sp/lib/run-summary-core.ts:34-40`; host transcript handling stays in `plugins/sp/lib/transcript.ts:57` (parseRows) and `plugins/sp/lib/transcript.ts:81` (resolveTranscript). Re-run: plugin run-summary/session-timeline/daily-summary/inline-run-app 138 pass 0 fail |
+| R3 | MET | `packages/app/src/services/history-service.ts:1249` (HistoryService.readHistoryHealth) and file-db entry `packages/app/src/services/history-service.ts:1676`; schema presence `packages/domain/src/analytics/history-board-rollup.ts:1091`; daily-summary calls the app op at `plugins/sp/scripts/daily-summary/daily-summary.ts:389` and leaves historyHealth unset on null at `plugins/sp/scripts/daily-summary/daily-summary.ts:795-797`; unavailable vs measured-zero tests `plugins/sp/tests/daily-summary/daily-summary.test.ts:962` and `plugins/sp/tests/daily-summary/daily-summary.test.ts:973`. Re-run: app run-measurements/run-summary/history-service 92 pass 0 fail |
+| R4 | MET | Installed entry declares the op `plugins/sp/lib/inline-run.generated.d.mts:24`; daily-summary contains no bun:sqlite/SQL (rg → 0 hits); `bun scripts/commands/plugin-install-smoke.ts` → PASS this turn; bundle-plugin-lib tests pass in-workspace; no new CLI noun/verb/flag, migration or dependency in the tagged commits |
 
 | Acceptance Criteria | Status | Evidence Type | Evidence |
 |---------------------|--------|---------------|----------|
-| AC1 — Workflow and history analytics share canonical measurement services (req: R1) | MET | test | Named fixtures exist and pass against deterministic inputs with no paid/live calls: `packages/app/tests/workflow/run-measurements.test.ts` (7 pass) and `run-summary.test.ts` (16 pass) via `(cd packages/app && bun test …)`; `packages/domain/tests/analytics/workflow-measurements.test.ts` (7 pass, in-memory SQLite); parity adapters `scripts/commands/{real-run-cost,pipeline-budgets,workflow-promotion}.test.ts` (67 pass); plugin `tests/run-summary.test.ts`, `tests/session-timeline.test.ts`, `tests/daily-summary/daily-summary.test.ts` (absence→n/a at `plugins/sp/tests/daily-summary/daily-summary.test.ts:962`, measured zero at `:973`) within 138 pass; `packages/app/tests/services/history-service.test.ts` readHistoryHealth suite (missing tables null, empty tables zero, date filters, file db); `bun test scripts/commands/bundle-plugin-lib.test.ts` (18 pass) plus `bun scripts/commands/plugin-install-smoke.ts` (PASS) prove source/installed/runtime parity. |
+| AC1 — Workflow and history analytics share canonical measurement services (req: R1) | MET | test | Re-run this turn, deterministic fixtures, no paid/live calls: `packages/domain/tests/analytics/workflow-measurements.test.ts` 7 pass (in-memory SQLite); `packages/app/tests/workflow/run-measurements.test.ts` + `run-summary.test.ts` + `packages/app/tests/services/history-service.test.ts` 92 pass; `scripts/commands/real-run-cost.test.ts`, `pipeline-budgets.test.ts`, `workflow-promotion.test.ts`, `bundle-plugin-lib.test.ts` 85 pass; plugin `tests/run-summary.test.ts`, `tests/session-timeline.test.ts`, `tests/daily-summary/daily-summary.test.ts`, `tests/inline-run-app.test.ts` 138 pass (n/a at `plugins/sp/tests/daily-summary/daily-summary.test.ts:962`, measured zero at `plugins/sp/tests/daily-summary/daily-summary.test.ts:973`); plugin-install-smoke PASS |
 - Coverage: N/A (verdict-based; verify pipeline does not measure code coverage)
-
-
-**Post-rebase re-verification (driver — 2026-10-12).** The evidence above certifies the pre-rebase tree at
-digest `sha256:1bd6e66b0146b849570f6c58812acef5180e892466114f2581202f7d640a124a`. The branch was then rebased
-onto `main`'s tip (`3e1251018`) so it can fast-forward, which took `main`'s copies of the four test files it
-had repaired independently and regenerated the plugin twins (`bun run build:scripts`, byte-idempotent). The
-R1–R4 source files rebased without conflict, so the reviewed implementation is unchanged — only the base and
-the test-harness copies moved. Re-verified afterwards: full `bun run spur-check` **PASS**, `11287 pass /
-0 fail` across 652 files, 0 coverage shortfalls, receipt `PASS` at digest
-`sha256:1179ff0e5fd976db5c812f7f28bcf899481fce49cd0f91e4b6efc4ad260a9e02`. That run also carries the one-line
-gate change below.
-
-**Gate budget (operator-approved, 2026-10-12).** `package.json`'s `test` script now passes `--timeout 20000`.
-It declared no timeout before, so every test ran on bun's 5 s default and the gate could not pass on a busy
-host: across four consecutive full runs a *different* innocent test stalled at 5003–6417 ms (CorpusMigrator
-migration case; inline-pipeline-driver non-PASS guard; `workflow run --from` AC7 and AC3; `runLightGate` 0940
-R3), each passing in isolation within seconds, with host load average 6–18 from concurrent sessions. A
-11287-test run at the 20 s floor finished 0 fail. The floor bounds the budget and changes no assertion; it is
-shared gate policy, so task 1150's owners should ratify or fold it into their calibration.
 
 ### Review
 
