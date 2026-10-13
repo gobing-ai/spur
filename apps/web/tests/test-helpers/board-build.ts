@@ -4,7 +4,7 @@
  * The task's distribution evidence must come from a build made by the test, never from a
  * `dist/web` that happens to exist (the plan's step 0 precondition).
  */
-import { cpSync, rmSync } from 'node:fs';
+import { cpSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { mkdtemp, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -37,10 +37,76 @@ export interface BoardBuildOptions {
 }
 
 /**
+ * Cross-process build mutex.
+ *
+ * `astro build` stages its prerender entry in the workspace-shared `.astro` cache, not in the
+ * `--outDir` below, and `bun test` runs files in parallel processes — so two test files building
+ * the board at once (`runtime-distribution` + `composed-board-browser`) raced: one cleared `.astro`
+ * while the other imported its entry ("Cannot find module … prerender-entry.<hash>.mjs"). The
+ * test-adapter injection window below is workspace-wide too, so every build of this root holds the
+ * lock.
+ */
+const BUILD_LOCK = join(tmpdir(), 'spur-board-0988-build.lock');
+const BUILD_LOCK_WAIT_MS = 600_000;
+
+/** The file lock is not re-entrant; a process-local queue keeps a second caller from waiting on itself. */
+let buildQueue: Promise<unknown> = Promise.resolve();
+
+function lockOwnerAlive(pid: number): boolean {
+    try {
+        process.kill(pid, 0);
+        return true;
+    } catch {
+        return false;
+    }
+}
+
+async function acquireBuildLock(): Promise<void> {
+    const deadline = Date.now() + BUILD_LOCK_WAIT_MS;
+    for (;;) {
+        try {
+            writeFileSync(BUILD_LOCK, String(process.pid), { flag: 'wx' });
+            return;
+        } catch {
+            // Held by another process — check whether its owner is still alive.
+        }
+        let owner: number;
+        try {
+            owner = Number.parseInt(readFileSync(BUILD_LOCK, 'utf8'), 10);
+        } catch {
+            continue; // released between the two attempts
+        }
+        if (Number.isInteger(owner) && lockOwnerAlive(owner)) {
+            if (Date.now() >= deadline) {
+                throw new Error(`board build lock ${BUILD_LOCK} held by pid ${owner} for over ${BUILD_LOCK_WAIT_MS}ms`);
+            }
+            await Bun.sleep(200);
+            continue;
+        }
+        rmSync(BUILD_LOCK, { force: true }); // abandoned: unparsable pid, or a dead owner
+    }
+}
+
+/**
  * Build the board into a fresh temporary distribution root and return that directory.
  * The caller owns cleanup (see {@link removeBoardBuild}).
  */
 export async function buildBoardToTemp(options: BoardBuildOptions = {}): Promise<string> {
+    const queued = buildQueue.then(() => buildBoardLocked(options));
+    buildQueue = queued.catch(() => undefined);
+    return queued;
+}
+
+async function buildBoardLocked(options: BoardBuildOptions): Promise<string> {
+    await acquireBuildLock();
+    try {
+        return await buildBoardOnce(options);
+    } finally {
+        rmSync(BUILD_LOCK, { force: true });
+    }
+}
+
+async function buildBoardOnce(options: BoardBuildOptions): Promise<string> {
     const dir = await mkdtemp(join(tmpdir(), 'spur-board-0988-'));
     try {
         if (options.testAdapterDir) {
