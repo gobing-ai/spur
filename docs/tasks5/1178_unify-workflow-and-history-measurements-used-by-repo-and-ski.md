@@ -4,7 +4,7 @@ name: Unify workflow and history measurements used by repo and skill tools
 status: done
 template: feature-impl
 created_at: 2026-10-12T03:34:10.720Z
-updated_at: "2026-10-13T02:43:56.004Z"
+updated_at: "2026-10-13T02:52:27.275Z"
 feature_id: A91
 priority: P1
 tags:
@@ -179,20 +179,26 @@ One measurement implementation, one SQL owner, adapters keep host/policy concern
 | `plugins/sp/tests/session-timeline.test.ts:96` | Timeline rendering over the adapter's normalized rows |
 | `plugins/sp/tests/daily-summary/daily-summary.test.ts:343` | Report composition for loops/remediation and the clean-status path |
 
-**Gate-hygiene edits (operator-authorised, 2026-10-12; test-only, no product behaviour change)**
+**Gate defects and the branch rebase (2026-10-12)**
 
-The full gate could not go green on this host until four test-harness defects were repaired (two of them real
-defects, not flakes). They are inside the certified digest and ship with this task.
+The full gate was red on four test-harness defects. Three of them were fixed independently on `main`
+while this task ran, and this branch rebased onto `main`'s tip (`3e1251018`) inherits those fixes rather
+than duplicating them:
+
+| `file:line` | Change | Owner |
+| --- | --- | --- |
+| `apps/cli/tests/output-envelope.test.ts:302` | The raw-vs-enveloped equality compares `withoutLiveAge(...)`, so `agent doctor`'s live `usage.age` cannot break byte identity. | `main` (76eeede8b) |
+| `apps/web/tests/modules/task-kanban/new-task-panel.test.tsx:66` | The `@/ui` `MockInput` forwards `value`/`onChange`, so the process-wide mock can no longer starve a later file's controlled input. | `main` (b6dd3e64c) |
+| `apps/web/tests/modules/projects/DatabaseView.test.tsx:131` | `setControlValue` reads the props handle with `Object.getOwnPropertyNames` (the React key is non-enumerable), and the filter settles before the read. | `main` (59c2e6013, b6dd3e64c) |
+| `apps/web/src/modules/projects/DatabaseView.tsx` | The filter value is settled before the rows read (product fix behind the above test repair). | `main` (59c2e6013) |
+
+What this branch adds on the gate front instead:
 
 | `file:line` | Change |
 | --- | --- |
-| `apps/web/tests/modules/task-kanban/new-task-panel.test.tsx:66` | Removed `mock.module('@/ui', …)`: Bun's module mock is process-wide and irreversible, so its stripped uncontrolled `Input` leaked into every later test file in the process and broke DatabaseView. The panel's Name input is now driven through the real React `onChange` prop. |
-| `apps/web/tests/modules/observability/decisions-tab.test.tsx:16` | Same leak, same fix for the run-id filter input (the second `@/ui` mocker). |
-| `apps/web/tests/modules/projects/DatabaseView.test.tsx:132` | `setControlValue` waits for the React `__reactProps$` handle instead of throwing on the first look, and names the element in its failure message. |
-| `apps/cli/tests/output-envelope.test.ts:49` | Freezes the wall clock for the two byte-identity comparisons: `agent doctor --json` embeds a live `usage.age`, so two captures can never match while the clock advances. Also covers the feature-doc status sync and the `## Solution`/`## Review` corpus writes of this run. |
-| `packages/app/tests/workflow/feature-lifecycle-adapter.test.ts:207` | `CLI_GUARD_TIMEOUT_MS` 20s to 60s: the R4 guard cases spawn a real CLI child, which starved past 20s while three full suites ran concurrently. |
-| `plugins/sp/tests/run-summary.test.ts:366` | New evidence for the `writeCloseSummary` success path (via `PI_SESSION_FILE`) and the unreadable-receipt branch: the old "success" assertion also held for the `n/a` branch, so the body was never executed and the file failed the coverage gate at 85.52%. |
-| `plugins/sp/tests/inline-run-app.test.ts:13` | New file pinning the portable bundle fallback and the stale-bundle refusal (coverage gate: `inline-run-app.ts` was 75.76%). |
+| `plugins/sp/tests/inline-run-app.test.ts:13` | New file pinning the portable bundle fallback and the stale-bundle refusal — the R3 adapter path's only coverage; `plugins/sp/lib/inline-run-app.ts` was 75.76% lines and failed the coverage gate. |
+| `plugins/sp/tests/run-summary.test.ts:366` | New evidence for the `writeCloseSummary` success path (via `PI_SESSION_FILE`) and the unreadable-receipt branch: the old "success" assertion also held for the `n/a` branch, so the function body never executed and the file failed the coverage gate at 85.52%. |
+| `packages/app/tests/workflow/feature-lifecycle-adapter.test.ts:207` | `CLI_GUARD_TIMEOUT_MS` 20s to 60s: the R4 guard cases spawn a real CLI child, which starved past 20s while three full suites ran concurrently on this host (isolated: ~1.3s). |
 
 ### Testing
 
@@ -261,6 +267,17 @@ Applied after the reviewer signed off, in the corpus only (no code, no test, so 
   test files, two `apps/cli`/`packages/app` test files, two `plugins/sp` test files — one of them new).
 - **P4 (advisory), `daily-summary` node re-exec — ACCEPTED as authored** (precedent: 1177 shipped the same
   contract in `inline-run-setup.ts`); recorded as an accepted residual, not a deferral.
+
+
+#### Post-rebase note (driver — 2026-10-12, after the review above was signed)
+
+This branch was rebased onto `main`'s tip (`3e1251018`) so it can fast-forward rather than merge. `main`
+had independently fixed the same four gate defects while this task ran (`76eeede8b` envelope clock,
+`b6dd3e64c` the process-wide `@/ui` mock, `59c2e6013`/`45465ed47` DatabaseView filter settle and paging
+bounds). The rebase therefore took `main`'s copies of those files; the reviewer's P4 row about seven
+unlisted paths is resolved by inheritance, and the `## Solution` map now names only this branch's own
+gate-related additions (the two coverage test files and the adapter budget). Nothing in the reviewed
+implementation changed: the R1–R4 source files rebased without conflict.
 
 ### References
 
