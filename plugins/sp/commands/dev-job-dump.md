@@ -24,6 +24,7 @@ For shared semantics, see the [flag glossary](../skills/spur-dev/references/flag
 ## Implementation
 
 Follow [job-dump](../skills/spur-dev/references/dev-operations.md#11a-job-dump), using the shared
-handoff template to capture the current job and its remaining work.
+handoff template to capture the current job and its remaining work. Run no quality gate
+(`bun run gate`, lint, typecheck, tests, `spur-check`); copy existing gate results or write `not run`.
 
 Skill(skill="sp:spur-dev", args="job-dump $ARGUMENTS")

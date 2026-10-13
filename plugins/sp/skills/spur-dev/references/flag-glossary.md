@@ -225,8 +225,10 @@ the `feature:<id>` sets, resolved once and frozen.
 
 **Anchor:** `#flag-check`.
 
-Verification command a command iterates against (`dev-simplify`, `dev-refactor`). The command
+Verification command a command iterates against (`dev-simplify`, `dev-refactor`, `dev-gitmsg`). The command
 establishes a baseline with it before the first change and re-runs it after each change.
+`dev-gitmsg` uses it as a one-shot opt-in pre-commit gate: run once, non-zero commits nothing, no
+fix loop. A command without `--check` in its contract runs no gate.
 
 ### `--focus <dims>` — constrain the operation to specific dimensions
 
