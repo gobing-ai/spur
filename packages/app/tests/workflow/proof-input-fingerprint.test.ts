@@ -1,6 +1,7 @@
-import { describe, expect, test } from 'bun:test';
+import { afterAll, beforeAll, describe, expect, test } from 'bun:test';
+import { execSync } from 'node:child_process';
 import { chmodSync, mkdirSync, mkdtempSync, writeFileSync } from 'node:fs';
-import { rm } from 'node:fs/promises';
+import { mkdtemp, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { createNodeFileSystem } from '@gobing-ai/ts-runtime';
@@ -188,23 +189,45 @@ Feature history.
 // return and the digest still "worked" — it was just blind to the working tree. These two tests
 // make that silent failure loud.
 describe('git-tree component is live, not silently empty', () => {
+    // These two hash a throwaway fixture repo, not the live checkout. Two reasons, both measured
+    // 2026-10-13: (1) the live tree is ~3.5k tracked files, so one `git add -A` capture costs
+    // 150-350ms idle and blew this file's own 5s/30s budgets whenever sibling suites were running —
+    // a 5s timeout reproduced in every loaded round; (2) hashing the live tree is not hermetic:
+    // any parallel test file creating a non-ignored file moves the digest mid-test, which is what
+    // failed "a working-tree change moves the digest" in the full parallel suite. The fixture also
+    // keeps the probe file out of the real repo (it used to write docs/design/zz-*.md there).
+    let fixture: string;
+
+    beforeAll(async () => {
+        fixture = await mkdtemp(join(tmpdir(), 'proof-tree-'));
+        await writeFile(join(fixture, 'tracked.ts'), 'export const a = 1;\n');
+        execSync(
+            'git init -q && git config user.email t@example.com && git config user.name t && git add -A && git commit -qm init',
+            { cwd: fixture },
+        );
+    });
+
+    afterAll(async () => {
+        await rm(fixture, { recursive: true, force: true });
+    });
+
     test('returns a real tree hash rather than an empty string', async () => {
-        const tree = await createGitAlternateTree(process.cwd());
+        const tree = await createGitAlternateTree(fixture);
         expect(tree).not.toBe('');
         expect(tree).toMatch(/^[a-f0-9]{40}$/);
     });
 
     test('a working-tree change moves the digest, and reverting restores it', async () => {
-        const probe = 'docs/design/zz-proof-fingerprint-probe.md';
-        const before = await ProofInputFingerprint.compute();
+        const probe = join(fixture, 'tracked.ts');
+        const before = await ProofInputFingerprint.compute({ cwd: fixture });
         try {
-            await Bun.write(probe, '# probe\n');
-            const during = await ProofInputFingerprint.compute();
+            await writeFile(probe, 'export const a = 2;\n');
+            const during = await ProofInputFingerprint.compute({ cwd: fixture });
             expect(during).not.toBe(before);
         } finally {
-            await rm(probe, { force: true });
+            await writeFile(probe, 'export const a = 1;\n');
         }
-        expect(await ProofInputFingerprint.compute()).toBe(before);
+        expect(await ProofInputFingerprint.compute({ cwd: fixture })).toBe(before);
     });
 });
 
