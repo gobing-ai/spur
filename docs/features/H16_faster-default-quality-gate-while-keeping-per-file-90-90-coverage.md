@@ -6,7 +6,7 @@ status: backlog
 priority: P2
 tags: []
 created_at: "2026-10-10T05:19:09.284Z"
-updated_at: "2026-10-13T17:39:11.914Z"
+updated_at: "2026-10-13T18:35:58.463Z"
 ---
 
 # H16: Faster default quality gate while keeping per-file 90/90 coverage
@@ -58,11 +58,12 @@ Feature: Faster default quality gate while keeping per-file 90/90 coverage
     And a test whose subject is the process boundary keeps one child process for the file
 
   @core
-  Scenario: R3 — The default suite stays serial until Bun honors parallel without isolate
-    Given the repo is on a Bun that does not honor bun test --parallel --no-isolate
-    When bun run gate runs the default suite
-    Then the test invocation does not pass --parallel
-    And the recorded upgrade bar requires a quiet-machine run that finishes, beats the serial baseline, and keeps the per-file 90/90 floor
+  Scenario: R3 — The parallel default holds only while its bar is measured
+    Given the repo is on a Bun that honors bun test --parallel
+    When bun run test runs the default suite
+    Then it may pass --parallel only while the recorded bar is met
+    And --no-isolate honored and beats-serial-baseline are measured and recorded before any speedup is claimed
+    And the per-file 90/90 floor still holds
 
   @core
   Scenario: R4 — The gate runs Biome once and repeat typecheck reuses a cache
