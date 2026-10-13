@@ -42,8 +42,8 @@ export const contract = {
 /** Type-level alias for the public Spur oRPC contract. */
 export type SpurContract = typeof contract;
 export * from './board';
-// Projects Database tab wire shapes (G631) — the routes are Hono-served; the
-// contracts document them for the generated OpenAPI.
+// Projects Database tab wire shapes (G631) — the routes are Hono-served, so these
+// DTOs type the client only and are absent from the generated OpenAPI.
 export * from './database';
 export type { DesktopServerControlMessage, DesktopServerStartupErrorMessage } from './desktop';
 export { featureCreateInputSchema, featureListResponseSchema, featureShowResponseSchema } from './feature';

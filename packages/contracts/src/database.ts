@@ -2,8 +2,9 @@ import { z } from 'zod';
 
 // ─── Projects Database tab wire shapes (feature G631) ───
 // CONTRACT ONLY — the four routes are served by the raw Hono module
-// `apps/server/src/modules/database`; these entries document their wire shapes so
-// the generated OpenAPI covers them. Same pattern as the observability DTOs.
+// `apps/server/src/modules/database`; these entries document their wire shapes for typed
+// clients. They are not in the generated OpenAPI, which covers only the oRPC contract
+// (apps/server/src/openapi.ts). Same pattern as the observability DTOs.
 // Shapes are owned by docs/design/projects-database-tab.md §3.3; task 1184
 // consumes them.
 
