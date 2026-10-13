@@ -1,0 +1,67 @@
+# Verdict-confidence rules (report corpus) — a committed verification record that states
+# a machine `Verdict:` line must also state the verifier's confidence, so a reader can
+# tell a PASS the verifier stands behind from one it would not.
+#
+# Contract owners: `Confidence: HIGH|MEDIUM|LOW` is specified for verify answers by
+# plugins/sp/skills/code-verification/SKILL.md (one `Verdict: PASS|PARTIAL|FAIL` line, one
+# `Confidence:` line, then the traceability tables) and for review reports by
+# plugins/sp/agents/super-reviewer.md. Both are already enforced for pipeline answers —
+# packages/app/src/services/verify-answer-lint.ts (`confidence-missing`,
+# `confidence-value`, and the coherence pair `confidence-unwarranted` /
+# `confidence-understated`) plus the verify stamp in config/workflows/task-pipeline.yaml —
+# but no rule read the standalone report documents agents commit under `docs/`. This file
+# is that backstop: the same three-level vocabulary, checked at the document level.
+#
+# Shape: one file-spanning forbidden match (`multiline: true` hands the evaluator the whole
+# document and the negative lookahead spans the newline) instead of line counting. The
+# lookahead demands a valid level, so a hedge (`Confidence: mostly`) reads as missing too.
+# The verdict prefix requires the closed `PASS|PARTIAL|FAIL` value on its own line, which is
+# what separates a record from prose: docs/reports/i31/0912-workflow-baseline.md:84 and
+# i31/1107-runall-p1-pilot.md:9 both open a bolded *conclusion* sentence
+# ("**Verdict: `partial — INSUFFICIENT_EVIDENCE retained`.**") and are not this contract.
+#
+# Severity `info`, and deliberately not in a preset — the same calibration choice the `docs`
+# category makes for sourced claims: findings surface for review without reddening gates
+# (`recommended-pre-check` runs `--fail-on warning`). To promote it, add `- docs` to that
+# preset's `extends` once the residual is triaged.
+#
+# Calibration (2026-10-13, `spur rule run --file config/rules/docs/verdict-confidence.yaml
+# --json`, unsuppressed): 3 findings over the 90 documents the include globs match (29 under
+# docs/reports/, 61 under docs/plans/), all three the hole this closes —
+# docs/reports/2026-09-12-i21-verifyall.md:3,
+# docs/reports/2026-10-01-E71-force-verification.md:3 and
+# docs/reports/g61-verifyall-2026-09-12.md:3 each open `Verdict: PASS` and state no
+# confidence level anywhere in the document. They stay visible rather than suppressed:
+# retro-fitting a level into a historical record would invent the verifier's own claim.
+# Both directions were controlled in the same run: a scratch report holding
+# `Verdict: PASS` + `Confidence: HIGH` is not flagged, and the same file with
+# `Confidence: mostly` is.
+#
+# Include is deliberately the report corpus. `docs/plans/*brainstorm*.md` states confidence
+# as prose with its rationale (`**Confidence: HIGH.** All primitives … are verified present`,
+# 61 such lines across 18 plans) — a different, human-facing contract that a
+# level-only vocabulary check would drown in false positives, and those plans carry no
+# machine verdict line to anchor on.
+include:
+  - "docs/reports/**/*.md"
+  - "docs/plans/**/*.md"
+exclude:
+  - "docs/tasks*/**"
+rules:
+  - id: verdict-line-confidence-missing
+    description: >
+      A committed verification record that asserts a machine verdict line
+      (`Verdict: PASS|PARTIAL|FAIL`) must follow it with the verifier's confidence level —
+      `Confidence: HIGH|MEDIUM|LOW` — so a reader can tell a verdict the verifier stands
+      behind from one it would not. Contract in sp-code-verification (verify answers) and
+      sp-super-reviewer (review reports); a missing level is a lint failure for pipeline
+      answers (`confidence-missing`), and this rule is the backstop for the reports those
+      surfaces do not read.
+    severity: info
+    evaluator:
+      type: regex
+      config:
+        mode: forbid
+        multiline: true
+        flags: "i"
+        pattern: "^[ \\t]*\\**Verdict\\**:\\**[ \\t]*(?:PASS|PARTIAL|FAIL)\\**[ \\t]*\\n(?:[ \\t]*\\n)*(?![ \\t]*\\**Confidence\\**:\\**[ \\t]*\\**(?:HIGH|MEDIUM|LOW)\\**[ \\t]*\\.?[ \\t]*$)"

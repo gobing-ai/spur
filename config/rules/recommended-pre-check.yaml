@@ -7,8 +7,12 @@
 # post-check alongside coverage-gate.
 #
 # TEMPORARY (2026-10-08): `docs` removed from extends to unblock the gate —
-# restore it (add `- docs` back) once sourced-api-claims finding noise is
-# triaged. Recapture the raw-json-baseline fixtures in the same change.
+# restore it (add `- docs` back) once sourcing-claim finding noise is triaged.
+# The category now holds two files and both residuals must be triaged first:
+# `docs/sourced-api-claims.yaml` (advisory citation/level checks on claim lines) and
+# `docs/verdict-confidence.yaml` (a machine `Verdict:` report must state its
+# HIGH/MEDIUM/LOW level; 3 historical reports under docs/reports/ predate the
+# contract). Recapture the raw-json-baseline fixtures in the same change.
 name: recommended-pre-check
 extends:
   - typescript
