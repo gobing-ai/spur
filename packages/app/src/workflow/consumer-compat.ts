@@ -96,10 +96,11 @@ function commandWords(command: string): string[] {
  * shortcut: only `<workdir>/.spur/` counts as project-owned; widen when a second port location appears.
  */
 export function projectConsumerScript(command: string, workdir: string): string | null {
-    const owned = join(workdir, '.spur') + sep;
+    const root = resolve(workdir);
+    const owned = join(root, '.spur') + sep;
     for (const token of commandWords(command)) {
         if (!SCRIPT_SUFFIX_RE.test(token) || token.includes('$')) continue;
-        const path = isAbsolute(token) ? token : resolve(workdir, token);
+        const path = isAbsolute(token) ? token : resolve(root, token);
         if (path.startsWith(owned)) return path;
     }
     return null;
@@ -118,25 +119,28 @@ export function nestedWorkflowRunTarget(command: string): string | null {
 }
 
 /**
- * The first project-rooted consumer script a definition's shell `onEnter` actions invoke, or
- * `null`. The resolved definition — not the child's prose — is authoritative for what a failing
- * nested run executed.
+ * The project-rooted consumer script a definition's shell `onEnter` actions invoke, or `null`. The
+ * resolved definition — not the child's prose — is authoritative for what a failing nested run
+ * executed. Two or more distinct consumers yield `null`: the complaint does not say which one
+ * failed, so naming either could blame the wrong file (fail open to the previous message).
  */
 export function definitionConsumerScript(workflow: WorkflowDef, workdir: string): string | null {
     if (!Array.isArray((workflow as { states?: unknown }).states)) return null;
     const states = (
         workflow as { states: readonly { onEnter?: readonly { kind: string; options?: Record<string, unknown> }[] }[] }
     ).states;
+    const consumers = new Set<string>();
     for (const state of states) {
         for (const action of state.onEnter ?? []) {
             if (action.kind !== 'shell') continue;
             const command = action.options?.command;
             if (typeof command !== 'string') continue;
             const consumer = projectConsumerScript(command, workdir);
-            if (consumer !== null) return consumer;
+            if (consumer !== null) consumers.add(consumer);
         }
     }
-    return null;
+    const [only, ...rest] = consumers;
+    return only !== undefined && rest.length === 0 ? only : null;
 }
 
 /**

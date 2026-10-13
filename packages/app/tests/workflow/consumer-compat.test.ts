@@ -7,7 +7,7 @@
  */
 
 import { describe, expect, test } from 'bun:test';
-import { join } from 'node:path';
+import { join, resolve } from 'node:path';
 import type { WorkflowDef } from '@gobing-ai/ts-dual-workflow-engine';
 import {
     consumerBundleSkew,
@@ -142,6 +142,27 @@ describe('definitionConsumerScript', () => {
             definitionConsumerScript(definition('bun plugins/sp/scripts/feature-verification-steps.ts'), WORKDIR),
         ).toBeNull();
         expect(definitionConsumerScript({ kind: 'dag', name: 'x' } as unknown as WorkflowDef, WORKDIR)).toBeNull();
+    });
+
+    test('two distinct project consumers fail open instead of naming one that may not have failed', () => {
+        const twoConsumers = {
+            kind: 'state-machine',
+            name: 'feature-verification',
+            initialState: 'verify',
+            states: [
+                { id: 'verify', onEnter: [{ kind: 'shell', options: { command: PORT_COMMAND } }] },
+                { id: 'post', onEnter: [{ kind: 'shell', options: { command: 'bun .spur/scripts/other.mjs' } }] },
+            ],
+        } as unknown as WorkflowDef;
+        expect(definitionConsumerScript(twoConsumers, WORKDIR)).toBeNull();
+    });
+});
+
+describe('projectConsumerScript with a relative workdir', () => {
+    test('recognises a project-rooted script whatever form the workdir arrives in', () => {
+        expect(projectConsumerScript('bun .spur/scripts/feature-verify.mjs', 'fixture')).toBe(
+            resolve('fixture', '.spur/scripts/feature-verify.mjs'),
+        );
     });
 });
 
