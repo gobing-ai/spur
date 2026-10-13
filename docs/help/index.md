@@ -15,7 +15,7 @@ and optional DecisionMaker backends can call TypeSafe for structured decisions.
 
 ### How to install Spur?
 
-**Prerequisites:** Bun ≥ 1.3.14 on PATH; at least one supported coding agent installed.
+**Prerequisites:** Bun ≥ 1.4.3 on PATH; at least one supported coding agent installed.
 
 ```bash
 # From source

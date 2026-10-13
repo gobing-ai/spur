@@ -227,16 +227,15 @@ describe('agent doctor', () => {
     });
 
     // B4/0683: the probe/cache flags parse and dispatch without changing the exit contract.
-    test.each([
-        ['--probe-health'],
-        ['--force-refresh'],
-        ['--probe-health', '--force-refresh'],
-    ])('doctor accepts %j', async (...args: unknown[]) => {
-        const flags = args.filter((a): a is string => typeof a === 'string');
-        const output = captureOutput();
-        const exitCode = await main(['agent', 'doctor', ...flags, '--json'], { output });
-        expect(typeof exitCode).toBe('number');
-    });
+    test.each([['--probe-health'], ['--force-refresh'], ['--probe-health', '--force-refresh']])(
+        'doctor accepts %j',
+        async (...args: unknown[]) => {
+            const flags = args.filter((a): a is string => typeof a === 'string');
+            const output = captureOutput();
+            const exitCode = await main(['agent', 'doctor', ...flags, '--json'], { output });
+            expect(typeof exitCode).toBe('number');
+        },
+    );
 });
 
 describe('member session rendering (0897)', () => {

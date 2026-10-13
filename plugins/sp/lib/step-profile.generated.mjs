@@ -162,13 +162,13 @@ function formatStepProfileHuman(profile) {
 `;
 }
 export {
-  rowFlags,
-  nonDryRuns,
-  nearestRankP50,
-  formatStepProfileHuman,
-  extractExecutions,
-  buildStepProfile,
-  buildRows,
+  DEFAULT_LAST,
   DEFAULT_WINDOW_SEC,
-  DEFAULT_LAST
+  buildRows,
+  buildStepProfile,
+  extractExecutions,
+  formatStepProfileHuman,
+  nearestRankP50,
+  nonDryRuns,
+  rowFlags
 };

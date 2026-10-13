@@ -1,4 +1,4 @@
-import { afterAll, beforeEach } from 'bun:test';
+import { afterAll, beforeAll, beforeEach } from 'bun:test';
 import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -49,14 +49,19 @@ setLoggerMuted(true);
 // This silences ALL log output regardless of which ts-infra instance
 // created the LogTapeLogger adapter (four duplicate ts-infra@0.3.5
 // instances exist in Bun's store, each with its own `muted` flag).
-await reset();
-await configure({
-    sinks: {},
-    loggers: [
-        { category: ['app'], lowestLevel: 'fatal', sinks: [] },
-        { category: ['logtape', 'meta'], lowestLevel: 'fatal', sinks: [] },
-    ],
-});
+// No top-level await: Bun 1.3.14 silently drops a TLA preload under `bun test --isolate`
+// / `--parallel` (none of this file's env hermeticity applied, and tests wrote to the
+// operator's real ~/.config/spur). Chain the async LogTape setup and await it once per file.
+const logtapeReady = reset().then(() =>
+    configure({
+        sinks: {},
+        loggers: [
+            { category: ['app'], lowestLevel: 'fatal', sinks: [] },
+            { category: ['logtape', 'meta'], lowestLevel: 'fatal', sinks: [] },
+        ],
+    }),
+);
+beforeAll(() => logtapeReady);
 
 // Prevent tests from resolving the global ~/.config/spur/config.yaml fallback,
 // ensuring they hit the direct (no-config) code path.
@@ -92,7 +97,13 @@ process.env.SPUR_SLASH_COMMANDS_FILE = testSlashCommandsFile;
 // `afterEach` and never restore it; because Bun runs test files in one process, that
 // stranded later files on the operator's real registry. Their own beforeEach runs
 // after this one, so an explicit per-suite path still wins.
+// The two config-skip switches get the same treatment: health.test used to `removeEnvVar`
+// SPUR_SKIP_GLOBAL_CONFIG in afterEach, after which every later file in the process read the
+// operator's ~/.config/spur layers (observed: rule-service preset tests resolving a stale
+// global `recommended-pre-check.yaml`).
 beforeEach(() => {
+    process.env.SPUR_SKIP_GLOBAL_CONFIG = 'true';
+    process.env.SPUR_SKIP_PROJECT_CONFIG = 'true';
     process.env.SPUR_PROJECTS_FILE = testRegistryFile;
     process.env.SPUR_SLASH_COMMANDS_FILE = testSlashCommandsFile;
 });

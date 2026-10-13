@@ -367,22 +367,25 @@ describe('verified-outcome conflict regressions', () => {
         ['2026-08-29T10:30:00.000Z', '2026-08-29T11:30:00.000Z', 0],
         ['2026-08-29T12:00:00.000Z', '2026-08-29T13:00:00.000Z', 1],
         ['', '2026-08-29T13:00:00.000Z', 0],
-    ] as const)('correction requires a run starting after certification: %s', async (startedAt, completedAt, corrections) => {
-        const { db, cwd, fs } = await makeBindingEnv(
-            { wbs: '0701', verdict: 'PASS', proof: { digest: 'sha256:abc', runId: 'cert' } },
-            [
-                { id: 'cert', status: 'done' },
-                { id: 'retry', status: 'failed', startedAt, completedAt },
-            ],
-        );
-        try {
-            const stat = await deriveVerifiedOutcome({ db, cwd, fs, locator: stubLocator(cwd) });
-            expect(stat?.verifiedResults).toBe(1);
-            expect(stat?.correctionCount).toBe(corrections);
-            expect(stat?.verifiedWithoutCorrection).toBe(1 - corrections);
-        } finally {
-            db.close();
-            rmSync(cwd, { recursive: true, force: true });
-        }
-    });
+    ] as const)(
+        'correction requires a run starting after certification: %s',
+        async (startedAt, completedAt, corrections) => {
+            const { db, cwd, fs } = await makeBindingEnv(
+                { wbs: '0701', verdict: 'PASS', proof: { digest: 'sha256:abc', runId: 'cert' } },
+                [
+                    { id: 'cert', status: 'done' },
+                    { id: 'retry', status: 'failed', startedAt, completedAt },
+                ],
+            );
+            try {
+                const stat = await deriveVerifiedOutcome({ db, cwd, fs, locator: stubLocator(cwd) });
+                expect(stat?.verifiedResults).toBe(1);
+                expect(stat?.correctionCount).toBe(corrections);
+                expect(stat?.verifiedWithoutCorrection).toBe(1 - corrections);
+            } finally {
+                db.close();
+                rmSync(cwd, { recursive: true, force: true });
+            }
+        },
+    );
 });

@@ -21,9 +21,9 @@ import type { AgentQuotaUpdatesContext } from './agent-quota-updates';
 import { drainPendingAgentQuotaUpdates, recordAgentQuotaEvent } from './agent-quota-updates';
 
 // Application sources may not statically import node:fs (runtime-boundaries rule);
-// the top-level-await dynamic form is the standing workaround (see inline-run-setup.ts).
-const { existsSync, mkdirSync, readFileSync, renameSync, writeFileSync } = await import('node:fs');
-const { join } = await import('node:path');
+// the synchronous `process.getBuiltinModule` form is the standing workaround (see inline-run-setup.ts).
+const { existsSync, mkdirSync, readFileSync, renameSync, writeFileSync } = process.getBuiltinModule('node:fs');
+const { join } = process.getBuiltinModule('node:path');
 
 /**
  * How long a quota/probe-owned disable survives without a fresh observation.

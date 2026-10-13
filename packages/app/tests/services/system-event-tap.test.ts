@@ -6,7 +6,8 @@ import type {
     SystemEventRow,
 } from '@gobing-ai/spur-domain';
 import { EventBus } from '@gobing-ai/ts-infra';
-import { normalizeSystemEventPayload, systemEventCatalogEntry } from '../../src/services/event-names';
+import { systemEventCatalogEntry } from '../../src/services/event-names';
+import { normalizeSystemEventPayload } from '../../src/services/system-event-envelope';
 import { extractSystemEventCorrelation, registerSystemEventTap } from '../../src/services/system-event-tap';
 
 /** In-memory fake DAO recording every insert and pruneQuotas call. */

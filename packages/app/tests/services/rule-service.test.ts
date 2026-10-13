@@ -906,6 +906,23 @@ describe('RuleService.list()', () => {
         expect(result.rules).toEqual([]);
     });
 
+    test('SPUR_SKIP_GLOBAL_CONFIG drops the ~/.config/spur/rules layer; an explicit global dir still wins', async () => {
+        const cwd = await createTempProject();
+        await writeRuleFile(cwd, '.spur/rules/boundary/sample.yaml', 'boundary-sample');
+        const globalRoot = join(cwd, 'global-rules');
+        await writeRuleFile(globalRoot, 'quality/coverage.yaml', 'coverage-gate');
+
+        const skipped = await new RuleService(
+            makeContext(cwd, nullOutput(), { SPUR_SKIP_GLOBAL_CONFIG: 'true' }),
+        ).list();
+        expect(skipped.layers.map((layer) => layer.id)).not.toContain('global');
+
+        const explicit = await new RuleService(
+            makeContext(cwd, nullOutput(), { SPUR_SKIP_GLOBAL_CONFIG: 'true', SPUR_GLOBAL_RULES_DIR: globalRoot }),
+        ).list();
+        expect(explicit.layers.map((layer) => layer.id)).toContain('global');
+    });
+
     test('returns empty result when no local rules exist', async () => {
         const cwd = await createTempProject();
         const result = await new RuleService(

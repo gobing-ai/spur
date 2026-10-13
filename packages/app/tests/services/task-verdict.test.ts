@@ -381,18 +381,15 @@ describe('AC evidence-type vocabulary (task 0398 R6)', () => {
             `| [doc-only] The contract is written down | MET | ${evidenceType} | \`docs/00_ADR.md:899\` |`,
         ].join('\n');
 
-    test.each([
-        'doc',
-        'docs',
-        'documentation',
-        'static',
-        'static-ref',
-    ])('"%s" normalizes to static-ref instead of dropping the row', (evidenceType) => {
-        const result = deriveVerdict(answer(evidenceType), true);
-        expect(result.acceptanceCriteria).toHaveLength(1);
-        expect(result.acceptanceCriteria?.[0]?.evidenceType).toBe('static-ref');
-        expect(result.acceptanceCriteria?.[0]?.status).toBe('MET');
-    });
+    test.each(['doc', 'docs', 'documentation', 'static', 'static-ref'])(
+        '"%s" normalizes to static-ref instead of dropping the row',
+        (evidenceType) => {
+            const result = deriveVerdict(answer(evidenceType), true);
+            expect(result.acceptanceCriteria).toHaveLength(1);
+            expect(result.acceptanceCriteria?.[0]?.evidenceType).toBe('static-ref');
+            expect(result.acceptanceCriteria?.[0]?.status).toBe('MET');
+        },
+    );
 
     test('compound evidence types parse as the union of their parts (0568 R2)', () => {
         for (const [compound, expected] of [

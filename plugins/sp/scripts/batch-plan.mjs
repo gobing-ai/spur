@@ -274,21 +274,21 @@ function accumulate(acc, row, ts) {
   if (row.type === "message") {
     const m = row.message;
     if (m?.role === "assistant") {
-      const blocks2 = Array.isArray(m.content) ? m.content : [];
-      for (const b of blocks2) {
+      const blocks = Array.isArray(m.content) ? m.content : [];
+      for (const b of blocks) {
         if (b.type === "toolCall" && b.id) {
           acc.toolIds.add(b.id);
           if (b.name && OPERATOR_TOOLS.has(b.name))
             acc.asks.set(b.id, ts);
         }
       }
-      const u2 = m.usage;
-      if (u2 && row.id)
+      const u = m.usage;
+      if (u && row.id)
         acc.messages.set(row.id, {
-          input: u2.input ?? 0,
-          cacheCreate: u2.cacheWrite ?? 0,
-          cacheRead: u2.cacheRead ?? 0,
-          output: u2.output ?? 0
+          input: u.input ?? 0,
+          cacheCreate: u.cacheWrite ?? 0,
+          cacheRead: u.cacheRead ?? 0,
+          output: u.output ?? 0
         });
     } else if (m?.role === "toolResult" && m.toolCallId && acc.asks.has(m.toolCallId)) {
       acc.askMs += ts - (acc.asks.get(m.toolCallId) ?? ts);
@@ -1039,36 +1039,36 @@ function main(argv) {
   process.exit(main(process.argv.slice(2)));
 }
 export {
-  zeroTokens,
-  validatePhaseTable,
-  taskPhaseChildren,
-  sumTokens,
-  sumSpans,
-  skillInvocationPrompt,
-  sensitiveReasonForPath,
-  scheduleBatch,
-  quickReadiness,
-  promptText,
-  preflightTask,
-  planLetter,
-  planChild,
-  newAcc,
-  main,
-  isCompaction,
-  insertOnEntry,
-  hostText,
-  hostStatus,
-  formatTokens,
-  formatTokenSplit,
-  formatDuration,
-  classifyFeaturePreflightFindings,
-  buildRunSummary,
-  buildPhasedPlan,
-  buildBatchPlan,
-  actorSplit,
-  accumulate,
-  SENSITIVE_PREFIXES,
-  SENSITIVE_GLOBS,
+  BATCH_PLAN_USAGE,
   NON_ABORTING_PREFLIGHT_CODES,
-  BATCH_PLAN_USAGE
+  SENSITIVE_GLOBS,
+  SENSITIVE_PREFIXES,
+  accumulate,
+  actorSplit,
+  buildBatchPlan,
+  buildPhasedPlan,
+  buildRunSummary,
+  classifyFeaturePreflightFindings,
+  formatDuration,
+  formatTokenSplit,
+  formatTokens,
+  hostStatus,
+  hostText,
+  insertOnEntry,
+  isCompaction,
+  main,
+  newAcc,
+  planChild,
+  planLetter,
+  preflightTask,
+  promptText,
+  quickReadiness,
+  scheduleBatch,
+  sensitiveReasonForPath,
+  skillInvocationPrompt,
+  sumSpans,
+  sumTokens,
+  taskPhaseChildren,
+  validatePhaseTable,
+  zeroTokens
 };

@@ -1,7 +1,5 @@
 #!/usr/bin/env node
 // @bun
-import { createRequire } from "node:module";
-var __require = /* @__PURE__ */ createRequire(import.meta.url);
 
 // plugins/sp/scripts/daily-summary/daily-summary.ts
 import { spawn, spawnSync } from "child_process";
@@ -41,8 +39,8 @@ function resolveAppEntry(spurBin) {
   }
   return { entry, portable: true };
 }
-async function loadInlineApp(spurBin, resolveAppEntry2, required) {
-  const { entry, portable } = resolveAppEntry2(spurBin);
+async function loadInlineApp(spurBin, resolveAppEntry, required) {
+  const { entry, portable } = resolveAppEntry(spurBin);
   const app = await import(entry);
   const missing = portable ? required.filter((name) => typeof app[name] !== "function") : [];
   if (missing.length > 0) {
@@ -143,7 +141,7 @@ function getDateRange(dateStr) {
   return { start, end };
 }
 var defaultProcessSpawner = (cmd, args, env) => {
-  return new Promise((resolve3, reject) => {
+  return new Promise((resolve, reject) => {
     try {
       const proc = spawn(cmd, args, {
         stdio: ["ignore", "pipe", "pipe"],
@@ -154,7 +152,7 @@ var defaultProcessSpawner = (cmd, args, env) => {
       proc.stdout.on("data", (chunk) => stdoutChunks.push(Buffer.from(chunk)));
       proc.stderr.on("data", (chunk) => stderrChunks.push(Buffer.from(chunk)));
       proc.on("close", (exitCode) => {
-        resolve3({
+        resolve({
           stdout: Buffer.concat(stdoutChunks).toString("utf8"),
           stderr: Buffer.concat(stderrChunks).toString("utf8"),
           exitCode: exitCode ?? 0
@@ -319,12 +317,12 @@ Please provide the following (press Enter to skip):
       chunks.push(chunk);
     }
     const buffered = Buffer.concat(chunks).toString("utf-8");
-    const [learnings2 = "", issuesFixed2 = "", pending2 = ""] = buffered.split(`
+    const [learnings = "", issuesFixed = "", pending = ""] = buffered.split(`
 `);
     return {
-      learnings: learnings2.trim(),
-      issuesFixed: issuesFixed2.trim(),
-      pending: pending2.trim()
+      learnings: learnings.trim(),
+      issuesFixed: issuesFixed.trim(),
+      pending: pending.trim()
     };
   }
   const readline = await import("readline");
@@ -332,9 +330,9 @@ Please provide the following (press Enter to skip):
     input: process.stdin,
     output: process.stdout
   });
-  const question = (prompt) => new Promise((resolve3) => {
+  const question = (prompt) => new Promise((resolve) => {
     rl.question(prompt, (answer) => {
-      resolve3(answer.trim());
+      resolve(answer.trim());
     });
   });
   const learnings = await question(`1. What did you learn today? (optional)
@@ -608,21 +606,21 @@ ${markdown}
   });
 }
 export {
-  yesterdayLocal,
-  writeSummary,
-  todayLocal,
-  setProcessSpawner,
-  promptUser,
-  printUsage,
-  parseArgs,
-  main,
-  getSpurHistoryHealth,
-  getGitCommits,
-  getDateRange,
-  getCcusageData,
-  generateMarkdown,
-  ensureDir,
-  enableLogger,
+  buildDailySummary,
   defaultProcessSpawner,
-  buildDailySummary
+  enableLogger,
+  ensureDir,
+  generateMarkdown,
+  getCcusageData,
+  getDateRange,
+  getGitCommits,
+  getSpurHistoryHealth,
+  main,
+  parseArgs,
+  printUsage,
+  promptUser,
+  setProcessSpawner,
+  todayLocal,
+  writeSummary,
+  yesterdayLocal
 };

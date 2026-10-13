@@ -84,9 +84,9 @@ function runDiffstat(env, options = {}, git = defaultGitRunner(options.cwd)) {
   const failSafe = (reason) => {
     process.stderr.write(`task-diffstat: ${reason} \u2014 failing safe (sensitive)
 `);
-    const row2 = { files: 0, insertions: 0, deletions: 0, paths: [], sensitive: true };
-    writeArtifact(abs(relResult), row2);
-    return { ...row2, resultFile: relResult, exitCode: 0 };
+    const row = { files: 0, insertions: 0, deletions: 0, paths: [], sensitive: true };
+    writeArtifact(abs(relResult), row);
+    return { ...row, resultFile: relResult, exitCode: 0 };
   };
   let stdoutIsArtifact = false;
   try {
@@ -172,10 +172,10 @@ function main(argv, env = getEnvVars(), options = {}) {
   process.exit(main(process.argv.slice(2)));
 }
 export {
-  sensitiveReasonForPath,
-  runDiffstat,
-  main,
-  TASK_DIFFSTAT_USAGE,
+  SENSITIVE_GLOBS,
   SENSITIVE_PREFIXES,
-  SENSITIVE_GLOBS
+  TASK_DIFFSTAT_USAGE,
+  main,
+  runDiffstat,
+  sensitiveReasonForPath
 };

@@ -288,35 +288,6 @@ export {
     readVerdictArtifact,
 } from './services/done-transition-guard';
 export { bridgeEventBus } from './services/event-bridge';
-export type {
-    SystemEventCatalogEntry,
-    SystemEventCatalogMetadata,
-    SystemEventMetadataField,
-    SystemEventName,
-    SystemEventPayloadPolicy,
-    SystemEventSource,
-    SystemEventTablePresentationInput,
-} from './services/event-names';
-export {
-    buildSystemEventEnvelope,
-    humanStepLabel,
-    humanWorkflowTitle,
-    isSystemEventEnvelopeV2,
-    looksLikeOpaqueId,
-    normalizeSystemEventPayload,
-    PLANNING_EVENT_NAMES,
-    projectStoredSystemEventEnvelope,
-    projectTablePresentation,
-    SYSTEM_EVENT_CATALOG,
-    SYSTEM_EVENT_CATALOG_METADATA,
-    SYSTEM_EVENT_ENVELOPE_SCHEMA_VERSION,
-    SYSTEM_EVENT_NAMES,
-    SYSTEM_EVENT_PERSISTED_NAMES,
-    SYSTEM_EVENT_PREFIXES,
-    SYSTEM_EVENT_STREAMED_NAMES,
-    systemEventCatalogEntry,
-    systemEventProjectContext,
-} from './services/event-names';
 export type { TimeoutPolicyMs } from './services/execution-policy';
 export {
     assertCanonicalTimeoutMs,
@@ -802,6 +773,35 @@ export {
     type SystemEventCorrelation,
     type SystemEventTap,
 } from './services/system-event-tap';
+export type {
+    SystemEventCatalogEntry,
+    SystemEventCatalogMetadata,
+    SystemEventMetadataField,
+    SystemEventName,
+    SystemEventPayloadPolicy,
+    SystemEventSource,
+    SystemEventTablePresentationInput,
+} from './services/system-events';
+export {
+    buildSystemEventEnvelope,
+    humanStepLabel,
+    humanWorkflowTitle,
+    isSystemEventEnvelopeV2,
+    looksLikeOpaqueId,
+    normalizeSystemEventPayload,
+    PLANNING_EVENT_NAMES,
+    projectStoredSystemEventEnvelope,
+    projectTablePresentation,
+    SYSTEM_EVENT_CATALOG,
+    SYSTEM_EVENT_CATALOG_METADATA,
+    SYSTEM_EVENT_ENVELOPE_SCHEMA_VERSION,
+    SYSTEM_EVENT_NAMES,
+    SYSTEM_EVENT_PERSISTED_NAMES,
+    SYSTEM_EVENT_PREFIXES,
+    SYSTEM_EVENT_STREAMED_NAMES,
+    systemEventCatalogEntry,
+    systemEventProjectContext,
+} from './services/system-events';
 export type { AttributeSessionsInput } from './services/task-attribution';
 export { attributeSessions } from './services/task-attribution';
 export type { CheckFindings, CheckResult as TaskCheckResult, SectionMatrix } from './services/task-check';

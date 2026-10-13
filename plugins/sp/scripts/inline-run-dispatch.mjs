@@ -34,8 +34,8 @@ function resolveAppEntry(spurBin) {
   }
   return { entry, portable: true };
 }
-async function loadInlineApp(spurBin, resolveAppEntry2, required) {
-  const { entry, portable } = resolveAppEntry2(spurBin);
+async function loadInlineApp(spurBin, resolveAppEntry, required) {
+  const { entry, portable } = resolveAppEntry(spurBin);
   const app = await import(entry);
   const missing = portable ? required.filter((name) => typeof app[name] !== "function") : [];
   if (missing.length > 0) {

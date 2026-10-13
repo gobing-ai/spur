@@ -101,7 +101,7 @@ spur init       # seed ~/.config/spur/ — idempotent
 > [Install](#install) above.
 
 ```bash
-# Prerequisites: Bun 1.3.14 (pinned in .prototools)
+# Prerequisites: Bun 1.4.3 (pinned in .prototools)
 bun install
 
 # Run the CLI from source (the .ts entry runs only under Bun)
@@ -201,9 +201,9 @@ detail.
 
 | Layer                                   | Technology                                                                   |
 | --------------------------------------- | ---------------------------------------------------------------------------- |
-| Runtime / package manager / test runner | [Bun](https://bun.sh/) `1.3.14` (prefer `bun:*` over `node:*`)               |
+| Runtime / package manager / test runner | [Bun](https://bun.sh/) `1.4.3` (prefer `bun:*` over `node:*`)               |
 | Language                                | TypeScript (strict)                                                          |
-| Lint + format                           | [Biome](https://biomejs.dev/) `2.4.16` (no ESLint, no Prettier)              |
+| Lint + format                           | [Biome](https://biomejs.dev/) `2.5.15` (no ESLint, no Prettier)              |
 | Type seam                               | [oRPC](https://orpc.unnoq.com/) `1.14.x` (contract-first, OpenAPI generated) |
 | HTTP                                    | [Hono](https://hono.dev/) on `Bun.serve` / Cloudflare Workers                |
 | Web                                     | [Astro](https://astro.build/) + Cloudflare adapter                           |

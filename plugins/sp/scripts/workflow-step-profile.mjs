@@ -322,17 +322,17 @@ function main(argv) {
   process.exit(main(process.argv.slice(2)));
 }
 export {
-  runStepProfileCli,
-  rowFlags,
-  parseStepProfileCliArgs,
-  nonDryRuns,
-  nearestRankP50,
-  main,
-  formatStepProfileHuman,
-  extractExecutions,
-  buildStepProfile,
-  buildRows,
-  STEP_PROFILE_USAGE,
+  DEFAULT_LAST,
   DEFAULT_WINDOW_SEC,
-  DEFAULT_LAST
+  STEP_PROFILE_USAGE,
+  buildRows,
+  buildStepProfile,
+  extractExecutions,
+  formatStepProfileHuman,
+  main,
+  nearestRankP50,
+  nonDryRuns,
+  parseStepProfileCliArgs,
+  rowFlags,
+  runStepProfileCli
 };

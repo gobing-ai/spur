@@ -3,7 +3,6 @@ import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import type { SystemEventCatalogEntry } from '../../src/services/event-names';
 import {
-    normalizeSystemEventPayload,
     PLANNING_EVENT_NAMES,
     SYSTEM_EVENT_CATALOG,
     SYSTEM_EVENT_CATALOG_METADATA,
@@ -16,6 +15,7 @@ import {
     SYSTEM_EVENT_STREAMED_NAMES,
     systemEventCatalogEntry,
 } from '../../src/services/event-names';
+import { normalizeSystemEventPayload } from '../../src/services/system-event-envelope';
 
 /** Fail-loud catalog lookup so tests get a definite entry without the non-null assertion
  * (forbidden by biome lint/style/noNonNullAssertion under --error-on-warnings). */

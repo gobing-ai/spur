@@ -695,18 +695,18 @@ function main(argv) {
   process.exit(main(process.argv.slice(2)));
 }
 export {
-  spawnRunner,
-  setCommandRunner,
-  scanHygiene,
-  renderFindings,
-  parseArgs,
-  normalizeFindings,
-  main,
-  isHeadReviewed,
-  isExplicitCleanReview,
-  isCodexAuthor,
-  hasCurrentCleanReview,
-  hasCodeReviewRules,
+  buildRequestBody,
   extractSeverity,
-  buildRequestBody
+  hasCodeReviewRules,
+  hasCurrentCleanReview,
+  isCodexAuthor,
+  isExplicitCleanReview,
+  isHeadReviewed,
+  main,
+  normalizeFindings,
+  parseArgs,
+  renderFindings,
+  scanHygiene,
+  setCommandRunner,
+  spawnRunner
 };

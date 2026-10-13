@@ -86,11 +86,9 @@ describe('TaskKanbanView scoping', () => {
             expect((container.querySelector('#tasks-status-wip') as HTMLInputElement).checked).toBe(true);
             // ADR-081 (amended 2026-08-26): the header rides History's centered 1600px rail
             // while the board body stays full-bleed — max-w appears only in the header.
-            expect((container.firstElementChild?.firstElementChild as HTMLElement).className).toContain(
-                'max-w-[1600px]',
-            );
+            expect(container.firstElementChild?.firstElementChild?.className).toContain('max-w-[1600px]');
             expect(container.querySelector('[data-kanban-board] [class*="max-w-"]')).toBeNull();
-            expect((container.firstElementChild?.firstElementChild as HTMLElement).className).toContain('px-4');
+            expect(container.firstElementChild?.firstElementChild?.className).toContain('px-4');
             await waitFor(() => expect(container.querySelector('[data-kanban-board] .p-4')).not.toBeNull());
 
             await waitFor(() =>

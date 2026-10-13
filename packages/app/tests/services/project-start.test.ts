@@ -11,6 +11,8 @@ import {
     type DetachedServeSpawn,
     defaultDetachedServeSpawn,
     defaultResolveOwnerPort,
+    parseLsofListenPort,
+    parseSsListenPort,
     resolveSpurServeCommand,
     setDetachedServeSpawnForTests,
     startRegisteredProject,
@@ -654,5 +656,24 @@ it('refuses a live registered server without mutating the registry', async () =>
                 projects: [{ name: 'project', path: '/tmp/spur-owner-test', port: 0 }],
             }),
         },
+    });
+});
+
+describe('listen-port probe parsers (lsof-less Linux fallback)', () => {
+    it('parseLsofListenPort reads the first LISTEN port, null otherwise', () => {
+        const out =
+            'COMMAND PID USER FD TYPE DEVICE SIZE/OFF NODE NAME\nbun 42 me 12u IPv4 0t0 TCP 127.0.0.1:4100 (LISTEN)\n';
+        expect(parseLsofListenPort(out)).toBe(4100);
+        expect(parseLsofListenPort('')).toBeNull();
+    });
+
+    it('parseSsListenPort only matches the requested pid (no pid-prefix false positive)', () => {
+        const out = [
+            'LISTEN 0 512 127.0.0.1:5000 0.0.0.0:* users:(("bun",pid=4242,fd=3))',
+            'LISTEN 0 512 [::1]:5100 [::]:* users:(("bun",pid=42,fd=12))',
+        ].join('\n');
+        expect(parseSsListenPort(out, 42)).toBe(5100);
+        expect(parseSsListenPort(out, 4242)).toBe(5000);
+        expect(parseSsListenPort(out, 7)).toBeNull();
     });
 });

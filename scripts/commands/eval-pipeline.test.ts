@@ -348,21 +348,18 @@ describe('nesting guard', () => {
         }
     });
 
-    // Drives a real `--dry` evalPipeline (worktree spawn + report write) — ~4.5s on this
-    // machine, over bun's 5s default under load. The test asserts flag inheritance, not speed.
-    test(
-        'a first-level run sets the flag so children inherit it',
-        async () => {
-            const prior = getEnvVar('SPUR_EVAL_PIPELINE_ACTIVE');
-            removeEnvVar('SPUR_EVAL_PIPELINE_ACTIVE');
-            try {
-                await evalPipeline(['--dry', '--label', 'nesting-guard-sets-flag']);
-                expect(getEnvVar('SPUR_EVAL_PIPELINE_ACTIVE')).toBe('1');
-            } finally {
-                if (prior === undefined) removeEnvVar('SPUR_EVAL_PIPELINE_ACTIVE');
-                else setEnvVar('SPUR_EVAL_PIPELINE_ACTIVE', prior);
-            }
-        },
-        SPAWN_TIMEOUT_MS,
-    );
+    // The flag is set on entry, before argument parsing, so every child forked later inherits it.
+    // An argv that fails validation proves that without a real `--dry` worktree run (~5 s) and
+    // without writing a throwaway report into the report dir on every gate run.
+    test('a first-level run sets the flag on entry so children inherit it', async () => {
+        const prior = getEnvVar('SPUR_EVAL_PIPELINE_ACTIVE');
+        removeEnvVar('SPUR_EVAL_PIPELINE_ACTIVE');
+        try {
+            await expect(evalPipeline(['--runs', '0'])).rejects.toThrow('--runs must be >= 1');
+            expect(getEnvVar('SPUR_EVAL_PIPELINE_ACTIVE')).toBe('1');
+        } finally {
+            if (prior === undefined) removeEnvVar('SPUR_EVAL_PIPELINE_ACTIVE');
+            else setEnvVar('SPUR_EVAL_PIPELINE_ACTIVE', prior);
+        }
+    });
 });

@@ -359,22 +359,22 @@ describe('1179 R3 — deprecated state edges', () => {
         }
     });
 
-    test.each([
-        'done',
-        'verifying',
-        'blocked',
-        'backlog',
-    ])('R3/AC2: deprecated → %s is an undeclared edge, refused, and writes nothing', async (target) => {
-        const { featFile, deps, cleanup } = setup('deprecated');
-        try {
-            const before = readFileSync(featFile, 'utf8');
-            await expect(transitionFeatureGuarded(deps, { id: 'F9', to: target })).rejects.toThrow(GuardDeniedError);
-            await expect(transitionFeatureGuarded(deps, { id: 'F9', to: target })).rejects.toThrow(
-                `undeclared edge deprecated → ${target}`,
-            );
-            expect(readFileSync(featFile, 'utf8')).toBe(before);
-        } finally {
-            cleanup();
-        }
-    });
+    test.each(['done', 'verifying', 'blocked', 'backlog'])(
+        'R3/AC2: deprecated → %s is an undeclared edge, refused, and writes nothing',
+        async (target) => {
+            const { featFile, deps, cleanup } = setup('deprecated');
+            try {
+                const before = readFileSync(featFile, 'utf8');
+                await expect(transitionFeatureGuarded(deps, { id: 'F9', to: target })).rejects.toThrow(
+                    GuardDeniedError,
+                );
+                await expect(transitionFeatureGuarded(deps, { id: 'F9', to: target })).rejects.toThrow(
+                    `undeclared edge deprecated → ${target}`,
+                );
+                expect(readFileSync(featFile, 'utf8')).toBe(before);
+            } finally {
+                cleanup();
+            }
+        },
+    );
 });

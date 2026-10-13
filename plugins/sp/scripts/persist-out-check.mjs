@@ -204,10 +204,10 @@ persist-out-check: --from must be an existing worktree directory
   process.exit(main(process.argv.slice(2)));
 }
 export {
-  wbsOfTaskFile,
-  persistOutCheckUsage,
-  main,
-  listObligations,
+  compareTrees,
   defaultInvokeRoot,
-  compareTrees
+  listObligations,
+  main,
+  persistOutCheckUsage,
+  wbsOfTaskFile
 };

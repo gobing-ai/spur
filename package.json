@@ -22,7 +22,7 @@
     ],
     "type": "module",
     "private": true,
-    "packageManager": "bun@1.3.14",
+    "packageManager": "bun@1.4.3",
     "workspaces": {
         "packages": [
             "apps/*",
@@ -50,7 +50,7 @@
             "@orpc/shared": "1.14.4",
             "@orpc/zod": "1.14.4",
             "@commander-js/extra-typings": "^14.0.0",
-            "@types/bun": "1.3.14",
+            "@types/bun": "1.4.3",
             "commander": "^14.0.3",
             "typescript": "6.0.3",
             "yaml": "^2.9.0",
@@ -84,7 +84,7 @@
         "test-post-check": "bun run apps/cli/src/index.ts rule run --preset recommended-post-check --fail-on warning --no-logo",
         "test-cf": "bun run --filter '@gobing-ai/spur-server' test-cf",
         "verify-gha-ci": "act -W .github/workflows/ci.yml -j verify",
-        "test": "bun run bundle:config && bun test --reporter=dots --timeout 20000 ./apps/cli ./apps/server ./apps/web ./apps/desktop ./packages ./plugins ./scripts",
+        "test": "bun run bundle:config && bun test --parallel --reporter=dots --timeout 20000 ./apps/cli ./apps/server ./apps/web ./apps/desktop ./packages ./plugins ./scripts",
         "test:heavy": "bun run bundle:config && bun --config=bunfig.heavy.toml test --reporter=dots .heavy.test.",
         "corpus-check": "bun run apps/cli/src/index.ts task check --corpus",
         "plugin-smoke": "bun scripts/commands/plugin-install-smoke.ts",
@@ -127,7 +127,7 @@
         "@gobing-ai/ts-utils": "catalog:"
     },
     "devDependencies": {
-        "@biomejs/biome": "2.4.16",
+        "@biomejs/biome": "2.5.15",
         "@earendil-works/pi-coding-agent": "0.87.1",
         "@gobing-ai/spur": "workspace:*",
         "@gobing-ai/superskill": "catalog:",
@@ -141,7 +141,7 @@
         "@opentelemetry/semantic-conventions": "1.41.1",
         "@types/bun": "catalog:",
         "drizzle-zod": "0.8.3",
-        "lefthook": "1.13.0",
+        "lefthook": "2.2.2",
         "typescript": "catalog:",
         "yaml": "2.9.0",
         "zod": "4.4.3"

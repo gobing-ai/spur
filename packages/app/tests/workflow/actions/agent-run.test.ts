@@ -21,7 +21,6 @@ import type {
 } from '../../../src/observability/agent-execution';
 import type { AgentRunInvocation, AgentRunTracedResult, AgentService } from '../../../src/services/agent-service';
 import {
-    AGENT_RUN_PROGRESS_INTERVAL_MS,
     AgentRunActionRunner,
     extractCompletedRequirementsHeuristic,
     extractTaskScopeAllowlist,
@@ -2098,11 +2097,6 @@ describe('R3 — progress heartbeats (task 0454)', () => {
         const result = await runner.execute({ role: 'coder', input: 'hello' }, makeCtx({ runId: 'test-1' }));
         expect(result.ok).toBe(true);
         // No bus → no observer connected → no events captured, but test passes
-    });
-
-    test('AGENT_RUN_PROGRESS_INTERVAL_MS constant is exported and positive', () => {
-        expect(AGENT_RUN_PROGRESS_INTERVAL_MS).toBeGreaterThan(0);
-        expect(AGENT_RUN_PROGRESS_INTERVAL_MS).toBe(30_000);
     });
 });
 

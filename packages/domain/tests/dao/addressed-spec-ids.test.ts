@@ -35,4 +35,13 @@ describe('listAddressedSpecIds', () => {
         const adapter = await createDbAdapter({ driver: 'bun-sqlite', url: ':memory:' });
         expect(await listAddressedSpecIds(adapter)).toEqual([]);
     });
+
+    test('any other read failure propagates — only a missing table means "unaddressed"', async () => {
+        const db = {
+            queryAll: async () => {
+                throw new Error('database is locked');
+            },
+        } as unknown as Parameters<typeof listAddressedSpecIds>[0];
+        await expect(listAddressedSpecIds(db)).rejects.toThrow('database is locked');
+    });
 });

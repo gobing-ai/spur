@@ -87,11 +87,28 @@ describe('version-carrier registry', () => {
     });
 
     test('registerCarrierType accepts new hook-only types', async () => {
-        registerCarrierType('test-probe-only', {
+        const unregister = registerCarrierType('test-probe-only', {
             schema: z.object({ type: z.literal('test-probe-only') }),
             probePackageLiteral: () => ({ file: 'VERSION', identifier: 'V' }),
         });
-        const [carrier = null as never] = parseVersionCarriers([{ type: 'test-probe-only' }]);
-        expect(findLiteralProbe([carrier], 'pkgs/lib')).toEqual({ file: 'VERSION', identifier: 'V' });
+        try {
+            const [carrier = null as never] = parseVersionCarriers([{ type: 'test-probe-only' }]);
+            expect(findLiteralProbe([carrier], 'pkgs/lib')).toEqual({ file: 'VERSION', identifier: 'V' });
+        } finally {
+            unregister();
+        }
+        // Regression: the probe type used to leak into the shared registry and change the
+        // "registered: …" list asserted by release-ops.test.ts when both ran in one process.
+        expect(carrierTypeNames()).not.toContain('test-probe-only');
+    });
+
+    test('the registration disposer restores a replaced definition', () => {
+        const before = parseVersionCarriers([{ type: 'ts-literal', file: 'src/v.ts', identifier: 'V' }]);
+        const unregister = registerCarrierType('ts-literal', {
+            schema: z.object({ type: z.literal('ts-literal') }),
+        });
+        unregister();
+        const after = parseVersionCarriers([{ type: 'ts-literal', file: 'src/v.ts', identifier: 'V' }]);
+        expect(after[0]?.def).toBe(before[0]?.def);
     });
 });
