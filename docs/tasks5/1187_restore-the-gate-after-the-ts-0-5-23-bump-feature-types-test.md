@@ -4,7 +4,7 @@ name: "Restore the gate after the ts-* 0.5.23 bump: feature-types test gap and c
 status: done
 template: issue
 created_at: 2026-10-12T23:05:17.602Z
-updated_at: "2026-10-12T23:16:15.226Z"
+updated_at: "2026-10-13T04:56:08.156Z"
 
 done_forced: "true"
 done_reason: "Cross-cutting gate fix raised and resolved in-session: the missing feature-types test is committed (73219e093); the coverage-gate finding was withdrawn as a stale-lcov artifact. No pipeline run applies to an issue record resolved inside the same batch."
@@ -135,16 +135,28 @@ full-gate log for the trees in this batch.
 
 ### Testing
 
-- `bun run test-pre-check` → **All 51 rules passed** (was: `WARNING require-corresponding-test apps/web/src/lib/feature-types.ts`, exit 1).
-- `(cd apps/web && bun test tests/lib/feature-types.test.ts)` → 4 pass, 0 fail, 7 expect() calls.
-- Guard-bites check: adding `driftProbe: string` to `FeatureSummary` produced 4 type errors inside the new test (`:44`, `:45`, `:55` plus the assignability line); reverting left `(cd apps/web && bunx tsc --noEmit)` **clean**.
-- `(cd apps/web && bun test ./apps/web 2>&1)` → 1101 pass, 0 fail (web suite, run for the batch that hit this).
-- `bun run test-post-check` — not a valid standalone check: it reads the last-written `.coverage/lcov.info`, so running it outside `spur-check:tests` (or after a run that died at `test-pre-check`) reports whichever files the last partial run never reached. Observed on one unchanged tree: `packages/contracts/src/shared.ts` at 88%, then two unrelated `packages/domain/src/stage-registry/` files, depending only on which subset had just run. The rule is meaningful only immediately after a full `bun run test`, which the real chain always performs.
-- `packages/contracts/src/shared.ts` in the full-gate coverage tables for 1183 and 1184: **100.00 / 100.00** — no coverage was lost.
+**Pipeline verify results**
+
+- Verdict: PASS (from verdict artifact)
+- Confidence: MEDIUM
+
+| Requirement | Status | Evidence |
+|-------------|--------|----------|
+| R1 | MET | `apps/web/tests/lib/feature-types.test.ts:52-95` is the corresponding test for the declaration-only `apps/web/src/lib/feature-types.ts`; no exclusion was added to `config/rules/structure/test-location.yaml:37`. Verifier-run: `bun run test-pre-check` -> "All 51 rules passed"; `(cd apps/web && bun test tests/lib/feature-types.test.ts)` -> 6 pass / 0 fail / 9 expect(). Fix pass (39b949c68): the former "client -> contract" assignment re-checked the contract -> client direction, so a client-only field went unnoticed; key-set guard added at `apps/web/tests/lib/feature-types.test.ts:22-28`, mutation-checked (adding `extra?: string` to `FeatureSummary` -> TS2322 at line 27, reverted). |
+| R2 | MET | Withdrawn as a stale-lcov artifact, re-confirmed this run: `(cd packages/contracts && bun test --coverage)` -> 89 pass / 0 fail, `src/shared.ts` 100.00 / 100.00; `packages/contracts/src/shared.ts` unchanged by this task. |
+| R3 | MET | `git show 412efed61 -- package.json` moves the ts-rule-engine catalog range one patch (the entry now lives at `package.json:41`, since bumped again); recorded in the task Background as the only real regression. |
+| R4 | MET | Outcome recorded in the task Background and the batch report `.spur/run/G631-batch-report.md` (exists). |
+- Coverage: N/A (verdict-based; verify pipeline does not measure code coverage)
 
 ### Review
 
-<!-- Filled during review: P1-P4 findings, residual risk, and final disposition. -->
+<!-- spur:record-review -->
+
+**SECU findings** (pipeline verify step — verdict: PASS)
+
+| Priority | Dimension | Location | Finding |
+|----------|-----------|----------|----------|
+| P4 | — | — | No findings (verify verdict PASS) |
 
 ### References
 
