@@ -6,7 +6,7 @@ status: backlog
 priority: P2
 tags: []
 created_at: "2026-10-10T05:19:09.284Z"
-updated_at: "2026-10-10T05:19:40.102Z"
+updated_at: "2026-10-13T17:39:11.914Z"
 ---
 
 # H16: Faster default quality gate while keeping per-file 90/90 coverage
@@ -25,7 +25,7 @@ Per measured file, line coverage and function coverage both stay at or above 90 
 
 - Move CLI-spawn, real `bun install`, Chromium/CDP, dev-supervisor, and host-lock proofs off the default `bun test` path that `bun run gate` and `bun run spur-check` use, onto their own script. Keep those proofs runnable. `bun run check` (what CI already invokes) still runs that script, composed from `package.json`, so the proofs are not dropped.
 - Call the script under test in-process. Keep a child process only when that process is the behavior under test, and then one process per file rather than one per assertion.
-- Leave the default suite serial on Bun 1.3.14. Record the bar a later Bun must clear before `bun test --parallel` may become the default: `--no-isolate` actually honored, a quiet-machine run that finishes, beats the serial baseline, and still enforces the per-file 90/90 floor.
+- Default-suite parallelism bar (revised 2026-10-13): Bun 1.4.3 is pinned in `.prototools` and `bun run test` now passes `bun test --parallel` (PR #9), while the `bun run check` path (`test:coverage`, `test:heavy`) stays serial and keeps `bunfig.toml`'s per-file 90/90 floor. Bar state: a parallel run finishing green is evidenced by CI `verify` on `5715de2e8`; `--no-isolate` actually honored, and beats the serial baseline, are **not** measured.
 - Run Biome once on the `bun run gate` path. Make a repeat `bun run typecheck` reuse a cache (incremental or project references) while an error in an imported workspace `.ts` file still fails the check.
 - Narrow `scripts/commands/gate-lock.ts` so the in-process suite does not hold `acquireGateLock` for its whole run. Keep the lock for work that touches shared host state. Do not remove the lock from task 1127.
 - Bring `plugins/sp/scripts/run-summary.ts` back to at least 90 percent function coverage by tests, so a green test run can exit 0. The captured run was 75.00 percent functions and 97.40 percent lines.
@@ -34,7 +34,7 @@ Per measured file, line coverage and function coverage both stay at or above 90 
 
 - Treating coverage instrumentation, the text reporter, or `createMigratedDb` / the 53 CLI migrations as the speed work. Do not set `coverage = false`, drop either reporter, lower either threshold, or add measured sources to `coveragePathIgnorePatterns` to go faster. Task 0587 already measured coverage overhead at about 1.1s / 1.7 percent on the then-~65s suite; a 2026-10-09 `--config` override with `coverage = false` still printed a coverage table, so there is no new on/off number.
 - Task 1150's load fixture and timeout budgets. Task 1127's lock semantics other than the scope of what the default suite holds. H15's shipped `deferQualityGate` policy. H52's shipped "full spur-check at most twice" bound.
-- Enabling `bun test --parallel` on Bun 1.3.14. A full `--parallel --no-isolate` run on this pin wedged (one worker near 99 percent CPU, a zombie child, stdout frozen) and was killed. Do not quote that run as a speedup. `--timings` is absent from `bun test --help` on 1.3.14.
+- Enabling `bun test --parallel` **on the retired Bun 1.3.14 pin** (the default passes `--parallel` on 1.4.3; see the parallelism-bar bullet in Scope). A full `--parallel --no-isolate` run on that pin wedged (one worker near 99 percent CPU, a zombie child, stdout frozen) and was killed. Do not quote that run as a speedup. `--timings` is absent from `bun test --help` on 1.3.14.
 - A new public `spur` noun or verb. Edits to `.github/workflows/`. Reopening done feature D64 (it owns the two-tier check and the catalogue, not this wall-time slice).
 
 ## Acceptance Criteria
@@ -109,3 +109,10 @@ Hierarchy (2026-10-10). Not a new root. D64, H15, and H52 are done, and a live t
 Operator instruction for the filed task: implement every 2026-10-09 gate-performance suggestion except suggestion 3, and keep per-file line coverage and function coverage at or above 90 percent.
 
 ## History
+
+### 2026-10-13 — the parallel default shipped ahead of the recorded bar (PR #9)
+
+`main` (`5715de2e8`) pins Bun 1.4.3 and `package.json` `test` passes `bun test --parallel`; `test:coverage` and `test:heavy` stay serial, so `bun run check` and CI keep the per-file 90/90 floor. The bar this feature recorded was not measured on the way in: `--no-isolate` actually honored, and beats the serial baseline, are outstanding; only "a quiet-machine run that finishes" has CI evidence.
+
+Open conflict for the owner: **R3** still requires the default invocation to *not* pass `--parallel`, so R3 currently fails against `main`. Re-scoping the feature or retiring R3 against a measured bar is an owner decision, not a mechanical sync.
+
