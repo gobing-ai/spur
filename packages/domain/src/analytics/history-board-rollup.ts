@@ -1069,6 +1069,70 @@ export async function historyBoardLoopsFromRollup(
     );
 }
 
+/** One row of the daily history-health loop read (task 1178 R3). */
+export interface HistoryHealthLoopRow {
+    toolName: string;
+    argsDigest: string;
+    repeats: number;
+    sessionId: string;
+    firstSeq: number;
+    lastSeq: number;
+    startedAt: string | null;
+}
+
+/**
+ * The tables the daily history-health read requires. Their ABSENCE means "unavailable"
+ * (nothing was ever rolled up for this database), which is distinct from an existing but
+ * empty table (a genuine measured zero) — the two must never collapse (task 1178 R3).
+ */
+export const HISTORY_HEALTH_TABLES = ['history_board_loop_findings', 'history_board_tool_5m'] as const;
+
+/** True when every {@link HISTORY_HEALTH_TABLES} table exists in the database. */
+export async function historyHealthSchemaPresent(db: DbAdapter): Promise<boolean> {
+    const rows = await db.queryAll<{ name: string }>(
+        `SELECT name FROM sqlite_master WHERE type = 'table' AND name IN (${HISTORY_HEALTH_TABLES.map(() => '?').join(', ')})`,
+        ...HISTORY_HEALTH_TABLES,
+    );
+    return rows.length === HISTORY_HEALTH_TABLES.length;
+}
+
+/**
+ * Read the day's loop findings for the daily report. Filters on the finding's own
+ * `started_at` (untimed findings always included) and keeps the most-repeated first; this
+ * is deliberately not {@link historyBoardLoopsFromRollup}, whose session-stats join and
+ * session-window predicate would drop untimed findings the daily view has always shown.
+ */
+export async function historyBoardDailyLoopFindings(
+    db: DbAdapter,
+    day: string,
+    limit = 20,
+): Promise<HistoryHealthLoopRow[]> {
+    return db.queryAll<HistoryHealthLoopRow>(
+        `SELECT tool_name AS toolName, args_digest AS argsDigest, repeats,
+                session_id AS sessionId, first_seq AS firstSeq, last_seq AS lastSeq,
+                started_at AS startedAt
+         FROM history_board_loop_findings
+         WHERE started_at IS NULL OR started_at LIKE ?
+         ORDER BY repeats DESC LIMIT ?`,
+        `${day}%`,
+        limit,
+    );
+}
+
+/** Sum the day's tool calls and errors from the materialized 5-minute rollup. */
+export async function historyBoardDailyToolTotals(
+    db: DbAdapter,
+    day: string,
+): Promise<{ calls: number; errors: number }> {
+    const row = await db.queryFirst<{ calls: number | null; errors: number | null }>(
+        `SELECT SUM(calls) AS calls, SUM(errors) AS errors
+         FROM history_board_tool_5m
+         WHERE bucket_start LIKE ?`,
+        `${day}%`,
+    );
+    return { calls: row?.calls ?? 0, errors: row?.errors ?? 0 };
+}
+
 /** Read a bounded materialized step ranking. */
 export async function historyBoardRankedStepsFromRollup(
     db: DbAdapter,

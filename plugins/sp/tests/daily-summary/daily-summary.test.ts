@@ -562,6 +562,52 @@ describe('getSpurHistoryHealth', () => {
         expect(result?.remediationProposals.length).toBeGreaterThanOrEqual(1);
         expect(result?.remediationProposals[0]?.command).toContain('spur task create');
     });
+
+    test('returns null when a required history-health table is absent', async () => {
+        const { Database } = await import('bun:sqlite');
+        const db = new Database(dbFile);
+        db.exec(`
+            CREATE TABLE history_board_tool_5m (
+                bucket_start TEXT NOT NULL,
+                calls INTEGER NOT NULL,
+                errors INTEGER NOT NULL
+            );
+            INSERT INTO history_board_tool_5m VALUES ('2026-09-01T10:00', 5, 1);
+        `);
+        db.close();
+
+        const result = await getSpurHistoryHealth('2026-09-01', dbFile);
+        expect(result).toBeNull();
+    });
+
+    test('returns a measured zero, not null, when the required tables exist but are empty', async () => {
+        const { Database } = await import('bun:sqlite');
+        const db = new Database(dbFile);
+        db.exec(`
+            CREATE TABLE history_board_loop_findings (
+                tool_name TEXT NOT NULL,
+                args_digest TEXT NOT NULL,
+                repeats INTEGER NOT NULL,
+                session_id TEXT NOT NULL,
+                first_seq INTEGER NOT NULL,
+                last_seq INTEGER NOT NULL,
+                started_at TEXT
+            );
+            CREATE TABLE history_board_tool_5m (
+                bucket_start TEXT NOT NULL,
+                calls INTEGER NOT NULL,
+                errors INTEGER NOT NULL
+            );
+        `);
+        db.close();
+
+        const result = await getSpurHistoryHealth('2026-09-01', dbFile);
+        expect(result).not.toBeNull();
+        expect(result?.toolCalls).toBe(0);
+        expect(result?.toolErrors).toBe(0);
+        expect(result?.loops).toEqual([]);
+        expect(result?.remediationProposals).toEqual([]);
+    });
 });
 
 // ───────── ensureDir / writeSummary ─────────
@@ -911,6 +957,51 @@ describe('git-backed integration', () => {
             skipCcusage: true,
         });
         expect(summary.historyReportPath).toBeUndefined();
+    });
+
+    test('buildDailySummary omits historyHealth when the history database is unavailable', async () => {
+        const summary = await buildDailySummary({
+            date: todayLocal(),
+            dryRun: true,
+            skipGit: true,
+            skipCcusage: true,
+        });
+        expect(summary.historyHealth).toBeUndefined();
+        expect(summary.platforms).not.toContain('Spur History');
+    });
+
+    test('buildDailySummary keeps a measured-zero history section for empty tables', async () => {
+        const { Database } = await import('bun:sqlite');
+        mkdirSync(join(tmpRepo, '.spur'), { recursive: true });
+        const db = new Database(join(tmpRepo, '.spur', 'spur.db'));
+        db.exec(`
+            CREATE TABLE history_board_loop_findings (
+                tool_name TEXT NOT NULL,
+                args_digest TEXT NOT NULL,
+                repeats INTEGER NOT NULL,
+                session_id TEXT NOT NULL,
+                first_seq INTEGER NOT NULL,
+                last_seq INTEGER NOT NULL,
+                started_at TEXT
+            );
+            CREATE TABLE history_board_tool_5m (
+                bucket_start TEXT NOT NULL,
+                calls INTEGER NOT NULL,
+                errors INTEGER NOT NULL
+            );
+        `);
+        db.close();
+
+        const summary = await buildDailySummary({
+            date: todayLocal(),
+            dryRun: true,
+            skipGit: true,
+            skipCcusage: true,
+        });
+        expect(summary.historyHealth).toBeDefined();
+        expect(summary.historyHealth?.toolCalls).toBe(0);
+        expect(summary.historyHealth?.loops).toEqual([]);
+        expect(summary.platforms).toContain('Spur History');
     });
 });
 

@@ -41,6 +41,18 @@ export async function createMigratedDb(options: CreateDomainDbOptions): Promise<
 }
 
 /**
+ * Open an EXISTING SQLite file WITHOUT running Spur migrations. The daily
+ * history-health reader must tell a schema-absent database from an empty one
+ * (task 1178 R3), so it cannot migrate a missing table into existence; the
+ * caller checks the file exists first (this opener creates a missing file).
+ * `bun:sqlite` stays inside packages/domain (ADR-011).
+ */
+export async function openExistingDb(url: string): Promise<DbAdapter> {
+    const { createDbAdapter } = await import('@gobing-ai/ts-db');
+    return createDbAdapter({ driver: 'bun-sqlite', url });
+}
+
+/**
  * Create a platform-selected DB adapter via ts-runtime and apply Spur's
  * CLI schema migrations (design §2.3, §2.1.1, invariant #9).
  *

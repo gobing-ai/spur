@@ -841,12 +841,12 @@ test('checkHookLayout is clean on its own fixture and reports unreadable hooks.j
     }
 });
 
-test('daily-summary dynamic db import is baselined and the real tree is clean (task 1018 AC3)', () => {
+test('daily-summary db-import exception is retired and the real tree is clean (task 1018 AC3, retired by 1178 R3)', () => {
     const repoRoot = join(import.meta.dir, '..', '..');
     const baselinePath = join(repoRoot, 'config', 'script-placement-baseline.json');
     const loaded = loadPlacementBaseline(baselinePath);
     if (!loaded.baseline) throw new Error(loaded.error ?? 'placement baseline missing');
     const entry = loaded.baseline.entries['plugins/sp/scripts/daily-summary/daily-summary.ts'];
-    expect(entry?.kinds).toEqual(['budget', 'db-import']);
+    expect(entry?.kinds).toEqual(['budget']); // 1178 R3 dropped the dynamic bun:sqlite read
     expect(checkPlacement({ repoRoot, baselinePath })).toEqual([]);
 });

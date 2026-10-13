@@ -3,6 +3,7 @@ import { afterEach, beforeEach, describe, expect, spyOn, test } from 'bun:test';
 import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import { createDbAdapter, type DbAdapter } from '@gobing-ai/ts-db';
 import {
     type AgentRunMeasurement,
     checkRetirementGuard,
@@ -129,7 +130,7 @@ describe('measureAgentRunHistory (0873 R1/R2 shadow-run inputs)', () => {
     test('counts agent.run actions per terminal non-dry run and sums their durations', async () => {
         const { dbPath, close } = await seedDb();
         try {
-            const m = measureAgentRunHistory(dbPath, 'task-pipeline');
+            const m = await measureAgentRunHistory(dbPath, 'task-pipeline');
             expect(m.agentRunCount.runs).toBe(2); // r1 + r2 only (rdry + rstale excluded)
             expect(m.agentRunCount.median).toBe(4);
             expect(m.agentRunCount.min).toBe(4);
@@ -143,7 +144,7 @@ describe('measureAgentRunHistory (0873 R1/R2 shadow-run inputs)', () => {
     test('narrows the replay to specific recorded run ids', async () => {
         const { dbPath, close } = await seedDb();
         try {
-            const m = measureAgentRunHistory(dbPath, 'task-pipeline', ['r1']);
+            const m = await measureAgentRunHistory(dbPath, 'task-pipeline', ['r1']);
             expect(m.agentRunCount.runs).toBe(1);
             expect(m.agentRunCount.median).toBe(4);
         } finally {
@@ -154,7 +155,7 @@ describe('measureAgentRunHistory (0873 R1/R2 shadow-run inputs)', () => {
     test('a run with no agent.run rows counts 0 actions with an unmeasured (null) duration', async () => {
         const { dbPath, close } = await seedDb();
         try {
-            const m = measureAgentRunHistory(dbPath, 'wrapup-pipeline');
+            const m = await measureAgentRunHistory(dbPath, 'wrapup-pipeline');
             expect(m.agentRunCount.runs).toBe(1);
             expect(m.agentRunCount.median).toBe(0);
             expect(m.agentRunDurationMs.median).toBeNull();
@@ -168,7 +169,7 @@ describe('measureAgentRunHistory (0873 R1/R2 shadow-run inputs)', () => {
     test('a workflow with no recorded runs is unmeasured, never 0', async () => {
         const { dbPath, close } = await seedDb();
         try {
-            const m = measureAgentRunHistory(dbPath, 'history-anatomy');
+            const m = await measureAgentRunHistory(dbPath, 'history-anatomy');
             expect(m.agentRunCount.runs).toBe(0);
             expect(m.agentRunCount.median).toBeNull();
         } finally {
@@ -537,16 +538,19 @@ describe('checkWorkflowPromotion (0873 R3/R4 catalogue check)', () => {
 
 describe('checkRetirementGuard (0882 R8, 0866 review finding 6)', () => {
     /** Mixed-history seed: `with-real` has one non-dry + one dry terminal run; `dry-only` has two dry runs. */
-    async function seedRetirementDb(): Promise<{ db: Database; close: () => Promise<void> }> {
+    async function seedRetirementDb(): Promise<{ db: DbAdapter; close: () => Promise<void> }> {
         const dir = await mkdtemp(join(tmpdir(), 'retirement-guard-'));
-        const db = new Database(join(dir, 'test.db'));
-        db.run('CREATE TABLE runs (id TEXT, workflow_name TEXT, status TEXT, metadata_json TEXT)');
-        const ins = db.query('INSERT INTO runs VALUES (?, ?, ?, ?)');
-        ins.run('wr1', 'with-real', 'done', '{}');
-        ins.run('wr2', 'with-real', 'done', '{"dryRun":true}');
-        ins.run('do1', 'dry-only', 'done', '{"dryRun":1}');
-        ins.run('do2', 'dry-only', 'done', '{"dryRun":true}');
-        ins.run('wp1', 'still-present', 'done', '{}');
+        const db = await createDbAdapter({ driver: 'bun-sqlite', url: join(dir, 'test.db') });
+        await db.exec('CREATE TABLE runs (id TEXT, workflow_name TEXT, status TEXT, metadata_json TEXT)');
+        for (const row of [
+            ['wr1', 'with-real', 'done', '{}'],
+            ['wr2', 'with-real', 'done', '{"dryRun":true}'],
+            ['do1', 'dry-only', 'done', '{"dryRun":1}'],
+            ['do2', 'dry-only', 'done', '{"dryRun":true}'],
+            ['wp1', 'still-present', 'done', '{}'],
+        ]) {
+            await db.run('INSERT INTO runs VALUES (?, ?, ?, ?)', ...row);
+        }
         return {
             db,
             close: async () => {
@@ -568,7 +572,7 @@ describe('checkRetirementGuard (0882 R8, 0866 review finding 6)', () => {
         const { db, close } = await seedRetirementDb();
         const dir = await seedWorkflowsDir(['still-present']);
         try {
-            const findings = checkRetirementGuard(db, config([]), dir, new Set(['with-real', 'still-present']));
+            const findings = await checkRetirementGuard(db, config([]), dir, new Set(['with-real', 'still-present']));
             expect(findings).toHaveLength(1);
             expect(findings[0]?.kind).toBe('unrecorded-retirement');
             expect(findings[0]?.detail).toContain('with-real');
@@ -583,7 +587,7 @@ describe('checkRetirementGuard (0882 R8, 0866 review finding 6)', () => {
         const { db, close } = await seedRetirementDb();
         const dir = await seedWorkflowsDir(['still-present']);
         try {
-            const withRecord = checkRetirementGuard(
+            const withRecord = await checkRetirementGuard(
                 db,
                 {
                     schemaVersion: 1,
@@ -596,7 +600,7 @@ describe('checkRetirementGuard (0882 R8, 0866 review finding 6)', () => {
                 new Set(['with-real', 'still-present']),
             );
             expect(withRecord).toHaveLength(0); // recorded decision + dry-only + still-present all pass
-            const neverTracked = checkRetirementGuard(db, config([]), dir, new Set(['still-present']));
+            const neverTracked = await checkRetirementGuard(db, config([]), dir, new Set(['still-present']));
             expect(neverTracked).toHaveLength(0); // ad-hoc run names without a standing definition are out of scope
         } finally {
             await close();

@@ -20,6 +20,9 @@ import type { VisibleItem, VisibleOutcome } from './step-reporter';
 // hand-rolled generated `.mjs` twins import one Node-pure artifact instead of gaining a second
 // bundle or registry. Both modules below are import-free and side-effect free.
 export * from '../services/planning-admission';
+// Task 1178 R2: the pure run-summary aggregation rides the same generated entry, so the plugin's
+// run-summary/transcript adapters reach it without a second bundle or registry.
+export * from './run-summary';
 export * from './task-triage';
 
 // ── Label caps ───────────────────────────────────────────────────────────────

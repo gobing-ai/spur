@@ -53,13 +53,11 @@ function getEnvVars() {
 import { existsSync as existsSync3, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join as join3 } from "node:path";
 
-// plugins/sp/lib/transcript.ts
-import { existsSync as existsSync2, readdirSync } from "node:fs";
-import { homedir } from "node:os";
-import { join as join2 } from "node:path";
-var SESSION_ID = /^[A-Za-z0-9_-]+$/;
-var OPERATOR_TOOLS = new Set(["AskUserQuestion", "ask_user_question"]);
-var PI_ROLES = new Set(["user", "assistant", "toolResult"]);
+// plugins/sp/lib/plan-projection.generated.mjs
+var NON_ABORTING_PREFLIGHT_CODES = new Set([
+  "L4.scenario-unverified",
+  "L4.verifying-incomplete-tasks"
+]);
 var zeroTokens = () => ({ input: 0, cacheCreate: 0, cacheRead: 0, output: 0 });
 function formatDuration(ms) {
   const s = Math.round(ms / 1000);
@@ -78,6 +76,26 @@ function formatTokenSplit(t) {
     return "n/a";
   const nonCached = t.input + t.cacheCreate + t.output;
   return `${formatTokens(nonCached + t.cacheRead)} / ${formatTokens(nonCached)}`;
+}
+var OPERATOR_TOOLS = new Set(["AskUserQuestion", "ask_user_question"]);
+function isCompaction(row) {
+  return row.type === "compaction" || row.type === "system" && row.subtype === "compact_boundary";
+}
+function firstTextContent(row) {
+  const content = row.message?.content;
+  if (typeof content === "string")
+    return content;
+  if (!Array.isArray(content))
+    return;
+  return content.find((b) => b.type === "text")?.text;
+}
+function skillInvocationPrompt(text) {
+  const name = /^\s*<skill name="([^"]+)"/.exec(text)?.[1];
+  if (name === undefined)
+    return;
+  const close = text.lastIndexOf("</skill>");
+  const args = close < 0 ? "" : text.slice(close + "</skill>".length).trim();
+  return args === "" ? `/${name}` : `/${name} ${args}`;
 }
 function promptText(row) {
   if (row.type === "custom_message") {
@@ -102,22 +120,6 @@ function promptText(row) {
   if (!Array.isArray(content) || content.some((b) => b.type === "tool_result"))
     return;
   return content.find((b) => b.type === "text")?.text;
-}
-function firstTextContent(row) {
-  const content = row.message?.content;
-  if (typeof content === "string")
-    return content;
-  if (!Array.isArray(content))
-    return;
-  return content.find((b) => b.type === "text")?.text;
-}
-function skillInvocationPrompt(text) {
-  const name = /^\s*<skill name="([^"]+)"/.exec(text)?.[1];
-  if (name === undefined)
-    return;
-  const close = text.lastIndexOf("</skill>");
-  const args = close < 0 ? "" : text.slice(close + "</skill>".length).trim();
-  return args === "" ? `/${name}` : `/${name} ${args}`;
 }
 function sumTokens(all) {
   const total = zeroTokens();
@@ -190,72 +192,14 @@ function accumulate(acc, row, ts) {
     });
   }
 }
-function isCompaction(row) {
-  return row.type === "compaction" || row.type === "system" && row.subtype === "compact_boundary";
-}
-function sniffFormat(rows) {
-  for (const row of rows) {
-    if (row.type === "message" && PI_ROLES.has(row.message?.role ?? ""))
-      return "pi";
-    if (row.type === "user" || row.type === "assistant")
-      return "claude";
-  }
-  return "unknown";
-}
-function parseRows(lines) {
-  const rows = [];
-  let skippedLines = 0;
-  for (const line of lines) {
-    if (!line.trim())
-      continue;
-    let row;
-    try {
-      row = JSON.parse(line);
-    } catch {
-      skippedLines++;
-      continue;
-    }
-    const ts = row.timestamp ? Date.parse(row.timestamp) : Number.NaN;
-    if (!Number.isNaN(ts))
-      rows.push([row, ts]);
-  }
-  return { rows, skippedLines, format: sniffFormat(rows.map(([r]) => r)) };
-}
-function resolveTranscript(env, projectsRoot = join2(homedir(), ".claude", "projects"), override) {
-  if (override)
-    return existsSync2(override) ? { ok: true, path: override } : { ok: false, reason: "no transcript" };
-  const id = env.CLAUDE_CODE_SESSION_ID;
-  if (!id) {
-    const piFile = env.PI_SESSION_FILE;
-    if (piFile !== undefined && piFile !== "") {
-      return existsSync2(piFile) ? { ok: true, path: piFile } : { ok: false, reason: `PI_SESSION_FILE ${piFile} does not exist` };
-    }
-    return {
-      ok: false,
-      reason: "no host session id; pass --transcript <path> (pi: ~/.pi/agent/sessions/<cwd-slug>/<file>.jsonl, " + "or set PI_SESSION_FILE)"
-    };
-  }
-  if (!SESSION_ID.test(id))
-    return { ok: false, reason: "refusing a session id with path characters" };
-  if (!existsSync2(projectsRoot))
-    return { ok: false, reason: `no transcript root ${projectsRoot}` };
-  for (const dir of readdirSync(projectsRoot)) {
-    const path = join2(projectsRoot, dir, `${id}.jsonl`);
-    if (existsSync2(path))
-      return { ok: true, path };
-  }
-  return { ok: false, reason: `no transcript for session ${id}` };
-}
-
-// plugins/sp/lib/run-summary-core.ts
 var IDLE_GAP_MS = 300000;
 var SHELL_TOOLS = new Set(["bash", "shell", "exec", "exec_command", "run_command", "command"]);
 var SUBAGENT_TOOLS = new Set(["agent", "task", "invoke_subagent", "subagent", "dispatch_agent"]);
-var OPERATOR_TOOLS2 = new Set(["askuserquestion", "ask_user_question"]);
+var LOWERCASE_OPERATOR_TOOLS = new Set(["askuserquestion", "ask_user_question"]);
 var ACTOR_PRECEDENCE = ["operator", "subagent", "shell", "other"];
 function actorOf(tool) {
   const t = tool.toLowerCase().replace(/[^a-z_]/g, "");
-  if (OPERATOR_TOOLS2.has(t))
+  if (LOWERCASE_OPERATOR_TOOLS.has(t))
     return "operator";
   if (SUBAGENT_TOOLS.has(t))
     return "subagent";
@@ -405,7 +349,8 @@ function summaryRow(stage, status, span, measured) {
     token: formatTokenSplit(measured ? span.tokens : null)
   };
 }
-function buildRunSummary(lines, inputs, since, until) {
+function buildRunSummary(rows, inputs, opts = {}) {
+  const { since, until } = opts;
   const windows = [];
   for (const { label, progress } of inputs) {
     const states = (progress.states ?? []).flatMap((s) => {
@@ -431,7 +376,6 @@ function buildRunSummary(lines, inputs, since, until) {
     }
   }
   windows.sort((a, b) => a.start - b.start);
-  const { rows, skippedLines } = parseRows(lines);
   const measure = (start, end) => {
     const acc = newAcc(start);
     for (const [row, ts] of rows)
@@ -479,9 +423,87 @@ function buildRunSummary(lines, inputs, since, until) {
     total,
     actors: actorSplit(rows, totalStart, totalEnd),
     gate: { ms: null, reason: "no matching check receipt" },
-    skippedLines
+    skippedLines: opts.skippedLines ?? 0
   };
 }
+var SENSITIVE_PREFIXES = ["drizzle/", "packages/config/", ".github/", "plugins/sp/hooks/"];
+var SENSITIVE_GLOBS = ["apps/server/src/**/auth*", "**/*secret*", "**/*.sql"];
+function globToRegex(glob) {
+  const escaped = glob.replace(/[.+^${}()|[\]\\]/g, "\\$&").replaceAll("**/", "\x00").replaceAll("**", "\x01").replaceAll("*", "[^/]*").replaceAll("\x00", "(?:.*/)?").replaceAll("\x01", ".*");
+  return new RegExp(`^${escaped}$`, "s");
+}
+var SENSITIVE_MATCHERS = [
+  ...SENSITIVE_PREFIXES.map((prefix) => ({
+    label: prefix,
+    test: (path) => path.startsWith(prefix)
+  })),
+  ...SENSITIVE_GLOBS.map((glob) => {
+    const regex = globToRegex(glob);
+    return { label: glob, test: (path) => regex.test(path) };
+  })
+];
+
+// plugins/sp/lib/transcript.ts
+import { existsSync as existsSync2, readdirSync } from "node:fs";
+import { homedir } from "node:os";
+import { join as join2 } from "node:path";
+var SESSION_ID = /^[A-Za-z0-9_-]+$/;
+var PI_ROLES = new Set(["user", "assistant", "toolResult"]);
+function sniffFormat(rows) {
+  for (const row of rows) {
+    if (row.type === "message" && PI_ROLES.has(row.message?.role ?? ""))
+      return "pi";
+    if (row.type === "user" || row.type === "assistant")
+      return "claude";
+  }
+  return "unknown";
+}
+function parseRows(lines) {
+  const rows = [];
+  let skippedLines = 0;
+  for (const line of lines) {
+    if (!line.trim())
+      continue;
+    let row;
+    try {
+      row = JSON.parse(line);
+    } catch {
+      skippedLines++;
+      continue;
+    }
+    const ts = row.timestamp ? Date.parse(row.timestamp) : Number.NaN;
+    if (!Number.isNaN(ts))
+      rows.push([row, ts]);
+  }
+  return { rows, skippedLines, format: sniffFormat(rows.map(([r]) => r)) };
+}
+function resolveTranscript(env, projectsRoot = join2(homedir(), ".claude", "projects"), override) {
+  if (override)
+    return existsSync2(override) ? { ok: true, path: override } : { ok: false, reason: "no transcript" };
+  const id = env.CLAUDE_CODE_SESSION_ID;
+  if (!id) {
+    const piFile = env.PI_SESSION_FILE;
+    if (piFile !== undefined && piFile !== "") {
+      return existsSync2(piFile) ? { ok: true, path: piFile } : { ok: false, reason: `PI_SESSION_FILE ${piFile} does not exist` };
+    }
+    return {
+      ok: false,
+      reason: "no host session id; pass --transcript <path> (pi: ~/.pi/agent/sessions/<cwd-slug>/<file>.jsonl, " + "or set PI_SESSION_FILE)"
+    };
+  }
+  if (!SESSION_ID.test(id))
+    return { ok: false, reason: "refusing a session id with path characters" };
+  if (!existsSync2(projectsRoot))
+    return { ok: false, reason: `no transcript root ${projectsRoot}` };
+  for (const dir of readdirSync(projectsRoot)) {
+    const path = join2(projectsRoot, dir, `${id}.jsonl`);
+    if (existsSync2(path))
+      return { ok: true, path };
+  }
+  return { ok: false, reason: `no transcript for session ${id}` };
+}
+
+// plugins/sp/lib/run-summary-core.ts
 function renderSummaryMarkdown(summary) {
   const line = (r, bold = false) => {
     const stage = bold ? `**${r.stage}**` : r.stage;
@@ -528,9 +550,13 @@ function writeCloseSummary(run, opts = {}) {
     const resolved = resolveTranscript(opts.env ?? getEnvVars(), opts.projectsRoot);
     if (!resolved.ok)
       return na(resolved.reason);
-    const lines = readFileSync(resolved.path, "utf8").split(`
-`);
-    const summary = buildRunSummary(lines, [{ progress: run.progress }], run.startedAt, run.completedAt);
+    const { rows, skippedLines } = parseRows(readFileSync(resolved.path, "utf8").split(`
+`));
+    const summary = buildRunSummary(rows, [{ progress: run.progress }], {
+      since: run.startedAt,
+      until: run.completedAt,
+      skippedLines
+    });
     if (summary.rows.length === 0)
       return na("no timed attempts");
     mkdirSync(runDir, { recursive: true });

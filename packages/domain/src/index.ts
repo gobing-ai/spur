@@ -19,6 +19,7 @@ export {
     findActiveSchedulerCustomJob,
     findPendingQueueJob,
     type JobQueue,
+    openExistingDb,
     type PendingQueueJob,
     type QueueConsumer,
     type QueueConsumerConfig,

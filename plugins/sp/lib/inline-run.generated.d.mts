@@ -21,6 +21,7 @@ export declare const writeInlineRunOutcome: typeof import('@gobing-ai/spur-app')
 export declare const computeProofInputFingerprint: typeof import('@gobing-ai/spur-app').computeProofInputFingerprint;
 export declare const readProofInputContents: typeof import('@gobing-ai/spur-app').readProofInputContents;
 export declare const createWorkflowActionTraceWriter: typeof import('@gobing-ai/spur-app').createWorkflowActionTraceWriter;
+export declare const readHistoryHealth: typeof import('@gobing-ai/spur-app').readHistoryHealth;
 export declare function splitLaunchCommand(value: string, label: string): { command: string; leadingArgs: string[] } | { error: string };
 export declare const createFeatureLookup: typeof import('@gobing-ai/spur-app').createFeatureLookup;
 export declare const runFeatureVerification: typeof import('@gobing-ai/spur-app').runFeatureVerification;

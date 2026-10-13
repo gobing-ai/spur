@@ -22,6 +22,7 @@ import {
     historyBoardRollupsFresh,
     RunSessionDao,
 } from '@gobing-ai/spur-domain';
+import { createDbAdapter } from '@gobing-ai/ts-db';
 import {
     assertPiImporterSafe,
     DEFAULT_SOURCE_TIMEOUT_MS,
@@ -29,6 +30,7 @@ import {
     type HistoryServiceContext,
     MIN_SAFE_PI_BASH_IMPORTER_VERSION,
     parseImporterVersion,
+    readHistoryHealth,
     UnsafeHistoryImporterError,
     writeArtifact,
 } from '../../src/services/history-service';
@@ -1843,6 +1845,92 @@ describe('import scope reporting (task 1144 R1/R2)', () => {
             // The design's failure inventory: the walk must not dominate the import. The
             // whole no-op import (walk + 5000 empty-file scans) stays well under this bound.
             expect(elapsedMs).toBeLessThan(5000);
+        } finally {
+            rmSync(dir, { recursive: true, force: true });
+        }
+    });
+});
+
+describe('HistoryService.readHistoryHealth (task 1178 R3)', () => {
+    test('returns null (unavailable) when a required table is absent', async () => {
+        const db = await createDbAdapter({ driver: 'bun-sqlite', url: ':memory:' });
+        try {
+            const svc = new HistoryService(makeCtx());
+            expect(await svc.readHistoryHealth({ date: '2026-09-01', db })).toBeNull();
+        } finally {
+            db.close();
+        }
+    });
+
+    test('returns a measured zero (not null) when the tables exist but are empty', async () => {
+        const db = await createMigratedDb({ url: ':memory:' });
+        try {
+            const svc = new HistoryService(makeCtx());
+            const reading = await svc.readHistoryHealth({ date: '2026-09-01', db });
+            expect(reading).toEqual({ toolCalls: 0, toolErrors: 0, errorRatePct: 0, loops: [] });
+        } finally {
+            db.close();
+        }
+    });
+
+    test('filters loops and tool totals to the requested day', async () => {
+        const db = await createMigratedDb({ url: ':memory:' });
+        try {
+            for (const [startedAt, repeats, tool] of [
+                ['2026-09-01T10:00:00Z', 4, 'grep'],
+                ['2026-09-02T10:00:00Z', 9, 'read'],
+                [null, 3, 'bash'],
+            ] as const) {
+                await db.run(
+                    `INSERT INTO history_board_loop_findings (source, session_id, model, started_at, tool_name, args_digest, repeats, first_seq, last_seq)
+                     VALUES ('claude', ?, 'm', ?, ?, 'digest', ?, 1, ?)`,
+                    `s-${tool}`,
+                    startedAt,
+                    tool,
+                    repeats,
+                    repeats,
+                );
+            }
+            for (const [bucket, calls, errors] of [
+                ['2026-09-01T10:00:00Z', 100, 20],
+                ['2026-09-02T10:00:00Z', 7, 7],
+            ] as const) {
+                await db.run(
+                    `INSERT INTO history_board_tool_5m (bucket_start, session_id, source, model, tool_name, skill_name, fresh_input_tokens_alloc, cache_read_tokens_alloc, output_tokens_alloc, calls, errors, duration_ms)
+                     VALUES (?, 's', 'claude', 'm', 'tool', '', 0, 0, 0, ?, ?, 0)`,
+                    bucket,
+                    calls,
+                    errors,
+                );
+            }
+
+            const svc = new HistoryService(makeCtx());
+            const reading = await svc.readHistoryHealth({ date: '2026-09-01', db });
+            expect(reading?.toolCalls).toBe(100);
+            expect(reading?.toolErrors).toBe(20);
+            expect(reading?.errorRatePct).toBeCloseTo(20);
+            // Untimed findings stay in the daily view; another day's finding and tool bucket drop out.
+            expect(reading?.loops.map((l) => l.toolName).sort()).toEqual(['bash', 'grep']);
+            expect(reading?.loops.find((l) => l.toolName === 'grep')?.repeats).toBe(4);
+        } finally {
+            db.close();
+        }
+    });
+
+    test('readHistoryHealth(dbPath) reads a real file database', async () => {
+        const dir = mkdtempSync(join(tmpdir(), 'spur-hist-health-'));
+        const dbPath = join(dir, 'spur.db');
+        const db = await createMigratedDb({ url: dbPath });
+        await db.run(
+            `INSERT INTO history_board_tool_5m (bucket_start, session_id, source, model, tool_name, skill_name, fresh_input_tokens_alloc, cache_read_tokens_alloc, output_tokens_alloc, calls, errors, duration_ms)
+             VALUES ('2026-09-01T10:00:00Z', 's', 'claude', 'm', 'tool', '', 0, 0, 0, 5, 1, 0)`,
+        );
+        db.close();
+        try {
+            const reading = await readHistoryHealth({ date: '2026-09-01', dbPath });
+            expect(reading?.toolCalls).toBe(5);
+            expect(reading?.toolErrors).toBe(1);
+            expect(await readHistoryHealth({ date: '2026-09-01', dbPath: join(dir, 'missing.db') })).toBeNull();
         } finally {
             rmSync(dir, { recursive: true, force: true });
         }

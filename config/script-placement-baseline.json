@@ -22,8 +22,8 @@
             "exempt": true
         },
         "plugins/sp/scripts/daily-summary/daily-summary.ts": {
-            "kinds": ["budget", "db-import"],
-            "reason": "Keep (daily-summary/, plan \u00a72); read-only history-health query via dynamic bun:sqlite import (task 1018)"
+            "kinds": ["budget"],
+            "reason": "Keep (daily-summary/, plan \u00a72); read-only history-health reads via the app service (task 1178)"
         },
         "plugins/sp/hooks/pi/guard-extension.ts": {
             "kinds": ["budget"],

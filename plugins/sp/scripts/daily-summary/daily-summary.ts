@@ -11,7 +11,9 @@
 import { spawn, spawnSync } from 'node:child_process';
 import { existsSync, mkdirSync, readlinkSync, writeFileSync } from 'node:fs';
 import { dirname, isAbsolute, join, resolve } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { getEnvVar, getEnvVars } from '../../lib/env';
+import { loadInlineApp, resolveAppEntry } from '../../lib/inline-run-app';
 
 // ─── In-script logger ────────────────────────────────────────────────────────
 
@@ -307,113 +309,85 @@ export async function getCcusageData(date: string): Promise<CcusageData | null> 
 
 // ─── Spur History Health Integration ──────────────────────────────────────────
 
+/** The day's raw history health read back across the generated inline app entry (task 1178 R3). */
+interface HistoryHealthReading {
+    toolCalls: number;
+    toolErrors: number;
+    errorRatePct: number;
+    loops: Array<{
+        toolName: string;
+        argsDigest: string;
+        repeats: number;
+        sessionId: string;
+        firstSeq: number;
+        lastSeq: number;
+        startedAt: string | null;
+    }>;
+}
+
+/** The generated inline app entry's history-health export. */
+interface InlineHistoryApp {
+    readHistoryHealth(input: { date: string; dbPath: string }): Promise<HistoryHealthReading | null>;
+}
+
+/**
+ * Compose the daily report's health summary from the app reading. `wastedTokens` stays an
+ * explicit `repeats * 250` estimate; remediation proposals stay plain text (task 1178 R3).
+ */
+function composeHistoryHealth(reading: HistoryHealthReading): HistoryHealthSummary {
+    const loops: HistoryLoopFinding[] = reading.loops.map((row) => ({
+        toolName: row.toolName,
+        argsDigest: row.argsDigest || 'repeated execution',
+        repeats: row.repeats,
+        sessionId: row.sessionId,
+        fromSeq: row.firstSeq,
+        toSeq: row.lastSeq,
+        wastedTokens: row.repeats * 250,
+    }));
+
+    const remediationProposals: Array<{ key: string; title: string; command: string }> = [];
+    for (const lp of loops.slice(0, 5)) {
+        const cleanTool = lp.toolName.replace(/[^a-zA-Z0-9_-]/g, '_');
+        const key = `repetition:${cleanTool}:${lp.argsDigest.slice(0, 16)}`;
+        const title = `Break execution loop in ${lp.toolName} (${lp.repeats} repeats)`;
+        const command = `spur task create "<title>" --feature <id> && spur task update <wbs> --section Plan --from-file <path>`;
+        remediationProposals.push({ key, title, command });
+    }
+    if (reading.toolCalls > 0 && reading.errorRatePct > 10) {
+        remediationProposals.push({
+            key: 'reliability:tooling:high-error-rate',
+            title: `Investigate high tool error rate (${reading.errorRatePct.toFixed(1)}%)`,
+            command: `spur task create "<title>" --feature <id> && spur task update <wbs> --section Plan --from-file <path>`,
+        });
+    }
+
+    return {
+        toolCalls: reading.toolCalls,
+        toolErrors: reading.toolErrors,
+        errorRatePct: reading.errorRatePct,
+        loops,
+        redundantCalls: loops.reduce((acc, l) => acc + Math.max(0, l.repeats - 1), 0),
+        wastedTokens: loops.reduce((acc, l) => acc + l.wastedTokens, 0),
+        remediationProposals,
+    };
+}
+
+/**
+ * Read the day's history health through the app owner (task 1178 R3): this adapter opens no
+ * SQLite and carries no SQL. A missing database file or required table returns `null`
+ * (unavailable); an existing empty table returns a measured-zero summary, never `n/a`.
+ */
 export async function getSpurHistoryHealth(
     date: string,
     dbPath = '.spur/spur.db',
 ): Promise<HistoryHealthSummary | null> {
     try {
         const resolvedPath = resolve(process.cwd(), dbPath);
-        if (!existsSync(resolvedPath)) {
-            return null;
-        }
-
-        const { Database } = await import('bun:sqlite');
-        const db = new Database(resolvedPath, { readonly: true });
-
-        try {
-            // 1. Query execution loop findings
-            const loopTable = db
-                .query<{ name: string }, [string]>("SELECT name FROM sqlite_master WHERE type = 'table' AND name = ?")
-                .get('history_board_loop_findings');
-
-            let loops: HistoryLoopFinding[] = [];
-            if (loopTable) {
-                const rows = db
-                    .query<
-                        {
-                            tool_name: string;
-                            args_digest: string;
-                            repeats: number;
-                            session_id: string;
-                            first_seq: number;
-                            last_seq: number;
-                            started_at: string | null;
-                        },
-                        [string]
-                    >(
-                        `SELECT tool_name, args_digest, repeats, session_id, first_seq, last_seq, started_at
-                         FROM history_board_loop_findings
-                         WHERE started_at IS NULL OR started_at LIKE ?
-                         ORDER BY repeats DESC
-                         LIMIT 20`,
-                    )
-                    .all(`${date}%`);
-
-                loops = rows.map((r) => ({
-                    toolName: r.tool_name,
-                    argsDigest: r.args_digest || 'repeated execution',
-                    repeats: r.repeats,
-                    sessionId: r.session_id,
-                    fromSeq: r.first_seq,
-                    toSeq: r.last_seq,
-                    wastedTokens: r.repeats * 250,
-                }));
-            }
-
-            // 2. Query tool calls and errors
-            let toolCalls = 0;
-            let toolErrors = 0;
-            const toolTable = db
-                .query<{ name: string }, [string]>("SELECT name FROM sqlite_master WHERE type = 'table' AND name = ?")
-                .get('history_board_tool_5m');
-
-            if (toolTable) {
-                const stats = db
-                    .query<{ calls: number | null; errors: number | null }, [string]>(
-                        `SELECT SUM(calls) AS calls, SUM(errors) AS errors
-                         FROM history_board_tool_5m
-                         WHERE bucket_start LIKE ?`,
-                    )
-                    .get(`${date}%`);
-
-                toolCalls = stats?.calls ?? 0;
-                toolErrors = stats?.errors ?? 0;
-            }
-
-            const redundantCalls = loops.reduce((acc, l) => acc + Math.max(0, l.repeats - 1), 0);
-            const wastedTokens = loops.reduce((acc, l) => acc + l.wastedTokens, 0);
-            const errorRatePct = toolCalls > 0 ? (toolErrors / toolCalls) * 100 : 0;
-
-            // 3. Generate auto-healing remediation proposals
-            const remediationProposals: Array<{ key: string; title: string; command: string }> = [];
-
-            for (const lp of loops.slice(0, 5)) {
-                const cleanTool = lp.toolName.replace(/[^a-zA-Z0-9_-]/g, '_');
-                const key = `repetition:${cleanTool}:${lp.argsDigest.slice(0, 16)}`;
-                const title = `Break execution loop in ${lp.toolName} (${lp.repeats} repeats)`;
-                const command = `spur task create "<title>" --feature <id> && spur task update <wbs> --section Plan --from-file <path>`;
-                remediationProposals.push({ key, title, command });
-            }
-
-            if (toolCalls > 0 && errorRatePct > 10) {
-                const key = 'reliability:tooling:high-error-rate';
-                const title = `Investigate high tool error rate (${errorRatePct.toFixed(1)}%)`;
-                const command = `spur task create "<title>" --feature <id> && spur task update <wbs> --section Plan --from-file <path>`;
-                remediationProposals.push({ key, title, command });
-            }
-
-            return {
-                toolCalls,
-                toolErrors,
-                errorRatePct,
-                loops,
-                redundantCalls,
-                wastedTokens,
-                remediationProposals,
-            };
-        } finally {
-            db.close();
-        }
+        const { app } = await loadInlineApp<InlineHistoryApp>(getEnvVar('SPUR_BIN') ?? '', resolveAppEntry, [
+            'readHistoryHealth',
+        ]);
+        const reading = await app.readHistoryHealth({ date, dbPath: resolvedPath });
+        return reading === null ? null : composeHistoryHealth(reading);
     } catch {
         return null;
     }
@@ -815,9 +789,11 @@ export async function buildDailySummary(options: CliOptions): Promise<DailySumma
         result.gitActivity = gitActivity;
     }
 
-    // Query Spur history health (loops, tool errors, and auto-healing proposals)
+    // Query Spur history health (loops, tool errors, and auto-healing proposals). A measured
+    // empty day is a real zero and keeps its "Clean" section; an unavailable database (missing
+    // file/table) stays absent — absence and zero never collapse (task 1178 R3).
     const historyHealth = await getSpurHistoryHealth(options.date);
-    if (historyHealth && (historyHealth.loops.length > 0 || historyHealth.toolCalls > 0)) {
+    if (historyHealth) {
         result.historyHealth = historyHealth;
         platforms.push('Spur History');
     }
@@ -826,6 +802,15 @@ export async function buildDailySummary(options: CliOptions): Promise<DailySumma
 }
 
 export async function main(): Promise<void> {
+    // The generated app entry read by getSpurHistoryHealth needs Bun (SQLite); the installed
+    // `.mjs` twin may be launched with plain node, so re-enter Bun before any app import.
+    if (!process.versions.bun) {
+        const child = spawnSync('bun', [fileURLToPath(import.meta.url), ...process.argv.slice(2)], {
+            stdio: 'inherit',
+        });
+        if (child.error) console.error(`daily-summary requires Bun on PATH: ${child.error.message}`);
+        process.exit(child.status ?? 1);
+    }
     const options = parseArgs();
 
     logger.info(`Generating daily summary for ${options.date}...`);

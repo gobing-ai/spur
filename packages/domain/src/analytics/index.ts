@@ -121,6 +121,7 @@ export {
 } from './history-board-marts';
 export {
     HISTORY_BOARD_ACTIVITY_DAYS,
+    HISTORY_HEALTH_TABLES,
     type HistoryBoardAggregateRow,
     type HistoryBoardDailyRollupRow,
     type HistoryBoardKpiTrendRow,
@@ -137,8 +138,11 @@ export {
     type HistoryBoardSourceModelRow,
     type HistoryBoardSourceRollupRow,
     type HistoryBoardSummaryRollup,
+    type HistoryHealthLoopRow,
     hasHistoryBoardRollupRows,
     historyBoardBucketsFromRollup,
+    historyBoardDailyLoopFindings,
+    historyBoardDailyToolTotals,
     historyBoardDatabaseBytes,
     historyBoardHeavySessionsFromRollup,
     historyBoardHistoryVersion,
@@ -151,6 +155,7 @@ export {
     historyBoardSkillBreakdownFromRollup,
     historyBoardSourcesFromRollup,
     historyBoardSummaryFromRollup,
+    historyHealthSchemaPresent,
     latestHistoryImportedAt,
     markHistoryBoardRollupsRefreshed,
     ROLLUP_DEFINITION_VERSION,
@@ -269,3 +274,16 @@ export {
     type WatermarkFilter,
     type WatermarkQueryOptions,
 } from './watermark';
+export {
+    type AgentRunHistoryRow,
+    readAgentRunHistoryRows,
+    readRealTerminalRunCounts,
+    readWorkflowRuns,
+    readWorkflowStateActionRows,
+    readWorkflowStateVisitRows,
+    TERMINAL_RUN_STATUSES,
+    type WorkflowRunCountRow,
+    type WorkflowRunRow,
+    type WorkflowStateActionRow,
+    type WorkflowStateVisitRow,
+} from './workflow-measurements';

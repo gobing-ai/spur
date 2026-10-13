@@ -2,7 +2,7 @@ import { describe, expect, test } from 'bun:test';
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { promptText, type Row } from '../lib/transcript';
+import { parseRows, promptText, type Row } from '../lib/transcript';
 import {
     actorSplit,
     buildRunSummary,
@@ -63,9 +63,12 @@ function runFixture(): string[] {
     ].map((r) => JSON.stringify(r));
 }
 
+/** The plugin normalizes the host transcript once; the app aggregation takes the rows. */
+const runRows = (lines: string[] = runFixture()): [Row, number][] => parseRows(lines).rows;
+
 describe('buildRunSummary', () => {
     const summary = buildRunSummary(
-        runFixture(),
+        runRows(),
         [
             {
                 progress: progress('r1', [
@@ -75,7 +78,7 @@ describe('buildRunSummary', () => {
                 ]),
             },
         ],
-        at(0),
+        { since: at(0) },
     );
     const row = (stage: string) => summary.rows.find((r) => r.stage === stage);
 
@@ -97,7 +100,7 @@ describe('buildRunSummary', () => {
     });
 
     test('several progress files give one labelled row per run (F14)', () => {
-        const multi = buildRunSummary(runFixture(), [
+        const multi = buildRunSummary(runRows(), [
             { label: '1074', progress: progress('r1', [['implement', 1, 'passed', 10, 30]]) },
             { label: '1075', progress: progress('r2', [['verify', 1, 'failed', 60, 80]]) },
         ]);
@@ -109,11 +112,11 @@ describe('buildRunSummary', () => {
     });
 
     test('a progress file without timed attempts fails loudly (F15)', () => {
-        expect(() => buildRunSummary(runFixture(), [{ progress: { runId: 'r', states: [] } }])).toThrow(/no timed/);
+        expect(() => buildRunSummary(runRows(), [{ progress: { runId: 'r', states: [] } }])).toThrow(/no timed/);
     });
 
     test('overlapping parallel runs never produce a negative overhead (F16)', () => {
-        const par = buildRunSummary(runFixture(), [
+        const par = buildRunSummary(runRows(), [
             { label: 'a', progress: progress('r1', [['implement', 1, 'passed', 10, 80]]) },
             { label: 'b', progress: progress('r2', [['implement', 1, 'passed', 10, 80]]) },
         ]);
@@ -359,6 +362,62 @@ describe('1146 — writeCloseSummary (R1/AC1/AC2)', () => {
             rmSync(dir, { recursive: true, force: true });
         }
     });
+
+    test('AC1: a resolved host transcript writes the measured table and its .json sibling', () => {
+        // 1178 gate fix: this path was never exercised — the previous "success" assertion also held
+        // for the n/a branch (both write the same .md path), so `writeCloseSummary`'s body sat
+        // uncovered and failed the gate's per-file coverage threshold. PI_SESSION_FILE is the
+        // explicit-path route through `resolveTranscript` (1138 R1), so no Claude id is needed.
+        const dir = mkdtempSync(join(tmpdir(), 'run-summary-ok-'));
+        try {
+            const transcript = join(dir, 'session.jsonl');
+            writeFileSync(
+                transcript,
+                `${JSON.stringify({
+                    type: 'user',
+                    timestamp: '2026-10-09T00:00:00.000Z',
+                    message: { role: 'user', content: 'go' },
+                })}\n${JSON.stringify({
+                    type: 'assistant',
+                    timestamp: '2026-10-09T00:02:00.000Z',
+                    message: {
+                        id: 'm1',
+                        content: [{ type: 'tool_use', id: 't1', name: 'Bash' }],
+                        usage: {
+                            input_tokens: 10,
+                            cache_creation_input_tokens: 1,
+                            cache_read_input_tokens: 2,
+                            output_tokens: 5,
+                        },
+                    },
+                })}\n`,
+            );
+            const rel = writeCloseSummary(run('2026-10-09T00:00:00.000Z'), {
+                env: { PI_SESSION_FILE: transcript },
+                projectsRoot: dir,
+                cwd: dir,
+            });
+            const body = readFileSync(join(dir, rel), 'utf8');
+            expect(body).not.toContain('Execution summary: n/a');
+            expect(body).toContain('| implement |');
+            const json = JSON.parse(readFileSync(join(dir, '.spur', 'run', 'run_close-summary.json'), 'utf8'));
+            expect(json.runId).toBe('run_close');
+            expect(json.available).toBe(true);
+        } finally {
+            rmSync(dir, { recursive: true, force: true });
+        }
+    });
+
+    test('AC2: an unreadable check receipt renders n/a instead of throwing', () => {
+        const dir = mkdtempSync(join(tmpdir(), 'run-summary-receipt-'));
+        try {
+            mkdirSync(join(dir, '.spur', 'run'), { recursive: true });
+            writeFileSync(join(dir, '.spur', 'run', 'run_x-check-receipt.json'), '{ not json');
+            expect(gateFromReceipt(dir, 'run_x')).toEqual({ ms: null, reason: 'check receipt is unreadable' });
+        } finally {
+            rmSync(dir, { recursive: true, force: true });
+        }
+    });
 });
 
 /** 1146 R3/AC5 — the CLI surface of `--rollup`, plus the usage guards main() owns. */
@@ -579,10 +638,12 @@ describe('1151 — a pi skill-invocation wrapper on a window boundary', () => {
     test('F24/R6: the wrapper row is a prompt, and the windowed summary is unchanged by it', () => {
         // The classification itself: this fails on the pre-1151 code, which dropped wrapper rows.
         expect(promptText(wrapper(30))).toBe('/sp-dev-runall --tasks 1,2');
-        const without = buildRunSummary(runFixture(), progressInput, at(0));
+        const without = buildRunSummary(runRows(), progressInput, { since: at(0) });
         // Placed exactly at the implement window's END boundary — the position where a row treated
         // as activity instead of a prompt would be accumulated into that window.
-        const withWrapper = buildRunSummary([...runFixture(), JSON.stringify(wrapper(30))], progressInput, at(0));
+        const withWrapper = buildRunSummary(runRows([...runFixture(), JSON.stringify(wrapper(30))]), progressInput, {
+            since: at(0),
+        });
         expect(withWrapper.rows).toEqual(without.rows);
         expect(withWrapper.total).toEqual(without.total);
         expect(withWrapper.rows.find((r) => r.stage === 'implement')).toMatchObject({

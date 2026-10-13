@@ -12,6 +12,7 @@ import {
     realRunCost,
     scopedWorkflows,
     stableJson,
+    type WorkflowMetrics,
 } from './real-run-cost';
 
 /**
@@ -95,7 +96,7 @@ async function seedDb(
 }
 
 /** Assert exactly one metric row and return it (noUncheckedIndexedAccess-safe). */
-function one(metrics: ReturnType<typeof readWorkflowMetrics>) {
+function one(metrics: WorkflowMetrics[]) {
     if (metrics.length !== 1) throw new Error(`expected 1 metric row, got ${metrics.length}`);
     const [row] = metrics;
     return row as NonNullable<(typeof metrics)[0]>;
@@ -112,7 +113,7 @@ describe('readWorkflowMetrics (0730 R2 measurement repairs)', () => {
     test('computes wall-clock from ISO text bounds over terminal non-dry runs', async () => {
         const { dbPath, close } = await seedDb();
         try {
-            const tp = one(readWorkflowMetrics(dbPath, ['task-pipeline']));
+            const tp = one(await readWorkflowMetrics(dbPath, ['task-pipeline']));
             expect(tp.runs).toBe(5); // r1, r2, rdry, rdry2, rstale
             expect(tp.terminalRuns).toBe(2); // r1 + r2 only
             expect(tp.dryRuns).toBe(2);
@@ -126,7 +127,7 @@ describe('readWorkflowMetrics (0730 R2 measurement repairs)', () => {
     test('no blanket long-run ceiling: a legit >24h terminal run stays in wall stats', async () => {
         const { dbPath, close } = await seedDb();
         try {
-            const idea = one(readWorkflowMetrics(dbPath, ['idea-pipeline']));
+            const idea = one(await readWorkflowMetrics(dbPath, ['idea-pipeline']));
             expect(idea.terminalRuns).toBe(2); // rlong (36h) + rempty, both terminal
             expect(idea.wallClockMs).not.toBeNull();
             expect(idea.wallClockMs?.max).toBe(36 * 3600 * 1000); // 36h run included
@@ -138,7 +139,7 @@ describe('readWorkflowMetrics (0730 R2 measurement repairs)', () => {
     test('dry-run and non-terminal rows never enter real-work stats (counts stay visible)', async () => {
         const { dbPath, close } = await seedDb();
         try {
-            const tp = one(readWorkflowMetrics(dbPath, ['task-pipeline']));
+            const tp = one(await readWorkflowMetrics(dbPath, ['task-pipeline']));
             // rstale (3s stale-completed 'running') and rdry2 (1s dry 'failed') would
             // have dragged the median down under the old code.
             expect(tp.wallClockMs?.min).toBe(1980000);
@@ -151,7 +152,7 @@ describe('readWorkflowMetrics (0730 R2 measurement repairs)', () => {
     test('folds mapped-session cost from the history plane (typed columns)', async () => {
         const { dbPath, close } = await seedDb();
         try {
-            const wrapup = one(readWorkflowMetrics(dbPath, ['wrapup-pipeline']));
+            const wrapup = one(await readWorkflowMetrics(dbPath, ['wrapup-pipeline']));
             expect(wrapup.tokenCostUsd).toBeCloseTo(0.0123, 4); // only rcost has USD
             expect(wrapup.mappedRuns).toBe(2);
             expect(wrapup.historyRows).toBe(3);
@@ -164,7 +165,7 @@ describe('readWorkflowMetrics (0730 R2 measurement repairs)', () => {
     test('tokens fold independently of USD: null-USD token rows keep their token counts', async () => {
         const { dbPath, close } = await seedDb();
         try {
-            const wrapup = one(readWorkflowMetrics(dbPath, ['wrapup-pipeline']));
+            const wrapup = one(await readWorkflowMetrics(dbPath, ['wrapup-pipeline']));
             // rcost 1200 tokens + rtok 950 tokens (600 in + 350 out, USD null).
             expect(wrapup.tokens).toBe(2150);
         } finally {
@@ -175,7 +176,7 @@ describe('readWorkflowMetrics (0730 R2 measurement repairs)', () => {
     test('a mapped run with no cost AND no token rows reports nulls, never 0', async () => {
         const { dbPath, close } = await seedDb();
         try {
-            const idea = one(readWorkflowMetrics(dbPath, ['idea-pipeline']));
+            const idea = one(await readWorkflowMetrics(dbPath, ['idea-pipeline']));
             expect(idea.tokenCostUsd).toBeNull();
             expect(idea.tokens).toBeNull();
         } finally {
@@ -186,11 +187,11 @@ describe('readWorkflowMetrics (0730 R2 measurement repairs)', () => {
     test('active time bounds from ≥2 transition hops; single-hop runs report null bound', async () => {
         const { dbPath, close } = await seedDb();
         try {
-            const wrapup = one(readWorkflowMetrics(dbPath, ['wrapup-pipeline']));
+            const wrapup = one(await readWorkflowMetrics(dbPath, ['wrapup-pipeline']));
             // rcost hops: 04:01 → 04:05 → 04:06 ⇒ active span 300000ms (last − first).
             expect(wrapup.activeRuns).toBe(1);
             expect(wrapup.activeMs).toEqual({ mean: 300000, median: 300000, min: 300000, max: 300000 });
-            const tp = one(readWorkflowMetrics(dbPath, ['task-pipeline']));
+            const tp = one(await readWorkflowMetrics(dbPath, ['task-pipeline']));
             expect(tp.activeMs).toBeNull(); // r1/r2 have 0 hops; tsolo is 1 hop
             expect(tp.activeRuns).toBe(0);
         } finally {
@@ -201,7 +202,7 @@ describe('readWorkflowMetrics (0730 R2 measurement repairs)', () => {
     test('a workflow with no runs reports nulls and zero counts', async () => {
         const { dbPath, close } = await seedDb();
         try {
-            const docs = one(readWorkflowMetrics(dbPath, ['docs-pipeline']));
+            const docs = one(await readWorkflowMetrics(dbPath, ['docs-pipeline']));
             expect(docs.runs).toBe(0);
             expect(docs.wallClockMs).toBeNull();
             expect(docs.tokenCostUsd).toBeNull();
@@ -300,7 +301,7 @@ describe('readStateMetrics (0938 R1)', () => {
             insAction(db, 'a4', 'p2', 'check', 'agent.run', 200);
         });
         try {
-            const rows = readStateMetrics(dbPath, ['pr-review']);
+            const rows = await readStateMetrics(dbPath, ['pr-review']);
             expect(rows.map((r) => `${r.workflow}/${r.state}`)).toEqual(['pr-review/check', 'pr-review/done']);
             const check = at(rows, 0);
             expect(check.visits).toBe(4); // 3 in p1 + 1 in p2
@@ -353,7 +354,7 @@ describe('readStateMetrics (0938 R1)', () => {
             insAction(db, 'a8', 'p4', 'check', 'agent.run', 888);
         });
         try {
-            const rows = readStateMetrics(dbPath, ['pr-review']);
+            const rows = await readStateMetrics(dbPath, ['pr-review']);
             expect(rows).toHaveLength(1);
             expect(at(rows, 0).visits).toBe(1);
             expect(at(rows, 0).agentRunCount).toBe(1);
@@ -423,7 +424,7 @@ describe('readWorkflowMetrics 0938 R2 additions', () => {
             );
         });
         try {
-            const m = one(readWorkflowMetrics(dbPath, ['task-lifecycle']));
+            const m = one(await readWorkflowMetrics(dbPath, ['task-lifecycle']));
             // Counts [2, 0, 1, 0] over terminal non-dry runs (m1/m2/m3 + f1; i1 is not
             // terminal-status): zero-action runs count as 0, nearest-rank p50 → sorted[1] = 0.
             expect(m.agentRunCountMedian).toBe(0);
@@ -440,7 +441,7 @@ describe('readWorkflowMetrics 0938 R2 additions', () => {
     test('a workflow with no runs: 0938 additions stay null and the mix stays empty', async () => {
         const { dbPath, close } = await seedDb();
         try {
-            const docs = one(readWorkflowMetrics(dbPath, ['docs-pipeline']));
+            const docs = one(await readWorkflowMetrics(dbPath, ['docs-pipeline']));
             expect(docs.agentRunCountMedian).toBeNull();
             expect(docs.wallMsP50).toBeNull();
             expect(docs.wallMsP90).toBeNull();
@@ -479,14 +480,14 @@ describe('0938 R4 --since window (epoch ms on runs.created_at)', () => {
             insAction(db, 'hb', 'h2', 'x', 'agent.run', 40);
         });
         try {
-            const windowed = readWorkflowMetrics(dbPath, ['history-anatomy'], { sinceMs: 1000 });
+            const windowed = await readWorkflowMetrics(dbPath, ['history-anatomy'], { sinceMs: 1000 });
             expect(one(windowed).terminalRuns).toBe(1); // h2 only; h1 (999) is out of the window
-            const states = readStateMetrics(dbPath, ['history-anatomy'], { sinceMs: 1000 });
+            const states = await readStateMetrics(dbPath, ['history-anatomy'], { sinceMs: 1000 });
             expect(states.map((r) => r.state)).toEqual(['x']);
             expect(at(states, 0).wallMsP50).toBe(40);
             // Without the window both runs fold in, ordered by state.
-            expect(readStateMetrics(dbPath, ['history-anatomy']).map((r) => r.state)).toEqual(['x', 'y']);
-            expect(one(readWorkflowMetrics(dbPath, ['history-anatomy'])).terminalRuns).toBe(2);
+            expect((await readStateMetrics(dbPath, ['history-anatomy'])).map((r) => r.state)).toEqual(['x', 'y']);
+            expect(one(await readWorkflowMetrics(dbPath, ['history-anatomy'])).terminalRuns).toBe(2);
         } finally {
             await close();
         }
@@ -523,8 +524,8 @@ describe('0938 R4 deterministic serialization', () => {
         });
         try {
             const targets = ['pr-review', 'history-anatomy'];
-            const first = buildReportJson(dbPath, targets);
-            const second = buildReportJson(dbPath, targets);
+            const first = await buildReportJson(dbPath, targets);
+            const second = await buildReportJson(dbPath, targets);
             expect(first).toBe(second); // determinism: two reads, one byte string
             expect(first).not.toMatch(/generated|timestamp|Date\.now/); // no wall-clock in the body
             const parsed = JSON.parse(first) as { workflows: unknown[]; states: unknown[] };

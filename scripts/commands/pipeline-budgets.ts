@@ -25,14 +25,16 @@
  * route to task 0608).
  */
 import { execFileSync } from 'node:child_process';
+import { existsSync } from 'node:fs';
 import { readdir, readFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { createDbAdapter } from '@gobing-ai/ts-db';
 import { parse } from 'yaml';
 // Deep relative import (0775): the root node_modules has no @gobing-ai/spur-app workspace
 // link for scripts/commands, so the §1.1 cross-workspace alias rule cannot resolve here.
 import { extractResolvedWorkflowFacts } from '../../packages/app/src/workflow/composition-baseline';
-import { readWorkflowMetrics, type WorkflowMetrics } from './real-run-cost';
+import { readWorkflowMetrics, type WorkflowMetrics } from '../../packages/app/src/workflow/run-measurements';
 
 const REPO_ROOT = fileURLToPath(new URL('../../', import.meta.url));
 const BUDGETS_PATH = join(REPO_ROOT, 'config/pipeline-budgets.json');
@@ -240,15 +242,22 @@ export async function checkPipelineBudgets(argv: string[]): Promise<number> {
         const targets = filters.length > 0 ? filters : workflows;
         // A project without an imported history plane (missing .spur/spur.db or tables) reads as
         // no real-run measurement — every pipeline is unmeasured, and the gate reports the query
-        // budgets only. Never crash the gate over a missing DB.
-        try {
-            const metrics = readWorkflowMetrics(join(REPO_ROOT, '.spur/spur.db'), targets);
-            measured = measuredFromWorkflows(metrics, queryCounts);
-        } catch (error) {
-            if (error instanceof Error && /no such table|unable to open/.test(error.message)) {
-                measured = {};
-            } else {
-                throw error;
+        // budgets only. Never crash the gate over a missing DB (and never create one here).
+        const dbPath = join(REPO_ROOT, '.spur/spur.db');
+        if (!existsSync(dbPath)) {
+            measured = {};
+        } else {
+            const db = await createDbAdapter({ driver: 'bun-sqlite', url: dbPath });
+            try {
+                measured = measuredFromWorkflows(await readWorkflowMetrics(db, targets), queryCounts);
+            } catch (error) {
+                if (error instanceof Error && /no such table|unable to open/.test(error.message)) {
+                    measured = {};
+                } else {
+                    throw error;
+                }
+            } finally {
+                db.close();
             }
         }
     }

@@ -96,3 +96,102 @@ export declare function preflightTask(input: PreflightInput): PreflightResult;
 export declare const SENSITIVE_PREFIXES: readonly ['drizzle/', 'packages/config/', '.github/', 'plugins/sp/hooks/'];
 export declare const SENSITIVE_GLOBS: readonly ['apps/server/src/**/auth*', '**/*secret*', '**/*.sql'];
 export declare function sensitiveReasonForPath(path: string): string | null;
+// task 1178: pure run-summary aggregation, exported through the same generated entry.
+export declare type Tokens = Record<'input' | 'cacheCreate' | 'cacheRead' | 'output', number>;
+export declare interface Span {
+    workMs: number;
+    waitMs: number;
+    toolCalls: number;
+    tokens: Tokens;
+}
+export declare interface Block {
+    type?: string;
+    id?: string;
+    name?: string;
+    text?: string;
+    tool_use_id?: string;
+    is_error?: boolean;
+}
+export declare interface Row {
+    type?: string;
+    subtype?: string;
+    timestamp?: string;
+    isMeta?: boolean;
+    isCompactSummary?: boolean;
+    id?: string;
+    content?: string;
+    display?: boolean;
+    customType?: string;
+    message?: {
+        id?: string;
+        role?: string;
+        content?: unknown;
+        usage?: Record<string, number | undefined>;
+        toolCallId?: string;
+        toolName?: string;
+        isError?: boolean;
+    };
+}
+export declare interface Acc {
+    last: number;
+    askMs: number;
+    asks: Map<string, number>;
+    toolIds: Set<string>;
+    messages: Map<string, Tokens>;
+    compactions: number;
+}
+export declare interface Progress {
+    runId: string;
+    workflow?: string;
+    status?: string;
+    states?: { state: string; visit?: number; status?: string; actions?: { attempts?: { startedAt?: string; completedAt?: string }[] }[] }[];
+}
+export declare interface SummaryRow {
+    stage: string;
+    status: string;
+    workMs: number;
+    waitMs: number;
+    toolCalls: number | null;
+    tokens: Tokens | null;
+    time: string;
+    wait: string;
+    token: string;
+}
+export declare interface ActorSplit {
+    operatorMs: number;
+    longestOperatorWaitMs: number;
+    modelMs: number;
+    shellMs: number;
+    subagentMs: number;
+    otherToolMs: number;
+    idleMs: number;
+    compactions: number;
+    subagentErrors: number;
+}
+export declare type GateTime = { ms: number } | { ms: null; reason: string };
+export declare interface RunSummary {
+    available: true;
+    transcript?: string;
+    rows: SummaryRow[];
+    total: SummaryRow;
+    actors: ActorSplit;
+    gate: GateTime;
+    skippedLines: number;
+}
+export declare function zeroTokens(): Tokens;
+export declare function formatDuration(ms: number): string;
+export declare function formatTokens(n: number): string;
+export declare function formatTokenSplit(t: Tokens | null): string;
+export declare function isCompaction(row: Row): boolean;
+export declare function skillInvocationPrompt(text: string): string | undefined;
+export declare function promptText(row: Row): string | undefined;
+export declare function sumTokens(all: Tokens[]): Tokens;
+export declare function sumSpans(spans: Span[]): Span;
+export declare function newAcc(ts: number): Acc;
+export declare function accumulate(acc: Acc, row: Row, ts: number): void;
+export declare function actorSplit(rows: [Row, number][], start: number, end: number): ActorSplit;
+export declare function buildRunSummary(
+    rows: [Row, number][],
+    inputs: { label?: string; progress: Progress }[],
+    opts?: { since?: string; until?: string; skippedLines?: number },
+): RunSummary;

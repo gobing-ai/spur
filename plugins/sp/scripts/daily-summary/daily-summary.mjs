@@ -5,8 +5,9 @@ var __require = /* @__PURE__ */ createRequire(import.meta.url);
 
 // plugins/sp/scripts/daily-summary/daily-summary.ts
 import { spawn, spawnSync } from "child_process";
-import { existsSync, mkdirSync, readlinkSync, writeFileSync } from "fs";
-import { dirname, isAbsolute, join, resolve } from "path";
+import { existsSync as existsSync2, mkdirSync, readlinkSync, writeFileSync } from "fs";
+import { dirname as dirname2, isAbsolute, join as join2, resolve as resolve2 } from "path";
+import { fileURLToPath as fileURLToPath2 } from "url";
 
 // plugins/sp/lib/env.ts
 function getEnvVar(name, fallback) {
@@ -15,6 +16,39 @@ function getEnvVar(name, fallback) {
 }
 function getEnvVars() {
   return process.env;
+}
+
+// plugins/sp/lib/inline-run-app.ts
+import { existsSync } from "node:fs";
+import { dirname, join, resolve } from "node:path";
+import { fileURLToPath } from "node:url";
+function resolveAppEntry(spurBin) {
+  const fallback = fileURLToPath(new URL("../../../apps/cli/src/index.ts", import.meta.url));
+  const candidates = spurBin !== "" ? [spurBin] : [fallback];
+  for (const candidate of candidates) {
+    const tokens = candidate.split(/\s+/).filter(Boolean);
+    const mainModule = [...tokens].reverse().find((t) => t.endsWith(".ts"));
+    if (mainModule === undefined || !existsSync(mainModule))
+      continue;
+    const repoRoot = resolve(dirname(mainModule), "..", "..", "..");
+    const appEntry = join(repoRoot, "packages", "app", "src", "index.ts");
+    if (existsSync(appEntry))
+      return { entry: appEntry, portable: false };
+  }
+  const entry = fileURLToPath(new URL("../lib/inline-run.generated.mjs", import.meta.url));
+  if (!existsSync(entry)) {
+    throw new Error("inline application bundle is missing — rebuild/install the sp plugin before running inline");
+  }
+  return { entry, portable: true };
+}
+async function loadInlineApp(spurBin, resolveAppEntry2, required) {
+  const { entry, portable } = resolveAppEntry2(spurBin);
+  const app = await import(entry);
+  const missing = portable ? required.filter((name) => typeof app[name] !== "function") : [];
+  if (missing.length > 0) {
+    throw new Error(`inline application bundle ${entry} is older than its scripts — missing ${missing.join(", ")}. Reinstall sp with a superskill release that stages lib/ (commit b42961b), or pass --spur-bin <spur checkout>/apps/cli/src/index.ts.`);
+  }
+  return { app, portable };
 }
 
 // plugins/sp/scripts/daily-summary/daily-summary.ts
@@ -109,7 +143,7 @@ function getDateRange(dateStr) {
   return { start, end };
 }
 var defaultProcessSpawner = (cmd, args, env) => {
-  return new Promise((resolve2, reject) => {
+  return new Promise((resolve3, reject) => {
     try {
       const proc = spawn(cmd, args, {
         stdio: ["ignore", "pipe", "pipe"],
@@ -120,7 +154,7 @@ var defaultProcessSpawner = (cmd, args, env) => {
       proc.stdout.on("data", (chunk) => stdoutChunks.push(Buffer.from(chunk)));
       proc.stderr.on("data", (chunk) => stderrChunks.push(Buffer.from(chunk)));
       proc.on("close", (exitCode) => {
-        resolve2({
+        resolve3({
           stdout: Buffer.concat(stdoutChunks).toString("utf8"),
           stderr: Buffer.concat(stderrChunks).toString("utf8"),
           exitCode: exitCode ?? 0
@@ -159,72 +193,49 @@ async function getCcusageData(date) {
     return null;
   }
 }
+function composeHistoryHealth(reading) {
+  const loops = reading.loops.map((row) => ({
+    toolName: row.toolName,
+    argsDigest: row.argsDigest || "repeated execution",
+    repeats: row.repeats,
+    sessionId: row.sessionId,
+    fromSeq: row.firstSeq,
+    toSeq: row.lastSeq,
+    wastedTokens: row.repeats * 250
+  }));
+  const remediationProposals = [];
+  for (const lp of loops.slice(0, 5)) {
+    const cleanTool = lp.toolName.replace(/[^a-zA-Z0-9_-]/g, "_");
+    const key = `repetition:${cleanTool}:${lp.argsDigest.slice(0, 16)}`;
+    const title = `Break execution loop in ${lp.toolName} (${lp.repeats} repeats)`;
+    const command = `spur task create "<title>" --feature <id> && spur task update <wbs> --section Plan --from-file <path>`;
+    remediationProposals.push({ key, title, command });
+  }
+  if (reading.toolCalls > 0 && reading.errorRatePct > 10) {
+    remediationProposals.push({
+      key: "reliability:tooling:high-error-rate",
+      title: `Investigate high tool error rate (${reading.errorRatePct.toFixed(1)}%)`,
+      command: `spur task create "<title>" --feature <id> && spur task update <wbs> --section Plan --from-file <path>`
+    });
+  }
+  return {
+    toolCalls: reading.toolCalls,
+    toolErrors: reading.toolErrors,
+    errorRatePct: reading.errorRatePct,
+    loops,
+    redundantCalls: loops.reduce((acc, l) => acc + Math.max(0, l.repeats - 1), 0),
+    wastedTokens: loops.reduce((acc, l) => acc + l.wastedTokens, 0),
+    remediationProposals
+  };
+}
 async function getSpurHistoryHealth(date, dbPath = ".spur/spur.db") {
   try {
-    const resolvedPath = resolve(process.cwd(), dbPath);
-    if (!existsSync(resolvedPath)) {
-      return null;
-    }
-    const { Database } = await import("bun:sqlite");
-    const db = new Database(resolvedPath, { readonly: true });
-    try {
-      const loopTable = db.query("SELECT name FROM sqlite_master WHERE type = 'table' AND name = ?").get("history_board_loop_findings");
-      let loops = [];
-      if (loopTable) {
-        const rows = db.query(`SELECT tool_name, args_digest, repeats, session_id, first_seq, last_seq, started_at
-                         FROM history_board_loop_findings
-                         WHERE started_at IS NULL OR started_at LIKE ?
-                         ORDER BY repeats DESC
-                         LIMIT 20`).all(`${date}%`);
-        loops = rows.map((r) => ({
-          toolName: r.tool_name,
-          argsDigest: r.args_digest || "repeated execution",
-          repeats: r.repeats,
-          sessionId: r.session_id,
-          fromSeq: r.first_seq,
-          toSeq: r.last_seq,
-          wastedTokens: r.repeats * 250
-        }));
-      }
-      let toolCalls = 0;
-      let toolErrors = 0;
-      const toolTable = db.query("SELECT name FROM sqlite_master WHERE type = 'table' AND name = ?").get("history_board_tool_5m");
-      if (toolTable) {
-        const stats = db.query(`SELECT SUM(calls) AS calls, SUM(errors) AS errors
-                         FROM history_board_tool_5m
-                         WHERE bucket_start LIKE ?`).get(`${date}%`);
-        toolCalls = stats?.calls ?? 0;
-        toolErrors = stats?.errors ?? 0;
-      }
-      const redundantCalls = loops.reduce((acc, l) => acc + Math.max(0, l.repeats - 1), 0);
-      const wastedTokens = loops.reduce((acc, l) => acc + l.wastedTokens, 0);
-      const errorRatePct = toolCalls > 0 ? toolErrors / toolCalls * 100 : 0;
-      const remediationProposals = [];
-      for (const lp of loops.slice(0, 5)) {
-        const cleanTool = lp.toolName.replace(/[^a-zA-Z0-9_-]/g, "_");
-        const key = `repetition:${cleanTool}:${lp.argsDigest.slice(0, 16)}`;
-        const title = `Break execution loop in ${lp.toolName} (${lp.repeats} repeats)`;
-        const command = `spur task create "<title>" --feature <id> && spur task update <wbs> --section Plan --from-file <path>`;
-        remediationProposals.push({ key, title, command });
-      }
-      if (toolCalls > 0 && errorRatePct > 10) {
-        const key = "reliability:tooling:high-error-rate";
-        const title = `Investigate high tool error rate (${errorRatePct.toFixed(1)}%)`;
-        const command = `spur task create "<title>" --feature <id> && spur task update <wbs> --section Plan --from-file <path>`;
-        remediationProposals.push({ key, title, command });
-      }
-      return {
-        toolCalls,
-        toolErrors,
-        errorRatePct,
-        loops,
-        redundantCalls,
-        wastedTokens,
-        remediationProposals
-      };
-    } finally {
-      db.close();
-    }
+    const resolvedPath = resolve2(process.cwd(), dbPath);
+    const { app } = await loadInlineApp(getEnvVar("SPUR_BIN") ?? "", resolveAppEntry, [
+      "readHistoryHealth"
+    ]);
+    const reading = await app.readHistoryHealth({ date, dbPath: resolvedPath });
+    return reading === null ? null : composeHistoryHealth(reading);
   } catch {
     return null;
   }
@@ -321,9 +332,9 @@ Please provide the following (press Enter to skip):
     input: process.stdin,
     output: process.stdout
   });
-  const question = (prompt) => new Promise((resolve2) => {
+  const question = (prompt) => new Promise((resolve3) => {
     rl.question(prompt, (answer) => {
-      resolve2(answer.trim());
+      resolve3(answer.trim());
     });
   });
   const learnings = await question(`1. What did you learn today? (optional)
@@ -469,26 +480,26 @@ function generateMarkdown(summary) {
 `);
 }
 function ensureDir(path) {
-  if (!existsSync(path)) {
+  if (!existsSync2(path)) {
     mkdirSync(path, { recursive: true });
   }
 }
 function writeSummary(markdown, options) {
   const filename = `summary_${options.date.replace(/-/g, "")}.md`;
-  const outputPath = options.outputPath || join(DAILY_DIR, filename);
-  ensureDir(join(outputPath, ".."));
+  const outputPath = options.outputPath || join2(DAILY_DIR, filename);
+  ensureDir(join2(outputPath, ".."));
   writeFileSync(outputPath, markdown, "utf-8");
   return outputPath;
 }
 function resolveHistoryReportPath() {
-  const pointer = resolve(process.cwd(), ".spur", "reports", "history", "latest.json");
-  if (!existsSync(pointer)) {
+  const pointer = resolve2(process.cwd(), ".spur", "reports", "history", "latest.json");
+  if (!existsSync2(pointer)) {
     return;
   }
   try {
     const target = readlinkSync(pointer);
-    const resolved = isAbsolute(target) ? target : resolve(dirname(pointer), target);
-    return existsSync(resolved) ? resolved : undefined;
+    const resolved = isAbsolute(target) ? target : resolve2(dirname2(pointer), target);
+    return existsSync2(resolved) ? resolved : undefined;
   } catch {
     return;
   }
@@ -541,13 +552,21 @@ async function buildDailySummary(options) {
     result.gitActivity = gitActivity;
   }
   const historyHealth = await getSpurHistoryHealth(options.date);
-  if (historyHealth && (historyHealth.loops.length > 0 || historyHealth.toolCalls > 0)) {
+  if (historyHealth) {
     result.historyHealth = historyHealth;
     platforms.push("Spur History");
   }
   return result;
 }
 async function main() {
+  if (!process.versions.bun) {
+    const child = spawnSync("bun", [fileURLToPath2(import.meta.url), ...process.argv.slice(2)], {
+      stdio: "inherit"
+    });
+    if (child.error)
+      console.error(`daily-summary requires Bun on PATH: ${child.error.message}`);
+    process.exit(child.status ?? 1);
+  }
   const options = parseArgs();
   logger.info(`Generating daily summary for ${options.date}...`);
   try {

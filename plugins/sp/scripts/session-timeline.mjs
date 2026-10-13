@@ -13,9 +13,12 @@ function getEnvVars() {
 import { existsSync, readdirSync } from "node:fs";
 import { homedir } from "node:os";
 import { join } from "node:path";
-var SESSION_ID = /^[A-Za-z0-9_-]+$/;
-var OPERATOR_TOOLS = new Set(["AskUserQuestion", "ask_user_question"]);
-var PI_ROLES = new Set(["user", "assistant", "toolResult"]);
+
+// plugins/sp/lib/plan-projection.generated.mjs
+var NON_ABORTING_PREFLIGHT_CODES = new Set([
+  "L4.scenario-unverified",
+  "L4.verifying-incomplete-tasks"
+]);
 var zeroTokens = () => ({ input: 0, cacheCreate: 0, cacheRead: 0, output: 0 });
 function formatDuration(ms) {
   const s = Math.round(ms / 1000);
@@ -34,6 +37,23 @@ function formatTokenSplit(t) {
     return "n/a";
   const nonCached = t.input + t.cacheCreate + t.output;
   return `${formatTokens(nonCached + t.cacheRead)} / ${formatTokens(nonCached)}`;
+}
+var OPERATOR_TOOLS = new Set(["AskUserQuestion", "ask_user_question"]);
+function firstTextContent(row) {
+  const content = row.message?.content;
+  if (typeof content === "string")
+    return content;
+  if (!Array.isArray(content))
+    return;
+  return content.find((b) => b.type === "text")?.text;
+}
+function skillInvocationPrompt(text) {
+  const name = /^\s*<skill name="([^"]+)"/.exec(text)?.[1];
+  if (name === undefined)
+    return;
+  const close = text.lastIndexOf("</skill>");
+  const args = close < 0 ? "" : text.slice(close + "</skill>".length).trim();
+  return args === "" ? `/${name}` : `/${name} ${args}`;
 }
 function promptText(row) {
   if (row.type === "custom_message") {
@@ -58,22 +78,6 @@ function promptText(row) {
   if (!Array.isArray(content) || content.some((b) => b.type === "tool_result"))
     return;
   return content.find((b) => b.type === "text")?.text;
-}
-function firstTextContent(row) {
-  const content = row.message?.content;
-  if (typeof content === "string")
-    return content;
-  if (!Array.isArray(content))
-    return;
-  return content.find((b) => b.type === "text")?.text;
-}
-function skillInvocationPrompt(text) {
-  const name = /^\s*<skill name="([^"]+)"/.exec(text)?.[1];
-  if (name === undefined)
-    return;
-  const close = text.lastIndexOf("</skill>");
-  const args = close < 0 ? "" : text.slice(close + "</skill>".length).trim();
-  return args === "" ? `/${name}` : `/${name} ${args}`;
 }
 function sumTokens(all) {
   const total = zeroTokens();
@@ -146,6 +150,29 @@ function accumulate(acc, row, ts) {
     });
   }
 }
+var SHELL_TOOLS = new Set(["bash", "shell", "exec", "exec_command", "run_command", "command"]);
+var SUBAGENT_TOOLS = new Set(["agent", "task", "invoke_subagent", "subagent", "dispatch_agent"]);
+var LOWERCASE_OPERATOR_TOOLS = new Set(["askuserquestion", "ask_user_question"]);
+var SENSITIVE_PREFIXES = ["drizzle/", "packages/config/", ".github/", "plugins/sp/hooks/"];
+var SENSITIVE_GLOBS = ["apps/server/src/**/auth*", "**/*secret*", "**/*.sql"];
+function globToRegex(glob) {
+  const escaped = glob.replace(/[.+^${}()|[\]\\]/g, "\\$&").replaceAll("**/", "\x00").replaceAll("**", "\x01").replaceAll("*", "[^/]*").replaceAll("\x00", "(?:.*/)?").replaceAll("\x01", ".*");
+  return new RegExp(`^${escaped}$`, "s");
+}
+var SENSITIVE_MATCHERS = [
+  ...SENSITIVE_PREFIXES.map((prefix) => ({
+    label: prefix,
+    test: (path) => path.startsWith(prefix)
+  })),
+  ...SENSITIVE_GLOBS.map((glob) => {
+    const regex = globToRegex(glob);
+    return { label: glob, test: (path) => regex.test(path) };
+  })
+];
+
+// plugins/sp/lib/transcript.ts
+var SESSION_ID = /^[A-Za-z0-9_-]+$/;
+var PI_ROLES = new Set(["user", "assistant", "toolResult"]);
 function sniffFormat(rows) {
   for (const row of rows) {
     if (row.type === "message" && PI_ROLES.has(row.message?.role ?? ""))

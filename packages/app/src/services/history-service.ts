@@ -39,6 +39,9 @@ import {
     HISTORY_ARTIFACT_SCHEMA_VERSION,
     type HistoryArtifact,
     type HistoryResetResult,
+    historyBoardDailyLoopFindings,
+    historyBoardDailyToolTotals,
+    historyHealthSchemaPresent,
     type LadderEntry,
     listAttributionSessions,
     loops,
@@ -47,6 +50,7 @@ import {
     materializeWatermarkExclude,
     messageRollup,
     narrowArtifact,
+    openExistingDb,
     pairingSummary,
     type RetentionResult,
     RunSessionDao,
@@ -268,6 +272,38 @@ export interface DailyResult {
     coverage: RefreshCoverage;
     /** Path of the mode-rendered `.md` sidecar (present only when `mode` was passed, 0555 R4). */
     reportPath?: string;
+}
+
+/** One execution-loop finding read from the history rollups for the daily report (task 1178 R3). */
+export interface HistoryHealthLoopFinding {
+    toolName: string;
+    /** Digest of the repeated call's arguments, for grouping (never the raw args). */
+    argsDigest: string;
+    repeats: number;
+    sessionId: string;
+    firstSeq: number;
+    lastSeq: number;
+    startedAt: string | null;
+}
+
+/**
+ * The day's measured history health (task 1178 R3). An empty table produces this with
+ * zeros — a genuine measured zero — whereas a missing database or required table yields
+ * `null` (`unavailable`); the caller must never collapse the two.
+ */
+export interface HistoryHealthReading {
+    toolCalls: number;
+    toolErrors: number;
+    errorRatePct: number;
+    loops: HistoryHealthLoopFinding[];
+}
+
+/** Explicit inputs for the daily history-health read: one calendar day and its database. */
+export interface ReadHistoryHealthInput {
+    /** Local calendar day (`YYYY-MM-DD`); matches rollup timestamps by prefix. */
+    date: string;
+    /** Already-open project database handle. */
+    db: DbAdapter;
 }
 
 /**
@@ -1205,6 +1241,28 @@ export class HistoryService {
     }
 
     /**
+     * Read the day's history health from the existing rollups (task 1178 R3). Explicit
+     * database/date inputs — no pinned project root — so the daily-summary adapter can
+     * compose it through the generated entry rather than opening SQLite itself. Returns
+     * `null` when a required table is absent (unavailable), never a fabricated zero.
+     */
+    async readHistoryHealth(input: ReadHistoryHealthInput): Promise<HistoryHealthReading | null> {
+        if (!(await historyHealthSchemaPresent(input.db))) {
+            return null;
+        }
+        const [loops, totals] = await Promise.all([
+            historyBoardDailyLoopFindings(input.db, input.date, 20),
+            historyBoardDailyToolTotals(input.db, input.date),
+        ]);
+        return {
+            toolCalls: totals.calls,
+            toolErrors: totals.errors,
+            errorRatePct: totals.calls > 0 ? (totals.errors / totals.calls) * 100 : 0,
+            loops,
+        };
+    }
+
+    /**
      * Isolated per-source import wrapper (task 0470 R2/R4/R5). Checks whether the source was
      * non-empty on a previous run (checkpoint rows exist), runs {@link import} under the
      * resolved execution policy (unlimited when `null` — no timer is armed, task 0813 R2),
@@ -1606,6 +1664,27 @@ function buildLadderSnapshot(agentConfig: AgentConfig | undefined): LadderEntry[
         tier: getExecutorTier(executor),
         order,
     }));
+}
+
+/**
+ * Packaged entry the daily-summary adapter calls through the generated inline bundle (task 1178
+ * R3): open the history database at `dbPath` and read the day's health. A missing file or a
+ * required table absent returns `null` (unavailable) — never a fabricated zero; an existing but
+ * empty table returns a measured-zero {@link HistoryHealthReading}. The plugin adapter never
+ * opens SQLite itself.
+ */
+export async function readHistoryHealth(input: { date: string; dbPath: string }): Promise<HistoryHealthReading | null> {
+    if (!existsSync(input.dbPath)) {
+        return null;
+    }
+    const db = await openExistingDb(input.dbPath);
+    try {
+        return await new HistoryService({ getDb: async () => db }).readHistoryHealth({ date: input.date, db });
+    } catch {
+        return null;
+    } finally {
+        db.close();
+    }
 }
 
 // ---------------------------------------------------------------------------

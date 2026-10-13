@@ -4,9 +4,10 @@
  * (`--no-summary` skips it). Inputs: one or more `spur workflow progress <run-id> --json` files
  * (`--progress [<label>=]<file>`) and the host transcript (resolved like session-timeline, or
  * `--transcript`), OR the close-written per-run summary files (`--rollup [<label>=]<file>`, 1146 R3).
- * Measurement and rendering live in `../lib/run-summary-core` (ADR-130 glue budget); this script is
- * argv parsing and dispatch. Reporting only: no transcript or no timed attempts → an `n/a` result,
- * exit 0. Node builtins only.
+ * Measurement lives in `packages/app/src/workflow/run-summary.ts` (reached through the generated
+ * pure bundle entry); presentation and host IO live in `../lib/run-summary-core` (ADR-130 glue
+ * budget). This script is argv parsing and dispatch. Reporting only: no transcript or no timed
+ * attempts → an `n/a` result, exit 0. Node builtins only.
  */
 import { readFileSync } from 'node:fs';
 import { getEnvVars } from '../lib/env';
@@ -18,7 +19,7 @@ import {
     renderRollupMarkdown,
     renderSummaryMarkdown,
 } from '../lib/run-summary-core';
-import { resolveTranscript } from '../lib/transcript';
+import { parseRows, resolveTranscript } from '../lib/transcript';
 
 // Re-exported so the suite and any consumer keep one import path for the whole surface.
 export * from '../lib/run-summary-core';
@@ -90,7 +91,8 @@ export function main(
             const [label, file] = eq > 0 ? [arg.slice(0, eq), arg.slice(eq + 1)] : [undefined, arg];
             return { label, progress: JSON.parse(readFileSync(file, 'utf8')) as Progress };
         });
-        const summary = buildRunSummary(readFileSync(resolved.path, 'utf8').split('\n'), inputs, since);
+        const { rows, skippedLines } = parseRows(readFileSync(resolved.path, 'utf8').split('\n'));
+        const summary = buildRunSummary(rows, inputs, { since, skippedLines });
         summary.gate = gateFromReceipt(process.cwd(), inputs[0]?.progress.runId ?? '');
         write(
             `${markdown ? renderSummaryMarkdown(summary) : JSON.stringify({ ...summary, transcript: resolved.path })}\n`,

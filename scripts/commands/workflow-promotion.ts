@@ -31,24 +31,25 @@
  *
  * Repo-internal dev-script, NOT a new public `spur` noun/verb (ADR-051).
  */
-import { Database } from 'bun:sqlite';
 import { execSync } from 'node:child_process';
 import { readdirSync, readFileSync, statSync } from 'node:fs';
 import { readFile, writeFile } from 'node:fs/promises';
 import { basename, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { createDbAdapter, type DbAdapter } from '@gobing-ai/ts-db';
 import { parse } from 'yaml';
 // Deep relative import (0775): the root node_modules has no @gobing-ai/spur-app workspace link
 // for scripts/commands, so the §1.1 cross-workspace alias rule cannot resolve here.
 import { extractResolvedWorkflowFacts } from '../../packages/app/src/workflow/composition-baseline';
+import {
+    readAgentRunHistoryRows,
+    readRealTerminalRunCounts,
+} from '../../packages/domain/src/analytics/workflow-measurements';
 
 const REPO_ROOT = fileURLToPath(new URL('../../', import.meta.url));
 const CANDIDATES_PATH = join(REPO_ROOT, 'config/workflow-candidates.json');
 const WORKFLOWS_DIR = join(REPO_ROOT, 'config/workflows');
 const DB_PATH = join(REPO_ROOT, '.spur/spur.db');
-
-/** Engine vocabulary (0730 R2): terminal statuses that count as a real, settled run. */
-const TERMINAL_RUN_STATUSES = ['done', 'failed', 'cancelled'];
 
 // ── Candidate record ───────────────────────────────────────────────────────
 
@@ -228,28 +229,17 @@ interface AgentRunPerRun {
  * Read the recorded real-run inputs for a workflow: per terminal non-dry run, the number of
  * `agent.run` actions and their summed `duration_ms`, from the `action_runs`/`runs` history. A
  * run with no `agent.run` rows counts as zero actions with an unmeasured duration (null, never 0
- * — the 0284 invariant). `runIds` narrows the replay to specific recorded runs.
+ * — the 0284 invariant). `runIds` narrows the replay to specific recorded runs. Delegates to the
+ * domain query owner; the adapter is opened here because the repository owns the database path.
  */
-export function readAgentRunHistory(dbPath: string, workflow: string, runIds?: string[]): AgentRunPerRun[] {
-    const db = new Database(dbPath, { readonly: true });
+export async function readAgentRunHistory(
+    dbPath: string,
+    workflow: string,
+    runIds?: string[],
+): Promise<AgentRunPerRun[]> {
+    const db = await createDbAdapter({ driver: 'bun-sqlite', url: dbPath });
     try {
-        const inClause = runIds && runIds.length > 0 ? ` AND r.id IN (${runIds.map(() => '?').join(',')})` : '';
-        const sql = `SELECT r.id AS runId,
-                            COUNT(a.id) AS count,
-                            SUM(a.duration_ms) AS durationMs
-                       FROM runs r
-                       LEFT JOIN action_runs a ON a.run_id = r.id AND a.kind = 'agent.run'
-                      WHERE r.workflow_name = ?
-                        AND r.status IN (${TERMINAL_RUN_STATUSES.map(() => '?').join(',')})
-                        AND json_extract(r.metadata_json, '$.dryRun') IS NOT 1
-                        AND r.started_at IS NOT NULL
-                        AND r.completed_at IS NOT NULL
-                        AND r.completed_at >= r.started_at${inClause}
-                      GROUP BY r.id`;
-        const params: (string | number)[] = [workflow, ...TERMINAL_RUN_STATUSES];
-        if (runIds && runIds.length > 0) params.push(...runIds);
-        const rows = db.query(sql).all(...params) as Array<{ runId: string; count: number; durationMs: number | null }>;
-        return rows.map((r) => ({ runId: r.runId, count: r.count, durationMs: r.durationMs }));
+        return await readAgentRunHistoryRows(db, workflow, runIds);
     } finally {
         db.close();
     }
@@ -287,8 +277,12 @@ export interface AgentRunMeasurement {
  * runs. Count folds every such run (zero-`agent.run` runs included as 0); duration folds only
  * runs that recorded at least one `agent.run` action (unmeasured stays null).
  */
-export function measureAgentRunHistory(dbPath: string, workflow: string, runIds?: string[]): AgentRunMeasurement {
-    const rows = readAgentRunHistory(dbPath, workflow, runIds);
+export async function measureAgentRunHistory(
+    dbPath: string,
+    workflow: string,
+    runIds?: string[],
+): Promise<AgentRunMeasurement> {
+    const rows = await readAgentRunHistory(dbPath, workflow, runIds);
     const durations = rows.map((r) => r.durationMs).filter((d): d is number => d !== null);
     return {
         workflow,
@@ -447,17 +441,9 @@ export function checkWorkflowPromotion(
  * 0, or 'false' counts as real (0866: a `done` row carrying `dryRun: 1` is not a
  * real completion).
  */
-export function countRealTerminalRuns(db: Database): Map<string, number> {
-    const rows = db
-        .query(
-            `SELECT workflow_name, COUNT(*) AS n FROM runs
-             WHERE status IN ('done', 'failed', 'cancelled')
-               AND (json_extract(metadata_json, '$.dryRun') IS NULL
-                    OR json_extract(metadata_json, '$.dryRun') IN (0, '0', 'false'))
-             GROUP BY workflow_name`,
-        )
-        .all() as Array<{ workflow_name: string; n: number }>;
-    return new Map(rows.map((r): [string, number] => [r.workflow_name ?? '', r.n]).filter(([name]) => name !== ''));
+export async function countRealTerminalRuns(db: DbAdapter): Promise<Map<string, number>> {
+    const rows = await readRealTerminalRunCounts(db);
+    return new Map(rows.map((r): [string, number] => [r.workflow, r.count]));
 }
 
 /**
@@ -490,12 +476,12 @@ export function everTrackedDefinitionNames(repoRoot: string): Set<string> {
  * tracked as definitions are in scope; definitions still present are untouched;
  * dry-only history does not block retirement.
  */
-export function checkRetirementGuard(
-    db: Database,
+export async function checkRetirementGuard(
+    db: DbAdapter,
     config: WorkflowCandidatesConfig,
     workflowsDir: string,
     everTracked: Set<string> = everTrackedDefinitionNames(REPO_ROOT),
-): PromotionCheckFinding[] {
+): Promise<PromotionCheckFinding[]> {
     const findings: PromotionCheckFinding[] = [];
     let present: Set<string>;
     try {
@@ -508,7 +494,7 @@ export function checkRetirementGuard(
         return findings; // no workflows dir — nothing is retired
     }
     const recorded = new Set((config.retirements ?? []).map((r) => r.name));
-    for (const [name, n] of countRealTerminalRuns(db)) {
+    for (const [name, n] of await countRealTerminalRuns(db)) {
         if (!everTracked.has(name) || present.has(name) || recorded.has(name)) continue;
         findings.push({
             kind: 'unrecorded-retirement',
@@ -596,9 +582,9 @@ export async function runWorkflowPromotion(argv: string[]): Promise<number> {
         const findings = checkWorkflowPromotion(config, args.workflowsDir, args.nowIso);
         // Retirement guard (0882): only when a project DB exists (fixture roots skip).
         if (statSync(args.dbPath, { throwIfNoEntry: false })) {
-            const db = new Database(args.dbPath, { readonly: true });
+            const db = await createDbAdapter({ driver: 'bun-sqlite', url: args.dbPath });
             try {
-                findings.push(...checkRetirementGuard(db, config, args.workflowsDir));
+                findings.push(...(await checkRetirementGuard(db, config, args.workflowsDir)));
             } finally {
                 db.close();
             }
@@ -635,7 +621,11 @@ export async function runWorkflowPromotion(argv: string[]): Promise<number> {
         const config = await loadWorkflowCandidates(configPath);
         const candidate = config.candidates.find((c) => c.id === id);
         if (!candidate) throw new Error(`workflow-promotion: candidate ${id} not found`);
-        const measured = measureAgentRunHistory(dbPath, candidate.measurement.workflow, candidate.measurement.runIds);
+        const measured = await measureAgentRunHistory(
+            dbPath,
+            candidate.measurement.workflow,
+            candidate.measurement.runIds,
+        );
         const canonicalCounts = loadCanonicalAgentRunCounts(workflowsDir);
         const canonicalCount = canonicalCounts[candidate.canonical] ?? 0;
         // 0921: with a registered baseline, the live count must be either the baseline (change not

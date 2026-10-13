@@ -183,6 +183,374 @@ function preflightTask(input) {
   }
   return { action: "run", code: "OK", reason: `preflight clear — launch task-pipeline for ${input.wbs}` };
 }
+var zeroTokens = () => ({ input: 0, cacheCreate: 0, cacheRead: 0, output: 0 });
+function formatDuration(ms) {
+  const s = Math.round(ms / 1000);
+  const h = Math.floor(s / 3600);
+  const m = Math.floor(s % 3600 / 60);
+  const ss = String(s % 60).padStart(2, "0");
+  return h > 0 ? `${h}:${String(m).padStart(2, "0")}:${ss}` : `${m}:${ss}`;
+}
+function formatTokens(n) {
+  if (n >= 999500)
+    return `${(n / 1e6).toFixed(1)}M`;
+  return n >= 1000 ? `${Math.round(n / 1000)}k` : String(n);
+}
+function formatTokenSplit(t) {
+  if (!t)
+    return "n/a";
+  const nonCached = t.input + t.cacheCreate + t.output;
+  return `${formatTokens(nonCached + t.cacheRead)} / ${formatTokens(nonCached)}`;
+}
+var OPERATOR_TOOLS = new Set(["AskUserQuestion", "ask_user_question"]);
+function isCompaction(row) {
+  return row.type === "compaction" || row.type === "system" && row.subtype === "compact_boundary";
+}
+function firstTextContent(row) {
+  const content = row.message?.content;
+  if (typeof content === "string")
+    return content;
+  if (!Array.isArray(content))
+    return;
+  return content.find((b) => b.type === "text")?.text;
+}
+function skillInvocationPrompt(text) {
+  const name = /^\s*<skill name="([^"]+)"/.exec(text)?.[1];
+  if (name === undefined)
+    return;
+  const close = text.lastIndexOf("</skill>");
+  const args = close < 0 ? "" : text.slice(close + "</skill>".length).trim();
+  return args === "" ? `/${name}` : `/${name} ${args}`;
+}
+function promptText(row) {
+  if (row.type === "custom_message") {
+    if (row.display === false)
+      return;
+    const text = typeof row.content === "string" ? row.content.trim() : "";
+    return text === "" ? undefined : text;
+  }
+  if (row.type === "message") {
+    if (row.message?.role !== "user")
+      return;
+    const text = firstTextContent(row);
+    if (text === undefined)
+      return;
+    return skillInvocationPrompt(text) ?? text;
+  }
+  if (row.type !== "user" || row.isMeta || row.isCompactSummary)
+    return;
+  const content = row.message?.content;
+  if (typeof content === "string")
+    return content;
+  if (!Array.isArray(content) || content.some((b) => b.type === "tool_result"))
+    return;
+  return content.find((b) => b.type === "text")?.text;
+}
+function sumTokens(all) {
+  const total = zeroTokens();
+  for (const t of all)
+    for (const k of Object.keys(total))
+      total[k] += t[k];
+  return total;
+}
+function sumSpans(spans) {
+  return {
+    workMs: spans.reduce((n, s) => n + s.workMs, 0),
+    waitMs: spans.reduce((n, s) => n + s.waitMs, 0),
+    toolCalls: spans.reduce((n, s) => n + s.toolCalls, 0),
+    tokens: sumTokens(spans.map((s) => s.tokens))
+  };
+}
+var newAcc = (ts) => ({
+  last: ts,
+  askMs: 0,
+  asks: new Map,
+  toolIds: new Set,
+  messages: new Map,
+  compactions: 0
+});
+function accumulate(acc, row, ts) {
+  acc.last = Math.max(acc.last, ts);
+  if (row.type === "message") {
+    const m = row.message;
+    if (m?.role === "assistant") {
+      const blocks2 = Array.isArray(m.content) ? m.content : [];
+      for (const b of blocks2) {
+        if (b.type === "toolCall" && b.id) {
+          acc.toolIds.add(b.id);
+          if (b.name && OPERATOR_TOOLS.has(b.name))
+            acc.asks.set(b.id, ts);
+        }
+      }
+      const u2 = m.usage;
+      if (u2 && row.id)
+        acc.messages.set(row.id, {
+          input: u2.input ?? 0,
+          cacheCreate: u2.cacheWrite ?? 0,
+          cacheRead: u2.cacheRead ?? 0,
+          output: u2.output ?? 0
+        });
+    } else if (m?.role === "toolResult" && m.toolCallId && acc.asks.has(m.toolCallId)) {
+      acc.askMs += ts - (acc.asks.get(m.toolCallId) ?? ts);
+    }
+    return;
+  }
+  if (row.type === "compaction")
+    acc.compactions++;
+  const blocks = Array.isArray(row.message?.content) ? row.message.content : [];
+  for (const b of blocks) {
+    if (b.type === "tool_use" && b.id) {
+      acc.toolIds.add(b.id);
+      if (b.name && OPERATOR_TOOLS.has(b.name))
+        acc.asks.set(b.id, ts);
+    } else if (b.type === "tool_result" && b.tool_use_id && acc.asks.has(b.tool_use_id)) {
+      acc.askMs += ts - (acc.asks.get(b.tool_use_id) ?? ts);
+    }
+  }
+  const u = row.message?.usage;
+  if (row.type === "assistant" && u && row.message?.id) {
+    acc.messages.set(row.message.id, {
+      input: u.input_tokens ?? 0,
+      cacheCreate: u.cache_creation_input_tokens ?? 0,
+      cacheRead: u.cache_read_input_tokens ?? 0,
+      output: u.output_tokens ?? 0
+    });
+  }
+}
+var IDLE_GAP_MS = 300000;
+var SHELL_TOOLS = new Set(["bash", "shell", "exec", "exec_command", "run_command", "command"]);
+var SUBAGENT_TOOLS = new Set(["agent", "task", "invoke_subagent", "subagent", "dispatch_agent"]);
+var LOWERCASE_OPERATOR_TOOLS = new Set(["askuserquestion", "ask_user_question"]);
+var ACTOR_PRECEDENCE = ["operator", "subagent", "shell", "other"];
+function actorOf(tool) {
+  const t = tool.toLowerCase().replace(/[^a-z_]/g, "");
+  if (LOWERCASE_OPERATOR_TOOLS.has(t))
+    return "operator";
+  if (SUBAGENT_TOOLS.has(t))
+    return "subagent";
+  if (SHELL_TOOLS.has(t))
+    return "shell";
+  return "other";
+}
+function unionMs(spans, start, end) {
+  const clipped = spans.map(([a, b]) => [Math.max(a, start), Math.min(b, end)]).filter(([a, b]) => b > a).sort((x, y) => x[0] - y[0]);
+  let total = 0;
+  let cursor = Number.NaN;
+  let openUntil = Number.NaN;
+  for (const [a, b] of clipped) {
+    if (!Number.isFinite(cursor)) {
+      cursor = a;
+      openUntil = b;
+      continue;
+    }
+    if (a > openUntil) {
+      total += openUntil - cursor;
+      cursor = a;
+      openUntil = b;
+    } else {
+      openUntil = Math.max(openUntil, b);
+    }
+  }
+  if (Number.isFinite(cursor))
+    total += openUntil - cursor;
+  return total;
+}
+function subtract(spans, claimed) {
+  let free = spans;
+  for (const [ca, cb] of claimed) {
+    const next = [];
+    for (const [a, b] of free) {
+      if (cb <= a || ca >= b) {
+        next.push([a, b]);
+        continue;
+      }
+      if (ca > a)
+        next.push([a, ca]);
+      if (cb < b)
+        next.push([cb, b]);
+    }
+    free = next;
+  }
+  return free;
+}
+function actorSplit(rows, start, end) {
+  const empty = {
+    operatorMs: 0,
+    longestOperatorWaitMs: 0,
+    modelMs: 0,
+    shellMs: 0,
+    subagentMs: 0,
+    otherToolMs: 0,
+    idleMs: 0,
+    compactions: 0,
+    subagentErrors: 0
+  };
+  const window = end - start;
+  if (window <= 0)
+    return empty;
+  const calls = new Map;
+  const results = new Map;
+  const eventTs = [];
+  let compactions = 0;
+  for (const [row, ts] of rows) {
+    if (ts < start || ts > end)
+      continue;
+    eventTs.push(ts);
+    if (isCompaction(row))
+      compactions++;
+    const blocks = Array.isArray(row.message?.content) ? row.message?.content : [];
+    if (row.message?.role === "toolResult" && row.message.toolCallId !== undefined) {
+      results.set(row.message.toolCallId, { ts, isError: row.message.isError === true });
+    }
+    for (const b of blocks) {
+      if ((b.type === "tool_use" || b.type === "toolCall") && b.id !== undefined && b.name !== undefined) {
+        calls.set(b.id, { id: b.id, actor: actorOf(b.name), ts });
+      } else if (b.type === "tool_result" && b.tool_use_id !== undefined) {
+        results.set(b.tool_use_id, { ts, isError: b.is_error === true });
+      }
+    }
+  }
+  let subagentErrors = 0;
+  const resolved = [];
+  for (const call of calls.values()) {
+    const result = results.get(call.id);
+    if (result?.isError === true && call.actor === "subagent")
+      subagentErrors++;
+    resolved.push({ ...call, end: Math.min(result?.ts ?? end, end) });
+  }
+  const claimed = [];
+  const byActor = new Map;
+  for (const actor of ACTOR_PRECEDENCE) {
+    const mine = resolved.filter((r) => r.actor === actor).map((r) => [r.ts, r.end]);
+    const free = subtract(mine, claimed);
+    for (const span of free)
+      claimed.push(span);
+    const ms = unionMs(free, start, end);
+    byActor.set(actor, ms);
+    if (actor === "operator") {
+      empty.longestOperatorWaitMs = Math.max(0, ...mine.map(([a, b]) => b - a));
+    }
+  }
+  const boundaries = [...new Set([start, end, ...eventTs, ...claimed.flat()])].sort((a, b) => a - b);
+  const claimedSorted = [...claimed].sort((a, b) => a[0] - b[0]);
+  let idleMs = 0;
+  for (let i = 0;i < boundaries.length - 1; i++) {
+    const a = boundaries[i];
+    const b = boundaries[i + 1];
+    if (b - a < IDLE_GAP_MS)
+      continue;
+    if (claimedSorted.some(([ca, cb]) => ca < b && cb > a))
+      continue;
+    idleMs += b - a;
+  }
+  const accounted = (byActor.get("operator") ?? 0) + (byActor.get("subagent") ?? 0) + (byActor.get("shell") ?? 0) + (byActor.get("other") ?? 0) + idleMs;
+  return {
+    ...empty,
+    operatorMs: byActor.get("operator") ?? 0,
+    subagentMs: byActor.get("subagent") ?? 0,
+    shellMs: byActor.get("shell") ?? 0,
+    otherToolMs: byActor.get("other") ?? 0,
+    idleMs,
+    modelMs: Math.max(0, window - accounted),
+    compactions,
+    subagentErrors
+  };
+}
+function attemptWindow(attempts) {
+  const starts = attempts.map((a) => Date.parse(a.startedAt ?? "")).filter((n) => !Number.isNaN(n));
+  const ends = attempts.map((a) => Date.parse(a.completedAt ?? "")).filter((n) => !Number.isNaN(n));
+  return starts.length && ends.length ? [Math.min(...starts), Math.max(...ends)] : undefined;
+}
+function summaryRow(stage, status, span, measured) {
+  return {
+    stage,
+    status,
+    workMs: span.workMs,
+    waitMs: span.waitMs,
+    toolCalls: measured ? span.toolCalls : null,
+    tokens: measured ? span.tokens : null,
+    time: formatDuration(span.workMs),
+    wait: formatDuration(span.waitMs),
+    token: formatTokenSplit(measured ? span.tokens : null)
+  };
+}
+function buildRunSummary(rows, inputs, opts = {}) {
+  const { since, until } = opts;
+  const windows = [];
+  for (const { label, progress } of inputs) {
+    const states = (progress.states ?? []).flatMap((s) => {
+      const w = attemptWindow((s.actions ?? []).flatMap((a) => a.attempts ?? []));
+      return w ? [{ s, w }] : [];
+    });
+    if (!states.length)
+      throw new Error(`progress for run ${progress.runId} has no timed attempts`);
+    if (inputs.length === 1) {
+      for (const { s, w } of states) {
+        const stage = (s.visit ?? 1) > 1 ? `${s.state} (visit ${s.visit})` : s.state;
+        windows.push({ stage, status: s.status ?? "", start: w[0], end: w[1] });
+      }
+    } else {
+      const stage = label ?? `${progress.workflow ?? "run"} ${progress.runId.slice(0, 8)}`;
+      const start = Math.min(...states.map(({ w }) => w[0]));
+      windows.push({
+        stage,
+        status: progress.status ?? "",
+        start,
+        end: Math.max(...states.map(({ w }) => w[1]))
+      });
+    }
+  }
+  windows.sort((a, b) => a.start - b.start);
+  const measure = (start, end) => {
+    const acc = newAcc(start);
+    for (const [row, ts] of rows)
+      if (ts >= start && ts <= end && promptText(row) === undefined)
+        accumulate(acc, row, ts);
+    const span = {
+      workMs: end - start - acc.askMs,
+      waitMs: acc.askMs,
+      toolCalls: acc.toolIds.size,
+      tokens: sumTokens([...acc.messages.values()])
+    };
+    return { span, measured: acc.toolIds.size > 0 || acc.messages.size > 0 };
+  };
+  const sinceMs = since ? Date.parse(since) : Number.NaN;
+  const totalStart = Number.isNaN(sinceMs) ? Math.min(...windows.map((w) => w.start)) : sinceMs;
+  let totalEnd = Math.max(...windows.map((w) => w.end));
+  if (!Number.isNaN(sinceMs)) {
+    for (const [, ts] of rows)
+      if (ts >= sinceMs)
+        totalEnd = Math.max(totalEnd, ts);
+  }
+  const untilMs = until ? Date.parse(until) : Number.NaN;
+  if (!Number.isNaN(untilMs) && untilMs > totalStart)
+    totalEnd = untilMs;
+  const stageRows = windows.map((w) => {
+    const { span, measured } = measure(w.start, w.end);
+    return summaryRow(w.stage, w.status, span, measured);
+  });
+  const totalMeasure = measure(totalStart, totalEnd);
+  const statuses = [...new Set(inputs.map((i) => i.progress.status ?? ""))].join("/");
+  const total = summaryRow("Total", statuses, totalMeasure.span, totalMeasure.measured);
+  const overlaps = windows.some((w, i) => i > 0 && w.start < (windows[i - 1]?.end ?? 0));
+  const sum = sumSpans(stageRows.map((r) => ({ ...r, toolCalls: r.toolCalls ?? 0, tokens: r.tokens ?? zeroTokens() })));
+  const overhead = {
+    workMs: total.workMs - sum.workMs,
+    waitMs: total.waitMs - sum.waitMs,
+    toolCalls: (total.toolCalls ?? 0) - sum.toolCalls,
+    tokens: Object.fromEntries(Object.keys(sum.tokens).map((k) => [k, (total.tokens?.[k] ?? 0) - sum.tokens[k]]))
+  };
+  if (!overlaps && overhead.workMs > 0)
+    stageRows.push(summaryRow("driver overhead", "", overhead, totalMeasure.measured));
+  return {
+    available: true,
+    rows: stageRows,
+    total,
+    actors: actorSplit(rows, totalStart, totalEnd),
+    gate: { ms: null, reason: "no matching check receipt" },
+    skippedLines: opts.skippedLines ?? 0
+  };
+}
 var SENSITIVE_PREFIXES = ["drizzle/", "packages/config/", ".github/", "plugins/sp/hooks/"];
 var SENSITIVE_GLOBS = ["apps/server/src/**/auth*", "**/*secret*", "**/*.sql"];
 function globToRegex(glob) {
@@ -671,21 +1039,34 @@ function main(argv) {
   process.exit(main(process.argv.slice(2)));
 }
 export {
+  zeroTokens,
   validatePhaseTable,
   taskPhaseChildren,
+  sumTokens,
+  sumSpans,
+  skillInvocationPrompt,
   sensitiveReasonForPath,
   scheduleBatch,
   quickReadiness,
+  promptText,
   preflightTask,
   planLetter,
   planChild,
+  newAcc,
   main,
+  isCompaction,
   insertOnEntry,
   hostText,
   hostStatus,
+  formatTokens,
+  formatTokenSplit,
+  formatDuration,
   classifyFeaturePreflightFindings,
+  buildRunSummary,
   buildPhasedPlan,
   buildBatchPlan,
+  actorSplit,
+  accumulate,
   SENSITIVE_PREFIXES,
   SENSITIVE_GLOBS,
   NON_ABORTING_PREFLIGHT_CODES,
