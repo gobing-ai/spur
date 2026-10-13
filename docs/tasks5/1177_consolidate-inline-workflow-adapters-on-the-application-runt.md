@@ -4,7 +4,7 @@ name: Consolidate inline workflow adapters on the application runtime owner
 status: done
 template: feature-impl
 created_at: 2026-10-12T03:34:10.718Z
-updated_at: "2026-10-12T18:10:02.211Z"
+updated_at: "2026-10-13T05:42:22.580Z"
 feature_id: A91
 priority: P1
 tags:
@@ -112,18 +112,18 @@ Deferred: the heavy installed-invocation suite (`plugins/sp/tests/inline-run-ins
 **Pipeline verify results**
 
 - Verdict: PASS (from verdict artifact)
-- Confidence: MEDIUM
+- Confidence: HIGH
 
 | Requirement | Status | Evidence |
 |-------------|--------|----------|
-| R1 | MET | Setup and dispatch now share one resolution: `plugins/sp/lib/inline-run-app.ts:25` owns `resolveAppEntry` (source-checkout app entry versus staged bundle, with the missing-bundle error), and both scripts delegate to it (`plugins/sp/scripts/inline-run-setup.ts:10`, `plugins/sp/scripts/inline-run-dispatch.ts:12`) instead of carrying a private copy. Pinned by `scripts/commands/bundle-plugin-lib.test.ts:256`, which fails if either script re-defines a resolver or stops importing the shared one. No CLI transport was added: the loaders still resolve `--spur-bin` source entries and the portable bundle as before |
-| R2 | MET | The inline bundle no longer exports the low-level DB/DAO surface (`openInlineRunProjectDb`, `ArtifactDao`, `RunDao`), retired from the entry table now that 1176 moved the last plugin caller into an application operation (`scripts/commands/bundle-plugin-lib.ts:788` hides only operations after the removal). Provable and pinned by `scripts/commands/bundle-plugin-lib.test.ts:240` (absent from both the runtime bundle and its declarations, while the owning operations stay). The plugin-side proof remains `plugins/sp/tests/feature-verification-steps.test.ts:47` (the entry owns no DB/DAO/scan) |
-| R3 | MET | Behavior of the extracted runners is unchanged: plugin inline-run suites `43 pass` (`plugins/sp/tests/inline-run-setup.test.ts`, `inline-run-trace.test.ts`, `inline-run-close-reason.test.ts`) and the app-side persistence suites `40 pass`. Bundle separation is real, not asserted by prose: `plugins/sp/lib/plan-projection.generated.mjs:1` imports nothing (Node-pure) while the inline bundle is the Bun/SQLite operation surface, and `scripts/commands/bundle-plugin-lib.test.ts:208` keeps byte determinism plus builtin-only imports. The remaining packaging exception is documented at `docs/design/workflow-execution-economy.md:99` |
-| R4 | MET | Installed/isolated proof: `bun run plugin-smoke` → `plugin-install-smoke PASS` (standalone surface, clean install) and `bun scripts/commands/inline-pipeline-parity-check.ts` → `ok (11 actions, 4 guards agree across 9 workflows; 0 spurious dependency edges)`. Stale-bundle and absent-bundle refusals before any write are covered by the plugin suites above plus the loader's guard (`plugins/sp/lib/inline-run-app.ts:25`); the heavy installed-invocation suite `plugins/sp/tests/inline-run-installed.heavy.test.ts:1` is the `test:heavy` half of that contract and is not part of the per-task gate |
+| R1 | MET | Single resolver `plugins/sp/lib/inline-run-app.ts:33` (`resolveAppEntry`); setup imports and uses it `plugins/sp/scripts/inline-run-setup.ts:10`, `:109`; dispatch `plugins/sp/scripts/inline-run-dispatch.ts:12`, `:73`. Pinned by `scripts/commands/bundle-plugin-lib.test.ts:256`. Verifier-run (scripts workspace) 18 pass / 0 fail. |
+| R2 | MET | No DB/DAO names in `plugins/sp/lib/inline-run.generated.d.mts` (grep for `openInlineRunProjectDb`/`ArtifactDao`/`RunDao` empty); pinned by `scripts/commands/bundle-plugin-lib.test.ts:240`; plugin entry owns no DB/DAO `plugins/sp/tests/feature-verification-steps.test.ts:47`. |
+| R3 | MET | Plugin inline-run setup/trace/close-reason suites 43 pass / 0 fail; app `tests/services/inline-run-setup.test.ts` + `inline-run-driver.test.ts` 67 pass / 0 fail; deterministic, builtin-only inline bundle `scripts/commands/bundle-plugin-lib.test.ts:208`; Node-pure bundle `scripts/commands/bundle-plugin-lib.test.ts:131`; exception documented `docs/design/workflow-execution-economy.md:99`. |
+| R4 | MET | Heavy installed suite run this time (previously deferred): `plugins/sp/tests/inline-run-installed.heavy.test.ts:8` (installed twin records identity, fingerprint, action, closure without a checkout), `:250` and `:292` (stale bundle refused with a named skew error), `:336` (twins export every operation) — 4 pass / 0 fail. `bun run plugin-smoke` PASS; `bun scripts/commands/inline-pipeline-parity-check.ts` → ok (11 actions, 4 guards, 9 workflows). |
 
 | Acceptance Criteria | Status | Evidence Type | Evidence |
 |---------------------|--------|---------------|----------|
-| AC1 — Workflow adapters use one approved runtime persistence path (req: R1) | MET | command | Full gate through the sanctioned primitive (`wbs=1177 bun plugins/sp/scripts/quality-gate.ts run`) → `quality gate PASS (attempts: 1)`; durable `.spur/run/1177-test-gate.status` (`PASS`) and `.spur/run/1177-test-gate.log:458` (`11126 pass`, `0 fail`), `:15` (51 pre-check rules), `:3` (1363 files formatted/linted) |
+| AC1 — Workflow adapters use one approved runtime persistence path (req: R1) | MET | test | `plugins/sp/tests/inline-run-installed.heavy.test.ts:8`, `:250`, `:292`; `scripts/commands/bundle-plugin-lib.test.ts:240`, `:256`; verifier-run 43 + 67 + 18 + 4 pass / 0 fail, plugin-smoke PASS, parity-check ok. |
 - Coverage: N/A (verdict-based; verify pipeline does not measure code coverage)
 
 ### Review
@@ -135,13 +135,6 @@ Deferred: the heavy installed-invocation suite (`plugins/sp/tests/inline-run-ins
 | Priority | Dimension | Location | Finding |
 |----------|-----------|----------|----------|
 | P4 | — | — | No findings (verify verdict PASS) |
-
-**Confidence:** MEDIUM
-
-The gap: the bundle-surface retirement and the shared resolver were verified by the tree’s own full gate, `plugin-smoke` and the inline parity check, but these hops ran out of band from the pipeline. So the `test` hop never captured `proofDigest` and no digest-bound
-`.spur/run/1177-check-receipt.json` exists; the deciding evidence is
-`.spur/run/1177-test-gate.status` plus its log. A pipeline-driven run that writes that receipt
-is what raises this to HIGH.
 
 ### References
 
