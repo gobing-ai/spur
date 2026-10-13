@@ -4,7 +4,7 @@ name: Unify workflow and history measurements used by repo and skill tools
 status: done
 template: feature-impl
 created_at: 2026-10-12T03:34:10.720Z
-updated_at: "2026-10-13T05:43:32.638Z"
+updated_at: "2026-10-13T05:47:13.565Z"
 feature_id: A91
 priority: P1
 tags:
@@ -210,7 +210,7 @@ What this branch adds on the gate front instead:
 | Requirement | Status | Evidence |
 |-------------|--------|----------|
 | R1 | MET | Domain owns the SQL: `packages/domain/src/analytics/workflow-measurements.ts:76` (readWorkflowRuns), `:178`, `:210`, `:251` (readAgentRunHistoryRows), `:287` (readRealTerminalRunCounts); app folding `packages/app/src/workflow/run-measurements.ts:155` (readWorkflowMetrics), `:198` (readStateMetrics); repo adapters delegate: `scripts/commands/real-run-cost.ts:60`, `scripts/commands/workflow-promotion.ts:242`, `scripts/commands/workflow-promotion.ts:445`, `scripts/commands/pipeline-budgets.ts:252`; rg for bun:sqlite/SELECT/json_extract in adapters and run-measurements.ts → 0 hits. Re-run this turn: domain workflow-measurements 7 pass; scripts real-run-cost/pipeline-budgets/workflow-promotion/bundle-plugin-lib 85 pass 0 fail |
-| R2 | MET | App-owned pure aggregation `packages/app/src/workflow/run-summary.ts:391` (actorSplit) and `packages/app/src/workflow/run-summary.ts:518` (buildRunSummary); plugin re-exports from the generated pure entry `plugins/sp/lib/run-summary-core.ts:34-40`; host transcript handling stays in `plugins/sp/lib/transcript.ts:57` (parseRows) and `plugins/sp/lib/transcript.ts:81` (resolveTranscript). Re-run: plugin run-summary/session-timeline/daily-summary/inline-run-app 138 pass 0 fail |
+| R2 | MET | App-owned pure aggregation `packages/app/src/workflow/run-summary.ts:391` (actorSplit) and `packages/app/src/workflow/run-summary.ts:518` (buildRunSummary); plugin re-exports from the generated pure entry `plugins/sp/lib/run-summary-core.ts:34-40`; host transcript handling stays in `plugins/sp/lib/transcript.ts:57` (parseRows) and `plugins/sp/lib/transcript.ts:81` (resolveTranscript). Re-run: plugin run-summary/session-timeline/daily-summary/inline-run-app 139 pass 0 fail (incl. the installed-twin no-Bun degrade test added in `ff1c1c722`) |
 | R3 | MET | `packages/app/src/services/history-service.ts:1249` (HistoryService.readHistoryHealth) and file-db entry `packages/app/src/services/history-service.ts:1676`; schema presence `packages/domain/src/analytics/history-board-rollup.ts:1091`; daily-summary calls the app op at `plugins/sp/scripts/daily-summary/daily-summary.ts:389` and leaves historyHealth unset on null at `plugins/sp/scripts/daily-summary/daily-summary.ts:795-797`; unavailable vs measured-zero tests `plugins/sp/tests/daily-summary/daily-summary.test.ts:962` and `plugins/sp/tests/daily-summary/daily-summary.test.ts:973`. Re-run: app run-measurements/run-summary/history-service 92 pass 0 fail |
 | R4 | MET | Installed entry declares the op `plugins/sp/lib/inline-run.generated.d.mts:24`; daily-summary contains no bun:sqlite/SQL (rg → 0 hits); `bun scripts/commands/plugin-install-smoke.ts` → PASS this turn; bundle-plugin-lib tests pass in-workspace; no new CLI noun/verb/flag, migration or dependency in the tagged commits |
 
@@ -231,9 +231,9 @@ Dimensions: functional traceability R1–R4 met and the `## Solution` map is acc
 
 | Priority | Finding | Location | Disposition |
 | --- | --- | --- | --- |
-| P3 (minor) | Four R2 change-map rows (`:115`–`:118`) name `plugins/sp/scripts/run-summary.ts` as the home of `actorSplit`/`buildRunSummary`/`accumulate`/`RunSummary`, but that file is 107 lines and holds none of them; the quoted line numbers (391 `actorSplit`, 518 `buildRunSummary`, 200 `accumulate`, 299 `RunSummary`) match `packages/app/src/workflow/run-summary.ts` exactly, so only the path in the map is wrong, not the code. | `docs/tasks5/1178_unify-workflow-and-history-measurements-used-by-repo-and-ski.md:115` | DEFER — documentation-only; correct the path in the Solution map after this run (the digest is frozen). No code or test impact. |
-| P4 (advisory) | Seven changed paths are absent from the Solution change map (3 `apps/web/tests` files removing a process-wide `mock.module('@/ui')` leak, `apps/cli/tests/output-envelope.test.ts` clock freeze, `feature-lifecycle-adapter.test.ts` 20s→60s subprocess budget, feature-doc status). All are test-hygiene/gate-contention edits with no product behavior change; they are part of the certified digest (e.g. the leak site `apps/web/tests/modules/observability/decisions-tab.test.tsx:16`). | `apps/web/tests/modules/observability/decisions-tab.test.tsx:1` | DEFER — operator decides whether to keep them as in-run gate hygiene or split them; no correctness impact either way. |
-| P4 (advisory) | `daily-summary` `main()` now re-execs `bun` when not running under Bun, so the documented `node …/n.mjs` invocation exits 1 on a host without `bun` on PATH, where it previously degraded to an unavailable history section (precedent `plugins/sp/scripts/inline-run-setup.ts:53`). | `plugins/sp/scripts/daily-summary/daily-summary.ts:807` | ACCEPT — identical precedent already shipped by 1177 in `plugins/sp/scripts/inline-run-setup.ts:53` and `inline-run-dispatch.ts:36`; the installed runtime contract is unchanged in kind. |
+| P3 (minor) | Four R2 change-map rows (`:115`–`:118`) name `plugins/sp/scripts/run-summary.ts` as the home of `actorSplit`/`buildRunSummary`/`accumulate`/`RunSummary`, but that file is 107 lines and holds none of them; the quoted line numbers (391 `actorSplit`, 518 `buildRunSummary`, 200 `accumulate`, 299 `RunSummary`) match `packages/app/src/workflow/run-summary.ts` exactly, so only the path in the map is wrong, not the code. | `docs/tasks5/1178_unify-workflow-and-history-measurements-used-by-repo-and-ski.md:115` | RESOLVED — the R2 change-map rows now cite `packages/app/src/workflow/run-summary.ts` (`:391`, `:518`, `:200`, `:299`); see Post-review corrections. |
+| P4 (advisory) | Seven changed paths are absent from the Solution change map (3 `apps/web/tests` files removing a process-wide `mock.module('@/ui')` leak, `apps/cli/tests/output-envelope.test.ts` clock freeze, `feature-lifecycle-adapter.test.ts` 20s→60s subprocess budget, feature-doc status). All are test-hygiene/gate-contention edits with no product behavior change; they are part of the certified digest (e.g. the leak site `apps/web/tests/modules/observability/decisions-tab.test.tsx:16`). | `apps/web/tests/modules/observability/decisions-tab.test.tsx:1` | RESOLVED — the rebase onto `main` took main's own copies of those test files; the Solution map names only this branch's gate additions (see Post-rebase note). |
+| P4 (advisory) | `daily-summary` `main()` now re-execs `bun` when not running under Bun, so the documented `node …/n.mjs` invocation exits 1 on a host without `bun` on PATH, where it previously degraded to an unavailable history section (precedent `plugins/sp/scripts/inline-run-setup.ts:53`). | `plugins/sp/scripts/daily-summary/daily-summary.ts:807` | FIXED — `ff1c1c722`: without Bun on PATH `main()` keeps running under node and history degrades to unavailable (`plugins/sp/scripts/daily-summary/daily-summary.ts:809-814`); pinned by the installed-twin test in `plugins/sp/tests/daily-summary/daily-summary.test.ts`. |
 
 Evidence (all run in this tree on 2026-10-12; no gate re-run):
 
@@ -278,6 +278,11 @@ bounds). The rebase therefore took `main`'s copies of those files; the reviewer'
 unlisted paths is resolved by inheritance, and the `## Solution` map now names only this branch's own
 gate-related additions (the two coverage test files and the adapter budget). Nothing in the reviewed
 implementation changed: the R1–R4 source files rebased without conflict.
+
+
+#### Re-verification fix (dev-verifyall --fix all — 2026-10-12)
+
+- **P4 (advisory), `daily-summary` node re-exec — FIXED** in `ff1c1c722`, superseding the earlier ACCEPT: the re-exec still runs Bun when present, but an `ENOENT` spawn now falls through under node so the history reader degrades to unavailable (the pre-1178 behavior). Evidence: `plugins/sp/tests/daily-summary/daily-summary.test.ts` "installed twin under node without Bun on PATH" runs `daily-summary.mjs` with a node-only PATH (red before the twin was regenerated; 71 pass / 0 fail after); `script-contract-check` PASS; `plugin-smoke` PASS.
 
 ### References
 
