@@ -4,7 +4,7 @@ name: Relocate behavioral evaluation tooling and preserve both evaluation tiers
 status: done
 template: feature-impl
 created_at: 2026-10-12T03:34:10.715Z
-updated_at: "2026-10-12T18:10:01.010Z"
+updated_at: "2026-10-13T05:39:31.048Z"
 feature_id: A91
 priority: P1
 tags:
@@ -108,17 +108,17 @@ Deferred: the live paid tier was not executed (it needs an authenticated agent a
 **Pipeline verify results**
 
 - Verdict: PASS (from verdict artifact)
-- Confidence: MEDIUM
+- Confidence: HIGH
 
 | Requirement | Status | Evidence |
 |-------------|--------|----------|
-| R1 | MET | Root entry kept and repointed at the relocated source runner `package.json:103` (`bun run scripts/commands/skill-eval.ts`); the runner's CLI surface is `scripts/commands/skill-eval.ts:186` and `scripts/commands/skill-eval.ts:195`; the paid tier stays opt-in because only the default path spawns an agent (`scripts/commands/skill-eval.ts:85`), while `--fixtures` never spawns — asserted by `scripts/commands/skill-eval.test.ts:102` |
-| R2 | MET | Corpus and judge now under the plugin test owner: `plugins/sp/tests/evals/judge.ts:1`, `plugins/sp/tests/evals/scenarios.ts:1`, `plugins/sp/tests/evals/judge.test.ts:1` and `plugins/sp/tests/evals/README.md:1`; `plugins/sp/evals` no longer exists, and no live reference names it (the sweep in `plugins/sp/tests/skill-structure.test.ts:1644` and `:1648` asserts the new layout plus the runner location); documentation moved and linked from `plugins/sp/README.md:285`, with the dispatch surface `plugins/sp/skills/parallel-execution/references/dispatch-surface.md:170` and the governance table `docs/design/harness-surface-governance.md:96` repointed |
-| R3 | MET | Three outcomes are distinguished in the runner: unavailable is ENOENT-only `scripts/commands/skill-eval.ts:96`, while timeout `scripts/commands/skill-eval.ts:99`, signal kill `:108`, non-zero exit `:111` and empty stdout `:120` are FAIL; a missing or empty recorded fixture is FAIL as corrupt data `scripts/commands/skill-eval.ts:147` and `:151`. Deterministic coverage without any model call: `scripts/commands/skill-eval.test.ts:40` (ENOENT), `:49` (timeout), `:58` (non-zero), `:64` (empty stdout), `:86` (missing fixture), `:93` (empty fixture). No live call runs in a default check — `bun run eval -- --fixtures` completes with zero spawns |
+| R1 | MET | Root entry `package.json:104` (`bun run scripts/commands/skill-eval.ts`); CLI `scripts/commands/skill-eval.ts:186`; only the live path spawns via the injectable `runLiveAttempt` `scripts/commands/skill-eval.ts:85`; fixture tier never spawns `scripts/commands/skill-eval.test.ts:102`. Verifier-run `bun run eval --fixtures` → 1 pass, 0 fail, 0 skipped, exit 0. |
+| R2 | MET | Corpus/judge under the plugin test owner `plugins/sp/tests/evals/judge.ts:1`, `plugins/sp/tests/evals/scenarios.ts:1`, `plugins/sp/tests/evals/judge.test.ts:1`, `plugins/sp/tests/evals/README.md:1`; `plugins/sp/evals` absent and only the dated plan names it; layout pinned `plugins/sp/tests/skill-structure.test.ts:1644`, runner location `:1648`; docs repointed `plugins/sp/README.md:285`, `plugins/sp/skills/parallel-execution/references/dispatch-surface.md:170`, `docs/design/harness-surface-governance.md:96`; tarball exclusion `scripts/commands/bundle-plugins.test.ts:59`. |
+| R3 | MET | ENOENT-only unavailable `scripts/commands/skill-eval.ts:96`; FAIL for timeout `:99`, signal `:108`, non-zero `:111`, empty stdout `:120`, missing fixture `:147`, empty fixture `:151`. Tests `scripts/commands/skill-eval.test.ts:40`, `:49`, `:58`, `:64`, `:86`, `:93`. Verifier-run in the scripts workspace: skill-eval + bundle-plugins + verify-pack 17 pass / 0 fail (after fix 964bd5da7). |
 
 | Acceptance Criteria | Status | Evidence Type | Evidence |
 |---------------------|--------|---------------|----------|
-| AC1 — Behavioral evals retain free and opt-in live execution after relocation (req: R1) | MET | command | Full gate through the sanctioned primitive (`wbs=1175 bun plugins/sp/scripts/quality-gate.ts run`) → `quality gate PASS (attempts: 1)`; durable `.spur/run/1175-test-gate.status` (`PASS`) and `.spur/run/1175-test-gate.log:455` (`11087 pass`, `0 fail`), `:15` (51 pre-check rules), `:460` (2 post-check rules), `:3` (1357 files formatted/linted). Tier lenses: `bun run eval -- --fixtures` prints the Markdown report and exits 0 with the same scenario PASS as before the move; `plugins/sp/tests/evals/judge.test.ts` still separates disciplined from undisciplined fixtures (`4 pass`); script runner suites `scripts/commands/skill-eval.test.ts` (`10 pass`) |
+| AC1 — Behavioral evals retain free and opt-in live execution after relocation (req: R1) | MET | test | `scripts/commands/skill-eval.test.ts:40-102`; judge split `plugins/sp/tests/evals/judge.test.ts:32`, `:38` (4 pass / 0 fail); skill-structure eval layout 9 pass / 0 fail; fixture report exit 0. |
 - Coverage: N/A (verdict-based; verify pipeline does not measure code coverage)
 
 ### Review
@@ -130,13 +130,6 @@ Deferred: the live paid tier was not executed (it needs an authenticated agent a
 | Priority | Dimension | Location | Finding |
 |----------|-----------|----------|----------|
 | P4 | — | — | No findings (verify verdict PASS) |
-
-**Confidence:** MEDIUM
-
-The gap: the eval relocation and the runner’s failure contract were verified by the tree’s own full gate plus the deterministic `--fixtures` tier, but these hops ran out of band from the pipeline. So the `test` hop never captured `proofDigest` and no digest-bound
-`.spur/run/1175-check-receipt.json` exists; the deciding evidence is
-`.spur/run/1175-test-gate.status` plus its log. A pipeline-driven run that writes that receipt
-is what raises this to HIGH.
 
 ### References
 
