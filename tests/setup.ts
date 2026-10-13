@@ -1,7 +1,7 @@
 import { afterAll, beforeAll, beforeEach } from 'bun:test';
 import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
-import { join } from 'node:path';
+import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import util from 'node:util';
 import { setLoggerMuted } from '@gobing-ai/ts-infra';
@@ -81,8 +81,10 @@ process.env.SPUR_SKIP_PROJECT_CONFIG = 'true';
 // them afterwards: the directory still exists, because Bun's test runner never fires
 // `process.on('exit')`, so serve.test.ts's own cleanup handler is dead code. Point
 // every test process at a disposable registry instead.
-const testRegistryDir = mkdtempSync(join(tmpdir(), 'spur-test-projects-'));
-const testRegistryFile = join(testRegistryDir, 'projects.json');
+const launcherRegistryDir =
+    process.env.SPUR_PROJECTS_FILE === undefined ? null : dirname(process.env.SPUR_PROJECTS_FILE);
+const testRegistryDir = launcherRegistryDir ?? mkdtempSync(join(tmpdir(), 'spur-test-projects-'));
+const testRegistryFile = process.env.SPUR_PROJECTS_FILE ?? join(testRegistryDir, 'projects.json');
 process.env.SPUR_PROJECTS_FILE = testRegistryFile;
 // 1089 R5: the same hermeticity for the second global file a mounted server writes.
 // `apps/server/src/modules/commands` generates the slash-command catalog through
@@ -90,7 +92,7 @@ process.env.SPUR_PROJECTS_FILE = testRegistryFile;
 // (`packages/config/src/slash-commands.ts`). Without this the isolated registry above
 // was still accompanied by a real `~/.config/spur/slash_commands.json`, so
 // `HOME=$(mktemp -d) cd apps/server && bun test` left a `.config/spur/` directory behind.
-const testSlashCommandsFile = join(testRegistryDir, 'slash_commands.json');
+const testSlashCommandsFile = process.env.SPUR_SLASH_COMMANDS_FILE ?? join(testRegistryDir, 'slash_commands.json');
 process.env.SPUR_SLASH_COMMANDS_FILE = testSlashCommandsFile;
 // Re-assert before every test. Suites that own a registry (apps/cli projects,
 // health.test, project-registry.test) call `removeEnvVar('SPUR_PROJECTS_FILE')` in
@@ -108,7 +110,9 @@ beforeEach(() => {
     process.env.SPUR_SLASH_COMMANDS_FILE = testSlashCommandsFile;
 });
 afterAll(() => {
-    rmSync(testRegistryDir, { recursive: true, force: true });
+    // The test entry (scripts/commands/run-tests.ts) owns the directory it exports, and under
+    // `--parallel` one worker finishing must not delete a registry its siblings are still writing.
+    if (launcherRegistryDir === null) rmSync(testRegistryDir, { recursive: true, force: true });
 });
 
 // 0817 residual (buglog 2026-09-09): pin bare `spur` resolution for any test-spawned
