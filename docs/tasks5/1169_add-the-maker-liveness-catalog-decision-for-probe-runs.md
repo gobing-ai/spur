@@ -4,7 +4,7 @@ name: Add the maker-liveness catalog decision for probe runs
 status: done
 template: feature-impl
 created_at: 2026-10-11T23:23:16.306Z
-updated_at: "2026-10-12T02:30:07.336Z"
+updated_at: "2026-10-13T02:58:32.265Z"
 feature_id: P11
 
 done_forced: "false"
@@ -128,15 +128,15 @@ non-question and the probe would be indistinguishable from a real classification
 
 | Requirement | Status | Evidence |
 |-------------|--------|----------|
-| R1 | MET | Golden path decision show maker-liveness --json exited 0: choice, ok/unclear, fallback unclear and floor zero; real-hub self-check exited 0 and accepted an injected valid confidence-0.6 answer (P11-floor-proof.json); `config/decisions/maker-liveness.yaml:25`. |
-| R2 | MET | Golden path decision show maker-liveness --json exited 0 with only the implicit instructions parameter; `config/decisions/maker-liveness.yaml:28` declares no parameters. |
-| R3 | MET | Catalog inventory inspected at `docs/design/decision-catalog.md:88` and linked readiness contract inspected at `docs/design/decision-observability-and-adoption.md:182`. |
-| R4 | MET | Golden path shared list and status commands exited 0: maker-liveness listed and shared layer count five; receipts in .spur/run/P11-golden-path.json. |
+| R1 | MET | Source-local decision show maker-liveness --json exited 0 in a scratch project: choice, criteria ok/unclear with the R1 wording, fallback unclear, minConfidence 0; floor WHY comment at `config/decisions/maker-liveness.yaml:19-25`, entry at `config/decisions/maker-liveness.yaml:28`, criteria at `config/decisions/maker-liveness.yaml:35-37`. Fix pass this run aligned the criteria text to R1 (was "This maker answered the probe."). |
+| R2 | MET | decision show maker-liveness --json exited 0 reporting only the injected instructions parameter; no parameters key at `config/decisions/maker-liveness.yaml:28-38`. |
+| R3 | MET | Catalog inventory names maker-liveness.yaml, its one caller and floor rationale at `docs/design/decision-catalog.md:88-90`. |
+| R4 | MET | Source-local decision list --layer shared --json exited 0 listing maker-liveness; decision status exited 0 printing "layers project 0 · registered 0 · shared 5". |
 
 | Acceptance Criteria | Status | Evidence Type | Evidence |
 |---------------------|--------|---------------|----------|
-| Scenario: R5 — An opt-in probe proves a maker answers right now | MET | test | App service and CLI suites: real catalog probe, deduplication, fallback data, bounds and unchanged recorded ledger. Fresh commands: bun test tests/decision (cwd packages/app) exited 0, 80 pass/0 fail; bun test tests/commands/decision.test.ts (cwd apps/cli) exited 0, 32 pass/0 fail; .spur/run/P11-golden-path.json records source-local CLI commands. |
-| Scenario: R7 — A missing liveness catalog entry fails loudly before any probe | MET | test | App/CLI suites: missing catalog id rejects before a call, including an empty effective set. Fresh commands: bun test tests/decision (cwd packages/app) exited 0, 80 pass/0 fail; bun test tests/commands/decision.test.ts (cwd apps/cli) exited 0, 32 pass/0 fail; .spur/run/P11-golden-path.json records source-local CLI commands. |
+| Scenario: R5 — An opt-in probe proves a maker answers right now | MET | test | Real-catalog probe, dedup and unchanged ledger: `apps/cli/tests/commands/decision.test.ts:482`, `packages/app/tests/decision/decision-status-readiness.test.ts:258`. Fresh this run: bun test tests/decision (cwd packages/app) exited 0, 88 pass/0 fail; bun test tests/commands/decision.test.ts (cwd apps/cli) exited 0, 32 pass/0 fail. |
+| Scenario: R7 — A missing liveness catalog entry fails loudly before any probe | MET | test | Missing-entry preflight with zero calls: `packages/app/tests/decision/decision-status-readiness.test.ts:308`. Fresh this run: bun test tests/decision (cwd packages/app) exited 0, 88 pass/0 fail; bun test tests/commands/decision.test.ts (cwd apps/cli) exited 0, 32 pass/0 fail. |
 - Coverage: N/A (verdict-based; verify pipeline does not measure code coverage)
 
 ### Review

@@ -33,6 +33,6 @@ decisions:
         description: >
             Liveness probe. Answer `ok` if this maker can serve a decision right now.
         criteria:
-            ok: This maker answered the probe.
-            unclear: This maker did not answer the probe.
+            ok: The maker answered the question it was asked.
+            unclear: The maker could not answer.
         fallback: unclear
