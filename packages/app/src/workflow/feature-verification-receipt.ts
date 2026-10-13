@@ -72,6 +72,19 @@ export interface FeatureVerifierIdentity {
 /** Receipt lifecycle status. Only PASS satisfies the completion boundary. */
 export type FeatureReceiptStatus = 'RUNNING' | 'PASS' | 'FAIL';
 
+/**
+ * Confidence levels a completion PASS may carry (task-pipeline's vocabulary, 1068).
+ *
+ * A level is what makes a PASS usable: `validateFeatureVerificationReceipt` refuses a PASS that
+ * carries none, or LOW, unless the receipt records the operator's acknowledgement. See
+ * `confidenceBasis` for what each level rests on — the level is DERIVED by the pass from its own
+ * measurements, never asserted by a model.
+ */
+export const FEATURE_RECEIPT_CONFIDENCE_LEVELS = ['HIGH', 'MEDIUM', 'LOW'] as const;
+
+/** One of {@link FEATURE_RECEIPT_CONFIDENCE_LEVELS}. */
+export type FeatureReceiptConfidence = (typeof FEATURE_RECEIPT_CONFIDENCE_LEVELS)[number];
+
 /** Durable receipt for one feature-scoped verification pass (schema v1). */
 export interface FeatureVerificationReceipt {
     /** Receipt schema version; validation rejects other versions as malformed. */
@@ -90,6 +103,21 @@ export interface FeatureVerificationReceipt {
     inputDigest: string;
     /** Outcome of the verification pass. Only PASS satisfies completion. */
     status: FeatureReceiptStatus;
+    /**
+     * Derived confidence in a PASS: `HIGH` when the selected definition's own command exited 0
+     * with an unchanged proof-input digest, `MEDIUM` when that clean pass ran under a caller
+     * command override, `LOW` otherwise (or when the operator declared it). Absent on receipts
+     * written before this field existed — such a PASS is refused at completion.
+     */
+    confidence?: FeatureReceiptConfidence;
+    /** Non-empty evidence the level rests on, e.g. `verification command exited 0`. */
+    confidenceBasis?: string[];
+    /**
+     * Operator acknowledgement of a LOW level. Only a LOW (or absent) level needs it; the
+     * completion boundary accepts LOW exactly when this is `true`. Recorded on the receipt so the
+     * acknowledgement is durable and auditable rather than re-supplied at transition time.
+     */
+    confidenceAcknowledged?: boolean;
     /** ISO-8601 UTC start time of the pass. */
     startedAt: string;
     /** ISO-8601 UTC completion time; null while RUNNING. */
@@ -197,6 +225,12 @@ export interface CompleteFeatureReceiptOptions {
     /** After-pass proof-input digest; defaults to the before digest (PASS when equal). */
     inputDigest?: string;
     completedAt?: string;
+    /** Derived level for this pass (see `FeatureVerificationReceipt.confidence`). */
+    confidence?: FeatureReceiptConfidence;
+    /** Non-empty evidence for `confidence`; required whenever `confidence` is supplied. */
+    confidenceBasis?: string[];
+    /** Operator acknowledgement of a LOW level; omitted when the operator did not acknowledge. */
+    confidenceAcknowledged?: boolean;
 }
 
 /**
@@ -213,11 +247,24 @@ export async function completeFeatureVerificationReceipt(
     if (running.status !== 'RUNNING') {
         throw new Error(`receipt for run ${running.runId} is already ${running.status}`);
     }
+    if (options.confidence !== undefined) {
+        if (!FEATURE_RECEIPT_CONFIDENCE_LEVELS.includes(options.confidence)) {
+            throw new Error(`confidence must be HIGH, MEDIUM or LOW (got ${JSON.stringify(options.confidence)})`);
+        }
+        // A level without its evidence is the claim-table equivalent of a PASS with no proof: the
+        // reader cannot tell what the level rests on, so the level is refused rather than stored bare.
+        if (options.confidenceBasis === undefined || options.confidenceBasis.length === 0) {
+            throw new Error(`confidence ${options.confidence} requires a non-empty confidenceBasis`);
+        }
+    }
     const receipt: FeatureVerificationReceipt = {
         ...running,
         status: options.status,
         inputDigest: options.inputDigest ?? running.inputDigest,
         completedAt: options.completedAt ?? new Date().toISOString().replace(/\.\d{3}Z$/, 'Z'),
+        ...(options.confidence === undefined ? {} : { confidence: options.confidence }),
+        ...(options.confidenceBasis === undefined ? {} : { confidenceBasis: [...options.confidenceBasis] }),
+        ...(options.confidenceAcknowledged === true ? { confidenceAcknowledged: true } : {}),
     };
     const paths = featureReceiptPaths(runDir, receipt.featureId, receipt.runId);
     await fs.ensureDir(runDir);
@@ -258,7 +305,8 @@ export type FeatureReceiptRejection =
     | 'failed'
     | 'run'
     | 'contract-mismatch'
-    | 'stale';
+    | 'stale'
+    | 'unacknowledged-low-confidence';
 
 /** Currently selected verifier contract the receipt is validated against. */
 export interface ValidateFeatureReceiptOptions {
@@ -310,6 +358,27 @@ export function parseFeatureVerificationReceipt(raw: string): FeatureVerificatio
         (r.completedAt !== null && typeof r.completedAt !== 'string')
     ) {
         throw new Error('required fields missing or mistyped');
+    }
+    // Confidence is additive (schema v1): a receipt written before the field existed parses, and the
+    // completion boundary refuses it as unacknowledged-low-confidence rather than as malformed —
+    // "re-run the pass" is the actionable repair, "not a valid artifact" is not. When present the
+    // shape is judged strictly, so a hand-edited level cannot slip past the reader.
+    if (r.confidence !== undefined) {
+        if (!FEATURE_RECEIPT_CONFIDENCE_LEVELS.includes(r.confidence)) {
+            throw new Error(`confidence must be HIGH, MEDIUM or LOW (got ${JSON.stringify(r.confidence)})`);
+        }
+        if (!Array.isArray(r.confidenceBasis) || r.confidenceBasis.length === 0) {
+            throw new Error('confidence requires a non-empty confidenceBasis');
+        }
+        if (!r.confidenceBasis.every((entry) => typeof entry === 'string' && entry.length > 0)) {
+            throw new Error('confidenceBasis entries must be non-empty strings');
+        }
+    }
+    if (r.confidenceBasis !== undefined && !Array.isArray(r.confidenceBasis)) {
+        throw new Error('confidenceBasis must be an array');
+    }
+    if (r.confidenceAcknowledged !== undefined && typeof r.confidenceAcknowledged !== 'boolean') {
+        throw new Error('confidenceAcknowledged must be a boolean');
     }
     return parsed as FeatureVerificationReceipt;
 }
@@ -480,6 +549,22 @@ export async function validateFeatureVerificationReceipt(
             ok: false,
             reason: 'stale',
             detail: `receipt digest ${latest.inputDigest} ≠ current inputs ${options.currentDigest} — tree, spec, learnings or check contract changed after the pass`,
+        };
+    }
+    // Last, deliberately: every rejection above means "this evidence is not current", and re-running
+    // the pass fixes those AND produces a level. Judged only here so no existing reason's behaviour
+    // changes. A level of HIGH or MEDIUM certifies as before; LOW needs the operator's recorded
+    // acknowledgement, and absence (a pre-field receipt) is the same refusal with a named repair.
+    const confidence = latest.confidence;
+    const certified = confidence === 'HIGH' || confidence === 'MEDIUM';
+    if (!certified && latest.confidenceAcknowledged !== true) {
+        return {
+            ok: false,
+            reason: 'unacknowledged-low-confidence',
+            detail:
+                confidence === undefined
+                    ? 'receipt records a PASS with no confidence level (written before the field existed) — re-run the feature-scoped verification pass, which derives HIGH or MEDIUM from its own evidence'
+                    : `receipt records a ${confidence} confidence${(latest.confidenceBasis ?? []).length > 0 ? ` (basis: ${(latest.confidenceBasis ?? []).join('; ')})` : ''} — re-run the pass where the level can be HIGH or MEDIUM, or re-run it with the acknowledgement (ackLowConfidence) when LOW is the honest level`,
         };
     }
     return { ok: true, receipt: latest };
