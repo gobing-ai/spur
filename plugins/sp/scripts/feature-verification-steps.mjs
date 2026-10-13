@@ -42,13 +42,15 @@ async function requireModule(entry, mode) {
   }
   return mod;
 }
-async function verify(featureId, runId, cmdOverride, spurBin, mode) {
+async function verify(featureId, runId, cmdOverride, spurBin, mode, confidenceOverride, ackLowConfidence) {
   const mod = await loadModule(spurBin, mode);
   const result = await mod.runFeatureVerification({
     workdir: process.cwd(),
     featureId,
     runId,
-    cmdOverride
+    cmdOverride,
+    confidenceOverride,
+    ackLowConfidence
   });
   console.log(`feature-verification-steps: ${featureId} ${result.message}`);
 }
@@ -60,10 +62,10 @@ function main() {
     return i >= 0 && i + 1 < args.length ? args[i + 1] ?? "" : "";
   };
   if (command !== "verify") {
-    console.error("Usage: feature-verification-steps.ts verify --feature-id <id> --run-id <id> [--cmd <command>]");
+    console.error("Usage: feature-verification-steps.ts verify --feature-id <id> --run-id <id> [--cmd <command>] [--confidence HIGH|MEDIUM|LOW] [--ack-low-confidence]");
     process.exit(2);
   }
-  verify(flag("--feature-id") || getEnvVar("featureId") || "", flag("--run-id") || getEnvVar("__runId") || "", flag("--cmd") || getEnvVar("verificationCmd") || "", flag("--spur-bin") || getEnvVar("spurBin") || "", resolveModuleMode(flag("--module-mode"))).then(() => process.exit(0)).catch((err) => {
+  verify(flag("--feature-id") || getEnvVar("featureId") || "", flag("--run-id") || getEnvVar("__runId") || "", flag("--cmd") || getEnvVar("verificationCmd") || "", flag("--spur-bin") || getEnvVar("spurBin") || "", resolveModuleMode(flag("--module-mode")), flag("--confidence") || getEnvVar("confidence") || "", args.includes("--ack-low-confidence") || getEnvVar("ackLowConfidence") === "true").then(() => process.exit(0)).catch((err) => {
     console.error(`feature-verification-steps: ${String(err)}`);
     process.exit(1);
   });
