@@ -4,7 +4,7 @@ name: Name the consumer that requires a retired inline-run bundle export instead
 status: done
 template: issue
 created_at: 2026-10-12T21:12:25.453Z
-updated_at: "2026-10-13T03:01:54.975Z"
+updated_at: "2026-10-13T04:53:09.786Z"
 feature_id: A33
 
 ac_altitude: task-local
@@ -287,9 +287,44 @@ Tests:
 
 Acceptance trace: AC1 by (a)+(b) (all four facts named on the surface failure, no reinstall advice offered); AC2 by the two-remedy diagnosis, the remedy-only packaged guidance, and (c); AC3 by (a) and (d).
 
-Scope note (design deviation, explicit): the Plan placed the reciprocal helper in `plugins/sp/lib/inline-run-app.ts`, but both hook points the same Design names live in `packages/app`, and plugin code is not importable from app code (`sp-plugin-standalone`, ADR-065/130) — the Design's "one shared helper" therefore lives once in `packages/app/src/workflow/consumer-compat.ts` so both boundaries share a single spelling. `plugins/sp/lib/inline-run-app.ts` and the generated bundle are untouched, and the stale-*bundle* contract keeps its 1120 behaviour.
+Scope note (design deviation, explicit): the Plan placed the reciprocal helper in `plugins/sp/lib/inline-run-app.ts`, but both hook points the same Design names live in `packages/app`, and a published workspace package cannot relative-import out of itself across the plugin/app boundary (ADR-130 — the same boundary that moved `history-anatomy`/`plan-projection` app-side; `sp-plugin-standalone` constrains a plugin file's own imports, not this direction) — the Design's "one shared helper" therefore lives once in `packages/app/src/workflow/consumer-compat.ts` so both boundaries share a single spelling. `plugins/sp/lib/inline-run-app.ts` and the generated bundle are untouched, and the stale-*bundle* contract keeps its 1120 behaviour.
 
 Boundary respected: no re-export of `openInlineRunProjectDb`/`ArtifactDao`, no migration or deletion of the downstream port, no new public CLI verb, no schema change, no workflow-graph change (the packaged header is a comment).
+
+**Post-verification follow-up (2026-10-12, operator-directed — all 1185 residuals closed in place, no new task).**
+The review's two deferred P3 rows and its P4 advisories were resolved here rather than carried into a
+separate task, so the residuals task filed by the sweep (1189) was withdrawn.
+
+- **P3 (recognition bound — real, fixed).** `projectConsumerScript` required `<workdir>/.spur/`, so a
+  project-owned consumer at `<workdir>/scripts/verify.mjs` or `<workdir>/tools/port.mjs` still got the
+  bare `exited with N`. The rule is now "inside the project tree, outside the shipped distribution"
+  (`DISTRIBUTION_SEGMENTS`: `<workdir>/plugins/sp/`, `node_modules/@gobing-ai/spur/`), which is what R1's
+  antecedent ("any project-layer override script") actually requires. The `.spur/`-only pin at
+  `consumer-compat.test.ts:99` was inverted, and cases added for a non-`.spur/` project consumer, an
+  installed plugin bundle, and a script outside the workdir.
+- **P3 (multi-consumer mis-naming — already correct, now pinned).** `definitionConsumerScript` already
+  failed open on two distinct consumers (`consumer-compat.test.ts:147`); the delivered code was correct
+  and the review's "returns the first" reading was of an earlier revision.
+- **P4 (entry capture unbounded — fixed).** `MAX_ENTRY_CHARS = 256` plus a control-character rejection;
+  an implausible capture fails open instead of embedding or truncating a wrong path.
+- **P4 (1120 wording / over-claiming comment — fixed).** The comment now scopes the recognised shape to
+  the retired-seam consumers and states that the 1120 bundle-side sentence is deliberately unmatched
+  (its remedy is a reinstall, not a migration) — pinned by a test.
+- **P4 (relative `workdir` — already correct, pinned).** `projectConsumerScript` resolved both sides
+  (`consumer-compat.test.ts:161`).
+- **P4 (registered layer — fixed).** `LifecycleAdapterOptions.registeredWorkflowPaths` is threaded from
+  `make-lifecycle-adapter.ts`, and `staleConsumerDenial` now diagnoses the **project-side** layers
+  (`project` and `registered`), excluding only the shipped `shared` layer. Boundary pinned at
+  `workflow-resolver.test.ts`: the registered layer is consulted by the *bare-name* scan only, so the
+  shipped `feature-lifecycle.yaml` (which invokes `workflow run feature-verification.yaml`) cannot reach
+  a registered-only override — the threading protects a bare-name nested invocation.
+- **P4 (AC1 assertion strength — fixed).** The fixture now asserts the composed diagnosis sentence
+  (`requires openInlineRunProjectDb, ArtifactDao from the shipped inline-run entry`), not just the paths.
+- **P4 (deviation citation — corrected).** The layering reason is that a published workspace package
+  cannot relative-import across the plugin/app boundary (ADR-130, the same boundary that sent
+  `history-anatomy`/`plan-projection` app-side), *not* the `sp-plugin-standalone` import rule, which
+  constrains a plugin file's own imports. `plugins/sp/lib/inline-run-app.ts` now carries the reciprocal
+  cross-reference.
 
 ### Testing
 
@@ -348,6 +383,10 @@ The Design placed the helper beside the task-1120 `resolveAppEntry`/`loadInlineA
 #### Residual risk
 
 R1 traceability is exact only for `.spur/`-rooted consumers; a multi-script override can name the wrong consumer; a consumer emitting the 1120 wording stays unclassified (all fail-open to the pre-1185 message). The diagnosis is proven against the fixture's re-created consumer, not the live downstream port. Merge verdict: **OK**.
+
+**Post-verification disposition (2026-10-12, operator-directed).** The two deferred P3 rows and the P4 advisories above are CLOSED in this task, not carried forward: the sweep's residuals task (1189) was withdrawn. Specifically — the recognition bound is now "inside the project tree, outside the shipped distribution" (`DISTRIBUTION_SEGMENTS`), which is what R1's antecedent requires; the multi-consumer fail-open and the relative-`workdir` resolution were already correct and are now pinned by tests; the entry capture is bounded (`MAX_ENTRY_CHARS`, fail-open); the 1120 bundle-side wording is deliberately unmatched and says so; `staleConsumerDenial` threads `registeredWorkflowPaths` and diagnoses both project-side layers (`project`, `registered`), excluding only the shipped `shared` layer; the fixture asserts the composed AC1 sentence; and the deviation citation in `## Solution` now names the layering reason (ADR-130) rather than the `sp-plugin-standalone` import rule. Residual risk after the follow-up: recognition is now bounded by the distribution exclusion, so a project consumer *inside* `<workdir>/plugins/sp/` would not be named; that folder is the plugin's own tree in both a source checkout and an installed project.
+
+Closure evidence: `packages/app/tests/workflow/{consumer-compat,feature-lifecycle-stale-consumer,workflow-resolver}.test.ts` (26 + 5 + 17 cases) and the repo gate on the follow-up commit.
 
 ### References
 
