@@ -250,7 +250,8 @@ check receipt (`receipt.runId === runId`), otherwise `n/a (<reason>)`. Any value
   checklist** against target sections (read codebases, ADRs, dependent WBS, dogfood evidence as
   needed). If any item fails, synthesize and rewrite via CLI-gated section updates until all pass
   (or surface a blocked Q&A with a concrete question). Outcome vocabulary: `refined` (wrote) |
-  `ready` (checklist already met, no write — optional alias of refined with zero writes) | `failed`.
+  `ready` (checklist already met, no write — optional alias of refined with zero writes) |
+  `cancelled` (issue triage found no valid issue — see `premises`) | `failed`.
   Prefer reporting `refined` when any section changed; if checklist already fully met, emit:
 
   ```
@@ -294,6 +295,17 @@ check receipt (`receipt.runId === runId`), otherwise `n/a (<reason>)`. Any value
      - **Concurrency** — active worktrees or `wip` tasks touching the same files (`git worktree
        list`, `spur task list --status wip --json`) are recorded in References/Design.
      - **Scope** — the work is not already done, and not owned by another task.
+
+     **Issue triage.** When the task bundles several issues (findings, defects, R-items with their
+     proposed fixes), judge each one separately as `valid` (reproduced or confirmed in the current
+     tree), `already-fixed`, `owned-elsewhere` (name the WBS) or `invalid` (premise false). An issue
+     that is not `valid` is removed **with everything that exists only for it**: its Background
+     paragraph, R-items, Design/Solution notes, Plan steps and ACs. Renumber nothing that other
+     tasks or feature scenarios cite; leave a gap instead. Each removal is one correction-record
+     line. When **no** issue stays valid, do not rewrite the task. Record the triage in the
+     correction block, then `spur task update <wbs> cancelled --json`, and report outcome
+     `cancelled`. Cancelling is not demotion; it is valid only within the backlog/todo status scope
+     above.
 
      Contradictions are corrected in **this** refine (rewrite the claim, or re-point the design at
      ground truth), never deferred to the implementer. `--depth ready` exists so a downstream agent
