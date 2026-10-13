@@ -4,7 +4,7 @@ name: Add the opt-in decision maker liveness probe
 status: done
 template: feature-impl
 created_at: 2026-10-11T23:23:17.424Z
-updated_at: "2026-10-12T02:30:12.584Z"
+updated_at: "2026-10-13T02:58:38.775Z"
 feature_id: P11
 
 done_forced: "false"
@@ -133,17 +133,17 @@ Closed decisions from the original 2026-10-11 refinement and implementation sess
 
 | Requirement | Status | Evidence |
 |-------------|--------|----------|
-| R1 | MET | App tests pass: exported liveness id and injectable probe API; `packages/app/src/decision/decision-status-readiness.ts:165`. |
-| R2 | MET | App tests pass: one call per registered effective maker, instructions input, duplicate rejection before hub; `packages/app/tests/decision/decision-status-readiness.test.ts:258`; `packages/app/tests/decision/decision-service.test.ts:47`. |
-| R3 | MET | App service tests pass: accepted and each fallback mapped, actual deadline race expires with null value, rejection propagates; `packages/app/tests/decision/decision-service.test.ts:64`. |
-| R4 | MET | Probe-only hub receives only maker selection with no bus or decision log; inspected `packages/app/src/decision/decision-service.ts:260`; CLI probe regression exits 0 with ledger evidence unchanged at zero, `apps/cli/tests/commands/decision.test.ts:482`. |
-| R5 | MET | App tests pass: missing-entry preflight on empty effective set makes zero calls; `packages/app/tests/decision/decision-status-readiness.test.ts:308`; CLI missing-entry regression exits 1 before progress. |
-| R6 | MET | Failure table inspected and executable cases pass: acceptance, all fallback reasons, deadline, unexpected rejection, missing id, registration filtering and deduplication; `packages/app/tests/decision/decision-status-readiness.test.ts:14`; `packages/app/tests/decision/decision-service.test.ts:64`. |
+| R1 | MET | Probe loop and exported liveness id at `packages/app/src/decision/decision-status-readiness.ts:165`; exported at `packages/app/src/index.ts:98-100`. |
+| R2 | MET | One call per distinct registered effective maker: `packages/app/tests/decision/decision-status-readiness.test.ts:258`; duplicate rejection before hub: `packages/app/tests/decision/decision-service.test.ts:47`. Fresh this run: bun test tests/decision (cwd packages/app) exited 0, 88 pass/0 fail; bun test tests/commands/decision.test.ts (cwd apps/cli) exited 0, 32 pass/0 fail. |
+| R3 | MET | probeMaker maps ok from source model and null value on deadline at `packages/app/src/decision/decision-service.ts:319-349`; backstop race at `packages/app/src/decision/decision-service.ts:186`; tested at `packages/app/tests/decision/decision-service.test.ts:64`. |
+| R4 | MET | Probe-only hub built with registry only, no bus/log, at `packages/app/src/decision/decision-service.ts:352-375`; ledger unchanged after probe at `apps/cli/tests/commands/decision.test.ts:482`. |
+| R5 | MET | Missing entry fails before any call: `packages/app/tests/decision/decision-status-readiness.test.ts:308`. Fresh this run: bun test tests/decision (cwd packages/app) exited 0, 88 pass/0 fail; bun test tests/commands/decision.test.ts (cwd apps/cli) exited 0, 32 pass/0 fail. |
+| R6 | MET | Failure-mode table written ahead of assertions at `packages/app/tests/decision/decision-status-readiness.test.ts:14-30`; executable cases at `packages/app/tests/decision/decision-service.test.ts:64`. |
 
 | Acceptance Criteria | Status | Evidence Type | Evidence |
 |---------------------|--------|---------------|----------|
-| Scenario: R5 — An opt-in probe proves a maker answers right now | MET | test | App service and CLI suites: real catalog probe, deduplication, fallback data, bounds and unchanged recorded ledger. Fresh commands: bun test tests/decision (cwd packages/app) exited 0, 80 pass/0 fail; bun test tests/commands/decision.test.ts (cwd apps/cli) exited 0, 32 pass/0 fail; .spur/run/P11-golden-path.json records source-local CLI commands. |
-| Scenario: R6 — A probe that cannot reach its maker is reported, not raised | MET | test | App service/loop suites: every fallback reason and deadline mapped to data, followed by other makers; CLI fallback exits zero. Fresh commands: bun test tests/decision (cwd packages/app) exited 0, 80 pass/0 fail; bun test tests/commands/decision.test.ts (cwd apps/cli) exited 0, 32 pass/0 fail; .spur/run/P11-golden-path.json records source-local CLI commands. |
+| Scenario: R5 — An opt-in probe proves a maker answers right now | MET | test | `apps/cli/tests/commands/decision.test.ts:482`; `packages/app/tests/decision/decision-status-readiness.test.ts:258`. Fresh this run: bun test tests/decision (cwd packages/app) exited 0, 88 pass/0 fail; bun test tests/commands/decision.test.ts (cwd apps/cli) exited 0, 32 pass/0 fail. |
+| Scenario: R6 — A probe that cannot reach its maker is reported, not raised | MET | test | Every fallback reason and deadline mapped to data: `packages/app/tests/decision/decision-service.test.ts:64`. Fresh this run: bun test tests/decision (cwd packages/app) exited 0, 88 pass/0 fail; bun test tests/commands/decision.test.ts (cwd apps/cli) exited 0, 32 pass/0 fail. |
 - Coverage: N/A (verdict-based; verify pipeline does not measure code coverage)
 
 ### Review

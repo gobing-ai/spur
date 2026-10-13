@@ -4,7 +4,7 @@ name: Render the sectioned decision status readiness report and wire --probe
 status: done
 template: feature-impl
 created_at: 2026-10-11T23:23:17.914Z
-updated_at: "2026-10-12T02:52:21.747Z"
+updated_at: "2026-10-13T02:58:42.119Z"
 feature_id: P11
 
 done_forced: "false"
@@ -169,18 +169,18 @@ this repository is currently in, where the previous output read as healthy.
 
 | Requirement | Status | Evidence |
 |-------------|--------|----------|
-| R1 | MET | CLI tests pass: single summary line, aligned headers, labelled errors/catalog, no raw JSON cells and complete timestamp; `apps/cli/tests/commands/decision.test.ts:368`. |
-| R2 | MET | CLI tests pass: opt-in probe column, maker-named stderr progress, unchanged recorded evidence, and conflicting flags rejected; `apps/cli/tests/commands/decision.test.ts:482`. |
-| R3 | MET | CLI tests pass: separate stdout parses in raw and enveloped JSON modes while stderr carries progress; existing JSON keys retained; `apps/cli/tests/commands/decision.test.ts:500`. |
-| R4 | MET | Owning readiness layout/probe contract inspected at `docs/design/decision-observability-and-adoption.md:164`; catalog inventory at `docs/design/decision-catalog.md:88`; CLI reference/help parity covered by repository gate. |
-| R5 | MET | CLI decision suite passes 32 tests, zero failures, including human layout, JSON compatibility, evidence, probes and conflict handling; `apps/cli/tests/commands/decision.test.ts:427`. |
-| R6 | MET | App decision suite passes, including readiness mapping and probe failure table; `packages/app/tests/decision/decision-status-readiness.test.ts:14`. |
+| R1 | MET | Renderer at `apps/cli/src/commands/decision.ts:377`; layout test at `apps/cli/tests/commands/decision.test.ts:368`; scratch-project decision status exited 0 with a single header line, Makers/Decisions tables and Catalog block. |
+| R2 | MET | Flag at `apps/cli/src/commands/decision.ts:275`, stderr progress at `apps/cli/src/commands/decision.ts:334`; test at `apps/cli/tests/commands/decision.test.ts:482`; scratch --probe --reliability exited 1 with "cannot be combined". |
+| R3 | MET | One parseable stdout document under --probe --json: `apps/cli/tests/commands/decision.test.ts:500`. Fresh this run: bun test tests/decision (cwd packages/app) exited 0, 88 pass/0 fail; bun test tests/commands/decision.test.ts (cwd apps/cli) exited 0, 32 pass/0 fail. |
+| R4 | MET | Layout and probe contract at `docs/design/decision-observability-and-adoption.md:164-184`; catalog inventory at `docs/design/decision-catalog.md:88`. |
+| R5 | MET | CLI decision suite: Fresh this run: bun test tests/decision (cwd packages/app) exited 0, 88 pass/0 fail; bun test tests/commands/decision.test.ts (cwd apps/cli) exited 0, 32 pass/0 fail. |
+| R6 | MET | App readiness suite with failure table at `packages/app/tests/decision/decision-status-readiness.test.ts:14`. Fresh this run: bun test tests/decision (cwd packages/app) exited 0, 88 pass/0 fail; bun test tests/commands/decision.test.ts (cwd apps/cli) exited 0, 32 pass/0 fail. |
 
 | Acceptance Criteria | Status | Evidence Type | Evidence |
 |---------------------|--------|---------------|----------|
-| Scenario: R1 — The readiness report renders as labelled sections instead of a flat key dump | MET | test | CLI suite: human sectioned report, single summary header, errors and aligned tables. Fresh commands: bun test tests/decision (cwd packages/app) exited 0, 80 pass/0 fail; bun test tests/commands/decision.test.ts (cwd apps/cli) exited 0, 32 pass/0 fail; .spur/run/P11-golden-path.json records source-local CLI commands. |
-| Scenario: R4 — Recorded evidence separates registered and configured from actually working | MET | test | App/CLI suites: pair-matched ledger evidence, zero evidence, facade compatibility and no default probing. Fresh commands: bun test tests/decision (cwd packages/app) exited 0, 80 pass/0 fail; bun test tests/commands/decision.test.ts (cwd apps/cli) exited 0, 32 pass/0 fail; .spur/run/P11-golden-path.json records source-local CLI commands. |
-| Scenario: R8 — Mutually exclusive status flags are refused as a caller mistake | MET | test | CLI suite: --probe plus --reliability exits one before maker progress. Fresh commands: bun test tests/decision (cwd packages/app) exited 0, 80 pass/0 fail; bun test tests/commands/decision.test.ts (cwd apps/cli) exited 0, 32 pass/0 fail; .spur/run/P11-golden-path.json records source-local CLI commands. |
+| Scenario: R1 — The readiness report renders as labelled sections instead of a flat key dump | MET | test | `apps/cli/tests/commands/decision.test.ts:368`; scratch decision status output inspected. Fresh this run: bun test tests/decision (cwd packages/app) exited 0, 88 pass/0 fail; bun test tests/commands/decision.test.ts (cwd apps/cli) exited 0, 32 pass/0 fail. |
+| Scenario: R4 — Recorded evidence separates registered and configured from actually working | MET | test | `apps/cli/tests/commands/decision.test.ts:427`; `packages/app/tests/decision/decision-status-readiness.test.ts:209`. Fresh this run: bun test tests/decision (cwd packages/app) exited 0, 88 pass/0 fail; bun test tests/commands/decision.test.ts (cwd apps/cli) exited 0, 32 pass/0 fail. |
+| Scenario: R8 — Mutually exclusive status flags are refused as a caller mistake | MET | command | Scratch-project decision status --probe --reliability exited 1 printing "--probe and --reliability cannot be combined"; `apps/cli/tests/commands/decision.test.ts:482`. |
 - Coverage: N/A (verdict-based; verify pipeline does not measure code coverage)
 
 ### Review

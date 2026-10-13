@@ -4,7 +4,7 @@ name: Map decision readiness facts and recorded evidence onto the status report
 status: done
 template: feature-impl
 created_at: 2026-10-11T23:23:16.864Z
-updated_at: "2026-10-12T02:30:10.086Z"
+updated_at: "2026-10-13T02:58:35.502Z"
 feature_id: P11
 
 done_forced: "false"
@@ -132,17 +132,17 @@ Closed decisions from the original 2026-10-11 refinement and implementation sess
 
 | Requirement | Status | Evidence |
 |-------------|--------|----------|
-| R1 | MET | App tests pass: readiness rows and evidence interfaces used by mapping; `packages/app/src/decision/decision-status-readiness.ts:98`. |
-| R2 | MET | App tests pass: empty catalog default, configured missing maker, pair matching, fold totals and changed maker; `packages/app/tests/decision/decision-status-readiness.test.ts:100`. |
-| R3 | MET | App tests pass: ledger mapping via real in-memory DAO; `packages/app/tests/decision/decision-status-readiness.test.ts:209`; additional unmigrated in-memory database command exited 0 with zero evidence. |
-| R4 | MET | Export block inspected: all readiness symbols exposed by the package facade; `packages/app/src/index.ts:78`. |
-| R5 | MET | CLI tests pass: original JSON key-set retained and per-decision catalog facts/evidence added; `apps/cli/tests/commands/decision.test.ts:427`. |
+| R1 | MET | Overlay interfaces and pure mapping at `packages/app/src/decision/decision-status-readiness.ts:98`; exercised by app readiness suite. Fresh this run: bun test tests/decision (cwd packages/app) exited 0, 88 pass/0 fail; bun test tests/commands/decision.test.ts (cwd apps/cli) exited 0, 32 pass/0 fail. |
+| R2 | MET | Empty-catalog default, missing maker, pair matching and fold totals: `packages/app/tests/decision/decision-status-readiness.test.ts:100`. Fresh this run: bun test tests/decision (cwd packages/app) exited 0, 88 pass/0 fail; bun test tests/commands/decision.test.ts (cwd apps/cli) exited 0, 32 pass/0 fail. |
+| R3 | MET | Ledger read via reliability aggregation at `packages/app/src/decision/decision-status-readiness.ts:148`; real in-memory DAO test at `packages/app/tests/decision/decision-status-readiness.test.ts:209`. |
+| R4 | MET | Readiness export block at `packages/app/src/index.ts:90-102` (re-anchored this run; prior :78 drifted). |
+| R5 | MET | Status rows gain type/layer/minConfidence at `packages/app/src/decision/decision-service.ts:606-616`; pre-existing JSON keys asserted at `apps/cli/tests/commands/decision.test.ts:427`. Fresh this run: bun test tests/decision (cwd packages/app) exited 0, 88 pass/0 fail; bun test tests/commands/decision.test.ts (cwd apps/cli) exited 0, 32 pass/0 fail. |
 
 | Acceptance Criteria | Status | Evidence Type | Evidence |
 |---------------------|--------|---------------|----------|
-| Scenario: R2 — Every maker row shows registration, configuration and what it serves | MET | test | App/CLI suites: maker registration, configuration sources, serves count and configured missing makers. Fresh commands: bun test tests/decision (cwd packages/app) exited 0, 80 pass/0 fail; bun test tests/commands/decision.test.ts (cwd apps/cli) exited 0, 32 pass/0 fail; .spur/run/P11-golden-path.json records source-local CLI commands. |
-| Scenario: R3 — Each decision row shows its effective maker, resolution source and catalog facts | MET | test | App/CLI suites: effective maker precedence, catalog fields and unregistered glyph. Fresh commands: bun test tests/decision (cwd packages/app) exited 0, 80 pass/0 fail; bun test tests/commands/decision.test.ts (cwd apps/cli) exited 0, 32 pass/0 fail; .spur/run/P11-golden-path.json records source-local CLI commands. |
-| Scenario: R4 — Recorded evidence separates registered and configured from actually working | MET | test | App/CLI suites: pair-matched ledger evidence, zero evidence, facade compatibility and no default probing. Fresh commands: bun test tests/decision (cwd packages/app) exited 0, 80 pass/0 fail; bun test tests/commands/decision.test.ts (cwd apps/cli) exited 0, 32 pass/0 fail; .spur/run/P11-golden-path.json records source-local CLI commands. |
+| Scenario: R2 — Every maker row shows registration, configuration and what it serves | MET | test | `apps/cli/tests/commands/decision.test.ts:427`; scratch-project decision status exited 0 showing CONFIGURED BY/SERVES per maker. Fresh this run: bun test tests/decision (cwd packages/app) exited 0, 88 pass/0 fail; bun test tests/commands/decision.test.ts (cwd apps/cli) exited 0, 32 pass/0 fail. |
+| Scenario: R3 — Each decision row shows its effective maker, resolution source and catalog facts | MET | test | `apps/cli/tests/commands/decision.test.ts:427`; scratch decision status rows show MAKER/SOURCE/MIN/LAYER. Fresh this run: bun test tests/decision (cwd packages/app) exited 0, 88 pass/0 fail; bun test tests/commands/decision.test.ts (cwd apps/cli) exited 0, 32 pass/0 fail. |
+| Scenario: R4 — Recorded evidence separates registered and configured from actually working | MET | test | `packages/app/tests/decision/decision-status-readiness.test.ts:209`; `apps/cli/tests/commands/decision.test.ts:427`. Fresh this run: bun test tests/decision (cwd packages/app) exited 0, 88 pass/0 fail; bun test tests/commands/decision.test.ts (cwd apps/cli) exited 0, 32 pass/0 fail. |
 - Coverage: N/A (verdict-based; verify pipeline does not measure code coverage)
 
 ### Review
