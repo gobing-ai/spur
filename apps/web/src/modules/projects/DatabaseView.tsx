@@ -28,6 +28,15 @@ import { fetchWithTimeout, resolveApiUrl } from '../../lib/rpc-client';
 /** Server-clamped page size. The route accepts up to 200; the viewer fixes 50. */
 export const DATABASE_PAGE_SIZE = 50;
 
+/**
+ * Settle time before the contains filter is sent to the server (R5). Each read costs a
+ * filtered `COUNT(*)` plus a window select, executed synchronously on `bun:sqlite` inside
+ * the Bun server, so reading once per keystroke blocks the shared event loop on a
+ * multi-million-row table. 250 ms matches the repo's other server-driven filter boxes
+ * (`HistoryShell`, `SystemEventsTab`).
+ */
+const FILTER_DEBOUNCE_MS = 250;
+
 /** URL query keys owned by this tab (frozen seam of task 1184). */
 const URL_KEYS = {
     table: 'table',
@@ -380,17 +389,27 @@ export default function DatabaseView() {
     const [pageInput, setPageInput] = useState('');
     const [detailOffset, setDetailOffset] = useState<number | null>(null);
 
+    // The input stays bound to the URL value so typing is immediate; the read waits for the
+    // value to settle. Debouncing the request rather than the URL write keeps `?f=` accurate
+    // for reload and deep links (AC2) while still collapsing a burst of keystrokes into one read.
+    const [filterValueSettled, setFilterValueSettled] = useState(filterValue);
+    useEffect(() => {
+        const timer = setTimeout(() => setFilterValueSettled(filterValue), FILTER_DEBOUNCE_MS);
+        return () => clearTimeout(timer);
+    }, [filterValue]);
+
     const query = useMemo<RowQuery | null>(() => {
         if (selectedTable === null) return null;
+        const filterSettled = filterColumn !== null && filterValueSettled !== '';
         return {
             page,
             pageSize: DATABASE_PAGE_SIZE,
             sort,
             dir,
-            filterColumn: filterActive ? filterColumn : null,
-            filterValue: filterActive ? filterValue : '',
+            filterColumn: filterSettled ? filterColumn : null,
+            filterValue: filterSettled ? filterValueSettled : '',
         };
-    }, [selectedTable, page, sort, dir, filterColumn, filterValue, filterActive]);
+    }, [selectedTable, page, sort, dir, filterColumn, filterValueSettled]);
 
     const tables = useDatabaseTables(reloadKey);
     const schema = useTableSchema(selectedTable, reloadKey);

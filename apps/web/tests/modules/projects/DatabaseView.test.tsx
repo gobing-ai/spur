@@ -571,3 +571,54 @@ describe('DatabaseView named states (AC8)', () => {
         await waitFor(() => expect(view.container.querySelector('[data-database-state="failed"]')).not.toBeNull());
     });
 });
+
+// ── 1188: the filter input must not read the server once per keystroke ────────
+// Each read costs a filtered COUNT(*) plus a window select, executed synchronously
+// on bun:sqlite inside the Bun server, so a keystroke-per-read against a 3.2M-row
+// table blocks the shared event loop. The two comparable server-driven filter boxes
+// in this repo (HistoryShell, SystemEventsTab) debounce 250 ms.
+describe('DatabaseView filter debounce (1188)', () => {
+    function filterRouter(requests: string[]) {
+        return databaseRouter({
+            tables: ['history_message'],
+            requests,
+            schema: (name) => jsonResponse({ name, columns: COLUMN_DEFS, rowCount: 120 }),
+            rows: (_name, params) => jsonResponse(rowsPayload(params, [], 120)),
+        });
+    }
+
+    /** Filter values that actually reached the server, in order. */
+    function filterValuesSent(requests: string[]): string[] {
+        return rowsRequests(requests)
+            .map((params) => params.get('filter'))
+            .filter((value): value is string => value !== null);
+    }
+
+    test('typing a term issues one rows read, carrying the final value', async () => {
+        const requests: string[] = [];
+        setFetchForTesting(filterRouter(requests));
+        const view = renderView('/board/projects/database?table=history_message&fcol=body&f=nee');
+        await waitFor(() => expect(lastRowsParams(requests)?.get('filter')).toBe('nee'));
+
+        const before = filterValuesSent(requests).length;
+        const input = view.container.querySelector('[data-database-filter-value]') as Element;
+        for (const value of ['needle', 'needleb', 'needlebo']) setControlValue(input, value);
+
+        await waitFor(() => expect(lastRowsParams(requests)?.get('filter')).toBe('needlebo'));
+        expect(filterValuesSent(requests).length - before).toBe(1);
+    });
+
+    test('only the settled value reaches the server, never an intermediate one', async () => {
+        const requests: string[] = [];
+        setFetchForTesting(filterRouter(requests));
+        const view = renderView('/board/projects/database?table=history_message&fcol=body&f=start');
+        await waitFor(() => expect(lastRowsParams(requests)?.get('filter')).toBe('start'));
+
+        const input = view.container.querySelector('[data-database-filter-value]') as Element;
+        setControlValue(input, 'ab');
+        setControlValue(input, 'abcd');
+
+        await waitFor(() => expect(lastRowsParams(requests)?.get('filter')).toBe('abcd'));
+        expect(filterValuesSent(requests)).toEqual(['start', 'abcd']);
+    });
+});
