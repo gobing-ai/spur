@@ -12,6 +12,7 @@ import type { WorkflowDef } from '@gobing-ai/ts-dual-workflow-engine';
 import {
     consumerBundleSkew,
     definitionConsumerScript,
+    MAX_ENTRY_CHARS,
     MAX_MISSING_EXPORTS,
     nestedWorkflowRunTarget,
     projectConsumerFailure,
@@ -55,6 +56,20 @@ describe('consumerBundleSkew', () => {
         const skew = consumerBundleSkew(`module /a/b.mjs is missing seams (${names})`, '/proj/.spur/scripts/x.mjs');
         expect(skew?.missing).toHaveLength(MAX_MISSING_EXPORTS);
     });
+
+    test('an implausibly long entry path fails open instead of being embedded or truncated', () => {
+        const entry = `/proj/${'a'.repeat(MAX_ENTRY_CHARS + 1)}/bundle.mjs`;
+        expect(consumerBundleSkew(`module ${entry} is missing seams (a, b)`, '/proj/x.mjs')).toBeNull();
+    });
+
+    test('the 1120 bundle-side wording stays unclassified (reinstall is its remedy, not migration)', () => {
+        // `plugins/sp/lib/inline-run-app.ts` owns this skew and prints the reinstall remedy itself;
+        // classifying it here would attach the project-side advice to the wrong failure.
+        const bundleSide =
+            'inline application bundle /opt/spur/plugins/sp/lib/inline-run.generated.mjs is older than its ' +
+            'scripts — missing readInstalledInventory, ArtifactDao';
+        expect(consumerBundleSkew(bundleSide, '/proj/.spur/scripts/x.mjs')).toBeNull();
+    });
 });
 
 describe('staleConsumerDiagnosis', () => {
@@ -96,7 +111,29 @@ describe('projectConsumerScript', () => {
         expect(
             projectConsumerScript('bun plugins/sp/scripts/feature-verification-steps.ts verify', WORKDIR),
         ).toBeNull();
-        expect(projectConsumerScript(`bun ${join(WORKDIR, 'scripts/verify.mjs')}`, WORKDIR)).toBeNull();
+    });
+
+    test('a project-owned script outside `.spur/` counts too (1185 review P3: that bound was too narrow)', () => {
+        // R1's antecedent is any project-layer override script, not only an `.spur/`-rooted one —
+        // an `.spur/`-only rule sent every other project consumer back to the bare `exited with N`.
+        expect(projectConsumerScript('bun scripts/verify.mjs', WORKDIR)).toBe(join(WORKDIR, 'scripts/verify.mjs'));
+        expect(projectConsumerScript('bun tools/deep/port.mjs', WORKDIR)).toBe(join(WORKDIR, 'tools/deep/port.mjs'));
+        expect(projectConsumerScript(`node ${join(WORKDIR, 'tools/port.mjs')}`, WORKDIR)).toBe(
+            join(WORKDIR, 'tools/port.mjs'),
+        );
+    });
+
+    test('an installed plugin bundle is the distribution, not a project consumer', () => {
+        expect(
+            projectConsumerScript(
+                `bun ${join(WORKDIR, 'node_modules/@gobing-ai/spur/lib/inline-run.generated.mjs')}`,
+                WORKDIR,
+            ),
+        ).toBeNull();
+    });
+
+    test('a script outside the workdir is not a project consumer', () => {
+        expect(projectConsumerScript('bun /opt/elsewhere/verify.mjs', WORKDIR)).toBeNull();
     });
 
     test('shell variables are never resolved into a path', () => {

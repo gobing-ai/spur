@@ -251,7 +251,12 @@ describe('feature-lifecycle verifying entry: stale consumer diagnosis (1185)', (
             expect(sync.status).not.toBe(0);
             // The bare denial is widened, not replaced: state/exit facts stay.
             expect(sync.output).toContain('State "verifying" onEnter shell failed (exit 1)');
-            // AC1: override path, consumer path, missing export, entry path — all four, by name.
+            // AC1: the diagnosis SENTENCE, not just the four bare facts — a message that happens to
+            // contain the paths but never composes the claim would satisfy the loose form (1185 review P4).
+            expect(sync.output).toContain(
+                'requires openInlineRunProjectDb, ArtifactDao from the shipped inline-run entry',
+            );
+            expect(sync.output).toContain('which no longer provides them');
             expect(sync.output).toContain(join(root, '.spur', 'workflows', 'feature-verification.yaml'));
             expect(sync.output).toContain(join(root, '.spur', 'scripts', 'feature-verify.mjs'));
             expect(sync.output).toContain('openInlineRunProjectDb');

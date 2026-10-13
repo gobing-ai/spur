@@ -18,9 +18,15 @@
  *   - `lifecycle-adapter.LifecycleAdapter.runTargetEnterActions` (`State "<to>" onEnter shell failed`)
  *   - `actions/shell.StreamingShellActionRunner` (the nested-run failure composition)
  * Both only *widen the message*; fail-closed behaviour and every other failure's text are unchanged.
+ *
+ * Layering: this helper lives app-side because both hook points do. The 1120 guard sits in
+ * `plugins/sp/lib/inline-run-app.ts` and is reached through the generated node-builtin-only bundle,
+ * which a published workspace package cannot relative-import across — the same boundary that sent
+ * `history-anatomy`/`plan-projection` app-side (ADR-130). The two halves cross-reference each other
+ * by comment.
  */
 
-import { isAbsolute, join, resolve, sep } from 'node:path';
+import { isAbsolute, resolve, sep } from 'node:path';
 import type { WorkflowDef } from '@gobing-ai/ts-dual-workflow-engine';
 
 /** A consumer requiring entry exports the shipped inline-run entry does not provide. */
@@ -34,8 +40,14 @@ export interface ConsumerBundleSkew {
 }
 
 /**
- * The compat complaint shape every generated-bundle consumer emits:
+ * The complaint shape the retired-seam consumers emit:
  * `<module|entry|bundle> <path> is missing <label> (<name>, <name> …)`.
+ *
+ * Deliberately NOT matched: the 1120 guard's bundle-side wording (`inline application bundle <entry>
+ * is older than its scripts — missing a, b`). That sentence reports the opposite skew — the *bundle*
+ * is behind, not the consumer — and it already carries its own owner (`plugins/sp/lib/inline-run-app.ts`)
+ * and its own remedy (reinstall). Classifying it here would attach the migrate/remove-override advice
+ * to a failure where a reinstall is the fix, so it keeps today's message.
  */
 const ENTRY_MISSING_EXPORTS_RE =
     /\b(?:module|entry|bundle)\s+(\S+\.(?:mjs|cjs|js|mts|ts))\s+is missing\b[^\n(]*\(([^()\n]+)\)/;
@@ -48,6 +60,23 @@ const SCRIPT_SUFFIX_RE = /\.(?:mjs|cjs|js|mts|ts)$/;
 export const MAX_MISSING_EXPORTS = 8;
 
 /**
+ * Bound on the entry path quoted from a child's complaint. Only the export names were bounded
+ * before, so one pathological line could embed an arbitrarily long path in the operator's denial.
+ * An implausible capture fails open (no diagnosis) rather than printing a truncated, wrong path.
+ */
+export const MAX_ENTRY_CHARS = 256;
+
+/** True for a captured entry path worth printing: printable, single-line, plausible length. */
+function isPlausibleEntry(entry: string): boolean {
+    if (entry === '' || entry.length > MAX_ENTRY_CHARS) return false;
+    // `\S+` already excludes whitespace; this rejects the control characters it still allows.
+    return ![...entry].some((char) => {
+        const code = char.codePointAt(0) ?? 0;
+        return code < 0x20 || code === 0x7f;
+    });
+}
+
+/**
  * The compat complaint in a failed consumer's output, or `null` when it carries none. `consumer`
  * names the script that complained; the caller resolves it (the failed module at the nested-run
  * boundary, the override's `onEnter` script at the lifecycle denial).
@@ -57,7 +86,8 @@ export function consumerBundleSkew(output: string, consumer: string): ConsumerBu
     if (match === null) return null;
     const entry = match[1] ?? '';
     const missing = [...new Set((match[2] ?? '').split(/[,\s]+/).filter((name) => EXPORT_NAME_RE.test(name)))];
-    if (entry === '' || missing.length === 0) return null;
+    if (!isPlausibleEntry(entry)) return null;
+    if (missing.length === 0) return null;
     return { consumer, missing: missing.slice(0, MAX_MISSING_EXPORTS), entry };
 }
 
@@ -88,20 +118,30 @@ function commandWords(command: string): string[] {
 }
 
 /**
- * The project-rooted consumer script a command invokes, or `null`. Project-rooted means a script
- * under `<workdir>/.spur/` — the tree the project owns (the observed port:
- * `.spur/scripts/feature-verify.mjs`). A plugin-shipped script lives in the distribution instead,
- * where a genuinely stale bundle IS the correct diagnosis (1120).
+ * Shipped-distribution path segments. A script here is the plugin's own, so a stale bundle IS the
+ * correct diagnosis (1120) and the project-side advice would be wrong.
+ */
+const DISTRIBUTION_SEGMENTS = [`${sep}plugins${sep}sp${sep}`, `${sep}node_modules${sep}@gobing-ai${sep}spur${sep}`];
+
+/**
+ * The project-owned consumer script a command invokes, or `null`. Project-owned means a script
+ * anywhere under `<workdir>` that is not part of the shipped plugin distribution: the observed port
+ * was `<workdir>/.spur/scripts/feature-verify.mjs`, but R1's antecedent is any project-layer
+ * override script, so `<workdir>/scripts/verify.mjs` or `<workdir>/tools/port.mjs` count too.
  *
- * shortcut: only `<workdir>/.spur/` counts as project-owned; widen when a second port location appears.
+ * The bound is therefore "inside the project tree, outside the plugin distribution" rather than
+ * "inside `.spur/`": an `.spur/`-only rule silently sent every other project-owned consumer back to
+ * the bare `exited with N` message (1185 review P3).
  */
 export function projectConsumerScript(command: string, workdir: string): string | null {
     const root = resolve(workdir);
-    const owned = join(root, '.spur') + sep;
+    const owned = root.endsWith(sep) ? root : `${root}${sep}`;
     for (const token of commandWords(command)) {
         if (!SCRIPT_SUFFIX_RE.test(token) || token.includes('$')) continue;
-        const path = isAbsolute(token) ? token : resolve(root, token);
-        if (path.startsWith(owned)) return path;
+        const path = isAbsolute(token) ? resolve(token) : resolve(root, token);
+        if (!path.startsWith(owned)) continue;
+        if (DISTRIBUTION_SEGMENTS.some((segment) => path.includes(segment))) continue;
+        return path;
     }
     return null;
 }

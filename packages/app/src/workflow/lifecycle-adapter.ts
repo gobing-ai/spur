@@ -139,6 +139,14 @@ export interface LifecycleAdapterOptions {
      */
     provenanceBypass?: boolean;
     /**
+     * The registered workflow layer (ADR-113) threaded from the composition root, i.e.
+     * `registeredWorkflowPaths(config)`. `resolveWorkflowDefinition` consults it only for the
+     * bare-name scan, so leaving it out cannot resolve a *wrong* path — but it can miss a
+     * definition reachable through a registered folder alone, and the 1185 stale-consumer
+     * diagnosis would then name nothing. Absent keeps the project/shared probe order only.
+     */
+    registeredWorkflowPaths?: readonly string[];
+    /**
      * Run the target state's `onEnter` shell actions after the engine accepts the hop
      * and before the file write is allowed (0948 AC1). The engine's external
      * `requestTransition` commits the hop and does not execute `onEnter`; feature
@@ -379,9 +387,11 @@ export class LifecycleAdapter implements LifecyclePort {
     /**
      * 1185 R1/R3: the named diagnosis for a failed `onEnter` shell that reached a project-layer
      * override whose consumer requires an export the shipped inline-run entry no longer provides.
-     * The nested definition is resolved exactly as bare-name resolution selects it (project first),
-     * so the path named is the override that actually ran; the consumer comes from the resolved
-     * definition's own `onEnter` commands, never from the child's prose. `null` for every other
+     * The nested definition is resolved the way bare-name resolution selects it — project layer
+     * first, then the registered layer when the composition root supplies one
+     * ({@link LifecycleAdapterOptions.registeredWorkflowPaths}) — so the path named is the override
+     * that actually ran; the consumer comes from the resolved definition's own `onEnter` commands,
+     * never from the child's prose. `null` for every other
      * failure — those keep today's message and today's fail-closed semantics, so a stale-consumer
      * failure stays distinguishable from a genuine verification FAIL (which denies the hop with the
      * verification command's own output).
@@ -396,11 +406,21 @@ export class LifecycleAdapter implements LifecyclePort {
         try {
             // Schema validation is deliberately off: the diagnosis only reads the definition's
             // `onEnter` commands, and must not depend on the embedded schema map being wired here.
-            resolved = await resolveWorkflowDefinition(this.opts.cwd, target, { validateSchema: false });
+            const registered = this.opts.registeredWorkflowPaths;
+            resolved = await resolveWorkflowDefinition(this.opts.cwd, target, {
+                validateSchema: false,
+                ...(registered === undefined ? {} : { registered }),
+            });
         } catch {
             return null;
         }
-        if (resolved.layer !== 'project') return null;
+        if (resolved.layer === 'shared') return null;
+        // Both project-side layers count: `.spur/workflows/` resolves as `project`, and a folder
+        // configured through `workflows.paths` (ADR-113) resolves as `registered`. Each is an
+        // override the project itself owns, so the remove-the-override remedy applies to both.
+        // The shipped `shared` layer is excluded: there is no project override to remove, and a
+        // stale consumer reaching the shipped definition is the bundle-side skew the 1120 guard
+        // owns.
         const consumer = definitionConsumerScript(resolved.workflow, this.opts.cwd);
         if (consumer === null) return null;
         const output = [data?.stdout, data?.stderr]

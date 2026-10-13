@@ -514,6 +514,21 @@ terminalStates:
                 (await resolveWorkflowDefinition(dir, sharedFile, { registered: [registeredDir], embeddedSchemas }))
                     .path,
             ).toBe(sharedFile);
+            // 1185 review P4 boundary: the registered layer is consulted by the BARE-NAME scan only
+            // (`bareName = basename === fileOrName && !/\.ya?ml$/`). A name that already carries the
+            // extension goes straight to resolveWorkflowFile's project → shared probe order, so a
+            // copy living only in a registered folder is NOT found. This is why the lifecycle
+            // adapter threads `registered` (it protects a bare-name nested invocation) and why the
+            // shipped `feature-lifecycle.yaml`, which invokes `workflow run feature-verification.yaml`,
+            // cannot reach a registered-only override in the first place.
+            const bareOnly = join(registeredDir, 'registered-only.yaml');
+            await writeFile(bareOnly, MINIMAL('registered-only'));
+            expect(
+                (await resolveWorkflowDefinition(dir, 'registered-only', { registered: [registeredDir] })).path,
+            ).toBe(bareOnly);
+            await expect(
+                resolveWorkflowDefinition(dir, 'registered-only.yaml', { registered: [registeredDir] }),
+            ).rejects.toThrow(/Workflow not found/);
         } finally {
             await rm(dir, { recursive: true, force: true });
         }

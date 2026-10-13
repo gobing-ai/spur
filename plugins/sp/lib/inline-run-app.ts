@@ -7,6 +7,14 @@
  * names the skew (bundle path, missing exports, both remedies) instead. Covers the
  * installed portable bundle only — source entries (`--spur-bin`) keep their exact
  * previous behavior (0809 delegate fixtures load minimal partial source modules).
+ *
+ * Reciprocal direction (1185, feature A33): a *consumer* requiring an export this
+ * entry no longer provides is diagnosed app-side in
+ * `packages/app/src/workflow/consumer-compat.ts`, because both of that failure's hook
+ * points (the lifecycle denial report and the nested-run composition) live in
+ * the app layer. The two halves are deliberately separate: this one's remedy is a
+ * reinstall, that one's is removing the project-layer override or migrating the
+ * consumer.
  */
 
 import { existsSync } from 'node:fs';

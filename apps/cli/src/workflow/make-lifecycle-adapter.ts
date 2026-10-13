@@ -2,6 +2,7 @@ import {
     configuredSecretValues,
     LifecycleAdapter,
     type LifecycleProfile,
+    registeredWorkflowPaths,
     resolveWorkflowFile,
 } from '@gobing-ai/spur-app';
 import { TaskRunLinkDao } from '@gobing-ai/spur-domain';
@@ -47,6 +48,11 @@ export function makeLifecycleAdapter(
         // 1147 R3: the onEnter denial quotes the child's stderr tail — hand it the same configured
         // secrets the run's shell-output redactor uses, so the diagnostic cannot leak one.
         secrets: configuredSecretValues(context.env ?? {}),
+        // 1185 review P4: the registered layer (ADR-113) is threaded from the composition root so
+        // the stale-consumer diagnosis resolves the nested definition exactly as `workflow run`
+        // does (apps/cli/src/commands/workflow.ts) — otherwise a definition reachable through a
+        // registered folder alone would be named as nothing.
+        registeredWorkflowPaths: registeredWorkflowPaths(context.spurConfig ?? null),
         ...(options.provenanceBypass === true ? { provenanceBypass: true } : {}),
     });
 }
