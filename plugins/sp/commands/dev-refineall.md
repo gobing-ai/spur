@@ -57,7 +57,8 @@ or when the tasks' existing content is in doubt; thread `--depth` into each per-
 report rows add corrections count, dropped issues, status before → after, and failed checklist ids.
 Each task's issues are triaged one by one: invalid ones are dropped with their fixes, and a task
 with no valid issue left is `cancelled`. The ready report also proposes merges between overlapping
-tasks and owning features for tasks without a `feature_id`. It executes neither unless
+tasks, ordering or a shared step for complementary ones, and owning features for tasks without a
+`feature_id`. It executes neither unless
 `--description` names the task and action, for example
 `--description "cancel 0273 and merge its issues into 0269; link 0260 and 0274 to G11"`.
 

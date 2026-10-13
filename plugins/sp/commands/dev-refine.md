@@ -60,7 +60,8 @@ implement without inventing design:
    Plan steps and ACs. If no issue stays valid, cancel the task (`spur task update <wbs> cancelled`)
    and report `cancelled` instead of promoting it.
 3. Run `spur task check <wbs> --as todo --json`, fill unset priority/estimate, and promote
-   `backlog → todo`.
+   `backlog → todo`. If triage dropped issues, re-estimate and record old → new. Also record a
+   title that still names dropped scope; the CLI cannot rename a task.
 4. Report checklist rows `{id, pass, evidence}`.
 
 Refine targets `backlog`/`todo` tasks; a `wip`-or-later task needs explicit operator consent and is
