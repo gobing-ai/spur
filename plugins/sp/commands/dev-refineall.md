@@ -54,7 +54,12 @@ not a bug.
 **Depth:** default `standard` keeps the cheap L3 SKIP gate under `--auto`. Use
 `--depth ready` when handing a feature to another implementer (frozen Design/Requirements/Plan),
 or when the tasks' existing content is in doubt; thread `--depth` into each per-task refine. Ready
-report rows add corrections count, status before → after, and failed checklist ids.
+report rows add corrections count, dropped issues, status before → after, and failed checklist ids.
+Each task's issues are triaged one by one: invalid ones are dropped with their fixes, and a task
+with no valid issue left is `cancelled`. The ready report also proposes merges between overlapping
+tasks and owning features for tasks without a `feature_id`. It executes neither unless
+`--description` names the task and action, for example
+`--description "cancel 0273 and merge its issues into 0269; link 0260 and 0274 to G11"`.
 
 > **`--next` dropped** (feature H8, 2026-07-31). Batch-level chaining was a token bomb — each refine
 > hop is an LLM call, and a large feature means N refine chains fanned out at once. For batch
