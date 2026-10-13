@@ -36,6 +36,7 @@ Root [DESIGN.md](../DESIGN.md) owns visual and interaction design;
 | Planning records and lifecycle contracts | [planning-record-contracts](design/planning-record-contracts.md) |
 | Planning workflow and operation contracts | [planning-workflow-contracts](design/planning-workflow-contracts.md) |
 | Feature `deprecated` status — frozen lifecycle state and affected surfaces (F42) | [feature-deprecated-status](design/feature-deprecated-status.md) |
+| Task `deprecated` status — frozen task lifecycle state, guards and exempt write set (F43) | [task-deprecated-status](design/task-deprecated-status.md) |
 | Observability and HTTP read contracts | [observability-contracts](design/observability-contracts.md) |
 | Projects Database tab — read-only table browser over the project database (feature G631) | [projects-database-tab](design/projects-database-tab.md) |
 | Essential workflow checks and observable execution | [essential-workflow-checks.md](design/essential-workflow-checks.md) |

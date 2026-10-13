@@ -2274,3 +2274,29 @@ owner split this entry established.
 - **Retains:** ADR-135 (graph-validated status writes), ADR-022 (lifecycles are workflow definitions).
 - **Detail:** [feature deprecated status](design/feature-deprecated-status.md);
   [planning records](design/planning-record-contracts.md).
+
+## ADR-137: Task `deprecated` Is a Frozen, Non-Terminal Lifecycle State
+
+- **Status:** Accepted (design approved 2026-10-13; implementation pending) · **Date:** 2026-10-13 · **Extends:** DD-01, ADR-135, ADR-136
+- **Decision:** `deprecated` joins the canonical `TaskStatus` vocabulary as a non-terminal state
+  meaning "retained, do not change unless removing". The task lifecycle graph admits it from
+  `backlog`, `todo`, `wip`, `testing`, `blocked` and `done`, and leaves it only to `todo`
+  (un-deprecate, History entry mandatory) or `cancelled` (removed). Freeze is about status-moving
+  writes: derivation reads a deprecated task as terminal-linked (so it stops holding its feature
+  back), a new dependency edge onto it is refused at the handoff resolver and the preflight, section
+  writes and the pipeline's own record/anchor/verdict hops stay permitted with a freeze warning, and
+  status writes other than `todo`/`cancelled` are refused by the graph. Alternatives rejected:
+  overloading `cancelled` (terminal, claims abandonment, loses un-deprecation) or `blocked`
+  (an impediment with edges back into `wip`/`testing`, i.e. an invitation to resume); a terminal
+  `deprecated` (duplicates `cancelled`); a per-task `frozen` flag (a second status axis every
+  consumer must combine with `status`); refusing every write on a deprecated task (would strand the
+  evidence trail and the corpus-integrity hops). The feature-layer decision is ADR-136; this ADR
+  extends the same semantics to tasks rather than inventing a second mechanism.
+- **Why:** the task corpus is the product's memory. Without a frozen state, "retained but do not
+  touch" is expressible only in prose, so no gate can enforce it and routing keeps re-attaching work
+  to retired tasks.
+- **Consequence:** project-layer `task-lifecycle.yaml` overrides must be re-synced to gain the
+  edges; the freeze is prospective, so pre-existing dependency edges are reported, never rewritten;
+  removal work runs under its own task (no override flag).
+- **Retains:** ADR-135 (graph-validated status writes), ADR-022 (lifecycles are workflow definitions).
+- **Detail:** [task deprecated status](design/task-deprecated-status.md).
