@@ -70,15 +70,23 @@ describe('feature-verification scope split (task 0872)', () => {
         expect(scripts['test-repo-wide']).toContain('repo-wide-tests');
     });
 
-    test('1154 R3: default test scripts do not pass --parallel on Bun 1.3.14', () => {
-        // Upgrade bar: Bun 1.3.14 does not honor --no-isolate under --parallel, causing workers
-        // to wedge under full-suite concurrency. An upgrade requires a Bun version whose help
-        // lists --no-isolate and whose workers are not started with --isolate, plus a quiet-machine
-        // run that finishes faster than serial baseline, maintains the 90/90 floor, and never wedges.
+    test('1154 R3: the gate test script runs --parallel; coverage/full scripts stay serial', () => {
+        // The 1154 wedge/TDZ failures under --parallel (which implies --isolate on Bun 1.3.14)
+        // were caused by top-level await: Bun leaves TLA modules uninitialized per isolated
+        // file, and silently drops a TLA preload. With no TLA left (guarded below) the
+        // parallel gate is green, keeps the 90/90 floor and runs ~4x faster than serial.
         const scripts = readScripts();
-        for (const key of ['test', 'test:coverage', 'test:full']) {
-            expect(scripts[key], `${key} must not pass --parallel on Bun 1.3.14`).not.toContain('--parallel');
+        expect(scripts.test).toContain('--parallel');
+        for (const key of ['test:coverage', 'test:full']) {
+            expect(scripts[key], `${key} must not pass --parallel`).not.toContain('--parallel');
         }
+    });
+
+    test('1154 R3: no top-level await in the test preload or app sources (breaks --isolate)', () => {
+        const tla = /^(?:(?:export\s+)?(?:const|let|var)\b[^\n]*=\s*)?await\b/m;
+        const files = ['tests/setup.ts', ...new Bun.Glob('{packages,apps}/*/src/**/*.{ts,tsx}').scanSync(REPO_ROOT)];
+        const offenders = files.filter((f) => tla.test(readFileSync(join(REPO_ROOT, f), 'utf8')));
+        expect(offenders).toEqual([]);
     });
 
     test('R3: feature-verification is a shell-only pass with no agent.run nodes', () => {
