@@ -22,6 +22,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { getEnvVars, removeEnvVar, setEnvVar } from '@gobing-ai/spur-config';
 import { parse as parseYaml } from 'yaml';
+import { setExecutorLockRetryForTests } from '../src/executor-update';
 import { ExecutorUpdateError, loadSpurConfig, setExecutorAvailability } from '../src/loader';
 
 let root: string;
@@ -260,12 +261,14 @@ describe('setExecutorAvailability project writes (0797)', () => {
     test('R3: a live lock owner is never reclaimed — exhaustion rejects', async () => {
         const path = writeProject(PROJECT_YAML);
         writeFileSync(`${path}.lock`, String(process.pid)); // kill(pid, 0) succeeds for our own pid
+        setExecutorLockRetryForTests({ delayMs: 1, maxAttempts: 3 });
         try {
             await expect(
                 setExecutorAvailability({ layer: 'project', projectRoot: root, executor: 'alpha', disabled: false }),
             ).rejects.toThrow(/held by a live process/);
             expect(readFileSync(path, 'utf8')).toBe(PROJECT_YAML); // untouched while the lock is held
         } finally {
+            setExecutorLockRetryForTests(undefined);
             unlinkSync(`${path}.lock`);
         }
     });
@@ -299,6 +302,9 @@ describe('setExecutorAvailability project writes (0797)', () => {
             } catch (error) {
                 expect(error).toBeInstanceOf(ExecutorUpdateError);
                 expect(['CONFIG_WRITE_FAILED', 'CONFIG_CONFLICT']).toContain((error as ExecutorUpdateError).code);
+                // Regression: an unwritable dir is not lock contention — it fails at once with the
+                // real cause instead of a 2 s retry loop ending in "held by a live process".
+                expect((error as Error).message).not.toContain('held by a live process');
             }
             expect(readFileSync(path, 'utf8')).toBe(PROJECT_YAML);
         } finally {

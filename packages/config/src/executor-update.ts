@@ -60,8 +60,16 @@ export interface ExecutorDisabledUpdate {
     reason: string;
 }
 
-const LOCK_RETRY_MS = 50;
-const LOCK_MAX_ATTEMPTS = 40;
+const DEFAULT_LOCK_RETRY = { delayMs: 50, maxAttempts: 40 } as const;
+let lockRetry: { delayMs: number; maxAttempts: number } = DEFAULT_LOCK_RETRY;
+
+/**
+ * Test seam: shrink the live-lock wait (default 40 × 50 ms ≈ 2 s) so contention tests do not
+ * sleep through the full production budget. `undefined` restores the default.
+ */
+export function setExecutorLockRetryForTests(retry: { delayMs: number; maxAttempts: number } | undefined): void {
+    lockRetry = retry ?? DEFAULT_LOCK_RETRY;
+}
 
 /**
  * Flip `agent.executors[<exact name>].disabled` in the layer where the executor is
@@ -312,19 +320,29 @@ function disabledMatches(current: unknown, desired: boolean | ExecutorDisabledUp
 /** Exclusive per-path lock. Recovers a lock only when its owner is confirmed dead. */
 async function withLock<T>(lockPath: string, fn: () => Promise<T>): Promise<T> {
     let holder: Awaited<ReturnType<typeof open>> | undefined;
-    for (let attempt = 0; attempt < LOCK_MAX_ATTEMPTS && holder === undefined; attempt++) {
+    const { delayMs, maxAttempts } = lockRetry;
+    for (let attempt = 0; attempt < maxAttempts && holder === undefined; attempt++) {
         try {
             holder = await open(lockPath, 'wx');
-        } catch {
+        } catch (error) {
+            // Only an existing lock file is contention. Anything else (EACCES on a read-only
+            // config dir, ENOENT, ENOSPC) used to be misreported as "held by a live process"
+            // after sleeping through the whole retry budget.
+            if ((error as NodeJS.ErrnoException).code !== 'EEXIST') {
+                throw new ExecutorUpdateError(
+                    'CONFIG_WRITE_FAILED',
+                    `could not create config update lock ${lockPath}: ${error instanceof Error ? error.message : String(error)}`,
+                );
+            }
             const reclaimed = await reclaimIfDead(lockPath);
             if (!reclaimed) {
-                if (attempt === LOCK_MAX_ATTEMPTS - 1) {
+                if (attempt === maxAttempts - 1) {
                     throw new ExecutorUpdateError(
                         'CONFIG_WRITE_FAILED',
                         `config update lock is held by a live process: ${lockPath}`,
                     );
                 }
-                await new Promise((resolve) => setTimeout(resolve, LOCK_RETRY_MS));
+                await new Promise((resolve) => setTimeout(resolve, delayMs));
             }
         }
     }
