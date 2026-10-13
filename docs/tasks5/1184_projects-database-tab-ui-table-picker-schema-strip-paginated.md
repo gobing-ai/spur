@@ -1,10 +1,10 @@
 ---
 schema_version: 1
 name: Projects Database tab UI (table picker, schema strip, paginated grid, row detail)
-status: wip
+status: done
 template: feature-impl
 created_at: 2026-10-12T05:49:58.435Z
-updated_at: "2026-10-12T22:48:26.128Z"
+updated_at: "2026-10-13T00:24:53.482Z"
 feature_id: G631
 priority: P2
 tags:
@@ -15,6 +15,8 @@ tags:
 estimate_hours: 4
 
 dependencies: ["1183"]
+done_forced: "false"
+done_reason: unforced close; PASS artifact at .spur/memory/evidence/1184-verdict.json
 ---
 
 ## 1184. Projects Database tab UI (table picker, schema strip, paginated grid, row detail)
@@ -39,25 +41,25 @@ Premises (verified against the tree):
 
 ### Requirements
 
-- [ ] R1. `PROJECT_TABS` gains a Database tab (`ProjectTabId` 'database') rendering `DatabaseView`; /board/projects/database deep-links to it; arrow-key cycling covers Fleet, Inbox and Database; Fleet/Inbox and their processes/conversation aliases are unchanged.
-- [ ] R2. A left rail lists every table from GET /api/project/database/tables with a filter-as-you-type box; the selected table, page, sort, dir, filter column and filter value live in the URL query so reload and deep links restore the view.
-- [ ] R3. A collapsible schema strip shows each column's name, declared type, nullability and primary-key flag plus the exact row count.
-- [ ] R4. The row grid shows the server page (default 50), a range label such as 1–50 of N, and previous/next/go-to-page controls; changing sort or filter resets to page 1.
-- [ ] R5. Column headers toggle ascending/descending sort; a column select plus text input apply a contains filter.
-- [ ] R6. Cells truncate to one line with a tooltip; NULL and BLOB (with byte length) render as distinct muted badges; clicking a row opens a modal with every column's full value and pretty-printed JSON when the text parses as JSON.
-- [ ] R7. Loading, empty table, unknown table (picker still usable), database unavailable and request failed are named visible states, never a blank panel.
-- [ ] R8. The view uses only existing `@/ui` primitives and Tailwind/daisyUI tokens; apps/web/package.json gains no dependency.
+- [x] R1. `PROJECT_TABS` gains a Database tab (`ProjectTabId` 'database') rendering `DatabaseView`; /board/projects/database deep-links to it; arrow-key cycling covers Fleet, Inbox and Database; Fleet/Inbox and their processes/conversation aliases are unchanged.
+- [x] R2. A left rail lists every table from GET /api/project/database/tables with a filter-as-you-type box; the selected table, page, sort, dir, filter column and filter value live in the URL query so reload and deep links restore the view.
+- [x] R3. A collapsible schema strip shows each column's name, declared type, nullability and primary-key flag plus the exact row count.
+- [x] R4. The row grid shows the server page (default 50), a range label such as 1–50 of N, and previous/next/go-to-page controls; changing sort or filter resets to page 1.
+- [x] R5. Column headers toggle ascending/descending sort; a column select plus text input apply a contains filter.
+- [x] R6. Cells truncate to one line with a tooltip; NULL and BLOB (with byte length) render as distinct muted badges; clicking a row opens a modal with every column's full value and pretty-printed JSON when the text parses as JSON.
+- [x] R7. Loading, empty table, unknown table (picker still usable), database unavailable and request failed are named visible states, never a blank panel.
+- [x] R8. The view uses only existing `@/ui` primitives and Tailwind/daisyUI tokens; apps/web/package.json gains no dependency.
 
 ### Acceptance Criteria
 
-- [ ] AC1 — The Projects module shows a Database tab with a deep link
-- [ ] AC2 — The user picks any table of the project database and the choice survives reload
-- [ ] AC3 — The selected table shows its schema and exact row count
-- [ ] AC4 — Rows are paginated on the server with a bounded page size
-- [ ] AC5 — The user sorts by one column and filters one column by a contains match
-- [ ] AC6 — Long, null and binary cell values stay readable
-- [ ] AC7 — The tab reuses the board table idiom without a new grid dependency
-- [ ] AC8 — Empty, unknown and unavailable states are named, never blank
+- [x] AC1 — The Projects module shows a Database tab with a deep link
+- [x] AC2 — The user picks any table of the project database and the choice survives reload
+- [x] AC3 — The selected table shows its schema and exact row count
+- [x] AC4 — Rows are paginated on the server with a bounded page size
+- [x] AC5 — The user sorts by one column and filters one column by a contains match
+- [x] AC6 — Long, null and binary cell values stay readable
+- [x] AC7 — The tab reuses the board table idiom without a new grid dependency
+- [x] AC8 — Empty, unknown and unavailable states are named, never blank
 
 ### Q&A
 
@@ -128,7 +130,33 @@ Note: `apps/web/tests/modules/projects/ProjectsShell.test.tsx` and `apps/web/tes
 
 ### Testing
 
-<!-- Filled during verification: commands run, outcomes, coverage claim or N/A. -->
+**Pipeline verify results**
+
+- Verdict: PASS (from verdict artifact)
+- Confidence: MEDIUM
+
+| Requirement | Status | Evidence |
+|-------------|--------|----------|
+| R1 | MET | `apps/web/src/modules/projects/tabs.tsx:7` adds `'database'` to `ProjectTabId`; `apps/web/src/modules/projects/tabs.tsx:21` registers `{ id: 'database', label: 'Database', component: DatabaseView }`. The deep link and arrow-key cycle resolve through the unedited `apps/web/src/modules/projects/useProjectTab.ts:24`, whose Fleet/Inbox aliases (`processes`→`fleet`, `conversation`→`inbox`) sit unchanged at `apps/web/src/modules/projects/useProjectTab.ts:22`. Fresh `bun test ./apps/web/tests/modules/projects` = 204 pass / 0 fail: `apps/web/tests/modules/projects/tabs.test.ts:32` pins the id-to-component pair, `apps/web/tests/modules/projects/a11y.test.tsx:223` asserts ArrowRight selects the Database tab and `apps/web/tests/modules/projects/a11y.test.tsx:225` asserts `#projects-tab-panel-database` mounts with focus on the tab. |
+| R2 | MET | `URL_KEYS` is exactly `table,page,sort,dir,fcol,f` at `apps/web/src/modules/projects/DatabaseView.tsx:32`; readers at `apps/web/src/modules/projects/DatabaseView.tsx:370` and writers via `updateParams`/`selectTable` at `apps/web/src/modules/projects/DatabaseView.tsx:435`. The rail lists the `GET /api/project/database/tables` response from `apps/web/src/modules/projects/DatabaseView.tsx:178` and the filter-as-you-type input at `apps/web/src/modules/projects/DatabaseView.tsx:516` narrows table names only at `apps/web/src/modules/projects/DatabaseView.tsx:486`. Reload restore and the URL round trip are asserted at `apps/web/tests/modules/projects/DatabaseView.test.tsx:189` and `apps/web/tests/modules/projects/DatabaseView.test.tsx:343`; malformed-key fallback at `apps/web/tests/modules/projects/DatabaseView.test.tsx:367`. |
+| R3 | MET | `SchemaStrip` at `apps/web/src/modules/projects/DatabaseView.tsx:295` renders one entry per column with name, declared type, `NOT NULL` and `PK`, collapsible through the toggle at `apps/web/src/modules/projects/DatabaseView.tsx:304`, and the header carries the exact `rowCount` at `apps/web/src/modules/projects/DatabaseView.tsx:308`. Asserted at `apps/web/tests/modules/projects/DatabaseView.test.tsx:142` (`2 columns`, `INTEGER`, `PK`, `3,212,345 rows`). The count is the server's exact `COUNT(*)` at `packages/domain/src/dao/database-inspector.ts:146`. |
+| R4 | MET | Bounded page size 50 at `apps/web/src/modules/projects/DatabaseView.tsx:29`, sent as `page`/`pageSize` at `apps/web/src/modules/projects/DatabaseView.tsx:87` — exactly the names the server reads at `apps/server/src/modules/database/index.ts:50`. Range label at `apps/web/src/modules/projects/DatabaseView.tsx:219` rendered at `apps/web/src/modules/projects/DatabaseView.tsx:715`; prev/next/go-to-page at `apps/web/src/modules/projects/DatabaseView.tsx:722`, `:734`, `:756`. `apps/web/tests/modules/projects/DatabaseView.test.tsx:235` asserts every outgoing rows request carries `pageSize=50` plus `page`, the `1–50 of 120`→`51–100 of 120`→`101–120 of 120` progression, and `apps/web/tests/modules/projects/DatabaseView.test.tsx:272` the out-of-range snap-back. Sort/filter resets to page 1 at `apps/web/src/modules/projects/DatabaseView.tsx:452` and `:472`. |
+| R5 | MET | `aria-sort` per header at `apps/web/src/modules/projects/DatabaseView.tsx:660` with the toggle button at `apps/web/src/modules/projects/DatabaseView.tsx:665` handled by `toggleSort` at `apps/web/src/modules/projects/DatabaseView.tsx:444`; one column select at `apps/web/src/modules/projects/DatabaseView.tsx:609` plus one contains input at `apps/web/src/modules/projects/DatabaseView.tsx:624` handled by `changeFilterColumn` at `apps/web/src/modules/projects/DatabaseView.tsx:456` and `changeFilterValue` at `apps/web/src/modules/projects/DatabaseView.tsx:468`. Asserted at `apps/web/tests/modules/projects/DatabaseView.test.tsx:293`, `apps/web/tests/modules/projects/DatabaseView.test.tsx:320` and `apps/web/tests/modules/projects/DatabaseView.test.tsx:343`. The server side is a bound contains match built at `packages/domain/src/dao/database-inspector.ts:235`. |
+| R6 | MET | `GridCell` at `apps/web/src/modules/projects/DatabaseView.tsx:260` renders all four cell tags: text on one line via the `truncate` utility with the full value in the tooltip at `apps/web/src/modules/projects/DatabaseView.tsx:265`, and distinct muted `NULL`/`BLOB · N B` badges at `apps/web/src/modules/projects/DatabaseView.tsx:245` and `apps/web/src/modules/projects/DatabaseView.tsx:253`. `FullCell` at `apps/web/src/modules/projects/DatabaseView.tsx:274` renders the row-detail modal at `apps/web/src/modules/projects/DatabaseView.tsx:770` with pretty JSON at `apps/web/src/modules/projects/DatabaseView.tsx:281` from `prettyJson` at `apps/web/src/modules/projects/DatabaseView.tsx:227`. Asserted at `apps/web/tests/modules/projects/DatabaseView.test.tsx:390` (truncate class, tooltip full value, `NULL` vs `BLOB · 2,048 B`) and `apps/web/tests/modules/projects/DatabaseView.test.tsx:425` (modal pretty-printed JSON, `offset=0` on the `/row` read built at `apps/web/src/modules/projects/DatabaseView.tsx:102`). |
+| R7 | MET | `StatePanel` at `apps/web/src/modules/projects/DatabaseView.tsx:341`, `stateMessage` at `apps/web/src/modules/projects/DatabaseView.tsx:348`, failure arbitration at `apps/web/src/modules/projects/DatabaseView.tsx:495`, blocked panel at `apps/web/src/modules/projects/DatabaseView.tsx:581`, rail states at `apps/web/src/modules/projects/DatabaseView.tsx:529`, and the unselected-table prompt at `apps/web/src/modules/projects/DatabaseView.tsx:576`. Every path is asserted in the fresh 204-pass run: loading `apps/web/tests/modules/projects/DatabaseView.test.tsx:471`, empty database `:482`, empty table `:488`, unknown table with a usable picker `:502`, 503 unavailable `:532`, HTTP failure with Retry `:545`, transport failure `:558`. The HTTP mapping lives at `apps/web/src/modules/projects/DatabaseView.tsx:129`. |
+| R8 | MET | The only UI import is the barrel at `apps/web/src/modules/projects/DatabaseView.tsx:12`, whose primitives already exist at `apps/web/src/ui.ts:8`–`apps/web/src/ui.ts:19`; the grid reuses the shared `table table-sm` idiom at `apps/web/src/modules/projects/DatabaseView.tsx:646`, matching `apps/web/src/modules/observability/DecisionsTab.tsx:292`. `git show 88ac88985 --numstat` lists no `apps/web/package.json` and no lockfile; `apps/web/package.json` carries no table/grid library; `git status --short` is clean and `git diff --cached --name-only` is empty. |
+
+| Acceptance Criteria | Status | Evidence Type | Evidence |
+|---------------------|--------|---------------|----------|
+| AC1 — The Projects module shows a Database tab with a deep link | MET | test | `apps/web/src/modules/projects/tabs.tsx:7` and `apps/web/src/modules/projects/tabs.tsx:21` register the tab; `/board/projects/database` resolves through the unedited `apps/web/src/modules/projects/useProjectTab.ts:24`. Fresh `bun test ./apps/web/tests/modules/projects` (204 pass / 0 fail): `apps/web/tests/modules/projects/tabs.test.ts:32` asserts the Database tab mounts `DatabaseView`, `apps/web/tests/modules/projects/a11y.test.tsx:223` and `apps/web/tests/modules/projects/a11y.test.tsx:225` assert the arrow-key cycle selects and mounts the Database panel. |
+| AC2 — The user picks any table of the project database and the choice survives reload | MET | test | Rail buttons come from the tables read at `apps/web/src/modules/projects/DatabaseView.tsx:178` and write `?table=` at `apps/web/src/modules/projects/DatabaseView.tsx:435`; `apps/web/tests/modules/projects/DatabaseView.test.tsx:189` clicks the picker, asserts the chosen table's rows request on the real request URL, then re-renders at `?table=tasks` and asserts the restored selection. |
+| AC3 — The selected table shows its schema and exact row count | MET | test | `apps/web/src/modules/projects/DatabaseView.tsx:295` renders name/type/`NOT NULL`/`PK` per column with the exact count at `apps/web/src/modules/projects/DatabaseView.tsx:308`; asserted at `apps/web/tests/modules/projects/DatabaseView.test.tsx:142`. |
+| AC4 — Rows are paginated on the server with a bounded page size | MET | test | Fixed page size 50 at `apps/web/src/modules/projects/DatabaseView.tsx:29` is sent as `pageSize` with `page` at `apps/web/src/modules/projects/DatabaseView.tsx:87`; `apps/web/tests/modules/projects/DatabaseView.test.tsx:235` asserts every outgoing rows request carries `pageSize=50` and renders one server window with the range/pager at `apps/web/src/modules/projects/DatabaseView.tsx:715`. |
+| AC5 — The user sorts by one column and filters one column by a contains match | MET | test | Sort toggle at `apps/web/src/modules/projects/DatabaseView.tsx:444` and column select plus contains input at `apps/web/src/modules/projects/DatabaseView.tsx:609` and `apps/web/src/modules/projects/DatabaseView.tsx:624`; asserted on the real request URLs (`sort`, `dir`, `filterColumn`, `filter`, `page=1`) at `apps/web/tests/modules/projects/DatabaseView.test.tsx:293`, `apps/web/tests/modules/projects/DatabaseView.test.tsx:320` and `apps/web/tests/modules/projects/DatabaseView.test.tsx:343`. |
+| AC6 — Long, null and binary cell values stay readable | MET | test | `apps/web/src/modules/projects/DatabaseView.tsx:260` truncates text to one line and keeps the full value in the tooltip, `apps/web/src/modules/projects/DatabaseView.tsx:245` and `apps/web/src/modules/projects/DatabaseView.tsx:253` render distinct muted `NULL` and `BLOB · N B` badges, and `apps/web/src/modules/projects/DatabaseView.tsx:274` renders every column's full value in the modal with pretty JSON from `apps/web/src/modules/projects/DatabaseView.tsx:227`; asserted at `apps/web/tests/modules/projects/DatabaseView.test.tsx:390` and `apps/web/tests/modules/projects/DatabaseView.test.tsx:425`. |
+| AC7 — The tab reuses the board table idiom without a new grid dependency | MET | command | `git show 88ac88985 --numstat` lists only the DatabaseView source, `tabs.tsx`, three project test files and the task file — no `apps/web/package.json` and no lockfile. The grid is the shared idiom at `apps/web/src/modules/projects/DatabaseView.tsx:646`, identical to `apps/web/src/modules/observability/DecisionsTab.tsx:292`, and imports only the barrel at `apps/web/src/modules/projects/DatabaseView.tsx:12`. |
+| AC8 — Empty, unknown and unavailable states are named, never blank | MET | test | Named states at `apps/web/src/modules/projects/DatabaseView.tsx:341` and `apps/web/src/modules/projects/DatabaseView.tsx:348` selected by `apps/web/src/modules/projects/DatabaseView.tsx:495`; asserted at `apps/web/tests/modules/projects/DatabaseView.test.tsx:482` (empty database), `apps/web/tests/modules/projects/DatabaseView.test.tsx:488` (empty table), `apps/web/tests/modules/projects/DatabaseView.test.tsx:502` (unknown table with a usable picker) and `apps/web/tests/modules/projects/DatabaseView.test.tsx:532` (503), in the fresh 204-pass run of `bun test ./apps/web/tests/modules/projects`. |
+- Coverage: N/A (verdict-based; verify pipeline does not measure code coverage)
 
 ### Review
 
@@ -241,4 +269,6 @@ stalls the board, add the ≥250 ms filter debounce recorded in finding #1.
 
 - 2026-10-12T05:59:48.111Z feature_id Q → G631 (system)
 - 2026-10-12T22:12:53.284Z todo → wip (system)
+- 2026-10-13T00:24:24.738Z wip → testing (system)
+- 2026-10-13T00:24:53.143Z testing → done (system)
 
