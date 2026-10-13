@@ -4,7 +4,7 @@ name: Enforce script ownership and retire proven legacy scaffolding
 status: done
 template: feature-impl
 created_at: 2026-10-12T03:34:10.708Z
-updated_at: "2026-10-12T18:09:59.608Z"
+updated_at: "2026-10-13T05:37:08.595Z"
 feature_id: A91
 priority: P1
 tags:
@@ -117,20 +117,20 @@ Deferred, by design: the strict hook-layout call (1174), lib-dependency review b
 **Pipeline verify results**
 
 - Verdict: PASS (from verdict artifact)
-- Confidence: MEDIUM
+- Confidence: HIGH
 
 | Requirement | Status | Evidence |
 |-------------|--------|----------|
-| R1 | MET | `scripts/commands/script-contract-check.ts:571` (shared DB/corpus boundary for scripts, hooks and handwritten lib), `scripts/commands/script-contract-check.ts:625` (hook source-layout checker: one authored entry per registered identity, helpers to lib, tests to the plugin test owner), `scripts/commands/script-contract-check.ts:741` (lib gets the boundary with no 250-line budget — Biome `files.includes` is resolved relative to the config file, https://biomejs.dev/installation/upgrade-to-biome-v2/); fixtures `scripts/commands/script-contract-check.test.ts:686` and `scripts/commands/script-contract-check.test.ts:723` through `:796`; real tree clean `scripts/commands/script-contract-check.test.ts:809` |
-| R2 | MET | Pure cores `plugins/sp/lib/dogfood-report.ts:236` and `plugins/sp/lib/dogfood-pipeline.ts:125`; thin executable entries `plugins/sp/scripts/dogfood-testing/validate-report.ts:14` and `plugins/sp/scripts/dogfood-testing/detect-pipeline-driving.ts:21` (argv, usage and exit codes unchanged); inlined console toggle `plugins/sp/scripts/daily-summary/daily-summary.ts:23`; helper deleted and the manifest carries no repo-only row `config/plugin-scripts.json:21`; suite `plugins/sp/tests/daily-summary/daily-summary.test.ts:29` |
-| R3 | MET | Test fixture `packages/app/tests/fixtures/proportional-route-table.ts:1` with both importers re-pointed `packages/app/tests/workflow/proportional-route-table.test.ts:8` and `packages/app/tests/workflow/proportional-routing-pilots.test.ts:8`; ported still-valid assertion `packages/app/tests/workflow/plan-projection.test.ts:178`; executable prototype removed with its historical Markdown record kept `docs/analysis/2026-10-plan-projection-prototype.md:4` |
-| R4 | MET | Root script names route to the source-local builder `package.json:76` and `package.json:77`; forwarder and dispatcher cases removed `scripts/spur-dev.ts:1` (no bump-ver/drop-tags case remains); fake-runner argv test `scripts/commands/release-alias.test.ts:55`; live probe `bun run bump-ver --help` exits 0 with the builder options, which is Bun appending operator args to a script command (https://bun.com/docs/runtime); no release executed by any check — version `apps/cli/package.json:3` and both `0.1.4` tags unchanged on local and origin |
-| R5 | MET | Active lock claims gone `plugins/sp/skills/spur-dev/references/inline-pipeline-driver.md:769` and `:910`, `plugins/sp/skills/code-implementation/SKILL.md:168`; the mechanism itself was deleted (`git log -S full-gate.lock` → f1d3c2caa); preload kept with its real reason `scripts/bunfig.toml:1` and `plugins/sp/bunfig.toml:1`; safeguards retained: SQLite busy retries `packages/domain/src/db.ts:19`, commit guard `plugins/sp/scripts/commit-guard.ts:3` |
+| R1 | MET | Shared DB/corpus boundary `scripts/commands/script-contract-check.ts:571`; hook-layout checker `scripts/commands/script-contract-check.ts:625`; handwritten lib carries the boundary without a line budget `scripts/commands/script-contract-check.ts:741-744`. Fixtures: lib boundary `scripts/commands/script-contract-check.test.ts:721`, hook layout `:758`, `:772`, `:810`, `:831`, strict activation `:699`, real tree clean `:844`. Verifier-run: script-contract-check + release-alias 37 pass / 0 fail; `bun scripts/commands/script-contract-check.ts --placement-only` → 0 finding(s) — PASS. |
+| R2 | MET | Pure cores `plugins/sp/lib/dogfood-report.ts:236`, `plugins/sp/lib/dogfood-pipeline.ts:125`; thin entries re-export them `plugins/sp/scripts/dogfood-testing/validate-report.ts:14`, `plugins/sp/scripts/dogfood-testing/detect-pipeline-driving.ts:21`; inlined console toggle `plugins/sp/scripts/daily-summary/daily-summary.ts:21-26`; `plugins/sp/scripts/daily-summary/logger.ts` absent; sole manifest entry `config/plugin-scripts.json:21`; test hook `plugins/sp/tests/daily-summary/daily-summary.test.ts:29`. Verifier-run: dogfood + daily-summary suites 161 pass / 0 fail. |
+| R3 | MET | Fixture `packages/app/tests/fixtures/proportional-route-table.ts:1`; importers `packages/app/tests/workflow/proportional-route-table.test.ts:8`, `packages/app/tests/workflow/proportional-routing-pilots.test.ts:9`; ported assertion `packages/app/tests/workflow/plan-projection.test.ts:178`; historical record kept `docs/analysis/2026-10-plan-projection-prototype.md:4`; `config/proportional-route-table.ts` and the `.ts` prototype absent. Verifier-run: 44 pass / 0 fail. |
+| R4 | MET | Root names route to the builder `package.json:77` (bump-ver) and `package.json:78` (drop-tags); `scripts/commands/release.ts` absent and no bump-ver/drop-tags case in `scripts/spur-dev.ts`; fake-runner argv test `scripts/commands/release-alias.test.ts:55`, removal pinned `:84`. |
+| R5 | MET | Active claims removed: `plugins/sp/skills/spur-dev/references/inline-pipeline-driver.md:769`, `plugins/sp/skills/code-implementation/SKILL.md:168`; remaining matches (`inline-pipeline-driver.md:444`, `:941`) are labelled historical. Preload kept `scripts/bunfig.toml:1`, `plugins/sp/bunfig.toml:1`; busy retry `packages/domain/src/db.ts:19`; commit guard `plugins/sp/scripts/commit-guard.ts:3`. |
 
 | Acceptance Criteria | Status | Evidence Type | Evidence |
 |---------------------|--------|---------------|----------|
-| AC1 — Placement policy prevents a second harness implementation (req: R1) | MET | test | `scripts/commands/script-contract-check.test.ts:686` (handwritten-lib boundary, no lib line budget), `scripts/commands/script-contract-check.test.ts:723` to `:796` (hook layout: one entry per identity, registered-twice group, unregistered helper, misplaced test, extension entries), `scripts/commands/script-contract-check.test.ts:809` (real tree produces no placement finding); dev-time probe `bun scripts/commands/script-contract-check.ts --placement-only` → `0 finding(s) — PASS` |
-| AC2 — Legacy cleanup removes obsolete surfaces without weakening safeguards (req: R5) | MET | command | Full gate through the sanctioned primitive: `wbs=1173 ... bun plugins/sp/scripts/quality-gate.ts run` → `quality gate PASS (attempts: 1)`; durable artifacts `.spur/run/1173-test-gate.status` (`PASS`) and `.spur/run/1173-test-gate.log:455` (`11076 pass`, `0 fail`), `:15` (51 pre-check rules), `:460` (2 post-check rules), `:3` (1353 files formatted/linted) |
+| AC1 — Placement policy prevents a second harness implementation (req: R1) | MET | test | `scripts/commands/script-contract-check.test.ts:721`, `:758`, `:772`, `:810`, `:831`, `:844`; verifier-run 37 pass / 0 fail plus placement scan 0 findings. |
+| AC2 — Legacy cleanup removes obsolete surfaces without weakening safeguards (req: R5) | MET | command | `rg -i 'gate[- ]lock |
 - Coverage: N/A (verdict-based; verify pipeline does not measure code coverage)
 
 ### Review
@@ -142,13 +142,6 @@ Deferred, by design: the strict hook-layout call (1174), lib-dependency review b
 | Priority | Dimension | Location | Finding |
 |----------|-----------|----------|----------|
 | P4 | — | — | No findings (verify verdict PASS) |
-
-**Confidence:** MEDIUM
-
-The gap: the placement/lib boundary and the hook-layout checker were verified by the tree’s own full gate plus the placement scan, but these hops ran out of band from the pipeline. So the `test` hop never captured `proofDigest` and no digest-bound
-`.spur/run/1173-check-receipt.json` exists; the deciding evidence is
-`.spur/run/1173-test-gate.status` plus its log. A pipeline-driven run that writes that receipt
-is what raises this to HIGH.
 
 ### References
 

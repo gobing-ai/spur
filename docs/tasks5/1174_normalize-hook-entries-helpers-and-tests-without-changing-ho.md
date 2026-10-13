@@ -4,7 +4,7 @@ name: Normalize hook entries helpers and tests without changing host behavior
 status: done
 template: feature-impl
 created_at: 2026-10-12T03:34:10.714Z
-updated_at: "2026-10-12T18:10:00.275Z"
+updated_at: "2026-10-13T05:37:48.106Z"
 feature_id: A91
 priority: P1
 tags:
@@ -115,17 +115,17 @@ Deferred: no application-service ownership moved here, so 1176/1177 keep their o
 **Pipeline verify results**
 
 - Verdict: PASS (from verdict artifact)
-- Confidence: MEDIUM
+- Confidence: HIGH
 
 | Requirement | Status | Evidence |
 |-------------|--------|----------|
-| R1 | MET | Registered identities unchanged in `plugins/sp/hooks/hooks.json:1` (six identities, one shared `agent-lifecycle` entry across four event occurrences); their entry files still resolve at `plugins/sp/hooks/task-write-guard.ts:1`, `plugins/sp/hooks/context-post-tool.ts:1`, `plugins/sp/hooks/context-session-start.ts:1`, `plugins/sp/hooks/context-session-stop.ts:1`, `plugins/sp/hooks/agent-lifecycle.ts:1` and `plugins/sp/hooks/fleet-guest-stop.ts:1`; the opt-in guard and the plugin-declared Pi extension keep their paths `plugins/sp/hooks/careful-guard.ts:1` and `plugins/sp/hooks/pi/guard-extension.ts:1`, with the extension still declared in `plugins/sp/plugin.json:6` |
-| R2 | MET | Helpers moved to lib: `plugins/sp/lib/agent-hint.ts:1`, `plugins/sp/lib/context-owner.ts:1`, `plugins/sp/lib/destructive-policy.ts:1`, `plugins/sp/lib/task-file-policy.ts:1`; cores extracted to `plugins/sp/lib/context-post-tool.ts:26`, `plugins/sp/lib/context-session-start.ts:17` and `plugins/sp/lib/context-session-stop.ts:24` with the entries reduced to argv/stdin adapters; every suite relocated under `plugins/sp/tests/hooks/` (nine files, Pi at `plugins/sp/tests/hooks/pi/guard-extension.test.ts:1`) and the moved fixture test `plugins/sp/tests/hooks/context-hooks.test.ts:24` re-derives its hooks root rather than assuming it; one capture policy — the Pi extension and the Claude entry both call the same cores `plugins/sp/hooks/pi/guard-extension.ts:31` and `plugins/sp/hooks/context-post-tool.ts:13` |
-| R3 | MET | Strict checker activated in the placement scan `scripts/commands/script-contract-check.ts:749` (task 1173 helper is now the enforcement path) and exercised in `scripts/commands/script-contract-check.test.ts:686` plus the activation fixture `scripts/commands/script-contract-check.test.ts:673`; real tree scan reports `0 finding(s) — PASS`. Behaviour lenses: redaction/byte caps and session ownership in `plugins/sp/tests/hooks/token-estimate.test.ts:21` and `plugins/sp/tests/hooks/context-hooks.test.ts:21`; destructive + task guard parity in `plugins/sp/tests/hooks/destructive-policy.test.ts:119` and `plugins/sp/tests/hooks/task-write-guard.test.ts:22`; installed extension/hook resolution in the plugin install smoke run (`bun run plugin-smoke` → `plugin-install-smoke PASS`) |
+| R1 | MET | `plugins/sp/hooks/hooks.json:1` still registers six identities via `superskill hook run sp <id>` (agent-lifecycle ×4 occurrences, context-post-tool, context-session-start, context-session-stop, fleet-guest-stop, task-write-guard); every entry file exists under `plugins/sp/hooks/`; opt-in `plugins/sp/hooks/careful-guard.ts:1` kept; Pi extension still declared `plugins/sp/plugin.json:6`. Verifier-run `bun run plugin-smoke` → plugin-install-smoke PASS. |
+| R2 | MET | Helpers at lib basenames `plugins/sp/lib/agent-hint.ts:1`, `plugins/sp/lib/context-owner.ts:1`, `plugins/sp/lib/destructive-policy.ts:1`, `plugins/sp/lib/task-file-policy.ts:1` (none remain in hooks); cores `plugins/sp/lib/context-post-tool.ts:288`, `plugins/sp/lib/context-session-start.ts:211`, `plugins/sp/lib/context-session-stop.ts:190`; adapters import them `plugins/sp/hooks/context-post-tool.ts:13`, `plugins/sp/hooks/context-session-start.ts:10`, `plugins/sp/hooks/context-session-stop.ts:10`; Pi uses the same core `plugins/sp/hooks/pi/guard-extension.ts:31`; no `*.test.ts` under `plugins/sp/hooks`; suites under `plugins/sp/tests/hooks/` (9 files) with derived root `plugins/sp/tests/hooks/context-hooks.test.ts:24`. |
+| R3 | MET | Strict call `scripts/commands/script-contract-check.ts:750`; activation fixture `scripts/commands/script-contract-check.test.ts:699-711` (stray helper + misplaced test). Behaviour: redaction before persistence `plugins/sp/tests/hooks/context-hooks.test.ts:261`, owner refusal `:932`, `:955`; guards fail open `plugins/sp/tests/hooks/task-write-guard.test.ts:71`, `:76`; destructive labels `plugins/sp/tests/hooks/destructive-policy.test.ts:91`; Pi handlers `plugins/sp/tests/hooks/pi/guard-extension.test.ts:128`. Verifier-run `bun test tests/hooks/` 387 pass / 0 fail; placement scan 0 findings. |
 
 | Acceptance Criteria | Status | Evidence Type | Evidence |
 |---------------------|--------|---------------|----------|
-| AC1 — Hook entries preserve behavior with helpers and tests in their owners (req: R1) | MET | command | Full gate through the sanctioned primitive (`wbs=1174 bun plugins/sp/scripts/quality-gate.ts run`) → `quality gate PASS (attempts: 1)`; durable `.spur/run/1174-test-gate.status` (`PASS`) and `.spur/run/1174-test-gate.log:455` (`11077 pass`, `0 fail`), `:15` (51 pre-check rules), `:460` (2 post-check rules), `:3` (1356 files formatted/linted); hook suites alone `cd plugins/sp && bun test tests/hooks/` → `387 pass / 0 fail` |
+| AC1 — Hook entries preserve behavior with helpers and tests in their owners (req: R1) | MET | test | `plugins/sp/tests/hooks/context-hooks.test.ts:261`, `plugins/sp/tests/hooks/pi/guard-extension.test.ts:128`, `scripts/commands/script-contract-check.test.ts:699`; verifier-run hooks 387 pass / 0 fail, plugin-smoke PASS, operator-run `bun run spur-check` all pass. |
 - Coverage: N/A (verdict-based; verify pipeline does not measure code coverage)
 
 ### Review
@@ -137,13 +137,6 @@ Deferred: no application-service ownership moved here, so 1176/1177 keep their o
 | Priority | Dimension | Location | Finding |
 |----------|-----------|----------|----------|
 | P4 | — | — | No findings (verify verdict PASS) |
-
-**Confidence:** MEDIUM
-
-The gap: the hook move and the activated layout checker were verified by the tree’s own full gate, `plugin-smoke` and the hook suites, but these hops ran out of band from the pipeline. So the `test` hop never captured `proofDigest` and no digest-bound
-`.spur/run/1174-check-receipt.json` exists; the deciding evidence is
-`.spur/run/1174-test-gate.status` plus its log. A pipeline-driven run that writes that receipt
-is what raises this to HIGH.
 
 ### References
 
