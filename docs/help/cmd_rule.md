@@ -72,11 +72,15 @@ retroactively clear the exit code (the operator re-runs to confirm green).
 
 1. `SPUR_RULES_PATH` env var (additional root)
 2. Local `.spur/rules/` (project layer)
-3. User-global `~/.config/spur/rules/` (or `SPUR_GLOBAL_RULES_DIR` override)
+3. User-global `~/.config/spur/rules/` (or `SPUR_GLOBAL_RULES_DIR` override) — skipped when
+   `SPUR_SKIP_GLOBAL_CONFIG=true` and `SPUR_GLOBAL_RULES_DIR` is unset
 4. Bundled fallback (from `ts-rule-engine`) — the generic demo rules
 
 A run that resolves **zero rules** exits 1. Setting `SPUR_GLOBAL_RULES_DIR` overrides the
-global root and suppresses the bundled fallback for a hermetic run.
+global root and suppresses the bundled fallback for a hermetic run. `SPUR_SKIP_GLOBAL_CONFIG=true`
+(the switch that also skips `~/.config/spur/config.yaml`) drops the `~/.config/spur/rules` layer
+so a stale operator copy cannot shadow the bundled presets; an explicit `SPUR_GLOBAL_RULES_DIR`
+still wins over it, and the bundled fallback still applies.
 
 ### JSON shape
 
