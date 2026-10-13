@@ -1,14 +1,16 @@
 ---
 schema_version: 1
 name: Deprecated task status vocabulary and lifecycle graph
-status: wip
+status: done
 template: feature-impl
 created_at: 2026-10-13T16:56:12.964Z
-updated_at: "2026-10-13T17:09:55.562Z"
+updated_at: "2026-10-13T18:11:14.336Z"
 feature_id: F43
 priority: P2
 estimate_hours: 3
 
+done_forced: "false"
+done_reason: unforced close; PASS artifact at .spur/memory/evidence/1189-verdict.json
 ---
 
 ## 1189. Deprecated task status vocabulary and lifecycle graph
@@ -23,14 +25,14 @@ Ordering: first slice; the guard and derivation slices depend on it (no consumer
 
 ### Requirements
 
-- [ ] R1. Append `deprecated` to `TASK_STATUSES` and add `TASK_STATUS_ICONS.deprecated` in `packages/domain/src/planning/schema.ts` (statuses at :20, icons at :39); add the identity alias `deprecated: 'deprecated'` to `TASK_STATUS_ALIASES` (:141) so `normalizeTaskStatus` (:190) stays total and a missing alias key cannot throw for a canonical status.
-- [ ] R2. Prove the vocabulary end to end: a task file declaring `status: deprecated` lists, shows and validates; `spur task list --status deprecated` selects it; the task contract round-trips it with no edit to `packages/contracts/src/task.ts` (it uses `z.enum(TASK_STATUSES)`); an unknown status still fails naming the allowed set.
-- [ ] R3. Add the `deprecated` state and its edges to `config/workflows/task-lifecycle.yaml`: enter from `backlog`, `todo`, `wip`, `testing`, `blocked` and `done`; exit only to `todo` (un-deprecate) and `cancelled` (removed); keep `deprecated` out of `terminalStates`; keep one transition per (from, to) pair per the file's own [CRITICAL] note; then regenerate `apps/cli/config/workflows/task-lifecycle.yaml` with `bun run build:bundle` so the two copies are byte-identical.
+- [x] R1. Append `deprecated` to `TASK_STATUSES` and add `TASK_STATUS_ICONS.deprecated` in `packages/domain/src/planning/schema.ts` (statuses at :20, icons at :39); add the identity alias `deprecated: 'deprecated'` to `TASK_STATUS_ALIASES` (:141) so `normalizeTaskStatus` (:190) stays total and a missing alias key cannot throw for a canonical status.
+- [x] R2. Prove the vocabulary end to end: a task file declaring `status: deprecated` lists, shows and validates; `spur task list --status deprecated` selects it; the task contract round-trips it with no edit to `packages/contracts/src/task.ts` (it uses `z.enum(TASK_STATUSES)`); an unknown status still fails naming the allowed set.
+- [x] R3. Add the `deprecated` state and its edges to `config/workflows/task-lifecycle.yaml`: enter from `backlog`, `todo`, `wip`, `testing`, `blocked` and `done`; exit only to `todo` (un-deprecate) and `cancelled` (removed); keep `deprecated` out of `terminalStates`; keep one transition per (from, to) pair per the file's own [CRITICAL] note; then regenerate `apps/cli/config/workflows/task-lifecycle.yaml` with `bun run build:bundle` so the two copies are byte-identical.
 
 ### Acceptance Criteria
 
-- [ ] AC1 — Deprecated is a canonical task status across domain and contracts
-- [ ] AC2 — The lifecycle graph retains a deprecated task and allows only un-deprecation or removal exits
+- [x] AC1 — Deprecated is a canonical task status across domain and contracts
+- [x] AC2 — The lifecycle graph retains a deprecated task and allows only un-deprecation or removal exits
 
 Task-local checks: the bundled copy is byte-identical to the source graph; an unknown status still reports the full allowed set.
 
@@ -117,11 +119,32 @@ asserted at `packages/domain/tests/planning/lifecycle-drift.test.ts:81`.
 
 ### Testing
 
-<!-- Filled during verification: commands run, outcomes, coverage claim or N/A. -->
+**Pipeline verify results**
+
+- Verdict: PASS (from verdict artifact)
+- Confidence: HIGH
+
+| Requirement | Status | Evidence |
+|-------------|--------|----------|
+| R1 | MET | `packages/domain/src/planning/schema.ts:20` TASK_STATUSES list gains the `deprecated` member (:28), `TASK_STATUS_ICONS.deprecated` at `:56`, and identity alias `deprecated: 'deprecated'` at `:169`; `normalizeTaskStatus` totality proven by `packages/domain/tests/planning-schema.test.ts:184` (identity + uppercase alias, no throw). |
+| R2 | MET | Contract enum derives from TASK_STATUSES at `packages/contracts/src/task.ts:79` (diff 8d5788ca3 touches only `packages/contracts/tests/contract.test.ts`, no src edit); round-trip test `packages/contracts/tests/contract.test.ts:428`; CLI board title `apps/cli/src/commands/task.ts:80`; batch not-started map `packages/app/src/services/task-verdict.ts:546`. CLI probes run here: `task list --status deprecated` exit 0 (accepted), `task list --status bogus` exit 1 naming the full allowed set incl. `deprecated`. |
+| R3 | MET | `config/workflows/task-lifecycle.yaml:67` declares the non-terminal `deprecated` state, `:45` `terminalStates: [cancelled]` (no `deprecated`), entry edges at `:168-193` from backlog/todo/wip/testing/blocked/done, exits at `:200` (todo) and `:205` (cancelled); drift tests `packages/domain/tests/planning/lifecycle-drift.test.ts:63,69,76,81` assert one edge per (from,to), non-terminal, exits only todo/cancelled, no duplicate pair. Bundled copy byte-identical (sha256 d11dfccc2894ea661f50112e00bf7b5285d324eedbc79e049572b8b5a4c6974b). |
+
+| Acceptance Criteria | Status | Evidence Type | Evidence |
+|---------------------|--------|---------------|----------|
+| AC1 — Deprecated is a canonical task status across domain and contracts | MET | test | `packages/domain/tests/planning-schema.test.ts:78` (frontmatter accept), `:184` (alias), `:261` (exact TASK_STATUSES array), `:308` (icon); `packages/contracts/tests/contract.test.ts:418,428` (enum + transition round-trip). Ran `bun test` over the 3 focused suites: 131 pass / 0 fail. CLI: `spur task list --status deprecated` exit 0, `--status bogus` exit 1 naming the allowed set incl. `deprecated`. |
+| AC2 — The lifecycle graph retains a deprecated task and allows only un-deprecation or removal exits | MET | test | `packages/domain/tests/planning/lifecycle-drift.test.ts:63` (declared + non-terminal), `:69` (one edge from each of backlog/todo/wip/testing/blocked/done), `:76` (outbound exactly {cancelled, todo}), `:81` (every other target undeclared). Graph read at `config/workflows/task-lifecycle.yaml:45,67,168-205`; bundled copy sha256-identical to source. |
+- Coverage: N/A (verdict-based; verify pipeline does not measure code coverage)
 
 ### Review
 
-<!-- Filled during review: P1-P4 findings, residual risk, and final disposition. -->
+<!-- spur:record-review -->
+
+**SECU findings** (pipeline verify step — verdict: PASS)
+
+| Priority | Dimension | Location | Finding |
+|----------|-----------|----------|----------|
+| P4 | — | — | No findings (verify verdict PASS) |
 
 ### References
 
@@ -130,4 +153,6 @@ asserted at `packages/domain/tests/planning/lifecycle-drift.test.ts:81`.
 ### History
 
 - 2026-10-13T17:09:51.472Z todo → wip (system)
+- 2026-10-13T18:10:53.227Z wip → testing (system)
+- 2026-10-13T18:11:14.142Z testing → done (system)
 

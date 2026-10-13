@@ -4,12 +4,13 @@ name: "Fix decide action evidence path resolution: an absolute evidence path is 
 status: todo
 template: standard
 created_at: 2026-10-13T17:44:16.262Z
-updated_at: "2026-10-13T17:59:00.393Z"
+updated_at: "2026-10-13T18:08:30.313Z"
 
 ac_altitude: task-local
 ac_numbering: task-local
 priority: P1
 estimate_hours: 2
+feature_id: P1
 ---
 
 ## 1193. Fix decide action evidence path resolution: an absolute evidence path is joined with the workdir
