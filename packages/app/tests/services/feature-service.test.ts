@@ -1307,6 +1307,7 @@ updated_at: "${new Date().toISOString()}"
             await recordPassReceipt(feat.ref.id);
             const second = await svc.syncFeature(feat.ref.id);
             expect(second.suppressed).toBeUndefined();
+            if (!second.applied) console.error('DIAG second proposal:', JSON.stringify(second.proposal, null, 2));
             expect(second.applied).toBe(true);
             expect(second.appliedHops).toEqual(['done']);
             expect((await svc.show(feat.ref.id))?.status).toBe('done');
