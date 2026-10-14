@@ -94,6 +94,17 @@ describe('DatabaseInspector.listTables', () => {
 });
 
 describe('DatabaseInspector.describe', () => {
+    test('marks every column of a composite primary key', async () => {
+        const db = await createDbAdapter({ driver: 'bun-sqlite', url: ':memory:' });
+        try {
+            await db.exec('CREATE TABLE composite (a TEXT, b TEXT, value TEXT, PRIMARY KEY (a, b))');
+            const described = await new DatabaseInspector(db).describe('composite');
+            expect(described.columns.map((column) => column.pk)).toEqual([true, true, false]);
+        } finally {
+            db.close();
+        }
+    });
+
     test('returns cid-ordered columns and the exact row count', async () => {
         const db = await fixtureDb();
         const inspector = new DatabaseInspector(db);
