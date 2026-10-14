@@ -3,7 +3,8 @@
  *
  * The task-side analogue of `FEATURE_STATUS_ACTIONS` (F42): a status lists an action only
  * when the task-lifecycle graph admits the transition it maps to. `task-actions.test.ts` asserts
- * that against the state machine's build-time source (`config/workflows/task-lifecycle.yaml`);
+ * that against the state machine's build-time source (the canonical task-lifecycle workflow
+ * definition);
  * a deployed project resolves the same graph at its runtime path
  * (`.spur/workflows/`). `deprecated` offers its two legal exits — un-deprecate to `todo`, or
  * `cancelled` for removal (ADR-137).
