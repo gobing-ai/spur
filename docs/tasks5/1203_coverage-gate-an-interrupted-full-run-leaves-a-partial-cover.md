@@ -1,16 +1,18 @@
 ---
 schema_version: 1
 name: "coverage-gate: an interrupted full run leaves a partial .coverage artifact that fails unrelated files"
-status: todo
+status: done
 template: standard
 created_at: 2026-10-14T03:25:27.063Z
-updated_at: "2026-10-14T05:48:19.009Z"
+updated_at: "2026-10-14T07:21:05.650Z"
 feature_id: C3
 
 ac_altitude: graduating
 ac_numbering: task-local
 priority: P2
 estimate_hours: 8
+done_forced: "false"
+done_reason: unforced close; PASS artifact at .spur/memory/evidence/1203-verdict.json
 ---
 
 ## 1203. coverage-gate: an interrupted full run leaves a partial .coverage artifact that fails unrelated files
@@ -29,11 +31,11 @@ The original session reported interrupted and stale .coverage/lcov.info producin
 
 ### Requirements
 
-- [ ] R1. Canonical root test, test:coverage and test:full runs invalidate prior coverage certification before launching and certify only an exit-zero full-suite run whose tested working-tree fingerprint is unchanged from start to finish.
-- [ ] R2. test-post-check and test-post-check:full validate certification before rule evaluation; missing, pending, malformed, superseded, stale-tree, missing-LCOV or byte-mismatched evidence fails nonzero with a coverage-artifact diagnostic and no per-file coverage findings.
-- [ ] R3. Valid certified evidence still reaches the existing coverage-gate evaluator with its existing path, production include globs, diagnostic shape and 90 percent threshold; Bun's 90/90 line/function thresholds remain unchanged.
-- [ ] R4. Certification adds no second full-suite execution or source-count scan. Targeted, heavy, repo-wide and interrupted producers cannot certify canonical coverage or clobber its certified artifact; concurrent canonical producers fail closed or supersede deterministically.
-- [ ] R5. Regression fixtures cover producer interruption, nonzero exit, source changes during/after a run, targeted overwrite and concurrent publication. Producer and post-check documentation names the canonical certification route and recovery command.
+- [x] R1. Canonical root test, test:coverage and test:full runs invalidate prior coverage certification before launching and certify only an exit-zero full-suite run whose tested working-tree fingerprint is unchanged from start to finish.
+- [x] R2. test-post-check and test-post-check:full validate certification before rule evaluation; missing, pending, malformed, superseded, stale-tree, missing-LCOV or byte-mismatched evidence fails nonzero with a coverage-artifact diagnostic and no per-file coverage findings.
+- [x] R3. Valid certified evidence still reaches the existing coverage-gate evaluator with its existing path, production include globs, diagnostic shape and 90 percent threshold; Bun's 90/90 line/function thresholds remain unchanged.
+- [x] R4. Certification adds no second full-suite execution or source-count scan. Targeted, heavy, repo-wide and interrupted producers cannot certify canonical coverage or clobber its certified artifact; concurrent canonical producers fail closed or supersede deterministically.
+- [x] R5. Regression fixtures cover producer interruption, nonzero exit, source changes during/after a run, targeted overwrite and concurrent publication. Producer and post-check documentation names the canonical certification route and recovery command.
 
 ### Acceptance Criteria
 
@@ -101,15 +103,92 @@ Out of scope: hangs, threshold lowering, per-file exemptions, new evaluator conf
 
 ### Solution
 
-<!-- Filled during implementation: file:line change map and concise rationale. -->
+Change-map (auto-generated — implement step did not record a Solution).
+Each entry cites the first changed line per file (`file:line`).
+
+| Change (`file:line`) |
+|----------------------|
+| `config/rules/quality/coverage-gate.yaml:2` |
+| `package.json:100` |
+| `package.json:84` |
+| `package.json:87` |
+| `package.json:91` |
+| `package.json:98` |
+| `plugins/sp/lib/idea-handoff.generated.mjs:325` |
+| `plugins/sp/lib/inline-run.generated.mjs:1385` |
+| `plugins/sp/lib/inline-run.generated.mjs:1534` |
+| `plugins/sp/lib/inline-run.generated.mjs:266` |
+| `plugins/sp/lib/inline-run.generated.mjs:3044` |
+| `plugins/sp/lib/quality-gate.generated.mjs:16710` |
+| `plugins/sp/lib/quality-gate.generated.mjs:17017` |
+| `plugins/sp/lib/quality-gate.generated.mjs:17040` |
+| `plugins/sp/lib/quality-gate.generated.mjs:17134` |
+| `plugins/sp/lib/quality-gate.generated.mjs:17168` |
+| `plugins/sp/lib/quality-gate.generated.mjs:24731` |
+| `plugins/sp/lib/quality-gate.generated.mjs:24859` |
+| `plugins/sp/lib/quality-gate.generated.mjs:24862` |
+| `plugins/sp/lib/quality-gate.generated.mjs:24865` |
+| `plugins/sp/lib/quality-gate.generated.mjs:24884` |
+| `plugins/sp/lib/quality-gate.generated.mjs:25149` |
+| `plugins/sp/lib/quality-gate.generated.mjs:25191` |
+| `plugins/sp/lib/quality-gate.generated.mjs:27297` |
+| `plugins/sp/lib/quality-gate.generated.mjs:27401` |
+| `plugins/sp/lib/quality-gate.generated.mjs:27404` |
+| `plugins/sp/lib/quality-gate.generated.mjs:27521` |
+| `plugins/sp/lib/quality-gate.generated.mjs:27620` |
+| `plugins/sp/lib/quality-gate.generated.mjs:30` |
+| `plugins/sp/lib/quality-gate.generated.mjs:41` |
+| `plugins/sp/lib/quality-gate.generated.mjs:64` |
+| `plugins/sp/lib/quality-gate.generated.mjs:67` |
+| `plugins/sp/lib/quality-gate.generated.mjs:72` |
+| `plugins/sp/lib/quality-gate.generated.mjs:75` |
+| `scripts/commands/coverage-certification.test.ts:1` |
+| `scripts/commands/coverage-certification.ts:1` |
+| `scripts/commands/coverage-provenance-check.ts:1` |
+| `scripts/commands/run-tests.ts:104` |
+| `scripts/commands/run-tests.ts:24` |
+| `scripts/commands/run-tests.ts:38` |
+| `scripts/commands/run-tests.ts:80` |
+| `scripts/commands/run-tests.ts:89` |
 
 ### Testing
 
-<!-- Filled during verification: commands run, outcomes, coverage claim or N/A. -->
+**Pipeline verify results**
+
+- Verdict: PASS (from verdict artifact)
+
+| Requirement | Status | Evidence |
+|-------------|--------|----------|
+| R1. Canonical root test, test:coverage and test:full runs invalidate prior coverage certification before launching and certify only an exit-zero full-suite run whose tested working-tree fingerprint is unchanged from start to finish. | MET | scripts/commands/run-tests.ts: --publish-coverage consumed before forwarding; startCanonicalRun (invalidates + fingerprints tracked tree) runs BEFORE Bun.spawnSync; certifyCanonicalRun runs only on exitCode===0 and requires the finish digest to equal the start digest (coverage-certification.ts certifyCanonicalRun). Tests: 'a passing canonical run certifies the artifact…', 'a failing canonical run keeps its real exit code and leaves evidence pending', 'an interrupted canonical producer never certifies', 'a source change during the run refuses publish…stale-tree'. |
+| R2. test-post-check and test-post-check:full validate certification before rule evaluation; missing, pending, malformed, superseded, stale-tree, missing-LCOV or byte-mismatched evidence fails nonzero with a coverage-artifact diagnostic and no per-file coverage findings. | MET | scripts/commands/coverage-provenance-check.ts exits nonzero with 'coverage-artifact: <reason>' + recovery before `&& spur rule run`; package.json prefixes both test-post-check scripts with it. validateCoverageCertification returns seven distinct reasons; each pinned by a dedicated test (missing/malformed json/malformed schema/pending/superseded/missing-lcov/stale-tree/lcov-mismatch) plus the precondition CLI diagnostic test. |
+| R3. Valid certified evidence still reaches the existing coverage-gate evaluator with its existing path, production include globs, diagnostic shape and 90 percent threshold; Bun's 90/90 line/function thresholds remain unchanged. | MET | config/rules/quality/coverage-gate.yaml diff is comment-only (evaluator block untouched); bunfig.toml untouched. AC2 tests evaluate certified fixture lcov through the real builtin coverage-gate evaluator (RuleEngine host): 89% file keeps its below-threshold finding, 90% passes; lcovPath/threshold/include carried unchanged. |
+| R4. Certification adds no second full-suite execution or source-count scan. Targeted, heavy, repo-wide and interrupted producers cannot certify canonical coverage or clobber its certified artifact; concurrent canonical producers fail closed or supersede deterministically. | MET | Producer test proves exactly one suite child per canonical command (PATH-counting shim, one log line). Wiring test pins test:heavy/test-repo-wide WITHOUT --publish-coverage. Interrupted run leaves pending (SIGKILL test); targeted overwrite fails validation with lcov-mismatch; concurrent runs: earlier publish refused with superseded, later certifies. |
+| R5. Regression fixtures cover producer interruption, nonzero exit, source changes during/after a run, targeted overwrite and concurrent publication. Producer and post-check documentation names the canonical certification route and recovery command. | MET | scripts/commands/coverage-certification.test.ts: 17 tests covering all named scenarios against bounded git-repo child-process fixtures. Docs: run-tests.ts header names the canonical route + recovery; coverage-gate.yaml PROVENANCE block names producers, marker path, refusal reasons, recovery (bun run test:full) and the portable-rule boundary. |
+
+| Acceptance Criteria | Status | Evidence Type | Evidence |
+|---------------------|--------|---------------|----------|
+| AC-1 | MET |  | failing-run, interrupted (SIGKILL), and targeted-overwrite tests all leave/refuse with pending/lcov-mismatch before any rule evaluation; precondition CLI exits 1 with coverage-artifact diagnostic. |
+| AC-2 | MET |  | 89% fixture keeps below-threshold finding and 90% passes through the real builtin evaluator with unchanged path/globs/threshold. |
+| AC-3 | MET |  | stale-tree (content-hashed worktree bytes, index-independent), lcov-mismatch, malformed and missing-marker refusals all pinned. |
+| AC-4 | MET |  | earlier producer publish refused as superseded once a later run starts; exactly one suite child per canonical command (shim count). |
+| AC-5 | MET |  | wiring test pins --publish-coverage on test/test:coverage/test:full, its absence on heavy/repo-wide, and provenance-first prefixes on both post-checks; recovery documented in yaml + CLI stderr. |
+- Coverage: N/A (verdict-based; verify pipeline does not measure code coverage)
 
 ### Review
 
-<!-- Filled during review: P1-P4 findings, residual risk, and final disposition. -->
+SECUA review of the 1203 diff (scripts/commands/coverage-certification.ts, coverage-provenance-check.ts, run-tests.ts, package.json, coverage-gate.yaml):
+
+- Security: marker at .coverage/coverage-certification.json (gitignored); atomic write via tmp+rename; malformed/absent evidence fails closed; refusal diagnostics name no secrets. Certification only from the launcher's own completed exit-zero run — a bare or targeted bun test cannot publish.
+- Edge cases: interrupted producer leaves pending (SIGKILL-pinned); concurrent canonical producers supersede deterministically (later start wins, earlier publish refused); mid-run worktree edits caught by content-hashed tracked-tree digest (index-independent); deleted tracked files hash as '<missing>'; refusal path cleans the registry temp dir.
+- Correctness: lcov digest + tree digest both bound at publish; validation re-checks bytes and tree. Evaluator/threshold untouched (yaml comment-only). One suite child per canonical command (shim-counted).
+- Usability: post-check refusal prints `coverage-artifact: <reason>` plus recovery (`bun run test:full`); producer/provenance headers and the rule file document the canonical route and the portable-rule boundary.
+- Architecture: certification is dependency-free (node builtins + git), self-contained in scripts/commands because scripts/ cannot resolve workspace app packages; no evaluator or CLI changes.
+
+| Priority | Finding | Status |
+| -------- | ------- | ------ |
+| P3 | Refusal path in run-tests.ts left the disposable registry temp dir behind | Fixed inline (rmSync before exit) |
+| P3 | Fixture tests with no imported source file emit no tracefile (empty measured set) | Fixed inline (fixtures import case/tiny.ts) |
+| P4 | Committed plugins/sp/lib/*.generated.mjs embed ts-db 0.5.26 vs installed 0.5.27 (pre-existing base failure, unrelated to 1203) | Regenerated in a separate chore commit |
 
 ### References
 
@@ -125,4 +204,6 @@ Out of scope: hangs, threshold lowering, per-file exemptions, new evaluator conf
 ### History
 
 - 2026-10-14T05:47:33.896Z backlog → todo (system)
+- 2026-10-14T06:52:43.585Z todo → wip (system)
+- 2026-10-14T07:21:05.642Z wip → done (system)
 

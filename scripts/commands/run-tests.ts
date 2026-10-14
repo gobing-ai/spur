@@ -21,11 +21,25 @@
  * Usage: `bun scripts/commands/run-tests.ts <bun test args>` — everything after the
  * script path is forwarded verbatim, so `--config=…` must precede `test` exactly as it
  * would on a bare `bun … test` line. The child's exit code is this process's exit code.
+ *
+ * Canonical coverage certification (task 1203): the root `test` / `test:coverage` /
+ * `test:full` scripts pass the internal `--publish-coverage` flag (consumed here,
+ * before forwarding). With it, the launcher invalidates prior certification before
+ * spawning and, only on an exit-zero run over an unchanged working tree, certifies
+ * `.coverage/lcov.info` in `.coverage/coverage-certification.json`. Targeted `bun test`,
+ * heavy/repo-wide gates and interrupted runs never publish. Recovery for a refused
+ * artifact: rerun `bun run test:full` (see coverage-certification.ts). Certifying adds
+ * no second suite execution — the digests come from the run this process already drove.
  */
 import { mkdtempSync, rmSync } from 'node:fs';
 import { availableParallelism, loadavg, tmpdir } from 'node:os';
 import { delimiter, join } from 'node:path';
 import { getEnvVar, getEnvVars } from '@gobing-ai/spur-config';
+import { certifyCanonicalRun, startCanonicalRun } from './coverage-certification';
+
+// Internal launcher flag (task 1203): consumed BEFORE forwarding; never reaches Bun.
+const publishCoverage = Bun.argv.includes('--publish-coverage');
+const forwardedArgs = Bun.argv.slice(2).filter((arg) => arg !== '--publish-coverage');
 
 // One disposable registry for the whole run: registry paths must be visible to children,
 // and a per-file path would drift between workers.
@@ -63,9 +77,28 @@ if (load1 > cores) {
     process.stderr.write(`run-tests: host load1=${load1.toFixed(2)} cores=${cores} — timeouts may be contention\n`);
 }
 
-const result = Bun.spawnSync(['bun', ...Bun.argv.slice(2)], {
+// Canonical coverage window (task 1203 R1): invalidate prior certification and capture
+// the tested-tree fingerprint BEFORE launching, so the window is closed while the suite
+// runs and any mid-run source change is caught at publish time.
+const canonicalStart = publishCoverage ? await startCanonicalRun(process.cwd()) : undefined;
+
+const result = Bun.spawnSync(['bun', ...forwardedArgs], {
     env,
     stdio: ['inherit', 'inherit', 'inherit'],
 });
+const exitCode = result.exitCode ?? 1;
+
+if (canonicalStart !== undefined && exitCode === 0) {
+    // Certify only the completed successful run (R1). A refused publish fails closed:
+    // the suite passed, but the artifact cannot be certified (superseded or the tree
+    // changed mid-run), so the post-check must not see green evidence (R4/AC4).
+    const certified = await certifyCanonicalRun(process.cwd(), canonicalStart);
+    if (!certified.ok) {
+        rmSync(registryDir, { recursive: true, force: true });
+        process.stderr.write(`coverage-certification: refused (${certified.reason}) — ${certified.message}\n`);
+        process.exit(1);
+    }
+}
+
 rmSync(registryDir, { recursive: true, force: true });
-process.exit(result.exitCode ?? 1);
+process.exit(exitCode);

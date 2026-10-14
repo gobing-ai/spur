@@ -1,4 +1,17 @@
 # Coverage gate — per-file line coverage meets threshold from Bun's lcov output.
+#
+# PROVENANCE (task 1203): since task 1203 the repository post-check scripts
+# (`test-post-check`, `test-post-check:full`) validate canonical coverage
+# certification BEFORE this rule evaluates: only a completed successful canonical
+# full-suite run (`bun run test`, `test:coverage`, `test:full`) certifies
+# .coverage/lcov.info (marker: .coverage/coverage-certification.json, written by
+# scripts/commands/run-tests.ts --publish-coverage). Missing/pending/superseded/
+# stale-tree/byte-mismatched artifacts fail the post-check with a
+# `coverage-artifact:` diagnostic before per-file findings; recovery is rerunning
+# `bun run test:full`. Running this rule directly via `spur rule run` outside the
+# repository wrapper bypasses that certification wrapper and is outside this
+# repository's certification contract. This rule and its evaluator are unchanged.
+#
 # Absorbed from ts-libs/.spur/rules/quality/coverage-gate.yaml, re-scoped to
 # Spur's monorepo layout:
 #   - lcovPath kept at .coverage/lcov.info (Spur's `bun run test:coverage`
