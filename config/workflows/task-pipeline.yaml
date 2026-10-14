@@ -1312,35 +1312,43 @@ transitions:
     # re-enters quality → review → verify on a fresh digest. Before 1088 a FAIL review had no
     # outgoing edge at all; before 1122 a PASS-with-findings cost a full re-certification cycle per
     # attempt (knowledge-kit 0210/0213). The reviewer writes `Verdict: PASS|FAIL` in its answer;
-    # both plain and bold forms are accepted. Under `profile=auto` the approve gate is skipped, so
-    # the PASS+auto edge is tried first and the interactive PASS edge second.
+    # both plain and bold forms are accepted. Since 1204 a PASS must also be GRADED: the reviewer
+    # states `Confidence: HIGH|MEDIUM|LOW` (verify-chain semantics, 1068), HIGH/MEDIUM cross the
+    # PASS edges unadorned, and LOW or an absent line needs the operator's `ackLowConfidence` —
+    # otherwise the PASS falls to the catch-all like any other verdict the reviewer would not stand
+    # behind (same policy as the verify confidence gate). Review stays advisory: verify certifies.
+    # Under `profile=auto` the approve gate is skipped, so the PASS+auto edge is tried first and the
+    # interactive PASS edge second.
     - from: review
       to: verify
-      description: profile=auto, the review certified PASS, and no open P1-P3 review finding — skip the human approval gate.
+      description: profile=auto, the review certified a HIGH/MEDIUM-confidence PASS (LOW/absent needs ackLowConfidence) with no open P1-P3 finding — skip the human approval gate.
       guard:
           kind: shell
           options:
               command: >-
                   test "$profile" = auto &&
                   grep -qiE '^[[:space:]]*\**Verdict:\** *PASS' ".spur/run/$__runId-review-answer.txt" &&
+                  ( grep -qiE '^[[:space:]]*\**Confidence:\** *(HIGH|MEDIUM)' ".spur/run/$__runId-review-answer.txt" || [ "$ackLowConfidence" = "true" ] ) &&
                   eval "$(jq -r 'if .mode=="source-repo" then "S="+@sh"\(.dir)/residual-scan.ts"+" RUNNER=bun" elif .mode=="installed" then "S="+@sh"\(.dir)/residual-scan.mjs"+" RUNNER=node" else empty end' ".spur/run/$__runId-script-root.json" 2>/dev/null)" &&
                   [ -f "$S" ] && "$RUNNER" "$S" review-gate "$wbs" --spur-bin "$spurBin" >&2
     - from: review
       to: approve
-      description: Review certified PASS with no open P1-P3 review finding — gate on human approval before verification.
+      description: Review certified a HIGH/MEDIUM-confidence PASS (LOW/absent needs ackLowConfidence) with no open P1-P3 finding — gate on human approval before verification.
       guard:
           kind: shell
           options:
               command: >-
                   grep -qiE '^[[:space:]]*\**Verdict:\** *PASS' ".spur/run/$__runId-review-answer.txt" &&
+                  ( grep -qiE '^[[:space:]]*\**Confidence:\** *(HIGH|MEDIUM)' ".spur/run/$__runId-review-answer.txt" || [ "$ackLowConfidence" = "true" ] ) &&
                   eval "$(jq -r 'if .mode=="source-repo" then "S="+@sh"\(.dir)/residual-scan.ts"+" RUNNER=bun" elif .mode=="installed" then "S="+@sh"\(.dir)/residual-scan.mjs"+" RUNNER=node" else empty end' ".spur/run/$__runId-script-root.json" 2>/dev/null)" &&
                   [ -f "$S" ] && "$RUNNER" "$S" review-gate "$wbs" --spur-bin "$spurBin" >&2
     - from: review
       to: review-fail-triage
       description: >-
-          No certified PASS without an open P1-P3 finding (FAIL, PARTIAL, missing, unparseable, or
-          a PASS whose review-gate check found an open P1-P3 row — fail closed) — classify the
-          failure and route it into the bounded repair hop instead of dead-ending the run.
+          No certified PASS without an open P1-P3 finding (FAIL, PARTIAL, missing, unparseable, a
+          PASS whose review-gate check found an open P1-P3 row, or a PASS the reviewer graded below
+          HIGH/MEDIUM — or left ungraded — without the operator's ackLowConfidence; fail closed) —
+          classify the failure and route it into the bounded repair hop instead of dead-ending the run.
       guard:
           kind: always
 
