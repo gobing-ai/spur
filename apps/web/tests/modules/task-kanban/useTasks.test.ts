@@ -2,6 +2,7 @@ registerHappyDom();
 
 import { afterAll, describe, expect, test } from 'bun:test';
 import { act, renderHook, waitFor } from '@testing-library/react';
+import { resetFetchForTesting, setFetchForTesting } from '../../../src/lib/rpc-client';
 import type { TaskSummary } from '../../../src/modules/task-kanban/types';
 import { createRefresh, deriveSubtaskProgress, TaskStore, useTasks } from '../../../src/modules/task-kanban/useTasks';
 import { registerHappyDom, teardownHappyDom } from '../../happy-dom';
@@ -146,10 +147,12 @@ describe('useTasks', () => {
         expect(result.current.tasks[0]?.status).toBe('done');
     });
 
-    test('connected starts as false when EventSource is unavailable', () => {
+    test('connected starts as false when EventSource is unavailable', async () => {
         const listFn = async () => ({ data: [] });
         const { result } = renderHook(() => useTasks(listFn));
         expect(result.current.connected).toBe(false);
+        // drain the mount-time refresh inside waitFor so it can't setState outside act
+        await waitFor(() => expect(result.current.loading).toBe(false));
     });
 
     test('connected is present in return value with custom listFn', async () => {
@@ -159,6 +162,21 @@ describe('useTasks', () => {
         await waitFor(() => expect(result.current.loading).toBe(false));
         expect(result.current.connected).toBe(false);
         unmount();
+    });
+
+    test('no-arg useTasks outside a provider falls back to the module shared store (getSharedStore)', async () => {
+        // The default listFn hits the real api client — stub the fetch boundary with a
+        // rejecting fetch (house pattern, 80c4d39b2) so the test stays offline and quiet.
+        setFetchForTesting(((_input: RequestInfo | URL) =>
+            Promise.reject(new Error('no server in tests'))) as typeof fetch);
+        try {
+            const { result, unmount } = renderHook(() => useTasks());
+            await waitFor(() => expect(result.current.loading).toBe(false));
+            expect(result.current.store).toBeInstanceOf(TaskStore);
+            unmount();
+        } finally {
+            resetFetchForTesting();
+        }
     });
 
     test('changing listFn re-fetches from the new source without remounting the store', async () => {

@@ -105,7 +105,9 @@ describe('useProjectRequests (0844)', () => {
             return Promise.resolve(new Response('{"requests":[]}', { status: 200 }));
         }) as typeof fetch);
         const view = renderHook(() => useProjectRequests('lead', 2));
-        await Bun.sleep(15);
+        await act(async () => {
+            await Bun.sleep(15);
+        });
         const during = hits;
         expect(during).toBeGreaterThanOrEqual(2); // initial read + at least one poll tick
         view.unmount();
