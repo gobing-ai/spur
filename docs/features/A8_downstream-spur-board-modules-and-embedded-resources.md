@@ -2,11 +2,11 @@
 schema_version: 1
 id: "A8"
 name: "Downstream Spur Board modules and embedded resources"
-status: done
+status: active
 priority: P2
 tags: []
 created_at: "2026-09-28T01:13:21.763Z"
-updated_at: "2026-10-07T00:13:08.623Z"
+updated_at: "2026-10-14T23:25:05.637Z"
 ---
 
 # A8: Downstream Spur Board modules and embedded resources
@@ -193,4 +193,5 @@ All 15 feature scenarios are linked. Planning checks and 35 ready-checklist rows
 - 2026-09-29T03:06:49.004Z done → active (system)
 - 2026-10-07T00:10:02.452Z active → verifying (system)
 - 2026-10-07T00:13:08.623Z verifying → done (system)
+- 2026-10-14T23:25:05.637Z done → active (system)
 
