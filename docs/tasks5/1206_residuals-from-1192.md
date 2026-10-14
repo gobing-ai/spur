@@ -1,14 +1,14 @@
 ---
 schema_version: 1
 name: Residuals from 1192
-status: backlog
+status: cancelled
 template: standard
-created_at: 2026-10-14T04:32:43.622Z
-updated_at: "2026-10-14T04:32:43.938Z"
+created_at: 2026-10-14T05:04:49.259Z
+updated_at: "2026-10-14T05:05:26.983Z"
 
 ---
 
-## 1202. Residuals from 1192
+## 1206. Residuals from 1192
 
 ### Background
 
@@ -57,3 +57,6 @@ Source task: 1192 (feature F43) — deferred residuals filed by residual-scan se
 <!-- Links to features, docs, ADRs, related tasks, or external references. -->
 
 ### History
+
+- 2026-10-14T05:05:26.983Z backlog → cancelled (system)
+

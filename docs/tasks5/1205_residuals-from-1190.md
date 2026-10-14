@@ -1,18 +1,20 @@
 ---
 schema_version: 1
-name: Refresh the stale commit-guard and script-root mjs twins so script-contract-check passes
-status: backlog
+name: Residuals from 1190
+status: cancelled
 template: standard
-created_at: 2026-10-14T04:42:32.749Z
-updated_at: "2026-10-14T04:42:32.848Z"
+created_at: 2026-10-14T05:04:42.341Z
+updated_at: "2026-10-14T05:05:25.119Z"
 
 ---
 
-## 1203. Refresh the stale commit-guard and script-root mjs twins so script-contract-check passes
+## 1205. Residuals from 1190
 
 ### Background
 
-Captured from the creation title: "Refresh the stale commit-guard and script-root mjs twins so script-contract-check passes".
+Source task: 1190 (feature F43) — deferred residuals filed by residual-scan settle (unlinked: a deferral must not hold the completing feature open).
+
+- review-finding:159e3782 — packages/app/src/services/planning-admission.ts:149,193,313; packages/app/src/services/task-check.ts:1222,1243; packages/app/src/services/task-service.ts:1224,1604-1608; packages/app/src/workflow/idea-handoff.ts:275,283; packages/app/src/workflow/lifecycle-adapter.ts:451: The `deprecated` freeze predicate and the `spur task update <wbs> todo` hint are re-spelled as literals in 8 source sites (no `isFrozen` / un-deprecate-hint helper); the remediation added an instance rather than converging them, so the next surface added can silently omit the guard. Non-blocking: design §4.2's guard table is the SSOT enumerating the surfaces.
 
 ### Requirements
 
@@ -53,3 +55,6 @@ Captured from the creation title: "Refresh the stale commit-guard and script-roo
 <!-- Links to features, docs, ADRs, related tasks, or external references. -->
 
 ### History
+
+- 2026-10-14T05:05:25.119Z backlog → cancelled (system)
+

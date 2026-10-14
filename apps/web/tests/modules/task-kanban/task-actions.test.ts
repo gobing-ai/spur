@@ -47,7 +47,7 @@ describe('task-actions constants', () => {
 
 /**
  * Legality floor — every FSM button the action group surfaces must be a legal transition
- * under the task lifecycle state machine (`.spur/workflows/task-lifecycle.yaml`). The
+ * under the task lifecycle state machine (`config/workflows/task-lifecycle.yaml`). The
  * `deprecated` state has no forward edge, so the invariant is what keeps the Board from
  * offering a transition the graph would refuse (1191 R3). Mirrors the F42 feature-side
  * floor in `apps/web/tests/modules/features/feature-actions.test.ts`.
