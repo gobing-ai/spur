@@ -3,7 +3,7 @@ kind: design
 title: "Workflow execution economy"
 status: accepted
 created_at: 2026-09-16
-updated_at: 2026-10-12
+updated_at: 2026-10-13
 related: [D62, "0867", "0868", "0872", "0873", "0876", "0877", "1185"]
 tags: [system, D62, workflow]
 ---

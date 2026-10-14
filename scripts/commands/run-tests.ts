@@ -23,7 +23,7 @@
  * would on a bare `bun … test` line. The child's exit code is this process's exit code.
  */
 import { mkdtempSync, rmSync } from 'node:fs';
-import { tmpdir } from 'node:os';
+import { availableParallelism, loadavg, tmpdir } from 'node:os';
 import { delimiter, join } from 'node:path';
 import { getEnvVar, getEnvVars } from '@gobing-ai/spur-config';
 
@@ -53,6 +53,15 @@ delete env.SPUR_WORKFLOW_RUN_ACTIVE;
 // "No backend" assertions must not reach the operator's live decision backend.
 delete env.TYPESAFE_API_KEY;
 delete env.TYPESAFE_BASE_URL;
+
+// 1199 R4: a timeout-shaped failure on a contended host reads as a regression unless the run
+// names the host load. Advisory only — one stderr line, printed before bun is spawned; it never
+// touches the forwarded argv or this process's exit code.
+const [load1 = 0] = loadavg();
+const cores = availableParallelism();
+if (load1 > cores) {
+    process.stderr.write(`run-tests: host load1=${load1.toFixed(2)} cores=${cores} — timeouts may be contention\n`);
+}
 
 const result = Bun.spawnSync(['bun', ...Bun.argv.slice(2)], {
     env,

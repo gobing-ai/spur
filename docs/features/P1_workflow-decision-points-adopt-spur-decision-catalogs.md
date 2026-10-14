@@ -202,7 +202,7 @@ Feature: Spur decision production readiness: events and workflow adoption
 | 1124 | Residuals from 1100 | done |
 | 1193 | Fix decide action evidence path resolution: an absolute evidence path is joined with the workdir | wip |
 | 1194 | Fix decide action evidence path resolution: an absolute evidence path is joined with the workdir | cancelled |
-| 1195 | Fix clef DecisionMaker: the hub passes state null and Cloudflare rejects the request with 422 | todo |
+| 1195 | Fix clef DecisionMaker: the hub passes state null and Cloudflare rejects the request with 422 | wip |
 <!-- END AUTO-GENERATED -->
 
 ## Notes

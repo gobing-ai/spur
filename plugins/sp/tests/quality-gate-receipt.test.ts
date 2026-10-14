@@ -753,6 +753,190 @@ describe('recheck no-progress skip (0940 R2)', () => {
             rmSync(dir, { recursive: true, force: true });
         }
     });
+
+    // 1198 R1 (AC1): a full-tier FAIL at the current digest whose prior gate log is timeout-shaped
+    // is host contention, not a deterministic defect — the recheck re-runs once instead of taking
+    // the sticky 0940 no-progress skip. The fixture reproduces Bun's two-line per-test timeout.
+    test('AC1/R1: a timeout-shaped prior log re-runs the recheck and logs check.retry-contended', () => {
+        const dir = mkdtempSync(join(tmpdir(), 'spur-1198-contended-'));
+        try {
+            writeReceipt(dir, receipt({ status: 'FAIL' }));
+            writeFileSync(
+                join(dir, '.spur/run/0939-test-gate.log'),
+                [
+                    '(fail) suite > times out first [60000ms]',
+                    '^ this test timed out after 60000ms.',
+                    '(fail) suite > times out second [60000ms]',
+                    '^ this test timed out after 60000ms.',
+                    '',
+                ].join('\n'),
+            );
+            const { out, value } = captureStdout(() =>
+                runQualityGate(
+                    'recheck',
+                    {
+                        wbs: '0939',
+                        proofDigest: 'digest-1',
+                        gateProbeCmd: 'echo probe-ran',
+                        qualityGateCmd: 'echo full-ran; exit 1',
+                    },
+                    { cwd: dir },
+                ),
+            );
+            const log = readFileSync(join(dir, '.spur/run/0939-test-gate.log'), 'utf8');
+            expect(log).toContain('check.retry-contended');
+            expect(log).not.toContain('check.skipped-no-progress');
+            expect(log).toContain('probe-ran');
+            expect(log).toContain('full-ran');
+            expect(out).toContain('check.retry-contended');
+            expect(value.status).toBe('FAIL');
+        } finally {
+            rmSync(dir, { recursive: true, force: true });
+        }
+    });
+
+    // 1198 R2 (AC2): the retry is spent once per input digest. The red retry's own log is
+    // timeout-shaped again, so only the `.spur/run/<wbs>-contended-retry` marker — not the log
+    // shape — can stop the second recheck from retrying; it falls back to the 0940 skip.
+    test('AC2/R2: a second recheck at the same digest skips and the marker holds the spent digest', () => {
+        const dir = mkdtempSync(join(tmpdir(), 'spur-1198-once-'));
+        const timeoutLog = ['(fail) suite > times out [60000ms]', '^ this test timed out after 60000ms.', ''].join(
+            '\n',
+        );
+        try {
+            writeReceipt(dir, receipt({ status: 'FAIL' }));
+            writeFileSync(join(dir, '.spur/run/0939-test-gate.log'), timeoutLog);
+            const first = captureStdout(() =>
+                runQualityGate(
+                    'recheck',
+                    {
+                        wbs: '0939',
+                        proofDigest: 'digest-1',
+                        gateProbeCmd: 'exit 0',
+                        // A red retry that is timeout-shaped again, so the marker is the only stop.
+                        qualityGateCmd: `printf '(fail) retry > still times out [60000ms]\\n^ this test timed out after 60000ms.\\n'; exit 1`,
+                    },
+                    { cwd: dir },
+                ),
+            );
+            expect(first.out).toContain('check.retry-contended');
+            expect(first.value.status).toBe('FAIL');
+            expect(readFileSync(join(dir, '.spur/run/0939-contended-retry'), 'utf8').trim()).toBe('digest-1');
+
+            const second = captureStdout(() =>
+                runQualityGate(
+                    'recheck',
+                    {
+                        wbs: '0939',
+                        proofDigest: 'digest-1',
+                        gateProbeCmd: 'echo probe-ran',
+                        qualityGateCmd: 'echo full-ran',
+                    },
+                    { cwd: dir },
+                ),
+            );
+            expect(second.out).toContain('check.skipped-no-progress');
+            expect(second.value.status).toBe('FAIL');
+            const log = readFileSync(join(dir, '.spur/run/0939-test-gate.log'), 'utf8');
+            expect(log).toContain('check.skipped-no-progress');
+            expect(log).not.toContain('check.retry-contended');
+            expect(log).not.toContain('probe-ran');
+            expect(log).not.toContain('full-ran');
+            // The marker now records the spent digest for this input.
+            expect(readFileSync(join(dir, '.spur/run/0939-contended-retry'), 'utf8').trim()).toBe('digest-1');
+        } finally {
+            rmSync(dir, { recursive: true, force: true });
+        }
+    });
+
+    // 1198 R3 (AC3): a green retry earns PASS through the normal chain — the recovery never
+    // fabricates a verdict; it only lets a contended FAIL be re-run once.
+    test('AC3/R3: a green retry writes PASS status and receipt and names check.retry-contended', () => {
+        const dir = mkdtempSync(join(tmpdir(), 'spur-1198-green-'));
+        try {
+            writeReceipt(dir, receipt({ status: 'FAIL' }));
+            writeFileSync(
+                join(dir, '.spur/run/0939-test-gate.log'),
+                ['(fail) suite > times out [60000ms]', '^ this test timed out after 60000ms.', ''].join('\n'),
+            );
+            const { out, value } = captureStdout(() =>
+                runQualityGate(
+                    'recheck',
+                    {
+                        wbs: '0939',
+                        proofDigest: 'digest-1',
+                        gateProbeCmd: 'echo probe-ran',
+                        qualityGateCmd: 'echo full-ran',
+                    },
+                    { cwd: dir },
+                ),
+            );
+            expect(value.status).toBe('PASS');
+            expect(readFileSync(join(dir, '.spur/run/0939-test-gate.status'), 'utf8')).toBe('PASS\n');
+            const receiptAfter = JSON.parse(
+                readFileSync(join(dir, '.spur/run/0939-check-receipt.json'), 'utf8'),
+            ) as CheckReceipt;
+            expect(receiptAfter.status).toBe('PASS');
+            expect(receiptAfter.inputDigest).toBe('digest-1');
+            const log = readFileSync(join(dir, '.spur/run/0939-test-gate.log'), 'utf8');
+            expect(log).toContain('check.retry-contended');
+            expect(log).toContain('full-ran');
+            expect(out).toContain('check.retry-contended');
+        } finally {
+            rmSync(dir, { recursive: true, force: true });
+        }
+    });
+
+    // 1198 R4 (AC4): only a fully timeout-shaped log retries. Any deterministic failure, a log
+    // with no `(fail) ` line, or a missing log keeps today's skip and never runs the chain.
+    test('AC4/R4: a mixed failure log, a no-fail log and a missing log all keep the skip', () => {
+        const cases: Array<{ name: string; log?: string }> = [
+            {
+                name: 'one timeout plus one assertion failure',
+                log: [
+                    '(fail) suite > times out [60000ms]',
+                    '^ this test timed out after 60000ms.',
+                    '(fail) suite > assertion fails [12ms]',
+                    'error: expect(received).toBe(expected)',
+                    '',
+                ].join('\n'),
+            },
+            {
+                name: 'no (fail) line',
+                log: 'some unrelated gate output\n^ this test timed out after 60000ms.\n',
+            },
+            { name: 'missing log' },
+        ];
+        for (const c of cases) {
+            const dir = mkdtempSync(join(tmpdir(), 'spur-1198-skip-'));
+            try {
+                writeReceipt(dir, receipt({ status: 'FAIL' }));
+                if (c.log !== undefined) writeFileSync(join(dir, '.spur/run/0939-test-gate.log'), c.log);
+                const { out, value } = captureStdout(() =>
+                    runQualityGate(
+                        'recheck',
+                        {
+                            wbs: '0939',
+                            proofDigest: 'digest-1',
+                            gateProbeCmd: 'echo probe-ran',
+                            qualityGateCmd: 'echo full-ran',
+                        },
+                        { cwd: dir },
+                    ),
+                );
+                if (out.includes('check.retry-contended')) throw new Error(`case "${c.name}" unexpectedly retried`);
+                const log = readFileSync(join(dir, '.spur/run/0939-test-gate.log'), 'utf8');
+                expect(log).toContain('check.skipped-no-progress');
+                expect(log).not.toContain('check.retry-contended');
+                expect(log).not.toContain('probe-ran');
+                expect(log).not.toContain('full-ran');
+                expect(value.status).toBe('FAIL');
+                expect(existsSync(join(dir, '.spur/run/0939-contended-retry'))).toBe(false);
+            } finally {
+                rmSync(dir, { recursive: true, force: true });
+            }
+        }
+    });
 });
 
 describe('status reuse marker (0940 R3)', () => {

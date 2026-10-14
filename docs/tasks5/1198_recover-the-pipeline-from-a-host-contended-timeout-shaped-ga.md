@@ -1,10 +1,10 @@
 ---
 schema_version: 1
 name: Recover the pipeline from a host-contended (timeout-shaped) gate FAIL instead of a sticky no-progress skip
-status: todo
+status: wip
 template: standard
 created_at: 2026-10-13T21:13:56.059Z
-updated_at: "2026-10-13T21:42:08.371Z"
+updated_at: "2026-10-14T00:42:51.748Z"
 
 priority: P2
 estimate_hours: 3
@@ -80,7 +80,29 @@ Out of scope: the flakes themselves (task 1199 owns suite isolation); `MAX_GATE_
 
 ### Solution
 
-<!-- Filled during implementation: file:line change map and concise rationale. -->
+Contended-retry recovery in `runQualityGate`, plus the pure helper and its tests. Frozen names honored: `isTimeoutShapedLog`, `.spur/run/<wbs>-contended-retry`, log literal `check.retry-contended`; no new CLI flag, env var, workflow var, YAML key or receipt field.
+
+| File:line | Change |
+| --- | --- |
+| packages/app/src/services/quality-gate.ts:297 | `countTimeoutShapedFailures` — private count of `(fail) ` lines and `/this test timed out after \d+ms/` lines (two independent tests, matching R1's predicate). |
+| packages/app/src/services/quality-gate.ts:313 | `isTimeoutShapedLog(text)` — exported pure helper: `fails > 0 && fails === timeouts` (R1; R4 for every non-timeout / no-`(fail)` shape). |
+| packages/app/src/services/quality-gate.ts:319 | `readContendedRetryDigest(markerPath)` — marker read; missing/unreadable → `''` (R2). |
+| packages/app/src/services/quality-gate.ts:891 | capture `priorLog` BEFORE the recheck log truncation at `:893`; `recheck`-only, missing → `''` (the log is never read after truncation, per the design correction). |
+| packages/app/src/services/quality-gate.ts:939 | `receiptFailsNow` — the original 0940 predicate (`commandPresent && mode === 'recheck' && receiptFailsAtDigest`) factored out unchanged. |
+| packages/app/src/services/quality-gate.ts:949 | `retryContended = receiptFailsNow && isTimeoutShapedLog(priorLog) && readContendedRetryDigest(...) !== proofDigest`; `noProgressSkip = receiptFailsNow && !retryContended`. |
+| packages/app/src/services/quality-gate.ts:954 | retry branch writes the spent digest to `.spur/run/<wbs>-contended-retry` and tees `check.retry-contended — <n> timeout-shaped failure(s) at input digest <d>; retry 1/1` to stdout and the log, leaving `gateRc` at 0 so the normal probe → full path runs. |
+| packages/app/src/services/quality-gate.ts:960 | `else if (noProgressSkip)` — today's 0940 skip, unchanged, when the log is not timeout-shaped or the digest was already spent. |
+| packages/app/src/services/quality-gate.ts:1036 | receipt-write guard stays `!noProgressSkip`: a retry is not a skip, so a green retry persists a PASS receipt and a red one a FAIL receipt through the existing path (R3 — no verdict is minted). |
+| scripts/commands/bundle-plugin-lib.ts:508 | add `isTimeoutShapedLog` to `QUALITY_GATE_DECLS` so the generated `.d.mts` surface matches the module's exports. |
+| plugins/sp/lib/quality-gate.generated.mjs:1 | regenerated bundle twin of the changed source via `bundleQualityGateLib()`. |
+| plugins/sp/lib/quality-gate.generated.d.mts:81 | regenerated declaration; names `isTimeoutShapedLog`. |
+| plugins/sp/scripts/quality-gate.mjs:1 | regenerated ADR-130 script twin (`superskill script convert sp quality-gate.ts`). |
+| plugins/sp/tests/quality-gate-receipt.test.ts:760 | AC1 — a timeout-shaped prior log re-runs the recheck; the log names `check.retry-contended`, not `check.skipped-no-progress`. |
+| plugins/sp/tests/quality-gate-receipt.test.ts:801 | AC2 — a second recheck at the same digest skips; the marker holds `digest-1` (the red retry's log is timeout-shaped again, so only the marker stops it). |
+| plugins/sp/tests/quality-gate-receipt.test.ts:854 | AC3 — a green retry writes PASS status + PASS receipt and names `check.retry-contended`. |
+| plugins/sp/tests/quality-gate-receipt.test.ts:892 | AC4 — mixed-failure / no-`(fail)` / missing prior logs all keep `check.skipped-no-progress`, run no chain, and write no marker. |
+
+Rationale: the retry reuses the existing bounded gate path instead of inventing a verdict — `gateRc` stays 0 and the only new decision is "run the chain once more", so PASS/FAIL is earned exactly as any other gate run. The one-per-input-digest bound is a marker file, so a fresh digest resets it with no cleanup step. Only a fully timeout-shaped log qualifies (R4), so a deterministic FAIL keeps today's sticky skip; a receipt at a different digest still never skips (receiptFailsAtDigest unchanged).
 
 ### Testing
 
@@ -97,4 +119,5 @@ Out of scope: the flakes themselves (task 1199 owns suite isolation); `MAX_GATE_
 ### History
 
 - 2026-10-13T21:42:08.371Z backlog → todo (system)
+- 2026-10-14T00:42:51.748Z todo → wip (system)
 

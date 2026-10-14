@@ -27,7 +27,7 @@ var __esm = (fn, res, err) => () => {
 };
 var __require = /* @__PURE__ */ createRequire(import.meta.url);
 
-// node_modules/.bun/@gobing-ai+ts-utils@0.5.24/node_modules/@gobing-ai/ts-utils/dist/errors.js
+// node_modules/.bun/@gobing-ai+ts-utils@0.5.26/node_modules/@gobing-ai/ts-utils/dist/errors.js
 var ErrorCode;
 var init_errors = __esm(() => {
   ErrorCode = {
@@ -38,7 +38,7 @@ var init_errors = __esm(() => {
   };
 });
 
-// node_modules/.bun/@gobing-ai+ts-utils@0.5.24/node_modules/@gobing-ai/ts-utils/dist/api-response.js
+// node_modules/.bun/@gobing-ai+ts-utils@0.5.26/node_modules/@gobing-ai/ts-utils/dist/api-response.js
 var API_ERROR_CODES, ERROR_CODE_TO_HTTP, CLIENT_SAFE_CODES;
 var init_api_response = __esm(() => {
   init_errors();
@@ -61,18 +61,18 @@ var init_api_response = __esm(() => {
   CLIENT_SAFE_CODES = new Set([ErrorCode.NotFound, ErrorCode.Validation, ErrorCode.Conflict]);
 });
 
-// node_modules/.bun/@gobing-ai+ts-utils@0.5.24/node_modules/@gobing-ai/ts-utils/dist/cursor.js
+// node_modules/.bun/@gobing-ai+ts-utils@0.5.26/node_modules/@gobing-ai/ts-utils/dist/cursor.js
 var init_cursor = () => {};
 
-// node_modules/.bun/@gobing-ai+ts-utils@0.5.24/node_modules/@gobing-ai/ts-utils/dist/env.js
+// node_modules/.bun/@gobing-ai+ts-utils@0.5.26/node_modules/@gobing-ai/ts-utils/dist/env.js
 function getEnvVars() {
   return process.env;
 }
 
-// node_modules/.bun/@gobing-ai+ts-utils@0.5.24/node_modules/@gobing-ai/ts-utils/dist/event-severity.js
+// node_modules/.bun/@gobing-ai+ts-utils@0.5.26/node_modules/@gobing-ai/ts-utils/dist/event-severity.js
 var init_event_severity = () => {};
 
-// node_modules/.bun/@gobing-ai+ts-utils@0.5.24/node_modules/@gobing-ai/ts-utils/dist/index.js
+// node_modules/.bun/@gobing-ai+ts-utils@0.5.26/node_modules/@gobing-ai/ts-utils/dist/index.js
 var init_dist = __esm(() => {
   init_api_response();
   init_cursor();
@@ -16707,7 +16707,7 @@ var init_sqlite_core = __esm(() => {
   init_view();
 });
 
-// node_modules/.bun/@gobing-ai+ts-db@0.5.24+bb33da49096c7d0e/node_modules/@gobing-ai/ts-db/dist/schema/common.js
+// node_modules/.bun/@gobing-ai+ts-db@0.5.26+7f1bf428753e3ac9/node_modules/@gobing-ai/ts-db/dist/schema/common.js
 function nowTimestamp() {
   return Date.now();
 }
@@ -17014,7 +17014,7 @@ var init_drizzle_zod = __esm(() => {
   };
 });
 
-// node_modules/.bun/@gobing-ai+ts-db@0.5.24+bb33da49096c7d0e/node_modules/@gobing-ai/ts-db/dist/schema/drizzle-internals.js
+// node_modules/.bun/@gobing-ai+ts-db@0.5.26+7f1bf428753e3ac9/node_modules/@gobing-ai/ts-db/dist/schema/drizzle-internals.js
 function sqlExpressionToText(value) {
   if (typeof value !== "object" || value === null || !("queryChunks" in value)) {
     return;
@@ -17037,7 +17037,7 @@ function getDrizzleTableName(table) {
   return String(table[nameSym]);
 }
 
-// node_modules/.bun/@gobing-ai+ts-db@0.5.24+bb33da49096c7d0e/node_modules/@gobing-ai/ts-db/dist/schema/ddl.js
+// node_modules/.bun/@gobing-ai+ts-db@0.5.26+7f1bf428753e3ac9/node_modules/@gobing-ai/ts-db/dist/schema/ddl.js
 function quoteIdent(name) {
   return `"${name.replace(/"/g, '""')}"`;
 }
@@ -17131,7 +17131,7 @@ var init_ddl = __esm(() => {
   init_sqlite_core();
 });
 
-// node_modules/.bun/@gobing-ai+ts-db@0.5.24+bb33da49096c7d0e/node_modules/@gobing-ai/ts-db/dist/schema/define-table.js
+// node_modules/.bun/@gobing-ai+ts-db@0.5.26+7f1bf428753e3ac9/node_modules/@gobing-ai/ts-db/dist/schema/define-table.js
 function defineTable(name, columns) {
   const table = sqliteTable(name, columns);
   let insert;
@@ -17165,7 +17165,7 @@ var init_define_table = __esm(() => {
   init_ddl();
 });
 
-// node_modules/.bun/@gobing-ai+ts-db@0.5.24+bb33da49096c7d0e/node_modules/@gobing-ai/ts-db/dist/schema/index.js
+// node_modules/.bun/@gobing-ai+ts-db@0.5.26+7f1bf428753e3ac9/node_modules/@gobing-ai/ts-db/dist/schema/index.js
 var init_schema = __esm(() => {
   init_sqlite_core();
   init_define_table();
@@ -24727,8 +24727,8 @@ var POST_WATERMARK_TABLES = [
   "history_daily_stats",
   "history_board_source_daily"
 ];
-// node_modules/.bun/@gobing-ai+ts-llm-jsonl-importer@0.5.24+6ca8e4a743b850c5/node_modules/@gobing-ai/ts-llm-jsonl-importer/dist/schema-sql.js
-var HISTORY_IMPORT_SCHEMA_VERSION = "0.5.24";
+// node_modules/.bun/@gobing-ai+ts-llm-jsonl-importer@0.5.26+6ca8e4a743b850c5/node_modules/@gobing-ai/ts-llm-jsonl-importer/dist/schema-sql.js
+var HISTORY_IMPORT_SCHEMA_VERSION = "0.5.26";
 var HISTORY_IMPORT_SCHEMA_SQL = `
 CREATE TABLE IF NOT EXISTS history_import_checkpoint (
     source TEXT NOT NULL,
@@ -24855,13 +24855,13 @@ CREATE INDEX IF NOT EXISTS idx_history_skill_call_invocation_kind
     ON history_skill_call(invocation_kind);
 `.trim();
 
-// node_modules/.bun/@gobing-ai+ts-llm-jsonl-importer@0.5.24+6ca8e4a743b850c5/node_modules/@gobing-ai/ts-llm-jsonl-importer/dist/sources.js
+// node_modules/.bun/@gobing-ai+ts-llm-jsonl-importer@0.5.26+6ca8e4a743b850c5/node_modules/@gobing-ai/ts-llm-jsonl-importer/dist/sources.js
 init_zod();
 
-// node_modules/.bun/@gobing-ai+ts-llm-jsonl-importer@0.5.24+6ca8e4a743b850c5/node_modules/@gobing-ai/ts-llm-jsonl-importer/dist/mappers.js
+// node_modules/.bun/@gobing-ai+ts-llm-jsonl-importer@0.5.26+6ca8e4a743b850c5/node_modules/@gobing-ai/ts-llm-jsonl-importer/dist/mappers.js
 init_zod();
 
-// node_modules/.bun/@gobing-ai+ts-llm-jsonl-importer@0.5.24+6ca8e4a743b850c5/node_modules/@gobing-ai/ts-llm-jsonl-importer/dist/hash.js
+// node_modules/.bun/@gobing-ai+ts-llm-jsonl-importer@0.5.26+6ca8e4a743b850c5/node_modules/@gobing-ai/ts-llm-jsonl-importer/dist/hash.js
 import { createHash } from "node:crypto";
 function stableJson(value) {
   if (Array.isArray(value)) {
@@ -24880,7 +24880,7 @@ function sha256Text(text) {
   return createHash("sha256").update(text, "utf8").digest("hex");
 }
 
-// node_modules/.bun/@gobing-ai+ts-llm-jsonl-importer@0.5.24+6ca8e4a743b850c5/node_modules/@gobing-ai/ts-llm-jsonl-importer/dist/capability.js
+// node_modules/.bun/@gobing-ai+ts-llm-jsonl-importer@0.5.26+6ca8e4a743b850c5/node_modules/@gobing-ai/ts-llm-jsonl-importer/dist/capability.js
 function matchCapabilityOrigin(origins, source, canonicalName, observable) {
   let candidates = origins.filter((origin) => origin.source === source && origin.skillName === canonicalName);
   if (candidates.length === 0)
@@ -25145,7 +25145,7 @@ function extractNestedExecCommandLiterals(payloadText) {
   return literals;
 }
 
-// node_modules/.bun/@gobing-ai+ts-llm-jsonl-importer@0.5.24+6ca8e4a743b850c5/node_modules/@gobing-ai/ts-llm-jsonl-importer/dist/redaction.js
+// node_modules/.bun/@gobing-ai+ts-llm-jsonl-importer@0.5.26+6ca8e4a743b850c5/node_modules/@gobing-ai/ts-llm-jsonl-importer/dist/redaction.js
 var DEFAULT_REDACTION_RULES = [
   {
     name: "api-key",
@@ -25187,7 +25187,7 @@ function applyRules(value, rules = DEFAULT_REDACTION_RULES) {
   return rules.reduce((current, rule) => current.replace(rule.pattern, rule.replacement), value);
 }
 
-// node_modules/.bun/@gobing-ai+ts-llm-jsonl-importer@0.5.24+6ca8e4a743b850c5/node_modules/@gobing-ai/ts-llm-jsonl-importer/dist/mappers.js
+// node_modules/.bun/@gobing-ai+ts-llm-jsonl-importer@0.5.26+6ca8e4a743b850c5/node_modules/@gobing-ai/ts-llm-jsonl-importer/dist/mappers.js
 var MESSAGE_MAPPER_KEYS = [
   "_codexUsageCarrier",
   "session_id",
@@ -27293,7 +27293,7 @@ var GROK_SCHEMA = passthroughSchema;
 var GEMINI_SCHEMA = passthroughSchema;
 var DSH_SCHEMA = passthroughSchema;
 
-// node_modules/.bun/@gobing-ai+ts-llm-jsonl-importer@0.5.24+6ca8e4a743b850c5/node_modules/@gobing-ai/ts-llm-jsonl-importer/dist/sources.js
+// node_modules/.bun/@gobing-ai+ts-llm-jsonl-importer@0.5.26+6ca8e4a743b850c5/node_modules/@gobing-ai/ts-llm-jsonl-importer/dist/sources.js
 var sourceRecordSchema = object2({
   source_record_id: string2().min(1),
   created_at: string2().min(1),
@@ -27397,10 +27397,10 @@ var SOURCE_DEFINITIONS = {
   openclaw: sourceDefinition("openclaw", "OpenClaw", [".openclaw"], ["*.jsonl"])
 };
 
-// node_modules/.bun/@gobing-ai+ts-llm-jsonl-importer@0.5.24+6ca8e4a743b850c5/node_modules/@gobing-ai/ts-llm-jsonl-importer/dist/jsonl-importer-dao.js
+// node_modules/.bun/@gobing-ai+ts-llm-jsonl-importer@0.5.26+6ca8e4a743b850c5/node_modules/@gobing-ai/ts-llm-jsonl-importer/dist/jsonl-importer-dao.js
 var TYPED_HISTORY_TABLES = ["history_message", "history_tool_call", "history_skill_call"];
 var TYPED_IGNORED_KEYS = new Set(["_meta", "split_index", "source_record_id", "_capabilityConflict"]);
-// node_modules/.bun/@gobing-ai+ts-llm-jsonl-importer@0.5.24+6ca8e4a743b850c5/node_modules/@gobing-ai/ts-llm-jsonl-importer/dist/tables.js
+// node_modules/.bun/@gobing-ai+ts-llm-jsonl-importer@0.5.26+6ca8e4a743b850c5/node_modules/@gobing-ai/ts-llm-jsonl-importer/dist/tables.js
 var BOOKKEEPING_HISTORY_TABLES = ["history_import_checkpoint", "history_import_ledger"];
 var IMPORTER_OWNED_TABLES = [
   ...TYPED_HISTORY_TABLES,
@@ -27517,7 +27517,7 @@ var workflowStatesTable = defineTable("workflow_states", {
   ...standardColumns
 });
 var workflowStates = workflowStatesTable.table;
-// node_modules/.bun/@gobing-ai+ts-dual-workflow-engine@0.5.24+473ffacabfa9a78c/node_modules/@gobing-ai/ts-dual-workflow-engine/dist/schema-sql.js
+// node_modules/.bun/@gobing-ai+ts-dual-workflow-engine@0.5.26+473ffacabfa9a78c/node_modules/@gobing-ai/ts-dual-workflow-engine/dist/schema-sql.js
 var WORKFLOW_ENGINE_SCHEMA_SQL = `
 CREATE TABLE IF NOT EXISTS runs (
     id TEXT PRIMARY KEY,
@@ -27616,7 +27616,7 @@ ALTER TABLE runs ADD COLUMN owner_pid INTEGER;
 ALTER TABLE runs ADD COLUMN interrupt_reason TEXT;
 ALTER TABLE runs ADD COLUMN terminal_reason TEXT;
 `.trim();
-// node_modules/.bun/@gobing-ai+ts-rule-engine@0.5.24+473ffacabfa9a78c/node_modules/@gobing-ai/ts-rule-engine/dist/persistence/schema.js
+// node_modules/.bun/@gobing-ai+ts-rule-engine@0.5.26+473ffacabfa9a78c/node_modules/@gobing-ai/ts-rule-engine/dist/persistence/schema.js
 var RULE_ENGINE_SCHEMA_SQL = `
 CREATE TABLE IF NOT EXISTS rule_runs (
     id TEXT PRIMARY KEY,
@@ -29953,6 +29953,29 @@ function readReceipt(receiptPath) {
 function receiptFailsAtDigest(receipt, currentDigest) {
   return receipt !== null && receipt.schemaVersion === RECEIPT_SCHEMA_VERSION && receipt.tier === "full" && receipt.status === "FAIL" && currentDigest.length > 0 && receipt.inputDigest === currentDigest;
 }
+function countTimeoutShapedFailures(text) {
+  let fails = 0;
+  let timeouts = 0;
+  for (const line of text.split(`
+`)) {
+    if (line.startsWith("(fail) "))
+      fails += 1;
+    if (/this test timed out after \d+ms/.test(line))
+      timeouts += 1;
+  }
+  return { fails, timeouts };
+}
+function isTimeoutShapedLog(text) {
+  const { fails, timeouts } = countTimeoutShapedFailures(text);
+  return fails > 0 && fails === timeouts;
+}
+function readContendedRetryDigest(markerPath) {
+  try {
+    return readFileSync(markerPath, "utf8").trim();
+  } catch {
+    return "";
+  }
+}
 function readReceiptStatus(receiptPath, currentDigest) {
   const receipt = readReceipt(receiptPath);
   if (receipt === null || receipt.schemaVersion !== RECEIPT_SCHEMA_VERSION) {
@@ -30310,6 +30333,7 @@ function runQualityGate(mode, env, options = {}) {
   const statusFile = rel("-test-gate.status");
   const attemptFile = rel("-test-fix-attempt");
   const abs = (p) => cwd ? join(cwd, p) : p;
+  const priorLog = mode === "recheck" && existsSync(abs(logFile)) ? readFileSync(abs(logFile), "utf8") : "";
   writeFileSync(abs(logFile), "");
   if (mode === "run")
     writeFileSync(abs(attemptFile), `0
@@ -30343,8 +30367,18 @@ function runQualityGate(mode, env, options = {}) {
 `);
     return { status: "PASS", attempts: 0, logFile, findingsFile, statusFile, attemptFile };
   }
-  const noProgressSkip = commandPresent && mode === "recheck" && receiptFailsAtDigest(readReceipt(abs(rel("-check-receipt.json"))), env.proofDigest ?? "");
-  if (noProgressSkip) {
+  const receiptFailsNow = commandPresent && mode === "recheck" && receiptFailsAtDigest(readReceipt(abs(rel("-check-receipt.json"))), env.proofDigest ?? "");
+  const retryContended = receiptFailsNow && isTimeoutShapedLog(priorLog) && readContendedRetryDigest(abs(rel("-contended-retry"))) !== (env.proofDigest ?? "");
+  const noProgressSkip = receiptFailsNow && !retryContended;
+  if (retryContended) {
+    writeFileSync(abs(rel("-contended-retry")), `${env.proofDigest ?? ""}
+`);
+    const fails = countTimeoutShapedFailures(priorLog).fails;
+    const line = `check.retry-contended — ${fails} timeout-shaped failure(s) at input digest ${env.proofDigest ?? ""}; retry 1/1
+`;
+    process.stdout.write(line);
+    appendFileSync(abs(logFile), line);
+  } else if (noProgressSkip) {
     const line = `check.skipped-no-progress — full-tier FAIL receipt at input digest ${env.proofDigest ?? ""}; recheck skipped
 `;
     process.stdout.write(line);
@@ -30452,6 +30486,7 @@ export {
   RETRY_DELAY_MS_ENV,
   buildReceipt,
   extractFindings,
+  isTimeoutShapedLog,
   isTransientLock,
   lightScope,
   parseCoverageThreshold,
