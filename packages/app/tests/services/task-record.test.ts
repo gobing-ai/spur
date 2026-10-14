@@ -895,6 +895,30 @@ Feature: Disposal
         expect(raw).toContain('| Priority | Dimension | Location | Finding |');
     });
 
+    test('the default verdict path resolves against the injected task tree, not process.cwd()', async () => {
+        const wbs = await createTask(svc);
+        const root = tasksDir.replace('/tasks', '');
+        const verdictPath = join(root, '.spur', 'run', `${wbs}-verdict.json`);
+        const fs = createNodeFileSystem(root);
+        await fs.writeFile(
+            verdictPath,
+            JSON.stringify({
+                wbs,
+                verdict: 'PASS',
+                requirements: [{ id: 'R1', status: 'MET', evidence: 'found under the fixture root' }],
+            }),
+        );
+
+        // No `verdictFile`: the artifact must be found under the tree the service was built for.
+        // A `process.cwd()`-relative default leaves it invisible whenever the suite starts
+        // elsewhere — the whole-suite run starts at the repo root, not here.
+        const result = await svc.record(wbs);
+
+        expect(result.verdictState).toBe('readable');
+        const raw = await fs.readFile(`${tasksDir}/${wbs}_record-test-task.md`);
+        expect(raw).toContain('found under the fixture root');
+    });
+
     test('the durable copy carries the confidence row the run artifact lacked (1156)', async () => {
         const wbs = await createTask(svc);
         const root = tasksDir.replace('/tasks', '');
