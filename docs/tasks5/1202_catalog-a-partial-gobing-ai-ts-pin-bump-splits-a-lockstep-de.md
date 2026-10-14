@@ -1,118 +1,85 @@
 ---
 schema_version: 1
 name: "catalog: a partial @gobing-ai/ts-* pin bump splits a lockstep dependency with no check catching it"
-status: backlog
+status: todo
 template: standard
 created_at: 2026-10-14T02:53:42.731Z
-updated_at: "2026-10-14T02:54:00.857Z"
-feature_id: C
+updated_at: "2026-10-14T05:48:16.656Z"
+feature_id: C2
 
+ac_altitude: graduating
+ac_numbering: task-local
+priority: P2
+estimate_hours: 2
 ---
 
 ## 1202. catalog: a partial @gobing-ai/ts-* pin bump splits a lockstep dependency with no check catching it
 
 ### Background
 
-Found while running task 1200 (2026-10-13). Task 1200 bumped **one** entry of the
-`@gobing-ai/ts-*` catalog in root `package.json` — `@gobing-ai/ts-rule-engine` `^0.5.24` → `^0.5.25` —
-while the other eleven stayed at `^0.5.24`. The ts-libs packages are versioned in **lockstep**, so the
-new `ts-rule-engine@0.5.25` pulled `@gobing-ai/ts-infra@^0.5.25` transitively while the direct pin
-still resolved `0.5.24`. `bun install` then legitimately installed **two** copies of
-`@gobing-ai/ts-infra` under `node_modules/.bun/`, and the typecheck failed with an obscure message:
+Task 1200's historical partial ts-rule-engine bump exposed a catalog consistency gap: dependency versions can diverge while lock-vs-installed comparisons remain individually satisfied. The historical session/typecheck receipt is retained as the reported incident, not a freshly reproduced package installation. Current code inspection confirms checkDependencyDrift compares each locked resolution to an installed version and has no catalog cross-entry assertion.
 
-```
-@gobing-ai/spur-app typecheck: src/services/rule-service.ts(281,39): error TS2345:
-  Types of property 'events' are incompatible.
-  Types have separate declarations of a private property 'syncHandlers'.
-```
-
-That error names neither the catalog nor the lockstep rule; the fix (move all twelve pins together,
-the shape commit `57a1a10cc` used for 0.5.23 → 0.5.24) had to be inferred from the two `.bun` paths
-in the message. Task 1200 shipped the complete bump, so this is a **detection gap**, not a live
-defect: no check in the tree asserts that the twelve `@gobing-ai/ts-*` catalog pins are version-equal.
-
-**Hypothesis tested and falsified during the session review** — recorded so it is not re-tried:
-`scripts/commands/dependency-drift-check.ts` does **not** cover this. `checkDependencyDrift`
-(`:97-135`) reads each `@gobing-ai/ts-*` lock entry and compares it against **that entry's installed
-copy**; a split install has every lock entry matching its own installed copy, so it reports **no
-drift**. It needs a *cross-entry* inequality assertion, which it does not have.
-
-The gap is cheap to close and the failure it prevents is expensive: the symptom costs a full
-typecheck round-trip (minutes under load) plus diagnosis, and the regression landed on `main` as
-`aa242b5e2` only because the author of task 1200 happened to notice the two copies.
+**Refine corrections (2026-10-13)**
+- Current root package.json has twelve @gobing-ai/ts-* entries at ^0.5.26, not ^0.5.25; tests must discover matching keys rather than freeze the count or version.
+- A manifest-wide assertion can fail on pre-existing catalog edits; the original claim that it necessarily belongs in every task pre-check contradicts ADR-119. Resolve by extending the existing feature-scoped dependency-drift-check command.
+- Rule-vs-script and escape-hatch choices are closed: use the existing script and enforce equality absolutely. No new rule evaluator or allowlist.
+- The old checkbox AC did not bind R-items; use Scenario titles and matching feature scenarios under C2.
+- Scope remains valid as a prevention gap; there is no current split-pin defect to repair.
 
 ### Requirements
 
-- [ ] R1. A check fails when the `@gobing-ai/ts-*` entries of `workspaces.catalog` in root
-      `package.json` are not all the same version, naming every pin that disagrees.
-- [ ] R2. The check passes on the current tree (all twelve at `^0.5.25`) and on a catalog whose pins
-      are uniformly older (`^0.5.23`), so it asserts *equality*, never a minimum version.
-- [ ] R3. The check tolerates the intent of a deliberate cross-version pin if such an intent is
-      declared — decide and state explicitly whether an escape hatch exists (e.g. a documented
-      allowlist entry). If none, say so in the Design and let the check be absolute.
-- [ ] R4. The check's placement follows ADR-119 (`docs/00_ADR.md:1864`): stated in the Design as
-      task-local or feature-scoped with the reason, since the assertion can fail for a reason the
-      current task did not cause.
+- [ ] R1. dependency-drift-check rejects unequal string specifiers among all root workspaces.catalog keys starting with @gobing-ai/ts-, printing every conflicting package/specifier group deterministically and exiting nonzero before lock-vs-installed checking.
+- [ ] R2. Equal specifiers pass catalog checking at any version; unrelated catalog entries are ignored; zero or one matching entry is vacuously consistent. Malformed JSON, missing/non-object catalog, or non-string matching specifiers fail with an actionable manifest diagnostic.
+- [ ] R3. The existing feature-scoped dependency-drift-check includes this assertion while preserving its lock-vs-installed checks and public exports; task-local presets remain unchanged. No escape hatch or automatic bump is added.
+- [ ] R4. Fixtures prove both catalog consistency and existing installed-dependency drift behavior; documentation of the command states its two checks and ADR-119 scope.
 
 ### Acceptance Criteria
 
-- [ ] AC1 — A catalog fixture with one pin at a different version produces a failure that names the
-      offending pin(s); a fixture with all pins equal produces none (req: R1, R2)
-- [ ] AC2 — The check runs green on the unmodified catalog of this repo (req: R1)
-- [ ] AC3 — The chosen placement is visible in the change itself (member of the per-task gate or of
-      `spur-check-feature`) and matches the Design's stated ADR-119 reading (req: R4)
-- [ ] AC4 — Either an escape hatch exists and is covered by a test, or the Design records that the
-      check is absolute; no silent bypass (req: R3)
+```gherkin
+Scenario: AC1 — Split pins fail before dependency diagnosis (req: R1)
+  Given a temporary manifest with eleven matching pins and one divergent ts-rule-engine pin
+  When the dependency-drift-check command reads that manifest
+  Then it exits nonzero and lists every package and specifier in both groups
+  And its diagnostic names catalog consistency rather than an installed-package type error
+Scenario: AC2 — Equality and malformed-input boundaries are pinned (req: R2)
+  Given fixtures with equal current and older pins, unrelated keys, and zero or one matching key
+  When the catalog assertion runs
+  Then those valid fixtures pass
+  And malformed JSON, absent catalog, and non-string matching values fail clearly
+Scenario: AC3 — Existing gate scope and drift detection are preserved (req: R3, R4)
+  Given scripts/commands/dependency-drift-check.test.ts and the root gate scripts
+  When their focused tests run
+  Then an unequal catalog fails even if installed and locked dependencies match
+  And an equal catalog still permits existing installed-drift detection to fail
+  And only the existing feature-scoped entrypoint owns the assertion
+```
 
 ### Q&A
 
-<!-- CLOSED decisions from refinement: what was chosen and why, what was deferred and on what
-     condition. Not a parking lot for open questions — an unanswered question here means the task
-     is not ready to hand off. Keep empty if none. -->
+- Closed: compare exact specifier strings, including range syntax; semver equivalence is not lockstep declaration equality.
+- Closed: report all groups sorted by specifier then package name; no arbitrary majority choice for ties.
+- Closed: extend dependency-drift-check rather than introduce a second engine or gate. Catalog consistency and installed consistency are two checks of the same dependency integrity surface and share ADR-119 scope.
+- Closed: no allowlist, minimum version, automatic install, or portable preset addition.
 
 ### Design
 
-**What to assert.** Read `workspaces.catalog` from root `package.json`, select the keys matching
-`@gobing-ai/ts-*`, and fail when the distinct version values exceed one. `bun.lock` does not need to
-be read: by the time the lock separates a dependency into two installed copies, the *cause* is
-already visible in the catalog, and reading `package.json` alone keeps the check dependency-free and
-fast (no lock parse, no `node_modules` walk).
+WHAT: add readCatalogTsDependencies(manifestPath) and checkCatalogConsistency(manifestPath) in scripts/commands/dependency-drift-check.ts, using the script's existing filesystem pattern. Extend DependencyDriftCheckOptions with optional packageJsonPath for fixture injection; default to the root cwd package.json. Keep checkDependencyDrift and its existing fixture callers unchanged; run the manifest assertion only from dependencyDriftCheck before its existing lock check. Group matching entries by exact string specifier; if multiple groups exist, emit the sorted groups and return 1. Catch manifest IO/parse/shape errors at the command boundary and return 1 with the path and remediation.
 
-**Mechanism — rule or script.** Prefer a **rule** in `config/rules/` (a static constraint over a
-tracked manifest is exactly the rule engine's shape) so it participates in the existing preset and
-needs no new gate plumbing. Fall back to a `scripts/commands/*-check.ts` script if the rule engine
-cannot express a cross-entry comparison over one JSON document cleanly — the rule evaluators already
-read `package.json` for other constraints, so this should not be necessary.
+WHY/WHERE: dependency-drift-check already owns repo dependency integrity and is wired into spur-check-feature. ADR-119 requires this repo-wide invariant at that feature boundary. Root package.json script wiring is already sufficient; no task-local rule is added. Extend scripts/commands/dependency-drift-check.test.ts with temporary manifests passed through packageJsonPath, plus command integration fixtures where matching lock/installed data cannot hide a split catalog.
 
-**Placement (ADR-119).** ADR-119 (`docs/00_ADR.md:1864`) forbids a per-task pipeline hosting a check
-that "can fail for a reason the current task did not cause". Read carefully, this check is
-**task-local and belongs in the per-task pre-check preset**: the invariant is self-consistency of one
-file that a task edits *itself*, so a failing check means the current task's own edit is internally
-inconsistent. A task that does not touch the catalog cannot make it fail — the property ADR-119
-protects. The alternative reading (feature-scoped, because a sibling task could have landed the
-partial bump) is weaker: it would delay detection of *this* task's own inconsistency by a whole
-feature cycle, which is the exact cost this task exists to remove. **Record this reasoning in the
-change** and cite ADR-119 either way.
+C2 owns this outcome; graduating AC match its ship scenarios, and ac_numbering: task-local binds every task requirement. No dependencies on 1203 or the review-confidence task.
 
-**Detector lineage.** Do not extend `dependency-drift-check.ts` (`scripts/commands/`): its contract is
-lock-vs-installed drift for `@gobing-ai/ts-*` and it is documented as feature-scoped under ADR-119
-(`docs/00_ADR.md:641`, `:1776`). Adding a second, unrelated invariant to it would make one check own
-two scopes. Keep the two separate.
+Before implementation, obtain a clean task-owned tree. The inspected main tree has unrelated F43 edits in task-service/task-check, Board modules, tests, and generated residual-scan.mjs; do not include or revert them. Only one worktree was registered and 1204 was the only wip task at inspection. Recheck ownership before starting.
+
+Out of scope: dependency upgrades, lockfile rewrites, minimum-version enforcement, new CLI nouns/verbs, rules, or deep imports into ts-* packages.
 
 ### Plan
 
-1. Reproduce the negative case cheaply and keep it as the first fixture: copy the catalog, move one
-   `@gobing-ai/ts-*` pin to another version, assert the check fails and names that pin. Confirm it
-   would have failed on the task-1200 intermediate state (eleven at `^0.5.24`, `ts-rule-engine` at
-   `^0.5.25`).
-2. Implement the assertion in the chosen mechanism (rule preferred) and wire it into the placement the
-   Design settles — per-task pre-check preset, with the ADR-119 citation in the change.
-3. Add the positive fixtures: all pins equal at `^0.5.25` (current) and all equal at `^0.5.23`, so a
-   uniform-but-older catalog stays green.
-4. Decide R3's escape hatch explicitly; if the check is absolute, record that in the Design and add a
-   test asserting no bypass exists.
-5. Run the owning gate plus `bun run spur-check`; confirm `test-pre-check` still reports its full rule
-   count with the new rule included.
+1. Recheck task ownership and catalog values; inspect all callers of checkDependencyDrift and dependencyDriftCheck. Prepare a clean implementation tree without the unrelated F43 edits.
+2. Add temporary-manifest negative fixtures to scripts/commands/dependency-drift-check.test.ts for a single divergent pin, tied groups, malformed manifest and non-string values (R1/R2).
+3. Implement the two manifest helpers and packageJsonPath option; invoke them before the existing installed drift check, keeping its exports and fixtures compatible (R1-R3).
+4. Add equal-current/equal-older, zero/one-entry, unrelated-key and combined catalog/installed-drift cases; update the command TSDoc and relevant existing command documentation (R2-R4).
+5. Run bun test ./scripts/commands/dependency-drift-check.test.ts from the repository root, then bun run dependency-drift-check. Confirm spur-check-feature already includes it and task-local presets did not change. Run the task pipeline's named gate once; the feature-scoped pass runs once at C2 acceptance (R3/R4).
 
 ### Solution
 
@@ -128,6 +95,14 @@ two scopes. Keep the two separate.
 
 ### References
 
-<!-- Links to features, docs, ADRs, related tasks, or external references. -->
+- Feature C2: docs/features/C2_lockstep-dependency-catalog-integrity.md
+- Root package.json: workspaces.catalog and dependency-drift-check / spur-check-feature scripts.
+- scripts/commands/dependency-drift-check.ts: checkDependencyDrift and dependencyDriftCheck.
+- scripts/commands/dependency-drift-check.test.ts: existing fixture seam.
+- docs/00_ADR.md: ADR-119; historical source incident task 1200.
+- Snapshot: 2026-10-13 local refinement, HEAD 46718be2c; installed ts-rule-engine package reports 0.5.26. Unrelated dirty F43 work must be reconciled at implementation start.
 
 ### History
+
+- 2026-10-14T05:47:30.158Z backlog → todo (system)
+
