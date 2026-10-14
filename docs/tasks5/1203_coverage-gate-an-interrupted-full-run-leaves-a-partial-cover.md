@@ -4,7 +4,7 @@ name: "coverage-gate: an interrupted full run leaves a partial .coverage artifac
 status: done
 template: standard
 created_at: 2026-10-14T03:25:27.063Z
-updated_at: "2026-10-14T07:21:05.650Z"
+updated_at: "2026-10-14T07:27:46.353Z"
 feature_id: C3
 
 ac_altitude: graduating
@@ -189,6 +189,22 @@ SECUA review of the 1203 diff (scripts/commands/coverage-certification.ts, cover
 | P3 | Refusal path in run-tests.ts left the disposable registry temp dir behind | Fixed inline (rmSync before exit) |
 | P3 | Fixture tests with no imported source file emit no tracefile (empty measured set) | Fixed inline (fixtures import case/tiny.ts) |
 | P4 | Committed plugins/sp/lib/*.generated.mjs embed ts-db 0.5.26 vs installed 0.5.27 (pre-existing base failure, unrelated to 1203) | Regenerated in a separate chore commit |
+
+#### Source verification of API/library claims (post-merge audit)
+
+| Claim | Source | Confidence |
+| ----- | ------ | ---------- |
+| bunfig `[test] coverage`/`coverageReporter=["lcov"]` writes lcov.info to coverageDir | bun.sh/docs/test/coverage | HIGH (doc + empirical) |
+| No tracefile when measured set is empty (test files excluded by default; only loaded files tracked) | bun.sh/docs/test/coverage | HIGH |
+| `git ls-files -s` sees the index, not worktree bytes → content hashing required | git-scm.com/docs/git-ls-files | HIGH |
+| `git ls-files -z` = NUL-terminated unquoted paths | git-scm.com/docs/git-ls-files | HIGH |
+| Bun.spawnSync env/pipe/exitCode; spawn+kill/exited for interruption fixture | bun.sh/docs/api/spawn | HIGH |
+| process.execPath bypasses PATH shim (shim count = 1 proves it) | in-test empirical | HIGH |
+| ts-rule-engine 0.5.27: RuleEngine ctor registers builtins; 'coverage-gate' evaluator; {findings,fixes}; SF/LF/LH parsing | node_modules dist (version-pinned): engine.js:19, builtins.js, types.d.ts:133, coverage-gate-evaluator.js | HIGH |
+| scripts/ cannot resolve @gobing-ai/spur-app | runtime + node_modules inspection | HIGH |
+| per-file coverage threshold semantics | bunfig.toml:13 repo-verified note; docs agree on exit behavior | MEDIUM (granularity is repo-empirical) |
+
+No claim rested on memory alone; all HIGH items are doc-cited and test-backed.
 
 ### References
 
