@@ -780,10 +780,12 @@ describe('task-pipeline review PASS-edge review-gate (task 1122)', () => {
             expect(guard).toContain('$wbs');
             expect(guard).toContain('$spurBin');
             // One AND-list: the gate runs only after the Verdict grep and the graded-PASS
-            // predicate (1204), so a missing scanner, an ungraded/LOW PASS, or an open P1-P3
-            // finding fails the edge closed into the review-fail-triage catch-all.
-            expect(guard).toContain('review-answer.txt" && ( grep');
-            expect(guard).toContain('"true" ] ) && eval "$(jq');
+            // predicate, so a missing scanner, an ungraded/LOW PASS, or an open P1-P3 finding fails
+            // the edge closed into the review-fail-triage catch-all. Since the session review the
+            // grade rides the scanner (ADR-115 budgets a guard at 5 logical commands) — the edge
+            // names the answer file instead of re-implementing the predicate inline.
+            expect(guard).toContain('--review-answer ".spur/run/$__runId-review-answer.txt"');
+            expect(guard).not.toContain('$ackLowConfidence');
             expect(guard).not.toContain(';');
         }
         // The test-fix hop's existing hand-off appends exactly the artifact review-gate writes.
@@ -894,12 +896,17 @@ describe('task-pipeline review confidence gate (task 1204)', () => {
         writeFileSync(join(dir, '.spur', 'run', `${runId}-review-answer.txt`), answer);
     }
 
-    test('both PASS edges demand a graded PASS and read the acknowledgement var', () => {
+    test('both PASS edges demand a graded PASS and delegate the grade to review-gate', () => {
         for (const to of ['verify', 'approve'] as const) {
             const guard = cmdOf('review', to);
-            expect(guard, `review→${to}`).toContain('Confidence:');
-            expect(guard, `review→${to}`).toContain('HIGH|MEDIUM');
-            expect(guard, `review→${to}`).toContain('"$ackLowConfidence"');
+            // The graded-PASS rule has to hold on the edge in effect. The session review moved the
+            // grading off the edge — ADR-115 budgets a guard at 5 logical commands and the inline
+            // predicate put these at 7 and 6, which made `workflow validate` exit 1 for the shipped
+            // pipeline — so the edge must name the answer file it hands to the scanner, and must not
+            // re-implement the predicate inline.
+            expect(guard, `review→${to}`).toContain('review-gate');
+            expect(guard, `review→${to}`).toContain('--review-answer ".spur/run/$__runId-review-answer.txt"');
+            expect(guard, `review→${to}`).not.toContain('$ackLowConfidence');
         }
     });
 

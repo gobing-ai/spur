@@ -359,6 +359,33 @@ export function reviewContractViolations(taskContent: string): Array<{ location:
 }
 
 /**
+ * Task 1204, folded out of the YAML guard by the session review: grade the review ANSWER's
+ * `Confidence:` line — HIGH/MEDIUM cross the PASS edges unadorned, LOW or an absent level clears
+ * only through the operator's `ackLowConfidence`. Presence and enum already fail-close in
+ * {@link reviewContractViolations} against the recorded section; this grades the answer the
+ * reviewer actually wrote. It lives here rather than inline in the edges because ADR-115 budgets a
+ * guard at 5 logical commands and the inline predicate pushed both review PASS edges over that
+ * (7 and 6), which made `workflow validate` exit 1 for the shipped pipeline.
+ */
+export function reviewConfidenceViolation(
+    reviewAnswer: string,
+    ackLowConfidence: string | undefined,
+): { location: string; text: string } | null {
+    if (ackLowConfidence === 'true') return null;
+    const level = extractAnswerConfidence(reviewAnswer.replace(/\*\*/g, ''));
+    if (level === 'HIGH' || level === 'MEDIUM') return null;
+    return {
+        location: 'review-answer:Confidence',
+        text:
+            level === undefined
+                ? 'The review answer carries no valid `**Confidence:** HIGH | MEDIUM | LOW` line — a ' +
+                  'PASS must be graded, or the operator must set ackLowConfidence'
+                : `The review answer graded its PASS ${level} — HIGH/MEDIUM cross unadorned, ` +
+                  'LOW/absent needs the operator\u2019s ackLowConfidence',
+    };
+}
+
+/**
  * Task 1122 R2: the review-gate artifact assembly — the review-finding slice
  * ({@link blockingReviewFindings}) shaped into the same `ResidualArtifact` the record sweep
  * writes to `.spur/run/<wbs>-residuals.json` (the test-fix hop's remediation input; the
@@ -370,10 +397,15 @@ export function buildReviewGateArtifact(
     wbs: string,
     taskContent: string,
     deferrals: Deferral[],
+    review?: { answer: string; ackLowConfidence: string | undefined },
 ): { artifact: ResidualArtifact; note: string } {
+    // 1204's graded-confidence rule rides the same review-contract category, so the existing
+    // blocking/count/note machinery and the record sweep's exclusion of this category are unchanged.
+    const confidence = review === undefined ? null : reviewConfidenceViolation(review.answer, review.ackLowConfidence);
+    const contractViolations = [...reviewContractViolations(taskContent), ...(confidence === null ? [] : [confidence])];
     const items = [
         ...blockingReviewFindings(taskContent, deferrals),
-        ...reviewContractViolations(taskContent).map((v) => ({
+        ...contractViolations.map((v) => ({
             id: makeItemId('review-contract', v.location, v.text),
             category: 'review-contract' as const,
             class: 'blocking' as const,
@@ -557,6 +589,8 @@ export interface ParsedScanArgs {
     spurBin?: string;
     root: string;
     tmpDir: string;
+    /** `--review-answer <path>`: the review answer the `review-gate` mode grades. */
+    reviewAnswer?: string;
 }
 
 /**
@@ -575,15 +609,17 @@ export function parseScanArgs(
     let spurBin: string | undefined;
     let root = cwd;
     let tmpDir = defaultTmpDir;
+    let reviewAnswer: string | undefined;
     for (let i = 0; i < argv.length; i++) {
         const a = argv[i];
         if (a === undefined) break;
         if (a === '--spur-bin') spurBin = argv[++i];
         else if (a === '--root') root = argv[++i] ?? root;
         else if (a === '--tmp-dir') tmpDir = argv[++i] ?? tmpDir;
+        else if (a === '--review-answer') reviewAnswer = argv[++i];
         else if (a === '--help' || a === '-h') return null;
         else if (mode === '') mode = a;
         else if (wbs === '') wbs = a;
     }
-    return mode === '' || wbs === '' ? null : { mode, wbs, spurBin, root, tmpDir };
+    return mode === '' || wbs === '' ? null : { mode, wbs, spurBin, root, tmpDir, reviewAnswer };
 }

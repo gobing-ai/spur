@@ -924,8 +924,8 @@ verdict artifact exists (tasks 0617, 0619 — the clobbering spiral).
 
 The full gate legitimately runs minutes, not seconds — measured 1.8-3.1 min for `bun run spur-check`
 on an idle 10-core host (2026-10-13), and far longer when other agents' suites run concurrently.
-Two rules keep it from becoming a hazard (both
-violated once on 2026-10-10, aborting the run's own verification):
+Five rules keep it from becoming a hazard (the first two
+were both violated once on 2026-10-10, aborting the run's own verification):
 
 - **Never wrap it in an external `timeout`, and never treat its runtime as a hang.** An outer bound
   that fires mid-suite leaves a half-finished suite behind while the caller believes it is gone.
@@ -938,6 +938,24 @@ violated once on 2026-10-10, aborting the run's own verification):
 - **Preserve a signal-induced receipt.** A cap-killed attempt leaves a red receipt that the next
   recheck's `no-progress` guard honours, so it reads as a genuine failure unless the receipt is kept
   under a distinct name and the run log says so.
+- **Clear the killed attempt's process tree before re-running.** A cap-signalled gate leaves its
+  `bun test --test-worker` children alive: the parent dies, the workers keep burning ~100% CPU, and
+  each retry is slower than the last until the cap kills that one too and mints another leak.
+  Observed 2026-10-13: five leaked workers (ages 23 min, 37 min, 50 min, 2 h 17 m, 4 h 18 m) drove
+  consecutive attempts from the measured 1.8-3.1 min up to 13-40 min, and the real defect of the
+  session only became visible once they were cleared. Find them by age and cwd, then clear the tree
+  before the next run; leave a tree alone whose cwd is another session's live run:
+
+  ```bash
+  ps -Ao pid=,ppid=,etime=,%cpu=,command= | grep -E "run-tests\.ts|bun test --test-worker" | grep -v grep
+  kill -TERM <pid> <ppid>; sleep 4; kill -KILL <pid> <ppid>    # escalate only if TERM is ignored
+  ```
+
+- **One gate per tree.** Nothing serializes gate runs since task 1173 deleted the lock, so confirm
+  no live gate is already running in your tree before starting one: two suites in one tree contend
+  for CPU and for the shared fixtures, and the second one's result is uninterpretable. Measured
+  2026-10-13: a duplicate gate launched into a tree already running another session's
+  `bun run spur-check` burned 40 min at the host cap and left an orphaned worker behind.
 
 > Historical (task 1127, removed in task 1173): these rules were once stated in terms of a host-wide
 > `full-gate.lock`. The lock mechanism was deleted (`refactor(gate): remove gate-lock mechanism and

@@ -219,10 +219,23 @@ function reviewContractViolations(taskContent) {
   }
   return violations;
 }
-function buildReviewGateArtifact(wbs, taskContent, deferrals) {
+function reviewConfidenceViolation(reviewAnswer, ackLowConfidence) {
+  if (ackLowConfidence === "true")
+    return null;
+  const level = extractAnswerConfidence(reviewAnswer.replace(/\*\*/g, ""));
+  if (level === "HIGH" || level === "MEDIUM")
+    return null;
+  return {
+    location: "review-answer:Confidence",
+    text: level === undefined ? "The review answer carries no valid `**Confidence:** HIGH | MEDIUM | LOW` line — a " + "PASS must be graded, or the operator must set ackLowConfidence" : `The review answer graded its PASS ${level} — HIGH/MEDIUM cross unadorned, ` + "LOW/absent needs the operator’s ackLowConfidence"
+  };
+}
+function buildReviewGateArtifact(wbs, taskContent, deferrals, review) {
+  const confidence = review === undefined ? null : reviewConfidenceViolation(review.answer, review.ackLowConfidence);
+  const contractViolations = [...reviewContractViolations(taskContent), ...confidence === null ? [] : [confidence]];
   const items = [
     ...blockingReviewFindings(taskContent, deferrals),
-    ...reviewContractViolations(taskContent).map((v) => ({
+    ...contractViolations.map((v) => ({
       id: makeItemId("review-contract", v.location, v.text),
       category: "review-contract",
       class: "blocking",
@@ -355,6 +368,7 @@ function parseScanArgs(argv, cwd, defaultTmpDir) {
   let spurBin;
   let root = cwd;
   let tmpDir = defaultTmpDir;
+  let reviewAnswer;
   for (let i = 0;i < argv.length; i++) {
     const a = argv[i];
     if (a === undefined)
@@ -365,6 +379,8 @@ function parseScanArgs(argv, cwd, defaultTmpDir) {
       root = argv[++i] ?? root;
     else if (a === "--tmp-dir")
       tmpDir = argv[++i] ?? tmpDir;
+    else if (a === "--review-answer")
+      reviewAnswer = argv[++i];
     else if (a === "--help" || a === "-h")
       return null;
     else if (mode === "")
@@ -372,7 +388,7 @@ function parseScanArgs(argv, cwd, defaultTmpDir) {
     else if (wbs === "")
       wbs = a;
   }
-  return mode === "" || wbs === "" ? null : { mode, wbs, spurBin, root, tmpDir };
+  return mode === "" || wbs === "" ? null : { mode, wbs, spurBin, root, tmpDir, reviewAnswer };
 }
 export {
   ALLOW_PRAGMA,
@@ -391,6 +407,7 @@ export {
   parseScanArgs,
   recordedVerdictPath,
   renderReport,
+  reviewConfidenceViolation,
   reviewContractViolations,
   scanResiduals,
   verdictDisagreementNote

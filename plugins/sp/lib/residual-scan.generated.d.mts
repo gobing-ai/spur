@@ -47,6 +47,8 @@ export declare interface ParsedScanArgs {
     spurBin?: string;
     root: string;
     tmpDir: string;
+    /** The --review-answer <path> flag: the review answer the review-gate mode grades (task 1204). */
+    reviewAnswer?: string;
 }
 export declare const ALLOW_PRAGMA: 'residual-scan:allow';
 export declare function recordedVerdictPath(runDir: string, wbs: string, fs: Pick<typeof import('node:fs'), 'lstatSync' | 'existsSync'>): string;
@@ -68,10 +70,15 @@ export declare function scanResiduals(inputs: ResidualScanInputs): ResidualArtif
 export declare function parseDeferralEntries(raw: unknown): Deferral[];
 export declare function blockingReviewFindings(taskContent: string, deferrals: Deferral[]): ResidualItem[];
 export declare function reviewContractViolations(taskContent: string): Array<{ location: string; text: string }>;
+export declare function reviewConfidenceViolation(
+    reviewAnswer: string,
+    ackLowConfidence: string | undefined,
+): { location: string; text: string } | null;
 export declare function buildReviewGateArtifact(
     wbs: string,
     taskContent: string,
     deferrals: Deferral[],
+    review?: { answer: string; ackLowConfidence: string | undefined },
 ): { artifact: ResidualArtifact; note: string };
 export declare function parseScanArgs(
     argv: readonly (string | undefined)[],
