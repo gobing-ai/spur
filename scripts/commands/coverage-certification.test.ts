@@ -187,6 +187,37 @@ describe('canonical certification producer (task 1203)', () => {
         expect(await validateCoverageCertification(fixture).then((r) => r.ok)).toBe(true);
     }, 30000);
 
+    test('a canonical run whose artifact is missing fails closed with exit 1 and a pending window (AC1/R4)', async () => {
+        // Fixture with only a test file: Bun excludes test files from coverage by
+        // default, so the measured set is empty and no lcov is emitted — the producer
+        // must refuse to certify, exit nonzero, and leave the window pending.
+        const dir = newFixture();
+        mkdirSync(join(dir, 'case'), { recursive: true });
+        writeFileSync(
+            join(dir, 'bunfig.toml'),
+            '[test]\ncoverage = true\ncoverageReporter = ["lcov"]\ncoverageDir = ".coverage"\n',
+        );
+        writeFileSync(
+            join(dir, 'case', 'tiny.test.ts'),
+            "import { test, expect } from 'bun:test';\ntest('bounded', () => { expect(1).toBe(1); });\n",
+        );
+        const git = (args: string[]) =>
+            Bun.spawnSync(['git', ...args], { cwd: dir, stdout: 'ignore', stderr: 'ignore' });
+        git(['init', '-q', '-b', 'main']);
+        git(['-c', 'user.email=f@f', '-c', 'user.name=f', 'add', '-A']);
+        git(['-c', 'user.email=f@f', '-c', 'user.name=f', 'commit', '-qm', 'init']);
+        const proc = Bun.spawnSync([process.execPath, PRODUCER, '--publish-coverage', 'test', join(dir, 'case')], {
+            cwd: dir,
+            env: getEnvVars(),
+            stdout: 'pipe',
+            stderr: 'pipe',
+        });
+        expect(proc.exitCode).toBe(1);
+        expect(proc.stderr.toString()).toContain('coverage-certification: refused (missing-lcov)');
+        expect(readMarker(dir).status).toBe('pending');
+        expect(await refuseReason(dir)).toBe('pending');
+    }, 30000);
+
     test('a targeted producer overwriting certified lcov bytes fails the post-check closed (AC1/AC3)', async () => {
         const fixture = initFixtureRepo(PASSING);
         const start = await startCanonicalRun(fixture);
