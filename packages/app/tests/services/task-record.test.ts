@@ -264,16 +264,6 @@ describe('renderTesting', () => {
         expect(out).toContain('Coverage: N/A');
     });
 
-    test('renders the confidence line when the artifact carries it (1068 R3)', () => {
-        const out = renderTesting(makeVerdict({ confidence: 'HIGH' }));
-        expect(out).toContain('- Confidence: HIGH');
-    });
-
-    test('renders no confidence line for a pre-1068 artifact without the field (1068 R3)', () => {
-        const out = renderTesting(makeVerdict());
-        expect(out).not.toContain('Confidence:');
-    });
-
     test('renders no-requirements row when empty', () => {
         const v = makeVerdict({ requirements: [] });
         const out = renderTesting(v);
@@ -917,46 +907,6 @@ Feature: Disposal
         expect(result.verdictState).toBe('readable');
         const raw = await fs.readFile(`${tasksDir}/${wbs}_record-test-task.md`);
         expect(raw).toContain('found under the fixture root');
-    });
-
-    test('the durable copy carries the confidence row the run artifact lacked (1156)', async () => {
-        const wbs = await createTask(svc);
-        const root = tasksDir.replace('/tasks', '');
-        const verdictPath = join(root, '.spur', 'run', `${wbs}-verdict.json`);
-        const fs = createNodeFileSystem(root);
-        // A run artifact with a level but no row — what a re-derivation (or any later rewrite of
-        // the run file) used to leave behind: the durable plane then recorded the level alone.
-        await fs.writeFile(
-            verdictPath,
-            `${JSON.stringify(
-                {
-                    wbs,
-                    verdict: 'PASS',
-                    confidence: 'HIGH',
-                    requirements: [{ id: 'R1', status: 'MET', evidence: '`src/foo.ts:10` re-run' }],
-                },
-                null,
-                4,
-            )}\n`,
-        );
-
-        await svc.record(wbs, { verdictFile: verdictPath });
-
-        const durablePath = join(root, '.spur', 'memory', 'evidence', `${wbs}-verdict.json`);
-        const durable = JSON.parse(await fs.readFile(durablePath)) as {
-            confidence?: string;
-            proof?: unknown;
-            checks?: Array<{ name: string; status: string; evidence: string }>;
-        };
-        const row = durable.checks?.find((c) => c.name === 'confidence');
-        expect(row?.status).toBe('pass');
-        expect(row?.evidence).toContain('HIGH');
-        expect(row?.evidence).toContain('1/1 rows MET');
-        // Retention never rewrites the run artifact it copied.
-        const runArtifact = JSON.parse(await fs.readFile(verdictPath)) as { checks?: unknown };
-        expect(runArtifact.checks).toBeUndefined();
-        // A bound proof block rides the copy untouched when it is present.
-        expect(durable.proof).toBeUndefined();
     });
 
     test('records a Testing section only when its .spur/run citations resolve (F8/AC6)', async () => {

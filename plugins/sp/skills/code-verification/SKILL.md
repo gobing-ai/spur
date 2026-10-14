@@ -341,7 +341,6 @@ Verdict: PASS    (or PARTIAL / FAIL)
 
 ```markdown
 Verdict: PASS
-Confidence: HIGH
 
 ### Per-Requirement Traceability
 | Req | Status | Evidence |
@@ -360,7 +359,7 @@ Confidence: HIGH
 ```
 
 The per-requirement traceability table MUST use `| Req | Status | Evidence |` (exactly this header, no `R#`/`R`/`Requirement` variant — `Status` in column 2 — and no extra columns between Req and Status). The Acceptance Criteria table MUST use `| AC | Status | Evidence Type | Evidence |`.
-The answer MUST carry exactly one `Confidence: HIGH|MEDIUM|LOW` line (task 1068): the verifier's stated confidence in the verdict — HIGH = fresh executable evidence + re-read anchors this run; MEDIUM = partial reliance on prior evidence, external/delegated outcomes, or an unstable tree; LOW = key evidence not re-executed. A missing or out-of-vocabulary line fails lint (`confidence-missing` / `confidence-value`) and blocks derivation; the value lands in the verdict artifact's `confidence` field and the recorded `## Testing` section.
+The answer carries no `Confidence:` line (F511, task 1207): model-asserted confidence is not verification — a verifier that can write a PASS can write `HIGH`. What the old level compressed now lives in the evidence cells themselves: cite fresh executable evidence and name residual gaps explicitly. Legacy answers that still carry a confidence line parse (the value is ignored); no lint code reads it and the artifact and recorded `## Testing` section carry no confidence value.
 The answer MUST cite a source for external API/library claims in Requirement/AC evidence cells: a cell asserting a scoped-package (`@scope/name`), `node_modules/`, semver-version (`x.y.z`), or backticked function-call (`` `name(args)` ``) claim is rejected with `evidence-citation` unless the SAME cell carries a citation — a repo `path:line(-end)` (backticked or bare), the external named-origin form (@origin `path` line N), or a URL. Cross-cell references ("receipt above") do not count; marker-free receipts ("bun test 398 pass / 0 fail") need no citation.
 **MUST NOT:** place a `Severity` column between `Req` and `Status`. The parser tolerates variants
 as defense-in-depth; this contract is canonical.

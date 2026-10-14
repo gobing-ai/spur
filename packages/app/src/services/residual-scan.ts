@@ -15,7 +15,7 @@ import { join } from 'node:path';
  */
 
 import { createHash } from 'node:crypto';
-import { extractAnswerConfidence, hasCitationForm, hasClaimMarker } from './verify-answer-lint';
+import { hasCitationForm, hasClaimMarker } from './verify-answer-lint';
 
 /** Residual-scan item categories: review-table rows, TODO markers, unchecked boxes, staging residue. */
 export type ResidualCategory =
@@ -322,28 +322,20 @@ export function blockingReviewFindings(taskContent: string, deferrals: Deferral[
 }
 
 /**
- * The two review-report contract rules the gate can decide deterministically (task 1070 R1 on the
- * review side): a report states the confidence level it can defend, and a finding that asserts an
- * external API/library claim cites it in the same cell. The claim predicates are the verify lint's,
- * so both paths share one definition of "external claim" and one set of accepted citation forms.
+ * The review-report contract rule the gate can decide deterministically (task 1070 R1 on the
+ * review side): a finding that asserts an external API/library claim cites it in the same cell.
+ * The claim predicates are the verify lint's, so both paths share one definition of "external
+ * claim" and one set of accepted citation forms. The review answer's asserted `Confidence:`
+ * grade was retired with the verify-answer one (F511) — a model grading itself is not
+ * verification; the findings gate and the record sweep stay the authority.
  *
- * Deliberately scoped to the findings table (the rows `parseReviewFindings` already extracts) and to
- * `### Review` bodies that exist: a missing section is not a contract violation, and the Functional
- * Traceability `Evidence` cells stay reviewer-enforced — see `verdict-schema.md` § Source citations
- * for external claims for why presence-only prose checks are kept narrow.
+ * Deliberately scoped to the findings table (the rows `parseReviewFindings` already extracts):
+ * a missing section is not a contract violation, and the Functional Traceability `Evidence`
+ * cells stay reviewer-enforced — see `verdict-schema.md` § Source citations for external claims
+ * for why presence-only prose checks are kept narrow.
  */
 export function reviewContractViolations(taskContent: string): Array<{ location: string; text: string }> {
     const violations: Array<{ location: string; text: string }> = [];
-    const body = reviewBody(taskContent);
-    if (body !== null && extractAnswerConfidence(body.replace(/\*\*/g, '')) === undefined) {
-        violations.push({
-            location: 'task-file:Review',
-            text:
-                'Review report carries no single valid `**Confidence:** HIGH | MEDIUM | LOW` line — ' +
-                'state the level the report can defend (HIGH: every requirement row MET, every finding ' +
-                'dispositioned, evidence cited; MEDIUM/LOW: name the gap).',
-        });
-    }
     for (const row of parseReviewFindings(taskContent)) {
         if (hasClaimMarker(row.text) && !hasCitationForm(row.text)) {
             violations.push({
@@ -359,72 +351,18 @@ export function reviewContractViolations(taskContent: string): Array<{ location:
 }
 
 /**
- * Task 1204, folded out of the YAML guard by the session review: grade the review ANSWER's
- * `Confidence:` line — HIGH/MEDIUM cross the PASS edges unadorned, LOW or an absent level clears
- * only through the operator's `ackLowConfidence`. Presence and enum already fail-close in
- * {@link reviewContractViolations} against the recorded section; this grades the answer the
- * reviewer actually wrote. It lives here rather than inline in the edges because ADR-115 budgets a
- * guard at 5 logical commands and the inline predicate pushed both review PASS edges over that
- * (7 and 6), which made `workflow validate` exit 1 for the shipped pipeline.
- */
-export function reviewConfidenceViolation(
-    reviewAnswer: string,
-    ackLowConfidence: string | undefined,
-): { location: string; text: string } | null {
-    if (ackLowConfidence === 'true') return null;
-    const level = extractAnswerConfidence(reviewAnswer.replace(/\*\*/g, ''));
-    if (level === 'HIGH' || level === 'MEDIUM') return null;
-    return {
-        location: 'review-answer:Confidence',
-        text:
-            level === undefined
-                ? 'The review answer carries no valid `**Confidence:** HIGH | MEDIUM | LOW` line — a ' +
-                  'PASS must be graded, or the operator must set ackLowConfidence'
-                : `The review answer graded its PASS ${level} — HIGH/MEDIUM cross unadorned, ` +
-                  'LOW/absent needs the operator\u2019s ackLowConfidence',
-    };
-}
-
-/**
- * Resolve the `review-gate` mode's grading input from the raw flag (task 1204): the answer text the
- * reviewer wrote plus the acknowledgement, or undefined when no answer was named. A named-but-absent
- * file grades as an empty answer — a missing grade, not a crash.
- */
-export function reviewGradingInput(
-    root: string,
-    reviewAnswer: string | undefined,
-    ackLowConfidence: string | undefined,
-    fs: Pick<typeof import('node:fs'), 'readFileSync' | 'statSync'>,
-): { answer: string; ackLowConfidence: string | undefined } | undefined {
-    if (reviewAnswer === undefined) return undefined;
-    const path = join(root, reviewAnswer);
-    let isFile = false;
-    try {
-        isFile = fs.statSync(path).isFile();
-    } catch {
-        isFile = false;
-    }
-    return { answer: isFile ? fs.readFileSync(path, 'utf8') : '', ackLowConfidence };
-}
-
-/**
  * Task 1122 R2: the review-gate artifact assembly — the review-finding slice
  * ({@link blockingReviewFindings}) shaped into the same `ResidualArtifact` the record sweep
  * writes to `.spur/run/<wbs>-residuals.json` (the test-fix hop's remediation input; the
  * record sweep stays the final authority and overwrites it), plus the operator line naming
- * blocking ids and anchors. The script's `review-gate` mode owns only the IO: task load,
- * artifact write, and the fail-closed exit code.
+ * blocking ids and anchors.
  */
 export function buildReviewGateArtifact(
     wbs: string,
     taskContent: string,
     deferrals: Deferral[],
-    review?: { answer: string; ackLowConfidence: string | undefined },
 ): { artifact: ResidualArtifact; note: string } {
-    // 1204's graded-confidence rule rides the same review-contract category, so the existing
-    // blocking/count/note machinery and the record sweep's exclusion of this category are unchanged.
-    const confidence = review === undefined ? null : reviewConfidenceViolation(review.answer, review.ackLowConfidence);
-    const contractViolations = [...reviewContractViolations(taskContent), ...(confidence === null ? [] : [confidence])];
+    const contractViolations = reviewContractViolations(taskContent);
     const items = [
         ...blockingReviewFindings(taskContent, deferrals),
         ...contractViolations.map((v) => ({
@@ -611,8 +549,6 @@ export interface ParsedScanArgs {
     spurBin?: string;
     root: string;
     tmpDir: string;
-    /** `--review-answer <path>`: the review answer the `review-gate` mode grades. */
-    reviewAnswer?: string;
 }
 
 /**
@@ -631,17 +567,15 @@ export function parseScanArgs(
     let spurBin: string | undefined;
     let root = cwd;
     let tmpDir = defaultTmpDir;
-    let reviewAnswer: string | undefined;
     for (let i = 0; i < argv.length; i++) {
         const a = argv[i];
         if (a === undefined) break;
         if (a === '--spur-bin') spurBin = argv[++i];
         else if (a === '--root') root = argv[++i] ?? root;
         else if (a === '--tmp-dir') tmpDir = argv[++i] ?? tmpDir;
-        else if (a === '--review-answer') reviewAnswer = argv[++i];
         else if (a === '--help' || a === '-h') return null;
         else if (mode === '') mode = a;
         else if (wbs === '') wbs = a;
     }
-    return mode === '' || wbs === '' ? null : { mode, wbs, spurBin, root, tmpDir, reviewAnswer };
+    return mode === '' || wbs === '' ? null : { mode, wbs, spurBin, root, tmpDir };
 }

@@ -67,8 +67,6 @@ import {
 import { normalizeTaskSection } from './task-section-normalizer';
 import { evaluateTaskSize } from './task-size-precheck';
 import { reconcileDoneCloseAudit, runTransitionCheckGate } from './task-transition';
-// 1156: the durable copy must carry the verification of the confidence level, not only the level.
-import { injectEarnedConfidenceRow } from './task-verdict';
 import type { VerifyVerdict as CanonicalVerifyVerdict } from './verify-verdict';
 
 /**
@@ -1766,19 +1764,11 @@ export class TaskService {
             const bytes = await this.ctx.fs.readFile(verdictPath);
             ensureDurablePlaneIgnored(paths.projectRoot);
             await this.ctx.fs.ensureDir(dirname(durablePath));
-            // 1156: a byte copy preserves whatever the run artifact held at this moment — including
-            // the gap when the confidence row was dropped before record (measured: 0/50 durable
-            // artifacts carried it). Inject only an earned `pass` row; a `warn` row would aggregate
-            // to PARTIAL and could contradict a stored `pass`.
+            // 1156: a byte copy preserves whatever the run artifact held at this moment. The
+            // confidence-row injection it used to carry was retired with the asserted level (F511).
             // `FileSystem.readFile` returns a string (not Buffer): the former `.toString('utf8')`
             // was a no-op that failed typecheck (TS2554) on main; the text is passed through.
-            await atomicWriteAsync(
-                durablePath,
-                injectEarnedConfidenceRow(bytes),
-                wbs,
-                this.ctx.fs,
-                this.ctx.projectName ?? 'spur',
-            );
+            await atomicWriteAsync(durablePath, bytes, wbs, this.ctx.fs, this.ctx.projectName ?? 'spur');
         }
 
         const result: RecordResult = {

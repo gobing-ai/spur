@@ -184,7 +184,7 @@
             "from": "verify",
             "to": "record",
             "kind": "shell",
-            "command": "jq -e --arg d \"$proofDigest\" --arg r \"$__runId\" --arg dd \"$__definitionDigest\" --arg ack \"$ackLowConfidence\" ' .verdict == \"PASS\" and (.proof.digest // \"\") == $d and (.proof.stages.qualityGate.digest // \"\") == $d and (.proof.stages.review.digest // \"\") == $d and (.proof.stages.review.status // \"\") == \"completed\" and (.proof.stages.verification.digest // \"\") == $d and (.proof.runId // \"\") == $r and (.proof.definitionDigest // \"\") == $dd and ((.confidence // \"LOW\") != \"LOW\" or $ack == \"true\") ' \".spur/run/$wbs-verdict.json\" >/dev/null 2>&1"
+            "command": "jq -e --arg d \"$proofDigest\" --arg r \"$__runId\" --arg dd \"$__definitionDigest\" ' .verdict == \"PASS\" and (.proof.digest // \"\") == $d and (.proof.stages.qualityGate.digest // \"\") == $d and (.proof.stages.review.digest // \"\") == $d and (.proof.stages.review.status // \"\") == \"completed\" and (.proof.stages.verification.digest // \"\") == $d and (.proof.runId // \"\") == $r and (.proof.definitionDigest // \"\") == $dd ' \".spur/run/$wbs-verdict.json\" >/dev/null 2>&1"
         },
         {
             "from": "verify",
@@ -202,7 +202,7 @@
             "from": "record",
             "to": "done",
             "kind": "shell",
-            "command": "$spurBin task check $wbs --as done && jq -e --arg p \"$proofDigest\" --arg ack \"$ackLowConfidence\" ' .verdict == \"PASS\" and ((.proof.digest // \"\") == $p) and ((.confidence // \"LOW\") != \"LOW\" or $ack == \"true\") ' \".spur/run/$wbs-verdict.json\" >/dev/null 2>&1"
+            "command": "$spurBin task check $wbs --as done && jq -e --arg p \"$proofDigest\" ' .verdict == \"PASS\" and ((.proof.digest // \"\") == $p) ' \".spur/run/$wbs-verdict.json\" >/dev/null 2>&1"
         },
         {
             "from": "record",

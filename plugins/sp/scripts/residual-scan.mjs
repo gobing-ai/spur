@@ -33,14 +33,6 @@ function hasClaimMarker(evidence) {
 function hasCitationForm(evidence) {
   return CITATION_FORMS.some((re) => re.test(evidence));
 }
-var CONFIDENCE_LEVELS = ["HIGH", "MEDIUM", "LOW"];
-function extractAnswerConfidence(text) {
-  const matches = [...text.matchAll(/^\s*Confidence:\s*(\S+)\s*$/gim)];
-  if (matches.length !== 1)
-    return;
-  const value = (matches[0]?.[1] ?? "").toUpperCase();
-  return CONFIDENCE_LEVELS.includes(value) ? value : undefined;
-}
 var MARKER_PATTERN = /TODO|FIXME|XXX|HACK/;
 var PRIORITY_PATTERN = /^P[1-4]/;
 var RANGE_PRIORITY = /^P[1-4]\s*[\u2013\u2014-]\s*P?[1-4]/;
@@ -212,13 +204,6 @@ function blockingReviewFindings(taskContent, deferrals) {
 }
 function reviewContractViolations(taskContent) {
   const violations = [];
-  const body = reviewBody(taskContent);
-  if (body !== null && extractAnswerConfidence(body.replace(/\*\*/g, "")) === undefined) {
-    violations.push({
-      location: "task-file:Review",
-      text: "Review report carries no single valid `**Confidence:** HIGH | MEDIUM | LOW` line — " + "state the level the report can defend (HIGH: every requirement row MET, every finding " + "dispositioned, evidence cited; MEDIUM/LOW: name the gap)."
-    });
-  }
   for (const row of parseReviewFindings(taskContent)) {
     if (hasClaimMarker(row.text) && !hasCitationForm(row.text)) {
       violations.push({
@@ -229,32 +214,8 @@ function reviewContractViolations(taskContent) {
   }
   return violations;
 }
-function reviewConfidenceViolation(reviewAnswer, ackLowConfidence) {
-  if (ackLowConfidence === "true")
-    return null;
-  const level = extractAnswerConfidence(reviewAnswer.replace(/\*\*/g, ""));
-  if (level === "HIGH" || level === "MEDIUM")
-    return null;
-  return {
-    location: "review-answer:Confidence",
-    text: level === undefined ? "The review answer carries no valid `**Confidence:** HIGH | MEDIUM | LOW` line — a " + "PASS must be graded, or the operator must set ackLowConfidence" : `The review answer graded its PASS ${level} — HIGH/MEDIUM cross unadorned, ` + "LOW/absent needs the operator’s ackLowConfidence"
-  };
-}
-function reviewGradingInput(root, reviewAnswer, ackLowConfidence, fs) {
-  if (reviewAnswer === undefined)
-    return;
-  const path = join(root, reviewAnswer);
-  let isFile = false;
-  try {
-    isFile = fs.statSync(path).isFile();
-  } catch {
-    isFile = false;
-  }
-  return { answer: isFile ? fs.readFileSync(path, "utf8") : "", ackLowConfidence };
-}
-function buildReviewGateArtifact(wbs, taskContent, deferrals, review) {
-  const confidence = review === undefined ? null : reviewConfidenceViolation(review.answer, review.ackLowConfidence);
-  const contractViolations = [...reviewContractViolations(taskContent), ...confidence === null ? [] : [confidence]];
+function buildReviewGateArtifact(wbs, taskContent, deferrals) {
+  const contractViolations = reviewContractViolations(taskContent);
   const items = [
     ...blockingReviewFindings(taskContent, deferrals),
     ...contractViolations.map((v) => ({
@@ -390,7 +351,6 @@ function parseScanArgs(argv, cwd, defaultTmpDir) {
   let spurBin;
   let root = cwd;
   let tmpDir = defaultTmpDir;
-  let reviewAnswer;
   for (let i = 0;i < argv.length; i++) {
     const a = argv[i];
     if (a === undefined)
@@ -401,8 +361,6 @@ function parseScanArgs(argv, cwd, defaultTmpDir) {
       root = argv[++i] ?? root;
     else if (a === "--tmp-dir")
       tmpDir = argv[++i] ?? tmpDir;
-    else if (a === "--review-answer")
-      reviewAnswer = argv[++i];
     else if (a === "--help" || a === "-h")
       return null;
     else if (mode === "")
@@ -410,7 +368,7 @@ function parseScanArgs(argv, cwd, defaultTmpDir) {
     else if (wbs === "")
       wbs = a;
   }
-  return mode === "" || wbs === "" ? null : { mode, wbs, spurBin, root, tmpDir, reviewAnswer };
+  return mode === "" || wbs === "" ? null : { mode, wbs, spurBin, root, tmpDir };
 }
 
 // plugins/sp/lib/spur-bin.ts
@@ -420,7 +378,7 @@ function spurCommand(spurBin) {
 }
 
 // plugins/sp/scripts/residual-scan.ts
-var RESIDUAL_SCAN_USAGE = "usage: residual-scan.ts <scan|fold|settle|report|review-gate> <wbs> [--spur-bin <bin>] [--root <dir>] [--tmp-dir <dir>] [--review-answer <path>]";
+var RESIDUAL_SCAN_USAGE = "usage: residual-scan.ts <scan|fold|settle|report|review-gate> <wbs> [--spur-bin <bin>] [--root <dir>] [--tmp-dir <dir>]";
 function run(cmd, args, cwd) {
   const result = spawnSync(cmd, args, { cwd, encoding: "utf8" });
   if (result.error !== undefined)
@@ -515,8 +473,7 @@ function reviewGateMode(opts, env, io) {
   const runDir = join2(opts.root, ".spur", "run");
   fs.mkdirSync(runDir, { recursive: true });
   const { content } = loadTask(env, opts.spurBin, opts.wbs, opts.root);
-  const grading = reviewGradingInput(opts.root, opts.reviewAnswer, env.ackLowConfidence, fs);
-  const gate = buildReviewGateArtifact(opts.wbs, content, readDeferrals(runDir, opts.wbs), grading);
+  const gate = buildReviewGateArtifact(opts.wbs, content, readDeferrals(runDir, opts.wbs));
   fs.writeFileSync(join2(runDir, `${opts.wbs}-residuals.json`), `${JSON.stringify(gate.artifact, null, 2)}
 `);
   io.out(gate.note);
@@ -671,9 +628,7 @@ export {
   parseScanArgs,
   recordedVerdictPath,
   renderReport,
-  reviewConfidenceViolation,
   reviewContractViolations,
-  reviewGradingInput,
   scanResiduals2 as scanResiduals,
   verdictDisagreementNote
 };

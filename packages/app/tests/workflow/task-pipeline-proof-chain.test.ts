@@ -4,7 +4,6 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { getEnvVars } from '@gobing-ai/spur-config';
 import { parse as parseYaml } from 'yaml';
-import { aggregateVerifyVerdict } from '../../src/services/verify-verdict';
 import { extractResolvedWorkflowFacts } from '../../src/workflow/composition-baseline';
 
 // Task 0703 (ADR-071): the task-pipeline proof chain must form ONE immutable bracket around the
@@ -282,8 +281,8 @@ describe('task-pipeline proof-input completeness and honest review evidence (tas
             .map((a) => String((a.options as Record<string, unknown> | undefined)?.command ?? ''))
             .map((c) => c.replace(/\n/g, ' '));
 
-    test('the workflow identity carries the current contract version (v6: the confidence row warns only for an unacknowledged LOW/absent level)', () => {
-        expect((DEF as unknown as { version: string }).version).toBe('6');
+    test('the workflow identity carries the current contract version (v7: the asserted confidence machinery is retired, F511)', () => {
+        expect((DEF as unknown as { version: string }).version).toBe('7');
     });
 
     test('a featureSpecPath var exists and defaults to empty (orphan tasks stay compatible)', () => {
@@ -342,9 +341,8 @@ describe('task-pipeline proof-input completeness and honest review evidence (tas
     });
 
     test('the verify stamp marks review completed only on a matching marker (R4)', () => {
-        // Located by `capturePoint`: since the session finding after 1088 the verify state has a
-        // second shell that also writes `.spur/run/<wbs>-verdict.json` (the confidence check row),
-        // and only the stamp carries the proof block.
+        // Located by `capturePoint`: only the stamp shell writes the proof block, and — since F511
+        // retired the confidence-row shell — it is the verify state's LAST action.
         const stamp = shellCommandsOf('verify').find((c) => c.includes('capturePoint'));
         expect(stamp).toBeDefined();
         // Default is skipped — an unexecuted review is never reported completed. 0823 moved the
@@ -428,13 +426,12 @@ describe('task-pipeline busy-retry classifiers, done guard projection, route-id 
     test('the record→done guard checks the done target with --as done and keeps verdict/proof backstops (R6)', () => {
         const guard = cmdOf('record', 'done');
         expect(guard).toContain('task check $wbs --as done');
-        // The backstops stay: PASS verdict + digest match on the proof block + the confidence rule
-        // (session finding after 1088). 0874's named reads became ONE `jq -e` predicate, which is
-        // also what the ADR-115 guard budget asks for — same semantics, fewer logical commands.
+        // The backstops stay: PASS verdict + digest match on the proof block (the F511 confidence
+        // rule is retired). 0874's named reads became ONE `jq -e` predicate, which is also what the
+        // ADR-115 guard budget asks for — same semantics, fewer logical commands.
         expect(guard).toContain('jq -e --arg p "$proofDigest"');
         expect(guard).toContain('.verdict == "PASS"');
         expect(guard).toContain('((.proof.digest // "") == $p)');
-        expect(guard).toContain('(.confidence // "LOW") != "LOW" or $ack == "true"');
         // No unprojected plain check remains.
         expect(guard.includes('task check $wbs &&')).toBe(false);
     });
@@ -491,170 +488,74 @@ describe('task-pipeline busy-retry classifiers, done guard projection, route-id 
     });
 });
 
-// Session finding after 1088 (task 1068 follow-up): the verify answer's `Confidence:` line was
-// captured, linted and recorded, and then ignored — a PASS at LOW confidence certified exactly
-// like HIGH. These pin the gate that now reads it, and the operator acknowledgement that is the
-// only way to certify a verdict the verifier would not stand behind.
-describe('task-pipeline confidence gate (session finding after 1088)', () => {
-    const runSh = (script: string, cwd: string, env?: Record<string, string>): { code: number; stderr: string } => {
+// F511 (task 1207): the asserted `Confidence: HIGH|MEDIUM|LOW` machinery was retired. A model
+// that can write PASS can write HIGH, so a self-graded level is not verification — anti-
+// hallucination lives in the cc skill family; spur certifies on deterministic evidence (PASS
+// verdict + proof digest at both completion boundaries). These pins keep the 1068-era gate from
+// being re-imported.
+describe('task-pipeline confidence retirement (F511, task 1207)', () => {
+    const runSh = (script: string, cwd: string): { code: number } => {
         const proc = Bun.spawnSync(['sh', '-c', script], {
             cwd,
-            env: env === undefined ? { ...getEnvVars() } : { ...getEnvVars(), ...env },
+            env: { ...getEnvVars() },
             stdout: 'pipe',
             stderr: 'pipe',
         });
-        return { code: proc.exitCode, stderr: proc.stderr.toString() };
+        return { code: proc.exitCode };
     };
 
-    /** Render the verify → record guard with the run's vars substituted for literals. */
-    const renderVerifyGuard = (cwd: string, ack: string): string =>
-        cmdOf('verify', 'record')
-            .replaceAll('$proofDigest', 'sha256:test-digest')
-            .replaceAll('$__runId', 'run-t-confidence')
-            .replaceAll('$__definitionDigest', 'sha256:def-digest')
-            .replaceAll('$ackLowConfidence', ack)
-            .replaceAll('$wbs', 't9002')
-            .replaceAll('../..', cwd);
-
-    function makeFixture(dir: string, confidence: string | undefined, rows = false): void {
-        mkdirSync(join(dir, '.spur', 'run'), { recursive: true });
-        const digest = 'sha256:test-digest';
-        const artifact = {
-            wbs: 't9002',
-            verdict: 'PASS',
-            ...(confidence === undefined ? {} : { confidence }),
-            ...(rows
-                ? {
-                      requirements: [{ id: 'R1', status: 'MET', evidence: 'test: covered' }],
-                      acceptanceCriteria: [
-                          { id: 'AC1', status: 'MET', evidenceType: 'test', evidence: 'test: covered' },
-                      ],
-                  }
-                : { requirements: [], acceptanceCriteria: [] }),
-            checks: [],
-            proof: {
-                digest,
-                runId: 'run-t-confidence',
-                definitionDigest: 'sha256:def-digest',
-                capturePoint: 'quality-gate-entry',
-                stages: {
-                    qualityGate: { status: 'PASS', digest },
-                    review: { status: 'completed', digest },
-                    verification: { status: 'PASS', digest },
-                },
-            },
-        };
-        writeFileSync(join(dir, '.spur', 'run', 't9002-verdict.json'), JSON.stringify(artifact));
-    }
-
-    test('the acknowledgement var exists and defaults empty (HIGH/MEDIUM need no ack)', () => {
-        const vars = (DEF as unknown as { vars: Record<string, unknown> }).vars;
-        expect(vars.ackLowConfidence).toBe('');
-    });
-
-    test('both completion guards read the confidence level (R: verify → record, record → done)', () => {
+    test('no completion guard reads the confidence level or the ack var', () => {
         for (const [from, to] of [
             ['verify', 'record'],
             ['record', 'done'],
         ] as const) {
             const guard = cmdOf(from, to);
-            expect(guard, `${from}→${to}`).toContain('--arg ack "$ackLowConfidence"');
-            // LOW (and an ABSENT level — fail closed) clears only with the operator's ack.
-            expect(guard, `${from}→${to}`).toContain('(.confidence // "LOW") != "LOW" or $ack == "true"');
+            expect(guard, `${from}→${to}`).not.toContain('confidence');
+            expect(guard, `${from}→${to}`).not.toContain('ackLowConfidence');
         }
     });
 
-    test('the verify state records a confidence check row before its proof-binding stamp', () => {
-        const verify = DEF.states.find((s) => s.id === 'verify');
-        const actions = verify?.onEnter ?? [];
-        const confidenceAction = actions.findIndex((a) => String(a.options?.command ?? '').includes('"confidence"'));
+    test('the ackLowConfidence var and the verify confidence-row action are gone; the stamp stays last', () => {
+        expect((DEF as unknown as { vars: Record<string, unknown> }).vars.ackLowConfidence).toBeUndefined();
+        const actions = DEF.states.find((s) => s.id === 'verify')?.onEnter ?? [];
+        expect(actions.some((a) => String(a.options?.command ?? '').includes('"confidence"'))).toBe(false);
         const stampIndex = actions.findIndex((a) => String(a.options?.command ?? '').includes('capturePoint'));
-        expect(confidenceAction).toBeGreaterThan(-1);
-        expect(actions[confidenceAction]?.kind).toBe('shell');
-        expect(String(actions[confidenceAction]?.options?.command)).toContain('map(select(.name != "confidence"))');
-        // The stamp stays last: the proof-chain bracket assertion depends on it.
         expect(stampIndex).toBe(actions.length - 1);
     });
 
-    test('behavioral: LOW is refused without the ack and admitted with it', () => {
-        const dir = mkdtempSync(join(tmpdir(), 'spur-conf-gate-'));
+    test('behavioral: a PASS artifact without any confidence field clears verify → record', () => {
+        const dir = mkdtempSync(join(tmpdir(), 'spur-conf-retired-'));
         try {
-            makeFixture(dir, 'LOW');
-            expect(runSh(renderVerifyGuard(dir, ''), dir).code).not.toBe(0);
-            expect(runSh(renderVerifyGuard(dir, 'true'), dir).code).toBe(0);
-            // HIGH and MEDIUM certify without an acknowledgement.
-            makeFixture(dir, 'HIGH');
-            expect(runSh(renderVerifyGuard(dir, ''), dir).code).toBe(0);
-            makeFixture(dir, 'MEDIUM');
-            expect(runSh(renderVerifyGuard(dir, ''), dir).code).toBe(0);
-            // An absent level is fail-closed: a pre-1068 artifact is not silently trusted.
-            makeFixture(dir, undefined);
-            expect(runSh(renderVerifyGuard(dir, ''), dir).code).not.toBe(0);
-            expect(runSh(renderVerifyGuard(dir, 'true'), dir).code).toBe(0);
+            mkdirSync(join(dir, '.spur', 'run'), { recursive: true });
+            const digest = 'sha256:test-digest';
+            const artifact = {
+                wbs: 't9002',
+                verdict: 'PASS',
+                requirements: [{ id: 'R1', status: 'MET', evidence: 'test: covered' }],
+                acceptanceCriteria: [{ id: 'AC1', status: 'MET', evidenceType: 'test', evidence: 'test: covered' }],
+                checks: [],
+                proof: {
+                    digest,
+                    runId: 'run-t-retired',
+                    definitionDigest: 'sha256:def-digest',
+                    capturePoint: 'quality-gate-entry',
+                    stages: {
+                        qualityGate: { status: 'PASS', digest },
+                        review: { status: 'completed', digest },
+                        verification: { status: 'PASS', digest },
+                    },
+                },
+            };
+            writeFileSync(join(dir, '.spur', 'run', 't9002-verdict.json'), JSON.stringify(artifact));
+            const guard = cmdOf('verify', 'record')
+                .replaceAll('$proofDigest', 'sha256:test-digest')
+                .replaceAll('$__runId', 'run-t-retired')
+                .replaceAll('$__definitionDigest', 'sha256:def-digest')
+                .replaceAll('$wbs', 't9002')
+                .replaceAll('../..', dir);
+            expect(runSh(guard, dir).code).toBe(0);
         } finally {
             rmSync(dir, { recursive: true, force: true });
-        }
-    });
-
-    /** Render the verify state's confidence-row shell with the run's vars substituted. */
-    const renderConfidenceRow = (ack: string): string => {
-        const verify = DEF.states.find((s) => s.id === 'verify');
-        const action = (verify?.onEnter ?? []).find((a) => String(a.options?.command ?? '').includes('"confidence"'));
-        expect(action, 'verify state has no confidence-row shell').toBeDefined();
-        return String(action?.options?.command ?? '')
-            .replaceAll('$ackLowConfidence', ack)
-            .replaceAll('$wbs', 't9002');
-    };
-
-    // The verify row and the two completion guards are one policy seen twice: the guard decides
-    // whether the pipeline may cross into record/done, and the row decides what the persisted
-    // artifact aggregates to for the CLI's independent done gate. When they disagree, the artifact
-    // is self-inconsistent and `done` is refused with no named reason — the MEDIUM-confidence
-    // defect this matrix pins (a level admitted by both guards, refused by the aggregate).
-    test('behavioral: the confidence row agrees with the guards at every level (HIGH/MEDIUM/LOW/absent)', () => {
-        const matrix: ReadonlyArray<readonly [string | undefined, string, boolean]> = [
-            ['HIGH', '', true],
-            ['HIGH', 'true', true],
-            ['MEDIUM', '', true],
-            ['MEDIUM', 'true', true],
-            ['LOW', '', false],
-            ['LOW', 'true', true],
-            [undefined, '', false],
-            [undefined, 'true', true],
-        ];
-        for (const [confidence, ack, admitted] of matrix) {
-            const dir = mkdtempSync(join(tmpdir(), 'spur-conf-row-'));
-            try {
-                makeFixture(dir, confidence, true);
-                const label = `${confidence ?? 'absent'}/ack=${ack === '' ? 'no' : 'yes'}`;
-                // The graph guard's decision is the contract the row must agree with.
-                expect(runSh(renderVerifyGuard(dir, ack), dir).code === 0, `guard ${label}`).toBe(admitted);
-                const row = renderConfidenceRow(ack);
-                const res = runSh(row, dir);
-                expect(res.code, `row ${label}: ${res.stderr}`).toBe(0);
-                const artifact = JSON.parse(readFileSync(join(dir, '.spur', 'run', 't9002-verdict.json'), 'utf8')) as {
-                    requirements: unknown[];
-                    acceptanceCriteria: unknown[];
-                    checks: Array<{ name?: string; status?: string; evidence?: string }>;
-                };
-                expect(artifact.checks.length, `confidence check recorded for ${label}: ${res.stderr}`).toBeGreaterThan(
-                    0,
-                );
-                expect(artifact.checks.find((c) => c.name === 'confidence')?.status, `confidence status ${label}`).toBe(
-                    admitted ? 'pass' : 'warn',
-                );
-                expect(
-                    aggregateVerifyVerdict({
-                        requirements: artifact.requirements as never,
-                        acceptanceCriteria: artifact.acceptanceCriteria as never,
-                        checks: artifact.checks as never,
-                        taskCheckPassed: true,
-                    }),
-                    `aggregate ${label}`,
-                ).toBe(admitted ? 'PASS' : 'PARTIAL');
-            } finally {
-                rmSync(dir, { recursive: true, force: true });
-            }
         }
     });
 });
@@ -719,7 +620,7 @@ describe('task-pipeline review-failure routing (session finding after 1088)', ()
             const stub = join(dir, 'stub-spur.sh');
             const cleanReview = JSON.stringify({
                 content:
-                    '### Review\n\n**Confidence:** HIGH\n\n| Priority | Finding | Location | Disposition |\n| --- | --- | --- | --- |\n| P4 (advisory) | Note | src/d.ts:1 | ACCEPTED |\n',
+                    '### Review\n\n| Priority | Finding | Location | Disposition |\n| --- | --- | --- | --- |\n| P4 (advisory) | Note | src/d.ts:1 | ACCEPTED |\n',
             }).replaceAll("'", "'\\''");
             writeFileSync(stub, `#!/bin/sh\ncase "$2" in\n  show) printf '%s' '${cleanReview}' ;;\nesac\n`);
             chmodSync(stub, 0o755);
@@ -735,8 +636,8 @@ describe('task-pipeline review-failure routing (session finding after 1088)', ()
                 .replaceAll('$spurBin', stub)
                 .replaceAll('$wbs', '1122');
             for (const [body, expected] of [
-                ['Verdict: PASS\nConfidence: HIGH\n', 0],
-                ['**Verdict: PASS**\nConfidence: HIGH\n', 0],
+                ['Verdict: PASS\n', 0],
+                ['**Verdict: PASS**\n', 0],
                 ['Verdict: FAIL\n', 1],
                 ['PASS without the token\n', 1],
             ] as const) {
@@ -779,12 +680,10 @@ describe('task-pipeline review PASS-edge review-gate (task 1122)', () => {
             expect(guard).toContain('residual-scan.mjs');
             expect(guard).toContain('$wbs');
             expect(guard).toContain('$spurBin');
-            // One AND-list: the gate runs only after the Verdict grep and the graded-PASS
-            // predicate, so a missing scanner, an ungraded/LOW PASS, or an open P1-P3 finding fails
-            // the edge closed into the review-fail-triage catch-all. Since the session review the
-            // grade rides the scanner (ADR-115 budgets a guard at 5 logical commands) — the edge
-            // names the answer file instead of re-implementing the predicate inline.
-            expect(guard).toContain('--review-answer ".spur/run/$__runId-review-answer.txt"');
+            // One AND-list: the gate runs only after the Verdict grep, so a missing scanner or an
+            // open P1-P3 finding fails the edge closed into the review-fail-triage catch-all. The
+            // grade rides the scanner; since F511 no answer file is handed over and no ack exists.
+            expect(guard).not.toContain('--review-answer');
             expect(guard).not.toContain('$ackLowConfidence');
             expect(guard).not.toContain(';');
         }
@@ -852,122 +751,15 @@ describe('task-pipeline review PASS-edge review-gate (task 1122)', () => {
             expect(desc).toContain('wrap residual');
         }
     });
-});
-
-// Task 1204: the review answer's `Confidence:` line was convention-only — a PASS at LOW (or with
-// no level at all) crossed the PASS edges exactly like HIGH. These pin the graded-PASS contract:
-// both PASS edges admit HIGH/MEDIUM unadorned; LOW or absent clears only through the operator's
-// `ackLowConfidence` var — the same policy the verify chain has enforced since 1068/1088.
-describe('task-pipeline review confidence gate (task 1204)', () => {
-    const runSh = (script: string, cwd: string, spurBin: string, ack: string): number =>
-        Bun.spawnSync(['sh', '-c', script], {
-            cwd,
-            env: { ...getEnvVars(), wbs: '1204', spurBin, ackLowConfidence: ack },
-            stdout: 'pipe',
-            stderr: 'pipe',
-        }).exitCode;
-
-    /** Render a review PASS edge with the run's vars substituted for literals. */
-    const renderReviewGuard = (to: 'verify' | 'approve', dir: string, runId: string): string =>
-        cmdOf('review', to)
-            .replaceAll('$profile', 'auto')
-            .replaceAll('$__runId', runId)
-            .replaceAll('../..', dir)
-            .replaceAll('$spurBin', join(dir, 'stub-spur.sh'))
-            .replaceAll('$wbs', '1204');
-
-    // Same fixture shape as the 1122 block: a clean P4-only review whose SECTION carries a valid
-    // HIGH level — `residual-scan review-gate` already fail-closes missing/out-of-enum levels at
-    // these same edges (review-contract), so a passing scanner is the baseline and the ANSWER
-    // file's level is the only variable under test; the scanner owns grading and acknowledgement.
-    function makeCase(dir: string, runId: string, answer: string, installed = false): void {
-        mkdirSync(join(dir, '.spur', 'run'), { recursive: true });
-        const stub = join(dir, 'stub-spur.sh');
-        const cleanReview = JSON.stringify({
-            content:
-                '### Review\n\n**Confidence:** HIGH\n\n| Priority | Finding | Location | Disposition |\n| --- | --- | --- | --- |\n| P4 (advisory) | Note | src/d.ts:1 | ACCEPTED |\n',
-        }).replaceAll("'", "'\\''");
-        writeFileSync(stub, `#!/bin/sh\ncase "$2" in\n  show) printf '%s' '${cleanReview}' ;;\nesac\n`);
-        chmodSync(stub, 0o755);
-        writeFileSync(
-            join(dir, '.spur', 'run', `${runId}-script-root.json`),
-            `${JSON.stringify({ mode: installed ? 'installed' : 'source-repo', dir: SCRIPTS_DIR })}\n`,
-        );
-        writeFileSync(join(dir, '.spur', 'run', `${runId}-review-answer.txt`), answer);
-    }
-
-    test('both PASS edges demand a graded PASS and delegate the grade to review-gate', () => {
+    // F511 (task 1207): the graded-PASS contract (1204) was retired with the asserted confidence
+    // machinery — the edges keep delegating the residual check to review-gate, but no longer hand
+    // it the answer file or consult any operator ack.
+    test('the PASS edges delegate to review-gate without an answer grade or ack (F511)', () => {
         for (const to of ['verify', 'approve'] as const) {
             const guard = cmdOf('review', to);
-            // The graded-PASS rule has to hold on the edge in effect. The session review moved the
-            // grading off the edge — ADR-115 budgets a guard at 5 logical commands and the inline
-            // predicate put these at 7 and 6, which made `workflow validate` exit 1 for the shipped
-            // pipeline — so the edge must name the answer file it hands to the scanner, and must not
-            // re-implement the predicate inline.
             expect(guard, `review→${to}`).toContain('review-gate');
-            expect(guard, `review→${to}`).toContain('--review-answer ".spur/run/$__runId-review-answer.txt"');
-            expect(guard, `review→${to}`).not.toContain('$ackLowConfidence');
-        }
-    });
-
-    for (const to of ['verify', 'approve'] as const) {
-        for (const installed of [false, true]) {
-            test(`confidence policy: review→${to}, ${installed ? 'installed' : 'source'} scanner`, () => {
-                for (const [answer, ack, expected] of [
-                    ['Verdict: PASS\nConfidence: HIGH\n', '', 0],
-                    ['Verdict: PASS\n**Confidence:** MEDIUM\n', '', 0],
-                    ['Verdict: PASS\nConfidence: LOW\n', '', 1],
-                    ['Verdict: PASS\n', '', 1],
-                    ['Verdict: PASS\nConfidence: LOW\n', 'true', 0],
-                    ['Verdict: PASS\n', 'true', 0],
-                    ['Verdict: PASS\nConfidence: UNKNOWN\n', '', 1],
-                    ['Verdict: PASS\nConfidence: UNKNOWN\n', 'true', 0],
-                    ['Verdict: PASS\nConfidence: HIGH\nConfidence: LOW\n', '', 1],
-                    ['Verdict: PASS\nConfidence: HIGH\nConfidence: LOW\n', 'true', 0],
-                    ['Verdict: PASS\nConfidence: LOW\n', 'TRUE', 1],
-                    ['Verdict: FAIL\nConfidence: HIGH\n', 'true', 1],
-                    ['Confidence: HIGH\n', 'true', 1],
-                ] as const) {
-                    const dir = mkdtempSync(join(tmpdir(), 'spur-review-conf-'));
-                    try {
-                        const runId = `run-t-1204-${to}`;
-                        makeCase(dir, runId, answer, installed);
-                        const code = runSh(renderReviewGuard(to, dir, runId), dir, join(dir, 'stub-spur.sh'), ack);
-                        expect(code, `review→${to}: ${JSON.stringify(answer)} ack=${ack}`).toBe(expected);
-                    } finally {
-                        rmSync(dir, { recursive: true, force: true });
-                    }
-                }
-            });
-        }
-    }
-
-    test('acknowledgement cannot bypass findings, the recorded contract, or an unavailable scanner', () => {
-        for (const to of ['verify', 'approve'] as const) {
-            for (const failure of ['finding', 'contract', 'scanner'] as const) {
-                const dir = mkdtempSync(join(tmpdir(), 'spur-review-ack-'));
-                try {
-                    const runId = `run-t-1204-${to}`;
-                    makeCase(dir, runId, 'Verdict: PASS\nConfidence: LOW\n');
-                    const stub = join(dir, 'stub-spur.sh');
-                    if (failure === 'scanner') {
-                        writeFileSync(
-                            join(dir, '.spur', 'run', `${runId}-script-root.json`),
-                            JSON.stringify({ mode: 'source-repo', dir: join(dir, 'missing') }),
-                        );
-                    } else {
-                        const content =
-                            failure === 'finding'
-                                ? '### Review\n\n**Confidence:** HIGH\n\n| Priority | Finding | Location | Disposition |\n| --- | --- | --- | --- |\n| P2 | Missing validation | src/d.ts:1 | OPEN |\n'
-                                : '### Review\n\nNo confidence recorded.\n';
-                        const task = JSON.stringify({ content }).replaceAll("'", "'\\''");
-                        writeFileSync(stub, `#!/bin/sh\ncase "$2" in\n  show) printf '%s' '${task}' ;;\nesac\n`);
-                    }
-                    expect(runSh(renderReviewGuard(to, dir, runId), dir, stub, 'true'), `${to}: ${failure}`).toBe(1);
-                } finally {
-                    rmSync(dir, { recursive: true, force: true });
-                }
-            }
+            expect(guard, `review→${to}`).not.toContain('--review-answer');
+            expect(guard, `review→${to}`).not.toContain('ackLowConfidence');
         }
     });
 });

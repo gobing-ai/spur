@@ -171,17 +171,13 @@ Two branches reach the bounded repair hop, not one (session finding after 1088):
   an on-graph, bounded path to remediation instead of dead-ending the run, and the fix re-enters
   quality → review → verify on a freshly captured proof digest.
 
-The completion gate also reads the verifier's confidence (session finding after 1088): the verify
-answer's `Confidence: HIGH|MEDIUM|LOW` line reaches the verdict artifact, and both `verify → record`
-and `record → done` refuse a `LOW` (or absent) level unless the run was launched with
-`--vars '{"ackLowConfidence":"true"}'`. A PASS the verifier would not stand behind is an operator
-risk decision, so it takes an operator acknowledgement — not a silent certification.
-The CLI-layer done gate (`done-transition-guard`, task 1068 R3) separately requires the artifact to *state* a
-level at all: a PASS artifact whose `confidence` is missing is denied there too, and a present but
-out-of-vocabulary value fails the read closed (`invalid confidence field`), so a hand-driven
-`task update <wbs> done` — which is how this pipeline itself reaches `done` (`--no-lifecycle`) —
-cannot certify a verdict that carries no confidence. `LOW` is accepted at that gate; the
-acknowledgement rule above stays the pipeline's.
+The completion gate reads deterministic evidence only (F511, task 1207): both `verify → record` and
+`record → done` check the proof digests in `.spur/run/<wbs>-verdict.json` — verdict PASS, matching
+run/definition digests, review stage completed. No confidence is read, stated or acknowledged; the
+asserted `Confidence:` line and the `ackLowConfidence` operator var were retired because a model
+that can write a PASS can write `HIGH` — the grade verified nothing. What protects a hand-driven
+`task update <wbs> done` is unchanged: the digests must match the run's captured proof, and the
+review stage must actually be completed in the artifact.
 
 Agentic steps use the pure slash inputs declared by each YAML `agent.run` action (ADR-043). The
 workflow engine dispatches them; the interactive driver invokes their backing skills in-session.

@@ -2335,3 +2335,31 @@ owner split this entry established.
   removal work runs under its own task (no override flag).
 - **Retains:** ADR-135 (graph-validated status writes), ADR-022 (lifecycles are workflow definitions).
 - **Detail:** [task deprecated status](design/task-deprecated-status.md).
+
+## ADR-138: Asserted Confidence Is Not Verification; Spur Gates on Deterministic Evidence
+
+- **Status:** Accepted (implemented) · **Date:** 2026-10-14 · **Extends:** ADR-131; supersedes the
+  machine-confidence contract of tasks 1068/1123/1133/1204 (feature F51, cancelled)
+- **Decision:** the model-asserted `Confidence: HIGH|MEDIUM|LOW` family is retired from spur. Verify
+  answers carry no `Confidence:` line, verdict artifacts no `confidence` field, the review gate no
+  grading step, the task pipeline (v7) no confidence check row, no review-edge grade and no
+  `ackLowConfidence` operator var, and the report-corpus rule `config/rules/docs/verdict-confidence.yaml`
+  is deleted. Gates read what a hand-edited answer cannot fake: proof digests, the `Verdict:` grep,
+  findings disposition, citations (`evidence-citation`), hedge refusal (`evidence-hedged`), AC identity.
+  Ownership rule: anti-hallucination belongs to the agent-side `cc:anti-hallucination` skill;
+  spur gates only on deterministic, re-checkable evidence. Alternatives rejected: keeping the grade as
+  advisory telemetry (re-import pressure — 1068 already resurrected it once after 1088 removed it);
+  keeping only the done-gate vocabulary check (still grades a self-claim). Legacy artifacts and answers
+  that still carry a confidence key parse with the value ignored (read-compat, unknown values tolerated).
+- **Why:** a model that can write a PASS can write `Confidence: HIGH` — the grade asserts nothing the
+  verdict does not, so gating on it added ceremony and false safety without adding evidence. The
+  1133 coherence lint proved the point: it could only compare one self-claim against another.
+- **Consequence:** a PASS that a reviewer would formerly have downgraded to `LOW` now crosses the same
+  boundaries; the mitigation is in the report body — name evidence gaps and assumptions explicitly, so
+  a reader can re-check them. Contract docs restate the boundary (code-verification SKILL Step 11,
+  `verdict-schema.md`, `dev-review.md`, `super-reviewer.md`, execution-workflow/inline-pipeline-driver
+  references, dev-review); pinning tests assert the machinery's absence.
+- **Retains:** the DERIVED confidence family is a different thing and stays — feature-verification
+  receipts (1196, ADR-131 amendment) with their `ackLowConfidence` var and `feature-verification.yaml`
+  contract, the decision subsystem's numeric confidence, history-anatomy report reading, the
+  `sourced-api-claims` citation rule, and the changelog "no confidence ratings" invariant.

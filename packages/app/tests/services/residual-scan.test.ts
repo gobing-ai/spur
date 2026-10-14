@@ -19,42 +19,10 @@ import {
     parseScanArgs,
     recordedVerdictPath,
     renderReport,
-    reviewConfidenceViolation,
     reviewContractViolations,
-    reviewGradingInput,
     scanResiduals,
     verdictDisagreementNote,
 } from '../../src/services/residual-scan';
-
-describe('review answer grading (task 1204)', () => {
-    test('only exact acknowledgement admits LOW and unknown grades', () => {
-        for (const answer of ['Confidence: LOW', '', 'Confidence: OTHER', 'Confidence: HIGH\nConfidence: LOW']) {
-            for (const ack of [undefined, '', 'false', 'TRUE', '1']) {
-                expect(reviewConfidenceViolation(answer, ack)).not.toBeNull();
-            }
-            expect(reviewConfidenceViolation(answer, 'true')).toBeNull();
-        }
-        for (const level of ['HIGH', 'MEDIUM']) {
-            expect(reviewConfidenceViolation(`**Confidence:** ${level}`, undefined)).toBeNull();
-        }
-    });
-
-    test('named missing or non-file answers grade as unknown while omitted inputs remain compatible', () => {
-        const dir = mkdtempSync(join(tmpdir(), 'review-grade-'));
-        try {
-            expect(reviewGradingInput(dir, undefined, undefined, fsp)).toBeUndefined();
-            expect(reviewGradingInput(dir, 'missing.txt', undefined, fsp)).toEqual({
-                answer: '',
-                ackLowConfidence: undefined,
-            });
-            expect(reviewGradingInput(dir, '.', 'true', fsp)).toEqual({ answer: '', ackLowConfidence: 'true' });
-            writeFileSync(join(dir, 'answer.txt'), 'Confidence: HIGH');
-            expect(reviewGradingInput(dir, 'answer.txt', undefined, fsp)?.answer).toBe('Confidence: HIGH');
-        } finally {
-            rmSync(dir, { recursive: true, force: true });
-        }
-    });
-});
 
 /** Task 1065 R3: fold freshness between run and durable verdict copies. */
 describe('verdict copy freshness (task 1065)', () => {
@@ -353,15 +321,9 @@ describe('review-finding parser hardening (task 1065 R4)', () => {
 
 /** Shared Review-section table head for the task 1122 review-gate tests. */
 const gateTable = (rows: string[]): string =>
-    [
-        '### Review',
-        '',
-        '**Confidence:** HIGH',
-        '',
-        '| Priority | Finding | Location | Disposition |',
-        '| --- | --- | --- | --- |',
-        ...rows,
-    ].join('\n');
+    ['### Review', '', '| Priority | Finding | Location | Disposition |', '| --- | --- | --- | --- |', ...rows].join(
+        '\n',
+    );
 
 /** The plugin script's fail-closed exit decision for the review-gate mode (task 1122 R2). */
 const gateExit = (counts: { blocking: number }): 0 | 1 => (counts.blocking > 0 ? 1 : 0);
@@ -466,36 +428,14 @@ describe('buildReviewGateArtifact (task 1122 R2)', () => {
 });
 
 describe('review-report contract at the gate (task 1070 R1 on the review side)', () => {
-    const reviewWith = (confidence: string, rows: string[]): string =>
+    const reviewWith = (rows: string[]): string =>
         [
             '### Review',
-            '',
-            confidence,
             '',
             '| Priority | Finding | Location | Disposition |',
             '| --- | --- | --- | --- |',
             ...rows,
         ].join('\n');
-
-    test('a report with no valid Confidence line is a blocking contract violation', () => {
-        for (const body of [
-            reviewWith('', ['| P4 (advisory) | Fuzzy name | `src/e.ts:20` | ACCEPTED |']),
-            reviewWith('**Confidence:** PROBABLY', ['| P4 (advisory) | Fuzzy name | `src/e.ts:20` | ACCEPTED |']),
-            reviewWith('**Confidence:** HIGH\n\n**Confidence:** LOW', [
-                '| P4 (advisory) | Fuzzy name | `src/e.ts:20` | ACCEPTED |',
-            ]),
-        ]) {
-            const violations = reviewContractViolations(body);
-            expect(violations).toHaveLength(1);
-            expect(violations[0]?.location).toBe('task-file:Review');
-            expect(violations[0]?.text).toContain('no single valid');
-            const gate = buildReviewGateArtifact('1070', body, []);
-            expect(gate.artifact.items.some((i) => i.category === 'review-contract' && i.class === 'blocking')).toBe(
-                true,
-            );
-            expect(gateExit(gate.artifact.counts)).toBe(1);
-        }
-    });
 
     test('an external API/library claim needs a same-cell citation in the Finding cell', () => {
         const claims = [
@@ -505,31 +445,23 @@ describe('review-report contract at the gate (task 1070 R1 on the review side)',
             '`OpenAPIHandler.handle()` swallows the error',
         ];
         for (const claim of claims) {
-            const uncited = reviewContractViolations(
-                reviewWith('**Confidence:** MEDIUM', [`| P3 | ${claim} | \`src/lib/rpc.ts:91\` | OPEN |`]),
-            );
+            const uncited = reviewContractViolations(reviewWith([`| P3 | ${claim} | \`src/lib/rpc.ts:91\` | OPEN |`]));
             expect(uncited).toHaveLength(1);
             expect(uncited[0]?.text).toContain('without a same-cell citation');
             expect(uncited[0]?.location).toBe('src/lib/rpc.ts:91');
             // A citation IN THE SAME CELL clears it; the Location column does not stand in.
             for (const cited of [`${claim} — see \`src/lib/rpc.ts:91\``, `${claim} — https://orpc.unnoq.com/docs`]) {
                 expect(
-                    reviewContractViolations(
-                        reviewWith('**Confidence:** MEDIUM', [`| P3 | ${cited} | \`src/lib/rpc.ts:91\` | OPEN |`]),
-                    ),
+                    reviewContractViolations(reviewWith([`| P3 | ${cited} | \`src/lib/rpc.ts:91\` | OPEN |`])),
                 ).toEqual([]);
             }
         }
     });
 
-    // The Confidence half above is asserted at BOTH layers (the function's return and the blocking
-    // gate outcome); the citation half was only asserted at the function. These two cases close that
-    // asymmetry: the citation check must actually stop the review gate, and the two halves of the
-    // contract must fire independently rather than one masking the other.
     test('a citation violation blocks the review gate, and a cited claim does not', () => {
         // P4/advisory keeps the findings' own blocking rule out of the way, so the only thing under
         // test is the citation check.
-        const uncited = reviewWith('**Confidence:** MEDIUM', [
+        const uncited = reviewWith([
             '| P4 (advisory) | `@orpc/client` swallows the error | `src/lib/rpc.ts:91` | ACCEPTED |',
         ]);
         const blocked = buildReviewGateArtifact('1070', uncited, []);
@@ -541,7 +473,7 @@ describe('review-report contract at the gate (task 1070 R1 on the review side)',
 
         // The same finding with a same-cell citation leaves the review gate green: what is graded is
         // an uncited claim, not the presence of a claim marker.
-        const cited = reviewWith('**Confidence:** MEDIUM', [
+        const cited = reviewWith([
             '| P4 (advisory) | `@orpc/client` swallows the error — see `src/lib/rpc.ts:91` | `src/lib/rpc.ts:91` | ACCEPTED |',
         ]);
         const green = buildReviewGateArtifact('1070', cited, []);
@@ -549,27 +481,10 @@ describe('review-report contract at the gate (task 1070 R1 on the review side)',
         expect(gateExit(green.artifact.counts)).toBe(0);
     });
 
-    test('an uncited claim and a missing Confidence line are independent blocking violations', () => {
-        // One report with both halves of the contract broken: neither check may mask the other, and
-        // each violation keeps its own location.
-        const both = reviewWith('', [
-            '| P4 (advisory) | `@orpc/client` swallows the error | `src/lib/rpc.ts:91` | ACCEPTED |',
-        ]);
-        const violations = reviewContractViolations(both);
-        expect(violations).toHaveLength(2);
-        expect(violations.map((v) => v.location).sort()).toEqual(['src/lib/rpc.ts:91', 'task-file:Review']);
-        expect(violations.some((v) => v.text.includes('no single valid'))).toBe(true);
-        expect(violations.some((v) => v.text.includes('without a same-cell citation'))).toBe(true);
-
-        const gate = buildReviewGateArtifact('1070', both, []);
-        expect(gate.artifact.items.filter((i) => i.category === 'review-contract')).toHaveLength(2);
-        expect(gateExit(gate.artifact.counts)).toBe(1);
-    });
-
     test('claim-free findings and a missing Review section raise nothing', () => {
         expect(
             reviewContractViolations(
-                reviewWith('**Confidence:** HIGH', [
+                reviewWith([
                     '| P2 (major) | Missing validation | `src/c.ts:8` | OPEN |',
                     '| P4 (advisory) | Fuzzy name | `src/e.ts:20` | ACCEPTED |',
                 ]),
@@ -584,7 +499,7 @@ describe('review-report contract at the gate (task 1070 R1 on the review side)',
         const artifact = scanResiduals({
             wbs: '1070',
             base: null,
-            taskContent: reviewWith('', ['| P4 (advisory) | Fuzzy name | `src/e.ts:20` | ACCEPTED |']),
+            taskContent: reviewWith(['| P4 (advisory) | Fuzzy name | `src/e.ts:20` | ACCEPTED |']),
             addedLines: [],
             stagingResidue: [],
             deferrals: [],

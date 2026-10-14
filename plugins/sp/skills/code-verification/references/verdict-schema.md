@@ -35,42 +35,21 @@ interface VerifyVerdict {
     status: 'pass' | 'fail' | 'warn';
     evidence: string;
   }>;
-  /** Verifier confidence (task 1068 R3). REQUIRED for PASS — the done gate denies
-   *  a confidence-less PASS. Accepted case-insensitively, normalized to uppercase. */
-  confidence?: 'HIGH' | 'MEDIUM' | 'LOW';
+  // F511 (task 1207): no asserted `confidence` field. Legacy artifacts that still carry one
+  // parse with the value ignored — unknown legacy keys are tolerated on read.
 }
 ```
 
-## Confidence level (task 1068 R3)
+## No asserted confidence (F511, task 1207)
 
-A PASS verdict must state the verifier's confidence: `"confidence": "HIGH" | "MEDIUM" | "LOW"`.
-The value is case-insensitive on read (normalized to uppercase), but a present value outside the
-enum invalidates the artifact, and a PASS with the field absent is denied at the `* → done`
-transition with a remediation naming the field (`--force-done` remains the documented escape).
-The verify answer's `Confidence:` lint rule (producer side) already guarantees the field for
-pipeline-produced artifacts; this closes the hand-authored / pre-1068 artifact hole.
-
-### Coherence: the level must be earned (task 1133)
-
-Presence and vocabulary are not enough — the level has to match the rows in the same answer, so the
-lint rejects a level that contradicts its own evidence. Two rejection classes, both addressed to the
-`Confidence:` line and both capped by the shared `ANSWER_LINT_MAX_FINDINGS` budget:
-
-- `confidence-unwarranted` — `HIGH` while any requirement row normalizes to `PARTIAL`/`UNMET`, any
-  acceptance-criteria row does not normalize to `MET`, or any `MET` row's evidence is hedged.
-  A `HIGH` claim says the evidence needs no re-check; a non-MET or hedged row says the opposite.
-- `confidence-understated` — `LOW` while at least one requirement row exists and every requirement
-  and acceptance-criteria row normalizes to `MET`. The evidence already did the work, so `LOW`
-  misreports the state as unproven.
-
-`MEDIUM` carries no coherence rule in either direction: it is the level a verifier uses for a caveat
-with no row to point at, and closing it would force either an overclaimed `HIGH` or an unusable
-`LOW`. The level is normalized to uppercase before the decision, so `high` is judged as `HIGH`.
-
-Set the level from the rows, not the mood: all rows `MET` with fresh evidence is `HIGH`; a
-`PARTIAL`/`UNMET` row or a hedge means `MEDIUM`, not `HIGH`. An unwarranted level does not merely
-warn — the lint rejects the answer and no verdict artifact is written, so the level is worth
-choosing deliberately before the verdict line is finalized.
+Verdict artifacts carry no `confidence` field and verify answers no `Confidence:` line. The
+1068/1133 machinery that required, linted and coherence-checked a model-asserted
+`HIGH | MEDIUM | LOW` was retired: a verifier that can write a PASS can write `HIGH`, so the grade
+verifies nothing. What the level compressed belongs in the evidence cells — cite fresh executable
+evidence and name residual gaps explicitly. The done gate no longer denies a confidence-less PASS:
+it checks the proof digests, which are the part a hand-edited artifact cannot fake. The DERIVED
+confidence family is a different thing and stays: feature-verification receipts (ADR-131, 1196),
+the decision subsystem threshold, history-anatomy reading.
 
 ## Compatibility alias: `scenario` row key
 

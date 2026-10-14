@@ -19,14 +19,6 @@
 # done guard closed, and re-records Testing before the failed edge); done settles
 # deferrals; failed renders the recovery report. No new state, edge, or model query.
 #
-# Confidence gate (session finding after 1088, task 1068 follow-up): the verify answer has
-# carried a `Confidence: HIGH|MEDIUM|LOW` line since 1068, and nothing read it — a PASS at
-# LOW confidence certified exactly like HIGH. The verify stamp now records a `confidence`
-# check row, and BOTH completion guards (verify → record, record → done) refuse a LOW (or
-# absent) level unless the run was launched with `--vars '{"ackLowConfidence":"true"}'`.
-# The acknowledgement is an operator decision, not a model one: it is the only way to
-# certify a verdict the verifier itself would not stand behind.
-#
 # Review-failure routing (session finding after 1088): `review` had no outgoing edge for a
 # FAIL verdict, so a failing review could only be remediated by driving the graph by hand
 # (re-entering `test` and hand-emitting rows). The review stage now derives
@@ -51,9 +43,8 @@ kind: state-machine
 name: task-pipeline
 # 0772 R2: explicit identity tag. Set only after the proof failure-path tests
 # passed; the engine treats unversioned external definitions as supported.
-# v4 (session finding after 1088): the completion gate reads the verifier's confidence level and
-# the graph routes a non-PASS review into bounded remediation — both are contract changes, so the
-# identity moves with them.
+# v4 (session finding after 1088): the graph routes a non-PASS review into bounded remediation —
+# a contract change, so the identity moves with it (the confidence half of v4 was retired at v7).
 # v5 (task 1077's inline run, 2026-10-06): the verify verdict action is explicitly `onError:
 # continue`. `task verdict` exits non-zero on any non-PASS verdict BY DESIGN (1003 R2) — that is
 # data for the verify guards, not a state failure. Under the engine's default 'fail' policy
@@ -63,14 +54,13 @@ name: task-pipeline
 # UNREACHABLE: a non-PASS verify could only end the run failed. `test-fix` also gained the
 # review-lane evidence projection (see its onEnter) so the repair hop is not fed an empty findings
 # list when the failing hop was `review-fail-triage` rather than the quality gate.
-# v6 (task 1134 run, 2026-10-09): the `confidence` check row now encodes the SAME policy as the two
-# completion guards instead of a stricter one of its own. It warned for every level below HIGH, so a
-# MEDIUM certification was admitted by both guards but recomputed as PARTIAL by the CLI done gate —
-# the artifact was self-inconsistent and `done` was refused with no named level to act on. The row
-# now warns only for an unacknowledged LOW (or absent) level, which is exactly what the guards
-# refuse; `packages/app/tests/workflow/task-pipeline-proof-chain.test.ts` pins the agreement for
-# HIGH/MEDIUM/LOW/absent × ack.
-version: "6"
+# v7 (task 1207, F511): the asserted `Confidence: HIGH|MEDIUM|LOW` machinery is retired — the
+# verifier's and reviewer's self-graded levels (re-imported from the cc anti-hallucination skill
+# by task 1068) are no longer written, checked, or gated on; spur certifies on deterministic
+# evidence (rows MET, proof digests, findings dispositioned). The `confidence` check row, the
+# `ackLowConfidence` var, and the guards' LOW/absent clauses are gone; the derived
+# feature-receipt confidence (ADR-131/1196) is a different family and stays.
+version: "7"
 description: "Standard task pipeline: precheck → implement → quality-gate (test/fix/recheck) → review → approve → verify → record → done"
 # Task entity lifecycle (owned by task-lifecycle.yaml):
 #   normal: backlog → todo → wip → testing → done
@@ -195,14 +185,6 @@ vars:
     # Escalation counter: .spur/run/<wbs>-escalation-count. Default 2 = two answered
     # questions; a third pause routes to failed with a report note.
     maxEscalations: "2"
-    # Operator acknowledgement of a LOW-confidence certification (session finding after 1088).
-    # The verify answer's `Confidence:` line is captured into the verdict artifact; a LOW (or
-    # absent) level fails the completion guards unless this is "true", because a PASS the
-    # verifier would not stand behind is an operator risk decision, not a mechanical one.
-    # Set per run: `--vars '{"ackLowConfidence":"true"}'` (and export it on the inline path).
-    # Deliberately NOT settable from the task file or the verifier's own answer: the point is
-    # that a second party, not the producer, accepts the residual uncertainty.
-    ackLowConfidence: ""
     # Runtime-written, 0933: the escalate hop's file.read.into-var fills this from
     # .spur/run/<wbs>-question.md; the hitl.input prompt below references it. Declared
     # here (empty) so the static var-reference validator sees the template source.
@@ -897,20 +879,6 @@ states:
             onError: continue
             options:
                 command: "$spurBin task verdict $wbs --from-answer .spur/run/$wbs-verify-answer.txt"
-          # Session finding after 1088: the verifier's confidence level becomes a `confidence` check
-          # row and a gate-log line, so the level the completion guards enforce is visible in the
-          # artifact and the log — not only in the answer file. v6 (task 1134 run): the row warns for
-          # an unacknowledged LOW/absent level ONLY, matching the guards' ack rule; warning for
-          # MEDIUM too made an admitted certification aggregate to PARTIAL (self-inconsistent artifact,
-          # done refused). This is its own action because the proof-binding stamp below must stay the
-          # state's LAST action AND under the ADR-115 800-char shell cap.
-          - kind: shell
-            options:
-                command: >-
-                    V=".spur/run/$wbs-verdict.json"; [ -f "$V" ] || exit 0;
-                    jq --arg ack "$ackLowConfidence" '. + {checks: (((.checks // []) | map(select(.name != "confidence"))) + [{name: "confidence", status: (if ((.confidence // "LOW") != "LOW" or $ack == "true") then "pass" else "warn" end), evidence: ((.confidence // "LOW (absent from artifact)") + (if $ack == "true" then " (operator-acknowledged)" else "" end))}])}' "$V" > "$V.tmp" && mv "$V.tmp" "$V";
-                    printf 'confidence: %s (ack=%s)\n' "$(jq -r '.confidence // "LOW (absent)"' "$V")" "$ackLowConfidence" >> ".spur/run/$wbs-test-gate.log";
-                    exit 0
           # (e) one jq mutation binds the verdict to the proof digest (0703 R3; runId 0730 §B.2 /
           # 0757 R4; definitionDigest 0759 R5; honest review stamp 0785 R4; soft action + hard guard).
           - kind: shell
@@ -1312,16 +1280,15 @@ transitions:
     # re-enters quality → review → verify on a fresh digest. Before 1088 a FAIL review had no
     # outgoing edge at all; before 1122 a PASS-with-findings cost a full re-certification cycle per
     # attempt (knowledge-kit 0210/0213). The reviewer writes `Verdict: PASS|FAIL` in its answer;
-    # both plain and bold forms are accepted. Since 1204 a PASS must also be GRADED: the reviewer
-    # states `Confidence: HIGH|MEDIUM|LOW` (verify-chain semantics, 1068), HIGH/MEDIUM cross the
-    # PASS edges unadorned, and LOW or an absent line needs the operator's `ackLowConfidence` —
-    # otherwise the PASS falls to the catch-all like any other verdict the reviewer would not stand
-    # behind (same policy as the verify confidence gate). Review stays advisory: verify certifies.
+    # both plain and bold forms are accepted. (F511: the v4-era PASS confidence grading — the
+    # reviewer's self-stated HIGH/MEDIUM/LOW level and its `ackLowConfidence` escape hatch — was
+    # retired; a PASS with no open P1-P3 finding is what the gate reads.) Review stays advisory:
+    # verify certifies.
     # Under `profile=auto` the approve gate is skipped, so the PASS+auto edge is tried first and the
     # interactive PASS edge second.
     - from: review
       to: verify
-      description: profile=auto, the review certified a HIGH/MEDIUM-confidence PASS (LOW/absent needs ackLowConfidence) with no open P1-P3 finding — skip the human approval gate.
+      description: profile=auto, the review certified a PASS with no open P1-P3 finding — skip the human approval gate.
       guard:
           kind: shell
           options:
@@ -1329,23 +1296,22 @@ transitions:
                   test "$profile" = auto &&
                   grep -qiE '^[[:space:]]*\**Verdict:\** *PASS' ".spur/run/$__runId-review-answer.txt" &&
                   eval "$(jq -r 'if .mode=="source-repo" then "S="+@sh"\(.dir)/residual-scan.ts"+" RUNNER=bun" elif .mode=="installed" then "S="+@sh"\(.dir)/residual-scan.mjs"+" RUNNER=node" else empty end' ".spur/run/$__runId-script-root.json" 2>/dev/null)" &&
-                  [ -f "$S" ] && "$RUNNER" "$S" review-gate "$wbs" --spur-bin "$spurBin" --review-answer ".spur/run/$__runId-review-answer.txt" >&2
+                  [ -f "$S" ] && "$RUNNER" "$S" review-gate "$wbs" --spur-bin "$spurBin" >&2
     - from: review
       to: approve
-      description: Review certified a HIGH/MEDIUM-confidence PASS (LOW/absent needs ackLowConfidence) with no open P1-P3 finding — gate on human approval before verification.
+      description: Review certified a PASS with no open P1-P3 finding — gate on human approval before verification.
       guard:
           kind: shell
           options:
               command: >-
                   grep -qiE '^[[:space:]]*\**Verdict:\** *PASS' ".spur/run/$__runId-review-answer.txt" &&
                   eval "$(jq -r 'if .mode=="source-repo" then "S="+@sh"\(.dir)/residual-scan.ts"+" RUNNER=bun" elif .mode=="installed" then "S="+@sh"\(.dir)/residual-scan.mjs"+" RUNNER=node" else empty end' ".spur/run/$__runId-script-root.json" 2>/dev/null)" &&
-                  [ -f "$S" ] && "$RUNNER" "$S" review-gate "$wbs" --spur-bin "$spurBin" --review-answer ".spur/run/$__runId-review-answer.txt" >&2
+                  [ -f "$S" ] && "$RUNNER" "$S" review-gate "$wbs" --spur-bin "$spurBin" >&2
     - from: review
       to: review-fail-triage
       description: >-
-          No certified PASS without an open P1-P3 finding (FAIL, PARTIAL, missing, unparseable, a
-          PASS whose review-gate check found an open P1-P3 row, or a PASS the reviewer graded below
-          HIGH/MEDIUM — or left ungraded — without the operator's ackLowConfidence; fail closed) —
+          No certified PASS without an open P1-P3 finding (FAIL, PARTIAL, missing, unparseable, or
+          a PASS whose review-gate check found an open P1-P3 row; fail closed) —
           classify the failure and route it into the bounded repair hop instead of dead-ending the run.
       guard:
           kind: always
@@ -1383,23 +1349,21 @@ transitions:
     # The verify step emits .spur/run/<wbs>-verdict.json with a required proof block (task 0703 R3/R5).
     # Only `verdict: PASS` PLUS a proof block whose digest — top level and every named stage — equals
     # the captured `proofDigest` clears the gate to `record`; any non-PASS, a missing file, malformed
-    # JSON, or missing/mismatched proof evidence does not. The verifier's confidence level is part of
-    # that certification (session finding after 1088): a PASS the verifier itself marked LOW — or left
-    # unstated — clears the gate only when the operator accepted it with
-    # `--vars '{"ackLowConfidence":"true"}'`. Declaration order: PASS+proof guard FIRST,
-    # then the bounded remediation route (R4), then the always catch-all so a PASS verdict with a
-    # missing/malformed proof block still terminates at `failed` instead of hanging the state.
+    # JSON, or missing/mismatched proof evidence does not. (F511: the v4-era LOW/absent-confidence
+    # clause and its `ackLowConfidence` escape hatch were retired.) Declaration order: PASS+proof
+    # guard FIRST, then the bounded remediation route (R4), then the always catch-all so a PASS
+    # verdict with a missing/malformed proof block still terminates at `failed` instead of hanging
+    # the state.
     - from: verify
       to: record
-      description: Verification verdict is PASS, its proof block names the captured digest on every stage, and any LOW confidence was operator-acknowledged — record results and proceed to done.
+      description: Verification verdict is PASS and its proof block names the captured digest on every stage — record results and proceed to done.
       guard:
           # (one jq -e predicate) PASS verdict; proof, quality-gate, review and verification digests
-          # equal to proofDigest; review completed; matching run id and definition digest (0703 R5, 0785 R4);
-          # confidence HIGH/MEDIUM, or LOW/absent with the operator's ack (session finding after 1088).
+          # equal to proofDigest; review completed; matching run id and definition digest (0703 R5, 0785 R4).
           kind: shell
           options:
               command: >-
-                  jq -e --arg d "$proofDigest" --arg r "$__runId" --arg dd "$__definitionDigest" --arg ack "$ackLowConfidence" '
+                  jq -e --arg d "$proofDigest" --arg r "$__runId" --arg dd "$__definitionDigest" '
                   .verdict == "PASS"
                   and (.proof.digest // "") == $d
                   and (.proof.stages.qualityGate.digest // "") == $d
@@ -1408,7 +1372,6 @@ transitions:
                   and (.proof.stages.verification.digest // "") == $d
                   and (.proof.runId // "") == $r
                   and (.proof.definitionDigest // "") == $dd
-                  and ((.confidence // "LOW") != "LOW" or $ack == "true")
                   ' ".spur/run/$wbs-verdict.json" >/dev/null 2>&1
     - from: verify
       to: test-fix
@@ -1436,12 +1399,10 @@ transitions:
     # ── done gate: record → done/failed gated on `spur task check` (ADR-026 amendment 2026-06-23)
     # PLUS the proof-block re-assertion (task 0703 R5): the verdict artifact must still be PASS and
     # still name the captured digest — a forged or mutated completion artifact fails closed here.
-    # PLUS the confidence re-assertion (session finding after 1088): the same ack rule as verify →
-    # record, re-read from the artifact so a mutation between the two boundaries cannot slip through.
     # Declaration order: pass guard first.
     - from: record
       to: done
-      description: Task check passed, the verdict proof block still names the captured digest, and any LOW confidence was acknowledged — certify done.
+      description: Task check passed and the verdict proof block still names the captured digest — certify done.
       guard:
           kind: shell
           options:
@@ -1451,14 +1412,13 @@ transitions:
               # comments inside the folded scalar: `>-` joins same-indent lines into
               # one shell line.
               # Two logical commands, deliberately (ADR-115): the `task check` projection plus
-              # ONE jq predicate re-asserting the whole completion contract — PASS verdict, the
-              # captured proof digest, and the confidence rule (session finding after 1088).
+              # ONE jq predicate re-asserting the whole completion contract — PASS verdict and the
+              # captured proof digest.
               command: >-
                   $spurBin task check $wbs --as done &&
-                  jq -e --arg p "$proofDigest" --arg ack "$ackLowConfidence" '
+                  jq -e --arg p "$proofDigest" '
                   .verdict == "PASS"
                   and ((.proof.digest // "") == $p)
-                  and ((.confidence // "LOW") != "LOW" or $ack == "true")
                   ' ".spur/run/$wbs-verdict.json" >/dev/null 2>&1
     - from: record
       to: failed

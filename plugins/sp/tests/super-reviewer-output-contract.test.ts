@@ -18,14 +18,13 @@ describe('super-reviewer Output Format contract (task 1122 R4)', () => {
     });
 });
 
-// The confidence contract (2026-10-12): a review report states the level it can defend, in the enum
-// the verify answer and every consumer use. A missing line or a HIGH the rows do not earn refuses an
-// otherwise usable PASS, so the contract is pinned here rather than left to review discretion.
-describe('super-reviewer confidence contract', () => {
-    test('the Output Format requires exactly one earned HIGH | MEDIUM | LOW line', () => {
-        expect(REVIEWER).toContain('**Confidence:** HIGH | MEDIUM | LOW');
-        expect(REVIEWER).toContain('../skills/code-verification/references/verdict-schema.md');
-        expect(REVIEWER).toContain('turns an otherwise usable');
+// F511 (task 1207): the asserted confidence line is retired — no review report states one and
+// no gate reads one. The pin asserts both the paragraph's presence and the template line's absence.
+describe('super-reviewer confidence contract (F511 retirement pin)', () => {
+    test('the Output Format states the no-confidence boundary instead of a Confidence line', () => {
+        expect(REVIEWER).toContain('No confidence line (F511');
+        expect(REVIEWER).not.toContain('**Confidence:**');
+        expect(REVIEWER).not.toContain('turns an otherwise usable');
     });
 });
 
@@ -38,6 +37,6 @@ describe('super-reviewer citation contract', () => {
         expect(REVIEWER).toContain('Source citations for external claims');
         expect(REVIEWER).toContain('SAME cell');
         expect(REVIEWER).toContain('does not stand in for it');
-        expect(REVIEWER).toContain('caps the level the report can defend');
+        expect(REVIEWER).toContain('name it\nas an explicit gap');
     });
 });

@@ -10,7 +10,7 @@ import { spurCommand } from '../lib/spur-bin';
 
 export * from '../lib/residual-scan.generated.mjs';
 export const RESIDUAL_SCAN_USAGE =
-    'usage: residual-scan.ts <scan|fold|settle|report|review-gate> <wbs> [--spur-bin <bin>] [--root <dir>] [--tmp-dir <dir>] [--review-answer <path>]';
+    'usage: residual-scan.ts <scan|fold|settle|report|review-gate> <wbs> [--spur-bin <bin>] [--root <dir>] [--tmp-dir <dir>]';
 export type ScanEnv = { spurBin?: string } & Record<string, string | undefined>;
 export type ScanIo = { out: (line: string) => void; err: (line: string) => void };
 export type ScanOptions = { cwd?: string; io?: ScanIo };
@@ -106,16 +106,14 @@ function scanMode(opts: ParsedArgs, env: ScanEnv, io: ScanIo): number {
 /**
  * Task 1122 R2: the review-time gate — the record sweep's review-finding slice
  * (core.buildReviewGateArtifact) at the review PASS edges; writes the same `<wbs>-residuals.json`
- * the test-fix hop reads. Exit 1 on an open P1-P3 finding, or on a review answer graded LOW or left
- * ungraded without `env.ackLowConfidence` (task 1204, graded via `core.reviewGradingInput` — it
- * cannot sit inline in the edge because ADR-115 caps a guard at 5 logical commands).
+ * the test-fix hop reads. Exit 1 on an open P1-P3 finding. The answer-grade rule (1204) was
+ * retired with the asserted confidence machinery (F511); findings stay the gate.
  */
 function reviewGateMode(opts: ParsedArgs, env: ScanEnv, io: ScanIo): number {
     const runDir = join(opts.root, '.spur', 'run');
     fs.mkdirSync(runDir, { recursive: true });
     const { content } = loadTask(env, opts.spurBin, opts.wbs, opts.root);
-    const grading = core.reviewGradingInput(opts.root, opts.reviewAnswer, env.ackLowConfidence, fs);
-    const gate = core.buildReviewGateArtifact(opts.wbs, content, readDeferrals(runDir, opts.wbs), grading);
+    const gate = core.buildReviewGateArtifact(opts.wbs, content, readDeferrals(runDir, opts.wbs));
     fs.writeFileSync(join(runDir, `${opts.wbs}-residuals.json`), `${JSON.stringify(gate.artifact, null, 2)}\n`);
     io.out(gate.note);
     return gate.artifact.counts.blocking > 0 ? 1 : 0;

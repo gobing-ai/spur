@@ -3017,46 +3017,13 @@ Only this section exists.
         expect(await readStatus(wbs)).toBe('testing');
     });
 
-    test('done guard: 1123 — a PASS artifact without a confidence level is denied', async () => {
-        // WHY: the pipeline's own completion guards read `confidence`, but the CLI-layer
-        // gate — which the pipeline itself passes through via `task update done
-        // --no-lifecycle` — did not, so a hand-written PASS artifact certified exactly
-        // like a HIGH-confidence one. The gate now requires the level.
-        const wbs = await seedTaskAtTesting('guard no-confidence');
-        const { confidence: _dropped, ...noConfidence } = PASS_VERDICT;
-        await writeVerdict(wbs, { ...noConfidence, wbs });
-        const output = createCapturedOutput();
-        const exitCode = await main(['task', 'update', wbs, 'done', '--no-lifecycle'], { cwd, output });
-        expect(exitCode).toBe(1);
-        const msg = output.errors.join('\n') + output.messages.join('\n');
-        // Landed wording (1068 R3 on main, merged over this branch's own guard): the
-        // denial names the gap, the artifact path, the expected field and both remedies.
-        expect(msg).toContain('PASS verdict does not state a confidence level');
-        expect(msg).toContain('HIGH|MEDIUM|LOW');
-        expect(msg).toContain('/sp:dev-verify');
-        expect(msg).toContain('--force-done');
-        expect(await readStatus(wbs)).toBe('testing');
-    });
-
-    test('done guard: 1123 — an out-of-vocabulary confidence value is denied', async () => {
-        // On the CLI path the structural check gate (`L4.malformed-verdict-artifact`,
-        // zod) rejects the bad enum before the guard is reached; the guard's own
-        // vocabulary branch covers the callers that skip that gate (e.g. --no-lifecycle
-        // without a check gate). Assert the observable contract either way.
-        const wbs = await seedTaskAtTesting('guard bad-confidence');
+    test('done guard: 1123 → F511 — a legacy artifact carrying a confidence value parses and advances', async () => {
+        // F511 (task 1207): the 1123 requirement (a PASS must state a level) was retired —
+        // a model that can write a PASS can write `HIGH`. The guard reads proof digests only;
+        // legacy artifacts that still carry a `confidence` key parse with the value ignored,
+        // including out-of-vocabulary ones (read-compat, no error).
+        const wbs = await seedTaskAtTesting('guard legacy-confidence');
         await writeVerdict(wbs, { ...PASS_VERDICT, wbs, confidence: 'SURE' });
-        const output = createCapturedOutput();
-        const exitCode = await main(['task', 'update', wbs, 'done', '--no-lifecycle'], { cwd, output });
-        expect(exitCode).toBe(1);
-        const msg = output.errors.join('\n') + output.messages.join('\n');
-        expect(msg).toMatch(/confidence/i);
-        expect(msg).toContain('HIGH');
-        expect(await readStatus(wbs)).toBe('testing');
-    });
-
-    test('done guard: 1123 — LOW confidence still advances (the pipeline owns the ack policy)', async () => {
-        const wbs = await seedTaskAtTesting('guard low-confidence');
-        await writeVerdict(wbs, { ...PASS_VERDICT, wbs, confidence: 'LOW' });
         const output = createCapturedOutput();
         const exitCode = await main(['task', 'update', wbs, 'done', '--no-lifecycle'], { cwd, output });
         expect(exitCode).toBe(0);
@@ -4433,11 +4400,11 @@ describe('spur task CLI — verdict scenario-key gate (0958)', () => {
 // ── parent-status link guard under raw --json (task 1132 R2, review residual v) ──
 // `task create` already emitted the structured `ok:false` payload; `task update --feature` wrote
 // prose to stderr with empty stdout, which automation reading stdout cannot parse.
-describe('spur task CLI — verdict answer lint gate (confidence level × uncertainty phrases)', () => {
-    // End-to-end cover for the two rules the pipeline's verify step depends on, exercised through
-    // the real command rather than the pure lint: the answer's `Confidence:` level and the
-    // uncertainty phrases in its MET evidence. `spur task verdict` refuses the answer before any
-    // artifact write when either is wrong, so a bad answer can never certify a verdict.
+describe('spur task CLI — verdict answer lint gate (hedge refusal, no confidence field; F511)', () => {
+    // End-to-end cover for the surviving lint contract, exercised through the real command
+    // rather than the pure lint: the uncertainty phrases in a MET row's evidence refuse the
+    // answer unwritten (`evidence-hedged`), and no confidence value exists anywhere — a legacy
+    // `Confidence:` line parses with the value ignored (F511, task 1207).
     const WBS = '9077';
     const SCENARIO = 'AC1 — The receipt is written on every run (req: R1)';
     const TASK_FILE = [
@@ -4477,11 +4444,11 @@ describe('spur task CLI — verdict answer lint gate (confidence level × uncert
         return isoCwd;
     }
 
-    /** One verify answer: `level` as the Confidence line, `status`/`evidence` for the only row. */
-    function answer(level: string, status: string, evidence: string): string {
+    /** One verify answer: `status`/`evidence` for the only row; optional legacy confidence line. */
+    function answer(status: string, evidence: string, legacyConfidence?: string): string {
         return [
             `Verdict: ${status === 'MET' ? 'PASS' : 'PARTIAL'}`,
-            `Confidence: ${level}`,
+            ...(legacyConfidence ? [`Confidence: ${legacyConfidence}`] : []),
             '',
             '| Req | Status | Evidence |',
             '| --- | --- | --- |',
@@ -4519,68 +4486,45 @@ describe('spur task CLI — verdict answer lint gate (confidence level × uncert
         return { exitCode, lintRules: (parsed.lintFindings ?? []).map((f) => f.rule), artifact };
     }
 
-    test('the matrix: clean levels certify, hedged or mis-levelled answers are refused unwritten', async () => {
+    test('the matrix: a clean answer certifies without any confidence value, legacy lines are ignored (F511)', async () => {
         const isoCwd = await seedCwd();
         try {
-            // Accepted: each level certifies when its rows earn it. LOW is only warranted by an
-            // unproven row, so its case is PARTIAL (the CLI exits 1 on a non-PASS *verdict* by
-            // design, which is why the artifact — not the exit code — carries the assertion).
-            const high = await runVerdict(isoCwd, 'high', answer('HIGH', 'MET', CLEAN_EVIDENCE));
-            expect({ exit: high.exitCode, conf: high.artifact?.confidence, rules: high.lintRules }).toEqual({
-                exit: 0,
-                conf: 'HIGH',
-                rules: [],
-            });
-            const medium = await runVerdict(isoCwd, 'medium', answer('MEDIUM', 'MET', CLEAN_EVIDENCE));
-            expect({ exit: medium.exitCode, conf: medium.artifact?.confidence, rules: medium.lintRules }).toEqual({
-                exit: 0,
-                conf: 'MEDIUM',
-                rules: [],
-            });
-            const low = await runVerdict(isoCwd, 'low', answer('LOW', 'PARTIAL', CLEAN_EVIDENCE));
-            expect({ conf: low.artifact?.confidence, verdict: low.artifact?.verdict, rules: low.lintRules }).toEqual({
-                conf: 'LOW',
+            // F511 (task 1207): no Confidence line exists; the artifact carries no confidence.
+            const clean = await runVerdict(isoCwd, 'clean', answer('MET', CLEAN_EVIDENCE));
+            expect({ exit: clean.exitCode, rules: clean.lintRules }).toEqual({ exit: 0, rules: [] });
+            expect(clean.artifact?.verdict).toBe('PASS');
+            expect('confidence' in (clean.artifact ?? {})).toBe(false);
+
+            // Read-compat: a legacy answer still carrying a level parses with the value ignored.
+            const legacy = await runVerdict(isoCwd, 'legacy-high', answer('MET', CLEAN_EVIDENCE, 'HIGH'));
+            expect({ exit: legacy.exitCode, rules: legacy.lintRules }).toEqual({ exit: 0, rules: [] });
+            expect('confidence' in (legacy.artifact ?? {})).toBe(false);
+
+            // Read-compat: even an out-of-vocabulary legacy value is ignored, not an error.
+            const legacyOdd = await runVerdict(isoCwd, 'legacy-odd', answer('MET', CLEAN_EVIDENCE, 'SURE'));
+            expect({ exit: legacyOdd.exitCode, rules: legacyOdd.lintRules }).toEqual({ exit: 0, rules: [] });
+
+            // A PARTIAL row still yields a PARTIAL verdict; the CLI exits 1 on a non-PASS
+            // verdict by design, which is why the artifact — not the exit code — carries it.
+            const partial = await runVerdict(isoCwd, 'partial', answer('PARTIAL', CLEAN_EVIDENCE));
+            expect({ conf: 'absent', verdict: partial.artifact?.verdict, rules: partial.lintRules }).toEqual({
+                conf: 'absent',
                 verdict: 'PARTIAL',
                 rules: [],
             });
-
-            // Refused: the phrase fires at every level, the level rule only when the level is HIGH.
-            const hedgedHigh = await runVerdict(isoCwd, 'hedged-high', answer('HIGH', 'MET', HEDGED_EVIDENCE));
-            expect(hedgedHigh.artifact).toBeNull();
-            expect(hedgedHigh.exitCode).toBe(1);
-            expect(hedgedHigh.lintRules).toContain('evidence-hedged');
-            expect(hedgedHigh.lintRules).toContain('confidence-unwarranted');
-
-            const hedgedMedium = await runVerdict(isoCwd, 'hedged-medium', answer('MEDIUM', 'MET', HEDGED_EVIDENCE));
-            expect(hedgedMedium.artifact).toBeNull();
-            expect(hedgedMedium.exitCode).toBe(1);
-            expect(hedgedMedium.lintRules).toContain('evidence-hedged');
-            expect(hedgedMedium.lintRules).not.toContain('confidence-unwarranted');
-
-            const hedgedLow = await runVerdict(isoCwd, 'hedged-low', answer('LOW', 'MET', HEDGED_EVIDENCE));
-            expect(hedgedLow.artifact).toBeNull();
-            expect(hedgedLow.exitCode).toBe(1);
-            expect(hedgedLow.lintRules).toContain('evidence-hedged');
-
-            const understated = await runVerdict(isoCwd, 'low-proven', answer('LOW', 'MET', CLEAN_EVIDENCE));
-            expect(understated.artifact).toBeNull();
-            expect(understated.exitCode).toBe(1);
-            expect(understated.lintRules).toContain('confidence-understated');
-            expect(understated.lintRules).not.toContain('evidence-hedged');
         } finally {
             rmSync(artifactPath(), { force: true });
             rmSync(isoCwd, { recursive: true, force: true });
         }
     });
 
-    test('the hedge alone flips the outcome — same fixture, only the phrase differs', async () => {
+    test('the hedge alone flips the outcome — same fixture, only the phrase differs (the one surviving rule)', async () => {
         const isoCwd = await seedCwd();
         try {
-            const clean = await runVerdict(isoCwd, 'control-clean', answer('MEDIUM', 'MET', CLEAN_EVIDENCE));
-            const hedged = await runVerdict(isoCwd, 'control-hedged', answer('MEDIUM', 'MET', HEDGED_EVIDENCE));
+            const clean = await runVerdict(isoCwd, 'control-clean', answer('MET', CLEAN_EVIDENCE));
+            const hedged = await runVerdict(isoCwd, 'control-hedged', answer('MET', HEDGED_EVIDENCE));
             expect(clean.lintRules).toEqual([]);
             expect(clean.exitCode).toBe(0);
-            expect(clean.artifact?.confidence).toBe('MEDIUM');
             // The only difference is the phrase: exactly one rule, and no artifact.
             expect(hedged.lintRules).toEqual(['evidence-hedged']);
             expect(hedged.exitCode).toBe(1);

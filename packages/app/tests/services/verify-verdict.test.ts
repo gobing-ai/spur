@@ -32,7 +32,10 @@ describe('parseVerifyVerdict (R1 — one canonical parser)', () => {
         if (o.kind === 'invalid') expect(o.reason.length).toBeGreaterThan(0);
     });
 
-    test('confidence normalizes case (1068 R3)', () => {
+    test('legacy confidence key normalizes... nothing — parses with the value ignored (F511)', () => {
+        // F511 (task 1207): confidence is no longer part of the verdict schema. A legacy
+        // artifact that still carries the key parses as valid with an unknown value tolerated;
+        // nothing in the parsed verdict reads or normalizes it.
         const o = parseVerifyVerdict(
             JSON.stringify({
                 verdict: 'PASS',
@@ -42,10 +45,12 @@ describe('parseVerifyVerdict (R1 — one canonical parser)', () => {
             '0299',
         );
         expect(o.kind).toBe('valid');
-        if (o.kind === 'valid') expect(o.verdict.confidence).toBe('HIGH');
+        if (o.kind === 'valid') expect('confidence' in o.verdict).toBe(false);
     });
 
-    test('invalid confidence value → kind invalid naming the field (1068 R3)', () => {
+    test('out-of-vocabulary legacy confidence value is tolerated, not an error (F511)', () => {
+        // Read-compat: the former 1068 R3 "invalid confidence → kind invalid" contract is
+        // retired with the field; an unknown legacy value is just an ignored unknown key.
         const o = parseVerifyVerdict(
             JSON.stringify({
                 verdict: 'PASS',
@@ -54,8 +59,8 @@ describe('parseVerifyVerdict (R1 — one canonical parser)', () => {
             }),
             '0299',
         );
-        expect(o.kind).toBe('invalid');
-        if (o.kind === 'invalid') expect(o.reason).toContain('confidence');
+        expect(o.kind).toBe('valid');
+        if (o.kind === 'valid') expect('confidence' in o.verdict).toBe(false);
     });
 
     test('invalid verdict value → kind invalid', () => {

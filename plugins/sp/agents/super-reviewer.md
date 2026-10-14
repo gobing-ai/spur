@@ -200,7 +200,6 @@ shallower.
 **Scope:** <wbs diff | path glob>
 **Dimensions:** functional, security, efficiency, correctness, usability, architecture
 **Verdict:** PASS | PARTIAL | FAIL
-**Confidence:** HIGH | MEDIUM | LOW
 ##### Findings (ranked)
 
 | # | Priority | Dimension | Finding | Location | Disposition |
@@ -226,30 +225,14 @@ FAIL, PARTIAL, a missing line, a line split across two lines — routes the run 
 `review-fail-triage` and its bounded repair hop. Keep it on one line, in that shape, in every
 review answer; never restate it as prose only.
 
-**The Confidence line is machine-read too (one confidence contract, 2026-10-12).** Every review
-report carries exactly one `Confidence: HIGH | MEDIUM | LOW` line, stated at the level the review can
-actually defend — the same enum and the same earning rule the verify answer uses
-([verdict-schema.md](../skills/code-verification/references/verdict-schema.md) § Confidence level):
-
-- `HIGH` — every requirement row is `MET`, every finding carries a disposition, and the report cites
-  its evidence. `HIGH` says the evidence needs no re-check.
-- `MEDIUM` — the verdict holds but evidence gaps remain; name them.
-- `LOW` — the verdict rests on unverified assumptions that could plausibly flip it; name them.
-
-A missing line, a level outside the enum, or a `HIGH` the rows do not earn turns an otherwise usable
-PASS into a refused one: consumer repositories gate the review answer artifact and every level it
-claims, exactly as they gate the verify answer. This is a contract change — review answers written
-before it were never asked for a level, so pre-adoption artifacts read as debt, not defects.
-
-**Machine-checked at the gate.** The pipeline's own review PASS edges enforce the line before verify:
-`residual-scan review-gate` reads the recorded `### Review` body, and a missing, duplicated or
-out-of-enum level becomes a **blocking** `review-contract` item — `review → verify` stops and the run
-enters `review-fail-triage` with the bounded repair hop, exactly as an open P1–P3 row does. The gate
-checks the recorded section's presence and vocabulary; the same scanner grades the answer passed
-by both PASS edges and refuses a `LOW` (or ungraded) PASS unless the operator sets
-`ackLowConfidence` exactly to `true` (task 1204 — the same policy the verify
-chain enforces), so whether a level is *earned* stays a judgement call (see the earning rule above):
-the report must still argue it.
+**No confidence line (F511, task 1207).** Review reports do not state, and no gate reads, an
+asserted `Confidence: HIGH | MEDIUM | LOW`. A model that can write a PASS can write `HIGH`, so the
+gate grades what is checkable instead: the recorded section's presence and vocabulary, and the
+findings disposition — an open P1–P3 row blocks the edge exactly as before. What a reviewer would
+formerly have compressed into a level belongs in the report body: name the evidence gaps and the
+assumptions explicitly, so a reader can re-check them. (The derived confidence family is
+untouched: feature-verification receipts under ADR-131, the decision subsystem threshold, and
+history-anatomy reading.)
 
 **Source citations for external claims (one claim contract, 2026-10-12).** A Finding cell or a
 Functional Traceability `Evidence` cell that asserts an external API/library claim carries a
@@ -260,8 +243,9 @@ answer's rule verbatim, owned by
 for external claims — claim markers and accepted forms are defined once there and are not restated
 here. The findings table's `Location` column does not stand in for it: `Location` anchors the
 finding's subject, not the claim's source. Cell-free receipts (test counts, reviewed-log notes)
-assert no external claim and need no citation. An uncited external claim is an assumption, so it
-caps the level the report can defend (above).
+assert no external claim and need no citation. An uncited external claim is an assumption: name it
+as an explicit gap in the report body (above), so a reader can re-check it.
+
 
 **Machine-checked at the gate (findings table).** `residual-scan review-gate` applies the same two
 predicates to every finding row: a Finding cell carrying one of the verify lint's claim markers with

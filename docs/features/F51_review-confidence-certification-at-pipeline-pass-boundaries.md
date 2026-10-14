@@ -2,11 +2,11 @@
 schema_version: 1
 id: "F51"
 name: "Review confidence certification at pipeline PASS boundaries"
-status: active
+status: cancelled
 priority: P2
 tags: []
 created_at: "2026-10-14T05:43:07.001Z"
-updated_at: "2026-10-14T06:35:57.779Z"
+updated_at: "2026-10-14T21:39:22.703Z"
 ---
 
 # F51: Review confidence certification at pipeline PASS boundaries
@@ -57,7 +57,10 @@ Task 1204 completed with a HIGH-confidence PASS, a green full sequential quality
 
 Feature-level acceptance remains separate. Sync advanced backlog to active; the verifying entry successfully launched feature-verification run 64758e8d-0489-4132-9291-9ba3b3eefe2f. That run reached failed because spur-check-feature stopped at script-contract-check: quality-gate.mjs still embedded history schema version 0.5.26 after the dependency upgrade to 0.5.27. The session review regenerated script twins through build:scripts and script-contract-check now reports zero violations. The feature-verification receipt remains failed until a fresh feature-scoped pass succeeds; no feature-done claim has been made.
 
+CANCELLED (F511, task 1207, 2026-10-14): the asserted confidence grade is not verification — a model that can write a PASS can write `Confidence: HIGH`. The review-gate grading this feature added (task 1204) and the verify-side lint/stamp/pipeline row it extended were removed in F511; anti-hallucination ownership stays with the cc anti-hallucination skill and spur gates on deterministic evidence (proof digests, grep contracts, findings blocking). The derived confidence family is untouched: feature-verification receipts (1196, ADR-131), the decision subsystem threshold, and history-anatomy reading.
+
 ## History
 
 - 2026-10-14T06:29:37.743Z backlog → active (system)
+- 2026-10-14T21:38:57.379Z active → cancelled (system)
 

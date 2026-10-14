@@ -844,9 +844,10 @@ leave no `.spur/run/<wbs>-check-receipt.json`. The deciding artifacts are then
 1. **Drive the pipeline** for anything that must be certified: only a digest-bound full receipt
    satisfies a review/verify/record boundary (`sp-spur-check`), and the `test` hop owns the capture.
 2. **When a host-driven pass is unavoidable, say so in the verdict** — name the status file and gate
-   log as the evidence and grade confidence `MEDIUM`. A `HIGH` claim needs re-runnable evidence from a
-   checked path (the `sp-code-verification` ladder); claiming a receipt that was never written is the
-   failure mode this note exists to prevent (observed across four A91 tasks, 2026-10-12).
+   log as the evidence, and mark the reliance explicitly in the evidence cell (a host-driven gate is
+   not re-runnable proof from a checked path; the `sp-code-verification` ladder is). Claiming a
+   receipt that was never written is the failure mode this note exists to prevent (observed across
+   four A91 tasks, 2026-10-12).
 
 **A mismatch names the drifted paths (R5).** At gate entry the pipeline snapshots the non-corpus tree
 state (`git status --porcelain=v1 -uall` plus `git diff --name-only HEAD`, excluding
@@ -977,14 +978,14 @@ Each item below cost a driver cycle to discover. They are contracts, not tips.
   `.spur/run/<wbs>-diffstat.json` and never on command output. Never the bare unguarded
   source-repo path form — the script-contract check forbids it on a shipped surface because it
   shadows the installed twin in a consumer.
-- **The verify answer grammar is exact.** One `Verdict:` line, one `Confidence:` line, then
+- **The verify answer grammar is exact.** One `Verdict:` line, then
   `### Per-Requirement Traceability` (`| Req | Status | Evidence |`) and
   `### Acceptance Criteria Verification` (`| AC | Status | Evidence Type | Evidence |`). Requirement
   statuses are `MET | PARTIAL | UNMET`; AC statuses add `N/A`; every AC row id must match a declared
   scenario title verbatim, including its `(req: ...)` suffix. A `MET` row whose evidence hedges
   (`likely`, `probably`, `seems`, `appears`, `possibly`, `presumably`) is rejected as
-  `evidence-hedged`, and a level the rows do not earn is rejected as `confidence-unwarranted` or
-  `confidence-understated`. `spur task verdict` lints before writing, so a rejected answer leaves no
+  `evidence-hedged`. No `Confidence:` line exists (F511, task 1207) — legacy answers that carry one
+  parse with the value ignored. `spur task verdict` lints before writing, so a rejected answer leaves no
   artifact and exits non-zero.
 - **Harness tooling refuses direct task-file writes.** Resolve a merge conflict in a task file by
   choosing a git side, then applying the corpus delta through `spur task update` (for example
