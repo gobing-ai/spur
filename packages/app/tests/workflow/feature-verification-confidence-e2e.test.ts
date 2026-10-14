@@ -216,6 +216,17 @@ interface MatrixRow {
 
 const matrix: MatrixRow[] = [];
 
+/**
+ * Suite-load budget for the cases below. Each one drives a real pass — a `bun run` spawn plus three
+ * git-tree digest captures — so it inherits the spawn-stall sensitivity of every subprocess-heavy
+ * test in this suite: measured 0.2-0.4s alone, but the first case hit the 20s suite default once
+ * while 662 files ran in parallel and a sibling spawn-heavy test stalled in the same run
+ * (2026-10-14). Same treatment and reasoning as `loadFlakeTest` in `command-gate.test.ts`; if this
+ * one recurs, make the pass cheaper before raising the budget.
+ */
+const CASE_TIMEOUT_MS = 60_000;
+const caseTest = (name: string, fn: () => Promise<void>): void => void test(name, fn, CASE_TIMEOUT_MS);
+
 /** Run the boundary and record its decision; returns the denial message when it refused. */
 async function crossBoundary(fixture: Fixture): Promise<{ certified: boolean; message: string }> {
     try {
@@ -228,7 +239,7 @@ async function crossBoundary(fixture: Fixture): Promise<{ certified: boolean; me
 }
 
 describe('feature-verification confidence grade — real pass through the real completion boundary', () => {
-    test('a derived HIGH certifies the verifying → done edge', async () => {
+    caseTest('a derived HIGH certifies the verifying → done edge', async () => {
         const fixture = buildFixture();
         const run = await runPass(fixture, { runId: 'run-high' });
         expect(run.status).toBe('PASS');
@@ -253,7 +264,7 @@ describe('feature-verification confidence grade — real pass through the real c
         });
     });
 
-    test('a declared MEDIUM certifies the verifying → done edge', async () => {
+    caseTest('a declared MEDIUM certifies the verifying → done edge', async () => {
         const fixture = buildFixture();
         const run = await runPass(fixture, { runId: 'run-medium', confidenceOverride: 'MEDIUM' });
         expect(run.status).toBe('PASS');
@@ -278,7 +289,7 @@ describe('feature-verification confidence grade — real pass through the real c
         });
     });
 
-    test('a declared LOW without acknowledgement is refused as unacknowledged-low-confidence', async () => {
+    caseTest('a declared LOW without acknowledgement is refused as unacknowledged-low-confidence', async () => {
         const fixture = buildFixture();
         const run = await runPass(fixture, { runId: 'run-low', confidenceOverride: 'LOW' });
         expect(run.status).toBe('PASS');
@@ -303,7 +314,7 @@ describe('feature-verification confidence grade — real pass through the real c
         });
     });
 
-    test('the same LOW with the operator acknowledgement certifies', async () => {
+    caseTest('the same LOW with the operator acknowledgement certifies', async () => {
         const fixture = buildFixture();
         const run = await runPass(fixture, { runId: 'run-low-ack', confidenceOverride: 'LOW', ackLowConfidence: true });
         expect(run.status).toBe('PASS');
@@ -326,7 +337,7 @@ describe('feature-verification confidence grade — real pass through the real c
         });
     });
 
-    test('a PASS recording no level at all (pre-field receipt) is refused with the re-run repair', async () => {
+    caseTest('a PASS recording no level at all (pre-field receipt) is refused with the re-run repair', async () => {
         const fixture = buildFixture();
         const run = await runPass(fixture, { runId: 'run-absent' });
         expect(run.status).toBe('PASS');
@@ -355,7 +366,7 @@ describe('feature-verification confidence grade — real pass through the real c
         });
     });
 
-    test('a FAILing pass derives LOW and is refused as failed evidence, not as a level problem', async () => {
+    caseTest('a FAILing pass derives LOW and is refused as failed evidence, not as a level problem', async () => {
         const fixture = buildFixture('exit 3');
         const run = await runPass(fixture, { runId: 'run-fail' });
         expect(run.status).toBe('FAIL');
@@ -380,7 +391,7 @@ describe('feature-verification confidence grade — real pass through the real c
         });
     });
 
-    test('a MEDIUM derived from a caller command override cannot complete alone', async () => {
+    caseTest('a MEDIUM derived from a caller command override cannot complete alone', async () => {
         const fixture = buildFixture();
         const run = await runPass(fixture, { runId: 'run-medium-override', cmdOverride: 'true' });
         expect(run.status).toBe('PASS');
