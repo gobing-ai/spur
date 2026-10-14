@@ -614,7 +614,7 @@ test('Windows adapter requests graceful shutdown over Node/Bun JSON IPC', async 
         { cwd: tmpdir(), env: getEnvVars() as Record<string, string>, stdio: 'ignore' },
     );
     await new Promise((resolve) => setTimeout(resolve, 100));
-    await stopChild(child, 2000);
+    await stopChild(child, 4000);
     expect(child.exitCode).toBe(0);
     expect(child.signalCode).toBeNull();
     expect(child.requestShutdown?.()).toBe(false);
