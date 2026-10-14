@@ -6168,3 +6168,192 @@ Wrap done. Scope respected: one file changed, inside `docs/` only.
   contract) and bump `updated_at`; leave `00`/`03` untouched when the fail-closed invariants they
   assert (ADR-135, `03 §12.2`) are unchanged. An index pointer whose satellite title did not change
   needs no ceremonial `04_DESIGN.md` edit.
+# Working learnings — batch `sp/runall-1190-1191-1192-c4a1` (feature F43, ADR-137)
+
+The `deprecated` task-status vocabulary and its freeze. Slices 1189 (vocabulary + lifecycle graph),
+1190 (freeze guards), 1191 (derivation, routing, Board), 1192 (doc/skill/audit closure). Everything
+below was re-read from this tree — the task records, the `.spur/run/*` receipts, the per-run
+narrative in `.spur/memory/runs/`, and the cited source — not copied from the batch brief.
+
+Dates: commits and document `updated_at` values are America/Los_Angeles (PDT, UTC−7);
+`.spur/memory/runs/*.md` and `.spur/run/*.json` stamps are UTC. The batch is one working day,
+2026-10-13 PDT.
+
+## 2026-10-13 — WBS 1189 (context: vocabulary + lifecycle graph)
+
+- Appending one enum member (`TASK_STATUSES`, `packages/domain/src/planning/schema.ts:28`) forced
+  exactly two compile fixes, because both consumers are total `Record<TaskStatus, …>` maps: the CLI
+  board title map (`apps/cli/src/commands/task.ts:80`) and the batch-verdict not-started map
+  (`packages/app/src/services/task-verdict.ts:546`). Exhaustive record types are the cheap half of a
+  vocabulary change — `TS2741` names every consumer the compiler can see; the hand-maintained lists
+  (see 1191) are the expensive half.
+- `normalizeTaskStatus` throws for any key missing from the alias map, so the identity alias
+  `deprecated: 'deprecated'` (`packages/domain/src/planning/schema.ts:169`) is mandatory, not
+  cosmetic; `normalizeTaskStatusSafe` needed no branch.
+- The lifecycle graph is the only owner of a task's legal moves
+  (`config/workflows/task-lifecycle.yaml`): `deprecated` is non-terminal, admitted from `backlog`,
+  `todo`, `wip`, `testing`, `blocked` and `done`, exiting only to `todo` (un-deprecate) or `cancelled`
+  (removed), with `terminalStates: [cancelled]` untouched. Refusal is graph denial, not a service
+  branch.
+- Guard-pairing gotcha already carried in that YAML's header (from task 0758): `requestTransition`
+  selects the single `(from, to)` transition, so a guard-paired sibling edge for the same pair
+  silently denies the whole forward path. Pair guards only in auto-run pipelines, never here.
+
+## 2026-10-13 — WBS 1190 (freeze guards)
+
+- The design's surface list was wrong about the dependency writer, and only an empirical probe
+  caught it. The satellite asserted there was no `dependencies`-validating branch in
+  `task-service.ts`; round-1 review reproduced a NEW edge being written onto a deprecated task
+  (exit 0, scratch corpus) through `TaskService.mutateDependencies` — the reachable writer behind
+  `spur task deps <wbs> set` (`packages/app/src/services/task-service.ts:1154`, refusal at
+  `:1224–1227`). Remediation added the guard (P2 FAIL → fix). Lesson: enumerate every reachable
+  writer of a frontmatter field before declaring a guard complete; the handoff payload
+  (`depends_on_names` → frontmatter key `dependencies`) is not the only path to the file.
+- The freeze is prospective by construction: an edge that already exists when a task is deprecated is
+  reported (`L4.task-deprecated`), never dropped or rewritten. That single decision shapes the guard
+  (`if (current.includes(v)) continue;`), the finding severity and the tests.
+- The exempt write set deserves the same explicitness as the freeze: `record`
+  (Testing/Solution/Review), `migrate-anchors`/verdict writes and `update <wbs> --section <any>` keep
+  landing (the section write returns with a freeze warning); only status-moving writes and new
+  dependency edges are refused. Refusing the evidence hops would strand the audit trail.
+- "The default verdict path" is a cwd trap in a refusal test: `spur task record` defaults to a
+  cwd-relative `.spur/run/<wbs>-verdict.json` (`packages/app/src/services/task-record.ts:75`), so
+  from the repo root a full-suite run picks up a real verdict artifact and renders Testing before the
+  refusal the test is asserting. Pin `verdictFile` into the fixture root — the pin and its reasoning
+  are at `packages/app/tests/services/task-record.test.ts:3237–3250`, verified 148/148 from both
+  `packages/app` and the repo root.
+- A doc-vs-code contradiction created by your own remediation is a finding, not a detail. 1190 broke
+  the satellite's §2 claim ("it does not exist") by creating the branch, and the reviewer recorded it
+  as an OPEN documentation finding instead of accepting it. It was still open at wrap time (see the
+  doc-sync section) — a remediation that invalidates a design claim owes the doc edit in the same
+  slice.
+
+## 2026-10-13 — WBS 1191 (derivation, routing, Board)
+
+- The derivation terminal test is a closure, not an enum member: `packages/app/src/services/feature-service.ts:490`
+  now reads `st === 'done' || st === 'cancelled' || st === 'deprecated'`, and the neighbouring
+  filters (`doneTasks` → `done` only, `activeTasks` → `wip`/`testing` only) were deliberately left
+  alone so the "at least one done" rule keeps its meaning. Changing one predicate in that function
+  moved the reopen, all-terminal, blocked and proposal consumers at once.
+- A hand-maintained complement of an enum drifts, and it fails visibly: the Board's
+  `OFF_TRACK = new Set(['blocked', 'cancelled'])` (`apps/web/src/modules/task-kanban/TaskDetail.tsx:30`)
+  was the round-1 P3 that blocked the review→verify guard — a frozen task rendered five empty phase
+  bars. The remediation added `deprecated`; the reviewer's standing recommendation is to derive it
+  (`TASK_STATUSES.filter((s) => !LIFECYCLE.includes(s))`). Same class of second vocabulary:
+  `matrixStatusSchema` (`packages/domain/src/planning/task-skeleton.ts:39`, still 7 statuses, docstring
+  says "all 7") and the mirrored `apps/cli/schemas/section-matrix.schema.json:56`.
+- Deriving one actions table per module beats re-listing: `apps/web/src/modules/task-kanban/task-actions.ts:10,22,44`
+  holds `TASK_STATUS_ACTIONS` / `TASK_ACTION_LABELS` / `TASK_FSM_TRANSITIONS` keyed by the canonical
+  `TASK_STATUSES`, replacing three inline tables in `TaskDetail.tsx`. Its test derives the legality
+  floor `LEGAL_TARGETS` from `config/workflows/task-lifecycle.yaml`, so "the Board never offers a
+  transition the graph refuses" is asserted against the graph rather than restated.
+- Two review rounds found two distinct defects created by the same change, and the fix budget
+  (`qualityGateMaxFixAttempts=2`) was exceeded with each round finding something new: the off-track
+  membership, then the doc corrections (`execution-batch.md`, `routing-table.md`). A status added to
+  an enum needs a sweep of every set/list/complement that names statuses, not just the compile-error
+  sites.
+- Browser verification of a Board change is cheap and was done: real headless Chromium against the
+  built board on a throwaway root, checking the deprecated lane icon, colour, filter membership and
+  the deprecate/undeprecate action set.
+
+## 2026-10-13 — WBS 1192 (doc/skill/audit closure)
+
+- Documentation closure must delete the driftable list, not update it. The `spur-cli` task reference
+  dropped its `backlog … cancelled` enumeration and now points at `TASK_STATUSES`, the shipped graph
+  and the design satellite; the concrete operator-facing facts (legal edges, both freeze guards, the
+  exempt write set) stay inline. Updating a list in place is how the next status addition recreates
+  the same finding.
+- An "audit only / no edit needed" row is only evidence if it names the read that proves it. S2
+  (contracts), S4 (init template), S14 (plugin scripts) and S15 (persistence) were re-read and
+  falsification was attempted; every row carries the command or `file:line` that produced its
+  no-edit verdict. Those rows are the ones that survive into arbitrary future readings.
+- A design satellite's anchors rot on contact with implementation. 1190/1191 shifted
+  `task-service.ts` (auto-walk `1834–1915` → `1883–1964`), `idea-handoff.ts` (resolver `221` → `256`)
+  and `feature-service.ts` (closure `486` → `490`), so the closure slice had to repoint six rows.
+  Where a whole-line-number audit is available (`rg -n`), one pass beats trusting the previous
+  reading — and one anchor still landed six lines off (`scaffold-manifest.ts:33` vs the `:39`
+  declaration), proving the point.
+- The ADR status line is a two-stage write: the design stage files the ADR with "implementation
+  pending" and the closure slice flips it to `Accepted (implemented)` only after every guarded slice
+  is `done` with a PASS verdict (`docs/00_ADR.md:2314`). Never flip it from the plan alone.
+- An AC row's evidence type is load-bearing. `applyAcceptanceCriteriaEvidenceRule`
+  (`packages/app/src/services/task-verdict.ts:388–410`) downgrades a `MET` row to `PARTIAL` when the
+  AC id carries no `[non-behavior]` / `[docs-only]` / `[advisory]` / `[non-core]` marker and the
+  evidence type is not `test`/`command`. AC8 shipped as `static-ref` and was downgraded; the repair
+  changed the type to `command` and listed the three commands actually run. Aliases `static`, `doc`,
+  `docs`, `documentation` all normalize to `static-ref`.
+- An unescaped `|` inside a markdown table cell splits the cell before any reader sees it: the AC8
+  evidence row lost columns to a bare `backlog|todo|wip|...`, and the verdict parsed short until the
+  pipes were escaped (`docs/tasks5/1192_...md:112`). Escape pipes inside evidence cells.
+- Deferrals have mechanics worth knowing: residual-scan settle files a `NNNN_residuals-from-<wbs>.md`
+  backlog skeleton for deferrable items and leaves it unlinked so a deferral can never hold the
+  completing feature open (1201 from 1190, 1202 from 1192). P4 advisories are dispositioned inside the
+  task's own `## Review` table (`ACCEPTED` / `OPEN` / `DEFER(reason)`) instead of being filed — and an
+  `OPEN` documentation disposition is a real hand-off to the wrap, not a closed item.
+
+## 2026-10-13 — process and gate behavior (shared across 1190–1192)
+
+- `sp-runtime-path` bans the literal `config/(plugins|rules|tasks|templates|workflows)` across
+  `apps/**`, `packages/**` and `plugins/sp/**` at severity error
+  (`config/rules/boundary/sp-runtime-path.yaml:29`), with a deliberately blanket scope: comments,
+  JSDoc and markdown count, and it runs on every pre-check. It bit two of the three slices — 1191 via
+  two new comments (`task-actions.ts:6`, `task-actions.test.ts:50`) and 1192 via a skill reference
+  (`plugins/sp/skills/spur-cli/references/tasks.md:132`). Use `.spur/workflows/...` for runtime paths
+  or name the graph in prose; never restate the build-time `config/` path in agent-facing text.
+- The residual review gate is strict about two things. P1–P3 review findings are `blocking` unless a
+  deferral with a non-empty reason reclassifies a P3 (never P1/P2), and `blocking > 0` downgrades
+  PASS→PARTIAL (`packages/app/src/services/residual-scan.ts:216–232`). Separately,
+  `reviewContractViolations` blocks a finding whose cell matches a claim marker without a same-cell
+  citation (`residual-scan.ts:335–360`): markers include `@scope/name`, `node_modules/`, a `1.2.3`
+  semver claim and a backticked function-call-shaped token; accepted citations are a backticked
+  `path:line`, a `` `path` line N `` form, a bare `path.ext:line` or a URL
+  (`packages/app/src/services/verify-answer-lint.ts:239–257`). A missing single
+  `**Confidence:** HIGH|MEDIUM|LOW` line is also a violation. 1191 paid for this twice: a P3
+  left un-dispositioned plus an OFF_TRACK defect failed the review→verify guard, and a round-3 report
+  row that quoted a backticked call token needed a driver-side citation repair.
+- False fails under foreign load are the norm on this host, and the receipt is the asset. 1190 lost
+  four runs (3/11390, 2/11390, 5/11390, 1/11390 — every failure a 15–120 s timeout, each file green in
+  isolation, with foreign full suites and a `--test-worker` run at load average up to 50); 1192 lost
+  two (1/11412, then 3/11412 under three concurrent foreign suites) and re-ran in a quiet window
+  (load 5.6). Each FAIL receipt was renamed rather than deleted — the no-progress guard skips a
+  recheck when a FAIL receipt already exists at the same input digest, so preserving it (and
+  recording why it was a false fail) is what unblocks the re-run. The durable environment adaptation
+  was the same tier with `--parallel=2 --max-concurrency=2 --timeout 120000`.
+- A zero-fail suite can still fail the gate on per-file coverage. 1190's decisive run had `0 fail`
+  and exited 1 on a per-file coverage shortfall
+  (`packages/app/src/services/planning-admission.ts` funcs=87.50 lines=88.78, below the 90 threshold);
+  the repair added three cases covering the new ADR-137 branches — `quickReadiness` deprecated skip and
+  force, the deprecated-dependency block and its remedy, `preflightTask`'s deprecated STOP row — for
+  95.9% line coverage. New refusal branches in a service are coverage-visible immediately.
+- Keep scratch artifacts out of the verify answer. 1190's answer cited probe-anchor placeholders
+  (`bar.ts:1`) to prove the scratch corpus worked; the record hop re-quoted them into `## Testing` as
+  two `L4.anchor-unresolved` errors, costing a citation-hygiene repair. Cite the committed tree.
+- One documented package quirk: `plugins/sp/tests/inline-run-setup.test.ts` fails 2/22 at bun's
+  default concurrency (20) and passes 22/22 at the gate's `--max-concurrency=2`; the file is untouched
+  since base and its 23 `test.concurrent` cases over-subscribe it standalone. Read it as a harness
+  artifact, not a regression.
+
+## 2026-10-13 — wrap doc-sync (this stage, WBS 1190–1192)
+
+- Doc drift after a vocabulary change concentrates in enumerations, and the closure slice's own
+  owner list is not the corpus list. 1192 fixed the owners it was told to fix; the wrap still found
+  stale task-status enumerations at `docs/design/planning-workflow-contracts.md:30` (the
+  `task-lifecycle.yaml` state row, while its `feature-lifecycle` sibling already carried `deprecated`),
+  `docs/design/e2e-workflow-for-system-development.md:95` (the lifecycle FSM node),
+  `docs/design/server-side-adjustment-design.md:1283` ("the 7 canonical task statuses"), and outside
+  the key-doc set at `docs/help2/task.md:97`, `docs/help2/daily-development-workflow.md:41` and
+  `docs/help/cmd_task.md:177`. `docs/design/planning-record-contracts.md` §7.3.3 and the live-task set
+  (`backlog|todo|wip|testing|blocked`) were already correct and needed no edit.
+- Two deferrable P3 residuals were waiting for exactly this stage: 1192 deferred
+  `planning-workflow-contracts.md:30` and the satellite's six-line anchor slip
+  (`scaffold-manifest.ts:33` → `:39`) to follow-up task 1202, and 1190 left its satellite-contradicts-
+  code finding `OPEN`. A wrap doc-sync is the natural closer for doc-only deferrals whose fix is
+  verifiable from the tree; the source-code half (`task-skeleton.ts:39`) stays with the follow-up.
+- Repair scope from the constitution held up in practice: content edits belong to the doc whose
+  meaning changed (T3/T9 — detail first, index only if its own pointer changed), dates are refreshed
+  only where content changed, and `docs/04_DESIGN.md` needed no edit at all because its F43 index row
+  was already present and correct. A no-op on a target file is a valid outcome, not a failure to look.
+- `docs/help/` and `docs/help2/` are gated only on nouns/verbs/flags
+  (`plugins/sp/tests/help-docs-parity.test.ts`), so their hand-written status prose can go stale
+  silently and no gate will say so — a gap worth a future rule, not a wrap-stage edit.
+

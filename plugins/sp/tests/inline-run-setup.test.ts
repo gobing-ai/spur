@@ -1,7 +1,13 @@
-import { expect, test } from 'bun:test';
+import { expect, setDefaultTimeout, test } from 'bun:test';
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+
+// Every test here spawns one or more `bun` processes; at bun's default `--max-concurrency=20` the
+// file's 22 `test.concurrent` cases oversubscribe the host, so the multi-spawn cases can outrun the
+// 5 s default timeout (they pass under the gate's lower concurrency). Raise the file's budget rather
+// than serializing the file, which would make it one of the slowest in the gate again.
+setDefaultTimeout(30_000);
 
 /**
  * Task 0804 R8/P2 (SECUA): the inline run setup delegate writes the two-file run record
