@@ -217,13 +217,14 @@ alias-tolerant. The legacy alias map is preserved as input normalization — nev
 
 | Domain          | Canonical values                                                                          |
 | --------------- | ----------------------------------------------------------------------------------------- |
-| `TaskStatus`    | `backlog · todo · wip · testing · blocked · done · cancelled`                             |
+| `TaskStatus`    | `backlog · todo · wip · testing · blocked · done · cancelled · deprecated` (ADR-137)      |
 | `FeatureStatus` | `backlog · active · verifying · blocked · done · cancelled · deprecated` (DD-13, ADR-136) |
 
 Input normalization (excerpt, full map lives in `normalizeTaskStatus` / `normalizeFeatureStatus`):
 `completed → done`, `in-progress / in_progress / in progress → wip (task) or active (feature)`,
 `dropped / canceled / cancel → cancelled`, `review / in-review / in_review → verifying` (feature only),
-`deprecated` (identity only — no synonym alias, ADR-136), `pending / new → backlog`, mixed case
+`deprecated` (identity only — no synonym alias, ADR-136 feature / ADR-137 task),
+`pending / new → backlog`, mixed case
 accepted via `.trim().toLowerCase()`. Storage is always the lowercase canonical form; aliases never
 persist.
 

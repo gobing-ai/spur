@@ -126,11 +126,31 @@ mutually exclusive.
 spur task update 0040 wip
 ```
 
-Valid statuses: `backlog · todo · wip · testing · blocked · done · cancelled` (the lifecycle engine
-enforces legal transitions). Two transitions are **guarded by `check`**: `wip→testing` runs
-`spur task check <wbs> --as testing`, and `testing→done` runs `spur task check <wbs> --as done`
-(F92 R3 — target-aware guards) — a failing
+Valid statuses are the canonical `TaskStatus` vocabulary — **`TASK_STATUSES` in
+`packages/domain/src/planning/schema.ts` is the only list**, and the lifecycle engine enforces legal
+transitions against the shipped `task-lifecycle` graph (the engine's bundled workflow, resolved per
+project).
+Operator-facing semantics (the freeze, its guards, the exempt write set) live in the design
+satellite [`task-deprecated-status.md`](../../../../../docs/design/task-deprecated-status.md) — read it
+there rather than restating the vocabulary. Two transitions are **guarded by `check`**:
+`wip→testing` runs `spur task check <wbs> --as testing`, and `testing→done` runs
+`spur task check <wbs> --as done` (F92 R3 — target-aware guards) — a failing
 gate blocks the transition (§7.5).
+
+**`deprecated` — frozen but retained (ADR-137).** Non-terminal: the record stays readable and
+countable, but nothing new attaches to it and it never advances. Legal edges (from the shipped
+graph): every status except `cancelled` may move to `deprecated`, and it leaves only to `todo`
+(un-deprecate, mandatory `History` entry) or `cancelled` (removed). Any other status write is
+refused by the graph, and the refusal names the un-deprecate command.
+
+Two guards carry the freeze past the graph: a **new** dependency edge onto a `deprecated` task is
+refused (ready-set resolver and pipeline preflight), and a live dependent is reported by the
+`L4.task-deprecated` warning. The freeze is prospective — an edge recorded before the deprecation is
+reported, never rewritten.
+
+Writes that stay **permitted** on a `deprecated` task (each edits the record rather than declaring
+the work resumable): `spur task record`, `migrate-anchors` and verdict writes, and
+`spur task update <wbs> --section <any>` — the section write lands and returns a freeze warning.
 
 **`--no-lifecycle`** suppresses lifecycle workflow *run record* creation (use during pipeline-driven
 transitions so nested lifecycle runs are not orphaned). **It is not a guard bypass** — the

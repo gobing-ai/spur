@@ -2311,7 +2311,7 @@ owner split this entry established.
 
 ## ADR-137: Task `deprecated` Is a Frozen, Non-Terminal Lifecycle State
 
-- **Status:** Accepted (design approved 2026-10-13; implementation pending) · **Date:** 2026-10-13 · **Extends:** DD-01, ADR-135, ADR-136
+- **Status:** Accepted (implemented) · **Date:** 2026-10-13 · **Extends:** DD-01, ADR-135, ADR-136
 - **Decision:** `deprecated` joins the canonical `TaskStatus` vocabulary as a non-terminal state
   meaning "retained, do not change unless removing". The task lifecycle graph admits it from
   `backlog`, `todo`, `wip`, `testing`, `blocked` and `done`, and leaves it only to `todo`
