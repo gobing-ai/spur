@@ -386,6 +386,28 @@ export function reviewConfidenceViolation(
 }
 
 /**
+ * Resolve the `review-gate` mode's grading input from the raw flag (task 1204): the answer text the
+ * reviewer wrote plus the acknowledgement, or undefined when no answer was named. A named-but-absent
+ * file grades as an empty answer — a missing grade, not a crash.
+ */
+export function reviewGradingInput(
+    root: string,
+    reviewAnswer: string | undefined,
+    ackLowConfidence: string | undefined,
+    fs: Pick<typeof import('node:fs'), 'readFileSync' | 'statSync'>,
+): { answer: string; ackLowConfidence: string | undefined } | undefined {
+    if (reviewAnswer === undefined) return undefined;
+    const path = join(root, reviewAnswer);
+    let isFile = false;
+    try {
+        isFile = fs.statSync(path).isFile();
+    } catch {
+        isFile = false;
+    }
+    return { answer: isFile ? fs.readFileSync(path, 'utf8') : '', ackLowConfidence };
+}
+
+/**
  * Task 1122 R2: the review-gate artifact assembly — the review-finding slice
  * ({@link blockingReviewFindings}) shaped into the same `ResidualArtifact` the record sweep
  * writes to `.spur/run/<wbs>-residuals.json` (the test-fix hop's remediation input; the

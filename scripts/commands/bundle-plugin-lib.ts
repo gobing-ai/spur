@@ -385,6 +385,12 @@ export declare function reviewConfidenceViolation(
     reviewAnswer: string,
     ackLowConfidence: string | undefined,
 ): { location: string; text: string } | null;
+export declare function reviewGradingInput(
+    root: string,
+    reviewAnswer: string | undefined,
+    ackLowConfidence: string | undefined,
+    fs: Pick<typeof import('node:fs'), 'readFileSync' | 'statSync'>,
+): { answer: string; ackLowConfidence: string | undefined } | undefined;
 export declare function buildReviewGateArtifact(
     wbs: string,
     taskContent: string,

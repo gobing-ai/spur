@@ -230,6 +230,18 @@ function reviewConfidenceViolation(reviewAnswer, ackLowConfidence) {
     text: level === undefined ? "The review answer carries no valid `**Confidence:** HIGH | MEDIUM | LOW` line — a " + "PASS must be graded, or the operator must set ackLowConfidence" : `The review answer graded its PASS ${level} — HIGH/MEDIUM cross unadorned, ` + "LOW/absent needs the operator’s ackLowConfidence"
   };
 }
+function reviewGradingInput(root, reviewAnswer, ackLowConfidence, fs) {
+  if (reviewAnswer === undefined)
+    return;
+  const path = join(root, reviewAnswer);
+  let isFile = false;
+  try {
+    isFile = fs.statSync(path).isFile();
+  } catch {
+    isFile = false;
+  }
+  return { answer: isFile ? fs.readFileSync(path, "utf8") : "", ackLowConfidence };
+}
 function buildReviewGateArtifact(wbs, taskContent, deferrals, review) {
   const confidence = review === undefined ? null : reviewConfidenceViolation(review.answer, review.ackLowConfidence);
   const contractViolations = [...reviewContractViolations(taskContent), ...confidence === null ? [] : [confidence]];
@@ -409,6 +421,7 @@ export {
   renderReport,
   reviewConfidenceViolation,
   reviewContractViolations,
+  reviewGradingInput,
   scanResiduals,
   verdictDisagreementNote
 };
