@@ -269,6 +269,26 @@ describe('DecideActionRunner catalog path (task 1094 R4)', () => {
         expect(record.input?.instructions).toBe('absolute body\n\nrelative body');
     });
 
+    // 1193 AC3/R3 (failure half): an absent absolute entry fails the whole mixed list — the
+    // fallback row is written with `reason: 'error'` and `decide` is never reached.
+    test('AC3: an absent absolute entry degrades the mixed list without calling decide', async () => {
+        const record: { input?: Record<string, unknown> } = {};
+        const { fs, writes } = fakeFs({ '/tmp/decide-workdir/notes.md': 'relative body' });
+        const runner = new DecideActionRunner(fs, {
+            enabled: true,
+            decisionService: async () =>
+                fakeService({ id: 'pick-lane', type: 'choice', fallback: 'slow', parameters: [] }, served(), record),
+        });
+        const result = await runner.execute(
+            { ...catalogOptions, evidence: ['/var/evidence/task.md', 'notes.md'] },
+            makeContext('/tmp/decide-workdir'),
+        );
+        expect(result.ok).toBe(true);
+        expect(record.input).toBeUndefined();
+        const row = JSON.parse(writes['/tmp/decide-workdir/out/lane.decision.json'] ?? '{}') as Record<string, unknown>;
+        expect(row).toMatchObject({ value: 'slow', degraded: true, reason: 'error' });
+    });
+
     test('an absolute resultFile is written as-is too', async () => {
         const { fs, writes } = fakeFs();
         const runner = new DecideActionRunner(fs, {
