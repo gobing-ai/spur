@@ -4,7 +4,7 @@ name: "Fix clef DecisionMaker: the hub passes state null and Cloudflare rejects 
 status: wip
 template: standard
 created_at: 2026-10-13T18:11:35.494Z
-updated_at: "2026-10-14T03:09:59.106Z"
+updated_at: "2026-10-14T03:17:56.481Z"
 
 ac_altitude: task-local
 ac_numbering: task-local
@@ -204,7 +204,7 @@ Test observability: AC1/AC2 observe the real POST body through the injected-fetc
 | `package.json:34` | Root `workspaces.catalog` pin for `@gobing-ai/ts-decision-clef` moved to `^0.5.26`. |
 | `bun.lock:514` | The resolved install is 0.5.26; `packages/app/node_modules/@gobing-ai/ts-decision-clef/dist/driver.js:220` carries `state: state ?? ''`. |
 | `plugins/sp/lib/inline-run.generated.mjs:3059` | The generated inline-application bundle, regenerated for the 0.5.26 dependency tree — the bundler's symbol numbering shifts with the new `@gobing-ai/ts-*` internals (`bounded2` → `bounded3`), and `scripts/commands/bundle-plugin-lib.test.ts` asserts on-disk === fresh regeneration, so the regenerated file is part of this change. |
-| `packages/app/tests/workflow/actions/decide.test.ts:242` | AC4: a real clef driver with an injected fetch, wrapped by `createDecisionMaker` and passed as `decisionMaker` to the inline `DecideActionRunner`, derives HIGH/MEDIUM/LOW from confidence 0.91/0.6/0.2 with `degraded: false`. |
+| `packages/app/tests/workflow/actions/decide.test.ts:288` | AC4: a real clef driver with an injected fetch, wrapped by `createDecisionMaker` and passed as `decisionMaker` to the inline `DecideActionRunner`, derives HIGH/MEDIUM/LOW from confidence 0.91/0.6/0.2 with `degraded: false`. The same chain carries R5's boundaries in the test at line 319: exactly the HIGH threshold (0.8) reads HIGH, one part per million below it reads MEDIUM, exactly the MEDIUM threshold (0.5) reads MEDIUM, and below it reads LOW — with the two thresholds also pinned as literals so a silent re-thresholding fails rather than follows. |
 
 **Release.** `bun run bump-ver 0.5.26 --push`, run from an isolated ts-libs worktree cut at `590e99ec` so a concurrent session's uncommitted `llm-jsonl-importer` edits were neither committed nor published. Result: release commit `f262a9f7`, aggregate tag `@gobing-ai/ts-libs-v0.5.26`, Publish workflow run 38491313970 → success; `main` fast-forwarded `53c22a69..f262a9f7`. The published tarball's bundled driver was verified to carry `state: state ?? ''` where the defective mapping used to be.
 
@@ -212,7 +212,7 @@ Test observability: AC1/AC2 observe the real POST body through the injected-fetc
 
 **Anti-patterns honoured.** No hub/`buildState` change, no Spur-side shim in `packages/app`, no readiness logic added to `spur decision status`, no duplicated thresholds (the AC4 case reads the existing `confidenceLevel()`).
 
-**Local checks.** ts-libs `bun run spur-check` 3007 pass / 0 fail; spur-new biome clean on the changed paths, `@gobing-ai/spur-app` typecheck exit 0, `packages/app/tests/workflow/actions/` 388 pass / 0 fail. AC4 was falsified — returning `success: false` from the stub makes it fail, so it exercises the shipped driver rather than a mock.
+**Local checks.** ts-libs `bun run spur-check` 3007 pass / 0 fail; spur-new biome clean on the changed paths, `@gobing-ai/spur-app` typecheck exit 0, `packages/app/tests/workflow/actions/` 388 pass / 0 fail. AC4 was falsified — returning `success: false` from the stub makes it fail, so it exercises the shipped driver rather than a mock. The R5 boundary cases were falsified twice: a 1e-6 backend drift fails them (0.8 arrives as 0.799999), and flipping `confidenceLevel`'s HIGH comparison from `>=` to `>` fails them with `Expected "HIGH" / Received "MEDIUM"` — so the boundary really is pinned by `>=`, not merely sampled near it.
 
 ### Testing
 
