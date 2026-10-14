@@ -163,6 +163,11 @@ function isGroupFeature(fm: Record<string, unknown>): string {
 
 /** Four-layer feature validator. L1 schema → L2 matrix → L3 format → L4 traceability. */
 export class FeatureCheckService extends PlanningCheckService {
+    // Pinned at construction: the L4 receipt capture must not re-read process.cwd()
+    // mid-flight — a concurrent chdir (parallel test suite) fails the capture with a
+    // foreign root (git exit 128 → L4.feature-receipt-stale).
+    private readonly projectRoot: string = process.cwd();
+
     constructor(fs: FileSystem, matrix?: FeatureSectionMatrix) {
         super({
             fs,
@@ -553,7 +558,7 @@ export class FeatureCheckService extends PlanningCheckService {
         let verifier: FeatureVerifierIdentity;
         let configuredCmd: string;
         try {
-            const selected = await resolveWorkflowDefinition(process.cwd(), 'feature-verification');
+            const selected = await resolveWorkflowDefinition(this.projectRoot, 'feature-verification');
             verifier = {
                 name: 'feature-verification',
                 sourcePath: selected.path,
@@ -580,13 +585,13 @@ export class FeatureCheckService extends PlanningCheckService {
         // the digest explicitly so learning appends after a pass go stale.
         let learningsContent: string | undefined;
         try {
-            learningsContent = await this.fs.readFile(join(process.cwd(), '.spur', 'context', 'learnings.md'));
+            learningsContent = await this.fs.readFile(join(this.projectRoot, '.spur', 'context', 'learnings.md'));
         } catch {
             learningsContent = undefined;
         }
         let currentDigest: string;
         try {
-            currentDigest = await captureFeatureReceiptDigest(process.cwd(), featureContent, learningsContent);
+            currentDigest = await captureFeatureReceiptDigest(this.projectRoot, featureContent, learningsContent);
         } catch (err) {
             findings.push({
                 layer: 'L4',
