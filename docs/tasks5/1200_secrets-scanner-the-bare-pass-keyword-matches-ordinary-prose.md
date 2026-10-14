@@ -4,7 +4,7 @@ name: "secrets-scanner: the bare pass keyword matches ordinary prose (PASS: toke
 status: done
 template: standard
 created_at: 2026-10-13T21:14:56.228Z
-updated_at: "2026-10-14T00:53:46.421Z"
+updated_at: "2026-10-14T02:46:58.704Z"
 
 priority: P2
 estimate_hours: 4
@@ -240,7 +240,25 @@ Confidence: MEDIUM
 
 ### References
 
-<!-- Links to features, docs, ADRs, related tasks, or external references. -->
+- Upstream fix: `../ts-libs` commit `fb5dfd67` — `packages/rule-engine/src/evaluators/secrets-scanner-evaluator.ts`
+  (drops the bare `pass` keyword from the `password` category) and its six fixtures in
+  `packages/rule-engine/tests/evaluators/secrets-scanner-evaluator.test.ts`.
+- Release: lockstep `@gobing-ai/ts-*` `0.5.25` (tag `@gobing-ai/ts-libs-v0.5.25`), published by the
+  Trusted-Publishing workflow run `38477585336`.
+- The workaround this task reverts: commit `351db01d5` (reworded the `FeatureVerificationReceipt`
+  confidence comment to dodge the matcher).
+- Firing rule and its scope: `config/rules/structure/protected-files.yaml:7-13`
+  (`no-hardcoded-secrets`, all five categories, scope `apps/`, `packages/`, `scripts/`).
+- False-positive site: `packages/app/src/workflow/feature-verification-receipt.ts:107-111`.
+- Cache producer: `packages/app/src/workflow/proof-input-fingerprint.ts` — `createGitAlternateTree`
+  (seeds its alternate index with `git read-tree HEAD`, which is why a pre-`record` commit moves the
+  proof digest; see `## Testing` → landing certification).
+- Related tasks: `1195` (sibling ts-libs work that landed on the same lockstep release), `1193`
+  (the batch whose first gate run died on this false positive).
+- Pipeline contract exercised by this run: `config/workflows/task-pipeline.yaml` (`confidence` check
+  row, `verify → record` and `record → done` guards) and
+  `packages/app/src/services/verify-answer-lint.ts` (`confidence-missing` / `confidence-value` /
+  `confidence-unwarranted` / `confidence-understated`).
 
 ### History
 
