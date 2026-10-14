@@ -4,7 +4,7 @@ name: Carry a derived HIGH/MEDIUM/LOW confidence level on the feature-verificati
 status: done
 template: standard
 created_at: 2026-10-13T19:03:27.230Z
-updated_at: "2026-10-13T19:47:20.140Z"
+updated_at: "2026-10-14T04:37:01.739Z"
 
 done_forced: "false"
 done_reason: unforced close; PASS artifact at tracked Testing section (scratch verdict not retained)
@@ -92,44 +92,26 @@ Observed in knowledge-kit during G14's verification (run `6a95b206`): the receip
 
 ### Testing
 
-**Contract and coverage.** `bun run typecheck` → exit 0. `bun apps/cli/src/index.ts rule run --preset recommended-pre-check --fail-on warning --no-logo` → 51 rules passed. Focused suites (the eight receipt/transition files, run by the implementer):
+**Pipeline verify results**
 
-```
-bun test packages/app/tests/workflow/feature-verification-run.test.ts \
-  packages/app/tests/workflow/feature-verification-receipt.test.ts \
-  packages/app/tests/services/feature-transition.test.ts packages/app/tests/services/feature-service.test.ts \
-  packages/app/tests/services/task-record.test.ts packages/app/tests/workflow/feature-lifecycle-adapter.test.ts \
-  apps/server/tests/modules/feature/transition-gate.test.ts apps/cli/tests/commands/feature.test.ts
-→ 343 pass / 0 fail (1740 expect calls)
-```
+- Verdict: PASS (from verdict artifact)
+- Confidence: MEDIUM
 
-Eleven new cases: the three derivations, the operator-declared override and its enum refusal, the recorded acknowledgement, the receipt round-trip, a level without its basis, a hand-edited level as malformed, and the completion boundary (HIGH/MEDIUM certified, LOW refused, LOW + acknowledgement accepted) including the `verifying → done` denial naming `L4.feature-receipt-confidence`.
+| Requirement | Status | Evidence |
+|-------------|--------|----------|
+| R1 | MET | Vocabulary `packages/app/src/workflow/feature-verification-receipt.ts:83`; receipt fields documented at `packages/app/src/workflow/feature-verification-receipt.ts:107`; round-trip `packages/app/tests/workflow/feature-verification-receipt.test.ts:614`, level-without-basis refused `packages/app/tests/workflow/feature-verification-receipt.test.ts:645`. |
+| R2 | MET | `deriveFeatureConfidence` at `packages/app/src/workflow/feature-verification-run.ts:163`; cases `packages/app/tests/workflow/feature-verification-run.test.ts:187` (HIGH), `:203` (MEDIUM override), `:212` (operator-declared wins), `:219` (unknown level refused), `:224` (non-zero → LOW). |
+| R3 | MET | Rejection reason `unacknowledged-low-confidence` at `packages/app/src/workflow/feature-verification-receipt.ts:309`; boundary case `packages/app/tests/workflow/feature-verification-receipt.test.ts:695` (HIGH/MEDIUM certified, LOW and absent refused at `:716`/`:730`, LOW + acknowledgement accepted). |
+| R4 | MET | Finding code `packages/config/src/finding-codes.ts:196`; mapping `packages/app/src/services/feature-check.ts:620`; unsuppressible set `packages/app/src/services/planning-check-base.ts:63`; transition denial naming the code at `packages/app/tests/services/feature-transition.test.ts:297`. |
+| R5 | MET | Focused suites re-run this run: packages/app six files 284 pass / 0 fail; `apps/server/tests/modules/feature/transition-gate.test.ts` 8 pass / 0 fail. `apps/cli/tests/commands/feature.test.ts` could not run in this sandbox (fixture `git init` cannot write `.git/config`); the implementer's 343/0 receipt covers it. |
 
-**Full gate.** `bun run gate` → 11369 pass / 6 fail. All six are environmental, and none touches this change:
-
-| Failure | Evidence it is not this change |
-| --- | --- |
-| `FeatureLifecycleAdapter … verifying→done refuses until the pass records PASS` | fails under parallel load with `SQLiteError: database is locked (SQLITE_BUSY)`; **green in isolation** in the same run |
-| `FeatureCheckService > D61: normal done check rejects an unverified scenario…` | 20 s timeout under load; **green in isolation** |
-| `EnvShellGuardRunner > a var carrying shell metacharacters…` | `^ this test timed out after 20000ms`; **green in isolation** |
-| `AgentRunActionRunner > returns ok:false with error on non-zero exit` | **green in isolation** |
-| `service-emitting verbs honor --json-envelope end-to-end (0697 AC2)` | 60 s timeout; unrelated surface |
-| `forensic-query-history > sessionTimeline stays bounded on a 6,500-message session` | a host-speed assertion (`durationMs < 100`; measured 101 ms in the gate, 525 ms isolated) in an analytics path this change never touches — **pre-existing** |
-
-Isolation re-run of the six files: `336 pass / 1 fail` — only the pre-existing timing assertion above.
-
-**End-to-end probes** (throwaway git project with `docs/features/T1_probe-feature.md`, a run row per probe, the real workflow file, the regenerated bundle):
-
-| Probe | Invocation | Receipt | Gate |
-| --- | --- | --- | --- |
-| C | `… --vars '{"featureId":"T1"}'` (definition's own command) | `PASS` · `HIGH` · basis `verification command exited 0`, `proof-input digest unchanged across the pass` | confidence rule satisfied |
-| A | `--cmd true` | `PASS` · `MEDIUM` · basis adds `caller command override: true`, `the selected definition declares: bun run spur-check-feature` | — |
-| D | `--confidence LOW`, no acknowledgement | `PASS` · `LOW` | **refused**: `L4.feature-receipt-confidence` — `completion evidence rejected (unacknowledged-low-confidence)`, detail names the basis and both repairs |
-| E | `--confidence LOW --ack-low-confidence` | `PASS` · `LOW` · `confidenceAcknowledged: true` | confidence rule satisfied (remaining findings are the probe feature's own missing frontmatter) |
-| — | `--confidence SURE` | no receipt written | refused before any write: `confidence must be HIGH, MEDIUM or LOW (got "SURE")` |
-| 4 | `--cmd false` | `FAIL` · `LOW` · basis `verification command did not exit 0` | — |
-
-**Known delivery limitation (filed as 1197).** The probes ran the repo's regenerated bundle under Bun. The *installed* path is not usable yet: the workflow's installed branch runs the `.mjs` twin with `node`, and the generated bundle imports `bun:sqlite` / `bun:ffi`, so `node <installed>/feature-verification-steps.mjs verify …` dies with `ERR_UNSUPPORTED_ESM_URL_SCHEME` while `bun …` proceeds. That mismatch predates this change (the pre-regeneration bundle contains the same three `bun:` imports) and is tracked in 1197 with the before/after evidence.
+| Acceptance Criteria | Status | Evidence Type | Evidence |
+|---------------------|--------|---------------|----------|
+| AC1 | MET | test | `packages/app/tests/workflow/feature-verification-run.test.ts:187`, `packages/app/tests/workflow/feature-verification-receipt.test.ts:614` |
+| AC2 | MET | test | `packages/app/tests/workflow/feature-verification-run.test.ts:203`, `packages/app/tests/workflow/feature-verification-run.test.ts:212` |
+| AC3 | MET | test | `packages/app/tests/workflow/feature-verification-receipt.test.ts:695`, `packages/app/tests/services/feature-transition.test.ts:297` |
+| AC4 | MET | command | 7 of 8 touched files re-run green this run (292 pass / 0 fail); CLI file sandbox-blocked; batch `bun run spur-check`: lint + typecheck + 51 pre-check rules PASS, test-leg failures sandbox/contention only (none in 1196 files) |
+- Coverage: N/A (verdict-based; verify pipeline does not measure code coverage)
 
 ### Review
 

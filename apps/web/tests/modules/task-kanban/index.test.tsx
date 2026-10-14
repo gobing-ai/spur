@@ -103,6 +103,28 @@ describe('TaskKanbanView scoping', () => {
             api.task.list = originalList;
         }
     });
+
+    test('module shell defaults blocked, cancelled, and deprecated checkboxes to unchecked and skips their lanes', async () => {
+        const mod = await import('../../../src/modules/task-kanban');
+        const View = mod.module.component;
+        const { container } = render(
+            <MemoryRouter initialEntries={['/board/tasks']}>
+                <View />
+            </MemoryRouter>,
+        );
+
+        expect((container.querySelector('#tasks-status-deprecated') as HTMLInputElement).checked).toBe(false);
+        expect((container.querySelector('#tasks-status-blocked') as HTMLInputElement).checked).toBe(false);
+        expect((container.querySelector('#tasks-status-cancelled') as HTMLInputElement).checked).toBe(false);
+        expect((container.querySelector('#tasks-status-todo') as HTMLInputElement).checked).toBe(true);
+        expect((container.querySelector('#tasks-status-wip') as HTMLInputElement).checked).toBe(true);
+
+        await waitFor(() => expect(container.querySelector('[data-kanban-board] .p-4')).not.toBeNull());
+        expect(container.querySelector('[aria-label="deprecated column"]')).toBeNull();
+        expect(container.querySelector('[aria-label="blocked column"]')).toBeNull();
+        expect(container.querySelector('[aria-label="cancelled column"]')).toBeNull();
+        expect(container.querySelector('[aria-label="todo column"]')).not.toBeNull();
+    });
 });
 
 describe('transition', () => {

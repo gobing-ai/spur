@@ -310,6 +310,26 @@ describe('1137 R2 — transitionFeatureGuarded', () => {
         }
     });
 
+    test('P2: the check service pins its project root at construction — a foreign cwd mid-flight cannot stale the receipt', async () => {
+        // Parallel-suite race (1198 false-FAIL): a sibling test chdirs while this
+        // flow is mid-verify; the service must use the root it was built with.
+        const { featFile, deps, cleanup } = setup('verifying', undefined, strictCleanFeature('F9', 'verifying'));
+        const foreign = mkdtempSync(join(tmpdir(), 'spur-foreign-cwd-'));
+        const prev = process.cwd();
+        try {
+            const fs = createNodeFileSystem();
+            await recordValidReceipt(fs, featFile, 'F9', deps.runDir, deps.cwd);
+            process.chdir(foreign);
+            const result = await transitionFeatureGuarded(deps, { id: 'F9', to: 'done' });
+            expect(result.toStatus).toBe('done');
+            expect(readFileSync(featFile, 'utf8')).toContain('status: done');
+        } finally {
+            process.chdir(prev);
+            rmSync(foreign, { recursive: true, force: true });
+            cleanup();
+        }
+    });
+
     test('failure inventory: a project-tier feature-lifecycle.yaml wins over the bundled tier', async () => {
         const { root, featFile, deps, cleanup } = setup('backlog');
         try {

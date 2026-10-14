@@ -1,13 +1,15 @@
 ---
 schema_version: 1
 name: Isolate the parallel suite's shared resources (live git tree, project DB) so a contended host cannot fail it
-status: wip
+status: done
 template: standard
 created_at: 2026-10-13T21:14:35.289Z
-updated_at: "2026-10-14T02:18:26.288Z"
+updated_at: "2026-10-14T04:37:15.728Z"
 
 priority: P1
 estimate_hours: 2
+done_forced: "false"
+done_reason: unforced close; PASS artifact at .spur/memory/evidence/1199-verdict.json
 ---
 
 ## 1199. Isolate the parallel suite's shared resources (live git tree, project DB) so a contended host cannot fail it
@@ -36,13 +38,13 @@ The pipeline needs the suite to be trustworthy on a *busy* host: sibling agents 
 
 ### Requirements
 
-- [ ] R1. No test reads or mutates the live checkout: every test that needs a git tree builds one under `mkdtemp` and passes it explicitly, including every `anchor-qualifier.test.ts` case that now uses `process.cwd()`, and no test calls `process.chdir`.
-- [ ] R4. `scripts/commands/run-tests.ts` prints the host context (load1 vs cores) once per run when load1 exceeds cores, so a timeout-shaped failure reads as contention rather than as a regression.
+- [x] R1. No test reads or mutates the live checkout: every test that needs a git tree builds one under `mkdtemp` and passes it explicitly, including every `anchor-qualifier.test.ts` case that now uses `process.cwd()`, and no test calls `process.chdir`.
+- [x] R4. `scripts/commands/run-tests.ts` prints the host context (load1 vs cores) once per run when load1 exceeds cores, so a timeout-shaped failure reads as contention rather than as a regression.
 
 ### Acceptance Criteria
 
-- [ ] AC1 — The anchor-qualifier tests pass from a cwd outside the repo and while the host is oversubscribed (req: R1)
-- [ ] AC4 — The suite header names load1/cores when load1 exceeds cores (req: R4)
+- [x] AC1 — The anchor-qualifier tests pass from a cwd outside the repo and while the host is oversubscribed (req: R1)
+- [x] AC4 — The suite header names load1/cores when load1 exceeds cores (req: R4)
 
 ### Q&A
 
@@ -106,11 +108,31 @@ The sibling `process.cwd()` receipt-capture defect in `packages/app/src/services
 
 ### Testing
 
-<!-- Filled during verification: commands run, outcomes, coverage claim or N/A. -->
+**Pipeline verify results**
+
+- Verdict: PASS (from verdict artifact)
+- Confidence: HIGH
+
+| Requirement | Status | Evidence |
+|-------------|--------|----------|
+| R1 | MET | Within the Design WHERE (`anchor-qualifier.test.ts`): `mkdtemp` fixture repo in `packages/app/tests/services/anchor-qualifier.test.ts:31`; cwd-derivation probed in a child `bun -e` at `packages/app/tests/services/anchor-qualifier.test.ts:64` (used at `:153`, `:158`); `buildTrackedBasenameIndex(fixtureRepo)` at `:175`, `createNodeFileSystem(fixtureRepo)` at `:196`, `projectRoot: fixtureRepo` at `:273`. `grep` this run: no `process.cwd()` call and no `process.chdir` call left in the file (only doc comments). |
+| R4 | MET | `scripts/commands/run-tests.ts:26` imports `availableParallelism, loadavg`; advisory line at `scripts/commands/run-tests.ts:60-63`, written before bun is spawned, argv and exit code untouched. Observed this run under load: `run-tests: host load1=18.90 cores=10 — timeouts may be contention`. |
+
+| Acceptance Criteria | Status | Evidence Type | Evidence |
+|---------------------|--------|---------------|----------|
+| AC1 — The anchor-qualifier tests pass from a cwd outside the repo and while the host is oversubscribed (req: R1) | MET | command | From `$TMPDIR` as cwd with absolute test path: 36 pass / 0 fail; with 20 `yes` spinners on 10 cores (load1 18.9): 36 pass / 0 fail, 2.45s |
+| AC4 — The suite header names load1/cores when load1 exceeds cores (req: R4) | MET | command | `bun scripts/commands/run-tests.ts packages/app/tests/services/anchor-qualifier.test.ts` under the same load printed the header line (see R4) |
+- Coverage: N/A (verdict-based; verify pipeline does not measure code coverage)
 
 ### Review
 
-<!-- Filled during review: P1-P4 findings, residual risk, and final disposition. -->
+<!-- spur:record-review -->
+
+**SECU findings** (pipeline verify step — verdict: PASS)
+
+| Priority | Dimension | Location | Finding |
+|----------|-----------|----------|----------|
+| P4 | — | — | No findings (verify verdict PASS) |
 
 ### References
 
@@ -120,4 +142,6 @@ The sibling `process.cwd()` receipt-capture defect in `packages/app/src/services
 
 - 2026-10-13T21:44:29.239Z backlog → todo (system)
 - 2026-10-14T02:18:24.220Z todo → wip (system)
+- 2026-10-14T04:37:14.983Z wip → testing (system)
+- 2026-10-14T04:37:15.610Z testing → done (system)
 

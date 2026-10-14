@@ -26,7 +26,7 @@ export const BOOTSTRAP_FOLDER = 'docs/tasks';
 const DETAIL_WIDTH_KEY = 'spur:detail-width';
 
 /** Default lane visibility when the board is uncontrolled (Workspace embed). */
-const DEFAULT_HIDDEN: ReadonlySet<string> = new Set(['blocked', 'cancelled']);
+const DEFAULT_HIDDEN: ReadonlySet<string> = new Set(['blocked', 'cancelled', 'deprecated']);
 
 type TaskStatus = (typeof TASK_STATUSES)[number];
 
@@ -43,7 +43,7 @@ interface Props {
     filters?: TaskListFilters;
     /** Controlled phase folder (module route). Omitted → board resolves its own default. */
     folder?: string;
-    /** Controlled lane visibility. Omitted → board defaults `blocked`/`cancelled` hidden. */
+    /** Controlled lane visibility. Omitted → board defaults `blocked`/`cancelled`/`deprecated` hidden. */
     hiddenColumns?: ReadonlySet<string>;
     /** Reports this board store's live connection state to its optional shell. */
     onConnectionChange?: (connected: boolean) => void;

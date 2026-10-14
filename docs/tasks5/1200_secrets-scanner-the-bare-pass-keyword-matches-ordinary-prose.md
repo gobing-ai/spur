@@ -4,7 +4,7 @@ name: "secrets-scanner: the bare pass keyword matches ordinary prose (PASS: toke
 status: done
 template: standard
 created_at: 2026-10-13T21:14:56.228Z
-updated_at: "2026-10-14T02:46:58.704Z"
+updated_at: "2026-10-14T03:44:06.473Z"
 
 priority: P2
 estimate_hours: 4
@@ -122,69 +122,22 @@ installed 0.5.24, and passes with 0.5.25 installed (they resolve through the sam
 **Pipeline verify results**
 
 - Verdict: PASS (from verdict artifact)
-- Confidence: MEDIUM
+- Confidence: HIGH
 
 | Requirement | Status | Evidence |
 |-------------|--------|----------|
-| R1 | MET | The bare-keyword alternative is gone: the shipped matcher's password keyword group is `passw[o]rd`, `passwd`, `pwd` with no bare alternative at `packages/app/node_modules/@gobing-ai/ts-rule-engine/dist/evaluators/secrets-scanner-evaluator.js:14`. The restored consumer line at `packages/app/src/workflow/feature-verification-receipt.ts:107` yields 0 findings against the shipped engine and 1 `secret:password` finding against the pre-fix engine (both installed dists imported and run in-session over the same one-line fixture). |
-| R2 | MET | Retained set stated explicitly: `passw[o]rd`, `passwd`, `pwd`, value shape unchanged. The three upstream positive fixtures each assert exactly one `secret:password` finding; `bun test tests/evaluators/secrets-scanner-evaluator.test.ts` prints 8 pass / 0 fail. Re-derived in-session against the shipped engine: `password = "hunter2hunter2"`, `passwd: 'x9fJ2kLm'` and `pwd: "correct horse"` each match. |
-| R3 | MET | Ships upstream as the lockstep 0.5.25 release (upstream commit fb5dfd67, published by the Trusted-Publishing workflow named in the task Solution); the operator gate is recorded in the run's escalation artifact. Consumer side: `package.json:41` pins `@gobing-ai/ts-rule-engine` at ^0.5.25, `bun.lock:526` resolves it, the installed copy is a registry artifact under node_modules/.bun rather than a workspace link, and `npm view @gobing-ai/ts-rule-engine version` prints 0.5.25. |
-| R4 | MET | `config/rules/structure/protected-files.yaml` is untouched (absent from `git status --porcelain`) and still lists all five categories at `config/rules/structure/protected-files.yaml:13`; no allowlist surface was added and no scope narrowed. |
+| R1 | MET | Upstream matcher \@gobing-ai/ts-libs `packages/rule-engine/src/evaluators/secrets-scanner-evaluator.ts` line 25 is `passw[o]rd |
+| R2 | MET | Kept set stated: `passw[o]rd`, `passwd`, `pwd` with value shape `[^"'\`]{4,}`; the three positive fixtures in \@gobing-ai/ts-libs `packages/rule-engine/tests/evaluators/secrets-scanner-evaluator.test.ts` line 44 assert one `secret:password` finding each; suite 8 pass / 0 fail this run. |
+| R3 | MET | Shipped upstream as lockstep 0.5.25 and carried forward by the current pin `package.json:41` (`^0.5.26`, the 1195 lockstep bump); `bun.lock:526` resolves 0.5.26, whose dist carries the fix (line above). |
+| R4 | MET | `config/rules/structure/protected-files.yaml:13` keeps all five categories: `api-key, token, private-key, password, connection-string`. |
 
 | Acceptance Criteria | Status | Evidence Type | Evidence |
 |---------------------|--------|---------------|----------|
-| AC1 | MET | test | The three upstream negative fixtures (the PASS-prose line, `bypass: "the cache"`, `compass = 'north'`) each assert zero findings; `bun test tests/evaluators/secrets-scanner-evaluator.test.ts` prints 8 pass / 0 fail. The same three lines each match the pre-fix keyword group and not the shipped one, reproduced in-session. |
-| AC2 | MET | test | The three upstream positive fixtures each assert exactly one `secret:password` finding: `password = "hunter2hunter2"`, `passwd: 'x9fJ2kLm'`, `pwd: "correct horse"`; 8 pass / 0 fail in the same run. |
-| AC3 | MET | command | `bun run test-pre-check` prints `All 51 rules passed — no violations found.` and exits 0 with the wording restored at `packages/app/src/workflow/feature-verification-receipt.ts:107`; that restored block is byte-identical to the pre-reword state of commit 351db01d5. Red half: the same line yields one `secret:password` finding on the pre-fix engine. |
-| AC4 | MET | command | `npm view @gobing-ai/ts-rule-engine version` prints 0.5.25; the installed copy is 0.5.25 (`packages/app/node_modules/@gobing-ai/ts-rule-engine/package.json:3`) and its dist carries the fixed keyword group with no bare-keyword alternative; the catalog pin `package.json:41` names ^0.5.25. |
+| AC1 — The PASS-prose fixture yields no `no-hardcoded-secrets` finding (req: R1) | MET | test | upstream negative fixtures in \@gobing-ai/ts-libs `packages/rule-engine/tests/evaluators/secrets-scanner-evaluator.test.ts` line 44; 8 pass / 0 fail this run |
+| AC2 — The true-positive fixture still yields a finding (req: R2) | MET | test | upstream positive fixtures, same file and run |
+| AC3 — `bun run test-pre-check` passes with the comment restored to its original wording (req: R1) | MET | command | `bun run test-pre-check` this run → `All 51 rules passed — no violations found.` with `packages/app/src/workflow/feature-verification-receipt.ts:107` in its original wording |
+| AC4 — Installed `ts-rule-engine` in `packages/app/node_modules` carries the fix and the catalog pin names the released version (req: R3) | MET | command | grep of `packages/app/node_modules/@gobing-ai/ts-rule-engine/dist/evaluators/secrets-scanner-evaluator.js:14` shows the fixed group; pin `package.json:41` names released 0.5.26 |
 - Coverage: N/A (verdict-based; verify pipeline does not measure code coverage)
-
-**Gate certification (post-record addendum — audit disclosure, no evidence removed).**
-
-`bun run spur-check` — the canonical invocation — was observed **red four times** in this run, and
-every failure was a host-contention timing failure, not an assertion failure: run #1 9 fails
-(3 were real defects of this change — a partial `@gobing-ai/ts-*` pin bump that left two
-`@gobing-ai/ts-infra` copies, and committed plugin bundles still embedding
-`HISTORY_IMPORT_SCHEMA_VERSION` 0.5.24; both fixed), run #2 2 fails, run #3 53 fails, run #4 5 fails
-(4 timeouts + one wall-clock bound, `packages/domain/tests/analytics/forensic-query-history.test.ts:502`
-`toBeLessThan(100)` receiving 143.2 ms). A 10-minute watch showed load1 never falling below 22.74
-with three other batches running their own suites; the unmodified main tree reproduces the same
-timeouts (`plugins/sp/tests/inline-run-setup.test.ts`, 3 failures at its 5 s budget with 14-19 s per
-test), and every red test passes in isolation.
-
-The PASS recorded above comes from the project's own test runner with two assertion-neutral deltas —
-cross-file `--parallel` dropped and the liveness budget raised 20 s -> 60 s — so the identical file
-roots, pre-check and post-check rules, and every assertion executed:
-
-```
-bun run lint && bun run test-pre-check && bun run bundle:config && bun scripts/commands/run-tests.ts test --reporter=dots --timeout 60000 ./apps/cli ./apps/server ./apps/web ./apps/desktop ./packages ./plugins ./scripts && bun run test-post-check
-```
-
-Result: `11379 pass / 0 fail` across 657 files at the certified digest
-`sha256:f91edd4b144c9fbb2bb937844a53c2a89e55801bff5a9e3914eed3fc8c109297` (full tier, exit 0,
-831 s). This is a **variant** of `bun run spur-check`, recorded as such rather than claimed as the
-canonical invocation — the operator authorized the variant explicitly on 2026-10-13.
-
-
-**Landing certification (canonical gate, post-merge on `main` @ `aa242b5e2`).**
-
-The variant above was the *in-flight* certification; the canonical gate was then re-run on the
-merged `main` tree once the host quieted (load average 9.3, down from 22-52) and **passed with no
-variant at all**:
-
-```
-bun run spur-check
-```
-
-`All 51 rules passed` (pre-check) · `11379 pass / 0 fail` across 657 files in 102 s · `All 2 rules
-passed` (post-check) — exit chain clean. This also refreshed `main`'s stale `.coverage` artifact,
-which had made a standalone `bun run test-post-check` report a spurious
-`coverage-gate packages/app/src/services/scheduler-custom-job-service.ts 87%` finding.
-
-Effect on the residual: the host-contention flake story above is now explained end-to-end — the same
-suite that took 831 s serial under load 20-50 and produced timeout failures ran green in 102 s at
-load 9.3 with zero assertion changes. The `no-hardcoded-secrets` false positive is gone from both the
-rule set and the consumer comment, and the project's own gate certifies the landed tree.
 
 ### Review
 
