@@ -1328,9 +1328,8 @@ transitions:
               command: >-
                   test "$profile" = auto &&
                   grep -qiE '^[[:space:]]*\**Verdict:\** *PASS' ".spur/run/$__runId-review-answer.txt" &&
-                  ( grep -qiE '^[[:space:]]*\**Confidence:\** *(HIGH|MEDIUM)' ".spur/run/$__runId-review-answer.txt" || [ "$ackLowConfidence" = "true" ] ) &&
                   eval "$(jq -r 'if .mode=="source-repo" then "S="+@sh"\(.dir)/residual-scan.ts"+" RUNNER=bun" elif .mode=="installed" then "S="+@sh"\(.dir)/residual-scan.mjs"+" RUNNER=node" else empty end' ".spur/run/$__runId-script-root.json" 2>/dev/null)" &&
-                  [ -f "$S" ] && "$RUNNER" "$S" review-gate "$wbs" --spur-bin "$spurBin" >&2
+                  [ -f "$S" ] && "$RUNNER" "$S" review-gate "$wbs" --spur-bin "$spurBin" --review-answer ".spur/run/$__runId-review-answer.txt" >&2
     - from: review
       to: approve
       description: Review certified a HIGH/MEDIUM-confidence PASS (LOW/absent needs ackLowConfidence) with no open P1-P3 finding — gate on human approval before verification.
@@ -1339,9 +1338,8 @@ transitions:
           options:
               command: >-
                   grep -qiE '^[[:space:]]*\**Verdict:\** *PASS' ".spur/run/$__runId-review-answer.txt" &&
-                  ( grep -qiE '^[[:space:]]*\**Confidence:\** *(HIGH|MEDIUM)' ".spur/run/$__runId-review-answer.txt" || [ "$ackLowConfidence" = "true" ] ) &&
                   eval "$(jq -r 'if .mode=="source-repo" then "S="+@sh"\(.dir)/residual-scan.ts"+" RUNNER=bun" elif .mode=="installed" then "S="+@sh"\(.dir)/residual-scan.mjs"+" RUNNER=node" else empty end' ".spur/run/$__runId-script-root.json" 2>/dev/null)" &&
-                  [ -f "$S" ] && "$RUNNER" "$S" review-gate "$wbs" --spur-bin "$spurBin" >&2
+                  [ -f "$S" ] && "$RUNNER" "$S" review-gate "$wbs" --spur-bin "$spurBin" --review-answer ".spur/run/$__runId-review-answer.txt" >&2
     - from: review
       to: review-fail-triage
       description: >-

@@ -10,7 +10,7 @@ import { spurCommand } from '../lib/spur-bin';
 
 export * from '../lib/residual-scan.generated.mjs';
 export const RESIDUAL_SCAN_USAGE =
-    'usage: residual-scan.ts <scan|fold|settle|report|review-gate> <wbs> [--spur-bin <bin>] [--root <dir>] [--tmp-dir <dir>]';
+    'usage: residual-scan.ts <scan|fold|settle|report|review-gate> <wbs> [--spur-bin <bin>] [--root <dir>] [--tmp-dir <dir>] [--review-answer <path>]';
 export type ScanEnv = { spurBin?: string } & Record<string, string | undefined>;
 export type ScanIo = { out: (line: string) => void; err: (line: string) => void };
 export type ScanOptions = { cwd?: string; io?: ScanIo };
@@ -110,12 +110,26 @@ function scanMode(opts: ParsedArgs, env: ScanEnv, io: ScanIo): number {
  * hop already appends to the gate log (its remediation input); the record sweep stays the final
  * authority and overwrites it. Exit 1 on an open P1-P3 finding fails the review PASS edge closed
  * into review-fail-triage.
+ *
+ * Task 1204 (folded in here by the session review): when `--review-answer <path>` names the review
+ * answer, its `Confidence:` level is graded too — HIGH/MEDIUM pass, LOW or an absent level needs
+ * `env.ackLowConfidence`. The rule lives here rather than inline in the edges because ADR-115 caps
+ * a guard at 5 logical commands.
  */
 function reviewGateMode(opts: ParsedArgs, env: ScanEnv, io: ScanIo): number {
     const runDir = join(opts.root, '.spur', 'run');
     fs.mkdirSync(runDir, { recursive: true });
     const { content } = loadTask(env, opts.spurBin, opts.wbs, opts.root);
-    const gate = core.buildReviewGateArtifact(opts.wbs, content, readDeferrals(runDir, opts.wbs));
+    // A named-but-absent answer file is a missing grade, not a crash: the grading violation covers it.
+    const answerPath = opts.reviewAnswer === undefined ? undefined : join(opts.root, opts.reviewAnswer);
+    const review =
+        answerPath === undefined
+            ? undefined
+            : {
+                  answer: isRegularFile(answerPath) ? fs.readFileSync(answerPath, 'utf8') : '',
+                  ackLowConfidence: env.ackLowConfidence,
+              };
+    const gate = core.buildReviewGateArtifact(opts.wbs, content, readDeferrals(runDir, opts.wbs), review);
     fs.writeFileSync(join(runDir, `${opts.wbs}-residuals.json`), `${JSON.stringify(gate.artifact, null, 2)}\n`);
     io.out(gate.note);
     return gate.artifact.counts.blocking > 0 ? 1 : 0;
