@@ -290,6 +290,41 @@ export function receiptFailsAtDigest(receipt: CheckReceipt | null, currentDigest
 }
 
 /**
+ * 1198 R1 — count the timeout-shaped failure pair in a gate log. Bun prints a per-test timeout as
+ * a `(fail) <name> [<n>ms]` line followed by `^ this test timed out after <n>ms.`; an assertion
+ * failure carries the `(fail)` line but no timeout line, so the two counts diverge.
+ */
+function countTimeoutShapedFailures(text: string): { fails: number; timeouts: number } {
+    let fails = 0;
+    let timeouts = 0;
+    for (const line of text.split('\n')) {
+        if (line.startsWith('(fail) ')) fails += 1;
+        if (/this test timed out after \d+ms/.test(line)) timeouts += 1;
+    }
+    return { fails, timeouts };
+}
+
+/**
+ * 1198 R1 — a gate log whose failures are exclusively per-test timeouts (host contention) rather
+ * than deterministic defects: at least one `(fail) ` line and exactly as many timeout lines as
+ * failures. Any non-timeout failure, no `(fail) ` line, or an empty/missing log is not
+ * timeout-shaped (R4), so the 0940 no-progress skip is unchanged for those shapes.
+ */
+export function isTimeoutShapedLog(text: string): boolean {
+    const { fails, timeouts } = countTimeoutShapedFailures(text);
+    return fails > 0 && fails === timeouts;
+}
+
+/** 1198 R2 — the input digest whose one contended retry is already spent, or '' when never spent. */
+function readContendedRetryDigest(markerPath: string): string {
+    try {
+        return readFileSync(markerPath, 'utf8').trim();
+    } catch {
+        return '';
+    }
+}
+
+/**
  * Reuse verdict for `.spur/run/<wbs>-check-receipt.json` against the current proof-input digest.
  * Evaluated missing → failed → stale → light-only; reuse requires `PASS` + `tier: full` + digest
  * match, so light rows can never flip a receipt reusable (0939 invariant).
@@ -850,6 +885,11 @@ export function runQualityGate(
     const attemptFile = rel('-test-fix-attempt');
     const abs = (p: string): string => (cwd ? join(cwd, p) : p);
 
+    // 1198 R1 — capture the prior gate log BEFORE the truncation below wipes it: the
+    // contended-retry predicate reads the failed log's shape, and a post-truncation read is always
+    // empty (the recheck truncates before the no-progress decision runs). A missing log reads ''.
+    const priorLog = mode === 'recheck' && existsSync(abs(logFile)) ? readFileSync(abs(logFile), 'utf8') : '';
+
     // run: `echo 0 > "$ATTEMPT_FILE" && : > "$LOG_FILE"`; recheck: truncate only.
     writeFileSync(abs(logFile), '');
     if (mode === 'run') writeFileSync(abs(attemptFile), '0\n');
@@ -896,11 +936,28 @@ export function runQualityGate(
     // then the shared FAIL path below writes findings/status/verdict exactly as a red gate does.
     // The attempt counter is pipeline-owned (only the test-fix hop increments it; `recheck` never
     // touches it), so the existing cap still bounds the loop.
-    const noProgressSkip =
+    const receiptFailsNow =
         commandPresent &&
         mode === 'recheck' &&
         receiptFailsAtDigest(readReceipt(abs(rel('-check-receipt.json'))), env.proofDigest ?? '');
-    if (noProgressSkip) {
+    // 1198 R1/R2 — contended retry: a receipt FAIL at the current digest whose prior gate log is
+    // timeout-shaped is host contention, not a deterministic defect, so the recheck re-runs the
+    // chain once per input digest instead of taking the sticky no-progress skip. The used digest is
+    // recorded in `.spur/run/<wbs>-contended-retry` (one line) so a second recheck at that digest
+    // skips exactly as today. `gateRc` stays 0, so the normal probe → full path runs: a green chain
+    // earns PASS through the existing path and a red one writes FAIL there — no verdict is minted.
+    const retryContended =
+        receiptFailsNow &&
+        isTimeoutShapedLog(priorLog) &&
+        readContendedRetryDigest(abs(rel('-contended-retry'))) !== (env.proofDigest ?? '');
+    const noProgressSkip = receiptFailsNow && !retryContended;
+    if (retryContended) {
+        writeFileSync(abs(rel('-contended-retry')), `${env.proofDigest ?? ''}\n`);
+        const fails = countTimeoutShapedFailures(priorLog).fails;
+        const line = `check.retry-contended — ${fails} timeout-shaped failure(s) at input digest ${env.proofDigest ?? ''}; retry 1/1\n`;
+        process.stdout.write(line); // tee: stdout and the log
+        appendFileSync(abs(logFile), line);
+    } else if (noProgressSkip) {
         const line = `check.skipped-no-progress — full-tier FAIL receipt at input digest ${env.proofDigest ?? ''}; recheck skipped\n`;
         process.stdout.write(line); // tee: stdout and the log
         appendFileSync(abs(logFile), line);
