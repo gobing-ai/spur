@@ -1,5 +1,11 @@
 # Changelog
 
+## [0.4.5] - 2026-10-14
+
+### Changed
+- retire asserted-confidence machinery from the pipeline (F511) (3c4f14824)
+- deflake the windows server-process graceful-stop timeout (95067746f)
+
 ## [0.4.4] - 2026-10-14
 
 ### Added
