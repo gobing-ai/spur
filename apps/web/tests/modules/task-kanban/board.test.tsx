@@ -407,14 +407,15 @@ test('an invalid stored detail width falls back to the computed default', async 
 });
 
 // ── controlled lane visibility (hiddenColumns prop; toggling lives in TasksShell) ──
-test('hiddenColumns prop hides lanes; omitting it defaults blocked/cancelled hidden', async () => {
+test('hiddenColumns prop hides lanes; omitting it defaults blocked/cancelled/deprecated hidden', async () => {
     const { getByText, queryByLabelText, container } = renderBoard();
     await waitFor(() => expect(getByText('Alpha')).toBeDefined());
 
-    // Defaults: to-do and wip visible, blocked/cancelled absent.
+    // Defaults: to-do and wip visible, blocked/cancelled/deprecated absent.
     expect(container.querySelector('[aria-label="todo column"]')).toBeTruthy();
     expect(queryByLabelText('blocked column')).toBeNull();
     expect(queryByLabelText('cancelled column')).toBeNull();
+    expect(queryByLabelText('deprecated column')).toBeNull();
 
     // Controlled: hiding wip removes that lane; un-hiding cancelled adds it.
     const { container: c2, getByText: g2 } = renderBoard({ hiddenColumns: new Set(['wip']) });
