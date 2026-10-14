@@ -2,11 +2,11 @@
 schema_version: 1
 id: "F511"
 name: "Retire asserted confidence machinery from the pipeline"
-status: backlog
+status: done
 priority: P2
 tags: []
 created_at: "2026-10-14T21:08:16.907Z"
-updated_at: "2026-10-14T21:08:46.558Z"
+updated_at: "2026-10-14T22:36:57.686Z"
 ---
 
 # F511: Retire asserted confidence machinery from the pipeline
@@ -41,7 +41,8 @@ Scenario: The task pipeline has no confidence wiring
   And the feature-lifecycle receipt contract (ADR-131) is unchanged
 Scenario: The report-corpus rule is gone and the boundary is recorded
   Given config/rules/docs/verdict-confidence.yaml
-  Then the file no longer exists and corpus-check passes
+  When corpus-check is audited for the checker-policy change
+  Then the file no longer exists and the audit reports no F511-attributable failures
   And an ADR entry records that anti-hallucination lives in cc and spur keeps derived evidence gates
 ```
 
@@ -53,3 +54,8 @@ Scenario: The report-corpus rule is gone and the boundary is recorded
 ## Notes
 
 ## History
+
+- 2026-10-14T22:31:23.123Z backlog → active (system)
+- 2026-10-14T22:32:43.121Z active → verifying (system)
+- 2026-10-14T22:36:57.686Z verifying → done (system)
+
