@@ -24,4 +24,5 @@ For shared semantics, see the [flag glossary](../skills/spur-dev/references/flag
 ## Implementation
 
 Follow the inline procedure in [dev-operations.md](../skills/spur-dev/references/dev-operations.md#11-handover) (handover).
+Run no quality gate (`bun run gate`, lint, typecheck, tests, `spur-check`); cite results already on record.
 

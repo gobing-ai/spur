@@ -42,7 +42,9 @@ export default function TasksShell() {
     const folder = filters.folder ?? defaultFolder;
     const visibleStatuses = new Set(
         filters.status === undefined
-            ? TASK_STATUSES.filter((status) => status !== 'blocked' && status !== 'cancelled')
+            ? TASK_STATUSES.filter(
+                  (status) => status !== 'blocked' && status !== 'cancelled' && status !== 'deprecated',
+              )
             : filters.status.split(',').filter((status) => TASK_STATUSES.some((candidate) => candidate === status)),
     );
     const hiddenColumns = new Set(TASK_STATUSES.filter((status) => !visibleStatuses.has(status)));

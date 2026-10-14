@@ -1,4 +1,4 @@
-import { describe, expect, test } from 'bun:test';
+import { afterAll, beforeAll, describe, expect, test } from 'bun:test';
 import { mkdtemp, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -15,13 +15,42 @@ const slowTest = (name: string, fn: () => Promise<void> | void): void => void te
 
 const fs = createNodeFileSystem();
 const runner = new ProofFingerprintActionRunner(fs);
-const ctx: ActionRunContext = {
-    runId: 'proof-fingerprint-test',
-    stateOrNodeId: 'test-node',
-    vars: {},
-    env: {},
-    workdir: process.cwd(),
-};
+/** Built in `beforeAll` against the fixture repo below — `workdir` is readonly, so the whole
+ * context is constructed once the fixture exists rather than mutated in place. */
+let ctx: ActionRunContext;
+
+/**
+ * The git repo these tests hash — a tiny fixture, not the live checkout.
+ *
+ * Hashing the live tree cost 150-350ms per capture (3.5k tracked files walked by `git add -A`) and
+ * blew even this file's 30s budget under host load (reproduced 2026-10-13 with sibling suites
+ * running: "captures the digest into the declared var" timed out at 30s), while a fixture repo
+ * captures in ~10ms. It is also the honest seam: the action only needs *a* repo. Tests that need a
+ * specific tree shape still build their own (`{ cwd: dir }` below).
+ */
+let fixtureRepo: string;
+
+beforeAll(async () => {
+    const { execSync } = require('node:child_process') as typeof import('node:child_process');
+    const { writeFileSync } = require('node:fs') as typeof import('node:fs');
+    fixtureRepo = await mkdtemp(join(tmpdir(), 'proof-fp-live-'));
+    writeFileSync(join(fixtureRepo, 'tracked.ts'), 'export const a = 1;\n');
+    execSync(
+        'git init -q && git config user.email t@example.com && git config user.name t && git add -A && git commit -qm init',
+        { cwd: fixtureRepo },
+    );
+    ctx = {
+        runId: 'proof-fingerprint-test',
+        stateOrNodeId: 'test-node',
+        vars: {},
+        env: {},
+        workdir: fixtureRepo,
+    };
+});
+
+afterAll(async () => {
+    await rm(fixtureRepo, { recursive: true, force: true });
+});
 
 /** Narrow a declared `setVars` value to a string, failing loudly if the action did not set it. */
 function digestFor(result: ActionResult, name: string): string {

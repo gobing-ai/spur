@@ -147,6 +147,13 @@ _(Fill from package manifests / README — or during `sp:doc-evolve` customize.)
 **Done gate (minimum):** lint + tests clean; only intentional `git status` changes; no
 `--no-verify` / silent suppressions. Harness task done ⇒ real verify **PASS** when the pipeline ran.
 
+**Gate scope:** the gate verifies code changes. Scribe commands — `/sp:dev-gitmsg`,
+`/sp:dev-changelog`, `/sp:dev-handover`, `/sp:dev-job-dump` — produce text or a commit and run no
+gate (lint, typecheck, tests) unless asked: `gitmsg --check <cmd>`, or `/sp:dev-gtd --no-push` for
+gate → fix → commit. Commands that own a gate (`dev-run`, `dev-runall`, `dev-fixall`, `dev-gtd`,
+`dev-fixgha`, `dev-unit`, `--check` loops) run exactly what their contract names — no extra
+completion-gate pass on top.
+
 ---
 
 ## Spur CLI surface

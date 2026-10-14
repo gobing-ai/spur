@@ -1,7 +1,9 @@
 import { describe, expect, test } from 'bun:test';
-import type { DecisionMaker } from '@gobing-ai/ts-ai-runner';
+import { createDecisionMaker, type DecisionMaker } from '@gobing-ai/ts-ai-runner';
+import { createClefDriver } from '@gobing-ai/ts-decision-clef';
 import type { ActionRunContext } from '@gobing-ai/ts-dual-workflow-engine';
 import type { FileSystem } from '@gobing-ai/ts-runtime';
+import { CONFIDENCE_HIGH_THRESHOLD, CONFIDENCE_MEDIUM_THRESHOLD } from '../../../src/decision/confidence-level';
 import { DECIDE_KIND, DecideActionRunner, DecideOptionsSchema } from '../../../src/workflow/actions/decide';
 import { collectDecideViolations } from '../../../src/workflow/composition-lint';
 
@@ -31,15 +33,67 @@ function makeContext(workdir: string): ActionRunContext {
     return { runId: 'run-1', stateOrNodeId: 'classify', workdir, vars: {}, env: {} };
 }
 
-function fakeMaker(answer: { label: string; confidence: number }): () => Promise<DecisionMaker> {
+/** `record.evidence` captures the `state.evidence` the maker receives below the path-resolution seam (task 1193). */
+function fakeMaker(
+    answer: { label: string; confidence: number },
+    record?: { evidence: string[] },
+): () => Promise<DecisionMaker> {
     const maker = {
         driver: 'fake',
         ask: () => Promise.reject(new Error('not used')),
-        choice: () => Promise.resolve({ ...answer, kind: 'choice' as const, probabilities: {} }),
+        choice: (state: { evidence: string[] }) => {
+            if (record !== undefined) record.evidence = state.evidence;
+            return Promise.resolve({ ...answer, kind: 'choice' as const, probabilities: {} });
+        },
         score: () => Promise.reject(new Error('not used')),
         noul: () => Promise.reject(new Error('not used')),
     };
     return () => Promise.resolve(maker as unknown as DecisionMaker);
+}
+
+/**
+ * A stub clef backend that answers the single choice question with one confidence value, on the
+ * wire shape the shipped driver parses. Only the network is stubbed — the request/response mapping,
+ * the maker and the level derivation are the real ones (1195 AC4/R5).
+ */
+function clefFetchAnswering(confidence: number): typeof fetch {
+    return (async () =>
+        new Response(
+            JSON.stringify({
+                success: true,
+                result: {
+                    model: 'clef-flash',
+                    answers: {
+                        question: {
+                            type: 'choice',
+                            choice: 'retry',
+                            confidence,
+                            probabilities: { retry: confidence, stop: 1 - confidence },
+                        },
+                    },
+                },
+            }),
+            { status: 200, headers: { 'Content-Type': 'application/json' } },
+        )) as unknown as typeof fetch;
+}
+
+/**
+ * The inline runner wired to a real clef driver over the stub above. `confidence` is the value the
+ * backend returns, so a caller asserts the level the shipped derivation actually produced rather
+ * than one a mock handed back.
+ */
+function clefRunner(fs: FileSystem, confidence: number): DecideActionRunner {
+    return new DecideActionRunner(fs, {
+        enabled: true,
+        decisionMaker: async () =>
+            createDecisionMaker({
+                driver: createClefDriver({
+                    accountId: '0123456789abcdef0123456789abcdef',
+                    apiToken: 'secret_token_abc123',
+                    fetch: clefFetchAnswering(confidence),
+                }),
+            }),
+    });
 }
 
 const validOptions = {
@@ -147,6 +201,47 @@ describe('DecideActionRunner', () => {
         expect(row.confidenceLevel).toBe('HIGH');
     });
 
+    // 1193 AC1/R1: `spur task path --json` yields an absolute taskSpecPath; the inline runner
+    // must read it as given, not join it with the workdir (`<workdir><absolute>` is unreadable).
+    test('AC1: an absolute evidence path is read as given, not joined with the workdir', async () => {
+        const record: { evidence: string[] } = { evidence: [] };
+        // The fake fs holds ONLY the absolute key; a join would resolve to the absent workdir key.
+        const { fs } = fakeFs({ '/var/evidence/task.md': 'absolute body' });
+        const runner = new DecideActionRunner(fs, {
+            enabled: true,
+            decisionMaker: fakeMaker({ label: 'retry', confidence: 0.91 }, record),
+        });
+        const result = await runner.execute(
+            { ...validOptions, evidence: ['/var/evidence/task.md'] },
+            makeContext('/tmp/decide-workdir'),
+        );
+        expect(result.ok).toBe(true);
+        expect(record.evidence).toEqual(['absolute body']);
+        const decision = result.data?.decision as { degraded: boolean; reason: string };
+        expect(decision.degraded).toBe(false);
+        expect(decision.reason).toBe('accepted');
+    });
+
+    // 1193 AC3/R3 (inline half): a mixed absolute+relative list reaches the maker in declaration
+    // order with both bodies.
+    test('AC3: a mixed evidence list reaches the maker in declaration order', async () => {
+        const record: { evidence: string[] } = { evidence: [] };
+        const { fs } = fakeFs({
+            '/var/evidence/task.md': 'absolute body',
+            '/tmp/decide-workdir/notes.md': 'relative body',
+        });
+        const runner = new DecideActionRunner(fs, {
+            enabled: true,
+            decisionMaker: fakeMaker({ label: 'retry', confidence: 0.91 }, record),
+        });
+        const result = await runner.execute(
+            { ...validOptions, evidence: ['/var/evidence/task.md', 'notes.md'] },
+            makeContext('/tmp/decide-workdir'),
+        );
+        expect(result.ok).toBe(true);
+        expect(record.evidence).toEqual(['absolute body', 'relative body']);
+    });
+
     test('a below-floor answer still reports its own MEDIUM level, not the gate decision', async () => {
         // The level is derived from the confidence that was OBSERVED, orthogonal to whether the gate
         // accepted it (design §3.5): the same 0.6 answer is `low-confidence` AND `MEDIUM` — never
@@ -183,6 +278,76 @@ describe('DecideActionRunner', () => {
         expect(degradedRow.reason).toBe('disabled');
         // No backend answered, so the level must not read as confident.
         expect(degradedRow.confidenceLevel).toBe('LOW');
+    });
+
+    // 1195 AC4/R5: a clef-served answer flows through the REAL driver → maker → runDecide →
+    // `confidenceLevel()` chain — only the network is stubbed. Before `ts-decision-clef` 0.5.26 a
+    // parameterless clef decision died on Cloudflare's 422 (`"state": null`) and degraded, so no
+    // clef answer ever reached this derivation; a mock would pass either way, the shipped driver
+    // does not.
+    test('AC4: a clef answer derives its HIGH/MEDIUM/LOW level with degraded:false', async () => {
+        for (const [observed, level] of [
+            [0.91, 'HIGH'],
+            [0.6, 'MEDIUM'],
+            [0.2, 'LOW'],
+        ] as const) {
+            const { fs } = fakeFs();
+            // The floor is lowered so the level reports what the answer OBSERVED rather than the
+            // gate decision: at the 0.8 default, 0.6/0.2 would degrade and rewrite the value to the
+            // declared default, hiding the level the driver actually returned.
+            const result = await clefRunner(fs, observed).execute(
+                { ...validOptions, minConfidence: 0.1 },
+                makeContext('.'),
+            );
+            expect(result.ok).toBe(true);
+            expect(result.data?.value).toBe('retry');
+            const decision = result.data?.decision as {
+                confidence: number;
+                confidenceLevel: string;
+                degraded: boolean;
+            };
+            expect(decision.confidence).toBe(observed);
+            expect(decision.confidenceLevel).toBe(level);
+            expect(decision.degraded).toBe(false);
+        }
+    });
+
+    // 1195 R5 boundaries: the contract names exact thresholds — HIGH at c ≥ 0.8, MEDIUM at c ≥ 0.5,
+    // LOW otherwise. AC4 covers representative values; these cases bracket both thresholds through
+    // the same real driver → maker → runDecide → `confidenceLevel()` chain, so an off-by-one or a
+    // relaxed comparison is caught at the integration seam and not only in the unit derivation.
+    test('R5 boundaries: the exact thresholds decide the level through the real driver', async () => {
+        // The literals pin the contract — a silent re-thresholding has to fail here. The cases are
+        // then built from those same constants, so the boundary exercised through the driver tracks
+        // whatever the thresholds are instead of drifting away from them.
+        expect(CONFIDENCE_HIGH_THRESHOLD).toBe(0.8);
+        expect(CONFIDENCE_MEDIUM_THRESHOLD).toBe(0.5);
+
+        const cases = [
+            [CONFIDENCE_HIGH_THRESHOLD, 'HIGH'],
+            [CONFIDENCE_HIGH_THRESHOLD - 1e-6, 'MEDIUM'],
+            [CONFIDENCE_MEDIUM_THRESHOLD, 'MEDIUM'],
+            [CONFIDENCE_MEDIUM_THRESHOLD - 1e-6, 'LOW'],
+        ] as const;
+
+        for (const [observed, level] of cases) {
+            const { fs } = fakeFs();
+            // Floor 0 accepts every case, so the level reported is the one the derivation produced
+            // rather than a degraded row's placeholder LOW.
+            const result = await clefRunner(fs, observed).execute(
+                { ...validOptions, minConfidence: 0 },
+                makeContext('.'),
+            );
+            expect(result.ok).toBe(true);
+            const decision = result.data?.decision as {
+                confidence: number;
+                confidenceLevel: string;
+                degraded: boolean;
+            };
+            expect(decision.confidence).toBe(observed);
+            expect(decision.confidenceLevel).toBe(level);
+            expect(decision.degraded).toBe(false);
+        }
     });
 });
 

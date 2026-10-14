@@ -264,10 +264,10 @@ describe('discoverModules (real fs fallback under bun test)', () => {
         }
     });
 
-    test('observability is the first discovered module and therefore the default landing route (AC Scenario 1)', () => {
+    test('tasks is the first discovered module and therefore the default landing route', () => {
         const discovered = discoverModules();
         expect(discovered.length).toBeGreaterThan(0);
-        expect(discovered[0]?.id).toBe('observability');
+        expect(discovered[0]?.id).toBe('tasks');
         expect(discovered[0]?.order).toBe(10);
     });
 });

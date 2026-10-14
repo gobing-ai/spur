@@ -572,7 +572,14 @@ does not earn another full-gate run:
 4. Give the test an explicit per-test timeout and a WHY comment (see
    `plugins/sp/tests/inline-run-close-reason.test.ts:100-102`) as soon as EITHER (a) the same test
    load-flakes in two separate runs, OR (b) it times out once **outside the change scope** and then
-   passes green alone on three consecutive isolated reruns. Waiting for a second gate run to license
+   passes green alone on three consecutive isolated reruns. **Prefer making the test cheap or
+   hermetic first** — a test that hashes the live checkout transitively, or writes a probe file into
+   it, should build a `mkdtemp` fixture repo instead of buying a bigger budget
+   (`packages/app/tests/workflow/actions/proof-fingerprint.test.ts` is the pattern, 2026-10-13).
+   Only then hand the remaining repeat flakers an explicit budget: the suite-wide `--timeout` is
+   not the lever, and raising it was measured NOT to help (a 60s suite default still failed 7
+   spawn-heavy tests under a host shared with two sibling agent suites, while every one passed
+   alone in 0.15-0.3s — 2026-10-13). Waiting for a second gate run to license
    the fix cost 21 minutes on 2026-10-08 (task 1128, the 1058 two-tree canary: 5145 ms then 5967 ms
    against bun's 5000 ms default, green 3/3 alone). Never raise the global timeout, skip the test,
    or loop full-gate reruns.

@@ -88,23 +88,22 @@ describe('createRegistry', () => {
  */
 describe('singleton registry instance', () => {
     // 0849 R1: the retired modules (workspace 50, inbox 60, teams 70) are gone from disk, so the
-    // surviving declared orders are the whole enabled set in ascending order. This is the assertion
-    // that catches an accidental renumber — `projects` (45) must stay between `tasks` and nothing.
+    // surviving declared orders are the whole enabled set in ascending order. Tasks (10) sorts first.
     test('enabled modules are the surviving modules plus settings, in declared order', () => {
         expect(getEnabledModules()).toEqual([
-            'observability',
+            'tasks',
             'history',
             'plans',
             'designs',
             'features',
-            'tasks',
+            'observability',
             'projects',
             'settings',
         ]);
     });
 
-    test('the default landing route is still observability (lowest declared order)', () => {
-        expect(defaultModule?.route).toBe('observability');
+    test('the default landing route is tasks (lowest declared order)', () => {
+        expect(defaultModule?.route).toBe('tasks');
     });
 
     test('getEnabledModules lists ids of all enabled modules', () => {

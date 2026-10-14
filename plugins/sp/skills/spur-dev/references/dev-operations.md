@@ -79,7 +79,7 @@ each would be scope creep for one-liner procedures.
 | 6   | plan       | `dev-plan`          | `Skill()`         | inline driver (`idea-pipeline`) or async workflow                                  | `"<description>" [--feature <id>] [--parent <feature-id>] [--skip-design] [--agent <inline\|auto\|name>] [--auto]`                                                                   |
 | 7   | docs       | _(no thin wrapper)_ | `Skill()`         | `sp:doc-evolve`                                                                    | `"<change description>"`                                                                                                                                                                               |
 | 8   | changelog  | `dev-changelog`     | `inline`          | git log + conventional-commit grouping                                             | `[<file>] [--since <ref>] [--until <ref>] [--version <ver>]`                                                                                                                                            |
-| 9   | gitmsg     | `dev-gitmsg`        | `inline`          | bounded diff capture → concern grouping → conventional commit                      | `[--commit] [--squash] [--all] [--scope <path>]`                                                                                                                            |
+| 9   | gitmsg     | `dev-gitmsg`        | `inline`          | bounded diff capture → concern grouping → conventional commit                      | `[--commit] [--squash] [--all] [--scope <path>] [--check <cmd>]`                                                                                                           |
 | 10  | fixall     | `dev-fixall`        | `inline`          | lint + test fix loop                                                               | `[<validation-command>] [--max-retry <n>] [--scope <path>] [--gate-log <path>] [--findings <anchors>]`                                                                                                 |
 | 11  | handover   | `dev-handover`      | `inline`          | structured doc generation                                                          | `"<blocker description>"`                                                                                                                                                                              |
 | 11a | job-dump   | `dev-job-dump`      | `Skill()`         | `sp:spur-dev` (`job-dump`) | `--file <path>` |
@@ -250,7 +250,8 @@ check receipt (`receipt.runId === runId`), otherwise `n/a (<reason>)`. Any value
   checklist** against target sections (read codebases, ADRs, dependent WBS, dogfood evidence as
   needed). If any item fails, synthesize and rewrite via CLI-gated section updates until all pass
   (or surface a blocked Q&A with a concrete question). Outcome vocabulary: `refined` (wrote) |
-  `ready` (checklist already met, no write — optional alias of refined with zero writes) | `failed`.
+  `ready` (checklist already met, no write — optional alias of refined with zero writes) |
+  `cancelled` (issue triage found no valid issue — see `premises`) | `failed`.
   Prefer reporting `refined` when any section changed; if checklist already fully met, emit:
 
   ```
@@ -295,6 +296,17 @@ check receipt (`receipt.runId === runId`), otherwise `n/a (<reason>)`. Any value
        list`, `spur task list --status wip --json`) are recorded in References/Design.
      - **Scope** — the work is not already done, and not owned by another task.
 
+     **Issue triage.** When the task bundles several issues (findings, defects, R-items with their
+     proposed fixes), judge each one separately as `valid` (reproduced or confirmed in the current
+     tree), `already-fixed`, `owned-elsewhere` (name the WBS) or `invalid` (premise false). An issue
+     that is not `valid` is removed **with everything that exists only for it**: its Background
+     paragraph, R-items, Design/Solution notes, Plan steps and ACs. Renumber nothing that other
+     tasks or feature scenarios cite; leave a gap instead. Each removal is one correction-record
+     line. When **no** issue stays valid, do not rewrite the task. Record the triage in the
+     correction block, then `spur task update <wbs> cancelled --json`, and report outcome
+     `cancelled`. Cancelling is not demotion; it is valid only within the backlog/todo status scope
+     above.
+
      Contradictions are corrected in **this** refine (rewrite the claim, or re-point the design at
      ground truth), never deferred to the implementer. `--depth ready` exists so a downstream agent
      does not re-derive the analysis; a frozen design built on a false premise is the worst
@@ -309,7 +321,10 @@ check receipt (`receipt.runId === runId`), otherwise `n/a (<reason>)`. Any value
   1. Run `spur task check <wbs> --as todo --json`. Any error means the task is not ready. Fix it,
      or report `failed`.
   2. Fill metadata that is still unset: `spur task update <wbs> --priority <P0–P3>` and
-     `--estimate-hours <n>` (both `--json`). Never overwrite a value the operator set.
+     `--estimate-hours <n>` (both `--json`). Never overwrite a value the operator set. The one
+     exception is a triage that dropped issues: re-estimate the remaining scope and record
+     old → new in the correction block. The CLI cannot rename a task. When a drop leaves the title
+     naming removed scope, record that in the correction block as well.
   3. Promote `backlog → todo` idempotently with `spur task update <wbs> todo --json`, the same FSM
      transition `--next` uses. Create-time ready preparation skips its own promotion when the task
      is already `todo`, and next-router stops routing the task back to refine. Without `--next`,
@@ -341,9 +356,10 @@ check receipt (`receipt.runId === runId`), otherwise `n/a (<reason>)`. Any value
   3. Topo-sort by `dependencies[]` (Kahn, WBS-ascending tie-break). Cycle → abort entire batch before any refine. Out-of-set deps: `done` → allow; else → block subtree (same as runall).
   4. For each WBS in order: invoke single-task refine with shared flags **including `--depth`**. Under `--auto` + **`--depth standard`** (default), the per-task **L3 pre-synthesis SKIP gate** still applies. Under **`--depth ready`**, each task runs the implement-ready checklist (no L3-only SKIP). That includes the premises audit, the correction record and ready finalization, so a passing task leaves at `todo`.
   5. Failure policy: **stop-the-batch** (default) or `--keep-going` (skip in-batch dependents of a failed refine; continue independents).
-  6. Emit a batch report (markdown or `--json`) that records `depth` once at the header. Under `--depth ready`, each row also carries the corrections count, status before → after, and failed checklist ids.
-- **Per-task outcome vocabulary:** `refined` (synthesis wrote sections) | `SKIP` (already meets the active depth bar under `--auto`) | `failed` | `skipped` (dep failed under `--keep-going`) | `not-attempted` (halted) | `blocked` (unmet out-of-set dep).
-- **Batch verdict:** `clean` (all attempted tasks `refined` or `SKIP`) | `halted` (a failure stopped the batch) | `aborted` (cycle / unknown selector / empty set after filter).
+  6. Emit a batch report (markdown or `--json`) that records `depth` once at the header. Under `--depth ready`, each row also carries the corrections count, dropped issues, status before → after, and failed checklist ids.
+  7. **Cross-task proposals (`--depth ready` only).** After the per-task pass, list two kinds of proposals in the report: tasks whose remaining issues overlap another set member (same root cause or file set → name the merge target; tasks that only share a step, such as one upstream release, or that fix two layers of one failure → propose ordering or a shared step, not a merge), and tasks with no `feature_id` (name the candidate owning feature with evidence). These are proposals only. Refineall merges, cancels or links a task only when the operator's `--description` names that task and the action (e.g. `cancel 0273 and merge its issues into 0269; link 0260 to G11`). That explicit directive is the confirmation the [feature-link helper](feature-link-helper.md) requires. A merge moves the surviving issues with their fixes into the target through CLI section updates, records the merge in both tasks' correction blocks, then cancels the source. Run directives before the per-task pass, so each target is refined with its merged content.
+- **Per-task outcome vocabulary:** `refined` (synthesis wrote sections) | `SKIP` (already meets the active depth bar under `--auto`) | `cancelled` (no valid issue left, or merged away by directive) | `failed` | `skipped` (dep failed under `--keep-going`) | `not-attempted` (halted) | `blocked` (unmet out-of-set dep).
+- **Batch verdict:** `clean` (all attempted tasks `refined`, `SKIP` or `cancelled`) | `halted` (a failure stopped the batch) | `aborted` (cycle / unknown selector / empty set after filter).
 - **`--next` is not accepted** (dropped by feature H8, 2026-07-31 — see `plugins/sp/commands/dev-refineall.md` for the removal record). Chain execution explicitly: refineall, then `/sp:dev-runall --feature <id>`.
 - **`--auto` recommendation:** Batch refine without `--auto` requires per-task interactive Q&A and does not scale. Default operator path: `/sp:dev-refineall --feature <id> --auto`. For implement handoffs, or to re-audit a feature's filed tasks: `/sp:dev-refineall --feature <id> --auto --depth ready`.
 - **Delegation:** `Skill(skill="sp:spur-dev", args="refineall $ARGUMENTS")` → per task `Skill(skill="sp:spur-dev", args="refine <wbs> $SHARED_FLAGS")` (shared flags include `--depth` when set).
@@ -375,7 +391,7 @@ check receipt (`receipt.runId === runId`), otherwise `n/a (<reason>)`. Any value
 - **Behavior:**
   1. Parse arguments, preserving quoted paths with spaces. Reject a missing/empty path, repeated `--file`, unknown flags, or extra positional arguments with usage. Resolve the absolute path before changing directories. Reject a directory target; create missing parent directories. Respect CLI-gated corpus writes: task/feature documents cannot be dump targets.
   2. Gather the mission, original invocation/options, approved outcome, completed and partial work, blockers, and next actions. Verify repository/worktree paths, branch, HEAD/base, dirty files and relevant commits with Git. Inspect referenced tasks/features/runs through the CLI facade with `--json` in their execution directory. Preserve frozen batch membership, dependency order, run IDs, workflow/checkpoint identity, failure policy, executor state and worktree marker when applicable. Record inspection time and provenance; label unavailable facts `unknown`.
-  3. Fill every template section for this job; use `N/A` where inapplicable. Include uncommitted work and ownership, gate commands/results, pending questions, approvals given or still required, discovery maps, evidence paths, and wrap/merge/cleanup success conditions. Keep confirmed lessons and rejected approaches with anchors. Link authoritative specifications instead of copying them; never turn task-specific bypasses into general instructions.
+  3. Fill every template section for this job; use `N/A` where inapplicable. Include uncommitted work and ownership, gate commands/results already on record (never run a gate to fill this — write `not run`), pending questions, approvals given or still required, discovery maps, evidence paths, and wrap/merge/cleanup success conditions. Keep confirmed lessons and rejected approaches with anchors. Link authoritative specifications instead of copying them; never turn task-specific bypasses into general instructions.
   4. Redact credentials, tokens and sensitive personal data. Link large logs/artifacts by path and note their durability and availability to the recipient; the Markdown file does not transfer referenced files. Include essential continuation context directly so missing optional scratch notes do not erase the plan.
   5. Construct the complete snapshot before writing or refreshing `--file`. Read it back to verify the mission, execution directory, ordered remaining work and first actions. Report the absolute path and unresolved facts. Dumping only saves context: it does not stop an active executor, execute remaining work, change lifecycle state, commit, merge, or remove a worktree; record any executor still running.
 
@@ -552,6 +568,14 @@ gate commands, pending questions and approval requirements.>
 These define their procedure directly in the command file. No `Skill()` delegation — the command
 is the procedure. The backing is a combination of git CLI, `spur` CLI, and agent reasoning.
 
+**Gate ownership.** A project quality gate (`bun run gate`, `spur-check`, lint, typecheck, tests,
+rule runs) runs only where an operation's own contract names it: the pipeline `test` hop
+(`run`/`runall`), `fixall`, `gtd`, `fixgha`, `unit`, and the `--check <cmd>` loops. The scribe
+operations — `changelog`, `gitmsg`, `handover`, `job-dump` — produce text or a commit, not code, so
+they run **no gate by default**, and a generic "verify before you finish" rule from `AGENTS.md` or
+host instructions does not add one. An opt-in gate is explicit: `gitmsg --check <cmd>`, or
+`/sp:dev-gtd [--no-push]` for gate → auto-fix → commit. Commit hooks still run as configured.
+
 ### 8. changelog
 
 - **Purpose:** Generate a structured changelog from git commits between two refs.
@@ -568,12 +592,12 @@ is the procedure. The backing is a combination of git CLI, `spur` CLI, and agent
   6. Emit: with `<file>`, insert the section into that file above its newest `## [` release heading (or after its title when none exists) and touch nothing else in the file; without `<file>`, print it to stdout.
   7. Self-check before emitting: every short hash in `<since>..<until>` appears exactly once. Fix any miss or duplicate; do not report a verdict.
   8. Reply in at most three lines: the range, bullet counts per category, and the output target.
-- **Invariants:** Output is derived from `git log` only. No quality gates — no lint/test/`spur-check`/rule runs, citation or manifest lookups, confidence ratings, or edits beyond the one inserted section. The file is left uncommitted.
+- **Invariants:** Output is derived from `git log` only. No quality gates — no `bun run gate`/lint/typecheck/test/`spur-check`/rule runs, citation or manifest lookups, confidence ratings, or edits beyond the one inserted section. The file is left uncommitted.
 
 ### 9. gitmsg
 
 - **Purpose:** Generate conventional commit message(s) for the current change set — one gather call → concern grouping → one message per concern; optionally commit. Git + POSIX shell only; no helper script.
-- **Inputs:** `--scope <path>` (default: the whole change set) — path filter; an explicit `--scope` always wins over change-set auto-discovery. `--all` (default: off) — widen the change set past the index to every change in the tree: unstaged **and untracked** files. Omitted, the change set is the index only, which keeps pre-commit semantics stable. `--commit` (default: off) — commit the change set, one commit per concern. `--squash` (default: off) — collapse every concern into one message and one commit; implies `--commit`.
+- **Inputs:** `--scope <path>` (default: the whole change set) — path filter; an explicit `--scope` always wins over change-set auto-discovery. `--check <cmd>` (default: off) — run `<cmd>` once as a pre-commit gate (step 5a). `--all` (default: off) — widen the change set past the index to every change in the tree: unstaged **and untracked** files. Omitted, the change set is the index only, which keeps pre-commit semantics stable. `--commit` (default: off) — commit the change set, one commit per concern. `--squash` (default: off) — collapse every concern into one message and one commit; implies `--commit`.
 - **Backing:** `inline` — one bounded gather call + concern grouping + conventional commit formatting.
 - **Behavior:**
 
@@ -631,6 +655,8 @@ is the procedure. The backing is a combination of git CLI, `spur` CLI, and agent
 
   5. **Report.** Print: one context line (branch; `linked worktree` when `--git-dir` ≠ `--git-common-dir` and the superproject line is empty), then each message in a fenced block. No per-file summaries, no restated diff. With neither `--commit` nor `--squash`, add one copy-paste `git commit` line per message and stop.
 
+  5a. **Gate (`--check <cmd>` only) — one more Bash call.** Without `--check`, run no gate of any kind. With it, run `<cmd>` exactly once, verbatim, after the report: exit 0 → one `check PASS` line and continue; non-zero → print its last 30 lines and commit nothing. Never fix, retry, or widen the command — gate → fix → commit is `/sp:dev-gtd`.
+
   6. **Commit (`--commit` / `--squash`) — one more Bash call.** `--squash` implies `--commit`, so both together is just `--squash`. Refuse before touching the index when:
      - `## secret hits` is non-empty → print each `file: line`, commit nothing;
      - `--commit` would split (more than one group) and `## partially staged` is non-empty → splitting would widen those `git add -p` stagings to whole files; print the paths and commit nothing (`--squash` is allowed — it commits the index as staged).
@@ -649,7 +675,7 @@ is the procedure. The backing is a combination of git CLI, `spur` CLI, and agent
 
      Hooks stay enabled; a failing hook stops the run with its output — never `--no-verify`.
 
-- **Invariants:** Git and POSIX shell only — no helper script, no temp file. At most two Bash calls: gather, then (only when committing) commit. With neither `--commit` nor `--squash`, never runs `git commit` — message only. Neither flag commits across a secret hit, and `--commit` never splits across a partial staging. Without `--all` the change set is the index, so plain `/sp:dev-gitmsg` keeps pre-commit semantics; only `--all` reaches unstaged and untracked files, and only a committing run stages them. The empty-index widen is read-only and always announced — a committing run never widens its own scope. An explicit `--scope <path>` always bounds the change set, with or without `--all`. One bounded, context-free capture per run — never a second, wider read.
+- **Invariants:** Git and POSIX shell only — no helper script, no temp file. At most two Bash calls: gather, then (only when committing) commit — three with `--check`. No quality gate (`bun run gate`, lint, typecheck, tests, `spur-check`) unless `--check` names one. With neither `--commit` nor `--squash`, never runs `git commit` — message only. Neither flag commits across a secret hit, and `--commit` never splits across a partial staging. Without `--all` the change set is the index, so plain `/sp:dev-gitmsg` keeps pre-commit semantics; only `--all` reaches unstaged and untracked files, and only a committing run stages them. The empty-index widen is read-only and always announced — a committing run never widens its own scope. An explicit `--scope <path>` always bounds the change set, with or without `--all`. One bounded, context-free capture per run — never a second, wider read.
 
 ### 10. fixall
 
@@ -796,4 +822,4 @@ is the procedure. The backing is a combination of git CLI, `spur` CLI, and agent
   `## Testing`, `## Review`), verdict files (`.spur/run/<wbs>-verdict.json`), diffs, and docs — by
   **path**, not by pasting their content into the handover body. The handover is a pointer document;
   restating content it can instead link to makes it stale the moment the source changes.
-- **Invariants:** The handover is honest — rejected approaches are recorded so the next agent doesn't retry them. The blocker is specific, not "it doesn't work."
+- **Invariants:** The handover is honest — rejected approaches are recorded so the next agent doesn't retry them. The blocker is specific, not "it doesn't work." No quality gate runs — cite gate results already on record.

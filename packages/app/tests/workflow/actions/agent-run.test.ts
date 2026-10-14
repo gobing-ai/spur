@@ -103,7 +103,12 @@ describe('AgentRunActionRunner', () => {
         expect(result.data).toMatchObject({ exitCode: 0, agent: '<default>' });
     });
 
-    test('returns ok:false with error on non-zero exit', async () => {
+    /**
+     * Load-flake budget (cross-cutting.md § Isolation rerun for load-flakes): this case spawns a child process; it timed out at 20s in the 1193 batch gate run and again in a loaded full-suite run (2026-10-13), green alone.
+     */
+    const loadFlakeTest = (name: string, fn: () => Promise<void> | void): void => void test(name, fn, 60_000);
+
+    loadFlakeTest('returns ok:false with error on non-zero exit', async () => {
         const svc = svcWithRunTraced({ exitCode: 2, stdout: 'boom', invocation: invocation() });
         const runner = new AgentRunActionRunner(svc);
         const result = await runner.execute({ role: 'coder', input: 'hello' }, makeCtx());

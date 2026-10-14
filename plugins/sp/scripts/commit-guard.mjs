@@ -206,11 +206,11 @@ function main(argv, options = {}) {
   process.exit(main(process.argv.slice(2)));
 }
 export {
-  runStart,
-  runStage,
-  runCheck,
-  parsePorcelainZ,
-  main,
+  COMMIT_GUARD_USAGE,
   conflictMarkerLine,
-  COMMIT_GUARD_USAGE
+  main,
+  parsePorcelainZ,
+  runCheck,
+  runStage,
+  runStart
 };

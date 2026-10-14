@@ -172,6 +172,13 @@ pipeline. `bun run corpus-check` is the explicit unsuppressed
 audit for checker-policy changes (T10); ordinary corpus edits check affected inputs (T11).
 Do not bypass hooks or suppress findings to force green.
 
+**Gate scope:** the gate verifies code changes. Scribe commands — `/sp:dev-gitmsg`,
+`/sp:dev-changelog`, `/sp:dev-handover`, `/sp:dev-job-dump` — produce text or a commit and run no
+gate (`bun run gate`, lint, typecheck, tests, `spur-check`) unless asked: `gitmsg --check <cmd>`, or
+`/sp:dev-gtd --no-push` for gate → fix → commit. Commands that own a gate (`dev-run`, `dev-runall`,
+`dev-fixall`, `dev-gtd`, `dev-fixgha`, `dev-unit`, `--check` loops) run exactly what their
+contract names — no extra completion-gate pass on top.
+
 Run targeted tests **inside their workspace**, whose `bunfig.toml` supplies the preload. Use a
 subshell or absolute paths — the shell's cwd persists between calls, so a bare `cd` breaks later
 relative-path commands:

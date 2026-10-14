@@ -1104,7 +1104,12 @@ describe('main entrypoint (in-process)', () => {
         expect(output).toContain('Commits:');
     });
 
-    test('handles errors and calls process.exit(1)', async () => {
+    /**
+     * Load-flake budget (cross-cutting.md § Isolation rerun for load-flakes): this case runs the CLI entrypoint in-process; it timed out at 20s in two consecutive worktree gate runs (2026-10-13), green alone.
+     */
+    const loadFlakeTest = (name: string, fn: () => Promise<void> | void): void => void test(name, fn, 60_000);
+
+    loadFlakeTest('handles errors and calls process.exit(1)', async () => {
         const today = todayLocal();
         process.argv = ['bun', 'script', '--date', today, '--no-ccusage', '--no-git'];
 

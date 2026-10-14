@@ -2,7 +2,7 @@
 doc: 00_ADR
 owns: WHY — lasting architectural choices, context and tradeoffs
 authority: authoritative
-version: 1.69.0
+version: 1.70.0
 owner: Robin Min
 updated_at: 2026-10-13
 read_before: any structural change; before diverging from a decision

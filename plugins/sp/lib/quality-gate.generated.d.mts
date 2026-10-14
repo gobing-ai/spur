@@ -78,6 +78,7 @@ export declare interface BuildReceiptInput {
 }
 export declare function buildReceipt(input: BuildReceiptInput): CheckReceipt;
 export declare function receiptFailsAtDigest(receipt: CheckReceipt | null, currentDigest: string): boolean;
+export declare function isTimeoutShapedLog(text: string): boolean;
 export declare function readReceiptStatus(receiptPath: string, currentDigest: string): ReceiptReadStatus;
 export declare interface ReceiptReuseDecision {
     reuse: boolean;

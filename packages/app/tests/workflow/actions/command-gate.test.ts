@@ -132,7 +132,12 @@ describe('CommandGateActionRunner', () => {
         expect(res.error).toContain('must resolve beneath .spur/run/');
     });
 
-    test('softFail records FAIL without failing the action (soft probe)', async () => {
+    /**
+     * Load-flake budget (cross-cutting.md § Isolation rerun for load-flakes): this case spawns a real child process; it passes in 0.15s alone but timed out at 5s, 20s and 60s while sibling agent suites ran (three separate runs, 2026-10-13).
+     */
+    const loadFlakeTest = (name: string, fn: () => Promise<void> | void): void => void test(name, fn, 60_000);
+
+    loadFlakeTest('softFail records FAIL without failing the action (soft probe)', async () => {
         const workdir = join(tmpdir(), `test-gate-${crypto.randomUUID()}`);
         const fs = createNodeFileSystem(workdir);
         await fs.ensureDir(join(workdir, '.spur', 'run'));

@@ -37,5 +37,5 @@ export const module: WebModule = {
     component: TasksShell,
     sidebarLabel: 'Tasks',
     description: 'Task kanban, lifecycle status, and per-task detail',
-    order: 40,
+    order: 10,
 };

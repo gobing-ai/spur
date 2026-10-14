@@ -490,6 +490,50 @@ describe('review-report contract at the gate (task 1070 R1 on the review side)',
         }
     });
 
+    // The Confidence half above is asserted at BOTH layers (the function's return and the blocking
+    // gate outcome); the citation half was only asserted at the function. These two cases close that
+    // asymmetry: the citation check must actually stop the review gate, and the two halves of the
+    // contract must fire independently rather than one masking the other.
+    test('a citation violation blocks the review gate, and a cited claim does not', () => {
+        // P4/advisory keeps the findings' own blocking rule out of the way, so the only thing under
+        // test is the citation check.
+        const uncited = reviewWith('**Confidence:** MEDIUM', [
+            '| P4 (advisory) | `@orpc/client` swallows the error | `src/lib/rpc.ts:91` | ACCEPTED |',
+        ]);
+        const blocked = buildReviewGateArtifact('1070', uncited, []);
+        const contractItems = blocked.artifact.items.filter((i) => i.category === 'review-contract');
+        expect(contractItems).toHaveLength(1);
+        expect(contractItems[0]?.class).toBe('blocking');
+        expect(contractItems[0]?.location).toBe('src/lib/rpc.ts:91');
+        expect(gateExit(blocked.artifact.counts)).toBe(1);
+
+        // The same finding with a same-cell citation leaves the review gate green: what is graded is
+        // an uncited claim, not the presence of a claim marker.
+        const cited = reviewWith('**Confidence:** MEDIUM', [
+            '| P4 (advisory) | `@orpc/client` swallows the error — see `src/lib/rpc.ts:91` | `src/lib/rpc.ts:91` | ACCEPTED |',
+        ]);
+        const green = buildReviewGateArtifact('1070', cited, []);
+        expect(green.artifact.items.filter((i) => i.category === 'review-contract')).toEqual([]);
+        expect(gateExit(green.artifact.counts)).toBe(0);
+    });
+
+    test('an uncited claim and a missing Confidence line are independent blocking violations', () => {
+        // One report with both halves of the contract broken: neither check may mask the other, and
+        // each violation keeps its own location.
+        const both = reviewWith('', [
+            '| P4 (advisory) | `@orpc/client` swallows the error | `src/lib/rpc.ts:91` | ACCEPTED |',
+        ]);
+        const violations = reviewContractViolations(both);
+        expect(violations).toHaveLength(2);
+        expect(violations.map((v) => v.location).sort()).toEqual(['src/lib/rpc.ts:91', 'task-file:Review']);
+        expect(violations.some((v) => v.text.includes('no single valid'))).toBe(true);
+        expect(violations.some((v) => v.text.includes('without a same-cell citation'))).toBe(true);
+
+        const gate = buildReviewGateArtifact('1070', both, []);
+        expect(gate.artifact.items.filter((i) => i.category === 'review-contract')).toHaveLength(2);
+        expect(gateExit(gate.artifact.counts)).toBe(1);
+    });
+
     test('claim-free findings and a missing Review section raise nothing', () => {
         expect(
             reviewContractViolations(

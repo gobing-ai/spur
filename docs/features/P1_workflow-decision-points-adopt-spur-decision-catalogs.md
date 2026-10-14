@@ -2,11 +2,11 @@
 schema_version: 1
 id: "P1"
 name: "Spur decision production readiness: events and workflow adoption"
-status: verifying
+status: active
 priority: P2
 tags: []
 created_at: "2026-10-06T18:15:41.140Z"
-updated_at: "2026-10-13T18:01:24.501Z"
+updated_at: "2026-10-13T22:25:03.151Z"
 ---
 
 # P1: Workflow decision points adopt spur decision catalogs
@@ -200,7 +200,9 @@ Feature: Spur decision production readiness: events and workflow adoption
 | 1115 | Migrate task-pipeline test-fail-triage decide to the failure-class catalog decision | done |
 | 1116 | Migrate task-pipeline review-fail-triage decide to the review-failure-class catalog decision | done |
 | 1124 | Residuals from 1100 | done |
+| 1193 | Fix decide action evidence path resolution: an absolute evidence path is joined with the workdir | wip |
 | 1194 | Fix decide action evidence path resolution: an absolute evidence path is joined with the workdir | cancelled |
+| 1195 | Fix clef DecisionMaker: the hub passes state null and Cloudflare rejects the request with 422 | wip |
 <!-- END AUTO-GENERATED -->
 
 ## Notes
@@ -213,4 +215,5 @@ Feature: Spur decision production readiness: events and workflow adoption
 - 2026-10-08T08:15:34.488Z active → verifying (system)
 - 2026-10-13T17:57:55.012Z verifying → active (system)
 - 2026-10-13T18:00:50.896Z active → verifying (system)
+- 2026-10-13T22:25:03.151Z verifying → active (system)
 

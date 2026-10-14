@@ -735,8 +735,8 @@ describe('task-pipeline review-failure routing (session finding after 1088)', ()
                 .replaceAll('$spurBin', stub)
                 .replaceAll('$wbs', '1122');
             for (const [body, expected] of [
-                ['Verdict: PASS\n', 0],
-                ['**Verdict: PASS**\n', 0],
+                ['Verdict: PASS\nConfidence: HIGH\n', 0],
+                ['**Verdict: PASS**\nConfidence: HIGH\n', 0],
                 ['Verdict: FAIL\n', 1],
                 ['PASS without the token\n', 1],
             ] as const) {
@@ -779,9 +779,11 @@ describe('task-pipeline review PASS-edge review-gate (task 1122)', () => {
             expect(guard).toContain('residual-scan.mjs');
             expect(guard).toContain('$wbs');
             expect(guard).toContain('$spurBin');
-            // One AND-list: the gate runs only after the Verdict grep, so a missing scanner or an
-            // open P1-P3 finding fails the edge closed into the review-fail-triage catch-all.
-            expect(guard).toContain('review-answer.txt" && eval "$(jq');
+            // One AND-list: the gate runs only after the Verdict grep and the graded-PASS
+            // predicate (1204), so a missing scanner, an ungraded/LOW PASS, or an open P1-P3
+            // finding fails the edge closed into the review-fail-triage catch-all.
+            expect(guard).toContain('review-answer.txt" && ( grep');
+            expect(guard).toContain('"true" ] ) && eval "$(jq');
             expect(guard).not.toContain(';');
         }
         // The test-fix hop's existing hand-off appends exactly the artifact review-gate writes.
@@ -796,7 +798,7 @@ describe('task-pipeline review PASS-edge review-gate (task 1122)', () => {
         try {
             mkdirSync(join(dir, '.spur', 'run'), { recursive: true });
             const runId = 'run-t-1122';
-            writeFileSync(join(dir, '.spur', 'run', `${runId}-review-answer.txt`), 'Verdict: PASS\n');
+            writeFileSync(join(dir, '.spur', 'run', `${runId}-review-answer.txt`), 'Verdict: PASS\nConfidence: HIGH\n');
             writeFileSync(
                 join(dir, '.spur', 'run', `${runId}-script-root.json`),
                 `${JSON.stringify({ mode: 'source-repo', dir: SCRIPTS_DIR })}\n`,
@@ -846,6 +848,81 @@ describe('task-pipeline review PASS-edge review-gate (task 1122)', () => {
             expect(desc).toContain('DEFER');
             expect(desc).toContain('quality → review → verify');
             expect(desc).toContain('wrap residual');
+        }
+    });
+});
+
+// Task 1204: the review answer's `Confidence:` line was convention-only — a PASS at LOW (or with
+// no level at all) crossed the PASS edges exactly like HIGH. These pin the graded-PASS contract:
+// both PASS edges admit HIGH/MEDIUM unadorned; LOW or absent clears only through the operator's
+// `ackLowConfidence` var — the same policy the verify chain has enforced since 1068/1088.
+describe('task-pipeline review confidence gate (task 1204)', () => {
+    const runSh = (script: string, cwd: string, spurBin: string, ack: string): number =>
+        Bun.spawnSync(['sh', '-c', script], {
+            cwd,
+            env: { ...getEnvVars(), wbs: '1204', spurBin, ackLowConfidence: ack },
+            stdout: 'pipe',
+            stderr: 'pipe',
+        }).exitCode;
+
+    /** Render a review PASS edge with the run's vars substituted for literals. */
+    const renderReviewGuard = (to: 'verify' | 'approve', dir: string, runId: string): string =>
+        cmdOf('review', to)
+            .replaceAll('$profile', 'auto')
+            .replaceAll('$__runId', runId)
+            .replaceAll('../..', dir)
+            .replaceAll('$spurBin', join(dir, 'stub-spur.sh'))
+            .replaceAll('$wbs', '1204');
+
+    // Same fixture shape as the 1122 block: a clean P4-only review whose SECTION carries a valid
+    // HIGH level — `residual-scan review-gate` already fail-closes missing/out-of-enum levels at
+    // these same edges (review-contract), so a passing scanner is the baseline and the ANSWER
+    // file's level is the only variable under test (grading + ack, which the scanner does not do).
+    function makeCase(dir: string, runId: string, answer: string): void {
+        mkdirSync(join(dir, '.spur', 'run'), { recursive: true });
+        const stub = join(dir, 'stub-spur.sh');
+        const cleanReview = JSON.stringify({
+            content:
+                '### Review\n\n**Confidence:** HIGH\n\n| Priority | Finding | Location | Disposition |\n| --- | --- | --- | --- |\n| P4 (advisory) | Note | src/d.ts:1 | ACCEPTED |\n',
+        }).replaceAll("'", "'\\''");
+        writeFileSync(stub, `#!/bin/sh\ncase "$2" in\n  show) printf '%s' '${cleanReview}' ;;\nesac\n`);
+        chmodSync(stub, 0o755);
+        writeFileSync(
+            join(dir, '.spur', 'run', `${runId}-script-root.json`),
+            `${JSON.stringify({ mode: 'source-repo', dir: SCRIPTS_DIR })}\n`,
+        );
+        writeFileSync(join(dir, '.spur', 'run', `${runId}-review-answer.txt`), answer);
+    }
+
+    test('both PASS edges demand a graded PASS and read the acknowledgement var', () => {
+        for (const to of ['verify', 'approve'] as const) {
+            const guard = cmdOf('review', to);
+            expect(guard, `review→${to}`).toContain('Confidence:');
+            expect(guard, `review→${to}`).toContain('HIGH|MEDIUM');
+            expect(guard, `review→${to}`).toContain('"$ackLowConfidence"');
+        }
+    });
+
+    test('behavioral: HIGH/MEDIUM pass; LOW/absent are refused without the ack and admitted with it', () => {
+        for (const to of ['verify', 'approve'] as const) {
+            for (const [answer, ack, expected] of [
+                ['Verdict: PASS\nConfidence: HIGH\n', '', 0],
+                ['Verdict: PASS\n**Confidence:** MEDIUM\n', '', 0],
+                ['Verdict: PASS\nConfidence: LOW\n', '', 1],
+                ['Verdict: PASS\n', '', 1],
+                ['Verdict: PASS\nConfidence: LOW\n', 'true', 0],
+                ['Verdict: PASS\n', 'true', 0],
+            ] as const) {
+                const dir = mkdtempSync(join(tmpdir(), 'spur-review-conf-'));
+                try {
+                    const runId = `run-t-1204-${to}`;
+                    makeCase(dir, runId, answer);
+                    const code = runSh(renderReviewGuard(to, dir, runId), dir, join(dir, 'stub-spur.sh'), ack);
+                    expect(code, `review→${to}: ${JSON.stringify(answer)} ack=${ack}`).toBe(expected);
+                } finally {
+                    rmSync(dir, { recursive: true, force: true });
+                }
+            }
         }
     });
 });
