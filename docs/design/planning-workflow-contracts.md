@@ -3,7 +3,7 @@ kind: design
 title: "Planning workflow and operation contracts"
 status: implemented
 created_at: 2026-09-09
-updated_at: 2026-10-10
+updated_at: 2026-10-13
 related: ["0889", "0898", "0949", "0976", "0958", "1090", "1111", "1147"]
 tags: [contract, planning, workflow]
 ---
@@ -27,7 +27,7 @@ the engine schema shipped by the CLI, referenced as
 
 | File                     | States (§2.3)                                                       | Initial   | Terminal      | Guards                                                                                                                                                                                                                           |
 | ------------------------ | ------------------------------------------------------------------- | --------- | ------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `task-lifecycle.yaml`    | `backlog · todo · wip · testing · blocked · done · cancelled`       | `backlog` | `[cancelled]` | `wip→testing`: `spur task check <wbs> --as testing`; `testing→done`: `spur task check <wbs> --as done` (F92 R3: guard evaluates the transition target)                                                                                                                                    |
+| `task-lifecycle.yaml`    | `backlog · todo · wip · testing · blocked · done · cancelled · deprecated` (ADR-137) | `backlog` | `[cancelled]` | `wip→testing`: `spur task check <wbs> --as testing`; `testing→done`: `spur task check <wbs> --as done` (F92 R3: guard evaluates the transition target); `deprecated`: entered from `backlog`/`todo`/`wip`/`testing`/`blocked`/`done`, left only to `todo` (un-deprecate) or `cancelled` (removed) — `always` (ADR-137) |
 | `feature-lifecycle.yaml` | `backlog · active · verifying · blocked · done · cancelled · deprecated` (DD-13, ADR-136) | `backlog` | `[cancelled]` | `active→verifying`: `spur feature check <id> --as verifying`; `verifying→done`: `spur feature check <id> --strict --as done` (0418: guards pass the edge target so the one-active-goal rule evaluates the post-transition state); `deprecated`: entered from `backlog`/`active`/`verifying`/`blocked`/`done`, left only to `active` (un-deprecate) or `cancelled` (removed) — `always` (ADR-136) |
 
 Guard commands reference the check verbs (tasks: 0051/0057). The engine integration is **live**:

@@ -2,7 +2,7 @@
 kind: design
 title: "Server-Side Adjustment — Design"
 created_at: 2026-06-14
-updated_at: 2026-10-02
+updated_at: 2026-10-13
 related: ["0073", "0074", "0134", "0294", "1051", "1054"]
 tags: [system, server, web]
 doc: server-side-adjustment-design
@@ -1279,10 +1279,10 @@ flowchart TD
     class TCard,RP leaf
 ```
 
-**Columns** are the 7 canonical task statuses from `TASK_STATUSES`:
+**Columns** are the canonical task statuses from `TASK_STATUSES`:
 
 ```typescript
-const KANBAN_COLUMNS = TASK_STATUSES; // ['backlog', 'todo', 'wip', 'testing', 'blocked', 'done', 'cancelled']
+const KANBAN_COLUMNS = TASK_STATUSES;
 ```
 
 **Task card:**

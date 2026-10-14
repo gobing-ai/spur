@@ -4,7 +4,7 @@ owns: WHY — lasting architectural choices, context and tradeoffs
 authority: authoritative
 version: 1.69.0
 owner: Robin Min
-updated_at: 2026-10-12
+updated_at: 2026-10-13
 read_before: any structural change; before diverging from a decision
 edit_rules: 99 §6.1
 sync: [T1, T2]
@@ -2317,9 +2317,10 @@ owner split this entry established.
   `backlog`, `todo`, `wip`, `testing`, `blocked` and `done`, and leaves it only to `todo`
   (un-deprecate, History entry mandatory) or `cancelled` (removed). Freeze is about status-moving
   writes: derivation reads a deprecated task as terminal-linked (so it stops holding its feature
-  back), a new dependency edge onto it is refused at the handoff resolver and the preflight, section
-  writes and the pipeline's own record/anchor/verdict hops stay permitted with a freeze warning, and
-  status writes other than `todo`/`cancelled` are refused by the graph. Alternatives rejected:
+  back), a new dependency edge onto it is refused by both writers (the handoff resolver and the
+  `dependencies` frontmatter write) and at admission, section writes and the pipeline's own
+  record/anchor/verdict hops stay permitted with a freeze warning, and status writes other than
+  `todo`/`cancelled` are refused by the graph. Alternatives rejected:
   overloading `cancelled` (terminal, claims abandonment, loses un-deprecation) or `blocked`
   (an impediment with edges back into `wip`/`testing`, i.e. an invitation to resume); a terminal
   `deprecated` (duplicates `cancelled`); a per-task `frozen` flag (a second status axis every

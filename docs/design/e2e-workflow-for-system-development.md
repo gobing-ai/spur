@@ -2,7 +2,7 @@
 kind: design
 title: "Design — End-to-end Workflow System for System Development"
 created_at: 2026-07-01
-updated_at: 2026-10-12
+updated_at: 2026-10-13
 related: ["0167", "0168", "0169", "0170", "0171", "0172"]
 tags: [system, workflow, plugin]
 ---
@@ -92,7 +92,7 @@ flowchart TD
     %% ====================== LIFECYCLE FSMS (entity-level) ======================
     subgraph LifecycleFSMs["Entity Lifecycle FSMs (NOT phase pipelines)"]
         direction LR
-        TaskLifecycle["task-lifecycle.yaml<br/>backlog → todo → wip → testing → done<br/>+ blocked, cancelled"]:::fsm
+        TaskLifecycle["task-lifecycle.yaml<br/>backlog → todo → wip → testing → done<br/>+ blocked, cancelled, deprecated<br/>deprecated entered from any non-cancelled state, left only to todo / cancelled"]:::fsm
         FeatureLifecycle["feature-lifecycle.yaml<br/>backlog → active → verifying → done<br/>+ blocked, cancelled, deprecated<br/>deprecated entered from any non-terminal state, left only to active / cancelled"]:::fsm
     end
 
