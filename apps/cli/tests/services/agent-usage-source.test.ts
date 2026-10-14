@@ -41,8 +41,24 @@ describe('defaultAgentUsageSnapshotPath', () => {
 });
 
 describe('CodexbarUsageSource.capture', () => {
+    // Hermetic per the load-flake protocol (cross-cutting.md § Isolation rerun, step 4):
+    // the real-spawn variant timed out at the 20s suite budget twice and at 60s once on a
+    // contended host (2026-10-14), and bigger budgets were measured not to help. The buffered
+    // mapping is the CLI-layer behavior under test; real-spawn round-trips stay covered by the
+    // non-zero-exit and deadline tests below.
     test('returns buffered stdout/exit for a successful capture', async () => {
-        const source = new CodexbarUsageSource(['echo', '{}']);
+        const executor = {
+            run: async () => ({
+                command: 'echo',
+                args: ['{}'],
+                stdout: '{}\n',
+                stderr: '',
+                exitCode: 0,
+                durationMs: 1,
+                outcome: 'exit' as const,
+            }),
+        };
+        const source = new CodexbarUsageSource(['echo', '{}'], 5_000, executor);
         const capture = await source.capture();
         expect(capture.exitCode).toBe(0);
         expect(capture.stdout.trim()).toBe('{}');

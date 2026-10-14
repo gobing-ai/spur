@@ -133,16 +133,21 @@ describe('CommandGateActionRunner', () => {
     });
 
     /**
-     * Load-flake budget (cross-cutting.md § Isolation rerun for load-flakes): this case spawns a real child process; it passes in 0.15s alone but timed out at 5s, 20s and 60s while sibling agent suites ran (three separate runs, 2026-10-13).
+     * Hermetic by protocol (cross-cutting.md § Isolation rerun for load-flakes, step 4): this
+     * case load-flaked even with a 60s budget (2026-10-14) and bigger budgets were measured NOT
+     * to help under sibling-suite load. The softFail behavior lives in the runner's exit-code
+     * handling, so a stub executor exercises it without a real spawn; the sibling hard-fail test
+     * below keeps the real-`false` integration coverage.
      */
-    const loadFlakeTest = (name: string, fn: () => Promise<void> | void): void => void test(name, fn, 60_000);
-
-    loadFlakeTest('softFail records FAIL without failing the action (soft probe)', async () => {
+    test('softFail records FAIL without failing the action (soft probe)', async () => {
         const workdir = join(tmpdir(), `test-gate-${crypto.randomUUID()}`);
         const fs = createNodeFileSystem(workdir);
         await fs.ensureDir(join(workdir, '.spur', 'run'));
 
-        const runner = new CommandGateActionRunner(undefined, fs);
+        const executor = {
+            run: async () => ({ command: 'false', args: [], durationMs: 0, stdout: '', stderr: '', exitCode: 1 }),
+        };
+        const runner = new CommandGateActionRunner(executor as unknown as NodeProcessExecutor, fs);
         const resultFile = '.spur/run/soft.status';
         // A soft probe must keep the run alive so a transition guard can read the status
         // file and route to `failed` itself — the schema exposes no `onError` to do this.

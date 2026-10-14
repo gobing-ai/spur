@@ -26,6 +26,9 @@ async function runWorkflowJson(
 }
 
 describe('display annotations on the bundled pipelines (1104 AC1)', () => {
+    // Per-test headroom (cross-cutting.md § Isolation rerun for load-flakes, step 4b):
+    // nine sequential in-process `main()` invocations; flaked once at the 20s suite budget
+    // outside the change scope on a contended host (2026-10-14), green 3/3 alone in ~1.3s.
     test('workflow validate reports every bundled workflow file valid', async () => {
         const files = readdirSync(CONFIG_WORKFLOWS)
             .filter((f) => f.endsWith('.yaml'))
@@ -40,7 +43,7 @@ describe('display annotations on the bundled pipelines (1104 AC1)', () => {
                 expect([file, result.errors]).toEqual([file, []]);
             }
         }
-    });
+    }, 60_000);
 });
 
 describe('todo projection carries the phased plan (1104 AC2)', () => {

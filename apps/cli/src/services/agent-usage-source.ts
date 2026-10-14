@@ -8,7 +8,7 @@ import { homedir } from 'node:os';
 import { join } from 'node:path';
 import { type UsageCapture, type UsageSource, UsageSourceError } from '@gobing-ai/spur-app';
 import { getEnvVars } from '@gobing-ai/spur-config';
-import { NodeProcessExecutor } from '@gobing-ai/ts-runtime';
+import { NodeProcessExecutor, type ProcessExecutor } from '@gobing-ai/ts-runtime';
 
 /** Default argv for the codexbar capture (machine-readable, all providers). */
 const CODEXBAR_ARGV = ['codexbar', 'usage', '--format', 'json', '--provider', 'all'];
@@ -34,14 +34,18 @@ export class CodexbarUsageSource implements UsageSource {
     constructor(
         private readonly command: readonly string[] = CODEXBAR_ARGV,
         private readonly timeoutMs: number = DEFAULT_CAPTURE_TIMEOUT_MS,
+        // Seam for hermetic tests (2026-10-14: the real-spawn success case load-flaked at
+        // 20s twice and 60s once on contended hosts; the deadline/non-zero cases below keep
+        // the real-spawn integration coverage).
+        private readonly executor: Pick<ProcessExecutor, 'run'> = new NodeProcessExecutor(),
     ) {
         if (!(Number.isFinite(timeoutMs) && timeoutMs > 0)) this.timeoutMs = DEFAULT_CAPTURE_TIMEOUT_MS;
     }
 
     async capture(): Promise<UsageCapture> {
-        let result: Awaited<ReturnType<NodeProcessExecutor['run']>>;
+        let result: Awaited<ReturnType<ProcessExecutor['run']>>;
         try {
-            result = await new NodeProcessExecutor().run({
+            result = await this.executor.run({
                 command: this.command[0] as string,
                 args: this.command.slice(1),
                 forceBuffered: true,
