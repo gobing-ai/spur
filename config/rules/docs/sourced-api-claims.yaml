@@ -31,8 +31,9 @@
 # backstop: the two `cited-*` rules cover the citation half, and
 # `cited-api-claims-confidence` covers the level half. All are severity `info`,
 # and the category is deliberately NOT in `recommended-pre-check` — it surfaces
-# findings for review without reddening gates. To promote it to a gate, add
-# `- docs` to that preset's `extends` once the residual list is triaged.
+# findings for review without reddening gates. The 2026-10-12 audit below settled
+# the promotion question: the residual findings stay a review-surface concern
+# (SECUA checklist), not a gate one — do not add `- docs` to that preset.
 include:
   - "docs/**/*.md"
   - "plugins/sp/skills/**/references/**/*.md"

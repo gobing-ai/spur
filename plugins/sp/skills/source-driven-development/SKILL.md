@@ -102,11 +102,11 @@ line: `Verification: HIGH|MEDIUM|LOW — <first failing check and deviation, or 
 - **HIGH** — all three checks pass. **MEDIUM** — coverage intact but some citations are off-version (latest docs for a pinned dependency) or secondary-source only. **LOW** — an API/library claim lacks any citation, or a LOW-confidence claim was asserted as fact.
 
 Deterministic backstop: the `cited-version-strings`, `cited-api-claims` and
-`cited-api-claims-confidence` rules (`.spur/rules/docs/sourced-api-claims.yaml`) flag markdown lines
+`cited-api-claims-confidence` rules (`config/rules/docs/sourced-api-claims.yaml`) flag markdown lines
 that assert a version string or a time-anchored API claim with no citation anchor on the same line,
 and claim lines that carry no HIGH/MEDIUM/LOW level. They are an info-severity advisory backstop for
 this contract and are deliberately NOT wired into `recommended-pre-check` — run them ad hoc with
-`spur rule run --file .spur/rules/docs/sourced-api-claims.yaml`. The checks above and the SECUA
+`spur rule run --file config/rules/docs/sourced-api-claims.yaml`. The checks above and the SECUA
 checklist remain the enforcement points.
 
 ## Common Rationalizations
