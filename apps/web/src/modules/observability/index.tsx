@@ -17,5 +17,5 @@ export const module: WebModule = {
     component: ObservabilityShell,
     sidebarLabel: 'Observabilities',
     description: 'Real-time system events, execution traces, and agent doctor telemetry',
-    order: 40,
+    order: 10,
 };

@@ -1,4 +1,4 @@
-import { disabledModules } from './config';
+import { defaultModuleId, disabledModules } from './config';
 import { discoverModules } from './discover';
 import type { WebModule } from './types';
 
@@ -8,7 +8,7 @@ export interface Registry {
     readonly modules: ReadonlyArray<WebModule>;
     /** Look up an enabled module by id. Returns undefined for disabled/unknown ids. */
     getModule(id: string): WebModule | undefined;
-    /** The first enabled module — the default landing route. `undefined` when the registry is empty. */
+    /** The default landing route module. `undefined` when the registry is empty. */
     readonly defaultModule: WebModule | undefined;
     /** Disable a discovered module by id — removes it from the enabled set without deleting it. */
     disableModule(id: string): void;
@@ -23,6 +23,8 @@ export interface Registry {
 interface RegistryOptions {
     /** Module ids to drop after discovery. */
     disabled?: readonly string[];
+    /** Preferred default module id to open by default. Falls back to first enabled module. */
+    defaultModuleId?: string;
 }
 
 /**
@@ -36,6 +38,7 @@ export function createRegistry(discovered: WebModule[], opts?: RegistryOptions):
     // enabled view but retain their slot so enableModule can restore them in place.
     const discoveredOrder = discovered.slice();
     const disabled = new Set<string>(disabledSet);
+    const preferredDefaultId = opts?.defaultModuleId;
 
     function enabledList(): WebModule[] {
         return discoveredOrder.filter((m) => !disabled.has(m.id));
@@ -51,7 +54,12 @@ export function createRegistry(discovered: WebModule[], opts?: RegistryOptions):
             return enabledList().find((m) => m.id === id);
         },
         get defaultModule() {
-            return enabledList()[0];
+            const list = enabledList();
+            if (preferredDefaultId) {
+                const found = list.find((m) => m.id === preferredDefaultId);
+                if (found) return found;
+            }
+            return list[0];
         },
         disableModule(id: string): void {
             disabled.add(id);
@@ -102,7 +110,7 @@ function sourceOf(mod: WebModule): string {
 // Consumers (router.tsx, LeftSidebar.tsx, BoardLayout.tsx) keep importing
 // { modules } / { getModule } / { defaultModule } from './modules/registry' unchanged.
 
-const registry = createRegistry(discoverModules(), { disabled: disabledModules });
+const registry = createRegistry(discoverModules(), { disabled: disabledModules, defaultModuleId });
 
 /**
  * The built-in registry instance — discovery with the configured disables applied. BoardApp
