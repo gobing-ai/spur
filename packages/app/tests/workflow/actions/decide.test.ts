@@ -1,5 +1,6 @@
 import { describe, expect, test } from 'bun:test';
-import type { DecisionMaker } from '@gobing-ai/ts-ai-runner';
+import { createDecisionMaker, type DecisionMaker } from '@gobing-ai/ts-ai-runner';
+import { createClefDriver } from '@gobing-ai/ts-decision-clef';
 import type { ActionRunContext } from '@gobing-ai/ts-dual-workflow-engine';
 import type { FileSystem } from '@gobing-ai/ts-runtime';
 import { DECIDE_KIND, DecideActionRunner, DecideOptionsSchema } from '../../../src/workflow/actions/decide';
@@ -231,6 +232,67 @@ describe('DecideActionRunner', () => {
         expect(degradedRow.reason).toBe('disabled');
         // No backend answered, so the level must not read as confident.
         expect(degradedRow.confidenceLevel).toBe('LOW');
+    });
+
+    // 1195 AC4/R5: a clef-served answer flows through the REAL driver → maker → runDecide →
+    // `confidenceLevel()` chain — only the network is stubbed. Before `ts-decision-clef` 0.5.26 a
+    // parameterless clef decision died on Cloudflare's 422 (`"state": null`) and degraded, so no
+    // clef answer ever reached this derivation; a mock would pass either way, the shipped driver
+    // does not.
+    test('AC4: a clef answer derives its HIGH/MEDIUM/LOW level with degraded:false', async () => {
+        let confidence = 0;
+        const clefFetch = (async () =>
+            new Response(
+                JSON.stringify({
+                    success: true,
+                    result: {
+                        model: 'clef-flash',
+                        answers: {
+                            question: {
+                                type: 'choice',
+                                choice: 'retry',
+                                confidence,
+                                probabilities: { retry: confidence, stop: 1 - confidence },
+                            },
+                        },
+                    },
+                }),
+                { status: 200, headers: { 'Content-Type': 'application/json' } },
+            )) as unknown as typeof fetch;
+
+        for (const [observed, level] of [
+            [0.91, 'HIGH'],
+            [0.6, 'MEDIUM'],
+            [0.2, 'LOW'],
+        ] as const) {
+            confidence = observed;
+            const { fs } = fakeFs();
+            const runner = new DecideActionRunner(fs, {
+                enabled: true,
+                decisionMaker: async () =>
+                    createDecisionMaker({
+                        driver: createClefDriver({
+                            accountId: '0123456789abcdef0123456789abcdef',
+                            apiToken: 'secret_token_abc123',
+                            fetch: clefFetch,
+                        }),
+                    }),
+            });
+            // The floor is lowered so the level reports what the answer OBSERVED rather than the
+            // gate decision: at the 0.8 default, 0.6/0.2 would degrade and rewrite the value to the
+            // declared default, hiding the level the driver actually returned.
+            const result = await runner.execute({ ...validOptions, minConfidence: 0.1 }, makeContext('.'));
+            expect(result.ok).toBe(true);
+            expect(result.data?.value).toBe('retry');
+            const decision = result.data?.decision as {
+                confidence: number;
+                confidenceLevel: string;
+                degraded: boolean;
+            };
+            expect(decision.confidence).toBe(observed);
+            expect(decision.confidenceLevel).toBe(level);
+            expect(decision.degraded).toBe(false);
+        }
     });
 });
 

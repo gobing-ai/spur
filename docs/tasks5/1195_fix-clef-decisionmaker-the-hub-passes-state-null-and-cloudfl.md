@@ -1,10 +1,10 @@
 ---
 schema_version: 1
 name: "Fix clef DecisionMaker: the hub passes state null and Cloudflare rejects the request with 422"
-status: todo
+status: wip
 template: standard
 created_at: 2026-10-13T18:11:35.494Z
-updated_at: "2026-10-13T21:37:18.396Z"
+updated_at: "2026-10-14T03:09:59.106Z"
 
 ac_altitude: task-local
 ac_numbering: task-local
@@ -190,7 +190,29 @@ Test observability: AC1/AC2 observe the real POST body through the injected-fetc
 
 ### Solution
 
-<!-- Filled during implementation: file:line change map and concise rationale. -->
+**WHAT** — one wire-mapping change in the upstream clef driver plus its regression test, the released patch consumed through the root catalog, and one spur-new integration test proving a clef answer reaches the level derivation.
+
+**WHY** — `@gobing-ai/ts-decision-clef` 0.5.24 sent `state: state ?? null`. The hub's `buildState` returns null for a decision with no parameter beside `instructions`, and Cloudflare's Clef endpoint requires `state` to be a string, dictionary or list — `"state": null` fails request-body validation with HTTP 422, so every parameterless decision degraded to its declared fallback. `clef` is registered and reported healthy, so the degradation was silent. TypeSafe hit the same class and already maps null to `''`; laya and fm do too.
+
+**Change map (one `file:line` anchor per row).**
+
+| Anchor | What it is |
+| --- | --- |
+| Evidence: ts-libs `packages/decision-clef/src/driver.ts` line 302 | The fix: absent state maps to `''` on the wire instead of `null`. |
+| Evidence: ts-libs `packages/decision-clef/src/driver.ts` line 289 | `undefined` now validates as "no caller context" exactly as `null` does, so an omitted state is no longer refused as unserializable before reaching the mapping. |
+| Evidence: ts-libs `packages/decision-clef/tests/driver.test.ts` line 199 | AC1/AC2 regression: a parameterless ask puts `state === ''` on the wire for both `null` and an omitted state; the existing "default route" test still pins structured state passing through unchanged. |
+| `package.json:34` | Root `workspaces.catalog` pin for `@gobing-ai/ts-decision-clef` moved to `^0.5.26`. |
+| `bun.lock:514` | The resolved install is 0.5.26; `packages/app/node_modules/@gobing-ai/ts-decision-clef/dist/driver.js:220` carries `state: state ?? ''`. |
+| `plugins/sp/lib/inline-run.generated.mjs:3059` | The generated inline-application bundle, regenerated for the 0.5.26 dependency tree — the bundler's symbol numbering shifts with the new `@gobing-ai/ts-*` internals (`bounded2` → `bounded3`), and `scripts/commands/bundle-plugin-lib.test.ts` asserts on-disk === fresh regeneration, so the regenerated file is part of this change. |
+| `packages/app/tests/workflow/actions/decide.test.ts:242` | AC4: a real clef driver with an injected fetch, wrapped by `createDecisionMaker` and passed as `decisionMaker` to the inline `DecideActionRunner`, derives HIGH/MEDIUM/LOW from confidence 0.91/0.6/0.2 with `degraded: false`. |
+
+**Release.** `bun run bump-ver 0.5.26 --push`, run from an isolated ts-libs worktree cut at `590e99ec` so a concurrent session's uncommitted `llm-jsonl-importer` edits were neither committed nor published. Result: release commit `f262a9f7`, aggregate tag `@gobing-ai/ts-libs-v0.5.26`, Publish workflow run 38491313970 → success; `main` fast-forwarded `53c22a69..f262a9f7`. The published tarball's bundled driver was verified to carry `state: state ?? ''` where the defective mapping used to be.
+
+**Frozen names.** Wire field `state`; mapping `state ?? ''`; levels `HIGH | MEDIUM | LOW` with `CONFIDENCE_HIGH_THRESHOLD = 0.8` and `CONFIDENCE_MEDIUM_THRESHOLD = 0.5`. No new type, flag, env var or `ask()` signature change.
+
+**Anti-patterns honoured.** No hub/`buildState` change, no Spur-side shim in `packages/app`, no readiness logic added to `spur decision status`, no duplicated thresholds (the AC4 case reads the existing `confidenceLevel()`).
+
+**Local checks.** ts-libs `bun run spur-check` 3007 pass / 0 fail; spur-new biome clean on the changed paths, `@gobing-ai/spur-app` typecheck exit 0, `packages/app/tests/workflow/actions/` 388 pass / 0 fail. AC4 was falsified — returning `success: false` from the stub makes it fail, so it exercises the shipped driver rather than a mock.
 
 ### Testing
 
@@ -216,4 +238,5 @@ Test observability: AC1/AC2 observe the real POST body through the injected-fetc
 ### History
 
 - 2026-10-13T18:18:40.112Z backlog → todo (system)
+- 2026-10-14T03:05:03.216Z todo → wip (system)
 
