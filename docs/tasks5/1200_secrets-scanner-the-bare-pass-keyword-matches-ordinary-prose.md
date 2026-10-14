@@ -4,7 +4,7 @@ name: "secrets-scanner: the bare pass keyword matches ordinary prose (PASS: toke
 status: done
 template: standard
 created_at: 2026-10-13T21:14:56.228Z
-updated_at: "2026-10-14T00:34:19.646Z"
+updated_at: "2026-10-14T00:53:46.421Z"
 
 priority: P2
 estimate_hours: 4
@@ -164,6 +164,27 @@ Result: `11379 pass / 0 fail` across 657 files at the certified digest
 `sha256:f91edd4b144c9fbb2bb937844a53c2a89e55801bff5a9e3914eed3fc8c109297` (full tier, exit 0,
 831 s). This is a **variant** of `bun run spur-check`, recorded as such rather than claimed as the
 canonical invocation — the operator authorized the variant explicitly on 2026-10-13.
+
+
+**Landing certification (canonical gate, post-merge on `main` @ `aa242b5e2`).**
+
+The variant above was the *in-flight* certification; the canonical gate was then re-run on the
+merged `main` tree once the host quieted (load average 9.3, down from 22-52) and **passed with no
+variant at all**:
+
+```
+bun run spur-check
+```
+
+`All 51 rules passed` (pre-check) · `11379 pass / 0 fail` across 657 files in 102 s · `All 2 rules
+passed` (post-check) — exit chain clean. This also refreshed `main`'s stale `.coverage` artifact,
+which had made a standalone `bun run test-post-check` report a spurious
+`coverage-gate packages/app/src/services/scheduler-custom-job-service.ts 87%` finding.
+
+Effect on the residual: the host-contention flake story above is now explained end-to-end — the same
+suite that took 831 s serial under load 20-50 and produced timeout failures ran green in 102 s at
+load 9.3 with zero assertion changes. The `no-hardcoded-secrets` false positive is gone from both the
+rule set and the consumer comment, and the project's own gate certifies the landed tree.
 
 ### Review
 
