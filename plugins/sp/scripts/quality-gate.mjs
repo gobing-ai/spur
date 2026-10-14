@@ -13,7 +13,7 @@ function getEnvVars() {
 // plugins/sp/lib/quality-gate.generated.mjs
 import { createRequire } from "node:module";
 import { spawnSync } from "node:child_process";
-import { createHash as createHash2, randomUUID } from "node:crypto";
+import { createHash as createHash3, randomUUID } from "node:crypto";
 import {
   appendFileSync,
   closeSync,
@@ -30,6 +30,7 @@ import {
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { createHash } from "node:crypto";
+import { createHash as createHash2 } from "node:crypto";
 var __defProp = Object.defineProperty;
 var __commonJS = (cb, mod) => () => (mod || cb((mod = { exports: {} }).exports, mod), mod.exports);
 var __returnValue = (v) => v;
@@ -24719,7 +24720,6 @@ var POST_WATERMARK_TABLES = [
   "history_daily_stats",
   "history_board_source_daily"
 ];
-var HISTORY_IMPORT_SCHEMA_VERSION = "0.5.27";
 var HISTORY_IMPORT_SCHEMA_SQL = `
 CREATE TABLE IF NOT EXISTS history_import_checkpoint (
     source TEXT NOT NULL,
@@ -27403,6 +27403,7 @@ var SPUR_OWNED_HISTORY_TABLES = [
 ];
 var HISTORY_RESET_TABLES = [...IMPORTER_OWNED_TABLES, ...SPUR_OWNED_HISTORY_TABLES];
 var IMPORTER_SCHEMA_LEDGER_PREFIX = "importer_schema@";
+var IMPORTER_SCHEMA_KEY = createHash2("sha256").update(HISTORY_IMPORT_SCHEMA_SQL, "utf8").digest("hex").slice(0, 16);
 var ROUTING_SUMMARY_DEFAULT_WINDOW_MS = 7 * 24 * 60 * 60 * 1000;
 init_schema();
 init_schema();
@@ -28606,7 +28607,7 @@ var CLI_MIGRATIONS = [
   },
   {
     id: "0033_spur_cli_importer_schema_version",
-    sql: `INSERT OR REPLACE INTO "__spur_cli_migrations" (id, applied_at) VALUES ('${IMPORTER_SCHEMA_LEDGER_PREFIX}${HISTORY_IMPORT_SCHEMA_VERSION}', strftime('%s', 'now') * 1000);`
+    sql: `INSERT OR REPLACE INTO "__spur_cli_migrations" (id, applied_at) VALUES ('${IMPORTER_SCHEMA_LEDGER_PREFIX}${IMPORTER_SCHEMA_KEY}', strftime('%s', 'now') * 1000);`
   },
   {
     id: "0034_spur_cli_history_tool_identity",
@@ -30243,7 +30244,7 @@ function recomputeGateProofFingerprint(cwd, env) {
       ...task !== undefined ? { task } : {},
       ...feature !== undefined ? { feature } : {}
     });
-    const hash = createHash2("sha256").update(canonical, "utf8").digest("hex");
+    const hash = createHash3("sha256").update(canonical, "utf8").digest("hex");
     return { ok: true, digest: `sha256:${hash}` };
   } catch (err) {
     return {

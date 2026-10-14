@@ -3,8 +3,9 @@ import { mkdtemp, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { createDbAdapter } from '@gobing-ai/ts-db';
-import { HISTORY_IMPORT_SCHEMA_SQL, HISTORY_IMPORT_SCHEMA_VERSION } from '@gobing-ai/ts-llm-jsonl-importer';
+import { HISTORY_IMPORT_SCHEMA_SQL } from '@gobing-ai/ts-llm-jsonl-importer';
 import {
+    IMPORTER_SCHEMA_KEY,
     IMPORTER_SCHEMA_LEDGER_PREFIX,
     readRecordedImporterSchemaVersion,
 } from '../../packages/domain/src/analytics/importer-schema-version';
@@ -31,7 +32,7 @@ describe('importer-schema-check (0748 R3/R5)', () => {
         await db.exec(
             'CREATE TABLE IF NOT EXISTS "__spur_cli_migrations" (id TEXT PRIMARY KEY, applied_at INTEGER NOT NULL)',
         );
-        const currentVersionId = `${IMPORTER_SCHEMA_LEDGER_PREFIX}${HISTORY_IMPORT_SCHEMA_VERSION}`;
+        const currentVersionId = `${IMPORTER_SCHEMA_LEDGER_PREFIX}${IMPORTER_SCHEMA_KEY}`;
         await db.run('INSERT INTO "__spur_cli_migrations" (id, applied_at) VALUES (?, ?)', [
             currentVersionId,
             Date.now(),
@@ -70,7 +71,7 @@ describe('importer-schema-check (0748 R3/R5)', () => {
         const verify = await createDbAdapter({ driver: 'bun-sqlite', url: dbPath });
         const recorded = await readRecordedImporterSchemaVersion(verify);
         verify.close();
-        expect(recorded).toBe(HISTORY_IMPORT_SCHEMA_VERSION);
+        expect(recorded).toBe(IMPORTER_SCHEMA_KEY);
 
         await rm(dir, { recursive: true });
     });
@@ -112,7 +113,7 @@ describe('importer-schema-check (0748 R3/R5)', () => {
         );
         // Truthful stamp first (older applied_at)…
         await db.run('INSERT INTO "__spur_cli_migrations" (id, applied_at) VALUES (?, ?)', [
-            `${IMPORTER_SCHEMA_LEDGER_PREFIX}${HISTORY_IMPORT_SCHEMA_VERSION}`,
+            `${IMPORTER_SCHEMA_LEDGER_PREFIX}${IMPORTER_SCHEMA_KEY}`,
             Date.now() - 60_000,
         ]);
         // …then a stale binary's false row shadows it with a newer applied_at.
@@ -132,7 +133,7 @@ describe('importer-schema-check (0748 R3/R5)', () => {
             `${IMPORTER_SCHEMA_LEDGER_PREFIX}0.4.60`,
         );
         verify.close();
-        expect(recorded).toBe(HISTORY_IMPORT_SCHEMA_VERSION);
+        expect(recorded).toBe(IMPORTER_SCHEMA_KEY);
         expect(stale).toBeUndefined(); // false shadow row deleted, not just out-dated
 
         await rm(dir, { recursive: true });

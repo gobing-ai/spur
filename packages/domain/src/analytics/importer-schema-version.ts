@@ -1,14 +1,24 @@
+import { createHash } from 'node:crypto';
 import type { DbAdapter } from '@gobing-ai/ts-db';
-import {
-    HISTORY_IMPORT_SCHEMA_SQL,
-    HISTORY_IMPORT_SCHEMA_VERSION,
-    IMPORTER_OWNED_TABLES,
-} from '@gobing-ai/ts-llm-jsonl-importer';
+import { HISTORY_IMPORT_SCHEMA_SQL, IMPORTER_OWNED_TABLES } from '@gobing-ai/ts-llm-jsonl-importer';
 
-/** Prefix used to encode the applied importer schema version in __spur_cli_migrations.id */
+/** Prefix used to encode the applied importer schema key in __spur_cli_migrations.id */
 export const IMPORTER_SCHEMA_LEDGER_PREFIX = 'importer_schema@';
 
-/** Result when database importer schema version drifts from installed version. */
+/**
+ * Drift key: content hash of the importer DDL, NOT the upstream package version. Upstream
+ * pins HISTORY_IMPORT_SCHEMA_VERSION to the package version, so every release — even one
+ * with zero DDL change — churned bundles and forced a DB re-stamp. Hashing the SQL means
+ * only a real schema change reads as drift, and a stale binary holding older-but-identical
+ * DDL no longer false-reports it. Legacy `importer_schema@0.x.y` rows read as drift once
+ * and self-heal through repair.
+ */
+export const IMPORTER_SCHEMA_KEY = createHash('sha256')
+    .update(HISTORY_IMPORT_SCHEMA_SQL, 'utf8')
+    .digest('hex')
+    .slice(0, 16);
+
+/** Result when the database importer schema key drifts from the installed DDL. */
 export interface ImporterSchemaVersionDrift {
     readonly recorded: string | null;
     readonly installed: string;
@@ -44,7 +54,7 @@ export async function readRecordedImporterSchemaVersion(db: DbAdapter): Promise<
  */
 export async function checkImporterSchemaVersion(db: DbAdapter): Promise<ImporterSchemaVersionDrift | null> {
     const recorded = await readRecordedImporterSchemaVersion(db);
-    const installed = HISTORY_IMPORT_SCHEMA_VERSION;
+    const installed = IMPORTER_SCHEMA_KEY;
 
     if (recorded === installed) {
         return null;
@@ -77,8 +87,8 @@ export async function checkImporterSchemaVersion(db: DbAdapter): Promise<Importe
 
     const remediation =
         recorded === null
-            ? `Database has no recorded importer schema version (installed: ${installed}). Run \`spur migrate\` to apply schema updates or \`bun install\` to resync workspace packages.`
-            : `Recorded importer schema version (${recorded}) does not match installed version (${installed}). Run \`spur migrate\` to apply schema updates or \`bun install\` to resync workspace packages.`;
+            ? `Database has no recorded importer schema key (installed DDL key: ${installed}). Run \`spur migrate\` to apply schema updates or \`bun install\` to resync workspace packages.`
+            : `Recorded importer schema key (${recorded}) does not match the installed DDL key (${installed}). Run \`spur migrate\` to apply schema updates or \`bun install\` to resync workspace packages.`;
 
     return {
         recorded,
@@ -101,7 +111,7 @@ export async function checkImporterSchemaVersion(db: DbAdapter): Promise<Importe
  * check folds the remedy in here instead of delegating to it.
  */
 export async function repairImporterSchemaVersion(db: DbAdapter): Promise<void> {
-    const installed = HISTORY_IMPORT_SCHEMA_VERSION;
+    const installed = IMPORTER_SCHEMA_KEY;
     // HISTORY_IMPORT_SCHEMA_SQL is DDL-only (no procedural bodies), so a naive
     // statement split is safe; statements are IF NOT EXISTS idempotent.
     for (const statement of HISTORY_IMPORT_SCHEMA_SQL.split(';')

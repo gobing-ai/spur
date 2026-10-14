@@ -1,10 +1,10 @@
 import { join } from 'node:path';
 import type { DbAdapter } from '@gobing-ai/ts-db';
 import { WORKFLOW_ENGINE_SCHEMA_SQL } from '@gobing-ai/ts-dual-workflow-engine';
-import { HISTORY_IMPORT_SCHEMA_SQL, HISTORY_IMPORT_SCHEMA_VERSION } from '@gobing-ai/ts-llm-jsonl-importer';
+import { HISTORY_IMPORT_SCHEMA_SQL } from '@gobing-ai/ts-llm-jsonl-importer';
 import { RULE_ENGINE_SCHEMA_SQL } from '@gobing-ai/ts-rule-engine';
 import { createNodeFileSystem } from '@gobing-ai/ts-runtime';
-import { IMPORTER_SCHEMA_LEDGER_PREFIX } from './analytics/importer-schema-version';
+import { IMPORTER_SCHEMA_KEY, IMPORTER_SCHEMA_LEDGER_PREFIX } from './analytics/importer-schema-version';
 import { DOMAIN_SCHEMA_SQL, PLANNING_SCHEMA_SQL } from './schema';
 
 /** Embedded CLI migration used when no migration folder is available. */
@@ -1512,7 +1512,7 @@ export const CLI_MIGRATIONS: CliMigration[] = [
     {
         // 0748 R2: record the applied importer schema version in the Spur migration ledger.
         id: '0033_spur_cli_importer_schema_version',
-        sql: `INSERT OR REPLACE INTO "__spur_cli_migrations" (id, applied_at) VALUES ('${IMPORTER_SCHEMA_LEDGER_PREFIX}${HISTORY_IMPORT_SCHEMA_VERSION}', strftime('%s', 'now') * 1000);`,
+        sql: `INSERT OR REPLACE INTO "__spur_cli_migrations" (id, applied_at) VALUES ('${IMPORTER_SCHEMA_LEDGER_PREFIX}${IMPORTER_SCHEMA_KEY}', strftime('%s', 'now') * 1000);`,
     },
     {
         // 0739: Persist tool identity at import: effective_tool_name, tool_name_alias, and alias map.
@@ -1687,7 +1687,7 @@ async function allMigrationsJournaled(adapter: DbAdapter, migrations: CliMigrati
     if (has0033) {
         const currentVersionRow = await adapter.queryFirst<{ id: string }>(
             'SELECT id FROM "__spur_cli_migrations" WHERE id = ?',
-            IMPORTER_SCHEMA_LEDGER_PREFIX + HISTORY_IMPORT_SCHEMA_VERSION,
+            IMPORTER_SCHEMA_LEDGER_PREFIX + IMPORTER_SCHEMA_KEY,
         );
         if (!currentVersionRow) return false;
     }
@@ -1728,7 +1728,7 @@ export async function applyCliMigrations(adapter: DbAdapter, migrations = CLI_MI
             for (const statement of splitSqlStatements(HISTORY_IMPORT_SCHEMA_SQL)) {
                 await adapter.exec(statement);
             }
-            const versionLedgerId = IMPORTER_SCHEMA_LEDGER_PREFIX + HISTORY_IMPORT_SCHEMA_VERSION;
+            const versionLedgerId = IMPORTER_SCHEMA_LEDGER_PREFIX + IMPORTER_SCHEMA_KEY;
             await adapter.run('INSERT OR REPLACE INTO "__spur_cli_migrations" (id, applied_at) VALUES (?, ?)', [
                 versionLedgerId,
                 Date.now(),
@@ -1996,7 +1996,7 @@ export async function applyCliMigrations(adapter: DbAdapter, migrations = CLI_MI
     // and the recorded importer version is behind the installed package.
     const has0033 = migrations.some((m) => m.id === '0033_spur_cli_importer_schema_version');
     if (has0033) {
-        const currentVersionLedgerId = IMPORTER_SCHEMA_LEDGER_PREFIX + HISTORY_IMPORT_SCHEMA_VERSION;
+        const currentVersionLedgerId = IMPORTER_SCHEMA_LEDGER_PREFIX + IMPORTER_SCHEMA_KEY;
         const recordedCurrent = await adapter.queryFirst<{ id: string }>(
             'SELECT id FROM "__spur_cli_migrations" WHERE id = ?',
             currentVersionLedgerId,

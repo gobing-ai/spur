@@ -27,7 +27,7 @@ var __esm = (fn, res, err) => () => {
 };
 var __require = /* @__PURE__ */ createRequire(import.meta.url);
 
-// node_modules/.bun/@gobing-ai+ts-utils@0.5.27/node_modules/@gobing-ai/ts-utils/dist/errors.js
+// node_modules/@gobing-ai/ts-utils/dist/errors.js
 var ErrorCode;
 var init_errors = __esm(() => {
   ErrorCode = {
@@ -38,7 +38,7 @@ var init_errors = __esm(() => {
   };
 });
 
-// node_modules/.bun/@gobing-ai+ts-utils@0.5.27/node_modules/@gobing-ai/ts-utils/dist/api-response.js
+// node_modules/@gobing-ai/ts-utils/dist/api-response.js
 var API_ERROR_CODES, ERROR_CODE_TO_HTTP, CLIENT_SAFE_CODES;
 var init_api_response = __esm(() => {
   init_errors();
@@ -61,18 +61,18 @@ var init_api_response = __esm(() => {
   CLIENT_SAFE_CODES = new Set([ErrorCode.NotFound, ErrorCode.Validation, ErrorCode.Conflict]);
 });
 
-// node_modules/.bun/@gobing-ai+ts-utils@0.5.27/node_modules/@gobing-ai/ts-utils/dist/cursor.js
+// node_modules/@gobing-ai/ts-utils/dist/cursor.js
 var init_cursor = () => {};
 
-// node_modules/.bun/@gobing-ai+ts-utils@0.5.27/node_modules/@gobing-ai/ts-utils/dist/env.js
+// node_modules/@gobing-ai/ts-utils/dist/env.js
 function getEnvVars() {
   return process.env;
 }
 
-// node_modules/.bun/@gobing-ai+ts-utils@0.5.27/node_modules/@gobing-ai/ts-utils/dist/event-severity.js
+// node_modules/@gobing-ai/ts-utils/dist/event-severity.js
 var init_event_severity = () => {};
 
-// node_modules/.bun/@gobing-ai+ts-utils@0.5.27/node_modules/@gobing-ai/ts-utils/dist/index.js
+// node_modules/@gobing-ai/ts-utils/dist/index.js
 var init_dist = __esm(() => {
   init_api_response();
   init_cursor();
@@ -80,7 +80,7 @@ var init_dist = __esm(() => {
   init_event_severity();
 });
 
-// node_modules/.bun/zod@4.4.3/node_modules/zod/v4/core/core.js
+// node_modules/zod/v4/core/core.js
 function $constructor(name, initializer, params) {
   function init(inst, def) {
     if (!inst._zod) {
@@ -159,7 +159,7 @@ var init_core = __esm(() => {
   globalConfig = globalThis.__zod_globalConfig;
 });
 
-// node_modules/.bun/zod@4.4.3/node_modules/zod/v4/core/util.js
+// node_modules/zod/v4/core/util.js
 var exports_util = {};
 __export(exports_util, {
   BIGINT_FORMAT_RANGES: () => BIGINT_FORMAT_RANGES,
@@ -854,7 +854,7 @@ var init_util = __esm(() => {
   };
 });
 
-// node_modules/.bun/zod@4.4.3/node_modules/zod/v4/core/errors.js
+// node_modules/zod/v4/core/errors.js
 function flattenError(error, mapper = (issue) => issue.message) {
   const fieldErrors = {};
   const formErrors = [];
@@ -998,7 +998,7 @@ var init_errors2 = __esm(() => {
   $ZodRealError = $constructor("$ZodError", initializer, { Parent: Error });
 });
 
-// node_modules/.bun/zod@4.4.3/node_modules/zod/v4/core/parse.js
+// node_modules/zod/v4/core/parse.js
 var _parse = (_Err) => (schema, value, _ctx, _params) => {
   const ctx = _ctx ? { ..._ctx, async: false } : { async: false };
   const result = schema._zod.run({ value, issues: [] }, ctx);
@@ -1080,7 +1080,7 @@ var init_parse = __esm(() => {
   safeDecodeAsync = /* @__PURE__ */ _safeDecodeAsync($ZodRealError);
 });
 
-// node_modules/.bun/zod@4.4.3/node_modules/zod/v4/core/regexes.js
+// node_modules/zod/v4/core/regexes.js
 var exports_regexes = {};
 __export(exports_regexes, {
   base64: () => base64,
@@ -1238,7 +1238,7 @@ var init_regexes = __esm(() => {
   sha512_base64url = /* @__PURE__ */ fixedBase64url(86);
 });
 
-// node_modules/.bun/zod@4.4.3/node_modules/zod/v4/core/checks.js
+// node_modules/zod/v4/core/checks.js
 function handleCheckPropertyResult(result, payload, property) {
   if (result.issues.length) {
     payload.issues.push(...prefixIssues(property, result.issues));
@@ -1791,7 +1791,7 @@ var init_checks = __esm(() => {
   });
 });
 
-// node_modules/.bun/zod@4.4.3/node_modules/zod/v4/core/doc.js
+// node_modules/zod/v4/core/doc.js
 class Doc {
   constructor(args = []) {
     this.content = [];
@@ -1829,7 +1829,7 @@ class Doc {
   }
 }
 
-// node_modules/.bun/zod@4.4.3/node_modules/zod/v4/core/versions.js
+// node_modules/zod/v4/core/versions.js
 var version;
 var init_versions = __esm(() => {
   version = {
@@ -1839,7 +1839,7 @@ var init_versions = __esm(() => {
   };
 });
 
-// node_modules/.bun/zod@4.4.3/node_modules/zod/v4/core/schemas.js
+// node_modules/zod/v4/core/schemas.js
 function isValidBase64(data) {
   if (data === "")
     return true;
@@ -3934,7 +3934,7 @@ var init_schemas = __esm(() => {
   });
 });
 
-// node_modules/.bun/zod@4.4.3/node_modules/zod/v4/locales/ar.js
+// node_modules/zod/v4/locales/ar.js
 function ar_default() {
   return {
     localeError: error()
@@ -4044,7 +4044,7 @@ var init_ar = __esm(() => {
   init_util();
 });
 
-// node_modules/.bun/zod@4.4.3/node_modules/zod/v4/locales/az.js
+// node_modules/zod/v4/locales/az.js
 function az_default() {
   return {
     localeError: error2()
@@ -4153,7 +4153,7 @@ var init_az = __esm(() => {
   init_util();
 });
 
-// node_modules/.bun/zod@4.4.3/node_modules/zod/v4/locales/be.js
+// node_modules/zod/v4/locales/be.js
 function getBelarusianPlural(count, one, few, many) {
   const absCount = Math.abs(count);
   const lastDigit = absCount % 10;
@@ -4313,7 +4313,7 @@ var init_be = __esm(() => {
   init_util();
 });
 
-// node_modules/.bun/zod@4.4.3/node_modules/zod/v4/locales/bg.js
+// node_modules/zod/v4/locales/bg.js
 function bg_default() {
   return {
     localeError: error4()
@@ -4437,7 +4437,7 @@ var init_bg = __esm(() => {
   init_util();
 });
 
-// node_modules/.bun/zod@4.4.3/node_modules/zod/v4/locales/ca.js
+// node_modules/zod/v4/locales/ca.js
 function ca_default() {
   return {
     localeError: error5()
@@ -4548,7 +4548,7 @@ var init_ca = __esm(() => {
   init_util();
 });
 
-// node_modules/.bun/zod@4.4.3/node_modules/zod/v4/locales/cs.js
+// node_modules/zod/v4/locales/cs.js
 function cs_default() {
   return {
     localeError: error6()
@@ -4663,7 +4663,7 @@ var init_cs = __esm(() => {
   init_util();
 });
 
-// node_modules/.bun/zod@4.4.3/node_modules/zod/v4/locales/da.js
+// node_modules/zod/v4/locales/da.js
 function da_default() {
   return {
     localeError: error7()
@@ -4782,7 +4782,7 @@ var init_da = __esm(() => {
   init_util();
 });
 
-// node_modules/.bun/zod@4.4.3/node_modules/zod/v4/locales/de.js
+// node_modules/zod/v4/locales/de.js
 function de_default() {
   return {
     localeError: error8()
@@ -4894,7 +4894,7 @@ var init_de = __esm(() => {
   init_util();
 });
 
-// node_modules/.bun/zod@4.4.3/node_modules/zod/v4/locales/el.js
+// node_modules/zod/v4/locales/el.js
 function el_default() {
   return {
     localeError: error9()
@@ -5007,7 +5007,7 @@ var init_el = __esm(() => {
   init_util();
 });
 
-// node_modules/.bun/zod@4.4.3/node_modules/zod/v4/locales/en.js
+// node_modules/zod/v4/locales/en.js
 function en_default() {
   return {
     localeError: error10()
@@ -5121,7 +5121,7 @@ var init_en = __esm(() => {
   init_util();
 });
 
-// node_modules/.bun/zod@4.4.3/node_modules/zod/v4/locales/eo.js
+// node_modules/zod/v4/locales/eo.js
 function eo_default() {
   return {
     localeError: error11()
@@ -5234,7 +5234,7 @@ var init_eo = __esm(() => {
   init_util();
 });
 
-// node_modules/.bun/zod@4.4.3/node_modules/zod/v4/locales/es.js
+// node_modules/zod/v4/locales/es.js
 function es_default() {
   return {
     localeError: error12()
@@ -5370,7 +5370,7 @@ var init_es = __esm(() => {
   init_util();
 });
 
-// node_modules/.bun/zod@4.4.3/node_modules/zod/v4/locales/fa.js
+// node_modules/zod/v4/locales/fa.js
 function fa_default() {
   return {
     localeError: error13()
@@ -5488,7 +5488,7 @@ var init_fa = __esm(() => {
   init_util();
 });
 
-// node_modules/.bun/zod@4.4.3/node_modules/zod/v4/locales/fi.js
+// node_modules/zod/v4/locales/fi.js
 function fi_default() {
   return {
     localeError: error14()
@@ -5604,7 +5604,7 @@ var init_fi = __esm(() => {
   init_util();
 });
 
-// node_modules/.bun/zod@4.4.3/node_modules/zod/v4/locales/fr.js
+// node_modules/zod/v4/locales/fr.js
 function fr_default() {
   return {
     localeError: error15()
@@ -5733,7 +5733,7 @@ var init_fr = __esm(() => {
   init_util();
 });
 
-// node_modules/.bun/zod@4.4.3/node_modules/zod/v4/locales/fr-CA.js
+// node_modules/zod/v4/locales/fr-CA.js
 function fr_CA_default() {
   return {
     localeError: error16()
@@ -5844,7 +5844,7 @@ var init_fr_CA = __esm(() => {
   init_util();
 });
 
-// node_modules/.bun/zod@4.4.3/node_modules/zod/v4/locales/he.js
+// node_modules/zod/v4/locales/he.js
 function he_default() {
   return {
     localeError: error17()
@@ -6041,7 +6041,7 @@ var init_he = __esm(() => {
   init_util();
 });
 
-// node_modules/.bun/zod@4.4.3/node_modules/zod/v4/locales/hr.js
+// node_modules/zod/v4/locales/hr.js
 function hr_default() {
   return {
     localeError: error18()
@@ -6167,7 +6167,7 @@ var init_hr = __esm(() => {
   init_util();
 });
 
-// node_modules/.bun/zod@4.4.3/node_modules/zod/v4/locales/hu.js
+// node_modules/zod/v4/locales/hu.js
 function hu_default() {
   return {
     localeError: error19()
@@ -6279,7 +6279,7 @@ var init_hu = __esm(() => {
   init_util();
 });
 
-// node_modules/.bun/zod@4.4.3/node_modules/zod/v4/locales/hy.js
+// node_modules/zod/v4/locales/hy.js
 function getArmenianPlural(count, one, many) {
   return Math.abs(count) === 1 ? one : many;
 }
@@ -6430,7 +6430,7 @@ var init_hy = __esm(() => {
   init_util();
 });
 
-// node_modules/.bun/zod@4.4.3/node_modules/zod/v4/locales/id.js
+// node_modules/zod/v4/locales/id.js
 function id_default() {
   return {
     localeError: error21()
@@ -6540,7 +6540,7 @@ var init_id = __esm(() => {
   init_util();
 });
 
-// node_modules/.bun/zod@4.4.3/node_modules/zod/v4/locales/is.js
+// node_modules/zod/v4/locales/is.js
 function is_default() {
   return {
     localeError: error22()
@@ -6653,7 +6653,7 @@ var init_is = __esm(() => {
   init_util();
 });
 
-// node_modules/.bun/zod@4.4.3/node_modules/zod/v4/locales/it.js
+// node_modules/zod/v4/locales/it.js
 function it_default() {
   return {
     localeError: error23()
@@ -6765,7 +6765,7 @@ var init_it = __esm(() => {
   init_util();
 });
 
-// node_modules/.bun/zod@4.4.3/node_modules/zod/v4/locales/ja.js
+// node_modules/zod/v4/locales/ja.js
 function ja_default() {
   return {
     localeError: error24()
@@ -6876,7 +6876,7 @@ var init_ja = __esm(() => {
   init_util();
 });
 
-// node_modules/.bun/zod@4.4.3/node_modules/zod/v4/locales/ka.js
+// node_modules/zod/v4/locales/ka.js
 function ka_default() {
   return {
     localeError: error25()
@@ -6992,7 +6992,7 @@ var init_ka = __esm(() => {
   init_util();
 });
 
-// node_modules/.bun/zod@4.4.3/node_modules/zod/v4/locales/km.js
+// node_modules/zod/v4/locales/km.js
 function km_default() {
   return {
     localeError: error26()
@@ -7106,7 +7106,7 @@ var init_km = __esm(() => {
   init_util();
 });
 
-// node_modules/.bun/zod@4.4.3/node_modules/zod/v4/locales/kh.js
+// node_modules/zod/v4/locales/kh.js
 function kh_default() {
   return km_default();
 }
@@ -7114,7 +7114,7 @@ var init_kh = __esm(() => {
   init_km();
 });
 
-// node_modules/.bun/zod@4.4.3/node_modules/zod/v4/locales/ko.js
+// node_modules/zod/v4/locales/ko.js
 function ko_default() {
   return {
     localeError: error27()
@@ -7229,7 +7229,7 @@ var init_ko = __esm(() => {
   init_util();
 });
 
-// node_modules/.bun/zod@4.4.3/node_modules/zod/v4/locales/lt.js
+// node_modules/zod/v4/locales/lt.js
 function getUnitTypeFromNumber(number) {
   const abs = Math.abs(number);
   const last = abs % 10;
@@ -7435,7 +7435,7 @@ var init_lt = __esm(() => {
   init_util();
 });
 
-// node_modules/.bun/zod@4.4.3/node_modules/zod/v4/locales/mk.js
+// node_modules/zod/v4/locales/mk.js
 function mk_default() {
   return {
     localeError: error29()
@@ -7548,7 +7548,7 @@ var init_mk = __esm(() => {
   init_util();
 });
 
-// node_modules/.bun/zod@4.4.3/node_modules/zod/v4/locales/ms.js
+// node_modules/zod/v4/locales/ms.js
 function ms_default() {
   return {
     localeError: error30()
@@ -7659,7 +7659,7 @@ var init_ms = __esm(() => {
   init_util();
 });
 
-// node_modules/.bun/zod@4.4.3/node_modules/zod/v4/locales/nl.js
+// node_modules/zod/v4/locales/nl.js
 function nl_default() {
   return {
     localeError: error31()
@@ -7773,7 +7773,7 @@ var init_nl = __esm(() => {
   init_util();
 });
 
-// node_modules/.bun/zod@4.4.3/node_modules/zod/v4/locales/no.js
+// node_modules/zod/v4/locales/no.js
 function no_default() {
   return {
     localeError: error32()
@@ -7885,7 +7885,7 @@ var init_no = __esm(() => {
   init_util();
 });
 
-// node_modules/.bun/zod@4.4.3/node_modules/zod/v4/locales/ota.js
+// node_modules/zod/v4/locales/ota.js
 function ota_default() {
   return {
     localeError: error33()
@@ -7998,7 +7998,7 @@ var init_ota = __esm(() => {
   init_util();
 });
 
-// node_modules/.bun/zod@4.4.3/node_modules/zod/v4/locales/ps.js
+// node_modules/zod/v4/locales/ps.js
 function ps_default() {
   return {
     localeError: error34()
@@ -8116,7 +8116,7 @@ var init_ps = __esm(() => {
   init_util();
 });
 
-// node_modules/.bun/zod@4.4.3/node_modules/zod/v4/locales/pl.js
+// node_modules/zod/v4/locales/pl.js
 function pl_default() {
   return {
     localeError: error35()
@@ -8229,7 +8229,7 @@ var init_pl = __esm(() => {
   init_util();
 });
 
-// node_modules/.bun/zod@4.4.3/node_modules/zod/v4/locales/pt.js
+// node_modules/zod/v4/locales/pt.js
 function pt_default() {
   return {
     localeError: error36()
@@ -8341,7 +8341,7 @@ var init_pt = __esm(() => {
   init_util();
 });
 
-// node_modules/.bun/zod@4.4.3/node_modules/zod/v4/locales/ro.js
+// node_modules/zod/v4/locales/ro.js
 function ro_default() {
   return {
     localeError: error37()
@@ -8464,7 +8464,7 @@ var init_ro = __esm(() => {
   init_util();
 });
 
-// node_modules/.bun/zod@4.4.3/node_modules/zod/v4/locales/ru.js
+// node_modules/zod/v4/locales/ru.js
 function getRussianPlural(count, one, few, many) {
   const absCount = Math.abs(count);
   const lastDigit = absCount % 10;
@@ -8624,7 +8624,7 @@ var init_ru = __esm(() => {
   init_util();
 });
 
-// node_modules/.bun/zod@4.4.3/node_modules/zod/v4/locales/sl.js
+// node_modules/zod/v4/locales/sl.js
 function sl_default() {
   return {
     localeError: error39()
@@ -8737,7 +8737,7 @@ var init_sl = __esm(() => {
   init_util();
 });
 
-// node_modules/.bun/zod@4.4.3/node_modules/zod/v4/locales/sv.js
+// node_modules/zod/v4/locales/sv.js
 function sv_default() {
   return {
     localeError: error40()
@@ -8851,7 +8851,7 @@ var init_sv = __esm(() => {
   init_util();
 });
 
-// node_modules/.bun/zod@4.4.3/node_modules/zod/v4/locales/ta.js
+// node_modules/zod/v4/locales/ta.js
 function ta_default() {
   return {
     localeError: error41()
@@ -8965,7 +8965,7 @@ var init_ta = __esm(() => {
   init_util();
 });
 
-// node_modules/.bun/zod@4.4.3/node_modules/zod/v4/locales/th.js
+// node_modules/zod/v4/locales/th.js
 function th_default() {
   return {
     localeError: error42()
@@ -9079,7 +9079,7 @@ var init_th = __esm(() => {
   init_util();
 });
 
-// node_modules/.bun/zod@4.4.3/node_modules/zod/v4/locales/tr.js
+// node_modules/zod/v4/locales/tr.js
 function tr_default() {
   return {
     localeError: error43()
@@ -9188,7 +9188,7 @@ var init_tr = __esm(() => {
   init_util();
 });
 
-// node_modules/.bun/zod@4.4.3/node_modules/zod/v4/locales/uk.js
+// node_modules/zod/v4/locales/uk.js
 function uk_default() {
   return {
     localeError: error44()
@@ -9300,7 +9300,7 @@ var init_uk = __esm(() => {
   init_util();
 });
 
-// node_modules/.bun/zod@4.4.3/node_modules/zod/v4/locales/ua.js
+// node_modules/zod/v4/locales/ua.js
 function ua_default() {
   return uk_default();
 }
@@ -9308,7 +9308,7 @@ var init_ua = __esm(() => {
   init_uk();
 });
 
-// node_modules/.bun/zod@4.4.3/node_modules/zod/v4/locales/ur.js
+// node_modules/zod/v4/locales/ur.js
 function ur_default() {
   return {
     localeError: error45()
@@ -9422,7 +9422,7 @@ var init_ur = __esm(() => {
   init_util();
 });
 
-// node_modules/.bun/zod@4.4.3/node_modules/zod/v4/locales/uz.js
+// node_modules/zod/v4/locales/uz.js
 function uz_default() {
   return {
     localeError: error46()
@@ -9536,7 +9536,7 @@ var init_uz = __esm(() => {
   init_util();
 });
 
-// node_modules/.bun/zod@4.4.3/node_modules/zod/v4/locales/vi.js
+// node_modules/zod/v4/locales/vi.js
 function vi_default() {
   return {
     localeError: error47()
@@ -9648,7 +9648,7 @@ var init_vi = __esm(() => {
   init_util();
 });
 
-// node_modules/.bun/zod@4.4.3/node_modules/zod/v4/locales/zh-CN.js
+// node_modules/zod/v4/locales/zh-CN.js
 function zh_CN_default() {
   return {
     localeError: error48()
@@ -9761,7 +9761,7 @@ var init_zh_CN = __esm(() => {
   init_util();
 });
 
-// node_modules/.bun/zod@4.4.3/node_modules/zod/v4/locales/zh-TW.js
+// node_modules/zod/v4/locales/zh-TW.js
 function zh_TW_default() {
   return {
     localeError: error49()
@@ -9872,7 +9872,7 @@ var init_zh_TW = __esm(() => {
   init_util();
 });
 
-// node_modules/.bun/zod@4.4.3/node_modules/zod/v4/locales/yo.js
+// node_modules/zod/v4/locales/yo.js
 function yo_default() {
   return {
     localeError: error50()
@@ -9983,7 +9983,7 @@ var init_yo = __esm(() => {
   init_util();
 });
 
-// node_modules/.bun/zod@4.4.3/node_modules/zod/v4/locales/index.js
+// node_modules/zod/v4/locales/index.js
 var exports_locales = {};
 __export(exports_locales, {
   ar: () => ar_default,
@@ -10094,7 +10094,7 @@ var init_locales = __esm(() => {
   init_yo();
 });
 
-// node_modules/.bun/zod@4.4.3/node_modules/zod/v4/core/registries.js
+// node_modules/zod/v4/core/registries.js
 class $ZodRegistry {
   constructor() {
     this._map = new WeakMap;
@@ -10146,7 +10146,7 @@ var init_registries = __esm(() => {
   globalRegistry = globalThis.__zod_globalRegistry;
 });
 
-// node_modules/.bun/zod@4.4.3/node_modules/zod/v4/core/api.js
+// node_modules/zod/v4/core/api.js
 function _string(Class, params) {
   return new Class({
     type: "string",
@@ -11074,7 +11074,7 @@ var init_api = __esm(() => {
   };
 });
 
-// node_modules/.bun/zod@4.4.3/node_modules/zod/v4/core/to-json-schema.js
+// node_modules/zod/v4/core/to-json-schema.js
 function initializeContext(params) {
   let target = params?.target ?? "draft-2020-12";
   if (target === "draft-4")
@@ -11429,7 +11429,7 @@ var init_to_json_schema = __esm(() => {
   init_registries();
 });
 
-// node_modules/.bun/zod@4.4.3/node_modules/zod/v4/core/json-schema-processors.js
+// node_modules/zod/v4/core/json-schema-processors.js
 function toJSONSchema(input, params) {
   if ("_idmap" in input) {
     const registry = input;
@@ -11934,7 +11934,7 @@ var init_json_schema_processors = __esm(() => {
   };
 });
 
-// node_modules/.bun/zod@4.4.3/node_modules/zod/v4/core/json-schema-generator.js
+// node_modules/zod/v4/core/json-schema-generator.js
 class JSONSchemaGenerator {
   get metadataRegistry() {
     return this.ctx.metadataRegistry;
@@ -11998,11 +11998,11 @@ var init_json_schema_generator = __esm(() => {
   init_to_json_schema();
 });
 
-// node_modules/.bun/zod@4.4.3/node_modules/zod/v4/core/json-schema.js
+// node_modules/zod/v4/core/json-schema.js
 var exports_json_schema = {};
 var init_json_schema = () => {};
 
-// node_modules/.bun/zod@4.4.3/node_modules/zod/v4/core/index.js
+// node_modules/zod/v4/core/index.js
 var exports_core2 = {};
 __export(exports_core2, {
   $ZodAny: () => $ZodAny,
@@ -12298,7 +12298,7 @@ var init_core2 = __esm(() => {
   init_to_json_schema();
 });
 
-// node_modules/.bun/zod@4.4.3/node_modules/zod/v4/classic/checks.js
+// node_modules/zod/v4/classic/checks.js
 var exports_checks2 = {};
 __export(exports_checks2, {
   endsWith: () => _endsWith,
@@ -12335,7 +12335,7 @@ var init_checks2 = __esm(() => {
   init_core2();
 });
 
-// node_modules/.bun/zod@4.4.3/node_modules/zod/v4/classic/iso.js
+// node_modules/zod/v4/classic/iso.js
 var exports_iso = {};
 __export(exports_iso, {
   ZodISODate: () => ZodISODate,
@@ -12381,7 +12381,7 @@ var init_iso = __esm(() => {
   });
 });
 
-// node_modules/.bun/zod@4.4.3/node_modules/zod/v4/classic/errors.js
+// node_modules/zod/v4/classic/errors.js
 var initializer2 = (inst, issues) => {
   $ZodError.init(inst, issues);
   inst.name = "ZodError";
@@ -12421,7 +12421,7 @@ var init_errors3 = __esm(() => {
   });
 });
 
-// node_modules/.bun/zod@4.4.3/node_modules/zod/v4/classic/parse.js
+// node_modules/zod/v4/classic/parse.js
 var parse3, parseAsync2, safeParse2, safeParseAsync2, encode2, decode2, encodeAsync2, decodeAsync2, safeEncode2, safeDecode2, safeEncodeAsync2, safeDecodeAsync2;
 var init_parse2 = __esm(() => {
   init_core2();
@@ -12440,7 +12440,7 @@ var init_parse2 = __esm(() => {
   safeDecodeAsync2 = /* @__PURE__ */ _safeDecodeAsync(ZodRealError);
 });
 
-// node_modules/.bun/zod@4.4.3/node_modules/zod/v4/classic/schemas.js
+// node_modules/zod/v4/classic/schemas.js
 var exports_schemas2 = {};
 __export(exports_schemas2, {
   ZodAny: () => ZodAny,
@@ -13906,7 +13906,7 @@ var init_schemas2 = __esm(() => {
   meta2 = meta;
 });
 
-// node_modules/.bun/zod@4.4.3/node_modules/zod/v4/classic/compat.js
+// node_modules/zod/v4/classic/compat.js
 function setErrorMap(map) {
   config({
     customError: map
@@ -13934,7 +13934,7 @@ var init_compat = __esm(() => {
   (function(ZodFirstPartyTypeKind) {})(ZodFirstPartyTypeKind || (ZodFirstPartyTypeKind = {}));
 });
 
-// node_modules/.bun/zod@4.4.3/node_modules/zod/v4/classic/from-json-schema.js
+// node_modules/zod/v4/classic/from-json-schema.js
 function detectVersion(schema, defaultTarget) {
   const $schema = schema.$schema;
   if ($schema === "https://json-schema.org/draft/2020-12/schema") {
@@ -14409,7 +14409,7 @@ var init_from_json_schema = __esm(() => {
   ]);
 });
 
-// node_modules/.bun/zod@4.4.3/node_modules/zod/v4/classic/coerce.js
+// node_modules/zod/v4/classic/coerce.js
 var exports_coerce = {};
 __export(exports_coerce, {
   bigint: () => bigint3,
@@ -14438,7 +14438,7 @@ var init_coerce = __esm(() => {
   init_schemas2();
 });
 
-// node_modules/.bun/zod@4.4.3/node_modules/zod/v4/classic/external.js
+// node_modules/zod/v4/classic/external.js
 var exports_external = {};
 __export(exports_external, {
   $brand: () => $brand,
@@ -14699,13 +14699,13 @@ var init_external = __esm(() => {
   config(en_default());
 });
 
-// node_modules/.bun/zod@4.4.3/node_modules/zod/index.js
+// node_modules/zod/index.js
 var init_zod = __esm(() => {
   init_external();
   init_external();
 });
 
-// node_modules/.bun/drizzle-orm@0.44.7+c68b2f34d56ca2f2/node_modules/drizzle-orm/entity.js
+// node_modules/drizzle-orm/entity.js
 function is(value, type) {
   if (!value || typeof value !== "object") {
     return false;
@@ -14733,7 +14733,7 @@ var init_entity = __esm(() => {
   hasOwnEntityKind = Symbol.for("drizzle:hasOwnEntityKind");
 });
 
-// node_modules/.bun/drizzle-orm@0.44.7+c68b2f34d56ca2f2/node_modules/drizzle-orm/column.js
+// node_modules/drizzle-orm/column.js
 var Column;
 var init_column = __esm(() => {
   init_entity();
@@ -14787,7 +14787,7 @@ var init_column = __esm(() => {
   };
 });
 
-// node_modules/.bun/drizzle-orm@0.44.7+c68b2f34d56ca2f2/node_modules/drizzle-orm/column-builder.js
+// node_modules/drizzle-orm/column-builder.js
 var ColumnBuilder;
 var init_column_builder = __esm(() => {
   init_entity();
@@ -14847,19 +14847,19 @@ var init_column_builder = __esm(() => {
   };
 });
 
-// node_modules/.bun/drizzle-orm@0.44.7+c68b2f34d56ca2f2/node_modules/drizzle-orm/table.utils.js
+// node_modules/drizzle-orm/table.utils.js
 var TableName;
 var init_table_utils = __esm(() => {
   TableName = Symbol.for("drizzle:Name");
 });
 
-// node_modules/.bun/drizzle-orm@0.44.7+c68b2f34d56ca2f2/node_modules/drizzle-orm/tracing-utils.js
+// node_modules/drizzle-orm/tracing-utils.js
 function iife(fn, ...args) {
   return fn(...args);
 }
 var init_tracing_utils = () => {};
 
-// node_modules/.bun/drizzle-orm@0.44.7+c68b2f34d56ca2f2/node_modules/drizzle-orm/pg-core/columns/enum.js
+// node_modules/drizzle-orm/pg-core/columns/enum.js
 function isPgEnum(obj) {
   return !!obj && typeof obj === "function" && isPgEnumSym in obj && obj[isPgEnumSym] === true;
 }
@@ -14868,7 +14868,7 @@ var init_enum = __esm(() => {
   isPgEnumSym = Symbol.for("drizzle:isPgEnum");
 });
 
-// node_modules/.bun/drizzle-orm@0.44.7+c68b2f34d56ca2f2/node_modules/drizzle-orm/subquery.js
+// node_modules/drizzle-orm/subquery.js
 var Subquery;
 var init_subquery = __esm(() => {
   init_entity();
@@ -14887,11 +14887,11 @@ var init_subquery = __esm(() => {
   };
 });
 
-// node_modules/.bun/drizzle-orm@0.44.7+c68b2f34d56ca2f2/node_modules/drizzle-orm/version.js
+// node_modules/drizzle-orm/version.js
 var version2 = "0.44.7";
 var init_version = () => {};
 
-// node_modules/.bun/drizzle-orm@0.44.7+c68b2f34d56ca2f2/node_modules/drizzle-orm/tracing.js
+// node_modules/drizzle-orm/tracing.js
 var otel, rawTracer, tracer;
 var init_tracing = __esm(() => {
   init_tracing_utils();
@@ -14921,13 +14921,13 @@ var init_tracing = __esm(() => {
   };
 });
 
-// node_modules/.bun/drizzle-orm@0.44.7+c68b2f34d56ca2f2/node_modules/drizzle-orm/view-common.js
+// node_modules/drizzle-orm/view-common.js
 var ViewBaseConfig;
 var init_view_common = __esm(() => {
   ViewBaseConfig = Symbol.for("drizzle:ViewBaseConfig");
 });
 
-// node_modules/.bun/drizzle-orm@0.44.7+c68b2f34d56ca2f2/node_modules/drizzle-orm/table.js
+// node_modules/drizzle-orm/table.js
 function isTable(table) {
   return typeof table === "object" && table !== null && IsDrizzleTable in table;
 }
@@ -14972,7 +14972,7 @@ var init_table = __esm(() => {
   };
 });
 
-// node_modules/.bun/drizzle-orm@0.44.7+c68b2f34d56ca2f2/node_modules/drizzle-orm/sql/sql.js
+// node_modules/drizzle-orm/sql/sql.js
 function isSQLWrapper(value) {
   return value !== null && value !== undefined && typeof value.getSQL === "function";
 }
@@ -15339,7 +15339,7 @@ var init_sql = __esm(() => {
   };
 });
 
-// node_modules/.bun/drizzle-orm@0.44.7+c68b2f34d56ca2f2/node_modules/drizzle-orm/alias.js
+// node_modules/drizzle-orm/alias.js
 var ColumnAliasProxyHandler, TableAliasProxyHandler;
 var init_alias = __esm(() => {
   init_column();
@@ -15401,13 +15401,13 @@ var init_alias = __esm(() => {
   };
 });
 
-// node_modules/.bun/drizzle-orm@0.44.7+c68b2f34d56ca2f2/node_modules/drizzle-orm/errors.js
+// node_modules/drizzle-orm/errors.js
 var init_errors4 = () => {};
 
-// node_modules/.bun/drizzle-orm@0.44.7+c68b2f34d56ca2f2/node_modules/drizzle-orm/logger.js
+// node_modules/drizzle-orm/logger.js
 var init_logger = () => {};
 
-// node_modules/.bun/drizzle-orm@0.44.7+c68b2f34d56ca2f2/node_modules/drizzle-orm/query-promise.js
+// node_modules/drizzle-orm/query-promise.js
 var QueryPromise;
 var init_query_promise = __esm(() => {
   init_entity();
@@ -15432,7 +15432,7 @@ var init_query_promise = __esm(() => {
   };
 });
 
-// node_modules/.bun/drizzle-orm@0.44.7+c68b2f34d56ca2f2/node_modules/drizzle-orm/utils.js
+// node_modules/drizzle-orm/utils.js
 function orderSelectedFields(fields, pathPrefix) {
   return Object.entries(fields).reduce((result, [name, field]) => {
     if (typeof name !== "string") {
@@ -15497,41 +15497,41 @@ var init_utils = __esm(() => {
   textDecoder = typeof TextDecoder === "undefined" ? null : new TextDecoder;
 });
 
-// node_modules/.bun/drizzle-orm@0.44.7+c68b2f34d56ca2f2/node_modules/drizzle-orm/sql/expressions/conditions.js
+// node_modules/drizzle-orm/sql/expressions/conditions.js
 var init_conditions = () => {};
 
-// node_modules/.bun/drizzle-orm@0.44.7+c68b2f34d56ca2f2/node_modules/drizzle-orm/sql/expressions/select.js
+// node_modules/drizzle-orm/sql/expressions/select.js
 var init_select = () => {};
 
-// node_modules/.bun/drizzle-orm@0.44.7+c68b2f34d56ca2f2/node_modules/drizzle-orm/sql/expressions/index.js
+// node_modules/drizzle-orm/sql/expressions/index.js
 var init_expressions = __esm(() => {
   init_conditions();
   init_select();
 });
 
-// node_modules/.bun/drizzle-orm@0.44.7+c68b2f34d56ca2f2/node_modules/drizzle-orm/relations.js
+// node_modules/drizzle-orm/relations.js
 var init_relations = () => {};
 
-// node_modules/.bun/drizzle-orm@0.44.7+c68b2f34d56ca2f2/node_modules/drizzle-orm/sql/functions/aggregate.js
+// node_modules/drizzle-orm/sql/functions/aggregate.js
 var init_aggregate = () => {};
 
-// node_modules/.bun/drizzle-orm@0.44.7+c68b2f34d56ca2f2/node_modules/drizzle-orm/sql/functions/vector.js
+// node_modules/drizzle-orm/sql/functions/vector.js
 var init_vector = () => {};
 
-// node_modules/.bun/drizzle-orm@0.44.7+c68b2f34d56ca2f2/node_modules/drizzle-orm/sql/functions/index.js
+// node_modules/drizzle-orm/sql/functions/index.js
 var init_functions = __esm(() => {
   init_aggregate();
   init_vector();
 });
 
-// node_modules/.bun/drizzle-orm@0.44.7+c68b2f34d56ca2f2/node_modules/drizzle-orm/sql/index.js
+// node_modules/drizzle-orm/sql/index.js
 var init_sql2 = __esm(() => {
   init_expressions();
   init_functions();
   init_sql();
 });
 
-// node_modules/.bun/drizzle-orm@0.44.7+c68b2f34d56ca2f2/node_modules/drizzle-orm/index.js
+// node_modules/drizzle-orm/index.js
 var init_drizzle_orm = __esm(() => {
   init_alias();
   init_column_builder();
@@ -15548,10 +15548,10 @@ var init_drizzle_orm = __esm(() => {
   init_view_common();
 });
 
-// node_modules/.bun/drizzle-orm@0.44.7+c68b2f34d56ca2f2/node_modules/drizzle-orm/sqlite-core/alias.js
+// node_modules/drizzle-orm/sqlite-core/alias.js
 var init_alias2 = () => {};
 
-// node_modules/.bun/drizzle-orm@0.44.7+c68b2f34d56ca2f2/node_modules/drizzle-orm/sqlite-core/checks.js
+// node_modules/drizzle-orm/sqlite-core/checks.js
 var CheckBuilder, Check;
 var init_checks3 = __esm(() => {
   init_entity();
@@ -15578,7 +15578,7 @@ var init_checks3 = __esm(() => {
   };
 });
 
-// node_modules/.bun/drizzle-orm@0.44.7+c68b2f34d56ca2f2/node_modules/drizzle-orm/sqlite-core/foreign-keys.js
+// node_modules/drizzle-orm/sqlite-core/foreign-keys.js
 var ForeignKeyBuilder, ForeignKey;
 var init_foreign_keys = __esm(() => {
   init_entity();
@@ -15636,7 +15636,7 @@ var init_foreign_keys = __esm(() => {
   };
 });
 
-// node_modules/.bun/drizzle-orm@0.44.7+c68b2f34d56ca2f2/node_modules/drizzle-orm/sqlite-core/unique-constraint.js
+// node_modules/drizzle-orm/sqlite-core/unique-constraint.js
 function uniqueKeyName(table, columns) {
   return `${table[TableName]}_${columns.join("_")}_unique`;
 }
@@ -15670,7 +15670,7 @@ var init_unique_constraint = __esm(() => {
   };
 });
 
-// node_modules/.bun/drizzle-orm@0.44.7+c68b2f34d56ca2f2/node_modules/drizzle-orm/sqlite-core/columns/common.js
+// node_modules/drizzle-orm/sqlite-core/columns/common.js
 var SQLiteColumnBuilder, SQLiteColumn;
 var init_common = __esm(() => {
   init_column_builder();
@@ -15728,7 +15728,7 @@ var init_common = __esm(() => {
   };
 });
 
-// node_modules/.bun/drizzle-orm@0.44.7+c68b2f34d56ca2f2/node_modules/drizzle-orm/sqlite-core/columns/blob.js
+// node_modules/drizzle-orm/sqlite-core/columns/blob.js
 function blob(a, b) {
   const { name, config } = getColumnNameAndConfig(a, b);
   if (config?.mode === "json") {
@@ -15817,7 +15817,7 @@ var init_blob = __esm(() => {
   };
 });
 
-// node_modules/.bun/drizzle-orm@0.44.7+c68b2f34d56ca2f2/node_modules/drizzle-orm/sqlite-core/columns/custom.js
+// node_modules/drizzle-orm/sqlite-core/columns/custom.js
 function customType(customTypeParams) {
   return (a, b) => {
     const { name, config } = getColumnNameAndConfig(a, b);
@@ -15863,7 +15863,7 @@ var init_custom = __esm(() => {
   };
 });
 
-// node_modules/.bun/drizzle-orm@0.44.7+c68b2f34d56ca2f2/node_modules/drizzle-orm/sqlite-core/columns/integer.js
+// node_modules/drizzle-orm/sqlite-core/columns/integer.js
 function integer2(a, b) {
   const { name, config } = getColumnNameAndConfig(a, b);
   if (config?.mode === "timestamp" || config?.mode === "timestamp_ms") {
@@ -15965,7 +15965,7 @@ var init_integer = __esm(() => {
   };
 });
 
-// node_modules/.bun/drizzle-orm@0.44.7+c68b2f34d56ca2f2/node_modules/drizzle-orm/sqlite-core/columns/numeric.js
+// node_modules/drizzle-orm/sqlite-core/columns/numeric.js
 function numeric(a, b) {
   const { name, config } = getColumnNameAndConfig(a, b);
   const mode = config?.mode;
@@ -16036,7 +16036,7 @@ var init_numeric = __esm(() => {
   };
 });
 
-// node_modules/.bun/drizzle-orm@0.44.7+c68b2f34d56ca2f2/node_modules/drizzle-orm/sqlite-core/columns/real.js
+// node_modules/drizzle-orm/sqlite-core/columns/real.js
 function real(name) {
   return new SQLiteRealBuilder(name ?? "");
 }
@@ -16061,7 +16061,7 @@ var init_real = __esm(() => {
   };
 });
 
-// node_modules/.bun/drizzle-orm@0.44.7+c68b2f34d56ca2f2/node_modules/drizzle-orm/sqlite-core/columns/text.js
+// node_modules/drizzle-orm/sqlite-core/columns/text.js
 function text(a, b = {}) {
   const { name, config } = getColumnNameAndConfig(a, b);
   if (config.mode === "json") {
@@ -16119,7 +16119,7 @@ var init_text = __esm(() => {
   };
 });
 
-// node_modules/.bun/drizzle-orm@0.44.7+c68b2f34d56ca2f2/node_modules/drizzle-orm/sqlite-core/columns/index.js
+// node_modules/drizzle-orm/sqlite-core/columns/index.js
 var init_columns = __esm(() => {
   init_blob();
   init_common();
@@ -16130,7 +16130,7 @@ var init_columns = __esm(() => {
   init_text();
 });
 
-// node_modules/.bun/drizzle-orm@0.44.7+c68b2f34d56ca2f2/node_modules/drizzle-orm/selection-proxy.js
+// node_modules/drizzle-orm/selection-proxy.js
 var SelectionProxyHandler;
 var init_selection_proxy = __esm(() => {
   init_alias();
@@ -16191,7 +16191,7 @@ var init_selection_proxy = __esm(() => {
   };
 });
 
-// node_modules/.bun/drizzle-orm@0.44.7+c68b2f34d56ca2f2/node_modules/drizzle-orm/sqlite-core/columns/all.js
+// node_modules/drizzle-orm/sqlite-core/columns/all.js
 function getSQLiteColumnBuilders() {
   return {
     blob,
@@ -16211,7 +16211,7 @@ var init_all = __esm(() => {
   init_text();
 });
 
-// node_modules/.bun/drizzle-orm@0.44.7+c68b2f34d56ca2f2/node_modules/drizzle-orm/sqlite-core/table.js
+// node_modules/drizzle-orm/sqlite-core/table.js
 function sqliteTableBase(name, columns, extraConfig, schema, baseName = name) {
   const rawTable = new SQLiteTable(name, schema, baseName);
   const parsedColumns = typeof columns === "function" ? columns(getSQLiteColumnBuilders()) : columns;
@@ -16249,7 +16249,7 @@ var init_table2 = __esm(() => {
   };
 });
 
-// node_modules/.bun/drizzle-orm@0.44.7+c68b2f34d56ca2f2/node_modules/drizzle-orm/sqlite-core/indexes.js
+// node_modules/drizzle-orm/sqlite-core/indexes.js
 var IndexBuilder, Index;
 var init_indexes = __esm(() => {
   init_entity();
@@ -16281,7 +16281,7 @@ var init_indexes = __esm(() => {
   };
 });
 
-// node_modules/.bun/drizzle-orm@0.44.7+c68b2f34d56ca2f2/node_modules/drizzle-orm/sqlite-core/primary-keys.js
+// node_modules/drizzle-orm/sqlite-core/primary-keys.js
 var PrimaryKeyBuilder, PrimaryKey;
 var init_primary_keys = __esm(() => {
   init_entity();
@@ -16313,7 +16313,7 @@ var init_primary_keys = __esm(() => {
   };
 });
 
-// node_modules/.bun/drizzle-orm@0.44.7+c68b2f34d56ca2f2/node_modules/drizzle-orm/sqlite-core/utils.js
+// node_modules/drizzle-orm/sqlite-core/utils.js
 function getTableConfig(table) {
   const columns = Object.values(table[SQLiteTable.Symbol.Columns]);
   const indexes = [];
@@ -16375,13 +16375,13 @@ var init_utils2 = __esm(() => {
   init_unique_constraint();
 });
 
-// node_modules/.bun/drizzle-orm@0.44.7+c68b2f34d56ca2f2/node_modules/drizzle-orm/sqlite-core/query-builders/delete.js
+// node_modules/drizzle-orm/sqlite-core/query-builders/delete.js
 var init_delete = () => {};
 
-// node_modules/.bun/drizzle-orm@0.44.7+c68b2f34d56ca2f2/node_modules/drizzle-orm/sqlite-core/dialect.js
+// node_modules/drizzle-orm/sqlite-core/dialect.js
 var init_dialect = () => {};
 
-// node_modules/.bun/drizzle-orm@0.44.7+c68b2f34d56ca2f2/node_modules/drizzle-orm/query-builders/query-builder.js
+// node_modules/drizzle-orm/query-builders/query-builder.js
 var TypedQueryBuilder;
 var init_query_builder = __esm(() => {
   init_entity();
@@ -16393,7 +16393,7 @@ var init_query_builder = __esm(() => {
   };
 });
 
-// node_modules/.bun/drizzle-orm@0.44.7+c68b2f34d56ca2f2/node_modules/drizzle-orm/sqlite-core/query-builders/select.js
+// node_modules/drizzle-orm/sqlite-core/query-builders/select.js
 function createSetOperator(type, isAll) {
   return (leftSelect, rightSelect, ...restSelects) => {
     const setOperators = [rightSelect, ...restSelects].map((select) => ({
@@ -16662,16 +16662,16 @@ var init_select2 = __esm(() => {
   except = createSetOperator("except", false);
 });
 
-// node_modules/.bun/drizzle-orm@0.44.7+c68b2f34d56ca2f2/node_modules/drizzle-orm/sqlite-core/query-builders/query-builder.js
+// node_modules/drizzle-orm/sqlite-core/query-builders/query-builder.js
 var init_query_builder2 = () => {};
 
-// node_modules/.bun/drizzle-orm@0.44.7+c68b2f34d56ca2f2/node_modules/drizzle-orm/sqlite-core/query-builders/insert.js
+// node_modules/drizzle-orm/sqlite-core/query-builders/insert.js
 var init_insert = () => {};
 
-// node_modules/.bun/drizzle-orm@0.44.7+c68b2f34d56ca2f2/node_modules/drizzle-orm/sqlite-core/query-builders/update.js
+// node_modules/drizzle-orm/sqlite-core/query-builders/update.js
 var init_update = () => {};
 
-// node_modules/.bun/drizzle-orm@0.44.7+c68b2f34d56ca2f2/node_modules/drizzle-orm/sqlite-core/query-builders/index.js
+// node_modules/drizzle-orm/sqlite-core/query-builders/index.js
 var init_query_builders = __esm(() => {
   init_delete();
   init_insert();
@@ -16680,16 +16680,16 @@ var init_query_builders = __esm(() => {
   init_update();
 });
 
-// node_modules/.bun/drizzle-orm@0.44.7+c68b2f34d56ca2f2/node_modules/drizzle-orm/sqlite-core/db.js
+// node_modules/drizzle-orm/sqlite-core/db.js
 var init_db = () => {};
 
-// node_modules/.bun/drizzle-orm@0.44.7+c68b2f34d56ca2f2/node_modules/drizzle-orm/sqlite-core/session.js
+// node_modules/drizzle-orm/sqlite-core/session.js
 var init_session = () => {};
 
-// node_modules/.bun/drizzle-orm@0.44.7+c68b2f34d56ca2f2/node_modules/drizzle-orm/sqlite-core/view.js
+// node_modules/drizzle-orm/sqlite-core/view.js
 var init_view = () => {};
 
-// node_modules/.bun/drizzle-orm@0.44.7+c68b2f34d56ca2f2/node_modules/drizzle-orm/sqlite-core/index.js
+// node_modules/drizzle-orm/sqlite-core/index.js
 var init_sqlite_core = __esm(() => {
   init_alias2();
   init_checks3();
@@ -16707,7 +16707,7 @@ var init_sqlite_core = __esm(() => {
   init_view();
 });
 
-// node_modules/.bun/@gobing-ai+ts-db@0.5.27+bd6ba572b80d77c0/node_modules/@gobing-ai/ts-db/dist/schema/common.js
+// node_modules/@gobing-ai/ts-db/dist/schema/common.js
 function nowTimestamp() {
   return Date.now();
 }
@@ -16736,18 +16736,18 @@ var init_common2 = __esm(() => {
   appendOnlyColumns = buildAppendOnlyColumns();
 });
 
-// node_modules/.bun/zod@4.4.3/node_modules/zod/v4/classic/index.js
+// node_modules/zod/v4/classic/index.js
 var init_classic = __esm(() => {
   init_external();
   init_external();
 });
 
-// node_modules/.bun/zod@4.4.3/node_modules/zod/v4/index.js
+// node_modules/zod/v4/index.js
 var init_v4 = __esm(() => {
   init_classic();
 });
 
-// node_modules/.bun/drizzle-zod@0.8.3+9318fc89f3677ae5/node_modules/drizzle-zod/index.mjs
+// node_modules/drizzle-zod/index.mjs
 function isColumnType(column, columnTypes) {
   return columnTypes.includes(column.columnType);
 }
@@ -17014,7 +17014,7 @@ var init_drizzle_zod = __esm(() => {
   };
 });
 
-// node_modules/.bun/@gobing-ai+ts-db@0.5.27+bd6ba572b80d77c0/node_modules/@gobing-ai/ts-db/dist/schema/drizzle-internals.js
+// node_modules/@gobing-ai/ts-db/dist/schema/drizzle-internals.js
 function sqlExpressionToText(value) {
   if (typeof value !== "object" || value === null || !("queryChunks" in value)) {
     return;
@@ -17037,7 +17037,7 @@ function getDrizzleTableName(table) {
   return String(table[nameSym]);
 }
 
-// node_modules/.bun/@gobing-ai+ts-db@0.5.27+bd6ba572b80d77c0/node_modules/@gobing-ai/ts-db/dist/schema/ddl.js
+// node_modules/@gobing-ai/ts-db/dist/schema/ddl.js
 function quoteIdent(name) {
   return `"${name.replace(/"/g, '""')}"`;
 }
@@ -17131,7 +17131,7 @@ var init_ddl = __esm(() => {
   init_sqlite_core();
 });
 
-// node_modules/.bun/@gobing-ai+ts-db@0.5.27+bd6ba572b80d77c0/node_modules/@gobing-ai/ts-db/dist/schema/define-table.js
+// node_modules/@gobing-ai/ts-db/dist/schema/define-table.js
 function defineTable(name, columns) {
   const table = sqliteTable(name, columns);
   let insert;
@@ -17165,14 +17165,14 @@ var init_define_table = __esm(() => {
   init_ddl();
 });
 
-// node_modules/.bun/@gobing-ai+ts-db@0.5.27+bd6ba572b80d77c0/node_modules/@gobing-ai/ts-db/dist/schema/index.js
+// node_modules/@gobing-ai/ts-db/dist/schema/index.js
 var init_schema = __esm(() => {
   init_sqlite_core();
   init_define_table();
   init_common2();
 });
 
-// node_modules/.bun/yaml@2.9.0/node_modules/yaml/dist/nodes/identity.js
+// node_modules/yaml/dist/nodes/identity.js
 var require_identity = __commonJS(function(exports) {
   var ALIAS = Symbol.for("yaml.alias");
   var DOC = Symbol.for("yaml.document");
@@ -17226,7 +17226,7 @@ var require_identity = __commonJS(function(exports) {
   exports.isSeq = isSeq;
 });
 
-// node_modules/.bun/yaml@2.9.0/node_modules/yaml/dist/visit.js
+// node_modules/yaml/dist/visit.js
 var require_visit = __commonJS(function(exports) {
   var identity = require_identity();
   var BREAK = Symbol("break visit");
@@ -17381,7 +17381,7 @@ var require_visit = __commonJS(function(exports) {
   exports.visitAsync = visitAsync;
 });
 
-// node_modules/.bun/yaml@2.9.0/node_modules/yaml/dist/doc/directives.js
+// node_modules/yaml/dist/doc/directives.js
 var require_directives = __commonJS(function(exports) {
   var identity = require_identity();
   var visit = require_visit();
@@ -17533,7 +17533,7 @@ var require_directives = __commonJS(function(exports) {
   exports.Directives = Directives;
 });
 
-// node_modules/.bun/yaml@2.9.0/node_modules/yaml/dist/doc/anchors.js
+// node_modules/yaml/dist/doc/anchors.js
 var require_anchors = __commonJS(function(exports) {
   var identity = require_identity();
   var visit = require_visit();
@@ -17595,7 +17595,7 @@ var require_anchors = __commonJS(function(exports) {
   exports.findNewAnchor = findNewAnchor;
 });
 
-// node_modules/.bun/yaml@2.9.0/node_modules/yaml/dist/doc/applyReviver.js
+// node_modules/yaml/dist/doc/applyReviver.js
 var require_applyReviver = __commonJS(function(exports) {
   function applyReviver(reviver, obj, key, val) {
     if (val && typeof val === "object") {
@@ -17642,7 +17642,7 @@ var require_applyReviver = __commonJS(function(exports) {
   exports.applyReviver = applyReviver;
 });
 
-// node_modules/.bun/yaml@2.9.0/node_modules/yaml/dist/nodes/toJS.js
+// node_modules/yaml/dist/nodes/toJS.js
 var require_toJS = __commonJS(function(exports) {
   var identity = require_identity();
   function toJS(value, arg, ctx) {
@@ -17669,7 +17669,7 @@ var require_toJS = __commonJS(function(exports) {
   exports.toJS = toJS;
 });
 
-// node_modules/.bun/yaml@2.9.0/node_modules/yaml/dist/nodes/Node.js
+// node_modules/yaml/dist/nodes/Node.js
 var require_Node = __commonJS(function(exports) {
   var applyReviver = require_applyReviver();
   var identity = require_identity();
@@ -17706,7 +17706,7 @@ var require_Node = __commonJS(function(exports) {
   exports.NodeBase = NodeBase;
 });
 
-// node_modules/.bun/yaml@2.9.0/node_modules/yaml/dist/nodes/Alias.js
+// node_modules/yaml/dist/nodes/Alias.js
 var require_Alias = __commonJS(function(exports) {
   var anchors = require_anchors();
   var visit = require_visit();
@@ -17816,7 +17816,7 @@ var require_Alias = __commonJS(function(exports) {
   exports.Alias = Alias;
 });
 
-// node_modules/.bun/yaml@2.9.0/node_modules/yaml/dist/nodes/Scalar.js
+// node_modules/yaml/dist/nodes/Scalar.js
 var require_Scalar = __commonJS(function(exports) {
   var identity = require_identity();
   var Node = require_Node();
@@ -17844,7 +17844,7 @@ var require_Scalar = __commonJS(function(exports) {
   exports.isScalarValue = isScalarValue;
 });
 
-// node_modules/.bun/yaml@2.9.0/node_modules/yaml/dist/doc/createNode.js
+// node_modules/yaml/dist/doc/createNode.js
 var require_createNode = __commonJS(function(exports) {
   var Alias = require_Alias();
   var identity = require_identity();
@@ -17916,7 +17916,7 @@ var require_createNode = __commonJS(function(exports) {
   exports.createNode = createNode;
 });
 
-// node_modules/.bun/yaml@2.9.0/node_modules/yaml/dist/nodes/Collection.js
+// node_modules/yaml/dist/nodes/Collection.js
 var require_Collection = __commonJS(function(exports) {
   var createNode = require_createNode();
   var identity = require_identity();
@@ -18031,7 +18031,7 @@ var require_Collection = __commonJS(function(exports) {
   exports.isEmptyPath = isEmptyPath;
 });
 
-// node_modules/.bun/yaml@2.9.0/node_modules/yaml/dist/stringify/stringifyComment.js
+// node_modules/yaml/dist/stringify/stringifyComment.js
 var require_stringifyComment = __commonJS(function(exports) {
   var stringifyComment = (str) => str.replace(/^(?!$)(?: $)?/gm, "#");
   function indentComment(comment, indent) {
@@ -18048,7 +18048,7 @@ var require_stringifyComment = __commonJS(function(exports) {
   exports.stringifyComment = stringifyComment;
 });
 
-// node_modules/.bun/yaml@2.9.0/node_modules/yaml/dist/stringify/foldFlowLines.js
+// node_modules/yaml/dist/stringify/foldFlowLines.js
 var require_foldFlowLines = __commonJS(function(exports) {
   var FOLD_FLOW = "flow";
   var FOLD_BLOCK = "block";
@@ -18185,7 +18185,7 @@ ${indent}${text.slice(fold + 1, end)}`;
   exports.foldFlowLines = foldFlowLines;
 });
 
-// node_modules/.bun/yaml@2.9.0/node_modules/yaml/dist/stringify/stringifyString.js
+// node_modules/yaml/dist/stringify/stringifyString.js
 var require_stringifyString = __commonJS(function(exports) {
   var Scalar = require_Scalar();
   var foldFlowLines = require_foldFlowLines();
@@ -18483,7 +18483,7 @@ ${indent}`);
   exports.stringifyString = stringifyString;
 });
 
-// node_modules/.bun/yaml@2.9.0/node_modules/yaml/dist/stringify/stringify.js
+// node_modules/yaml/dist/stringify/stringify.js
 var require_stringify = __commonJS(function(exports) {
   var anchors = require_anchors();
   var identity = require_identity();
@@ -18604,7 +18604,7 @@ ${ctx.indent}${str}`;
   exports.stringify = stringify;
 });
 
-// node_modules/.bun/yaml@2.9.0/node_modules/yaml/dist/stringify/stringifyPair.js
+// node_modules/yaml/dist/stringify/stringifyPair.js
 var require_stringifyPair = __commonJS(function(exports) {
   var identity = require_identity();
   var Scalar = require_Scalar();
@@ -18740,7 +18740,7 @@ ${ctx.indent}`;
   exports.stringifyPair = stringifyPair;
 });
 
-// node_modules/.bun/yaml@2.9.0/node_modules/yaml/dist/log.js
+// node_modules/yaml/dist/log.js
 var require_log = __commonJS(function(exports) {
   var node_process = __require("process");
   function debug(logLevel, ...messages) {
@@ -18759,7 +18759,7 @@ var require_log = __commonJS(function(exports) {
   exports.warn = warn;
 });
 
-// node_modules/.bun/yaml@2.9.0/node_modules/yaml/dist/schema/yaml-1.1/merge.js
+// node_modules/yaml/dist/schema/yaml-1.1/merge.js
 var require_merge = __commonJS(function(exports) {
   var identity = require_identity();
   var Scalar = require_Scalar();
@@ -18816,7 +18816,7 @@ var require_merge = __commonJS(function(exports) {
   exports.merge = merge;
 });
 
-// node_modules/.bun/yaml@2.9.0/node_modules/yaml/dist/nodes/addPairToJSMap.js
+// node_modules/yaml/dist/nodes/addPairToJSMap.js
 var require_addPairToJSMap = __commonJS(function(exports) {
   var log = require_log();
   var merge = require_merge();
@@ -18877,7 +18877,7 @@ var require_addPairToJSMap = __commonJS(function(exports) {
   exports.addPairToJSMap = addPairToJSMap;
 });
 
-// node_modules/.bun/yaml@2.9.0/node_modules/yaml/dist/nodes/Pair.js
+// node_modules/yaml/dist/nodes/Pair.js
 var require_Pair = __commonJS(function(exports) {
   var createNode = require_createNode();
   var stringifyPair = require_stringifyPair();
@@ -18915,7 +18915,7 @@ var require_Pair = __commonJS(function(exports) {
   exports.createPair = createPair;
 });
 
-// node_modules/.bun/yaml@2.9.0/node_modules/yaml/dist/stringify/stringifyCollection.js
+// node_modules/yaml/dist/stringify/stringifyCollection.js
 var require_stringifyCollection = __commonJS(function(exports) {
   var identity = require_identity();
   var stringify = require_stringify();
@@ -19067,7 +19067,7 @@ ${indent}${end}`;
   exports.stringifyCollection = stringifyCollection;
 });
 
-// node_modules/.bun/yaml@2.9.0/node_modules/yaml/dist/nodes/YAMLMap.js
+// node_modules/yaml/dist/nodes/YAMLMap.js
 var require_YAMLMap = __commonJS(function(exports) {
   var stringifyCollection = require_stringifyCollection();
   var addPairToJSMap = require_addPairToJSMap();
@@ -19194,7 +19194,7 @@ var require_YAMLMap = __commonJS(function(exports) {
   exports.findPair = findPair;
 });
 
-// node_modules/.bun/yaml@2.9.0/node_modules/yaml/dist/schema/common/map.js
+// node_modules/yaml/dist/schema/common/map.js
 var require_map = __commonJS(function(exports) {
   var identity = require_identity();
   var YAMLMap = require_YAMLMap();
@@ -19213,7 +19213,7 @@ var require_map = __commonJS(function(exports) {
   exports.map = map;
 });
 
-// node_modules/.bun/yaml@2.9.0/node_modules/yaml/dist/nodes/YAMLSeq.js
+// node_modules/yaml/dist/nodes/YAMLSeq.js
 var require_YAMLSeq = __commonJS(function(exports) {
   var createNode = require_createNode();
   var stringifyCollection = require_stringifyCollection();
@@ -19306,7 +19306,7 @@ var require_YAMLSeq = __commonJS(function(exports) {
   exports.YAMLSeq = YAMLSeq;
 });
 
-// node_modules/.bun/yaml@2.9.0/node_modules/yaml/dist/schema/common/seq.js
+// node_modules/yaml/dist/schema/common/seq.js
 var require_seq = __commonJS(function(exports) {
   var identity = require_identity();
   var YAMLSeq = require_YAMLSeq();
@@ -19325,7 +19325,7 @@ var require_seq = __commonJS(function(exports) {
   exports.seq = seq;
 });
 
-// node_modules/.bun/yaml@2.9.0/node_modules/yaml/dist/schema/common/string.js
+// node_modules/yaml/dist/schema/common/string.js
 var require_string = __commonJS(function(exports) {
   var stringifyString = require_stringifyString();
   var string = {
@@ -19341,7 +19341,7 @@ var require_string = __commonJS(function(exports) {
   exports.string = string;
 });
 
-// node_modules/.bun/yaml@2.9.0/node_modules/yaml/dist/schema/common/null.js
+// node_modules/yaml/dist/schema/common/null.js
 var require_null = __commonJS(function(exports) {
   var Scalar = require_Scalar();
   var nullTag = {
@@ -19356,7 +19356,7 @@ var require_null = __commonJS(function(exports) {
   exports.nullTag = nullTag;
 });
 
-// node_modules/.bun/yaml@2.9.0/node_modules/yaml/dist/schema/core/bool.js
+// node_modules/yaml/dist/schema/core/bool.js
 var require_bool = __commonJS(function(exports) {
   var Scalar = require_Scalar();
   var boolTag = {
@@ -19377,7 +19377,7 @@ var require_bool = __commonJS(function(exports) {
   exports.boolTag = boolTag;
 });
 
-// node_modules/.bun/yaml@2.9.0/node_modules/yaml/dist/stringify/stringifyNumber.js
+// node_modules/yaml/dist/stringify/stringifyNumber.js
 var require_stringifyNumber = __commonJS(function(exports) {
   function stringifyNumber({ format, minFractionDigits, tag, value }) {
     if (typeof value === "bigint")
@@ -19401,7 +19401,7 @@ var require_stringifyNumber = __commonJS(function(exports) {
   exports.stringifyNumber = stringifyNumber;
 });
 
-// node_modules/.bun/yaml@2.9.0/node_modules/yaml/dist/schema/core/float.js
+// node_modules/yaml/dist/schema/core/float.js
 var require_float = __commonJS(function(exports) {
   var Scalar = require_Scalar();
   var stringifyNumber = require_stringifyNumber();
@@ -19444,7 +19444,7 @@ var require_float = __commonJS(function(exports) {
   exports.floatNaN = floatNaN;
 });
 
-// node_modules/.bun/yaml@2.9.0/node_modules/yaml/dist/schema/core/int.js
+// node_modules/yaml/dist/schema/core/int.js
 var require_int = __commonJS(function(exports) {
   var stringifyNumber = require_stringifyNumber();
   var intIdentify = (value) => typeof value === "bigint" || Number.isInteger(value);
@@ -19486,7 +19486,7 @@ var require_int = __commonJS(function(exports) {
   exports.intOct = intOct;
 });
 
-// node_modules/.bun/yaml@2.9.0/node_modules/yaml/dist/schema/core/schema.js
+// node_modules/yaml/dist/schema/core/schema.js
 var require_schema = __commonJS(function(exports) {
   var map = require_map();
   var _null = require_null();
@@ -19511,7 +19511,7 @@ var require_schema = __commonJS(function(exports) {
   exports.schema = schema;
 });
 
-// node_modules/.bun/yaml@2.9.0/node_modules/yaml/dist/schema/json/schema.js
+// node_modules/yaml/dist/schema/json/schema.js
 var require_schema2 = __commonJS(function(exports) {
   var Scalar = require_Scalar();
   var map = require_map();
@@ -19575,7 +19575,7 @@ var require_schema2 = __commonJS(function(exports) {
   exports.schema = schema;
 });
 
-// node_modules/.bun/yaml@2.9.0/node_modules/yaml/dist/schema/yaml-1.1/binary.js
+// node_modules/yaml/dist/schema/yaml-1.1/binary.js
 var require_binary = __commonJS(function(exports) {
   var node_buffer = __require("buffer");
   var Scalar = require_Scalar();
@@ -19630,7 +19630,7 @@ var require_binary = __commonJS(function(exports) {
   exports.binary = binary;
 });
 
-// node_modules/.bun/yaml@2.9.0/node_modules/yaml/dist/schema/yaml-1.1/pairs.js
+// node_modules/yaml/dist/schema/yaml-1.1/pairs.js
 var require_pairs = __commonJS(function(exports) {
   var identity = require_identity();
   var Pair = require_Pair();
@@ -19705,7 +19705,7 @@ ${cn.comment}` : item.comment;
   exports.resolvePairs = resolvePairs;
 });
 
-// node_modules/.bun/yaml@2.9.0/node_modules/yaml/dist/schema/yaml-1.1/omap.js
+// node_modules/yaml/dist/schema/yaml-1.1/omap.js
 var require_omap = __commonJS(function(exports) {
   var identity = require_identity();
   var toJS = require_toJS();
@@ -19777,7 +19777,7 @@ var require_omap = __commonJS(function(exports) {
   exports.omap = omap;
 });
 
-// node_modules/.bun/yaml@2.9.0/node_modules/yaml/dist/schema/yaml-1.1/bool.js
+// node_modules/yaml/dist/schema/yaml-1.1/bool.js
 var require_bool2 = __commonJS(function(exports) {
   var Scalar = require_Scalar();
   function boolStringify({ value, source }, ctx) {
@@ -19806,7 +19806,7 @@ var require_bool2 = __commonJS(function(exports) {
   exports.trueTag = trueTag;
 });
 
-// node_modules/.bun/yaml@2.9.0/node_modules/yaml/dist/schema/yaml-1.1/float.js
+// node_modules/yaml/dist/schema/yaml-1.1/float.js
 var require_float2 = __commonJS(function(exports) {
   var Scalar = require_Scalar();
   var stringifyNumber = require_stringifyNumber();
@@ -19852,7 +19852,7 @@ var require_float2 = __commonJS(function(exports) {
   exports.floatNaN = floatNaN;
 });
 
-// node_modules/.bun/yaml@2.9.0/node_modules/yaml/dist/schema/yaml-1.1/int.js
+// node_modules/yaml/dist/schema/yaml-1.1/int.js
 var require_int2 = __commonJS(function(exports) {
   var stringifyNumber = require_stringifyNumber();
   var intIdentify = (value) => typeof value === "bigint" || Number.isInteger(value);
@@ -19928,7 +19928,7 @@ var require_int2 = __commonJS(function(exports) {
   exports.intOct = intOct;
 });
 
-// node_modules/.bun/yaml@2.9.0/node_modules/yaml/dist/schema/yaml-1.1/set.js
+// node_modules/yaml/dist/schema/yaml-1.1/set.js
 var require_set = __commonJS(function(exports) {
   var identity = require_identity();
   var Pair = require_Pair();
@@ -20011,7 +20011,7 @@ var require_set = __commonJS(function(exports) {
   exports.set = set;
 });
 
-// node_modules/.bun/yaml@2.9.0/node_modules/yaml/dist/schema/yaml-1.1/timestamp.js
+// node_modules/yaml/dist/schema/yaml-1.1/timestamp.js
 var require_timestamp = __commonJS(function(exports) {
   var stringifyNumber = require_stringifyNumber();
   function parseSexagesimal(str, asBigInt) {
@@ -20093,7 +20093,7 @@ var require_timestamp = __commonJS(function(exports) {
   exports.timestamp = timestamp;
 });
 
-// node_modules/.bun/yaml@2.9.0/node_modules/yaml/dist/schema/yaml-1.1/schema.js
+// node_modules/yaml/dist/schema/yaml-1.1/schema.js
 var require_schema3 = __commonJS(function(exports) {
   var map = require_map();
   var _null = require_null();
@@ -20134,7 +20134,7 @@ var require_schema3 = __commonJS(function(exports) {
   exports.schema = schema;
 });
 
-// node_modules/.bun/yaml@2.9.0/node_modules/yaml/dist/schema/tags.js
+// node_modules/yaml/dist/schema/tags.js
 var require_tags = __commonJS(function(exports) {
   var map = require_map();
   var _null = require_null();
@@ -20225,7 +20225,7 @@ var require_tags = __commonJS(function(exports) {
   exports.getTags = getTags;
 });
 
-// node_modules/.bun/yaml@2.9.0/node_modules/yaml/dist/schema/Schema.js
+// node_modules/yaml/dist/schema/Schema.js
 var require_Schema = __commonJS(function(exports) {
   var identity = require_identity();
   var map = require_map();
@@ -20255,7 +20255,7 @@ var require_Schema = __commonJS(function(exports) {
   exports.Schema = Schema;
 });
 
-// node_modules/.bun/yaml@2.9.0/node_modules/yaml/dist/stringify/stringifyDocument.js
+// node_modules/yaml/dist/stringify/stringifyDocument.js
 var require_stringifyDocument = __commonJS(function(exports) {
   var identity = require_identity();
   var stringify = require_stringify();
@@ -20335,7 +20335,7 @@ var require_stringifyDocument = __commonJS(function(exports) {
   exports.stringifyDocument = stringifyDocument;
 });
 
-// node_modules/.bun/yaml@2.9.0/node_modules/yaml/dist/doc/Document.js
+// node_modules/yaml/dist/doc/Document.js
 var require_Document = __commonJS(function(exports) {
   var Alias = require_Alias();
   var Collection = require_Collection();
@@ -20570,7 +20570,7 @@ var require_Document = __commonJS(function(exports) {
   exports.Document = Document;
 });
 
-// node_modules/.bun/yaml@2.9.0/node_modules/yaml/dist/errors.js
+// node_modules/yaml/dist/errors.js
 var require_errors = __commonJS(function(exports) {
   class YAMLError extends Error {
     constructor(name, pos, code, message) {
@@ -20635,7 +20635,7 @@ ${pointer}
   exports.prettifyError = prettifyError;
 });
 
-// node_modules/.bun/yaml@2.9.0/node_modules/yaml/dist/compose/resolve-props.js
+// node_modules/yaml/dist/compose/resolve-props.js
 var require_resolve_props = __commonJS(function(exports) {
   function resolveProps(tokens, { flow, indicator, next, offset, onError, parentIndent, startOnNewline }) {
     let spaceBefore = false;
@@ -20765,7 +20765,7 @@ var require_resolve_props = __commonJS(function(exports) {
   exports.resolveProps = resolveProps;
 });
 
-// node_modules/.bun/yaml@2.9.0/node_modules/yaml/dist/compose/util-contains-newline.js
+// node_modules/yaml/dist/compose/util-contains-newline.js
 var require_util_contains_newline = __commonJS(function(exports) {
   function containsNewline(key) {
     if (!key)
@@ -20805,7 +20805,7 @@ var require_util_contains_newline = __commonJS(function(exports) {
   exports.containsNewline = containsNewline;
 });
 
-// node_modules/.bun/yaml@2.9.0/node_modules/yaml/dist/compose/util-flow-indent-check.js
+// node_modules/yaml/dist/compose/util-flow-indent-check.js
 var require_util_flow_indent_check = __commonJS(function(exports) {
   var utilContainsNewline = require_util_contains_newline();
   function flowIndentCheck(indent, fc, onError) {
@@ -20820,7 +20820,7 @@ var require_util_flow_indent_check = __commonJS(function(exports) {
   exports.flowIndentCheck = flowIndentCheck;
 });
 
-// node_modules/.bun/yaml@2.9.0/node_modules/yaml/dist/compose/util-map-includes.js
+// node_modules/yaml/dist/compose/util-map-includes.js
 var require_util_map_includes = __commonJS(function(exports) {
   var identity = require_identity();
   function mapIncludes(ctx, items, search) {
@@ -20833,7 +20833,7 @@ var require_util_map_includes = __commonJS(function(exports) {
   exports.mapIncludes = mapIncludes;
 });
 
-// node_modules/.bun/yaml@2.9.0/node_modules/yaml/dist/compose/resolve-block-map.js
+// node_modules/yaml/dist/compose/resolve-block-map.js
 var require_resolve_block_map = __commonJS(function(exports) {
   var Pair = require_Pair();
   var YAMLMap = require_YAMLMap();
@@ -20940,7 +20940,7 @@ var require_resolve_block_map = __commonJS(function(exports) {
   exports.resolveBlockMap = resolveBlockMap;
 });
 
-// node_modules/.bun/yaml@2.9.0/node_modules/yaml/dist/compose/resolve-block-seq.js
+// node_modules/yaml/dist/compose/resolve-block-seq.js
 var require_resolve_block_seq = __commonJS(function(exports) {
   var YAMLSeq = require_YAMLSeq();
   var resolveProps = require_resolve_props();
@@ -20988,7 +20988,7 @@ var require_resolve_block_seq = __commonJS(function(exports) {
   exports.resolveBlockSeq = resolveBlockSeq;
 });
 
-// node_modules/.bun/yaml@2.9.0/node_modules/yaml/dist/compose/resolve-end.js
+// node_modules/yaml/dist/compose/resolve-end.js
 var require_resolve_end = __commonJS(function(exports) {
   function resolveEnd(end, offset, reqSpace, onError) {
     let comment = "";
@@ -21028,7 +21028,7 @@ var require_resolve_end = __commonJS(function(exports) {
   exports.resolveEnd = resolveEnd;
 });
 
-// node_modules/.bun/yaml@2.9.0/node_modules/yaml/dist/compose/resolve-flow-collection.js
+// node_modules/yaml/dist/compose/resolve-flow-collection.js
 var require_resolve_flow_collection = __commonJS(function(exports) {
   var identity = require_identity();
   var Pair = require_Pair();
@@ -21219,7 +21219,7 @@ var require_resolve_flow_collection = __commonJS(function(exports) {
   exports.resolveFlowCollection = resolveFlowCollection;
 });
 
-// node_modules/.bun/yaml@2.9.0/node_modules/yaml/dist/compose/compose-collection.js
+// node_modules/yaml/dist/compose/compose-collection.js
 var require_compose_collection = __commonJS(function(exports) {
   var identity = require_identity();
   var Scalar = require_Scalar();
@@ -21281,7 +21281,7 @@ var require_compose_collection = __commonJS(function(exports) {
   exports.composeCollection = composeCollection;
 });
 
-// node_modules/.bun/yaml@2.9.0/node_modules/yaml/dist/compose/resolve-block-scalar.js
+// node_modules/yaml/dist/compose/resolve-block-scalar.js
 var require_resolve_block_scalar = __commonJS(function(exports) {
   var Scalar = require_Scalar();
   function resolveBlockScalar(ctx, scalar, onError) {
@@ -21474,7 +21474,7 @@ var require_resolve_block_scalar = __commonJS(function(exports) {
   exports.resolveBlockScalar = resolveBlockScalar;
 });
 
-// node_modules/.bun/yaml@2.9.0/node_modules/yaml/dist/compose/resolve-flow-scalar.js
+// node_modules/yaml/dist/compose/resolve-flow-scalar.js
 var require_resolve_flow_scalar = __commonJS(function(exports) {
   var Scalar = require_Scalar();
   var resolveEnd = require_resolve_end();
@@ -21691,7 +21691,7 @@ var require_resolve_flow_scalar = __commonJS(function(exports) {
   exports.resolveFlowScalar = resolveFlowScalar;
 });
 
-// node_modules/.bun/yaml@2.9.0/node_modules/yaml/dist/compose/compose-scalar.js
+// node_modules/yaml/dist/compose/compose-scalar.js
 var require_compose_scalar = __commonJS(function(exports) {
   var identity = require_identity();
   var Scalar = require_Scalar();
@@ -21769,7 +21769,7 @@ var require_compose_scalar = __commonJS(function(exports) {
   exports.composeScalar = composeScalar;
 });
 
-// node_modules/.bun/yaml@2.9.0/node_modules/yaml/dist/compose/util-empty-scalar-position.js
+// node_modules/yaml/dist/compose/util-empty-scalar-position.js
 var require_util_empty_scalar_position = __commonJS(function(exports) {
   function emptyScalarPosition(offset, before, pos) {
     if (before) {
@@ -21796,7 +21796,7 @@ var require_util_empty_scalar_position = __commonJS(function(exports) {
   exports.emptyScalarPosition = emptyScalarPosition;
 });
 
-// node_modules/.bun/yaml@2.9.0/node_modules/yaml/dist/compose/compose-node.js
+// node_modules/yaml/dist/compose/compose-node.js
 var require_compose_node = __commonJS(function(exports) {
   var Alias = require_Alias();
   var identity = require_identity();
@@ -21899,7 +21899,7 @@ var require_compose_node = __commonJS(function(exports) {
   exports.composeNode = composeNode;
 });
 
-// node_modules/.bun/yaml@2.9.0/node_modules/yaml/dist/compose/compose-doc.js
+// node_modules/yaml/dist/compose/compose-doc.js
 var require_compose_doc = __commonJS(function(exports) {
   var Document = require_Document();
   var composeNode = require_compose_node();
@@ -21939,7 +21939,7 @@ var require_compose_doc = __commonJS(function(exports) {
   exports.composeDoc = composeDoc;
 });
 
-// node_modules/.bun/yaml@2.9.0/node_modules/yaml/dist/compose/composer.js
+// node_modules/yaml/dist/compose/composer.js
 var require_composer = __commonJS(function(exports) {
   var node_process = __require("process");
   var directives = require_directives();
@@ -22130,7 +22130,7 @@ ${end.comment}` : end.comment;
   exports.Composer = Composer;
 });
 
-// node_modules/.bun/yaml@2.9.0/node_modules/yaml/dist/parse/cst-scalar.js
+// node_modules/yaml/dist/parse/cst-scalar.js
 var require_cst_scalar = __commonJS(function(exports) {
   var resolveBlockScalar = require_resolve_block_scalar();
   var resolveFlowScalar = require_resolve_flow_scalar();
@@ -22320,7 +22320,7 @@ var require_cst_scalar = __commonJS(function(exports) {
   exports.setScalarValue = setScalarValue;
 });
 
-// node_modules/.bun/yaml@2.9.0/node_modules/yaml/dist/parse/cst-stringify.js
+// node_modules/yaml/dist/parse/cst-stringify.js
 var require_cst_stringify = __commonJS(function(exports) {
   var stringify = (cst) => ("type" in cst) ? stringifyToken(cst) : stringifyItem(cst);
   function stringifyToken(token) {
@@ -22378,7 +22378,7 @@ var require_cst_stringify = __commonJS(function(exports) {
   exports.stringify = stringify;
 });
 
-// node_modules/.bun/yaml@2.9.0/node_modules/yaml/dist/parse/cst-visit.js
+// node_modules/yaml/dist/parse/cst-visit.js
 var require_cst_visit = __commonJS(function(exports) {
   var BREAK = Symbol("break visit");
   var SKIP = Symbol("skip children");
@@ -22437,7 +22437,7 @@ var require_cst_visit = __commonJS(function(exports) {
   exports.visit = visit;
 });
 
-// node_modules/.bun/yaml@2.9.0/node_modules/yaml/dist/parse/cst.js
+// node_modules/yaml/dist/parse/cst.js
 var require_cst = __commonJS(function(exports) {
   var cstScalar = require_cst_scalar();
   var cstStringify = require_cst_stringify();
@@ -22538,7 +22538,7 @@ var require_cst = __commonJS(function(exports) {
   exports.tokenType = tokenType;
 });
 
-// node_modules/.bun/yaml@2.9.0/node_modules/yaml/dist/parse/lexer.js
+// node_modules/yaml/dist/parse/lexer.js
 var require_lexer = __commonJS(function(exports) {
   var cst = require_cst();
   function isEmpty(ch) {
@@ -23135,7 +23135,7 @@ var require_lexer = __commonJS(function(exports) {
   exports.Lexer = Lexer;
 });
 
-// node_modules/.bun/yaml@2.9.0/node_modules/yaml/dist/parse/line-counter.js
+// node_modules/yaml/dist/parse/line-counter.js
 var require_line_counter = __commonJS(function(exports) {
   class LineCounter {
     constructor() {
@@ -23163,7 +23163,7 @@ var require_line_counter = __commonJS(function(exports) {
   exports.LineCounter = LineCounter;
 });
 
-// node_modules/.bun/yaml@2.9.0/node_modules/yaml/dist/parse/parser.js
+// node_modules/yaml/dist/parse/parser.js
 var require_parser = __commonJS(function(exports) {
   var node_process = __require("process");
   var cst = require_cst();
@@ -24019,7 +24019,7 @@ var require_parser = __commonJS(function(exports) {
   exports.Parser = Parser;
 });
 
-// node_modules/.bun/yaml@2.9.0/node_modules/yaml/dist/public-api.js
+// node_modules/yaml/dist/public-api.js
 var require_public_api = __commonJS(function(exports) {
   var composer = require_composer();
   var Document = require_Document();
@@ -24113,7 +24113,7 @@ var require_public_api = __commonJS(function(exports) {
   exports.stringify = stringify;
 });
 
-// node_modules/.bun/yaml@2.9.0/node_modules/yaml/dist/index.js
+// node_modules/yaml/dist/index.js
 var composer, Document, Schema2, errors5, Alias, identity, Pair, Scalar, YAMLMap, YAMLSeq, cst, lexer, lineCounter, parser, publicApi, visit, $Composer, $Document, $Schema, $YAMLError, $YAMLParseError, $YAMLWarning, $Alias, $isAlias, $isCollection, $isDocument, $isMap, $isNode, $isPair, $isScalar, $isSeq, $Pair, $Scalar, $YAMLMap, $YAMLSeq, $Lexer, $LineCounter, $Parser, $parse, $parseAllDocuments, $parseDocument, $stringify, $visit, $visitAsync;
 var init_dist2 = __esm(() => {
   composer = require_composer();
@@ -24165,7 +24165,7 @@ var init_dist2 = __esm(() => {
 // packages/app/src/services/quality-gate.ts
 init_dist();
 import { spawnSync } from "node:child_process";
-import { createHash as createHash2, randomUUID } from "node:crypto";
+import { createHash as createHash3, randomUUID } from "node:crypto";
 import {
   appendFileSync,
   closeSync,
@@ -24728,8 +24728,7 @@ var POST_WATERMARK_TABLES = [
   "history_daily_stats",
   "history_board_source_daily"
 ];
-// node_modules/.bun/@gobing-ai+ts-llm-jsonl-importer@0.5.27+6ca8e4a743b850c5/node_modules/@gobing-ai/ts-llm-jsonl-importer/dist/schema-sql.js
-var HISTORY_IMPORT_SCHEMA_VERSION = "0.5.27";
+// node_modules/@gobing-ai/ts-llm-jsonl-importer/dist/schema-sql.js
 var HISTORY_IMPORT_SCHEMA_SQL = `
 CREATE TABLE IF NOT EXISTS history_import_checkpoint (
     source TEXT NOT NULL,
@@ -24856,13 +24855,13 @@ CREATE INDEX IF NOT EXISTS idx_history_skill_call_invocation_kind
     ON history_skill_call(invocation_kind);
 `.trim();
 
-// node_modules/.bun/@gobing-ai+ts-llm-jsonl-importer@0.5.27+6ca8e4a743b850c5/node_modules/@gobing-ai/ts-llm-jsonl-importer/dist/sources.js
+// node_modules/@gobing-ai/ts-llm-jsonl-importer/dist/sources.js
 init_zod();
 
-// node_modules/.bun/@gobing-ai+ts-llm-jsonl-importer@0.5.27+6ca8e4a743b850c5/node_modules/@gobing-ai/ts-llm-jsonl-importer/dist/mappers.js
+// node_modules/@gobing-ai/ts-llm-jsonl-importer/dist/mappers.js
 init_zod();
 
-// node_modules/.bun/@gobing-ai+ts-llm-jsonl-importer@0.5.27+6ca8e4a743b850c5/node_modules/@gobing-ai/ts-llm-jsonl-importer/dist/hash.js
+// node_modules/@gobing-ai/ts-llm-jsonl-importer/dist/hash.js
 import { createHash } from "node:crypto";
 function stableJson(value) {
   if (Array.isArray(value)) {
@@ -24881,7 +24880,7 @@ function sha256Text(text) {
   return createHash("sha256").update(text, "utf8").digest("hex");
 }
 
-// node_modules/.bun/@gobing-ai+ts-llm-jsonl-importer@0.5.27+6ca8e4a743b850c5/node_modules/@gobing-ai/ts-llm-jsonl-importer/dist/capability.js
+// node_modules/@gobing-ai/ts-llm-jsonl-importer/dist/capability.js
 function matchCapabilityOrigin(origins, source, canonicalName, observable) {
   let candidates = origins.filter((origin) => origin.source === source && origin.skillName === canonicalName);
   if (candidates.length === 0)
@@ -25146,7 +25145,7 @@ function extractNestedExecCommandLiterals(payloadText) {
   return literals;
 }
 
-// node_modules/.bun/@gobing-ai+ts-llm-jsonl-importer@0.5.27+6ca8e4a743b850c5/node_modules/@gobing-ai/ts-llm-jsonl-importer/dist/redaction.js
+// node_modules/@gobing-ai/ts-llm-jsonl-importer/dist/redaction.js
 var DEFAULT_REDACTION_RULES = [
   {
     name: "api-key",
@@ -25188,7 +25187,7 @@ function applyRules(value, rules = DEFAULT_REDACTION_RULES) {
   return rules.reduce((current, rule) => current.replace(rule.pattern, rule.replacement), value);
 }
 
-// node_modules/.bun/@gobing-ai+ts-llm-jsonl-importer@0.5.27+6ca8e4a743b850c5/node_modules/@gobing-ai/ts-llm-jsonl-importer/dist/mappers.js
+// node_modules/@gobing-ai/ts-llm-jsonl-importer/dist/mappers.js
 var MESSAGE_MAPPER_KEYS = [
   "_codexUsageCarrier",
   "session_id",
@@ -27294,7 +27293,7 @@ var GROK_SCHEMA = passthroughSchema;
 var GEMINI_SCHEMA = passthroughSchema;
 var DSH_SCHEMA = passthroughSchema;
 
-// node_modules/.bun/@gobing-ai+ts-llm-jsonl-importer@0.5.27+6ca8e4a743b850c5/node_modules/@gobing-ai/ts-llm-jsonl-importer/dist/sources.js
+// node_modules/@gobing-ai/ts-llm-jsonl-importer/dist/sources.js
 var sourceRecordSchema = object2({
   source_record_id: string2().min(1),
   created_at: string2().min(1),
@@ -27398,10 +27397,10 @@ var SOURCE_DEFINITIONS = {
   openclaw: sourceDefinition("openclaw", "OpenClaw", [".openclaw"], ["*.jsonl"])
 };
 
-// node_modules/.bun/@gobing-ai+ts-llm-jsonl-importer@0.5.27+6ca8e4a743b850c5/node_modules/@gobing-ai/ts-llm-jsonl-importer/dist/jsonl-importer-dao.js
+// node_modules/@gobing-ai/ts-llm-jsonl-importer/dist/jsonl-importer-dao.js
 var TYPED_HISTORY_TABLES = ["history_message", "history_tool_call", "history_skill_call"];
 var TYPED_IGNORED_KEYS = new Set(["_meta", "split_index", "source_record_id", "_capabilityConflict"]);
-// node_modules/.bun/@gobing-ai+ts-llm-jsonl-importer@0.5.27+6ca8e4a743b850c5/node_modules/@gobing-ai/ts-llm-jsonl-importer/dist/tables.js
+// node_modules/@gobing-ai/ts-llm-jsonl-importer/dist/tables.js
 var BOOKKEEPING_HISTORY_TABLES = ["history_import_checkpoint", "history_import_ledger"];
 var IMPORTER_OWNED_TABLES = [
   ...TYPED_HISTORY_TABLES,
@@ -27432,7 +27431,9 @@ var SPUR_OWNED_HISTORY_TABLES = [
 ];
 var HISTORY_RESET_TABLES = [...IMPORTER_OWNED_TABLES, ...SPUR_OWNED_HISTORY_TABLES];
 // packages/domain/src/analytics/importer-schema-version.ts
+import { createHash as createHash2 } from "node:crypto";
 var IMPORTER_SCHEMA_LEDGER_PREFIX = "importer_schema@";
+var IMPORTER_SCHEMA_KEY = createHash2("sha256").update(HISTORY_IMPORT_SCHEMA_SQL, "utf8").digest("hex").slice(0, 16);
 // packages/domain/src/dao/system-event-dao.ts
 var ROUTING_SUMMARY_DEFAULT_WINDOW_MS = 7 * 24 * 60 * 60 * 1000;
 // packages/domain/src/schema/artifacts.ts
@@ -27518,7 +27519,7 @@ var workflowStatesTable = defineTable("workflow_states", {
   ...standardColumns
 });
 var workflowStates = workflowStatesTable.table;
-// node_modules/.bun/@gobing-ai+ts-dual-workflow-engine@0.5.27+473ffacabfa9a78c/node_modules/@gobing-ai/ts-dual-workflow-engine/dist/schema-sql.js
+// node_modules/@gobing-ai/ts-dual-workflow-engine/dist/schema-sql.js
 var WORKFLOW_ENGINE_SCHEMA_SQL = `
 CREATE TABLE IF NOT EXISTS runs (
     id TEXT PRIMARY KEY,
@@ -27617,7 +27618,7 @@ ALTER TABLE runs ADD COLUMN owner_pid INTEGER;
 ALTER TABLE runs ADD COLUMN interrupt_reason TEXT;
 ALTER TABLE runs ADD COLUMN terminal_reason TEXT;
 `.trim();
-// node_modules/.bun/@gobing-ai+ts-rule-engine@0.5.27+473ffacabfa9a78c/node_modules/@gobing-ai/ts-rule-engine/dist/persistence/schema.js
+// node_modules/@gobing-ai/ts-rule-engine/dist/persistence/schema.js
 var RULE_ENGINE_SCHEMA_SQL = `
 CREATE TABLE IF NOT EXISTS rule_runs (
     id TEXT PRIMARY KEY,
@@ -28658,7 +28659,7 @@ var CLI_MIGRATIONS = [
   },
   {
     id: "0033_spur_cli_importer_schema_version",
-    sql: `INSERT OR REPLACE INTO "__spur_cli_migrations" (id, applied_at) VALUES ('${IMPORTER_SCHEMA_LEDGER_PREFIX}${HISTORY_IMPORT_SCHEMA_VERSION}', strftime('%s', 'now') * 1000);`
+    sql: `INSERT OR REPLACE INTO "__spur_cli_migrations" (id, applied_at) VALUES ('${IMPORTER_SCHEMA_LEDGER_PREFIX}${IMPORTER_SCHEMA_KEY}', strftime('%s', 'now') * 1000);`
   },
   {
     id: "0034_spur_cli_history_tool_identity",
@@ -30309,7 +30310,7 @@ function recomputeGateProofFingerprint(cwd, env) {
       ...task !== undefined ? { task } : {},
       ...feature !== undefined ? { feature } : {}
     });
-    const hash = createHash2("sha256").update(canonical, "utf8").digest("hex");
+    const hash = createHash3("sha256").update(canonical, "utf8").digest("hex");
     return { ok: true, digest: `sha256:${hash}` };
   } catch (err) {
     return {

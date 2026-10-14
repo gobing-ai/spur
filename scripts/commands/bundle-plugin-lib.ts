@@ -31,10 +31,17 @@ const REPO_ROOT = fileURLToPath(new URL('../../', import.meta.url));
  * unminified lib differed between a root-cwd generation (`// packages/...`) and a
  * scripts-workspace regeneration (`// ../packages/...`). Pin to repo-relative for
  * cwd-independent determinism (task 1003 R5 gate).
+ *
+ * Dependency module comments go through Bun's isolated-install store
+ * (`// node_modules/.bun/<name>@<version>+<hash>/node_modules/<name>/...`), so every upstream
+ * version bump churned the committed bytes without any code change. Strip the versioned store
+ * segment; the path stays human-meaningful and only real code changes move the bundle.
  */
 function normalizeBundleComments(mjsPath: string): void {
     const raw = readFileSync(mjsPath, 'utf8');
-    const normalized = raw.replace(/^\/\/ (?:\.\.\/)+/gm, '// ');
+    const normalized = raw
+        .replace(/^\/\/ (?:\.\.\/)+/gm, '// ')
+        .replace(/^\/\/ node_modules\/\.bun\/[^/\n]+\/node_modules\//gm, '// node_modules/');
     if (normalized !== raw) writeFileSync(mjsPath, normalized);
 }
 

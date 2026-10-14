@@ -1,8 +1,9 @@
 import { describe, expect, test } from 'bun:test';
 import { createDbAdapter } from '@gobing-ai/ts-db';
-import { HISTORY_IMPORT_SCHEMA_SQL, HISTORY_IMPORT_SCHEMA_VERSION } from '@gobing-ai/ts-llm-jsonl-importer';
+import { HISTORY_IMPORT_SCHEMA_SQL } from '@gobing-ai/ts-llm-jsonl-importer';
 import {
     checkImporterSchemaVersion,
+    IMPORTER_SCHEMA_KEY,
     IMPORTER_SCHEMA_LEDGER_PREFIX,
     readRecordedImporterSchemaVersion,
 } from '../../src/analytics/importer-schema-version';
@@ -65,7 +66,7 @@ describe('importer-schema-version (task 0748)', () => {
             await db.exec(
                 'CREATE TABLE IF NOT EXISTS "__spur_cli_migrations" (id TEXT PRIMARY KEY, applied_at INTEGER NOT NULL)',
             );
-            const currentVersionId = IMPORTER_SCHEMA_LEDGER_PREFIX + HISTORY_IMPORT_SCHEMA_VERSION;
+            const currentVersionId = IMPORTER_SCHEMA_LEDGER_PREFIX + IMPORTER_SCHEMA_KEY;
             await db.run('INSERT INTO "__spur_cli_migrations" (id, applied_at) VALUES (?, ?)', [
                 currentVersionId,
                 Date.now(),
@@ -95,11 +96,11 @@ describe('importer-schema-version (task 0748)', () => {
             const drift = await checkImporterSchemaVersion(db);
             expect(drift).not.toBeNull();
             expect(drift?.recorded).toBe('0.4.51');
-            expect(drift?.installed).toBe(HISTORY_IMPORT_SCHEMA_VERSION);
+            expect(drift?.installed).toBe(IMPORTER_SCHEMA_KEY);
             // history_skill_call was not created in 0.4.51
             expect(drift?.missingTables).toContain('history_skill_call');
             expect(drift?.remediation).toContain('0.4.51');
-            expect(drift?.remediation).toContain(HISTORY_IMPORT_SCHEMA_VERSION);
+            expect(drift?.remediation).toContain(IMPORTER_SCHEMA_KEY);
             expect(drift?.remediation).toContain('spur migrate');
             db.close();
         });
@@ -110,7 +111,7 @@ describe('importer-schema-version (task 0748)', () => {
             const drift = await checkImporterSchemaVersion(db);
             expect(drift).not.toBeNull();
             expect(drift?.recorded).toBeNull();
-            expect(drift?.installed).toBe(HISTORY_IMPORT_SCHEMA_VERSION);
+            expect(drift?.installed).toBe(IMPORTER_SCHEMA_KEY);
             db.close();
         });
     });
@@ -121,7 +122,7 @@ describe('importer-schema-version (task 0748)', () => {
             await applyCliMigrations(db);
 
             const recorded = await readRecordedImporterSchemaVersion(db);
-            expect(recorded).toBe(HISTORY_IMPORT_SCHEMA_VERSION);
+            expect(recorded).toBe(IMPORTER_SCHEMA_KEY);
 
             const drift = await checkImporterSchemaVersion(db);
             expect(drift).toBeNull();

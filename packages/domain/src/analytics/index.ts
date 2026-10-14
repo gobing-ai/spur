@@ -174,6 +174,7 @@ export {
 } from './history-reset';
 export {
     checkImporterSchemaVersion,
+    IMPORTER_SCHEMA_KEY,
     IMPORTER_SCHEMA_LEDGER_PREFIX,
     type ImporterSchemaVersionDrift,
     readRecordedImporterSchemaVersion,
