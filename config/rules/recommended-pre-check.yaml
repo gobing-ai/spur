@@ -3,15 +3,17 @@
 #
 # Runs BEFORE tests (test-pre-check). Extends categories: typescript,
 # structure, boundary, surface, ui, strict (ui since bc267cc8, strict since
-# 79186391), and docs (sourced-api-claims, 2026-10-07). TSDoc exports run in
-# post-check alongside coverage-gate.
+# 79186391), and docs (sourced-api-claims, 2026-10-07; pulled 2026-10-08 for
+# finding noise — a 2026-10-14 restore was reverted; keep it out for now, see
+# the marker line below). TSDoc exports run in post-check alongside
+# coverage-gate.
 #
-# TEMPORARY (2026-10-08): `docs` removed from extends to unblock the gate —
-# restore it (add `- docs` back) once sourcing-claim finding noise is triaged.
-# The category's remaining file is `docs/sourced-api-claims.yaml` (advisory
-# citation/level checks on claim lines). Recapture the raw-json-baseline fixtures
-# in the same change. (F511: the category's other file, `verdict-confidence.yaml`,
-# was deleted with the asserted confidence machinery it backstopped.)
+# `docs/sourced-api-claims.yaml` (citation/level checks) stays OUT of this gate:
+# severity info would not redden it, but the findings belong to the SECUA review
+# surface — run that file ad hoc instead. Recapture the raw-json-baseline
+# fixtures when touching this preset. (F511: the category's other file,
+# `verdict-confidence.yaml`, was deleted with the asserted confidence machinery
+# it backstopped.)
 name: recommended-pre-check
 extends:
   - typescript
@@ -20,3 +22,4 @@ extends:
   - surface
   - ui
   - strict
+  # - docs  ## DO NOT ENABLE THIS LINE
