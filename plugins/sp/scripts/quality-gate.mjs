@@ -24314,6 +24314,7 @@ var ALL_FINDING_CODES = [
   "L4.feature-receipt-run",
   "L4.feature-receipt-stale",
   "L4.feature-receipt-contract",
+  "L4.feature-receipt-confidence",
   "precheck-size",
   "precheck-evidence",
   "inventory-coverage",
@@ -24717,7 +24718,7 @@ var POST_WATERMARK_TABLES = [
   "history_daily_stats",
   "history_board_source_daily"
 ];
-var HISTORY_IMPORT_SCHEMA_VERSION = "0.5.24";
+var HISTORY_IMPORT_SCHEMA_VERSION = "0.5.25";
 var HISTORY_IMPORT_SCHEMA_SQL = `
 CREATE TABLE IF NOT EXISTS history_import_checkpoint (
     source TEXT NOT NULL,

@@ -2,7 +2,7 @@
 kind: design
 title: "Design — End-to-end Workflow System for System Development"
 created_at: 2026-07-01
-updated_at: 2026-10-12
+updated_at: 2026-10-13
 related: ["0167", "0168", "0169", "0170", "0171", "0172"]
 tags: [system, workflow, plugin]
 ---
