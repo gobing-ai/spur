@@ -445,7 +445,8 @@ test('shows the deprecated lane with its icon and card colour (1191 R3)', async 
         { wbs: '0001', name: 'Alpha', status: 'todo', filePath: 'a.md' },
         { wbs: '0002', name: 'Zeta', status: 'deprecated', filePath: 'z.md' },
     ];
-    const { getByText, container } = renderBoard();
+    // The board hides the deprecated lane by default (31c21ec25); un-hide it to inspect the lane.
+    const { getByText, container } = renderBoard({ hiddenColumns: new Set() });
     await waitFor(() => expect(getByText('Zeta')).toBeDefined());
 
     // Lane membership derives from TASK_STATUSES — no parallel filter list was added.

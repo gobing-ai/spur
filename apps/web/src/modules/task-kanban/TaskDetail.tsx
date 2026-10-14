@@ -1,4 +1,4 @@
-import { taskStatusIcon } from '@gobing-ai/spur-domain/schema';
+import { TASK_STATUSES, taskStatusIcon } from '@gobing-ai/spur-domain/schema';
 import { useEffect, useState } from 'react';
 import { Badge, Button, Checkbox, Loading, MDEditor, Select } from '@/ui';
 import { markdownPreviewSafety } from '../../lib/markdown-safety';
@@ -26,8 +26,8 @@ type BodyMode = 'preview' | 'edit';
  */
 const LIFECYCLE = ['backlog', 'todo', 'wip', 'testing', 'done'] as const;
 
-/** Off-track states that don't map to a lifecycle position (ADR-137: `deprecated` is frozen, not a phase). */
-const OFF_TRACK = new Set(['blocked', 'cancelled', 'deprecated']);
+/** Off-track states: every status with no lifecycle position (ADR-137: `deprecated` is frozen, not a phase). */
+const OFF_TRACK = new Set<string>(TASK_STATUSES.filter((s) => !(LIFECYCLE as readonly string[]).includes(s)));
 
 export default function TaskDetail({ task, onTransition, onClose }: Props) {
     const [serverBody, setServerBody] = useState('');
