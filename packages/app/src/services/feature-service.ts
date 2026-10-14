@@ -483,7 +483,11 @@ export class FeatureService {
             };
         }
 
-        const isTerminal = (st: string) => st === 'done' || st === 'cancelled';
+        // 1191 R1 (ADR-137 S5): `deprecated` reads as terminal-linked here so a frozen task
+        // stops holding its feature back — without it a feature whose only remaining work is
+        // deprecated can never leave `verifying`. It stays out of `doneTasks`/`activeTasks`
+        // below, so the "at least one done" rule keeps its meaning.
+        const isTerminal = (st: string) => st === 'done' || st === 'cancelled' || st === 'deprecated';
         const terminalTasks = linkedTasks.filter((t) => isTerminal(t.status));
         const doneTasks = linkedTasks.filter((t) => t.status === 'done');
         const activeTasks = linkedTasks.filter((t) => t.status === 'wip' || t.status === 'testing');

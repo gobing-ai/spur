@@ -152,8 +152,8 @@ kickoff** — the driver never re-queries `spur task list` to recompute membersh
 | --- | --- | --- |
 | Explicit WBS list | `^[0-9, ]+$` | Split on comma; validate each token is a 4-digit WBS; collect the explicit set. (R1.1) |
 | `feature:<id>` (via `--tasks` or `--feature <id>`) | literal `feature:` prefix or `--feature` flag | `spur task list --feature <id> --json`; collect `wbs` from each row. The `--feature` flag is sugar that becomes `--tasks feature:<id>` at the command layer. (R1.3) |
-| `ready` | literal `ready` | Resolve the union of `spur task list --status todo --json` + `spur task list --status backlog --json`, drop tasks with open children (R1.5, umbrella-parent exclusion below), then keep only tasks whose every `dependencies[]` entry resolves to `status == done` (via `spur task show <dep> --json | jq '{wbs, status, dependencies, feature_id}'` — R5 metadata-only). Report each excluded task with its unmet dependency. (R1.4) |
-| Status pseudo-list | `todo` \| `backlog` \| `wip` \| `blocked` \| `testing` | `spur task list --status <value> --json`; collect `wbs` from each row. (R1.2) |
+| `ready` | literal `ready` | Resolve the union of `spur task list --status todo --json` + `spur task list --status backlog --json`, drop tasks with open children (R1.5, umbrella-parent exclusion below), then keep only tasks whose every `dependencies[]` entry resolves to `status == done` (via `spur task show <dep> --json | jq '{wbs, status, dependencies, feature_id}'` — R5 metadata-only). Report each excluded task with its unmet dependency. A `deprecated` dependency is *not* satisfied (ADR-137: a frozen task never reads as `done`), so it keeps its dependents out of the ready set. (R1.4) |
+| Status pseudo-list | `todo` \| `backlog` \| `wip` \| `blocked` \| `testing` | `spur task list --status <value> --json`; collect `wbs` from each row. (R1.2) `deprecated` is deliberately not a selector value: a frozen task has no pipeline hop to drive, so a batch is never built from that status (ADR-137; `/sp:dev-next` row A10 stops the same way). |
 | *(else)* | no match | Error: "unknown selector `<value>`" — list the valid forms and halt before running anything. |
 
 **Dedup:** an explicit list with a repeated WBS (`--tasks 0040,0040`) collapses to a single entry;
@@ -200,7 +200,9 @@ For each dependency edge to a task **outside** the frozen set, resolve its curre
 - status ≠ `done` → mark the dependent **blocked**. Transitively mark its in-set descendants blocked
   too (fixpoint propagation: any task depending on a blocked task is itself blocked). Exclude all
   blocked tasks from execution and record the unmet dependency + the blocked subtree for the report
-  (R2.4). Independent (non-blocked) tasks in the set still run.
+  (R2.4). Independent (non-blocked) tasks in the set still run. **`deprecated` is not satisfied**
+  (ADR-137): a frozen task never reads as `done`, so the dependent blocks and the report names the
+  remedy — re-point the edge, or un-deprecate (`spur task update <dep> todo`).
 
 ### 2.4 Topological sort
 
@@ -277,6 +279,7 @@ node "$(superskill script path sp batch-preflight.mjs)" \
 | `action: skip` code **A2** | Do not launch; report `preflight-skip` + unmet deps (mirrors TABLE A2) |
 | `action: skip` code **A7** | Do not launch; report blocked (handover is operator-side) |
 | `action: skip` code **A8**/**A9** | Do not launch; already done / cancelled |
+| `action: skip` code **DEPRECATED** | Do not launch; frozen and retained (ADR-137) — the reason line names the un-deprecate command. A deprecated WBS can reach preflight through an explicit `--tasks` list or a `feature:<id>` selector (`spur task list --feature` reports every linked row, whatever its status); the `ready` and status pseudo-lists exclude it |
 
 **Invariants:** Preflight never replaces the pipeline with a loop of `/sp:dev-next`. TABLES A/B/C
 remain SSOT in `next-router/references/routing-table.md`. Step 2.3 already pre-blocks many unmet

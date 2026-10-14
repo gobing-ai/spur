@@ -27,6 +27,9 @@ const STATUS_DOT: Record<string, string> = {
     done: 'bg-spur-success',
     blocked: 'bg-spur-error',
     cancelled: 'bg-spur-text-faint',
+    // 1191 R3: frozen-but-retained reads muted (the feature-module colour), not the
+    // `bg-spur-text-faint` unknown-status fallback.
+    deprecated: 'bg-spur-text-muted',
 };
 
 function relativeTime(iso: string, now: number): string {

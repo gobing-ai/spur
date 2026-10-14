@@ -438,6 +438,55 @@ test('onDragStart captures the active drag id', async () => {
     // The mock DragOverlay just passes children through, so check the DOM
 });
 
+// ── 1191 R3 / AC7: the deprecated status on the Board ──
+test('shows the deprecated lane with its icon and card colour (1191 R3)', async () => {
+    listedTasks = [
+        { wbs: '0001', name: 'Alpha', status: 'todo', filePath: 'a.md' },
+        { wbs: '0002', name: 'Zeta', status: 'deprecated', filePath: 'z.md' },
+    ];
+    const { getByText, container } = renderBoard();
+    await waitFor(() => expect(getByText('Zeta')).toBeDefined());
+
+    // Lane membership derives from TASK_STATUSES — no parallel filter list was added.
+    const lane = container.querySelector('[aria-label="deprecated column"]') as HTMLElement;
+    expect(lane).toBeTruthy();
+    expect(lane.textContent).toContain('🗄️');
+    expect(lane.textContent).toContain('Zeta');
+
+    // Card dot carries the deprecated colour instead of the unknown-status fallback.
+    const dot = lane.querySelector('[data-status="deprecated"]') as HTMLElement;
+    expect(dot.className).toContain('bg-spur-text-muted');
+    expect(dot.className).not.toContain('bg-spur-text-faint');
+});
+
+test('offers deprecate/un-deprecate only from the legal source states (1191 R3 / AC7)', async () => {
+    listedTasks = [
+        { wbs: '0001', name: 'Alpha', status: 'todo', filePath: 'a.md' },
+        { wbs: '0002', name: 'Zeta', status: 'deprecated', filePath: 'z.md' },
+        { wbs: '0003', name: 'Yank', status: 'cancelled', filePath: 'y.md' },
+    ];
+    const { getByText, getByLabelText, queryByLabelText } = renderBoard({ hiddenColumns: new Set() });
+    await waitFor(() => expect(getByText('Zeta')).toBeDefined());
+
+    // A live `todo` task may be deprecated; it must not offer the un-freeze exit.
+    fireEvent.click(getByText('Alpha'));
+    await waitFor(() => expect(getByLabelText('Deprecate')).toBeDefined());
+    expect(queryByLabelText('Un-deprecate')).toBeNull();
+
+    // A deprecated task offers exactly its two legal exits (todo, cancelled) — no reopen.
+    fireEvent.click(getByText('Zeta'));
+    await waitFor(() => expect(getByLabelText('Un-deprecate')).toBeDefined());
+    expect(getByLabelText('Cancel')).toBeDefined();
+    expect(queryByLabelText('Deprecate')).toBeNull();
+    expect(queryByLabelText('Reopen')).toBeNull();
+
+    // Cancelled is terminal: no egress, so no deprecate button either.
+    fireEvent.click(getByText('Yank'));
+    await waitFor(() => expect(queryByLabelText('Deprecate')).toBeNull());
+    expect(queryByLabelText('Un-deprecate')).toBeNull();
+    expect(queryByLabelText('Cancel')).toBeNull();
+});
+
 // ── NewTaskPanel integration moved to TasksShell (board is pure lanes) ──
 
 // ── onTransition: TaskDetail cancel fires transition callback ──

@@ -3239,7 +3239,11 @@ Recorded before the freeze.
         try {
             const before = await fs.readFile(taskPath);
 
-            await expect(svc.record('1190', { transition: 'testing' })).rejects.toThrow(/deprecated/);
+            // Pin the verdict to this fixture's own run dir: `record`'s default verdict path is
+            // cwd-relative, so a full-suite run from the repo root would otherwise pick up a real
+            // `.spur/run/1190-verdict.json` and render Testing before the refusal it is asserting.
+            const verdictFile = join(root, '.spur', 'run', '1190-verdict.json');
+            await expect(svc.record('1190', { transition: 'testing', verdictFile })).rejects.toThrow(/deprecated/);
 
             expect(await fs.readFile(taskPath)).toBe(before);
         } finally {

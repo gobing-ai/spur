@@ -142,7 +142,8 @@ but redundant. See the glossary entry for the disambiguation in full.
 
 Never: reimplement the pipeline inside the router; default `todo` to `--mode full`; infer targets
 from git/chat; auto-`--merge` on wrap; auto-author rules; use `dev-runall` as the feature default;
-bypass lifecycle guards (`--no-lifecycle`) to force progress.
+bypass lifecycle guards (`--no-lifecycle`) to force progress; select a `deprecated` task for any
+lifecycle hop (TABLE A A10 — frozen work has no forward step; un-deprecate or cancel it first).
 
 ## Common Rationalizations
 
@@ -158,6 +159,7 @@ bypass lifecycle guards (`--no-lifecycle`) to force progress.
 - Dispatching more than one primary command in a single invocation.
 - `--auto` used to choose among HITL candidates.
 - A route that is not in TABLE A/B/C (invented dispatch targets).
+- A `deprecated` WBS routed into any lifecycle command instead of stopping (A10/ADR-137).
 - `--once` honored by merely skipping the re-invoke while leaving `--next` in the child argv.
 - Omitting the `dev-next:` prefix on stop/plan messages.
 

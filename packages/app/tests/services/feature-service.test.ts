@@ -82,6 +82,53 @@ async function recordPassReceipt(featureId: string): Promise<void> {
     });
 }
 
+/**
+ * 1191 R1: write one linked task directly into the fixture corpus with an explicit
+ * status — the raw-frontmatter shape `collectTasksByFeature` reads (`feature_id` edge).
+ * Returns the written path so the caller can release it again.
+ */
+function writeLinkedTask(wbs: string, name: string, status: string, featureId: string): string {
+    const filePath = join(tasksDir, `${wbs}_${name.toLowerCase().replace(/\s+/g, '-')}.md`);
+    writeFileSync(
+        filePath,
+        `---
+schema_version: 1
+wbs: "${wbs}"
+name: "${name}"
+status: "${status}"
+feature_id: "${featureId}"
+created_at: "${new Date().toISOString()}"
+updated_at: "${new Date().toISOString()}"
+---
+# ${wbs}: ${name}
+`,
+    );
+    return filePath;
+}
+
+/**
+ * 1191 R1: one derivation scenario on a throwaway feature. The suite shares a single
+ * `featuresDir` and `svc.create` allocates the first free letter A–Z, so the feature file
+ * and every linked task file it introduced are released afterwards — a leaked fixture both
+ * exhausts the letter range and lets a later re-allocated id inherit the old roster.
+ */
+async function withDerivationFixture<T>(
+    title: string,
+    roster: ReadonlyArray<{ wbs: string; name: string; status: string }>,
+    scenario: (featureId: string) => Promise<T>,
+): Promise<T> {
+    const created = await svc.create(title);
+    const featureId = created.ref.id;
+    const taskPaths: string[] = [];
+    try {
+        for (const t of roster) taskPaths.push(writeLinkedTask(t.wbs, t.name, t.status, featureId));
+        return await scenario(featureId);
+    } finally {
+        for (const p of taskPaths) rmSync(p, { force: true });
+        rmSync(created.ref.filePath, { force: true });
+    }
+}
+
 beforeAll(async () => {
     root = mkdtempSync(join(tmpdir(), 'spur-feature-svc-'));
     featuresDir = join(root, 'features');
@@ -921,6 +968,107 @@ updated_at: "${new Date().toISOString()}"
             const res = await svc.syncFeature(feat.ref.id, { force: true });
             expect(res.applied).toBe(false);
             expect((await svc.show(feat.ref.id))?.status).toBe('deprecated');
+        });
+
+        // ── 1191 R1 / AC6: `deprecated` is terminal-linked in derivation ──
+
+        test('R1 (1191): a feature whose only remaining linked task is deprecated still leaves verifying', async () => {
+            await withDerivationFixture(
+                'Sync Deprecated Terminal Linked',
+                [
+                    { wbs: '9930', name: 'Frozen', status: 'deprecated' },
+                    { wbs: '9931', name: 'Landed', status: 'done' },
+                ],
+                async (featureId) => {
+                    await svc.transition(featureId, 'active');
+                    await svc.transition(featureId, 'verifying');
+                    // 1119: completion needs the feature-verification receipt — fixture it.
+                    await recordPassReceipt(featureId);
+
+                    const prop = await svc.deriveFeatureStatus(featureId);
+                    expect(prop.from).toBe('verifying');
+                    expect(prop.to).toBe('done');
+                    expect(prop.reason).toContain('All linked tasks are terminal');
+                    expect(prop.hops).toEqual(['done']);
+
+                    const res = await svc.syncFeature(featureId);
+                    expect(res.applied).toBe(true);
+                    expect((await svc.show(featureId))?.status).toBe('done');
+                },
+            );
+        });
+
+        test('R1 (1191): a deprecated task does not reopen a closed feature', async () => {
+            await withDerivationFixture(
+                'Sync Deprecated Closed',
+                [{ wbs: '9932', name: 'Frozen After Landing', status: 'deprecated' }],
+                async (featureId) => {
+                    await svc.transition(featureId, 'active');
+                    await svc.transition(featureId, 'verifying');
+                    await svc.transition(featureId, 'done');
+
+                    const prop = await svc.deriveFeatureStatus(featureId);
+                    expect(prop.from).toBe('done');
+                    expect(prop.to).toBe('done');
+                    expect(prop.reason).toBe('All linked tasks are terminal and feature is closed');
+                    expect(prop.requiresConfirm).toBeUndefined();
+
+                    expect((await svc.syncFeature(featureId, { force: true })).applied).toBe(false);
+                    expect((await svc.show(featureId))?.status).toBe('done');
+                },
+            );
+        });
+
+        test('R1 (1191): deprecated is never active work but still yields a blocked proposal', async () => {
+            // Neighbour pin: `activeTasks` keeps reading wip/testing only, so a live
+            // `wip` still decides the active proposal beside a frozen sibling.
+            await withDerivationFixture(
+                'Sync Deprecated Plus Wip',
+                [
+                    { wbs: '9934', name: 'Frozen', status: 'deprecated' },
+                    { wbs: '9935', name: 'Live', status: 'wip' },
+                ],
+                async (featureId) => {
+                    const prop = await svc.deriveFeatureStatus(featureId);
+                    expect(prop.from).toBe('backlog');
+                    expect(prop.to).toBe('active');
+                    expect(prop.reason).toContain('active work');
+                },
+            );
+
+            // Consumer at the blocked branch: once the frozen task stops counting as
+            // non-terminal, the remaining live task's state is what the feature reads.
+            await withDerivationFixture(
+                'Sync Deprecated Plus Blocked',
+                [
+                    { wbs: '9936', name: 'Frozen', status: 'deprecated' },
+                    { wbs: '9937', name: 'Impeded', status: 'blocked' },
+                ],
+                async (featureId) => {
+                    const prop = await svc.deriveFeatureStatus(featureId);
+                    expect(prop.from).toBe('backlog');
+                    expect(prop.to).toBe('blocked');
+                    expect(prop.hops).toEqual(['blocked']);
+                },
+            );
+        });
+
+        test('R1 (1191): the at-least-one-done rule still holds for a deprecated-only roster', async () => {
+            await withDerivationFixture(
+                'Sync Deprecated Only',
+                [{ wbs: '9933', name: 'Only Frozen', status: 'deprecated' }],
+                async (featureId) => {
+                    await svc.transition(featureId, 'active');
+                    await svc.transition(featureId, 'verifying');
+
+                    // `doneTasks` keeps reading `done` only: a frozen task is terminal-linked
+                    // but never a completion, so the feature is neither advanced nor blocked.
+                    const prop = await svc.deriveFeatureStatus(featureId);
+                    expect(prop.from).toBe('verifying');
+                    expect(prop.to).toBe('verifying');
+                    expect(prop.reason).toBe('Linked tasks state does not trigger status transition');
+                },
+            );
         });
 
         test('deriveFeatureStatus proposes active when linked task is wip', async () => {

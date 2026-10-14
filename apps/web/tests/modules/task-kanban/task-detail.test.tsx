@@ -298,16 +298,29 @@ describe('TaskDetail — metadata pane', () => {
         expect(getAllByText('done').length).toBeGreaterThanOrEqual(1);
     });
 
-    test('R2b — blocked/cancelled render as off-track badge', async () => {
-        const { getAllByText, getByText } = render(
-            <TaskDetail task={{ ...task, status: 'blocked' }} onTransition={() => {}} />,
-        );
+    test('R2b — blocked/cancelled/deprecated render as off-track badge', async () => {
+        const warningBadges = () =>
+            Array.from(document.querySelectorAll('.badge-warning')).map((el) => el.textContent?.trim());
 
+        for (const status of ['blocked', 'cancelled', 'deprecated'] as const) {
+            const { getByText, unmount } = render(<TaskDetail task={{ ...task, status }} onTransition={() => {}} />);
+
+            await waitFor(() => expect(getByText('Metadata')).toBeDefined());
+            expandMetadata(getByText);
+
+            // The Progress pane's off-track branch renders this exact warning badge; the
+            // lifecycle branch renders phase bars instead, so this fails if a status leaves
+            // OFF_TRACK (ADR-137: deprecated is frozen, not a phase).
+            expect(warningBadges()).toContain(status);
+            unmount();
+        }
+
+        // Control: a lifecycle status never takes the off-track branch.
+        const { getByText, unmount } = render(<TaskDetail task={{ ...task, status: 'wip' }} onTransition={() => {}} />);
         await waitFor(() => expect(getByText('Metadata')).toBeDefined());
         expandMetadata(getByText);
-
-        // Off-track badge renders the status (getAllByText: header pill + badge + dropdown all use it)
-        expect(getAllByText('blocked').length).toBeGreaterThanOrEqual(1);
+        expect(warningBadges()).not.toContain('wip');
+        unmount();
     });
 
     test('R4 — metadata pane toggles collapse/expand (folded by default)', async () => {
@@ -447,6 +460,45 @@ describe('TaskDetail — workflow action buttons', () => {
         await waitFor(() => expect(queryByText('Body')).toBeDefined());
 
         expect(queryByText('Actions')).toBeNull();
+    });
+
+    test('R3 (1191) — a deprecated task offers exactly Un-deprecate and Cancel, and moves to todo', async () => {
+        showImpl = async () => ({ data: { ...DEFAULT_SHOW_DATA, status: 'deprecated' } });
+        const transitions: { wbs: string; toStatus: string }[] = [];
+        const { getByLabelText, queryByLabelText } = render(
+            <TaskDetail
+                task={{ ...task, status: 'deprecated' }}
+                onTransition={(wbs, toStatus) => transitions.push({ wbs, toStatus })}
+            />,
+        );
+        await waitFor(() => expect(getByLabelText('Edit body')).toBeDefined());
+
+        // The two legal exits of `deprecated` (ADR-137); no status write may re-enter the work.
+        expect(getByLabelText('Un-deprecate')).toBeDefined();
+        expect(getByLabelText('Cancel')).toBeDefined();
+        expect(queryByLabelText('Reopen')).toBeNull();
+        expect(queryByLabelText('Deprecate')).toBeNull();
+
+        fireEvent.click(getByLabelText('Un-deprecate'));
+        expect(transitions).toEqual([{ wbs: '0001', toStatus: 'todo' }]);
+    });
+
+    test('R3 (1191) — a live task may be deprecated but never un-deprecated', async () => {
+        showImpl = async () => ({ data: { ...DEFAULT_SHOW_DATA, status: 'todo' } });
+        const transitions: { wbs: string; toStatus: string }[] = [];
+        const { getByLabelText, queryByLabelText } = render(
+            <TaskDetail
+                task={{ ...task, status: 'todo' }}
+                onTransition={(wbs, toStatus) => transitions.push({ wbs, toStatus })}
+            />,
+        );
+        await waitFor(() => expect(getByLabelText('Edit body')).toBeDefined());
+
+        expect(getByLabelText('Deprecate')).toBeDefined();
+        expect(queryByLabelText('Un-deprecate')).toBeNull();
+
+        fireEvent.click(getByLabelText('Deprecate'));
+        expect(transitions).toEqual([{ wbs: '0001', toStatus: 'deprecated' }]);
     });
 
     test('R2 — clicking an action opens modal; Dispatch invokes the API and refreshes the list', async () => {

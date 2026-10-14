@@ -4,46 +4,9 @@ import { Badge, Button, Checkbox, Loading, MDEditor, Select } from '@/ui';
 import { markdownPreviewSafety } from '../../lib/markdown-safety';
 import { api } from '../../lib/rpc-client';
 import MarkdownBody from './MarkdownBody';
+import { TASK_ACTION_LABELS, TASK_FSM_TRANSITIONS, TASK_STATUS_ACTIONS } from './task-actions';
 import type { TaskSummary } from './types';
 import { useTasks } from './useTasks';
-
-/** Actions offered per task status — workflow actions + explicit FSM transitions. */
-const STATUS_ACTIONS: Record<string, readonly string[]> = {
-    backlog: ['refine', 'start', 'cancel'],
-    todo: ['plan', 'run', 'decompose', 'add-subtask', 'link-feature', 'block', 'cancel'],
-    wip: ['run', 'add-subtask', 'link-feature', 'block', 'cancel'],
-    testing: ['verify', 'complete', 'block', 'cancel'],
-    blocked: ['refine', 'unblock', 'cancel'],
-    done: ['reopen'],
-    cancelled: [],
-};
-
-/** Label for each action button. */
-const ACTION_LABELS: Record<string, string> = {
-    refine: 'Refine',
-    plan: 'Plan',
-    run: 'Run',
-    verify: 'Verify',
-    decompose: 'Decompose',
-    'add-subtask': '+ Subtask',
-    'link-feature': 'Link Feature',
-    start: 'Start',
-    complete: 'Complete',
-    reopen: 'Reopen',
-    block: 'Block',
-    unblock: 'Unblock',
-    cancel: 'Cancel',
-};
-
-/** FSM transition actions → target status. */
-const FSM_TRANSITIONS: Record<string, string> = {
-    start: 'todo',
-    complete: 'done',
-    reopen: 'wip',
-    block: 'blocked',
-    unblock: 'todo',
-    cancel: 'cancelled',
-};
 
 interface Props {
     /** Selected task, resolved by the container from the polled list (null when nothing is selected). */
@@ -63,8 +26,8 @@ type BodyMode = 'preview' | 'edit';
  */
 const LIFECYCLE = ['backlog', 'todo', 'wip', 'testing', 'done'] as const;
 
-/** Off-track states that don't map to a lifecycle position. */
-const OFF_TRACK = new Set(['blocked', 'cancelled']);
+/** Off-track states that don't map to a lifecycle position (ADR-137: `deprecated` is frozen, not a phase). */
+const OFF_TRACK = new Set(['blocked', 'cancelled', 'deprecated']);
 
 export default function TaskDetail({ task, onTransition, onClose }: Props) {
     const [serverBody, setServerBody] = useState('');
@@ -163,7 +126,7 @@ export default function TaskDetail({ task, onTransition, onClose }: Props) {
     };
     const handleAction = (action: string) => {
         // FSM transitions go through the existing onTransition callback
-        const targetStatus = FSM_TRANSITIONS[action];
+        const targetStatus = TASK_FSM_TRANSITIONS[action];
         if (targetStatus !== undefined) {
             if (action === 'cancel' && task) {
                 setShowCancelModal(true);
@@ -285,16 +248,16 @@ export default function TaskDetail({ task, onTransition, onClose }: Props) {
                     </div>
                 </div>
                 <div className="flex flex-wrap items-center justify-end gap-1 shrink-0">
-                    {(STATUS_ACTIONS[task.status] ?? []).map((action) => (
+                    {(TASK_STATUS_ACTIONS[task.status] ?? []).map((action) => (
                         <Button
                             key={action}
                             variant={action === 'cancel' ? 'error' : 'accent'}
                             size="xs"
                             onClick={() => handleAction(action)}
                             disabled={actionLoading === action}
-                            aria-label={ACTION_LABELS[action]}
+                            aria-label={TASK_ACTION_LABELS[action]}
                         >
-                            {actionLoading === action ? '…' : ACTION_LABELS[action]}
+                            {actionLoading === action ? '…' : TASK_ACTION_LABELS[action]}
                         </Button>
                     ))}
                     {onClose && (
@@ -588,7 +551,7 @@ export default function TaskDetail({ task, onTransition, onClose }: Props) {
                 >
                     <div className="bg-spur-surface border border-spur-border rounded-xl shadow-xl p-4 mx-4 max-w-sm w-full">
                         <h4 className="text-sm font-semibold text-spur-text mb-3">
-                            {ACTION_LABELS[actionModal] ?? actionModal} — Select Channel
+                            {TASK_ACTION_LABELS[actionModal] ?? actionModal} — Select Channel
                         </h4>
                         <div className="space-y-3">
                             <Select
