@@ -70,11 +70,16 @@ delete env.TYPESAFE_BASE_URL;
 
 // 1199 R4: a timeout-shaped failure on a contended host reads as a regression unless the run
 // names the host load. Advisory only — one stderr line, printed before bun is spawned; it never
-// touches the forwarded argv or this process's exit code.
-const [load1 = 0] = loadavg();
+// touches the forwarded argv or this process's exit code. NOTE: dropping --parallel is NOT a
+// viable mitigation — the suite drifted parallel-only after d6189d3ab (serial run: 7 shared-
+// state failures + cross-file happy-dom fetch pollution). A contended host must wait for a
+// quieter window instead.
+const [load1 = 0, load5 = 0, load15 = 0] = loadavg();
 const cores = availableParallelism();
-if (load1 > cores) {
-    process.stderr.write(`run-tests: host load1=${load1.toFixed(2)} cores=${cores} — timeouts may be contention\n`);
+if (Math.max(load1, load5, load15) > cores) {
+    process.stderr.write(
+        `run-tests: host load1=${load1.toFixed(2)} load5=${load5.toFixed(2)} load15=${load15.toFixed(2)} cores=${cores} — timeouts may be contention\n`,
+    );
 }
 
 // Canonical coverage window (task 1203 R1): invalidate prior certification and capture

@@ -31,7 +31,7 @@
 [active] **C**: Rules ([C_rules.md](./C_rules.md))
     ├── [done] **C1**: Rule surface contract and catalog integrity ([C1_rule-surface-contract-and-catalog-integrity.md](./C1_rule-surface-contract-and-catalog-integrity.md))
     ├── [cancelled] **C2**: Lockstep dependency catalog integrity ([C2_lockstep-dependency-catalog-integrity.md](./C2_lockstep-dependency-catalog-integrity.md))
-    └── [backlog] **C3**: Coverage artifact provenance and completion integrity ([C3_coverage-artifact-provenance-and-completion-integrity.md](./C3_coverage-artifact-provenance-and-completion-integrity.md))
+    └── [verifying] **C3**: Coverage artifact provenance and completion integrity ([C3_coverage-artifact-provenance-and-completion-integrity.md](./C3_coverage-artifact-provenance-and-completion-integrity.md))
 [done] **D**: Workflows ([D_workflows.md](./D_workflows.md))
     ├── [done] **D1**: workflow run observability — enriched step lines, FSM transitions, async follow ([D1_workflow-run-observability-enriched-step-lines-fsm-transitions-async-follow.md](./D1_workflow-run-observability-enriched-step-lines-fsm-transitions-async-follow.md))
     ├── [done] **D2**: All-in-one per-run workflow run log ([D2_all-in-one-per-run-workflow-run-log.md](./D2_all-in-one-per-run-workflow-run-log.md))
