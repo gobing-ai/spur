@@ -6,7 +6,7 @@ status: active
 priority: P2
 tags: []
 created_at: "2026-10-14T05:43:07.001Z"
-updated_at: "2026-10-14T06:30:07.896Z"
+updated_at: "2026-10-14T06:35:57.779Z"
 ---
 
 # F51: Review confidence certification at pipeline PASS boundaries
@@ -53,7 +53,9 @@ Scenario: Implementation stays in its deterministic owner
 
 ## Notes
 
-Task 1204 completed with a HIGH-confidence PASS, a green full sequential quality gate (11447 tests, 0 failures), and a clean residual sweep. Its wrapup workflow wrap-1204-final reached done. Feature-level acceptance remains separate: sync advanced backlog to active, but the verifying entry's feature-verification workflow failed to start successfully. No feature completion receipt or feature-done claim was manufactured. Re-run the feature-scoped verification pass before feature completion.
+Task 1204 completed with a HIGH-confidence PASS, a green full sequential quality gate (11447 tests, 0 failures), and a clean residual sweep. Its wrapup workflow wrap-1204-final reached done.
+
+Feature-level acceptance remains separate. Sync advanced backlog to active; the verifying entry successfully launched feature-verification run 64758e8d-0489-4132-9291-9ba3b3eefe2f. That run reached failed because spur-check-feature stopped at script-contract-check: quality-gate.mjs still embedded history schema version 0.5.26 after the dependency upgrade to 0.5.27. The session review regenerated script twins through build:scripts and script-contract-check now reports zero violations. The feature-verification receipt remains failed until a fresh feature-scoped pass succeeds; no feature-done claim has been made.
 
 ## History
 

@@ -15,11 +15,13 @@ import {
     DEFAULT_FEATURE_VERIFICATION_CMD,
     startFeatureVerificationReceipt,
 } from '../../src/workflow/feature-verification-receipt';
+import { ProofInputFingerprint } from '../../src/workflow/proof-input-fingerprint';
 import { resolveWorkflowDefinition } from '../../src/workflow/workflow-resolver';
 
 let featuresDir: string;
 let tasksDir: string;
 let root: string;
+let restoreReceiptFingerprint: (() => void) | undefined;
 const F_SECTION_MATRIX: SectionMatrix = {
     variants: {
         standard: {
@@ -131,16 +133,42 @@ async function withDerivationFixture<T>(
 
 beforeAll(async () => {
     root = mkdtempSync(join(tmpdir(), 'spur-feature-svc-'));
-    featuresDir = join(root, 'features');
-    tasksDir = join(root, 'tasks');
+    featuresDir = join(root, 'docs', 'features');
+    tasksDir = join(root, 'docs', 'tasks');
     const fs = createNodeFileSystem(root);
     await fs.ensureDir(featuresDir);
     await fs.ensureDir(tasksDir);
+    writeFileSync(join(root, '.gitignore'), '.spur/\n');
+    for (const args of [
+        ['init', '-q'],
+        ['add', '.gitignore'],
+        [
+            '-c',
+            'user.name=Fixture',
+            '-c',
+            'user.email=fixture@example.invalid',
+            'commit',
+            '-q',
+            '--allow-empty',
+            '-m',
+            'fixture',
+        ],
+    ]) {
+        const result = Bun.spawnSync(['git', ...args], { cwd: root, stdout: 'pipe', stderr: 'pipe' });
+        if (result.exitCode !== 0) throw new Error(result.stderr.toString());
+    }
+    // Keep real receipt hashing, but isolate its Git input from concurrent checkout writes.
+    const compute = ProofInputFingerprint.compute;
+    const fingerprint = spyOn(ProofInputFingerprint, 'compute').mockImplementation((options = {}) =>
+        compute({ ...options, cwd: root }),
+    );
+    restoreReceiptFingerprint = () => fingerprint.mockRestore();
     const writeService = new PlanningWriteService({ fs });
     svc = new FeatureService({ fs, featuresDir, tasksDir, writeService });
 });
 
 afterAll(() => {
+    restoreReceiptFingerprint?.();
     rmSync(root, { recursive: true, force: true });
 });
 
@@ -1307,7 +1335,6 @@ updated_at: "${new Date().toISOString()}"
             await recordPassReceipt(feat.ref.id);
             const second = await svc.syncFeature(feat.ref.id);
             expect(second.suppressed).toBeUndefined();
-            if (!second.applied) console.error('DIAG second proposal:', JSON.stringify(second.proposal, null, 2));
             expect(second.applied).toBe(true);
             expect(second.appliedHops).toEqual(['done']);
             expect((await svc.show(feat.ref.id))?.status).toBe('done');
