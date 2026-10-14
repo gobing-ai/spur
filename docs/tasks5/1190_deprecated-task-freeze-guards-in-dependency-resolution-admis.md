@@ -4,7 +4,7 @@ name: Deprecated task freeze guards in dependency resolution, admission, checks 
 status: done
 template: feature-impl
 created_at: 2026-10-13T16:56:12.968Z
-updated_at: "2026-10-14T05:04:07.537Z"
+updated_at: "2026-10-14T05:49:51.421Z"
 feature_id: F43
 priority: P2
 estimate_hours: 6
@@ -102,103 +102,73 @@ Tests: `packages/app/tests/services/task-check.test.ts` (live dependent warns / 
 **Pipeline verify results**
 
 - Verdict: PASS (from verdict artifact)
-- Confidence: MEDIUM
+- Confidence: HIGH
 
 | Requirement | Status | Evidence |
 |-------------|--------|----------|
-| R1 | MET | New `dependencies` edge onto a deprecated task refused before the write at both layers: `mutateDependencies` (`packages/app/src/services/task-service.ts:1225`, prospective — values already in the current array are skipped) and the ready-set resolver (`packages/app/src/workflow/idea-handoff.ts:276`). Both share the predicate at `packages/app/src/services/task-freeze.ts:10`. Tests `packages/app/tests/services/task-service.test.ts:1650`, `apps/cli/tests/commands/task.test.ts:1701` (exit 3, file unwritten), `packages/app/tests/workflow/idea-handoff.test.ts` — all green this run. |
-| R2 | MET | `quickReadiness` skips a deprecated task with code DEPRECATED, `verify --force` included (`packages/app/src/services/planning-admission.ts:151`); a deprecated dep-status never reads satisfied and the block names the remedy (`packages/app/src/services/planning-admission.ts:195`); `preflightTask` skips it (`packages/app/src/services/planning-admission.ts:315`). Regenerated twin `plugins/sp/scripts/batch-preflight.mjs`. Tests `packages/app/tests/services/planning-admission.test.ts:144`, `:155`, `plugins/sp/tests/batch-preflight.test.ts:98`, `:205`, `:223` — green this run. |
-| R3 | MET | The deprecated branch of the graph refusal appends the un-deprecate/remove exit (`packages/app/src/workflow/lifecycle-adapter.ts:451`); the forward chain has no deprecated hop (`packages/app/src/services/pipeline-run-link.ts:19`). Tests `packages/app/tests/workflow/lifecycle-adapter.test.ts`, `packages/app/tests/services/task-record.test.ts:3231` — green this run. |
-| R4 | MET | `L4.task-deprecated` registered (`packages/config/src/finding-codes.ts:48`, `:154`); `runL4` emits it only for a live dependent of a deprecated dependency (`packages/app/src/services/task-check.ts:1244`). Tests `packages/app/tests/services/task-check.test.ts:2862` (live warns, strict elevates), `:2886` (terminal silent), `:2900` (live dependency silent) — green this run. |
-| R5 | MET | A section write on a deprecated task lands with the freeze note exactly once: `sectionWriteFreezeWarning` (`packages/app/src/services/task-service.ts:1602`) resolved at `:1520` and applied at both exits (`:1587`, `:1594`). Tests `packages/app/tests/services/task-service.test.ts:2543`, `:2563`, `:2572` — green this run. |
-| R6 | MET | Prospective freeze and exempt hops: an edge recorded before the deprecation is never rewritten or dropped (`packages/app/tests/services/task-service.test.ts:1664`), checking a live dependent never rewrites it (`packages/app/tests/services/task-check.test.ts:2913`), and the record hop lands on a deprecated task (`packages/app/tests/services/task-record.test.ts:3255`) — green this run. Prior throwaway-root probe also ran `migrate-anchors` and `verdict` on a deprecated task at exit 0. |
+| R1 | MET | A new dependency edge onto a deprecated task is refused before the write by `mutateDependencies` (`packages/app/src/services/task-service.ts:1228`, prospective — edges already present are skipped) and by the handoff resolver (`packages/app/src/workflow/idea-handoff.ts:276`). Tests green this run: `packages/app/tests/services/task-service.test.ts:1650`, `apps/cli/tests/commands/task.test.ts:1701` (exit 3, file unwritten), `packages/app/tests/workflow/idea-handoff.test.ts:159`. |
+| R2 | MET | Admission skips a deprecated task and never reads a deprecated dependency as satisfied, naming the un-deprecate command (`packages/app/src/services/planning-admission.ts:161,205,325`). Tests green: `plugins/sp/tests/batch-preflight.test.ts:98,205,223` (35 pass / 0 fail). |
+| R3 | MET | The denial message names the un-deprecate and remove exits for a deprecated source (`packages/app/src/workflow/lifecycle-adapter.ts:451`); the forward chain has no deprecated hop (`packages/app/src/services/pipeline-run-link.ts:19`). The record auto-walk to done is refused and the status stays deprecated (`packages/app/tests/services/task-record.test.ts:3255`). |
+| R4 | MET | `L4.task-deprecated` is registered (`packages/config/src/finding-codes.ts:48,154`) and emitted for a live dependent of a deprecated task (`packages/app/src/services/task-check.ts:1251`). Tests green: `packages/app/tests/services/task-check.test.ts:2862,2886,2900`. |
+| R5 | MET | A section write on a deprecated task lands with the freeze note (`packages/app/src/services/task-service.ts:1523,1605`). Tests green: `packages/app/tests/services/task-service.test.ts:2543,2563`. |
+| R6 | MET | Exempt hops land on a deprecated task: record (`packages/app/tests/services/task-record.test.ts:3292`), body write (`packages/app/tests/services/task-service.test.ts:2572`), anchor migration (`apps/cli/tests/commands/task.test.ts:3732`). Existing edges are never rewritten (`packages/app/tests/services/task-service.test.ts:1664`, `packages/app/tests/services/task-check.test.ts:2913`). |
 
 | Acceptance Criteria | Status | Evidence Type | Evidence |
 |---------------------|--------|---------------|----------|
-| AC3 — New dependency links onto a deprecated task are refused before any write | MET | test | `apps/cli/tests/commands/task.test.ts:1701` (deps add onto a deprecated task exits 3, file unwritten) and `packages/app/tests/services/task-service.test.ts:1650`; guards `packages/app/src/services/task-service.ts:1225`, `packages/app/src/workflow/idea-handoff.ts:276`. |
-| AC4 — A deprecated task never starts, advances or gets routed | MET | test | `packages/app/tests/services/task-record.test.ts:3231` (no hop out of deprecated), `packages/app/tests/services/planning-admission.test.ts:144`, `plugins/sp/tests/batch-preflight.test.ts:98`; refusal hint `packages/app/src/workflow/lifecycle-adapter.ts:451`. |
-| AC5 — Checks flag live dependents and section writes are warned about | MET | test | `packages/app/tests/services/task-check.test.ts:2862` and `packages/app/tests/services/task-service.test.ts:2543`; code `packages/app/src/services/task-check.ts:1244`, `packages/app/src/services/task-service.ts:1602`. |
-| AC9 — Only status-moving writes are frozen, and existing edges are never rewritten | MET | test | `packages/app/tests/services/task-service.test.ts:1664`, `:2572`, `packages/app/tests/services/task-check.test.ts:2913`, `packages/app/tests/services/task-record.test.ts:3255`. |
+| AC3 — New dependency links onto a deprecated task are refused before any write | MET | test | `apps/cli/tests/commands/task.test.ts:1701` (deps add exits 3, file unwritten) and `packages/app/tests/services/task-service.test.ts:1650`; guard at `packages/app/src/services/task-service.ts:1228`. |
+| AC4 — A deprecated task never starts, advances or gets routed | MET | test | `packages/app/tests/services/task-record.test.ts:3255` (walk to done refused, status unchanged); `plugins/sp/tests/batch-preflight.test.ts:98,205`; admission at `packages/app/src/services/planning-admission.ts:161,325`. |
+| AC5 — Checks flag live dependents and section writes are warned about | MET | test | `packages/app/tests/services/task-check.test.ts:2862`; `packages/app/tests/services/task-service.test.ts:2543`; code `packages/app/src/services/task-check.ts:1251`, `packages/app/src/services/task-service.ts:1605`. |
+| AC9 — Only status-moving writes are frozen, and existing edges are never rewritten | MET | test | `packages/app/tests/services/task-service.test.ts:1664,2572`; `packages/app/tests/services/task-record.test.ts:3292`; `apps/cli/tests/commands/task.test.ts:3732`; `packages/app/tests/services/task-check.test.ts:2913`. |
 - Coverage: N/A (verdict-based; verify pipeline does not measure code coverage)
 
 ### Review
 
-Verdict: PASS
-Confidence: MEDIUM
+**Review Report — 1190 (round 3, closure pass)**
+**Scope:** batch-2 commits `22fd7e968` (shared freeze predicate), `6c85fd472` (satellite anchors) plus this round's working-tree remediation on main (`packages/app/src/services/task-check.ts`, `packages/app/src/services/task-service.ts`, the record/handoff/migrate-anchors tests, satellite re-anchors). Supersedes round 2 below; every round-2 finding re-checked on the artifact.
+**Dimensions:** functional traceability · SECUA · architectural depth · test quality
+**Verdict:** PASS
+**Confidence:** HIGH
 
-This report supersedes the previous round's `## Review` (iteration 1, which returned FAIL on one P2). Scope: working tree vs `HEAD` — 23 files (8 source/config, 6 app/plugin test files, 1 task doc, 6 regenerated plugin twins). Dimensions: functional traceability, SECUA, architectural depth (five signals), test quality. The remediation was re-verified on the artifact — by executing `spur task deps` against a throwaway project root and by reading the guard's position relative to the write — not from the brief's summary.
-
-**Previous round's findings — resolved vs still standing**
-
-| Prior # | Prior priority | Status now | Evidence |
-| --- | --- | --- | --- |
-| 1 | P2 (major) — dependency freeze unenforced on every reachable path | RESOLVED | `mutateDependencies` now refuses a NEW edge onto a `deprecated` target before the write (`packages/app/src/services/task-service.ts:1215-1232`); executed on a scratch corpus: `task deps <parent> add <deprecated>` → exit 3, refusal naming `spur task update <wbs> todo`, parent file byte-identical |
-| 2 | P3 (minor) — freeze literals duplicated across modules | STANDS (grown) | now 8 source sites, incl. the new `task-service.ts:1224`; no `isFrozen`/un-deprecate hint helper |
-| 3 | P4 — design S10 "deprecated task's own advisory" absent | STANDS, accepted | F42's twin has one emission site (the live dependent); a frozen record must not fail its own check |
-| 4 | P4 — `preflightTask`'s extra `deprecated` branch is scope creep | STANDS, accepted | in scope: without it the task falls through every arm to `return { action: 'run' }` |
-| 5 | P4 — Solution's "`.d.mts` decls" regeneration claim overstates the diff | STANDS, accepted | no `.d.mts` line changed this round either |
-| 6 | P4 — efficiency: dependency resolved twice | STANDS, accepted | `task-check.ts:1230,1242`; the new guard repeats the class at `task-service.ts:1222` |
-| 7 | P4 — test quality: handoff test mocks an unreachable state; record test asserts a constant | STANDS, accepted | `packages/app/tests/workflow/idea-handoff.test.ts:161-193`; `packages/app/tests/services/task-record.test.ts:3234` |
-| 8 | P4 — task's own `## Solution` trips `L4.anchor-subject-mismatch` | STANDS | re-confirmed this round: `spur task check 1190` → PASS with that one warning |
-
-**Findings (ranked)**
+#### Findings (ranked)
 
 | # | Priority | Dimension | Finding | Location | Disposition |
 | --- | --- | --- | --- | --- | --- |
-| 1 | P3 (minor) | architecture | The `deprecated` freeze predicate and the `spur task update <wbs> todo` hint are re-spelled as literals in 8 source sites (no `isFrozen` / un-deprecate-hint helper); the remediation added an instance rather than converging them, so the next surface added can silently omit the guard. Non-blocking: design §4.2's guard table is the SSOT enumerating the surfaces. | `packages/app/src/services/planning-admission.ts:149,193,313`; `packages/app/src/services/task-check.ts:1222,1243`; `packages/app/src/services/task-service.ts:1224,1604-1608`; `packages/app/src/workflow/idea-handoff.ts:275,283`; `packages/app/src/workflow/lifecycle-adapter.ts:451-463` | DEFER(F43 follow-up slice: extract `isFrozen(status)` + an un-deprecate-command helper in `packages/domain/src/planning/schema.ts`) |
-| 2 | P4 (advisory) | documentation | Design §2 still asserts the dependency freeze attaches "not at a `dependencies`-validating branch in `task-service.ts` (it does not exist)" — the remediation created exactly that branch, so the design SSOT now contradicts the shipped code. | `docs/design/task-deprecated-status.md:52-54` vs `packages/app/src/services/task-service.ts:1215-1232` | OPEN |
-| 3 | P4 (advisory) | documentation | The task's own `## Solution` section still trips the repo's anchor lint: its citation `packages/config/src/finding-codes.ts:48` sits on the plugin-bundle bullet whose prose names only plugin paths. Warning only (`pass: true`), but it will sit in the done gate until re-pointed. | `docs/tasks5/1190_deprecated-task-freeze-guards-in-dependency-resolution-admis.md` (`## Solution`, plugin-bundle bullet) | OPEN |
-| 4 | P4 (advisory) | correctness | `readTaskStatus` compares `!== 'deprecated'` without lower-casing, while its siblings normalize (`sectionWriteFreezeWarning` lower-cases; `taskStatusOf` lower-cases then compares). Inert today (statuses are enum-validated lowercase) but an inconsistency a future non-normalized writer could slip through. | `packages/app/src/services/task-service.ts:1390-1394` vs `:1604` and `packages/app/src/workflow/idea-handoff.ts:229` | ACCEPTED |
-| 5 | P4 (advisory) | efficiency | The R4 check resolves each dependency twice (`findTaskFile` then `readTaskSnapshot` re-locates it), and the new guard repeats the class in `mutateDependencies` (`findTaskFileName` at step 2 and again at step 6). | `packages/app/src/services/task-check.ts:1230,1242`; `packages/app/src/services/task-service.ts:1196,1222` | ACCEPTED |
-| 6 | P4 (advisory) | test quality | Two added tests do not pin reachable behaviour: the record suite asserts the `TASK_FORWARD_CHAIN` constant rather than a walk, and the handoff guard test mocks `task show` to a state production cannot produce. | `packages/app/tests/services/task-record.test.ts:3234`; `packages/app/tests/workflow/idea-handoff.test.ts:161-193` | ACCEPTED |
-| 7 | P4 (advisory) | functional | Design §3.1 S10's "deprecated task's own advisory" is not implemented (only a live dependent warns). Judged CORRECT — F42's twin `L4.feature-deprecated` has one emission site, for the live dependent. | `packages/app/src/services/task-check.ts:1222,1243` | ACCEPTED |
-| 8 | P4 (advisory) | functional | `preflightTask`'s extra `deprecated` branch is in scope, not scope creep: without it a deprecated task falls through every status arm to `return { action: 'run' }` and would be routed into the pipeline (AC4 violation). | `packages/app/src/services/planning-admission.ts:311-316` | ACCEPTED |
+| 1 | P3 (minor) | architecture | Round 2 #1 — freeze literals duplicated across 8 sites. Converged: one predicate and one exit command, imported by every guard (admission, check, service, handoff); import-free so the plugin bundle stays free of the domain barrel. | `packages/app/src/services/task-freeze.ts:10` | RESOLVED (`22fd7e968`; users at `packages/app/src/services/planning-admission.ts:161`, `packages/app/src/services/task-check.ts:1251`, `packages/app/src/services/task-service.ts:1228`, `packages/app/src/workflow/idea-handoff.ts:276`) |
+| 2 | P4 (advisory) | documentation | Round 2 #2 — satellite §2 denied the `task-service.ts` branch. Now names both writers and the refusal lines. | `docs/design/task-deprecated-status.md:54` | RESOLVED |
+| 3 | P4 (advisory) | documentation | Round 2 #3 — `## Solution` anchor-subject mismatch. Re-pointed; `spur task check 1190` carries no anchor warning. | `docs/design/task-deprecated-status.md:79` | RESOLVED |
+| 4 | P4 (advisory) | correctness | Round 2 #4 — `readTaskStatus` compared without lower-casing. Every comparison now routes through the case-insensitive predicate. | `packages/app/src/services/task-freeze.ts:11` | RESOLVED |
+| 5 | P4 (advisory) | efficiency | Round 2 #5 — each dependency resolved twice. The check reads the already-resolved path; `mutateDependencies` keeps the step-2 resolution in a map for step 6. | `packages/app/src/services/task-check.ts:1246`; `packages/app/src/services/task-service.ts:1197` | RESOLVED |
+| 6 | P4 (advisory) | test quality | Round 2 #6 — record test asserted a constant; handoff test mocked an "unreachable" state. The record test now drives a real PASS-verdict walk to `done` and asserts refusal plus an unchanged `deprecated` status; the handoff state is reachable (an agent step runs between batch-create and finalize, so a resumed run can meet an operator deprecation) and the test documents that. | `packages/app/tests/services/task-record.test.ts:3255`; `packages/app/tests/workflow/idea-handoff.test.ts:155` | RESOLVED |
+| 7 | P4 (advisory) | test quality | Round 2 R6 gap — anchor migration had no direct proof on a deprecated task. Added: migrate-anchors qualifies a citation on a deprecated task and leaves the status `deprecated`. | `apps/cli/tests/commands/task.test.ts:3732` | RESOLVED |
+| 8 | P4 (advisory) | functional | Design S10's "deprecated task's own advisory" not emitted — only a live dependent warns. Judged correct: F42's twin `L4.feature-deprecated` has one emission site, and a frozen record must not fail its own check. | `packages/app/src/services/task-check.ts:1251` | ACCEPTED |
+| 9 | P4 (advisory) | functional | `preflightTask`'s `deprecated` branch is in scope, not creep: without it a deprecated task falls through to `run` (AC4). | `packages/app/src/services/planning-admission.ts:325` | ACCEPTED |
+| 10 | P3 (minor) | documentation | Found by this round's post-check rule gate: the shared-predicate import landed between the module header and the exported status type, leaving the export without a doc comment (`every-export-has-tsdoc`). Doc comment added; the type also names `deprecated` now. | `packages/app/src/services/planning-admission.ts:14` | RESOLVED (`bun run test-post-check` → all rules pass) |
 
-**Functional traceability (R1–R6)**
+#### Functional Traceability
 
 | Req | Status | Evidence |
 | --- | --- | --- |
-| R1 | MET | Two layers now refuse a new edge onto a `deprecated` task before any write: the reachable writer `mutateDependencies` (`packages/app/src/services/task-service.ts:1215-1232`, prospective — values already in `current` are skipped) and the handoff resolver (`packages/app/src/workflow/idea-handoff.ts:268-286`). Executed on a scratch root: `task deps 0001 add 0002` with 0002 `deprecated` → exit 3, stderr names `spur task update 0002 todo`, parent sha256 unchanged across the call |
-| R2 | MET | `quickReadiness` returns `skipped/DEPRECATED` (`packages/app/src/services/planning-admission.ts:149-157`), a deprecated `--dep-status` never reads satisfied and the block names the remedy (`:190-210`); plugin twin regenerated (`plugins/sp/lib/plan-projection.generated.mjs`) |
-| R3 | MET | Executed on the scratch root: `task update 0002 wip` on a `deprecated` task → exit 1, "No transition from \"deprecated\" to \"wip\" … un-deprecate with `spur task update 0002 todo`", file byte-identical; `task update 0002 todo` then succeeds |
-| R4 | MET | Executed on the scratch root: `task check 0001` (0001 live, depends on `deprecated` 0003) → PASS + `L4.task-deprecated` "re-point the dependency at live work or un-deprecate it (`spur task update 0003 todo`)". Terminal dependent silent and edge byte-identical per the unit tests |
-| R5 | MET | Executed on the scratch root: `task update 0002 --section Testing --from-file` on a `deprecated` task → exit 0, body landed, status stays `deprecated`, freeze note on stderr. `noteFreeze` wraps both exits of `updateSection` so the note appears exactly once (`packages/app/src/services/task-service.ts:1515-1518,1585-1592,1594`) |
-| R6 | PARTIAL | The record hop lands on a `deprecated` task (real lifecycle adapter) and the pre-existing edge is reported, never rewritten — proven by unit tests and the scratch probe above. Gap: anchor migration (`spur task migrate-anchors`) is untouched by the diff and has no direct test in this round; it is exempt by construction (a body/section write, never a status move), not by a fresh proof. |
+| R1 | MET | `packages/app/src/services/task-service.ts:1228` refuses a NEW edge onto a deprecated target before the write; `packages/app/src/workflow/idea-handoff.ts:276` refuses in the handoff resolver. Tests `packages/app/tests/services/task-service.test.ts:1650`, `apps/cli/tests/commands/task.test.ts:1701`, `packages/app/tests/workflow/idea-handoff.test.ts:159` |
+| R2 | MET | `packages/app/src/services/planning-admission.ts:161,205,325` |
+| R3 | MET | graph refusal + hint; `packages/app/tests/services/task-record.test.ts:3255` walks the real chain |
+| R4 | MET | `packages/app/src/services/task-check.ts:1251`; tests `packages/app/tests/services/task-check.test.ts:2862,2886,2900` |
+| R5 | MET | `packages/app/src/services/task-service.ts:1523,1605`; test `packages/app/tests/services/task-service.test.ts:2543` |
+| R6 | MET | record hop `packages/app/tests/services/task-record.test.ts:3292`; body hop `packages/app/tests/services/task-service.test.ts:2572`; anchor migration `apps/cli/tests/commands/task.test.ts:3732`; edge never rewritten `packages/app/tests/services/task-check.test.ts:2913` |
 
-**Acceptance criteria**
+#### Dimension notes
 
-| AC | Status | Evidence |
-| --- | --- | --- |
-| AC3 — new dependency links onto a deprecated task refused before any write | MET | reachable-writer probe above (exit 3, byte-identical file); CLI test `apps/cli/tests/commands/task.test.ts:1701` and service test `packages/app/tests/services/task-service.test.ts:1650` |
-| AC4 — a deprecated task never starts, advances or gets routed | MET | `planning-admission.ts:149,311`; scratch `task update 0002 wip` → exit 1 with the hint; `TASK_FORWARD_CHAIN` has no `deprecated` hop |
-| AC5 — checks flag live dependents and section writes are warned about | MET | `task-check.ts:1243-1250` (scratch `task check 0001` emitted it); `task-service.ts:1577,1601-1612` (scratch section write emitted the note) |
-| AC9 — only status-moving writes frozen; existing edges never rewritten | MET | scratch: record/section/body writes land on a deprecated task; `set`/`add`/`remove` re-stating or dropping a pre-existing edge succeed; the CLI probe left the dependent file byte-identical |
+- **SECUA.** No new input path; refusals precede every write; every refusal names the un-deprecate command. Efficiency improved (finding 5).
+- **Architecture.** One predicate module at the seam all guards share; weak-locality signal from round 2 closed.
+- **Test quality.** Each freeze test fails if its guard is removed; the prospective-edge test guards over-refusal.
 
-**SECUA** — Security: no new input path or injection surface (the guard passes an already-resolved WBS; the message interpolates an id already used). Correctness: the refusal is ordered after the read-only validation steps and before `updateFrontmatterArray` (`task-service.ts:1219-1232`), so no partial write is possible; the prospective skip (`current.includes(v)`) is verified by execution. Efficiency: the guard adds one file read per NEW value (Finding 5). Usability: every refusal/admission message names the un-deprecate command — confirmed by execution. Accessibility: N/A (CLI/service only).
+#### Evidence (fresh, this round)
 
-**Architectural depth (five signals)** — Shallow module: none new (`sectionWriteFreezeWarning` is a small cohesive helper). Tight coupling / raw-frontmatter seam: `readTaskStatus` parses sibling frontmatter directly rather than through a status accessor (Finding 4). Wrong seam: the round-1 seam defect is closed — the freeze now sits at the writer that can see the target's status. Weak locality: Finding 1 (literals duplicated, no shared predicate). Poor test surface: Finding 6. Finding 1 should not block `done` (P3, deferred with a reason) but is the right next slice.
+- `packages/app`: feature-service, task-service, task-check, task-record, task-freeze, idea-handoff suites → 582 pass / 0 fail.
+- `apps/cli` task + embedded-schemas → 211 pass / 0 fail; migrate-anchors subset 6/6.
+- `bun run test-pre-check` (51 rules) and `bun run test-post-check` pass.
+- Biome clean; `bunx tsc -p packages/app --noEmit` clean; `bun run plugin-smoke` PASS.
 
-**Test quality** — Failure-sensitive: `apps/cli/tests/commands/task.test.ts:1701` (exit 3 + unwritten file; would fail if the guard were removed), `packages/app/tests/services/task-service.test.ts:1650` (`.rejects.toMatchObject({ code: 'deprecated' })` + byte-identical file), the task-check quartet (warn/silent/live/byte-identical), the record suite wired to the REAL lifecycle adapter, and the admission suites asserting both the function result and the CLI exit/JSON code. Weak: `packages/app/tests/services/task-service.test.ts:1663` asserts prospective semantics (it would still pass if the guard were deleted — it guards against over-refusal, not against removal); Finding 6.
-
-**Verification evidence run this round**
-
-- scratch probe (`mktemp` root, `spur init --minimal`, never this repo's corpus): `task create` ×4 → `task update 0002 deprecated` → `task deps 0001 add 0002` = exit 3, message names `spur task update 0002 todo`, parent sha256 unchanged
-- scratch: `task deps 0001 set 0002` = exit 3; `task deps 0001 set 0003` (live) = exit 0 → `dependencies: ["0003"]`; `task deps 0001 add 0003` while a `deprecated` edge pre-exists = exit 0, both kept; `task deps 0001 remove 0004` (deprecated) = exit 0
-- scratch: `task update 0002 wip` = exit 1 with the un-deprecate hint, file byte-identical; `task update 0002 todo` = exit 0
-- scratch: `task update 0002 --section Testing --from-file` = exit 0, body landed, `status: deprecated` retained, freeze note on stderr
-- scratch: `task check 0001` (live dependent of a `deprecated` task) = PASS + `[WARN] L4 … spur task update 0003 todo`
-- `bun test packages/app/tests/services/task-service.test.ts -t deprecated` → 3 pass, 0 fail; `bun test apps/cli/tests/commands/task.test.ts -t deprecated` → 1 pass, 0 fail; `bun test packages/app/tests/services/task-check.test.ts -t 1190` → 4 pass, 0 fail; `bun test packages/app/tests/services/task-record.test.ts -t ADR-137` → 3 pass, 0 fail
-- full quality gate not re-run (`1190-test-gate.status` = PASS, 11396 pass / 0 fail)
-- `git diff` re-read for all 23 files; `git status` shows no staged change
-
-**Residual risk**
-
-- The dependency freeze is directional as specified (edges ONTO a deprecated task); an edge FROM a deprecated task outward is not refused. That is consistent with design §3.2 ("nothing new attaches to it" / "the freeze constrains status-moving writes only"), and no R/AC covers it — recorded here so the scoping is explicit, not a finding.
-- Anchor migration is exempt by construction but has no direct regression test in this round (R6, above).
-- No corpus task carries `status: deprecated` today, so `L4.task-deprecated` stays inert on the shipped corpus until the vocabulary is first used (`--strict` will then elevate it).
-- Consumers with a project-layer `task-lifecycle.yaml` must re-sync to gain the `deprecated` edges; until then a deprecation write is refused by the stale graph (documented, design §4.3).
-
-**Next:** the AC3 gap that caused round 1's FAIL is closed and re-proven; leftover P3/P4 items are recorded above (P3 deferred with a reason). No blocking finding survives.
+**Next:** none — no open finding.
 
 ### References
 

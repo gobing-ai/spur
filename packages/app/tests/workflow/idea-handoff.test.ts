@@ -153,6 +153,9 @@ describe('finalizeIdeaHandoff', () => {
     });
 
     // ── ADR-137 (S8): a new dependency edge onto a deprecated task is refused ──
+    // Reachable, though narrow: `ready-prepare` (an agent step) runs between `batch-create-run` and
+    // `handoff-finalize`, so an interrupted run resumed later can find a just-created task the
+    // operator has since deprecated. The mocked `task show` stands in for that resumed state.
     test('refuses a resolved dependency that is a deprecated task before any deps write', async () => {
         const runId = 'test-idea-run-deprecated-dep';
         const featureId = 'D5';

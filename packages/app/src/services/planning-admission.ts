@@ -10,7 +10,17 @@
 
 import { isTaskFrozen, undeprecateTaskCommand } from './task-freeze';
 
-export type TaskStatus = 'backlog' | 'todo' | 'wip' | 'testing' | 'blocked' | 'done' | 'cancelled' | string;
+/** A task status as admission reads it — the canonical vocabulary, open to unknown strings from raw frontmatter. */
+export type TaskStatus =
+    | 'backlog'
+    | 'todo'
+    | 'wip'
+    | 'testing'
+    | 'blocked'
+    | 'done'
+    | 'cancelled'
+    | 'deprecated'
+    | string;
 
 /** Inputs for TABLE A STOP evaluation: the task status plus every dependency status. */
 export interface PreflightInput {

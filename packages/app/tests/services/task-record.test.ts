@@ -3252,10 +3252,23 @@ Recorded before the freeze.
         return { svc, fs, taskPath, db, root };
     }
 
-    test('the auto-walk chain has no hop out of deprecated', () => {
-        // The freeze is expressed by the graph, not by a special case in record: the
-        // forward chain the auto-walk indexes simply has no `deprecated` entry.
+    test('the auto-walk to done finds no hop out of deprecated and leaves the status frozen', async () => {
+        // The freeze is expressed by the graph, not by a special case in record: a PASS verdict
+        // asking for `done` drives the real auto-walk, which has no `deprecated` entry to start from.
         expect(TASK_FORWARD_CHAIN).not.toContain('deprecated');
+        const { svc, fs, taskPath, db, root } = await makeDeprecatedRecordEnv();
+        try {
+            const verdictFile = join(root, '.spur', 'run', '1190-verdict.json');
+            await fs.writeFile(verdictFile, JSON.stringify(makeVerdict({ wbs: '1190' })));
+
+            await expect(svc.record('1190', { transition: 'done', verdictFile })).rejects.toThrow(/deprecated/);
+
+            const after = MarkdownDocument.parse(await fs.readFile(taskPath), 'task').frontmatterData;
+            expect(after?.status).toBe('deprecated');
+        } finally {
+            db.close();
+            rmSync(root, { recursive: true, force: true });
+        }
     });
 
     test('R3: the refused status move performs no write (file stays byte-identical)', async () => {

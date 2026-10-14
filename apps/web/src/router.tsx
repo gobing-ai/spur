@@ -36,11 +36,14 @@ function elementFor(mod: WebModule) {
 }
 
 /**
- * The landing target: the first BUILT-IN entry, captured independently of ordering so a
- * downstream module with a low `order` can never replace `/board`'s built-in landing (R1).
+ * The landing target: the default module (or first non-contained BUILT-IN entry), captured
+ * independently of ordering so a downstream module with a low `order` can never replace
+ * `/board`'s built-in landing (R1).
  */
 function landingOf(registry: Registry): WebModule | undefined {
-    return registry.modules.find((mod) => !isContained(mod)) ?? registry.defaultModule;
+    const defaultMod = registry.defaultModule;
+    if (defaultMod && !isContained(defaultMod)) return defaultMod;
+    return registry.modules.find((mod) => !isContained(mod)) ?? defaultMod;
 }
 
 /**

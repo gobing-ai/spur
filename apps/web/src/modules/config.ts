@@ -22,3 +22,8 @@ export const moduleRoots = ['./'] as const;
  * deleted from disk; `enableModule(id)` restores it at runtime.
  */
 export const disabledModules: readonly string[] = [];
+
+/**
+ * The module id opened by default when navigating to the board root.
+ */
+export const defaultModuleId = 'tasks';

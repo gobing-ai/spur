@@ -1193,12 +1193,14 @@ export class TaskService {
             }
         }
 
-        // 2. WBS existence (each value must resolve to a sibling task file).
+        // 2. WBS existence (each value must resolve to a sibling task file). Kept for step 6.
+        const targets = new Map<string, string>();
         for (const v of next) {
             const target = await this.findTaskFileName(v);
             if (target === null) {
                 throw new DependencyMutationError('not-found', `No task file for WBS ${v}`);
             }
+            targets.set(v, target.filePath);
         }
 
         // 3. Self-edge.
@@ -1221,9 +1223,9 @@ export class TaskService {
         // while editing the rest of the array still works.
         for (const v of next) {
             if (current.includes(v)) continue;
-            const target = await this.findTaskFileName(v);
-            if (target === null) continue; // step 2 already refused a missing WBS
-            if (!isTaskFrozen(await this.readTaskStatus(target.filePath))) continue;
+            const targetPath = targets.get(v);
+            if (targetPath === undefined) continue; // unreachable: step 2 resolved every value
+            if (!isTaskFrozen(await this.readTaskStatus(targetPath))) continue;
             throw new DependencyMutationError(
                 'deprecated',
                 `Task ${v} is deprecated (frozen) — a new dependency edge onto it is refused; re-point at live work, or un-deprecate it (\`${undeprecateTaskCommand(v)}\`)`,

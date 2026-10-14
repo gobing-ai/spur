@@ -175,8 +175,8 @@ describe('LeftSidebar module ordering, labels, and tooltips', () => {
         const labels = Array.from(container.querySelectorAll('nav a span:last-child')).map((s) =>
             s.textContent?.trim(),
         );
-        // Surviving modules keep their declared order (tasks 10, history 20, plans 24, designs 25, features 30, observability 40, projects 45).
-        expect(labels).toEqual(['Tasks', 'Histories', 'Plans', 'Designs', 'Features', 'Observabilities', 'Projects']);
+        // Surviving modules keep their declared order (observability 10, history 20, plans 24, designs 25, features 30, tasks 40, projects 45).
+        expect(labels).toEqual(['Observabilities', 'Histories', 'Plans', 'Designs', 'Features', 'Tasks', 'Projects']);
     });
 
     test('collapsed nav items render tooltips with label and description', () => {
@@ -185,6 +185,8 @@ describe('LeftSidebar module ordering, labels, and tooltips', () => {
         const tooltips = Array.from(container.querySelectorAll('nav .tooltip'));
         expect(tooltips.length).toBe(7);
         const firstTip = tooltips[0]?.getAttribute('data-tip');
-        expect(firstTip).toContain('Tasks\nTask kanban, lifecycle status, and per-task detail');
+        expect(firstTip).toContain(
+            'Observabilities\nReal-time system events, execution traces, and agent doctor telemetry',
+        );
     });
 });

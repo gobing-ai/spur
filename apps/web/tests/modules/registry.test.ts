@@ -39,6 +39,19 @@ describe('createRegistry', () => {
         expect(reg.getEnabledModules()).toEqual(['b']);
     });
 
+    test('defaultModuleId selects the configured module over the first discovered', () => {
+        const reg = createRegistry([fixture('a'), fixture('b')], { defaultModuleId: 'b' });
+        expect(reg.defaultModule?.id).toBe('b');
+    });
+
+    test('defaultModuleId falls back to first enabled module if target is disabled or absent', () => {
+        const reg = createRegistry([fixture('a'), fixture('b')], { disabled: ['b'], defaultModuleId: 'b' });
+        expect(reg.defaultModule?.id).toBe('a');
+
+        const absent = createRegistry([fixture('a'), fixture('b')], { defaultModuleId: 'nonexistent' });
+        expect(absent.defaultModule?.id).toBe('a');
+    });
+
     test('enableModule restores a disabled module to its original position', () => {
         const reg = createRegistry([fixture('a'), fixture('b'), fixture('c')]);
         reg.disableModule('b');
@@ -88,21 +101,21 @@ describe('createRegistry', () => {
  */
 describe('singleton registry instance', () => {
     // 0849 R1: the retired modules (workspace 50, inbox 60, teams 70) are gone from disk, so the
-    // surviving declared orders are the whole enabled set in ascending order. Tasks (10) sorts first.
+    // surviving declared orders are the whole enabled set in ascending order (observability 10, history 20, ...).
     test('enabled modules are the surviving modules plus settings, in declared order', () => {
         expect(getEnabledModules()).toEqual([
-            'tasks',
+            'observability',
             'history',
             'plans',
             'designs',
             'features',
-            'observability',
+            'tasks',
             'projects',
             'settings',
         ]);
     });
 
-    test('the default landing route is tasks (lowest declared order)', () => {
+    test('the default landing route is tasks (configured default module)', () => {
         expect(defaultModule?.route).toBe('tasks');
     });
 

@@ -3727,6 +3727,56 @@ updated_at: "2026-08-10T00:00:00.000Z"
             }
         });
 
+        // ADR-137 / 1190 R6: anchor migration is a section write, never a status move, so the
+        // deprecated freeze must not block it — and it must leave the status untouched.
+        test('qualifies anchors on a deprecated task and leaves it deprecated', async () => {
+            const isoCwd = await mkdtemp(join(tmpdir(), 'spur-task-migrate-anchors-deprecated-'));
+            await mkdir(join(isoCwd, 'docs', 'tasks'), { recursive: true });
+            await mkdir(join(isoCwd, 'src'), { recursive: true });
+            await writeFile(join(isoCwd, 'src', 'bar.ts'), 'export const bar = 1;\n');
+            const taskPath = join(isoCwd, 'docs', 'tasks', '0001_frozen-task.md');
+            await writeFile(
+                taskPath,
+                `---
+template: standard
+schema_version: 1
+name: "Frozen task"
+description: "fixture"
+status: deprecated
+type: task
+profile: standard
+parent_wbs: null
+priority: P3
+tags: []
+dependencies: []
+created_at: "2026-08-10T00:00:00.000Z"
+updated_at: "2026-08-10T00:00:00.000Z"
+---
+
+## 0001. Frozen task
+
+### Testing
+
+- Evidence: \`bar.ts:1\`
+`,
+            );
+            Bun.spawnSync(['git', 'init'], { cwd: isoCwd });
+            Bun.spawnSync(['git', 'add', '.'], { cwd: isoCwd });
+            try {
+                const applyOut = createCapturedOutput();
+                const applyCode = await main(['task', 'migrate-anchors', '--wbs', '0001'], {
+                    cwd: isoCwd,
+                    output: applyOut,
+                });
+                expect(applyCode).toBe(0);
+                const applied = await readFile(taskPath, 'utf8');
+                expect(applied).toContain('`src/bar.ts:1`');
+                expect(applied).toContain('status: deprecated');
+            } finally {
+                rmSync(isoCwd, { recursive: true, force: true });
+            }
+        });
+
         // 1109 R1/R2: `--wbs` scopes the pass to one task file. The failure cases are
         // asserted first (a sibling that must NOT be touched, an ambiguous anchor that must
         // NOT be guessed at, an unknown wbs that must fail loudly) because the unscoped pass

@@ -229,10 +229,35 @@ function reviewContractViolations(taskContent) {
   }
   return violations;
 }
-function buildReviewGateArtifact(wbs, taskContent, deferrals) {
+function reviewConfidenceViolation(reviewAnswer, ackLowConfidence) {
+  if (ackLowConfidence === "true")
+    return null;
+  const level = extractAnswerConfidence(reviewAnswer.replace(/\*\*/g, ""));
+  if (level === "HIGH" || level === "MEDIUM")
+    return null;
+  return {
+    location: "review-answer:Confidence",
+    text: level === undefined ? "The review answer carries no valid `**Confidence:** HIGH | MEDIUM | LOW` line — a " + "PASS must be graded, or the operator must set ackLowConfidence" : `The review answer graded its PASS ${level} — HIGH/MEDIUM cross unadorned, ` + "LOW/absent needs the operator’s ackLowConfidence"
+  };
+}
+function reviewGradingInput(root, reviewAnswer, ackLowConfidence, fs) {
+  if (reviewAnswer === undefined)
+    return;
+  const path = join(root, reviewAnswer);
+  let isFile = false;
+  try {
+    isFile = fs.statSync(path).isFile();
+  } catch {
+    isFile = false;
+  }
+  return { answer: isFile ? fs.readFileSync(path, "utf8") : "", ackLowConfidence };
+}
+function buildReviewGateArtifact(wbs, taskContent, deferrals, review) {
+  const confidence = review === undefined ? null : reviewConfidenceViolation(review.answer, review.ackLowConfidence);
+  const contractViolations = [...reviewContractViolations(taskContent), ...confidence === null ? [] : [confidence]];
   const items = [
     ...blockingReviewFindings(taskContent, deferrals),
-    ...reviewContractViolations(taskContent).map((v) => ({
+    ...contractViolations.map((v) => ({
       id: makeItemId("review-contract", v.location, v.text),
       category: "review-contract",
       class: "blocking",
@@ -365,6 +390,7 @@ function parseScanArgs(argv, cwd, defaultTmpDir) {
   let spurBin;
   let root = cwd;
   let tmpDir = defaultTmpDir;
+  let reviewAnswer;
   for (let i = 0;i < argv.length; i++) {
     const a = argv[i];
     if (a === undefined)
@@ -375,6 +401,8 @@ function parseScanArgs(argv, cwd, defaultTmpDir) {
       root = argv[++i] ?? root;
     else if (a === "--tmp-dir")
       tmpDir = argv[++i] ?? tmpDir;
+    else if (a === "--review-answer")
+      reviewAnswer = argv[++i];
     else if (a === "--help" || a === "-h")
       return null;
     else if (mode === "")
@@ -382,7 +410,7 @@ function parseScanArgs(argv, cwd, defaultTmpDir) {
     else if (wbs === "")
       wbs = a;
   }
-  return mode === "" || wbs === "" ? null : { mode, wbs, spurBin, root, tmpDir };
+  return mode === "" || wbs === "" ? null : { mode, wbs, spurBin, root, tmpDir, reviewAnswer };
 }
 
 // plugins/sp/lib/spur-bin.ts
@@ -392,7 +420,7 @@ function spurCommand(spurBin) {
 }
 
 // plugins/sp/scripts/residual-scan.ts
-var RESIDUAL_SCAN_USAGE = "usage: residual-scan.ts <scan|fold|settle|report|review-gate> <wbs> [--spur-bin <bin>] [--root <dir>] [--tmp-dir <dir>]";
+var RESIDUAL_SCAN_USAGE = "usage: residual-scan.ts <scan|fold|settle|report|review-gate> <wbs> [--spur-bin <bin>] [--root <dir>] [--tmp-dir <dir>] [--review-answer <path>]";
 function run(cmd, args, cwd) {
   const result = spawnSync(cmd, args, { cwd, encoding: "utf8" });
   if (result.error !== undefined)
@@ -487,7 +515,8 @@ function reviewGateMode(opts, env, io) {
   const runDir = join2(opts.root, ".spur", "run");
   fs.mkdirSync(runDir, { recursive: true });
   const { content } = loadTask(env, opts.spurBin, opts.wbs, opts.root);
-  const gate = buildReviewGateArtifact(opts.wbs, content, readDeferrals(runDir, opts.wbs));
+  const grading = reviewGradingInput(opts.root, opts.reviewAnswer, env.ackLowConfidence, fs);
+  const gate = buildReviewGateArtifact(opts.wbs, content, readDeferrals(runDir, opts.wbs), grading);
   fs.writeFileSync(join2(runDir, `${opts.wbs}-residuals.json`), `${JSON.stringify(gate.artifact, null, 2)}
 `);
   io.out(gate.note);
@@ -642,7 +671,9 @@ export {
   parseScanArgs,
   recordedVerdictPath,
   renderReport,
+  reviewConfidenceViolation,
   reviewContractViolations,
+  reviewGradingInput,
   scanResiduals2 as scanResiduals,
   verdictDisagreementNote
 };
