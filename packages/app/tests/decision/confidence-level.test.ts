@@ -9,17 +9,20 @@ import {
     type ConfidenceLevel,
     confidenceLevel,
 } from '../../src/decision/confidence-level';
+import { extractAnswerConfidence } from '../../src/services/verify-answer-lint';
+import { FEATURE_RECEIPT_CONFIDENCE_LEVELS } from '../../src/workflow/feature-verification-receipt';
 
 /**
  * Verification for the derived confidence level (design §3.5, task 1100): the closed
  * HIGH/MEDIUM/LOW vocabulary, its boundaries, its fail-conservative behaviour on a
- * broken maker value, the catalog bar it is anchored to, and the transport enum it
- * must stay identical to.
+ * broken maker value, the catalog bar it is anchored to, and the FOUR declarations of
+ * that vocabulary which must stay identical — this module's derivation, the answer
+ * lint, the feature-verification receipt, and the transport enum.
  *
  * Every case that can silently mislead an operator is enumerated rather than sampled:
  * a value one step either side of each threshold, every invalid shape a maker can
  * return, and the two ways the vocabulary can drift (the catalog bar moving, or a
- * consumer's enum diverging).
+ * consumer's vocabulary diverging).
  */
 
 const DECISIONS_DIR = join(import.meta.dir, '../../../../config', 'decisions');
@@ -60,6 +63,34 @@ describe('confidenceLevel', () => {
         const values: Array<number | null> = [0, 0.1, 0.49, 0.5, 0.79, 0.8, 0.9, 1, null];
         const levels = new Set<ConfidenceLevel>(values.map((value) => confidenceLevel(value)));
         expect([...levels].sort()).toEqual(['HIGH', 'LOW', 'MEDIUM']);
+    });
+
+    test('every declaration of the vocabulary agrees — derivation, answer lint, receipt, transport', () => {
+        // The closed vocabulary is written down four times: this module's type, the answer lint's
+        // internal list, `FEATURE_RECEIPT_CONFIDENCE_LEVELS`, and the transport enum. The closure
+        // test above pins only the derivation's own outputs against literals, so a consumer could
+        // gain or lose a value unnoticed — exactly the "consumer's enum diverging" drift the file
+        // header claims to cover. Each consumer is probed through its real entry point rather than
+        // through a re-exported list, so the assertion cannot pass on a stale copy.
+        const derived = [
+            ...new Set(
+                [0, 0.1, 0.49, 0.5, 0.6, 0.79, 0.8, 0.9, 1, null, Number.NaN, -1, 2].map((value) =>
+                    confidenceLevel(value),
+                ),
+            ),
+        ].sort();
+        expect(derived).toEqual([...FEATURE_RECEIPT_CONFIDENCE_LEVELS].sort());
+        expect(derived).toEqual(['HIGH', 'LOW', 'MEDIUM']);
+
+        for (const level of FEATURE_RECEIPT_CONFIDENCE_LEVELS) {
+            expect(extractAnswerConfidence(`Confidence: ${level}`)).toBe(level);
+            expect(decisionLogRowSchema.shape.confidenceLevel.safeParse(level).success).toBe(true);
+        }
+        // Both consumers refuse a value outside the vocabulary, so neither is merely a superset.
+        for (const bogus of ['CERTAIN', 'MEDIUMISH', '']) {
+            expect(extractAnswerConfidence(`Confidence: ${bogus}`)).toBeUndefined();
+            expect(decisionLogRowSchema.shape.confidenceLevel.safeParse(bogus).success).toBe(false);
+        }
     });
 
     test('every shipped catalog bar is at or below the HIGH threshold, and one reaches it', async () => {
