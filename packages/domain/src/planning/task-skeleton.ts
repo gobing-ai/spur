@@ -18,6 +18,7 @@
 import { stringify as stringifyYaml } from 'yaml';
 import { z } from 'zod';
 import { MarkdownDocument, TASK_CANONICAL_SECTIONS } from './markdown-document';
+import { TASK_STATUSES } from './schema';
 
 /** A canonical task section name (DD-08). */
 export type TaskSection = (typeof TASK_CANONICAL_SECTIONS)[number];
@@ -36,7 +37,7 @@ export const matrixEntrySchema = z
     .strict();
 
 /** Valid status keys inside a variant. */
-const matrixStatusSchema = z.enum(['backlog', 'todo', 'wip', 'testing', 'blocked', 'done', 'cancelled']);
+const matrixStatusSchema = z.enum(TASK_STATUSES);
 
 /**
  * Zod SSOT for the shipped `tasks/section-matrix.yaml`. Mirrors
@@ -47,7 +48,7 @@ const matrixStatusSchema = z.enum(['backlog', 'todo', 'wip', 'testing', 'blocked
 export const sectionMatrixSchema = z
     .object({
         // partialRecord: a variant may declare any SUBSET of the status keys
-        // (a plain z.record over a Zod enum key would require all 7 exhaustively).
+        // (a plain z.record over a Zod enum key would require every status exhaustively).
         variants: z.record(z.string(), z.partialRecord(matrixStatusSchema, matrixEntrySchema)),
     })
     .strict();

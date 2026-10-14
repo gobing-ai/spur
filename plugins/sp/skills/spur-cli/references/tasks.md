@@ -139,7 +139,7 @@ gate blocks the transition (§7.5).
 
 **`deprecated` — frozen but retained (ADR-137).** Non-terminal: the record stays readable and
 countable, but nothing new attaches to it and it never advances. Legal edges (from the shipped
-graph): every status except `cancelled` may move to `deprecated`, and it leaves only to `todo`
+graph): `backlog`, `todo`, `wip`, `testing`, `blocked` and `done` may move to `deprecated`, and it leaves only to `todo`
 (un-deprecate, mandatory `History` entry) or `cancelled` (removed). Any other status write is
 refused by the graph, and the refusal names the un-deprecate command.
 

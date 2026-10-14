@@ -53,7 +53,7 @@
         "variant": {
             "type": "object",
             "additionalProperties": false,
-            "description": "A variant may declare any subset of the 7 canonical statuses (enumerated below); an unknown status key is rejected.",
+            "description": "A variant may declare any subset of the 8 canonical statuses (enumerated below); an unknown status key is rejected.",
             "properties": {
                 "backlog": { "$ref": "#/$defs/entry" },
                 "todo": { "$ref": "#/$defs/entry" },
@@ -61,7 +61,8 @@
                 "testing": { "$ref": "#/$defs/entry" },
                 "blocked": { "$ref": "#/$defs/entry" },
                 "done": { "$ref": "#/$defs/entry" },
-                "cancelled": { "$ref": "#/$defs/entry" }
+                "cancelled": { "$ref": "#/$defs/entry" },
+                "deprecated": { "$ref": "#/$defs/entry" }
             }
         }
     }

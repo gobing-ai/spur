@@ -29742,7 +29742,7 @@ var matrixEntrySchema = object2({
   forbidden: array(sectionNameSchema).optional(),
   gate: boolean2().optional()
 }).strict();
-var matrixStatusSchema = _enum2(["backlog", "todo", "wip", "testing", "blocked", "done", "cancelled"]);
+var matrixStatusSchema = _enum2(TASK_STATUSES);
 var sectionMatrixSchema = object2({
   variants: record(string2(), partialRecord(matrixStatusSchema, matrixEntrySchema))
 }).strict();

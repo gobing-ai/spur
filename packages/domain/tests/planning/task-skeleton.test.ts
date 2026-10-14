@@ -1,5 +1,6 @@
 import { describe, expect, test } from 'bun:test';
 import { MarkdownDocument } from '../../src/planning/markdown-document';
+import { TASK_STATUSES } from '../../src/planning/schema';
 import {
     buildTaskSkeleton,
     extractTemplateBodies,
@@ -127,6 +128,16 @@ describe('sectionMatrixSchema', () => {
             variants: { standard: { someday: { required: ['Background'] } } },
         });
         expect(bad.success).toBe(false);
+    });
+
+    test('accepts every canonical task status as a variant key, including deprecated (ADR-137)', () => {
+        // WHY: the status keys must track TASK_STATUSES; a second hand-kept list drifted once.
+        for (const status of TASK_STATUSES) {
+            const ok = sectionMatrixSchema.safeParse({
+                variants: { standard: { [status]: { required: ['Background'] } } },
+            });
+            expect(ok.success, status).toBe(true);
+        }
     });
 });
 
