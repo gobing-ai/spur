@@ -1,16 +1,18 @@
 ---
 schema_version: 1
 name: Review answer files carry a confidence level (HIGH/MEDIUM/LOW)
-status: wip
+status: done
 template: standard
 created_at: 2026-10-14T03:44:43.514Z
-updated_at: "2026-10-14T05:48:21.206Z"
+updated_at: "2026-10-14T06:29:12.935Z"
 
 ac_altitude: graduating
 ac_numbering: task-local
 feature_id: F51
 priority: P2
 estimate_hours: 1
+done_forced: "false"
+done_reason: unforced close; PASS artifact at .spur/memory/evidence/1204-verdict.json
 ---
 
 ## 1204. Review answer files carry a confidence level (HIGH/MEDIUM/LOW)
@@ -29,10 +31,10 @@ The review PASS boundaries needed the same confidence acknowledgement policy as 
 
 ### Requirements
 
-- [ ] R1. The pipeline review answer contract mandates one Verdict: PASS|FAIL and one Confidence: HIGH|MEDIUM|LOW line, with documented evidence-based confidence semantics.
-- [ ] R2. Both review PASS edges delegate answer confidence grading to the existing review-gate command; HIGH/MEDIUM proceed without acknowledgement, while LOW or missing/unparseable confidence requires ackLowConfidence exactly true.
-- [ ] R3. Acknowledgement waives only answer confidence grading. FAIL/absent verdict, open P1-P3 findings, recorded Review contract violations, missing scanner or scanner failure remain fail closed through review-fail-triage.
-- [ ] R4. Focused behavioral regressions exercise both rendered PASS guards and real scanner behavior; source and bundled scanner artifacts agree without adding a shell predicate, new workflow state or public API.
+- [x] R1. The pipeline review answer contract mandates one Verdict: PASS|FAIL and one Confidence: HIGH|MEDIUM|LOW line, with documented evidence-based confidence semantics.
+- [x] R2. Both review PASS edges delegate answer confidence grading to the existing review-gate command; HIGH/MEDIUM proceed without acknowledgement, while LOW or missing/unparseable confidence requires ackLowConfidence exactly true.
+- [x] R3. Acknowledgement waives only answer confidence grading. FAIL/absent verdict, open P1-P3 findings, recorded Review contract violations, missing scanner or scanner failure remain fail closed through review-fail-triage.
+- [x] R4. Focused behavioral regressions exercise both rendered PASS guards and real scanner behavior; source and bundled scanner artifacts agree without adding a shell predicate, new workflow state or public API.
 
 ### Acceptance Criteria
 
@@ -94,18 +96,68 @@ Current as-built map (supersedes the earlier inline-predicate receipt):
 
 The original task recorded an inline grep implementation before the session review moved grading into the deterministic owner to satisfy ADR-115. This correction preserves that history without asking an implementer to restore the superseded approach.
 
+#### Close-out — 2026-10-14
+
+- `packages/app/tests/workflow/task-pipeline-proof-chain.test.ts:915` — both review transitions now execute the confidence matrix against source and installed scanners; separate cases retain the normal per-test timeout under contention.
+- `packages/app/tests/workflow/task-pipeline-proof-chain.test.ts:945` — exact acknowledgement still refuses open findings, recorded-contract violations and an unavailable scanner; FAIL and absent verdicts are pinned by the matrix.
+- `packages/app/tests/services/residual-scan.test.ts:30` — exact acknowledgement, malformed/duplicate grades, omitted/named-missing/non-file inputs and readable answer IO are covered.
+- `plugins/sp/agents/super-reviewer.md:244` — machine-check ownership correctly names scanner-side answer grading.
+- `docs/design/task-residual-sweep.md:61` — owning contract now describes confidence grading, standalone compatibility and independent blockers.
+- `plugins/sp/scripts/residual-scan.mjs:232` — generated scanner rebuilt through Superskill and exercised by installed-mode guard fixtures. The originally dirty generated scanner was already committed on main during close-out.
+- `plugins/sp/lib/inline-run.generated.mjs:1` — generated application libraries rebuilt after the integrated dependency upgrade; 18 bundler determinism tests pass. quality-gate and idea-handoff libraries were refreshed by the same generator.
+
+Final verification: full sequential gate passed 11447 tests across 660 files, lint/typechecks, 51 pre-check rules and 2 post-check rules. Fresh focused app verification passed 73 tests; residual sweep has zero findings. The previous red gates are retained in run scratch and were not represented as successful. A live external coding agent was not launched; rendered guard tests execute the real scanner against controlled task fixtures.
+
 ### Testing
 
-- `bun test tests/workflow/task-pipeline-proof-chain.test.ts` (packages/app): 36/36 pass (3 new tests; red-first confirmed — HIGH fixture failed before the YAML change).
-- Regression ring: packages/config `bundled-config.test.ts` (12), packages/domain `validator.test.ts` + `lifecycle-drift.test.ts` (62) — all pass.
-- `biome check` on the touched test file: clean. `tsc --noEmit` (packages/app): clean.
-- Bundled twin `apps/cli/config/workflows/task-pipeline.yaml` (ignored artifact) regenerated via `bundle-config config`; byte-identical to SSOT.
-- `spur task check 1204`: PASS (1 WARN — standalone task, no feature_id; same shape as task 1068).
-- Not covered: a live pipeline run end-to-end; guard semantics are exercised via rendered-guard execution with the real scanner instead.
+**Pipeline verify results**
+
+- Verdict: PASS (from verdict artifact)
+- Confidence: HIGH
+
+| Requirement | Status | Evidence |
+|-------------|--------|----------|
+| R1 | MET | plugins/sp/commands/dev-review.md:46 and plugins/sp/agents/super-reviewer.md:202 define Verdict, Confidence and evidence-based semantics; fresh contract assertion exited 0. |
+| R2 | MET | packages/app/src/services/residual-scan.ts:370 grades HIGH/MEDIUM and exact acknowledgement; config/workflows/task-pipeline.yaml:1329 and :1340 pass the answer to the scanner; fresh focused suite: 73 pass, 0 fail, exit 0. |
+| R3 | MET | packages/app/src/services/residual-scan.ts:426 preserves independent contract/finding blockers; packages/app/tests/workflow/task-pipeline-proof-chain.test.ts:945 proves acknowledgement cannot bypass findings, invalid recorded contract or missing scanner; FAIL/absent verdict cells also refuse. |
+| R4 | MET | packages/app/tests/workflow/task-pipeline-proof-chain.test.ts:915 runs both transitions against real source and installed scanners; packages/app/tests/services/residual-scan.test.ts:30 and :42 cover exact acknowledgement, unknown grades and file boundaries; generated-bundle determinism: 18 pass, 0 fail. |
+
+| Acceptance Criteria | Status | Evidence Type | Evidence |
+|---------------------|--------|---------------|----------|
+| Scenario: Authoring contract is explicit | MET | command | Fresh contract assertions exited 0; plugins/sp/commands/dev-review.md:46 and plugins/sp/agents/super-reviewer.md:244 name the line and grading owner. |
+| Scenario: Both PASS boundaries apply confidence policy | MET | test | packages/app/tests/workflow/task-pipeline-proof-chain.test.ts:915 executes source/installed HIGH, MEDIUM, LOW, absent and unknown grade cases for both edges; final focused suite 73 pass, 0 fail. |
+| Scenario: Other review failures still block | MET | test | packages/app/tests/workflow/task-pipeline-proof-chain.test.ts:945 executes acknowledged open-P2, recorded-contract and missing-scanner refusals; :928 pins FAIL/absent verdict refusal; final focused suite exit 0. |
+| Scenario: Implementation stays in its deterministic owner | MET | test | packages/app/tests/workflow/task-pipeline-proof-chain.test.ts:899 pins delegated guards; scripts/commands/bundle-plugin-lib.test.ts:131 pins generation; workflow validation valid=true, exit 0; all 18 bundler tests pass. |
+- Coverage: N/A (verdict-based; verify pipeline does not measure code coverage)
 
 ### Review
 
-<!-- Filled during review: P1-P4 findings, residual risk, and final disposition. -->
+#### Review Report — 1204
+**Scope:** Task 1204 implementation commits and close-out tests, scanner generation, authoring contracts and residual-sweep design; unrelated F43 work is baseline only.
+**Dimensions:** functional, security, efficiency, correctness, usability, architecture
+**Verdict:** PASS
+**Confidence:** HIGH
+
+##### Findings
+
+| Priority | Dimension | Location | Finding | Disposition |
+| --- | --- | --- | --- | --- |
+| P4 | all | packages/app/src/services/residual-scan.ts:370 | No findings (review verdict PASS) | ACCEPTED |
+
+##### Functional Traceability
+
+| Req | Status | Evidence |
+| --- | --- | --- |
+| R1 | MET | plugins/sp/commands/dev-review.md:46 defines the answer contract; plugins/sp/agents/super-reviewer.md:202 and :244 define report and gate ownership. |
+| R2 | MET | packages/app/src/services/residual-scan.ts:370 grades the answer; config/workflows/task-pipeline.yaml:1329 and :1340 delegate both PASS boundaries; packages/app/tests/workflow/task-pipeline-proof-chain.test.ts:915 executes source and installed scanners. |
+| R3 | MET | packages/app/src/services/residual-scan.ts:426 merges independent blockers; packages/app/tests/workflow/task-pipeline-proof-chain.test.ts:945 refuses open findings, invalid recorded contract and missing scanner despite acknowledgement. |
+| R4 | MET | packages/app/tests/services/residual-scan.test.ts:30 and :42 cover exact acknowledgement and IO boundaries; regenerated scanner plus real installed-mode guards retain parity. |
+
+##### SECUA and Architecture
+
+Security/correctness: exact acknowledgement waives only answer confidence, with all independent blockers preserved. Missing named files grade as unknown; IO/scanner failure is nonzero. Efficiency: grading reuses the existing scanner and parser, adding no model stage or subprocess. Usability: blocker diagnostics name confidence and acknowledgement. Architecture: pure application grading and plugin IO stay separated; no extra YAML predicate, new state or public noun. No supported deepening finding survived the existing-seam check.
+
+Fresh gate: lint/typecheck, 51 pre-check rules, 11447 tests with 0 failures, and 2 post-check rules; sequential suite completed with exit 0. Prior failed/interrupted parallel attempts and stale generated-bundle failures are retained as red receipts, not counted as PASS. The final tree digest matches quality-gate entry.
 
 ### References
 
@@ -121,4 +173,6 @@ The original task recorded an inline grep implementation before the session revi
 
 - 2026-10-14T03:57:35.949Z backlog → todo (system)
 - 2026-10-14T03:57:36.288Z todo → wip (system)
+- 2026-10-14T06:28:32.800Z wip → testing (system)
+- 2026-10-14T06:28:52.702Z testing → done (system)
 

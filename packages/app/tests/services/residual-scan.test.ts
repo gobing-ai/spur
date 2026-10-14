@@ -19,10 +19,42 @@ import {
     parseScanArgs,
     recordedVerdictPath,
     renderReport,
+    reviewConfidenceViolation,
     reviewContractViolations,
+    reviewGradingInput,
     scanResiduals,
     verdictDisagreementNote,
 } from '../../src/services/residual-scan';
+
+describe('review answer grading (task 1204)', () => {
+    test('only exact acknowledgement admits LOW and unknown grades', () => {
+        for (const answer of ['Confidence: LOW', '', 'Confidence: OTHER', 'Confidence: HIGH\nConfidence: LOW']) {
+            for (const ack of [undefined, '', 'false', 'TRUE', '1']) {
+                expect(reviewConfidenceViolation(answer, ack)).not.toBeNull();
+            }
+            expect(reviewConfidenceViolation(answer, 'true')).toBeNull();
+        }
+        for (const level of ['HIGH', 'MEDIUM']) {
+            expect(reviewConfidenceViolation(`**Confidence:** ${level}`, undefined)).toBeNull();
+        }
+    });
+
+    test('named missing or non-file answers grade as unknown while omitted inputs remain compatible', () => {
+        const dir = mkdtempSync(join(tmpdir(), 'review-grade-'));
+        try {
+            expect(reviewGradingInput(dir, undefined, undefined, fsp)).toBeUndefined();
+            expect(reviewGradingInput(dir, 'missing.txt', undefined, fsp)).toEqual({
+                answer: '',
+                ackLowConfidence: undefined,
+            });
+            expect(reviewGradingInput(dir, '.', 'true', fsp)).toEqual({ answer: '', ackLowConfidence: 'true' });
+            writeFileSync(join(dir, 'answer.txt'), 'Confidence: HIGH');
+            expect(reviewGradingInput(dir, 'answer.txt', undefined, fsp)?.answer).toBe('Confidence: HIGH');
+        } finally {
+            rmSync(dir, { recursive: true, force: true });
+        }
+    });
+});
 
 /** Task 1065 R3: fold freshness between run and durable verdict copies. */
 describe('verdict copy freshness (task 1065)', () => {

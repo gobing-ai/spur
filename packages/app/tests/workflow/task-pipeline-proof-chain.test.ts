@@ -879,8 +879,8 @@ describe('task-pipeline review confidence gate (task 1204)', () => {
     // Same fixture shape as the 1122 block: a clean P4-only review whose SECTION carries a valid
     // HIGH level — `residual-scan review-gate` already fail-closes missing/out-of-enum levels at
     // these same edges (review-contract), so a passing scanner is the baseline and the ANSWER
-    // file's level is the only variable under test (grading + ack, which the scanner does not do).
-    function makeCase(dir: string, runId: string, answer: string): void {
+    // file's level is the only variable under test; the scanner owns grading and acknowledgement.
+    function makeCase(dir: string, runId: string, answer: string, installed = false): void {
         mkdirSync(join(dir, '.spur', 'run'), { recursive: true });
         const stub = join(dir, 'stub-spur.sh');
         const cleanReview = JSON.stringify({
@@ -891,7 +891,7 @@ describe('task-pipeline review confidence gate (task 1204)', () => {
         chmodSync(stub, 0o755);
         writeFileSync(
             join(dir, '.spur', 'run', `${runId}-script-root.json`),
-            `${JSON.stringify({ mode: 'source-repo', dir: SCRIPTS_DIR })}\n`,
+            `${JSON.stringify({ mode: installed ? 'installed' : 'source-repo', dir: SCRIPTS_DIR })}\n`,
         );
         writeFileSync(join(dir, '.spur', 'run', `${runId}-review-answer.txt`), answer);
     }
@@ -910,22 +910,60 @@ describe('task-pipeline review confidence gate (task 1204)', () => {
         }
     });
 
-    test('behavioral: HIGH/MEDIUM pass; LOW/absent are refused without the ack and admitted with it', () => {
+    for (const to of ['verify', 'approve'] as const) {
+        for (const installed of [false, true]) {
+            test(`confidence policy: review→${to}, ${installed ? 'installed' : 'source'} scanner`, () => {
+                for (const [answer, ack, expected] of [
+                    ['Verdict: PASS\nConfidence: HIGH\n', '', 0],
+                    ['Verdict: PASS\n**Confidence:** MEDIUM\n', '', 0],
+                    ['Verdict: PASS\nConfidence: LOW\n', '', 1],
+                    ['Verdict: PASS\n', '', 1],
+                    ['Verdict: PASS\nConfidence: LOW\n', 'true', 0],
+                    ['Verdict: PASS\n', 'true', 0],
+                    ['Verdict: PASS\nConfidence: UNKNOWN\n', '', 1],
+                    ['Verdict: PASS\nConfidence: UNKNOWN\n', 'true', 0],
+                    ['Verdict: PASS\nConfidence: HIGH\nConfidence: LOW\n', '', 1],
+                    ['Verdict: PASS\nConfidence: HIGH\nConfidence: LOW\n', 'true', 0],
+                    ['Verdict: PASS\nConfidence: LOW\n', 'TRUE', 1],
+                    ['Verdict: FAIL\nConfidence: HIGH\n', 'true', 1],
+                    ['Confidence: HIGH\n', 'true', 1],
+                ] as const) {
+                    const dir = mkdtempSync(join(tmpdir(), 'spur-review-conf-'));
+                    try {
+                        const runId = `run-t-1204-${to}`;
+                        makeCase(dir, runId, answer, installed);
+                        const code = runSh(renderReviewGuard(to, dir, runId), dir, join(dir, 'stub-spur.sh'), ack);
+                        expect(code, `review→${to}: ${JSON.stringify(answer)} ack=${ack}`).toBe(expected);
+                    } finally {
+                        rmSync(dir, { recursive: true, force: true });
+                    }
+                }
+            });
+        }
+    }
+
+    test('acknowledgement cannot bypass findings, the recorded contract, or an unavailable scanner', () => {
         for (const to of ['verify', 'approve'] as const) {
-            for (const [answer, ack, expected] of [
-                ['Verdict: PASS\nConfidence: HIGH\n', '', 0],
-                ['Verdict: PASS\n**Confidence:** MEDIUM\n', '', 0],
-                ['Verdict: PASS\nConfidence: LOW\n', '', 1],
-                ['Verdict: PASS\n', '', 1],
-                ['Verdict: PASS\nConfidence: LOW\n', 'true', 0],
-                ['Verdict: PASS\n', 'true', 0],
-            ] as const) {
-                const dir = mkdtempSync(join(tmpdir(), 'spur-review-conf-'));
+            for (const failure of ['finding', 'contract', 'scanner'] as const) {
+                const dir = mkdtempSync(join(tmpdir(), 'spur-review-ack-'));
                 try {
                     const runId = `run-t-1204-${to}`;
-                    makeCase(dir, runId, answer);
-                    const code = runSh(renderReviewGuard(to, dir, runId), dir, join(dir, 'stub-spur.sh'), ack);
-                    expect(code, `review→${to}: ${JSON.stringify(answer)} ack=${ack}`).toBe(expected);
+                    makeCase(dir, runId, 'Verdict: PASS\nConfidence: LOW\n');
+                    const stub = join(dir, 'stub-spur.sh');
+                    if (failure === 'scanner') {
+                        writeFileSync(
+                            join(dir, '.spur', 'run', `${runId}-script-root.json`),
+                            JSON.stringify({ mode: 'source-repo', dir: join(dir, 'missing') }),
+                        );
+                    } else {
+                        const content =
+                            failure === 'finding'
+                                ? '### Review\n\n**Confidence:** HIGH\n\n| Priority | Finding | Location | Disposition |\n| --- | --- | --- | --- |\n| P2 | Missing validation | src/d.ts:1 | OPEN |\n'
+                                : '### Review\n\nNo confidence recorded.\n';
+                        const task = JSON.stringify({ content }).replaceAll("'", "'\\''");
+                        writeFileSync(stub, `#!/bin/sh\ncase "$2" in\n  show) printf '%s' '${task}' ;;\nesac\n`);
+                    }
+                    expect(runSh(renderReviewGuard(to, dir, runId), dir, stub, 'true'), `${to}: ${failure}`).toBe(1);
                 } finally {
                     rmSync(dir, { recursive: true, force: true });
                 }

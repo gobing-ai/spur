@@ -245,8 +245,9 @@ before it were never asked for a level, so pre-adoption artifacts read as debt, 
 `residual-scan review-gate` reads the recorded `### Review` body, and a missing, duplicated or
 out-of-enum level becomes a **blocking** `review-contract` item — `review → verify` stops and the run
 enters `review-fail-triage` with the bounded repair hop, exactly as an open P1–P3 row does. The gate
-checks presence and vocabulary only; the PASS edges themselves additionally refuse a `LOW` (or
-ungraded) PASS unless the operator sets `ackLowConfidence` (task 1204 — the same policy the verify
+checks the recorded section's presence and vocabulary; the same scanner grades the answer passed
+by both PASS edges and refuses a `LOW` (or ungraded) PASS unless the operator sets
+`ackLowConfidence` exactly to `true` (task 1204 — the same policy the verify
 chain enforces), so whether a level is *earned* stays a judgement call (see the earning rule above):
 the report must still argue it.
 

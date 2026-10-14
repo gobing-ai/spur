@@ -3,8 +3,8 @@ kind: design
 title: "Task residual sweep"
 status: implemented
 created_at: 2026-09-24
-updated_at: 2026-09-27
-related: [F96]
+updated_at: 2026-10-14
+related: [F96, F51]
 tags: [system, F96, planning]
 adr: ADR-071, ADR-076
 ---
@@ -44,7 +44,7 @@ This design takes that path:
 ```text
 precheck ─(+ write .spur/run/<wbs>-base.sha)→ implement → test → review → verify
 review:  /sp:dev-review → findings table
-         ├─ PASS + review-gate clean (no open P1-P3 row, 1122) → verify (profile=auto) or approve
+         ├─ PASS + review-gate clean (findings, recorded contract, answer confidence) → verify (profile=auto) or approve
          └─ otherwise (incl. a PASS carrying an open P1-P3 row, fail closed) → review-fail-triage
                                        → test-fix → re-enter quality → review → verify
 verify:  agent answer → answer-lint → task verdict → proof bind (jq)
@@ -58,9 +58,14 @@ record:  task record (flips verdict-proven R/AC boxes) → feature sync
                                        (+ residual-report.md, recovery line); task stays testing
 ```
 
-The record sweep stays the final authority; the 1122 `review-gate` check only runs the same
-review-finding classification earlier, at the review PASS edges, so an open P1–P3 finding enters
-the bounded repair lane before verify spends a full re-certification cycle.
+The record sweep stays the final authority for leftovers. At both review PASS edges,
+`review-gate` checks open P1–P3 findings, the recorded Review contract, and the confidence of the
+answer supplied with `--review-answer` (1204). HIGH/MEDIUM confidence passes without acknowledgement;
+LOW or an absent/unparseable grade requires `ackLowConfidence` exactly `true`. That acknowledgement
+waives only the answer grade: recorded contract violations and open findings still block. An omitted
+answer flag preserves standalone finding-only compatibility; a named missing file grades as unknown.
+Grading stays in the scanner so the YAML guards retain their ADR-115 command budget. Refusal routes
+through `review-fail-triage` into bounded repair before verification.
 
 ## Scanner
 
@@ -74,7 +79,7 @@ the bounded repair lane before verify spends a full re-certification cycle.
 | `fold <wbs>` | after `spur task record` on every surface: pipeline `record` (0983), standalone `/sp:dev-verify` and `/sp:dev-verifyall` (0987) | Downgrades PASS→PARTIAL in `<wbs>-verdict.json` when blocking > 0; adds a `residual-sweep` check; appends blocking anchors to `<wbs>-test-gate.findings`. A downgrade re-records Testing from the final artifact (pipeline R5; standalone downgrade-only re-record). Freshness (1065): when both the run copy `.spur/run/<wbs>-verdict.json` and the durable copy `.spur/memory/evidence/<wbs>-verdict.json` exist, the newer (mtime; tie → run copy) wins the fold, and a content disagreement between the captured and folded verdict is reported, never silent |
 | `settle <wbs>` | pipeline `done` entry, `/sp:dev-verify --next` after its done transition | Files one follow-up task for deferrables (`spur task create --feature <f> --skip-ready`, dedup guard) and removes `/tmp/<wbs>-*` files |
 | `report <wbs>` | `failed` state entry | No-op unless the verdict carries a failing `residual-sweep` check; otherwise writes `.spur/run/<wbs>-residual-report.md` and prints the recovery line |
-| `review-gate <wbs>` | review PASS edges (`review → verify`, `review → approve`; 1122) | Review-finding-only slice of the record sweep with the same parse/classify/deferrals (`blockingReviewFindings`); writes `.spur/run/<wbs>-residuals.json` (the test-fix hop's remediation input); prints blocking anchors; exit 1 on an open P1-P3 finding fails the PASS edge closed into `review-fail-triage` |
+| `review-gate <wbs> [--review-answer <path>]` | review PASS edges (`review → verify`, `review → approve`; 1122, 1204) | Checks review findings, the recorded Review contract, and the named answer's confidence; writes `.spur/run/<wbs>-residuals.json`, prints blocking anchors, and exits 1 on any blocking item. Answer-grade acknowledgement does not waive other blockers. |
 
 ### Categories and classification
 

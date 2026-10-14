@@ -76,7 +76,7 @@
         ├── [verifying] **F42**: Deprecated feature status: frozen-but-retained lifecycle state with guarded consumers ([F42_deprecated-feature-status-frozen-but-retained-lifecycle-state-with-guarded-consumers.md](./F42_deprecated-feature-status-frozen-but-retained-lifecycle-state-with-guarded-consumers.md))
         └── [active] **F43**: Task-level deprecated status: frozen-but-retained task lifecycle state with guarded consumers ([F43_task-level-deprecated-status-frozen-but-retained-task-lifecycle-state-with-guarded-consumers.md](./F43_task-level-deprecated-status-frozen-but-retained-task-lifecycle-state-with-guarded-consumers.md))
     ├── [done] **F5**: Execution pipeline ([F5_execution-pipeline.md](./F5_execution-pipeline.md))
-        └── [backlog] **F51**: Review confidence certification at pipeline PASS boundaries ([F51_review-confidence-certification-at-pipeline-pass-boundaries.md](./F51_review-confidence-certification-at-pipeline-pass-boundaries.md))
+        └── [active] **F51**: Review confidence certification at pipeline PASS boundaries ([F51_review-confidence-certification-at-pipeline-pass-boundaries.md](./F51_review-confidence-certification-at-pipeline-pass-boundaries.md))
     ├── [verifying] **F6**: Corpus migration ([F6_corpus-migration.md](./F6_corpus-migration.md))
         └── [done] **F61**: Corpus gate acceptance parity: the per-task gate honors accepted baseline debt ([F61_corpus-citation-repair-pay-down-the-anchor-drift-the-content-gate-revealed.md](./F61_corpus-citation-repair-pay-down-the-anchor-drift-the-content-gate-revealed.md))
     ├── [active] **F7**: Task Kanban web parity ([F7_task-kanban-web-parity.md](./F7_task-kanban-web-parity.md))
