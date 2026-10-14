@@ -1240,8 +1240,15 @@ export class TaskCheckService extends PlanningCheckService {
                         continue;
                     }
                     if (!taskLive) continue;
-                    const depStatus = (await this.readTaskSnapshot(tasksDir, depWbs))?.status;
-                    if (!isTaskFrozen(depStatus)) continue;
+                    // Read the already-resolved file rather than re-locating it via readTaskSnapshot.
+                    let depStatus: unknown;
+                    try {
+                        depStatus = MarkdownDocument.parse(await this.fs.readFile(depPath), 'task').frontmatterData
+                            ?.status;
+                    } catch {
+                        continue;
+                    }
+                    if (!isTaskFrozen(typeof depStatus === 'string' ? depStatus : null)) continue;
                     findings.push({
                         layer: 'L4',
                         code: FINDING_CODES.L4_TASK_DEPRECATED,

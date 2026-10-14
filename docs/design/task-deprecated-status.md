@@ -40,7 +40,7 @@ must not conflate them:
 - Every status write is proven against `task-lifecycle.yaml` or refused, on every transport
   (ADR-135).
 - **There is no `spur task advance` verb.** The task-side forward path is the graph-mediated status
-  write plus the auto-walk chain at `packages/app/src/services/task-service.ts:1883–1964`. The
+  write plus the auto-walk chain at `packages/app/src/services/task-service.ts:1930–1968`. The
   feature-side `advance` refusal has no task-side twin to extend; the equivalent surface is the
   status-write refusal message and the auto-walk guard.
 - **The dependency field has two names in play, and the freeze guards two writers.**
@@ -51,7 +51,7 @@ must not conflate them:
   proof extractor accepts either `depends_on` or `dependencies`
   (`packages/app/src/workflow/proof-input-fingerprint.ts`). So the freeze attaches at two writers:
   the handoff resolver (S8) and `TaskService.mutateDependencies`
-  (`packages/app/src/services/task-service.ts:1225–1228`) — the second is required exactly because
+  (`packages/app/src/services/task-service.ts:1228–1232`) — the second is required exactly because
   `spur task deps` reaches the frontmatter without the handoff — plus the preflight refusal (S9).
 - Derivation's terminal test is a closure, not an enum:
   `packages/app/src/services/feature-service.ts:490` — `st === 'done' || st === 'cancelled' || st === 'deprecated'`.
@@ -74,11 +74,11 @@ attaches to it, it never starts, and leaving the state is explicit — un-deprec
 | S3 | Lifecycle graph | `config/workflows/task-lifecycle.yaml` | States + edges in §4.1; `deprecated` stays out of `terminalStates` (which holds only `cancelled`). |
 | S4 | Shipped graph copy | `apps/cli/config/workflows/task-lifecycle.yaml` (generated) | Byte-identical to S3 via `build:bundle` (verified 2026-10-13: matching sha256). **No separate init template — verified 2026-10-13:** `SCAFFOLD_MANIFEST` (`apps/cli/src/config/scaffold-manifest.ts:39`) lists no workflow entry, and `seedGlobalConfig` (`apps/cli/src/commands/init.ts:152`) seeds the bundled config copy wholesale, so the only task-lifecycle YAML an init produces is a copy of S3. `/apps/cli/config` is gitignored build output, so the regenerated copy never appears in a diff — parity is asserted by sha256, not by a tracked file. |
 | S5 | Status derivation | `packages/app/src/services/feature-service.ts:490` (closure used at `:491,494,539,606`) | Extend the terminal test to `deprecated` so frozen work stops holding its feature back; a deprecated task is never `activeTasks` (`:493` reads `wip`/`testing` only) and never `doneTasks` (`:492`), so the "at least one done" rule is unaffected. |
-| S6 | Task section writes | `packages/app/src/services/task-service.ts:1495` (`updateSection`, shared by CLI and server; warning channel at `:1580,1638,1698,1712`; freeze advisory at `:1520,1602`) | Write lands; append a freeze note to `warnings[]`. |
-| S7 | Status writes / auto-walk | `task-service.ts:1883–1964` (forward-chain walk) | No new branch needed: with no `deprecated` forward edge the walk finds no hop and the write is refused by the graph (ADR-135). Add the un-deprecate hint to the refusal message. |
-| S8 | Dependency resolution | `packages/app/src/workflow/idea-handoff.ts:149,256` (refusal at `:276`); `packages/app/src/services/task-service.ts:1155` (`mutateDependencies`, refusal at `:1225–1228`); frontmatter key `dependencies` (written by `spur task deps`) | Refuse a ready-set item whose resolved dependency is a deprecated task, naming it and the un-deprecate command, before any dependency frontmatter is written. |
-| S9 | Pipeline admission | `plugins/sp/scripts/batch-preflight.ts` (adapter; `--dep-status`) over `packages/app/src/services/planning-admission.ts:151,195,315` (`quickReadiness`) | Treat a deprecated task as non-runnable (like a cancelled dep) and report it by code rather than silently admitting the set. |
-| S10 | Task check | `packages/app/src/services/task-check.ts:1180` (beside `L4_FEATURE_DEPRECATED`; the new branch at `:1244`); `packages/config/src/finding-codes.ts:47,48,149,154` | New warning `L4.task-deprecated` for a live dependent of a deprecated task, plus the deprecated task's own advisory; guidance names re-point and un-deprecate. |
+| S6 | Task section writes | `packages/app/src/services/task-service.ts:1498` (`updateSection`, shared by CLI and server; warning channel at `:1584,1641,1701,1715`; freeze advisory at `:1523,1605`) | Write lands; append a freeze note to `warnings[]`. |
+| S7 | Status writes / auto-walk | `task-service.ts:1930–1968` (forward-chain walk) | No new branch needed: with no `deprecated` forward edge the walk finds no hop and the write is refused by the graph (ADR-135). Add the un-deprecate hint to the refusal message. |
+| S8 | Dependency resolution | `packages/app/src/workflow/idea-handoff.ts:149,256` (refusal at `:276`); `packages/app/src/services/task-service.ts:1156` (`mutateDependencies`, refusal at `:1228–1232`); frontmatter key `dependencies` (written by `spur task deps`) | Refuse a ready-set item whose resolved dependency is a deprecated task, naming it and the un-deprecate command, before any dependency frontmatter is written. |
+| S9 | Pipeline admission | `plugins/sp/scripts/batch-preflight.ts` (adapter; `--dep-status`) over `packages/app/src/services/planning-admission.ts:161,205,325` (`quickReadiness`) | Treat a deprecated task as non-runnable (like a cancelled dep) and report it by code rather than silently admitting the set. |
+| S10 | Task check | `packages/app/src/services/task-check.ts:1180` (beside `L4_FEATURE_DEPRECATED`; the new branch at `:1251`); `packages/config/src/finding-codes.ts:47,48,149,154` | New warning `L4.task-deprecated` for a live dependent of a deprecated task, plus the deprecated task's own advisory; guidance names re-point and un-deprecate. |
 | S11 | Routing | `plugins/sp/skills/next-router/SKILL.md`, `plugins/sp/skills/next-router/references/routing-table.md`, `plugins/sp/skills/spur-dev/references/execution-batch.md` | Never select a deprecated task as the next step; `spur task list --status deprecated` works through the enum with no edit. |
 | S12 | Board | `apps/web/src/modules/task-kanban/KanbanBoard.tsx`, `TasksShell.tsx` (filter membership from `TASK_STATUSES`), `TaskCard.tsx:32` (colour), `task-actions.ts:17` (deprecate/undeprecate actions) | Status icon/colour, filter membership from `TASK_STATUSES`, and deprecate/undeprecate actions on the legal source statuses. |
 | S13 | Skills / docs | `plugins/sp/skills/spur-cli/references/tasks.md`; `docs/design/planning-record-contracts.md` §7.3.3; `docs/design/rd3-migration-design.md` §2.3; `docs/design/planning-workflow-contracts.md` §7.5; `docs/design/e2e-workflow-for-system-development.md` (lifecycle FSM node) | Document the status, the legal edges, the freeze guards and the exempt write set; keep every task-status enumeration identical to `TASK_STATUSES`. |

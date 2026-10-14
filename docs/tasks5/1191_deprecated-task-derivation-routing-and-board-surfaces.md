@@ -4,7 +4,7 @@ name: Deprecated task derivation, routing and Board surfaces
 status: done
 template: feature-impl
 created_at: 2026-10-13T16:56:12.969Z
-updated_at: "2026-10-14T05:04:10.231Z"
+updated_at: "2026-10-14T05:37:57.760Z"
 feature_id: F43
 priority: P2
 estimate_hours: 5
@@ -110,69 +110,45 @@ Browser check: the Board change is user-visible, so the verification needs at le
 
 | Requirement | Status | Evidence |
 |-------------|--------|----------|
-| R1 | MET | Terminal closure `packages/app/src/services/feature-service.ts:490` reads done, cancelled or deprecated; `doneTasks` (`:492`) stays done-only and `activeTasks` (`:493`) stays wip/testing-only. Tests `packages/app/tests/services/feature-service.test.ts:975`, `:1001`, `:1022`, `:1056` — green this run. |
-| R2 | MET | Routing never selects a deprecated task: `plugins/sp/skills/next-router/references/routing-table.md:70` (A10 STOP), `:105` (frontier excludes deprecated); `plugins/sp/skills/next-router/SKILL.md:145`; batch resolution `plugins/sp/skills/spur-dev/references/execution-batch.md:155`, `:282`. `spur task list --status deprecated` works through the enum (prior throwaway-root probe, exit 0). |
-| R3 | MET | Board actions `apps/web/src/modules/task-kanban/task-actions.ts:11` (TASK_STATUS_ACTIONS) and `:45` (TASK_FSM_TRANSITIONS), rendered at `apps/web/src/modules/task-kanban/TaskDetail.tsx:251`; card colour `apps/web/src/modules/task-kanban/TaskCard.tsx:32`; lanes derive from TASK_STATUSES at `apps/web/src/modules/task-kanban/KanbanBoard.tsx:14`; the off-track badge set now derives from TASK_STATUSES too (`apps/web/src/modules/task-kanban/TaskDetail.tsx:30`). Legality floor `apps/web/tests/modules/task-kanban/task-actions.test.ts:85` against `config/workflows/task-lifecycle.yaml:200`. 175 / 0 this run. |
+| R1 | MET | Terminal closure includes deprecated (`packages/app/src/services/feature-service.ts:490`); `doneTasks`/`activeTasks` unchanged (`packages/app/src/services/feature-service.ts:492,493`). Pins green this run: `packages/app/tests/services/feature-service.test.ts:975,1001,1022,1056`. |
+| R2 | MET | Routing stops a deprecated task: `plugins/sp/skills/next-router/references/routing-table.md:70` (A10 STOP); batch selection and preflight skip it (`plugins/sp/skills/spur-dev/references/execution-batch.md:155,282`). |
+| R3 | MET | Board actions: `apps/web/src/modules/task-kanban/task-actions.ts:12,46` (deprecate pair), rendered at `apps/web/src/modules/task-kanban/TaskDetail.tsx:251`; off-track set derived from the enum (`apps/web/src/modules/task-kanban/TaskDetail.tsx:30`); lanes from the enum (`apps/web/src/modules/task-kanban/KanbanBoard.tsx:14`); card dot `apps/web/src/modules/task-kanban/TaskCard.tsx:32`. Legality floor against the graph: `apps/web/tests/modules/task-kanban/task-actions.test.ts:85`. Kanban suites 175 pass / 0 fail. |
 
 | Acceptance Criteria | Status | Evidence Type | Evidence |
 |---------------------|--------|---------------|----------|
-| AC6 — Derivation reads a deprecated task as terminal-linked work | MET | test | `packages/app/tests/services/feature-service.test.ts:975` and `:1001` over the closure at `packages/app/src/services/feature-service.ts:490` — green this run. |
-| AC7 — The Board shows deprecated tasks with deprecate and undeprecate actions | MET | test | `apps/web/tests/modules/task-kanban/board.test.tsx:443` (deprecated lane with icon and muted dot when un-hidden), `:464` (legal deprecate/un-deprecate sources), `apps/web/tests/modules/task-kanban/task-detail.test.tsx:465`, `:486`, `:301` (off-track badge) — green this run. |
+| AC6 — Derivation reads a deprecated task as terminal-linked work | MET | test | `packages/app/tests/services/feature-service.test.ts:975` (leaves verifying for done) and `packages/app/tests/services/feature-service.test.ts:1001` (no reopen); closure at `packages/app/src/services/feature-service.ts:490`. |
+| AC7 — The Board shows deprecated tasks with deprecate and undeprecate actions | MET | test | `apps/web/tests/modules/task-kanban/board.test.tsx:443` (deprecated lane, icon, dot) and `apps/web/tests/modules/task-kanban/board.test.tsx:464` (legal action sets); `apps/web/tests/modules/task-kanban/task-detail.test.tsx:301,465,486`. |
 - Coverage: N/A (verdict-based; verify pipeline does not measure code coverage)
 
 ### Review
 
-#### Review Report — 1191
-**Scope:** uncommitted 1191 diff on branch `sp/runall-1190-1191-1192-c4a1` — 11 modified tracked files + 2 new (`apps/web/src/modules/task-kanban/task-actions.ts`, `apps/web/tests/modules/task-kanban/task-actions.test.ts`); commit `071296062` (task 1190) read as context only. Brief: `.spur/run/1c9d179f-0a72-416a-bbf5-f6807baf055d/review-brief-3.md` (iteration 3).
-**Dimensions:** functional traceability (R1–R3, AC6/AC7), SECUA, architectural depth, test quality
+**Review Report — 1191 (round 4, closure pass)**
+**Scope:** batch-2 commit `ead60d40a` plus main's `701951b02` (reworded the module comment). Supersedes round 3; each round-3 advisory re-checked on the artifact.
+**Dimensions:** functional traceability · SECUA · architectural depth · test quality
 **Verdict:** PASS
 **Confidence:** HIGH
 
-##### Findings (ranked)
+#### Findings (ranked)
 
 | # | Priority | Dimension | Finding | Location | Disposition |
-|---|----------|-----------|---------|----------|-------------|
-| 1 | P4 (advisory) | test-quality | Two tests restate the literals they pin (`TASK_ACTION_LABELS.deprecate === 'Deprecate'`; `TASK_FSM_TRANSITIONS.deprecate === 'deprecated'` / `.undeprecate === 'todo'`). They fail only if the constant changes; the discriminating weight sits in the YAML-derived legality floor and the component/Board action-set tests. Unchanged since round 1; mirrors the F42 twin. | `apps/web/tests/modules/task-kanban/task-actions.test.ts:28-37` | ACCEPTED |
-| 2 | P4 (advisory) | architecture | `OFF_TRACK` is a hand-maintained complement of the `LIFECYCLE` phases — `new Set(['blocked','cancelled','deprecated'])`. The round-2 P3 was exactly this list drifting behind the enum; deriving it (`TASK_STATUSES.filter((s) => !LIFECYCLE.includes(s))`) makes the next status addition safe by construction. No current defect — `deprecated` is present (authority: `apps/web/src/modules/task-kanban/TaskDetail.tsx:30`). | `apps/web/src/modules/task-kanban/TaskDetail.tsx:30` | ACCEPTED |
-| 3 | P4 (advisory) | correctness | The new module's doc comment points readers at `.spur/workflows/task-lifecycle.yaml`, which does not exist in this tree; the authority the test actually asserts against is `config/workflows/task-lifecycle.yaml`. | `apps/web/src/modules/task-kanban/task-actions.ts:5-6` | ACCEPTED |
+| --- | --- | --- | --- | --- | --- |
+| 1 | P4 (advisory) | test-quality | Two tests restate the label and FSM-target literals they pin. Kept on purpose: they pin user-visible button labels and the action→status mapping the Board emits; the discriminating weight sits in the graph-derived legality test beside them. | `apps/web/tests/modules/task-kanban/task-actions.test.ts:28` | ACCEPTED (pins user-visible labels; legality floor at `apps/web/tests/modules/task-kanban/task-actions.test.ts:19`) |
+| 2 | P4 (advisory) | architecture | Round 3 #2 — `OFF_TRACK` hand-maintained. Now derived from `TASK_STATUSES` minus the lifecycle phases, so the next status lands safely by construction. | `apps/web/src/modules/task-kanban/TaskDetail.tsx:30` | RESOLVED (`ead60d40a`) |
+| 3 | P4 (advisory) | correctness | Round 3 #3 — module comment pointed at a non-existent path. Reworded to name the canonical task-lifecycle definition and the deployed runtime path. | `apps/web/src/modules/task-kanban/task-actions.ts:5` | RESOLVED (`701951b02`) |
 
-##### Adjudications (the brief's five claims, on the artifact)
-
-1. **R1 terminal closure — CONFIRMED.** `packages/app/src/services/feature-service.ts:490` reads `done || cancelled || deprecated`; `isTerminal` is a function-local const consumed only by `terminalTasks` (:491) and `nonTerminalTasks` (:494), so the widened predicate reaches exactly the reopen branch (:497), the all-terminal + at-least-one-done branch (:539) and the blocked branch (:626). `doneTasks` (:492, `done` only) and `activeTasks` (:493, `wip`/`testing` only) are untouched, so "at least one done" keeps its meaning — no widening beyond the terminal set. Failure-sensitivity proven on a throwaway copy of the tree: reverting `isTerminal` to the pre-1191 predicate flips 3 of the 4 R1 pins to fail (`feature-service.test.ts:975`, `:1001`, `:1022`); the fourth (`:1056`) passes both ways by design (the deliberate "does not widen" invariant). Fresh run on this tree: 66 pass / 0 fail.
-2. **R2 routing — CONFIRMED.** TABLE A A10 (`routing-table.md:70`) is the only status-matching row for `deprecated` and dispatches nothing (STOP, no fallthrough); the vocabulary line (:57), the TABLE B frontier prose (:105-107) and the corrected B7 row (:88) agree; the router non-route summary and Red Flags name it (`next-router/SKILL.md:145,162`); the batch `ready` selector, the Step 2.3 blocked propagation and the Step 2.6 `DEPRECATED` preflight row (`execution-batch.md:155,203,282`) all treat a deprecated task/dependency as non-satisfied / non-runnable. `spur task list --status deprecated` needed no code change — verified, not assumed: a throwaway root with task 0001 `deprecated` printed "🗄️ Deprecated • 0001" at exit 0 (the enum at `packages/domain/src/planning/schema.ts:20` and the `--status` option carry it).
-3. **R3 Board — CONFIRMED.** `TASK_STATUS_ACTIONS` / `TASK_ACTION_LABELS` / `TASK_FSM_TRANSITIONS` (`task-actions.ts:10,22,44`) moved the three former inline `TaskDetail.tsx` tables verbatim — every prior status row, label and FSM target is preserved — and added only the deprecate pair (`deprecated: ['undeprecate','cancel']`; `deprecate` appended to backlog/todo/wip/testing/blocked/done; `deprecate → deprecated`, `undeprecate → todo`), exactly the legal edges of `config/workflows/task-lifecycle.yaml:166-209`. Lane membership derives from `TASK_STATUSES` (`KanbanBoard.tsx:14` `KANBAN_COLUMNS = TASK_STATUSES`; filter `TasksShell.tsx:44-48`) — no second list. Card dot `TaskCard.tsx:32`. Fresh kanban suites: 77 pass / 0 fail.
-4. **The off-track pin IS failure-sensitive (round-2 P3 #1) — CONFIRMED on the artifact.** `task-detail.test.tsx:301` now asserts the Progress pane's `.badge-warning` badge (the sole `variant="warning"` in the component, `TaskDetail.tsx:338`) carries the status, with a `wip` control. Verified by reverting `deprecated` out of `OFF_TRACK` on a throwaway copy of the tree: the R2b pin fails (`Expected to contain: "deprecated"` / `Received: []`); with the fix it passes. The old `[class*="w-16"]` assertion was inert — the component's only `w-16` is the unrelated `implProgress` state column, and the LIFECYCLE fallback uses `w-0`.
-5. **The execution-batch Step-2.6 admission-path correction (round-2 P3 #2) — CONFIRMED true.** `execution-batch.md:282` now says a deprecated WBS reaches preflight via an explicit `--tasks` list or a `feature:<id>` selector, excluding the `ready`/status pseudo-lists. Probe on a throwaway root: with 0001 `deprecated` and 0002 `todo` both linked to feature F1, `task list --feature F1 --json` returned BOTH rows at exit 0 — so the corrected sentence matches the real Step-1 behaviour.
-6. **The TABLE B B7 wording (round-1 P4 #1) — RESOLVED.** `routing-table.md:88` now reads "mixed terminal only (any combination drawn from `cancelled`, `done`, `deprecated`)", matching the frontier prose.
-7. **Test hardening (`packages/app/tests/services/task-record.test.ts:3237`) — SOUND, not weakened.** `readFile` in `createNodeFileSystem` reads the raw path (only `resolve()` roots paths), so record's default `.spur/run/<wbs>-verdict.json` IS `process.cwd()`-relative; the repo already carries a readable `.spur/run/1190-verdict.json` (wbs "1190", PASS) that a full-suite run from the repo root would pick up. Probed on a throwaway copy: making the pinned verdict readable renders Testing (checkbox flip + `updated_at` bump) BEFORE the transition refusal, so the byte-identical assertion fails — the pin is necessary to isolate the refusal, not a weakening. With the pinned (absent) verdict the assertion holds and still catches a guard failure; the refusal is `Lifecycle transition denied ... No transition from "deprecated" to "testing"`, matched by `rejects.toThrow(/deprecated/)`.
-8. **Test quality.** The new rendering/derivation pins are failure-sensitive (the R1 pins above; the Board lane/icon and action-set pins fail if a table row or the dot entry changes). The one low-signal pair is finding 1.
-
-##### Functional Traceability
+#### Functional Traceability
 
 | Req | Status | Evidence |
-|-----|--------|----------|
-| R1 | MET | `feature-service.ts:490` — `isTerminal = done \|\| cancelled \|\| deprecated`; consumers bounded to :497/:539/:626, neighbours :492/:493 unchanged. Pins `feature-service.test.ts:975` (deprecated + done leaves `verifying` for `done`), `:1001` (never reopens a closed feature, `force` included), `:1022` (a live `wip` still drives the active proposal; blocked-only remainder reads `blocked`), `:1056` (at-least-one-done holds for a deprecated-only roster). Fresh: 66/66; failure-sensitivity probed. |
-| R2 | MET | `routing-table.md:70` (A10 no-dispatch STOP), `:57`, `:88`, `:105-107`; `next-router/SKILL.md:145,162`; `execution-batch.md:155,203,282`. `spur task list --status deprecated` unchanged — throwaway-root probe exit 0. |
-| R3 | MET | `task-actions.ts:10,22,44` (deprecate pair + verbatim move); `config/workflows/task-lifecycle.yaml:166-209` legal edges; lane/filter from `TASK_STATUSES` (`KanbanBoard.tsx:14`, `TasksShell.tsx:44-48`); dot `TaskCard.tsx:32`. Fresh kanban: 77/77. |
-| AC6 | MET | Same change as R1 — `feature-service.test.ts:975` (leaves `verifying` for `done`) and `:1001` (no reopen). |
-| AC7 | MET | `board.test.tsx:442` (deprecated lane from `TASK_STATUSES`, 🗄️ icon, muted dot) and `:462` (a `todo` card offers Deprecate but not Un-deprecate; a deprecated card offers exactly Un-deprecate + Cancel; a cancelled card offers nothing); `task-detail.test.tsx:465,486` (per-status button set; click emits `onTransition(wbs,'todo')` / `'deprecated'`). The metadata off-track remediation is present and correct (`TaskDetail.tsx:30`) and now discriminatingly pinned (`task-detail.test.tsx:301`). |
+| --- | --- | --- |
+| R1 | MET | `packages/app/src/services/feature-service.ts:490` terminal closure includes `deprecated`; pins `packages/app/tests/services/feature-service.test.ts:975,1001,1022,1056` |
+| R2 | MET | `plugins/sp/skills/next-router/references/routing-table.md:70` (A10 no-dispatch STOP); `plugins/sp/skills/spur-dev/references/execution-batch.md:282` |
+| R3 | MET | `apps/web/src/modules/task-kanban/task-actions.ts:12`; tests `apps/web/tests/modules/task-kanban/board.test.tsx:443,464`, `apps/web/tests/modules/task-kanban/task-detail.test.tsx:301,465,486` |
 
-##### Dimension notes
+#### Evidence (fresh, this round)
 
-- **Functional.** R1–R3, AC6, AC7 all MET.
-- **SECUA.** Correctness: minimal closure change, four pins behave as intended (fresh 66/66). Security: no new input path, secret handling or injection surface. Efficiency: unchanged O(n) filters. Usability: the two new buttons carry `aria-label` from the single label table and the frozen task renders the neutral off-track badge. Accessibility: parity with `blocked`/`cancelled`, no new gap.
-- **Architecture (five signals).** Shallow module — none (`task-actions.ts` is a declarative projection). Tight coupling — low (one test edge pins the module to the FSM YAML). Wrong seam — none (the UI-projection seam matches F42's `feature-actions.ts`, and `config/workflows/task-lifecycle.yaml` stays the authority asserted one-way by the YAML-derived legality floor). Weak locality — improved (three inline tables consolidated beside the components). Poor test surface — improved. The module does not duplicate an existing source of truth: it projects task statuses where the feature module projects feature statuses. Residual advisory: finding 2.
-- **Test quality.** Failure-sensitive where it matters; the YAML-derived legality floor is the strongest addition (the invariant behind "the Board never offers a transition the graph refuses"). One advisory restatement pair (finding 1).
+- `apps/web` task-kanban suites → 175 pass / 0 fail; `packages/app` feature-service included in 582 pass / 0 fail.
 
-##### Evidence (fresh, on this tree unless noted)
-
-- `bun test apps/web/tests/modules/task-kanban/{task-detail.test.tsx,task-actions.test.ts,board.test.tsx}` → 77 pass / 0 fail.
-- `bun test packages/app/tests/services/feature-service.test.ts` → 66 pass / 0 fail (R1 subset 4/4).
-- `bun test packages/app/tests/services/task-record.test.ts` → 148 pass / 0 fail.
-- Throwaway-root CLI probes: adjudications 2 and 5.
-- Throwaway-copy tree probes (never this tree's tracked files): off-track revert, `isTerminal` revert, readable-verdict confound.
-
-**Next:** none — round 3 closes both round-2 P3s on the artifact; the three P4 advisories are non-blocking. No tracked source was modified by this review; the full quality gate was not re-run (certified digest `sha256:8d8ccf141498fb38b2d235531c55f0538a05bd21237c6087e2cb0dad28f35775`, `.spur/run/1191-test-gate.status = PASS`).
+**Next:** none — no open finding.
 
 ### References
 
