@@ -57,6 +57,14 @@ describe('preflightTask — TABLE A STOP evaluation (task 0279)', () => {
             expect(r.action === 'skip' && r.code).toBe(code);
         }
     });
+
+    // ADR-137: the frozen status is a STOP row of its own, so the batch never routes it.
+    test('a deprecated task is skipped with the un-deprecate remedy, not routed', () => {
+        const r = preflightTask(input({ status: 'deprecated' }));
+        expect(r.action).toBe('skip');
+        expect(r.action === 'skip' && r.code).toBe('DEPRECATED');
+        expect(r.action === 'skip' && r.reason).toContain('spur task update 0042 todo');
+    });
 });
 
 /** Command-aware readiness: the operation decides whether a gap blocks or is work to do. */
@@ -129,6 +137,27 @@ describe('quickReadiness — command-aware admission (task 0814 R2)', () => {
 
     test('refine on a non-planning status is skipped, not run', () => {
         expect(quickReadiness(input({ status: 'testing', operation: 'refine' })).action).toBe('skipped');
+    });
+
+    // ADR-137 (S9): a deprecated task never starts, advances or gets routed — including
+    // `--force` (the verdict/record evidence hops stay reachable through their own verbs).
+    test('skipped — a deprecated task is never admitted, force included', () => {
+        for (const over of [{}, { force: true, operation: 'verify' as const }]) {
+            const r = quickReadiness(input({ status: 'deprecated', ...over }));
+            expect(r.action).toBe('skipped');
+            expect(r.action === 'skipped' && r.code).toBe('DEPRECATED');
+            expect(r.action === 'skipped' && r.reason).toContain('spur task update 0814 todo');
+        }
+    });
+
+    // ADR-137 (S9): a deprecated dependency never reads as satisfied, and the block names
+    // the remedy instead of leaving the operator to guess.
+    test('blocked — a deprecated dependency is unmet and the remedy is named', () => {
+        const r = quickReadiness(input({ dependencies: ['0040'], depStatuses: { '0040': 'deprecated' } }));
+        expect(r.action).toBe('blocked');
+        expect(r.action === 'blocked' && r.unmetDeps).toEqual(['0040']);
+        expect(r.action === 'blocked' && r.reason).toContain('0040 deprecated (frozen)');
+        expect(r.action === 'blocked' && r.reason).toContain('spur task update 0040 todo');
     });
 });
 

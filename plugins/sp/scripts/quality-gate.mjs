@@ -24280,6 +24280,7 @@ var ALL_FINDING_CODES = [
   "L4.feature-not-found",
   "L4.feature-terminal",
   "L4.feature-deprecated",
+  "L4.task-deprecated",
   "L4.missing-feature-id",
   "L4.parent-not-found",
   "L4.dependency-not-found",
@@ -29741,7 +29742,7 @@ var matrixEntrySchema = object2({
   forbidden: array(sectionNameSchema).optional(),
   gate: boolean2().optional()
 }).strict();
-var matrixStatusSchema = _enum2(["backlog", "todo", "wip", "testing", "blocked", "done", "cancelled"]);
+var matrixStatusSchema = _enum2(TASK_STATUSES);
 var sectionMatrixSchema = object2({
   variants: record(string2(), partialRecord(matrixStatusSchema, matrixEntrySchema))
 }).strict();

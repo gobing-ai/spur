@@ -152,6 +152,60 @@ describe('finalizeIdeaHandoff', () => {
         ]);
     });
 
+    // ── ADR-137 (S8): a new dependency edge onto a deprecated task is refused ──
+    test('refuses a resolved dependency that is a deprecated task before any deps write', async () => {
+        const runId = 'test-idea-run-deprecated-dep';
+        const featureId = 'D5';
+        const runDir = '.spur/run';
+        await fs.ensureDir(runDir);
+
+        const batch = [{ name: 'Task A' }, { name: 'Task B' }];
+        const result = { wbs: ['0601', '0602'] };
+        const order = [{ name: 'Task A' }, { name: 'Task B', depends_on_names: ['Task A'] }];
+
+        await fs.writeFile(`${runDir}/${runId}-idea-task-batch.json`, JSON.stringify(batch));
+        await fs.writeFile(`${runDir}/${runId}-idea-batch-create-result.json`, JSON.stringify(result));
+        await fs.writeFile(`${runDir}/${runId}-idea-task-order.json`, JSON.stringify(order));
+        const paths = await writeReadyFixture(runId, result.wbs);
+
+        const executed: string[][] = [];
+        const base = evidenceAwareExecutor(paths);
+        const mockExecutor: ProcessExecutor = {
+            run: async (opts) => {
+                const args = opts.args ?? [];
+                executed.push(args);
+                if (args.includes('show')) {
+                    return {
+                        command: opts.command,
+                        args,
+                        durationMs: 1,
+                        exitCode: 0,
+                        stdout: JSON.stringify({ wbs: '0601', status: 'deprecated' }),
+                        stderr: '',
+                    };
+                }
+                return base.run(opts);
+            },
+            runStreaming: () => ({}) as unknown as PipeProcess,
+        };
+
+        const res = await finalizeIdeaHandoff({ runId, featureId, processExecutor: mockExecutor });
+
+        expect(res.ok).toBe(false);
+        expect(res.error).toContain('0601');
+        expect(res.error).toContain('deprecated');
+        expect(res.error).toContain('spur task update 0601 todo');
+        // The refusal precedes every dependency write and the rest of the handoff.
+        expect(executed.some((args) => args.includes('deps'))).toBe(false);
+        expect(executed.some((args) => args.includes('refresh'))).toBe(false);
+
+        await cleanupRun(runId, result.wbs, [
+            `${runDir}/${runId}-idea-task-batch.json`,
+            `${runDir}/${runId}-idea-batch-create-result.json`,
+            `${runDir}/${runId}-idea-task-order.json`,
+        ]);
+    });
+
     test('recommends refineall when a deterministic task check fails despite good evidence', async () => {
         const runId = 'test-idea-run-fail';
         const featureId = 'D5';

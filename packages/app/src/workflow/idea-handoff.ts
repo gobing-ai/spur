@@ -7,6 +7,7 @@ import {
     type ProcessExecutor,
     type ProcessResult,
 } from '@gobing-ai/ts-runtime';
+import { isTaskFrozen, undeprecateTaskCommand } from '../services/task-freeze';
 import {
     computePlanningDigest,
     lintPremiseEvidence,
@@ -204,6 +205,41 @@ export async function finalizeIdeaHandoff(options: FinalizeIdeaHandoffOptions): 
             };
         }
 
+        /**
+         * Task status by WBS, probed once per WBS. ADR-137 (S8): the order sidecar's
+         * `depends_on_names` become `dependencies[]` values here and nowhere else, and
+         * `spur task deps` (the writer) has no status-aware branch — so the dependency
+         * freeze's resolver guard lives here. An unreadable probe yields `null` and never
+         * a fabricated refusal.
+         */
+        const taskStatusByWbs = new Map<string, string | null>();
+        const taskStatusOf = async (wbs: string): Promise<string | null> => {
+            const cached = taskStatusByWbs.get(wbs);
+            if (cached !== undefined) return cached;
+            const showRes = await executor.run({
+                command: spurCommand,
+                args: [...spurArgsPrefix, 'task', 'show', wbs, '--json'],
+                cwd: root,
+                forceBuffered: true,
+                rejectOnError: false,
+            });
+            let status: string | null = null;
+            if (showRes.exitCode === 0) {
+                try {
+                    const parsed: unknown = JSON.parse(showRes.stdout);
+                    const raw =
+                        typeof parsed === 'object' && parsed !== null && 'status' in parsed
+                            ? (parsed as { status: unknown }).status
+                            : undefined;
+                    if (typeof raw === 'string' && raw !== '') status = raw.toLowerCase();
+                } catch {
+                    status = null;
+                }
+            }
+            taskStatusByWbs.set(wbs, status);
+            return status;
+        };
+
         // Apply dependencies
         for (const item of order) {
             const ownIdx = names.indexOf(item.name);
@@ -233,6 +269,22 @@ export async function finalizeIdeaHandoff(options: FinalizeIdeaHandoffOptions): 
             }
 
             if (deps.length > 0) {
+                // Nothing new attaches to a deprecated task (ADR-137): refuse the ready-set
+                // item before the `dependencies[]` write, naming the frozen task and the
+                // un-deprecate command, so no edge is half-applied.
+                for (const depWbs of deps) {
+                    if (!isTaskFrozen(await taskStatusOf(depWbs))) continue;
+                    return {
+                        ok: false,
+                        wbsList: result.wbs,
+                        nextCommand: '',
+                        reportPath,
+                        error:
+                            `Dependency ${depWbs} is deprecated (frozen, ADR-137) — a new dependency edge is ` +
+                            `refused. Re-point the order entry "${item.name}" at live work, or un-deprecate ` +
+                            `it: \`${undeprecateTaskCommand(depWbs)}\``,
+                    };
+                }
                 const depRes = await executor.run({
                     command: spurCommand,
                     args: [...spurArgsPrefix, 'task', 'deps', ownWbs, 'set', ...deps, '--json'],

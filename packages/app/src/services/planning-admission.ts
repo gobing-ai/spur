@@ -8,6 +8,8 @@
  * policy with no filesystem or corpus access. Pure and side-effect free, so it also runs under Node.
  */
 
+import { isTaskFrozen, undeprecateTaskCommand } from './task-freeze';
+
 export type TaskStatus = 'backlog' | 'todo' | 'wip' | 'testing' | 'blocked' | 'done' | 'cancelled' | string;
 
 /** Inputs for TABLE A STOP evaluation: the task status plus every dependency status. */
@@ -146,6 +148,17 @@ export function quickReadiness(input: QuickReadinessInput): QuickReadinessResult
         }
     }
 
+    if (isTaskFrozen(status)) {
+        // ADR-137 (S9): a deprecated task is retained and frozen — it never starts,
+        // advances or gets routed, and `--force` re-verification does not re-admit it
+        // (the verdict/record evidence hops stay reachable through their own verbs).
+        return {
+            action: 'skipped',
+            code: 'DEPRECATED',
+            reason: `quick-readiness: deprecated (frozen) — no ${operation} hop; un-deprecate with \`${undeprecateTaskCommand(input.wbs)}\` (${input.wbs})`,
+        };
+    }
+
     if (status === 'cancelled' || status === 'done') {
         // verify --force re-verification (R2 AC): an already-verified terminal task
         // is re-checked, not skipped — but force never bypasses a dirty tree or the
@@ -176,10 +189,23 @@ export function quickReadiness(input: QuickReadinessInput): QuickReadinessResult
     if (operation === 'run' && input.dependencies && input.dependencies.length > 0) {
         const unmet = input.dependencies.filter((d) => (input.depStatuses?.[d] ?? 'missing').toLowerCase() !== 'done');
         if (unmet.length > 0) {
+            // ADR-137 (S9): a deprecated task never reads as a satisfied dependency, and the
+            // block names the remedy rather than leaving the operator to guess why a task that
+            // is not "open" still holds the set back.
+            const frozen = unmet.filter((d) => isTaskFrozen(input.depStatuses?.[d]));
+            const hint =
+                frozen.length > 0
+                    ? ` — ${frozen
+                          .map(
+                              (d) =>
+                                  `${d} deprecated (frozen); re-point the edge or un-deprecate: \`${undeprecateTaskCommand(d)}\``,
+                          )
+                          .join('; ')}`
+                    : '';
             return {
                 action: 'blocked',
                 code: 'DEP',
-                reason: `quick-readiness: unmet deps — ${unmet.join(', ')} (${input.wbs})`,
+                reason: `quick-readiness: unmet deps — ${unmet.join(', ')} (${input.wbs})${hint}`,
                 unmetDeps: unmet,
             };
         }
@@ -281,6 +307,16 @@ export function preflightTask(input: PreflightInput): PreflightResult {
             action: 'skip',
             code: 'A7',
             reason: `dev-next: blocked — do not launch pipeline; human/handover first (${input.wbs})`,
+        };
+    }
+
+    // ADR-137: a deprecated task is frozen — the batch never routes it into the pipeline
+    // (un-deprecate, or cancel it once removed).
+    if (isTaskFrozen(status)) {
+        return {
+            action: 'skip',
+            code: 'DEPRECATED',
+            reason: `dev-next: deprecated (frozen) — un-deprecate first: ${undeprecateTaskCommand(input.wbs)} (${input.wbs})`,
         };
     }
 

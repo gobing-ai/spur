@@ -5,6 +5,12 @@
 import { readFileSync } from "fs";
 
 // plugins/sp/lib/plan-projection.generated.mjs
+function isTaskFrozen(status) {
+  return status?.toLowerCase() === "deprecated";
+}
+function undeprecateTaskCommand(wbs) {
+  return `spur task update ${wbs} todo`;
+}
 var NON_ABORTING_PREFLIGHT_CODES = new Set([
   "L4.scenario-unverified",
   "L4.verifying-incomplete-tasks"
@@ -55,6 +61,13 @@ function quickReadiness(input) {
       };
     }
   }
+  if (isTaskFrozen(status)) {
+    return {
+      action: "skipped",
+      code: "DEPRECATED",
+      reason: `quick-readiness: deprecated (frozen) — no ${operation} hop; un-deprecate with \`${undeprecateTaskCommand(input.wbs)}\` (${input.wbs})`
+    };
+  }
   if (status === "cancelled" || status === "done") {
     if (operation === "verify" && input.force === true) {
       return {
@@ -79,10 +92,12 @@ function quickReadiness(input) {
   if (operation === "run" && input.dependencies && input.dependencies.length > 0) {
     const unmet = input.dependencies.filter((d) => (input.depStatuses?.[d] ?? "missing").toLowerCase() !== "done");
     if (unmet.length > 0) {
+      const frozen = unmet.filter((d) => isTaskFrozen(input.depStatuses?.[d]));
+      const hint = frozen.length > 0 ? ` — ${frozen.map((d) => `${d} deprecated (frozen); re-point the edge or un-deprecate: \`${undeprecateTaskCommand(d)}\``).join("; ")}` : "";
       return {
         action: "blocked",
         code: "DEP",
-        reason: `quick-readiness: unmet deps — ${unmet.join(", ")} (${input.wbs})`,
+        reason: `quick-readiness: unmet deps — ${unmet.join(", ")} (${input.wbs})${hint}`,
         unmetDeps: unmet
       };
     }
@@ -165,6 +180,13 @@ function preflightTask(input) {
       action: "skip",
       code: "A7",
       reason: `dev-next: blocked — do not launch pipeline; human/handover first (${input.wbs})`
+    };
+  }
+  if (isTaskFrozen(status)) {
+    return {
+      action: "skip",
+      code: "DEPRECATED",
+      reason: `dev-next: deprecated (frozen) — un-deprecate first: ${undeprecateTaskCommand(input.wbs)} (${input.wbs})`
     };
   }
   if (status === "todo" || status === "backlog") {

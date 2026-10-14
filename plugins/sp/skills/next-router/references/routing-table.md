@@ -54,7 +54,7 @@ it or when chaining (chain links already use `--auto` per existing refine→run�
 
 ## 1. TABLE A — Task primary routes (corpus status)
 
-Statuses from `TASK_STATUSES`: backlog | todo | wip | testing | blocked | done | cancelled.
+Statuses from `TASK_STATUSES`: backlog | todo | wip | testing | blocked | done | cancelled | deprecated.
 
 | # | Precondition | Primary signal | Dispatch | probe | Chain on success? | Stop / notes |
 | --- | --- | --- | --- | --- | --- | --- |
@@ -67,8 +67,9 @@ Statuses from `TASK_STATUSES`: backlog | todo | wip | testing | blocked | done |
 | A7 | `status == blocked` | `task.show` + Notes/History for blocker text | `/sp:dev-handover "<blocker summary from Notes or status>"` | no | no | **STOP** after handover doc; human unblocks |
 | A8 | `status == done` | `task.show.status` | `/sp:dev-wrap <wbs>` (`--agent <value>` preserved when the originating command supplied it; omission remains omission) | no | **no** (wrap's `--merge` is irreversible HITL; never auto) | Operator may re-invoke with `--merge` explicitly later |
 | A9 | `status == cancelled` | `task.show.status` | *(none)* | no | no | **STOP** — no-op; print "cancelled — nothing to advance" |
+| A10 | `status == deprecated` | `task.show.status` | *(none)* | no | no | **STOP** — frozen and retained (ADR-137); nothing to advance. Print "deprecated — frozen; un-deprecate with `spur task update <wbs> todo`, or cancel it once removed". Never falls through to another row |
 
-**Priority when multiple TABLE A rows could match:** lowest row number wins (A1–A9 are mutually
+**Priority when multiple TABLE A rows could match:** lowest row number wins (A1–A10 are mutually
 exclusive by status except A2/A3 which split `todo`).
 
 ## 2. TABLE B — Feature-ID path (rollup)
@@ -84,7 +85,7 @@ When input is a feature id:
 | B4 | No frontier tasks AND `feature.status == backlog` AND AC placeholder/invalid | `feature check` / AC body | `/sp:dev-plan` continuation is not WBS-shaped — **STOP** with: run `/sp:dev-plan --feature <id>` or fix AC then `spur feature check <id>` | no | no | Planning-half entry needs a description; do not invent idea text |
 | B5 | No frontier tasks AND feature has valid AC but zero tasks | feature + empty task roster | **STOP** with: `/sp:dev-plan --feature <id>` (decompose/batch-create) | no | no | Avoid auto-running plan without operator description confirmation in v1 |
 | B6 | No frontier tasks AND all child tasks `done` AND feature in `active`\|`verifying` | task list all done | `/sp:dev-wrapall --feature <id>` (`--agent <value>` preserved when the originating command supplied it; omission remains omission) | no | no | Advances feature via wrapall guards; `--merge` never auto |
-| B7 | No frontier tasks AND mixed cancelled/done only | statuses | **STOP** — print summary; suggest feature status update manually | no | no | |
+| B7 | No frontier tasks AND mixed terminal only (any combination drawn from `cancelled`, `done`, `deprecated`) | statuses | **STOP** — print summary; suggest feature status update manually | no | no | |
 | B8 | `feature.status == blocked` | feature status | **STOP** — print feature blocked; do not pick tasks | no | no | |
 
 **Frontier selection algorithm (B3) — precise:**
@@ -100,6 +101,11 @@ pick = first(candidates)
 if pick is null → TABLE B rows B4–B7
 else → TABLE A(pick)
 ```
+
+The candidate set is exactly the open statuses: `done`, `cancelled` **and `deprecated`** are never
+frontier candidates (ADR-137 — a frozen task is retained, not resumable), and a `deprecated`
+dependency is not a satisfied one, so it keeps its dependents out of the frontier exactly like any
+unfinished dep.
 
 ## 3. TABLE C — Light-gate short-circuit (probe=yes rows only)
 

@@ -45,6 +45,7 @@ export const ALL_FINDING_CODES = [
     'L4.feature-not-found',
     'L4.feature-terminal',
     'L4.feature-deprecated',
+    'L4.task-deprecated',
     'L4.missing-feature-id',
     'L4.parent-not-found',
     'L4.dependency-not-found',
@@ -146,6 +147,11 @@ export const FINDING_CODES = {
     // live work under a frozen feature is surfaced as this warning instead. `--strict`
     // elevates it per existing policy.
     L4_FEATURE_DEPRECATED: 'L4.feature-deprecated',
+    // ADR-137 (task 1190 R4): `deprecated` is non-terminal, so a frozen task is retained and
+    // countable — but a *live* dependent of it is still holding work behind frozen material, so
+    // the edge is surfaced (warning; `--strict` elevates) with re-point / un-deprecate guidance.
+    // The freeze is prospective: the finding reports the pre-existing edge, it never rewrites it.
+    L4_TASK_DEPRECATED: 'L4.task-deprecated',
     L4_MISSING_FEATURE_ID: 'L4.missing-feature-id',
     L4_PARENT_NOT_FOUND: 'L4.parent-not-found',
     L4_DEPENDENCY_NOT_FOUND: 'L4.dependency-not-found',

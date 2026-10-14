@@ -2859,6 +2859,75 @@ describe('TaskCheckService', () => {
             expect(result.findings.filter((f) => f.code === FINDING_CODES.L4_FEATURE_DEPRECATED)).toEqual([]);
         });
 
+        test('R4 (1190): a live dependent of a deprecated task warns and names the remedy', async () => {
+            // ADR-137: the freeze is prospective — the edge recorded before the deprecation is
+            // REPORTED, never rewritten. A live dependent is the reader who must act.
+            const content = taskFm({ status: 'todo', dependencies: ['0050'] });
+            const { fs, path, cleanup } = seedEnv({
+                taskContent: content,
+                extraTasks: { '0050': taskFm({ name: 'Frozen dep', status: 'deprecated' }) },
+            });
+            const result = await new TaskCheckService(fs, matrix).check(path, '0001');
+            const strictResult = await new TaskCheckService(fs, matrix).check(path, '0001', { strict: true });
+            cleanup();
+
+            const frozen = result.findings.filter((f) => f.code === FINDING_CODES.L4_TASK_DEPRECATED);
+            expect(frozen).toHaveLength(1);
+            expect(frozen[0]?.severity).toBe('warning');
+            expect(frozen[0]?.message).toContain('0050');
+            expect(frozen[0]?.message).toContain('spur task update 0050 todo');
+            // A warning never fails the check; --strict elevates through the shared base.
+            expect(result.pass).toBe(true);
+            expect(strictResult.findings.find((f) => f.code === FINDING_CODES.L4_TASK_DEPRECATED)?.severity).toBe(
+                'error',
+            );
+        });
+
+        test('R4 (1190): a terminal dependent of a deprecated task gets no finding', async () => {
+            // WHY: a done record under a frozen dependency is a retained historical end state;
+            // flagging it would re-litigate completed work (0339 R1 reasoning, applied to tasks).
+            const content = taskFm({ status: 'done', dependencies: ['0050'] });
+            const { fs, path, cleanup } = seedEnv({
+                taskContent: content,
+                extraTasks: { '0050': taskFm({ name: 'Frozen dep', status: 'deprecated' }) },
+            });
+            const result = await new TaskCheckService(fs, matrix).check(path, '0001');
+            cleanup();
+
+            expect(result.findings.filter((f) => f.code === FINDING_CODES.L4_TASK_DEPRECATED)).toEqual([]);
+        });
+
+        test('R4 (1190): a live dependent of a live task gets no finding', async () => {
+            // Guard against over-firing: only the frozen dependency raises the advisory.
+            const content = taskFm({ status: 'todo', dependencies: ['0050'] });
+            const { fs, path, cleanup } = seedEnv({
+                taskContent: content,
+                extraTasks: { '0050': taskFm({ name: 'Live dep', status: 'wip' }) },
+            });
+            const result = await new TaskCheckService(fs, matrix).check(path, '0001');
+            cleanup();
+
+            expect(result.findings.filter((f) => f.code === FINDING_CODES.L4_TASK_DEPRECATED)).toEqual([]);
+        });
+
+        test('R6 (1190): checking a live dependent never rewrites the pre-existing edge', async () => {
+            // ADR-137: the freeze is prospective — an edge recorded before the deprecation is
+            // reported (R4), never deleted or rewritten by the reader.
+            const content = taskFm({ status: 'todo', dependencies: ['0050'] });
+            const { fs, path, cleanup } = seedEnv({
+                taskContent: content,
+                extraTasks: { '0050': taskFm({ name: 'Frozen dep', status: 'deprecated' }) },
+            });
+            const before = require('node:fs').readFileSync(path, 'utf8');
+            const result = await new TaskCheckService(fs, matrix).check(path, '0001');
+            const after = require('node:fs').readFileSync(path, 'utf8');
+            cleanup();
+
+            expect(result.findings.some((f) => f.code === FINDING_CODES.L4_TASK_DEPRECATED)).toBe(true);
+            expect(after).toBe(before);
+            expect(after).toContain('0050');
+        });
+
         test('R3 (F21 0787): placeholder-only Requirements is tolerated where the matrix does not require it', async () => {
             // WHY: 0337 made L3_REQUIREMENTS_EMPTY unconditional; F21 0787 R1
             // supersedes that — creation scaffolded placeholders everywhere, so a

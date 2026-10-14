@@ -150,7 +150,7 @@ One lowercase canonical vocabulary for both domains (DD-01); display layers capi
 case-insensitive and alias-tolerant (the legacy alias map — `completed→done`, `wip`, `dropped→
 cancelled`, etc. — is preserved as input normalization, never as storage).
 
-**TaskStatus:** `backlog · todo · wip · testing · blocked · done · cancelled`
+**TaskStatus:** `backlog · todo · wip · testing · blocked · done · cancelled · deprecated` (ADR-137)
 
 ```
 backlog ──► todo ──► wip ──► testing ──► done
@@ -158,12 +158,17 @@ backlog ──► todo ──► wip ──► testing ──► done
              blocked ◄─┴────────┘           ▼
                                            wip
    any non-terminal ──► cancelled (terminal)
+
+   backlog · todo · wip · testing · blocked · done ──► deprecated   (frozen, retained — ADR-137)
+   deprecated ──► todo (un-deprecate)  ·  deprecated ──► cancelled (removed)
 ```
 
 Guard placement (executed by the lifecycle workflow, §5): `wip → testing` runs `task check`
 warning-first; `testing → done` runs `task check` with the hard core (AC format, Solution
 `file:line`, Review table) plus Testing-evidence presence. `done → wip` (reopen) is allowed with
-a warning + mandatory History entry; `cancelled` is terminal.
+a warning + mandatory History entry; `cancelled` is terminal, while `deprecated` is non-terminal —
+frozen and retained, admitted from every status but `cancelled` and left only for `todo` or
+`cancelled`.
 
 **FeatureStatus:** `backlog · active · verifying · blocked · done · cancelled · deprecated` (DD-13,
 ADR-136)

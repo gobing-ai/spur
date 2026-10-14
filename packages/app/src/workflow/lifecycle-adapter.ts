@@ -444,8 +444,21 @@ export class LifecycleAdapter implements LifecyclePort {
         id: string,
     ): string {
         const base = this.formatDenial(result.detail, result.guardReport);
-        if (result.reason !== 'no-such-transition') return base;
         const legal = workflow.transitions.filter((t) => t.from === currentStatus).map((t) => t.to);
+        // ADR-137: `deprecated` is a frozen, non-terminal state, so a refused hop out of it
+        // is not a missing edge to route around — the task must leave the freeze explicitly.
+        // The hint names the exit for the entity kind this adapter drives.
+        if (currentStatus === 'deprecated') {
+            const [noun, unDeprecate] =
+                this.opts.profile.entityPrefix === 'feature' ? ['feature', 'active'] : ['task', 'todo'];
+            return (
+                `${base}. ${id} is deprecated (frozen — ADR-137): un-deprecate with ` +
+                `\`spur ${noun} update ${id} ${unDeprecate}\`, or remove it with ` +
+                `\`spur ${noun} update ${id} cancelled\`.` +
+                (legal.length > 0 ? ` Legal path(s) from ${currentStatus}: ${legal.join(' → ')}.` : '')
+            );
+        }
+        if (result.reason !== 'no-such-transition') return base;
         if (legal.length === 0) return base;
         const command =
             this.opts.profile.entityPrefix === 'feature'

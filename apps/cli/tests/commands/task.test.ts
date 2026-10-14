@@ -1696,6 +1696,29 @@ describe('spur task CLI', () => {
         expect(output.messages[0] ?? '').toContain(`${cWbs}`);
     });
 
+    // ADR-137 (task 1190 R1): the reachable writer is `task deps`, so the freeze is proved here —
+    // refusal before any write, with the un-deprecate exit named.
+    test('deps add onto a deprecated task exits 3 and leaves the file unwritten', async () => {
+        const cOut = createCapturedOutput();
+        await main(['task', 'create', '--skip-ready', 'Freeze parent'], { cwd, output: cOut });
+        const parentWbs = createdWbs(cOut);
+        const cOut2 = createCapturedOutput();
+        await main(['task', 'create', '--skip-ready', 'Freeze child'], { cwd, output: cOut2 });
+        const childWbs = createdWbs(cOut2);
+
+        const deprecate = createCapturedOutput();
+        expect(await main(['task', 'update', childWbs, 'deprecated'], { cwd, output: deprecate })).toBe(0);
+
+        const output = createCapturedOutput();
+        const exitCode = await main(['task', 'deps', parentWbs, 'add', childWbs], { cwd, output });
+        expect(exitCode).toBe(3);
+        expect(output.errors.some((e) => e.includes('deprecated (frozen)'))).toBe(true);
+        expect(output.errors.some((e) => e.includes(`spur task update ${childWbs} todo`))).toBe(true);
+
+        const content = await Bun.file(join(cwd, 'docs', 'tasks', `${parentWbs}_freeze-parent.md`)).text();
+        expect(content).not.toContain('dependencies:');
+    });
+
     test('deps remove drops a listed value', async () => {
         const cOut = createCapturedOutput();
         await main(['task', 'create', '--skip-ready', 'Rem parent'], { cwd, output: cOut });

@@ -1645,6 +1645,38 @@ describe('TaskService', () => {
             });
         });
 
+        // ADR-137 (task 1190 R1): the dependency freeze is prospective and lives at the one
+        // reachable writer, before any write.
+        test('rejects a NEW edge onto a deprecated task (deprecated), leaving the file untouched', async () => {
+            const a = await svc.create({ title: 'frozen parent' });
+            const b = await svc.create({ title: 'frozen child b' });
+            await svc.updateStatus(b.ref.id, 'deprecated');
+
+            const fs = createNodeFileSystem(tasksDir.replace('/tasks', ''));
+            const beforeRaw = await fs.readFile(a.ref.filePath);
+
+            await expect(svc.mutateDependencies(a.ref.id, 'add', [b.ref.id])).rejects.toMatchObject({
+                code: 'deprecated',
+            });
+            expect(await fs.readFile(a.ref.filePath)).toBe(beforeRaw);
+        });
+
+        test('an edge recorded before the deprecation is never rewritten or dropped', async () => {
+            const a = await svc.create({ title: 'prospective parent' });
+            const b = await svc.create({ title: 'prospective child b' });
+            const c = await svc.create({ title: 'prospective child c' });
+            await svc.mutateDependencies(a.ref.id, 'set', [b.ref.id]);
+            await svc.updateStatus(b.ref.id, 'deprecated');
+
+            // Adding an unrelated live edge keeps the pre-existing frozen one…
+            const added = await svc.mutateDependencies(a.ref.id, 'add', [c.ref.id]);
+            expect(added.dependencies).toEqual([b.ref.id, c.ref.id]);
+
+            // …and a `set` that re-states it is not a NEW edge either.
+            const reset = await svc.mutateDependencies(a.ref.id, 'set', [b.ref.id]);
+            expect(reset.dependencies).toEqual([b.ref.id]);
+        });
+
         test('atomicity: a failed validation must not modify the file', async () => {
             const a = await svc.create({ title: 'atomic parent' });
             const b = await svc.create({ title: 'atomic child b' });
@@ -2494,6 +2526,59 @@ describe('TaskService 0416: WBS collision guard + baseCounter', () => {
             const result = await svc.updateSection(created.ref.id, 'Requirements', src);
 
             expect((result.warnings ?? []).join('\n')).not.toContain('L3.requirements-checkbox');
+        });
+    });
+
+    // ── ADR-137 (S6, 1190 R5): a section write is a record write, not a status move ──
+    describe('updateSection — ADR-137 freeze note', () => {
+        const root = () => tasksDir.replace('/tasks', '');
+
+        async function writeTmp(name: string, body: string): Promise<string> {
+            const fs = createNodeFileSystem(root());
+            const path = join(tasksDir, `${name}.frozen.tmp.md`);
+            await fs.writeFile(path, `${body}\n`);
+            return path;
+        }
+
+        test('a section write on a deprecated task lands and carries the freeze note', async () => {
+            // The freeze constrains status-moving writes only: refusing the section write
+            // would strand the evidence trail (design §3.2).
+            const created = await svc.create({ title: 'Frozen section write' });
+            await svc.updateStatus(created.ref.id, 'deprecated');
+            const src = await writeTmp('frozen', 'Recorded after the freeze.');
+
+            const result = await svc.updateSection(created.ref.id, 'Testing', src);
+
+            const warnings = (result.warnings ?? []).join('\n');
+            expect(warnings).toContain('deprecated');
+            expect(warnings).toContain(`spur task update ${created.ref.id} todo`);
+            // Exactly once: the note is appended at the single exit, not per return path.
+            expect((result.warnings ?? []).filter((w) => w.includes('deprecated'))).toHaveLength(1);
+            const fs = createNodeFileSystem(root());
+            const landed = await fs.readFile(result.ref.filePath);
+            expect(landed).toContain('Recorded after the freeze.');
+            expect(landed).toContain('status: deprecated');
+        });
+
+        test('a live task section write carries no freeze note', async () => {
+            const created = await svc.create({ title: 'Live section write' });
+            const src = await writeTmp('live', 'Ordinary write.');
+
+            const result = await svc.updateSection(created.ref.id, 'Testing', src);
+
+            expect((result.warnings ?? []).join('\n')).not.toContain('deprecated');
+        });
+
+        test('the exempt body hop still lands on a deprecated task (design §3.2)', async () => {
+            const created = await svc.create({ title: 'Frozen body write' });
+            await svc.updateStatus(created.ref.id, 'deprecated');
+
+            await svc.updateBody(created.ref.id, '## Updated\n\nBody recorded after the freeze.\n');
+
+            const fs = createNodeFileSystem(root());
+            const landed = await fs.readFile(created.ref.filePath);
+            expect(landed).toContain('Body recorded after the freeze.');
+            expect(landed).toContain('status: deprecated');
         });
     });
 
