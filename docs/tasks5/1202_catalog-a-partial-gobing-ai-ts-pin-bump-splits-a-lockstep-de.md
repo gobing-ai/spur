@@ -1,10 +1,10 @@
 ---
 schema_version: 1
 name: "catalog: a partial @gobing-ai/ts-* pin bump splits a lockstep dependency with no check catching it"
-status: todo
+status: cancelled
 template: standard
 created_at: 2026-10-14T02:53:42.731Z
-updated_at: "2026-10-14T05:48:16.656Z"
+updated_at: "2026-10-14T06:53:07.143Z"
 feature_id: C2
 
 ac_altitude: graduating
@@ -91,7 +91,9 @@ Out of scope: dependency upgrades, lockfile rewrites, minimum-version enforcemen
 
 ### Review
 
-<!-- Filled during review: P1-P4 findings, residual risk, and final disposition. -->
+Cancelled at the operator's request after reassessing proportionality. All twelve root @gobing-ai/ts-* catalog entries are now aligned at ^0.5.27, so there is no current split-specifier defect to repair. The reported incident arose from an agent updating one package independently; the operator upgrades the package family together.
+
+A consistency guard could prevent recurrence, but the proposed implementation, fixture matrix, and maintenance cost are not justified by this single historical incident. Retain the existing dependency-drift checker and handle future upgrades as family-wide changes. The earlier requirements and design are retained as historical context, not authorized implementation work. Reconsider automation only if partial upgrades recur or upgrade ownership changes.
 
 ### References
 
@@ -105,4 +107,5 @@ Out of scope: dependency upgrades, lockfile rewrites, minimum-version enforcemen
 ### History
 
 - 2026-10-14T05:47:30.158Z backlog → todo (system)
+- 2026-10-14T06:53:07.143Z todo → cancelled (system)
 
