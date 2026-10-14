@@ -1,7 +1,7 @@
-import { describe, expect, test } from 'bun:test';
-import { mkdirSync, mkdtempSync, realpathSync, rmSync } from 'node:fs';
+import { afterAll, beforeAll, describe, expect, test } from 'bun:test';
+import { mkdirSync, mkdtempSync, realpathSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
-import { join } from 'node:path';
+import { join, resolve } from 'node:path';
 import { createNodeFileSystem, type FileSystem } from '@gobing-ai/ts-runtime';
 import {
     anchorQualify,
@@ -15,6 +15,59 @@ import {
     TRACKED_TESTING_POINTER,
 } from '../../src/services/anchor-qualifier';
 import { citedLinesNameSubject, extractSubjectTokens } from '../../src/services/task-check';
+
+/**
+ * The fixture repo these tests operate on — a tiny `mkdtemp` tree, never the live checkout.
+ *
+ * 1199 R1: reading `process.cwd()` made this file's verdict depend on where the suite was
+ * launched (and, under load, on whichever sibling suite held a `.git/index.lock`). Every
+ * git-tree read below points at this fixture instead. `fixtureRepoRoot` is the symlink-resolved
+ * form because `git rev-parse --show-toplevel` returns the physical path (macOS `$TMPDIR` is
+ * `/var` → `/private/var`).
+ */
+let fixtureRepo: string;
+let fixtureRepoRoot: string;
+
+beforeAll(() => {
+    fixtureRepo = mkdtempSync(join(tmpdir(), 'spur-anchor-'));
+    mkdirSync(join(fixtureRepo, 'packages', 'app', 'src', 'services'), { recursive: true });
+    mkdirSync(join(fixtureRepo, '.spur'), { recursive: true });
+    // Nested on purpose: a bare-basename citation only qualifies to a *different* path when the
+    // tracked file is not already at the repo root (that is what makes the rewrite observable).
+    writeFileSync(join(fixtureRepo, 'packages/app/src/services/project-registry.ts'), 'export const registry = 1;\n');
+    writeFileSync(join(fixtureRepo, 'packages/app/src/services/task-check.ts'), 'export const check = 1;\n');
+    // A tracked path under `.spur/`, so the index filter below proves something rather than
+    // passing vacuously.
+    writeFileSync(join(fixtureRepo, '.spur', 'tracked.txt'), 'tracked under .spur\n');
+    for (const args of [
+        ['init', '-q'],
+        ['config', 'user.email', 't@example.com'],
+        ['config', 'user.name', 't'],
+        ['add', '-f', '-A'],
+        ['commit', '-qm', 'init'],
+    ]) {
+        const proc = Bun.spawnSync(['git', ...args], { cwd: fixtureRepo });
+        if (proc.exitCode !== 0) throw new Error(`git ${args.join(' ')} failed: ${proc.stderr.toString()}`);
+    }
+    fixtureRepoRoot = realpathSync(fixtureRepo);
+});
+
+afterAll(() => {
+    rmSync(fixtureRepo, { recursive: true, force: true });
+});
+
+/**
+ * Resolve a repo root in a throwaway child Bun process so a cwd-derivation case never calls
+ * `process.chdir` — process-global, and unsafe across the parallel suite (1199 R1). The probe
+ * imports the real module and prints the resolved root to stdout.
+ */
+function probeRepoRoot(opts: { cwd: string; hint?: string }): { root: string; exitCode: number; stderr: string } {
+    const modulePath = resolve(import.meta.dir, '..', '..', 'src', 'services', 'anchor-qualifier.ts');
+    const hint = opts.hint === undefined ? 'undefined' : JSON.stringify(opts.hint);
+    const script = `const { resolveRepoRoot } = await import(${JSON.stringify(modulePath)});\nconsole.log(await resolveRepoRoot(undefined, ${hint}));`;
+    const proc = Bun.spawnSync(['bun', '-e', script], { cwd: opts.cwd });
+    return { root: proc.stdout.toString().trim(), exitCode: proc.exitCode, stderr: proc.stderr.toString() };
+}
 
 describe('qualifySectionBody', () => {
     const index = new Map<string, string[]>([
@@ -88,41 +141,42 @@ describe('resolveRepoRoot', () => {
     });
 
     /**
-     * Load-flake budget (cross-cutting.md § Isolation rerun for load-flakes): this case resolves the live checkout's git root; it timed out at 5s in 2 of 5 loaded rounds (2026-10-13), green alone.
+     * Load-flake budget (cross-cutting.md § Isolation rerun for load-flakes): this case resolves a
+     * git root through a child process; keep the wrapper so the budget is unchanged.
      */
     const loadFlakeTest = (name: string, fn: () => Promise<void> | void): void => void test(name, fn, 60_000);
 
-    loadFlakeTest('resolves git repo root when projectRoot is omitted', async () => {
-        // 0713 R3b: assert the git toplevel, not `process.cwd()` — they coincide only when the
-        // suite is launched from the repo root, which made this test cwd-dependent.
-        const toplevel = Bun.spawnSync(['git', 'rev-parse', '--show-toplevel'], { cwd: process.cwd() })
-            .stdout.toString()
-            .trim();
-        const root = await resolveRepoRoot(undefined);
-        expect(root).toBe(toplevel);
+    loadFlakeTest('resolves git repo root when projectRoot is omitted', () => {
+        // 1199 R1: run the cwd-derived probe in a child whose cwd IS the fixture repo, so the
+        // fallback is exercised without a process-global `chdir`. 0713 R3b keeps the assertion
+        // on the git toplevel, not on the raw cwd.
+        const { root, exitCode, stderr } = probeRepoRoot({ cwd: fixtureRepo });
+        expect(exitCode, stderr).toBe(0);
+        expect(root).toBe(fixtureRepoRoot);
     });
 
-    test('R4: hint resolves the target project root when cwd is outside the project', async () => {
-        const outer = mkdtempSync(join(tmpdir(), 'spur-r4-'));
-        Bun.spawnSync(['git', 'init', '-q', '.'], { cwd: outer });
-        const nested = join(outer, 'docs', 'tasks');
+    test('R4: hint resolves the target project root when cwd is outside the project', () => {
+        const nested = join(fixtureRepo, 'docs', 'tasks');
         mkdirSync(nested, { recursive: true });
-        const prevCwd = process.cwd();
-        try {
-            process.chdir(tmpdir());
-            const root = await resolveRepoRoot(undefined, nested);
-            expect(root).toBe(realpathSync(outer));
-        } finally {
-            process.chdir(prevCwd);
-            rmSync(outer, { recursive: true, force: true });
-        }
+
+        // The cwd alone cannot find the fixture — it sits outside any git repo…
+        const withoutHint = probeRepoRoot({ cwd: tmpdir() });
+        expect(withoutHint.root).not.toBe(fixtureRepoRoot);
+
+        // …the hint is what resolves the target tree (also from a child, no chdir).
+        const { root, exitCode, stderr } = probeRepoRoot({ cwd: tmpdir(), hint: nested });
+        expect(exitCode, stderr).toBe(0);
+        expect(root).toBe(fixtureRepoRoot);
     });
 });
 
 describe('buildTrackedBasenameIndex', () => {
-    test('builds tracked index from real repo root and filters out .spur/', async () => {
-        const index = await buildTrackedBasenameIndex(process.cwd());
+    test('builds the tracked index from the fixture repo and filters out .spur/', async () => {
+        const index = await buildTrackedBasenameIndex(fixtureRepo);
         expect(index.size).toBeGreaterThan(0);
+        // The fixture tracks a `.spur/` path, so the filter is proven rather than vacuous.
+        const tracked = Bun.spawnSync(['git', 'ls-files'], { cwd: fixtureRepo }).stdout.toString();
+        expect(tracked).toContain('.spur/tracked.txt');
         // .spur/ entries should be excluded
         for (const list of index.values()) {
             for (const p of list) {
@@ -139,7 +193,7 @@ describe('buildTrackedBasenameIndex', () => {
 
 describe('resolveConfiguredTaskDirs', () => {
     test('resolves active and configured task folders', async () => {
-        const fs = createNodeFileSystem(process.cwd());
+        const fs = createNodeFileSystem(fixtureRepo);
         const dirs = await resolveConfiguredTaskDirs(fs);
         expect(dirs.length).toBeGreaterThan(0);
     });
@@ -203,7 +257,7 @@ Evidence: \`index.ts:10\`
             fs: mockFs,
             dryRun: true,
             taskDirs: ['/mock/docs/tasks', '/mock/nonexistent-dir'],
-            projectRoot: process.cwd(),
+            projectRoot: fixtureRepo,
             write: async (filePath, wbs, section, newBody) => {
                 written.push({ filePath, wbs, section, newBody });
             },
@@ -216,6 +270,7 @@ Evidence: \`index.ts:10\`
         const applyReport = await anchorQualify(mockFs, {
             dryRun: false,
             taskDirs: ['/mock/docs/tasks'],
+            projectRoot: fixtureRepo,
             write: async (filePath, wbs, section, newBody) => {
                 written.push({ filePath, wbs, section, newBody });
             },
@@ -240,7 +295,7 @@ Evidence: \`index.ts:10\`
             fs: mockFs,
             dryRun: false,
             taskDirs: ['/mock/docs/tasks'],
-            projectRoot: process.cwd(),
+            projectRoot: fixtureRepo,
         });
 
         expect(report.filesScanned).toBe(0);
@@ -416,7 +471,7 @@ done_reason: "Verified with 23 passing tests"
             fs: mockFs(),
             dryRun: true,
             taskDirs: ['/mock/docs/tasks'],
-            projectRoot: process.cwd(),
+            projectRoot: fixtureRepo,
             writeField: async (filePath, wbs, key, value) => {
                 writes.push({ filePath, wbs, key, value });
             },
@@ -435,7 +490,7 @@ done_reason: "Verified with 23 passing tests"
             fs: mockFs(),
             dryRun: false,
             taskDirs: ['/mock/docs/tasks'],
-            projectRoot: process.cwd(),
+            projectRoot: fixtureRepo,
             writeField: async (filePath, wbs, key, value) => {
                 writes.push({ filePath, wbs, key, value });
             },
@@ -457,7 +512,7 @@ done_reason: "Verified with 23 passing tests"
             fs: mockFs({ drifted: false }),
             dryRun: false,
             taskDirs: ['/mock/docs/tasks'],
-            projectRoot: process.cwd(),
+            projectRoot: fixtureRepo,
             writeField: async (filePath, wbs, key, value) => {
                 writes.push({ filePath, wbs, key, value });
             },
@@ -473,7 +528,7 @@ done_reason: "Verified with 23 passing tests"
             fs: mockFs({ anchor: 'project-registry.ts:42' }),
             dryRun: false,
             taskDirs: ['/mock/docs/tasks'],
-            projectRoot: process.cwd(),
+            projectRoot: fixtureRepo,
             write: async () => {
                 throw new Error('schema predates the current frontmatter');
             },

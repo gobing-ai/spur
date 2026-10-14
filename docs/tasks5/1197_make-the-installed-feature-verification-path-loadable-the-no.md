@@ -1,10 +1,10 @@
 ---
 schema_version: 1
 name: "Make the installed feature-verification path loadable: the Node twin cannot import the Bun-target inline bundle"
-status: todo
+status: wip
 template: standard
 created_at: 2026-10-13T19:44:53.347Z
-updated_at: "2026-10-13T21:40:11.213Z"
+updated_at: "2026-10-13T22:11:46.899Z"
 
 priority: P1
 estimate_hours: 2
@@ -83,7 +83,17 @@ Out of scope: changing the bundle target or shimming `bun:sqlite` (would need a 
 
 ### Solution
 
-<!-- Filled during implementation: file:line change map and concise rationale. -->
+Bun re-entry added to the feature-verification verifier, its generated twin regenerated, and the pattern pinned for every inline-bundle consumer.
+
+| file:line | change |
+| --- | --- |
+| `plugins/sp/scripts/feature-verification-steps.ts:30` | add `import { spawnSync } from 'node:child_process'` — a Node builtin (ADR-065), already the shape used by the three existing consumers. |
+| `plugins/sp/scripts/feature-verification-steps.ts:128` | top of `main()`: `if (!process.versions.bun)` re-execs `bun <fileURLToPath(import.meta.url)> ...process.argv.slice(2)` with `stdio: 'inherit'`, `process.exit(child.status ?? 1)`, and on spawn error prints `feature-verification-steps requires Bun on PATH: <message>` then exits 1 — fail closed, deliberately NOT daily-summary's degrade-and-continue. (R1) |
+| `plugins/sp/scripts/feature-verification-steps.mjs:59` | regenerated twin (`superskill script convert sp feature-verification-steps.ts --out plugins/sp/scripts/feature-verification-steps.mjs`) — carries the same re-entry; `script-contract-check` proves byte-identity; never hand-edited. (R2) |
+| `plugins/sp/tests/feature-verification-steps.test.ts:65` | AC1/AC2 cases: spawn `node` on the twin in a scratch git project holding the twin under `scripts/` and the bundle under `lib/` (plus the shipped workflow definition + a `docs/features/T1_*.md`). AC1 asserts no `ERR_UNSUPPORTED_ESM_URL_SCHEME` and stderr byte-equal to the Bun run's (the missing run row); AC2 strips `bun` from `PATH` and asserts exit 1 plus the frozen `feature-verification-steps requires Bun on PATH` string. |
+| `plugins/sp/tests/bun-reentry-contract.test.ts:26` | AC3 static contract scan over `plugins/sp/scripts/**/*.ts`: every consumer whose source names `inline-run.generated` or `loadInlineApp` (feature-verification-steps, inline-run-setup, inline-run-dispatch, daily-summary) must carry `process.versions.bun` + `spawnSync('bun'` in both the `.ts` and the generated `.mjs` twin the workflow executes. (R3) |
+
+Rationale: the generated inline bundle keeps `bun:sqlite` external by design (`scripts/commands/bundle-plugin-lib.ts`), so the installed `node`-launched twin must re-enter Bun before the dynamic import. Reuse of the existing re-entry (Q&A closed) — a Node-safe bundle (a) and runtime-from-bundle-target (b) were rejected.
 
 ### Testing
 
@@ -105,4 +115,5 @@ Out of scope: changing the bundle target or shimming `bun:sqlite` (would need a 
 ### History
 
 - 2026-10-13T21:40:11.213Z backlog → todo (system)
+- 2026-10-13T22:11:46.899Z todo → wip (system)
 

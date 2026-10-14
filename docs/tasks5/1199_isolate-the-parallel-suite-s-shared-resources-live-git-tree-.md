@@ -1,10 +1,10 @@
 ---
 schema_version: 1
 name: Isolate the parallel suite's shared resources (live git tree, project DB) so a contended host cannot fail it
-status: todo
+status: wip
 template: standard
 created_at: 2026-10-13T21:14:35.289Z
-updated_at: "2026-10-13T21:45:54.974Z"
+updated_at: "2026-10-14T02:18:26.288Z"
 
 priority: P1
 estimate_hours: 2
@@ -74,7 +74,35 @@ The pipeline needs the suite to be trustworthy on a *busy* host: sibling agents 
 
 ### Solution
 
-<!-- Filled during implementation: file:line change map and concise rationale. -->
+1199 — point the anchor-qualifier tests at a `mkdtemp` fixture repo, and print the host load before the suite runs.
+
+**R1 — no test reads or mutates the live checkout** (`packages/app/tests/services/anchor-qualifier.test.ts`):
+
+| file:line | change |
+| --- | --- |
+| packages/app/tests/services/anchor-qualifier.test.ts:31 | `beforeAll` builds a `mkdtemp` fixture git repo (nested tracked files plus one under `.spur/`); `afterAll` removes it — the fixture pattern copied from `packages/app/tests/workflow/actions/proof-fingerprint.test.ts:31` |
+| packages/app/tests/services/anchor-qualifier.test.ts:64 | `probeRepoRoot` runs `resolveRepoRoot` in a child `bun -e` and returns its stdout — the cwd-derivation probe that replaces `process.chdir` |
+| packages/app/tests/services/anchor-qualifier.test.ts:153 | "resolves git repo root when projectRoot is omitted" now probes from a child whose cwd IS the fixture (was `process.cwd()`) |
+| packages/app/tests/services/anchor-qualifier.test.ts:158 | "R4: hint resolves the target project root…" now runs two child probes (no-hint proves cwd alone misses the fixture; the hint resolves it) — `process.chdir` removed |
+| packages/app/tests/services/anchor-qualifier.test.ts:175 | `buildTrackedBasenameIndex(fixtureRepo)` (was `process.cwd()`); the test asserts the fixture tracks `.spur/tracked.txt`, so the `.spur/` filter is proven rather than vacuous |
+| packages/app/tests/services/anchor-qualifier.test.ts:196 | `createNodeFileSystem(fixtureRepo)` (was `process.cwd()`) |
+| packages/app/tests/services/anchor-qualifier.test.ts:260 | `qualifyAnchors` dry-run `projectRoot: fixtureRepo` (was `process.cwd()`) |
+| packages/app/tests/services/anchor-qualifier.test.ts:273 | `anchorQualify` apply gained `projectRoot: fixtureRepo` (previously omitted, so it resolved the live cwd) |
+| packages/app/tests/services/anchor-qualifier.test.ts:298 | unreadable-files case `projectRoot: fixtureRepo` (was `process.cwd()`) |
+| packages/app/tests/services/anchor-qualifier.test.ts:474 | `done_reason` dry-run `projectRoot: fixtureRepo` (was `process.cwd()`) |
+| packages/app/tests/services/anchor-qualifier.test.ts:493 | `done_reason` apply `projectRoot: fixtureRepo` (was `process.cwd()`) |
+| packages/app/tests/services/anchor-qualifier.test.ts:515 | already-relative reason `projectRoot: fixtureRepo` (was `process.cwd()`) |
+| packages/app/tests/services/anchor-qualifier.test.ts:531 | unwritable-task `projectRoot: fixtureRepo` (was `process.cwd()`) |
+
+**R4 — advisory host-context line** (`scripts/commands/run-tests.ts`):
+
+| file:line | change |
+| --- | --- |
+| scripts/commands/run-tests.ts:26 | import `availableParallelism, loadavg` from `node:os` |
+| scripts/commands/run-tests.ts:60 | read `load1`/`cores` and, when `load1 > cores`, write `run-tests: host load1=<x> cores=<n> — timeouts may be contention` to stderr once per run, before bun is spawned |
+| scripts/commands/run-tests.ts:63 | the line is advisory only — the forwarded argv and the child's exit code are untouched |
+
+The sibling `process.cwd()` receipt-capture defect in `packages/app/src/services/feature-check.ts:589` (which fails `packages/app/tests/services/feature-transition.test.ts:299`) is out of scope for 1199 and was left untouched.
 
 ### Testing
 
@@ -91,4 +119,5 @@ The pipeline needs the suite to be trustworthy on a *busy* host: sibling agents 
 ### History
 
 - 2026-10-13T21:44:29.239Z backlog → todo (system)
+- 2026-10-14T02:18:24.220Z todo → wip (system)
 

@@ -29887,6 +29887,29 @@ function readReceipt(receiptPath) {
 function receiptFailsAtDigest(receipt, currentDigest) {
   return receipt !== null && receipt.schemaVersion === RECEIPT_SCHEMA_VERSION && receipt.tier === "full" && receipt.status === "FAIL" && currentDigest.length > 0 && receipt.inputDigest === currentDigest;
 }
+function countTimeoutShapedFailures(text) {
+  let fails = 0;
+  let timeouts = 0;
+  for (const line of text.split(`
+`)) {
+    if (line.startsWith("(fail) "))
+      fails += 1;
+    if (/this test timed out after \d+ms/.test(line))
+      timeouts += 1;
+  }
+  return { fails, timeouts };
+}
+function isTimeoutShapedLog(text) {
+  const { fails, timeouts } = countTimeoutShapedFailures(text);
+  return fails > 0 && fails === timeouts;
+}
+function readContendedRetryDigest(markerPath) {
+  try {
+    return readFileSync(markerPath, "utf8").trim();
+  } catch {
+    return "";
+  }
+}
 function readReceiptStatus(receiptPath, currentDigest) {
   const receipt = readReceipt(receiptPath);
   if (receipt === null || receipt.schemaVersion !== RECEIPT_SCHEMA_VERSION) {
@@ -30244,6 +30267,7 @@ function runQualityGate(mode, env, options = {}) {
   const statusFile = rel("-test-gate.status");
   const attemptFile = rel("-test-fix-attempt");
   const abs = (p) => cwd ? join(cwd, p) : p;
+  const priorLog = mode === "recheck" && existsSync(abs(logFile)) ? readFileSync(abs(logFile), "utf8") : "";
   writeFileSync(abs(logFile), "");
   if (mode === "run")
     writeFileSync(abs(attemptFile), `0
@@ -30277,8 +30301,18 @@ function runQualityGate(mode, env, options = {}) {
 `);
     return { status: "PASS", attempts: 0, logFile, findingsFile, statusFile, attemptFile };
   }
-  const noProgressSkip = commandPresent && mode === "recheck" && receiptFailsAtDigest(readReceipt(abs(rel("-check-receipt.json"))), env.proofDigest ?? "");
-  if (noProgressSkip) {
+  const receiptFailsNow = commandPresent && mode === "recheck" && receiptFailsAtDigest(readReceipt(abs(rel("-check-receipt.json"))), env.proofDigest ?? "");
+  const retryContended = receiptFailsNow && isTimeoutShapedLog(priorLog) && readContendedRetryDigest(abs(rel("-contended-retry"))) !== (env.proofDigest ?? "");
+  const noProgressSkip = receiptFailsNow && !retryContended;
+  if (retryContended) {
+    writeFileSync(abs(rel("-contended-retry")), `${env.proofDigest ?? ""}
+`);
+    const fails = countTimeoutShapedFailures(priorLog).fails;
+    const line = `check.retry-contended — ${fails} timeout-shaped failure(s) at input digest ${env.proofDigest ?? ""}; retry 1/1
+`;
+    process.stdout.write(line);
+    appendFileSync(abs(logFile), line);
+  } else if (noProgressSkip) {
     const line = `check.skipped-no-progress — full-tier FAIL receipt at input digest ${env.proofDigest ?? ""}; recheck skipped
 `;
     process.stdout.write(line);
@@ -30432,6 +30466,7 @@ export {
   RETRY_DELAY_MS_ENV,
   buildReceipt,
   extractFindings,
+  isTimeoutShapedLog,
   isTransientLock,
   lightScope,
   main,

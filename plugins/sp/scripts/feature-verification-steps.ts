@@ -18,10 +18,16 @@
  * Always exits 0 after a completed pass; the transition guard reads the status file and the
  * completion boundary validates the receipt (fail-closed). Unsafe ids are refused by the operation.
  *
+ * The installed `.mjs` twin may be launched with plain `node` (the `feature-verification` workflow
+ * selects `installed -> node`), but the generated inline bundle keeps `bun:sqlite` external by design, so the
+ * twin re-enters Bun at the top of `main()` (task 1197). Unlike daily-summary it fails closed when Bun
+ * is missing — a verifier that cannot load its bundle cannot run the checks.
+ *
  * Node-builtin imports only (ADR-065); the application seams come from the generated inline bundle,
  * never from `packages/app/src/index.ts`, which is not a plugin-script contract surface (0948 R3).
  */
 
+import { spawnSync } from 'node:child_process';
 import { existsSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { getEnvVar } from '../lib/env';
@@ -116,6 +122,16 @@ async function verify(
 }
 
 function main(): void {
+    // The portable Node twin has no workspace imports; the generated bundle still uses Spur's Bun
+    // runtime (bun:sqlite stays external by design). Re-enter Bun before any app import; fail closed
+    // when Bun is missing — the verifier must not report a pass it could not run.
+    if (!process.versions.bun) {
+        const child = spawnSync('bun', [fileURLToPath(import.meta.url), ...process.argv.slice(2)], {
+            stdio: 'inherit',
+        });
+        if (child.error) console.error(`feature-verification-steps requires Bun on PATH: ${child.error.message}`);
+        process.exit(child.status ?? 1);
+    }
     const args = process.argv.slice(2);
     const command = args[0];
     const flag = (name: string): string => {
