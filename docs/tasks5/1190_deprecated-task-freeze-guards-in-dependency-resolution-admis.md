@@ -4,7 +4,7 @@ name: Deprecated task freeze guards in dependency resolution, admission, checks 
 status: done
 template: feature-impl
 created_at: 2026-10-13T16:56:12.968Z
-updated_at: "2026-10-13T22:43:15.301Z"
+updated_at: "2026-10-14T04:59:36.225Z"
 feature_id: F43
 priority: P2
 estimate_hours: 6
@@ -77,23 +77,25 @@ Test-first note: write the failing cases before the code — dependency refusal 
 
 - `packages/config/src/finding-codes.ts:48,154` — registered `L4.task-deprecated` in `ALL_FINDING_CODES` and `FINDING_CODES.L4_TASK_DEPRECATED`: one stable identity for the freeze finding, warning-severity by default so `--strict` elevates it and `tasks.severity` can override it like every other advisory.
 
-- `packages/app/src/services/task-check.ts:1222,1246` — `runL4`'s dependency-edge loop emits that finding for a LIVE dependent whose declared dependency resolves to `deprecated`, naming re-point or un-deprecate (`spur task update <dep> todo`); a terminal dependent is skipped, and the pre-existing edge is only read — never rewritten (the freeze is prospective).
+- `packages/app/src/services/task-freeze.ts:10,15` — `isTaskFrozen` (case-insensitive, missing → false) and `undeprecateTaskCommand`: the one freeze predicate and exit command every guard below shares (review remediation P3, replacing duplicated `=== 'deprecated'` literals). Import-free so the plugin bundle of `planning-admission.ts` stays free of the domain barrel.
 
-- `packages/app/src/services/task-service.ts:1495,1569,1577` — `sectionWriteFreezeWarning` plus one `noteFreeze` at each exit: a section write on a deprecated task still lands, with the freeze note appended to the returned `warnings[]` exactly once (design §3.2 exempt write set; the record hop is the same channel).
+- `packages/app/src/services/task-check.ts:1225,1244` — `runL4`'s dependency-edge loop emits that finding for a LIVE dependent whose declared dependency resolves to `deprecated`, naming re-point or un-deprecate (`spur task update <dep> todo`); a terminal dependent is skipped, and the pre-existing edge is only read — never rewritten (the freeze is prospective).
 
-- `packages/app/src/workflow/lifecycle-adapter.ts:455` — the `deprecated` branch of `formatDenialWithLegalPaths` appends the exit to the graph refusal: `spur task update <wbs> todo` (un-deprecate) or `cancelled` (remove), with the feature twin `spur feature update <id> active`. No new edge, no new verb — the refusal itself still comes from `task-lifecycle.yaml` through ADR-135.
+- `packages/app/src/services/task-service.ts:1520,1587,1602` — `sectionWriteFreezeWarning` plus one `noteFreeze` at each exit: a section write on a deprecated task still lands, with the freeze note appended to the returned `warnings[]` exactly once (design §3.2 exempt write set; the record hop is the same channel).
 
-- `packages/app/src/workflow/idea-handoff.ts:215,275` — the ready-set resolver probes each resolved dependency's status once per WBS and refuses the item before any `spur task deps set`, naming the deprecated task and the un-deprecate command; an unreadable probe yields no fabricated refusal.
+- `packages/app/src/workflow/lifecycle-adapter.ts:451` — the `deprecated` branch of `formatDenialWithLegalPaths` appends the exit to the graph refusal: `spur task update <wbs> todo` (un-deprecate) or `cancelled` (remove), with the feature twin `spur feature update <id> active`. No new edge, no new verb — the refusal itself still comes from `task-lifecycle.yaml` through ADR-135.
 
-- `packages/app/src/services/planning-admission.ts:150,193,311` — `quickReadiness` returns `skipped/DEPRECATED` for a deprecated task (including `verify --force`), a deprecated `--dep-status` value never reads as a satisfied dependency and the block carries the remedy, and `preflightTask` stops routing a deprecated task into the pipeline.
+- `packages/app/src/workflow/idea-handoff.ts:276` — the ready-set resolver probes each resolved dependency's status once per WBS and refuses the item before any `spur task deps set`, naming the deprecated task and the un-deprecate command; an unreadable probe yields no fabricated refusal.
 
-- `plugins/sp/lib/plan-projection.generated.mjs`, `plugins/sp/scripts/batch-preflight.mjs`, `plugins/sp/scripts/batch-plan.mjs` — regenerated with `bun run build:scripts` so the plugin-side admission policy (and its `.d.mts` decls) carry the same guard; `packages/config/src/finding-codes.ts:48` also re-emitted into `plugins/sp/lib/{quality-gate,inline-run}.generated.mjs` and `plugins/sp/scripts/quality-gate.mjs`.
+- `packages/app/src/services/planning-admission.ts:151,195,315` — `quickReadiness` returns `skipped/DEPRECATED` for a deprecated task (including `verify --force`), a deprecated `--dep-status` value never reads as a satisfied dependency and the block carries the remedy, and `preflightTask` stops routing a deprecated task into the pipeline.
 
-Tests: `packages/app/tests/services/task-check.test.ts` (live dependent warns / terminal silent / edge byte-identical), `packages/app/tests/services/task-service.test.ts` (section-write freeze note exactly once), `packages/app/tests/services/task-record.test.ts` (no forward hop; refusal writes nothing; the record hop is exempt), `packages/app/tests/workflow/idea-handoff.test.ts` (dependency refusal before any deps write), `packages/app/tests/workflow/lifecycle-adapter.test.ts` (denial hint), `plugins/sp/tests/batch-preflight.test.ts` (admission code + deprecated dep). All six files pass; `bun run build:scripts` regenerated the twins, and the throws stay typed (`GuardDeniedError`).
-
-- `packages/app/src/services/task-service.ts:1154,1215,1226,1390` — added the reachable-writer half of the dependency freeze the review remediation found missing: `mutateDependencies` now refuses a NEW edge whose target resolves to `deprecated` (`DependencyMutationError` code `deprecated`) before any write, naming the un-deprecate exit. The check is prospective — an edge already present in the current array is neither dropped nor rewritten — and `readTaskStatus` reads the sibling file's frontmatter status.
+- `packages/app/src/services/task-service.ts:1155,1225,1391` — the reachable-writer half of the dependency freeze: `mutateDependencies` refuses a NEW edge whose target resolves to `deprecated` (`DependencyMutationError` code `deprecated`) before any write, naming the un-deprecate exit. The check is prospective — an edge already present in the current array is neither dropped nor rewritten — and `readTaskStatus` reads the sibling file's frontmatter status.
 
 - `apps/cli/src/commands/task.ts:809` — the `spur task deps` help text names the ADR-137 freeze among the validations that run before any write.
+
+- Generated twins — `plugins/sp/lib/plan-projection.generated.mjs`, `plugins/sp/scripts/batch-preflight.mjs` and `plugins/sp/scripts/batch-plan.mjs` carry the admission guard, and `plugins/sp/lib/{quality-gate,inline-run}.generated.mjs` plus `plugins/sp/scripts/quality-gate.mjs` carry the new finding code; all regenerated with `bun run build:scripts` (`bun run plugin-smoke` PASS, no `bun:sqlite` in the admission bundle).
+
+Tests: `packages/app/tests/services/task-check.test.ts` (live dependent warns / terminal silent / edge byte-identical), `packages/app/tests/services/task-service.test.ts` (section-write freeze note exactly once; new edge onto deprecated refused, existing edge kept), `packages/app/tests/services/task-record.test.ts` (no forward hop; refusal writes nothing; the record hop is exempt), `packages/app/tests/workflow/idea-handoff.test.ts` (dependency refusal before any deps write), `packages/app/tests/workflow/lifecycle-adapter.test.ts` (denial hint), `plugins/sp/tests/batch-preflight.test.ts` (admission code + deprecated dep). The throws stay typed (`GuardDeniedError`).
 
 ### Testing
 

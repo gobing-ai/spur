@@ -7,6 +7,7 @@ import {
     type ProcessExecutor,
     type ProcessResult,
 } from '@gobing-ai/ts-runtime';
+import { isTaskFrozen, undeprecateTaskCommand } from '../services/task-freeze';
 import {
     computePlanningDigest,
     lintPremiseEvidence,
@@ -272,7 +273,7 @@ export async function finalizeIdeaHandoff(options: FinalizeIdeaHandoffOptions): 
                 // item before the `dependencies[]` write, naming the frozen task and the
                 // un-deprecate command, so no edge is half-applied.
                 for (const depWbs of deps) {
-                    if ((await taskStatusOf(depWbs)) !== 'deprecated') continue;
+                    if (!isTaskFrozen(await taskStatusOf(depWbs))) continue;
                     return {
                         ok: false,
                         wbsList: result.wbs,
@@ -281,7 +282,7 @@ export async function finalizeIdeaHandoff(options: FinalizeIdeaHandoffOptions): 
                         error:
                             `Dependency ${depWbs} is deprecated (frozen, ADR-137) — a new dependency edge is ` +
                             `refused. Re-point the order entry "${item.name}" at live work, or un-deprecate ` +
-                            `it: \`spur task update ${depWbs} todo\``,
+                            `it: \`${undeprecateTaskCommand(depWbs)}\``,
                     };
                 }
                 const depRes = await executor.run({

@@ -46,6 +46,7 @@ import type { EntityRef, PlanningEventName, PlanningWriteService, WriteResult } 
 import { ensureDurablePlaneIgnored, runStoragePaths } from './run-storage';
 import { structuralFindings } from './structural-repair';
 import { GATE_LANGUAGE_SECTIONS, hasGateLanguage, hasSolutionFileLineCitation, TaskCheckService } from './task-check';
+import { isTaskFrozen, undeprecateTaskCommand } from './task-freeze';
 import { TaskLocator } from './task-locator';
 import {
     escapeTablePipe,
@@ -1221,10 +1222,10 @@ export class TaskService {
             if (current.includes(v)) continue;
             const target = await this.findTaskFileName(v);
             if (target === null) continue; // step 2 already refused a missing WBS
-            if ((await this.readTaskStatus(target.filePath)) !== 'deprecated') continue;
+            if (!isTaskFrozen(await this.readTaskStatus(target.filePath))) continue;
             throw new DependencyMutationError(
                 'deprecated',
-                `Task ${v} is deprecated (frozen) — a new dependency edge onto it is refused; re-point at live work, or un-deprecate it (\`spur task update ${v} todo\`)`,
+                `Task ${v} is deprecated (frozen) — a new dependency edge onto it is refused; re-point at live work, or un-deprecate it (\`${undeprecateTaskCommand(v)}\`)`,
             );
         }
 
@@ -1601,11 +1602,10 @@ export class TaskService {
     private async sectionWriteFreezeWarning(wbs: string, filePath: string): Promise<string | null> {
         try {
             const fm = MarkdownDocument.parse(await this.ctx.fs.readFile(filePath), 'task').frontmatterData ?? {};
-            const status = typeof fm.status === 'string' ? fm.status.toLowerCase() : '';
-            if (status !== 'deprecated') return null;
+            if (!isTaskFrozen(typeof fm.status === 'string' ? fm.status : null)) return null;
             return (
                 `Task ${wbs} is deprecated (frozen, ADR-137) — the section write was recorded, but status ` +
-                `moves stay refused until it is un-deprecated (\`spur task update ${wbs} todo\`)`
+                `moves stay refused until it is un-deprecated (\`${undeprecateTaskCommand(wbs)}\`)`
             );
         } catch {
             return null;

@@ -31,6 +31,7 @@ import {
 } from './planning-check-base';
 import { applyStructuralRepairs, type StructuralRepair } from './structural-repair';
 import { evaluateTaskEvidence, type TaskEvidenceDeps } from './task-evidence-precheck';
+import { isTaskFrozen, undeprecateTaskCommand } from './task-freeze';
 import { TaskLocator } from './task-locator';
 import { isEmptyRecordSolution } from './task-record';
 import { evaluateTaskSize } from './task-size-precheck';
@@ -1240,13 +1241,13 @@ export class TaskCheckService extends PlanningCheckService {
                     }
                     if (!taskLive) continue;
                     const depStatus = (await this.readTaskSnapshot(tasksDir, depWbs))?.status;
-                    if (depStatus !== 'deprecated') continue;
+                    if (!isTaskFrozen(depStatus)) continue;
                     findings.push({
                         layer: 'L4',
                         code: FINDING_CODES.L4_TASK_DEPRECATED,
                         severity: 'warning',
                         section: '',
-                        message: `Task ${wbs} depends on deprecated task ${depWbs} (frozen) — re-point the dependency at live work or un-deprecate it (\`spur task update ${depWbs} todo\`)`,
+                        message: `Task ${wbs} depends on deprecated task ${depWbs} (frozen) — re-point the dependency at live work or un-deprecate it (\`${undeprecateTaskCommand(depWbs)}\`)`,
                     });
                 }
             }
