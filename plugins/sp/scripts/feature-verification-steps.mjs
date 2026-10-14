@@ -2,6 +2,7 @@
 // @bun
 
 // plugins/sp/scripts/feature-verification-steps.ts
+import { spawnSync } from "child_process";
 import { existsSync } from "fs";
 import { fileURLToPath } from "url";
 
@@ -55,6 +56,14 @@ async function verify(featureId, runId, cmdOverride, spurBin, mode, confidenceOv
   console.log(`feature-verification-steps: ${featureId} ${result.message}`);
 }
 function main() {
+  if (!process.versions.bun) {
+    const child = spawnSync("bun", [fileURLToPath(import.meta.url), ...process.argv.slice(2)], {
+      stdio: "inherit"
+    });
+    if (child.error)
+      console.error(`feature-verification-steps requires Bun on PATH: ${child.error.message}`);
+    process.exit(child.status ?? 1);
+  }
   const args = process.argv.slice(2);
   const command = args[0];
   const flag = (name) => {
