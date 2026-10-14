@@ -34,6 +34,7 @@ import { resolveDurableArtifactPath } from '../workflow/actions/run-path';
 import { reconcileExistingLifecycleRow, TASK_LIFECYCLE_PROFILE } from '../workflow/lifecycle-adapter';
 import { extractRunCitations, RUN_CITATION_DIRS } from '../workflow/run-citation';
 import {
+    defaultVerdictRunDir,
     featureScenarioTitles,
     matchedScenarioKeys,
     readFeatureAcBody,
@@ -1692,8 +1693,11 @@ export class TaskService {
         const raw = await this.ctx.fs.readFile(filePath);
         const doc = MarkdownDocument.parse(raw, 'task');
 
-        // Resolve verdict path.
-        const verdictPath = opts.verdictFile ?? `.spur/run/${wbs}-verdict.json`;
+        // Resolve verdict path. The default is rooted in the task tree this service was built for,
+        // not in `process.cwd()`: a caller that injects a tree (a test fixture, an embedding app)
+        // otherwise reads whatever project happens to be the process's working directory — a
+        // coupling that silently made a fixture's own verdict invisible from the repo root.
+        const verdictPath = opts.verdictFile ?? join(defaultVerdictRunDir(this.ctx.tasksDir), `${wbs}-verdict.json`);
         // 1040 R1/R4: classify the artifact read so the result can report
         // readable/missing/malformed (foreign explicit-WBS counts as missing)
         // instead of silently collapsing everything to UNKNOWN.
