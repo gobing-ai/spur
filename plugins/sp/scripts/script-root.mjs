@@ -119,11 +119,11 @@ function main(argv, env = getEnvVars(), options = {}) {
   process.exit(main(process.argv.slice(2)));
 }
 export {
-  runScriptRoot,
-  main,
-  digestScriptSet,
-  SOURCE_REPO_MARKER,
-  SCRIPT_ROOT_USAGE,
+  PROJECT_SCRIPTS_DIR,
   SCRIPT_ROOT_TWIN_REL,
-  PROJECT_SCRIPTS_DIR
+  SCRIPT_ROOT_USAGE,
+  SOURCE_REPO_MARKER,
+  digestScriptSet,
+  main,
+  runScriptRoot
 };
