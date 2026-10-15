@@ -56,8 +56,8 @@ interface OccupantRef {
 the legacy `--agent <specId>` fallback (its warn-once notice retired by task 0849) — rewrites
 `--agent` to the
 spec's **executor name** when the spec records one (task 0537: restores the operator's
-`{ agent, model }` + tier through `resolveExecutor`), falling back to the spec's coding-agent type
-only via the `spec-without-executor-field` shim. A spec whose executor is absent from
+`{ agent, model }` + tier through `resolveExecutor`). A spec without an `executor` field fails at
+drain naming the field to add (the `spec-without-executor-field` fallback was removed). A spec whose executor is absent from
 `agent.executors` fails loudly at drain, spawning nothing (0537 R5). The occupant record **retains**
 `specId`. Wait/send addressing is a concrete spec id or an exact-one `--role` selector; a bare
 coding-agent kind remains invalid.
@@ -66,7 +66,7 @@ coding-agent kind remains invalid.
 
 **Wave-1 implementation (task 0529, amended 0537):** `drainIntoPrompt` sets `flags['spec-id']` **before**
 rewriting `flags.agent` — originally to `spec.type`; since 0537, to the spec's **executor name**
-when the spec records one (fallback to `type` via the `spec-without-executor-field` shim).
+(required; the former fallback to `type` was removed).
 `AgentService.executeRun` persists the occupant when a
 `spec-id` flag is present (the bare `--agent <binary>` path does not). `generation` is
 `max(generation for spec_id) + 1` per run row — monotonic per spec; the process-generation-shared

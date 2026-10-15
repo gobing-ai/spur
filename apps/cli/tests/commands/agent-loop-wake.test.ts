@@ -70,9 +70,11 @@ async function makeRig(opts?: { corpus?: boolean }): Promise<WakeRig> {
         output,
         db,
         loadAgentConfig: (root: string) => loadSpurConfig(root),
+        // The spec's executor binding: a runner-unknown agent keeps the loop on one-shot drains.
+        spurConfig: spurConfigSchema.parse({ agent: { executors: [{ name: 'claude-code', agent: 'claude-code' }] } }),
     });
     const team = new AgentCoordinationService(ctx);
-    await team.createAgentSpec({ id: 'wake-worker', type: 'claude-code' });
+    await team.createAgentSpec({ id: 'wake-worker', type: 'claude-code', executor: 'claude-code' });
     if (opts?.corpus === true) {
         // Minimal planning corpus so `recordIdleHold` can produce REAL holds
         // (the default `rest` strategy holds every ready candidate).
@@ -416,8 +418,8 @@ test('G71 production loop claims ownership, dispatches gated tasks through the i
         process.chdir(project);
         const path = realpathSync(project);
         const team = new AgentCoordinationService(ctx);
-        await team.createAgentSpec({ id: 'proj-lead', type: 'pi' });
-        await team.createAgentSpec({ id: 'proj-coder', type: 'pi' });
+        await team.createAgentSpec({ id: 'proj-lead', type: 'pi', executor: 'pi' });
+        await team.createAgentSpec({ id: 'proj-coder', type: 'pi', executor: 'pi' });
         for (const [wbs, tags, body, dependencies] of [
             ['0841', '[fleet:auto]', '### Plan\n\n- [ ] Inspect the supplied fixture and record its result.', '[]'],
             ['0842', '[]', '### Plan\n\n- [ ] Inspect the supplied fixture and record its result.', '[]'],
@@ -534,8 +536,8 @@ test('G71 a member failure is read from the receipt: definite failed retries und
         process.chdir(project);
         const path = realpathSync(project);
         const team = new AgentCoordinationService(ctx);
-        await team.createAgentSpec({ id: 'proj-lead', type: 'pi' });
-        await team.createAgentSpec({ id: 'proj-coder', type: 'pi' });
+        await team.createAgentSpec({ id: 'proj-lead', type: 'pi', executor: 'pi' });
+        await team.createAgentSpec({ id: 'proj-coder', type: 'pi', executor: 'pi' });
         writeFileSync(
             join(project, 'docs', 'tasks', '0841_fixture.md'),
             `---\nschema_version: 1\nname: Fixture 0841\nstatus: todo\ntemplate: meta\nfeature_id: G62\nupdated_at: 2026-09-12T00:00:00.000Z\ncreated_at: 2026-09-12T00:00:00.000Z\ntags: [fleet:auto]\ndependencies: []\n---\n\n## 0841. Fixture 0841\n\n### Background\n\nInspect this local fixture to exercise managed dispatch through the real task readiness checker.\n\n### Plan\n\n- [ ] Inspect the supplied fixture and record its result.\n`,

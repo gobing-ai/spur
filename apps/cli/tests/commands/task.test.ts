@@ -4077,7 +4077,7 @@ describe('spur task ready-by-default (0788, fake executor)', () => {
         // global layer merges in) pinning the claude shim our fake bin serves.
         await writeFile(
             join(isoCwd, '.spur', 'config.yaml'),
-            'agent:\n  default: fakeprep\n  executors:\n    - name: fakeprep\n      agent: claude\n',
+            'agent:\n  default: coder\n  executors:\n    - name: fakeprep\n      agent: claude\n      tier: standard\n',
         );
         binDir = join(isoCwd, '.fake-bin');
         await mkdir(binDir, { recursive: true });

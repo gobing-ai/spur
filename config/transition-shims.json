@@ -7,20 +7,6 @@
             "file": "packages/app/src/services/agent-service.ts",
             "keepsWorking": "a bare coding-agent binary name (codex, omp, claude with no matching agent.executors entry) remains a valid --agent value during the role transition, with a one-time warning emitted by warnBareBinaryOnce",
             "removalCondition": "no bare-binary --agent value remains in docs/, config/workflows/, or plugins/sp/ (scan for --agent <binary-name> usages against agent.executors names)"
-        },
-        {
-            "id": "spec-without-executor-field",
-            "wbs": "0537",
-            "file": "apps/cli/src/commands/agent.ts",
-            "keepsWorking": "a pre-existing agent spec carrying only type (no executor field) still drains: --agent <specId> falls back to the spec's coding-agent type instead of resolving a missing executor",
-            "removalCondition": "every spec under .spur/agents/ records an executor field (scan .spur/agents/*.yaml for the key; re-materialize the demo team first)"
-        },
-        {
-            "id": "agent-default-executor",
-            "wbs": "0542",
-            "file": "packages/app/src/services/agent-service.ts",
-            "keepsWorking": "a configured executor name in agent.default still resolves during the transition, warned once by warnAgentDefaultExecutorOnce; the value domain moved to roles (recommended default: coder)",
-            "removalCondition": "no agent.default value names an agent.executors entry (scan .spur/config.yaml and config/config.example.yaml against the agent.executors names)"
         }
     ]
 }

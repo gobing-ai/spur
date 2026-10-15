@@ -740,8 +740,8 @@ Current shipped coordination is two independent channels (`03` §14.1): durable 
 consumed through the loop/dispatch policy in §14.1, and a supervised process pipe (stdin POST + bounded SSE ring).
 Wave 1 (task 0529) persists an `OccupantRef` + `coordination_runs` row when a run is addressed by
 spec id (`flags['spec-id']` is set before `--drain` rewrites `--agent` to the spec's **executor
-name** when the spec records one — falling back to the coding-agent type only via the
-`spec-without-executor-field` shim, task 0537; `--spec <id>` is the canonical carrier since 0542)
+name**; a spec without an `executor` field fails at drain naming the field to add — the
+`spec-without-executor-field` fallback was removed; `--spec <id>` is the canonical carrier since 0542)
 and injects `SPUR_SPEC_ID` / `SPUR_RUN_ID` / `SPUR_SERVE_URL` on supervised spawn.
 Wave 2 (task 0530) ships the identity-pinned wait surface: `spur agent wait <specId>` (pins
 `specId+runId+generation`, typed errors `occupant_gone|run_replaced|wait_stalled|timeout`)

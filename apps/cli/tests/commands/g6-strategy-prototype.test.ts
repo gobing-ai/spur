@@ -114,7 +114,7 @@ function boot(): G6StrategyPrototypeController {
     c.addInstance(P1, I('coder-1'));
     c.addInstance(P1, I('coder-2'));
     c.addInstance(P1, I('scribe-1', { role: 'scribe', executor: 'codex' }));
-    c.addInstance(P1, I('planner-1', { role: 'planner', executor: 'claude-code', purpose: 'orchestrator' }));
+    c.addInstance(P1, I('planner-1', { role: 'planner', executor: 'claude', purpose: 'orchestrator' }));
     return c;
 }
 

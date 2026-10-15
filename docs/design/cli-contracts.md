@@ -332,9 +332,9 @@ keeps working during the transition under a registered shim, with a one-time war
 rejected at the flag boundary **before any agent process spawns**, with a message naming both
 accepted sets (R3). With no stage and no declaration, `agent.default` is resolved as the **default
 role** (0542 R2 — the value domain moved from executor names to roles; recommended value `coder`):
-a role uses the new semantics; a configured executor name still resolves during the transition with
-a one-time warning (shim `agent-default-executor`); a value that is neither fails naming both
-accepted sets. On miss, Tier-1 priority applies. The legacy
+a role uses the new semantics; a configured executor name fails (exit 2) with the fix — set a role
+such as `coder` and pin the executor with `--agent <name>` (the `agent-default-executor` shim was
+removed); any other value fails naming the accepted roles. On miss, Tier-1 priority applies. The legacy
 `current`/`inherit` tokens were removed (ADR-047): they resolve as unknown executor names (exit 2) —
 `inline` is the surviving value for "the agent running this session". Host-agent detection reads
 `SPUR_AGENT`/`CLAUDE_CODE_ENTRYPOINT`/`TERM_PROGRAM` via `resolveAgentHint`, not `--agent current`.
@@ -430,8 +430,8 @@ operator's `{ agent, model }` with the executor's declared tier — a spec bound
 runs on `gpt-5.6-sol` at `capable-3`, not bare `codex` on the default model. For a **role-only**
 member (0543 R1) `executor` is the executor the tier ladder resolved (cheapest eligible for the
 role's tier — the same funnel `--agent <role>` uses), so the resolution is inspectable on the
-spec, not implicit. Pre-existing specs
-with no executor field fall back to the coding-agent type (`@transition-shim(spec-without-executor-field)`).
+spec, not implicit. A spec with no executor field fails at drain, naming the `executor:` field to
+add (the `spec-without-executor-field` fallback to the coding-agent type was removed).
 A spec whose executor is absent from `agent.executors` (renamed or removed) **fails loudly** at
 drain, naming the spec and the missing executor, and no process spawns — it never silently
 downgrades to a bare binary. It also
@@ -599,8 +599,8 @@ through `spur agent list --specs`. Spec ids are validated (`[a-z][a-z0-9_-]{1,63
   `<slug>-<localId>` with the coding-agent kind (`type`, required for the
   runner) **and** the configured executor name (`executor: <name>` beside `type`, e.g. `codex-sol`),
   so `--drain --spec <specId>` can resolve back to the operator's model + tier. `executor` is
-  optional on disk — pre-existing specs carrying only `type` still load and drain via the fallback
-  (`@transition-shim(spec-without-executor-field)`). **Role is the primary axis (0543).** A member
+  optional on disk for loading, but required to drain: a spec carrying only `type` fails at drain
+  naming the field to add (the `spec-without-executor-field` fallback was removed). **Role is the primary axis (0543).** A member
   may declare `role: <scribe|coder|reviewer|planner>` (the Layer-1 role vocabulary —
   `DEFAULT_AGENT_ROLES` in `packages/config`, task 0535) with or without an executor; `purpose` stays human
   annotation. A member declaring a role **and** an executor pins the executor (R2, pin beats policy);

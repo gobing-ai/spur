@@ -2290,10 +2290,14 @@ export class AgentService {
         const phaseSuffix = phase !== undefined ? ` for phase '${phase}'` : '';
 
         if (executor !== undefined) {
-            // R2 (0542): agent.default's value domain is now role ids; a configured
-            // executor name is the legacy value — warn once under the registered shim.
+            // R2 (0542): agent.default takes a role id. The executor-name fallback
+            // (shim agent-default-executor) was removed, so an executor name fails loudly.
             if (source === 'default') {
-                warnAgentDefaultExecutorOnce(selector, this.ctx.output);
+                return {
+                    ok: false,
+                    exitCode: 2,
+                    message: agentDefaultExecutorMessage(selector, this.ctx.roles),
+                };
             }
             // 111 R3/R4: a pinned (or default-named, or phase-mapped) disabled
             // profile is never silently substituted — routing fails naming the
@@ -2357,19 +2361,15 @@ export class AgentService {
             };
         }
 
-        // R2 (0542): agent.default is a role now; a value that is neither a role
-        // nor a configured executor fails naming both accepted sets — it must not
-        // silently resolve as a legacy direct agent name (the value domain moved).
+        // R2 (0542): agent.default is a role; any other value fails naming the
+        // accepted roles — it must not silently resolve as a legacy direct agent name.
         if (source === 'default') {
             const roleNames = this.ctx.roles !== undefined ? [...this.ctx.roles.keys()].join(', ') : '';
-            const names = this.ctx.agentConfig?.executors?.map((e) => e.name) ?? [];
-            const roleList = roleNames !== '' ? `role (${roleNames})` : 'a role';
-            const executorList =
-                names.length > 0 ? `configured executor (${names.join(', ')})` : 'a configured executor';
+            const roleList = roleNames !== '' ? `a role (${roleNames})` : 'a role';
             return {
                 ok: false,
                 exitCode: 2,
-                message: `Unknown agent.default value: '${selector}'. Accepted: ${roleList} or ${executorList}.`,
+                message: `Unknown agent.default value: '${selector}'. Accepted: ${roleList}, e.g. agent.default: coder.`,
             };
         }
 
@@ -2926,22 +2926,17 @@ function warnBareBinaryOnce(selector: string, output: AgentServiceOutput): void 
     );
 }
 
-/** `agent.default` values already warned as legacy executor names (warn once per process — 0542 R2). */
-const warnedAgentDefaultExecutor = new Set<string>();
-
 /**
- * One-time transition warning when `agent.default` holds a configured executor
- * name instead of the new default-role value (0542 R2). The executor keeps
- * working during the transition; the value domain moved to roles.
+ * Actionable error for an `agent.default` that names a configured executor. The value domain is
+ * roles since 0542; the transition fallback that kept executor names working is gone.
  */
-// @transition-shim(agent-default-executor) — a configured executor name in agent.default still resolves
-// during the transition, warned once; removal: no agent.default value names an agent.executors entry
-// (scan .spur/config.yaml and config/config.example.yaml against the agent.executors names)
-function warnAgentDefaultExecutorOnce(selector: string, output: AgentServiceOutput): void {
-    if (warnedAgentDefaultExecutor.has(selector)) return;
-    warnedAgentDefaultExecutor.add(selector);
-    output.error(
-        `Warning: agent.default "${selector}" is a configured executor name, not a role. It keeps working during the transition; prefer a role (scribe, coder, reviewer, planner) (config/transition-shims.json: agent-default-executor).`,
+function agentDefaultExecutorMessage(selector: string, roles: ReadonlyMap<string, unknown> | undefined): string {
+    const roleNames =
+        roles !== undefined && roles.size > 0 ? [...roles.keys()].join(', ') : 'scribe, coder, reviewer, planner';
+    return (
+        `agent.default '${selector}' names a configured executor, but agent.default takes a role (${roleNames}). ` +
+        `Fix: set agent.default to a role such as 'coder' in .spur/config.yaml, and pin '${selector}' explicitly ` +
+        `with --agent ${selector} where you need that executor.`
     );
 }
 
@@ -2953,7 +2948,6 @@ function warnAgentDefaultExecutorOnce(selector: string, output: AgentServiceOutp
  */
 export function _resetAgentServiceShimsForTest(): void {
     warnedBareBinary.clear();
-    warnedAgentDefaultExecutor.clear();
 }
 
 /** Display row: DoctorResult joined with its executor config and role eligibility (B4/0681). */

@@ -65,6 +65,7 @@ async function seedSpec(cwd: string, specId: string): Promise<void> {
     await new AgentCoordinationService(createCliContext({ cwd, output: createCapturedOutput() })).createAgentSpec({
         id: specId,
         type: 'claude-code',
+        executor: 'claude',
         purpose: 'plan it',
     });
 }
