@@ -161,6 +161,7 @@ mechanics; the CLI guide points here for the 26-step view.
 | `spur self migrate`  | [cmd_migrate.md](./cmd_migrate.md)   |
 | `spur self maintain` | [cmd_maintain.md](./cmd_maintain.md) |
 | `spur self serve`    | [cmd_serve.md](./cmd_serve.md)       |
+| `spur self hook`     | [self_hook.md](./self_hook.md)       |
 | `spur projects` | [cmd_projects.md](./cmd_projects.md) |
 
 ### References

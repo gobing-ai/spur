@@ -14,7 +14,7 @@
  *     onto their `self` verbs; the hidden `agent loop` is allow-listed.
  *   R2 (CLI → docs): every live verb and every live flag must appear in the noun's owning
  *     page(s) in EACH tree (`docs/help/cmd_<noun>.md`, `docs/help2/<noun>.md`; `self` maps
- *     to its five verb pages). `--help`/`-h` and `--json-envelope` are exempt.
+ *     to its five verb pages plus `hook`). `--help`/`-h` and `--json-envelope` are exempt.
  *   R3 (matrix): the noun×verb table, the `Verb count` row, and the Summary counts in
  *     `docs/help/spur-cli-matrix.md` are checked against the live surface, never trusted as
  *     hand-maintained.
@@ -191,14 +191,16 @@ function mentions(haystack: string, needle: string): boolean {
 // ---------------------------------------------------------------------------
 
 /** Tree → noun → owning pages whose union must document every live verb and flag. */
-function owningPages(dir: string, prefix: (noun: string) => string): Map<string, string[]> {
+function owningPages(dir: string, prefix: (noun: string) => string, selfHookPage: string): Map<string, string[]> {
     const pages = new Map<string, string[]>();
     for (const noun of surface.keys()) {
         if (noun === 'self') {
-            pages.set(
-                noun,
-                HIDDEN_ALIASES.map((verb) => join(dir, prefix(verb))),
-            );
+            pages.set(noun, [
+                ...HIDDEN_ALIASES.map((verb) => join(dir, prefix(verb))),
+                // `self hook` (script-absorption PR-2a) has no top-level alias, so docs/help names its
+                // page `self_hook.md` rather than a `cmd_<noun>.md` that would claim a top-level command.
+                join(dir, selfHookPage),
+            ]);
         } else {
             pages.set(noun, [join(dir, prefix(noun))]);
         }
@@ -206,7 +208,10 @@ function owningPages(dir: string, prefix: (noun: string) => string): Map<string,
     return pages;
 }
 
-const pageMaps = [owningPages(HELP_DIR, (noun) => `cmd_${noun}.md`), owningPages(HELP2_DIR, (noun) => `${noun}.md`)];
+const pageMaps = [
+    owningPages(HELP_DIR, (noun) => `cmd_${noun}.md`, 'self_hook.md'),
+    owningPages(HELP2_DIR, (noun) => `${noun}.md`, 'hook.md'),
+];
 
 function pageTexts(pages: string[]): string {
     return pages.map((p) => readFileSync(p, 'utf8')).join('\n');

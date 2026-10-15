@@ -22,6 +22,7 @@ top-level forms are omitted from `spur --help`, leaving `self` as the visible su
 | `migrate` | Apply CLI-owned schema migrations | `--json` |
 | `serve` | Start the Spur web server (local fallback) | `--port <n>` `--host <addr>` `--no-open` `--cwd <path>` `--json` |
 | `status [path]` | Show project and git status for a Spur project | `--json` |
+| `hook <id>` | Host hook transport for `superskill hook run sp <id>` and the Pi extension (stdin payload → decision; always exit 0); `hook list` shows ids | `--host <host>` `--json` |
 
 **Deep detail lives in the verb-owner references** — **[init.md](init.md)** owns the `init` and
 `status` verbs (scaffold semantics + the Phase 1.5 / 1.6 post-scaffold validation probes),
@@ -119,3 +120,17 @@ directory. Only flag is `--json`.
 > `apps/cli/src/commands/shared-options.ts` (`SHARED_OPTIONS`). Never re-declare a shared flag
 > inline in a command module — see SKILL.md "Shared option registry" and
 > `docs/04_DESIGN.md` §1.0.1.
+
+## `self hook` - host hook transport
+
+```bash
+echo '{"tool_name":"Bash","tool_input":{"command":"git reset --hard"}}' | spur self hook careful-guard
+spur self hook careful-guard --host pi < pi-event.json   # Pi wrapper shape: {"action":...}
+spur self hook list --json                              # registry: id, kind, events
+```
+
+Reads one host payload on stdin and always exits 0 (fail-open). It is dispatched before the
+database and config boot, so it never creates `.spur/spur.db`. Not a manual workflow verb:
+`superskill hook run sp <id>` and the Pi extension call it. Ids and switches:
+`docs/help/self_hook.md` in the spur repo.
+

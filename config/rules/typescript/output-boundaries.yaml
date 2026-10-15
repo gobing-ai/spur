@@ -36,3 +36,7 @@ rules:
     exclude:
       - "packages/app/src/services/quality-gate.ts"
       - "packages/app/src/services/inline-run-setup.ts"
+      # Script-absorption PR-2a: `spur self hook` prints the host hook decision byte-for-byte (Claude/
+      # Codex JSON or Pi action JSON, no trailing newline), proven identical to the plugin hook files by
+      # self-hook-parity.test.ts. echo() appends "\n", so the seam cannot carry that contract.
+      - "apps/cli/src/self-hook.ts"

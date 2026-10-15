@@ -30,7 +30,6 @@ import { registerMessageCommand } from './commands/message';
 import { registerMigrateCommand } from './commands/migrate';
 import { registerProjectsCommand } from './commands/projects';
 import { registerRuleCommand } from './commands/rule';
-
 import { registerServeCommand } from './commands/serve';
 import { registerStatusCommand } from './commands/status';
 import { registerTaskCommand } from './commands/task';
@@ -40,6 +39,7 @@ import { EMBEDDED_SPUR_SCHEMAS } from './config/embedded-schemas';
 import { createCliContext, createMigratedDbAdapter } from './context';
 import { errorMessage } from './errors';
 import { type CommandOutput, consoleOutput, toJson } from './output';
+import { isSelfHookInvocation, registerSelfHookCommand } from './self-hook';
 /** Options for programmatic CLI execution in tests. */
 export interface MainOptions {
     cwd?: string;
@@ -50,6 +50,8 @@ export interface MainOptions {
     db?: DbAdapter;
     /** Database-free serve launch seam for startup tests. */
     startServer?: typeof import('@gobing-ai/spur-server').startServer;
+    /** `spur self hook` I/O seams (stdin, raw stdout/stderr) for in-process tests. */
+    selfHook?: import('./self-hook').SelfHookDeps;
 }
 
 /** Run the Spur CLI with explicit argv and injectable runtime dependencies. */
@@ -76,6 +78,33 @@ export async function main(argv = process.argv.slice(2), options: MainOptions = 
         };
         registerServeCommand(program, context, { startServer: options.startServer });
         registerServeCommand(program.command('self'), context, { startServer: options.startServer });
+        try {
+            await program.parseAsync(argv, { from: 'user' });
+            return exitCode;
+        } catch (error) {
+            const code = (error as { exitCode?: number }).exitCode;
+            if (code !== undefined) return code;
+            output.error(errorMessage(error));
+            return 1;
+        }
+    }
+
+    // `self hook` is a host hook transport (script-absorption PR-2a): it must answer in
+    // milliseconds, never create or migrate a database, never fail on a broken config, and
+    // always exit 0. Dispatch it before the adapter and configuration boot, like serve.
+    if (isSelfHookInvocation(argv)) {
+        const program = new Command().name('spur').exitOverride();
+        program.option('--no-logo').option('-v, --cli-verbose');
+        program.configureOutput({ writeOut: (str) => output.write(str), writeErr: (str) => output.error(str) });
+        const context = {
+            cwd,
+            output,
+            env,
+            setExitCode: (code: number) => {
+                exitCode = code;
+            },
+        };
+        registerSelfHookCommand(program.command('self'), context, options.selfHook);
         try {
             await program.parseAsync(argv, { from: 'user' });
             return exitCode;
@@ -226,6 +255,7 @@ export function buildProgram(context: ReturnType<typeof createCliContext>, outpu
     registerMigrateCommand(selfCommand, context);
     registerServeCommand(selfCommand, context);
     registerStatusCommand(selfCommand, context);
+    registerSelfHookCommand(selfCommand, context);
 
     registerInitCommand(program, context, { hidden: true });
     registerMaintainCommand(program, context, { hidden: true });
@@ -275,6 +305,8 @@ export function bannerText(): string {
  * never consults this — programmatic dispatch stays banner-free by construction.
  */
 export function shouldRenderBanner(argv: readonly string[]): boolean {
+    // Hook output is read by the host as JSON; a banner would corrupt every decision.
+    if (isSelfHookInvocation(argv)) return false;
     return !argv.some((arg) => arg === '--no-logo' || arg === '--json' || arg === '--quiet' || arg === '--silent');
 }
 
