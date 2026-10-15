@@ -17,7 +17,6 @@ import {
     normalizeAcFence,
     normalizeTaskStatus,
     parseChecklist,
-    SECTION_GUIDANCE,
     serializeTaskFrontmatter,
     stripAcFence,
     TASK_CANONICAL_SECTIONS,
@@ -50,7 +49,6 @@ import { GATE_LANGUAGE_SECTIONS, hasGateLanguage, hasSolutionFileLineCitation, T
 import { isTaskFrozen, undeprecateTaskCommand } from './task-freeze';
 import { TaskLocator } from './task-locator';
 import {
-    escapeTablePipe,
     flipVerifiedCheckboxes,
     gitDiffU0,
     isRecordAuthoredReview,
@@ -64,10 +62,35 @@ import {
     renderSolutionFromDiff,
     renderTesting,
 } from './task-record';
+import { ROSTER_END, ROSTER_REGION_RE, ROSTER_START, renderRosterTable } from './task-roster-table';
+import {
+    bulletizeRequirements,
+    renderSectionGuidanceBody,
+    sectionIsBare,
+    stripLeadingSectionHeader,
+} from './task-section-bodies';
 import { normalizeTaskSection } from './task-section-normalizer';
+import {
+    DependencyMutationError,
+    DuplicateFollowUpError,
+    ParentFeatureStatusError,
+    SectionMutationError,
+    TaskCandidateInvalidError,
+    WbsCollisionError,
+} from './task-service-errors';
 import { evaluateTaskSize } from './task-size-precheck';
 import { reconcileDoneCloseAudit, runTransitionCheckGate } from './task-transition';
 import type { VerifyVerdict as CanonicalVerifyVerdict } from './verify-verdict';
+
+export { sectionIsBare } from './task-section-bodies';
+export {
+    DependencyMutationError,
+    DuplicateFollowUpError,
+    ParentFeatureStatusError,
+    SectionMutationError,
+    TaskCandidateInvalidError,
+    WbsCollisionError,
+} from './task-service-errors';
 
 /**
  * R6 diagnostics: name the verdict row whose evidence carries the citation, so the operator
@@ -86,152 +109,6 @@ function citationOrigin(verdict: CanonicalVerifyVerdict, name: string): string {
         if (row.evidence?.includes(needle)) return `check ${row.name}`;
     }
     return 'the verdict';
-}
-
-/**
- * Error thrown by `mutateDependencies` for any validation failure (R2).
- * The `code` field is a stable identifier the CLI maps to an exit code:
- *
- * - `usage`     — wrong arg shape (op vs. values count) → exit 2
- * - `format`    — value is not a 4-digit WBS → exit 3
- * - `not-found` — no task file for a referenced WBS → exit 3
- * - `self-edge` — task references itself → exit 3
- * - `duplicate` — duplicate WBS in the resulting array → exit 3
- * - `cycle`     — the resulting graph has a cycle → exit 3
- */
-export class DependencyMutationError extends Error {
-    readonly code: 'usage' | 'format' | 'not-found' | 'self-edge' | 'duplicate' | 'cycle' | 'deprecated';
-    constructor(code: DependencyMutationError['code'], message: string) {
-        super(message);
-        this.name = 'DependencyMutationError';
-        this.code = code;
-    }
-}
-
-/**
- * Error thrown by `mutateSections` for any validation failure (R2).
- * The `code` field is a stable identifier the CLI maps to an exit code:
- *
- * - `usage`          — wrong arg shape (op vs. section name) → exit 2
- * - `no-matrix`      — no section-matrix entry for variant/status → exit 3
- * - `unknown-section`— section name not in `TASK_CANONICAL_SECTIONS` → exit 3
- * - `forbidden`      — section is forbidden for the task's current status → exit 3
- * - `invalid-solution` — explicit Solution update lacks a `file:line` citation → exit 3
- */
-export class SectionMutationError extends Error {
-    readonly code: 'usage' | 'no-matrix' | 'unknown-section' | 'forbidden' | 'invalid-solution';
-    constructor(code: SectionMutationError['code'], message: string) {
-        super(message);
-        this.name = 'SectionMutationError';
-        this.code = code;
-    }
-}
-
-/**
- * Error thrown by `create()` when the dedup guard (task 0341 R4) detects an
- * existing task under the same feature with an identical name created within
- * the dedupe window. The CLI maps this to a stable exit code and surfaces the
- * existing WBS so the operator can reuse the prior task instead of duplicating.
- */
-export class DuplicateFollowUpError extends Error {
-    readonly existingWbs: string;
-    readonly existingName: string;
-    readonly attemptedName: string;
-    constructor(existingWbs: string, existingName: string, attemptedName: string) {
-        super(
-            `duplicate-follow-up: task ${existingWbs} ("${existingName}") already exists under this feature ` +
-                `with an identical name. Reuse ${existingWbs} or pass --allow-duplicate-name to override.`,
-        );
-        this.name = 'DuplicateFollowUpError';
-        this.existingWbs = existingWbs;
-        this.existingName = existingName;
-        this.attemptedName = attemptedName;
-    }
-}
-
-/**
- * Error thrown by the WBS allocation guard (task 0416 R1) when a file with the
- * allocated WBS prefix already exists in any configured folder. The allocation
- * scan returned a stale maximum (e.g. a file was created after the scan but
- * before the write, or the scan missed a non-conventional filename). The guard
- * refuses to write rather than silently overwriting the existing file.
- *
- * The CLI maps this to a non-zero exit and surfaces both paths so the operator
- * can see what would have been overwritten.
- */
-export class WbsCollisionError extends Error {
-    readonly wbs: string;
-    readonly existingPath: string;
-    readonly attemptedPath: string;
-    constructor(wbs: string, existingPath: string, attemptedPath: string) {
-        super(
-            `wbs-collision: WBS ${wbs} already exists at "${existingPath}". ` +
-                `Refusing to overwrite with "${attemptedPath}". ` +
-                `Re-run create; if the collision persists, inspect the corpus with: spur task check.`,
-        );
-        this.name = 'WbsCollisionError';
-        this.wbs = wbs;
-        this.existingPath = existingPath;
-        this.attemptedPath = attemptedPath;
-    }
-}
-
-/**
- * Error thrown by `create`/`batchCreate` (F21 task 0787 R2/R4) when a candidate
- * task fails the SAME content policy `spur task check` enforces (L1 schema + L2
- * matrix + L3 format), BEFORE any WBS allocation or file write. The
- * machine-readable `findings` ride on the error so the CLI can emit one
- * parseable result under `--json`.
- */
-export class TaskCandidateInvalidError extends Error {
-    readonly findings: CheckFindings[];
-    constructor(title: string, findings: CheckFindings[], context?: string) {
-        const where = context !== undefined ? ` (${context})` : '';
-        const detail = findings
-            .filter((f) => f.severity === 'error')
-            .map((f) => `${f.layer}${f.section !== '' ? `/${f.section}` : ''}: ${f.message}`)
-            .join('; ');
-        super(
-            `candidate task "${title}"${where} rejected before persistence — it would fail \`spur task check\`: ${detail}`,
-        );
-        this.name = 'TaskCandidateInvalidError';
-        this.findings = findings;
-    }
-}
-
-/**
- * 1132 R2: a task cannot link to a terminal parent feature. Carries the offending
- * status and up to three `active` siblings in the same ID group so the CLI/agent can
- * re-point the link without a second lookup.
- */
-export class ParentFeatureStatusError extends Error {
-    readonly featureId: string;
-    readonly status: string;
-    readonly activeSiblings: string[];
-    constructor(featureId: string, status: string, activeSiblings: string[]) {
-        // 1180 R1: `deprecated` is frozen, not terminal — the message names the removal
-        // path and the un-deprecate command rather than a reopen/re-parent hint.
-        if (status === 'deprecated') {
-            super(
-                `parent-feature-status: feature ${featureId} is deprecated (frozen); new tasks cannot link to it. ` +
-                    `Run removal work under its own feature, or un-deprecate: spur feature update ${featureId} active`,
-            );
-        } else {
-            const group = featureId[0] ?? '';
-            const hint =
-                activeSiblings.length > 0
-                    ? `active siblings in group ${group}: ${activeSiblings.join(', ')}`
-                    : `no active sibling features in group ${group} — reopen ${featureId} to active first`;
-            super(
-                `parent-feature-status: feature ${featureId} is ${status}; new tasks cannot link to a ` +
-                    `done/cancelled parent. ${hint}`,
-            );
-        }
-        this.name = 'ParentFeatureStatusError';
-        this.featureId = featureId;
-        this.status = status;
-        this.activeSiblings = activeSiblings;
-    }
 }
 
 /**
@@ -288,21 +165,6 @@ export interface SectionMutationResult {
     readonly present?: string[];
     /** Required sections not yet in the file (`list` only). */
     readonly missing?: string[];
-}
-
-// ─── Sub-task roster (0123) ───────────────────────────────────────────────
-
-/** Auto-gen markers for the parent `## Plan` sub-task roster block. */
-const ROSTER_START = '<!-- AUTO-GENERATED by spur task refresh-roster -->';
-const ROSTER_END = '<!-- END AUTO-GENERATED -->';
-/** Matches a full prior roster region (markers inclusive) for idempotent rewrite. */
-const ROSTER_REGION_RE = /<!--[ \t]*AUTO-GENERATED[^>]*-->[\s\S]*?<!--[ \t]*END[ \t]*AUTO-GENERATED[^>]*-->/g;
-
-/** Render the sub-task roster table — one row per child (WBS · title · status). */
-function renderRosterTable(rows: { wbs: string; name: string; status: string }[]): string {
-    const header = '| WBS | Sub-task | Status |\n| --- | -------- | ------ |';
-    const body = rows.map((r) => `| ${r.wbs} | ${escapeTablePipe(r.name)} | ${r.status} |`).join('\n');
-    return `${header}\n${body}`;
 }
 
 // ─── Types ──────────────────────────────────────────────────────────────
@@ -458,80 +320,6 @@ export interface TaskListFilters {
     folder?: string;
     /** Legacy alias: 'phase' maps to status filter for backward compat. */
     phase?: string;
-}
-
-/**
- * Normalize a Requirements body to a bulleted markdown list. R-numbered items
- * written as one run-on paragraph (`R1. … R2. …`) become one `- Rn. …` line
- * each, so they render as a clear list in a markdown viewer (dogfood issue #2).
- * Already-bulleted or multi-line input is returned unchanged.
- */
-function bulletizeRequirements(raw: string): string {
-    const text = raw.trim();
-    if (text === '') return text;
-    // Already a bullet/numbered list or multi-line — leave as authored.
-    if (/\n/.test(text) || /^\s*[-*]\s/.test(text)) return text;
-    const parts = text
-        .split(/(?=\bR\d+\.)/)
-        .map((p) => p.trim())
-        .filter((p) => p.length > 0);
-    if (parts.length <= 1) return text;
-    return parts.map((p) => `- ${p}`).join('\n');
-}
-
-/**
- * Strip a redundant leading section header from `--from-file` body content (R1, task 0115).
- *
- * Agents naturally write a full section (`## Acceptance Criteria\n\n- [ ] AC1 …`) to the
- * temp file, but `--section` already names the section and the CLI supplies the canonical
- * heading. A leading heading line whose text matches `sectionName` (any level `#`–`######`,
- * case-insensitive) is therefore a duplicate — strip it and the blank lines that follow so
- * the body handed to `replaceSection` starts at the first real content line (no triple-newline
- * gap, no visual duplicate header). A heading that does NOT match the section name is left
- * alone — `replaceSection`'s same-level strip (R2) handles any phantom risk.
- */
-function stripLeadingSectionHeader(body: string, sectionName: string): string {
-    const match = body.match(/^(\s*)#{1,6}\s+(.+?)\s*(?:\n|$)/);
-    if (match === null) return body;
-    const headingText = (match[2] ?? '').trim();
-    if (headingText.toLowerCase() !== sectionName.trim().toLowerCase()) return body;
-    // Remove the heading line plus any leading whitespace and the blank lines after it.
-    return body.slice(match[0].length).replace(/^\n+/, '');
-}
-
-// ─── Section bareness — used by pipeline steps to decide when to write ──
-
-/**
- * Returns `true` if a named section is absent, empty/whitespace-only, guidance-comment-only,
- * or a known pipeline placeholder (the old `printf 'Pipeline run …'` stub).
- *
- * Used by the implement step (write `Solution` only when bare, never clobber
- * a hand-authored change-map) and the record step (backfill `Solution` safety-net,
- * skip `Testing`/`Review` if verify already populated them).
- */
-export function sectionIsBare(doc: MarkdownDocument, name: string): boolean {
-    if (!doc.hasSection(name)) return true;
-    const body = doc.getSection(name);
-    if (body === null) return true;
-    const trimmed = body.replace(/<!--[\s\S]*?-->/g, '').trim();
-    if (trimmed === '') return true;
-    // Old pipeline placeholder: "Pipeline run <wbs> — …"
-    if (/^Pipeline run \d{4}\b/.test(trimmed)) return true;
-    return false;
-}
-
-/**
- * Render the placeholder body for a canonical task section — the one-line
- * guidance comment from `SECTION_GUIDANCE` wrapped in `<!-- ... -->`, matching
- * `buildTaskSkeleton`'s rendering (so `sections add` and `sections init`
- * produce the same artifact as `task create`). `History` (machine-owned) and
- * unknown sections render an empty body.
- */
-function renderSectionGuidanceBody(name: TaskSection): string {
-    const guidance = SECTION_GUIDANCE[name];
-    if (guidance === undefined) return '';
-    if (name === 'History') return '';
-    return `<!-- ${guidance} -->`;
 }
 
 // ─── TaskService ────────────────────────────────────────────────────────
