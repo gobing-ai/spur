@@ -343,6 +343,13 @@ async function readExistingRunFile(path: string): Promise<Buffer | undefined> {
 export async function persistWorktreeRuns(input: PersistWorktreeRunsInput): Promise<PersistWorktreeRunsSuccess> {
     const fromDir = resolve(input.fromWorkdir);
     const toDir = resolve(input.toWorkdir);
+    // Fail closed before any side effect: with a bogus from-dir the source-DB open creates a
+    // stray tree, and root-relative evidence discovery walks up to the INVOKING tree, so the
+    // confinement probe later reports the wrong tree (`must resolve beneath …`).
+    const fromStat = await lstat(fromDir).catch(() => undefined);
+    if (fromStat === undefined || !fromStat.isDirectory()) {
+        throw new Error(`persist-out: source worktree does not exist or is not a directory: ${input.fromWorkdir}`);
+    }
     const fromRunDir = join(fromDir, '.spur', 'run');
     const toRunDir = join(toDir, '.spur', 'run');
     // 1026 R7: the durable run-record plane migrates alongside the scratch evidence.
