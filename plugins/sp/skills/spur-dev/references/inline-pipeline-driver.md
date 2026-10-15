@@ -168,7 +168,7 @@ fallback) — labels are display addresses only, never an execution key.
    Publishing executes nothing, so it safely precedes readiness and isolation, which keep their
    existing order below.
 6. **Quick deterministic readiness (R2), before isolation.** Evaluate `quickReadiness` from
-   `plugins/sp/scripts/batch-preflight.ts` with the operation, status, filtered-set size, the
+   `spur task preflight <wbs> --operation <op>` with the operation, status, filtered-set size, the
    matrix-selected required/present sections, and content-policy findings. Record the outcome
    (runnable / needs-refinement / blocked / skipped / invalid) in the run log. Admission decision
    only — no model, no full tests/lint, no live-data probe, no feature mutation, no corpus-wide

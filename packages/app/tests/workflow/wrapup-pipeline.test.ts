@@ -20,16 +20,7 @@
  */
 import { describe, expect, test } from 'bun:test';
 import { spawnSync } from 'node:child_process';
-import {
-    chmodSync,
-    existsSync,
-    mkdirSync,
-    mkdtempSync,
-    readFileSync,
-    rmSync,
-    symlinkSync,
-    writeFileSync,
-} from 'node:fs';
+import { chmodSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { getEnvVar, getEnvVars } from '@gobing-ai/spur-config';
@@ -37,8 +28,25 @@ import { loadWorkflowDefFromText } from '@gobing-ai/ts-dual-workflow-engine';
 
 const REPO_ROOT = join(import.meta.dir, '../../../../');
 const WORKFLOWS_DIR = join(REPO_ROOT, 'config', 'workflows');
-/** 0824: the wrapup-steps plugin script the wrappers delegate to (exec pins live in its suite). */
-const WRAPUP_STEPS = join(REPO_ROOT, 'plugins', 'sp', 'scripts', 'wrapup-steps.ts');
+/** 0824: the wrapup steps the wrappers delegate to (exec pins live in tests/workflow/wrapup/). */
+const WRAPUP_STEPS = join(REPO_ROOT, 'packages', 'app', 'src', 'workflow', 'wrapup', 'steps.ts');
+/** Script-absorption PR-5: the wrappers call `$spurBin task wrapup <op>`; this is that CLI. */
+const CLI = join(REPO_ROOT, 'apps', 'cli', 'src', 'index.ts');
+
+/**
+ * A spurBin shim that runs `task wrapup …` through the real CLI and forwards every other call
+ * (the steps' nested `task show` / `feature …` lookups) to `stub`. The CLI hands its own env —
+ * including spurBin = this shim — to the nested calls.
+ */
+function wrapupShim(cwd: string, stub: string): string {
+    const shim = join(cwd, 'spur-shim');
+    writeFileSync(
+        shim,
+        `#!/bin/sh\ncase "$1 $2" in "task wrapup") exec '${process.execPath}' '${CLI}' "$@";; esac\nexec '${stub}' "$@"\n`,
+    );
+    chmodSync(shim, 0o755);
+    return shim;
+}
 
 interface ShellAction {
     kind: string;
@@ -99,8 +107,9 @@ function stubSpur(cwd: string, json: string): string {
 }
 
 /**
- * 0824: task-capture, metrics and feature-sync execution moved into the wrapup-steps plugin
- * script — `plugins/sp/tests/wrapup-steps.test.ts` spawns it with the exec pins. This file
+ * 0824: task-capture, metrics and feature-sync execution moved into the wrapup steps
+ * (`spur task wrapup <op>` since script-absorption PR-5) — `tests/workflow/wrapup/steps.test.ts`
+ * holds the exec pins. This file
  * pins the workflow definition: wrapper delegation, the route writer, guards, and the
  * fail-closed wrapper contract.
  */
@@ -130,10 +139,10 @@ describe('wrapup-pipeline truthfulness (task 0770, feature R8; task 0783, R1-R5)
             const result = spawnSync('sh', ['-c', def.vars?.featureGateCmd ?? 'exit 99'], { env, encoding: 'utf8' });
             expect(result.status).toBe(0);
             expect(result.stdout).toBe('feature\ncheck\nD61\n');
-            // 0824: the feature-transition shell is a locator wrapper; the gate itself is spawned
-            // by the wrapup-steps script (the script suite pins `sh -c` with $featureGateCmd).
+            // 0824: the feature-transition shell delegates to `spur task wrapup`; the gate itself is
+            // spawned by the step (the steps suite pins `sh -c` with $featureGateCmd).
             const command = String(shellsOf(def, 'feature-transition')[0]?.options?.command ?? '');
-            expect(command).toContain('wrapup-steps');
+            expect(command).toContain('$spurBin task wrapup');
             expect(command).toContain('feature-transition');
         } finally {
             cleanup(cwd);
@@ -167,27 +176,26 @@ describe('wrapup-pipeline truthfulness (task 0770, feature R8; task 0783, R1-R5)
     });
 
     describe('task-resolve validates wrap input exactly once', () => {
-        test('the validation shell is the wrapup-steps locator; the route writer reads the validated capture', () => {
+        test('the validation shell is the `task wrapup` wrapper; the route writer reads the validated capture', () => {
             const shells = shellsOf(def, 'task-resolve');
             expect(shells.length).toBeGreaterThanOrEqual(2);
-            // 0824: shells[0] locates the wrapup-steps script (monorepo first, registered twin
-            // under node) and fails closed to FAIL — it never re-parses raw vars.tasks. The
-            // canonical-id validation lives in the script (wrapup-steps suite pins the regex).
+            // 0824: shells[0] delegates to `spur task wrapup resolve` and fails closed to FAIL —
+            // it never re-parses raw vars.tasks. The canonical-id validation lives in the step
+            // (the steps suite pins the regex).
             const validate = String(shells[0]?.options?.command ?? '');
-            expect(validate).toContain('wrapup-steps');
+            expect(validate).toContain('$spurBin task wrapup');
             expect(validate).toContain('resolve');
             expect(validate).toContain('wrapup-resolve.status');
             expect(validate).toContain('failed closed');
             expect(validate).not.toContain('"$tasks"');
             // 0783 R2/R5: the route-reason writer consumes the capture, never raw input.
-            // 0944: the writer moved behind the wrapup-steps locator (composition caps) and
-            // also reads the drift probe verdict; the capture + reason pins hold against the
-            // script source.
+            // 0944: the writer moved behind `spur task wrapup` (composition caps) and also reads
+            // the drift probe verdict; the capture + reason pins hold against the step source.
             const route = String(shells[2]?.options?.command ?? '');
-            expect(route).toContain('wrapup-steps');
+            expect(route).toContain('$spurBin task wrapup');
             expect(route).toContain('route-reason');
-            // The route-reason writer lives in wrapup-steps.ts (0944): pin its body, not the
-            // whole script (resolve legitimately parses env.tasks; route-reason must not).
+            // The route-reason writer lives in wrapup/steps.ts (0944): pin its body, not the
+            // whole module (resolve legitimately parses env.tasks; route-reason must not).
             const script = readFileSync(WRAPUP_STEPS, 'utf8');
             const fn = script.slice(
                 script.indexOf('export function writeRouteReason'),
@@ -227,11 +235,11 @@ describe('wrapup-pipeline truthfulness (task 0770, feature R8; task 0783, R1-R5)
             const cwd = mkdtempSync(join(tmpdir(), 'wrapup-0783-two-runs-'));
             try {
                 const spurBin = stubSpur(cwd, '{"frontmatter":{"status":"done"}}');
-                // 0824: the resolve step and the 0944 route-reason writer both run through the
-                // wrapup-steps script; run attribution stays a script-level pin.
+                // 0824: the resolve step and the 0944 route-reason writer both run through
+                // `spur task wrapup`; run attribution stays a step-level pin.
                 const runThrough = (runId: string, wbs: string): void => {
                     for (const sub of ['resolve', 'route-reason'] as const) {
-                        const step = spawnSync(process.execPath, [WRAPUP_STEPS, sub], {
+                        const step = spawnSync(process.execPath, [CLI, 'task', 'wrapup', sub, '--no-logo'], {
                             cwd,
                             encoding: 'utf8',
                             env: { ...getEnvVars(), __runId: runId, tasks: `["${wbs}"]`, spurBin, mode: '' },
@@ -313,9 +321,9 @@ describe('wrapup-pipeline truthfulness (task 0770, feature R8; task 0783, R1-R5)
     });
 
     describe('metrics-record consumes the normalized artifact', () => {
-        test('the shell is the wrapup-steps locator; it never re-parses raw $tasks or writes rows itself', () => {
+        test('the shell is the `task wrapup` wrapper; it never re-parses raw $tasks or writes rows itself', () => {
             const cmd = String(shellsOf(def, 'metrics-record')[0]?.options?.command ?? '');
-            expect(cmd).toContain('wrapup-steps');
+            expect(cmd).toContain('$spurBin task wrapup');
             expect(cmd).toContain('metrics');
             expect(cmd).toContain('wrapup-metrics.status');
             expect(cmd).toContain('failed closed');
@@ -335,12 +343,12 @@ describe('wrapup-pipeline truthfulness (task 0770, feature R8; task 0783, R1-R5)
     });
 
     describe('doc-sync and feature-transition record truthful outcomes', () => {
-        test('the feature-transition shell is the wrapup-steps locator and writes a sync status', () => {
+        test('the feature-transition shell is the `task wrapup` wrapper and writes a sync status', () => {
             const cmd = String(shellsOf(def, 'feature-transition')[0]?.options?.command ?? '');
-            // 0824: proposal-based classification moved into the script (its suite pins
-            // gateBlocked / requiresConfirm / explicit no-change); the wrapper only locates
+            // 0824: proposal-based classification moved into the step (its suite pins
+            // gateBlocked / requiresConfirm / explicit no-change); the wrapper only delegates
             // and fails closed.
-            expect(cmd).toContain('wrapup-steps');
+            expect(cmd).toContain('$spurBin task wrapup');
             expect(cmd).toContain('feature-transition');
             expect(cmd).toContain('wrapup-sync.status');
             expect(cmd).toContain('failed closed');
@@ -369,18 +377,18 @@ describe('wrapup-pipeline truthfulness (task 0770, feature R8; task 0783, R1-R5)
     });
 
     test('route reason writers remain run-attributed (0758 R4/R5 pins survive; 0783 R5 drops the fixed fallback)', () => {
-        // 0824: shells[0] is the wrapup-steps locator wrapper. 0944: the route-reason writer
-        // also moved behind a locator (index 2, after the drift probe + mode projection) to
-        // stay inside the ADR-115 shell caps; only the script writes reasons.
+        // 0824: shells[0] is the `task wrapup resolve` wrapper. 0944: the route-reason writer
+        // also moved behind `task wrapup` (index 2, after the drift probe + mode projection) to
+        // stay inside the ADR-115 shell caps; only the step writes reasons.
         const route = String(shellOf(def, 'task-resolve', 2)?.options?.command ?? '');
-        expect(route).toContain('wrapup-steps');
+        expect(route).toContain('$spurBin task wrapup');
         expect(route).toContain('route-reason');
         expect(route).not.toContain('.spur/run/wrapup-route-reason.txt');
         expect(route).not.toContain('RUN_ID="wrapup"');
         const script = readFileSync(WRAPUP_STEPS, 'utf8');
         expect(script).toContain('route-reason.txt`');
         expect(script).not.toContain('.spur/run/wrapup-route-reason.txt');
-        // The resolve locator wrapper writes no reason at all — fixed-path or otherwise.
+        // The resolve wrapper writes no reason at all — fixed-path or otherwise.
         const wrapper = String(shellOf(def, 'task-resolve', 0)?.options?.command ?? '');
         expect(wrapper).not.toContain('route-reason');
     });
@@ -398,8 +406,8 @@ describe('wrapup-pipeline truthfulness (task 0770, feature R8; task 0783, R1-R5)
         }
 
         /**
-         * Runs the task-resolve onEnter shells against a scaffolded temp cwd (symlinked
-         * plugin scripts + stub spur), simulating file.read.into-var between the probe
+         * Runs the task-resolve onEnter shells against a temp cwd (the real `spur task wrapup`
+         * behind a shim, stub spur for the lookups), simulating file.read.into-var between the probe
          * wrapper and the route-reason writer (vars.mode := projected mode file content).
          */
         const runTaskResolve = (cwd: string, runId: string, spurBin: string, callerMode: string): RouteOutcome => {
@@ -423,11 +431,6 @@ describe('wrapup-pipeline truthfulness (task 0770, feature R8; task 0783, R1-R5)
                 expect(result.status, `shell ${index}`).toBe(0);
             };
             mkdirSync(join(cwd, '.spur', 'run'), { recursive: true });
-            // 1007 R4: stage the script-root identity the resolution snippet reads.
-            writeFileSync(
-                join(cwd, '.spur', 'run', `${runId}-script-root.json`),
-                `${JSON.stringify({ mode: 'source-repo', source: 'project', dir: join(REPO_ROOT, 'plugins', 'sp', 'scripts') })}\n`,
-            );
             runShell(0, callerMode); // resolve: validates and writes the capture
             runShell(1, callerMode); // probe + mode projection (no-op projection when mode set)
             const raw = readFileSync(join(cwd, '.spur/run', `${runId}-mode.txt`), 'utf8');
@@ -463,16 +466,10 @@ describe('wrapup-pipeline truthfulness (task 0770, feature R8; task 0783, R1-R5)
         };
 
         const scaffold = (cwd: string, stubBody: string): string => {
-            mkdirSync(join(cwd, 'plugins', 'sp'), { recursive: true });
-            symlinkSync(join(REPO_ROOT, 'plugins', 'sp', 'scripts'), join(cwd, 'plugins', 'sp', 'scripts'));
-            // 0960: the project-first probe is gated on the source-repo marker — without it
-            // the shells fall back to a globally installed superskill twin (dev macs only).
-            mkdirSync(join(cwd, 'config'), { recursive: true });
-            writeFileSync(join(cwd, 'config', 'plugin-scripts.json'), '{}\n');
             const stub = join(cwd, 'stub-spur');
             writeFileSync(stub, stubBody);
             chmodSync(stub, 0o755);
-            return stub;
+            return wrapupShim(cwd, stub);
         };
 
         // sh echo interprets the JSON's \n escapes; the stubs below use printf %s instead.
@@ -555,12 +552,12 @@ describe('wrapup-pipeline truthfulness (task 0770, feature R8; task 0783, R1-R5)
 
         test('caller-mode-wins is YAML-level: the probe runs only behind the -n "$mode" gate', () => {
             const probeShell = String(shellOf(def, 'task-resolve', 1)?.options?.command ?? '');
-            expect(probeShell).toContain('wrapup-drift-probe');
+            expect(probeShell).toContain('$spurBin task wrapup drift-probe');
             expect(probeShell.indexOf('[ -n "$mode" ]')).toBeGreaterThanOrEqual(0);
-            expect(probeShell.indexOf('[ -n "$mode" ]')).toBeLessThan(probeShell.indexOf('wrapup-drift-probe'));
-            // 0944: no inline parsing of the capture/probe output — the only jq call is the
-            // 1007 R4 script-root identity read (mode→S/RUNNER), not the drift data path.
-            expect(probeShell.match(/jq /g)?.length ?? 0).toBe(1);
+            expect(probeShell.indexOf('[ -n "$mode" ]')).toBeLessThan(probeShell.indexOf('task wrapup drift-probe'));
+            // 0944: no inline parsing of the capture/probe output (PR-5 also dropped the 1007 R4
+            // script-root identity read the plugin-script locator needed).
+            expect(probeShell.match(/jq /g)?.length ?? 0).toBe(0);
             // The projection is read into vars.mode by a declared file.read.into-var action.
             const actions = (def.states.find((s) => s.id === 'task-resolve')?.onEnter ?? []) as Array<{
                 kind: string;
@@ -574,7 +571,7 @@ describe('wrapup-pipeline truthfulness (task 0770, feature R8; task 0783, R1-R5)
     });
 
     describe('0824 wrapper fail-closed contract', () => {
-        test('each wrap-up wrapper writes FAIL and exits 0 when neither the monorepo script nor the twin exists', () => {
+        test('each wrap-up wrapper writes FAIL and exits 0 when `spur task wrapup` exits nonzero', () => {
             const cases: Array<{ state: string; statusFile: string; marker?: string }> = [
                 { state: 'task-resolve', statusFile: 'wrapup-resolve.status' },
                 { state: 'metrics-record', statusFile: 'wrapup-metrics.status' },
@@ -584,18 +581,13 @@ describe('wrapup-pipeline truthfulness (task 0770, feature R8; task 0783, R1-R5)
                 {
                     state: 'doc-sync',
                     statusFile: 'wrapup-doc-sync-scope.status',
-                    marker: 'scope-violation: wrapup-steps script not found',
+                    marker: 'scope-violation: task wrapup doc-sync-scope failed',
                 },
                 { state: 'doc-sync', statusFile: 'wrapup-doc-supersession.status', marker: 'supersession-pin-failed' },
             ];
             for (const [index, { state, statusFile, marker }] of cases.entries()) {
                 const cwd = mkdtempSync(join(tmpdir(), 'wrapup-failclosed-'));
                 try {
-                    // Temp cwd has no plugins/ scaffold; a failing superskill stub keeps the
-                    // registered-twin branch deterministic.
-                    const superskill = join(cwd, 'superskill');
-                    writeFileSync(superskill, '#!/bin/sh\nexit 1\n');
-                    chmodSync(superskill, 0o755);
                     const actionIndex = state === 'doc-sync' ? index - 2 : 0;
                     const result = spawnSync(
                         'sh',
@@ -606,7 +598,8 @@ describe('wrapup-pipeline truthfulness (task 0770, feature R8; task 0783, R1-R5)
                             env: {
                                 ...getEnvVars(),
                                 __runId: `r-fc-${state}`,
-                                spurBin: 'true',
+                                // A spur that fails every call: each wrapper must fail closed.
+                                spurBin: 'false',
                                 featureGateCmd: '$spurBin feature check "$feature"',
                                 feature: 'D61',
                                 PATH: `${cwd}:${getEnvVar('PATH') ?? ''}`,
@@ -701,7 +694,7 @@ describe('wrapup-pipeline truthfulness (task 0770, feature R8; task 0783, R1-R5)
             const cmd = String(state?.onEnter?.[0]?.options?.command ?? '');
             expect(cmd).toContain('wrapup-repair.status');
             expect(cmd).toContain('skipped re-dispatch');
-            expect(cmd).not.toContain('wrapup-steps');
+            expect(cmd).not.toContain('task wrapup');
             // The repair path never re-enters doc-sync: it flows to doc-tripwire (1037).
             expect(def.transitions.filter((t: TransitionDef) => t.from === 'repair').map((e) => e.to)).toEqual([
                 'doc-tripwire',

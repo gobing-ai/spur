@@ -17,7 +17,8 @@
 | `move <id>` | Move a feature to a new parent — cascade-rename the subtree |
 | `refresh` | Rebuild `INDEX.md` + each feature `## Tasks` table from task edges (**docs only** — no status change); scope explicit via `--feature <id>` or `--all` |
 | `check [id]` | Validate feature file(s) through the four-layer check |
-| `verify <id>` | Run the feature-scoped verification pass and record the bound evidence receipt (0915) |
+| `verify [id]` | Run the feature-scoped verification pass and record the bound evidence receipt (0915) |
+| `handoff [id]` | Finalize the idea pipeline: task ordering, roster refresh and the handoff report |
 | `sync [id]` | Align feature **lifecycle status** with linked task states (real transitions + guards) |
 
 ## spur feature create
@@ -293,6 +294,50 @@ spur feature check [options] [id]
 Completion evidence: when the target is `done`, `feature check` validates the feature
 verification receipt recorded by the `feature-verification` workflow
 (see `docs/design/workflow-execution-economy.md` — v1 receipt contract).
+
+## spur feature verify
+
+```
+spur feature verify [options] [id]
+```
+
+| Argument | Description |
+|---|---|
+| `id` | Feature ID (env: `featureId`) |
+
+| Flag | Description |
+|---|---|
+| `--run-id <id>` | Workflow run id the receipt binds to (env: `__runId`) |
+| `--cmd <command>` | Verification command override (env: `verificationCmd`) |
+| `--confidence <level>` | Declared confidence `HIGH` \| `MEDIUM` \| `LOW` (env: `confidence`) |
+| `--ack-low-confidence` | Acknowledge a `LOW` confidence level on the receipt (env: `ackLowConfidence=true`) |
+
+The `feature-verification.yaml` pass (D63 task 0915; script-absorption PR-5 replaced the plugin
+script `feature-verification-steps`): runs the selected definition's command once (or `--cmd`)
+through the safe argv splitter and writes the run-scoped + feature-latest receipts and
+`.spur/run/<runId>-feature-verification.status`. Exit `0` after a completed pass (PASS or FAIL);
+`1` when the pass could not run (unsafe or missing ids, unknown feature, run-store errors).
+
+## spur feature handoff
+
+```
+spur feature handoff [options] [id]
+```
+
+| Argument | Description |
+|---|---|
+| `id` | Feature ID (env: `featureId`) |
+
+| Flag | Description |
+|---|---|
+| `--run-id <id>` | Idea-pipeline run id (env: `__runId`) |
+| `--spur-bin <cmd>` | Spur invocation for the nested task/feature calls (env: `spurBin`; default: this spur) |
+
+The `idea-pipeline.yaml` finalization (0518/0824; script-absorption PR-5 replaced the plugin script
+`idea-handoff` and its generated bundle): applies `depends_on_names` through `spur task deps`,
+refreshes the feature roster, checks every created task and writes
+`.spur/run/<runId>-idea-handoff.md` with exactly one next command. Exit `0` success, `1` on any
+failure (fail closed, never a silent skip).
 
 ## See Also
 

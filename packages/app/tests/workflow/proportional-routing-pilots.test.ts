@@ -1,6 +1,6 @@
 import { describe, expect, test } from 'bun:test';
 import { spawnSync } from 'node:child_process';
-import { chmodSync, existsSync, mkdirSync, mkdtempSync, readFileSync, symlinkSync, writeFileSync } from 'node:fs';
+import { chmodSync, mkdirSync, mkdtempSync, readFileSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { getEnvVars } from '@gobing-ai/spur-config';
@@ -10,8 +10,10 @@ import { evaluateWrapupRoute, type RouteInput, safetyFloorHolds } from '../fixtu
 
 const REPO_ROOT = join(import.meta.dir, '../../../../');
 const WORKFLOWS_DIR = join(REPO_ROOT, 'config', 'workflows');
-/** 0944: the route-reason writer (and its reason tokens) live in the wrapup-steps script. */
-const WRAPUP_STEPS_SCRIPT = join(REPO_ROOT, 'plugins', 'sp', 'scripts', 'wrapup-steps.ts');
+/** 0944: the route-reason writer (and its reason tokens) live in the wrapup steps (PR-5: app). */
+const WRAPUP_STEPS_SCRIPT = join(REPO_ROOT, 'packages', 'app', 'src', 'workflow', 'wrapup', 'steps.ts');
+/** Script-absorption PR-5: the wrappers call `$spurBin task wrapup <op>`; this is that CLI. */
+const CLI = join(REPO_ROOT, 'apps', 'cli', 'src', 'index.ts');
 
 interface StateDef {
     id: string;
@@ -47,15 +49,14 @@ describe('proportional routing pilots (task 0758)', () => {
             const taskResolve = wrapupDef.states.find((s: StateDef) => s.id === 'task-resolve');
             expect(taskResolve).toBeDefined();
             // Since task 0783 the FIRST shell is validation (writes the resolve status); since
-            // 0944 the LAST shell is the route-reason writer behind the wrapup-steps locator —
+            // 0944 the LAST shell is the route-reason writer behind `spur task wrapup` —
             // it reads the validated run-scoped capture and the drift probe verdict only, and
-            // the reason tokens live in the script (the YAML shell stays inside the ADR-115 caps).
+            // the reason tokens live in the step (the YAML shell stays inside the ADR-115 caps).
             const shellActions = taskResolve?.onEnter?.filter((a) => a.kind === 'shell') ?? [];
             const shellAction = shellActions[shellActions.length - 1];
             expect(shellAction).toBeDefined();
             const cmd = String(shellAction?.options?.command ?? '');
-            expect(cmd).toContain('wrapup-steps');
-            expect(cmd).toContain('route-reason');
+            expect(cmd).toContain('$spurBin task wrapup route-reason');
             expect(cmd).toContain('mkdir -p .spur/run .spur/memory');
             const script = readFileSync(WRAPUP_STEPS_SCRIPT, 'utf8');
             expect(script).toContain('fast:evidence complete+consistent');
@@ -201,33 +202,22 @@ describe('route reason writers are run-attributed (0758 R4/R5)', () => {
         return (state?.onEnter ?? []).filter((a) => a.kind === 'shell').map((a) => String(a.options?.command ?? ''));
     };
 
+    // `task wrapup …` runs the real CLI; every nested lookup answers a done task.
     const doneStubSpur = (cwd: string): string => {
         const stub = join(cwd, 'stub-spur');
-        writeFileSync(stub, '#!/bin/sh\necho \'{"frontmatter":{"status":"done"}}\'\n');
+        writeFileSync(
+            stub,
+            `#!/bin/sh\ncase "$1 $2" in "task wrapup") exec '${process.execPath}' '${CLI}' "$@";; esac\necho '{"frontmatter":{"status":"done"}}'\n`,
+        );
         chmodSync(stub, 0o755);
         return stub;
     };
 
     const runResolveShells = (command: string[], vars: Record<string, string>, cwd: string): void => {
         const spurBin = doneStubSpur(cwd);
-        // 0824: the first task-resolve shell is the wrapup-steps locator wrapper, which resolves
-        // `plugins/sp/scripts/wrapup-steps.ts` relative to the run cwd. The engine runs workflows
-        // from the project root, so mirror that scaffold into the temp cwd to execute exactly
-        // what the YAML invokes (deterministically the monorepo branch, never an installed twin).
-        mkdirSync(join(cwd, 'plugins/sp'), { recursive: true });
-        const scaffold = join(cwd, 'plugins/sp/scripts');
-        if (!existsSync(scaffold)) symlinkSync(join(REPO_ROOT, 'plugins', 'sp', 'scripts'), scaffold);
-        // 0960: the project-first probe is gated on the source-repo marker — without it the
-        // shells fall back to a globally installed superskill twin (present on dev macs,
-        // absent in CI) instead of the monorepo branch under test.
-        mkdirSync(join(cwd, 'config'), { recursive: true });
-        writeFileSync(join(cwd, 'config', 'plugin-scripts.json'), '{}\n');
-        // 1007 R4: stage the script-root identity the resolution snippet reads (per run id).
+        // 0824 / script-absorption PR-5: the task-resolve shells call `$spurBin task wrapup <op>`
+        // — the stub runs exactly what the YAML invokes through the real CLI.
         mkdirSync(join(cwd, '.spur/run'), { recursive: true });
-        writeFileSync(
-            join(cwd, '.spur/run', `${vars.__runId}-script-root.json`),
-            `${JSON.stringify({ mode: 'source-repo', source: 'project', dir: join(REPO_ROOT, 'plugins', 'sp', 'scripts') })}\n`,
-        );
         for (const cmd of command) {
             const res = spawnSync('sh', ['-c', cmd], { cwd, env: { ...getEnvVars(), ...vars, spurBin } });
             expect(res.status).toBe(0);

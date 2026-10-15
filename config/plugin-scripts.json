@@ -3,16 +3,6 @@
     "description": "Registry of plugin sp scripts and their entrypoint contracts (standard with .mjs twin vs repo-only).",
     "entries": [
         {
-            "rel": "batch-preflight.ts",
-            "contract": "standard",
-            "twin": "batch-preflight.mjs"
-        },
-        {
-            "rel": "batch-plan.ts",
-            "contract": "standard",
-            "twin": "batch-plan.mjs"
-        },
-        {
             "rel": "daily-summary/daily-summary.ts",
             "contract": "standard",
             "twin": "daily-summary/daily-summary.mjs"
@@ -28,29 +18,9 @@
             "twin": "dogfood-testing/validate-report.mjs"
         },
         {
-            "rel": "idea-handoff.ts",
-            "contract": "standard",
-            "twin": "idea-handoff.mjs"
-        },
-        {
-            "rel": "wrapup-drift-probe.ts",
-            "contract": "standard",
-            "twin": "wrapup-drift-probe.mjs"
-        },
-        {
-            "rel": "wrapup-steps.ts",
-            "contract": "standard",
-            "twin": "wrapup-steps.mjs"
-        },
-        {
             "rel": "history-anatomy-cache.ts",
             "contract": "standard",
             "twin": "history-anatomy-cache.mjs"
-        },
-        {
-            "rel": "feature-verification-steps.ts",
-            "contract": "standard",
-            "twin": "feature-verification-steps.mjs"
         },
         {
             "rel": "pr-reviewing.ts",

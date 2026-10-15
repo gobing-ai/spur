@@ -258,7 +258,7 @@ procedure and do not fabricate a workflow YAML.
    inventory with `columnLabel` labels; the skill-only refine/verify batches keep the bootstrap rows
    below.
 2. **Quick deterministic readiness (R2) — plan row A1, before isolation.** Evaluate `quickReadiness`
-   (`plugins/sp/scripts/batch-preflight.ts`) with the operation, status, filtered-set size, and the
+   (`spur task preflight <wbs> --operation <op>`) with the operation, status, filtered-set size, and the
    selected matrix required/present sections + content-policy findings. This is an admission decision
    (runnable / needs-refinement / blocked / skipped / invalid), never an implementation certificate.
 3. **Isolation (R3) — plan row A2, only when `--worktree` is valid.** After quick readiness and the

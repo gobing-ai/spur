@@ -104,7 +104,7 @@ bun run apps/cli/src/index.ts feature check <id> --strict --json
   tasks, and the structured feature findings (the `--json` finding list) reported verbatim. This is
   the same abort vocabulary as cycle / unknown selector (Step 4/Step 5). **Expected pre-run
   states are classified in code, not here:** the non-aborting set lives in
-  `NON_ABORTING_PREFLIGHT_CODES` (`plugins/sp/scripts/batch-preflight.ts`), consumed through
+  `NON_ABORTING_PREFLIGHT_CODES` (`spur task preflight --classify-feature`), consumed through
   `classifyFeaturePreflightFindings`, which splits the finding list into `aborting` and
   `nonAborting` and reports `shouldAbort`. `L4.scenario-unverified` is the expected state of any
   not-yet-run feature (its covering tasks have no PASS verdicts yet) and
@@ -211,12 +211,12 @@ as a JSON array of `{wbs, dependencies, files?}` (`dependencies` from `spur task
 frontmatter; `files` = repo paths the task's Design/Plan names, omit when it names none) and run:
 
 ```bash
-node "$(superskill script path sp batch-plan.mjs)" order --tasks <tasks.json> [--concurrency <n>]
+spur task batch-plan order --tasks <tasks.json> [--concurrency <n>]
 # → {"order":[…],"waves":[[…],…],"cycle":null|[…],"overlaps":[…],"mode":"sequential|parallel","reason":"…"}
 ```
 
 `order` is the execution plan; a non-null `cycle` is the abort below. `waves`, `overlaps`, `mode`
-and `reason` feed `--mode auto` (§ 2.4a) and the batch report. The script implements Kahn's
+and `reason` feed `--mode auto` (§ 2.4a) and the batch report. The verb implements Kahn's
 algorithm (ADR-130 glue over `scheduleBatch` in `packages/app/src/workflow/plan-projection.ts`):
 
 1. Seed the queue with zero-indegree nodes, **sorted WBS-ascending** (deterministic tie-break).
@@ -265,12 +265,12 @@ The ordered execution plan: a WBS-ascending-topological list of tasks to run, pl
 ### 2.6 Preflight — TABLE A STOP rows (task 0279 / next-router consumer)
 
 **Before** each `spur workflow run` for a WBS still on the plan, re-check readiness with the pure
-helper (preferred) or `sp:next-router` dry-run:
+helper (preferred) or `sp:next-router` dry-run. Status, dependencies and their statuses are read
+from the task corpus; `--status` / `--deps` / `--dep-status` override those reads:
 
 ```bash
-node "$(superskill script path sp batch-preflight.mjs)" \
-  --wbs <wbs> --status <status> \
-  --deps <comma-deps> --dep-status <wbs:status,...> --json
+spur task preflight <wbs> --json
+spur task preflight <wbs> --status <status> --deps <comma-deps> --dep-status <wbs:status,...> --json
 ```
 
 | Result | Batch action |
@@ -289,9 +289,8 @@ out-of-set deps; 2.6 is belt-and-braces for status STOP rows and a uniform repor
 ### 2.7 Visible batch plan (1105 R3)
 
 The batch publishes a generated two-layer plan in the host's native todo list — letters first, digits
-per task only at task start. Rows come from `batch-plan.mjs` (ADR-130 glue over
-`packages/app/src/workflow/plan-projection.ts`), reached like `batch-preflight`:
-`node "$(superskill script path sp batch-plan.mjs)"`. The visible plan is a projection of the frozen
+per task only at task start. Rows come from `spur task batch-plan` (a thin verb over
+`packages/app/src/workflow/plan-projection.ts`), reached like `spur task preflight`. The visible plan is a projection of the frozen
 plan, never a second plan: labels carry identity, updates happen at the boundaries below only, and no
 per-task letter is ever hand-assigned.
 
@@ -302,7 +301,7 @@ per-task letter is ever hand-assigned.
    JSON array of `{wbs, name}` and render the waves:
 
    ```bash
-   node "$(superskill script path sp batch-plan.mjs)" waves --tasks <tasks.json>
+   spur task batch-plan waves --tasks <tasks.json>
    ```
 
    Publish wave 1's rows — one letter (B…Y) per task with no digit children, then `Z Batch report`;
@@ -311,7 +310,7 @@ per-task letter is ever hand-assigned.
    `spur workflow show task-pipeline.yaml --no-logo --format todo --json` payload:
 
    ```bash
-   node "$(superskill script path sp batch-plan.mjs)" task-children --letter <task-letter> --plan <plan.json>
+   spur task batch-plan task-children --letter <task-letter> --plan <plan.json>
    ```
 
 4. **When a task ends:** mark the task's letter (and its published digits) with the task's terminal
@@ -324,7 +323,7 @@ per-task letter is ever hand-assigned.
 ```
 plan = resolve(--tasks) → freeze → order(deps)        # may abort (cycle) or pre-block (unmet dep)
 report = []
-publish visible plan §2.7: A/Z rows now; one letter per task after this freeze (batch-plan.mjs waves)
+publish visible plan §2.7: A/Z rows now; one letter per task after this freeze (task batch-plan waves)
 RUN_ID = WT-3 marker id under --worktree, else "batch-$(date -u +%Y%m%dT%H%M%SZ)"   # fixed ONCE here; the close-out reuses it
 spur workflow commit-guard start --run "$RUN_ID"       # 1129 R1: fingerprint before the first task writes; the close-out commit stages through it
 for wbs in plan:                                       # default sequential mode
@@ -334,7 +333,7 @@ for wbs in plan:                                       # default sequential mode
     if precheck fails on semantic findings:
         if --auto: one /sp:dev-refineall --auto pass; still failing → report += skipped(wbs, findings); continue
         else:      HALT (unchanged non-auto behavior)
-    preflight = batch-preflight(wbs)                   # Step 2.6 — TABLE A STOP
+    preflight = spur task preflight <wbs>              # Step 2.6 — TABLE A STOP
     if preflight.action == skip:
         report += preflight-skip(wbs, preflight); continue
     visible plan (§2.7): letter in_progress + task-children digits at start; letter ← outcome at end
@@ -443,7 +442,7 @@ After a non-PASS terminal state (or when the task status is stuck at `wip`/`test
 verdict), consult **one** recovery hop:
 
 ```bash
-node "$(superskill script path sp batch-preflight.mjs)" --wbs <wbs> --status <status> --recovery
+spur task preflight <wbs> --status <status> --recovery
 # → e.g. /sp:dev-verify 0042 --auto --next
 ```
 
@@ -455,7 +454,7 @@ node "$(superskill script path sp batch-preflight.mjs)" --wbs <wbs> --status <st
 | Multi-candidate | HITL stop — do not silent-pick (batch `--auto` does not break ties) |
 | Forbidden | Replacing the whole batch with repeated `/sp:dev-next` (deep-merge) |
 
-Helper: `recoveryHint(status, wbs)` in `plugins/sp/scripts/batch-preflight.ts`. Tables remain SSOT
+Helper: `recoveryHint(status, wbs)` behind `spur task preflight --recovery`. Tables remain SSOT
 in next-router; this only maps status → primary TABLE A hop for recovery.
 
 ### 3.3c Feature-sync retry suppression (task 0411; 1004 R3)

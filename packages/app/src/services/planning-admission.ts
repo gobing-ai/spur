@@ -2,7 +2,8 @@
  * planning-admission — the pure readiness and admission policy behind batch preflight
  * (task 1179/1173 ownership move, ADR-130).
  *
- * Moved out of `plugins/sp/scripts/batch-preflight.ts` (task 1176): the planner adapter keeps the CLI
+ * Moved out of `plugins/sp/scripts/batch-preflight.ts` (task 1176): the planner adapter
+ * (`./planning-preflight.ts` behind `spur task preflight` since script-absorption PR-5) keeps the CLI
  * surface, argv/error contracts and recovery hints, while the decisions themselves — TABLE A STOP
  * evaluation, quick command-aware readiness and feature-finding classification — are application
  * policy with no filesystem or corpus access. Pure and side-effect free, so it also runs under Node.

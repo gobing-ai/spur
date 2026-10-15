@@ -6,7 +6,8 @@
  * external by design (`scripts/commands/bundle-plugin-lib.ts`). Every plugin script that loads that
  * bundle must therefore re-enter Bun in `main()` when `process.versions.bun` is unset — otherwise it
  * ships a Node-unloadable twin (`ERR_UNSUPPORTED_ESM_URL_SCHEME`). `feature-verification-steps.ts`
- * was the outlier; this static scan pins the pattern so a new consumer cannot repeat the mistake.
+ * was the outlier (absorbed into `spur feature verify` by script-absorption PR-5); this static scan
+ * pins the pattern so a new consumer cannot repeat the mistake.
  *
  * Detection is by the load markers R3 names (`inline-run.generated` or `loadInlineApp`); a consumer
  * missing the re-entry fails here by name, and the two-sided twin check extends the pin to the
@@ -44,7 +45,7 @@ test('1197 R3/AC3: every inline-bundle consumer re-enters Bun in its Node twin',
     const rel = CONSUMERS.map((file) => file.slice(SCRIPTS_DIR.length + 1));
     // The known consumers, feature-verification-steps.ts included (the 1176 arrival). The inline
     // run setup/dispatch scripts left with script-absorption PR-4 (`spur workflow inline`).
-    for (const expected of ['feature-verification-steps.ts', 'daily-summary/daily-summary.ts']) {
+    for (const expected of ['daily-summary/daily-summary.ts']) {
         expect(rel, `${expected} loads the inline bundle and must be scanned`).toContain(expected);
     }
     for (const file of CONSUMERS) {

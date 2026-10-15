@@ -1,15 +1,51 @@
 import { describe, expect, test } from 'bun:test';
-import { join } from 'node:path';
 import {
     classifyFeaturePreflightFindings,
     NON_ABORTING_PREFLIGHT_CODES,
-    parsePreflightCliArgs,
     preflightTask,
     quickReadiness,
     type ReadinessOperation,
+} from '../../src/services/planning-admission';
+import {
+    type PreflightOutcome,
+    type PreflightRequest,
+    parseCommaList,
+    parseDepStatuses,
     recoveryHint,
-    runPreflightCli,
-} from '../scripts/batch-preflight';
+    runPreflight,
+} from '../../src/services/planning-preflight';
+
+/**
+ * Moved from `plugins/sp/tests/batch-preflight.test.ts` with the logic (script-absorption PR-5:
+ * `spur task preflight` replaces the plugin script). `runPreflightCli` maps the retired script's
+ * flag spelling onto a {@link PreflightRequest} — the same mapping the CLI adapter
+ * (`apps/cli/src/commands/task/preflight.ts`) applies to its options — so these pins keep reading
+ * as the batch driver's calls.
+ */
+function runPreflightCli(argv: string[]): PreflightOutcome {
+    const flag = (name: string): string | undefined => {
+        const i = argv.indexOf(name);
+        return i >= 0 ? argv[i + 1] : undefined;
+    };
+    const op = flag('--operation');
+    const filtered = flag('--filtered-count');
+    const count = filtered === undefined ? Number.NaN : Number(filtered);
+    const req: PreflightRequest = {
+        wbs: flag('--wbs') ?? '0000',
+        status: flag('--status') ?? null,
+        deps: parseCommaList(flag('--deps')),
+        depStatuses: parseDepStatuses(flag('--dep-status')),
+        recovery: argv.includes('--recovery'),
+        json: argv.includes('--json'),
+        operation: op === 'run' || op === 'refine' || op === 'verify' ? op : null,
+        force: argv.includes('--force'),
+        filteredCount: Number.isFinite(count) ? count : null,
+        requiredSections: parseCommaList(flag('--required-sections')),
+        presentSections: parseCommaList(flag('--present-sections')),
+        classifyFeature: flag('--classify-feature') ?? null,
+    };
+    return runPreflight(req);
+}
 
 describe('batch-preflight — TABLE A STOP evaluation (task 0279)', () => {
     test('A2 — todo with unmet dep is skipped (no pipeline launch)', () => {
@@ -149,8 +185,9 @@ describe('batch-preflight — TABLE A STOP evaluation (task 0279)', () => {
     });
 
     test('CLI — help / usage / recovery json / no recovery for done', () => {
-        expect(runPreflightCli(['--help']).exitCode).toBe(0);
-        expect(runPreflightCli([]).exitCode).toBe(1);
+        const usage = runPreflightCli([]);
+        expect(usage.exitCode).toBe(1);
+        expect(usage.stderr).toContain('spur task preflight <wbs>');
         const j = runPreflightCli(['--wbs', '1', '--status', 'wip', '--recovery', '--json']);
         expect(j.exitCode).toBe(0);
         expect(JSON.parse(j.stdout).recovery.command).toContain('implement');
@@ -339,41 +376,39 @@ describe('quickReadiness — command-aware readiness (task 0814 R2)', () => {
     });
 });
 
-describe('batch-preflight CLI arg parsing (task 0814 R2)', () => {
-    test('parsePreflightCliArgs — --required-sections / --present-sections / --filtered-count / --force', () => {
-        const args = parsePreflightCliArgs([
+describe('preflight list parsing (task 0814 R2)', () => {
+    test('parseCommaList trims, drops empties, and maps an empty or absent value to []', () => {
+        expect(parseCommaList('Plan, Solution ,,')).toEqual(['Plan', 'Solution']);
+        expect(parseCommaList('')).toEqual([]);
+        expect(parseCommaList(undefined)).toEqual([]);
+    });
+
+    test('parseDepStatuses builds the dep → status map and skips malformed parts', () => {
+        expect(parseDepStatuses('0275:done, 0276 : todo,bogus,:x')).toEqual({ '0275': 'done', '0276': 'todo' });
+        expect(parseDepStatuses(undefined)).toEqual({});
+    });
+
+    test('the flag mapping carries sections, filtered count and force into quick readiness', () => {
+        const r = runPreflightCli([
+            '--operation',
+            'run',
             '--wbs',
             '0814',
             '--status',
             'todo',
-            '--operation',
-            'run',
             '--required-sections',
-            'Solution,Review',
+            'Plan,Solution',
             '--present-sections',
             'Solution',
             '--filtered-count',
             '3',
-            '--force',
+            '--json',
         ]);
-        expect(args.requiredSections).toEqual(['Solution', 'Review']);
-        expect(args.presentSections).toEqual(['Solution']);
-        expect(args.filteredCount).toBe(3);
-        expect(args.force).toBe(true);
-        // empty value → empty array; non-finite count → null
-        expect(parsePreflightCliArgs(['--required-sections', '']).requiredSections).toEqual([]);
-        expect(parsePreflightCliArgs(['--present-sections', '']).presentSections).toEqual([]);
-        expect(parsePreflightCliArgs(['--filtered-count', 'x']).filteredCount).toBeNull();
-    });
-
-    test('CLI script entrypoint (import.meta.main) exits with the declared code', () => {
-        const script = join(import.meta.dir, '..', 'scripts', 'batch-preflight.ts');
-        const ok = Bun.spawnSync(['bun', script, '--wbs', '1', '--status', 'todo']);
-        expect(ok.exitCode).toBe(0);
-        expect(ok.stdout.toString()).toContain('run:');
-        const skip = Bun.spawnSync(['bun', script, '--wbs', '1', '--status', 'done']);
-        expect(skip.exitCode).toBe(2);
-        expect(skip.stdout.toString()).toContain('skip A8');
+        expect(r.exitCode).toBe(0);
+        expect(JSON.parse(r.stdout)).toMatchObject({ action: 'needs-refinement' });
+        expect(
+            runPreflightCli(['--operation', 'run', '--wbs', '1', '--status', 'todo', '--filtered-count', 'x']).exitCode,
+        ).toBe(0);
     });
 
     test('1132 R4: feature preflight classifies L4.scenario-unverified and L4.verifying-incomplete-tasks as nonAborting', () => {
@@ -403,12 +438,10 @@ describe('batch-preflight CLI arg parsing (task 0814 R2)', () => {
         expect(resFatal.shouldAbort).toBe(true);
         expect(resFatal.aborting.map((f) => f.code)).toEqual(['L1.schema-validation']);
 
-        // CLI invocation
-        const script = join(import.meta.dir, '..', 'scripts', 'batch-preflight.ts');
-        const cliOk = Bun.spawnSync(['bun', script, '--classify-feature', JSON.stringify(findings)]);
-        expect(cliOk.exitCode).toBe(0);
-        const cliFail = Bun.spawnSync(['bun', script, '--classify-feature', JSON.stringify(fatal)]);
-        expect(cliFail.exitCode).toBe(1);
+        // Request-level invocation (the CLI's `--classify-feature`)
+        expect(runPreflightCli(['--classify-feature', JSON.stringify(findings)]).exitCode).toBe(0);
+        expect(runPreflightCli(['--classify-feature', JSON.stringify(fatal)]).exitCode).toBe(1);
+        expect(runPreflightCli(['--classify-feature', '{"not":"an array"}']).exitCode).toBe(0);
     });
 
     test('classify-feature mode reports the classification in-process (task 1176 move)', () => {

@@ -43,6 +43,13 @@ rules:
             # and exposes no timeout, so it cannot reproduce either half (task 1176 R2; same class as
             # the quality-gate exemption above).
             - "packages/app/src/workflow/feature-verification-run.ts"
+            # `spur task wrapup` steps (script-absorption PR-5, plan §3.4), pinned to the retired plugin
+            # scripts' golden output by apps/cli/tests/script-absorption-pr5-parity.test.ts. The feature gate
+            # (`sh -c`) and `task resolve` run with stdio/stderr INHERITED so their output streams into the
+            # workflow run log in order, and every step is synchronous; ProcessExecutor captures the streams
+            # separately and cannot inherit them (same class as the quality-gate exemption above).
+            - "packages/app/src/workflow/wrapup/steps.ts"
+            - "packages/app/src/workflow/wrapup/drift-probe.ts" # sync nested `spur task show` reads beside steps.ts (same exemption)
 
   - id: no-direct-fs-io
     description: "Prefer ts-runtime's FileSystem seam for fs IO."
@@ -94,6 +101,8 @@ rules:
             # dev/ino identity check (1067 R3) that the async FileSystem seam cannot express.
             - "packages/app/src/services/residual-scan-run.ts"
             - "packages/app/src/workflow/task-diffstat.ts"
+            - "packages/app/src/workflow/wrapup/steps.ts" # `spur task wrapup` steps (script-absorption PR-5): sync status/metrics appends and run-artifact writes byte-pinned to the retired plugin scripts' golden output (apps/cli/tests/script-absorption-pr5-parity.test.ts); the FileSystem seam is async and has no append
+            - "packages/app/src/workflow/wrapup/drift-probe.ts" # drift-probe step beside steps.ts (same exemption)
             - "packages/app/src/workflow/feature-verification-run.ts" # the pass opens the run's single merged log fd (`openSync(path,'a')`) and mkdirs the run dir beside the receipt writer, exactly as the plugin entry did before the move; the fd cannot be expressed through the FileSystem seam (task 1176 R2; same class as the quality-gate exemption above)
             - "packages/app/src/services/run-storage.ts" # durable-evidence migration core (task 1025 R4): atomic tmp+rename byte copies with digest reread and atomic manifest publish must stay byte-stable (mirrors agent-usage-producer.ts / project-registry.ts exemptions)
             - "packages/app/src/services/durable-plane-ignore.ts" # .git/info/exclude append moved verbatim out of run-storage.ts to break an import cycle (same exemption)

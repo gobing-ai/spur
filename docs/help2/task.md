@@ -16,6 +16,9 @@ status transitions, frontmatter fields, and section edits — never mutate a tas
 | `refresh` | Re-scan the task corpus and report counts |
 | `refresh-roster <wbs>` | Regenerate a parent's sub-task roster block |
 | `batch-create` | Create many tasks from a validated JSON file (all-or-nothing) |
+| `batch-plan <mode>` | Project a task batch: plan waves, dependency order, or phase digits |
+| `preflight [wbs]` | Read-only batch admission decision for one task |
+| `wrapup <op>` | Run one deterministic wrapup-pipeline step |
 | `record <wbs>` | Record pipeline results into the task file |
 | `verdict <wbs>` | Derive a PASS/PARTIAL/FAIL verdict from verify answer text |
 | `check [wbs]` | Validate a task file through the four-layer check |
@@ -162,6 +165,45 @@ spur task batch-create --file <path> [--skip-ready] [--agent <selector>] [--json
 
 Many tasks from one schema-validated JSON file — **all or nothing**: if any row fails
 validation, none are created. This is the bulk-creation gate for agents and scripts.
+
+## spur task batch-plan
+
+```bash
+spur task batch-plan waves --tasks <file>
+spur task batch-plan order --tasks <file> [--concurrency <n>]
+spur task batch-plan task-children --letter <A-Z> --plan <file>
+```
+
+The batch driver's visible plan, as JSON on stdout: `waves` lays out the letters-first rows
+(A prepare, one row per task, Z report), `order` sorts by dependencies into parallel waves
+(a cycle is reported as data), `task-children` returns one task row's phase digits.
+
+## spur task preflight
+
+```bash
+spur task preflight <wbs> [--status <s>] [--deps <list>] [--dep-status <map>] [--force]
+spur task preflight <wbs> [--operation <op>] [--filtered-count <n>]
+spur task preflight <wbs> [--required-sections <list>] [--present-sections <list>]
+spur task preflight <wbs> --recovery
+spur task preflight --classify-feature <json>
+```
+
+Decides whether the batch driver launches a task (`run`, exit 0) or skips it (`skip <code>`,
+exit 2). Status and dependencies come from the task corpus unless the flags supply them.
+`--recovery` prints the one-shot `/sp:dev-*` hop for the status; `--classify-feature` splits
+feature findings into aborting and non-aborting.
+
+## spur task wrapup
+
+```bash
+spur task wrapup <op> [--run-id <id>] [--tasks <json>] [--mode <mode>] [--feature <id>]
+spur task wrapup feature-transition [--feature-gate-cmd <cmd>] [--spur-bin <cmd>]
+```
+
+The `wrapup-pipeline` workflow's deterministic steps (`resolve`, `route-reason`, `metrics`,
+`feature-transition`, `doc-sync-snapshot`, `doc-sync-scope`, `doc-supersession`,
+`drift-probe`). Each writes its `.spur/run/<runId>-*` artifact and exits 0 once it ran — the
+verdict lives in the status file. Flags default to the workflow env names.
 
 ## spur task record / verdict
 

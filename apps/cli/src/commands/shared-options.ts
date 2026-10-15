@@ -122,6 +122,10 @@ export const SHARED_OPTIONS = {
         'Force applying reopen proposals without confirmation; also bypasses repeated-BLOCKED suppression',
     ] as const,
     forceInitRecreate: ['--force', 'Recreate files that already exist'] as const,
+    forceTaskPreflight: [
+        '--force',
+        'Verify-only: re-verify an already-done/cancelled task instead of skipping',
+    ] as const,
     forceWorkflowClean: ['--force', 'Clean ALL non-terminal runs regardless of age (overrides --older-than)'] as const,
     forceWorkflowContinue: ['--force', 'Proceed with resume even if workflow definition drift is detected'] as const,
     strictFeature: ['--strict', 'Elevate warnings to failures'] as const,

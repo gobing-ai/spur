@@ -18,6 +18,9 @@
 | `refresh` | Re-scan the task corpus and report counts (`kanban.md` retired — A17 cutover) |
 | `refresh-roster <wbs>` | Regenerate a parent's sub-task roster block inside its `## Plan` |
 | `batch-create` | Create many tasks from validated JSON (all-or-nothing) |
+| `batch-plan <mode>` | Project a task batch: visible plan waves, dependency order, or a task row's phase digits |
+| `preflight [wbs]` | Batch preflight for one task: TABLE A STOP check, quick readiness, recovery hint |
+| `wrapup <op>` | Run one deterministic wrapup-pipeline step (resolve, metrics, feature sync, doc-sync guards, drift probe) |
 | `record <wbs>` | Write Testing/Review from verify verdict; optional Solution backfill + status move |
 | `verdict <wbs>` | Derive PASS/PARTIAL/FAIL/UNKNOWN gate verdict from a verify answer file |
 | `verifyall-aggregate` | Aggregate per-task verify outcomes into a deterministic batch verdict |
@@ -256,6 +259,83 @@ spur task batch-create [options] --file <path>
 
 All-or-nothing: if any task in the batch fails validation, none are created. This is the
 **LLM→CLI gate** for bulk task creation.
+
+## spur task batch-plan
+
+```
+spur task batch-plan [options] <mode>
+```
+
+| Argument | Description |
+|---|---|
+| `mode` | `waves` \| `order` \| `task-children` |
+
+| Flag | Description |
+|---|---|
+| `--tasks <file>` | Tasks JSON file: `{wbs, name}[]` for `waves`, `{wbs, dependencies?, files?}[]` for `order` |
+| `--concurrency <n>` | Parallel slots for `order` (positive integer, default 2) |
+| `--letter <letter>` | Task row letter `A`–`Z` (`task-children`) |
+| `--plan <file>` | `spur workflow show --format todo --json` payload or a bare plan array (`task-children`) |
+
+The batch driver's letters-first visible plan (script-absorption PR-5; replaces the plugin script
+`batch-plan`). JSON on stdout: `waves` → `{ waves }` (A Prepare batch, B…Y one row per task, Z Batch
+report), `order` → `{ order, waves, cycle, overlaps, mode, reason }` (a cycle is data, not an error),
+`task-children` → the task's phase digits. Files resolve against the project directory. Exit `0`
+success, `1` unreadable/invalid input, `2` usage error.
+
+## spur task preflight
+
+```
+spur task preflight [options] [wbs]
+```
+
+| Argument | Description |
+|---|---|
+| `wbs` | Task WBS number |
+
+| Flag | Description |
+|---|---|
+| `--status <status>` | Task status (default: read from the task file) |
+| `--deps <list>` | Comma-separated dependency WBS list (default: the task frontmatter) |
+| `--dep-status <map>` | Dependency statuses, e.g. `0275:done,0276:todo` (default: read per dependency) |
+| `--operation <op>` | Quick command-aware readiness for `run` \| `refine` \| `verify` |
+| `--filtered-count <n>` | Status-filtered candidate set size (`0` = empty set) |
+| `--required-sections <list>` | Required planning sections (comma-separated) |
+| `--present-sections <list>` | Planning sections present in the task (comma-separated) |
+| `--force` | Verify-only: re-verify an already-done/cancelled task instead of skipping |
+| `--recovery` | Print the one-shot `/sp:dev-*` recovery hop for the status instead of a decision |
+| `--classify-feature <json>` | Classify feature findings into aborting / non-aborting (1132 R4) and exit |
+| `--folder <path>` | Custom tasks folder |
+| `--json` | Output machine-readable JSON |
+
+Read-only admission decision the batch driver runs before each launch (script-absorption PR-5;
+replaces the plugin script `batch-preflight`). Without `--status`, status, dependencies and their
+statuses come from the task corpus. Exit `0` run (or recovery hint printed / non-aborting
+classification), `2` skip, `1` usage error, unreadable task or aborting classification.
+
+## spur task wrapup
+
+```
+spur task wrapup [options] <op>
+```
+
+| Argument | Description |
+|---|---|
+| `op` | `resolve` \| `route-reason` \| `metrics` \| `feature-transition` \| `doc-sync-snapshot` \| `doc-sync-scope` \| `doc-supersession` \| `drift-probe` |
+
+| Flag | Description |
+|---|---|
+| `--run-id <id>` | Workflow run id (env: `__runId`) |
+| `--tasks <json>` | JSON array of four-digit WBS strings (env: `tasks`) |
+| `--mode <mode>` | Projected wrapup mode for `route-reason` (env: `mode`) |
+| `--feature <id>` | Feature to pre-flight / transition (env: `feature`) |
+| `--feature-gate-cmd <cmd>` | Trusted `sh -c` feature gate for `feature-transition` (env: `featureGateCmd`) |
+| `--spur-bin <cmd>` | Spur invocation for nested lookups (env: `spurBin`; default: this spur) |
+
+The `wrapup-pipeline.yaml` deterministic steps (script-absorption PR-5; replaces the plugin scripts
+`wrapup-steps` and `wrapup-drift-probe`). Each step writes its `.spur/run/<runId>-*` artifact and
+exits `0` once it ran — the verdict lives in the status file; `1` = mis-invocation (empty run id or
+feature), `2` = unknown op.
 
 ## spur task record
 

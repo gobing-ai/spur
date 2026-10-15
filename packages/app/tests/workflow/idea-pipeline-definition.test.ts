@@ -9,10 +9,10 @@
 
 import { describe, expect, test } from 'bun:test';
 import { spawnSync } from 'node:child_process';
-import { chmodSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { getEnvVar, getEnvVars } from '@gobing-ai/spur-config';
+import { getEnvVars } from '@gobing-ai/spur-config';
 import { parse as parseYaml } from 'yaml';
 
 interface Guard {
@@ -538,17 +538,13 @@ describe('idea-pipeline definition — task ordering, roster refresh, handoff re
         expect(batchRunCmd).toContain('--skip-ready');
     });
 
-    test('handoff-finalize delegates to the bundled finalizeIdeaHandoff and fails closed (0824)', () => {
-        // 0824: the finalize shell is a locator wrapper. The zip/deps/refresh/check/report
-        // contract is pinned by finalizeIdeaHandoff unit tests (idea-handoff.test.ts); no
-        // second shell implementation may remain in the definition. 1007 R4: resolution
-        // goes through the run-scoped script-root probe, not superskill path probing.
-        expect(finalizeCmd).toContain('@sh"\\(.dir)/idea-handoff.ts"+" RUNNER=bun"');
-        expect(finalizeCmd).toContain('@sh"\\(.dir)/idea-handoff.mjs"+" RUNNER=node"');
-        expect(finalizeCmd).toContain('if [ -f "$S" ]; then');
-        expect(finalizeCmd).toContain('"$RUNNER" "$S"');
-        expect(finalizeCmd).toContain('failed closed');
-        expect(finalizeCmd).toContain('exit 1');
+    test('handoff-finalize delegates to `spur feature handoff` and fails closed (0824, PR-5)', () => {
+        // 0824: the finalize shell only delegates. The zip/deps/refresh/check/report contract is
+        // pinned by finalizeIdeaHandoff unit tests (idea-handoff.test.ts); no second shell
+        // implementation may remain in the definition. Script-absorption PR-5 replaced the
+        // plugin-script locator with the CLI verb, whose nonzero exit fails the action.
+        expect(finalizeCmd).toBe('$spurBin feature handoff "$featureId" --run-id "$__runId" --no-logo');
+        expect(finalizeCmd).not.toContain('script-root');
         expect(finalizeCmd).not.toContain('superskill script path');
         expect(finalizeCmd).not.toContain('task deps');
         expect(finalizeCmd).not.toContain('task check');
@@ -580,23 +576,20 @@ describe('idea-pipeline definition — regression invariants and no-surface guar
         DEF.states.find((s) => s.id === 'handoff-finalize')?.onEnter?.find((a) => a.kind === 'shell')?.options
             ?.command ?? '';
 
-    test('handoff-finalize fails closed with exit 1 when neither the monorepo writer nor the plugin twin exists (0824)', () => {
-        // R1 (0824): a seeded project without the sp plugin must not silently skip
-        // finalization. In a temp cwd (no packages/, no plugins/) with a failing
-        // `superskill` on PATH, the wrapper exits 1 naming the failure.
+    test('handoff-finalize fails closed with exit 1 when the handoff inputs are missing (0824, PR-5)', () => {
+        // R1 (0824): finalization must never be silently skipped. In a temp cwd with none of the
+        // run's batch artifacts, `spur feature handoff` (the real CLI as spurBin) exits 1 naming
+        // the failure, and the wrapper propagates it.
         const cwd = mkdtempSync(join(tmpdir(), 'idea-handoff-failclosed-'));
         try {
-            const superskill = join(cwd, 'superskill');
-            writeFileSync(superskill, '#!/bin/sh\necho "stub: superskill unavailable" >&2\nexit 1\n');
-            chmodSync(superskill, 0o755);
+            const cli = join(import.meta.dir, '../../../../apps', 'cli', 'src', 'index.ts');
             const result = spawnSync('sh', ['-c', finalizeCmd], {
                 cwd,
                 encoding: 'utf8',
-                env: { ...getEnvVars(), __runId: 'r-fc', featureId: 'F1', PATH: `${cwd}:${getEnvVar('PATH') ?? ''}` },
+                env: { ...getEnvVars(), __runId: 'r-fc', featureId: 'F1', spurBin: `${process.execPath} ${cli}` },
             });
             expect(result.status).toBe(1);
-            expect(result.stderr).toContain('failed closed');
-            expect(result.stderr).toContain('superskill install sp');
+            expect(result.stderr).toContain('idea-handoff: ');
             // No partial handoff report may appear.
             expect(() => readFileSync(join(cwd, '.spur/run/r-fc-idea-handoff.md'))).toThrow();
         } finally {

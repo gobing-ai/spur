@@ -88,12 +88,6 @@ states:
       handoff — no task execution. Soft agent doctor (status file) so doctor red
       routes to `failed` via transitions instead of a raw lifecycle abort.
     onEnter:
-      # 0960 R2: run-start script-resolution identity — record which tree this run
-      # resolved (source-repo vs installed) before any step executes. Never aborts.
-      - kind: shell
-        options:
-          command: >-
-            S=plugins/sp/scripts/script-root.ts; [ -f config/plugin-scripts.json -a -f "$S" ] || S="$(superskill script path sp script-root.mjs 2>/dev/null)"; RUNNER=bun; case "$S" in *.mjs) RUNNER=node ;; esac; [ -f "$S" ] && "$RUNNER" "$S" --run-id "$__runId" --spur-bin "$spurBin" || echo "script-root failed closed — run 'superskill install sp --marketplace gobing-ai/spur'" >&2; exit 0
       - kind: note
         options:
           message: "Idea pipeline start for idea: ${vars.idea}"
@@ -606,21 +600,14 @@ states:
       A mapping or CLI error fails the run before terminal handoff; an unready
       task is a successful planning outcome recorded as a refineall recommendation.
     onEnter:
-      # (d) idea-handoff owns finalization (0824): the bundled finalizeIdeaHandoff
-      # capability runs from the monorepo checkout first; seeded projects (no
-      # packages/, no plugins/) resolve the registered idea-handoff.mjs twin under
-      # bare node; neither present fails closed (exit 1) instead of silently
-      # skipping finalization. The zip/deps/refresh/check/report contract itself is
-      # pinned by finalizeIdeaHandoff unit tests, not by this file.
+      # (d) `spur feature handoff` owns finalization (0824; script-absorption PR-5
+      # retired the idea-handoff plugin script and its bundle). A nonzero exit fails
+      # the run (fail closed) instead of silently skipping finalization. The
+      # zip/deps/refresh/check/report contract itself is pinned by
+      # finalizeIdeaHandoff unit tests, not by this file.
       - kind: shell
         options:
-          command: >-
-            eval "$(jq -r 'if .mode=="source-repo" then "S="+@sh"\(.dir)/idea-handoff.ts"+" RUNNER=bun" elif .mode=="installed" then "S="+@sh"\(.dir)/idea-handoff.mjs"+" RUNNER=node" else empty end' ".spur/run/$__runId-script-root.json" 2>/dev/null)"; if [ -f "$S" ]; then
-              "$RUNNER" "$S";
-            else
-              echo "idea handoff failed closed — idea-handoff script not found — run 'superskill install sp --marketplace gobing-ai/spur'" >&2;
-              exit 1;
-            fi
+          command: '$spurBin feature handoff "$featureId" --run-id "$__runId" --no-logo'
   - id: handoff
     description: >
       Terminal — idea pipeline complete. Ordering applied, roster refreshed, and

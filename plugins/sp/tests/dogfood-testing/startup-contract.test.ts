@@ -98,7 +98,7 @@ describe('batch and command publish-first (task 1105 R3/R4) — spec pins', () =
         const section = BATCH.indexOf('### 2.7 Visible batch plan');
         expect(section).toBeGreaterThan(BATCH.indexOf('### 2.6 Preflight'));
         expect(section).toBeLessThan(BATCH.indexOf('## Step 3'));
-        for (const needle of ['batch-plan.mjs', 'waves --tasks', 'task-children --letter', 'Z Batch report']) {
+        for (const needle of ['spur task batch-plan', 'waves --tasks', 'task-children --letter', 'Z Batch report']) {
             expect(BATCH, `batch driver should name ${needle}`).toContain(needle);
         }
     });
@@ -130,7 +130,9 @@ describe('batch and command publish-first (task 1105 R3/R4) — spec pins', () =
 
 describe('worktree startup ordering (task 0814 R3) — spec pins', () => {
     test('execution-batch.md puts command-aware quickReadiness before worktree creation/adoption', () => {
-        expect(BATCH).toContain('command-aware readiness (the `quickReadiness` contract in `batch-preflight.ts`)');
+        expect(BATCH).toContain(
+            'command-aware readiness (the `quickReadiness` contract behind `spur task preflight --operation`)',
+        );
         expect(BATCH).toContain('**before** creating');
     });
 

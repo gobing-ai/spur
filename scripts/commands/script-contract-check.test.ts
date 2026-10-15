@@ -689,17 +689,13 @@ test('placement baseline reconciles with plan §2 (task 1000 R7)', () => {
         .sort();
     expect(actual).toEqual(expected);
 
-    // exempt: true is exactly the three over-budget Keep files (task-frozen list). The context-post-tool
+    // exempt: true listed the three over-budget Keep files (task-frozen list). The context-post-tool
     // row left in task 1174 (hook → lib core adapter) and the feature-verification-steps row left in
-    // task 1176 (verify body → app operation), both because the entry fell under the budget.
+    // task 1176 (verify body → app operation), both because the entry fell under the budget; the
+    // batch-preflight, wrapup-drift-probe and wrapup-steps rows left with script-absorption PR-5
+    // (absorbed into `spur task preflight` / `spur task wrapup`), so no exemption remains.
     const exempt = keys.filter((k) => entries[k]?.exempt === true).sort();
-    expect(exempt).toEqual(
-        [
-            'plugins/sp/scripts/batch-preflight.ts',
-            'plugins/sp/scripts/wrapup-drift-probe.ts',
-            'plugins/sp/scripts/wrapup-steps.ts',
-        ].sort(),
-    );
+    expect(exempt).toEqual([]);
 });
 
 test('checkPlacement includes the hook source-layout findings (task 1174 R3 activation)', () => {
