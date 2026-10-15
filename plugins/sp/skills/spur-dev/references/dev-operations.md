@@ -590,9 +590,13 @@ host instructions does not add one. An opt-in gate is explicit: `gitmsg --check 
      - `keepachangelog` (default): `## [<version>] - <date>` header, then category headings per the keepachangelog convention — `### Added` / `### Fixed` / `### Changed` / `### Removed` / `### Other` — mapped from conventional-commit types.
      - `simple`: flat bulleted list grouped by type heading (`### feat`, `### fix`, …).
   6. Emit: with `<file>`, insert the section into that file above its newest `## [` release heading (or after its title when none exists) and touch nothing else in the file; without `<file>`, print it to stdout.
-  7. Self-check before emitting: every short hash in `<since>..<until>` appears exactly once. Fix any miss or duplicate; do not report a verdict.
-  8. Reply in at most three lines: the range, bullet counts per category, and the output target.
-- **Invariants:** Output is derived from `git log` only. No quality gates — no `bun run gate`/lint/typecheck/test/`spur-check`/rule runs, citation or manifest lookups, confidence ratings, or edits beyond the one inserted section. The file is left uncommitted.
+  7. **Verify claims before emitting:** scan the generated bullets for API/library claims — bullets asserting what code, APIs, libraries, dependencies, or versions do (skip merge/bookkeeping bullets that assert no such fact). Verify each affected bullet, then append an HTML comment line directly under it: `<!-- src: <citation> · <HIGH|MEDIUM|LOW> -->`.
+     - Internal claims (what a commit or the code does): confirm against the commit diff (`git show --stat <hash>`, reading hunks when the summary asserts behavior) or the artifact's presence in the tree; cite `path[:line]` — bare path for whole-file claims, `path:line` for a specific behavior or symbol.
+     - External claims (framework/library/version behavior): confirm against official docs for the installed version; cite the URL. Unverifiable → LOW plus the reason in one clause.
+     - Confidence: HIGH = the diff/artifact confirms the summary as written; MEDIUM = the evidence is real but narrower than the summary; LOW = cannot be confirmed from available sources.
+  8. Self-check before emitting: every short hash in `<since>..<until>` appears exactly once, and every verified bullet carries exactly one `<!-- src: … -->` comment whose level is `HIGH`, `MEDIUM`, or `LOW` — no off-rubric levels, no unannotated claim bullets. Fix any miss, duplicate, or bad level; do not report a verdict.
+  9. Reply in at most three lines: the range, bullet counts per category plus verified-claim counts (`x HIGH / y MEDIUM / z LOW`), and the output target.
+- **Invariants:** Bullets are derived from `git log` only; the claim-verification pass (step 7) adds evidence from commit diffs, the working tree, and official docs. No quality gates — no `bun run gate`/lint/typecheck/test/`spur-check`/rule runs, and no edits beyond the one inserted section (its verification comments included). The file is left uncommitted.
 
 ### 9. gitmsg
 

@@ -26,5 +26,5 @@ For shared semantics, see the [flag glossary](../skills/spur-dev/references/flag
 
 ## Implementation
 
-Follow the inline procedure in [dev-operations.md](../skills/spur-dev/references/dev-operations.md#8-changelog) (changelog). This is a docs-only generator: run no quality gates (`bun run gate`, lint, typecheck, tests, `spur-check`, rules, citation checks) — a generic "verify before finishing" rule does not apply here.
+Follow the inline procedure in [dev-operations.md](../skills/spur-dev/references/dev-operations.md#8-changelog) (changelog). This is a docs-only generator: run no quality gates (`bun run gate`, lint, typecheck, tests, `spur-check`, rules) — a generic "verify before finishing" rule does not apply here. The generator's own claim-verification pass (dev-operations §8, step 7: API/library claims get `<!-- src: … · HIGH|MEDIUM|LOW -->` citations) is part of the procedure, not a gate.
 

@@ -1,5 +1,76 @@
 # Changelog
 
+## [0.4.7] - 2026-10-14
+
+### Fixed
+- carry the stdout verdict in scheduler failure detail (49c724c5b)
+  <!-- src: packages/app/src/services/scheduler-custom-job-service.ts:296 · HIGH -->
+- preserve relative catalog paths after module split (1210) (7c94e3903)
+  <!-- src: packages/app/src/services/workflow-catalog-scan.ts:60 · HIGH -->
+- merge post-refactor review refinements (#14) (77e151f2b)
+
+### Changed
+- split commands/task.ts into commands/task/<verb>.ts (255d83949)
+  <!-- src: apps/cli/src/commands/task/ · HIGH -->
+- split commands/workflow.ts into commands/workflow/<verb>.ts (d84fd743c)
+  <!-- src: apps/cli/src/commands/workflow/ · HIGH -->
+- split commands/agent.ts into commands/agent/<verb>.ts (220f6f3e2)
+  <!-- src: apps/cli/src/commands/agent/ · HIGH -->
+- move agent-service.ts module-level helpers into focused modules (e69794944)
+  <!-- src: packages/app/src/services/agent-doctor-report.ts · HIGH -->
+- move workflow-service.ts module-level helpers into focused modules (a09b7eda2)
+  <!-- src: packages/app/src/services/workflow-catalog-scan.ts · HIGH -->
+- move task-service.ts module-level helpers into focused modules (a7ba83507)
+  <!-- src: packages/app/src/services/task-section-bodies.ts · HIGH -->
+- batch-create staged-file cleanup as try/catch (755831e51)
+  <!-- src: apps/cli/src/commands/task/batch-create.ts:161 · HIGH -->
+- split TaskService class body into verb modules (83b8d3420)
+  <!-- src: packages/app/src/services/task-create-ops.ts · HIGH -->
+- split WorkflowAppService class body into verb modules (f0114d23a)
+  <!-- src: packages/app/src/services/workflow-run-ops.ts · HIGH -->
+- split AgentService class body into verb modules (356a0e260)
+  <!-- src: packages/app/src/services/agent-run-executor.ts · HIGH -->
+- fold dispatch process executors into agent-run-executor (c3cdaa369)
+  <!-- src: packages/app/src/services/agent-run-executor.ts · HIGH -->
+- extract fleet dispatch deps builder in WorkflowEngineFactory (e3ca40b47)
+  <!-- src: packages/app/src/services/workflow-engine-factory.ts:174 · HIGH -->
+- merge CLI and service helper split (#11) (cf4783f74)
+- merge service class split (#13) (a4cc1b3b5)
+
+### Other
+- teach CLI surface checks the commands/<noun>/ layout (b77d0b57a)
+  <!-- src: config/rules/surface/check-cli-surface.yaml · HIGH -->
+- mirror commands/task/ — split task.test.ts into tests/commands/task/<verb>.test.ts (75d1501c1)
+  <!-- src: apps/cli/tests/commands/task/ · HIGH -->
+- mirror commands/workflow/ — split workflow.test.ts per verb (475cd813a)
+  <!-- src: apps/cli/tests/commands/workflow/ · HIGH -->
+- mirror commands/agent/ — per-verb agent tests (8e5ddf363)
+  <!-- src: apps/cli/tests/commands/agent/ · HIGH -->
+- focused tests for commands/task/shared.ts and commands/workflow/shared.ts (a8f110d40)
+  <!-- src: apps/cli/tests/commands/task/shared.test.ts · HIGH -->
+- repoint citations of the split CLI modules and test files (06510dbe9)
+  <!-- src: AGENTS.md · HIGH -->
+- focused tests for the helper modules split out of the services (066a775cc)
+  <!-- src: packages/app/tests/services/task-section-bodies.test.ts · HIGH -->
+- merge origin/main into refactor/split-large-modules (PR #10 merged) (2cc013c28)
+- focused tests for agent-doctor-report and workflow-trace-projection (0722bc9da)
+  <!-- src: packages/app/tests/services/agent-doctor-report.test.ts · HIGH -->
+- cover the per-verb branches the monolith tests left to the file average (e38cb2cde)
+  <!-- src: apps/cli/tests/commands/task/check.test.ts · MEDIUM -->
+- TSDoc for helpers the splits promoted to exports (ffc48bcec)
+  <!-- src: packages/app/src/services/workflow-catalog-scan.ts · HIGH -->
+- merge origin/main (0.4.6 release, verdict/persist-out fixes) into refactor/split-large-modules (4a4552814)
+- refresh bun.lock workspace versions for 0.4.6 (d299ae152)
+  <!-- src: bun.lock · HIGH -->
+- regenerate inline-run bundle after workflowVersionLiteral move (7ec75d9fc)
+  <!-- src: plugins/sp/lib/inline-run.generated.mjs:3065 · HIGH -->
+- point TaskFeatureLink AC-body doc at the new owning classes (3a0d7d0e9)
+  <!-- src: packages/app/src/services/task-feature-link.ts · HIGH -->
+- unit tests for the extracted service modules (f59496994)
+  <!-- src: packages/app/tests/services/agent-run-executor.test.ts · HIGH -->
+- merge lockfile refresh (#12) (280ae88bf)
+- sync merged PRs into local main (51bcccf62)
+
 ## [0.4.6] - 2026-10-14
 
 ### Added
