@@ -272,7 +272,7 @@ plugins/sp/
 │   └── wayfinder/                   # Multi-session investigation maps (SKILL.md only)
 ├── commands/                        # Slash-command wrappers — the SSOT (hand-editable thin wrappers; see Commands below)
 ├── agents/                          # 4 specialist subagents (expert-spur, super-coder, super-planner, super-reviewer)
-├── hooks/                           # hooks.json (the registry) + pi/guard-extension.ts (plugin.json `extensions.pi`)
+├── hooks/                           # hooks.json (the registry) only — Pi runs it through superskill's native Pi adapter
 │                                    # — no hook entries here; see scripts/hooks/ (superskill ADR-039)
 ├── lib/                             # Handwritten plugin cores — context-{post-tool,session-start,session-stop}.ts,
 │                                    # agent-hint.ts, context-owner.ts, destructive-policy.ts, task-file-policy.ts,
@@ -281,7 +281,7 @@ plugins/sp/
 │                                    # (daily-summary: daily-summary.ts; dogfood-testing: {detect-pipeline-driving, validate-report}.ts)
 │   └── hooks/                       # One entry per registered hook identity, run by `superskill hook run sp <id>`;
 │                                    # entries delegate to lib cores (task 1174); hook suites live in tests/hooks/
-├── tests/                           # Plugin tests — skill-structure.test.ts + hooks/ (guard, context, Pi suites)
+├── tests/                           # Plugin tests — skill-structure.test.ts + hooks/ (guard, context, lifecycle suites)
 │                                    # + evals/ (behavioral eval corpus + judge; see tests/evals/README.md,
 │                                    # runner at scripts/commands/skill-eval.ts) + per-skill suites
 ├── plugin.json                      # Marketplace entry
@@ -519,8 +519,9 @@ inbox work to a session joined as a fleet guest at turn end; any other session p
 **Destructive-command guard.** `careful-guard` (task 0215 R3) fires on every `Bash` tool call and
 asks the operator to confirm destructive shell commands (`rm -rf`, `DROP TABLE`, `git push --force`,
 …); rebuildable caches (`rm -rf node_modules`, `dist`, …) pass. The policy is
-`lib/destructive-policy.ts`, shared with the Pi extension. Hosts that cannot confirm (Codex, omp)
-fail the `ask` open, so there it is advisory only. Fail-open by contract; escape hatch
+`lib/destructive-policy.ts`. On Pi, superskill's native adapter routes the `ask` to `ctx.ui.confirm`
+(and blocks when Pi has no UI). Hosts that cannot confirm (Codex, omp) fail the `ask` open, so there
+it is advisory only. Fail-open by contract; escape hatch
 `SPUR_CAREFUL=off`.
 
 **Runtime contract (superskill ADR-039).** `superskill hook run sp <id>` runs the plugin's own
@@ -543,12 +544,27 @@ targets:
 - Native targets (Claude Code, omp, Grok) get the whole plugin.
 
 So `scripts/hooks/<id>.ts`, importing `../../lib/…`, is the only path that resolves the same way on
-every target. `hooks/` keeps the registry and the Pi extension only. `script-contract-check`
+every target. `hooks/` keeps the registry only. `script-contract-check`
 rejects a hook entry there: on native installs it would shadow the staged one, and staged targets
 would never receive it. Hook logic stays in the plugin (Revision 2026-10-15); the files are entries
 and lib cores, not `spur` commands.
 
 **Escape hatch:** `SPUR_WRITE_GUARD=off` short-circuits the write guard before any subprocess.
+
+**Pi.** The plugin ships no Pi-specific extension any more: the former
+`hooks/pi/guard-extension.ts` (declared through `plugin.json` `extensions.pi`) is retired. Pi gets
+the same seven `hooks.json` hooks as every other host, through superskill's **native Pi hook
+adapter** (superskill PR #4, ADR-039): `superskill install` generates one Pi extension module per
+declared hook, each running `superskill hook run sp <id>` with `SUPERSKILL_HOOK_HOST=pi`, and
+applies the decision with Pi's primitives — `{block}` for deny, `ctx.ui.confirm` for `ask`, a
+follow-up message for a Stop `block`. Requirements:
+
+- **superskill with the native Pi adapter** — the first superskill release that contains PR #4
+  (later than 0.3.37). Older superskill emits only the `@vahor/pi-hooks` shim, which cannot raise
+  `ask` or continue a Stop.
+- **A reinstall to Pi** after upgrading either side: `superskill install sp --targets pi`. Reinstall
+  removes the old `sp` extension package and any shim entries, so a hook never runs twice. An
+  existing Pi install keeps the retired extension until it is reinstalled.
 
 #### 5. Scripts (`scripts/` + `hooks/`)
 
@@ -722,7 +738,7 @@ root codex/opencode use in global mode.
 | `skills/*.md`      | `~/.claude/skills/`                      | Adapted as Skills 2.0 skill directories — all platforms receive skills uniformly                |
 | `commands/*.md`    | `~/.claude/commands/`                    | Adapted as Skills 2.0 skill entries (`disable-model-invocation: true`)                          |
 | `agents/*.md`      | `~/.claude/agents/`                      | Adapted as Skills 2.0 skill entries (model-invocable); Pi additionally gets native agent format |
-| `hooks/hooks.json` | `~/.claude/hooks/`                       | Converted to target-native format (pi-hooks shim for pi/omp, HOOK.yaml for hermes)              |
+| `hooks/hooks.json` | `~/.claude/hooks/`                       | Converted to target-native format (generated native extensions for pi, pi-hooks shim for omp, HOOK.yaml for hermes) |
 | `hooks/*.ts`       | plugin hook runtime / compatibility copy | Copied alongside platform output only for environments that still invoke script paths directly  |
 
 Each skill declares its own platform support in `metadata.platforms` frontmatter.

@@ -2130,6 +2130,7 @@ launched with `ackLowConfidence=true`); the feature boundary now carries the sam
 - **Consequence:** A new host (omp, Codex) adds a normalizer, not a ledger implementation. The cores stay plugin-local under the standalone contract (ADR-065) rather than moving into `packages/app`, so hook processes keep running without the monorepo. Claude and Pi rows are equal on every `ts`-independent field.
 - **Retains:** ADR-012/065 (plugin standalone, portable entrypoints), ADR-056 (one observability envelope seam), ADR-068 (capture at the producing boundary).
 - **Detail:** `03 §31`; [observability contracts](design/observability-contracts.md) §7.8b; feature H21.
+- **Amendment (2026-10-15, Pi adapter):** The plugin-owned Pi normalizer (`hooks/pi/guard-extension.ts`, `plugin.json` `extensions.pi`) is retired. Pi normalization now lives in superskill's generic native Pi hook adapter (superskill ADR-039, PR #4), which renders every `hooks.json` hook as a generated Pi extension that runs `superskill hook run sp <id>`; the cores and the one-core invariant above are unchanged. Pi installs require that superskill release and a reinstall (`superskill install sp --targets pi`).
 
 ## ADR-130: Spur Logic Lives in the CLI; Plugin Scripts, Hooks and Lib Are Thin Glue
 

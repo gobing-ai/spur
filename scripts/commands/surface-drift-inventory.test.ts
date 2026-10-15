@@ -327,10 +327,10 @@ describe('sweepHooks — hook contract against the real plugin tree', () => {
         // Tool-scoped events must carry a matcher — no structure mismatch rows.
         expect(added.some((r) => r.asserted.endsWith('matcher') && r.status === 'mismatch')).toBe(false);
 
-        // The pi extension named by plugin.json exists.
+        // Pi no longer ships a plugin-owned extension (superskill's native adapter renders
+        // hooks.json). When plugin.json declares none, the sweep must not invent rows.
         const ext = added.filter((r) => r.asserted.startsWith('pi extension'));
-        expect(ext.length).toBeGreaterThan(0);
-        for (const r of ext) expect(r.status).toBe('ok');
+        expect(ext).toEqual([]);
 
         // Host-side event names stay honestly unverified.
         expect(added.some((r) => r.method === 'host-contract' && r.status === 'unverified')).toBe(true);

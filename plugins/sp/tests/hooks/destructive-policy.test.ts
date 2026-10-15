@@ -2,11 +2,12 @@
  * destructive-policy — one matrix, asserted against the policy AND against every
  * platform adapter that is supposed to use it.
  *
- * The adapter-parity blocks are the point of this file. A policy test alone would
- * still have passed while `pi/guard-extension.ts` carried its own regexes and
- * diverged from the Claude matrix on 7 of 10 cases. Driving each adapter's real
- * entry point with the same table is what makes a re-implementation fail here
- * instead of in production on one platform only.
+ * The adapter-parity block is the point of this file. A policy test alone would
+ * still have passed while the retired Pi extension carried its own regexes and
+ * diverged from the Claude matrix on 7 of 10 cases. Every host — Pi included,
+ * through superskill's native Pi adapter — now runs the same
+ * `scripts/hooks/careful-guard.ts` entry, so driving that entry end-to-end with
+ * the table is the parity proof for all of them.
  */
 import { describe, expect, test } from 'bun:test';
 import { spawnSync } from 'node:child_process';
@@ -114,50 +115,10 @@ function claudeDecision(command: string): Expected {
     return 'ask';
 }
 
-/**
- * Drive the Pi extension's real `tool_call` handler. The handler prompts via
- * `ctx.ui.confirm`, so "was confirm called" is the Pi-side equivalent of `ask`.
- */
-async function piDecision(command: string): Promise<Expected> {
-    const mod = (await import('../../hooks/pi/guard-extension')) as {
-        default: (pi: unknown) => void;
-    };
-    let handler: ((event: unknown, ctx: unknown) => Promise<unknown>) | undefined;
-    mod.default({
-        on: (event: string, fn: (event: unknown, ctx: unknown) => Promise<unknown>) => {
-            if (event === 'tool_call') handler = fn;
-        },
-    });
-    if (handler === undefined) throw new Error('guard-extension registered no tool_call handler');
-
-    let confirmed = false;
-    await handler(
-        { toolName: 'bash', input: { command } },
-        {
-            ui: {
-                notify: () => {},
-                confirm: async () => {
-                    confirmed = true;
-                    return true; // operator approves — we only assert that they were asked
-                },
-            },
-        },
-    );
-    return confirmed ? 'ask' : 'allow';
-}
-
 describe('destructive-policy — Claude Code adapter parity', () => {
     for (const { command, expected } of MATRIX) {
         test(`careful-guard ${expected}: ${command}`, () => {
             expect(claudeDecision(command)).toBe(expected);
-        });
-    }
-});
-
-describe('destructive-policy — Pi adapter parity', () => {
-    for (const { command, expected } of MATRIX) {
-        test(`guard-extension ${expected}: ${command}`, async () => {
-            expect(await piDecision(command)).toBe(expected);
         });
     }
 });

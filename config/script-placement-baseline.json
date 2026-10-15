@@ -24,10 +24,6 @@
         "plugins/sp/scripts/daily-summary/daily-summary.ts": {
             "kinds": ["budget"],
             "reason": "Keep (daily-summary/, plan \u00a72); read-only history-health reads via the app service (task 1178)"
-        },
-        "plugins/sp/hooks/pi/guard-extension.ts": {
-            "kinds": ["budget"],
-            "reason": "Keep (ADR-129 normalizer) (plan \u00a72)"
         }
     }
 }

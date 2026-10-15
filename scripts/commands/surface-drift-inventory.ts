@@ -583,6 +583,8 @@ export function sweepHooks(root: string = PLUGIN_ROOT): void {
     const plugin = JSON.parse(readFileSync(join(root, 'plugin.json'), 'utf8')) as {
         extensions?: { pi?: string[] };
     };
+    // Optional: a plugin may still declare extensions.pi. The sp plugin retired its Pi
+    // extension in favour of superskill's native adapter (2026-10-15); an empty list is fine.
     for (const ext of plugin.extensions?.pi ?? []) {
         const p = join(root, ext.replace(/^\.\//, ''));
         record(

@@ -661,9 +661,7 @@ test('placement baseline reconciles with plan §2 (task 1000 R7)', () => {
             scriptNames.has(key.replace('plugins/sp/scripts/', '').replace(/\.ts$/, ''));
         const underDirs = /^(plugins\/sp\/scripts\/)?(daily-summary|dogfood-testing)\//.test(key);
         const hookFile = key.split('/').at(-1)?.replace(/\.ts$/, '') ?? '';
-        const inHooks =
-            (key.startsWith('plugins/sp/hooks/') && hookNames.has(hookFile)) ||
-            key === 'plugins/sp/hooks/pi/guard-extension.ts';
+        const inHooks = key.startsWith('plugins/sp/hooks/') && hookNames.has(hookFile);
         expect(inScripts || underDirs || inHooks).toBe(true);
     }
     const dirKeys = keys.filter((k) => /^(plugins\/sp\/scripts\/)?(daily-summary|dogfood-testing)\//.test(k));
@@ -850,11 +848,12 @@ test('one identity may serve several events but not twice in one group (task 117
     }
 });
 
-test('hook tests belong to the plugin test owner in either hook tree; the Pi extension is an entry (task 1173 R1)', () => {
+test('hook tests belong to the plugin test owner in either hook tree; a retired Pi extension is flagged (task 1173 R1)', () => {
     const root = createHookFixture({ hooks: { Stop: [group(['fleet-guest-stop'])] } });
     try {
         const hooks = join(root, 'plugins', 'sp', 'hooks');
         writeFileSync(entryPath(root, 'fleet-guest-stop.ts'), 'export const entry = 1;\n');
+        // Pi runs hooks.json through superskill's native adapter; a plugin-owned extension is no longer an entry.
         writeFileSync(join(hooks, 'pi', 'guard-extension.ts'), 'export const extension = 1;\n');
         const testBody = `import { test } from 'bun:test';\ntest('x', () => {});\n`;
         writeFileSync(entryPath(root, 'fleet-guest-stop.test.ts'), testBody);
@@ -862,9 +861,15 @@ test('hook tests belong to the plugin test owner in either hook tree; the Pi ext
         const findings = checkHookLayout({ repoRoot: root });
         expect(findings.map((f) => f.file)).toEqual([
             'plugins/sp/hooks/guard.test.ts',
+            'plugins/sp/hooks/pi/guard-extension.ts',
             'plugins/sp/scripts/hooks/fleet-guest-stop.test.ts',
         ]);
-        expect(findings.every((f) => f.detail.includes('plugins/sp/tests/hooks'))).toBe(true);
+        expect(
+            findings
+                .filter((f) => f.file.endsWith('.test.ts'))
+                .every((f) => f.detail.includes('plugins/sp/tests/hooks')),
+        ).toBe(true);
+        expect(findings.find((f) => f.file.endsWith('guard-extension.ts'))?.detail).toContain('hooks.json only');
     } finally {
         rmSync(root, { recursive: true, force: true });
     }

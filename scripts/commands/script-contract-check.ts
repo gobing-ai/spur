@@ -607,13 +607,6 @@ interface HooksJson {
     hooks?: Record<string, HooksJsonGroup[]>;
 }
 
-/**
- * Entry mechanisms outside the `hooks.json` registry (ADR-129): the Pi extension normalizer, which
- * `plugin.json` declares and superskill bundles for Pi. It is the only authored `.ts` the
- * `plugins/sp/hooks` directory may hold besides the registry itself.
- */
-const EXTRA_HOOK_ENTRIES = ['pi/guard-extension.ts'];
-
 /** Identity from `superskill hook run sp <identity>`; null for any other command shape. */
 function hookIdentity(command: string | undefined): string | null {
     return /\bhook\s+run\s+sp\s+([\w-]+)/.exec(command ?? '')?.[1] ?? null;
@@ -697,11 +690,11 @@ export function checkHookLayout(opts: { repoRoot: string }): PlacementFinding[] 
         const rel = abs.slice(hooksDir.length + 1);
         const file = `plugins/sp/hooks/${rel}`;
         if (rel.endsWith('.test.ts')) findings.push(misplacedTest(file));
-        else if (!EXTRA_HOOK_ENTRIES.includes(rel)) {
+        else {
             findings.push({
                 file,
                 kind: 'hook-layout',
-                detail: 'plugins/sp/hooks holds hooks.json and the Pi extension only — hook entries live in plugins/sp/scripts/hooks (the one location superskill reaches on every target), helpers in plugins/sp/lib',
+                detail: 'plugins/sp/hooks holds hooks.json only — hook entries live in plugins/sp/scripts/hooks (the one location superskill reaches on every target, Pi included via its native adapter), helpers in plugins/sp/lib',
             });
         }
     }
