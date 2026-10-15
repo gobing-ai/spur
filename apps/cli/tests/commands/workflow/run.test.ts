@@ -155,10 +155,6 @@ failureStates:
         '',
     ].join('\n');
 
-    // 0948 R6: an EXISTING but empty legacy `.log` used to fall into the same branch as an
-    // absent record, so the operator was told to look for a `--no-log` flag that was never
-    // passed. The empty case must name the real condition.
-
     test('run refuses when already inside an active workflow run, before any side effect', async () => {
         const dir = await createTempProject();
         const workflowFile = join(dir, 'workflow.yaml');

@@ -17,10 +17,6 @@ beforeEach(() => {
 });
 
 describe('workflow command (main)', () => {
-    // 0948 R6: an EXISTING but empty legacy `.log` used to fall into the same branch as an
-    // absent record, so the operator was told to look for a `--no-log` flag that was never
-    // passed. The empty case must name the real condition.
-
     test('async run self-records its worker pid; cancel SIGTERMs the whole process group', async () => {
         const cwd = await createTempProject();
         // A workflow whose only step shells a long sleep — a real grandchild of

@@ -64,8 +64,6 @@ describe('spur task CLI', () => {
         for (const p of verdictArtifacts) rmSync(p, { force: true });
     });
 
-    // Cover the scaffold-tests action (function-coverage gate for task.ts)
-
     test('verdict derives PASS from an all-MET answer table and writes the artifact', async () => {
         const answerPath = join(cwd, '8001-verify-answer.txt');
         await Bun.write(answerPath, '| Req | Status | Evidence |\n|-----|--------|----------|\n| R1 | MET | done |\n');

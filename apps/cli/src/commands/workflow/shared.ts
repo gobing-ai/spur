@@ -156,7 +156,7 @@ export function makeWorkflowService(context: CliContext, json?: boolean, bus?: W
         getDb: () => context.getDb(),
         // Task 0687 R10: thread the ledger bus into AgentService so workflow-dispatched
         // agents write `agent.invoke.*` like the `spur agent run` path does
-        // (`commands/agent.ts`). The prior comment here withheld the bus to avoid
+        // (`commands/agent/run.ts`). The prior comment here withheld the bus to avoid
         // dual-emitting against a single `workflow.agent` series — but that series was
         // never written, so from 2026-08-20 (when dispatches moved into pipelines)
         // until this change NO agent dispatch reached `system_events` at all, and every

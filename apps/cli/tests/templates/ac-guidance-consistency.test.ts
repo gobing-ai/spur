@@ -5,7 +5,7 @@ import { bundledConfigRoot } from '@gobing-ai/spur-config/loader';
 
 // The AC-guidance comment lives as 8 synchronized copies (task 1061 diff exposed the
 // coupling; 1063 pins it): 6 task templates under the bundled-config root, a condensed
-// prose form in the sp style guide, and the escaped AC_PLACEHOLDER in task.test.ts.
+// prose form in the sp style guide, and the escaped AC_PLACEHOLDER in task/create.test.ts.
 // The shared body (everything through "checked at close.") must stay byte-identical;
 // each template keeps a deliberate one-line closing tail, pinned below. Templates must
 // stay self-contained (no generator), so drift is caught here instead.
@@ -81,8 +81,8 @@ describe('AC-guidance comment consistency across copies (1063)', () => {
         expect(drift(bodies, bodyAndTail(reference).body)).toEqual([]);
     });
 
-    test('AC_PLACEHOLDER in task.test.ts matches the templates (escaping-insensitive)', () => {
-        const src = read('apps/cli/tests/commands/task.test.ts');
+    test('AC_PLACEHOLDER in task/create.test.ts matches the templates (escaping-insensitive)', () => {
+        const src = read('apps/cli/tests/commands/task/create.test.ts');
         const m = src.match(/const AC_PLACEHOLDER =\s*'((?:[^'\\]|\\.)*)';/);
         expect(m).toBeTruthy();
         // The only backslashes in either copy are JS-string escapes; stripping them

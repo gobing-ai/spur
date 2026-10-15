@@ -129,7 +129,7 @@ process.env.PATH = `${fileURLToPath(new URL('../scripts/test-shims', import.meta
 // A pipeline's `test`/`test-recheck` gate runs as a child of the workflow run process,
 // inheriting its SPUR_WORKFLOW_RUN_ACTIVE=1 marker (task 0610 R4 nested-run refusal).
 // Tests are legitimate top-level processes, not nested pipelines, so drop the leaked
-// marker here. The refusal test in apps/cli/tests/commands/workflow.test.ts sets it
+// marker here. The refusal test in apps/cli/tests/commands/workflow/run.test.ts sets it
 // explicitly itself, so the guard stays fully covered (0753 R3: never relax the guard).
 delete process.env.SPUR_WORKFLOW_RUN_ACTIVE;
 

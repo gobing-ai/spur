@@ -4,7 +4,7 @@
  * The AC-guidance placeholder comment exists in 8 synchronized copies:
  *   - 6 templates under the task-template dir (identical core + per-template tail)
  *   - the condensed prose form in plugins/sp/skills/spur-dev/references/ac-style-guide.md
- *   - the sed-escaped fixture copy in apps/cli/tests/commands/task.test.ts (0788)
+ *   - the sed-escaped fixture copy in apps/cli/tests/commands/task/create.test.ts (0788)
  *
  * Only standard.md is contract-pinned; this test pins every other copy to it so the
  * lockstep-edit cost of one wording change cannot hide silent drift. Templates must stay
@@ -15,7 +15,7 @@ import { describe, expect, test } from 'bun:test';
 import { existsSync, readdirSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 
-const FIXTURE_TEST = 'apps/cli/tests/commands/task.test.ts';
+const FIXTURE_TEST = 'apps/cli/tests/commands/task/create.test.ts';
 
 // Task-template dir under the repo-root build-time asset tree. Joined at runtime — the
 // sp-runtime-path rule bans `config/(...)` literals in runtime source, and this test audits

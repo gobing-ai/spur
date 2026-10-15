@@ -625,7 +625,7 @@ Before launching a full `spur-check-new`:
 3. **Promoted code must satisfy the boundary rules `scripts/` never enforced.** A command module
    moving from `scripts/` into `apps/cli/src` must route output through the `CommandOutput` seam (no
    `console.*`), spawn processes via `NodeProcessExecutor` (no `Bun.spawnSync`), get a
-   `runtime-boundaries` fs-io exemption for sync reads (mirrors `task.ts`), and a non-command helper
+   `runtime-boundaries` fs-io exemption for sync reads (mirrors `commands/task/shared.ts`), and a non-command helper
    must not live in `apps/cli/src/commands/` (the noun scan treats every file there as a noun).
 4. **Doc/TSDoc edits shift `file:line` anchors** cited by other tasks — the per-task gate surfaces
    them as `L4.anchor-subject-mismatch` (0775: the corpus sweep retired; run `spur task check <wbs>`

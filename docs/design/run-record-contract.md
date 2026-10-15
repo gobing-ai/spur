@@ -49,7 +49,7 @@ The 0594 injected-file-list cost idea is independent instrumentation, not a prer
 4. **Authoritative start time:** `startedAt` uses `runs.started_at` threaded from the committed run row via `closeRun` when prior sidecar state is missing, falling back to projection time only for context-less direct callers.
 
 **1064 run registration and lazy record open baseline (2026-10-02).** `WorkflowRunLogSink` and the sync `spur workflow run` path eliminate orphan run records and unqueryable run IDs (feature D3):
-1. **Event-driven header:** The sync CLI human progress stream withholds `Run: <id>` and plan preview until the committed `workflow.run.started` event fires (`apps/cli/src/commands/workflow.ts`). Pre-row failures (such as `--vars` validation or engine setup) print no run ID.
+1. **Event-driven header:** The sync CLI human progress stream withholds `Run: <id>` and plan preview until the committed `workflow.run.started` event fires (`apps/cli/src/commands/workflow/run.ts`). Pre-row failures (such as `--vars` validation or engine setup) print no run ID.
 2. **Lazy record open:** `WorkflowRunLogSink` (`packages/app/src/observability/workflow-run-log-sink.ts`) defers directory creation and opening `<id>.md` to `ensureOpen()` on the first emitted event (with an `openFailed` latch for R8 inert degradation), so constructing a sink before row commit leaves no 0-byte `.md` or `.state.json` files.
 
 **1136 worktree run-trace integrity baseline (2026-10-09).** The inline run record stays per-tree, but the writer stops trusting its own cwd and its callers' arithmetic (incident: task 1132's run `85fab6d4-baf5-4db8-a0e9-810b12927fb4`, 93 action rows lost to a suppressed `RUN_NOT_FOUND`; a stale digest one accepted command away from certifying a tree that no longer existed):
@@ -194,7 +194,7 @@ Counts are a live `ls .spur/run/` grouping (1,576 files). The ~30 kinds fold int
 
 ### 2.4 Historical `.spur/workflow/` removal proposal — superseded
 
-`apps/cli/src/commands/workflow.ts:227` declares `--trace-file` writing a "redacted schema-versioned JSONL trace under `.spur/workflow/`"; the flag is wired (`:282` async propagation, `:357` `WorkflowTraceWriter`) but **never exercised** — the tree does not exist on disk. The trace need is already covered twice over:
+`apps/cli/src/commands/workflow/run.ts` declares `--trace-file` writing a "redacted schema-versioned JSONL trace under `.spur/workflow/`"; the flag is wired (`:282` async propagation, `:357` `WorkflowTraceWriter`) but **never exercised** — the tree does not exist on disk. The trace need is already covered twice over:
 
 - the consolidated run log (`WorkflowRunLogSink`, `:374`), which this contract promotes to the append-only `<RUNID>.md`, and
 - the `system_events` ledger (task 0370), which made the JSONL trace redundant for server-side visibility (`docs/tasks3/0370_…md` records server-side ingestion of these traces was declined).
@@ -212,15 +212,15 @@ Every current reader of a `.spur/run/*` artifact, with `path:line`:
 
 | Reader | `path:line` | Reads | Mid-run? | Compatible with split? |
 | --- | --- | --- | --- | --- |
-| `followRunLog` tail | `apps/cli/src/commands/workflow.ts:971` | `.spur/run/<RUNID>.log` (offset tail) | yes (live) | yes — read-only tail of the append-only markdown |
-| `--output` follow | `apps/cli/src/commands/workflow.ts:678` | `.spur/run/<RUNID>.log` | yes | yes — same tail |
-| `task verdict` | `apps/cli/src/commands/task.ts:394` | `.spur/run/<wbs>-verdict.json` | yes | yes → reads cache |
-| `task check --from-answer` | `apps/cli/src/commands/task.ts:896` | `.spur/run/<wbs>-verify-answer.txt` | yes | yes → answer moves to markdown section, but the *consumer* reads the verdict from cache |
-| `verifyall` | `apps/cli/src/commands/task.ts:966` | `.spur/run/verifyall-batch-input.json` | yes | yes → cache key |
-| workflow shell guards | `apps/cli/tests/commands/workflow.test.ts:632` (canonical `test "$(cat …-gate.status …)" = PASS`) | `.spur/run/<RUNID>-gate.status` | yes (between steps) | yes → cache `state.gates` |
+| `followRunLog` tail | `apps/cli/src/commands/workflow/trace.ts` | `.spur/run/<RUNID>.log` (offset tail) | yes (live) | yes — read-only tail of the append-only markdown |
+| `--output` follow | `apps/cli/src/commands/workflow/trace.ts` | `.spur/run/<RUNID>.log` | yes | yes — same tail |
+| `task verdict` | `apps/cli/src/commands/task/verdict.ts` | `.spur/run/<wbs>-verdict.json` | yes | yes → reads cache |
+| `task check --from-answer` | `apps/cli/src/commands/task/check.ts` | `.spur/run/<wbs>-verify-answer.txt` | yes | yes → answer moves to markdown section, but the *consumer* reads the verdict from cache |
+| `verifyall` | `apps/cli/src/commands/task/verifyall-aggregate.ts` | `.spur/run/verifyall-batch-input.json` | yes | yes → cache key |
+| workflow shell guards | `apps/cli/tests/commands/workflow/run.test.ts` (canonical `test "$(cat …-gate.status …)" = PASS`) | `.spur/run/<RUNID>-gate.status` | yes (between steps) | yes → cache `state.gates` |
 | feature-sync verdict mtime vector | `packages/app/src/services/feature-sync-suppression.ts:99` (`readVerdictMtimeVector`, called `feature-service.ts:728`) | `-verdict.json` mtimes | yes (bounded loop) | yes → cache `state.verdict.updatedAt` |
 | eval-pipeline snapshot | `scripts/commands/eval-pipeline.ts:370`/`:401` (`snapshotDir(run.runDir)`) | whole dir | yes | yes — snapshots the two files instead of N |
-| `WorkflowRunLogSink` | `apps/cli/src/commands/workflow.ts:374` | (writes) `.spur/run/<RUNID>.log` | writer | n/a — becomes the markdown writer |
+| `WorkflowRunLogSink` | `apps/cli/src/commands/workflow/run.ts` | (writes) `.spur/run/<RUNID>.log` | writer | n/a — becomes the markdown writer |
 
 **Conclusion:** every mid-run reader needs *state*, not *sequence*. All of them move to the read/write JSON cache. The append-only markdown has exactly **one** mid-run consumer — the human `--follow` tail, which is read-only and offset-based, therefore append-safe. **The strict append-only rule is feasible**; no relaxation required.
 
@@ -244,7 +244,7 @@ Every current reader of a `.spur/run/*` artifact, with `path:line`:
 | --- | --- | --- |
 | correctness of tool rows | partial — ledger rows are tool-*activity* hints, not the per-call time+token record the operator wants | correct — `analyze` writes the Q1–Q10 versioned JSON artifact (`apps/cli/src/commands/history.ts:129`) over imported `history_message` typed columns |
 | liveness | **live-tailable** (`fs.watch` → SSE) | **batch-imported** — no live tail equivalent |
-| per-call time + token cost | absent (ledger has no per-call duration/token fields) | present (task 0559 join, `workflow.ts` cost renderer) |
+| per-call time + token cost | absent (ledger has no per-call duration/token fields) | present (task 0559 join, `workflow/trace.ts` cost renderer) |
 
 **Migration design:** point the tab at a new history oRPC contract (§8, the first contract). The `analyze` artifact (Q1–Q10) supplies the per-call time+token rows. **Live tail survives as an overlay, not a replacement:** keep `GET /api/observability/tool-use/stream` on the ledger for *liveness only* (appends since last import), while the paged/historical rows come from the history plane. This is the *import-on-demand + live overlay* alternative — the operator's open question ("whether the live tail survives") is answered: **yes, as a thin overlay**, because dropping liveness is a regression disguised as a fix and the ledger remains the only live source until E1 ships incremental import.
 

@@ -199,10 +199,6 @@ terminalStates:
   - rejected
 `;
 
-    // 0948 R6: an EXISTING but empty legacy `.log` used to fall into the same branch as an
-    // absent record, so the operator was told to look for a `--no-log` flag that was never
-    // passed. The empty case must name the real condition.
-
     test('continue with no paused run returns 1', async () => {
         const dir = await createTempProject();
         const errors: string[] = [];

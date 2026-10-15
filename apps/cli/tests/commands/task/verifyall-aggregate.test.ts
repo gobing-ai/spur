@@ -32,15 +32,6 @@ afterAll(() => {
 });
 
 describe('spur task CLI', () => {
-    // ── verdict ──
-    // The verdict command reads the answer file and writes .spur/run/<wbs>-verdict.json
-    // relative to the process cwd (not the test cwd), so we pass an absolute --from-answer
-    // and clean the emitted artifact afterward to keep the repo tree clean.
-    const verdictArtifacts: string[] = [];
-    afterAll(() => {
-        for (const p of verdictArtifacts) rmSync(p, { force: true });
-    });
-
     // ── verifyall-aggregate (task 0341) ──────────────────────────────
     // Deterministic batch verdict rollup. Replaces agent-discretion prose
     // (dev-operations.md §3a). NOT-STARTED rows are excluded from the rollup
@@ -51,8 +42,6 @@ describe('spur task CLI', () => {
         await writeFile(batchPath, JSON.stringify(rows), 'utf-8');
         return batchPath;
     }
-
-    // Cover the scaffold-tests action (function-coverage gate for task.ts)
 
     test('verifyall-aggregate: all-PASS rolls up to PASS, exit 0', async () => {
         const batchPath = await writeBatchFile([

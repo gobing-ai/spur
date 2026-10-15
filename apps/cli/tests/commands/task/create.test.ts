@@ -51,15 +51,6 @@ function lastMessage(output: CapturedOutput): string {
 }
 
 describe('spur task CLI', () => {
-    // ── verdict ──
-    // The verdict command reads the answer file and writes .spur/run/<wbs>-verdict.json
-    // relative to the process cwd (not the test cwd), so we pass an absolute --from-answer
-    // and clean the emitted artifact afterward to keep the repo tree clean.
-    const verdictArtifacts: string[] = [];
-    afterAll(() => {
-        for (const p of verdictArtifacts) rmSync(p, { force: true });
-    });
-
     // F21 task 0787 R4/AC-R3: the create/batch-create failure surface emits ONE
     // parseable result via writeCreateJsonError — raw `--json` gets the ADR-091
     // `ok:false` payload on stdout, `--json --json-envelope` the canonical
@@ -76,8 +67,6 @@ describe('spur task CLI', () => {
             message: 'Acceptance Criteria has no criteria.',
         },
     ];
-
-    // Cover the scaffold-tests action (function-coverage gate for task.ts)
 
     test('create writes a task file and exits 0', async () => {
         const output = createCapturedOutput();

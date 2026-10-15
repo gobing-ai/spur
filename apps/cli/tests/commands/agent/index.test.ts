@@ -1,5 +1,5 @@
 /**
- * Comprehensive tests for apps/cli/src/commands/agent.ts.
+ * Tests for `spur agent` (apps/cli/src/commands/agent/).
  */
 import { beforeEach, describe, expect, spyOn, test } from 'bun:test';
 import { _resetAgentServiceShimsForTest } from '@gobing-ai/spur-app';

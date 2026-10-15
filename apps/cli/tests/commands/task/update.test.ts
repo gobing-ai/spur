@@ -62,15 +62,6 @@ function lastMessage(output: CapturedOutput): string {
 }
 
 describe('spur task CLI', () => {
-    // ── verdict ──
-    // The verdict command reads the answer file and writes .spur/run/<wbs>-verdict.json
-    // relative to the process cwd (not the test cwd), so we pass an absolute --from-answer
-    // and clean the emitted artifact afterward to keep the repo tree clean.
-    const verdictArtifacts: string[] = [];
-    afterAll(() => {
-        for (const p of verdictArtifacts) rmSync(p, { force: true });
-    });
-
     // ── run-link ────────────────────────────────────────────────────
     // ── Done-transition verdict guard (task 0292) ──
     // The guard is orthogonal to the lifecycle FSM, so all transitions use
@@ -166,8 +157,6 @@ describe('spur task CLI', () => {
         acceptanceCriteria: [],
         source: 'spur task verdict',
     };
-
-    // Cover the scaffold-tests action (function-coverage gate for task.ts)
 
     test('update --help names the section-discovery command (0534 R2)', async () => {
         const output = createCapturedOutput();

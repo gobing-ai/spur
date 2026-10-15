@@ -139,7 +139,7 @@ roster duplicate, (3) intra-Teams control/modal duplication.
 ## 4. Role-mechanism impact (R3)
 
 `spur agent run --agent <role|executor|binary|auto|inline>` accepts a role as a first-class value
-(`apps/cli/src/commands/agent.ts:56`), validated before spawn by `validateAgentSelector`
+(`apps/cli/src/commands/agent/run.ts`), validated before spawn by `validateAgentSelector`
 (`agent.ts:167-181`). M5 then made `role` the primary declared axis of a roster member
 (`docs/features/M5_….md` § Goal), with `purpose` demoted to annotation and `executor` optional.
 

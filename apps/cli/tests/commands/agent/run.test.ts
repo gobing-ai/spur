@@ -1,5 +1,5 @@
 /**
- * Comprehensive tests for apps/cli/src/commands/agent.ts.
+ * Tests for `spur agent` (apps/cli/src/commands/agent/).
  */
 import { beforeEach, describe, expect, mock, spyOn, test } from 'bun:test';
 import { mkdtempSync, rmSync } from 'node:fs';

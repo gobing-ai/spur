@@ -53,10 +53,6 @@ transitions:
 terminalStates: [done]
 `;
 
-    // 0948 R6: an EXISTING but empty legacy `.log` used to fall into the same branch as an
-    // absent record, so the operator was told to look for a `--no-log` flag that was never
-    // passed. The empty case must name the real condition.
-
     test('validate of a missing file (plain) returns 1 and reports invalid', async () => {
         const errors: string[] = [];
         const exitCode = await main(['workflow', 'validate', '/tmp/spur-missing-workflow.yaml'], {

@@ -56,17 +56,6 @@ function lastMessage(output: CapturedOutput): string {
 }
 
 describe('spur task CLI', () => {
-    // ── verdict ──
-    // The verdict command reads the answer file and writes .spur/run/<wbs>-verdict.json
-    // relative to the process cwd (not the test cwd), so we pass an absolute --from-answer
-    // and clean the emitted artifact afterward to keep the repo tree clean.
-    const verdictArtifacts: string[] = [];
-    afterAll(() => {
-        for (const p of verdictArtifacts) rmSync(p, { force: true });
-    });
-
-    // Cover the scaffold-tests action (function-coverage gate for task.ts)
-
     test('sections list returns matrix snapshot for current variant/status', async () => {
         const cOut = createCapturedOutput();
         await main(['task', 'create', '--skip-ready', 'Sections list target'], { cwd, output: cOut });

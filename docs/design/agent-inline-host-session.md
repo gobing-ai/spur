@@ -64,7 +64,7 @@ where batch dispatch bugs live.
 
 ## Components
 
-1. `apps/cli/src/commands/agent.ts` — `inline` branch in `validateAgentSelector`/`runAgentRun`:
+1. `apps/cli/src/commands/agent/run.ts` — `inline` branch in `validateAgentSelector`/`runAgentRun`:
    special error, no spawn; `--agent` help lists `inline`.
 2. `packages/app/src/services/agent-service.ts` — remove the `inline → resolveAgentAuto`
    equivalence (~:1131-1136); resolution fails with the same error; ADR-047 comment updated.

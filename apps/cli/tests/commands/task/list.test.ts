@@ -47,17 +47,6 @@ describe('spur task CLI', () => {
         ).toBe(0);
     });
 
-    // ── verdict ──
-    // The verdict command reads the answer file and writes .spur/run/<wbs>-verdict.json
-    // relative to the process cwd (not the test cwd), so we pass an absolute --from-answer
-    // and clean the emitted artifact afterward to keep the repo tree clean.
-    const verdictArtifacts: string[] = [];
-    afterAll(() => {
-        for (const p of verdictArtifacts) rmSync(p, { force: true });
-    });
-
-    // Cover the scaffold-tests action (function-coverage gate for task.ts)
-
     test('list renders a status-grouped board with all columns', async () => {
         const output = createCapturedOutput();
         const exitCode = await main(['task', 'list'], { cwd, output });

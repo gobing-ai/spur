@@ -136,17 +136,6 @@ describe('spur task CLI', () => {
         };
     }
 
-    // ── verdict ──
-    // The verdict command reads the answer file and writes .spur/run/<wbs>-verdict.json
-    // relative to the process cwd (not the test cwd), so we pass an absolute --from-answer
-    // and clean the emitted artifact afterward to keep the repo tree clean.
-    const verdictArtifacts: string[] = [];
-    afterAll(() => {
-        for (const p of verdictArtifacts) rmSync(p, { force: true });
-    });
-
-    // Cover the scaffold-tests action (function-coverage gate for task.ts)
-
     test('explicit corpus audit is not invoked by routine repository hooks or quality gates', async () => {
         const root = resolve(join(import.meta.dir, '..'), '../../../..');
         expect(await readFile(join(root, '.lefthook.yml'), 'utf8')).not.toMatch(/corpus-check|check --corpus/);

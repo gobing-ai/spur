@@ -73,17 +73,6 @@ async function seedMigrationCorpus(): Promise<{ root: string; tasksDir: string; 
 }
 
 describe('spur task CLI', () => {
-    // ── verdict ──
-    // The verdict command reads the answer file and writes .spur/run/<wbs>-verdict.json
-    // relative to the process cwd (not the test cwd), so we pass an absolute --from-answer
-    // and clean the emitted artifact afterward to keep the repo tree clean.
-    const verdictArtifacts: string[] = [];
-    afterAll(() => {
-        for (const p of verdictArtifacts) rmSync(p, { force: true });
-    });
-
-    // Cover the scaffold-tests action (function-coverage gate for task.ts)
-
     test('migrate --dry-run reports M1-M8 and writes nothing', async () => {
         const { root, tasksDir, taskPath } = await seedMigrationCorpus();
         try {

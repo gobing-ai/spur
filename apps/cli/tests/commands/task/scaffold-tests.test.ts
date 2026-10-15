@@ -48,16 +48,7 @@ function createdWbs(output: CapturedOutput): string {
 }
 
 describe('spur task CLI', () => {
-    // ── verdict ──
-    // The verdict command reads the answer file and writes .spur/run/<wbs>-verdict.json
-    // relative to the process cwd (not the test cwd), so we pass an absolute --from-answer
-    // and clean the emitted artifact afterward to keep the repo tree clean.
-    const verdictArtifacts: string[] = [];
-    afterAll(() => {
-        for (const p of verdictArtifacts) rmSync(p, { force: true });
-    });
-
-    // Cover the scaffold-tests action (function-coverage gate for task.ts)
+    // Cover the scaffold-tests action (function-coverage gate for commands/task/scaffold-tests.ts)
 
     test('scaffold-tests action executes for an existing task', async () => {
         const isoCwd = join(join(import.meta.dir, '..'), '..', `.tmp-scaffold-tests-task-scaffold-${Date.now()}`);

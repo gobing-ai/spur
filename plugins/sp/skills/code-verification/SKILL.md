@@ -324,7 +324,7 @@ node "$RESIDUAL" fold <wbs>
 > `review` coordinator (`/sp:dev-review` → `sp:super-reviewer`), which merges
 > `functional-review` + `code-verification` review mode + `code-improvement` fragments. The
 > `record` step backfills `## Review` from the verdict artifact **only** if the section is bare
-> (`sectionIsBare` guard, `task-service.ts`) — a standalone compatibility fallback, never an
+> (`sectionIsBare` guard, `task-section-bodies.ts`) — a standalone compatibility fallback, never an
 > overwrite of authored Review. Writing `## Review` here destroys the review step's
 > three-dimensional findings.
 

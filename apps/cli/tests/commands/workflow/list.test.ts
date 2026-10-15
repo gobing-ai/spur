@@ -35,10 +35,6 @@ function nullOutput(): CommandOutput {
 }
 
 describe('workflow command (main)', () => {
-    // 0948 R6: an EXISTING but empty legacy `.log` used to fall into the same branch as an
-    // absent record, so the operator was told to look for a `--no-log` flag that was never
-    // passed. The empty case must name the real condition.
-
     test('list subcommand (json) returns 0', async () => {
         const exitCode = await main(['workflow', 'list', '--json'], { output: nullOutput(), dbUrl: ':memory:' });
         expect(exitCode).toBe(0);
