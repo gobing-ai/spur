@@ -63,7 +63,7 @@ const env: Record<string, string | undefined> = {
     // Bare `spur` inside a test must resolve to this checkout's source-local CLI. A stale
     // global spur writes with its own older ts-db provisioning (buglog 2026-09-09: it
     // stamped a false importer_schema@ row into a worktree DB mid-gate).
-    PATH: `${join(import.meta.dir, '..', 'test-shims')}${delimiter}${getEnvVar('PATH') ?? ''}`,
+    PATH: `${join(import.meta.dir, '..', '..', 'tests', 'shims')}${delimiter}${getEnvVar('PATH') ?? ''}`,
 };
 
 // A gate run is a child of the workflow process, so it inherits SPUR_WORKFLOW_RUN_ACTIVE;

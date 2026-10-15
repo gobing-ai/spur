@@ -122,9 +122,9 @@ afterAll(() => {
 // Prepended (not replaced) so every other tool keeps resolving normally.
 //
 // 0818 R1: `fileURLToPath`, not `URL.pathname` — a checkout whose path contains
-// a space percent-encodes to `/my%20checkout/scripts/test-shims`, a directory
+// a space percent-encodes to `/my%20checkout/tests/shims`, a directory
 // that does not exist, so the prepend silently protected nothing.
-process.env.PATH = `${fileURLToPath(new URL('../scripts/test-shims', import.meta.url))}:${process.env.PATH ?? ''}`;
+process.env.PATH = `${fileURLToPath(new URL('./shims', import.meta.url))}:${process.env.PATH ?? ''}`;
 
 // A pipeline's `test`/`test-recheck` gate runs as a child of the workflow run process,
 // inheriting its SPUR_WORKFLOW_RUN_ACTIVE=1 marker (task 0610 R4 nested-run refusal).
