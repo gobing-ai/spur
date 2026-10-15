@@ -68,6 +68,7 @@ describe('installed Node twin re-enters Bun (task 1197 R1/R2, AC1/AC2)', () => {
     // The verifier resolves its own definition from the project layer, so the throwaway project
     // carries the shipped one (as the task's measured throwaway project did).
     const WORKFLOW = join(import.meta.dir, '..', '..', '..', 'config', 'workflows', 'feature-verification.yaml');
+    const CLI_PACKAGE = join(import.meta.dir, '..', '..', '..', 'apps', 'cli');
     const nodeBin = Bun.which('node');
     const args = ['verify', '--feature-id', 'T1', '--run-id', 'r1', '--cmd', 'true'];
     const twinRel = join('scripts', 'feature-verification-steps.mjs');
@@ -81,6 +82,12 @@ describe('installed Node twin re-enters Bun (task 1197 R1/R2, AC1/AC2)', () => {
         copyFileSync(BUNDLE, join(root, 'lib', 'inline-run.generated.mjs'));
         mkdirSync(join(root, '.spur', 'workflows'), { recursive: true });
         copyFileSync(WORKFLOW, join(root, '.spur', 'workflows', 'feature-verification.yaml'));
+        // The workflow's `$schema` is a bare package ref (`@gobing-ai/spur/schemas/...`). Link the
+        // workspace CLI package so it resolves locally; otherwise resolution depends on Bun
+        // auto-installing the published package from the registry (absent offline or when any
+        // ancestor directory holds a node_modules).
+        mkdirSync(join(root, 'node_modules', '@gobing-ai'), { recursive: true });
+        symlinkSync(CLI_PACKAGE, join(root, 'node_modules', '@gobing-ai', 'spur'), 'dir');
         mkdirSync(join(root, 'docs', 'features'), { recursive: true });
         writeFileSync(
             join(root, 'docs', 'features', 'T1_feature.md'),
