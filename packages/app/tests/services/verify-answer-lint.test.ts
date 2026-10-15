@@ -805,4 +805,41 @@ describe('AC identities containing colons (task 1118)', () => {
         );
         expect(junk.some((f) => f.rule === 'ac-identity')).toBe(true);
     });
+
+    test('the unbalanced parenthetical colon-head is no longer a declared identity (session 1209 garble)', () => {
+        // The runall-1208/1209 verify answers cited `… every surface (req` — the head the old
+        // first-colon split declared for `(req: R1)` labels. That garbled form must be rejected
+        // so the lint steers the verifier to the verbatim label instead of blessing the truncation.
+        const garbled = lintVerifyAnswer(
+            answer(
+                ['| R1 | MET | done |'],
+                ['| AC1 — The inventory names the `file:line` anchor for every surface (req | MET | test | `t.ts:1` |'],
+            ),
+            COLON_TASK,
+            null,
+        );
+        expect(garbled.some((f) => f.rule === 'ac-identity')).toBe(true);
+    });
+
+    test('the balanced `(req: R1)` head resolves for labels with a trailing Given-clause colon', () => {
+        // Labels shaped like `AC1 — Title (req: R1): Given …` declare the balanced title-with-paren
+        // form as a head, so the natural citation — label minus the scenario clause — resolves.
+        const task = `
+## 9004. Paren clause task
+
+### Requirements
+
+- [ ] **R1. Gate.** Pass it.
+
+### Acceptance Criteria
+
+- [ ] AC1 — Gate passes (req: R1): Given a thing, when checked, then it passes
+`;
+        const findings = lintVerifyAnswer(
+            answer(['| R1 | MET | done |'], ['| AC1 — Gate passes (req: R1) | MET | test | `t.ts:1` |']),
+            task,
+            null,
+        );
+        expect(findings).toEqual([]);
+    });
 });

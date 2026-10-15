@@ -516,11 +516,18 @@ function buildAcIdentityIndex(taskContent: string, featureContent: string | null
     // title containing one (e.g. `file:line` in backticks) truncated its identity and could
     // never match the verbatim title an evidence convention asks verifiers to quote. Declare
     // the full row text too; the colon-head stays declared for the legacy `AC1 (R1): …` form.
+    // Session 1208/1209: for `(req: R1)` labels the first-colon split declared the unbalanced
+    // `… (req` garble and rejected the natural `… (req: R1)` citation — the head now ends at a
+    // balanced parenthetical close instead of any colon.
     for (const m of section.matchAll(/^[-*]\s+(?:\[[ xX]\]\s+)?(.+?)\s*$/gm)) {
         const label = (m[1] ?? '').trim();
         if (!label) continue;
         declareIdentity(label);
-        const head = label.split(/:(?:\s|$)/)[0]?.trim() ?? '';
+        const balancedHead = /^(.+?\([^()]*\))\s*:(?:\s|$)/.exec(label)?.[1];
+        // When the label carries a `(…: …)` parenthetical, any first-colon split lands inside it;
+        // only the balanced head (or the full label) is declarable for such labels.
+        const fallback = /\([^():]*:[^()]*\)/.test(label) ? null : label.split(/:(?:\s|$)/)[0];
+        const head = (balancedHead ?? fallback ?? '').trim();
         if (head && head !== label) declareIdentity(head);
         const leading = label.split(/\s+/)[0] ?? '';
         if (leading && leading !== label && leading !== head) declareIdentity(leading);
