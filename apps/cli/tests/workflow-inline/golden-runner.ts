@@ -82,6 +82,7 @@ export function childEnv(root: string): Record<string, string> {
     return {
         PATH: getEnvVar('PATH') ?? '',
         HOME: `${root}.home`,
+        TMPDIR: tmpdir(),
         SPUR_SKIP_GLOBAL_CONFIG: 'true',
         ...GIT_ENV,
     };

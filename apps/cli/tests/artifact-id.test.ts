@@ -2,8 +2,8 @@ import { describe, expect, test } from 'bun:test';
 import { existsSync, mkdtempSync, readdirSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { main } from '../../src/index';
-import { createCapturedOutput } from '../helpers';
+import { main } from '../src/index';
+import { createCapturedOutput } from './helpers';
 
 const commands = [
     ['task', 'diffstat', '../../outside'],
