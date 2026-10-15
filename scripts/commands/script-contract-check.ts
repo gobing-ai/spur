@@ -116,6 +116,9 @@ export function listDiskScripts(scriptsDir: string): { tsFiles: string[]; mjsFil
                 continue;
             }
             if (st.isDirectory()) {
+                // `scripts/hooks/` holds hook entries run by `superskill hook run` under Bun (ADR-039):
+                // not script-path entrypoints, so no manifest row and no `.mjs` twin. checkHookLayout owns them.
+                if (base === '' && entry === 'hooks') continue;
                 walk(fullPath, base ? `${base}/${entry}` : entry);
             } else if (st.isFile()) {
                 const rel = base ? `${base}/${entry}` : entry;
@@ -605,91 +608,113 @@ interface HooksJson {
 }
 
 /**
- * Entry mechanisms outside the `hooks.json` registry (ADR-129): the Pi extension normalizer and
- * the opt-in conditional guard. Each is one authored entry file, exactly like a registered
- * identity — only the registration channel differs.
+ * Entry mechanisms outside the `hooks.json` registry (ADR-129): the Pi extension normalizer, which
+ * `plugin.json` declares and superskill bundles for Pi. It is the only authored `.ts` the
+ * `plugins/sp/hooks` directory may hold besides the registry itself.
  */
-const EXTRA_HOOK_ENTRIES = ['careful-guard.ts', 'pi/guard-extension.ts'];
+const EXTRA_HOOK_ENTRIES = ['pi/guard-extension.ts'];
 
 /** Identity from `superskill hook run sp <identity>`; null for any other command shape. */
 function hookIdentity(command: string | undefined): string | null {
     return /\bhook\s+run\s+sp\s+([\w-]+)/.exec(command ?? '')?.[1] ?? null;
 }
 
+/** Registered identities from `hooks.json`, plus the findings its structure produces. */
+function registeredHookIdentities(hooksJsonPath: string): { registered: Set<string>; findings: PlacementFinding[] } {
+    const registered = new Set<string>();
+    const findings: PlacementFinding[] = [];
+    if (!existsSync(hooksJsonPath)) return { registered, findings };
+    let parsed: HooksJson = {};
+    try {
+        parsed = JSON.parse(readFileSync(hooksJsonPath, 'utf8')) as HooksJson;
+    } catch (error) {
+        findings.push({
+            file: 'plugins/sp/hooks/hooks.json',
+            kind: 'hook-layout',
+            detail: `unreadable hooks.json: ${(error as Error).message}`,
+        });
+    }
+    for (const [event, groups] of Object.entries(parsed.hooks ?? {})) {
+        // One identity per event: a second registration for the same event would run the same
+        // entry twice for any tool matching both matchers (task 1173 R1 — one identity, one entry).
+        const seen = new Set<string>();
+        for (const group of groups) {
+            for (const entry of group.hooks ?? []) {
+                const identity = hookIdentity(entry.command);
+                if (identity === null) continue;
+                registered.add(identity);
+                if (seen.has(identity)) {
+                    findings.push({
+                        file: 'plugins/sp/hooks/hooks.json',
+                        kind: 'hook-layout',
+                        detail: `hook identity '${identity}' is registered twice for ${event}${group.matcher ? ` (matcher ${group.matcher})` : ''} — one identity, one authored entry`,
+                    });
+                }
+                seen.add(identity);
+            }
+        }
+    }
+    return { registered, findings };
+}
+
 /**
- * Hook source-layout contract (ADR-129, task 1173): one registered identity has one authored
- * entry under `plugins/sp/hooks`, reusable helpers live in `plugins/sp/lib`, and hook tests live
- * in `plugins/sp/tests/hooks`. Pure and side-effect free; task 1174 activates the strict call in
- * `checkPlacement` after the relocation lands.
+ * Hook source-layout contract (ADR-129, task 1173; entry location per superskill ADR-039): one
+ * registered identity has one authored entry at `plugins/sp/scripts/hooks/<identity>.ts`, reusable
+ * helpers live in `plugins/sp/lib`, and hook tests live in `plugins/sp/tests/hooks`.
+ *
+ * Why `scripts/hooks` and not `hooks`: `superskill hook run sp <id>` resolves `hooks/<id>` before
+ * `scripts/hooks/<id>` under every plugin root, but install stages only `scripts/` (and `lib/` as its
+ * sibling) for Codex/OpenCode/Antigravity/Hermes. `scripts/hooks/<id>.ts` is therefore the single
+ * location every target reaches. `plugins/sp/hooks` keeps the registry and the Pi extension only — an
+ * entry there would shadow the staged one on native installs and never ship to staged targets.
+ * Pure and side-effect free; task 1174 activates the strict call in `checkPlacement`.
  */
 export function checkHookLayout(opts: { repoRoot: string }): PlacementFinding[] {
     const root = resolve(opts.repoRoot);
     const hooksDir = join(root, 'plugins', 'sp', 'hooks');
-    const findings: PlacementFinding[] = [];
-    if (!existsSync(hooksDir)) return findings;
+    const entriesDir = join(root, 'plugins', 'sp', 'scripts', 'hooks');
+    if (!existsSync(hooksDir)) return [];
 
-    const registered = new Set<string>();
-    const hooksJsonPath = join(hooksDir, 'hooks.json');
-    if (existsSync(hooksJsonPath)) {
-        let parsed: HooksJson = {};
-        try {
-            parsed = JSON.parse(readFileSync(hooksJsonPath, 'utf8')) as HooksJson;
-        } catch (error) {
-            findings.push({
-                file: 'plugins/sp/hooks/hooks.json',
-                kind: 'hook-layout',
-                detail: `unreadable hooks.json: ${(error as Error).message}`,
-            });
-        }
-        for (const [event, groups] of Object.entries(parsed.hooks ?? {})) {
-            // One identity per event: a second registration for the same event would run the same
-            // entry twice for any tool matching both matchers (task 1173 R1 — one identity, one entry).
-            const seen = new Set<string>();
-            for (const group of groups) {
-                for (const entry of group.hooks ?? []) {
-                    const identity = hookIdentity(entry.command);
-                    if (identity === null) continue;
-                    registered.add(identity);
-                    if (seen.has(identity)) {
-                        findings.push({
-                            file: 'plugins/sp/hooks/hooks.json',
-                            kind: 'hook-layout',
-                            detail: `hook identity '${identity}' is registered twice for ${event}${group.matcher ? ` (matcher ${group.matcher})` : ''} — one identity, one authored entry`,
-                        });
-                    }
-                    seen.add(identity);
-                }
-            }
-        }
-    }
+    const { registered, findings } = registeredHookIdentities(join(hooksDir, 'hooks.json'));
 
     for (const identity of [...registered].sort()) {
-        if (!existsSync(join(hooksDir, `${identity}.ts`))) {
+        if (!existsSync(join(entriesDir, `${identity}.ts`))) {
             findings.push({
-                file: `plugins/sp/hooks/${identity}.ts`,
+                file: `plugins/sp/scripts/hooks/${identity}.ts`,
                 kind: 'hook-layout',
-                detail: `registered hook identity '${identity}' has no authored entry under plugins/sp/hooks`,
+                detail: `registered hook identity '${identity}' has no authored entry under plugins/sp/scripts/hooks`,
             });
         }
     }
 
-    const allowedEntries = new Set([...registered].map((identity) => `${identity}.ts`));
-    for (const extra of EXTRA_HOOK_ENTRIES) allowedEntries.add(extra);
+    const misplacedTest = (file: string): PlacementFinding => ({
+        file,
+        kind: 'hook-layout',
+        detail: 'hook tests belong in plugins/sp/tests/hooks — one test owner for the plugin',
+    });
+
     for (const abs of collectHookTsFiles(hooksDir).sort()) {
         const rel = abs.slice(hooksDir.length + 1);
-        if (rel.endsWith('.test.ts')) {
+        const file = `plugins/sp/hooks/${rel}`;
+        if (rel.endsWith('.test.ts')) findings.push(misplacedTest(file));
+        else if (!EXTRA_HOOK_ENTRIES.includes(rel)) {
             findings.push({
-                file: `plugins/sp/hooks/${rel}`,
+                file,
                 kind: 'hook-layout',
-                detail: 'hook tests belong in plugins/sp/tests/hooks — one test owner for the plugin',
+                detail: 'plugins/sp/hooks holds hooks.json and the Pi extension only — hook entries live in plugins/sp/scripts/hooks (the one location superskill reaches on every target), helpers in plugins/sp/lib',
             });
-            continue;
         }
-        if (!allowedEntries.has(rel)) {
+    }
+
+    for (const abs of collectHookTsFiles(entriesDir).sort()) {
+        const rel = abs.slice(entriesDir.length + 1);
+        const file = `plugins/sp/scripts/hooks/${rel}`;
+        if (rel.endsWith('.test.ts')) findings.push(misplacedTest(file));
+        else if (!registered.has(rel.replace(/\.ts$/, ''))) {
             findings.push({
-                file: `plugins/sp/hooks/${rel}`,
+                file,
                 kind: 'hook-layout',
-                detail: 'not a registered hook entry or a supported extension entry — reusable helpers belong in plugins/sp/lib',
+                detail: 'not a registered hook entry (no `superskill hook run sp <id>` in hooks.json) — reusable helpers belong in plugins/sp/lib',
             });
         }
     }

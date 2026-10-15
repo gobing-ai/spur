@@ -15,7 +15,7 @@ import {
     runFleetGuestStop,
     runStopFromStdin,
     stopDecisionFor,
-} from '../../hooks/fleet-guest-stop';
+} from '../../scripts/hooks/fleet-guest-stop';
 
 function makeProject(records: Array<{ id: string; sessionId?: string }>): string {
     const cwd = mkdtempSync(join(tmpdir(), 'spur-guest-stop-'));

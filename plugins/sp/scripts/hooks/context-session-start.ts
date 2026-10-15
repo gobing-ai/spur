@@ -7,7 +7,7 @@
  * (legacy policy) and every error path exits 0 with no output.
  */
 
-import { recordSessionStartFromPayloadText } from '../lib/context-session-start';
+import { recordSessionStartFromPayloadText } from '../../lib/context-session-start';
 
 if (import.meta.main) {
     try {

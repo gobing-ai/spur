@@ -426,7 +426,13 @@ function buildRunSummary(rows, inputs, opts = {}) {
     skippedLines: opts.skippedLines ?? 0
   };
 }
-var SENSITIVE_PREFIXES = ["drizzle/", "packages/config/", ".github/", "plugins/sp/hooks/"];
+var SENSITIVE_PREFIXES = [
+  "drizzle/",
+  "packages/config/",
+  ".github/",
+  "plugins/sp/hooks/",
+  "plugins/sp/scripts/hooks/"
+];
 var SENSITIVE_GLOBS = ["apps/server/src/**/auth*", "**/*secret*", "**/*.sql"];
 function globToRegex(glob) {
   const escaped = glob.replace(/[.+^${}()|[\]\\]/g, "\\$&").replaceAll("**/", "\x00").replaceAll("**", "\x01").replaceAll("*", "[^/]*").replaceAll("\x00", "(?:.*/)?").replaceAll("\x01", ".*");

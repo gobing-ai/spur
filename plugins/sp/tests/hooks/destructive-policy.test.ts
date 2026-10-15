@@ -100,15 +100,18 @@ describe('destructive-policy — classification', () => {
 
 /** Run the Claude Code hook end-to-end and read back its permission decision. */
 function claudeDecision(command: string): Expected {
-    const res = spawnSync('bun', [join(import.meta.dir, '../../hooks', 'careful-guard.ts')], {
+    const res = spawnSync('bun', [join(import.meta.dir, '../../scripts/hooks', 'careful-guard.ts')], {
         input: JSON.stringify({ tool_name: 'Bash', tool_input: { command } }),
         encoding: 'utf-8',
         timeout: 30_000,
     });
+    // Allow is silence (superskill ADR-039); anything printed must be the `ask` decision.
+    if (res.stdout === '') return 'allow';
     const parsed = JSON.parse(res.stdout) as {
         hookSpecificOutput?: { permissionDecision?: string };
     };
-    return parsed.hookSpecificOutput?.permissionDecision === 'ask' ? 'ask' : 'allow';
+    if (parsed.hookSpecificOutput?.permissionDecision !== 'ask') throw new Error(`unexpected output: ${res.stdout}`);
+    return 'ask';
 }
 
 /**

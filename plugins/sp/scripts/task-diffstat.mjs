@@ -20,7 +20,13 @@ var OPERATOR_TOOLS = new Set(["AskUserQuestion", "ask_user_question"]);
 var SHELL_TOOLS = new Set(["bash", "shell", "exec", "exec_command", "run_command", "command"]);
 var SUBAGENT_TOOLS = new Set(["agent", "task", "invoke_subagent", "subagent", "dispatch_agent"]);
 var LOWERCASE_OPERATOR_TOOLS = new Set(["askuserquestion", "ask_user_question"]);
-var SENSITIVE_PREFIXES = ["drizzle/", "packages/config/", ".github/", "plugins/sp/hooks/"];
+var SENSITIVE_PREFIXES = [
+  "drizzle/",
+  "packages/config/",
+  ".github/",
+  "plugins/sp/hooks/",
+  "plugins/sp/scripts/hooks/"
+];
 var SENSITIVE_GLOBS = ["apps/server/src/**/auth*", "**/*secret*", "**/*.sql"];
 function globToRegex(glob) {
   const escaped = glob.replace(/[.+^${}()|[\]\\]/g, "\\$&").replaceAll("**/", "\x00").replaceAll("**", "\x01").replaceAll("*", "[^/]*").replaceAll("\x00", "(?:.*/)?").replaceAll("\x01", ".*");

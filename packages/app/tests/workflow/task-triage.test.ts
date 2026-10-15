@@ -15,7 +15,8 @@ describe('task-triage — sensitive-path policy (0943 R2c)', () => {
             'drizzle/0001_init.sql',
             'packages/config/src/app.ts',
             '.github/workflows/ci.yml',
-            'plugins/sp/hooks/task-write-guard.ts',
+            'plugins/sp/hooks/hooks.json',
+            'plugins/sp/scripts/hooks/task-write-guard.ts',
         ]) {
             expect(sensitiveReasonForPath(path)).not.toBeNull();
         }
@@ -55,6 +56,7 @@ describe('task-triage — sensitive-path policy (0943 R2c)', () => {
 
     test('the exported pattern lists stay data, so the frozen classes are auditable', () => {
         expect(SENSITIVE_PREFIXES).toContain('plugins/sp/hooks/');
+        expect(SENSITIVE_PREFIXES).toContain('plugins/sp/scripts/hooks/');
         expect(SENSITIVE_GLOBS).toContain('**/*.sql');
         expect(SENSITIVE_GLOBS).toContain('**/*secret*');
     });

@@ -15,9 +15,11 @@
  * - **Bounded.** The pending check is `spur agent wait --inbox <id> --timeout 2000`, which also
  *   heartbeats the guest lease (R5), and the reason names at most the first few messages.
  *
- * Block contract (both hosts that support it): exit 0 with JSON on stdout —
- * `{"decision":"block","reason":"<non-empty>"}`. Claude Code uses the reason as the stop reason;
- * Codex turns it into the next user prompt. Hosts that drop the Stop event (`codex exec` on
+ * Block contract: exit 0 with the host-neutral superskill result on stdout (ADR-039) —
+ * `{"decision":"block","reason":"<non-empty>"}`. `superskill hook run` renders it per host: Claude
+ * Code and Codex receive that same Stop JSON (Claude uses the reason as the stop reason; Codex turns
+ * it into the next user prompt), omp/Pi get exit 2 + the reason on stderr. No pending work prints
+ * nothing. Hosts that drop the Stop event (`codex exec` on
  * 0.160.0 — see `docs/plans/2026-10-05-codex-guest-spike.md`) simply never call it.
  *
  * Self-contained by design: hooks are bundled standalone at install time, so this file imports
@@ -27,7 +29,7 @@
 import { spawnSync } from 'node:child_process';
 import { existsSync, readdirSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { getEnvVar } from '../lib/env';
+import { getEnvVar } from '../../lib/env';
 
 /** Budget for the pending-work probe; the hook must never noticeably slow a turn. */
 export const GUEST_STOP_PROBE_MS = 2000;

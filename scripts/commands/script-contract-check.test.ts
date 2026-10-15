@@ -269,6 +269,24 @@ test('R3 — unlisted script on disk fails unregistered_script', () => {
     }
 });
 
+test('R3 — hook entries under scripts/hooks are not script-path entrypoints and need no manifest row (ADR-039)', () => {
+    const env = createTempEnv();
+    try {
+        mkdirSync(join(env.scriptsDir, 'hooks'), { recursive: true });
+        writeFileSync(join(env.scriptsDir, 'hooks', 'guard.ts'), 'process.exit(0);\n');
+        // A nested `hooks/` deeper in the tree is an ordinary feature dir and still needs a row.
+        mkdirSync(join(env.scriptsDir, 'feature', 'hooks'), { recursive: true });
+        writeFileSync(join(env.scriptsDir, 'feature', 'hooks', 'tool.ts'), 'console.log("tool");\n');
+        const violations = validateContract({ entries: [] }, env.scriptsDir, env.pluginDir);
+        expect(violations.some((v) => v.target === 'hooks/guard.ts')).toBe(false);
+        expect(violations.some((v) => v.kind === 'unregistered_script' && v.target === 'feature/hooks/tool.ts')).toBe(
+            true,
+        );
+    } finally {
+        env.cleanup();
+    }
+});
+
 test('R3 — manifest entry not present on disk fails unregistered_script', () => {
     const env = createTempEnv();
     try {
@@ -463,7 +481,8 @@ function createPlacementFixture(): string {
             4,
         ),
     );
-    writeFileSync(join(hooksDir, 'fine.ts'), 'export const fine = 1;\n');
+    mkdirSync(join(scriptsDir, 'hooks'), { recursive: true });
+    writeFileSync(join(scriptsDir, 'hooks', 'fine.ts'), 'export const fine = 1;\n');
     writeFileSync(join(scriptsDir, 'skipped.test.ts'), `import { test } from 'bun:test';\ntest('skip', () => {});\n`);
     return root;
 }
@@ -563,7 +582,7 @@ test('baseline suppresses listed kinds and flags stale entries', () => {
                 entries: {
                     'plugins/sp/scripts/big.ts': { kinds: ['budget'] },
                     'plugins/sp/scripts/db.ts': { kinds: ['budget', 'db-import'] },
-                    'plugins/sp/hooks/fine.ts': { kinds: ['budget'] },
+                    'plugins/sp/scripts/hooks/fine.ts': { kinds: ['budget'] },
                 },
             }),
         );
@@ -573,7 +592,7 @@ test('baseline suppresses listed kinds and flags stale entries', () => {
             findings.find((f) => f.file === 'plugins/sp/scripts/db.ts' && f.kind === 'stale-baseline'),
         ).toBeDefined();
         expect(
-            findings.find((f) => f.file === 'plugins/sp/hooks/fine.ts' && f.kind === 'stale-baseline'),
+            findings.find((f) => f.file === 'plugins/sp/scripts/hooks/fine.ts' && f.kind === 'stale-baseline'),
         ).toBeDefined();
         expect(findings.some((f) => f.file === 'plugins/sp/scripts/corpus.ts')).toBe(true);
     } finally {
@@ -706,19 +725,20 @@ test('checkPlacement includes the hook source-layout findings (task 1174 R3 acti
     const root = createPlacementFixture();
     try {
         const hooks = join(root, 'plugins', 'sp', 'hooks');
-        // Stray helper: not registered, not a supported extension entry.
+        const entries = join(root, 'plugins', 'sp', 'scripts', 'hooks');
+        // A hook entry left in hooks/ would shadow the staged scripts/hooks entry (superskill ADR-039).
         writeFileSync(join(hooks, 'stray-helper.ts'), 'export const helper = 1;\n');
         // Misplaced test: hook tests belong to plugins/sp/tests/hooks.
-        writeFileSync(join(hooks, 'fine.test.ts'), `import { test } from 'bun:test';\ntest('x', () => {});\n`);
+        writeFileSync(join(entries, 'fine.test.ts'), `import { test } from 'bun:test';\ntest('x', () => {});\n`);
         const findings = checkPlacement({ repoRoot: root, baselinePath: join(root, 'config', 'missing.json') });
         const hookFindings = findings.filter((f) => f.kind === 'hook-layout');
         expect(hookFindings.map((f) => f.file).sort()).toEqual([
-            'plugins/sp/hooks/fine.test.ts',
             'plugins/sp/hooks/stray-helper.ts',
+            'plugins/sp/scripts/hooks/fine.test.ts',
         ]);
         expect(hookFindings.every((f) => f.detail.length > 0)).toBe(true);
         // The registered entry itself stays clean.
-        expect(hookFindings.some((f) => f.file === 'plugins/sp/hooks/fine.ts')).toBe(false);
+        expect(hookFindings.some((f) => f.file === 'plugins/sp/scripts/hooks/fine.ts')).toBe(false);
     } finally {
         rmSync(root, { recursive: true, force: true });
     }
@@ -750,9 +770,13 @@ test('checkPlacement applies the DB/corpus boundary to handwritten lib without a
 function createHookFixture(hooksJson: unknown = { hooks: {} }): string {
     const root = mkdtempSync(join(tmpdir(), 'hook-layout-test-'));
     mkdirSync(join(root, 'plugins', 'sp', 'hooks', 'pi'), { recursive: true });
+    mkdirSync(join(root, 'plugins', 'sp', 'scripts', 'hooks'), { recursive: true });
     writeFileSync(join(root, 'plugins', 'sp', 'hooks', 'hooks.json'), JSON.stringify(hooksJson, null, 4));
     return root;
 }
+
+/** Where a registered identity's authored entry lives (superskill ADR-039 `scripts/hooks/<id>.ts`). */
+const entryPath = (root: string, file: string): string => join(root, 'plugins', 'sp', 'scripts', 'hooks', file);
 
 function group(identities: string[], matcher?: string): Record<string, unknown> {
     return {
@@ -764,11 +788,12 @@ function group(identities: string[], matcher?: string): Record<string, unknown> 
 test('checkHookLayout resolves one authored entry per registered identity (task 1173 R1)', () => {
     const root = createHookFixture({ hooks: { Stop: [group(['task-write-guard'])] } });
     try {
-        const hooks = join(root, 'plugins', 'sp', 'hooks');
-        writeFileSync(join(hooks, 'task-write-guard.ts'), 'export const guard = 1;\n');
-        writeFileSync(join(root, 'plugins', 'sp', 'hooks', 'agent-lifecycle.ts'), 'export const stray = 1;\n');
+        writeFileSync(entryPath(root, 'task-write-guard.ts'), 'export const guard = 1;\n');
+        writeFileSync(entryPath(root, 'agent-lifecycle.ts'), 'export const stray = 1;\n');
         const findings = checkHookLayout({ repoRoot: root });
-        expect(findings.map((f) => [f.file, f.kind])).toEqual([['plugins/sp/hooks/agent-lifecycle.ts', 'hook-layout']]);
+        expect(findings.map((f) => [f.file, f.kind])).toEqual([
+            ['plugins/sp/scripts/hooks/agent-lifecycle.ts', 'hook-layout'],
+        ]);
         expect(findings[0]?.detail).toContain('plugins/sp/lib');
     } finally {
         rmSync(root, { recursive: true, force: true });
@@ -778,12 +803,24 @@ test('checkHookLayout resolves one authored entry per registered identity (task 
 test('checkHookLayout flags a registered identity with no authored entry (task 1173 R1)', () => {
     const root = createHookFixture({ hooks: { SessionStart: [group(['context-session-start', 'agent-lifecycle'])] } });
     try {
-        const hooks = join(root, 'plugins', 'sp', 'hooks');
-        writeFileSync(join(hooks, 'agent-lifecycle.ts'), 'export const entry = 1;\n');
+        writeFileSync(entryPath(root, 'agent-lifecycle.ts'), 'export const entry = 1;\n');
         const findings = checkHookLayout({ repoRoot: root });
         expect(findings).toHaveLength(1);
-        expect(findings[0]?.file).toBe('plugins/sp/hooks/context-session-start.ts');
+        expect(findings[0]?.file).toBe('plugins/sp/scripts/hooks/context-session-start.ts');
         expect(findings[0]?.detail).toContain('no authored entry');
+    } finally {
+        rmSync(root, { recursive: true, force: true });
+    }
+});
+
+test('an entry under plugins/sp/hooks is a finding even when registered — it would shadow the staged one (ADR-039)', () => {
+    const root = createHookFixture({ hooks: { PreToolUse: [group(['careful-guard'], 'Bash')] } });
+    try {
+        writeFileSync(entryPath(root, 'careful-guard.ts'), 'export const entry = 1;\n');
+        writeFileSync(join(root, 'plugins', 'sp', 'hooks', 'careful-guard.ts'), 'export const shadow = 1;\n');
+        const findings = checkHookLayout({ repoRoot: root });
+        expect(findings.map((f) => f.file)).toEqual(['plugins/sp/hooks/careful-guard.ts']);
+        expect(findings[0]?.detail).toContain('plugins/sp/scripts/hooks');
     } finally {
         rmSync(root, { recursive: true, force: true });
     }
@@ -798,14 +835,14 @@ test('one identity may serve several events but not twice in one group (task 117
         },
     });
     try {
-        writeFileSync(join(root, 'plugins', 'sp', 'hooks', 'agent-lifecycle.ts'), 'export const entry = 1;\n');
-        writeFileSync(join(root, 'plugins', 'sp', 'hooks', 'stop-lifecycle.ts'), 'export const helper = 1;\n');
+        writeFileSync(entryPath(root, 'agent-lifecycle.ts'), 'export const entry = 1;\n');
+        writeFileSync(entryPath(root, 'stop-lifecycle.ts'), 'export const helper = 1;\n');
         // The multi-event registration itself is legal; only the duplicated group and the unregistered
         // sibling helper are findings.
         const findings = checkHookLayout({ repoRoot: root });
         expect(findings.map((f) => f.file)).toEqual([
             'plugins/sp/hooks/hooks.json',
-            'plugins/sp/hooks/stop-lifecycle.ts',
+            'plugins/sp/scripts/hooks/stop-lifecycle.ts',
         ]);
         expect(findings[0]?.detail).toContain('registered twice for Stop');
     } finally {
@@ -813,22 +850,21 @@ test('one identity may serve several events but not twice in one group (task 117
     }
 });
 
-test('hook tests belong to the plugin test owner, and both extension entries are entries (task 1173 R1)', () => {
+test('hook tests belong to the plugin test owner in either hook tree; the Pi extension is an entry (task 1173 R1)', () => {
     const root = createHookFixture({ hooks: { Stop: [group(['fleet-guest-stop'])] } });
     try {
         const hooks = join(root, 'plugins', 'sp', 'hooks');
-        for (const entry of ['fleet-guest-stop.ts', 'careful-guard.ts']) {
-            writeFileSync(join(hooks, entry), 'export const entry = 1;\n');
-        }
+        writeFileSync(entryPath(root, 'fleet-guest-stop.ts'), 'export const entry = 1;\n');
         writeFileSync(join(hooks, 'pi', 'guard-extension.ts'), 'export const extension = 1;\n');
-        writeFileSync(
-            join(hooks, 'fleet-guest-stop.test.ts'),
-            `import { test } from 'bun:test';\ntest('x', () => {});\n`,
-        );
+        const testBody = `import { test } from 'bun:test';\ntest('x', () => {});\n`;
+        writeFileSync(entryPath(root, 'fleet-guest-stop.test.ts'), testBody);
+        writeFileSync(join(hooks, 'guard.test.ts'), testBody);
         const findings = checkHookLayout({ repoRoot: root });
-        expect(findings).toHaveLength(1);
-        expect(findings[0]?.file).toBe('plugins/sp/hooks/fleet-guest-stop.test.ts');
-        expect(findings[0]?.detail).toContain('plugins/sp/tests/hooks');
+        expect(findings.map((f) => f.file)).toEqual([
+            'plugins/sp/hooks/guard.test.ts',
+            'plugins/sp/scripts/hooks/fleet-guest-stop.test.ts',
+        ]);
+        expect(findings.every((f) => f.detail.includes('plugins/sp/tests/hooks'))).toBe(true);
     } finally {
         rmSync(root, { recursive: true, force: true });
     }
@@ -837,11 +873,20 @@ test('hook tests belong to the plugin test owner, and both extension entries are
 test('checkHookLayout is clean on its own fixture and reports unreadable hooks.json (task 1173 R1)', () => {
     const root = createHookFixture({ hooks: { SessionStart: [group(['agent-lifecycle'])] } });
     try {
-        writeFileSync(join(root, 'plugins', 'sp', 'hooks', 'agent-lifecycle.ts'), 'export const entry = 1;\n');
+        writeFileSync(entryPath(root, 'agent-lifecycle.ts'), 'export const entry = 1;\n');
         expect(checkHookLayout({ repoRoot: root })).toEqual([]);
         writeFileSync(join(root, 'plugins', 'sp', 'hooks', 'hooks.json'), '{ not json');
         const broken = checkHookLayout({ repoRoot: root });
         expect(broken.some((f) => f.detail.includes('unreadable hooks.json'))).toBe(true);
+    } finally {
+        rmSync(root, { recursive: true, force: true });
+    }
+});
+
+test('checkHookLayout is empty when the plugin has no hooks directory', () => {
+    const root = mkdtempSync(join(tmpdir(), 'hook-layout-none-'));
+    try {
+        expect(checkHookLayout({ repoRoot: root })).toEqual([]);
     } finally {
         rmSync(root, { recursive: true, force: true });
     }

@@ -7,7 +7,7 @@
  * `agent.run`'s shutdown stays a no-op because the owner gate lives in the core, not here.
  */
 
-import { recordSessionEndFromPayloadText } from '../lib/context-session-stop';
+import { recordSessionEndFromPayloadText } from '../../lib/context-session-stop';
 
 if (import.meta.main) {
     try {

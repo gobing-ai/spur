@@ -566,7 +566,9 @@ export function sweepHooks(root: string = PLUGIN_ROOT): void {
                     );
                     continue;
                 }
-                const script = join(root, 'hooks', `${m[1]}.ts`);
+                // superskill ADR-039: `hook run` resolves the plugin's `scripts/hooks/<id>.ts` (the
+                // location staged targets also receive).
+                const script = join(root, 'scripts', 'hooks', `${m[1]}.ts`);
                 record(
                     `hook ${m[1]} script exists`,
                     'file-resolution',

@@ -93,7 +93,7 @@ export declare type QuickReadinessResult =
     | { action: 'invalid'; code: string; reason: string };
 export declare function quickReadiness(input: QuickReadinessInput): QuickReadinessResult;
 export declare function preflightTask(input: PreflightInput): PreflightResult;
-export declare const SENSITIVE_PREFIXES: readonly ['drizzle/', 'packages/config/', '.github/', 'plugins/sp/hooks/'];
+export declare const SENSITIVE_PREFIXES: readonly ['drizzle/', 'packages/config/', '.github/', 'plugins/sp/hooks/', 'plugins/sp/scripts/hooks/'];
 export declare const SENSITIVE_GLOBS: readonly ['apps/server/src/**/auth*', '**/*secret*', '**/*.sql'];
 export declare function sensitiveReasonForPath(path: string): string | null;
 // task 1178: pure run-summary aggregation, exported through the same generated entry.

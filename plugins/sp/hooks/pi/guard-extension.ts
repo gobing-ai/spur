@@ -34,7 +34,7 @@ import { recordSessionEnd } from '../../lib/context-session-stop';
 import { classifyCommand } from '../../lib/destructive-policy';
 import { getEnvVar, getEnvVars } from '../../lib/env';
 import { couldBeTaskFile } from '../../lib/task-file-policy';
-import { reportLifecycleHook } from '../agent-lifecycle';
+import { reportLifecycleHook } from '../../scripts/hooks/agent-lifecycle';
 
 // ─── Constants ───────────────────────────────────────────────────────────
 
