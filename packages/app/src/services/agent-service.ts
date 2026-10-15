@@ -28,7 +28,7 @@ import { AgentRunExecutor } from './agent-run-executor';
 
 export type { DoctorUsageInfo } from './agent-doctor-report';
 export { executorFingerprint } from './agent-doctor-report';
-export { PidObservingProcessExecutor, RolePropagatingProcessExecutor } from './agent-process-executors';
+export { PidObservingProcessExecutor, RolePropagatingProcessExecutor } from './agent-run-executor';
 
 // Re-exported so the six existing `AgentExecutorConfig` importers stay untouched (0965 R3).
 export type { AgentExecutorConfig } from './executor-tier';
