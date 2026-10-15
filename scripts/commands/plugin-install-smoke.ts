@@ -64,13 +64,16 @@ function walkTs(dir: string): string[] {
 
 const failures: string[] = [];
 
-// Gate 1: install-bundled surfaces (hooks, lib) — node:*/bun:* builtins + relative only.
-// Gate 1b: scripts — no @gobing-ai/* value imports (twins are prebuilt in-repo; this
+// Gate 1: install-bundled surfaces (hooks, lib, and the hook entries under scripts/hooks, which
+// `superskill hook run` executes as-is under Bun on targets with no node_modules) — node:*/bun:*
+// builtins + relative only.
+// Gate 1b: other scripts — no @gobing-ai/* value imports (twins are prebuilt in-repo; this
 // guards the install-time re-conversion path that requires host-side resolution).
+const HOOK_ENTRIES = join(PLUGIN, 'scripts', 'hooks');
 for (const dir of ['hooks', 'lib', 'scripts']) {
     for (const file of walkTs(join(PLUGIN, dir))) {
         if (file.endsWith('.test.ts')) continue;
-        const strict = dir !== 'scripts';
+        const strict = dir !== 'scripts' || file.startsWith(`${HOOK_ENTRIES}/`);
         const source = readFileSync(file, 'utf8');
         scanValueImports(source, (specifier) => {
             const builtin = specifier.startsWith('node:') || specifier.startsWith('bun:');

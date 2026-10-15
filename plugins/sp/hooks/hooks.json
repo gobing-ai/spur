@@ -1,5 +1,5 @@
 {
-    "description": "Spur (sp) plugin hooks — task corpus write protection + indexed-context token-ledger tracking + fleet lifecycle reporting.",
+    "description": "Spur (sp) plugin hooks — task corpus write protection + destructive-command confirm + indexed-context token-ledger tracking + fleet lifecycle reporting. Each `superskill hook run sp <id>` resolves to scripts/hooks/<id>.ts (superskill ADR-039).",
     "hooks": {
         "PreToolUse": [
             {
@@ -8,6 +8,16 @@
                     {
                         "type": "command",
                         "command": "superskill hook run sp task-write-guard",
+                        "timeout": 10
+                    }
+                ]
+            },
+            {
+                "matcher": "Bash",
+                "hooks": [
+                    {
+                        "type": "command",
+                        "command": "superskill hook run sp careful-guard",
                         "timeout": 10
                     }
                 ]

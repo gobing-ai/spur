@@ -26,7 +26,7 @@
  */
 
 import { spawn } from 'node:child_process';
-import { getEnvVars } from '../lib/env';
+import { getEnvVars } from '../../lib/env';
 
 /** Lifecycle states `spur agent report` accepts — mirrors MEMBER_LIFECYCLE_STATES in the domain. */
 export type MemberLifecycleState = 'working' | 'idle' | 'blocked';

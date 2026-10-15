@@ -1267,14 +1267,12 @@ compatibility limits: [downstream Board module contract](design/downstream-board
 
 ## 31. Cross-Platform Hook Core — built (ADR-129; task 0969)
 
-`plugins/sp/hooks` owns one indexed-context implementation. `recordToolUseEvent`
+The sp plugin owns one indexed-context implementation (cores in `plugins/sp/lib`, registered entries in `plugins/sp/scripts/hooks`, run by `superskill hook run`). `recordToolUseEvent`
 (`context-post-tool.ts`), `recordSessionStart` (`context-session-start.ts`) and `recordSessionEnd`
 (`context-session-stop.ts`) append to `.spur/context/token-ledger.jsonl` and manage `.session.json`;
 `context-owner.ts` is the shared, import-free module both session cores derive host-native owner
 identity from (task 1159), so adapter subprocess entrypoints stay free of untested logic.
-Claude Code reaches them through its hook entries; the Pi extension (`hooks/pi/guard-extension.ts`)
-normalizes `tool_result` / `session_start` / `session_shutdown` into the canonical Claude payload via
-`normalizePiToolEvent` and calls the same cores (agent fallback `pi`). Hosts never re-implement the
+Every host reaches them through the hook entries: Claude Code and the staged-script hosts (Codex, OpenCode, Antigravity, Hermes) directly, and Pi through superskill's native Pi hook adapter (superskill ADR-039, PR #4), which generates one extension per `hooks.json` hook and normalizes Pi's `tool_result` / `session_start` / `session_shutdown` into the canonical payload before `superskill hook run`. The plugin-owned Pi extension (`hooks/pi/guard-extension.ts`) is retired; Pi needs a superskill release with that adapter and a reinstall (`superskill install sp --targets pi`). Hosts never re-implement the
 row schema, token cascade, redaction or session reuse — a new host adds a normalizer. Two ownership
 invariants hold at the pointer: redaction and both byte caps apply before any summary is persisted,
 and only the pointer's recorded `{host, sessionId}` owner may append the `session_end` rollup or

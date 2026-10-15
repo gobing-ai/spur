@@ -21,7 +21,7 @@ import { join } from 'node:path';
 import type { SessionOwner } from '../../lib/context-owner';
 import { getEnvVar, removeEnvVar, setEnvVar } from '../../lib/env';
 
-const HOOKS_DIR = join(import.meta.dir, '../../hooks');
+const HOOKS_DIR = join(import.meta.dir, '../../scripts/hooks');
 const START_HOOK = join(HOOKS_DIR, 'context-session-start.ts');
 const POST_TOOL_HOOK = join(HOOKS_DIR, 'context-post-tool.ts');
 const STOP_HOOK = join(HOOKS_DIR, 'context-session-stop.ts');

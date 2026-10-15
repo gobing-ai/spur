@@ -8,9 +8,12 @@
  *
  * Tested here:
  *  1. **Fail-open contract** — every error path (unparseable payload, non-Write/Edit tool, empty
- *     path, missing spur binary, `SPUR_WRITE_GUARD=off` short-circuit) emits an `allow` decision.
- *  2. **Decision logic** — denies a raw Write/Edit to a corpus task file; allows non-task source
- *     files. The `spur task resolve --strict` exit code is the sole ownership signal.
+ *     path, missing spur binary, `SPUR_WRITE_GUARD=off` short-circuit) allows by printing nothing —
+ *     the superskill ADR-039 hook contract (a printed `permissionDecision:"allow"` would auto-approve).
+ *  2. **Decision logic** — denies a raw Write/Edit to a corpus task file, with the reason in both
+ *     `permissionDecisionReason` (model; Codex/omp exit-2 stderr via `hook run`) and `systemMessage`
+ *     (user); allows non-task source files. The `spur task resolve --strict` exit code is the sole
+ *     ownership signal.
  */
 
 import { describe, expect, test } from 'bun:test';
@@ -19,7 +22,7 @@ import { join } from 'node:path';
 import { getEnvVar } from '../../lib/env';
 
 const REPO_ROOT = join(import.meta.dir, '..', '..', '..', '..');
-const HOOK = join(import.meta.dir, '../../hooks', 'task-write-guard.ts');
+const HOOK = join(import.meta.dir, '../../scripts/hooks', 'task-write-guard.ts');
 
 const OWNED_TASK = join(REPO_ROOT, 'docs', 'tasks2', '0181_0176-wave-e-comprehensive-sweep-cleanup.md');
 const UNOWNED_SRC = join(REPO_ROOT, 'packages', 'app', 'src', 'services', 'task-service.ts');
@@ -34,16 +37,24 @@ const LOCAL_SPUR = `bun run ${join(REPO_ROOT, 'apps', 'cli', 'src', 'index.ts')}
 const SPAWN_TIMEOUT_MS = 30_000;
 
 interface Decision {
-    permissionDecision: 'allow' | 'deny';
+    /** `allow` = the guard printed nothing (the only allow shape the contract permits). */
+    permissionDecision: 'allow' | 'deny' | 'printed-allow';
+    permissionDecisionReason?: string;
     systemMessage?: string;
 }
 
 function parseDecision(out: string): Decision {
+    if (out === '') return { permissionDecision: 'allow' };
     const parsed = JSON.parse(out) as {
-        hookSpecificOutput: { permissionDecision: 'allow' | 'deny' };
+        hookSpecificOutput: { permissionDecision: 'allow' | 'deny'; permissionDecisionReason?: string };
         systemMessage?: string;
     };
-    return { permissionDecision: parsed.hookSpecificOutput.permissionDecision, systemMessage: parsed.systemMessage };
+    const { permissionDecision, permissionDecisionReason } = parsed.hookSpecificOutput;
+    return {
+        permissionDecision: permissionDecision === 'allow' ? 'printed-allow' : permissionDecision,
+        permissionDecisionReason,
+        systemMessage: parsed.systemMessage,
+    };
 }
 
 /** Run the inlined guard with a synthetic stdin payload and the provided env. */
@@ -113,8 +124,8 @@ describe('task-write-guard — fail-open contract', () => {
             });
             const out = await new Response(proc.stdout).text();
             await proc.exited;
-            // Even for an owned task file, an absent spur binary yields allow.
-            expect(JSON.parse(out).hookSpecificOutput.permissionDecision).toBe('allow');
+            // Even for an owned task file, an absent spur binary yields allow (silence).
+            expect(out).toBe('');
         },
         SPAWN_TIMEOUT_MS,
     );
@@ -127,6 +138,8 @@ describe.if(HAS_OWNED_TASK)('task-write-guard — decision logic', () => {
             const d = await runGuard({ tool_name: 'Edit', tool_input: { file_path: OWNED_TASK } });
             expect(d.permissionDecision).toBe('deny');
             expect(d.systemMessage).toContain('spur task update');
+            // Codex/omp only see the reason through permissionDecisionReason (hook run → exit 2 stderr).
+            expect(d.permissionDecisionReason).toBe(d.systemMessage);
         },
         SPAWN_TIMEOUT_MS,
     );

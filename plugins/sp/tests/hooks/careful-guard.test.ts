@@ -6,21 +6,24 @@
  * per-file coverage gate — hooks are portable scripts run via `superskill hook run`, not modules.
  *
  * Tested here:
- *  1. **Pattern matrix** — destructive commands yield `ask`; safe build-cache removals and benign
- *     commands yield `allow`. The safe-exception list (node_modules/dist/.next/coverage/build) and
+ *  1. **Pattern matrix** — destructive commands yield `ask` (reason in `permissionDecisionReason`
+ *     and `systemMessage`); safe build-cache removals and benign commands allow by printing nothing
+ *     (superskill ADR-039 hook contract). The safe-exception list (node_modules/dist/.next/coverage/build) and
  *     the force-with-lease exemption are exercised explicitly.
  *  2. **Fail-open + escape-hatch contract** — non-Bash tool, malformed payload, empty command all
- *     yield `allow`; `SPUR_CAREFUL=off` short-circuits even a destructive command to `allow`.
+ *     allow silently; `SPUR_CAREFUL=off` short-circuits even a destructive command to `allow`.
  */
 
 import { describe, expect, test } from 'bun:test';
 import { join } from 'node:path';
 import { getEnvVar } from '../../lib/env';
 
-const HOOK = join(import.meta.dir, '../../hooks', 'careful-guard.ts');
+const HOOK = join(import.meta.dir, '../../scripts/hooks', 'careful-guard.ts');
 
 interface Decision {
-    permissionDecision: 'allow' | 'ask' | 'deny';
+    /** `allow` = the guard printed nothing (the only allow shape the contract permits). */
+    permissionDecision: 'allow' | 'ask' | 'deny' | 'printed-allow';
+    permissionDecisionReason?: string;
     systemMessage?: string;
 }
 
@@ -33,11 +36,17 @@ async function runGuard(payload: unknown, env: Record<string, string> = {}, stdi
     });
     const out = await new Response(proc.stdout).text();
     await proc.exited;
+    if (out === '') return { permissionDecision: 'allow' };
     const parsed = JSON.parse(out) as {
-        hookSpecificOutput: { permissionDecision: 'allow' | 'ask' | 'deny' };
+        hookSpecificOutput: { permissionDecision: 'allow' | 'ask' | 'deny'; permissionDecisionReason?: string };
         systemMessage?: string;
     };
-    return { permissionDecision: parsed.hookSpecificOutput.permissionDecision, systemMessage: parsed.systemMessage };
+    const { permissionDecision, permissionDecisionReason } = parsed.hookSpecificOutput;
+    return {
+        permissionDecision: permissionDecision === 'allow' ? 'printed-allow' : permissionDecision,
+        permissionDecisionReason,
+        systemMessage: parsed.systemMessage,
+    };
 }
 
 const bash = (command: string) => ({ tool_name: 'Bash', tool_input: { command } });
@@ -125,5 +134,6 @@ describe('careful-guard — fail-open + escape-hatch contract', () => {
         const d = await runGuard(bash('git push --force origin main'));
         expect(d.permissionDecision).toBe('ask');
         expect(d.systemMessage).toContain('SPUR_CAREFUL=off');
+        expect(d.permissionDecisionReason).toBe(d.systemMessage);
     });
 });

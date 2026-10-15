@@ -1,10 +1,5 @@
 {
     "schemaVersion": 1,
     "description": "ADR-130 placement baseline (task 1000, seeded from plan \u00a72 inventory). Entries suppress sp-script-placement findings; kinds[] rows are migration-ledger entries for plan \u00a72 rows with no current findings. Baseline can only shrink: a listed kind the file no longer produces is a stale-baseline finding. Tasks 1001-1007 delete their entries in the same commit as the move.",
-    "entries": {
-        "plugins/sp/hooks/pi/guard-extension.ts": {
-            "kinds": ["budget"],
-            "reason": "Keep (ADR-129 normalizer) (plan \u00a72)"
-        }
-    }
+    "entries": {}
 }

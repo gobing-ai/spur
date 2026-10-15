@@ -10,8 +10,8 @@
  */
 
 import { join } from 'node:path';
-import { recordToolUseEvent, type ToolPayload } from '../lib/context-post-tool';
-import { getEnvVar } from '../lib/env';
+import { recordToolUseEvent, type ToolPayload } from '../../lib/context-post-tool';
+import { getEnvVar } from '../../lib/env';
 
 if (import.meta.main) {
     void (async () => {

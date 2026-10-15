@@ -17,7 +17,7 @@
  * Self-contained by design (task 0232/0246/0248). Installed hook configs use
  * `superskill hook run sp context-post-tool`.
  *
- * Task 1174: this core lives in `plugins/sp/lib/`; `plugins/sp/hooks/context-post-tool.ts` keeps the argv/stdin adapter the installed entry resolves to.
+ * Task 1174: this core lives in `plugins/sp/lib/`; `plugins/sp/scripts/hooks/context-post-tool.ts` keeps the argv/stdin adapter the installed entry resolves to.
  */
 
 import { execSync } from 'node:child_process';
