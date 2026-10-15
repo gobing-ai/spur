@@ -66,91 +66,6 @@ async function readSystemEvents(cwd: string): Promise<SystemEventRow[]> {
 }
 
 describe('spur agent start|stop', () => {
-    test('start posts to the supervisor endpoint and prints the started line', async () => {
-        const { cwd, out, cleanup } = await makeCtx();
-        try {
-            const calls: Array<{ url: string; method: string }> = [];
-            await withMockedFetch(
-                async (url, init) => {
-                    calls.push({ url: String(url), method: init?.method ?? '' });
-                    return jsonResponse(200, { ok: true, pid: 99, status: 'running' });
-                },
-                async () => {
-                    const code = await main(['agent', 'start', 'planner', '--server', 'http://x:1/api'], {
-                        cwd,
-                        output: out,
-                        dbUrl: ':memory:',
-                    });
-                    expect(code).toBe(0);
-                    expect(calls).toEqual([{ url: 'http://x:1/api/agents/planner/start', method: 'POST' }]);
-                    expect(out.messages.at(-1)).toBe('started planner (pid=99, status=running)');
-                },
-            );
-        } finally {
-            await cleanup();
-        }
-    });
-
-    test('start --json emits the server body', async () => {
-        const { cwd, out, cleanup } = await makeCtx();
-        try {
-            await withMockedFetch(
-                async () => jsonResponse(201, { ok: true, pid: 7, status: 'running' }),
-                async () => {
-                    const code = await main(['agent', 'start', 'planner', '--json'], {
-                        cwd,
-                        output: out,
-                        dbUrl: ':memory:',
-                    });
-                    expect(code).toBe(0);
-                    expect(JSON.parse(out.messages.at(-1) ?? '{}')).toMatchObject({ ok: true, pid: 7 });
-                },
-            );
-        } finally {
-            await cleanup();
-        }
-    });
-
-    test('stop --json posts to the default server stop endpoint', async () => {
-        const { cwd, out, cleanup } = await makeCtx();
-        try {
-            const calls: Array<{ url: string; method: string }> = [];
-            await withMockedFetch(
-                async (url, init) => {
-                    calls.push({ url: String(url), method: init?.method ?? '' });
-                    return jsonResponse(200, { ok: true });
-                },
-                async () => {
-                    const code = await main(['agent', 'stop', 'planner', '--json'], {
-                        cwd,
-                        output: out,
-                        dbUrl: ':memory:',
-                    });
-                    expect(code).toBe(0);
-                    expect(calls).toEqual([{ url: 'http://localhost:3000/api/agents/planner/stop', method: 'POST' }]);
-                    expect((JSON.parse(out.messages.at(-1) ?? '{}') as { ok?: boolean }).ok).toBe(true);
-                },
-            );
-        } finally {
-            await cleanup();
-        }
-    });
-
-    test('stop prints the stopped line', async () => {
-        const { cwd, out, cleanup } = await makeCtx();
-        try {
-            await withMockedFetch(
-                async () => jsonResponse(200, { ok: true }),
-                async () => {
-                    expect(await main(['agent', 'stop', 'planner'], { cwd, output: out, dbUrl: ':memory:' })).toBe(0);
-                    expect(out.messages.at(-1)).toBe('stopped planner');
-                },
-            );
-        } finally {
-            await cleanup();
-        }
-    });
-
     for (const [verb, status, body, expected] of [
         ['start', 409, { error: 'agent disabled' }, /agent disabled/],
         ['start', 500, { detail: 'oops' }, /start failed: 500/],
@@ -172,23 +87,6 @@ describe('spur agent start|stop', () => {
             }
         });
     }
-
-    test('unreachable server exits 1 naming spur serve', async () => {
-        const { cwd, out, cleanup } = await makeCtx();
-        try {
-            await withMockedFetch(
-                async () => {
-                    throw new Error('ECONNREFUSED');
-                },
-                async () => {
-                    expect(await main(['agent', 'start', 'planner'], { cwd, output: out, dbUrl: ':memory:' })).toBe(1);
-                    expect(out.errors.at(-1)).toMatch(/Cannot reach server at .* — is spur serve running\?/);
-                },
-            );
-        } finally {
-            await cleanup();
-        }
-    });
 });
 
 describe('spur agent list --specs live run-status merge', () => {

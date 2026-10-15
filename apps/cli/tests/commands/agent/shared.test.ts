@@ -12,15 +12,15 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { AgentCoordinationService, type PortProbeResult, setPortProbeForTests } from '@gobing-ai/spur-app';
 import { removeEnvVar, setEnvVar } from '@gobing-ai/spur-config';
-import { main } from '../../src';
+import { main } from '../../../src';
 import {
     resetAgentServerFetchForTesting,
     resolveAgentServer,
     setAgentServerFetchForTesting,
     startParentWatch,
-} from '../../src/commands/agent';
-import { createCliContext } from '../../src/context';
-import { type CapturedOutput, createCapturedOutput } from '../helpers';
+} from '../../../src/commands/agent';
+import { createCliContext } from '../../../src/context';
+import { type CapturedOutput, createCapturedOutput } from '../../helpers';
 
 const REGISTRY_PORT = 3011;
 

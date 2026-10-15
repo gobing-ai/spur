@@ -26,9 +26,9 @@ import {
     SystemEventDao,
 } from '@gobing-ai/spur-domain';
 import { type AgentProcessOptions, saveAgentSpec } from '@gobing-ai/ts-ai-runner';
-import { type MemberAgentProcess, runAgentLoop, selectsPersistentStdinDispatch } from '../../src/commands/agent';
-import { type CliContext, createCliContext } from '../../src/context';
-import type { CommandOutput } from '../../src/output';
+import { type MemberAgentProcess, runAgentLoop, selectsPersistentStdinDispatch } from '../../../src/commands/agent';
+import { type CliContext, createCliContext } from '../../../src/context';
+import type { CommandOutput } from '../../../src/output';
 
 function captureOutput(): CommandOutput & { stdout: string[]; stderr: string[] } {
     const stdout: string[] = [];

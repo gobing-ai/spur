@@ -8,8 +8,8 @@ import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { CoordinationRunDao, createMigratedDb } from '@gobing-ai/spur-domain';
-import { main } from '../../src/index';
-import type { CommandOutput } from '../../src/output';
+import { main } from '../../../src/index';
+import type { CommandOutput } from '../../../src/output';
 
 function captureOutput(): { output: CommandOutput; messages: string[]; errors: string[] } {
     const messages: string[] = [];

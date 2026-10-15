@@ -3,8 +3,8 @@ import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { CoordinationRunDao, createMigratedDb, SystemEventDao } from '@gobing-ai/spur-domain';
-import { main } from '../../src/index';
-import { createCapturedOutput } from '../helpers';
+import { main } from '../../../src/index';
+import { createCapturedOutput } from '../../helpers';
 
 /** A shared temp dir with in-memory DB for multi-call main() tests. */
 async function makeCtx(): Promise<{

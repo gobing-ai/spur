@@ -25,11 +25,11 @@ import {
     SystemEventDao,
 } from '@gobing-ai/spur-domain';
 import { EventBus } from '@gobing-ai/ts-infra';
-import { runAgentLoop } from '../../src/commands/agent';
-import { makeCheckService } from '../../src/commands/task';
-import { type CliContext, createCliContext } from '../../src/context';
-import type { CommandOutput } from '../../src/output';
-import { attachSystemEventLedger } from '../../src/system-event-ledger';
+import { runAgentLoop } from '../../../src/commands/agent';
+import { makeCheckService } from '../../../src/commands/task';
+import { type CliContext, createCliContext } from '../../../src/context';
+import type { CommandOutput } from '../../../src/output';
+import { attachSystemEventLedger } from '../../../src/system-event-ledger';
 
 function captureOutput(): CommandOutput & { stdout: string[]; stderr: string[] } {
     const stdout: string[] = [];

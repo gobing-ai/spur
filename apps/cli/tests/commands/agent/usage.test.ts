@@ -12,13 +12,13 @@ import { join } from 'node:path';
 import type { UsageSource } from '@gobing-ai/spur-app';
 import { runAgentUsageProducer, UsageSourceError } from '@gobing-ai/spur-app';
 import { loadSpurConfig } from '@gobing-ai/spur-config/loader';
-import { main } from '../../src';
-import { setAgentUsageSourceForTesting } from '../../src/commands/agent';
-import { EMBEDDED_SPUR_SCHEMAS } from '../../src/config/embedded-schemas';
-import { type CliContext, createCliContext } from '../../src/context';
-import { createCapturedOutput } from '../helpers';
+import { main } from '../../../src';
+import { setAgentUsageSourceForTesting } from '../../../src/commands/agent';
+import { EMBEDDED_SPUR_SCHEMAS } from '../../../src/config/embedded-schemas';
+import { type CliContext, createCliContext } from '../../../src/context';
+import { createCapturedOutput } from '../../helpers';
 
-const FIXTURE_PATH = join(import.meta.dir, '..', 'fixtures', 'codexbar-usage.json');
+const FIXTURE_PATH = join(join(import.meta.dir, '..'), '..', 'fixtures', 'codexbar-usage.json');
 
 /** Source stub serving a canned capture (or throwing like a missing binary). */
 function stubSource(
@@ -300,7 +300,10 @@ describe('spur agent usage (0892)', () => {
     });
 
     test('R4: the serve module never references the producer (no scheduler in spur serve)', async () => {
-        const serveModule = await readFile(join(import.meta.dir, '..', '..', 'src', 'commands', 'serve.ts'), 'utf8');
+        const serveModule = await readFile(
+            join(join(import.meta.dir, '..'), '..', '..', 'src', 'commands', 'serve.ts'),
+            'utf8',
+        );
         expect(serveModule).not.toContain('codexbar');
         expect(serveModule).not.toContain('agent-usage');
     });

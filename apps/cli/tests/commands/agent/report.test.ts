@@ -10,9 +10,9 @@ import { mkdtemp, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { readLifecycle } from '@gobing-ai/spur-domain';
-import { runAgentReport } from '../../src/commands/agent';
-import { type CliContext, createCliContext } from '../../src/context';
-import { createCapturedOutput } from '../helpers';
+import { runAgentReport } from '../../../src/commands/agent';
+import { type CliContext, createCliContext } from '../../../src/context';
+import { createCapturedOutput } from '../../helpers';
 
 async function makeCtx(env: Record<string, string | undefined> = {}): Promise<{
     ctx: CliContext;

@@ -13,9 +13,9 @@ import { join } from 'node:path';
 import { type AgentConfig, AgentCoordinationService } from '@gobing-ai/spur-app';
 import { createMigratedDb } from '@gobing-ai/spur-domain';
 import { saveAgentSpec } from '@gobing-ai/ts-ai-runner';
-import { runAgentRun } from '../../src/commands/agent';
-import { type CliContext, createCliContext } from '../../src/context';
-import type { CommandOutput } from '../../src/output';
+import { runAgentRun } from '../../../src/commands/agent';
+import { type CliContext, createCliContext } from '../../../src/context';
+import type { CommandOutput } from '../../../src/output';
 
 function captureOutput(): CommandOutput & { stdout: string[]; stderr: string[] } {
     const stdout: string[] = [];
