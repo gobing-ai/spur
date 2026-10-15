@@ -175,7 +175,34 @@ Everything not in `BOARD_PROVIDED` (date libraries, chart libraries, your own co
 **bundled** into `dist/` — the Board resolves no other bare imports. Lazy-loaded chunks are fine;
 they are served from the same directory.
 
-### 3.5 Declare it
+### 3.5 Alternative: Bun.build (zero-config build)
+
+If your project already uses Bun, you can build without Vite using a simple build script:
+
+```ts
+// scripts/build-board.ts
+await Bun.build({
+    entrypoints: ['board/team-board/src/index.tsx'],
+    outdir: 'board/team-board/dist',
+    target: 'browser',
+    format: 'esm',
+    naming: '[name].[ext]',
+    external: [
+        'react',
+        'react/jsx-runtime',
+        'react/jsx-dev-runtime',
+        'react-dom',
+        'react-dom/client',
+        'react-router',
+        'react-router/dom',
+    ],
+    define: { 'process.env.NODE_ENV': '"production"' },
+});
+```
+
+Copy your scoped `index.css` beside `index.js` in the output directory.
+
+### 3.6 Declare it
 
 Paths are relative to the project root (the directory `spur self serve` runs in, or `--cwd`), not
 your shell's current directory:
@@ -197,7 +224,125 @@ Restart `spur self serve`, reload, and open `/board/modules/team-board`.
 
 ---
 
-## 4. Field reference
+
+---
+
+## 4. Visual design system & theme alignment
+
+Custom modules share the DOM with the host Spur Board. To look and feel like native Spur modules
+across both light and dark modes, adhere to the following design system practices:
+
+### 4.1 Consuming Spur design tokens
+
+The host dynamically sets `data-theme="dark"` or `data-theme="light"` on `<html>` and exposes
+Tailwind v4 CSS custom properties. **Never hardcode hex colors or background values** — always use
+the host's tokens:
+
+```css
+/* Scoped module stylesheet */
+.team-board {
+    display: flex;
+    flex-direction: column;
+    gap: 1rem;
+    padding: 1rem 1.25rem 2rem;
+    color: var(--color-spur-text);
+}
+
+/* Surfaces and borders */
+.team-board .card {
+    background: var(--color-spur-surface);
+    border: 1px solid var(--color-spur-border);
+    border-radius: 0.75rem;
+    padding: 1rem 1.25rem;
+}
+
+/* Secondary surface (e.g. table headers, input backings) */
+.team-board .sub-surface {
+    background: var(--color-spur-surface-2);
+}
+```
+
+| Token | Purpose | Example Usage |
+| --- | --- | --- |
+| `--color-spur-bg` | Page background | Base viewport backdrop |
+| `--color-spur-surface` | Card and panel surface | Main content cards, containers |
+| `--color-spur-surface-2` | Secondary elevated surface | Table headers, toolbars, input backgrounds |
+| `--color-spur-surface-3` | Hover / active surface | Button hover, list item highlight |
+| `--color-spur-border` | Subtle boundaries | Card borders, dividers, table rows |
+| `--color-spur-text` | Primary typography | Headings, primary labels, values |
+| `--color-spur-text-muted` | Secondary typography | Subtitles, field labels, timestamps |
+| `--color-spur-text-faint` | Tertiary typography | Footnotes, hints, disabled labels |
+| `--color-spur-accent` | Brand accent | Primary buttons, active tabs, focus rings |
+| `--color-spur-success` | Success states | Passed checks, live published status |
+| `--color-spur-warning` | Warning states | Drafts, revisions required, retries |
+| `--color-spur-error` | Error states | Failed runs, validation errors |
+
+### 4.2 Recommended UI patterns
+
+#### Compact filterable dropdowns (save horizontal canvas)
+Avoid heavy left-side master lists or sidebars inside your module: they consume 25–30% of the
+horizontal screen width. Instead, place an interactive search filter input alongside a `<select>`
+dropdown directly in the top header toolbar:
+
+```tsx
+<div className="team-board-toolbar">
+    <div className="filter-group">
+        <input
+            type="text"
+            placeholder="Filter items..."
+            value={filterQuery}
+            onChange={(e) => setFilterQuery(e.target.value)}
+        />
+        <select value={selectedId} onChange={(e) => setSelectedId(e.target.value)}>
+            {filteredItems.map(item => <option key={item.id} value={item.id}>{item.name}</option>)}
+        </select>
+    </div>
+    <button type="button" onClick={reload}>Refresh</button>
+</div>
+```
+
+#### Segmented control tabs
+Use pill-shaped segmented controls on a secondary surface strip:
+
+```css
+.team-board-tabs {
+    display: inline-flex;
+    gap: 0.25rem;
+    padding: 0.25rem;
+    background: var(--color-spur-surface-2);
+    border: 1px solid var(--color-spur-border);
+    border-radius: 0.5rem;
+}
+.team-board-tabs button[aria-current="page"] {
+    font-weight: 600;
+    color: #ffffff;
+    background: var(--color-spur-accent);
+}
+```
+
+#### KPI stat cards
+Display top-level summary metrics in a responsive grid before detail tables:
+
+```css
+.stat-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(170px, 1fr));
+    gap: 0.75rem;
+}
+.stat-card {
+    background: var(--color-spur-surface);
+    border: 1px solid var(--color-spur-border);
+    border-radius: 0.625rem;
+    padding: 0.875rem 1rem;
+}
+.stat-value {
+    font-size: 1.5rem;
+    font-weight: 700;
+    color: var(--color-spur-text);
+}
+```
+
+## 5. Field reference
 
 | Field | Types | Required | Meaning |
 | --- | --- | --- | --- |
@@ -224,10 +369,14 @@ installed `web/board-runtime.json`; check it after upgrading Spur.
 
 ---
 
-## 5. Develop, verify, change
+## 6. Develop, verify, change
 
 1. **Stage safely.** Add the declaration with `enabled: false`. It is still validated (id shape,
    duplicates, collisions) but needs no built assets, so a typo surfaces before any code runs.
+   > **Fresh checkout hazard:** If your `directory` is gitignored (e.g. `dist/`), an `enabled: true`
+   > declaration will cause `spur self serve` to crash on a fresh checkout before the build is run.
+   > Either commit a placeholder, keep `enabled: false` by default, or tie the module build into
+   > your repository's root `build` / `prepare` script.
 2. **Build** (`react` only) into the declared `directory`.
 3. **Enable** with `enabled: true` (or delete the line) and **restart** `spur self serve`. Startup
    fails with a message naming `bootstrap.modules[<index>]`, the id and the reason when a declaration
@@ -249,7 +398,7 @@ preflight.
 
 ---
 
-## 6. Trust and limits
+## 7. Trust and limits
 
 - **Trusted code only.** Loading a `react` entry evaluates its code inside the Board page. Declare only
   modules you trust. Failures after load are contained: a module that fails to load or throws while
@@ -267,7 +416,7 @@ preflight.
 
 ---
 
-## 7. Troubleshooting
+## 8. Troubleshooting
 
 | Symptom | Cause | Fix |
 | --- | --- | --- |
@@ -279,6 +428,9 @@ preflight.
 | Banner above the workspace about the catalog | The Board could not read `/api/board/modules` | Check the server log; built-in modules keep working |
 | Iframe stays blank | The app sends `X-Frame-Options` / CSP `frame-ancestors`, or HTTPS/HTTP mixed content | Allow framing from the Board origin in that app, or use **Open externally** |
 | Change not visible | Config and builds are read once at startup | Restart `spur self serve` and reload the browser |
+| Module looks unstyled or breaks in dark/light theme | Hardcoded hex colors or missing CSS custom properties | Use host tokens: `var(--color-spur-surface)`, `var(--color-spur-text)`, etc. |
+| `spur self serve` crashes on fresh checkout with missing directory | Target `directory` is gitignored and hasn't been built yet | Wire build into project `build` script, or use `enabled: false` until built |
+| Horizontal space cramped inside module | Inner sidebar taking up page width | Move item selectors to a compact header toolbar with filter input |
 
 ---
 
