@@ -110,6 +110,11 @@ bundle instead of letting a missing export surface as a bare failure (1120); the
 project-layer consumer requiring a retired export — is diagnosed app-side (1185, receipt contract below). Retiring the exception
 itself needs a separately approved owning-noun transport; it is not implied by any of the above.
 
+**Amendment (2026-10-15, script absorption).** That transport was approved: PR-4..PR-6 moved every
+consumer onto `spur <noun> <verb>` (`workflow inline`, `feature verify`, `task batch-plan|preflight|diffstat`,
+`history anatomy|timeline|summary`, `workflow summary|profile`), and PR-6 deleted every generated
+bundle and `inline-run-app.ts`. The paragraphs above are historical.
+
 For source and installed setup, the selected Spur CLI's existing `workflow show --format todo --json`
 projection owns project/registered/shared resolution. The application service validates the
 projection and re-loads its selected definition under schema validation, checks name and digest,

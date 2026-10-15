@@ -72,6 +72,15 @@ rules:
 
             # Low-level system primitives (O_EXCL locks, FD byte-tailing, FS watcher, atomic registry, Vite glob fallback):
             - "packages/domain/src/planning/locks.ts" # POSIX atomic O_EXCL file locks
+            # Script-absorption PR-6: synchronous op modules whose file bytes are pinned by the
+            # PR-6 golden (apps/cli/tests/script-absorption-pr6). They keep the retired scripts'
+            # sync node:fs reads/writes (atomic publish rename, porcelain baselines, env/report
+            # writes, transcript and progress reads, the daily summary file + latest.json pointer);
+            # the async FileSystem seam would turn every op async and reorder their output.
+            - "packages/app/src/services/history-anatomy-cli.ts"
+            - "packages/app/src/services/session-timeline.ts"
+            - "packages/app/src/workflow/run-summary-cli.ts"
+            - "packages/app/src/services/daily-summary.ts"
             - "packages/domain/src/retention.ts" # recursive backup-dir reclamation + mtime stat (task 0622 R8); ts-runtime FileSystem seam has no recursive dir remove
             - "packages/app/src/services/token-ledger-service.ts" # FD byte-window log tailing
             - "packages/app/src/services/token-ledger-watcher.ts" # node:fs watch() live watcher

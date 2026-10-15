@@ -97,7 +97,7 @@ Use this skill to:
 
 The skill's logic divides by **whether the LLM adds value**:
 
-- **Direct CLI** (`validate`, `run`, `list`, `trace`, `progress`, `continue`, `cancel`, `clean`) — deterministic,
+- **Direct CLI** (`validate`, `run`, `list`, `trace`, `progress`, `summary`, `profile`, `continue`, `cancel`, `clean`) — deterministic,
   single-verb commands. Run them straight. A slash-command wrapper would only forward flags and add
   drift; **there is no command for these — use the CLI**. The skill still drives them in natural
   language (interpreting a failed validate, reading a run trace).
@@ -116,6 +116,8 @@ The skill's logic divides by **whether the LLM adds value**:
 | `list` | `spur workflow list` (CLI) | — | Available workflow **YAML definition files** (not run records) |
 | `trace` | `spur workflow trace` (CLI) | `[run-id] [--workflow <n>] [--status <s>] [--since <iso>] [--last <n>] [--follow] [--poll <ms>] [--output] [--timeout <ms>]` | Run history list or per-run timeline |
 | `progress` | `spur workflow progress` (CLI) | `<run-id>` | The `projectWorkflowProgress` projection for that run — current state, per-action attempts, candidate next transitions, diagnostics. Read-only; the verb renders, `packages/app` derives. Unknown run id exits 1 with `Run <id> not found.` |
+| `summary` | `spur workflow summary` (CLI) | `--progress <[label=]file>`… \| `--rollup <[label=]file>`… `[--transcript] [--since] [--markdown]` | Measured execution summary (per-stage time, wait, tool calls, tokens, actor split) or the batch roll-up `/sp:dev-runall` prints. `n/a` exit 0 without a transcript; exit 2 on usage or unreadable input |
+| `profile` | `spur workflow profile` (CLI) | `<workflow> [--last n] [--window sec] [--spur-bin cmd] [--json]` | Read-only per-node step profile from `spur workflow trace` with the ADR-115 cache-window flags, for `sp:spur-doctor`. Exit 1 when a trace read fails |
 | `inline` | `spur workflow inline <op>` (CLI) | `begin`, `fingerprint`, `node-enter`, `action`, `actions`, `close`, `decide`, `persist-out`, `persist-check`, `attribution`, `dispatch-failure` | The host-inline driver's run lifecycle transport ([inline-pipeline-driver.md](../../spur-dev/references/inline-pipeline-driver.md)); exit 0 ok / 1 fail closed / 2 usage |
 | `commit-guard` | `spur workflow commit-guard <op>` (CLI) | `start\|stage\|check --run <id> [--base <sha>] [-- <paths…>]` | Stages only paths this run wrote; exit 2 when a listed path is refused, 3 on unmerged/conflict-marked targets |
 | `add` | agent procedure | `"<nl-description>" [--kind <state-machine\|transition-flow>] [--file <path>]` | **Mode chosen (confirmed)** → first reconciled against existing workflows (extend an existing flow rather than duplicate) → YAML authored in real schema shape → **validated AND dry-run** (reaches the expected terminal state) → [add](workflows/operations.md#add) |
@@ -268,6 +270,8 @@ spur workflow clean    [--older-than <minutes>] [--force] [--logs] [--dry-run] [
 spur workflow list     [--json]
 spur workflow trace    [run-id] [--workflow <name>] [--status <s>] [--since <iso>] [--last <n>] [--follow] [--poll <ms>] [--output] [--timeout <ms>] [--json]
 spur workflow progress <run-id> [--json]
+spur workflow summary  (--progress <[label=]file>... | --rollup <[label=]file>...) [--transcript <path>] [--since <iso>] [--markdown]
+spur workflow profile  <workflow> [--last <n>] [--window <sec>] [--spur-bin <cmd>] [--json]
 spur workflow inline   <op> [options]
 spur workflow commit-guard <op> [options]
 ```

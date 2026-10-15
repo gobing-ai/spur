@@ -6,9 +6,11 @@ import { registerWorkflowCommitGuardCommand } from './commit-guard';
 import { registerWorkflowContinueCommand } from './continue';
 import { registerWorkflowInlineCommand } from './inline';
 import { registerWorkflowListCommand } from './list';
+import { registerWorkflowProfileCommand } from './profile';
 import { registerWorkflowProgressCommand } from './progress';
 import { registerWorkflowRunCommand } from './run';
 import { registerWorkflowShowCommand } from './show';
+import { registerWorkflowSummaryCommand } from './summary';
 import { registerWorkflowTraceCommand } from './trace';
 import { registerWorkflowValidateCommand } from './validate';
 
@@ -24,6 +26,9 @@ export function registerWorkflowCommand(program: Command, context: CliContext): 
     registerWorkflowShowCommand(workflow, context);
     registerWorkflowTraceCommand(workflow, context);
     registerWorkflowProgressCommand(workflow, context);
+    // Run measurement read-outs absorbed from the plugin scripts (script-absorption PR-6).
+    registerWorkflowSummaryCommand(workflow, context);
+    registerWorkflowProfileCommand(workflow, context);
     // The inline driver's transports (PR-4). Real invocations take the boot-free early dispatch in
     // `index.ts`; mounting them here keeps them in `spur workflow --help` and the full tree.
     registerWorkflowInlineCommand(workflow, context);

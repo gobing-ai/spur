@@ -1,9 +1,8 @@
 /**
  * task-freeze — the ADR-137 deprecated-task freeze predicate and its exit command, in one place.
  *
- * Import-free on purpose: `planning-admission.ts` is bundled into the Node-run plugin
- * (`plugins/sp/lib/plan-projection.generated.mjs`), so this module must not pull the domain barrel
- * (and with it `bun:sqlite`) into that bundle.
+ * Import-free on purpose: `planning-admission.ts` stays a light, domain-barrel-free module (it was
+ * bundled into the Node-run plugin until script-absorption PR-6 retired that bundle).
  */
 
 /** True when a task status is the frozen `deprecated` state (case-insensitive, missing → false). */

@@ -13,6 +13,9 @@
 | `report` | Render a previously-generated artifact as a spend + forensic report (pure renderer — never opens the DB) |
 | `daily` | Run-once daily pipeline: import-all → analyze → write artifact → prune reports older than 90 days |
 | `reset` | Destructively wipe every history table (requires `--yes`); task corpus and run provenance are untouched |
+| `anatomy <op>` | history-anatomy report cache ops (digest, check, paths, assert-clean, probe, stamp, refresh, publish) behind the `history-anatomy` workflow |
+| `timeline` | Per-prompt work/wait time and tokens from the host transcript (JSON) for `sp:session-review` |
+| `summary` | Daily summary report: tokens (ccusage), git activity, history health, annotations |
 
 ## spur history import
 
@@ -121,6 +124,58 @@ spur history reset [options]
 Destructively wipe every `history_*` table: normalized rows, per-source ETL, board rollups,
 daily stats, and importer checkpoints/ledger. The task corpus and run provenance
 (`task_run_links`) are untouched; a full `spur history import` rebuilds everything.
+
+## spur history anatomy
+
+```
+spur history anatomy <op> [op flags...]
+```
+
+| Argument | Description |
+|---|---|
+| `op` | `digest <artifact.json>` · `check <report.md>` · `paths --out <env> [--skill-dir d] [--helper p] ...` · `assert-clean --baseline <porcelain> [--expect p]` · `probe --artifact a --target t ...` · `stamp --candidate c --provenance p --out o` · `refresh --report r --out o` · `publish <candidate.md> <target.md>` |
+
+Deterministic cache ops behind the `history-anatomy` workflow (ADR-079; absorbed from the retired
+`history-anatomy-cache` plugin script, script-absorption PR-6). Each op keeps its own argv grammar.
+`paths` records the running spur as `HA_HELPER` (so a spur upgrade invalidates the cache) and resolves
+`HA_SKILL` from `--skill-dir`, else `plugins/sp/skills/history-anatomy` under the cwd, else the
+superskill install (`~/.agents/skills/sp-history-anatomy`, `~/.claude/skills/sp-history-anatomy`).
+Exit: `0` ok, `1` usage or op failure (`check` prints `PASS` or `FAIL` plus one line per finding).
+
+## spur history timeline
+
+```
+spur history timeline [--transcript <path>] [--group <spec>]
+```
+
+| Flag | Description |
+|---|---|
+| `--transcript <path>` | Transcript JSONL path (default: the active host session) |
+| `--group <spec>` | Sum segments into stages, e.g. `"1-3,4"` |
+
+Reads the host transcript read-only (`--transcript`, else `CLAUDE_CODE_SESSION_ID` under
+`~/.claude/projects`, else `PI_SESSION_FILE`) and prints one JSON timeline: a segment per operator
+prompt with work time, operator wait, tool calls and tokens (total / non-cached). No transcript →
+`{"available":false,"reason":...}`, exit `0`. Exit `2`: invalid `--group` or unreadable transcript.
+
+## spur history summary
+
+```
+spur history summary [--date <date>] [--dry-run] [--output <path>] [--no-git] [--no-ccusage]
+```
+
+| Flag | Description |
+|---|---|
+| `--date <date>` | `YYYY-MM-DD`, `today` or `yesterday` (default: today) |
+| `--dry-run` | Print the summary without writing the file |
+| `--output <path>` | Write to a custom path |
+| `--no-git` | Skip git history collection |
+| `--no-ccusage` | Skip token usage collection |
+
+The `sp:daily-summary` report: ccusage token usage, the day's git activity, the history-health
+findings from the project `.spur/spur.db`, and operator annotations (prompted unless
+`SP_DAILY_SUMMARY_NO_PROMPT=1`; non-TTY stdin supplies the three answers as lines). Writes
+`docs/daily/summary_<YYYYMMDD>.md` (or `--output`). Exit `0` written, `1` generation failed.
 
 ## See Also
 

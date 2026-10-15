@@ -140,7 +140,7 @@ invoking tree shows the merged run `done` with its per-action rows.
 the batch roll-up built from the per-run files:
 
 ```bash
-node "$(superskill script path sp run-summary.mjs)" --rollup <runId>-summary.json --rollup <runId2>-summary.json
+spur workflow summary --rollup <runId>-summary.json --rollup <runId2>-summary.json
 ```
 
 One row per run carrying that run's own Total, a bold total of the sums, and — when run windows overlap —

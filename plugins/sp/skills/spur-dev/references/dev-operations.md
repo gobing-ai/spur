@@ -174,7 +174,7 @@ through to `inline close`. `--no-summary` is an `inline close` flag: anywhere el
 `runs.started_at` → close time and no block reuses a batch-wide window — plus one batch roll-up:
 
 ```
-node "$(superskill script path sp run-summary.mjs)" --rollup <runId>-summary.json --rollup <runId2>-summary.json
+spur workflow summary --rollup <runId>-summary.json --rollup <runId2>-summary.json
 ```
 
 which renders one row per run (that run's own Total) and a bold total of the sums; when run windows overlap it

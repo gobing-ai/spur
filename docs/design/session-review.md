@@ -47,10 +47,10 @@ available`; unsupported causality is a hypothesis with a confirmation path.
 
 The report has six sections in order: Outcome; Time breakdown; Resolved issues; Open issues and
 risks; Process and environment improvements; Next actions. The time breakdown uses non-overlapping
-stages measured from the host transcript by the read-only `plugins/sp/scripts/session-timeline.ts`
+stages measured from the host transcript by the read-only `spur history timeline`
 (the visible conversation carries no timestamps or token usage): per stage, work time, operator wait,
 tool calls and tokens (total / non-cached, where non-cached excludes cache reads; deduplicated by
-message id). The sibling `plugins/sp/scripts/run-summary.ts` reuses the same measurement (`plugins/sp/lib/transcript.ts`)
+message id). The sibling `spur workflow summary` reuses the same measurement (`packages/app/src/workflow/transcript.ts`)
 for the `/sp:dev-run` / `/sp:dev-runall` execution summary, windowed by workflow progress attempts. Durations render
 as `M:SS` below one hour and `H:MM:SS` at one hour or above; unavailable measurements render `n/a`.
 Operator waits remain separate from execution bottlenecks. Improvements use the shared

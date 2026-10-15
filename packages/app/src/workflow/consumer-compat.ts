@@ -1,9 +1,9 @@
 /**
  * Consumer-side counterpart of the stale-bundle guard (task 1185, feature A33).
  *
- * The 1120 guard (`plugins/sp/lib/inline-run-app.ts`, `resolveAppEntry`/`loadInlineApp`) names a
- * stale *bundle*: an installed `lib/*.generated.mjs` older than the plugin scripts that load it,
- * whose remedy is a reinstall. This is the reciprocal skew, one layer out — a *consumer* (typically
+ * The 1120 guard (formerly `plugins/sp/lib/inline-run-app.ts`, retired with the generated bundles by
+ * script-absorption PR-6) named a stale *bundle*: an installed `lib/*.generated.mjs` older than the
+ * plugin scripts that loaded it, whose remedy was a reinstall. This is the reciprocal skew, one layer out — a *consumer* (typically
  * a project-rooted port that a project-layer workflow override invokes) requires an export the
  * shipped entry no longer provides. `openInlineRunProjectDb` and `ArtifactDao` were deliberately
  * retired (8f51a752d / efd78f058), so the entry's export contract moved and the consumer is behind;
@@ -19,11 +19,10 @@
  *   - `actions/shell.StreamingShellActionRunner` (the nested-run failure composition)
  * Both only *widen the message*; fail-closed behaviour and every other failure's text are unchanged.
  *
- * Layering: this helper lives app-side because both hook points do. The 1120 guard sits in
- * `plugins/sp/lib/inline-run-app.ts` and is reached through the generated node-builtin-only bundle,
- * which a published workspace package cannot relative-import across — the same boundary that sent
- * `history-anatomy`/`plan-projection` app-side (ADR-130). The two halves cross-reference each other
- * by comment.
+ * Layering: this helper lives app-side because both hook points do. Older installs may still
+ * ship a project-layer consumer that imports the retired `inline-run.generated.mjs`; this diagnosis
+ * keeps naming that skew so the operator migrates the consumer (to `spur feature verify` and the
+ * other `spur <noun> <verb>` transports) instead of reinstalling.
  */
 
 import { isAbsolute, resolve, sep } from 'node:path';
@@ -45,7 +44,7 @@ export interface ConsumerBundleSkew {
  *
  * Deliberately NOT matched: the 1120 guard's bundle-side wording (`inline application bundle <entry>
  * is older than its scripts — missing a, b`). That sentence reports the opposite skew — the *bundle*
- * is behind, not the consumer — and it already carries its own owner (`plugins/sp/lib/inline-run-app.ts`)
+ * is behind, not the consumer — and it carried its own owner (the retired `plugins/sp/lib/inline-run-app.ts`)
  * and its own remedy (reinstall). Classifying it here would attach the migrate/remove-override advice
  * to a failure where a reinstall is the fix, so it keeps today's message.
  */

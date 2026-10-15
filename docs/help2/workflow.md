@@ -16,6 +16,8 @@ phases.
 | `list` | List available workflow YAML files |
 | `trace [run-id]` | Show persisted workflow run history |
 | `progress <run-id>` | Project a run's structured progress: current state, action attempts, next transitions |
+| `summary` | Measured execution summary of runs, or a batch roll-up |
+| `profile <workflow>` | Per-node step profile of the last N runs with cache-window flags |
 | `clean` | Housekeeping: finalize stale runs and reclaim retained logs |
 | `inline <op>` | Inline pipeline driver transport: run lifecycle, trace rows, decide, persist-out/check, dispatch |
 | `commit-guard <op>` | Stage only the paths this run wrote (`start` / `stage` / `check`) |
@@ -125,6 +127,33 @@ instead; `--timeout` sets a caller deadline in milliseconds).
 spur workflow trace <run-id> --follow
 spur workflow clean --older-than 60 --dry-run
 ```
+
+## spur workflow summary
+
+```bash
+spur workflow summary (--progress <[label=]file>... | --rollup <[label=]file>...) [--transcript <path>] [--since <iso>] [--markdown]
+```
+
+| Flag | Description |
+| --- | --- |
+| `--progress <[label=]file>` | Progress JSON of a run (repeatable) |
+| `--rollup <[label=]file>` | Close-written `<run>-summary.json` (repeatable; excludes `--progress`) |
+| `--transcript <path>` | Transcript JSONL path (default: the active host session) |
+| `--since <iso>` | Measure from this instant |
+| `--markdown` | Render the Markdown table instead of JSON |
+
+## spur workflow profile
+
+```bash
+spur workflow profile <workflow> [--last <n>] [--window <sec>] [--spur-bin <cmd>] [--json]
+```
+
+| Flag | Description |
+| --- | --- |
+| `--last <n>` | Recent done runs to sample (default 20) |
+| `--window <sec>` | Cache window in seconds (default 300) |
+| `--spur-bin <cmd>` | spur invocation for the trace reads |
+| `--json` | Output machine-readable JSON |
 
 ## spur workflow progress
 

@@ -3,11 +3,9 @@
  * previously inlined in `plugins/sp/lib/run-summary-core.ts`.
  *
  * This module is import-free and side-effect free: it never reads the host transcript or a
- * filesystem path. The plugin's `transcript.ts` adapter resolves/normalizes a host transcript once
- * (`parseRows`) and hands the normalized `[Row, timestamp]` pairs here; the plugin's
- * `run-summary-core.ts` keeps the close-summary callback, receipt read and Markdown rendering. The
- * moved module rides the generated pure plan-projection bundle entry so the plugin reaches it
- * without a second bundle or registry.
+ * filesystem path. `./transcript.ts` resolves/normalizes a host transcript once and hands the
+ * normalized `[Row, timestamp]` pairs here; `./run-summary-render.ts` owns the close-summary
+ * callback, receipt read and Markdown rendering (`spur workflow summary`, script-absorption PR-6).
  */
 
 // ── Normalized transcript shapes ─────────────────────────────────────────────

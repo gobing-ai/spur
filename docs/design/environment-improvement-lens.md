@@ -132,7 +132,7 @@ Section 9 projected-candidate line (additive; existing numbered prose without th
 
 The report contains no applied change, no diff, and no command it claims to have run.
 
-**Structure gate.** `checkReportStructure` (`plugins/sp/scripts/history-anatomy-cache.ts`) matches pipe-rows whose first segment is already in the closed vocabulary, then scans Findings bullet blocks for `key` + triage fields. A retro-as-category key currently misses the pipe-row regex and does not fail. Extend the gate so a finding whose `category` or key first segment is a retro name fails:
+**Structure gate.** `checkReportStructure` (`packages/app/src/services/history-anatomy.ts`, run by `spur history anatomy check`) matches pipe-rows whose first segment is already in the closed vocabulary, then scans Findings bullet blocks for `key` + triage fields. A retro-as-category key currently misses the pipe-row regex and does not fail. Extend the gate so a finding whose `category` or key first segment is a retro name fails:
 
 ```text
 navigation | automated-checks | coding-standards | agents-md-placement | tool-economy | no-ops | information-access

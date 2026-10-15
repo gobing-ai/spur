@@ -28,6 +28,9 @@ import { CLI_CONFIG } from '../config';
 import type { CliContext } from '../context';
 import { toEnvelopeJson } from '../output';
 import { attachSystemEventLedger } from '../system-event-ledger';
+import { registerHistoryAnatomyCommand } from './history/anatomy';
+import { registerHistorySummaryCommand } from './history/summary';
+import { registerHistoryTimelineCommand } from './history/timeline';
 import { SHARED_OPTIONS } from './shared-options';
 
 /**
@@ -701,6 +704,11 @@ export function registerHistoryCommand(program: Command, context: CliContext): v
                 options.json ? toEnvelopeJson(result, { enveloped: options.jsonEnvelope }) : formatDailyResult(result),
             );
         });
+
+    // Read-outs absorbed from the plugin scripts (script-absorption PR-6).
+    registerHistoryAnatomyCommand(noun, context);
+    registerHistoryTimelineCommand(noun, context);
+    registerHistorySummaryCommand(noun, context);
 }
 
 /**

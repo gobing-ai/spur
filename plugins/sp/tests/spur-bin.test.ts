@@ -3,8 +3,7 @@
  *
  * Pins `defaultSpurBin()`'s monorepo rung: the relative walk from
  * `plugins/sp/lib/` must land on this repo's CLI entry, not fall through to
- * bare `spur`. The twin embeds the same literal (workflow-step-profile.mjs);
- * parity is owned by script-contract-check, this suite owns resolution.
+ * bare `spur`. This suite owns resolution (PR-8 retires the lib).
  */
 
 import { describe, expect, test } from 'bun:test';

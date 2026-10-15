@@ -1181,7 +1181,7 @@ describe('1146 — execution summary is a close product (AC6)', () => {
 
     test('the batch report names the roll-up built from per-run files', () => {
         const report = ref('execution-batch-report.md');
-        expect(report).toContain('run-summary.mjs');
+        expect(report).toContain('spur workflow summary');
         expect(report).toContain('--rollup');
         expect(report).toContain('wall-span');
     });

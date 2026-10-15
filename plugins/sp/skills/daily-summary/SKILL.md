@@ -52,13 +52,13 @@ The daily-summary skill:
 
 ```bash
 # Generate summary for today
-node "$(superskill script path sp daily-summary/daily-summary.mjs)"
+spur history summary
 
 # Generate summary for a specific date
-node "$(superskill script path sp daily-summary/daily-summary.mjs)" --date 2026-04-17
+spur history summary --date 2026-04-17
 
 # Show summary without writing file
-node "$(superskill script path sp daily-summary/daily-summary.mjs)" --dry-run
+spur history summary --dry-run
 ```
 
 ## Workflows
@@ -165,7 +165,6 @@ Read the skill file and follow the workflow manually.
 
 ## Additional Resources
 
-- **Script source:** [scripts/daily-summary/daily-summary.ts](../../scripts/daily-summary/daily-summary.ts) — CLI implementation
-- **Tests:** [tests/daily-summary/daily-summary.test.ts](../../tests/daily-summary/daily-summary.test.ts) — unit coverage for parsing, date ranges, markdown output
+- **CLI:** `spur history summary [--date d] [--dry-run] [--output p] [--no-git] [--no-ccusage]` — see `sp:spur-cli` (history reference)
 - **Related skills:** `sp:dev-handover` (blocker handoff), `sp:dev-changelog` (commit-based changelog), `sp:spur-cli` (task management)
 - **Upstream CLI:** [ccusage](https://github.com/ryoppippi/ccusage) — AI agent token usage reporter

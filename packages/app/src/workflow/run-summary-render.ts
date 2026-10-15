@@ -2,15 +2,26 @@
  * Close-step execution summary (task 1146 R1): render the measured per-stage table and write
  * `.spur/run/<runId>-summary.{md,json}` when `spur workflow inline close` finalizes a run.
  *
- * Script-absorption PR-4 moved the close callback out of `plugins/sp/lib/run-summary-core.ts`
- * (the plugin copy stays for the `run-summary` script until PR-6 absorbs it as `spur workflow
- * summary`). Measurement is `./run-summary.ts`; transcript IO is `./transcript.ts`.
+ * Script-absorption PR-4 moved the close callback out of `plugins/sp/lib/run-summary-core.ts`;
+ * PR-6 moved the rest (batch roll-up, receipt read) when `spur workflow summary` absorbed the
+ * `run-summary` script. Measurement is `./run-summary.ts`; transcript IO is `./transcript.ts`.
  */
-import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { getEnvVars } from '@gobing-ai/spur-config';
 import type { WorkflowProgressProjection } from './progress-projection';
-import { buildRunSummary, formatDuration, type Progress, type RunSummary, type SummaryRow } from './run-summary';
+import {
+    type ActorSplit,
+    buildRunSummary,
+    formatDuration,
+    formatTokenSplit,
+    type GateTime,
+    type Progress,
+    type RunSummary,
+    type SummaryRow,
+    sumTokens,
+    zeroTokens,
+} from './run-summary';
 import { parseTranscriptRows, resolveTranscript } from './transcript';
 
 /** The per-stage + per-actor Markdown tables of one run's measured summary. */
@@ -41,6 +52,88 @@ export function renderSummaryMarkdown(summary: RunSummary): string {
         '',
         `Compactions: ${a.compactions} · Subagent errors: ${a.subagentErrors}`,
     ].join('\n');
+}
+
+/** One `--rollup` input: a close-written `<runId>-summary.json` plus its label. */
+export interface RollupInput {
+    label: string;
+    summary: {
+        runId?: string;
+        startedAt?: string;
+        completedAt?: string;
+        total: SummaryRow;
+        actors: ActorSplit;
+    };
+}
+
+/** Batch roll-up (1146 R3/AC5): one row per run's OWN window, then the sum, then the wall span. */
+export function renderRollupMarkdown(rows: RollupInput[]): string {
+    const line = (label: string, r: SummaryRow, actors: ActorSplit, bold = false): string => {
+        const name = bold ? `**${label}**` : label;
+        return `| ${name} | ${r.status} | ${r.time} | ${r.wait} | ${r.toolCalls ?? 'n/a'} | ${r.token} | ${formatDuration(actors.operatorMs)} | ${formatDuration(actors.subagentMs)} |`;
+    };
+    const total = rows.reduce(
+        (acc, { summary }) => ({
+            workMs: acc.workMs + summary.total.workMs,
+            waitMs: acc.waitMs + summary.total.waitMs,
+            toolCalls: (acc.toolCalls ?? 0) + (summary.total.toolCalls ?? 0),
+            tokens: sumTokens([acc.tokens, summary.total.tokens ?? zeroTokens()]),
+        }),
+        { workMs: 0, waitMs: 0, toolCalls: 0 as number | null, tokens: zeroTokens() },
+    );
+    const totalRow: SummaryRow = {
+        stage: 'Batch total',
+        status: '',
+        workMs: total.workMs,
+        waitMs: total.waitMs,
+        toolCalls: total.toolCalls,
+        tokens: total.tokens,
+        time: formatDuration(total.workMs),
+        wait: formatDuration(total.waitMs),
+        token: formatTokenSplit(total.tokens),
+    };
+    const totalActors: ActorSplit = {
+        operatorMs: 0,
+        longestOperatorWaitMs: 0,
+        modelMs: 0,
+        shellMs: 0,
+        subagentMs: 0,
+        otherToolMs: 0,
+        idleMs: 0,
+        compactions: 0,
+        subagentErrors: 0,
+    };
+    for (const { summary } of rows) {
+        totalActors.operatorMs += summary.actors.operatorMs;
+        totalActors.subagentMs += summary.actors.subagentMs;
+        totalActors.compactions += summary.actors.compactions;
+        totalActors.subagentErrors += summary.actors.subagentErrors;
+    }
+    const out = [
+        '| Run | Status | Time | Wait | Tool calls | Token (total / non-cached) | Operator wait | Subagent |',
+        '| --- | --- | ---: | ---: | ---: | ---: | ---: | ---: |',
+        ...rows.map(({ label, summary }) => line(label, summary.total, summary.actors)),
+        line('Batch total', totalRow, totalActors, true),
+    ];
+    const starts = rows.map((r) => Date.parse(r.summary.startedAt ?? '')).filter((n) => !Number.isNaN(n));
+    const ends = rows.map((r) => Date.parse(r.summary.completedAt ?? '')).filter((n) => !Number.isNaN(n));
+    const overlaps =
+        starts.length === rows.length &&
+        rows.some((r, i) =>
+            rows.some(
+                (o, j) =>
+                    i !== j &&
+                    Date.parse(r.summary.startedAt ?? '') < Date.parse(o.summary.completedAt ?? '') &&
+                    Date.parse(o.summary.startedAt ?? '') < Date.parse(r.summary.completedAt ?? ''),
+            ),
+        );
+    if (overlaps && starts.length > 0 && ends.length > 0) {
+        out.push(
+            '',
+            `Wall span: ${new Date(Math.min(...starts)).toISOString()} → ${new Date(Math.max(...ends)).toISOString()}`,
+        );
+    }
+    return out.join('\n');
 }
 
 /** What the close hands the summarizer (`InlineRunCloseSummaryInput` in the inline-run service). */
@@ -95,5 +188,24 @@ export function writeCloseSummary(
         return rel;
     } catch (error) {
         return na(error instanceof Error ? error.message : String(error));
+    }
+}
+
+/**
+ * 1146 R4: gate time comes only from THIS run's check receipt (`receipt.runId === runId`); a
+ * receipt belonging to another run is a cross-run scratch read (ADR-131) and renders n/a.
+ */
+export function gateFromReceipt(cwd: string, runId: string): GateTime {
+    const path = join(cwd, '.spur', 'run', `${runId}-check-receipt.json`);
+    if (!existsSync(path)) return { ms: null, reason: 'no matching check receipt' };
+    try {
+        const parsed = JSON.parse(readFileSync(path, 'utf8')) as { runId?: unknown; gateRuntimeMs?: unknown };
+        if (parsed.runId !== runId) return { ms: null, reason: 'check receipt belongs to another run' };
+        const ms = parsed.gateRuntimeMs;
+        if (typeof ms !== 'number' || !Number.isFinite(ms))
+            return { ms: null, reason: 'check receipt has no gate time' };
+        return { ms };
+    } catch {
+        return { ms: null, reason: 'check receipt is unreadable' };
     }
 }

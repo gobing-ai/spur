@@ -3,9 +3,8 @@
  * from the environment, detect the host row format, and parse raw JSONL lines into timestamped rows
  * (Claude Code / pi JSONL, read-only). The pure measurement lives in `./run-summary.ts`.
  *
- * Script-absorption PR-4 moved the copy `spur workflow inline close` needs out of
- * `plugins/sp/lib/transcript.ts`; the plugin copy stays only until PR-6 absorbs its remaining
- * consumers (`run-summary`, `session-timeline`).
+ * Script-absorption PR-4 moved this adapter out of `plugins/sp/lib/transcript.ts`; PR-6 retired
+ * the plugin copy with its last consumers (now `spur workflow summary` / `spur history timeline`).
  */
 import { existsSync, readdirSync } from 'node:fs';
 import { homedir } from 'node:os';

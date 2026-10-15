@@ -18,7 +18,12 @@
         "./pipeline-steps": "./src/workflow/pipeline-steps.ts",
         "./commit-guard": "./src/workflow/commit-guard.ts",
         "./persist-check": "./src/workflow/persist-check.ts",
-        "./close-summary": "./src/workflow/run-summary-render.ts"
+        "./close-summary": "./src/workflow/run-summary-render.ts",
+        "./history-anatomy-cli": "./src/services/history-anatomy-cli.ts",
+        "./session-timeline": "./src/services/session-timeline.ts",
+        "./daily-summary": "./src/services/daily-summary.ts",
+        "./run-summary-cli": "./src/workflow/run-summary-cli.ts",
+        "./step-profile-cli": "./src/workflow/step-profile-cli.ts"
     },
     "scripts": {
         "build": "bun build src/index.ts --outdir dist --target bun",

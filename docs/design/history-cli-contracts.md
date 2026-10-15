@@ -438,8 +438,8 @@ remains packaged and directly invocable under the bounded coexistence and retire
 interpretation (mode contract, finding taxonomy, twelve-section report contract, `enrich`/`validate`
 rubrics); workflow `config/workflows/history-anatomy.yaml` owns the cache branch, deterministic stage
 ordering, a shared two-pass correction budget, and atomic publication — the cache/digest/structure/publish
-determinism is `plugins/sp/scripts/history-anatomy-cache.ts` (+ committed `.mjs` twin, ADR-065
-standard contract, ADR-079 digest-truth). Publication is reachable only from a passing validation
+determinism is `spur history anatomy <op>` (ADR-079 digest-truth; the `history-anatomy-cache`
+plugin script and its `.mjs` twin were absorbed by script-absorption PR-6). Publication is reachable only from a passing validation
 state; a hit reuses model enrichment only and refreshes `validated_at` + the imported-snapshot banner
 without claiming a later import.
 
@@ -461,10 +461,9 @@ beside the `HistoryArtifact` type they canonicalize. The classification
 an exhaustive `Record<ArtifactArrayKey, 'ranked' | 'set'>` makes an unclassified new array field a
 `tsc` error naming the field — order-as-evidence must be declared, closing the drift class that hid
 `topSteps`/`bottlenecks` for months. The application core in `packages/app/src/services/history-anatomy.ts`
-imports the domain digest directly. The plugin script consumes that core through the generated
-`plugins/sp/lib/history-anatomy.generated.mjs` bundle (task 1005), built by `bun run build:plugin-lib`
-with the domain digest inlined. This preserves ADR-065's standalone contract without a separate
-artifact-digest bundle or a monorepo value import in plugin glue. No hand-maintained enumeration of
+imports the domain digest directly, and `spur history anatomy` reaches it in-process (the
+generated `history-anatomy.generated.mjs` plugin bundle of task 1005 was retired by script-absorption
+PR-6). No hand-maintained enumeration of
 artifact array keys may
 exist in `plugins/sp/scripts/`; the twin's bare-`node` fixture test (R2) backstops the twin-staleness
 hole (script-contract-check regenerates each standard twin and compares it byte-for-byte — mtimes
