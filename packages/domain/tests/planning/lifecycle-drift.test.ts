@@ -293,13 +293,17 @@ describe('task-pipeline.yaml structure (task 0062)', () => {
         expect(text).not.toContain('@gobing-ai/ts-dual-workflow-engine/schemas');
     });
 
-    test('R2 (task 0482): every `bun plugins/sp/scripts/...` step passes --spur-bin so spur resolves regardless of shell PATH', () => {
+    test('R2 (task 0482 → retired by 1213): no `bun plugins/sp/scripts/...` steps remain; any that return must pass --spur-bin', () => {
         // Regression for 0471's double precheck FAIL (`could not fetch task 0471 via spur`):
         // the precheck shell could not resolve bare `spur`, so the workflow invoked a
         // bundled checker without `--spur-bin` / `SPUR_BIN` and the shell (`/bin/sh -c`, no
         // user PATH) failed the fetch. Sibling steps (doctor, feature-sync) pass `$spurBin`.
         // Guard: any shell step that shells spur through a bundled script must hand it the
-        // resolved binary.
+        // resolved binary. 1213 retired the script machinery (hook-only script contract,
+        // including the last step — 0960's script-resolution probe), so the pipeline must
+        // carry NO bundled-script steps anymore (mirrors task-pipeline-resilience's
+        // not-contains contract for the retired probes); the per-step guard stays for any
+        // that might return.
         const allCmds = yaml.states
             .flatMap((s) => s.onEnter ?? [])
             .filter((a) => a.kind === 'shell')
@@ -312,7 +316,7 @@ describe('task-pipeline.yaml structure (task 0062)', () => {
                 // now — they take `$spurBin` as the command itself, not a `--spur-bin` flag.)
                 c.includes('bun plugins/sp/scripts/') || c.includes('S=plugins/sp/scripts/'),
         );
-        expect(spurShellingScripts.length).toBeGreaterThan(0);
+        expect(spurShellingScripts).toEqual([]);
         for (const cmd of spurShellingScripts) {
             expect(cmd).toContain('--spur-bin');
         }
