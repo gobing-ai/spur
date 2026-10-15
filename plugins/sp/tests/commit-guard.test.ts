@@ -248,19 +248,23 @@ describe('commit-guard (1209 R1) — a failed changed-path probe cannot certify 
 });
 
 describe('commit-guard (1209 R2) — failed safety probes never reach git add', () => {
-    test('AC2 — a failed changed-path (diff) probe refuses an otherwise stageable file', () => {
-        const cwd = makeRepo();
-        expect(guard(['start', '--run', 'r2'], cwd).code).toBe(0);
-        writeFileSync(join(cwd, 'a.txt'), 'run edit\n');
-        const { runner, adds } = probeRunner(cwd, isChangedProbe);
-        const { value: result, stdout, stderr } = capture(() => runStage('r2', ['a.txt'], { cwd, git: runner }));
-        expect(result).toEqual({ staged: [], foreign: [], exitCode: 1 });
-        expect(stderr.startsWith('commit-guard:')).toBe(true);
-        expect(stderr).toContain('diff');
-        expect(stdout).toBe('');
-        expect(adds()).toBe(0);
-        expect(staged(cwd)).toEqual([]);
-    });
+    for (const probe of ['diff', 'ls-files']) {
+        test(`AC2 — a failed changed-path (${probe}) probe refuses an otherwise stageable file`, () => {
+            const cwd = makeRepo();
+            expect(guard(['start', '--run', 'r2'], cwd).code).toBe(0);
+            writeFileSync(join(cwd, 'a.txt'), 'run edit\n');
+            const { runner, adds } = probeRunner(cwd, (args) =>
+                probe === 'diff' ? isChangedProbe(args) : args[0] === 'ls-files',
+            );
+            const { value: result, stdout, stderr } = capture(() => runStage('r2', ['a.txt'], { cwd, git: runner }));
+            expect(result).toEqual({ staged: [], foreign: [], exitCode: 1 });
+            expect(stderr.startsWith('commit-guard:')).toBe(true);
+            expect(stderr).toContain(probe);
+            expect(stdout).toBe('');
+            expect(adds()).toBe(0);
+            expect(staged(cwd)).toEqual([]);
+        });
+    }
 
     test('AC2 — a failed unmerged probe refuses an otherwise stageable ordinary file', () => {
         const cwd = makeRepo();
