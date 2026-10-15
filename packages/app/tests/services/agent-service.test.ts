@@ -1,11 +1,11 @@
-import { beforeEach, describe, expect, mock, test } from 'bun:test';
+import { beforeEach, describe, expect, mock, spyOn, test } from 'bun:test';
 import { mkdirSync, mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import type { AgentExecutorConfig, SpurConfig } from '@gobing-ai/spur-config';
 import { applyCliMigrations, CoordinationRunDao, RunSessionDao } from '@gobing-ai/spur-domain';
 import type { AgentName, AgentRunResult, AuthState } from '@gobing-ai/ts-ai-runner';
-import { saveAgentSpec, TIER1_PRIORITY } from '@gobing-ai/ts-ai-runner';
+import { DoctorRunner, saveAgentSpec, TIER1_PRIORITY } from '@gobing-ai/ts-ai-runner';
 import { createDbAdapter } from '@gobing-ai/ts-db';
 import { EventBus } from '@gobing-ai/ts-infra';
 import {
@@ -4903,5 +4903,82 @@ describe('AgentService.doctor — availability provenance (0893)', () => {
         expect(missing.table).toContain('usage: none');
         // R3: the producer is optional — no warning fires for a missing snapshot.
         expect(missing.errors.join('\n')).not.toMatch(/[Ww]arning/);
+    });
+});
+
+// ---------------------------------------------------------------------------
+// Tests: AgentService.executorAvailability / resolveRoleFresh (B7 R6 / task 0895)
+// ---------------------------------------------------------------------------
+
+describe('AgentService fresh-roster reads', () => {
+    const freshConfig = (executors: AgentExecutorConfig[]) =>
+        (async () => ({ agent: { executors } }) as unknown as SpurConfig) satisfies () => Promise<SpurConfig | null>;
+
+    test('executorAvailability falls back to the construction-time roster without a loader', async () => {
+        const svc = makeService({}, nullOutput(), {
+            executors: [
+                { name: 'on', agent: 'omp', disabled: false },
+                { name: 'off', agent: 'omp', disabled: true },
+            ],
+        });
+        expect((await svc.executorAvailability('on'))?.disabled).toBe(false);
+        expect(await svc.executorAvailability('off')).toEqual({
+            disabled: true,
+            owner: 'operator',
+            since: undefined,
+            reason: undefined,
+        });
+        expect(await svc.executorAvailability('missing')).toBeUndefined();
+    });
+
+    test('executorAvailability reads through the live loader when one is wired', async () => {
+        const svc = new AgentService({
+            cwd: process.cwd(),
+            env: {},
+            output: nullOutput(),
+            agentConfig: { executors: [{ name: 'omp-zai', agent: 'omp', disabled: false }] },
+            reloadAgentConfig: freshConfig([{ name: 'omp-zai', agent: 'omp', disabled: true }]),
+        });
+        expect((await svc.executorAvailability('omp-zai'))?.disabled).toBe(true);
+    });
+
+    test('resolveRoleFresh without a live roster is plain resolve()', async () => {
+        const svc = makeService();
+        const expected = { ok: false as const, exitCode: 2, message: 'stub' };
+        const resolveSpy = mock(async () => expected);
+        (svc as unknown as { resolve: typeof resolveSpy }).resolve = resolveSpy;
+        expect(await svc.resolveRoleFresh({ agent: 'pi' })).toBe(expected);
+        expect(resolveSpy).toHaveBeenCalledWith({ agent: 'pi' });
+    });
+
+    test('resolveRoleFresh walks the fresh roster, then restores the construction-time one', async () => {
+        // The construction-time roster still lists `old-coder` as enabled; the live
+        // loader says it was disabled mid-run and `new-coder` now serves the tier.
+        const svc = new AgentService({
+            cwd: process.cwd(),
+            env: {},
+            output: nullOutput(),
+            roles: roleMap(),
+            agentConfig: { executors: [{ name: 'old-coder', agent: 'omp', tier: 'standard', disabled: false }] },
+            reloadAgentConfig: freshConfig([
+                { name: 'old-coder', agent: 'omp', tier: 'standard', disabled: true },
+                { name: 'new-coder', agent: 'pi', tier: 'standard', disabled: false },
+            ]),
+        });
+        // resolveRoleFresh builds its own DoctorRunner; stub the probe so no binary runs.
+        const probe = spyOn(DoctorRunner.prototype, 'runOne').mockImplementation(
+            async (agent: string) => mockDoctorResult({ agent }) as Awaited<ReturnType<DoctorRunner['runOne']>>,
+        );
+        try {
+            const fresh = await svc.resolveRoleFresh({ agent: 'auto', role: 'coder' });
+            expect(fresh.ok).toBe(true);
+            if (fresh.ok) expect(fresh.executor).toBe('new-coder');
+        } finally {
+            probe.mockRestore();
+        }
+        // The override is scoped to that one resolution.
+        const after = await svc.resolve({ agent: 'auto', role: 'coder' }, mockDeps().deps);
+        expect(after.ok).toBe(true);
+        if (after.ok) expect(after.executor).toBe('old-coder');
     });
 });
