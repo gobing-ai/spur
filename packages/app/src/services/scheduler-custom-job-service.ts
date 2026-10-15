@@ -296,8 +296,10 @@ export async function handleSchedulerCustomJob(deps: SchedulerCustomJobDeps, job
             maxOutput: SCHEDULER_CUSTOM_MAX_OUTPUT,
         });
         const { result } = outcome;
-        // stderr leads; stdout is the fallback for commands that report failure on stdout only.
-        const detail = outputTail(result.stderr) || outputTail(result.stdout);
+        // stderr leads; stdout detail is appended too. The history importer prints its
+        // per-source verdict (degraded/failed reasons) on stdout while scope lines go
+        // to stderr, so either stream alone can miss the actionable failure detail.
+        const detail = [outputTail(result.stderr), outputTail(result.stdout)].filter((part) => part !== '').join(' | ');
         if (outcome.timedOut) {
             throw new Error(
                 describeBoundedFailure({ subject: `scheduler job "${payload.name}"`, outcome, outputTail: detail }),

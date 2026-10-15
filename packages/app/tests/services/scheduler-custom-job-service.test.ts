@@ -174,6 +174,16 @@ describe('handleSchedulerCustomJob (task 0734 R6)', () => {
         ).rejects.toThrow('scheduler job "n" exited 1: reported on stdout');
     });
 
+    test('failure detail carries both streams — stderr scope lines and the stdout verdict', async () => {
+        // Regression: the history importer reports its per-source verdict (with the
+        // real degraded/failed reasons) on stdout while scope lines go to stderr; the
+        // old stderr-||-stdout composition discarded the verdict entirely.
+        const { executor } = fakeExecutor({ exitCode: 2, stderr: 'scope: home', stdout: 'source pi: degraded' });
+        await expect(
+            handleSchedulerCustomJob({ cwd: '/proj', executor }, jobOf({ name: 'n', command: 'x' })),
+        ).rejects.toThrow('scheduler job "n" exited 2: scope: home | source pi: degraded');
+    });
+
     test('the failure detail is bounded to the final 400 characters', async () => {
         const { executor } = fakeExecutor({ exitCode: 1, stderr: 'A'.repeat(5_000) });
         const err = (await handleSchedulerCustomJob(
