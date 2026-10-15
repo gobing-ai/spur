@@ -97,6 +97,12 @@ export interface GuardInput {
     verdictPath?: string;
     /** Pre-loaded artifact, or `undefined` if no verdict file exists. */
     artifact?: VerdictArtifact;
+    /**
+     * MET rows whose evidence cites a test file that does not exist in the project
+     * (see {@link findUnresolvedTestEvidence}). A non-empty list blocks an unforced PASS:
+     * a verdict citing a test that is not there is unsupported, however its rows read.
+     */
+    unresolvedTestEvidence?: string[];
 }
 
 // ─── Artifact loading ──────────────────────────────────────────────────
@@ -193,6 +199,47 @@ export async function readVerdictArtifact(
     const scratch = await readVerdictFrom(fs, `${runDir}/${wbs}-verdict.json`, wbs);
     const { missing: _scratchMissing, ...result } = scratch;
     return result;
+}
+
+// ─── Test-evidence resolution ─────────────────────────────────────────
+
+const TEST_PATH_RE = /(?:^|[\s`'"([,])((?:[\w@.-]+\/)+[\w@.-]+\.(?:test|spec)\.[cm]?[jt]sx?)\b/g;
+
+/**
+ * Repo-relative test file paths cited in an evidence string (e.g.
+ * `apps/cli/tests/task.test.ts:42`). Bare file names without a directory are not
+ * returned: they cannot be resolved unambiguously.
+ */
+export function citedTestPaths(evidence: string): string[] {
+    const paths = new Set<string>();
+    for (const match of evidence.matchAll(TEST_PATH_RE)) {
+        const path = (match[1] ?? '').replace(/^\.\//, '');
+        if (path !== '' && !path.startsWith('/')) paths.add(path);
+    }
+    return [...paths];
+}
+
+/**
+ * List `<row id>: <path>` for every MET requirement/AC row whose evidence cites a
+ * test file that does not exist under `projectRoot`. Before this check a MET row only
+ * needed a non-empty evidence string, so a fabricated or stale test citation still
+ * cleared `done`.
+ */
+export async function findUnresolvedTestEvidence(
+    fs: FileSystem,
+    projectRoot: string,
+    artifact: VerdictArtifact | undefined,
+): Promise<string[]> {
+    if (artifact === undefined) return [];
+    const rows = [...(artifact.requirements ?? []), ...(artifact.acceptanceCriteria ?? [])];
+    const unresolved: string[] = [];
+    for (const row of rows) {
+        if (String(row.status).toUpperCase() !== 'MET' || typeof row.evidence !== 'string') continue;
+        for (const path of citedTestPaths(row.evidence)) {
+            if (!(await fs.exists(join(projectRoot, path)))) unresolved.push(`${row.id ?? '?'}: ${path}`);
+        }
+    }
+    return unresolved;
 }
 
 // ─── Aggregation (R10) ─────────────────────────────────────────────────
@@ -390,6 +437,22 @@ export function evaluateDoneTransition(input: GuardInput): GuardOutcome {
     // UNKNOWN (deny), closing the "vacuously PASS" softening at the done boundary.
     const internallyConsistentPass = artifact.verdict !== 'PASS' || reqs.length > 0 || acs.length > 0;
     const effective: VerdictAggregate = internallyConsistentPass ? harshnessMax(artifact.verdict, computed) : 'UNKNOWN';
+
+    const unresolved = input.unresolvedTestEvidence ?? [];
+    if (effective === 'PASS' && unresolved.length > 0) {
+        return {
+            kind: 'deny',
+            verdict: 'PARTIAL',
+            message: [
+                `Cannot transition task ${wbs} to done: the PASS verdict cites test files that do not exist.`,
+                `  task:    ${taskFilePath}`,
+                `  verdict: ${verdictPath}`,
+                ...unresolved.map((u) => `  missing: ${u}`),
+                `  remediation: re-run \`/sp:dev-verify ${wbs}\` with evidence naming real tests, ` +
+                    `or override with \`spur task update ${wbs} done --force-done --reason "<why>"\`.`,
+            ].join('\n'),
+        };
+    }
 
     if (effective === 'PASS') {
         return { kind: 'allow', reason: 'pass' };

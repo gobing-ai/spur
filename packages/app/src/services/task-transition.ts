@@ -37,7 +37,12 @@ import { MarkdownDocument, normalizeTaskStatus } from '@gobing-ai/spur-domain';
 import type { FileSystem } from '@gobing-ai/ts-runtime';
 import { GuardDeniedError } from '../errors';
 import { retargetScratchVerdictPointer } from './anchor-qualifier';
-import { evaluateDoneTransition, readVerdictArtifact, type VerdictAggregate } from './done-transition-guard';
+import {
+    evaluateDoneTransition,
+    findUnresolvedTestEvidence,
+    readVerdictArtifact,
+    type VerdictAggregate,
+} from './done-transition-guard';
 import type { WriteResult } from './planning-write-service';
 import type { TaskCheckService } from './task-check';
 import type { TaskService } from './task-service';
@@ -337,6 +342,10 @@ export async function transitionTaskGuarded(
             // 1042 R2: surface identity/parse read errors in the denial instead
             // of the misleading "missing verify verdict artifact" text.
             readError: loaded.readError,
+            unresolvedTestEvidence:
+                input.forceDone === true
+                    ? []
+                    : await findUnresolvedTestEvidence(deps.fs, dirname(dirname(deps.runDir)), loaded.artifact),
         });
         if (guardOutcome.kind === 'noop') {
             // R9: same-status no-op. The transport exits success so scripts

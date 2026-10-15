@@ -1,8 +1,10 @@
 import { describe, expect, test } from 'bun:test';
 import type { FileSystem } from '@gobing-ai/ts-runtime';
 import {
+    citedTestPaths,
     computeAggregate,
     evaluateDoneTransition,
+    findUnresolvedTestEvidence,
     formatDenialMessage,
     formatNoopMessage,
     type GuardInput,
@@ -680,5 +682,59 @@ describe('0721 — hollow MET evidence in a persisted artifact', () => {
             expect(outcome.message).toContain('PARTIAL');
             expect(outcome.message).toContain('self-inconsistent');
         }
+    });
+});
+
+describe('test-evidence resolution', () => {
+    const fsWith = (paths: string[]): FileSystem =>
+        ({ exists: async (p: string) => paths.includes(p) }) as unknown as FileSystem;
+
+    test('citedTestPaths extracts repo-relative test paths and ignores bare names', () => {
+        expect(
+            citedTestPaths('`apps/cli/tests/a.test.ts:12` passed; see ./packages/x/b.spec.tsx and c.test.ts'),
+        ).toEqual(['apps/cli/tests/a.test.ts', 'packages/x/b.spec.tsx']);
+        expect(citedTestPaths('bun test passed')).toEqual([]);
+    });
+
+    test('lists MET rows citing missing tests; skips non-MET rows and undefined artifacts', async () => {
+        const artifact: VerdictArtifact = {
+            wbs: '0299',
+            verdict: 'PASS',
+            requirements: [
+                { id: 'R1', status: 'MET', evidence: 'apps/cli/tests/real.test.ts' },
+                { id: 'R2', status: 'MET', evidence: 'apps/cli/tests/ghost.test.ts' },
+                { id: 'R3', status: 'PARTIAL', evidence: 'apps/cli/tests/other.test.ts' },
+            ],
+            acceptanceCriteria: [{ status: 'MET', evidenceType: 'test', evidence: 'x/y.test.ts' }],
+        };
+        const fs = fsWith(['/p/apps/cli/tests/real.test.ts']);
+        expect(await findUnresolvedTestEvidence(fs, '/p', artifact)).toEqual([
+            'R2: apps/cli/tests/ghost.test.ts',
+            '?: x/y.test.ts',
+        ]);
+        expect(await findUnresolvedTestEvidence(fs, '/p', undefined)).toEqual([]);
+    });
+
+    test('a PASS citing a missing test is denied; forced still allows', () => {
+        const base: GuardInput = {
+            wbs: '0299',
+            taskFilePath: '/p/t.md',
+            currentStatus: 'testing',
+            targetStatus: 'done',
+            forced: false,
+            artifact: passArtifact,
+            unresolvedTestEvidence: ['R1: a/b.test.ts'],
+        };
+        const denied = evaluateDoneTransition(base);
+        expect(denied.kind).toBe('deny');
+        if (denied.kind === 'deny') {
+            expect(denied.verdict).toBe('PARTIAL');
+            expect(denied.message).toContain('missing: R1: a/b.test.ts');
+        }
+        expect(evaluateDoneTransition({ ...base, forced: true })).toEqual({ kind: 'allow', reason: 'forced' });
+        expect(evaluateDoneTransition({ ...base, unresolvedTestEvidence: [] })).toEqual({
+            kind: 'allow',
+            reason: 'pass',
+        });
     });
 });
