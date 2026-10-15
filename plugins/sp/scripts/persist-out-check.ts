@@ -1,7 +1,6 @@
 #!/usr/bin/env bun
 /**
  * persist-out-check — WT-4 pre-removal assertion for E71 persist-out (task 1067 R1, 1148 R1).
- *
  * Before `git worktree remove`, verify the worktree's OWNED durable evidence would not be abandoned:
  * every `.spur/run/` and `.spur/memory/evidence/` file starting with a forwarded `<wbs>-`/`<runId>-`
  * prefix must exist in the invoking tree with identical bytes. Unowned evidence is counted
@@ -165,14 +164,12 @@ export function main(argv: string[], invokeRoot = defaultInvokeRoot(process.cwd(
     }
     if (wbsList.length === 0 && runIds.length === 0) {
         process.stderr.write(
-            `${persistOutCheckUsage()}\npersist-out-check: at least one --task-file or --run-id prefix required\n`,
+            `${persistOutCheckUsage()}\npersist-out-check: at least one --task-file or --run-id required\n`,
         );
         return 2;
     }
     if (!wtRoot || !existsSync(wtRoot) || !statSync(wtRoot).isDirectory()) {
-        process.stderr.write(
-            `${persistOutCheckUsage()}\npersist-out-check: --from must be an existing worktree directory\n`,
-        );
+        process.stderr.write(`${persistOutCheckUsage()}\npersist-out-check: --from must be an existing directory\n`);
         return 2;
     }
     const foreignDivergent = new Set<string>();
@@ -183,27 +180,26 @@ export function main(argv: string[], invokeRoot = defaultInvokeRoot(process.cwd(
         join(wtRoot, '.spur', 'run', 'persist-out.json'),
     ].filter(Boolean);
     for (const cand of candidates) {
-        if (existsSync(cand)) {
-            try {
-                const parsed = JSON.parse(readFileSync(cand, 'utf8'));
-                if (Array.isArray(parsed.evidenceSkipped)) {
-                    for (const item of parsed.evidenceSkipped) {
-                        if (item.reason === 'foreign-divergent' && typeof item.name === 'string') {
-                            foreignDivergent.add(item.name);
-                            foreignDivergent.add(join(EVIDENCE_DIR, item.name));
-                        }
+        if (!existsSync(cand)) continue;
+        try {
+            const parsed = JSON.parse(readFileSync(cand, 'utf8'));
+            if (Array.isArray(parsed.evidenceSkipped)) {
+                for (const item of parsed.evidenceSkipped) {
+                    if (item.reason === 'foreign-divergent' && typeof item.name === 'string') {
+                        foreignDivergent.add(item.name);
+                        foreignDivergent.add(join(EVIDENCE_DIR, item.name));
                     }
                 }
-                if (Array.isArray(parsed.skipped)) {
-                    for (const item of parsed.skipped) {
-                        if (typeof item.id === 'string' && typeof item.reason === 'string') {
-                            skips.push({ id: item.id, reason: item.reason });
-                        }
+            }
+            if (Array.isArray(parsed.skipped)) {
+                for (const item of parsed.skipped) {
+                    if (typeof item.id === 'string' && typeof item.reason === 'string') {
+                        skips.push({ id: item.id, reason: item.reason });
                     }
                 }
-                break;
-            } catch {}
-        }
+            }
+            break;
+        } catch {}
     }
     const obligations = listObligations(wtRoot, wbsList, runIds);
     if (obligations === null) {
@@ -213,10 +209,9 @@ export function main(argv: string[], invokeRoot = defaultInvokeRoot(process.cwd(
         return 1;
     }
     const { files, unowned, planeFiles } = obligations;
-    // Session-incident class (runall-1208-1209-bdcd): the driver forwarded only the batch run id,
-    // no prefix matched the wbs-named verdicts, and the check passed with 0 obligations while the
-    // worktree still held them. Family files outside the forwarded prefixes (and not recorded
-    // foreign-divergent by persist-out) block the teardown — non-family scratch still never does.
+    // Session-incident class (runall-1208-1209-bdcd): the driver forwarded only the batch run id, no
+    // prefix matched, and the check passed at 0 obligations while the worktree held its verdicts. Family
+    // files outside the prefixes (not foreign-divergent) block teardown; non-family scratch never does.
     const unforwarded = planeFiles
         .filter((rel) => DURABLE_FAMILY_RE.test(basename(rel)))
         .filter((rel) => !files.includes(rel) && !foreignDivergent.has(rel) && !foreignDivergent.has(basename(rel)));
@@ -244,7 +239,7 @@ export function main(argv: string[], invokeRoot = defaultInvokeRoot(process.cwd(
     process.stderr.write(
         `persist-out-check: BLOCKED ${missing.length} missing, ${divergent.length} divergent` +
             `${unforwarded.length > 0 ? `, ${unforwarded.length} unforwarded durable verdict/receipt` : ''}` +
-            ' — run inline-run-setup --persist-out --from <worktree> (--task-file <docs/tasks5/<wbs>_…>) before worktree removal\n',
+            ' — run inline-run-setup --persist-out --from <worktree> (--task-file <wbs>_<slug>.md) before worktree removal\n',
     );
     return 1;
 }

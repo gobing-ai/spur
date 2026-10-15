@@ -129,13 +129,13 @@ function main(argv, invokeRoot = defaultInvokeRoot(process.cwd())) {
   }
   if (wbsList.length === 0 && runIds.length === 0) {
     process.stderr.write(`${persistOutCheckUsage()}
-persist-out-check: at least one --task-file or --run-id prefix required
+persist-out-check: at least one --task-file or --run-id required
 `);
     return 2;
   }
   if (!wtRoot || !existsSync(wtRoot) || !statSync(wtRoot).isDirectory()) {
     process.stderr.write(`${persistOutCheckUsage()}
-persist-out-check: --from must be an existing worktree directory
+persist-out-check: --from must be an existing directory
 `);
     return 2;
   }
@@ -147,27 +147,27 @@ persist-out-check: --from must be an existing worktree directory
     join(wtRoot, ".spur", "run", "persist-out.json")
   ].filter(Boolean);
   for (const cand of candidates) {
-    if (existsSync(cand)) {
-      try {
-        const parsed = JSON.parse(readFileSync(cand, "utf8"));
-        if (Array.isArray(parsed.evidenceSkipped)) {
-          for (const item of parsed.evidenceSkipped) {
-            if (item.reason === "foreign-divergent" && typeof item.name === "string") {
-              foreignDivergent.add(item.name);
-              foreignDivergent.add(join(EVIDENCE_DIR, item.name));
-            }
+    if (!existsSync(cand))
+      continue;
+    try {
+      const parsed = JSON.parse(readFileSync(cand, "utf8"));
+      if (Array.isArray(parsed.evidenceSkipped)) {
+        for (const item of parsed.evidenceSkipped) {
+          if (item.reason === "foreign-divergent" && typeof item.name === "string") {
+            foreignDivergent.add(item.name);
+            foreignDivergent.add(join(EVIDENCE_DIR, item.name));
           }
         }
-        if (Array.isArray(parsed.skipped)) {
-          for (const item of parsed.skipped) {
-            if (typeof item.id === "string" && typeof item.reason === "string") {
-              skips.push({ id: item.id, reason: item.reason });
-            }
+      }
+      if (Array.isArray(parsed.skipped)) {
+        for (const item of parsed.skipped) {
+          if (typeof item.id === "string" && typeof item.reason === "string") {
+            skips.push({ id: item.id, reason: item.reason });
           }
         }
-        break;
-      } catch {}
-    }
+      }
+      break;
+    } catch {}
   }
   const obligations = listObligations(wtRoot, wbsList, runIds);
   if (obligations === null) {
@@ -200,7 +200,7 @@ persist-out-check: --from must be an existing worktree directory
 `);
     return 0;
   }
-  process.stderr.write(`persist-out-check: BLOCKED ${missing.length} missing, ${divergent.length} divergent` + `${unforwarded.length > 0 ? `, ${unforwarded.length} unforwarded durable verdict/receipt` : ""}` + ` \u2014 run inline-run-setup --persist-out --from <worktree> (--task-file <docs/tasks5/<wbs>_\u2026>) before worktree removal
+  process.stderr.write(`persist-out-check: BLOCKED ${missing.length} missing, ${divergent.length} divergent` + `${unforwarded.length > 0 ? `, ${unforwarded.length} unforwarded durable verdict/receipt` : ""}` + ` \u2014 run inline-run-setup --persist-out --from <worktree> (--task-file <wbs>_<slug>.md) before worktree removal
 `);
   return 1;
 }
