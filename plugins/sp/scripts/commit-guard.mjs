@@ -6,15 +6,9 @@ import { spawnSync } from "child_process";
 import { mkdirSync, readFileSync, renameSync, writeFileSync } from "fs";
 import { join } from "path";
 var COMMIT_GUARD_USAGE = "usage: commit-guard start --run <id> | stage --run <id> [--base <sha>] -- <paths\u2026> | check --run <id>";
-function isBookkeeping(path) {
-  return path === ".spur" || path.startsWith(".spur/");
-}
-function at(options, rel) {
-  return options.cwd ? join(options.cwd, rel) : rel;
-}
-function artifactPath(run) {
-  return join(".spur", "run", `${run}-tree-start.json`);
-}
+var isBookkeeping = (path) => path === ".spur" || path.startsWith(".spur/");
+var at = (options, rel) => options.cwd ? join(options.cwd, rel) : rel;
+var artifactPath = (run) => join(".spur", "run", `${run}-tree-start.json`);
 function gitOf(options) {
   if (options.git)
     return options.git;
@@ -57,9 +51,11 @@ function conflictMarkerLine(content) {
 }
 function changedSinceBase(base, git) {
   const tracked = git(["diff", "--name-only", base]);
+  if (tracked.status !== 0)
+    throw new Error(`git diff --name-only failed (status ${tracked.status})`);
   const others = git(["ls-files", "--others", "--exclude-standard", "-z"]);
-  if (tracked.status !== 0 || others.status !== 0)
-    return new Set;
+  if (others.status !== 0)
+    throw new Error(`git ls-files --others failed (status ${others.status})`);
   const clean = (out, sep) => out.split(sep).map((p) => p.trim()).filter((p) => p.length > 0 && !isBookkeeping(p));
   return new Set([...clean(tracked.stdout, `
 `), ...clean(others.stdout, "\x00")]);
@@ -119,7 +115,10 @@ function runStart(run, options = {}) {
   return 0;
 }
 function conflictingTarget(paths, options, git) {
-  const unmerged = new Set(git(["diff", "--name-only", "--diff-filter=U"]).stdout.split(`
+  const probe = git(["diff", "--name-only", "--diff-filter=U"]);
+  if (probe.status !== 0)
+    throw new Error(`git diff --name-only --diff-filter=U failed (status ${probe.status})`);
+  const unmerged = new Set(probe.stdout.split(`
 `).map((p) => p.trim()));
   for (const path of paths) {
     if (unmerged.has(path))
@@ -131,16 +130,29 @@ function conflictingTarget(paths, options, git) {
   }
   return null;
 }
-function runStage(run, paths, options = {}) {
-  if (paths.length === 0) {
-    process.stderr.write(`${COMMIT_GUARD_USAGE}
+function usageError() {
+  process.stderr.write(`${COMMIT_GUARD_USAGE}
 `);
+  return 1;
+}
+function probeDiagnostic(err) {
+  const detail = err instanceof Error ? err.message : String(err);
+  return `commit-guard: git probe failed (${detail}) \u2014 tree state unproven, nothing staged or reported
+`;
+}
+function runStage(run, paths, options = {}) {
+  if (paths.length === 0)
+    return { staged: [], foreign: [], exitCode: usageError() };
+  let context, conflict;
+  try {
+    context = runContext(run, options);
+    if (!context)
+      return { staged: [], foreign: [], exitCode: missingStart(run) };
+    conflict = conflictingTarget(paths, options, context.git);
+  } catch (err) {
+    process.stderr.write(probeDiagnostic(err));
     return { staged: [], foreign: [], exitCode: 1 };
   }
-  const context = runContext(run, options);
-  if (!context)
-    return { staged: [], foreign: [], exitCode: missingStart(run) };
-  const conflict = conflictingTarget(paths, options, context.git);
   if (conflict) {
     process.stderr.write(`commit-guard: refusing to stage ${conflict}; nothing staged
 `);
@@ -165,13 +177,19 @@ function runStage(run, paths, options = {}) {
   return { staged, foreign, exitCode: refused.length > 0 ? 2 : 0 };
 }
 function runCheck(run, options = {}) {
-  const context = runContext(run, options);
-  if (!context)
-    return missingStart(run);
-  const foreign = [...changedSinceBase(context.base, context.git)].filter((path) => !context.written.has(path)).sort();
-  process.stdout.write(`${JSON.stringify({ foreign })}
+  try {
+    const context = runContext(run, options);
+    if (!context)
+      return missingStart(run);
+    const { base, git, written } = context;
+    const foreign = [...changedSinceBase(base, git)].filter((path) => !written.has(path)).sort();
+    process.stdout.write(`${JSON.stringify({ foreign })}
 `);
-  return 0;
+    return 0;
+  } catch (err) {
+    process.stderr.write(probeDiagnostic(err));
+    return 1;
+  }
 }
 function takeFlag(args, name) {
   const index = args.indexOf(name);
@@ -185,26 +203,18 @@ function main(argv, options = {}) {
   const args = [...argv];
   takeFlag(args, "--spur-bin");
   const sub = args.shift();
-  const run = takeFlag(args, "--run");
-  const base = takeFlag(args, "--base");
-  const usage = () => {
-    process.stderr.write(`${COMMIT_GUARD_USAGE}
-`);
-    return 1;
-  };
+  const run = takeFlag(args, "--run"), base = takeFlag(args, "--base");
   if (!run)
-    return usage();
+    return usageError();
   if (sub === "start")
-    return args.length === 0 ? runStart(run, options) : usage();
+    return args.length === 0 ? runStart(run, options) : usageError();
   if (sub === "check")
-    return args.length === 0 ? runCheck(run, { ...options, base }) : usage();
+    return args.length === 0 ? runCheck(run, { ...options, base }) : usageError();
   if (sub === "stage")
     return runStage(run, args.filter((arg) => arg !== "--"), { ...options, base }).exitCode;
-  return usage();
+  return usageError();
 }
-{
-  process.exit(main(process.argv.slice(2)));
-}
+process.exit(main(process.argv.slice(2)));
 export {
   COMMIT_GUARD_USAGE,
   conflictMarkerLine,

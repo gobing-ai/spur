@@ -53,8 +53,8 @@ export interface BoardModuleFileProbe {
     readonly isDirectory: (absolutePath: string) => Promise<boolean>;
     /**
      * Symlink-resolved absolute path, or `undefined` when the backend has no such operation
-     * (Cloudflare stubs). Callers treat `undefined` as "cannot verify", exactly like the
-     * extension loader's optional containment check (ADR-022).
+     * (Cloudflare stubs). Callers treat `undefined` as "cannot verify" and fail closed — an
+     * unverified native path is refused, never served (ADR-022, task 1208).
      */
     readonly realPath: (absolutePath: string) => string | undefined;
 }
@@ -158,10 +158,25 @@ export async function prepareBoardModules(input: {
         }
     }
 
-    // Resolved lazily: a config with no enabled native module asks the backend for nothing.
+    // Fail-closed canonical verification (task 1208 R1): a lexical path proves nothing about
+    // where a symlink lands, so every enabled react declaration must resolve its real paths,
+    // and an unavailable answer (absent, thrown or outside its root) is a config error —
+    // there is no lexical fallback. Disabled/empty/iframe-only configs never reach this IO.
     let realProjectRoot: string | undefined;
-    const projectRootRealPath = (): string => {
-        realProjectRoot ??= input.probe.realPath(input.projectRoot) ?? input.projectRoot;
+    const verifiedRealPath = (index: number, id: string, path: string, label: string): string => {
+        let resolved: string | undefined;
+        try {
+            resolved = input.probe.realPath(path);
+        } catch {
+            resolved = undefined;
+        }
+        if (resolved === undefined) {
+            throw new BoardModuleConfigError(index, id, `${label} "${path}" could not be resolved to a real path`);
+        }
+        return resolved;
+    };
+    const projectRootRealPath = (index: number, id: string): string => {
+        realProjectRoot ??= verifiedRealPath(index, id, input.projectRoot, 'project root');
         return realProjectRoot;
     };
 
@@ -182,9 +197,11 @@ export async function prepareBoardModules(input: {
             declaration.entry,
             declaration.id,
         );
-        const stylePaths = declaration.styles.map((style) =>
-            resolveContained(index, input.projectRoot, declaration.directory, style, declaration.id),
-        );
+        const styles = declaration.styles.map((style) => ({
+            declared: style,
+            absolute: resolveContained(index, input.projectRoot, declaration.directory, style, declaration.id),
+        }));
+        const stylePaths = styles.map((style) => style.absolute);
 
         if (!(await input.probe.isDirectory(root))) {
             throw new BoardModuleConfigError(
@@ -200,30 +217,40 @@ export async function prepareBoardModules(input: {
                 `entry asset "${declaration.entry}" was not found in "${declaration.directory}"`,
             );
         }
-        for (const [styleIndex, stylePath] of stylePaths.entries()) {
-            if (!(await input.probe.isFile(stylePath))) {
+        for (const style of styles) {
+            if (!(await input.probe.isFile(style.absolute))) {
                 throw new BoardModuleConfigError(
                     index,
                     declaration.id,
-                    `style asset "${declaration.styles[styleIndex]}" was not found`,
+                    `style asset "${style.declared}" was not found`,
                 );
             }
         }
 
-        // R3: containment is proven on the REAL paths before the server listens, so a
-        // symlinked entry cannot be the difference between startup and request-time failure.
-        const realRoot = input.probe.realPath(root);
-        const realEntry = input.probe.realPath(entryPath);
-        if (
-            realRoot !== undefined &&
-            realEntry !== undefined &&
-            (!isInsideRoot(projectRootRealPath(), realRoot) || !isInsideRoot(realRoot, realEntry))
-        ) {
+        // R3 (task 1208): containment is proven on the REAL paths before the server listens —
+        // project root, module root, entry and every stylesheet — so a symlinked native path
+        // cannot be the difference between startup and request-time failure.
+        const realProject = projectRootRealPath(index, declaration.id);
+        const realRoot = verifiedRealPath(index, declaration.id, root, 'module directory');
+        if (!isInsideRoot(realProject, realRoot)) {
             throw new BoardModuleConfigError(
                 index,
                 declaration.id,
-                `"${declaration.directory}" resolves outside the project root or its entry resolves outside the module directory`,
+                `"${declaration.directory}" resolves outside the project root`,
             );
+        }
+        const requireInsideModule = (declaredPath: string, realPath: string): void => {
+            if (!isInsideRoot(realRoot, realPath)) {
+                throw new BoardModuleConfigError(
+                    index,
+                    declaration.id,
+                    `"${declaredPath}" resolves outside the project root or its module directory`,
+                );
+            }
+        };
+        requireInsideModule(declaration.entry, verifiedRealPath(index, declaration.id, entryPath, 'entry asset'));
+        for (const style of styles) {
+            requireInsideModule(style.declared, verifiedRealPath(index, declaration.id, style.absolute, 'style asset'));
         }
 
         descriptors.push({

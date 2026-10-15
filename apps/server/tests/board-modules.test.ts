@@ -5,7 +5,7 @@ import { join } from 'node:path';
 import { prepareBoardModules } from '@gobing-ai/spur-app';
 import { BoardModuleConfigError, type BoardModuleDeclaration, boardModuleRoute } from '@gobing-ai/spur-config';
 import type { BoardHostRuntime } from '@gobing-ai/spur-contracts';
-import { createNodeFileSystem } from '@gobing-ai/ts-runtime';
+import { createNodeFileSystem, type FileSystem } from '@gobing-ai/ts-runtime';
 import { createApp } from '../src/bootstrap';
 import type { ServerContext } from '../src/context';
 import { boardModuleProbe, readBoardHostRuntime } from '../src/serve';
@@ -82,13 +82,13 @@ async function prepare(root: string, list: readonly BoardModuleDeclaration[], ru
 
 function appWith(
     prepared: Awaited<ReturnType<typeof prepare>>,
-    projectRoot = prepared.roots[0]?.root ?? process.cwd(),
+    fs: FileSystem = createNodeFileSystem(prepared.roots[0]?.root ?? process.cwd()),
 ) {
     return createApp(undefined, {
         ctx: {
             webDistPath: fixtureDist,
             boardModules: prepared,
-            fs: createNodeFileSystem(projectRoot),
+            fs,
         } as unknown as ServerContext,
     });
 }
@@ -252,6 +252,119 @@ describe('declared module asset serving (R5/AC3)', () => {
         try {
             const app = appWith(await prepare(root, []));
             expect((await app.request('/modules/kanban/index.js')).status).toBe(404);
+        } finally {
+            await cleanup();
+        }
+    });
+
+    test('a contained internal symlink is served (task 1208 R3)', async () => {
+        const { root, cleanup } = await projectTree();
+        try {
+            await symlink(join(root, 'board', 'kanban', 'app.css'), join(root, 'board', 'kanban', 'linked.css'));
+            const res = await appWith(await prepare(root, declarations({ styles: ['app.css', 'linked.css'] }))).request(
+                '/modules/kanban/linked.css',
+            );
+            expect(res.status).toBe(200);
+            expect(await res.text()).toContain('.kanban');
+        } finally {
+            await cleanup();
+        }
+    });
+});
+
+// ─── Fail-closed request-time canonicalization (task 1208 R2/R3) ───
+//
+// Real files through the mounted handler: an EXISTING asset is served only when both real
+// paths resolve and stay contained, so an absent or throwing `FileSystem.realPath` degrades
+// to 403 — never to the lexical path that would hand out symlinked outside bytes.
+
+describe('fail-closed request-time canonicalization (task 1208 R2/R3)', () => {
+    test('an escaping asset is 403 on GET and HEAD when the filesystem has no realPath', async () => {
+        const { root, cleanup } = await projectTree();
+        try {
+            const full = createNodeFileSystem(root);
+            const withoutRealPath = { stat: (path: string) => full.stat(path) } as unknown as FileSystem;
+            const app = appWith(await prepare(root, declarations()), withoutRealPath);
+            const res = await app.request('/modules/kanban/escape.js');
+            expect(res.status).toBe(403);
+            expect(await res.text()).not.toContain('secret');
+            const head = await app.request('/modules/kanban/escape.js', { method: 'HEAD' });
+            expect(head.status).toBe(403);
+            expect(await head.text()).toBe('');
+        } finally {
+            await cleanup();
+        }
+    });
+
+    test('an existing asset is 403 on GET and HEAD when either real path is undefined or throws', async () => {
+        const { root, cleanup } = await projectTree();
+        try {
+            const full = createNodeFileSystem(root);
+            const prepared = await prepare(root, declarations());
+            for (const failedPath of [join(root, 'board', 'kanban'), join(root, 'board', 'kanban', 'index.js')]) {
+                for (const failure of ['undefined', 'throw']) {
+                    const unavailable = {
+                        stat: (path: string) => full.stat(path),
+                        realPath: (path: string) => {
+                            if (path !== failedPath) return full.realPath?.(path);
+                            if (failure === 'throw') throw new Error('canonical path unavailable');
+                            return undefined;
+                        },
+                    } as unknown as FileSystem;
+                    const app = appWith(prepared, unavailable);
+                    const res = await app.request('/modules/kanban/index.js');
+                    expect(res.status).toBe(403);
+                    expect(await res.text()).not.toContain('webModule');
+                    const head = await app.request('/modules/kanban/index.js', { method: 'HEAD' });
+                    expect(head.status).toBe(403);
+                    expect(await head.text()).toBe('');
+                }
+            }
+        } finally {
+            await cleanup();
+        }
+    });
+
+    test('an escaping symlink is 403 on GET and bodyless HEAD, with outside bytes never served', async () => {
+        const { root, cleanup } = await projectTree();
+        try {
+            const app = appWith(await prepare(root, declarations()));
+            const res = await app.request('/modules/kanban/escape.js');
+            expect(res.status).toBe(403);
+            expect(await res.text()).not.toContain('secret');
+            const head = await app.request('/modules/kanban/escape.js', { method: 'HEAD' });
+            expect(head.status).toBe(403);
+            expect(await head.text()).toBe('');
+        } finally {
+            await cleanup();
+        }
+    });
+
+    test('missing, dangling and non-file targets stay 404', async () => {
+        const { root, cleanup } = await projectTree();
+        try {
+            await symlink(join(root, 'absent.js'), join(root, 'board', 'kanban', 'dangling.js'));
+            await mkdir(join(root, 'board', 'kanban', 'sub'));
+            const app = appWith(await prepare(root, declarations()));
+            expect((await app.request('/modules/kanban/nope.js')).status).toBe(404);
+            expect((await app.request('/modules/kanban/dangling.js')).status).toBe(404);
+            expect((await app.request('/modules/kanban/sub')).status).toBe(404);
+            expect((await app.request('/modules/kanban/nope.js', { method: 'HEAD' })).status).toBe(404);
+        } finally {
+            await cleanup();
+        }
+    });
+
+    test('a normal asset keeps serving and HEAD returns headers without a body', async () => {
+        const { root, cleanup } = await projectTree();
+        try {
+            const app = appWith(await prepare(root, declarations()));
+            const res = await app.request('/modules/kanban/index.js');
+            expect(res.status).toBe(200);
+            const head = await app.request('/modules/kanban/index.js', { method: 'HEAD' });
+            expect(head.status).toBe(200);
+            expect(head.headers.get('content-type')).toContain('javascript');
+            expect(await head.text()).toBe('');
         } finally {
             await cleanup();
         }

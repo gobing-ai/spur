@@ -11,14 +11,16 @@
 # `bun run test:full`. Running this rule directly via `spur rule run` outside the
 # repository wrapper bypasses that certification wrapper and is outside this
 # repository's certification contract. This rule and its evaluator are unchanged.
+# Launcher children write isolated LCOV; canonical publication is exclusive and
+# accepts only that run's complete records. Noncanonical launcher runs cannot
+# overwrite the certified tracefile. Bare `bun test` still bypasses the launcher.
 #
 # Absorbed from ts-libs/.spur/rules/quality/coverage-gate.yaml, re-scoped to
 # Spur's monorepo layout:
 #   - lcovPath kept at .coverage/lcov.info (Spur's `bun run test:coverage`
-#     writes it via --coverage-dir=.coverage, and `bunfig.toml
-#     [test] coverage = true` means a plain `bun run test` writes the same
-#     artifact — so a TARGETED `bun test <file>` overwrites it with a partial
-#     tracefile, and this rule then judges that partial data)
+#     publishes it after a completed run; bare TARGETED `bun test <file>` can
+#     still overwrite it with partial data, which the repository provenance
+#     wrapper refuses before this rule runs)
 #   - include expanded to apps/** + packages/** (Spur tests cover both;
 #     ts-libs only covers packages/**)
 #   - threshold kept at 90 matching bunfig.toml coverageThreshold

@@ -1232,4 +1232,28 @@ describe('persistWorktreeRuns non-ENOENT abort + external-key conflict (task 104
             to.cleanup();
         }
     });
+
+    test('a nonexistent --from fails closed before the source DB creates a stray tree', async () => {
+        const { dir, cleanup } = makeDir('persist-out-missing-from-');
+        try {
+            const invoking = join(dir, 'invoking');
+            mkdirSync(join(invoking, '.spur', 'run'), { recursive: true });
+            const ghost = join(invoking, 'ghost-worktree');
+            let error: unknown;
+            try {
+                await persistWorktreeRuns({ fromWorkdir: ghost, toWorkdir: invoking });
+            } catch (e) {
+                error = e;
+            }
+            // Root-relative evidence discovery walks UP from the bogus from-dir and lands on
+            // the invoking tree — without this guard the confinement probe reports the
+            // wrong tree (`must resolve beneath …`) and the source-DB open already created
+            // a stray scratch tree under the invoking tree.
+            expect(error).toBeInstanceOf(Error);
+            expect((error as Error).message).toContain('does not exist');
+            expect(existsSync(ghost)).toBe(false);
+        } finally {
+            cleanup();
+        }
+    });
 });

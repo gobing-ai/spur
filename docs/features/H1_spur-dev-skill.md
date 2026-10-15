@@ -2,11 +2,11 @@
 schema_version: 1
 id: H1
 name: spur-dev umbrella skill
-status: active
+status: done
 priority: P1
 tags: [rd3-migration, wave-3]
 created_at: 2026-06-12T23:45:00.000Z
-updated_at: "2026-10-09T07:00:05.415Z"
+updated_at: "2026-10-15T02:22:55.131Z"
 ---
 
 # H1: spur-dev umbrella skill
@@ -608,6 +608,18 @@ Feature: spur-dev umbrella skill
 | 0934 | Re-verify legacy H1 umbrella scenarios and close out the feature | done |
 | 0984 | Persist worktree run evidence so merged task files carry no dangling .spur/run anchors | done |
 | 1090 | Fix the record-stage Solution backfill's diff base and pathspec | done |
+| 1127 | Serialize full quality gates host-wide and keep workers off the full gate | done |
+| 1128 | Shrink the runall driver bootstrap runbooks below a context budget | done |
+| 1129 | Guard driver commits against sweeping foreign working-tree changes | done |
+| 1135 | Implement-stage acceptance probe and the post-gate tree-freeze boundary | done |
+| 1136 | Run-record and wrap integrity for worktree runs: loud bookkeeping, fresh digests, scoped repair | done |
+| 1142 | Make fix-iteration checks cheap and load-tolerant instead of re-running the full gate | done |
+| 1147 | Wrapup write-scope guard and nested feature-transition verification | done |
+| 1150 | Stop the full quality gate from failing on load-sensitive test timeouts | done |
+| 1152 | Wrapup repair step must tolerate a missing learnings status file | done |
+| 1160 | Parse raw Git numstat paths for sensitive gate routing | done |
+| 1161 | Revalidate PR head throughout review wait polling | done |
+| 1209 | Fail closed on commit-guard Git probe errors | done |
 <!-- END AUTO-GENERATED -->
 
 ## Notes
@@ -676,4 +688,6 @@ the residuals as final.
 - 2026-10-09T04:11:23.593Z active → verifying (system)
 - 2026-10-09T04:11:26.792Z verifying → done (system)
 - 2026-10-09T07:00:05.415Z done → active (system)
+- 2026-10-15T02:22:28.892Z active → verifying (system)
+- 2026-10-15T02:22:55.131Z verifying → done (system)
 

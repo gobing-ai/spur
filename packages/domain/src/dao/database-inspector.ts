@@ -215,7 +215,7 @@ export class DatabaseInspector {
             name: row.name,
             type: row.type ?? '',
             notNull: row.notnull === 1,
-            pk: row.pk === 1,
+            pk: row.pk > 0,
         }));
     }
 

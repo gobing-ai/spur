@@ -3,7 +3,7 @@ import { spawnSync } from 'node:child_process';
 import { mkdtempSync, readFileSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { main, parsePorcelainZ } from '../scripts/commit-guard';
+import { type GitRunner, main, parsePorcelainZ, runStage } from '../scripts/commit-guard';
 
 /**
  * 1129 R1–R4 / AC1–AC3: the commit guard's evidence contract, exercised against real temp git repos
@@ -59,8 +59,8 @@ function makeRepo(): string {
     return cwd;
 }
 
-/** Capture stdout/stderr around one guard call: the JSON payloads and diagnostics ARE the contract. */
-function guard(argv: string[], cwd: string): { code: number; stdout: string; stderr: string } {
+/** Capture stdout/stderr around any guard call: the JSON payloads and diagnostics ARE the contract. */
+function capture<T>(fn: () => T): { value: T; stdout: string; stderr: string } {
     const out: string[] = [];
     const err: string[] = [];
     const [writeOut, writeErr] = [process.stdout.write, process.stderr.write];
@@ -73,12 +73,48 @@ function guard(argv: string[], cwd: string): { code: number; stdout: string; std
     process.stdout.write = collect(out);
     process.stderr.write = collect(err);
     try {
-        return { code: main(argv, { cwd }), stdout: out.join(''), stderr: err.join('') };
+        return { value: fn(), stdout: out.join(''), stderr: err.join('') };
     } finally {
         process.stdout.write = writeOut;
         process.stderr.write = writeErr;
     }
 }
+
+/** Capture around one `main` call; options carries the injected GitRunner (1209). */
+function guard(
+    argv: string[],
+    cwd: string,
+    options: { git?: GitRunner } = {},
+): { code: number; stdout: string; stderr: string } {
+    const { value, stdout, stderr } = capture(() => main(argv, { cwd, ...options }));
+    return { code: value, stdout, stderr };
+}
+
+/** Real git underneath, with one probe kind forced to return status 1 on its Nth call (1-based);
+ * counts `git add` calls so "never stages after a failed probe" is asserted, not assumed (1209). */
+function probeRunner(
+    cwd: string,
+    fail: (args: string[], nth: number) => boolean,
+): {
+    runner: GitRunner;
+    adds: () => number;
+} {
+    const seen = new Map<string, number>();
+    let adds = 0;
+    const runner: GitRunner = (args) => {
+        if (args[0] === 'add') adds++;
+        const nth = (seen.get(args.join(' ')) ?? 0) + 1;
+        seen.set(args.join(' '), nth);
+        if (fail(args, nth)) return { status: 1, stdout: '' };
+        const run = spawnSync('git', args, { cwd, encoding: 'utf8' });
+        return { status: run.status ?? 1, stdout: run.stdout ?? '' };
+    };
+    return { runner, adds: () => adds };
+}
+
+/** The changed-path tracked probe (`diff --name-only <base>`), not the unmerged gate. */
+const isChangedProbe = (args: string[]): boolean => args[0] === 'diff' && !args.includes('--diff-filter=U');
+const isUnmergedProbe = (args: string[]): boolean => args.includes('--diff-filter=U');
 
 function staged(cwd: string): string[] {
     return git(cwd, ['diff', '--cached', '--name-only'])
@@ -173,6 +209,126 @@ describe('commit-guard (1129 R1–R4, AC1–AC3)', () => {
             'b.txt',
         ]);
         expect(parsePorcelainZ('?? .spur/run/r1-tree-start.json\u0000')).toEqual([]);
+    });
+});
+
+/** 1209: a failed probe proves nothing — exit 1, one diagnostic, no success JSON, no staging. */
+describe('commit-guard (1209 R1) — a failed changed-path probe cannot certify a clean tree', () => {
+    // All four combinations: {diff, ls-files} × {runContext scan, runCheck's report scan}.
+    for (const [probe, scan] of [
+        ['diff', 1],
+        ['diff', 2],
+        ['ls-files', 1],
+        ['ls-files', 2],
+    ] as const) {
+        test(`AC1 — ${probe} probe fails in scan ${scan} (${scan === 1 ? 'runContext' : 'report'}): exit 1, no JSON`, () => {
+            const cwd = makeRepo();
+            expect(guard(['start', '--run', 'r1'], cwd).code).toBe(0); // valid start snapshot
+            const { runner } = probeRunner(cwd, (args, nth) => {
+                if (nth !== scan) return false;
+                return probe === 'diff' ? isChangedProbe(args) : args[0] === 'ls-files';
+            });
+            const res = guard(['check', '--run', 'r1'], cwd, { git: runner });
+            expect(res.code).toBe(1);
+            expect(res.stderr.startsWith('commit-guard:')).toBe(true);
+            expect(res.stderr).toContain(probe); // names the failed operation …
+            expect(res.stderr).toContain('failed (status 1)'); // … and its status
+            expect(res.stdout).toBe(''); // no success JSON
+        });
+    }
+
+    test('an invalid --base check exits 1 without success JSON (real git, unknown revision)', () => {
+        const cwd = makeRepo();
+        expect(guard(['start', '--run', 'r1b'], cwd).code).toBe(0);
+        const res = guard(['check', '--run', 'r1b', '--base', 'not-a-rev'], cwd);
+        expect(res.code).toBe(1);
+        expect(res.stderr.startsWith('commit-guard:')).toBe(true);
+        expect(res.stdout).toBe('');
+    });
+});
+
+describe('commit-guard (1209 R2) — failed safety probes never reach git add', () => {
+    for (const probe of ['diff', 'ls-files']) {
+        test(`AC2 — a failed changed-path (${probe}) probe refuses an otherwise stageable file`, () => {
+            const cwd = makeRepo();
+            expect(guard(['start', '--run', 'r2'], cwd).code).toBe(0);
+            writeFileSync(join(cwd, 'a.txt'), 'run edit\n');
+            const { runner, adds } = probeRunner(cwd, (args) =>
+                probe === 'diff' ? isChangedProbe(args) : args[0] === 'ls-files',
+            );
+            const { value: result, stdout, stderr } = capture(() => runStage('r2', ['a.txt'], { cwd, git: runner }));
+            expect(result).toEqual({ staged: [], foreign: [], exitCode: 1 });
+            expect(stderr.startsWith('commit-guard:')).toBe(true);
+            expect(stderr).toContain(probe);
+            expect(stdout).toBe('');
+            expect(adds()).toBe(0);
+            expect(staged(cwd)).toEqual([]);
+        });
+    }
+
+    test('AC2 — a failed unmerged probe refuses an otherwise stageable ordinary file', () => {
+        const cwd = makeRepo();
+        expect(guard(['start', '--run', 'r2b'], cwd).code).toBe(0);
+        writeFileSync(join(cwd, 'a.txt'), 'run edit\n');
+        const { runner, adds } = probeRunner(cwd, isUnmergedProbe);
+        const { value: result, stderr } = capture(() => runStage('r2b', ['a.txt'], { cwd, git: runner }));
+        expect(result).toEqual({ staged: [], foreign: [], exitCode: 1 });
+        expect(stderr).toContain('--diff-filter=U');
+        expect(adds()).toBe(0);
+        expect(staged(cwd)).toEqual([]);
+    });
+
+    test('AC2 — a thrown GitRunner failure surfaces at the public entrypoint as exit 1', () => {
+        const cwd = makeRepo();
+        expect(guard(['start', '--run', 'r2c'], cwd).code).toBe(0);
+        writeFileSync(join(cwd, 'a.txt'), 'run edit\n');
+        const boom: GitRunner = () => {
+            throw new Error('runner exploded');
+        };
+        const res = guard(['stage', '--run', 'r2c', '--', 'a.txt'], cwd, { git: boom });
+        expect(res.code).toBe(1);
+        expect(res.stderr.startsWith('commit-guard:')).toBe(true);
+        expect(res.stderr).toContain('runner exploded');
+        expect(res.stdout).toBe('');
+        expect(staged(cwd)).toEqual([]);
+    });
+});
+
+describe('commit-guard (1209 AC3) — regenerated node twin CLI keeps shipped behavior', () => {
+    const MJS = join(ROOT, 'plugins', 'sp', 'scripts', 'commit-guard.mjs');
+
+    /** Spawn node against the twin by ABSOLUTE path — cwd is the fixture repo, never repo-relative. */
+    function nodeGuard(args: string[], cwd: string): { status: number | null; stdout: string; stderr: string } {
+        const run = spawnSync('node', [MJS, ...args], { cwd, encoding: 'utf8' });
+        return { status: run.status, stdout: run.stdout ?? '', stderr: run.stderr ?? '' };
+    }
+
+    test('exit 0/2/3 preserved and an invalid --base fails closed after conversion', () => {
+        const cwd = makeRepo();
+        writeFileSync(join(cwd, 'b.txt'), 'foreign\n'); // dirty at start → the other writer
+        expect(nodeGuard(['start', '--run', 'smoke'], cwd).status).toBe(0);
+        writeFileSync(join(cwd, 'a.txt'), 'run edit\n');
+
+        const ok = nodeGuard(['stage', '--run', 'smoke', '--', 'a.txt'], cwd);
+        expect(ok.status).toBe(0);
+        expect(JSON.parse(ok.stdout)).toEqual({ staged: ['a.txt'], foreign: [] });
+
+        expect(JSON.parse(nodeGuard(['check', '--run', 'smoke'], cwd).stdout)).toEqual({ foreign: ['b.txt'] });
+
+        writeFileSync(join(cwd, 'a.txt'), 'run edit 2\n');
+        const refused = nodeGuard(['stage', '--run', 'smoke', '--', 'a.txt', 'b.txt'], cwd);
+        expect(refused.status).toBe(2);
+        expect(JSON.parse(refused.stdout)).toEqual({ staged: ['a.txt'], foreign: ['b.txt'] });
+
+        writeFileSync(join(cwd, 'c.txt'), 'ok\n<<<<<<< HEAD\nours\n=======\ntheirs\n>>>>>>> other\n');
+        const conflict = nodeGuard(['stage', '--run', 'smoke', '--', 'c.txt'], cwd);
+        expect(conflict.status).toBe(3);
+        expect(staged(cwd)).toEqual(['a.txt']); // the refusal left the index untouched
+
+        const bad = nodeGuard(['check', '--run', 'smoke', '--base', 'not-a-rev'], cwd);
+        expect(bad.status).toBe(1);
+        expect(bad.stderr.startsWith('commit-guard:')).toBe(true);
+        expect(bad.stdout).not.toContain('foreign'); // no success JSON
     });
 });
 

@@ -7,7 +7,7 @@ import type {
     DatabaseTableResponse,
     DatabaseTablesResponse,
 } from '@gobing-ai/spur-contracts';
-import { type ReactNode, useEffect, useMemo, useState } from 'react';
+import { type ReactNode, useEffect, useMemo, useRef, useState } from 'react';
 import { useSearchParams } from 'react-router';
 import { Badge, Button, Card, CardBody, Input, Loading, Modal, Select, Tooltip } from '@/ui';
 import { fetchWithTimeout, resolveApiUrl } from '../../lib/rpc-client';
@@ -309,7 +309,7 @@ function FullCell({ cell }: { cell: DatabaseCell }) {
 function SchemaStrip({ schema }: { schema: DatabaseTableResponse }) {
     const [open, setOpen] = useState(true);
     return (
-        <section className="border-b border-base-content/10 pb-2" data-database-schema-strip>
+        <section className="border-b border-base-content/10 px-3 py-2 bg-base-200/20" data-database-schema-strip>
             <button
                 type="button"
                 aria-expanded={open}
@@ -394,6 +394,8 @@ export default function DatabaseView() {
     const [railFilter, setRailFilter] = useState('');
     const [pageInput, setPageInput] = useState('');
     const [detailOffset, setDetailOffset] = useState<number | null>(null);
+    const [tableDropdownOpen, setTableDropdownOpen] = useState(false);
+    const tableDropdownRef = useRef<HTMLDivElement>(null);
 
     // The input stays bound to the URL value so typing is immediate; the read waits for the
     // value to settle. Debouncing the request rather than the URL write keeps `?f=` accurate
@@ -403,6 +405,26 @@ export default function DatabaseView() {
         const timer = setTimeout(() => setFilterValueSettled(filterValue), FILTER_DEBOUNCE_MS);
         return () => clearTimeout(timer);
     }, [filterValue]);
+
+    useEffect(() => {
+        if (!tableDropdownOpen) return;
+        const handleClickOutside = (e: MouseEvent) => {
+            if (tableDropdownRef.current && !tableDropdownRef.current.contains(e.target as Node)) {
+                setTableDropdownOpen(false);
+            }
+        };
+        const handleKeyDown = (e: KeyboardEvent) => {
+            if (e.key === 'Escape') {
+                setTableDropdownOpen(false);
+            }
+        };
+        document.addEventListener('mousedown', handleClickOutside);
+        document.addEventListener('keydown', handleKeyDown);
+        return () => {
+            document.removeEventListener('mousedown', handleClickOutside);
+            document.removeEventListener('keydown', handleKeyDown);
+        };
+    }, [tableDropdownOpen]);
 
     const query = useMemo<RowQuery | null>(() => {
         if (selectedTable === null) return null;
@@ -532,73 +554,192 @@ export default function DatabaseView() {
     const columns = rows.data?.columns ?? schema.data?.columns.map((c) => c.name) ?? [];
 
     return (
-        <div className="flex h-full min-h-0 gap-3" data-database-view>
-            {/* Left rail: filter-as-you-type table list */}
-            <Card variant="bordered" className="w-56 shrink-0 overflow-hidden">
-                <CardBody className="p-2 gap-2 min-h-0">
-                    <Input
-                        size="xs"
-                        placeholder="Filter tables"
-                        aria-label="Filter tables"
-                        value={railFilter}
-                        onChange={(e) => setRailFilter(e.target.value)}
-                        data-database-rail-filter
-                    />
-                    <div
-                        className="min-h-0 flex-1 overflow-y-auto"
-                        data-database-rail
-                        data-database-rail-state={tables.state}
-                    >
-                        {tables.state === 'loading' && (
-                            <div className="flex justify-center p-3">
-                                <Loading size="sm" />
-                            </div>
-                        )}
-                        {tables.state === 'unavailable' && (
-                            <p className="p-2 text-xs text-base-content/60">Database unavailable.</p>
-                        )}
-                        {tables.state === 'failed' && (
-                            <p className="p-2 text-xs text-base-content/60">Could not load tables.</p>
-                        )}
-                        {tables.state === 'empty' && (
-                            <p className="p-2 text-xs text-base-content/60" data-database-rail-empty>
-                                This database has no tables.
-                            </p>
-                        )}
-                        {tables.state === 'ready' &&
-                            (visibleTables.length === 0 ? (
-                                <p className="p-2 text-xs text-base-content/60">No tables match this filter.</p>
-                            ) : (
-                                <ul className="flex flex-col gap-0.5">
-                                    {visibleTables.map((name) => (
-                                        <li key={name}>
-                                            <button
-                                                type="button"
-                                                data-database-table={name}
-                                                aria-current={name === selectedTable ? 'true' : undefined}
-                                                onClick={() => selectTable(name)}
-                                                className={
-                                                    name === selectedTable
-                                                        ? 'font-mono text-xs font-semibold text-primary'
-                                                        : 'font-mono text-xs'
-                                                }
-                                            >
-                                                {name}
-                                            </button>
-                                        </li>
-                                    ))}
-                                </ul>
-                            ))}
-                    </div>
-                </CardBody>
-            </Card>
-
-            {/* Main: schema strip + grid + footer */}
+        <div className="flex flex-col h-full min-h-0" data-database-view>
             <Card variant="bordered" className="min-w-0 flex-1 overflow-hidden">
-                <CardBody className="p-0 min-h-0 flex flex-col">
+                <CardBody className="p-0 min-h-0 flex flex-col h-full">
+                    {/* Top control bar: table selector dropdown + filter controls */}
+                    <div className="flex flex-wrap items-center justify-between gap-2.5 border-b border-base-content/10 px-3 py-2 bg-base-100/60 shrink-0">
+                        <div className="flex flex-wrap items-center gap-2.5">
+                            {/* Table dropdown with input filter */}
+                            <div ref={tableDropdownRef} className="relative">
+                                <button
+                                    type="button"
+                                    aria-haspopup="listbox"
+                                    aria-expanded={tableDropdownOpen}
+                                    aria-label="Select table"
+                                    data-database-table-select
+                                    onClick={() => setTableDropdownOpen((v) => !v)}
+                                    className="flex items-center gap-2 px-2.5 py-1 text-xs rounded border border-base-content/20 bg-base-100 hover:bg-base-200/80 transition-colors cursor-pointer text-left font-mono font-medium text-base-content"
+                                >
+                                    <svg
+                                        className="h-3.5 w-3.5 text-base-content/60 shrink-0"
+                                        viewBox="0 0 16 16"
+                                        fill="none"
+                                        stroke="currentColor"
+                                        strokeWidth="1.5"
+                                        aria-hidden="true"
+                                    >
+                                        <ellipse cx="8" cy="4" rx="6" ry="2.5" />
+                                        <path d="M2 4v4c0 1.38 2.69 2.5 6 2.5s6-1.12 6-2.5V4" />
+                                        <path d="M2 8v4c0 1.38 2.69 2.5 6 2.5s6-1.12 6-2.5V8" />
+                                    </svg>
+                                    <span className="truncate max-w-[200px] sm:max-w-[320px]">
+                                        {selectedTable ?? 'Select table…'}
+                                    </span>
+                                    <svg
+                                        className={`h-3 w-3 shrink-0 text-base-content/50 transition-transform ${tableDropdownOpen ? 'rotate-180' : ''}`}
+                                        viewBox="0 0 16 16"
+                                        fill="none"
+                                        stroke="currentColor"
+                                        strokeWidth="2"
+                                        strokeLinecap="round"
+                                        strokeLinejoin="round"
+                                        aria-hidden="true"
+                                    >
+                                        <path d="M4 6l4 4 4-4" />
+                                    </svg>
+                                </button>
+
+                                {tableDropdownOpen && (
+                                    <div
+                                        role="dialog"
+                                        aria-label="Select table"
+                                        className="absolute left-0 top-full mt-1.5 z-50 w-72 sm:w-84 rounded-lg border border-base-content/15 bg-base-100 shadow-xl p-2 flex flex-col gap-2"
+                                    >
+                                        <div className="relative">
+                                            <Input
+                                                size="xs"
+                                                placeholder="Filter tables…"
+                                                aria-label="Filter tables"
+                                                value={railFilter}
+                                                onChange={(e) => setRailFilter(e.target.value)}
+                                                onKeyDown={(e) => {
+                                                    const first = visibleTables[0];
+                                                    if (e.key === 'Enter' && first) {
+                                                        e.preventDefault();
+                                                        selectTable(first);
+                                                        setTableDropdownOpen(false);
+                                                        setRailFilter('');
+                                                    }
+                                                }}
+                                                data-database-rail-filter
+                                                autoFocus
+                                            />
+                                            {railFilter && (
+                                                <button
+                                                    type="button"
+                                                    onClick={() => setRailFilter('')}
+                                                    className="absolute right-2 top-1/2 -translate-y-1/2 text-xs text-base-content/40 hover:text-base-content cursor-pointer"
+                                                    aria-label="Clear filter"
+                                                >
+                                                    ×
+                                                </button>
+                                            )}
+                                        </div>
+
+                                        <div
+                                            className="max-h-64 overflow-y-auto min-h-0 flex flex-col gap-0.5"
+                                            data-database-rail
+                                            data-database-rail-state={tables.state}
+                                            role="listbox"
+                                            aria-label="Tables"
+                                        >
+                                            {tables.state === 'loading' && (
+                                                <div className="flex justify-center p-3">
+                                                    <Loading size="sm" />
+                                                </div>
+                                            )}
+                                            {tables.state === 'unavailable' && (
+                                                <p className="p-2 text-xs text-base-content/60 text-center">
+                                                    Database unavailable.
+                                                </p>
+                                            )}
+                                            {tables.state === 'failed' && (
+                                                <p className="p-2 text-xs text-base-content/60 text-center">
+                                                    Could not load tables.
+                                                </p>
+                                            )}
+                                            {tables.state === 'empty' && (
+                                                <p
+                                                    className="p-2 text-xs text-base-content/60 text-center"
+                                                    data-database-rail-empty
+                                                >
+                                                    This database has no tables.
+                                                </p>
+                                            )}
+                                            {tables.state === 'ready' &&
+                                                (visibleTables.length === 0 ? (
+                                                    <p className="p-2 text-xs text-base-content/60 text-center">
+                                                        No tables match this filter.
+                                                    </p>
+                                                ) : (
+                                                    visibleTables.map((name) => {
+                                                        const isSelected = name === selectedTable;
+                                                        return (
+                                                            <button
+                                                                key={name}
+                                                                type="button"
+                                                                role="option"
+                                                                aria-selected={isSelected}
+                                                                data-database-table={name}
+                                                                onClick={() => {
+                                                                    selectTable(name);
+                                                                    setTableDropdownOpen(false);
+                                                                    setRailFilter('');
+                                                                }}
+                                                                className={`flex items-center justify-between px-2.5 py-1.5 text-xs font-mono rounded text-left transition-colors cursor-pointer ${
+                                                                    isSelected
+                                                                        ? 'bg-primary text-primary-content font-bold'
+                                                                        : 'text-base-content/80 hover:bg-base-content/10 hover:text-base-content'
+                                                                }`}
+                                                            >
+                                                                <span className="truncate">{name}</span>
+                                                                {isSelected && <span className="text-xs ml-2">✓</span>}
+                                                            </button>
+                                                        );
+                                                    })
+                                                ))}
+                                        </div>
+                                    </div>
+                                )}
+                            </div>
+
+                            {/* Filter row: one column + contains value (R5) */}
+                            {selectedTable !== null && schemaReady && schema.data !== null && (
+                                <>
+                                    <div className="h-4 w-px bg-base-content/15 hidden sm:block" />
+                                    <div className="flex items-center gap-2">
+                                        <Select
+                                            size="xs"
+                                            aria-label="Filter column"
+                                            value={filterColumn ?? ''}
+                                            onChange={(e) => changeFilterColumn(e.target.value)}
+                                            data-database-filter-column
+                                        >
+                                            <option value="">Filter column…</option>
+                                            {schema.data.columns.map((column) => (
+                                                <option key={column.name} value={column.name}>
+                                                    {column.name}
+                                                </option>
+                                            ))}
+                                        </Select>
+                                        <Input
+                                            size="xs"
+                                            placeholder="contains…"
+                                            aria-label="Filter value"
+                                            value={filterValue}
+                                            onChange={(e) => changeFilterValue(e.target.value)}
+                                            data-database-filter-value
+                                        />
+                                    </div>
+                                </>
+                            )}
+                        </div>
+                    </div>
+
                     {selectedTable === null && (
                         <StatePanel state="prompt">
-                            <p data-database-prompt>Select a table from the left to browse its rows.</p>
+                            <p data-database-prompt>Select a table to browse its rows.</p>
                         </StatePanel>
                     )}
 
@@ -624,32 +765,6 @@ export default function DatabaseView() {
                     {selectedTable !== null && blockedState === null && schemaReady && schema.data !== null && (
                         <>
                             <SchemaStrip schema={schema.data} />
-
-                            {/* Filter row: one column + contains value (R5) */}
-                            <div className="flex items-center gap-2 border-b border-base-content/10 px-2 py-2">
-                                <Select
-                                    size="xs"
-                                    aria-label="Filter column"
-                                    value={filterColumn ?? ''}
-                                    onChange={(e) => changeFilterColumn(e.target.value)}
-                                    data-database-filter-column
-                                >
-                                    <option value="">Filter column…</option>
-                                    {schema.data.columns.map((column) => (
-                                        <option key={column.name} value={column.name}>
-                                            {column.name}
-                                        </option>
-                                    ))}
-                                </Select>
-                                <Input
-                                    size="xs"
-                                    placeholder="contains…"
-                                    aria-label="Filter value"
-                                    value={filterValue}
-                                    onChange={(e) => changeFilterValue(e.target.value)}
-                                    data-database-filter-value
-                                />
-                            </div>
 
                             {rows.state === 'loading' && (
                                 <div className="flex flex-1 items-center justify-center p-8">

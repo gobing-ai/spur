@@ -1,4 +1,7 @@
 import { describe, expect, test } from 'bun:test';
+import { realpathSync } from 'node:fs';
+import { mkdir, mkdtemp, rm, stat, symlink, writeFile } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { BoardModuleConfigError, type BoardModuleDeclaration } from '@gobing-ai/spur-config';
 import {
@@ -157,5 +160,160 @@ describe('prepareBoardModules (R3/AC2)', () => {
         expect(isInsideRoot('/project/board', '/project/board/index.js')).toBe(true);
         expect(isInsideRoot('/project/board', '/project/board')).toBe(false);
         expect(isInsideRoot('/project/board', '/project/elsewhere.js')).toBe(false);
+    });
+});
+
+// ─── Fail-closed canonical verification (task 1208 R1/R3) ───
+//
+// These tests run against a real temporary tree with a real-path-backed probe, so `/tmp`
+// aliases cannot mask the premise: every canonical answer the code sees is the path the
+// filesystem would actually open, and the escaping stylesheet is a real symlink.
+
+async function realTree(): Promise<{ root: string; moduleDir: string; cleanup: () => Promise<void> }> {
+    const root = await mkdtemp(join(tmpdir(), 'spur-board-1208-'));
+    const moduleDir = join(root, 'board', 'kanban');
+    await mkdir(moduleDir, { recursive: true });
+    await writeFile(join(moduleDir, 'index.js'), 'export const webModule = 1;\n');
+    await writeFile(join(moduleDir, 'app.css'), '.kanban{}\n');
+    await writeFile(join(root, 'outside.css'), '.secret{}\n');
+    await symlink(join(root, 'outside.css'), join(moduleDir, 'escape.css'));
+    return { root, moduleDir, cleanup: () => rm(root, { recursive: true, force: true }) };
+}
+
+/** A real-filesystem probe whose canonical answers can be overridden per lexical path. */
+function realProbe(override?: (path: string) => string | undefined): BoardModuleFileProbe {
+    return {
+        isFile: async (path) => (await stat(path)).isFile(),
+        isDirectory: async (path) => (await stat(path)).isDirectory(),
+        realPath: (path) => {
+            if (override) return override(path);
+            return realpathSync(path);
+        },
+    };
+}
+
+describe('prepareBoardModules fail-closed canonical verification (task 1208 R1)', () => {
+    test('an unresolvable project root real path is refused, not accepted lexically', async () => {
+        const { root, cleanup } = await realTree();
+        try {
+            const error = await prepareBoardModules({
+                projectRoot: root,
+                declarations: [reactModule()],
+                host,
+                probe: realProbe(() => undefined),
+            }).catch((thrown: unknown) => thrown);
+            expect(error).toBeInstanceOf(BoardModuleConfigError);
+            expect((error as Error).message).toContain('project root');
+            expect((error as Error).message).toContain(root);
+        } finally {
+            await cleanup();
+        }
+    });
+
+    test('a thrown project root resolution is normalized into a BoardModuleConfigError', async () => {
+        const { root, cleanup } = await realTree();
+        try {
+            const error = await prepareBoardModules({
+                projectRoot: root,
+                declarations: [reactModule()],
+                host,
+                probe: {
+                    ...realProbe(),
+                    realPath: () => {
+                        throw new Error('no symlink resolution here');
+                    },
+                },
+            }).catch((thrown: unknown) => thrown);
+            expect(error).toBeInstanceOf(BoardModuleConfigError);
+            expect((error as Error).message).not.toContain('no symlink resolution here');
+            expect((error as Error).message).toContain(root);
+        } finally {
+            await cleanup();
+        }
+    });
+
+    test('each undefined or throwing canonical path is refused naming the declaration and path', async () => {
+        const { root, moduleDir, cleanup } = await realTree();
+        try {
+            const cases = [
+                { absent: moduleDir, message: 'module directory', styles: [] as string[] },
+                { absent: join(moduleDir, 'index.js'), message: 'entry asset', styles: [] },
+                { absent: join(moduleDir, 'app.css'), message: 'style asset', styles: ['app.css'] },
+            ];
+            for (const { absent, message, styles } of cases) {
+                for (const failure of ['undefined', 'throw']) {
+                    const error = await prepareBoardModules({
+                        projectRoot: root,
+                        declarations: [reactModule({ styles })],
+                        host,
+                        probe: realProbe((path) => {
+                            if (path !== absent) return realpathSync(path);
+                            if (failure === 'throw') throw new Error('canonical path unavailable');
+                            return undefined;
+                        }),
+                    }).catch((thrown: unknown) => thrown);
+                    expect(error).toBeInstanceOf(BoardModuleConfigError);
+                    expect((error as Error).message).toContain('bootstrap.modules[0]');
+                    expect((error as Error).message).toContain('kanban');
+                    expect((error as Error).message).toContain(absent);
+                    expect((error as Error).message).toContain(message);
+                }
+            }
+        } finally {
+            await cleanup();
+        }
+    });
+
+    test('a module root whose real path escapes the project root is refused', async () => {
+        const { root, moduleDir, cleanup } = await realTree();
+        try {
+            const error = await prepareBoardModules({
+                projectRoot: root,
+                declarations: [reactModule()],
+                host,
+                probe: realProbe((path) => (path === moduleDir ? '/elsewhere/kanban' : realpathSync(path))),
+            }).catch((thrown: unknown) => thrown);
+            expect(error).toBeInstanceOf(BoardModuleConfigError);
+            expect((error as Error).message).toContain('resolves outside the project root');
+        } finally {
+            await cleanup();
+        }
+    });
+
+    test('a real escaping stylesheet symlink is refused at startup', async () => {
+        const { root, cleanup } = await realTree();
+        try {
+            const error = await prepareBoardModules({
+                projectRoot: root,
+                declarations: [reactModule({ styles: ['app.css', 'escape.css'] })],
+                host,
+                probe: realProbe(),
+            }).catch((thrown: unknown) => thrown);
+            expect(error).toBeInstanceOf(BoardModuleConfigError);
+            expect((error as Error).message).toContain('escape.css');
+            expect((error as Error).message).toContain('resolves outside');
+        } finally {
+            await cleanup();
+        }
+    });
+
+    test('contained real entry and stylesheet symlinks keep working (R3)', async () => {
+        const { root, moduleDir, cleanup } = await realTree();
+        try {
+            await symlink(join(moduleDir, 'index.js'), join(moduleDir, 'boot.js'));
+            await symlink(join(moduleDir, 'app.css'), join(moduleDir, 'linked.css'));
+            const prepared = await prepareBoardModules({
+                projectRoot: root,
+                declarations: [reactModule({ entry: 'boot.js', styles: ['linked.css'] })],
+                host,
+                probe: realProbe(),
+            });
+            expect(prepared.catalog.modules[0]).toMatchObject({
+                entryUrl: '/modules/kanban/boot.js',
+                styles: ['/modules/kanban/linked.css'],
+            });
+        } finally {
+            await cleanup();
+        }
     });
 });

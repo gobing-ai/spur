@@ -87,16 +87,18 @@ async function serveModuleAsset(
     const target = resolve(declared.root, relative);
     if (!isInsideRoot(declared.root, target)) return refusal(403, 'Forbidden path');
 
+    // Missing, non-file and dangling targets are 404s decided on the lexical path before any
+    // canonical IO, after the declaration/traversal gates above.
+    if (!(await fs.stat(target))?.isFile()) return refusal(404, 'Not Found');
+
+    // Fail closed: an existing file is served only when BOTH real paths resolve and stay
+    // contained. An absent `FileSystem.realPath`, a throwing backend or an escape is a 403 —
+    // never the lexical fallback, which would serve symlinked outside bytes (task 1208 R2).
     const realRoot = resolvedOrUndefined(fs, declared.root);
-    const resolvedTarget = resolvedOrUndefined(fs, target);
-    // Skip when the backend cannot resolve symlinks — the string containment above already
-    // refused every `..` form, and resolving for the file below still fails for a broken link.
-    if (realRoot !== undefined && resolvedTarget !== undefined && !isInsideRoot(realRoot, resolvedTarget)) {
+    const realTarget = resolvedOrUndefined(fs, target);
+    if (realRoot === undefined || realTarget === undefined || !isInsideRoot(realRoot, realTarget)) {
         return refusal(403, 'Forbidden path');
     }
-
-    const realTarget = resolvedTarget ?? target;
-    if (!(await fs.stat(realTarget))?.isFile()) return refusal(404, 'Not Found');
 
     const file = Bun.file(realTarget);
     const headers = new Headers({

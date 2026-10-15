@@ -4,7 +4,7 @@ name: "coverage-gate: an interrupted full run leaves a partial .coverage artifac
 status: done
 template: standard
 created_at: 2026-10-14T03:25:27.063Z
-updated_at: "2026-10-14T07:27:46.353Z"
+updated_at: "2026-10-15T00:39:11.267Z"
 feature_id: C3
 
 ac_altitude: graduating
@@ -74,6 +74,20 @@ Scenario: AC5 — Recovery and caller scope are documented (req: R3, R5)
 - Closed: marker contains an LCOV digest and tree digest; byte count, mtime and SF count are not identity checks.
 - Closed: no dependency on the review-confidence task; historical hang repair is outside this task.
 
+#### Q&A entry — 2026-10-15T00:18:02.902Z
+
+#### Shippable follow-up — 2026-10-15
+
+The operator requested remaining tasks 1203/1204/1207 be completed and verified before a later commit. No commit was made.
+
+Fresh `bun run spur-check-feature` passed all structural checks, 10 repository-wide tests and 28 heavy tests (0 failures); log: `.spur/run/shippable-feature-gate.log`. Derived confidence completion-boundary tests passed 8/8 in `.spur/run/shippable-derived-recheck.log`. The command-gate hard-failure test passed alone in 14 ms after a full-suite timeout; this does not erase the failed full-suite evidence.
+
+The normal full gate ran with concurrent external gate activity and reported unrelated timing/subprocess failures. Its original process ended without a complete final receipt; `.spur/run/shippable-spur-check.log` remains a failed/incomplete attempt. A diagnostic two-worker run and a fresh canonical two-worker run were started without changing repository scripts, timeouts, threshold or file isolation. Their final outcomes must be collected before claiming a new task PASS.
+
+Concurrent writes were observed in `packages/domain/tests/analytics/forensic-query-history.test.ts`: the existing 100 ms assertion was commented out by another writer during the first gate. This change was preserved and was not made as part of this task. The original assertion failed at 103 ms under load, and at 197 ms in a focused run while the host was still contended. A green run over the changed tree cannot be represented as proof that the original timing contract passed.
+
+Task 1204's original confidence requirements conflict with the explicitly authorized retirement in 1207/ADR-138. The original contract and fresh FAIL record remain intact pending the operator's explicit choice of historical disposition; no acceptance criterion is weakened to manufacture PASS.
+
 ### Design
 
 WHAT/WHERE: scripts/commands/run-tests.ts remains the producer. Add an internal --publish-coverage flag only to root test, test:coverage and test:full scripts; strip it from the forwarded argv. Put the shared certificate reads/writes and validation in scripts/commands/coverage-artifact-check.ts with import-safe exports and an import.meta.main command entrypoint. Wire that command before the current rule command in both test-post-check variants. This is repository command composition under ADR-130, not a rule-engine workaround or public CLI addition.
@@ -103,53 +117,32 @@ Out of scope: hangs, threshold lowering, per-file exemptions, new evaluator conf
 
 ### Solution
 
-Change-map (auto-generated — implement step did not record a Solution).
-Each entry cites the first changed line per file (`file:line`).
+The original canonical coverage wrapper was delivered in commits 8e67f8ea0 and 92b8043a6. Forced verification on 2026-10-14 reproduced three gaps with failing tests: old LCOV could satisfy a run that emitted none, newly added source was absent from the fingerprint, and noncanonical launcher output overwrote certified LCOV. Inspection also found publication ownership spanning an await.
 
-| Change (`file:line`) |
-|----------------------|
-| `config/rules/quality/coverage-gate.yaml:2` |
-| `package.json:100` |
-| `package.json:84` |
-| `package.json:87` |
-| `package.json:91` |
-| `package.json:98` |
-| `plugins/sp/lib/idea-handoff.generated.mjs:325` |
-| `plugins/sp/lib/inline-run.generated.mjs:1385` |
-| `plugins/sp/lib/inline-run.generated.mjs:1534` |
-| `plugins/sp/lib/inline-run.generated.mjs:266` |
-| `plugins/sp/lib/inline-run.generated.mjs:3044` |
-| `plugins/sp/lib/quality-gate.generated.mjs:16710` |
-| `plugins/sp/lib/quality-gate.generated.mjs:17017` |
-| `plugins/sp/lib/quality-gate.generated.mjs:17040` |
-| `plugins/sp/lib/quality-gate.generated.mjs:17134` |
-| `plugins/sp/lib/quality-gate.generated.mjs:17168` |
-| `plugins/sp/lib/quality-gate.generated.mjs:24731` |
-| `plugins/sp/lib/quality-gate.generated.mjs:24859` |
-| `plugins/sp/lib/quality-gate.generated.mjs:24862` |
-| `plugins/sp/lib/quality-gate.generated.mjs:24865` |
-| `plugins/sp/lib/quality-gate.generated.mjs:24884` |
-| `plugins/sp/lib/quality-gate.generated.mjs:25149` |
-| `plugins/sp/lib/quality-gate.generated.mjs:25191` |
-| `plugins/sp/lib/quality-gate.generated.mjs:27297` |
-| `plugins/sp/lib/quality-gate.generated.mjs:27401` |
-| `plugins/sp/lib/quality-gate.generated.mjs:27404` |
-| `plugins/sp/lib/quality-gate.generated.mjs:27521` |
-| `plugins/sp/lib/quality-gate.generated.mjs:27620` |
-| `plugins/sp/lib/quality-gate.generated.mjs:30` |
-| `plugins/sp/lib/quality-gate.generated.mjs:41` |
-| `plugins/sp/lib/quality-gate.generated.mjs:64` |
-| `plugins/sp/lib/quality-gate.generated.mjs:67` |
-| `plugins/sp/lib/quality-gate.generated.mjs:72` |
-| `plugins/sp/lib/quality-gate.generated.mjs:75` |
-| `scripts/commands/coverage-certification.test.ts:1` |
-| `scripts/commands/coverage-certification.ts:1` |
-| `scripts/commands/coverage-provenance-check.ts:1` |
-| `scripts/commands/run-tests.ts:104` |
-| `scripts/commands/run-tests.ts:24` |
-| `scripts/commands/run-tests.ts:38` |
-| `scripts/commands/run-tests.ts:80` |
-| `scripts/commands/run-tests.ts:89` |
+Verification fix:
+- `scripts/commands/coverage-certification.ts:108` — one short exclusive publication lock protects pending-window replacement and the final ownership check plus LCOV/certificate publication.
+- `scripts/commands/coverage-certification.ts:120` — reuse the existing computeProofInputFingerprint implementation, including nonignored new sources and its corpus exclusions; no duplicated fingerprint engine or source-count scan. Repository command import follows existing 0775 command precedent because spur-app has no root workspace link.
+- `scripts/commands/coverage-certification.ts:130` — unique coverage directory per canonical run; certification at `scripts/commands/coverage-certification.ts:166` reads only that run's complete LCOV records, then atomically publishes while still owning the pending window.
+- `scripts/commands/coverage-certification.ts:230` — retain named provenance refusals, validate optional marker fields, and surface failed tree capture as tree-unavailable before rule evaluation.
+- `scripts/commands/run-tests.ts:96` — canonical children write run-owned output; noncanonical children write disposable output. Bun's configured coverageDir overrides its CLI flag, so copy the selected TOML config, change only its output directory and resolve existing preload paths. Thresholds, ignore patterns, explicit heavy config and child exit status remain intact. One suite child is launched at `scripts/commands/run-tests.ts:121`.
+- `scripts/commands/coverage-certification.test.ts:126` — regressions cover the reproduced failures, shared lock contention, malformed run output, configuration preservation, interruption/nonzero exits, before/after source changes, 89/90 real evaluator behavior and command wiring.
+- `config/rules/quality/coverage-gate.yaml:3` — producer/provenance comments now describe isolated launcher output and bare Bun's legacy overwrite boundary; evaluator path, globs, diagnostic and threshold unchanged.
+
+Design conformance: isolation, ownership locking, complete-record validation and the shared proof-input implementation now match the approved mechanism. Goal-equivalent compatibility choice: retain the shipped .coverage/coverage-certification.json path and pending/certified field names rather than migrate to the draft full-suite.json naming. All existing consumers keep the same artifact path and root scripts; no new public CLI surface or external dependency.
+
+The final bounded script suite passed 25 tests, including the corrected preload fixture and explicit missing-config refusal; script typecheck and scoped formatting passed. The full gate failed on a 60-second derived-HIGH test timeout and its matrix follow-on, so Testing records PARTIAL. The final missing-config guard has focused/typecheck evidence and no green full-gate claim. Prior red attempts remain in .spur/run/verifyall-1203-red.log and .spur/run/verifyall-spur-check.log; no failed receipt is counted as successful. This fix does not include the existing unrelated DatabaseView.tsx edit.
+
+#### Final shippable validation — 2026-10-15
+
+This supersedes the earlier PARTIAL validation state, while retaining all red/interrupted run logs. The exact root `bun run spur-check` exited 0: lint/typechecks, all 51 pre-check rules, 10748 tests across 614 files (0 failures), unchanged-tree certified coverage, and both post-check rules. Evidence: `.spur/run/shippable-bounded-final-gate.log`.
+
+`package.json:87` bounds the root suite at two isolated parallel workers. The previous CPU-count fan-out repeatedly timed out different subprocess-heavy cases on the shared host; the bounded default completed the entire suite in 258.50 seconds. Test selection, isolation, the existing 20-second timeout and per-file 90/90 coverage thresholds are unchanged. The analytics timing assertion disabled by another writer during an intermediate run was restored before final validation and passed in the final suite. No production process-execution workaround, dependency change, assertion removal or timeout increase was introduced. Temporary tracing was removed.
+
+Task 1204 is retained as deprecated under the existing 1207/ADR-138 retirement decision, tagged `superseded:1207`. Its original requirements, historical delivery receipts and current-tree FAIL re-audit are preserved; current confidence-free behavior is verified by 1207. F51 remains cancelled. No commit was made.
+
+Final feature-wide validation also passed on the bounded-worker tree: `bun run spur-check-feature` exited 0; all structural checks, 10 repository-wide tests and 28 heavy tests passed. Log: `.spur/run/shippable-bounded-feature-gate.log`. Post-record C3/F511 feature checks have zero findings and all linked tasks are done; current delivery aggregate is PASS. The original three-task aggregate remains FAIL solely because it retains 1204's current-tree historical FAIL; that task is now deprecated under the authorized retirement, not falsely relabeled PASS. Coverage certification still validates after the noncanonical feature-wide run. No commit was made.
+
+Validated root launcher configuration: `package.json:87`; coverage producer ownership: `scripts/commands/coverage-certification.ts:130`.
 
 ### Testing
 
@@ -159,19 +152,19 @@ Each entry cites the first changed line per file (`file:line`).
 
 | Requirement | Status | Evidence |
 |-------------|--------|----------|
-| R1. Canonical root test, test:coverage and test:full runs invalidate prior coverage certification before launching and certify only an exit-zero full-suite run whose tested working-tree fingerprint is unchanged from start to finish. | MET | scripts/commands/run-tests.ts: --publish-coverage consumed before forwarding; startCanonicalRun (invalidates + fingerprints tracked tree) runs BEFORE Bun.spawnSync; certifyCanonicalRun runs only on exitCode===0 and requires the finish digest to equal the start digest (coverage-certification.ts certifyCanonicalRun). Tests: 'a passing canonical run certifies the artifact…', 'a failing canonical run keeps its real exit code and leaves evidence pending', 'an interrupted canonical producer never certifies', 'a source change during the run refuses publish…stale-tree'. |
-| R2. test-post-check and test-post-check:full validate certification before rule evaluation; missing, pending, malformed, superseded, stale-tree, missing-LCOV or byte-mismatched evidence fails nonzero with a coverage-artifact diagnostic and no per-file coverage findings. | MET | scripts/commands/coverage-provenance-check.ts exits nonzero with 'coverage-artifact: <reason>' + recovery before `&& spur rule run`; package.json prefixes both test-post-check scripts with it. validateCoverageCertification returns seven distinct reasons; each pinned by a dedicated test (missing/malformed json/malformed schema/pending/superseded/missing-lcov/stale-tree/lcov-mismatch) plus the precondition CLI diagnostic test. |
-| R3. Valid certified evidence still reaches the existing coverage-gate evaluator with its existing path, production include globs, diagnostic shape and 90 percent threshold; Bun's 90/90 line/function thresholds remain unchanged. | MET | config/rules/quality/coverage-gate.yaml diff is comment-only (evaluator block untouched); bunfig.toml untouched. AC2 tests evaluate certified fixture lcov through the real builtin coverage-gate evaluator (RuleEngine host): 89% file keeps its below-threshold finding, 90% passes; lcovPath/threshold/include carried unchanged. |
-| R4. Certification adds no second full-suite execution or source-count scan. Targeted, heavy, repo-wide and interrupted producers cannot certify canonical coverage or clobber its certified artifact; concurrent canonical producers fail closed or supersede deterministically. | MET | Producer test proves exactly one suite child per canonical command (PATH-counting shim, one log line). Wiring test pins test:heavy/test-repo-wide WITHOUT --publish-coverage. Interrupted run leaves pending (SIGKILL test); targeted overwrite fails validation with lcov-mismatch; concurrent runs: earlier publish refused with superseded, later certifies. |
-| R5. Regression fixtures cover producer interruption, nonzero exit, source changes during/after a run, targeted overwrite and concurrent publication. Producer and post-check documentation names the canonical certification route and recovery command. | MET | scripts/commands/coverage-certification.test.ts: 17 tests covering all named scenarios against bounded git-repo child-process fixtures. Docs: run-tests.ts header names the canonical route + recovery; coverage-gate.yaml PROVENANCE block names producers, marker path, refusal reasons, recovery (bun run test:full) and the portable-rule boundary. |
+| R1 | MET | `scripts/commands/coverage-certification.ts:130` opens a pending window before the child; `scripts/commands/coverage-certification.ts:166` certifies only owned complete output. Final 25-test coverage suite passed, including explicit-config validation and preservation. |
+| R2 | MET | `scripts/commands/coverage-certification.ts:230` validates provenance; `scripts/commands/coverage-certification.test.ts:409` proves failed tree capture is a named refusal. Fresh 25-test suite covered missing, malformed, pending, superseded, stale and byte-mismatched evidence; post-check CLI diagnostic test passed. |
+| R3 | MET | `scripts/commands/coverage-certification.test.ts:439` and `scripts/commands/coverage-certification.test.ts:455` certify fixtures before the real coverage evaluator: 89 percent fails and 90 percent passes. Root threshold and production globs are unchanged. |
+| R4 | MET | `scripts/commands/coverage-certification.test.ts:145` proves a noncanonical launcher preserves certified bytes; `scripts/commands/coverage-certification.test.ts:166` proves exclusive publication and pending-window replacement; `scripts/commands/coverage-certification.test.ts:293` proves supersession. Exactly-one-child fixture passed. |
+| R5 | MET | `scripts/commands/coverage-certification.test.ts:126`, `scripts/commands/coverage-certification.test.ts:135`, `scripts/commands/coverage-certification.test.ts:262`, `scripts/commands/coverage-certification.test.ts:276` and `scripts/commands/coverage-certification.test.ts:467` cover stale output, added source, interruption, source drift and producer/recovery wiring; fresh focused suite passed. |
 
 | Acceptance Criteria | Status | Evidence Type | Evidence |
 |---------------------|--------|---------------|----------|
-| AC-1 | MET |  | failing-run, interrupted (SIGKILL), and targeted-overwrite tests all leave/refuse with pending/lcov-mismatch before any rule evaluation; precondition CLI exits 1 with coverage-artifact diagnostic. |
-| AC-2 | MET |  | 89% fixture keeps below-threshold finding and 90% passes through the real builtin evaluator with unchanged path/globs/threshold. |
-| AC-3 | MET |  | stale-tree (content-hashed worktree bytes, index-independent), lcov-mismatch, malformed and missing-marker refusals all pinned. |
-| AC-4 | MET |  | earlier producer publish refused as superseded once a later run starts; exactly one suite child per canonical command (shim count). |
-| AC-5 | MET |  | wiring test pins --publish-coverage on test/test:coverage/test:full, its absence on heavy/repo-wide, and provenance-first prefixes on both post-checks; recovery documented in yaml + CLI stderr. |
+| Interrupted and targeted evidence cannot become file verdicts | MET | test | `scripts/commands/coverage-certification.test.ts:254` and `scripts/commands/coverage-certification.test.ts:262` cover failed/interrupted producers; `scripts/commands/coverage-certification.test.ts:145` proves noncanonical isolation; 25 focused tests passed. |
+| Certified evidence retains real threshold failures | MET | test | `scripts/commands/coverage-certification.test.ts:439` and `scripts/commands/coverage-certification.test.ts:455` passed certified-fixture checks and the real 89/90 evaluator behavior. |
+| Tree and artifact identity are enforced | MET | test | `scripts/commands/coverage-certification.test.ts:126`, `scripts/commands/coverage-certification.test.ts:135` and `scripts/commands/coverage-certification.test.ts:276` passed stale output, added-source and during-run drift regressions; marker/tamper/after-run cases passed in the same suite. |
+| Concurrent publication is fail closed and bounded | MET | test | `scripts/commands/coverage-certification.test.ts:166` passed shared-lock exclusion and late-owner checks; `scripts/commands/coverage-certification.test.ts:293` passed supersession; exactly-one-child test passed. |
+| Recovery and caller scope are documented | MET | test | `scripts/commands/coverage-certification.test.ts:467` passed canonical and post-check wiring; provenance CLI recovery test passed; `config/rules/quality/coverage-gate.yaml:3` records the direct-rule boundary. |
 - Coverage: N/A (verdict-based; verify pipeline does not measure code coverage)
 
 ### Review
