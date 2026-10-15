@@ -28,8 +28,9 @@ export interface CoverageResult {
  * `[doc-only] Scenario: Foo`, `Scenario: [doc-only] Foo`, and `Foo` reduce alike.
  *
  * Bracket tags (`[doc-only]`, `[docs-only]`, `[non-behavior]`, `[advisory]`, `[non-core]`) are
- * evidence-rule metadata carried *in the AC id* — `requiresExecutableEvidence` reads them there to
- * decide whether a MET row needs executable evidence. They are not part of the scenario's identity,
+ * evidence-rule metadata written by the task author on the task file's AC items —
+ * `requiresExecutableEvidence` (task-verdict.ts) reads them from there, never from the verify
+ * answer, to decide whether a MET row needs executable evidence. They are not part of the scenario's identity,
  * so they must not participate in title matching. Before task 0398 R7 they survived normalization,
  * which made the two rules mutually unsatisfiable for a documentation scenario: tag the row and
  * `rowMatchesScenario` no longer links it to its feature scenario (→ `L4.scenario-unverified`,

@@ -40,7 +40,7 @@ export function escapeTablePipe(s: string): string {
 /** Verdict from the verify pipeline step (`.spur/run/<wbs>-verdict.json`). */
 export interface VerifyVerdict {
     wbs: string;
-    verdict: 'PASS' | 'PARTIAL' | 'FAIL' | 'UNKNOWN';
+    verdict: VerdictAggregate;
     requirements: VerdictRequirement[];
     acceptanceCriteria?: VerdictAcceptanceCriteria[];
     checks: VerdictCheck[];

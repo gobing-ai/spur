@@ -1476,8 +1476,8 @@ export async function runAgentRun(
  * Drain pending inbox messages for the addressed agent spec and prepend them to
  * the prompt — or, with `--spec` alone, just address the occupant without
  * touching the inbox. Returns possibly-rewritten flags (with `--agent` mapped
- * from spec id to the spec's executor name — or coding-agent type when the spec
- * carries no executor field — when a spec is found).
+ * from spec id to the spec's executor name when a spec is found; a spec without
+ * an executor field fails).
  *
  * R1 (0542): the spec id is read from `--spec <id>` (canonical). A spec id
  * passed to the legacy `--agent <spec-id>` is still accepted as fallback
@@ -1561,12 +1561,17 @@ async function drainIntoPrompt(
  * operator's model + tier binding survives drain (R2). A dangling executor —
  * renamed or removed from `agent.executors` — fails loudly instead of silently
  * falling back to a bare binary on the default model (R5): the error names the
- * spec and the missing executor, and no process spawns. Pre-existing specs with
- * no executor field keep today's `spec.type` behavior.
+ * spec and the missing executor, and no process spawns. A spec with no executor
+ * field also fails before spawn, naming the field to add.
  */
 function drainAgentSelector(spec: AgentSpec, context: CliContext): string {
-    // @transition-shim(spec-without-executor-field) — legacy specs carry only `type`, no executor binding
-    if (spec.executor === undefined) return spec.type;
+    if (spec.executor === undefined) {
+        // The spec-without-executor-field fallback to `spec.type` was removed: drain needs an
+        // explicit executor binding so the operator's model + tier survive.
+        throw new Error(
+            `Spec "${spec.id}" has no executor field — add \`executor: <name>\` (an agent.executors entry) to the spec under .spur/agents/ or re-materialize it, then drain again`,
+        );
+    }
     try {
         resolveExecutor(spec.executor, context.agentConfig, { isCanonicalAgent: isAgentName });
     } catch (error) {

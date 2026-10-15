@@ -118,14 +118,11 @@ export async function makeSessionRig(specType: string, opts: RigOptions = {}): P
         cwd: tempDir,
         output,
         db,
-        ...(opts.specKind === 'executor'
-            ? {
-                  // The executor entry names the runner-known binary (G66 R1).
-                  spurConfig: spurConfigSchema.parse({
-                      agent: { executors: [{ name: 'writer', agent: specType }] },
-                  }),
-              }
-            : {}),
+        // The executor entry names the runner-known (or -unknown) binary (G66 R1); drain
+        // requires an explicit executor binding on the spec.
+        spurConfig: spurConfigSchema.parse({
+            agent: { executors: [{ name: opts.specKind === 'executor' ? 'writer' : specType, agent: specType }] },
+        }),
     });
     if (opts.specKind === 'executor') {
         // Executor-carrying specs bypass `AgentSpecInput` (0537's materialized shape).
@@ -143,7 +140,11 @@ export async function makeSessionRig(specType: string, opts: RigOptions = {}): P
             join(tempDir, '.spur', 'agents'),
         );
     } else {
-        await new AgentCoordinationService(ctx).createAgentSpec({ id: 'member', type: specType });
+        await new AgentCoordinationService(ctx).createAgentSpec({
+            id: 'member',
+            type: specType,
+            executor: specType,
+        });
     }
 
     const runs: Array<{ prompt: string | undefined; flags: Record<string, string | boolean> }> = [];

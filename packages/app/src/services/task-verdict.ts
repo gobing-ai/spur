@@ -5,9 +5,10 @@
  * grep/shell block (task 0111; same pattern as task 0108's spur task record).
  */
 
+import { normalizeTitle } from '@gobing-ai/spur-domain';
 import type { TaskStatus } from '@gobing-ai/spur-domain/schema';
 import type { VerdictCheck, VerdictRequirement, VerifyVerdict } from './task-record';
-import { aggregateVerifyVerdict } from './verify-verdict';
+import { aggregateVerifyVerdict, type VerdictAggregate } from './verify-verdict';
 
 // ─── Types ──────────────────────────────────────────────────────────────
 
@@ -16,7 +17,7 @@ export type AnswerText = string;
 
 /** Outcome of verdict derivation. */
 export interface VerdictResult {
-    verdict: 'PASS' | 'PARTIAL' | 'FAIL' | 'UNKNOWN';
+    verdict: VerdictAggregate;
     requirements: VerdictRequirement[];
     acceptanceCriteria?: VerdictAcceptanceCriteria[];
     checks: VerdictCheck[];
@@ -35,17 +36,35 @@ export interface VerdictAcceptanceCriteria {
 /**
  * Derive a verdict from verify answer text and `spur task check` exit status.
  *
+ * `taskAcceptanceCriteria` is the task file's own `## Acceptance Criteria` section. An
+ * evidence-rule exemption tag (`[advisory]`, `[non-core]`, `[non-behavior]`, `[docs-only]`,
+ * `[doc-only]`) counts only when the task author wrote it on that AC item; a tag that
+ * appears only in the verify answer is ignored (and flagged), so the verifier cannot waive
+ * the executable-evidence rule for its own rows. Omitted or empty → no exemptions.
+ *
  * Priority order:
  *   UNMET any requirement          → FAIL
  *   PARTIAL any (no UNMET)         → PARTIAL
  *   all MET + task check passes    → PASS
  *   unparseable input              → UNKNOWN
  */
-export function deriveVerdict(answerText: AnswerText, taskCheckPassed: boolean): VerdictResult {
+export function deriveVerdict(
+    answerText: AnswerText,
+    taskCheckPassed: boolean,
+    taskAcceptanceCriteria = '',
+): VerdictResult {
     const requirements = extractRequirements(answerText);
     const parsedAc = extractAcceptanceCriteria(answerText);
-    const acceptanceCriteria = applyAcceptanceCriteriaEvidenceRule(parsedAc.rows);
-    const checks = extractChecks(answerText, taskCheckPassed, requirements, acceptanceCriteria, parsedAc.dropped);
+    const exempt = taskAcExemptions(taskAcceptanceCriteria);
+    const acceptanceCriteria = applyAcceptanceCriteriaEvidenceRule(parsedAc.rows, exempt);
+    const checks = extractChecks(
+        answerText,
+        taskCheckPassed,
+        requirements,
+        acceptanceCriteria,
+        parsedAc.dropped,
+        exempt,
+    );
 
     // If we couldn't parse any requirements, the answer is unparseable.
     if (requirements.length === 0) {
@@ -307,11 +326,31 @@ function normalizeEvidenceType(raw: string): VerdictAcceptanceCriteria['evidence
     return EVIDENCE_TYPE_PRECEDENCE.find((candidate) => tokens.includes(candidate)) ?? null;
 }
 
-function applyAcceptanceCriteriaEvidenceRule(rows: VerdictAcceptanceCriteria[]): VerdictAcceptanceCriteria[] {
+const EXEMPTION_TAG_RE = /\[(?:advisory|non-core|non-behavior|docs-only|doc-only)\]/i;
+
+/**
+ * Normalized titles of the task file's AC items that carry an evidence-rule exemption tag.
+ * Only these may relax the executable-evidence rule (owner decision on PR #10, P2).
+ */
+export function taskAcExemptions(taskAcceptanceCriteria: string): Set<string> {
+    const exempt = new Set<string>();
+    for (const line of taskAcceptanceCriteria.split('\n')) {
+        if (!EXEMPTION_TAG_RE.test(line)) continue;
+        const item = line.replace(/^\s*(?:[-*+]|\d+[.)])\s*(?:\[[ xX]\]\s*)?/, '');
+        const key = normalizeTitle(item);
+        if (key !== '') exempt.add(key);
+    }
+    return exempt;
+}
+
+function applyAcceptanceCriteriaEvidenceRule(
+    rows: VerdictAcceptanceCriteria[],
+    exempt: Set<string>,
+): VerdictAcceptanceCriteria[] {
     return rows.map((row) => {
         if (
             row.status === 'MET' &&
-            requiresExecutableEvidence(row.id) &&
+            requiresExecutableEvidence(row.id, exempt) &&
             row.evidenceType !== 'test' &&
             row.evidenceType !== 'command'
         ) {
@@ -321,14 +360,9 @@ function applyAcceptanceCriteriaEvidenceRule(rows: VerdictAcceptanceCriteria[]):
     });
 }
 
-function requiresExecutableEvidence(id: string): boolean {
-    const normalized = id.toLowerCase();
-    const nonCore = normalized.includes('[advisory]') || normalized.includes('[non-core]');
-    const nonBehavior =
-        normalized.includes('[non-behavior]') ||
-        normalized.includes('[docs-only]') ||
-        normalized.includes('[doc-only]');
-    return !nonCore && !nonBehavior;
+/** True unless the task file (not the answer) marks this AC item with an exemption tag. */
+function requiresExecutableEvidence(id: string, exempt: Set<string>): boolean {
+    return !exempt.has(normalizeTitle(id));
 }
 
 /** Extract checks from the answer text. Always includes a task-check entry. */
@@ -338,6 +372,7 @@ function extractChecks(
     requirements: VerdictRequirement[],
     acceptanceCriteria: VerdictAcceptanceCriteria[],
     droppedAcRows: string[] = [],
+    exempt: Set<string> = new Set(),
 ): VerdictCheck[] {
     const checks: VerdictCheck[] = [
         {
@@ -402,11 +437,28 @@ function extractChecks(
         });
     }
 
+    // P2: an exemption tag the verifier wrote on its own row, but the task author did not
+    // write on the AC item, is ignored for the evidence rule; name it so the author sees it.
+    const answerOnlyTags = acceptanceCriteria
+        .filter((row) => EXEMPTION_TAG_RE.test(row.id) && requiresExecutableEvidence(row.id, exempt))
+        .map((row) => row.id);
+    if (answerOnlyTags.length > 0) {
+        checks.push({
+            name: 'ac-exemption-not-in-task',
+            status: 'warn',
+            severity: 'advisory',
+            evidence:
+                `${answerOnlyTags.length} AC row(s) carry an evidence-rule exemption tag the task file does not: ` +
+                `${answerOnlyTags.join('; ')}. Exemptions come only from the task's Acceptance Criteria; ` +
+                'these rows still need test or command evidence.',
+        });
+    }
+
     if (acceptanceCriteria.length > 0) {
         const downgraded = acceptanceCriteria.filter(
             (row) =>
                 row.status === 'PARTIAL' &&
-                requiresExecutableEvidence(row.id) &&
+                requiresExecutableEvidence(row.id, exempt) &&
                 row.evidenceType !== 'test' &&
                 row.evidenceType !== 'command',
         );
@@ -444,7 +496,7 @@ export interface BatchTaskResult {
 /** Aggregated batch verdict for verifyall. */
 export interface BatchAggregation {
     /** Headline verdict over rolledUp only. UNKNOWN when nothing has been implemented yet. */
-    verdict: 'PASS' | 'PARTIAL' | 'FAIL' | 'UNKNOWN';
+    verdict: VerdictAggregate;
     /** Tasks that contributed to the verdict (excludes NOT-STARTED). */
     rolledUp: BatchTaskResult[];
     /** Tasks classified NOT-STARTED — excluded from rollup, reported separately so the operator sees them. */

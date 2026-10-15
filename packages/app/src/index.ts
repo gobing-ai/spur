@@ -310,6 +310,7 @@ export {
     isFeatureFile,
     lintVerifyAnswerForTask,
     readFeatureBody,
+    readTaskAcceptanceCriteria,
     summarizeRowIds,
     VERDICT_SCENARIO_KEY_FORMS,
     type VerdictScenarioKeyGap,

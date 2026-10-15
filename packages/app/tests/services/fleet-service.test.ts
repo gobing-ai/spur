@@ -890,7 +890,7 @@ describe('fleet registration and launch ground truth (G62)', () => {
                 getDb: async () => db,
             });
             await expect(
-                team.createAgentSpec({ id: 'proj-lead', type: 'pi', tags: ['fleet:generated'] }),
+                team.createAgentSpec({ id: 'proj-lead', type: 'pi', executor: 'pi', tags: ['fleet:generated'] }),
             ).rejects.toThrow('Ground-truth mismatch');
         } finally {
             process.chdir(previous);

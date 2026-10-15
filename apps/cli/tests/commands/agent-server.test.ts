@@ -50,6 +50,7 @@ async function seedTaskAndSpec(cwd: string, taskId: string, specId: string): Pro
     await new AgentCoordinationService(createCliContext({ cwd, output: createCapturedOutput() })).createAgentSpec({
         id: specId,
         type: 'claude-code',
+        executor: 'claude',
         purpose: 'plan it',
     });
     return taskPath;

@@ -11,6 +11,7 @@ import {
     AgentCoordinationService,
     type AgentRunDeps,
 } from '@gobing-ai/spur-app';
+import { spurConfigSchema } from '@gobing-ai/spur-config';
 import { createMigratedDb, type DbAdapter, InboxMessageDao } from '@gobing-ai/spur-domain';
 import { AgentDetector, saveAgentSpec } from '@gobing-ai/ts-ai-runner';
 import {
@@ -114,7 +115,7 @@ describe('agent command (main)', () => {
             const output = captureOutput();
             const ctx = createCliContext({ cwd: tempDir, output, db });
             const team = new AgentCoordinationService(ctx);
-            await team.createAgentSpec({ id: 'worker-1', type: 'claude-code' });
+            await team.createAgentSpec({ id: 'worker-1', type: 'claude-code', executor: 'claude' });
 
             const program = new (await import('@commander-js/extra-typings')).Command();
             let exitCode = 0;
@@ -181,7 +182,7 @@ describe('agent list --specs', () => {
         });
 
         const team = new AgentCoordinationService(ctx);
-        await team.createAgentSpec({ id: 'test-agent-1', type: 'coder', purpose: 'test purpose' });
+        await team.createAgentSpec({ id: 'test-agent-1', type: 'coder', executor: 'coder', purpose: 'test purpose' });
 
         const exitCode = await main(['agent', 'list', '--specs', '--json'], {
             cwd: tempDir,
@@ -287,8 +288,8 @@ describe('member session rendering (0897)', () => {
         const output = captureOutput();
         const ctx = createCliContext({ cwd: tempDir, output, db });
         const team = new AgentCoordinationService(ctx);
-        await team.createAgentSpec({ id: 'planner', type: 'claude-code', purpose: 'plans' });
-        await team.createAgentSpec({ id: 'worker', type: 'coder', purpose: 'codes' });
+        await team.createAgentSpec({ id: 'planner', type: 'claude-code', executor: 'claude', purpose: 'plans' });
+        await team.createAgentSpec({ id: 'worker', type: 'coder', executor: 'coder', purpose: 'codes' });
     }
 
     test('list --specs renders the session column: mode + shortened id, - when absent', async () => {
@@ -422,7 +423,7 @@ describe('runAgentRun service wiring (0126 / 0370)', () => {
             });
 
             const team = new AgentCoordinationService(ctx);
-            await team.createAgentSpec({ id: 'worker-1', type: 'pi' });
+            await team.createAgentSpec({ id: 'worker-1', type: 'pi', executor: 'pi' });
             await team.sendMessage(null, 'worker-1', 'Do step 1');
 
             const run = mock((prompt: string | undefined, flags: Record<string, unknown>) => {
@@ -460,7 +461,7 @@ describe('runAgentRun service wiring (0126 / 0370)', () => {
             });
 
             const team = new AgentCoordinationService(ctx);
-            await team.createAgentSpec({ id: 'worker-2', type: 'pi' });
+            await team.createAgentSpec({ id: 'worker-2', type: 'pi', executor: 'pi' });
             await team.sendMessage('operator', 'worker-2', 'Solo message');
 
             const run = mock((prompt: string | undefined) => {
@@ -665,11 +666,41 @@ describe('runAgentLoop', () => {
         );
     });
 
-    test('runAgentLoop drains inbox when messages exist and runs agent', async () => {
+    test('drain refuses a spec without an executor field, naming the fix (shim removed)', async () => {
         const output = captureOutput();
         const ctx = createCliContext({ cwd: tempDir, output, db });
         const team = new AgentCoordinationService(ctx);
-        await team.createAgentSpec({ id: 'loop-worker', type: 'claude-code' });
+        await team.createAgentSpec({ id: 'legacy-worker', type: 'claude-code' });
+        await team.sendMessage('operator', 'legacy-worker', 'Process task #101');
+        const run = mock(() => Promise.resolve(0));
+        const customCtx = {
+            ...ctx,
+            agentService: () => ({ run }) as unknown as ReturnType<CliContext['agentService']>,
+        };
+        let caught = '';
+        try {
+            await runAgentLoop(customCtx, { spec: 'legacy-worker', poll: '100' }, { maxIterations: 1 });
+        } catch (error) {
+            caught = error instanceof Error ? error.message : String(error);
+        }
+        const text = [caught, ...output.stderr].join('\n');
+        expect(text).toContain('Spec "legacy-worker" has no executor field');
+        expect(text).toContain('executor: <name>');
+        expect(run).not.toHaveBeenCalled();
+    });
+
+    test('runAgentLoop drains inbox when messages exist and runs agent', async () => {
+        const output = captureOutput();
+        const ctx = createCliContext({
+            cwd: tempDir,
+            output,
+            db,
+            spurConfig: spurConfigSchema.parse({
+                agent: { executors: [{ name: 'claude-code', agent: 'claude-code' }] },
+            }),
+        });
+        const team = new AgentCoordinationService(ctx);
+        await team.createAgentSpec({ id: 'loop-worker', type: 'claude-code', executor: 'claude-code' });
         await team.sendMessage('operator', 'loop-worker', 'Process task #100');
 
         const run = mock((prompt: string | undefined) => {
@@ -697,7 +728,7 @@ describe('runAgentLoop', () => {
         const output = captureOutput();
         const ctx = createCliContext({ cwd: tempDir, output, db });
         const team = new AgentCoordinationService(ctx);
-        await team.createAgentSpec({ id: 'reconcile-worker', type: 'claude-code' });
+        await team.createAgentSpec({ id: 'reconcile-worker', type: 'claude-code', executor: 'claude' });
         const inbox = new InboxMessageDao(db);
         // In-flight: consumed by a previous drain that never settled (no receipt).
         const stuck = await inbox.enqueue('operator', 'reconcile-worker', 'ambiguous work');
@@ -730,7 +761,7 @@ describe('runAgentLoop', () => {
         const output = captureOutput();
         const ctx = createCliContext({ cwd: tempDir, output, db });
         const team = new AgentCoordinationService(ctx);
-        await team.createAgentSpec({ id: 'idle-worker-default-sleep', type: 'claude-code' });
+        await team.createAgentSpec({ id: 'idle-worker-default-sleep', type: 'claude-code', executor: 'claude' });
 
         const run = mock(() => Promise.resolve(0));
         const customCtx = {
@@ -751,7 +782,7 @@ describe('runAgentLoop', () => {
         const output = captureOutput();
         const ctx = createCliContext({ cwd: tempDir, output, db });
         const team = new AgentCoordinationService(ctx);
-        await team.createAgentSpec({ id: 'abort-worker', type: 'claude-code' });
+        await team.createAgentSpec({ id: 'abort-worker', type: 'claude-code', executor: 'claude' });
 
         const run = mock(() => Promise.resolve(0));
         const customCtx = {

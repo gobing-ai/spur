@@ -1,5 +1,10 @@
 import { describe, expect, test } from 'bun:test';
-import { aggregateBatchVerdicts, classifyTaskOutcome, deriveVerdict } from '../../src/services/task-verdict';
+import {
+    aggregateBatchVerdicts,
+    classifyTaskOutcome,
+    deriveVerdict,
+    taskAcExemptions,
+} from '../../src/services/task-verdict';
 
 const MET_ANSWER = [
     '| Req | Status | Evidence |',
@@ -164,8 +169,9 @@ describe('deriveVerdict', () => {
         expect(evidenceCheck?.status).toBe('pass');
     });
 
-    test('PASS: non-behavior AC may use static evidence', () => {
-        const result = deriveVerdict(AC_NON_BEHAVIOR_STATIC_ANSWER, true);
+    test('PASS: non-behavior AC may use static evidence when the task file tags it', () => {
+        const taskAc = '- [x] [non-behavior] Documentation mentions the command\n';
+        const result = deriveVerdict(AC_NON_BEHAVIOR_STATIC_ANSWER, true, taskAc);
         expect(result.verdict).toBe('PASS');
         expect(result.acceptanceCriteria?.[0]?.status).toBe('MET');
         const evidenceCheck = result.checks.find((c) => c.name === 'evidence-rule-pass');
@@ -366,7 +372,7 @@ describe('AC evidence-type vocabulary (task 0398 R6)', () => {
     test.each(['doc', 'docs', 'documentation', 'static', 'static-ref'])(
         '"%s" normalizes to static-ref instead of dropping the row',
         (evidenceType) => {
-            const result = deriveVerdict(answer(evidenceType), true);
+            const result = deriveVerdict(answer(evidenceType), true, '- [x] [doc-only] The contract is written down');
             expect(result.acceptanceCriteria).toHaveLength(1);
             expect(result.acceptanceCriteria?.[0]?.evidenceType).toBe('static-ref');
             expect(result.acceptanceCriteria?.[0]?.status).toBe('MET');
@@ -669,5 +675,45 @@ describe('hollow MET evidence (0721)', () => {
         expect(result.acceptanceCriteria).toHaveLength(1);
         expect(result.checks.find((c) => c.name === 'ac-row-dropped')).toBeUndefined();
         expect(result.verdict).toBe('PASS');
+    });
+});
+
+describe('AC exemption tags come only from the task file (P2)', () => {
+    const answer = [
+        '| Req | Status | Evidence |',
+        '|-----|--------|----------|',
+        '| R1 | MET | `src/foo.ts:10` |',
+        '',
+        '| AC | Status | Evidence Type | Evidence |',
+        '|----|--------|---------------|----------|',
+        '| [docs-only] AC1 — The contract is written down | MET | static-ref | `docs/00_ADR.md:899` |',
+    ].join('\n');
+
+    test('a tag in the task file exempts the AC from executable evidence', () => {
+        for (const taskAc of [
+            '- [x] AC1 — [docs-only] The contract is written down',
+            '1. Scenario: [advisory] The contract is written down',
+        ]) {
+            const result = deriveVerdict(answer, true, taskAc);
+            expect(result.acceptanceCriteria?.[0]?.status).toBe('MET');
+            expect(result.verdict).toBe('PASS');
+            expect(result.checks.find((c) => c.name === 'ac-exemption-not-in-task')).toBeUndefined();
+        }
+    });
+
+    test('a tag only in the verdict does not exempt; the AC needs real evidence', () => {
+        for (const taskAc of ['- [x] AC1 — The contract is written down', '']) {
+            const result = deriveVerdict(answer, true, taskAc);
+            expect(result.acceptanceCriteria?.[0]?.status).toBe('PARTIAL');
+            expect(result.verdict).toBe('PARTIAL');
+            const flag = result.checks.find((c) => c.name === 'ac-exemption-not-in-task');
+            expect(flag?.severity).toBe('advisory');
+            expect(flag?.evidence).toContain('[docs-only] AC1');
+            expect(result.checks.find((c) => c.name === 'evidence-rule-failed')?.status).toBe('fail');
+        }
+    });
+
+    test('taskAcExemptions keys only tagged task items', () => {
+        expect([...taskAcExemptions('- [ ] [doc-only] Foo bar\n- [ ] Baz\n- [non-core]\n')]).toEqual(['foo bar']);
     });
 });

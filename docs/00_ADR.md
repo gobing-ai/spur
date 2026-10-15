@@ -420,7 +420,9 @@ role picks a starting tier instead of naming an executor, and `agent.default`'s 
 from executor names to roles (0542 R2, shim `agent-default-executor`). The unified table stays —
 role, executor name, bare binary name (shim), `auto`, or `inline` — one selector, closed and
 validated at the CLI boundary. Prompt-regex phase detection is retired alongside (ADR-033 amendment
-0536).
+0536). *2026-10-14:* the `agent-default-executor` shim was removed — an `agent.default` naming an
+executor now fails with a fix (set a role, pin the executor with `--agent`); the
+`spec-without-executor-field` drain fallback was removed alongside.
 
 **Why.** Role routing expresses the caller's intent without pinning a vendor; the executor pin
 remains a permanent override for the pipeline's deliberate pins.

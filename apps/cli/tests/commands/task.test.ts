@@ -2587,6 +2587,52 @@ Only this section exists.
         expect(parsed.checks.some((check: { name: string }) => check.name === 'evidence-rule-failed')).toBe(true);
     });
 
+    test('verdict honors an AC exemption tag only when the task file carries it (P2)', async () => {
+        const createOut = createCapturedOutput();
+        await main(['task', 'create', '--skip-ready', 'Exemption fixture'], { cwd, output: createOut });
+        const wbs = createdWbs(createOut);
+        const acFile = join(cwd, `${wbs}-ac.md`);
+        const answerPath = join(cwd, `${wbs}-verify-answer.txt`);
+        const reqFile = join(cwd, `${wbs}-req.md`);
+        await Bun.write(reqFile, 'R1. The help text must name the verb.\n');
+        await main(['task', 'update', wbs, '--section', 'Requirements', '--from-file', reqFile], {
+            cwd,
+            output: createCapturedOutput(),
+        });
+        const answer = (tag: string) =>
+            [
+                'Verdict: PASS',
+                '',
+                '| Req | Status | Evidence |',
+                '|-----|--------|----------|',
+                '| R1 | MET | `apps/cli/src/commands/task.ts:1` |',
+                '',
+                '| AC | Status | Evidence Type | Evidence |',
+                '|----|--------|---------------|----------|',
+                `| ${tag}The help text names the verb | MET | static-ref | \`apps/cli/src/commands/task.ts:1\` |`,
+            ].join('\n');
+        const runVerdict = async (taskItem: string): Promise<{ verdict: string; checks: { name: string }[] }> => {
+            await Bun.write(acFile, `- [x] ${taskItem}\n`);
+            await main(['task', 'update', wbs, '--section', 'Acceptance Criteria', '--from-file', acFile], {
+                cwd,
+                output: createCapturedOutput(),
+            });
+            await Bun.write(answerPath, answer('[docs-only] '));
+            const output = createCapturedOutput();
+            await main(['task', 'verdict', wbs, '--from-answer', answerPath, '--json'], { cwd, output });
+            return JSON.parse(lastMessage(output));
+        };
+        verdictArtifacts.push(join(process.cwd(), '.spur', 'run', `${wbs}-verdict.json`));
+
+        const untagged = await runVerdict('The help text names the verb');
+        expect(untagged.verdict).toBe('PARTIAL');
+        expect(untagged.checks.some((c) => c.name === 'ac-exemption-not-in-task')).toBe(true);
+
+        const tagged = await runVerdict('[docs-only] The help text names the verb');
+        expect(tagged.checks.some((c) => c.name === 'ac-exemption-not-in-task')).toBe(false);
+        expect(tagged.checks.some((c) => c.name === 'evidence-rule-pass')).toBe(true);
+    });
+
     test('verdict exits 1 on UNKNOWN when the answer has no parseable requirements', async () => {
         const answerPath = join(cwd, '8003-verify-answer.txt');
         await Bun.write(answerPath, 'no requirements table here\n');
@@ -4031,7 +4077,7 @@ describe('spur task ready-by-default (0788, fake executor)', () => {
         // global layer merges in) pinning the claude shim our fake bin serves.
         await writeFile(
             join(isoCwd, '.spur', 'config.yaml'),
-            'agent:\n  default: fakeprep\n  executors:\n    - name: fakeprep\n      agent: claude\n',
+            'agent:\n  default: coder\n  executors:\n    - name: fakeprep\n      agent: claude\n      tier: standard\n',
         );
         binDir = join(isoCwd, '.fake-bin');
         await mkdir(binDir, { recursive: true });

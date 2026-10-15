@@ -215,6 +215,8 @@ export interface AgentSpecInput {
     id: string;
     name?: string;
     type: string;
+    /** Executor binding drain routes through (an agent.executors name or a canonical agent). */
+    executor?: string;
     workspace?: string;
     purpose?: string;
     tags?: string[];
@@ -542,6 +544,7 @@ export class AgentCoordinationService {
             id: input.id,
             name: input.name ?? input.id,
             type: input.type,
+            ...(input.executor !== undefined ? { executor: input.executor } : {}),
             workspace: input.workspace ?? this.ctx.cwd,
             // ts-ai-runner requires a non-empty purpose to round-trip a spec, so
             // fall back to a type-derived default rather than writing an unloadable file.

@@ -414,7 +414,7 @@ describe('AgentCoordinationService agent specs', () => {
     test('createAgentSpec writes a spec and applies defaults', async () => {
         const { svc, cwd, cleanup } = await makeService();
         try {
-            const spec = await svc.createAgentSpec({ id: 'planner', type: 'claude-code' });
+            const spec = await svc.createAgentSpec({ id: 'planner', type: 'claude-code', executor: 'claude' });
             expect(spec.id).toBe('planner');
             expect(spec.name).toBe('planner');
             expect(spec.workspace).toBe(cwd);
@@ -433,8 +433,10 @@ describe('AgentCoordinationService agent specs', () => {
     test('createAgentSpec rejects a duplicate id', async () => {
         const { svc, cleanup } = await makeService();
         try {
-            await svc.createAgentSpec({ id: 'planner', type: 'claude-code' });
-            await expect(svc.createAgentSpec({ id: 'planner', type: 'codex' })).rejects.toThrow(/already exists/);
+            await svc.createAgentSpec({ id: 'planner', type: 'claude-code', executor: 'claude' });
+            await expect(svc.createAgentSpec({ id: 'planner', type: 'codex', executor: 'codex' })).rejects.toThrow(
+                /already exists/,
+            );
         } finally {
             await cleanup();
         }
@@ -443,7 +445,9 @@ describe('AgentCoordinationService agent specs', () => {
     test('createAgentSpec rejects an invalid id', async () => {
         const { svc, cleanup } = await makeService();
         try {
-            await expect(svc.createAgentSpec({ id: 'Bad ID', type: 'claude-code' })).rejects.toThrow();
+            await expect(
+                svc.createAgentSpec({ id: 'Bad ID', type: 'claude-code', executor: 'claude' }),
+            ).rejects.toThrow();
         } finally {
             await cleanup();
         }
@@ -452,8 +456,8 @@ describe('AgentCoordinationService agent specs', () => {
     test('listAgentSpecs returns created specs', async () => {
         const { svc, cleanup } = await makeService();
         try {
-            await svc.createAgentSpec({ id: 'planner', type: 'claude-code' });
-            await svc.createAgentSpec({ id: 'coder', type: 'codex', purpose: 'write code' });
+            await svc.createAgentSpec({ id: 'planner', type: 'claude-code', executor: 'claude' });
+            await svc.createAgentSpec({ id: 'coder', type: 'codex', executor: 'codex', purpose: 'write code' });
             const specs = (await svc.listAgentSpecs()).map((s) => s.id).sort();
             expect(specs).toEqual(['coder', 'planner']);
         } finally {
@@ -517,10 +521,17 @@ describe('AgentCoordinationService agent specs', () => {
     test('buildIdentity includes workspace peers', async () => {
         const { svc, cwd, cleanup } = await makeService();
         try {
-            await svc.createAgentSpec({ id: 'planner', type: 'claude-code', workspace: cwd, purpose: 'plan' });
+            await svc.createAgentSpec({
+                id: 'planner',
+                type: 'claude-code',
+                executor: 'claude',
+                workspace: cwd,
+                purpose: 'plan',
+            });
             const coder = await svc.createAgentSpec({
                 id: 'coder',
                 type: 'codex',
+                executor: 'codex',
                 workspace: cwd,
                 purpose: 'code',
             });

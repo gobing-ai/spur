@@ -35,10 +35,9 @@ version: "1.2"
 agent:
     # `default` is the role used for `--agent auto` when the caller declares
     # nothing (task 0542 R2 — the value domain moved from executor names to
-    # roles). A role id selects its tier's cheapest eligible executor; a
-    # configured executor name still resolves during the transition with a
-    # one-time warning (shim agent-default-executor); any other value fails
-    # naming both accepted sets.
+    # roles). A role id selects its tier's cheapest eligible executor; any
+    # other value fails. A configured executor name fails with a fix (use a
+    # role, and pin the executor with --agent <name>).
     default: coder
 
     # Role → tier map. Resolution: role → tier → cheapest USABLE executor whose

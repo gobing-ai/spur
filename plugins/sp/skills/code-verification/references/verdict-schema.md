@@ -103,9 +103,11 @@ is part of the contract so weak proof is visible to the pipeline and to reviewer
 - `n/a`: explicitly justified non-applicability.
 
 Every CORE behavior-bearing AC requires executable evidence: at least one `test` or `command` row.
-`spur task verdict` treats AC rows as core and behavior-bearing by default; add `[advisory]`,
-`[non-core]`, `[non-behavior]`, or `[docs-only]` in the AC id only when that weaker rule is
-intentional. A MET behavior AC with only `static-ref`, `manual-review`, or `llm-judge` evidence is
+`spur task verdict` treats AC rows as core and behavior-bearing by default. Only the task author
+can exempt an AC: the `[advisory]`, `[non-core]`, `[non-behavior]` or `[docs-only]` tag must be on
+the AC item in the task file's `## Acceptance Criteria`. The verifier must not add these tags to
+answer rows; a tag that appears only in the answer is ignored and flagged by an advisory
+`ac-exemption-not-in-task` check. A MET behavior AC with only `static-ref`, `manual-review`, or `llm-judge` evidence is
 downgraded to `PARTIAL` and emits an `evidence-rule-failed` check. CLI-surface changes should also
 emit a `cli-golden-path-present` check backed by a golden-path `--json` command invocation.
 

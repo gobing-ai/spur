@@ -3,6 +3,7 @@ import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { AgentCoordinationService, DeliveryReconciler } from '@gobing-ai/spur-app';
+import { spurConfigSchema } from '@gobing-ai/spur-config';
 import type { AgentProcessOptions, DoctorResult } from '@gobing-ai/ts-ai-runner';
 import { RequestKeyConflictError } from '@gobing-ai/ts-db';
 import { EventBus } from '@gobing-ai/ts-infra';
@@ -12,7 +13,10 @@ import { type AgentRunDeps, type MemberAgentProcess, runAgentLoop, runAgentRun }
 import { type CliContext, createCliContext } from '../../src/context';
 import { createCapturedOutput } from '../helpers';
 
-async function makeCtx(env: Record<string, string | undefined> = {}): Promise<{
+async function makeCtx(
+    env: Record<string, string | undefined> = {},
+    spurConfig?: ReturnType<typeof spurConfigSchema.parse>,
+): Promise<{
     ctx: CliContext;
     cwd: string;
     out: ReturnType<typeof createCapturedOutput>;
@@ -25,7 +29,7 @@ async function makeCtx(env: Record<string, string | undefined> = {}): Promise<{
     const cwd = join(root, 'alpha');
     await mkdir(cwd, { recursive: true });
     const out = createCapturedOutput();
-    const ctx = createCliContext({ cwd, output: out, env, dbUrl: ':memory:' });
+    const ctx = createCliContext({ cwd, output: out, env, dbUrl: ':memory:', ...(spurConfig ? { spurConfig } : {}) });
     return { ctx, cwd, out, cleanup: async () => rm(root, { recursive: true, force: true }) };
 }
 
@@ -67,7 +71,12 @@ describe('spur agent list --specs', () => {
     test('lists created specs', async () => {
         const { ctx, cwd, out, cleanup } = await makeCtx();
         try {
-            await new AgentCoordinationService(ctx).createAgentSpec({ id: 'coder', type: 'codex', purpose: 'code' });
+            await new AgentCoordinationService(ctx).createAgentSpec({
+                id: 'coder',
+                type: 'codex',
+                executor: 'codex',
+                purpose: 'code',
+            });
             const code = await main(['agent', 'list', '--specs'], { cwd, output: out, dbUrl: ':memory:' });
             expect(code).toBe(0);
             expect(out.messages.join('\n')).toContain('coder');
@@ -79,7 +88,7 @@ describe('spur agent list --specs', () => {
     test('--json includes spec paths', async () => {
         const { ctx, cwd, out, cleanup } = await makeCtx();
         try {
-            await new AgentCoordinationService(ctx).createAgentSpec({ id: 'coder', type: 'codex' });
+            await new AgentCoordinationService(ctx).createAgentSpec({ id: 'coder', type: 'codex', executor: 'codex' });
             const code = await main(['agent', 'list', '--specs', '--json'], { cwd, output: out, dbUrl: ':memory:' });
             expect(code).toBe(0);
             const payload = JSON.parse(out.messages.at(-1) ?? '{}');
@@ -210,7 +219,7 @@ describe('spur agent run --drain', () => {
             // main() opens a fresh DB per call, so drain would never see the message —
             // the whole point of team-mode is that the drained message reaches the runner).
             const team = new AgentCoordinationService(ctx);
-            await team.createAgentSpec({ id: 'planner', type: 'claude' });
+            await team.createAgentSpec({ id: 'planner', type: 'claude', executor: 'claude' });
             await team.sendMessage('operator', 'planner', 'remember to drain me');
 
             let receivedInput = '';
@@ -246,7 +255,7 @@ describe('spur agent run --drain', () => {
         const { ctx, cleanup } = await makeCtx();
         try {
             const team = new AgentCoordinationService(ctx);
-            await team.createAgentSpec({ id: 'reviewer', type: 'claude' });
+            await team.createAgentSpec({ id: 'reviewer', type: 'claude', executor: 'claude' });
 
             const fakeRunner = {
                 runPromptCommand: async () => ({ exitCode: 0, stdout: '', stderr: '', durationMs: 1 }),
@@ -300,7 +309,7 @@ describe('spur agent run --drain', () => {
         const started = captureInvokeStart();
         try {
             const team = new AgentCoordinationService(ctx);
-            await team.createAgentSpec({ id: 'planner', type: 'claude' });
+            await team.createAgentSpec({ id: 'planner', type: 'claude', executor: 'claude' });
             await team.sendMessage('operator', 'planner', 'loop message');
 
             const processes: FakeMemberProcess[] = [];
@@ -357,7 +366,7 @@ describe('spur agent run --drain', () => {
         const { ctx, cleanup } = await makeCtx();
         try {
             const team = new AgentCoordinationService(ctx);
-            await team.createAgentSpec({ id: 'planner', type: 'claude' });
+            await team.createAgentSpec({ id: 'planner', type: 'claude', executor: 'claude' });
 
             let runs = 0;
             const deps = {
@@ -506,7 +515,7 @@ describe('G61 delivery settle regressions (0831)', () => {
         const accepted = captureInvokeStart();
         try {
             const team = new AgentCoordinationService(ctx);
-            await team.createAgentSpec({ id: 'planner', type: 'claude' });
+            await team.createAgentSpec({ id: 'planner', type: 'claude', executor: 'claude' });
             const sent = await team.sendMessage('operator', 'planner', 'must reach the prompt');
             const deps = {
                 runner: {
@@ -554,7 +563,7 @@ describe('G61 delivery settle regressions (0831)', () => {
         const accepted = captureInvokeStart();
         try {
             const team = new AgentCoordinationService(ctx);
-            await team.createAgentSpec({ id: 'planner', type: 'claude' });
+            await team.createAgentSpec({ id: 'planner', type: 'claude', executor: 'claude' });
             await team.sendMessage('operator', 'planner', 'characterize me');
             const db = await ctx.getDb();
 
@@ -595,10 +604,14 @@ describe('G61 delivery settle regressions (0831)', () => {
         // agent name, so validateAgentSelector rejects AFTER the drain (exit 2,
         // pre-spawn) — the claim happened inside drainIntoPrompt, and the settle
         // step must release it for redelivery within the attempt budget.
-        const { ctx, cleanup } = await makeCtx();
+        // The spec binds executor 'bogus-exec' (drain needs an executor); its agent is not invocable.
+        const { ctx, cleanup } = await makeCtx(
+            {},
+            spurConfigSchema.parse({ agent: { executors: [{ name: 'bogus-exec', agent: 'bogus-exec' }] } }),
+        );
         try {
             const team = new AgentCoordinationService(ctx);
-            await team.createAgentSpec({ id: 'planner', type: 'bogus-exec' });
+            await team.createAgentSpec({ id: 'planner', type: 'bogus-exec', executor: 'bogus-exec' });
             await team.sendMessage('operator', 'planner', 'release me');
             const db = await ctx.getDb();
 
@@ -637,7 +650,7 @@ describe('G61 delivery settle regressions (0831)', () => {
         const { ctx, out, cleanup } = await makeCtx();
         try {
             const team = new AgentCoordinationService(ctx);
-            await team.createAgentSpec({ id: 'planner', type: 'codex' }); // resume path — no persistent-stdin claim
+            await team.createAgentSpec({ id: 'planner', type: 'codex', executor: 'codex' }); // resume path — no persistent-stdin claim
             await team.sendMessage('operator', 'planner', 'will never start');
             const db = await ctx.getDb();
 
@@ -689,7 +702,7 @@ describe('G61 delivery settle regressions (0831)', () => {
         const captured = captureInvokeStart();
         try {
             const team = new AgentCoordinationService(ctx);
-            await team.createAgentSpec({ id: 'planner', type: 'claude' });
+            await team.createAgentSpec({ id: 'planner', type: 'claude', executor: 'claude' });
             await team.sendMessage('operator', 'planner', 'start then fail');
             const db = await ctx.getDb();
 
@@ -733,7 +746,7 @@ describe('G61 delivery settle regressions (0831)', () => {
             const db = await ctx.getDb();
             const dao = new InboxMessageDao(db);
             const team = new AgentCoordinationService(ctx);
-            await team.createAgentSpec({ id: 'planner', type: 'claude' });
+            await team.createAgentSpec({ id: 'planner', type: 'claude', executor: 'claude' });
 
             const first = await team.sendMessage('operator', 'planner', 'same body', undefined, 'retry-key-1');
             const second = await team.sendMessage('operator', 'planner', 'same body', undefined, 'retry-key-1');
@@ -856,7 +869,7 @@ describe('G61 completion receipt regressions (0833)', () => {
         const accepted = captureInvokeStart();
         try {
             const team = new AgentCoordinationService(ctx);
-            await team.createAgentSpec({ id: 'planner', type: 'claude' });
+            await team.createAgentSpec({ id: 'planner', type: 'claude', executor: 'claude' });
             const sent = await team.sendMessage('operator', 'planner', 'complete and correlate me');
             const db = await ctx.getDb();
             const dao = new CoordinationRunDao(db);
@@ -911,7 +924,7 @@ describe('G61 completion receipt regressions (0833)', () => {
         const { ctx, cleanup } = await makeCtx();
         try {
             const team = new AgentCoordinationService(ctx);
-            await team.createAgentSpec({ id: 'planner', type: 'claude' });
+            await team.createAgentSpec({ id: 'planner', type: 'claude', executor: 'claude' });
             const db = await ctx.getDb();
             const dao = new CoordinationRunDao(db);
 
@@ -942,7 +955,7 @@ describe('G61 completion receipt regressions (0833)', () => {
         const { ctx, cleanup } = await makeCtx();
         try {
             const team = new AgentCoordinationService(ctx);
-            await team.createAgentSpec({ id: 'planner', type: 'claude' });
+            await team.createAgentSpec({ id: 'planner', type: 'claude', executor: 'claude' });
             const sent = await team.sendMessage('operator', 'planner', 'fail loudly');
             const db = await ctx.getDb();
             const dao = new CoordinationRunDao(db);
