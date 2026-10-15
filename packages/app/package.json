@@ -14,7 +14,10 @@
         "./quality-gate": "./src/services/quality-gate.ts",
         "./residual-scan-run": "./src/services/residual-scan-run.ts",
         "./task-diffstat": "./src/workflow/task-diffstat.ts",
-        "./testing": "./src/testing/history-board-mock.ts"
+        "./testing": "./src/testing/history-board-mock.ts",
+        "./commit-guard": "./src/workflow/commit-guard.ts",
+        "./persist-check": "./src/workflow/persist-check.ts",
+        "./close-summary": "./src/workflow/run-summary-render.ts"
     },
     "scripts": {
         "build": "bun build src/index.ts --outdir dist --target bun",

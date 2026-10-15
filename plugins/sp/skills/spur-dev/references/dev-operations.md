@@ -165,10 +165,10 @@ must not be changed without updating the backing skill.
 
 #### Execution summary
 
-Produced by the run's own close (1146 R1), not by a trailing step: `inline-run-setup --close` writes
+Produced by the run's own close (1146 R1), not by a trailing step: `spur workflow inline close` writes
 `.spur/run/<runId>-summary.md` + `.json` and reports `summaryFile` in its stdout JSON. The driver's only
 job is to print that file's contents under an `### Execution summary` heading, and to pass `--no-summary`
-through to `--close`. `--no-summary` is a `--close` flag: anywhere else it is a usage error.
+through to `inline close`. `--no-summary` is an `inline close` flag: anywhere else it is a usage error.
 
 `/sp:dev-runall` shows one summary per run — each produced by that run's own close, so each window is its own
 `runs.started_at` → close time and no block reuses a batch-wide window — plus one batch roll-up:

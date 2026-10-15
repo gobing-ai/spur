@@ -13,11 +13,6 @@
             "twin": "batch-plan.mjs"
         },
         {
-            "rel": "commit-guard.ts",
-            "contract": "standard",
-            "twin": "commit-guard.mjs"
-        },
-        {
             "rel": "daily-summary/daily-summary.ts",
             "contract": "standard",
             "twin": "daily-summary/daily-summary.mjs"
@@ -53,16 +48,6 @@
             "twin": "history-anatomy-cache.mjs"
         },
         {
-            "rel": "inline-run-setup.ts",
-            "contract": "standard",
-            "twin": "inline-run-setup.mjs"
-        },
-        {
-            "rel": "inline-run-dispatch.ts",
-            "contract": "standard",
-            "twin": "inline-run-dispatch.mjs"
-        },
-        {
             "rel": "feature-verification-steps.ts",
             "contract": "standard",
             "twin": "feature-verification-steps.mjs"
@@ -71,11 +56,6 @@
             "rel": "pr-reviewing.ts",
             "contract": "standard",
             "twin": "pr-reviewing.mjs"
-        },
-        {
-            "rel": "persist-out-check.ts",
-            "contract": "standard",
-            "twin": "persist-out-check.mjs"
         },
         {
             "rel": "run-summary.ts",

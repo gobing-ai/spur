@@ -2,7 +2,9 @@ import type { Command } from '@commander-js/extra-typings';
 import type { CliContext } from '../../context';
 import { registerWorkflowCancelCommand } from './cancel';
 import { registerWorkflowCleanCommand } from './clean';
+import { registerWorkflowCommitGuardCommand } from './commit-guard';
 import { registerWorkflowContinueCommand } from './continue';
+import { registerWorkflowInlineCommand } from './inline';
 import { registerWorkflowListCommand } from './list';
 import { registerWorkflowProgressCommand } from './progress';
 import { registerWorkflowRunCommand } from './run';
@@ -22,6 +24,10 @@ export function registerWorkflowCommand(program: Command, context: CliContext): 
     registerWorkflowShowCommand(workflow, context);
     registerWorkflowTraceCommand(workflow, context);
     registerWorkflowProgressCommand(workflow, context);
+    // The inline driver's transports (PR-4). Real invocations take the boot-free early dispatch in
+    // `index.ts`; mounting them here keeps them in `spur workflow --help` and the full tree.
+    registerWorkflowInlineCommand(workflow, context);
+    registerWorkflowCommitGuardCommand(workflow, context);
 }
 
 export { waitForResumeClaim } from './continue';

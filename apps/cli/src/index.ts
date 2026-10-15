@@ -35,11 +35,13 @@ import { registerServeCommand } from './commands/serve';
 import { registerStatusCommand } from './commands/status';
 import { registerTaskCommand } from './commands/task';
 import { registerWorkflowCommand } from './commands/workflow';
+import type { WorkflowInlineDeps } from './commands/workflow/inline';
 import { CLI_CONFIG } from './config';
 import { EMBEDDED_SPUR_SCHEMAS } from './config/embedded-schemas';
 import { createCliContext, createMigratedDbAdapter } from './context';
 import { errorMessage } from './errors';
 import { type CommandOutput, consoleOutput, toJson } from './output';
+import { isWorkflowTransportInvocation, registerWorkflowTransportCommands } from './workflow-transport';
 /** Options for programmatic CLI execution in tests. */
 export interface MainOptions {
     cwd?: string;
@@ -50,6 +52,8 @@ export interface MainOptions {
     db?: DbAdapter;
     /** Database-free serve launch seam for startup tests. */
     startServer?: typeof import('@gobing-ai/spur-server').startServer;
+    /** `spur workflow inline` seams (app runners, self argv) for in-process tests. */
+    workflowTransport?: WorkflowInlineDeps;
 }
 
 /** Run the Spur CLI with explicit argv and injectable runtime dependencies. */
@@ -76,6 +80,33 @@ export async function main(argv = process.argv.slice(2), options: MainOptions = 
         };
         registerServeCommand(program, context, { startServer: options.startServer });
         registerServeCommand(program.command('self'), context, { startServer: options.startServer });
+        try {
+            await program.parseAsync(argv, { from: 'user' });
+            return exitCode;
+        } catch (error) {
+            const code = (error as { exitCode?: number }).exitCode;
+            if (code !== undefined) return code;
+            output.error(errorMessage(error));
+            return 1;
+        }
+    }
+
+    // `workflow inline|commit-guard` are the inline driver's transports (script-absorption PR-4):
+    // like the plugin scripts they replace, they never create a database in the cwd (the runners
+    // open the run-owning tree's database) and load config only for the ops that read it.
+    if (isWorkflowTransportInvocation(argv)) {
+        const program = new Command().name('spur').exitOverride();
+        program.option('--no-logo').option('-v, --cli-verbose');
+        program.configureOutput({ writeOut: (str) => output.write(str), writeErr: (str) => output.error(str) });
+        const context = {
+            cwd,
+            output,
+            env,
+            setExitCode: (code: number) => {
+                exitCode = code;
+            },
+        };
+        registerWorkflowTransportCommands(program.command('workflow'), context, options.workflowTransport);
         try {
             await program.parseAsync(argv, { from: 'user' });
             return exitCode;
@@ -275,6 +306,8 @@ export function bannerText(): string {
  * never consults this — programmatic dispatch stays banner-free by construction.
  */
 export function shouldRenderBanner(argv: readonly string[]): boolean {
+    // The inline driver parses these transports' stdout (JSON verdicts, fingerprints).
+    if (isWorkflowTransportInvocation(argv)) return false;
     return !argv.some((arg) => arg === '--no-logo' || arg === '--json' || arg === '--quiet' || arg === '--silent');
 }
 

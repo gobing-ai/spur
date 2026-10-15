@@ -1,0 +1,757 @@
+{
+    "_meta": {
+        "what": "Golden observations of the retired plugin scripts plugins/sp/scripts/{inline-run-setup,inline-run-dispatch,persist-out-check,commit-guard}.ts, frozen by script-absorption PR-4 before those scripts were deleted. workflow-inline-parity.test.ts replays every case through `spur workflow inline <op>` / `spur workflow commit-guard <op>` and asserts the same exit codes, stdout, stderr (modulo the documented rewrites) and side effects.",
+        "capturedFrom": "gobing-ai/spur d17990f2b (feat/sp-hooks-via-spur) \u2014 the old scripts launched as `bun plugins/sp/scripts/<script>.ts <old argv>`",
+        "capturedWith": "bun 1.4.3; apps/cli/tests/workflow-inline/golden-runner.ts runCase(case, 'old'); two captures byte-identical",
+        "normalization": "<ROOT> scratch tree, <REPO> checkout (<REPO_CONFIG> its bundled-asset dir), <TS> ISO timestamps, <UUID> ids, qo-<ID> quota observation ids, durationMs/elapsedMs -> 0, <N>ms"
+    },
+    "cases": {
+        "commit-guard: missing --run is a usage error (exit 1)": {
+            "steps": [
+                {
+                    "exitCode": 1,
+                    "stdout": "",
+                    "stderr": "usage: commit-guard start --run <id> | stage --run <id> [--base <sha>] -- <paths\u2026> | check --run <id>\n"
+                },
+                {
+                    "exitCode": 1,
+                    "stdout": "",
+                    "stderr": "usage: commit-guard start --run <id> | stage --run <id> [--base <sha>] -- <paths\u2026> | check --run <id>\n"
+                },
+                {
+                    "exitCode": 1,
+                    "stdout": "",
+                    "stderr": "usage: commit-guard start --run <id> | stage --run <id> [--base <sha>] -- <paths\u2026> | check --run <id>\n"
+                }
+            ],
+            "artifacts": {},
+            "db": {}
+        },
+        "commit-guard: unknown op and excess start/check args are mis-invocations (exit 1)": {
+            "steps": [
+                {
+                    "exitCode": 1,
+                    "stdout": "",
+                    "stderr": "usage: commit-guard start --run <id> | stage --run <id> [--base <sha>] -- <paths\u2026> | check --run <id>\n"
+                },
+                {
+                    "exitCode": 1,
+                    "stdout": "",
+                    "stderr": "usage: commit-guard start --run <id> | stage --run <id> [--base <sha>] -- <paths\u2026> | check --run <id>\n"
+                },
+                {
+                    "exitCode": 1,
+                    "stdout": "",
+                    "stderr": "usage: commit-guard start --run <id> | stage --run <id> [--base <sha>] -- <paths\u2026> | check --run <id>\n"
+                }
+            ],
+            "artifacts": {},
+            "db": {}
+        },
+        "commit-guard: start \u2192 stage refuses the foreign path \u2192 check reports it": {
+            "steps": [
+                {
+                    "exitCode": 0,
+                    "stdout": "",
+                    "stderr": ""
+                },
+                {
+                    "exitCode": 2,
+                    "stdout": "{\"staged\":[\"a.txt\",\"c.txt\"],\"foreign\":[\"b.txt\"]}\n",
+                    "stderr": "commit-guard: refused b.txt (foreign \u2014 dirty at start, untouched by this run)\n"
+                },
+                {
+                    "exitCode": 0,
+                    "stdout": "{\"foreign\":[\"b.txt\"]}\n",
+                    "stderr": ""
+                },
+                {
+                    "exitCode": 0,
+                    "stdout": "{\"foreign\":[\"b.txt\"]}\n",
+                    "stderr": ""
+                }
+            ],
+            "artifacts": {
+                ".spur/run/r1-tree-start.json": "{\n  \"head\": \"f75a8586eb1c9e6698215c72be9634f83a053f5e\",\n  \"dirty\": [\n    {\n      \"path\": \"b.txt\",\n      \"sha\": \"2107bba5fb3be15aa4a306458417e9fc6e473880\"\n    }\n  ]\n}\n"
+            },
+            "db": {}
+        },
+        "commit-guard: stage with every path written by the run exits 0": {
+            "steps": [
+                {
+                    "exitCode": 0,
+                    "stdout": "",
+                    "stderr": ""
+                },
+                {
+                    "exitCode": 0,
+                    "stdout": "{\"staged\":[\"a.txt\"],\"foreign\":[]}\n",
+                    "stderr": ""
+                }
+            ],
+            "artifacts": {},
+            "db": {}
+        },
+        "commit-guard: an unchanged path is refused (exit 2, not foreign)": {
+            "steps": [
+                {
+                    "exitCode": 0,
+                    "stdout": "",
+                    "stderr": ""
+                },
+                {
+                    "exitCode": 2,
+                    "stdout": "{\"staged\":[],\"foreign\":[]}\n",
+                    "stderr": "commit-guard: refused a.txt (unchanged since base)\n"
+                }
+            ],
+            "artifacts": {},
+            "db": {}
+        },
+        "commit-guard: conflict markers refuse the whole stage (exit 3)": {
+            "steps": [
+                {
+                    "exitCode": 0,
+                    "stdout": "",
+                    "stderr": ""
+                },
+                {
+                    "exitCode": 3,
+                    "stdout": "",
+                    "stderr": "commit-guard: refusing to stage docs/readme.md (conflict markers); nothing staged\n"
+                }
+            ],
+            "artifacts": {},
+            "db": {}
+        },
+        "commit-guard: stage/check without a start snapshot fail closed (exit 1)": {
+            "steps": [
+                {
+                    "exitCode": 1,
+                    "stdout": "",
+                    "stderr": "commit-guard: no .spur/run/nope-tree-start.json \u2014 run `commit-guard start --run nope` first\n"
+                },
+                {
+                    "exitCode": 1,
+                    "stdout": "",
+                    "stderr": "commit-guard: no .spur/run/nope-tree-start.json \u2014 run `commit-guard start --run nope` first\n"
+                }
+            ],
+            "artifacts": {},
+            "db": {}
+        },
+        "commit-guard: the precheck base anchor is honored": {
+            "steps": [
+                {
+                    "exitCode": 0,
+                    "stdout": "",
+                    "stderr": ""
+                },
+                {
+                    "exitCode": 0,
+                    "stdout": "{\"foreign\":[]}\n",
+                    "stderr": ""
+                }
+            ],
+            "artifacts": {},
+            "db": {}
+        },
+        "commit-guard: outside a work tree the probes fail (exit 1)": {
+            "steps": [
+                {
+                    "exitCode": 1,
+                    "stdout": "",
+                    "stderr": "commit-guard: git probe failed (rev-parse HEAD / status) \u2014 is this a work tree?\n"
+                }
+            ],
+            "artifacts": {},
+            "db": {}
+        },
+        "persist-check: usage errors exit 2": {
+            "steps": [
+                {
+                    "exitCode": 2,
+                    "stdout": "",
+                    "stderr": "usage: persist-out-check --from <worktree> [--task-file <path>]\u2026 [--run-id <id>]\u2026 [--root <invoke-tree>] [--success-json <path>]\npersist-out-check: at least one --task-file or --run-id required\n"
+                },
+                {
+                    "exitCode": 2,
+                    "stdout": "",
+                    "stderr": "usage: persist-out-check --from <worktree> [--task-file <path>]\u2026 [--run-id <id>]\u2026 [--root <invoke-tree>] [--success-json <path>]\npersist-out-check: at least one --task-file or --run-id required\n"
+                },
+                {
+                    "exitCode": 2,
+                    "stdout": "",
+                    "stderr": "usage: persist-out-check --from <worktree> [--task-file <path>]\u2026 [--run-id <id>]\u2026 [--root <invoke-tree>] [--success-json <path>]\npersist-out-check: --from must be an existing directory\n"
+                },
+                {
+                    "exitCode": 2,
+                    "stdout": "",
+                    "stderr": "usage: persist-out-check --from <worktree> [--task-file <path>]\u2026 [--run-id <id>]\u2026 [--root <invoke-tree>] [--success-json <path>]\n"
+                }
+            ],
+            "artifacts": {},
+            "db": {}
+        },
+        "persist-check: every owned file persisted with identical bytes passes": {
+            "steps": [
+                {
+                    "exitCode": 0,
+                    "stdout": "persist-out-check: ok \u2014 2 evidence file(s) persisted, unowned: 1, nothing abandoned\n",
+                    "stderr": ""
+                },
+                {
+                    "exitCode": 0,
+                    "stdout": "persist-out-check: ok \u2014 1 evidence file(s) persisted, unowned: 2, nothing abandoned\n",
+                    "stderr": ""
+                }
+            ],
+            "artifacts": {},
+            "db": {}
+        },
+        "persist-check: missing, divergent and unforwarded evidence block (exit 1)": {
+            "steps": [
+                {
+                    "exitCode": 1,
+                    "stdout": "MISSING .spur/run/r1-a.json\nDIVERGENT .spur/run/r1-b.json \u2014 reconcile by hand (persist-out never overwrites)\nUNFORWARDED .spur/run/9999-verdict.json \u2014 durable verdict/receipt outside the forwarded prefixes\n",
+                    "stderr": "persist-out-check: BLOCKED 1 missing, 1 divergent, 1 unforwarded durable verdict/receipt \u2014 run inline-run-setup --persist-out --from <worktree> (--task-file <wbs>_<slug>.md) before worktree removal\n"
+                }
+            ],
+            "artifacts": {},
+            "db": {}
+        },
+        "persist-check: persist-out skips are reported and foreign-divergent evidence is excused": {
+            "steps": [
+                {
+                    "exitCode": 0,
+                    "stdout": "SKIP run-a: id-exists\npersist-out-check: ok \u2014 0 evidence file(s) persisted, unowned: 0, 1 skipped\n",
+                    "stderr": ""
+                }
+            ],
+            "artifacts": {},
+            "db": {}
+        },
+        "persist-check: --success-json overrides the default persist-out result": {
+            "steps": [
+                {
+                    "exitCode": 0,
+                    "stdout": "SKIP run-z: record-conflict:x\npersist-out-check: ok \u2014 1 evidence file(s) persisted, unowned: 0, 1 skipped\n",
+                    "stderr": ""
+                }
+            ],
+            "artifacts": {},
+            "db": {}
+        },
+        "inline begin: an unsafe run id refuses before any write (exit 1)": {
+            "steps": [
+                {
+                    "exitCode": 1,
+                    "stdout": "",
+                    "stderr": "inline-run-setup: refusing unsafe run id: ../evil\n  The run id must be a single safe filename component (alphanumeric/._-, no leading dot, no path separators, interpolation or traversal; same class as the task-pipeline route-reason guard, task 0804 R8). Allocate a fresh run id (uuid or timestamp slug) and retry.\n"
+                },
+                {
+                    "exitCode": 1,
+                    "stdout": "",
+                    "stderr": "inline-run-setup: refusing unsafe run id: $(id)\n  The run id must be a single safe filename component (alphanumeric/._-, no leading dot, no path separators, interpolation or traversal; same class as the task-pipeline route-reason guard, task 0804 R8). Allocate a fresh run id (uuid or timestamp slug) and retry.\n"
+                }
+            ],
+            "artifacts": {
+                ".spur/run": null,
+                ".spur/memory": null
+            },
+            "db": {}
+        },
+        "inline begin: a missing --file is a usage error (exit 2)": {
+            "steps": [
+                {
+                    "exitCode": 2,
+                    "stdout": "",
+                    "stderr": "Usage: bun plugins/sp/scripts/inline-run-setup.ts --run-id <id> --file <definition> [--spur-bin <path>]\n       bun plugins/sp/scripts/inline-run-setup.ts --fingerprint --task-file <path> [--feature-file <path>] [--spur-bin <path>]\n       bun plugins/sp/scripts/inline-run-setup.ts --action --run-id <id> --node <state> --kind <kind> --status <done|failed> --ok <true|false> [--duration-ms <n>] [--estimated] [--project-root <path>] [--spur-bin <path>]\n       bun plugins/sp/scripts/inline-run-setup.ts --node-enter --run-id <id> --node <state> [--project-root <path>] [--spur-bin <path>]  (1136 R4: stamps the node enter time)\n       bun plugins/sp/scripts/inline-run-setup.ts --actions-file <json-file> --run-id <id> [--project-root <path>] [--spur-bin <path>]  (1007 R5 batch trace emission)\n       bun plugins/sp/scripts/inline-run-setup.ts --close --run-id <id> --status <done|failed|paused> [--reason <terminal-reason>] [--no-summary] [--project-root <path>] [--spur-bin <path>]\n       --project-root (1136 R1) names the tree that OWNS the run row; without it the run row is read from the cwd tree, and a miss exits 1 with RUN_NOT_FOUND\n       --duration-ms is optional on --action (1136 R4): omitted, the duration is measured from the calling --node-enter; supplied, it records provenance host-reported\n       bun plugins/sp/scripts/inline-run-setup.ts --persist-out --from <worktree-path> [--task-file <path>]... [--spur-bin <path>]\n       terminal-reason is a closed enum (0937 R2): done, paused-operator, failed-check, failed-agent, failed-timeout, failed-guard, cancelled, interrupted, retry-exhausted\n       close defaults (1051 AC1): --status done \u2192 reason done, --status paused \u2192 reason paused-operator; --status failed requires an explicit --reason\n       bun plugins/sp/scripts/inline-run-setup.ts --decide --run-id <id> --node <state> --options-json <file> [--spur-bin <path>]\n"
+                }
+            ],
+            "artifacts": {},
+            "db": {}
+        },
+        "inline begin: an unresolvable definition fails closed and records the error": {
+            "steps": [
+                {
+                    "exitCode": 1,
+                    "stdout": "",
+                    "stderr": "inline-run-setup: FAIL \u2014 could not resolve the workflow definition: could not resolve the workflow definition with the installed CLI: workflow show: file not found: <ROOT>/no-such-workflow (shared: <REPO_CONFIG>/workflows/no-such-workflow.yaml)\n"
+                }
+            ],
+            "artifacts": {
+                ".spur/memory/runs/r-missing.state.json": "{\n    \"schemaVersion\": 1,\n    \"runId\": \"r-missing\",\n    \"startedAt\": \"<TS>\",\n    \"updatedAt\": \"<TS>\",\n    \"ok\": false,\n    \"error\": \"could not resolve the workflow definition: could not resolve the workflow definition with the installed CLI: workflow show: file not found: <ROOT>/no-such-workflow (shared: <REPO_CONFIG>/workflows/no-such-workflow.yaml)\"\n}\n"
+            },
+            "db": {}
+        },
+        "inline: begin \u2192 node-enter \u2192 action \u2192 actions \u2192 close lands rows and the run record": {
+            "steps": [
+                {
+                    "exitCode": 0,
+                    "stdout": "",
+                    "stderr": "inline-run-setup: created run r-flow (inline-smoke, layer project, digest sha256:e5a7b8e49a9ad929cf387cb534168afa18980193746f958fff1b28d08d332b3f, status running)\n"
+                },
+                {
+                    "exitCode": 0,
+                    "stdout": "",
+                    "stderr": "inline-run-setup: attached run r-flow (inline-smoke, layer project, digest sha256:e5a7b8e49a9ad929cf387cb534168afa18980193746f958fff1b28d08d332b3f, status running)\n"
+                },
+                {
+                    "exitCode": 0,
+                    "stdout": "{\"ok\":true,\"runId\":\"r-flow\",\"node\":\"start\",\"enteredAt\":\"<TS>\"}\n",
+                    "stderr": ""
+                },
+                {
+                    "exitCode": 0,
+                    "stdout": "{\"ok\":true,\"actionId\":\"<UUID>\",\"runId\":\"r-flow\"}\n",
+                    "stderr": ""
+                },
+                {
+                    "exitCode": 0,
+                    "stdout": "{\"ok\":true,\"actionId\":\"<UUID>\",\"runId\":\"r-flow\"}\n",
+                    "stderr": ""
+                },
+                {
+                    "exitCode": 0,
+                    "stdout": "{\"ok\":true,\"runId\":\"r-flow\",\"recorded\":2}\n",
+                    "stderr": ""
+                },
+                {
+                    "exitCode": 0,
+                    "stdout": "{\"ok\":true,\"actionRows\":4,\"runId\":\"r-flow\",\"missingNodes\":[]}\n",
+                    "stderr": ""
+                }
+            ],
+            "artifacts": {
+                ".spur/memory/runs/r-flow.state.json": "{\n    \"schemaVersion\": 1,\n    \"runId\": \"r-flow\",\n    \"workflowName\": \"inline-smoke\",\n    \"status\": \"done\",\n    \"startedAt\": \"<TS>\",\n    \"updatedAt\": \"<TS>\",\n    \"attached\": true,\n    \"definitionDigest\": \"sha256:e5a7b8e49a9ad929cf387cb534168afa18980193746f958fff1b28d08d332b3f\",\n    \"workflowVersion\": null,\n    \"resolvedPath\": \"<ROOT>/.spur/workflows/inline-smoke.yaml\",\n    \"layer\": \"project\",\n    \"workdir\": \"<ROOT>\",\n    \"ok\": true,\n    \"nodeEnters\": {\n        \"start\": \"<TS>\"\n    },\n    \"visitedNodes\": [\n        \"start\"\n    ],\n    \"activeNode\": \"start\",\n    \"enteredAt\": \"<TS>\"\n}\n",
+                ".spur/memory/runs/r-flow.md": "# spur inline run r-flow \u2014 inline-smoke \u2014 setup <TS>\n[<TS>] node-entered run=r-flow node=start at=<TS>\n",
+                ".spur/run": null
+            },
+            "db": {
+                "SELECT id, workflow_name, status, terminal_reason FROM runs ORDER BY id": [
+                    {
+                        "id": "r-flow",
+                        "workflow_name": "inline-smoke",
+                        "status": "done",
+                        "terminal_reason": "done"
+                    }
+                ],
+                "SELECT run_id, node, kind, status, duration_ms, ok FROM action_runs ORDER BY run_id, node, kind": [
+                    {
+                        "run_id": "r-flow",
+                        "node": "end",
+                        "kind": "agent.run",
+                        "status": "failed",
+                        "duration_ms": 7,
+                        "ok": 0
+                    },
+                    {
+                        "run_id": "r-flow",
+                        "node": "implement",
+                        "kind": "agent.run",
+                        "status": "done",
+                        "duration_ms": 1234,
+                        "ok": 1
+                    },
+                    {
+                        "run_id": "r-flow",
+                        "node": "start",
+                        "kind": "shell",
+                        "status": "done",
+                        "duration_ms": 5,
+                        "ok": 1
+                    },
+                    {
+                        "run_id": "r-flow",
+                        "node": "test",
+                        "kind": "shell",
+                        "status": "failed",
+                        "duration_ms": 88,
+                        "ok": 0
+                    }
+                ]
+            }
+        },
+        "inline close: the default close writes the n/a summary when no transcript resolves": {
+            "steps": [
+                {
+                    "exitCode": 0,
+                    "stdout": "",
+                    "stderr": "inline-run-setup: created run r-sum (inline-smoke, layer project, digest sha256:e5a7b8e49a9ad929cf387cb534168afa18980193746f958fff1b28d08d332b3f, status running)\n"
+                },
+                {
+                    "exitCode": 0,
+                    "stdout": "{\"ok\":true,\"actionId\":\"<UUID>\",\"runId\":\"r-sum\"}\n",
+                    "stderr": ""
+                },
+                {
+                    "exitCode": 0,
+                    "stdout": "{\"ok\":true,\"actionRows\":1,\"runId\":\"r-sum\",\"missingNodes\":[],\"summaryFile\":\".spur/run/r-sum-summary.md\"}\n",
+                    "stderr": ""
+                }
+            ],
+            "artifacts": {
+                ".spur/run/r-sum-summary.md": "Execution summary: n/a (no host session id; pass --transcript <path> (pi: ~/.pi/agent/sessions/<cwd-slug>/<file>.jsonl, or set PI_SESSION_FILE))\n",
+                ".spur/memory/runs/r-sum.state.json": "{\n    \"schemaVersion\": 1,\n    \"runId\": \"r-sum\",\n    \"workflowName\": \"inline-smoke\",\n    \"status\": \"paused\",\n    \"startedAt\": \"<TS>\",\n    \"updatedAt\": \"<TS>\",\n    \"attached\": false,\n    \"definitionDigest\": \"sha256:e5a7b8e49a9ad929cf387cb534168afa18980193746f958fff1b28d08d332b3f\",\n    \"workflowVersion\": null,\n    \"resolvedPath\": \"<ROOT>/.spur/workflows/inline-smoke.yaml\",\n    \"layer\": \"project\",\n    \"workdir\": \"<ROOT>\",\n    \"ok\": true\n}\n"
+            },
+            "db": {
+                "SELECT id, workflow_name, status, terminal_reason FROM runs ORDER BY id": [
+                    {
+                        "id": "r-sum",
+                        "workflow_name": "inline-smoke",
+                        "status": "paused",
+                        "terminal_reason": "paused-operator"
+                    }
+                ],
+                "SELECT run_id, node, kind, status, duration_ms, ok FROM action_runs ORDER BY run_id, node, kind": [
+                    {
+                        "run_id": "r-sum",
+                        "node": "start",
+                        "kind": "shell",
+                        "status": "done",
+                        "duration_ms": 5,
+                        "ok": 1
+                    }
+                ]
+            }
+        },
+        "inline close: zero action rows on a done close exits 1 (NO_ACTION_ROWS); failed needs a reason": {
+            "steps": [
+                {
+                    "exitCode": 0,
+                    "stdout": "",
+                    "stderr": "inline-run-setup: created run r-zero (inline-smoke, layer project, digest sha256:e5a7b8e49a9ad929cf387cb534168afa18980193746f958fff1b28d08d332b3f, status running)\n"
+                },
+                {
+                    "exitCode": 2,
+                    "stdout": "",
+                    "stderr": "Usage: bun plugins/sp/scripts/inline-run-setup.ts --run-id <id> --file <definition> [--spur-bin <path>]\n       bun plugins/sp/scripts/inline-run-setup.ts --fingerprint --task-file <path> [--feature-file <path>] [--spur-bin <path>]\n       bun plugins/sp/scripts/inline-run-setup.ts --action --run-id <id> --node <state> --kind <kind> --status <done|failed> --ok <true|false> [--duration-ms <n>] [--estimated] [--project-root <path>] [--spur-bin <path>]\n       bun plugins/sp/scripts/inline-run-setup.ts --node-enter --run-id <id> --node <state> [--project-root <path>] [--spur-bin <path>]  (1136 R4: stamps the node enter time)\n       bun plugins/sp/scripts/inline-run-setup.ts --actions-file <json-file> --run-id <id> [--project-root <path>] [--spur-bin <path>]  (1007 R5 batch trace emission)\n       bun plugins/sp/scripts/inline-run-setup.ts --close --run-id <id> --status <done|failed|paused> [--reason <terminal-reason>] [--no-summary] [--project-root <path>] [--spur-bin <path>]\n       --project-root (1136 R1) names the tree that OWNS the run row; without it the run row is read from the cwd tree, and a miss exits 1 with RUN_NOT_FOUND\n       --duration-ms is optional on --action (1136 R4): omitted, the duration is measured from the calling --node-enter; supplied, it records provenance host-reported\n       bun plugins/sp/scripts/inline-run-setup.ts --persist-out --from <worktree-path> [--task-file <path>]... [--spur-bin <path>]\n       terminal-reason is a closed enum (0937 R2): done, paused-operator, failed-check, failed-agent, failed-timeout, failed-guard, cancelled, interrupted, retry-exhausted\n       close defaults (1051 AC1): --status done \u2192 reason done, --status paused \u2192 reason paused-operator; --status failed requires an explicit --reason\n       bun plugins/sp/scripts/inline-run-setup.ts --decide --run-id <id> --node <state> --options-json <file> [--spur-bin <path>]\n"
+                },
+                {
+                    "exitCode": 2,
+                    "stdout": "",
+                    "stderr": "Usage: bun plugins/sp/scripts/inline-run-setup.ts --run-id <id> --file <definition> [--spur-bin <path>]\n       bun plugins/sp/scripts/inline-run-setup.ts --fingerprint --task-file <path> [--feature-file <path>] [--spur-bin <path>]\n       bun plugins/sp/scripts/inline-run-setup.ts --action --run-id <id> --node <state> --kind <kind> --status <done|failed> --ok <true|false> [--duration-ms <n>] [--estimated] [--project-root <path>] [--spur-bin <path>]\n       bun plugins/sp/scripts/inline-run-setup.ts --node-enter --run-id <id> --node <state> [--project-root <path>] [--spur-bin <path>]  (1136 R4: stamps the node enter time)\n       bun plugins/sp/scripts/inline-run-setup.ts --actions-file <json-file> --run-id <id> [--project-root <path>] [--spur-bin <path>]  (1007 R5 batch trace emission)\n       bun plugins/sp/scripts/inline-run-setup.ts --close --run-id <id> --status <done|failed|paused> [--reason <terminal-reason>] [--no-summary] [--project-root <path>] [--spur-bin <path>]\n       --project-root (1136 R1) names the tree that OWNS the run row; without it the run row is read from the cwd tree, and a miss exits 1 with RUN_NOT_FOUND\n       --duration-ms is optional on --action (1136 R4): omitted, the duration is measured from the calling --node-enter; supplied, it records provenance host-reported\n       bun plugins/sp/scripts/inline-run-setup.ts --persist-out --from <worktree-path> [--task-file <path>]... [--spur-bin <path>]\n       terminal-reason is a closed enum (0937 R2): done, paused-operator, failed-check, failed-agent, failed-timeout, failed-guard, cancelled, interrupted, retry-exhausted\n       close defaults (1051 AC1): --status done \u2192 reason done, --status paused \u2192 reason paused-operator; --status failed requires an explicit --reason\n       bun plugins/sp/scripts/inline-run-setup.ts --decide --run-id <id> --node <state> --options-json <file> [--spur-bin <path>]\n"
+                },
+                {
+                    "exitCode": 1,
+                    "stdout": "{\"ok\":false,\"runId\":\"r-zero\",\"error\":\"run r-zero closed done with zero action_runs rows; emit --action/--actions-file during the run (no backfill); see inline-pipeline-driver.md#structured-trace-emission-adr-117-task-0868\",\"code\":\"NO_ACTION_ROWS\",\"actionRows\":0}\n",
+                    "stderr": ""
+                }
+            ],
+            "artifacts": {},
+            "db": {
+                "SELECT id, workflow_name, status, terminal_reason FROM runs ORDER BY id": [
+                    {
+                        "id": "r-zero",
+                        "workflow_name": "inline-smoke",
+                        "status": "done",
+                        "terminal_reason": "done"
+                    }
+                ],
+                "SELECT run_id, node, kind, status, duration_ms, ok FROM action_runs ORDER BY run_id, node, kind": []
+            }
+        },
+        "inline: trace ops on a run with no row are loud RUN_NOT_FOUND failures": {
+            "steps": [
+                {
+                    "exitCode": 1,
+                    "stdout": "{\"ok\":false,\"runId\":\"r-ghost\",\"error\":\"run row not found: r-ghost\",\"code\":\"RUN_NOT_FOUND\"}\n",
+                    "stderr": ""
+                },
+                {
+                    "exitCode": 1,
+                    "stdout": "{\"ok\":false,\"runId\":\"r-ghost\",\"error\":\"run row not found: r-ghost\",\"code\":\"RUN_NOT_FOUND\"}\n",
+                    "stderr": ""
+                },
+                {
+                    "exitCode": 1,
+                    "stdout": "{\"ok\":false,\"runId\":\"r-ghost\",\"error\":\"run row not found: r-ghost\",\"code\":\"RUN_NOT_FOUND\"}\n",
+                    "stderr": ""
+                }
+            ],
+            "artifacts": {
+                ".spur/memory/runs/r-ghost.md": "[<TS>] trace-emission-failed run=r-ghost: run row not found: r-ghost\n[<TS>] trace-close-failed run=r-ghost: run row not found: r-ghost\n[<TS>] node-enter-failed run=r-ghost: run row not found: r-ghost\n"
+            },
+            "db": {}
+        },
+        "inline action: malformed values are usage errors (exit 2); unsafe ids refuse (exit 1)": {
+            "steps": [
+                {
+                    "exitCode": 0,
+                    "stdout": "",
+                    "stderr": "inline-run-setup: created run r-usage (inline-smoke, layer project, digest sha256:e5a7b8e49a9ad929cf387cb534168afa18980193746f958fff1b28d08d332b3f, status running)\n"
+                },
+                {
+                    "exitCode": 2,
+                    "stdout": "",
+                    "stderr": "Usage: bun plugins/sp/scripts/inline-run-setup.ts --run-id <id> --file <definition> [--spur-bin <path>]\n       bun plugins/sp/scripts/inline-run-setup.ts --fingerprint --task-file <path> [--feature-file <path>] [--spur-bin <path>]\n       bun plugins/sp/scripts/inline-run-setup.ts --action --run-id <id> --node <state> --kind <kind> --status <done|failed> --ok <true|false> [--duration-ms <n>] [--estimated] [--project-root <path>] [--spur-bin <path>]\n       bun plugins/sp/scripts/inline-run-setup.ts --node-enter --run-id <id> --node <state> [--project-root <path>] [--spur-bin <path>]  (1136 R4: stamps the node enter time)\n       bun plugins/sp/scripts/inline-run-setup.ts --actions-file <json-file> --run-id <id> [--project-root <path>] [--spur-bin <path>]  (1007 R5 batch trace emission)\n       bun plugins/sp/scripts/inline-run-setup.ts --close --run-id <id> --status <done|failed|paused> [--reason <terminal-reason>] [--no-summary] [--project-root <path>] [--spur-bin <path>]\n       --project-root (1136 R1) names the tree that OWNS the run row; without it the run row is read from the cwd tree, and a miss exits 1 with RUN_NOT_FOUND\n       --duration-ms is optional on --action (1136 R4): omitted, the duration is measured from the calling --node-enter; supplied, it records provenance host-reported\n       bun plugins/sp/scripts/inline-run-setup.ts --persist-out --from <worktree-path> [--task-file <path>]... [--spur-bin <path>]\n       terminal-reason is a closed enum (0937 R2): done, paused-operator, failed-check, failed-agent, failed-timeout, failed-guard, cancelled, interrupted, retry-exhausted\n       close defaults (1051 AC1): --status done \u2192 reason done, --status paused \u2192 reason paused-operator; --status failed requires an explicit --reason\n       bun plugins/sp/scripts/inline-run-setup.ts --decide --run-id <id> --node <state> --options-json <file> [--spur-bin <path>]\n"
+                },
+                {
+                    "exitCode": 2,
+                    "stdout": "",
+                    "stderr": "Usage: bun plugins/sp/scripts/inline-run-setup.ts --run-id <id> --file <definition> [--spur-bin <path>]\n       bun plugins/sp/scripts/inline-run-setup.ts --fingerprint --task-file <path> [--feature-file <path>] [--spur-bin <path>]\n       bun plugins/sp/scripts/inline-run-setup.ts --action --run-id <id> --node <state> --kind <kind> --status <done|failed> --ok <true|false> [--duration-ms <n>] [--estimated] [--project-root <path>] [--spur-bin <path>]\n       bun plugins/sp/scripts/inline-run-setup.ts --node-enter --run-id <id> --node <state> [--project-root <path>] [--spur-bin <path>]  (1136 R4: stamps the node enter time)\n       bun plugins/sp/scripts/inline-run-setup.ts --actions-file <json-file> --run-id <id> [--project-root <path>] [--spur-bin <path>]  (1007 R5 batch trace emission)\n       bun plugins/sp/scripts/inline-run-setup.ts --close --run-id <id> --status <done|failed|paused> [--reason <terminal-reason>] [--no-summary] [--project-root <path>] [--spur-bin <path>]\n       --project-root (1136 R1) names the tree that OWNS the run row; without it the run row is read from the cwd tree, and a miss exits 1 with RUN_NOT_FOUND\n       --duration-ms is optional on --action (1136 R4): omitted, the duration is measured from the calling --node-enter; supplied, it records provenance host-reported\n       bun plugins/sp/scripts/inline-run-setup.ts --persist-out --from <worktree-path> [--task-file <path>]... [--spur-bin <path>]\n       terminal-reason is a closed enum (0937 R2): done, paused-operator, failed-check, failed-agent, failed-timeout, failed-guard, cancelled, interrupted, retry-exhausted\n       close defaults (1051 AC1): --status done \u2192 reason done, --status paused \u2192 reason paused-operator; --status failed requires an explicit --reason\n       bun plugins/sp/scripts/inline-run-setup.ts --decide --run-id <id> --node <state> --options-json <file> [--spur-bin <path>]\n"
+                },
+                {
+                    "exitCode": 2,
+                    "stdout": "",
+                    "stderr": "Usage: bun plugins/sp/scripts/inline-run-setup.ts --run-id <id> --file <definition> [--spur-bin <path>]\n       bun plugins/sp/scripts/inline-run-setup.ts --fingerprint --task-file <path> [--feature-file <path>] [--spur-bin <path>]\n       bun plugins/sp/scripts/inline-run-setup.ts --action --run-id <id> --node <state> --kind <kind> --status <done|failed> --ok <true|false> [--duration-ms <n>] [--estimated] [--project-root <path>] [--spur-bin <path>]\n       bun plugins/sp/scripts/inline-run-setup.ts --node-enter --run-id <id> --node <state> [--project-root <path>] [--spur-bin <path>]  (1136 R4: stamps the node enter time)\n       bun plugins/sp/scripts/inline-run-setup.ts --actions-file <json-file> --run-id <id> [--project-root <path>] [--spur-bin <path>]  (1007 R5 batch trace emission)\n       bun plugins/sp/scripts/inline-run-setup.ts --close --run-id <id> --status <done|failed|paused> [--reason <terminal-reason>] [--no-summary] [--project-root <path>] [--spur-bin <path>]\n       --project-root (1136 R1) names the tree that OWNS the run row; without it the run row is read from the cwd tree, and a miss exits 1 with RUN_NOT_FOUND\n       --duration-ms is optional on --action (1136 R4): omitted, the duration is measured from the calling --node-enter; supplied, it records provenance host-reported\n       bun plugins/sp/scripts/inline-run-setup.ts --persist-out --from <worktree-path> [--task-file <path>]... [--spur-bin <path>]\n       terminal-reason is a closed enum (0937 R2): done, paused-operator, failed-check, failed-agent, failed-timeout, failed-guard, cancelled, interrupted, retry-exhausted\n       close defaults (1051 AC1): --status done \u2192 reason done, --status paused \u2192 reason paused-operator; --status failed requires an explicit --reason\n       bun plugins/sp/scripts/inline-run-setup.ts --decide --run-id <id> --node <state> --options-json <file> [--spur-bin <path>]\n"
+                },
+                {
+                    "exitCode": 2,
+                    "stdout": "",
+                    "stderr": "Usage: bun plugins/sp/scripts/inline-run-setup.ts --run-id <id> --file <definition> [--spur-bin <path>]\n       bun plugins/sp/scripts/inline-run-setup.ts --fingerprint --task-file <path> [--feature-file <path>] [--spur-bin <path>]\n       bun plugins/sp/scripts/inline-run-setup.ts --action --run-id <id> --node <state> --kind <kind> --status <done|failed> --ok <true|false> [--duration-ms <n>] [--estimated] [--project-root <path>] [--spur-bin <path>]\n       bun plugins/sp/scripts/inline-run-setup.ts --node-enter --run-id <id> --node <state> [--project-root <path>] [--spur-bin <path>]  (1136 R4: stamps the node enter time)\n       bun plugins/sp/scripts/inline-run-setup.ts --actions-file <json-file> --run-id <id> [--project-root <path>] [--spur-bin <path>]  (1007 R5 batch trace emission)\n       bun plugins/sp/scripts/inline-run-setup.ts --close --run-id <id> --status <done|failed|paused> [--reason <terminal-reason>] [--no-summary] [--project-root <path>] [--spur-bin <path>]\n       --project-root (1136 R1) names the tree that OWNS the run row; without it the run row is read from the cwd tree, and a miss exits 1 with RUN_NOT_FOUND\n       --duration-ms is optional on --action (1136 R4): omitted, the duration is measured from the calling --node-enter; supplied, it records provenance host-reported\n       bun plugins/sp/scripts/inline-run-setup.ts --persist-out --from <worktree-path> [--task-file <path>]... [--spur-bin <path>]\n       terminal-reason is a closed enum (0937 R2): done, paused-operator, failed-check, failed-agent, failed-timeout, failed-guard, cancelled, interrupted, retry-exhausted\n       close defaults (1051 AC1): --status done \u2192 reason done, --status paused \u2192 reason paused-operator; --status failed requires an explicit --reason\n       bun plugins/sp/scripts/inline-run-setup.ts --decide --run-id <id> --node <state> --options-json <file> [--spur-bin <path>]\n"
+                },
+                {
+                    "exitCode": 1,
+                    "stdout": "{\"ok\":false,\"runId\":\"r-usage\",\"error\":\"no enter timestamp recorded for node \\\"start\\\"; call --node-enter first or pass --duration-ms\",\"code\":\"ACTION_DURATION_UNAVAILABLE\"}\n",
+                    "stderr": ""
+                },
+                {
+                    "exitCode": 1,
+                    "stdout": "",
+                    "stderr": "inline-run-setup: refusing unsafe run id: a/b\n  The run id must be a single safe filename component (alphanumeric/._-, no leading dot, no path separators, interpolation or traversal; same class as the task-pipeline route-reason guard, task 0804 R8). Allocate a fresh run id (uuid or timestamp slug) and retry.\n"
+                },
+                {
+                    "exitCode": 2,
+                    "stdout": "",
+                    "stderr": "Usage: bun plugins/sp/scripts/inline-run-setup.ts --run-id <id> --file <definition> [--spur-bin <path>]\n       bun plugins/sp/scripts/inline-run-setup.ts --fingerprint --task-file <path> [--feature-file <path>] [--spur-bin <path>]\n       bun plugins/sp/scripts/inline-run-setup.ts --action --run-id <id> --node <state> --kind <kind> --status <done|failed> --ok <true|false> [--duration-ms <n>] [--estimated] [--project-root <path>] [--spur-bin <path>]\n       bun plugins/sp/scripts/inline-run-setup.ts --node-enter --run-id <id> --node <state> [--project-root <path>] [--spur-bin <path>]  (1136 R4: stamps the node enter time)\n       bun plugins/sp/scripts/inline-run-setup.ts --actions-file <json-file> --run-id <id> [--project-root <path>] [--spur-bin <path>]  (1007 R5 batch trace emission)\n       bun plugins/sp/scripts/inline-run-setup.ts --close --run-id <id> --status <done|failed|paused> [--reason <terminal-reason>] [--no-summary] [--project-root <path>] [--spur-bin <path>]\n       --project-root (1136 R1) names the tree that OWNS the run row; without it the run row is read from the cwd tree, and a miss exits 1 with RUN_NOT_FOUND\n       --duration-ms is optional on --action (1136 R4): omitted, the duration is measured from the calling --node-enter; supplied, it records provenance host-reported\n       bun plugins/sp/scripts/inline-run-setup.ts --persist-out --from <worktree-path> [--task-file <path>]... [--spur-bin <path>]\n       terminal-reason is a closed enum (0937 R2): done, paused-operator, failed-check, failed-agent, failed-timeout, failed-guard, cancelled, interrupted, retry-exhausted\n       close defaults (1051 AC1): --status done \u2192 reason done, --status paused \u2192 reason paused-operator; --status failed requires an explicit --reason\n       bun plugins/sp/scripts/inline-run-setup.ts --decide --run-id <id> --node <state> --options-json <file> [--spur-bin <path>]\n"
+                },
+                {
+                    "exitCode": 2,
+                    "stdout": "",
+                    "stderr": "Usage: bun plugins/sp/scripts/inline-run-setup.ts --run-id <id> --file <definition> [--spur-bin <path>]\n       bun plugins/sp/scripts/inline-run-setup.ts --fingerprint --task-file <path> [--feature-file <path>] [--spur-bin <path>]\n       bun plugins/sp/scripts/inline-run-setup.ts --action --run-id <id> --node <state> --kind <kind> --status <done|failed> --ok <true|false> [--duration-ms <n>] [--estimated] [--project-root <path>] [--spur-bin <path>]\n       bun plugins/sp/scripts/inline-run-setup.ts --node-enter --run-id <id> --node <state> [--project-root <path>] [--spur-bin <path>]  (1136 R4: stamps the node enter time)\n       bun plugins/sp/scripts/inline-run-setup.ts --actions-file <json-file> --run-id <id> [--project-root <path>] [--spur-bin <path>]  (1007 R5 batch trace emission)\n       bun plugins/sp/scripts/inline-run-setup.ts --close --run-id <id> --status <done|failed|paused> [--reason <terminal-reason>] [--no-summary] [--project-root <path>] [--spur-bin <path>]\n       --project-root (1136 R1) names the tree that OWNS the run row; without it the run row is read from the cwd tree, and a miss exits 1 with RUN_NOT_FOUND\n       --duration-ms is optional on --action (1136 R4): omitted, the duration is measured from the calling --node-enter; supplied, it records provenance host-reported\n       bun plugins/sp/scripts/inline-run-setup.ts --persist-out --from <worktree-path> [--task-file <path>]... [--spur-bin <path>]\n       terminal-reason is a closed enum (0937 R2): done, paused-operator, failed-check, failed-agent, failed-timeout, failed-guard, cancelled, interrupted, retry-exhausted\n       close defaults (1051 AC1): --status done \u2192 reason done, --status paused \u2192 reason paused-operator; --status failed requires an explicit --reason\n       bun plugins/sp/scripts/inline-run-setup.ts --decide --run-id <id> --node <state> --options-json <file> [--spur-bin <path>]\n"
+                },
+                {
+                    "exitCode": 1,
+                    "stdout": "{\"ok\":false,\"runId\":\"r-usage\",\"error\":\"cannot read actions file nope.json: ENOENT: no such file or directory, open 'nope.json'\"}\n",
+                    "stderr": ""
+                }
+            ],
+            "artifacts": {},
+            "db": {
+                "SELECT id, workflow_name, status, terminal_reason FROM runs ORDER BY id": [
+                    {
+                        "id": "r-usage",
+                        "workflow_name": "inline-smoke",
+                        "status": "running",
+                        "terminal_reason": null
+                    }
+                ],
+                "SELECT run_id, node, kind, status, duration_ms, ok FROM action_runs ORDER BY run_id, node, kind": []
+            }
+        },
+        "inline fingerprint: prints the proof-input digest; refuses bad input": {
+            "steps": [
+                {
+                    "exitCode": 0,
+                    "stdout": "sha256:33e02535dde1a1abd1bafa260c5e8cd01555cd4aaef59a37f5d5e4e6b34092c1\n",
+                    "stderr": ""
+                },
+                {
+                    "exitCode": 0,
+                    "stdout": "sha256:2a78d4474d139ce4322381ab0ff3e980b46f4b0bdcd3408dcda084fde1c5c2c3\n",
+                    "stderr": ""
+                },
+                {
+                    "exitCode": 1,
+                    "stdout": "",
+                    "stderr": "inline-run-setup: FAIL \u2014 taskFile does not exist: no-such-task.md (resolved <ROOT>/no-such-task.md) \u2014 an explicitly supplied spec must be readable, not silently omitted\n"
+                },
+                {
+                    "exitCode": 2,
+                    "stdout": "",
+                    "stderr": "Usage: bun plugins/sp/scripts/inline-run-setup.ts --run-id <id> --file <definition> [--spur-bin <path>]\n       bun plugins/sp/scripts/inline-run-setup.ts --fingerprint --task-file <path> [--feature-file <path>] [--spur-bin <path>]\n       bun plugins/sp/scripts/inline-run-setup.ts --action --run-id <id> --node <state> --kind <kind> --status <done|failed> --ok <true|false> [--duration-ms <n>] [--estimated] [--project-root <path>] [--spur-bin <path>]\n       bun plugins/sp/scripts/inline-run-setup.ts --node-enter --run-id <id> --node <state> [--project-root <path>] [--spur-bin <path>]  (1136 R4: stamps the node enter time)\n       bun plugins/sp/scripts/inline-run-setup.ts --actions-file <json-file> --run-id <id> [--project-root <path>] [--spur-bin <path>]  (1007 R5 batch trace emission)\n       bun plugins/sp/scripts/inline-run-setup.ts --close --run-id <id> --status <done|failed|paused> [--reason <terminal-reason>] [--no-summary] [--project-root <path>] [--spur-bin <path>]\n       --project-root (1136 R1) names the tree that OWNS the run row; without it the run row is read from the cwd tree, and a miss exits 1 with RUN_NOT_FOUND\n       --duration-ms is optional on --action (1136 R4): omitted, the duration is measured from the calling --node-enter; supplied, it records provenance host-reported\n       bun plugins/sp/scripts/inline-run-setup.ts --persist-out --from <worktree-path> [--task-file <path>]... [--spur-bin <path>]\n       terminal-reason is a closed enum (0937 R2): done, paused-operator, failed-check, failed-agent, failed-timeout, failed-guard, cancelled, interrupted, retry-exhausted\n       close defaults (1051 AC1): --status done \u2192 reason done, --status paused \u2192 reason paused-operator; --status failed requires an explicit --reason\n       bun plugins/sp/scripts/inline-run-setup.ts --decide --run-id <id> --node <state> --options-json <file> [--spur-bin <path>]\n"
+                },
+                {
+                    "exitCode": 2,
+                    "stdout": "",
+                    "stderr": "Usage: bun plugins/sp/scripts/inline-run-setup.ts --run-id <id> --file <definition> [--spur-bin <path>]\n       bun plugins/sp/scripts/inline-run-setup.ts --fingerprint --task-file <path> [--feature-file <path>] [--spur-bin <path>]\n       bun plugins/sp/scripts/inline-run-setup.ts --action --run-id <id> --node <state> --kind <kind> --status <done|failed> --ok <true|false> [--duration-ms <n>] [--estimated] [--project-root <path>] [--spur-bin <path>]\n       bun plugins/sp/scripts/inline-run-setup.ts --node-enter --run-id <id> --node <state> [--project-root <path>] [--spur-bin <path>]  (1136 R4: stamps the node enter time)\n       bun plugins/sp/scripts/inline-run-setup.ts --actions-file <json-file> --run-id <id> [--project-root <path>] [--spur-bin <path>]  (1007 R5 batch trace emission)\n       bun plugins/sp/scripts/inline-run-setup.ts --close --run-id <id> --status <done|failed|paused> [--reason <terminal-reason>] [--no-summary] [--project-root <path>] [--spur-bin <path>]\n       --project-root (1136 R1) names the tree that OWNS the run row; without it the run row is read from the cwd tree, and a miss exits 1 with RUN_NOT_FOUND\n       --duration-ms is optional on --action (1136 R4): omitted, the duration is measured from the calling --node-enter; supplied, it records provenance host-reported\n       bun plugins/sp/scripts/inline-run-setup.ts --persist-out --from <worktree-path> [--task-file <path>]... [--spur-bin <path>]\n       terminal-reason is a closed enum (0937 R2): done, paused-operator, failed-check, failed-agent, failed-timeout, failed-guard, cancelled, interrupted, retry-exhausted\n       close defaults (1051 AC1): --status done \u2192 reason done, --status paused \u2192 reason paused-operator; --status failed requires an explicit --reason\n       bun plugins/sp/scripts/inline-run-setup.ts --decide --run-id <id> --node <state> --options-json <file> [--spur-bin <path>]\n"
+                }
+            ],
+            "artifacts": {
+                ".spur/run": null,
+                ".spur/memory": null
+            },
+            "db": {}
+        },
+        "inline decide: the switched-off decision maker degrades to the declared default": {
+            "steps": [
+                {
+                    "exitCode": 0,
+                    "stdout": "{\"runId\":\"r-dec\",\"node\":\"classify\",\"ok\":true,\"value\":\"stop\",\"degraded\":true,\"reason\":\"disabled\",\"source\":\"default\",\"backend\":null,\"confidence\":null,\"resultFile\":\"<ROOT>/.spur/run/decide-recovery.decision.json\",\"durationMs\":0}\n{\"ok\":false,\"runId\":\"r-dec\",\"error\":\"FOREIGN KEY constraint failed\"}\n",
+                    "stderr": ""
+                },
+                {
+                    "exitCode": 1,
+                    "stdout": "{\"ok\":false,\"runId\":\"r-dec\",\"error\":\"decide: invalid options \u2014 default \\\"c\\\" is not one of choices [a, b]\"}\n",
+                    "stderr": ""
+                },
+                {
+                    "exitCode": 2,
+                    "stdout": "",
+                    "stderr": "Usage: bun plugins/sp/scripts/inline-run-setup.ts --run-id <id> --file <definition> [--spur-bin <path>]\n       bun plugins/sp/scripts/inline-run-setup.ts --fingerprint --task-file <path> [--feature-file <path>] [--spur-bin <path>]\n       bun plugins/sp/scripts/inline-run-setup.ts --action --run-id <id> --node <state> --kind <kind> --status <done|failed> --ok <true|false> [--duration-ms <n>] [--estimated] [--project-root <path>] [--spur-bin <path>]\n       bun plugins/sp/scripts/inline-run-setup.ts --node-enter --run-id <id> --node <state> [--project-root <path>] [--spur-bin <path>]  (1136 R4: stamps the node enter time)\n       bun plugins/sp/scripts/inline-run-setup.ts --actions-file <json-file> --run-id <id> [--project-root <path>] [--spur-bin <path>]  (1007 R5 batch trace emission)\n       bun plugins/sp/scripts/inline-run-setup.ts --close --run-id <id> --status <done|failed|paused> [--reason <terminal-reason>] [--no-summary] [--project-root <path>] [--spur-bin <path>]\n       --project-root (1136 R1) names the tree that OWNS the run row; without it the run row is read from the cwd tree, and a miss exits 1 with RUN_NOT_FOUND\n       --duration-ms is optional on --action (1136 R4): omitted, the duration is measured from the calling --node-enter; supplied, it records provenance host-reported\n       bun plugins/sp/scripts/inline-run-setup.ts --persist-out --from <worktree-path> [--task-file <path>]... [--spur-bin <path>]\n       terminal-reason is a closed enum (0937 R2): done, paused-operator, failed-check, failed-agent, failed-timeout, failed-guard, cancelled, interrupted, retry-exhausted\n       close defaults (1051 AC1): --status done \u2192 reason done, --status paused \u2192 reason paused-operator; --status failed requires an explicit --reason\n       bun plugins/sp/scripts/inline-run-setup.ts --decide --run-id <id> --node <state> --options-json <file> [--spur-bin <path>]\n"
+                },
+                {
+                    "exitCode": 1,
+                    "stdout": "",
+                    "stderr": "inline-run-setup: refusing unsafe run id: ../x\n  The run id must be a single safe filename component (alphanumeric/._-, no leading dot, no path separators, interpolation or traversal; same class as the task-pipeline route-reason guard, task 0804 R8). Allocate a fresh run id (uuid or timestamp slug) and retry.\n"
+                }
+            ],
+            "artifacts": {
+                ".spur/run/decide-recovery.decision.json": "{\n  \"schemaVersion\": 1,\n  \"id\": \"recovery-classify\",\n  \"method\": \"choice\",\n  \"value\": \"stop\",\n  \"backend\": null,\n  \"confidence\": null,\n  \"confidenceLevel\": \"LOW\",\n  \"degraded\": true,\n  \"reason\": \"disabled\",\n  \"source\": \"default\",\n  \"evidenceDigest\": null,\n  \"durationMs\":0\n}\n",
+                ".spur/memory/runs/r-dec.md": "[<TS>] decide node=classify value=stop source=default reason=disabled\n[<TS>] trace-emission-failed operation=action.start run=r-dec: FOREIGN KEY constraint failed\n[<TS>] trace-emission-failed operation=action.finish run=r-dec node=classify kind=decide: FOREIGN KEY constraint failed\n",
+                "d.json": null
+            },
+            "db": {}
+        },
+        "inline persist-out: copies the worktree run into the invoking tree; idempotent re-persist": {
+            "steps": [
+                {
+                    "exitCode": 0,
+                    "stdout": "",
+                    "stderr": "inline-run-setup: created run r-po (inline-smoke, layer project, digest sha256:e5a7b8e49a9ad929cf387cb534168afa18980193746f958fff1b28d08d332b3f, status running)\n"
+                },
+                {
+                    "exitCode": 0,
+                    "stdout": "{\"ok\":true,\"actionId\":\"<UUID>\",\"runId\":\"r-po\"}\n",
+                    "stderr": ""
+                },
+                {
+                    "exitCode": 0,
+                    "stdout": "{\"ok\":true,\"persisted\":1,\"skipped\":[]}\n",
+                    "stderr": ""
+                },
+                {
+                    "exitCode": 0,
+                    "stdout": "{\"ok\":true,\"persisted\":0,\"skipped\":[{\"id\":\"r-po\",\"reason\":\"id-exists\"}]}\n",
+                    "stderr": ""
+                },
+                {
+                    "exitCode": 0,
+                    "stdout": "SKIP r-po: id-exists\npersist-out-check: ok \u2014 1 evidence file(s) persisted, unowned: 0, 1 skipped\n",
+                    "stderr": ""
+                }
+            ],
+            "artifacts": {
+                "main/.spur/run/persist-out.json": "{\n  \"ok\": true,\n  \"persisted\": 0,\n  \"skipped\": [\n    {\n      \"id\": \"r-po\",\n      \"reason\": \"id-exists\"\n    }\n  ]\n}",
+                "main/.spur/run/1234-verdict.json": "{\"verdict\":\"PASS\"}\n",
+                "main/.spur/memory/runs": ["r-po.md", "r-po.state.json"]
+            },
+            "db": {
+                "SELECT id, workflow_name, status, terminal_reason FROM runs ORDER BY id": [
+                    {
+                        "id": "r-po",
+                        "workflow_name": "inline-smoke",
+                        "status": "running",
+                        "terminal_reason": null
+                    }
+                ],
+                "SELECT run_id, node, kind, status, duration_ms, ok FROM action_runs ORDER BY run_id, node, kind": [
+                    {
+                        "run_id": "r-po",
+                        "node": "start",
+                        "kind": "shell",
+                        "status": "done",
+                        "duration_ms": 5,
+                        "ok": 1
+                    }
+                ]
+            }
+        },
+        "inline persist-out: an unreadable worktree DB fails closed; usage errors exit 2": {
+            "steps": [
+                {
+                    "exitCode": 1,
+                    "stdout": "{\"ok\":false,\"error\":\"file is not a database\"}\n",
+                    "stderr": ""
+                },
+                {
+                    "exitCode": 2,
+                    "stdout": "",
+                    "stderr": "Usage: bun plugins/sp/scripts/inline-run-setup.ts --run-id <id> --file <definition> [--spur-bin <path>]\n       bun plugins/sp/scripts/inline-run-setup.ts --fingerprint --task-file <path> [--feature-file <path>] [--spur-bin <path>]\n       bun plugins/sp/scripts/inline-run-setup.ts --action --run-id <id> --node <state> --kind <kind> --status <done|failed> --ok <true|false> [--duration-ms <n>] [--estimated] [--project-root <path>] [--spur-bin <path>]\n       bun plugins/sp/scripts/inline-run-setup.ts --node-enter --run-id <id> --node <state> [--project-root <path>] [--spur-bin <path>]  (1136 R4: stamps the node enter time)\n       bun plugins/sp/scripts/inline-run-setup.ts --actions-file <json-file> --run-id <id> [--project-root <path>] [--spur-bin <path>]  (1007 R5 batch trace emission)\n       bun plugins/sp/scripts/inline-run-setup.ts --close --run-id <id> --status <done|failed|paused> [--reason <terminal-reason>] [--no-summary] [--project-root <path>] [--spur-bin <path>]\n       --project-root (1136 R1) names the tree that OWNS the run row; without it the run row is read from the cwd tree, and a miss exits 1 with RUN_NOT_FOUND\n       --duration-ms is optional on --action (1136 R4): omitted, the duration is measured from the calling --node-enter; supplied, it records provenance host-reported\n       bun plugins/sp/scripts/inline-run-setup.ts --persist-out --from <worktree-path> [--task-file <path>]... [--spur-bin <path>]\n       terminal-reason is a closed enum (0937 R2): done, paused-operator, failed-check, failed-agent, failed-timeout, failed-guard, cancelled, interrupted, retry-exhausted\n       close defaults (1051 AC1): --status done \u2192 reason done, --status paused \u2192 reason paused-operator; --status failed requires an explicit --reason\n       bun plugins/sp/scripts/inline-run-setup.ts --decide --run-id <id> --node <state> --options-json <file> [--spur-bin <path>]\n"
+                },
+                {
+                    "exitCode": 2,
+                    "stdout": "",
+                    "stderr": "Usage: bun plugins/sp/scripts/inline-run-setup.ts --run-id <id> --file <definition> [--spur-bin <path>]\n       bun plugins/sp/scripts/inline-run-setup.ts --fingerprint --task-file <path> [--feature-file <path>] [--spur-bin <path>]\n       bun plugins/sp/scripts/inline-run-setup.ts --action --run-id <id> --node <state> --kind <kind> --status <done|failed> --ok <true|false> [--duration-ms <n>] [--estimated] [--project-root <path>] [--spur-bin <path>]\n       bun plugins/sp/scripts/inline-run-setup.ts --node-enter --run-id <id> --node <state> [--project-root <path>] [--spur-bin <path>]  (1136 R4: stamps the node enter time)\n       bun plugins/sp/scripts/inline-run-setup.ts --actions-file <json-file> --run-id <id> [--project-root <path>] [--spur-bin <path>]  (1007 R5 batch trace emission)\n       bun plugins/sp/scripts/inline-run-setup.ts --close --run-id <id> --status <done|failed|paused> [--reason <terminal-reason>] [--no-summary] [--project-root <path>] [--spur-bin <path>]\n       --project-root (1136 R1) names the tree that OWNS the run row; without it the run row is read from the cwd tree, and a miss exits 1 with RUN_NOT_FOUND\n       --duration-ms is optional on --action (1136 R4): omitted, the duration is measured from the calling --node-enter; supplied, it records provenance host-reported\n       bun plugins/sp/scripts/inline-run-setup.ts --persist-out --from <worktree-path> [--task-file <path>]... [--spur-bin <path>]\n       terminal-reason is a closed enum (0937 R2): done, paused-operator, failed-check, failed-agent, failed-timeout, failed-guard, cancelled, interrupted, retry-exhausted\n       close defaults (1051 AC1): --status done \u2192 reason done, --status paused \u2192 reason paused-operator; --status failed requires an explicit --reason\n       bun plugins/sp/scripts/inline-run-setup.ts --decide --run-id <id> --node <state> --options-json <file> [--spur-bin <path>]\n"
+                },
+                {
+                    "exitCode": 2,
+                    "stdout": "",
+                    "stderr": "Usage: bun plugins/sp/scripts/inline-run-setup.ts --run-id <id> --file <definition> [--spur-bin <path>]\n       bun plugins/sp/scripts/inline-run-setup.ts --fingerprint --task-file <path> [--feature-file <path>] [--spur-bin <path>]\n       bun plugins/sp/scripts/inline-run-setup.ts --action --run-id <id> --node <state> --kind <kind> --status <done|failed> --ok <true|false> [--duration-ms <n>] [--estimated] [--project-root <path>] [--spur-bin <path>]\n       bun plugins/sp/scripts/inline-run-setup.ts --node-enter --run-id <id> --node <state> [--project-root <path>] [--spur-bin <path>]  (1136 R4: stamps the node enter time)\n       bun plugins/sp/scripts/inline-run-setup.ts --actions-file <json-file> --run-id <id> [--project-root <path>] [--spur-bin <path>]  (1007 R5 batch trace emission)\n       bun plugins/sp/scripts/inline-run-setup.ts --close --run-id <id> --status <done|failed|paused> [--reason <terminal-reason>] [--no-summary] [--project-root <path>] [--spur-bin <path>]\n       --project-root (1136 R1) names the tree that OWNS the run row; without it the run row is read from the cwd tree, and a miss exits 1 with RUN_NOT_FOUND\n       --duration-ms is optional on --action (1136 R4): omitted, the duration is measured from the calling --node-enter; supplied, it records provenance host-reported\n       bun plugins/sp/scripts/inline-run-setup.ts --persist-out --from <worktree-path> [--task-file <path>]... [--spur-bin <path>]\n       terminal-reason is a closed enum (0937 R2): done, paused-operator, failed-check, failed-agent, failed-timeout, failed-guard, cancelled, interrupted, retry-exhausted\n       close defaults (1051 AC1): --status done \u2192 reason done, --status paused \u2192 reason paused-operator; --status failed requires an explicit --reason\n       bun plugins/sp/scripts/inline-run-setup.ts --decide --run-id <id> --node <state> --options-json <file> [--spur-bin <path>]\n"
+                }
+            ],
+            "artifacts": {},
+            "db": {}
+        },
+        "inline attribution: records the executor identity or the explicit no-attribution marker": {
+            "steps": [
+                {
+                    "exitCode": 0,
+                    "stdout": "{\"ok\":true,\"runId\":\"r-att\",\"stage\":\"implement\"}\n",
+                    "stderr": ""
+                },
+                {
+                    "exitCode": 0,
+                    "stdout": "{\"ok\":true,\"runId\":\"r-att\",\"stage\":\"review\"}\n",
+                    "stderr": ""
+                },
+                {
+                    "exitCode": 2,
+                    "stdout": "",
+                    "stderr": "Usage: bun plugins/sp/scripts/inline-run-dispatch.ts --attribution --run-id <id> --stage <state> [--executor <name>] [--agent <name>] [--model <m>] [--spur-bin <path>]\n       bun plugins/sp/scripts/inline-run-dispatch.ts --dispatch-failure --run-id <id> --stage <state> --decision <escalate|stop|host-inline> (--text <record> | --text-file <path>) [--executor <name>] [--agent <name>] [--model <m>] [--spur-bin <path>]\n       --attribution writes .spur/run/<run-id>-attribution.jsonl; an omitted/empty --executor records the explicit no-attribution marker.\n       --dispatch-failure classifies the record upstream, writes .spur/run/<run-id>-dispatch-fallback.json, and carries an attributed capacity exhaustion onto the durable availability path.\n"
+                },
+                {
+                    "exitCode": 2,
+                    "stdout": "",
+                    "stderr": "Usage: bun plugins/sp/scripts/inline-run-dispatch.ts --attribution --run-id <id> --stage <state> [--executor <name>] [--agent <name>] [--model <m>] [--spur-bin <path>]\n       bun plugins/sp/scripts/inline-run-dispatch.ts --dispatch-failure --run-id <id> --stage <state> --decision <escalate|stop|host-inline> (--text <record> | --text-file <path>) [--executor <name>] [--agent <name>] [--model <m>] [--spur-bin <path>]\n       --attribution writes .spur/run/<run-id>-attribution.jsonl; an omitted/empty --executor records the explicit no-attribution marker.\n       --dispatch-failure classifies the record upstream, writes .spur/run/<run-id>-dispatch-fallback.json, and carries an attributed capacity exhaustion onto the durable availability path.\n"
+                }
+            ],
+            "artifacts": {
+                ".spur/run/r-att-attribution.jsonl": "{\"stage\":\"implement\",\"executor\":\"codex\",\"agent\":\"super-coder\",\"model\":\"gpt-x\",\"observedAt\":\"<TS>\"}\n{\"stage\":\"review\",\"executor\":null,\"agent\":null,\"observedAt\":\"<TS>\"}\n"
+            },
+            "db": {}
+        },
+        "inline dispatch-failure: classifies the record and writes the fallback decision": {
+            "steps": [
+                {
+                    "exitCode": 0,
+                    "stdout": "{\"ok\":true,\"runId\":\"r-df\",\"stage\":\"implement\",\"class\":\"capability\",\"decision\":\"host-inline\",\"executor\":\"codex\",\"attribution\":\"recorded\",\"observedAt\":\"<TS>\"}\n",
+                    "stderr": ""
+                },
+                {
+                    "exitCode": 0,
+                    "stdout": "{\"ok\":true,\"runId\":\"r-df2\",\"stage\":\"implement\",\"class\":\"capability\",\"decision\":\"stop\",\"executor\":null,\"attribution\":\"no-attribution\",\"observedAt\":\"<TS>\"}\n",
+                    "stderr": ""
+                },
+                {
+                    "exitCode": 0,
+                    "stdout": "{\"ok\":true,\"runId\":\"r-df3\",\"stage\":\"implement\",\"class\":\"capacity\",\"reason\":\"usage_limit_reached\",\"resetAt\":\"<TS>\",\"decision\":\"escalate\",\"executor\":\"codex\",\"attribution\":\"recorded\",\"observedAt\":\"<TS>\",\"observationId\":\"qo-<ID>\",\"recorded\":\"rejected: unknown executor \\\"codex\\\" for this project\"}\n",
+                    "stderr": ""
+                },
+                {
+                    "exitCode": 2,
+                    "stdout": "",
+                    "stderr": "Usage: bun plugins/sp/scripts/inline-run-dispatch.ts --attribution --run-id <id> --stage <state> [--executor <name>] [--agent <name>] [--model <m>] [--spur-bin <path>]\n       bun plugins/sp/scripts/inline-run-dispatch.ts --dispatch-failure --run-id <id> --stage <state> --decision <escalate|stop|host-inline> (--text <record> | --text-file <path>) [--executor <name>] [--agent <name>] [--model <m>] [--spur-bin <path>]\n       --attribution writes .spur/run/<run-id>-attribution.jsonl; an omitted/empty --executor records the explicit no-attribution marker.\n       --dispatch-failure classifies the record upstream, writes .spur/run/<run-id>-dispatch-fallback.json, and carries an attributed capacity exhaustion onto the durable availability path.\n"
+                },
+                {
+                    "exitCode": 2,
+                    "stdout": "",
+                    "stderr": "Usage: bun plugins/sp/scripts/inline-run-dispatch.ts --attribution --run-id <id> --stage <state> [--executor <name>] [--agent <name>] [--model <m>] [--spur-bin <path>]\n       bun plugins/sp/scripts/inline-run-dispatch.ts --dispatch-failure --run-id <id> --stage <state> --decision <escalate|stop|host-inline> (--text <record> | --text-file <path>) [--executor <name>] [--agent <name>] [--model <m>] [--spur-bin <path>]\n       --attribution writes .spur/run/<run-id>-attribution.jsonl; an omitted/empty --executor records the explicit no-attribution marker.\n       --dispatch-failure classifies the record upstream, writes .spur/run/<run-id>-dispatch-fallback.json, and carries an attributed capacity exhaustion onto the durable availability path.\n"
+                },
+                {
+                    "exitCode": 2,
+                    "stdout": "",
+                    "stderr": "Usage: bun plugins/sp/scripts/inline-run-dispatch.ts --attribution --run-id <id> --stage <state> [--executor <name>] [--agent <name>] [--model <m>] [--spur-bin <path>]\n       bun plugins/sp/scripts/inline-run-dispatch.ts --dispatch-failure --run-id <id> --stage <state> --decision <escalate|stop|host-inline> (--text <record> | --text-file <path>) [--executor <name>] [--agent <name>] [--model <m>] [--spur-bin <path>]\n       --attribution writes .spur/run/<run-id>-attribution.jsonl; an omitted/empty --executor records the explicit no-attribution marker.\n       --dispatch-failure classifies the record upstream, writes .spur/run/<run-id>-dispatch-fallback.json, and carries an attributed capacity exhaustion onto the durable availability path.\n"
+                }
+            ],
+            "artifacts": {
+                ".spur/run/r-df-dispatch-fallback.json": "{\n  \"stage\": \"implement\",\n  \"class\": \"capability\",\n  \"decision\": \"host-inline\",\n  \"executor\": \"codex\",\n  \"attribution\": \"recorded\",\n  \"observedAt\": \"<TS>\"\n}\n",
+                ".spur/run/r-df2-dispatch-fallback.json": "{\n  \"stage\": \"implement\",\n  \"class\": \"capability\",\n  \"decision\": \"stop\",\n  \"executor\": null,\n  \"attribution\": \"no-attribution\",\n  \"observedAt\": \"<TS>\"\n}\n",
+                ".spur/run/r-df3-dispatch-fallback.json": "{\n  \"stage\": \"implement\",\n  \"class\": \"capacity\",\n  \"reason\": \"usage_limit_reached\",\n  \"resetAt\": \"<TS>\",\n  \"decision\": \"escalate\",\n  \"executor\": \"codex\",\n  \"attribution\": \"recorded\",\n  \"observedAt\": \"<TS>\",\n  \"observationId\": \"qo-<ID>\",\n  \"recorded\": \"rejected: unknown executor \\\"codex\\\" for this project\"\n}\n"
+            },
+            "db": {}
+        }
+    }
+}
