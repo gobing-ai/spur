@@ -313,6 +313,15 @@ registered the four agent-role entries, of which the manifest now carries one
 
 ### 2.6 Plugin-script contract manifest & gate (task 0600, ADR-065)
 
+> **Retired (2026-10-15, task 1213).** The manifest/twin gate below no longer exists:
+> `config/plugin-scripts.json` is deleted, no `.mjs` twins are generated or shipped, and
+> `build:scripts` is gone. `plugins/sp/scripts/` holds only registered hook entries
+> (`scripts/hooks/<id>.ts`, run by `superskill hook run sp <id>`); reusable behavior lives in
+> approved CLI surfaces (ADR-130). The gate is now the hook-only contract in
+> `scripts/commands/script-contract-check.ts` (its header documents the four rules), with
+> `--placement-only` keeping the ADR-130 scan and failing on any finding. The text below is
+> the historical 0600 contract.
+
 **Manifest.** `config/plugin-scripts.json` records one entry per file under `plugins/sp/scripts/`:
 `rel`, `contract` (`standard` | `repo-only`), and for `standard` entries the `twin` path (a
 committed `.mjs` beside the `.ts` source).

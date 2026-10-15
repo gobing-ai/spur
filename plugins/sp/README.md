@@ -277,7 +277,8 @@ plugins/sp/
 ├── lib/                             # Handwritten plugin cores — context-{post-tool,session-start,session-stop}.ts,
 │                                    # agent-hint.ts, context-owner.ts, destructive-policy.ts, task-file-policy.ts,
 │                                    # env.ts (no generated bundles: script absorption retired them)
-├── scripts/                         # Hook entries plus script-root (pending infrastructure retirement)
+├── scripts/                         # Hook entries only (script absorption complete, task 1213 —
+│                                    # no script-root, no .mjs twins, no manifest)
 │   └── hooks/                       # One entry per hook identity, run by `superskill hook run sp <id>`;
 │                                    # entries delegate to lib cores; suites live in tests/hooks/
 ├── tests/                           # Plugin tests — skill-structure.test.ts + hooks/ (guard, context, lifecycle suites)

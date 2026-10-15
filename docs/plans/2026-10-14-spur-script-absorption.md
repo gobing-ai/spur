@@ -30,7 +30,7 @@ The operator requested one dev branch, comprehensive review/refinement, integrat
 | PR-7 / #24 | Included in #28: builder PR operations and agent dogfood. |
 | Hook conformance / #23 | Release-gated member of #28; final main landing requires the verified superskill release containing generic dispatch, native Pi adapters and staged timeout metadata. Pi/omp installations require reinstalling after upgrade. |
 | PR-9 / #26 | Draft and unfinished. Task 1212 owns completion, coverage proof and the four known CLI help/reference/shared-option parity failures. |
-| PR-8 | Task 1213, after 1212: retire exhausted script-root, generated/twin/build/baseline infrastructure and simplify distribution checks. |
+| PR-8 | Task 1213, after 1212: retire exhausted script-root, generated/twin/build/baseline infrastructure and simplify distribution checks. **Landed 2026-10-15 (branch sp/runall-1212-1213-9fdf):** script-root.ts/.mjs, lib/spur-bin.ts, their tests, config/plugin-scripts.json and config/script-placement-baseline.json deleted; script-contract-check rewritten as the hook-only contract (placement findings fail raw); plugin-install-smoke scans hooks/lib/scripts uniformly strict; build:scripts removed; Superskill pins aligned at 0.3.39. surface-drift-inventory stays (I3 still `verifying`). |
 | PR-10 | Closed as originally designed: no context shims remain to retire. Document Spur >=0.5.0; optional runtime version enforcement and diagnostics are explicitly deferred. No new manifest field or compatibility layer. |
 
 **Remaining implementation is two cohesive tasks, not one task per file or gate.** Task 1212 completes the already-open release/cost migration; task 1213 owns the final distribution/retirement contract and depends on 1212. Each includes its callers, tests, help, matrix, coverage and gate receipts. The landing reviewer accepts their exact tested heads before merging. Task 1211 stays open until their results and the final cross-repo checks satisfy its original acceptance criteria.
@@ -44,8 +44,8 @@ The operator requested one dev branch, comprehensive review/refinement, integrat
 | §3.2 release/cost/schema tooling | Migration is unfinished in #26, owned by task 1212. Existing repository promotion/cohort policy remains repository-owned. |
 | §3.3 hook registry and executable entries | hooks/hooks.json stays the registry. Executable entries move to scripts/hooks/<id>.ts so native and flattened installations resolve the same plugin-owned implementation. The old Pi guard extension is retired through #23 after its superskill dependency is released. |
 | §3.4 reusable non-hook skill scripts | Absorbed into existing task/feature/workflow/history/builder/agent CLI owners by the landing batch; no standalone generated compatibility bundle remains. |
-| §3.4 script-root and build/placement infrastructure | Intentionally pending task 1213. Do not claim the entire scripts directory disappears: canonical scripts/hooks entries remain. |
-| §3.5 handwritten plugin libs | Keep env.ts and actual hook-only backing libs; remove migrated non-hook cores and generated bundles. spur-bin is pending task 1213 after its final consumers retire. |
+| §3.4 script-root and build/placement infrastructure | Retired by task 1213 (2026-10-15): script-root and the manifest/twin/baseline/build machinery are deleted; canonical scripts/hooks entries remain. |
+| §3.5 handwritten plugin libs | Keep env.ts and actual hook-only backing libs; remove migrated non-hook cores and generated bundles. spur-bin deleted by task 1213 (2026-10-15); its last consumer was its own test. |
 | §3 generated twins/bundles and build wrappers | Absorption deletions are included; task 1213 removes the last exhausted infrastructure and records any retained project-only file reason. |
 
 **Q1–Q7 disposition.** Q1: existing nouns only, with plugin-owned hooks run by superskill. Q2: retain the generic superskill hook runner. Q3: Spur is a hard skill/workflow prerequisite; hook runtime errors retain their documented fail-open policy. Q4: clean break in 0.5.0, with a documented minimum; optional runtime minimum-version diagnostics are deferred by the PR-10 closure decision. Q5: builder release plumbing remains approved and is completed by 1212. Q6: proven one-offs are deleted; surface-drift-inventory is conditional on I3, and repository-only link/drift/coverage gates retain their reasons. Q7: root and scripts bunfig.toml remain unchanged.
@@ -762,6 +762,13 @@ Sizes are rough, as hand-written lines added and removed; generated deletions ar
 ---
 
 ## 12. Acceptance checklist (end state)
+
+> **Status overlay (2026-10-15, task 1213).** The raw-deletion items below are the plan's original
+> wording; the interpretation at the top of this section (and the task spec) reconcile them —
+> `plugins/sp/scripts/` remains as `scripts/hooks/` only (hook ownership stays with the plugin).
+> Landed by task 1213: script-root/twin/manifest/baseline/build infrastructure deleted; the
+> retired-invocation grep below is clean over `plugins/` and `config/`; `bunfig.toml` untouched.
+> Superskill floor aligned at 0.3.39 (catalog, lockfile, publish smoke).
 
 - [ ] `plugins/sp/scripts/` does not exist.
 - [ ] `plugins/sp/hooks/` unchanged from `main` (Revision 2026-10-15).

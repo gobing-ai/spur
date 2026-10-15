@@ -124,11 +124,16 @@ This accepts placement policy, not any public CLI expansion or premature removal
 ### 2.2 Enforcement and migration
 
 **Current enforcement:** `sp-script-placement` uses a 250 LOC entry budget and detects direct DB
-imports/corpus parsing with the shrinking `config/script-placement-baseline.json`. A small entry
+imports/corpus parsing; any finding fails — the shrink-only `config/script-placement-baseline.json`
+ledger was retired with the 0600 manifest in task 1213 (no historical findings remain to baseline).
+A small entry
 is not proof of correct ownership. **Landed (task 1173):** the same DB/corpus boundary now covers
 handwritten `plugins/sp/lib` sources (no line budget — a line count is a review trigger, not an
 architecture test), and `checkHookLayout` answers for hook source layout: one authored entry per
-registered identity, helpers in lib, tests in the plugin test owner. The hook check is unit-fixtured
+registered identity, helpers in lib, tests in the plugin test owner. **Landed (task 1213):** the
+strict hook-only contract over `plugins/sp/scripts` is active — registered hook entries only, no
+non-hook skill scripts, no twins, no manifest — and reusable behavior lives only in approved CLI
+surfaces (ADR-130). The hook check is unit-fixtured
 and its strict call activates in 1174, once the relocation it judges has landed. **Remaining:**
 reusable helper dependencies beyond that boundary still need focused semantic review, since import
 checks cannot classify behavior. No second exception registry.
