@@ -140,6 +140,8 @@ docs           authority docs, satellites, plans, reports, tool-owned corpus
 Apps are thin transports; application logic lives in `packages/app` (ADR-021). Cross-workspace
 imports use `@gobing-ai/*`, never deep relative paths. Reusable engines are released
 `@gobing-ai/ts-*` packages; fix their facades instead of adding Spur workarounds.
+CLI modules mirror `spur <noun> <verb>`: large nouns are `apps/cli/src/commands/<noun>/{index,<verb>,shared}.ts`,
+tests mirror them under `tests/commands/<noun>/` (`docs/03_ARCHITECTURE.md` §3).
 
 - Runtime: Bun; versions come from `package.json`. Prefer `bun:*` over `node:*`.
 - Format/lint: Biome; 4 spaces, 120 columns, single quotes, semicolons, trailing commas.

@@ -117,7 +117,7 @@ Row-level deltas from the default rule:
   `feature transition` not-found returns at `apps/cli/src/commands/feature.ts:60,175`, which had
   bypassed the seam via a direct `context.output.error(...)`.
   Task 0787 (2026-09-06) added the create/batch-create machine-error surface:
-  `writeCreateJsonError` (`apps/cli/src/commands/task.ts:146`) emits ONE parseable
+  `writeCreateJsonError` (`apps/cli/src/commands/task/shared.ts`) emits ONE parseable
   `--json` result for `candidate-invalid` (exit 1, `details.findings` carrying the
   checker findings), `invalid-usage` (exit 2), collision/duplicate-follow-up (exit 3),
   and `create-failed`/`batch-create-failed` (exit 1). Unlike `writeJsonError`, raw
@@ -129,7 +129,7 @@ Row-level deltas from the default rule:
 - **Kept raw (5 sites, not adopted):** `task verdict` (writes the `.spur/run` verdict
   artifact consumed by pipeline code, not CLI stdout), the two workflow internal event
   fingerprints (dedup keys, not CLI output), and the two `workflow show` `toJson` sites
-  (`apps/cli/src/commands/workflow.ts:866,875` — the verb deliberately does not advertise
+  (`apps/cli/src/commands/workflow/show.ts` — the verb deliberately does not advertise
   `--json-envelope`, so no enveloped path exists to route to). `rule list` and
   `task verifyall-aggregate` raw `JSON.stringify(x, null, 2)` sites were adopted — their
   formatting is identical to the `toJson` raw path, so byte-identity holds.
@@ -142,9 +142,9 @@ Row-level deltas from the default rule:
 
   | Verb | Emit site (post-0697) | Threaded from | Enveloped shape |
   | --- | --- | --- | --- |
-  | `agent list` | `agent-service.ts` `list()` | `agent.ts` → `runAgentList` → `svc.list({enveloped})` | `{ok, data: {agents}}` |
-  | `agent doctor` | `agent-service.ts` `renderDoctor()` (2 sites) + role-ladder failure | `agent.ts` → `svc.doctor({enveloped})` | `{ok, data: {agents, rolesSource, cache}}`; failure → `{ok:false, error:{code:'INTERNAL_ERROR', details:{cliCode:'agent-resolution'}}}` |
-  | `agent run` | `agent-service.ts` `handleRunOutput()` + resolution failure | `agent.ts` → `flags.jsonEnvelope` shim → `AgentService.run()` | `{ok, data: {exitCode, stdout, …}}`; failure as above |
+  | `agent list` | `agent-service.ts` `list()` | `agent/list.ts` → `runAgentList` → `svc.list({enveloped})` | `{ok, data: {agents}}` |
+  | `agent doctor` | `agent-service.ts` `renderDoctor()` (2 sites) + role-ladder failure | `agent/doctor.ts` → `svc.doctor({enveloped})` | `{ok, data: {agents, rolesSource, cache}}`; failure → `{ok:false, error:{code:'INTERNAL_ERROR', details:{cliCode:'agent-resolution'}}}` |
+  | `agent run` | `agent-service.ts` `handleRunOutput()` + resolution failure | `agent/run.ts` → `flags.jsonEnvelope` shim → `AgentService.run()` | `{ok, data: {exitCode, stdout, …}}`; failure as above |
   | `rule run` | `rule-service.ts` `evaluate()` | `rule.ts` → `service.evaluate({enveloped})` | `{ok, data: {preset, ruleCount, findings, fixes}}` |
   | `rule validate` | `rule-service.ts` `validate()` (valid + invalid branches) | `rule.ts` → `service.validate({enveloped})` | `{ok, data: {valid, kind, source, …}}` |
 

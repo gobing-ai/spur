@@ -1,0 +1,91 @@
+/**
+ * Thin-wrapper integration tests for `spur task run-link` (apps/cli/src/commands/task/run-link.ts).
+ * Behavioral tests for TaskService live in packages/app/tests/services/task-service.test.ts.
+ *
+ * These exercise the verb surface through the real `main()` entry point:
+ * golden paths, the `--json` envelope shape, and exit codes 0/1/2 (design §10, R5).
+ */
+import { afterAll, beforeAll, describe, expect, test } from 'bun:test';
+import { rmSync } from 'node:fs';
+import { mkdir, writeFile } from 'node:fs/promises';
+import { join } from 'node:path';
+import { main } from '../../../src/index';
+import { type CapturedOutput, createCapturedOutput } from '../../helpers';
+
+let cwd: string;
+
+beforeAll(async () => {
+    cwd = join(join(import.meta.dir, '..'), '..', `.tmp-run-link-task-test-${Date.now()}`);
+    await mkdir(join(cwd, 'docs', 'tasks'), { recursive: true });
+    // Materialize the file the fixtures cite as their evidence anchor. Since the 0994
+    // follow-up a live record's Testing/Solution `file:line` anchor must RESOLVE at the
+    // `--as done` guard (`L4.anchor-unresolved` is an error there), so a fixture citing a
+    // path that does not exist would be denied by the anchor gate before the behaviour
+    // each test below exists to exercise. Every fixture cites line 1 of this file.
+    const evidenceTarget = join(cwd, 'apps', 'cli', 'src', 'commands', 'task.ts');
+    await mkdir(join(evidenceTarget, '..'), { recursive: true });
+    await writeFile(evidenceTarget, '// fixture evidence target (no real code)\nexport {};\n', 'utf-8');
+});
+
+afterAll(() => {
+    rmSync(cwd, { recursive: true, force: true });
+});
+
+/** The file path printed by `task create` ("Created task NNNN: <path>"). */
+function createdPath(output: CapturedOutput): string {
+    const msg = output.messages.find((m) => m.startsWith('Created task'));
+    if (msg === undefined) throw new Error(`no "Created task" line in: ${output.messages.join(' | ')}`);
+    const path = msg.split(': ')[1];
+    if (path === undefined) throw new Error(`could not parse path from: ${msg}`);
+    return path;
+}
+
+/** The WBS embedded in the `task create` confirmation line. */
+function createdWbs(output: CapturedOutput): string {
+    const match = createdPath(output).match(/(\d{4})_/);
+    if (match?.[1] === undefined) throw new Error(`no WBS in created path`);
+    return match[1];
+}
+
+describe('spur task CLI', () => {
+    test('run-link inserts a pipeline provenance link', async () => {
+        const output = createCapturedOutput();
+        await main(['task', 'create', '--skip-ready', 'run-link test'], { cwd, output });
+        const wbs = createdWbs(output);
+        const exitCode = await main(['task', 'run-link', wbs, '--source', 'next-auto', '--json'], { cwd, output });
+        expect(exitCode).toBe(0);
+        const jsonMsg = output.messages.filter((m) => m.trim()).pop() ?? '';
+        const result = JSON.parse(jsonMsg);
+        expect(result.kind).toBe('pipeline');
+        expect(result.runId).toMatch(/^chain:next-auto:/);
+    });
+    test('run-link is idempotent', async () => {
+        const output = createCapturedOutput();
+        await main(['task', 'create', '--skip-ready', 'run-link idempotent'], { cwd, output });
+        const wbs = createdWbs(output);
+        // First call inserts.
+        await main(['task', 'run-link', wbs, '--source', 'next-auto', '--json'], { cwd, output });
+        // Second call returns existed:true.
+        const exitCode = await main(['task', 'run-link', wbs, '--source', 'next-auto', '--json'], { cwd, output });
+        expect(exitCode).toBe(0);
+        const jsonMsg = output.messages.filter((m) => m.trim()).pop() ?? '';
+        const result = JSON.parse(jsonMsg);
+        expect(result.existed).toBe(true);
+    });
+});
+
+describe('spur task run-link — text output', () => {
+    test('text mode reports a new link, then the skipped duplicate', async () => {
+        const create = createCapturedOutput();
+        await main(['task', 'create', '--skip-ready', 'run-link text'], { cwd, output: create });
+        const wbs = createdWbs(create);
+        const first = createCapturedOutput();
+        expect(await main(['task', 'run-link', wbs, '--source', 'next-auto'], { cwd, output: first })).toBe(0);
+        expect(first.messages.at(-1)).toMatch(
+            new RegExp(`^Recorded pipeline run-link .+ for task ${wbs} \\(source: next-auto\\)$`),
+        );
+        const second = createCapturedOutput();
+        expect(await main(['task', 'run-link', wbs, '--source', 'next-auto'], { cwd, output: second })).toBe(0);
+        expect(second.messages.at(-1)).toContain(`Pipeline run-link already exists for ${wbs}`);
+    });
+});

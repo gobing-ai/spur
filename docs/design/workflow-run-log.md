@@ -112,7 +112,7 @@ Removing or repointing any existing sink is a compatibility decision. Before rem
 | Consumer | Reads today | Disposition |
 |---|---|---|
 | `spur workflow trace --follow` | DB (`workflow_runs` etc.) | unchanged; gains `--output` source |
-| Async worker (`apps/cli/src/commands/workflow.ts`, detached nohup) | writes `<RUNID>-output.log` via sink | propagates consolidated sink + `--no-log` |
+| Async worker (`apps/cli/src/commands/workflow/shared.ts` `spawnAsyncWorkflowWorker`, detached nohup) | writes `<RUNID>-output.log` via sink | propagates consolidated sink + `--no-log` |
 | Web board (Observability/Tasks tabs) | persisted rows + event ledger | unchanged (reads DB/system events, not the log file) |
 | timed-out-implement runbook (`plugins/sp/skills/spur-dev/references/execution-workflow.md`) | tails `<RUNID>-output.log` | repoint to `<RUNID>.log` |
 | `spur workflow clean` | finalizes stale runs only | extended with log reclamation |

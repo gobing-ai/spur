@@ -35,7 +35,7 @@ description: >
   Two-layer done gate (task 0292): this workflow's testing→done guard
   (`spur task check --as done`, F92 R3 — target-aware) is the FIRST gate.
   The CLI verdict guard (`packages/app/src/services/done-transition-guard.ts`)
-  is the SECOND gate, invoked by `apps/cli/src/commands/task.ts` for every
+  is the SECOND gate, invoked by `apps/cli/src/commands/task/update.ts` for every
   `spur task update <wbs> done` call — it reads `.spur/run/<wbs>-verdict.json`
   and blocks non-PASS verdicts unless `--force-done --reason "<why>"` is
   supplied. The CLI gate covers the `--no-lifecycle` and adapter-unavailable

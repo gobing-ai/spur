@@ -1,6 +1,7 @@
 import { describe, expect, test } from 'bun:test';
-import { readdir, readFile } from 'node:fs/promises';
+import { readFile } from 'node:fs/promises';
 import { join } from 'node:path';
+import { readCommandModules } from './command-modules';
 
 // ── Types ────────────────────────────────────────────────────────────────
 
@@ -144,13 +145,9 @@ function parseVerbsFromHeading(section: string, noun: string): VerbSurface[] {
 // ── Parse code surface ────────────────────────────────────────────────────
 
 async function parseCodeSurface(cmdsDir: string): Promise<NounSurface[]> {
-    const entries = (await readdir(cmdsDir)).filter((f) => f.endsWith('.ts') && f !== 'shared-options.ts');
     const nouns: NounSurface[] = [];
 
-    for (const file of entries) {
-        const text = await readFile(join(cmdsDir, file), 'utf-8');
-        const nounName = file.replace(/\.ts$/, '');
-
+    for (const { noun: nounName, src: text } of readCommandModules(cmdsDir, ['shared-options.ts'])) {
         // Multi-verb: assigns `program.command('X')` to a variable.
         const multiVerbMatch = text.match(
             /const\s+(\w+)\s*=\s*(?:program|plugin)\s*\.\s*command\s*\(\s*['"](\w+)['"]\s*\)/,

@@ -3,7 +3,7 @@ kind: design
 title: "Agent doctor as the routing inspection surface"
 status: accepted
 created_at: 2026-08-26
-updated_at: 2026-09-18
+updated_at: 2026-10-15
 related: [B4, "0681", "0682", "0683", "0684", "0818"]
 tags: [contract, B4, agent, cli]
 ---
@@ -205,7 +205,7 @@ enough that `doctor.probe`'s 1–2 calls per pipeline precheck hit warm.
 
 | Surface | Why untouched |
 | --- | --- |
-| `resolveRole` (`agent-service.ts:1783-1823`) | First-usable-wins is the correct dispatch semantic; this feature is projection only |
+| `resolveRole` (`packages/app/src/services/agent-resolver.ts:698`) | First-usable-wins is the correct dispatch semantic; this feature is projection only |
 | the retired roster materialization (fleet roster derivation owns this since 0857/0858, G72 R2) | Config-time `[0]` selection, no liveness probe — a display change cannot reach it |
 | Stage fallback / escalation ladder | Already correct (task 0482 R1); runtime concern, not inspection |
 | `DoctorResult.tier` (support tier) | Still backs the exit code and stays in `--json` |
@@ -217,5 +217,5 @@ enough that `doctor.probe`'s 1–2 calls per pipeline precheck hit warm.
 - `plugins/sp/skills/spur-cli/references/agent.md` — parity-gated; the flag table and `--json` shape.
 - `plugins/sp/skills/spur-dev/references/cross-cutting.md` — the "do not read provider quota from
   `spur agent doctor`" paragraph now describes a surface with no auth field at all.
-- `apps/cli/tests/commands/agent.test.ts`, `packages/app/tests/services/agent-service.test.ts`,
+- `apps/cli/tests/commands/agent/doctor.test.ts`, `packages/app/tests/services/agent-service.test.ts`,
   `packages/app/tests/workflow/actions/doctor-probe.test.ts` — pinned output and classifier assertions.

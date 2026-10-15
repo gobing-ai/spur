@@ -5,7 +5,7 @@
  * malformed-answer classes the pipeline used to reject through the script CLI are rejected by
  * `lintVerifyAnswer`, which `spur task verdict` now runs before `deriveVerdict` (1003 R2).
  * The CLI exit path (exit 1, `lintFindings`, no artifact) is covered by
- * apps/cli/tests/commands/task.test.ts and plugins/sp/tests/dispatch-handoff-contract.test.ts.
+ * apps/cli/tests/commands/task/verdict.test.ts and plugins/sp/tests/dispatch-handoff-contract.test.ts.
  */
 import { describe, expect, test } from 'bun:test';
 import { ANSWER_LINT_MAX_FINDINGS, lintVerifyAnswer } from '../../src/services/verify-answer-lint';
@@ -252,7 +252,7 @@ describe('lintVerifyAnswer (task 1003 R1)', () => {
  * Behavior classes carried over verbatim from the deleted plugin suite (review of task 1003, R4).
  * The old suite drove the script CLI end-to-end; these re-express the same malformed-answer
  * classes against the ported pure lint. File-level cases (absent answer path) remain CLI-covered
- * (apps/cli/tests/commands/task.test.ts, "verdict exits 1 with an error when the answer file is missing").
+ * (apps/cli/tests/commands/task/verdict.test.ts, "verdict exits 1 with an error when the answer file is missing").
  */
 describe('ported behavior classes (task 1003 review: R4 port completion)', () => {
     // 0726 feature form: bare `Scenarios:` header with two scenario titles.

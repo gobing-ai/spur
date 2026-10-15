@@ -569,7 +569,7 @@ const RESIDUAL_RISKS: ResidualRisk[] = [
         summary:
             'A strategy dispatch records no parent run edge, so its execution record is a single-node lineage: the dispatch → member-turn depth of 2 requires the workflow dispatcher.',
         rootCause:
-            "drainIntoPrompt sets parentRunId only from a workflow request key of the shape `<runId>/<state>` (apps/cli/src/commands/agent.ts:1391-1394); the strategy's `fleet:task:<wbs>:<n>` key is deliberately excluded, so the member turn is a lineage root (packages/app/src/services/agent-service.ts:1322-1326).",
+            "drainIntoPrompt sets parentRunId only from a workflow request key of the shape `<runId>/<state>` (apps/cli/src/commands/agent/shared.ts:449); the strategy's `fleet:task:<wbs>:<n>` key is deliberately excluded, so the member turn is a lineage root (packages/app/src/services/agent-run-executor.ts:364).",
         evidence:
             'the traced dispatch run reports parentRunId=null and nodes.length=1; its stream and status are still readable, which is what the step asserts.',
     },

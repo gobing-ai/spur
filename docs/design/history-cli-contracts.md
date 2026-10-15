@@ -574,9 +574,9 @@ the 02:00 nightly loop.
 
 **Trigger points (exhaustive).** Exactly two, both terminal — never "every CLI invocation":
 
-1. `spur task update <wbs> done` (task completion) — `apps/cli/src/commands/task.ts`.
+1. `spur task update <wbs> done` (task completion) — `apps/cli/src/commands/task/update.ts`.
 2. `spur workflow run` / `continue` reaching a terminal status (pipeline-run completion) —
-   `apps/cli/src/commands/workflow.ts`, at the sync completion path, the main sync run path, and the
+   `apps/cli/src/commands/workflow/` (`run.ts`, `continue.ts`), at the sync completion path, the main sync run path, and the
    `continue` path. The `--async` launcher itself does **not** trigger — its worker does when the run
    completes.
 

@@ -2236,7 +2236,7 @@ describe('record with a suppressed lifecycle FSM (0980)', () => {
      * Stub gate — the subject here is that record CONSULTS the injected gate at
      * the adapter guard's timing and propagates its denial, not the check rules
      * themselves (covered by task-check tests and the real-gate backstop in
-     * apps/cli/tests/commands/task.test.ts).
+     * apps/cli/tests/commands/task/update.test.ts).
      */
     function makeCheckGate(pass: boolean, calls: string[] = []): TransitionCheckGate {
         return {

@@ -486,6 +486,24 @@ test('checkPlacement reports each finding kind once per file', () => {
     }
 });
 
+test('checkPlacement treats a per-verb CLI noun folder (commands/<noun>/index.ts) as a noun', () => {
+    const root = createPlacementFixture();
+    try {
+        mkdirSync(join(root, 'apps', 'cli', 'src', 'commands', 'agent'), { recursive: true });
+        writeFileSync(join(root, 'apps', 'cli', 'src', 'commands', 'agent', 'index.ts'), 'export const noun = 1;\n');
+        writeFileSync(join(root, 'scripts', 'commands', 'agent.ts'), 'export const glue = 1;\n');
+        // A folder without index.ts is not a noun.
+        mkdirSync(join(root, 'apps', 'cli', 'src', 'commands', 'notes'), { recursive: true });
+        writeFileSync(join(root, 'scripts', 'commands', 'notes.ts'), 'export const glue = 1;\n');
+        const findings = checkPlacement({ repoRoot: root, baselinePath: join(root, 'config', 'missing.json') });
+        const byFile = new Map(findings.map((f) => [f.file, f.kind]));
+        expect(byFile.get('scripts/commands/agent.ts')).toBe('noun-clash');
+        expect(byFile.has('scripts/commands/notes.ts')).toBe(false);
+    } finally {
+        rmSync(root, { recursive: true, force: true });
+    }
+});
+
 test('checkPlacement reports dynamic DB imports as db-import (task 1018 AC1)', () => {
     const root = createPlacementFixture();
     try {

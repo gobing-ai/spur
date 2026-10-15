@@ -71,8 +71,8 @@ interface CliContext {
 | --- | --- | --- |
 | `apps/cli/src/index.ts:66,89` | `loadSpurConfig` result discarded; `appRt.appConfig?.agent` (single-file) | result kept; `spurConfig` threaded; `appRt.appConfig` unread |
 | `apps/cli/src/history-refresh.ts:35` | own `loadSpurConfig` + try/catch → null | `HistoryRefreshContext` picks up `spurConfig`; passes `context.spurConfig ?? null` to `enqueueHistoryRefresh`; loader import deleted |
-| `apps/cli/src/commands/workflow.ts:195` | `resolveWorkflowPaths(cwd)` loads config | `resolveWorkflowPaths(config: SpurConfig \| null): string[]` — sync, pure; absent `workflows.paths` ⇒ `['.spur/workflows/']`; `bundled:` expansion unchanged (layer set later superseded by ADR-113) |
-| `apps/cli/src/commands/workflow.ts:483,719` | `resolveOutputLogConfig(cwd)` / `resolveWorkflowLogRetentionDays(cwd)` **call sites** | both helpers are defined in `packages/app/…/workflow/run-record.ts` (re-exported via `packages/app/src/index.ts`); the CLI call sites pass `context.spurConfig ?? null`; signatures become `(config: SpurConfig \| null)`, sync, no try/catch (a load failure never reaches dispatch); defaults unchanged (`{}`, `30`) |
+| `apps/cli/src/commands/workflow/shared.ts` | `resolveWorkflowPaths(cwd)` loads config | `resolveWorkflowPaths(config: SpurConfig \| null): string[]` — sync, pure; absent `workflows.paths` ⇒ `['.spur/workflows/']`; `bundled:` expansion unchanged (layer set later superseded by ADR-113) |
+| `apps/cli/src/commands/workflow/{run,continue,clean}.ts` | `resolveOutputLogConfig(cwd)` / `resolveWorkflowLogRetentionDays(cwd)` **call sites** | both helpers are defined in `packages/app/…/workflow/run-record.ts` (re-exported via `packages/app/src/index.ts`); the CLI call sites pass `context.spurConfig ?? null`; signatures become `(config: SpurConfig \| null)`, sync, no try/catch (a load failure never reaches dispatch); defaults unchanged (`{}`, `30`) |
 | `packages/app/…/workflow-service.ts:1129` | `(await loadSpurConfig(cwd)).agent` + try/catch | `this.ctx.spurConfig?.agent`; degrade-empty behavior unchanged |
 | `packages/app/…/workflow-service.ts:1516` | `resolveDefaultAgentVar(cwd, vars, warn)` loads config | `resolveDefaultAgentVar(config, vars, warn)`; validation of `agent.default` unchanged |
 | `packages/app/…/team-service.ts:869` | `loadTeamConfig()` loads + try/catch | method deleted; callers read `this.ctx.spurConfig ?? null`; loader import deleted |
@@ -111,7 +111,7 @@ Newly conforming failure sites:
 `toJson` stays CLI-owned; `packages/app` services emit the same envelope shape through the injected
 `output.write` when their `json` flag is set (doctor already receives `args.json`; `run` reads
 `flags.json`), otherwise `output.error(message)`. Exit codes are unchanged. Existing envelope sites
-(`agent.ts` waitFail, `message.ts` sendWaitFail, builder/projects) are untouched.
+(`agent/wait.ts` waitFail, `message.ts` sendWaitFail, builder/projects) are untouched.
 
 **Surface-change record:** this is a behavior-only output change on existing verbs (ADR-051 gate per
 the 2026-08-16 lesson); consent is recorded by the A5 design-review approval of this satellite.

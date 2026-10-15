@@ -2,10 +2,10 @@
 doc: 03_ARCHITECTURE
 owns: HOW — module boundaries, data flow, runtime model, invariants
 authority: derived
-version: 1.73.0
+version: 1.74.0
 derived_from: [01_PRD, 00_ADR]
 owner: Robin Min
-updated_at: 2026-10-11
+updated_at: 2026-10-15
 read_before: cross-module, seam, or schema work
 edit_rules: 99 §6.4
 sync: [T1]
@@ -183,6 +183,15 @@ No file inventory here — that rots (99 §6.4 lesson); boundaries only:
 - **Dispatch:** one commander `Command`; each noun registers via
   `registerXxxCommand(program, context)` (ADR-014). Commander owns parsing, subcommand dispatch,
   and `--help` rendering.
+- **Module layout mirrors `spur <noun> <verb>`:** a small noun is one file `commands/<noun>.ts`;
+  a large noun is a folder `commands/<noun>/` with `index.ts` (creates the noun and calls each
+  verb's register function), one `<verb>.ts` per verb (`registerXxxYyyCommand(noun, context)`),
+  and `shared.ts` holding only helpers two or more verbs use. Tests mirror it under
+  `tests/commands/<noun>/`. Services keep their public facade in `packages/app/src/services/`;
+  task, workflow and agent facades construct private collaborators grouped by responsibility.
+  Collaborators call public facade methods through a host reference when needed to preserve
+  overrides. Imports back to service types are type-only, avoiding runtime cycles. Pure helpers
+  live in focused sibling modules and existing public exports remain on the service facade.
 - **Commands** parse flags, call a `packages/app` service, format output, return an exit code —
   no business logic in the app (ADR-021).
 - **CliContext** carries cwd/env/fs/output/`setExitCode`. The CLI composition root creates and

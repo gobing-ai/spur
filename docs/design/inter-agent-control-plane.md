@@ -235,7 +235,7 @@ Board SSE (roadmap S6/W6) is **not** a prerequisite. CLI wait may poll the ledge
 - `packages/app/src/services/agent-service.ts` — mint/retain occupant; emit invoke events with pin
 - `packages/app/src/services/agent-coordination-service.ts` — send-wait snapshot; do not add a third store
 - `packages/app/src/services/supervisor-service.ts` — env injection; generation bump on replace
-- `apps/cli/src/commands/agent.ts` — drain rewrite; wait verb (Wave 2)
+- `apps/cli/src/commands/agent/` — drain rewrite (`shared.ts`); wait verb (`wait.ts`, Wave 2)
 - `apps/cli/src/commands/message.ts` — `--wait` (Wave 2)
 - `packages/domain/src/migrations.ts` — coordination-run table
 - `packages/contracts/src/` — oRPC DTOs only when Board/server expose the record

@@ -50,7 +50,7 @@ export function makeLifecycleAdapter(
         secrets: configuredSecretValues(context.env ?? {}),
         // 1185 review P4: the registered layer (ADR-113) is threaded from the composition root so
         // the stale-consumer diagnosis resolves the nested definition exactly as `workflow run`
-        // does (apps/cli/src/commands/workflow.ts) — otherwise a definition reachable through a
+        // does (apps/cli/src/commands/workflow/run.ts) — otherwise a definition reachable through a
         // registered folder alone would be named as nothing.
         registeredWorkflowPaths: registeredWorkflowPaths(context.spurConfig ?? null),
         ...(options.provenanceBypass === true ? { provenanceBypass: true } : {}),

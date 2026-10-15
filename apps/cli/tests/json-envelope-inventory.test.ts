@@ -1,6 +1,6 @@
 import { describe, expect, test } from 'bun:test';
-import { readdirSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
+import { readCommandModules } from './command-modules';
 
 /**
  * Task 0697 AC4 — the advertise-and-ignore guard, as a runnable check rather than a
@@ -37,9 +37,7 @@ interface VerbBlock {
 
 function collectVerbBlocks(): VerbBlock[] {
     const blocks: VerbBlock[] = [];
-    for (const file of readdirSync(COMMANDS_DIR).filter((f) => f.endsWith('.ts'))) {
-        const noun = file.replace(/\.ts$/, '');
-        const module = readFileSync(join(COMMANDS_DIR, file), 'utf8');
+    for (const { noun, src: module } of readCommandModules(COMMANDS_DIR)) {
         const lines = module.split('\n');
         let current: VerbBlock | undefined;
         for (const [index, line] of lines.entries()) {
@@ -108,7 +106,7 @@ describe('AC4 — no CLI verb advertises --json-envelope and ignores it', () => 
         const offenders = advertising
             .filter((b) => !honorsFlag(b))
             .filter((b) => KEPT_RAW[`${b.noun} ${b.verb}`] === undefined)
-            .map((b) => `${b.noun} ${b.verb} (apps/cli/src/commands/${b.noun}.ts:${b.line})`);
+            .map((b) => `${b.noun} ${b.verb} (apps/cli/src/commands/${b.noun}[.ts or /]: block line ${b.line})`);
         expect(offenders).toEqual([]);
     });
 
@@ -179,9 +177,8 @@ describe('0699 R1 — no flag-declaring verb exits non-zero without JSON', () =>
 
     function unenvelopedFailureSites(): Site[] {
         const sites: Site[] = [];
-        for (const file of readdirSync(COMMANDS_DIR).filter((f) => f.endsWith('.ts'))) {
-            const noun = file.replace(/\.ts$/, '');
-            const lines = readFileSync(join(COMMANDS_DIR, file), 'utf8').split('\n');
+        for (const { noun, src } of readCommandModules(COMMANDS_DIR)) {
+            const lines = src.split('\n');
 
             const blocks: Array<{ verb: string; start: number; end: number }> = [];
             let verb: string | undefined;
@@ -293,7 +290,7 @@ describe('0699 R1 — no flag-declaring verb exits non-zero without JSON', () =>
 
     test('no failure path under a flag-declaring verb writes bare stderr instead of JSON', () => {
         const offenders = unenvelopedFailureSites().map(
-            (s) => `${s.noun} ${s.verb} — apps/cli/src/commands/${s.noun}.ts:${s.line}`,
+            (s) => `${s.noun} ${s.verb} — apps/cli/src/commands/${s.noun}[.ts or /]: block line ${s.line}`,
         );
         expect(offenders).toEqual([]);
     });
