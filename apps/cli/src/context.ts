@@ -195,15 +195,18 @@ export function createCliContext(options: {
 /** No-op fallback when `setExitCode` is not provided to createCliContext. */
 export function noopSetExitCode(_code: number): void {}
 
+/** The project database URL: `DATABASE_URL` when set, else `<cwd>/.spur/spur.db` (the default). */
+export function resolveDatabaseUrl(cwd: string, env: Record<string, string | undefined>): string {
+    return env.DATABASE_URL === undefined ? join(cwd, DEFAULT_DATABASE_URL) : buildConfigFromEnv(env).database.url;
+}
+
 /** Create the CLI SQLite adapter and apply the local Spur schema. */
 export async function createMigratedDbAdapter(
     cwd = process.cwd(),
     env: Record<string, string | undefined> = getEnvVars(),
     dbUrl?: string,
 ): Promise<DbAdapter> {
-    const config = buildConfigFromEnv(env);
-    const configuredUrl = env.DATABASE_URL === undefined ? join(cwd, DEFAULT_DATABASE_URL) : config.database.url;
-    const url = dbUrl ?? configuredUrl;
+    const url = dbUrl ?? resolveDatabaseUrl(cwd, env);
     if (url !== IN_MEMORY_DATABASE_URL) {
         await createNodeFileSystem().ensureDir(dirname(url));
     }

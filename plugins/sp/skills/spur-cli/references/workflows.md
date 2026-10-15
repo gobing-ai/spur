@@ -97,7 +97,7 @@ Use this skill to:
 
 The skill's logic divides by **whether the LLM adds value**:
 
-- **Direct CLI** (`validate`, `run`, `list`, `trace`, `progress`, `summary`, `profile`, `continue`, `cancel`, `clean`) — deterministic,
+- **Direct CLI** (`validate`, `run`, `list`, `trace`, `progress`, `summary`, `profile`, `cost`, `continue`, `cancel`, `clean`) — deterministic,
   single-verb commands. Run them straight. A slash-command wrapper would only forward flags and add
   drift; **there is no command for these — use the CLI**. The skill still drives them in natural
   language (interpreting a failed validate, reading a run trace).
@@ -272,6 +272,7 @@ spur workflow trace    [run-id] [--workflow <name>] [--status <s>] [--since <iso
 spur workflow progress <run-id> [--json]
 spur workflow summary  (--progress <[label=]file>... | --rollup <[label=]file>...) [--transcript <path>] [--since <iso>] [--markdown]
 spur workflow profile  <workflow> [--last <n>] [--window <sec>] [--spur-bin <cmd>] [--json]
+spur workflow cost     [--workflow <name>]... [--by-state] [--include-bookkeeping] [--since <YYYY-MM-DD>] [--budget <file>] [--measured-file <json>] [--json]
 spur workflow inline   <op> [options]
 spur workflow commit-guard <op> [options]
 ```

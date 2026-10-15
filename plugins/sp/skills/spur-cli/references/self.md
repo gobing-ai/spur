@@ -19,7 +19,7 @@ top-level forms are omitted from `spur --help`, leaving `self` as the visible su
 | ---- | ------- | --------- |
 | `init` | Scaffold a new Spur project in the current directory | `--name <name>` `--force` `--minimal` `--adopt-global-config` `--json` |
 | `maintain` | Run database maintenance: PRAGMA optimize, WAL truncation, optional VACUUM | `--vacuum` `--json` |
-| `migrate` | Apply CLI-owned schema migrations | `--json` |
+| `migrate` | Apply CLI-owned schema migrations (or `--check` the importer schema) | `--check` `--json` |
 | `serve` | Start the Spur web server (local fallback) | `--port <n>` `--host <addr>` `--no-open` `--cwd <path>` `--json` |
 | `status [path]` | Show project and git status for a Spur project | `--json` |
 
@@ -63,10 +63,12 @@ Executes SQLite database maintenance operations on `.spur/spur.db`:
 ```bash
 spur self migrate                     # apply pending migrations
 spur self migrate --json              # machine-readable { ok, applied }
+spur self migrate --check             # read-only importer-schema drift report (exit 1 on drift)
 ```
 
-Temporary helper: applies CLI-owned schema migrations and reports `{ ok, applied }`. Only flag is
-`--json`.
+Temporary helper: applies CLI-owned schema migrations and reports `{ ok, applied }`. Flags are
+`--json` and `--check`; with `--check` the command only reports importer schema drift, leaves an
+absent database absent, and never repairs.
 
 ## `self serve` - start the local web server
 

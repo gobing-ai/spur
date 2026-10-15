@@ -4,6 +4,7 @@ import { registerWorkflowCancelCommand } from './cancel';
 import { registerWorkflowCleanCommand } from './clean';
 import { registerWorkflowCommitGuardCommand } from './commit-guard';
 import { registerWorkflowContinueCommand } from './continue';
+import { registerWorkflowCostCommand } from './cost';
 import { registerWorkflowInlineCommand } from './inline';
 import { registerWorkflowListCommand } from './list';
 import { registerWorkflowProfileCommand } from './profile';
@@ -33,6 +34,7 @@ export function registerWorkflowCommand(program: Command, context: CliContext): 
     // `index.ts`; mounting them here keeps them in `spur workflow --help` and the full tree.
     registerWorkflowInlineCommand(workflow, context);
     registerWorkflowCommitGuardCommand(workflow, context);
+    registerWorkflowCostCommand(workflow, context);
 }
 
 export { waitForResumeClaim } from './continue';

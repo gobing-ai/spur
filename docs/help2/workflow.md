@@ -18,6 +18,7 @@ phases.
 | `progress <run-id>` | Project a run's structured progress: current state, action attempts, next transitions |
 | `summary` | Measured execution summary of runs, or a batch roll-up |
 | `profile <workflow>` | Per-node step profile of the last N runs with cache-window flags |
+| `cost` | Per-workflow wall-clock/cost from real runs; with `--budget`, the pipeline budget gate |
 | `clean` | Housekeeping: finalize stale runs and reclaim retained logs |
 | `inline <op>` | Inline pipeline driver transport: run lifecycle, trace rows, decide, persist-out/check, dispatch |
 | `commit-guard <op>` | Stage only the paths this run wrote (`start` / `stage` / `check`) |
@@ -154,6 +155,28 @@ spur workflow profile <workflow> [--last <n>] [--window <sec>] [--spur-bin <cmd>
 | `--window <sec>` | Cache window in seconds (default 300) |
 | `--spur-bin <cmd>` | spur invocation for the trace reads |
 | `--json` | Output machine-readable JSON |
+
+## spur workflow cost
+
+```bash
+spur workflow cost [--workflow <name>]... [--by-state] [--include-bookkeeping] [--since <YYYY-MM-DD>] [--budget <file>] [--measured-file <json>] [--json]
+```
+
+| Flag | Description |
+| --- | --- |
+| `--workflow <name>` | Restrict to a workflow (repeatable) |
+| `--by-state` | Report per-state rows instead of per-workflow rows |
+| `--include-bookkeeping` | Keep bookkeeping workflows in the default cohort |
+| `--since <YYYY-MM-DD>` | Only runs created on/after this UTC date |
+| `--budget <file>` | Run the pipeline budget gate against this budget file |
+| `--measured-file <json>` | With `--budget`: read measured values from this file instead of the DB |
+| `--json` | Output machine-readable JSON |
+
+Per-workflow wall-clock and cost from REAL (terminal, non-dry) runs in `.spur/spur.db` (default
+cohort: every definition in `config/workflows/` minus bookkeeping workflows). With `--budget`,
+runs the per-pipeline budget gate instead: exit `1` on over-budget, missing-budget, or
+silent-raise failure. `--json` emits the byte-stable baseline payload (workflow + state rows,
+key-sorted). Absorbed from the retired `real-run-cost` / `pipeline-budgets` scripts (PR-9).
 
 ## spur workflow progress
 

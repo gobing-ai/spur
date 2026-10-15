@@ -1,14 +1,14 @@
 import type { Command } from '@commander-js/extra-typings';
 import type { CliContext } from '../context';
 import { toEnvelopeJson } from '../output';
-import { bumpVer, dropTags } from '../release-ops';
+import { bumpVer, checkVersionDrift, dropTags, publishPackage } from '../release-ops';
 import { registerBuilderPrCommand } from './builder/pr';
 import { SHARED_OPTIONS } from './shared-options';
 
 /**
  * Register `spur builder` — release plumbing promoted from spur-dev (task 0617, ADR-051
- * amendment R5; charter extended by script-absorption Q1/Q5 for `pr`, and later `publish`
- * / `bump-ver --check`). Verbs: `bump-ver`, `drop-tags`, `pr`.
+ * amendment R5; charter extended by script-absorption Q1/Q5 for `pr` (PR-7) and `publish` /
+ * `bump-ver --check` (PR-9)). Verbs: `bump-ver`, `drop-tags`, `publish`, `pr`.
  */
 export function registerBuilderCommand(program: Command, context: CliContext): void {
     const noun = program.command('builder').summary('release plumbing: version bumps, tags, and PR-review ops');
@@ -21,8 +21,12 @@ export function registerBuilderCommand(program: Command, context: CliContext): v
                 'rewrite workspace pins, commit, and tag. A bare version bumps all:',
                 '  spur builder bump-ver 0.1.4          # every released package',
                 '  spur builder bump-ver spur 0.1.4     # one package by id',
+                '  spur builder bump-ver --check spur   # pre-publish drift guard (read-only)',
+                '--check fails (exit 1) when .claude-plugin/marketplace.json or a listed plugin.json',
+                'drifted from the package version; target defaults to the aggregate package.',
             ].join('\n'),
         )
+        .option('--check', 'only verify marketplace/plugin versions match the package version (no writes)')
         .option('--all', 'bump every released package in one commit with per-package + aggregate tags')
         .option('--push', 'push the branch and release tag to origin')
         .option(...SHARED_OPTIONS.json)
@@ -34,6 +38,20 @@ export function registerBuilderCommand(program: Command, context: CliContext): v
             if (options.all === true) args.push('--all');
             if (options.push === true) args.push('--push');
             try {
+                if (options.check === true) {
+                    if (version !== undefined) throw new Error('bump-ver --check takes only a package id');
+                    const code = await checkVersionDrift(target, context.cwd, context.output, context.spurConfig);
+                    if (options.json === true) {
+                        context.output.write(
+                            toEnvelopeJson(
+                                { ok: code === 0, verb: 'bump-ver', check: true, target: target ?? 'aggregate' },
+                                { enveloped: options.jsonEnvelope },
+                            ),
+                        );
+                    }
+                    if (code !== 0) context.setExitCode(code);
+                    return;
+                }
                 await bumpVer(args, context.cwd, context.output, context.spurConfig);
                 if (options.json === true) {
                     context.output.write(
@@ -115,6 +133,30 @@ export function registerBuilderCommand(program: Command, context: CliContext): v
                     return;
                 }
                 context.output.error(message);
+                context.setExitCode(1);
+            }
+        });
+
+    noun.command('publish')
+        .summary('resolve workspace/catalog ranges, build, and npm publish a package (CI)')
+        .description(
+            [
+                'CI publish for npm Trusted Publishing (OIDC): rewrite workspace:/catalog: ranges in',
+                '<dir>/package.json, run `bun run build:bundle`, `npm publish --access public`, and',
+                'restore the manifest on every exit path.',
+            ].join('\n'),
+        )
+        .option('--otp <code>', 'npm one-time password (local publishes only)')
+        .argument('<dir>', 'package directory, relative to the workspace root')
+        .action(async (dir, options) => {
+            try {
+                await publishPackage(dir, {
+                    repoRoot: context.cwd,
+                    output: context.output,
+                    ...(options.otp !== undefined ? { otp: options.otp } : {}),
+                });
+            } catch (err) {
+                context.output.error(err instanceof Error ? err.message : String(err));
                 context.setExitCode(1);
             }
         });

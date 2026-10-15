@@ -2,7 +2,7 @@ import type { DbAdapter } from '@gobing-ai/ts-db';
 
 /**
  * Workflow run/state measurement SQL (task 1178 R1). Sole owner of the queries the
- * `real-run-cost` and `workflow-promotion` repository commands used to read directly:
+ * `real-run-cost` (now `spur workflow cost`) and `workflow-promotion` repository commands used to read directly:
  * reusable run/action/history folds over the main history plane.
  *
  * The measurement/aggregation sits one layer up in

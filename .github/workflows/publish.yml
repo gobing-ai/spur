@@ -82,4 +82,4 @@ jobs:
                   echo "Release assets OK (config/ + web/ present in pack)"
 
             - name: Publish spur-cli
-              run: bun scripts/spur-dev.ts publish apps/cli
+              run: bun apps/cli/src/index.ts builder publish apps/cli --no-logo

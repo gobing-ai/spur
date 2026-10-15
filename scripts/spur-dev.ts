@@ -7,12 +7,10 @@
  *   bun scripts/spur-dev.ts <command> [args...]
  *
  * Commands:
- *   publish <package-dir> [--otp <code>]       resolve deps + npm publish (OIDC)
  *   bundle-config <out-dir>                     copy config/ into a tarball dir
  *   bundle-web [out-dir]                        copy dist/web into apps/cli/web for npm
  *   emit-board-types                            emit apps/cli/board/index.d.ts from the authoring source
  *   bundle-plugins                               copy plugins/ + .claude-plugin into apps/cli for npm
- *   check-marketplace-version                    fail if marketplace/plugin versions drifted from the CLI package
  *   verify-pack <tgz>                            extract + assert the packed tarball ships plugin + marketplace
  *   build-binaries                              cross-compile per-platform spur
  *   build-cli                                  patch ts-runtime + compile local `spur` binary
@@ -22,9 +20,11 @@
  *   eval-pipeline [args]                        run fixture tasks through a pipeline and record cost/outcome
  *   fleet-e2e [--inject-failure <step>]         prove the inbox-only fleet end to end, write the receipt
  *   fleet-e2e --guest-join-fixture              exercise the R4 pre-1081 guest-join skip arm, write its receipt
- *   real-run-cost [args]                        report real pipeline-run cost from the project DB
- *   check-pipeline-budgets [args]               fail when pipeline cost exceeds config/pipeline-budgets.json
  *   promotion [args]                            workflow candidate promotion/retirement records
+ *
+ * Retired into the CLI by script-absorption PR-9: `publish` → `spur builder publish`,
+ * `check-marketplace-version` → `spur builder bump-ver --check`, `real-run-cost` /
+ * `check-pipeline-budgets` → `spur workflow cost [--budget]`.
  */
 import { buildBinaries } from './commands/build-binaries';
 import { buildCli } from './commands/build-cli';
@@ -32,21 +32,17 @@ import { buildServer } from './commands/build-server';
 import { bundleConfig } from './commands/bundle-config';
 import { bundlePlugins } from './commands/bundle-plugins';
 import { bundleWeb } from './commands/bundle-web';
-import { checkMarketplaceVersion } from './commands/check-marketplace-version';
 import { devAll } from './commands/dev-all';
 import { emitBoardDeclarations } from './commands/emit-board-types';
 import { evalPipeline } from './commands/eval-pipeline';
 import { runFleetE2e } from './commands/fleet-e2e';
 import { linkCheck } from './commands/link-check';
-import { checkPipelineBudgets } from './commands/pipeline-budgets';
-import { publish } from './commands/publish';
-import { realRunCost } from './commands/real-run-cost';
 import { verifyPack } from './commands/verify-pack';
 import { runWorkflowPromotion } from './commands/workflow-promotion';
 
 function usage(message?: string): never {
     console.error(
-        'Commands: publish, bundle-config, bundle-web, bundle-plugins, emit-board-types, check-marketplace-version, verify-pack, build-binaries, build-cli, build-server, dev-all, link-check, eval-pipeline, fleet-e2e, real-run-cost, check-pipeline-budgets, promotion',
+        'Commands: bundle-config, bundle-web, bundle-plugins, emit-board-types, verify-pack, build-binaries, build-cli, build-server, dev-all, link-check, eval-pipeline, fleet-e2e, promotion',
     );
     process.exit(message ? 1 : 0);
 }
@@ -55,16 +51,6 @@ const [command, ...args] = process.argv.slice(2);
 
 try {
     switch (command) {
-        case 'publish': {
-            const otpIndex = args.indexOf('--otp');
-            const otp = otpIndex !== -1 ? args[otpIndex + 1] : undefined;
-            // Flag position is free: the dir is the first arg that is neither `--otp` nor its value.
-            await publish(
-                args.find((_, i) => otpIndex === -1 || (i !== otpIndex && i !== otpIndex + 1)),
-                otp,
-            );
-            break;
-        }
         case 'bundle-config': {
             const result = await bundleConfig(args[0]);
             console.log(
@@ -87,9 +73,6 @@ try {
             console.log(`${result.changed ? 'Wrote' : 'Unchanged'} board declaration ${result.target}`);
             break;
         }
-        case 'check-marketplace-version':
-            process.exit(await checkMarketplaceVersion());
-            break;
         case 'verify-pack': {
             const tarball = args[0];
             if (!tarball) throw new Error('Usage: spur-dev verify-pack <path-to-.tgz>');
@@ -116,12 +99,6 @@ try {
             break;
         case 'link-check':
             process.exit(await linkCheck());
-            break;
-        case 'real-run-cost':
-            process.exit(await realRunCost(args));
-            break;
-        case 'check-pipeline-budgets':
-            process.exit(await checkPipelineBudgets(args));
             break;
         case 'promotion':
             process.exit(await runWorkflowPromotion(args));
