@@ -103,6 +103,7 @@ rules:
             - "apps/cli/src/commands/task/shared.ts" # sync loadTemplateContent/Bodies callbacks
             - "apps/cli/src/commands/task/batch-create.ts" # temp batch payload write + cleanup for `task batch-create` (moved verbatim from task.ts, same exemption)
             - "packages/app/src/services/workflow-service.ts" # run-log/checkpoint reclamation realpath confinement (:988, :1014)
+            - "packages/app/src/services/workflow-catalog-scan.ts" # `workflow list` catalogue scan (lstat/readdir newest-mtime walk) moved verbatim out of workflow-service.ts (same exemption)
             - "packages/app/src/workflow/run-record.ts" # confined sync run-record reads: realpath + fstat byte-window (moved from workflow-service.ts, 0962)
             - "apps/cli/src/release-ops.ts" # sync manifest/workspace reads + Bun.write rewrites inside the git release flow (task 0617); mirrors task.ts sync-template exemption
             - "apps/cli/src/version-carriers.ts" # sync manifest reads + Bun.write rewrites for registered release carriers (task 0854); mirrors release-ops.ts sync exemption
