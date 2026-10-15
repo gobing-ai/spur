@@ -13,7 +13,7 @@
  * module is testable without a repository checkout.
  */
 import { join } from 'node:path';
-import { createDbAdapter, type DbAdapter } from '@gobing-ai/ts-db';
+import { type DbAdapter, openExistingDb } from '@gobing-ai/spur-domain';
 import { createNodeFileSystem, type FileSystem, NodeProcessExecutor } from '@gobing-ai/ts-runtime';
 import { parse } from 'yaml';
 import { extractResolvedWorkflowFacts } from './composition-baseline';
@@ -305,8 +305,8 @@ export const defaultGitShow: GitShowReader = async (cwd, relPath) => {
 /** Opens the project DB at a path (injected so tests can supply an in-memory adapter). */
 export type DbOpener = (dbPath: string) => Promise<DbAdapter>;
 
-/** Default {@link DbOpener}: a bun-sqlite adapter at `dbPath`. */
-export const defaultDbOpener: DbOpener = (dbPath) => createDbAdapter({ driver: 'bun-sqlite', url: dbPath });
+/** Default {@link DbOpener}: the domain facade's raw bun-sqlite opener at `dbPath` (ADR-011). */
+export const defaultDbOpener: DbOpener = (dbPath) => openExistingDb(dbPath);
 
 /** Inputs for {@link runBudgetGate}. */
 export interface BudgetGateOptions {

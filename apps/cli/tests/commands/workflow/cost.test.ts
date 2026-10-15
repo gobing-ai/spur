@@ -23,7 +23,9 @@ async function run(argv: string[]) {
 beforeAll(() => {
     scratch = mkdtempSync(join(tmpdir(), 'cli-cost-'));
     mkdirSync(join(scratch, 'config'), { recursive: true });
-    cpSync(join(FIX, 'workflows'), join(scratch, 'config/workflows'), { recursive: true });
+    // The command reads the project workflow layer (.spur/workflows).
+    mkdirSync(join(scratch, '.spur', 'workflows'), { recursive: true });
+    cpSync(join(FIX, 'workflows'), join(scratch, '.spur', 'workflows'), { recursive: true });
     cpSync(join(FIX, 'pipeline-budgets.json'), join(scratch, 'config/pipeline-budgets.json'));
 });
 

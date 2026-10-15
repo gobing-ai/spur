@@ -238,7 +238,7 @@ describe('readWorkflowMetrics (0730 R2 measurement repairs)', () => {
 });
 
 describe('inScopeWorkflows (0730 R1/R2 cohort scope)', () => {
-    test('scopes the cohort to the config/workflows definitions', async () => {
+    test('scopes the cohort to the definitions directory', async () => {
         const dir = await mkdtemp(join(tmpdir(), 'scope-'));
         try {
             const wfDir = join(dir, 'workflows');

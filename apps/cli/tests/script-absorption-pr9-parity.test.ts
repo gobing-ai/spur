@@ -32,7 +32,10 @@ async function run(argv: string[]) {
 beforeAll(async () => {
     scratch = mkdtempSync(join(tmpdir(), 'pr9-parity-'));
     mkdirSync(join(scratch, 'config'), { recursive: true });
-    cpSync(join(FIX, 'workflows'), join(scratch, 'config/workflows'), { recursive: true });
+    // The command reads the project workflow layer (.spur/workflows); the budget file stays a
+    // user-supplied --budget argv path, so it keeps its scratch-relative location.
+    mkdirSync(join(scratch, '.spur', 'workflows'), { recursive: true });
+    cpSync(join(FIX, 'workflows'), join(scratch, '.spur', 'workflows'), { recursive: true });
     cpSync(join(FIX, 'pipeline-budgets.json'), join(scratch, 'config/pipeline-budgets.json'));
     cpSync(join(FIX, 'measured-over.json'), join(scratch, 'measured-over.json'));
     // First invocation migrates the project DB; then seed the run rows.

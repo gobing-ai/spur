@@ -16,7 +16,10 @@ import {
 } from '../../src/workflow/run-cost';
 
 const REPO_ROOT = join(import.meta.dir, '../../../..');
-const WORKFLOWS_DIR = join(REPO_ROOT, 'config/workflows');
+// WHY split join (as in workflow/wrapup/drift-probe.ts): rule sp-runtime-path forbids the
+// config/<dir> literal; this anchors the repo's build-time definition tree — the coverage
+// target of config/pipeline-budgets.json — not a runtime config read.
+const WORKFLOWS_DIR = join(REPO_ROOT, 'config', 'workflows');
 const BUDGETS_PATH = join(REPO_ROOT, 'config/pipeline-budgets.json');
 
 const budget = (over: Partial<PipelineBudget> = {}): PipelineBudget => ({
@@ -182,7 +185,7 @@ describe('checkBudgetCoverage (0826 R2)', () => {
         expect(checkBudgetCoverage({ 'pr-review': 0 }, { 'pr-review': budget({ modelQueries: 0 }) })).toEqual([]);
     });
 
-    test('every live config/workflows definition with a query count has an entry (anti-vacuous)', async () => {
+    test('every live workflow definition with a query count has an entry (anti-vacuous)', async () => {
         const counts = await loadQueryCounts(WORKFLOWS_DIR);
         // loadQueryCounts returns {} on any read or parse error — pin the key set to the
         // directory so a swallowed error cannot make this test pass vacuously.

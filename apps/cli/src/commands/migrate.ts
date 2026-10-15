@@ -5,9 +5,9 @@ import {
     checkImporterSchemaVersion,
     type ImporterSchemaVersionDrift,
     loadSqlMigrations,
+    openExistingDb,
     repairImporterSchemaVersion,
 } from '@gobing-ai/spur-domain';
-import { createDbAdapter } from '@gobing-ai/ts-db';
 import { type CliContext, resolveDatabaseUrl } from '../context';
 import { toEnvelopeJson } from '../output';
 import { SHARED_OPTIONS } from './shared-options';
@@ -29,7 +29,7 @@ export async function checkImporterSchema(
 ): Promise<ImporterSchemaCheckResult> {
     const url = resolveDatabaseUrl(context.cwd, context.env);
     if (!(await context.fs.exists(url))) return { state: 'absent', url };
-    const db = await createDbAdapter({ driver: 'bun-sqlite', url });
+    const db = await openExistingDb(url);
     try {
         const drift = await checkImporterSchemaVersion(db);
         return drift === null ? { state: 'ok', url } : { state: 'drift', url, drift };

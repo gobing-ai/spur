@@ -11,9 +11,9 @@ import {
     renderWorkflowLines,
     runBudgetGate,
     scopedWorkflows,
-    stableJson,
 } from '@gobing-ai/spur-app/run-cost';
 import type { CliContext } from '../../context';
+import { toEnvelopeJson } from '../../output';
 import { SHARED_OPTIONS } from '../shared-options';
 
 const collect = (value: string, previous: string[]): string[] => [...previous, value];
@@ -34,7 +34,7 @@ export function registerWorkflowCostCommand(workflow: Command, context: CliConte
         .description(
             [
                 'Report per-workflow wall-clock and cost from REAL (terminal, non-dry) runs in .spur/spur.db.',
-                'The cohort defaults to every definition in config/workflows/ (bookkeeping workflows excluded).',
+                'The cohort defaults to every definition in .spur/workflows/ (bookkeeping workflows excluded).',
                 '--json emits the byte-stable baseline payload (workflow + state rows, key-sorted).',
                 '--budget <file> runs the per-pipeline budget gate instead (exit 1 on any over-budget,',
                 'missing-budget, or silent-raise failure).',
@@ -50,7 +50,9 @@ export function registerWorkflowCostCommand(workflow: Command, context: CliConte
         .action(async (options) => {
             const cwd = context.cwd;
             const dbPath = join(cwd, '.spur/spur.db');
-            const workflowsDir = join(cwd, 'config/workflows');
+            // Project workflow layer (ADR-113): runtime definitions live under .spur/, not the
+            // build-time config/ tree (rule sp-runtime-path).
+            const workflowsDir = join(cwd, '.spur', 'workflows');
             const openDb = deps.openDb ?? defaultDbOpener;
             try {
                 if (options.budget !== undefined) {
@@ -65,7 +67,7 @@ export function registerWorkflowCostCommand(workflow: Command, context: CliConte
                         openDb,
                     });
                     if (options.json === true) {
-                        context.output.write(stableJson({ ok: result.exitCode === 0, ...result }));
+                        context.output.write(toEnvelopeJson({ ok: result.exitCode === 0, ...result }));
                     } else {
                         for (const line of result.errors) context.output.error(line);
                         for (const line of result.lines) context.output.write(line);
