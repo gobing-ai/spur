@@ -256,7 +256,7 @@ states:
           command: >-
             f=.spur/run/$__runId-validation.txt;
             if [ -f "$f" ] && [ "$(grep -cx 'Verdict: FAIL' "$f")" = 0 ] && ! tail -n 1 "$f" | grep -qx 'Verdict: PASS'; then
-              d=$("$spurBin" decision run anatomy-validation-verdict --evidence "$f" --json || true);
+              d=$($spurBin decision run anatomy-validation-verdict --evidence "$f" --json || true);
               v=$(printf '%s' "$d" | jq -r 'if (.source // .data.source) == "model" and (.value // .data.value) == "PASS" then "PASS" else "FAIL" end' 2>/dev/null);
               [ "$v" = "PASS" ] || v="FAIL";
               printf 'Verdict: %s\n' "$v" >> "$f";

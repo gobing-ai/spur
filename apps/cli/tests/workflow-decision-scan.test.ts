@@ -151,7 +151,7 @@ describe('history-anatomy normalize-then-rescue ordering pin (1106 R1)', () => {
     }
 
     /** Run the commands in the given order against a fixture validation artifact. */
-    function runInOrder(commands: string[], fixture: string): Outcome {
+    function runInOrder(commands: string[], fixture: string, runtimeLaunch = false): Outcome {
         const tmp = mkdtempSync(join(tmpdir(), 'ha-order-'));
         const callsLog = join(tmp, 'calls.log');
         const stub = join(tmp, 'stub-spur.sh');
@@ -167,7 +167,7 @@ describe('history-anatomy normalize-then-rescue ordering pin (1106 R1)', () => {
             const env = {
                 PATH: `/usr/bin:/bin:${join(Bun.which('jq') ?? '/usr/bin', '..')}`,
                 __runId: 'r1',
-                spurBin: stub,
+                spurBin: runtimeLaunch ? `/bin/sh ${stub}` : stub,
                 CALLS_LOG: callsLog,
             };
             for (const command of commands) {
@@ -191,6 +191,16 @@ describe('history-anatomy normalize-then-rescue ordering pin (1106 R1)', () => {
     }
 
     // The rescue command pipes through jq; skip (not fail) where it is absent.
+    test.skipIf(Bun.which('jq') === null)('behavioral: rescue supports a runtime plus entry module', () => {
+        const validate = actionChunks(stateBlock(TEXT, 'validate'));
+        const rescueCommand = extractCommand(
+            validate.find((c) => c.includes('decision run anatomy-validation-verdict')) as string,
+        );
+        const result = runInOrder([rescueCommand], 'undecidable prose\n', true);
+        expect(result.stubCalls).toBe(1);
+        expect(result.lastLine).toBe('Verdict: PASS');
+    });
+
     test.skipIf(Bun.which('jq') === null)('behavioral: normalization deciding PASS keeps the rescue silent', () => {
         const validate = actionChunks(stateBlock(TEXT, 'validate'));
         const normalizeCommand = extractCommand(validate.find((c) => c.includes("grep -vx 'Verdict: PASS'")) as string);
