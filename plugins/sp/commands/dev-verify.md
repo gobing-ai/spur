@@ -32,7 +32,7 @@ For shared semantics, see the [flag glossary](../skills/spur-dev/references/flag
 ```
 
 **Shippable readiness** (feature-level): when `--fix all` and the task has a `feature_id`, the
-skill runs `spur feature check <id>` after the per-task verdict and emits `Shippable: PASS|FAIL|N/A`.
+skill runs `spur feature check <id> --as done --strict` after the per-task verdict and emits `Shippable: PASS|FAIL|N/A`.
 Default **on** with `--fix all`. Opt out only with **`--skip-shippable`** (alias `--skip-shipable`).
 See `sp:code-verification` § Shippable readiness gate.
 

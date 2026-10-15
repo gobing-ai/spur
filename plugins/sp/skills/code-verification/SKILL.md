@@ -445,11 +445,13 @@ gate is **active**, evaluate feature AC satisfaction via the existing CLI.
 
    ```bash
    SPUR_BIN="${SPUR_BIN:-$([ -f apps/cli/src/index.ts ] && echo 'bun apps/cli/src/index.ts' || echo spur)}"
-   $SPUR_BIN feature check <featureId> --json
+   $SPUR_BIN feature check <featureId> --as done --strict --json
    $SPUR_BIN task list --feature <featureId> --json
    ```
 
 3. Classify **Shippable: PASS** only if **all** of:
+   - Strict completion exits 0: PASS feature-verification receipts and required dogfood evidence.
+     Projection changes no status; active-state checks are insufficient.
    - No finding whose code/message indicates **linked but unverified** scenarios
      (`L4_SCENARIO_UNVERIFIED`).
    - No **orphan / uncovered** feature scenarios (`L4_ORPHAN_SCENARIOS`,

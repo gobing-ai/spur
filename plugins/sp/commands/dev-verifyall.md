@@ -60,7 +60,7 @@ statuses. Do not confuse with `--keep-going`
 
 **Shippable readiness** (feature-level): when `--fix all` and a feature context exists
 (`--feature` or a unique shared `feature_id` across the set), after all per-task verifies the
-orchestrator runs **one** `spur feature check <id>` and emits `Shippable: PASS|FAIL|N/A`.
+orchestrator runs **one** `spur feature check <id> --as done --strict` and emits `Shippable: PASS|FAIL|N/A`.
 A FAIL means the batch is **not clean** (rollup at least PARTIAL) even if every task AC PASSed.
 Default **on** with `--fix all`. Opt out only with **`--skip-shippable`** (alias `--skip-shipable`).
 Without `--fix all`, shippable is not evaluated (optional note: use `--fix all` for ship gate).
