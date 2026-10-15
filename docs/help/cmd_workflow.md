@@ -392,7 +392,7 @@ spur workflow cost [--workflow <name>]... [--by-state] [--include-bookkeeping] [
 | `--json` | Output machine-readable JSON |
 
 Per-workflow wall-clock and cost from REAL (terminal, non-dry) runs in `.spur/spur.db`; the
-default cohort is every definition in `config/workflows/` minus bookkeeping workflows. Unknown
+default cohort is every definition in `.spur/workflows/` minus bookkeeping workflows. Unknown
 measurements render as `null`, never `0`. With `--budget <file>` the command runs the
 per-pipeline budget gate instead (measured-file requires budget): exit `1` on any over-budget,
 missing-budget, or silent-raise failure. `--json` emits the byte-stable baseline payload
