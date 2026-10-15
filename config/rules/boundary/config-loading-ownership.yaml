@@ -65,7 +65,7 @@ rules:
       - "packages/**/src/**/*.ts"
     exclude:
       - "packages/config/src/**"
-      - "apps/cli/src/index.ts"
+      - "apps/cli/src/cli-runtime.ts" # CLI composition root (full boot; split from index.ts for lazy loading)
       - "apps/server/src/serve.ts"
       - "apps/server/src/context.ts"
       - "**/tests/**"

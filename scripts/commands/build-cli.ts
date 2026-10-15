@@ -32,6 +32,14 @@ const OUT_FILE = fileURLToPath(new URL('../../dist/cli/spur', import.meta.url));
  */
 export const UNUSED_LAYA_PEER = '@johnhenry/backend-webgpu';
 
+/**
+ * Startup flags shared by every `bun build --compile` of the CLI (PR-L, lazy CLI loading).
+ * `--bytecode` embeds precompiled JSC bytecode so a launch does not re-parse the whole bundled
+ * graph (the dominant cost of a compiled `spur self hook` once commands load lazily); bytecode
+ * needs `--format=esm` because the entry keeps its `import.meta.main` top-level await.
+ */
+export const COMPILE_STARTUP_FLAGS = ['--bytecode', '--format=esm'] as const;
+
 /** Resolve the ts-runtime dist file through the CLI's module resolution. */
 function resolveTsRuntimeDist(): string {
     const req = createRequire(resolve(CLI_DIR, 'package.json'));
@@ -109,7 +117,17 @@ export async function buildCompiledBinary(entry: string, outfile: string): Promi
     const restore = patchTsRuntimeImport();
     try {
         const result = Bun.spawnSync(
-            ['bun', 'build', entry, '--compile', '--external', UNUSED_LAYA_PEER, '--outfile', outfile],
+            [
+                'bun',
+                'build',
+                entry,
+                '--compile',
+                ...COMPILE_STARTUP_FLAGS,
+                '--external',
+                UNUSED_LAYA_PEER,
+                '--outfile',
+                outfile,
+            ],
             {
                 stdio: ['ignore', 'inherit', 'inherit'],
             },

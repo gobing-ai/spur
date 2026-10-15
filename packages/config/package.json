@@ -6,6 +6,7 @@
     "exports": {
         ".": "./src/index.ts",
         "./loader": "./src/loader.ts",
+        "./env": "./src/env.ts",
         "./agent-quota-events": "./src/agent-quota-events.ts"
     },
     "scripts": {

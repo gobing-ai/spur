@@ -65,9 +65,24 @@ spur <noun> [<verb>] [positionals] [--flags]
 
 The CLI surface is built on `commander` + `@commander-js/extra-typings`. Each noun exports a
 `registerXxxCommand(program, context)` function from `apps/cli/src/commands/<noun>.ts`. Adding a
-noun requires writing its registration function and importing it in `apps/cli/src/index.ts`.
-Commander handles option parsing, `--help` rendering, and subcommand dispatch — no custom
-help rendering overrides remain.
+noun requires writing its registration function and adding a step to `REGISTRATION_STEPS` in
+`apps/cli/src/program.ts` (in help-listing order) whose loader reaches the module through a
+**string-literal** dynamic `import()`. Commander handles option parsing, `--help` rendering, and
+subcommand dispatch — no custom help rendering overrides remain.
+
+**Lazy loading.** The entry (`apps/cli/src/index.ts`) imports only light modules. Each step in
+`apps/cli/src/program.ts` loads its command module only when it is needed:
+
+- **Boot-free paths.** `spur --version`, `spur self hook …` and `serve` never create a database
+  or load config.
+- **Full boot.** Every other invocation boots the database and config in
+  `apps/cli/src/cli-runtime.ts`, then registers **only the invoked noun**.
+- **Full tree.** Root help, `spur help …`, an unknown noun, or any unexpected root flag before
+  the noun loads every noun, so help and "unknown command" output stays byte-identical.
+
+Bun `--compile` bundles string-literal dynamic imports, and builds use `--bytecode --format=esm`
+(`COMPILE_STARTUP_FLAGS` in `scripts/commands/build-cli.ts`). `apps/cli/tests/lazy-loading.test.ts`
+guards the static graph.
 
 <a id="101-shared-option-registry-0618"></a>
 

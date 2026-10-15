@@ -29,7 +29,7 @@
  */
 
 import { spawn } from 'node:child_process';
-import { getEnvVars } from '@gobing-ai/spur-config';
+import { getEnvVars } from '@gobing-ai/spur-config/env';
 
 /** Lifecycle states `spur agent report` accepts — mirrors MEMBER_LIFECYCLE_STATES in the domain. */
 export type MemberLifecycleState = 'working' | 'idle' | 'blocked';

@@ -1019,22 +1019,6 @@ export type SpurConfig = z.infer<typeof spurConfigSchema>;
 /** Inferred type for the `bootstrap.options` runtime-option bag. */
 export type BootstrapOptions = z.infer<typeof bootstrapOptionsSchema>;
 
-/**
- * Env/app-options gateway, single-sourced from `@gobing-ai/ts-utils` (`packages/utils/src/env.ts`).
- * Re-exported here so `packages/config` stays the one import surface: direct environment
- * access is banned everywhere in this repo — packages/config included — and every
- * surviving read (host contracts, deployment plane, invocation contracts — documented
- * in `.env.example`) stays greppable through this funnel. Signatures and contracts live in
- * ts-libs; portable plugin scripts bundle the same functions from ts-utils via
- * `superskill script convert`.
- */
-export {
-    getAppOptions,
-    getEnvVar,
-    getEnvVars,
-    removeEnvVar,
-    setEnvVar,
-} from '@gobing-ai/ts-utils';
 export {
     BOARD_MODULE_ID_PATTERN,
     BOARD_MODULE_ROUTE_PREFIX,
@@ -1049,6 +1033,17 @@ export {
     parseBoardModuleDeclarations,
     validateBoardModuleDeclarations,
 } from './board-modules';
+/**
+ * Env/app-options gateway, single-sourced from `@gobing-ai/ts-utils` (`packages/utils/src/env.ts`).
+ * Re-exported here so `packages/config` stays the one import surface: direct environment
+ * access is banned everywhere in this repo — packages/config included — and every
+ * surviving read (host contracts, deployment plane, invocation contracts — documented
+ * in `.env.example`) stays greppable through this funnel. Signatures and contracts live in
+ * ts-libs; portable plugin scripts bundle the same functions from ts-utils via
+ * `superskill script convert`.
+ */
+// Re-exported from the `./env` subpath so the light startup import and this barrel share one source.
+export { getAppOptions, getEnvVar, getEnvVars, removeEnvVar, setEnvVar } from './env';
 
 /**
  * Top-level keys that belong at the project layer, never the global layer, per the

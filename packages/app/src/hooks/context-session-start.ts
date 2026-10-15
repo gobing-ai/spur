@@ -22,7 +22,7 @@ import { execSync } from 'node:child_process';
 import { randomUUID } from 'node:crypto';
 import { appendFileSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { getEnvVar, getEnvVars } from '@gobing-ai/spur-config';
+import { getEnvVar, getEnvVars } from '@gobing-ai/spur-config/env';
 import { resolveAgentHint, resolveModelHint } from './agent-hint';
 import { claudeHookOwnerFromPayloadText, type SessionOwner } from './context-owner';
 import { checkContextFreshness } from './context-post-tool';

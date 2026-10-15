@@ -1,4 +1,4 @@
-import { getEnvVar } from '@gobing-ai/spur-config';
+import { getEnvVar } from '@gobing-ai/spur-config/env';
 import type {
     ApiErrorCode,
     apiErrorSchema,

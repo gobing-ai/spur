@@ -1,9 +1,11 @@
 import { describe, expect, test } from 'bun:test';
+import { existsSync } from 'node:fs';
 import { mkdtemp } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { getEnvVars } from '@gobing-ai/spur-config';
 import { createMigratedDb, type DbAdapter } from '@gobing-ai/spur-domain';
+import { CLI_CONFIG } from '../src/config';
 import { main } from '../src/index';
 import type { CommandOutput } from '../src/output';
 import { createTempProject } from './helpers';
@@ -44,8 +46,9 @@ describe('bootstrap (runNodeApplication path)', () => {
         const globalDir = await mkdtemp(join(tmpdir(), 'spur-glob-'));
         const env = { ...getEnvVars(), SPUR_GLOBAL_RULES_DIR: globalDir };
 
-        const code = await main(['--version'], { cwd, env, output: nullOutput(), dbUrl: ':memory:' });
-        // --version uses Commander's exitOverride → throws with exitCode 0
+        // Root --help still takes the full boot (PR-L made only --version boot-free) and exits 0
+        // through Commander's exitOverride.
+        const code = await main(['--help'], { cwd, env, output: nullOutput(), dbUrl: ':memory:' });
         expect(code).toBe(0);
     });
 
@@ -55,7 +58,7 @@ describe('bootstrap (runNodeApplication path)', () => {
         const globalDir = await mkdtemp(join(tmpdir(), 'spur-glob-'));
         const env = { ...getEnvVars(), SPUR_GLOBAL_RULES_DIR: globalDir };
 
-        const code = await main(['--version'], { cwd, env, output: nullOutput(), dbUrl: ':memory:' });
+        const code = await main(['--help'], { cwd, env, output: nullOutput(), dbUrl: ':memory:' });
         expect(code).toBe(0);
     });
 
@@ -73,7 +76,7 @@ describe('bootstrap (runNodeApplication path)', () => {
         const env = { ...getEnvVars(), SPUR_GLOBAL_RULES_DIR: globalDir };
         const { db, closed } = await spyDb();
 
-        const code = await main(['--version'], { cwd, env, output: nullOutput(), db });
+        const code = await main(['--help'], { cwd, env, output: nullOutput(), db });
 
         expect(code).toBe(0);
         expect(closed()).toBe(true);
@@ -85,9 +88,35 @@ describe('bootstrap (runNodeApplication path)', () => {
         const env = { ...getEnvVars(), SPUR_GLOBAL_RULES_DIR: globalDir };
         const { db, closed } = await spyDb();
 
-        const code = await main(['--version'], { cwd, env, output: nullOutput(), db });
+        const code = await main(['--help'], { cwd, env, output: nullOutput(), db });
 
         expect(code).toBe(0);
         expect(closed()).toBe(true);
+    });
+});
+
+describe('boot-free --version (PR-L lazy CLI loading)', () => {
+    test('prints the version without opening a database or reading config', async () => {
+        const cwd = await createTempProject();
+        // A broken project config would fail the full boot; --version must not read it.
+        await Bun.write(join(cwd, '.spur', 'config.yaml'), 'version: [unterminated\n');
+        const { db, closed } = await spyDb();
+        const lines: string[] = [];
+        const output: CommandOutput = { write: (m) => lines.push(m), error: (m) => lines.push(m) };
+
+        for (const flag of ['--version', '-V']) {
+            expect(await main([flag], { cwd, env: getEnvVars(), output, db })).toBe(0);
+            expect(await main(['--no-logo', flag], { cwd, env: getEnvVars(), output, db })).toBe(0);
+        }
+
+        expect(lines.map((l) => l.trim())).toEqual([
+            CLI_CONFIG.binaryVersion,
+            CLI_CONFIG.binaryVersion,
+            CLI_CONFIG.binaryVersion,
+            CLI_CONFIG.binaryVersion,
+        ]);
+        expect(closed()).toBe(false);
+        expect(existsSync(join(cwd, '.spur', 'spur.db'))).toBe(false);
+        await db.close();
     });
 });

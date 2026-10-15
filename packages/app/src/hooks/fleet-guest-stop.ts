@@ -29,7 +29,7 @@
 import { spawnSync } from 'node:child_process';
 import { existsSync, readdirSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { getEnvVar } from '@gobing-ai/spur-config';
+import { getEnvVar } from '@gobing-ai/spur-config/env';
 
 /** Budget for the pending-work probe; the hook must never noticeably slow a turn. */
 export const GUEST_STOP_PROBE_MS = 2000;

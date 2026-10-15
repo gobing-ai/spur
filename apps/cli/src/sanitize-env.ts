@@ -1,4 +1,4 @@
-import { getEnvVars, removeEnvVar } from '@gobing-ai/spur-config';
+import { getEnvVars, removeEnvVar } from '@gobing-ai/spur-config/env';
 
 /**
  * proto's tool shim marks shim-launched processes with `PROTO_SHIM_*` / `PROTO_INTERNAL_*`

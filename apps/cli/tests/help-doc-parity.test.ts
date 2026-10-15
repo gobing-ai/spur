@@ -1,4 +1,4 @@
-import { describe, expect, test } from 'bun:test';
+import { beforeAll, describe, expect, test } from 'bun:test';
 import { readdirSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { createCliContext } from '../src/context';
@@ -30,9 +30,10 @@ interface CmdLike {
 }
 
 /** Walk the commander tree: `spur <noun> [verb…]` → declared long flags. */
-function collectCliFlags(): Map<string, Set<string>> {
+async function collectCliFlags(): Promise<Map<string, Set<string>>> {
     const output: CommandOutput = { write: () => {}, error: () => {} };
-    const program = buildProgram(createCliContext({ output }), output) as unknown as CmdLike;
+    // No argv → the full (unscoped) tree, the same one root help renders (PR-L lazy loading).
+    const program = (await buildProgram(createCliContext({ output }), output)) as unknown as CmdLike;
     const cli = new Map<string, Set<string>>();
     const walk = (cmd: CmdLike, path: string): void => {
         if (!cli.has(path)) {
@@ -101,8 +102,11 @@ function collectDocFlags(): Map<string, Map<string, Set<string>>> {
 }
 
 describe('docs/help flag-set parity (task 0800 R3)', () => {
-    const cli = collectCliFlags();
+    let cli = new Map<string, Set<string>>();
     const docs = collectDocFlags();
+    beforeAll(async () => {
+        cli = await collectCliFlags();
+    });
 
     test('AC7: every CLI flag has a documented row (file :: subcommand :: flag)', () => {
         const undocumented: string[] = [];

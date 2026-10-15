@@ -16,7 +16,7 @@ export {
     toEnvelopeError,
     toEnvelopeJson,
     writeJsonError,
-} from '@gobing-ai/spur-app';
+} from '@gobing-ai/spur-app/envelope';
 
 /** Output sink used by CLI commands and tests. */
 export interface CommandOutput {

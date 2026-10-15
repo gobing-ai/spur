@@ -1,4 +1,4 @@
-import { getEnvVars } from '@gobing-ai/spur-config';
+import { getEnvVars } from '@gobing-ai/spur-config/env';
 /**
  * Shared host-agent identification helpers — the **only** host-agent detection path
  * in the sp plugin hooks.

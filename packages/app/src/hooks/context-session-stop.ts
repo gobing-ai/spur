@@ -27,7 +27,7 @@
 
 import { appendFileSync, existsSync, readFileSync, rmSync } from 'node:fs';
 import { join } from 'node:path';
-import { getEnvVar, getEnvVars } from '@gobing-ai/spur-config';
+import { getEnvVar, getEnvVars } from '@gobing-ai/spur-config/env';
 // Type-only import: erased at bundle time, so this hook keeps its minimal
 // node:fs/node:path/env dependency surface (sp-plugin-standalone contract).
 import type { SessionOwner } from './context-owner';

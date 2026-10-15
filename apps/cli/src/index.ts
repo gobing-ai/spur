@@ -1,58 +1,27 @@
 #!/usr/bin/env bun
-// Force ts-db into the --compile static bundle so that dynamic
-// import('@gobing-ai/ts-db') calls in ts-runtime resolve at runtime.
-// Bun --compile bundles only the static import graph into bunfs;
-// string-literal dynamic imports resolve from the bundled graph,
-// but variable-specifier imports (ts-runtime@0.4.6 uses
-// `const spec = '@gobing-ai/ts-db'; await import(spec)`) do not.
-// The side-effect import below forces ts-db into the static graph.
-// `spur-dev.ts build-cli` patches the variable specifier in ts-runtime's
-// dist to a string literal at build time so it resolves at runtime.
+// CLI entry (PR-L, lazy CLI loading): only light modules are imported statically. The DB/config
+// boot (`./cli-runtime`), every command module (`./program`'s registry) and the startup banner are
+// reached through string-literal dynamic imports, which `bun build --compile` still bundles.
 import './sanitize-env';
-import '@gobing-ai/ts-db';
 import { Command } from '@commander-js/extra-typings';
-import { disposeDecisionServices } from '@gobing-ai/spur-app';
-import { getEnvVar, getEnvVars, type SpurAppConfig, type SpurConfig } from '@gobing-ai/spur-config';
-import { loadSpurConfig, resolveConfigFile } from '@gobing-ai/spur-config/loader';
-import type { DbAdapter } from '@gobing-ai/spur-domain';
-import type { ApplicationRuntime } from '@gobing-ai/ts-infra/application';
-import { runNodeApplication } from '@gobing-ai/ts-infra/application-node';
-import figlet from 'figlet';
-import standard from 'figlet/fonts/Standard';
-import { registerAgentCommand } from './commands/agent';
-import { registerBuilderCommand } from './commands/builder';
-import { registerDecisionCommand } from './commands/decision';
-import { registerFeatureCommand } from './commands/feature';
-import { registerHistoryCommand } from './commands/history';
-import { registerInitCommand } from './commands/init';
-import { registerMaintainCommand } from './commands/maintain';
-import { registerMessageCommand } from './commands/message';
-import { registerMigrateCommand } from './commands/migrate';
-import { registerProjectsCommand } from './commands/projects';
-import { registerRuleCommand } from './commands/rule';
-import { registerServeCommand } from './commands/serve';
-import { registerStatusCommand } from './commands/status';
-import { registerTaskCommand } from './commands/task';
-import { registerWorkflowCommand } from './commands/workflow';
-import { CLI_CONFIG } from './config';
-import { EMBEDDED_SPUR_SCHEMAS } from './config/embedded-schemas';
-import { createCliContext, createMigratedDbAdapter } from './context';
+import { getEnvVars } from '@gobing-ai/spur-config/env';
+import type { MainOptions } from './cli-runtime';
 import { errorMessage } from './errors';
-import { type CommandOutput, consoleOutput, toJson } from './output';
-import { isSelfHookInvocation, registerSelfHookCommand } from './self-hook';
-/** Options for programmatic CLI execution in tests. */
-export interface MainOptions {
-    cwd?: string;
-    env?: Record<string, string | undefined>;
-    output?: CommandOutput;
-    dbUrl?: string;
-    /** Pre-built DB adapter. Injectable so tests can assert close-on-shutdown (ADR-018). */
-    db?: DbAdapter;
-    /** Database-free serve launch seam for startup tests. */
-    startServer?: typeof import('@gobing-ai/spur-server').startServer;
-    /** `spur self hook` I/O seams (stdin, raw stdout/stderr) for in-process tests. */
-    selfHook?: import('./self-hook').SelfHookDeps;
-}
+import { type CommandOutput, consoleOutput } from './output';
+import { buildProgram, createRootProgram } from './program';
+import { isSelfHookInvocation } from './self-hook-argv';
+
+export type { MainOptions } from './cli-runtime';
+export { buildProgram };
+
+/** Root flags `main()` ignores when classifying an invocation (they take no value). */
+const GLOBAL_FLAGS = ['--no-logo', '--cli-verbose', '-v'];
+
+/**
+ * Set once an invocation has loaded the application layer (full boot or `serve`); `runCli()` then
+ * releases the cached decision services. Boot-free paths (`--version`, `self hook`) never load it.
+ */
+let applicationLoaded = false;
 
 /** Run the Spur CLI with explicit argv and injectable runtime dependencies. */
 export async function main(argv = process.argv.slice(2), options: MainOptions = {}): Promise<number> {
@@ -61,242 +30,66 @@ export async function main(argv = process.argv.slice(2), options: MainOptions = 
 
     const cwd = options.cwd ?? process.cwd();
     const env = options.env ?? getEnvVars();
+    const context = {
+        cwd,
+        output,
+        env,
+        setExitCode: (code: number) => {
+            exitCode = code;
+        },
+    };
+    const commandTokens = argv.filter((token) => !GLOBAL_FLAGS.includes(token));
+
     // Serve owns its sole runtime and database. Dispatch before the CLI's adapter
     // and configuration runtime boot, including the canonical `self serve` form.
-    const commandTokens = argv.filter((token) => !['--no-logo', '--cli-verbose', '-v'].includes(token));
     if (commandTokens[0] === 'serve' || (commandTokens[0] === 'self' && commandTokens[1] === 'serve')) {
-        const program = new Command().name('spur').exitOverride();
-        program.option('--no-logo').option('-v, --cli-verbose');
-        program.configureOutput({ writeOut: (str) => output.write(str), writeErr: (str) => output.error(str) });
-        const context = {
-            cwd,
-            output,
-            env,
-            setExitCode: (code: number) => {
-                exitCode = code;
-            },
-        };
+        applicationLoaded = true;
+        const { registerServeCommand } = await import('./commands/serve');
+        const program = earlyProgram(output);
         registerServeCommand(program, context, { startServer: options.startServer });
         registerServeCommand(program.command('self'), context, { startServer: options.startServer });
-        try {
-            await program.parseAsync(argv, { from: 'user' });
-            return exitCode;
-        } catch (error) {
-            const code = (error as { exitCode?: number }).exitCode;
-            if (code !== undefined) return code;
-            output.error(errorMessage(error));
-            return 1;
-        }
+        return parseEarly(program, argv, output, () => exitCode);
     }
 
     // `self hook` is a host hook transport (script-absorption PR-2a): it must answer in
     // milliseconds, never create or migrate a database, never fail on a broken config, and
     // always exit 0. Dispatch it before the adapter and configuration boot, like serve.
     if (isSelfHookInvocation(argv)) {
-        const program = new Command().name('spur').exitOverride();
-        program.option('--no-logo').option('-v, --cli-verbose');
-        program.configureOutput({ writeOut: (str) => output.write(str), writeErr: (str) => output.error(str) });
-        const context = {
-            cwd,
-            output,
-            env,
-            setExitCode: (code: number) => {
-                exitCode = code;
-            },
-        };
+        const { registerSelfHookCommand } = await import('./self-hook');
+        const program = earlyProgram(output);
         registerSelfHookCommand(program.command('self'), context, options.selfHook);
-        try {
-            await program.parseAsync(argv, { from: 'user' });
-            return exitCode;
-        } catch (error) {
-            const code = (error as { exitCode?: number }).exitCode;
-            if (code !== undefined) return code;
-            output.error(errorMessage(error));
-            return 1;
-        }
+        return parseEarly(program, argv, output, () => exitCode);
     }
 
-    // Task 0817 R1: forward `options.cwd` verbatim — which may be undefined — so the
-    // loader's `SPUR_SKIP_PROJECT_CONFIG` gate can suppress the project layer for
-    // unpinned programmatic runs. `cwd` stays materialized for the DB and context seams.
-    const configFile = resolveConfigFile(options.cwd);
-    const db = options.db ?? (await createMigratedDbAdapter(cwd, env, options.dbUrl));
-
-    // Load the merged global+project config ONCE at the composition root (A5 /
-    // ADR-082) — covering both the config-present and no-config branches — and
-    // thread the result into dispatch as the only app-config source. A config-load
-    // failure emits exactly one error and exits 1 (R4); the loader's message already
-    // names the failing layer path and is propagated verbatim.
-    let spurConfig: SpurConfig;
-    try {
-        // Pass the embedded schemas so the `$schema` ref resolves without
-        // node_modules (dev tree and --compile binary alike).
-        spurConfig = await loadSpurConfig(options.cwd, { embeddedSchemas: EMBEDDED_SPUR_SCHEMAS });
-    } catch (err) {
-        const message = errorMessage(err);
-        if (argv.includes('--json')) {
-            output.write(toJson({ error: { code: 'config', message } }));
-        } else {
-            output.error(message);
-        }
-        await db.close();
-        return 1;
+    // `spur --version` (PR-L): print through the same root program and Commander path as the full
+    // tree, but without creating a database or loading config it never reads.
+    if (commandTokens.length === 1 && (commandTokens[0] === '--version' || commandTokens[0] === '-V')) {
+        return parseEarly(createRootProgram(output), argv, output, () => exitCode);
     }
 
-    // 0799 (ADR-082): re-load accessor for the quota-update flow (R3 executor
-    // refresh, drain-time binding checks). Only this composition root may call
-    // the loader; commands receive the closure through CliContext.
-    const loadAgentConfig = async (projectRoot: string): Promise<SpurConfig | null> => {
-        try {
-            return await loadSpurConfig(projectRoot, { embeddedSchemas: EMBEDDED_SPUR_SCHEMAS });
-        } catch {
-            return null;
-        }
-    };
-
-    // 0858 R2/R5: the fail-loud sibling. A read surface that reports a project's
-    // declared fleet state must surface a broken config (retired source, invalid
-    // section) instead of degrading it to "nothing declared".
-    const loadAgentConfigStrict = (projectRoot: string): Promise<SpurConfig> =>
-        loadSpurConfig(projectRoot, { embeddedSchemas: EMBEDDED_SPUR_SCHEMAS });
-
-    try {
-        if (configFile !== undefined) {
-            // Bootstrap through runNodeApplication — standard path (R1).
-            // `bootstrap` is project-shaped (0641 split); the app section comes from
-            // the merged load, so the appConfig validator is dropped and
-            // appRt.appConfig is never read.
-            const app = await runNodeApplication<SpurAppConfig>({
-                configLoader: {
-                    configFile,
-                    bootstrapSection: 'bootstrap',
-                },
-                // Under test, force logging off so initializeLogger() does not
-                // reconfigure LogTape with a console sink — which would reset the
-                // global mute installed in tests/setup.ts and leak JSON log lines
-                // from every later app.* logger (e.g. the rule engine).
-                // Outside test, enforce console off — all output goes to file.
-                config:
-                    getEnvVar('NODE_ENV') === 'test'
-                        ? { logging: { enabled: false } }
-                        : { logging: { console: false } },
-                services: { db },
-                async start(appRt: ApplicationRuntime<SpurAppConfig>) {
-                    void appRt;
-                    const context = createCliContext({
-                        cwd,
-                        env,
-                        output,
-                        db,
-                        spurConfig,
-                        loadAgentConfig,
-                        loadAgentConfigStrict,
-                    });
-                    exitCode = await runCommandDispatch(argv, context, output);
-                },
-            });
-            await app.stop('shutdown');
-        } else {
-            // No config file — direct path (pre-init, tests).
-            const context = createCliContext({
-                cwd,
-                env,
-                output,
-                db,
-                spurConfig,
-                loadAgentConfig,
-                loadAgentConfigStrict,
-            });
-            exitCode = await runCommandDispatch(argv, context, output);
-        }
-    } finally {
-        // ADR-018: ts-infra 0.3.6 no longer closes a caller-injected services.db.
-        // Spur owns the adapter it creates — close it in both bootstrap branches.
-        await db.close();
-    }
-
-    return exitCode;
+    applicationLoaded = true;
+    const { runFullCli } = await import('./cli-runtime');
+    return runFullCli(argv, options, output, cwd, env);
 }
 
-/**
- * Build the Commander program with every noun command group registered.
- * Exported so the docs/help flag-set parity test (task 0800 R3) walks the same
- * tree the dispatcher runs — a separately-built tree would drift.
- */
-export function buildProgram(context: ReturnType<typeof createCliContext>, output: CommandOutput): Command {
-    const program = new Command();
-    program.name('spur').version(CLI_CONFIG.binaryVersion).exitOverride();
-    program.configureOutput({
-        writeOut: (str: string) => output.write(str),
-        writeErr: (str: string) => output.error(str),
-    });
-    program.option('-v, --cli-verbose', 'Show internal diagnostics');
-    // Global startup-decoration opt-out (A31/0719). Registered at the composition root so the
-    // token is accepted before or after nested noun/verb tokens; runCli() consumes it via raw
-    // argv, so this registration only owns help visibility and parse acceptance.
-    program.option('--no-logo', 'Suppress the startup ASCII banner');
-
-    // Register every noun command group — UNCHANGED (R3).
-    registerAgentCommand(program, context);
-    registerBuilderCommand(program, context);
-    registerDecisionCommand(program, context);
-    registerFeatureCommand(program, context);
-    registerHistoryCommand(program, context);
-    registerMessageCommand(program, context);
-    registerProjectsCommand(program, context);
-    registerRuleCommand(program, context);
-
-    // `self` is the visible home for the self-management verbs; the four legacy
-    // top-level nouns stay registered over the same builders as hidden aliases
-    // so existing scripts, workflow YAML, and habits keep working unchanged.
-    const selfCommand = program.command('self').summary('inspect and manage the Spur installation itself');
-    registerInitCommand(selfCommand, context);
-    registerMaintainCommand(selfCommand, context);
-    registerMigrateCommand(selfCommand, context);
-    registerServeCommand(selfCommand, context);
-    registerStatusCommand(selfCommand, context);
-    registerSelfHookCommand(selfCommand, context);
-
-    registerInitCommand(program, context, { hidden: true });
-    registerMaintainCommand(program, context, { hidden: true });
-    registerMigrateCommand(program, context, { hidden: true });
-    registerServeCommand(program, context, { hidden: true });
-    registerStatusCommand(program, context, { hidden: true });
-
-    registerTaskCommand(program, context);
-    registerWorkflowCommand(program, context);
-
+/** Root program for the boot-free early dispatches: global flags only, no version or nouns. */
+function earlyProgram(output: CommandOutput): Command {
+    const program = new Command().name('spur').exitOverride();
+    program.option('--no-logo').option('-v, --cli-verbose');
+    program.configureOutput({ writeOut: (str) => output.write(str), writeErr: (str) => output.error(str) });
     return program;
 }
 
-/** Build the Commander program and run the dispatch. Returns exit code. */
-async function runCommandDispatch(
-    argv: string[],
-    context: ReturnType<typeof createCliContext>,
-    output: CommandOutput,
-): Promise<number> {
-    let exitCode = 0;
-    context.setExitCode = (code: number) => {
-        exitCode = code;
-    };
-    const program = buildProgram(context, output);
-
+async function parseEarly(program: Command, argv: string[], output: CommandOutput, exitCode: () => number) {
     try {
         await program.parseAsync(argv, { from: 'user' });
-        return exitCode;
-    } catch (err) {
-        if (err instanceof Error && 'exitCode' in err) {
-            return (err as Error & { exitCode: number }).exitCode;
-        }
-        output.error(errorMessage(err));
-        return exitCode !== 0 ? exitCode : 1;
+        return exitCode();
+    } catch (error) {
+        const code = (error as { exitCode?: number }).exitCode;
+        if (code !== undefined) return code;
+        output.error(errorMessage(error));
+        return 1;
     }
-}
-
-/** Render the startup ASCII banner without runtime font file I/O. */
-export function bannerText(): string {
-    figlet.parseFont('Standard', standard);
-    return figlet.textSync(CLI_CONFIG.binaryLabel, { font: 'Standard' });
 }
 
 /**
@@ -314,6 +107,7 @@ export function shouldRenderBanner(argv: readonly string[]): boolean {
 export async function runCli(): Promise<number> {
     const argv = process.argv.slice(2);
     if (shouldRenderBanner(argv)) {
+        const { bannerText } = await import('./banner');
         consoleOutput.write(bannerText());
     }
     try {
@@ -321,8 +115,12 @@ export async function runCli(): Promise<number> {
     } finally {
         // A `laya-local` decision leaves a warm Python worker whose open pipes keep this process
         // alive; the CLI owns that client, so it releases it at the process boundary (otherwise the
-        // command prints its result and the process never exits).
-        await disposeDecisionServices();
+        // command prints its result and the process never exits). Only paths that loaded the
+        // application layer can hold one.
+        if (applicationLoaded) {
+            const { disposeDecisionServices } = await import('@gobing-ai/spur-app');
+            await disposeDecisionServices();
+        }
     }
 }
 

@@ -11,10 +11,10 @@ import {
 import { SHARED_OPTIONS } from './commands/shared-options';
 import type { CliContext } from './context';
 import { toEnvelopeJson } from './output';
+import { SELF_HOOK_VERB } from './self-hook-argv';
 import { resolveSpurArgv } from './workflow/resolve-spur-bin';
 
-/** The verb this module mounts; the parent (`self`) is chosen by the caller. */
-export const SELF_HOOK_VERB = 'hook';
+export { isSelfHookInvocation, SELF_HOOK_VERB } from './self-hook-argv';
 
 /** Seams for {@link registerSelfHookCommand}; the defaults are the live process. */
 export interface SelfHookDeps {
@@ -28,12 +28,6 @@ export interface SelfHookDeps {
     run?: (id: string, input: HookRunInput) => HookRunResult;
     /** Launch argv of this spur build, for hook children; defaults to {@link resolveSpurArgv}. */
     selfArgv?: readonly string[];
-}
-
-/** True when argv addresses `spur self hook …` (global flags ignored) — the early-dispatch test. */
-export function isSelfHookInvocation(argv: readonly string[]): boolean {
-    const tokens = argv.filter((token) => !['--no-logo', '--cli-verbose', '-v'].includes(token));
-    return tokens[0] === 'self' && tokens[1] === SELF_HOOK_VERB;
 }
 
 function parseHost(value: string): HookHostOption {

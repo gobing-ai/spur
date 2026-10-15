@@ -11,7 +11,7 @@
 import { mkdir } from 'node:fs/promises';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { patchTsRuntimeImport, UNUSED_LAYA_PEER } from './build-cli';
+import { COMPILE_STARTUP_FLAGS, patchTsRuntimeImport, UNUSED_LAYA_PEER } from './build-cli';
 
 const CLI_ENTRY = fileURLToPath(new URL('../../apps/cli/src/index.ts', import.meta.url));
 const OUT_DIR = fileURLToPath(new URL('../../dist/cli', import.meta.url));
@@ -61,6 +61,7 @@ export async function buildBinaries(): Promise<void> {
                     'build',
                     CLI_ENTRY,
                     '--compile',
+                    ...COMPILE_STARTUP_FLAGS,
                     `--target=${target}`,
                     '--external',
                     UNUSED_LAYA_PEER,
