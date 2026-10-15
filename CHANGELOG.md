@@ -1,5 +1,40 @@
 # Changelog
 
+## [0.4.6] - 2026-10-14
+
+### Added
+- replace the database table rail with a dropdown selector (18879d6c6)
+
+### Fixed
+- block persist-out teardown on unforwarded durable verdicts (ace325d88)
+- keep (req: R1) citations resolvable in AC identity lint (98b62be01)
+- fail closed when the persist-out source worktree is missing (d49694932)
+- fail closed on commit-guard git probe errors (1209) (ded49f65c)
+- take AC evidence-rule exemptions only from the task file (b3a68afcb)
+- certify coverage only against the canonical run that produced it (8a4cb8d3d)
+- fail closed on unverifiable board module paths (1208) (5d6efc088)
+- deny done when a PASS verdict cites test files that do not exist (2ca8cb5e7)
+- mark all composite primary key columns as pk (206552cae)
+
+### Changed
+- remove the spec-without-executor-field and agent-default-executor shims (202b2312d)
+- one VerdictAggregate type; fix the stale duplicated-rule note in the done guard (867a97733)
+- delete unreferenced components and the unused domain types barrel (b4a40bec0)
+
+### Other
+- merge PR #10 architecture simplification into main (5bd15356a)
+- extend commit-guard probe-failure staging tests (1209) (8239bffd0)
+- strengthen fail-closed verification coverage (1208) (5ee056eb7)
+- advance features A8 and H1 to done (1208, 1209) (1b6d45aa5)
+- merge sp/runall-1208-1209-bdcd (1208,1209) — fail-closed board modules + commit-guard probes (738b46b6a)
+- deprecate superseded task 1204, record 1207 validation (8cb75f85d)
+- cap the root test suite at two parallel workers (c8d5ca0f2)
+- add the 2026-10-14 architecture review (72b689e3b)
+- drop the unused @dnd-kit/sortable dependency (986f1753e)
+- resolve the workflow $schema package locally in the installed-twin fixture (2c347a39a)
+- refresh bun.lock workspace versions to 0.4.5 (eb9210dda)
+- file review tasks 1208/1209 and reopen feature A8 (bdcdae779)
+
 ## [0.4.5] - 2026-10-14
 
 ### Changed

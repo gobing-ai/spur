@@ -238,4 +238,26 @@ describe('persist-out-check', () => {
         expect(realpathSync(defaultInvokeRoot(join(dirname(repo.wt), 'linked')))).toBe(mainTree); // linked worktree → main tree
         rmSync(dirname(repo.wt), { recursive: true, force: true });
     });
+
+    test('run-plane subdirectories are scanned — artifacts under .spur/run/<run-id>/ are obligations', () => {
+        const { wt } = makeTrees();
+        mkdirSync(join(wt, '.spur', 'run', 'run_abc'), { recursive: true });
+        writeFileSync(join(wt, '.spur', 'run', 'run_abc', '1209-verdict.json'), 'v');
+        const files = listObligations(wt, ['1209'], []);
+        expect(files?.files).toContain(join('.spur', 'run', 'run_abc', '1209-verdict.json'));
+    });
+
+    test('unforwarded durable-verdict family blocks the teardown (batch-run-id-only forwarding)', () => {
+        const { wt, invoke } = makeTrees();
+        // The session incident: only the batch run id was forwarded, so the driver's
+        // wbs-named verdicts matched no prefix and the check passed vacuously with 0
+        // obligations while the worktree still held them.
+        writeFileSync(join(wt, '.spur', 'run', '1209-verdict.json'), 'v');
+        writeFileSync(join(wt, '.spur', 'run', 'scratch-notes.txt'), 'noise');
+        const run = runMain(['--from', wt, '--run-id', 'runall-1208-1209-bdcd'], invoke);
+        expect(run.code).toBe(1);
+        expect(run.out).toContain('UNFORWARDED .spur/run/1209-verdict.json');
+        expect(run.out).not.toContain('scratch-notes.txt'); // unowned non-family scratch still never blocks (1148 R1)
+        expect(run.err).toContain('unforwarded durable');
+    });
 });

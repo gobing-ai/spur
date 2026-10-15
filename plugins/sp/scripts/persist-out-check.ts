@@ -1,7 +1,6 @@
 #!/usr/bin/env bun
 /**
  * persist-out-check — WT-4 pre-removal assertion for E71 persist-out (task 1067 R1, 1148 R1).
- *
  * Before `git worktree remove`, verify the worktree's OWNED durable evidence would not be abandoned:
  * every `.spur/run/` and `.spur/memory/evidence/` file starting with a forwarded `<wbs>-`/`<runId>-`
  * prefix must exist in the invoking tree with identical bytes. Unowned evidence is counted
@@ -17,6 +16,9 @@ const EVIDENCE_DIR = join('.spur', 'memory', 'evidence');
 const RUN_DIR = join('.spur', 'run');
 const NAMED_CAP = 32;
 const PREFIX_CAP = 64;
+/** The durable-verdict family persist-out itself transfers (1026/1043) — the one artifact class whose
+ *  silent abandonment WT-4 exists to prevent, even when the driver forwarded no matching prefix. */
+const DURABLE_FAMILY_RE = /^\d{4}-(?:verdict|feature-verification)\.json$/;
 
 /** Task files own their `<wbs>-*` evidence: leading digits before `_` in the basename. */
 export function wbsOfTaskFile(path: string): string | null {
@@ -27,6 +29,8 @@ export function wbsOfTaskFile(path: string): string | null {
 export interface ListObligationsResult {
     files: string[];
     unowned: number;
+    /** Every file seen in both planes (recursive) — lets callers audit outside the forwarded prefixes. */
+    planeFiles: string[];
 }
 
 /** Recursively list files under `dir`, relative to `root`. */
@@ -58,8 +62,9 @@ function collectOwned(rels: string[], prefixes: string[], counts: Map<string, nu
 }
 
 /**
- * Evidence the worktree owns: `.spur/memory/evidence/` (recursive) and `.spur/run/` (flat) files
- * whose basename starts with a forwarded `<wbs>-`/`<runId>-` prefix. Evidence matching no prefix is
+ * Evidence the worktree owns: `.spur/memory/evidence/` (recursive) and `.spur/run/` (recursive — the
+ * driver keeps run scratch under `.spur/run/<run-id>/`, which a flat scan silently missed) files whose
+ * basename starts with a forwarded `<wbs>-`/`<runId>-` prefix. Evidence matching no prefix is
  * counted as `unowned` (1148 R1). Null when no prefix is forwarded or a prefix cap is exceeded.
  */
 export function listObligations(wtRoot: string, wbsList: string[], runIds: string[]): ListObligationsResult | null {
@@ -69,19 +74,14 @@ export function listObligations(wtRoot: string, wbsList: string[], runIds: strin
     const evDir = join(wtRoot, EVIDENCE_DIR);
     const runDir = join(wtRoot, RUN_DIR);
     const evFiles = walkFiles(evDir, wtRoot);
-    const runFiles = existsSync(runDir)
-        ? readdirSync(runDir, { withFileTypes: true })
-              .filter((e) => e.isFile())
-              .map((e) => join(RUN_DIR, e.name))
-              .sort()
-        : [];
+    const runFiles = walkFiles(runDir, wtRoot);
 
     const files: string[] = [];
     const counts = new Map<string, number>();
     if (!collectOwned(evFiles, prefixes, counts, files)) return null;
     if (!collectOwned(runFiles, prefixes, counts, files)) return null;
     const unowned = evFiles.length - files.filter((f) => f.startsWith(EVIDENCE_DIR)).length;
-    return { files: [...new Set(files)].sort(), unowned };
+    return { files: [...new Set(files)].sort(), unowned, planeFiles: [...evFiles, ...runFiles] };
 }
 
 /** Classify obligations against the invoking tree: missing, divergent (byte-differs), or ok. */
@@ -164,14 +164,12 @@ export function main(argv: string[], invokeRoot = defaultInvokeRoot(process.cwd(
     }
     if (wbsList.length === 0 && runIds.length === 0) {
         process.stderr.write(
-            `${persistOutCheckUsage()}\npersist-out-check: at least one --task-file or --run-id prefix required\n`,
+            `${persistOutCheckUsage()}\npersist-out-check: at least one --task-file or --run-id required\n`,
         );
         return 2;
     }
     if (!wtRoot || !existsSync(wtRoot) || !statSync(wtRoot).isDirectory()) {
-        process.stderr.write(
-            `${persistOutCheckUsage()}\npersist-out-check: --from must be an existing worktree directory\n`,
-        );
+        process.stderr.write(`${persistOutCheckUsage()}\npersist-out-check: --from must be an existing directory\n`);
         return 2;
     }
     const foreignDivergent = new Set<string>();
@@ -182,27 +180,26 @@ export function main(argv: string[], invokeRoot = defaultInvokeRoot(process.cwd(
         join(wtRoot, '.spur', 'run', 'persist-out.json'),
     ].filter(Boolean);
     for (const cand of candidates) {
-        if (existsSync(cand)) {
-            try {
-                const parsed = JSON.parse(readFileSync(cand, 'utf8'));
-                if (Array.isArray(parsed.evidenceSkipped)) {
-                    for (const item of parsed.evidenceSkipped) {
-                        if (item.reason === 'foreign-divergent' && typeof item.name === 'string') {
-                            foreignDivergent.add(item.name);
-                            foreignDivergent.add(join(EVIDENCE_DIR, item.name));
-                        }
+        if (!existsSync(cand)) continue;
+        try {
+            const parsed = JSON.parse(readFileSync(cand, 'utf8'));
+            if (Array.isArray(parsed.evidenceSkipped)) {
+                for (const item of parsed.evidenceSkipped) {
+                    if (item.reason === 'foreign-divergent' && typeof item.name === 'string') {
+                        foreignDivergent.add(item.name);
+                        foreignDivergent.add(join(EVIDENCE_DIR, item.name));
                     }
                 }
-                if (Array.isArray(parsed.skipped)) {
-                    for (const item of parsed.skipped) {
-                        if (typeof item.id === 'string' && typeof item.reason === 'string') {
-                            skips.push({ id: item.id, reason: item.reason });
-                        }
+            }
+            if (Array.isArray(parsed.skipped)) {
+                for (const item of parsed.skipped) {
+                    if (typeof item.id === 'string' && typeof item.reason === 'string') {
+                        skips.push({ id: item.id, reason: item.reason });
                     }
                 }
-                break;
-            } catch {}
-        }
+            }
+            break;
+        } catch {}
     }
     const obligations = listObligations(wtRoot, wbsList, runIds);
     if (obligations === null) {
@@ -211,11 +208,21 @@ export function main(argv: string[], invokeRoot = defaultInvokeRoot(process.cwd(
         );
         return 1;
     }
-    const { files, unowned } = obligations;
+    const { files, unowned, planeFiles } = obligations;
+    // Session-incident class (runall-1208-1209-bdcd): the driver forwarded only the batch run id, no
+    // prefix matched, and the check passed at 0 obligations while the worktree held its verdicts. Family
+    // files outside the prefixes (not foreign-divergent) block teardown; non-family scratch never does.
+    const unforwarded = planeFiles
+        .filter((rel) => DURABLE_FAMILY_RE.test(basename(rel)))
+        .filter((rel) => !files.includes(rel) && !foreignDivergent.has(rel) && !foreignDivergent.has(basename(rel)));
+    const unforwardedFindings = unforwarded.map(
+        (f) => `UNFORWARDED ${f} — durable verdict/receipt outside the forwarded prefixes`,
+    );
     const { missing, divergent, ok } = compareTrees(wtRoot, invokeRoot, files, foreignDivergent);
     const findings = [
         ...missing.map((f) => `MISSING ${f}`),
         ...divergent.map((f) => `DIVERGENT ${f} — reconcile by hand (persist-out never overwrites)`),
+        ...unforwardedFindings,
     ];
     for (const line of findings.slice(0, NAMED_CAP)) process.stdout.write(`${line}\n`);
     if (findings.length > NAMED_CAP) process.stdout.write(`… +${findings.length - NAMED_CAP} more\n`);
@@ -230,7 +237,9 @@ export function main(argv: string[], invokeRoot = defaultInvokeRoot(process.cwd(
         return 0;
     }
     process.stderr.write(
-        `persist-out-check: BLOCKED ${missing.length} missing, ${divergent.length} divergent — run inline-run-setup --persist-out --from <worktree> before worktree removal\n`,
+        `persist-out-check: BLOCKED ${missing.length} missing, ${divergent.length} divergent` +
+            `${unforwarded.length > 0 ? `, ${unforwarded.length} unforwarded durable verdict/receipt` : ''}` +
+            ' — run inline-run-setup --persist-out --from <worktree> (--task-file <wbs>_<slug>.md) before worktree removal\n',
     );
     return 1;
 }
