@@ -7,7 +7,7 @@
 
 import type { TaskStatus } from '@gobing-ai/spur-domain/schema';
 import type { VerdictCheck, VerdictRequirement, VerifyVerdict } from './task-record';
-import { aggregateVerifyVerdict } from './verify-verdict';
+import { aggregateVerifyVerdict, type VerdictAggregate } from './verify-verdict';
 
 // ─── Types ──────────────────────────────────────────────────────────────
 
@@ -16,7 +16,7 @@ export type AnswerText = string;
 
 /** Outcome of verdict derivation. */
 export interface VerdictResult {
-    verdict: 'PASS' | 'PARTIAL' | 'FAIL' | 'UNKNOWN';
+    verdict: VerdictAggregate;
     requirements: VerdictRequirement[];
     acceptanceCriteria?: VerdictAcceptanceCriteria[];
     checks: VerdictCheck[];
@@ -444,7 +444,7 @@ export interface BatchTaskResult {
 /** Aggregated batch verdict for verifyall. */
 export interface BatchAggregation {
     /** Headline verdict over rolledUp only. UNKNOWN when nothing has been implemented yet. */
-    verdict: 'PASS' | 'PARTIAL' | 'FAIL' | 'UNKNOWN';
+    verdict: VerdictAggregate;
     /** Tasks that contributed to the verdict (excludes NOT-STARTED). */
     rolledUp: BatchTaskResult[];
     /** Tasks classified NOT-STARTED — excluded from rollup, reported separately so the operator sees them. */

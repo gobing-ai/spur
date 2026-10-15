@@ -20,10 +20,8 @@
  *     against the per-requirement / per-AC rows using the same aggregation rule
  *     as `deriveVerdict` (any UNMET → FAIL; any PARTIAL → PARTIAL). An
  *     inconsistent artifact is treated as non-PASS and the denial names the
- *     inconsistency. The aggregation rule is duplicated here intentionally —
- *     it is two boolean folds over a tiny enum and must not pull the whole
- *     `task-verdict` parser (and its `AnswerText` dependency) into this leaf
- *     module. `task-verdict.test.ts` unit-checks the rule itself; the
+ *     inconsistency. The aggregation delegates to `aggregateVerifyVerdict`
+ *     (verify-verdict.ts), the one policy `deriveVerdict` also uses; the
  *     cross-check is in `done-transition-guard.test.ts` ("R10 — agrees with
  *     deriveVerdict on every shape").
  *   - Override (R3): `done_forced: true` + `done_reason: <text>` frontmatter
@@ -33,13 +31,13 @@
 
 import { dirname, join } from 'node:path';
 import type { FileSystem } from '@gobing-ai/ts-runtime';
-import type { CheckSeverity } from './verify-verdict';
+import type { CheckSeverity, VerdictAggregate } from './verify-verdict';
 import { aggregateVerifyVerdict, checkRowName } from './verify-verdict';
 
 // ─── Types ─────────────────────────────────────────────────────────────
 
-/** Verdict values that may appear in the persisted artifact's aggregate field. */
-export type VerdictAggregate = 'PASS' | 'PARTIAL' | 'FAIL' | 'UNKNOWN';
+/** Verdict values that may appear in the persisted artifact's aggregate field (canonical: verify-verdict). */
+export type { VerdictAggregate };
 
 /** Row-level status (matches `VerdictRequirement.status` / AC `status`). */
 export type VerdictRowStatus = 'MET' | 'PARTIAL' | 'UNMET';
