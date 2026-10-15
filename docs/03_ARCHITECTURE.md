@@ -1267,12 +1267,12 @@ compatibility limits: [downstream Board module contract](design/downstream-board
 
 ## 31. Cross-Platform Hook Core — built (ADR-129; task 0969)
 
-`plugins/sp/hooks` owns one indexed-context implementation. `recordToolUseEvent`
+The sp plugin owns one indexed-context implementation (cores in `plugins/sp/lib`, registered entries in `plugins/sp/scripts/hooks`, run by `superskill hook run`). `recordToolUseEvent`
 (`context-post-tool.ts`), `recordSessionStart` (`context-session-start.ts`) and `recordSessionEnd`
 (`context-session-stop.ts`) append to `.spur/context/token-ledger.jsonl` and manage `.session.json`;
 `context-owner.ts` is the shared, import-free module both session cores derive host-native owner
 identity from (task 1159), so adapter subprocess entrypoints stay free of untested logic.
-Claude Code reaches them through its hook entries; the Pi extension (`hooks/pi/guard-extension.ts`)
+Claude Code and the staged-script hosts (Codex, OpenCode, Antigravity, Hermes) reach them through the hook entries; the Pi extension (`hooks/pi/guard-extension.ts`)
 normalizes `tool_result` / `session_start` / `session_shutdown` into the canonical Claude payload via
 `normalizePiToolEvent` and calls the same cores (agent fallback `pi`). Hosts never re-implement the
 row schema, token cascade, redaction or session reuse — a new host adds a normalizer. Two ownership
