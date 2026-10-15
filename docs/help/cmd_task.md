@@ -30,6 +30,9 @@
 | `run-link <wbs>` | Record a pipeline provenance link (for `--next` chains / testing→done guard) |
 | `scaffold-tests <wbs>` | Generate BDD test stubs from task Acceptance Criteria |
 | `migrate` | Run the A17 task corpus normalization report/apply pass |
+| `gate <wbs> <mode>` | Run the task-pipeline quality gate (`run` \| `recheck` \| `light` \| `deferred` \| `status`) |
+| `residual <wbs> <step>` | Run one F96 residual-sweep step (`scan` \| `review-gate` \| `fold` \| `settle` \| `report`) |
+| `diffstat <wbs>` | Write the triage diffstat `.spur/run/<wbs>-diffstat.json` against the run base |
 
 ## spur task create
 
@@ -568,6 +571,53 @@ Rewrites stale `file:line` anchors in task sections to the current line numbers.
 the same per-file changes without writing. Without `--wbs` the pass walks every configured task
 folder, so `--wbs` is how the pipeline's implement step repairs one task's unique basename anchors
 without rewriting unrelated files.
+
+## spur task gate
+
+```
+spur task gate [options] <wbs> <mode>
+```
+
+| Flag | Description |
+|---|---|
+| `--cmd <command>` | Full-tier gate command (overrides env `qualityGateCmd`) |
+| `--probe-cmd <command>` | Gate probe command (overrides env `gateProbeCmd`) |
+| `--proof-digest <digest>` | Proof-input digest bound into the check receipt (overrides env `proofDigest`) |
+| `--run-id <id>` | Receipt run identity (overrides env `runId`; default `pipeline-<wbs>`) |
+
+The task-pipeline quality gate (the `test` / `test-recheck` states). Writes
+`.spur/run/<wbs>-test-gate.{log,findings,status,attempt}`; `run` with a proof digest also writes the
+`check-receipt/v1` receipt. `status` prints the `{reuse, reason}` receipt verdict as the last stdout
+line without running anything. Exit `0` PASS / DEFERRED / status, `1` FAIL, `2` usage error.
+
+## spur task residual
+
+```
+spur task residual [options] <wbs> <step>
+```
+
+| Flag | Description |
+|---|---|
+| `--root <dir>` | Repository root holding `.spur/run` (default: cwd) |
+| `--tmp-dir <dir>` | Staging directory scanned for `<wbs>-*` residue (default: OS tmpdir) |
+| `--folder <path>` | Custom tasks folder |
+
+The F96 residual sweep (docs/design/task-residual-sweep.md): `scan` classifies leftovers since the
+run base into `<wbs>-residuals.json`; `review-gate` rebuilds it from the Review table and exits `1`
+on an open P1-P3 finding; `fold` folds the `residual-sweep` check into the recorded verdict;
+`settle` files deferrable residuals as one unlinked follow-up task; `report` writes the recovery
+report when the sweep failed. Exit `0` otherwise, `2` on usage error.
+
+## spur task diffstat
+
+```
+spur task diffstat <wbs>
+```
+
+Diff the working tree against `.spur/run/<wbs>-base.sha` and write
+`.spur/run/<wbs>-diffstat.json` `{files, insertions, deletions, paths, sensitive}` for the triage
+lane. Fail safe: a missing or malformed base or a failing git call writes `sensitive: true` and
+exits `0`. Exit `1` only when stdout is redirected onto the artifact itself.
 
 ## See Also
 

@@ -3,13 +3,11 @@ import { join } from 'node:path';
 /**
  * Residual scan — task-leftover classification and recorded-verdict discovery (F96, ADR-071).
  *
- * Contract owner: docs/design/task-residual-sweep.md. The plugin script
- * `plugins/sp/scripts/residual-scan.ts` keeps the IO glue (git/spur spawning, file IO, the
- * scan/fold/settle/report/review-gate modes) and calls into this module through the
- * generated standalone bundle `plugins/sp/lib/residual-scan.generated.mjs` — node-builtin
- * only, no workspace imports, so the bundle satisfies the plugin standalone contract.
+ * Contract owner: docs/design/task-residual-sweep.md. `./residual-scan-run.ts` keeps the IO glue
+ * (git reads, file IO, the task port, the scan/fold/settle/report/review-gate modes) behind
+ * `spur task residual` (script-absorption PR-3 retired the plugin script and its generated bundle).
  *
- * Classification is pure: the script collects the base sha, added diff lines, staging
+ * Classification is pure: the IO layer collects the base sha, added diff lines, staging
  * residue paths and deferral entries, then calls {@link scanResiduals}. Recorded verdict
  * discovery also checks the canonical evidence plane without following symlink paths.
  */

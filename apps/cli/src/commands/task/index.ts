@@ -5,6 +5,8 @@ import { registerTaskBatchPlanCommand } from './batch-plan';
 import { registerTaskCheckCommand } from './check';
 import { registerTaskCreateCommand } from './create';
 import { registerTaskDepsCommand } from './deps';
+import { registerTaskDiffstatCommand } from './diffstat';
+import { registerTaskGateCommand } from './gate';
 import { registerTaskListCommand } from './list';
 import { registerTaskMigrateCommand } from './migrate';
 import { registerTaskMigrateAnchorsCommand } from './migrate-anchors';
@@ -13,6 +15,7 @@ import { registerTaskPreflightCommand } from './preflight';
 import { registerTaskRecordCommand } from './record';
 import { registerTaskRefreshCommand } from './refresh';
 import { registerTaskRefreshRosterCommand } from './refresh-roster';
+import { registerTaskResidualCommand } from './residual';
 import { registerTaskResolveCommand } from './resolve';
 import { registerTaskRunLinkCommand } from './run-link';
 import { registerTaskScaffoldTestsCommand } from './scaffold-tests';
@@ -49,6 +52,9 @@ export function registerTaskCommand(program: Command, context: CliContext): void
     registerTaskPathCommand(task, context);
     registerTaskRunLinkCommand(task, context);
     registerTaskScaffoldTestsCommand(task, context);
+    registerTaskGateCommand(task, context);
+    registerTaskResidualCommand(task, context);
+    registerTaskDiffstatCommand(task, context);
 }
 
 export { makeCheckService, makeService, makeTaskLocator } from './shared';

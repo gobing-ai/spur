@@ -25,6 +25,9 @@ status transitions, frontmatter fields, and section edits — never mutate a tas
 | `resolve <file-path>` | Resolve a file path to its owning task WBS |
 | `path <wbs>` | Resolve a WBS to its task file path |
 | `scaffold-tests <wbs>` | Generate BDD test stubs from the task's acceptance criteria |
+| `gate <wbs> <mode>` | Run the task-pipeline quality gate (`run`, `recheck`, `deferred`, `light`, `status`) |
+| `residual <wbs> <step>` | F96 residual sweep: `scan`, `fold`, `settle`, `report`, `review-gate` |
+| `diffstat <wbs>` | Emit the `<wbs>-diffstat.json` row the risk-tiered review routes on |
 | `run-link <wbs>` | Record a pipeline provenance link |
 | `verifyall-aggregate` | Aggregate per-task verify outcomes into one batch verdict |
 | `migrate` | One-time task corpus normalization pass |
@@ -249,6 +252,21 @@ spur task scaffold-tests <wbs> [--file <path>] [--json]
 
 Generates BDD test stubs from the task's acceptance-criteria scenarios — the bridge from
 planning to the test suite.
+
+## spur task gate / residual / diffstat
+
+```bash
+spur task gate <wbs> <mode> [--cmd <command>] [--probe-cmd <command>] [--proof-digest <digest>] [--run-id <id>]
+spur task residual <wbs> <scan|fold|settle|report|review-gate> [--root <dir>] [--tmp-dir <dir>] [--folder <path>]
+spur task diffstat <wbs>
+```
+
+The task-pipeline's deterministic steps, called from `task-pipeline.yaml` (no plugin scripts).
+`gate` runs the quality gate and writes `.spur/run/<wbs>-test-gate.{log,findings,status,attempt}`
+(exit `0` PASS/DEFERRED, `1` FAIL, `2` usage). `residual` drives the F96 residual sweep (`--root`
+holds `.spur/run`, `--tmp-dir` is the staging dir scanned for `<wbs>-*` residue). `diffstat` writes
+the diff row (`files`, `loc`, `sensitive`) that routes the risk-tiered review. These verbs print
+plain text, not `--json` envelopes.
 
 ## spur task run-link
 

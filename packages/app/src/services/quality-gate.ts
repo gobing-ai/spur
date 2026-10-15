@@ -1,8 +1,9 @@
 /**
  * Quality-gate service — the shared retry/bounded-findings gate behind the task-pipeline
  * test-gate wrappers (task 0823, feature I21, governance §1.2 composition budgets). Task 1006
- * R1 relocated the logic here from `plugins/sp/scripts/quality-gate.ts`; the plugin script is
- * ADR-130 glue (argv/env) over the bundled core (see scripts/commands/bundle-plugin-lib.ts).
+ * R1 relocated the logic here from `plugins/sp/scripts/quality-gate.ts`; script-absorption PR-3
+ * retired that script and moved its argv/env glue here too ({@link qualityGateMain}), reached as
+ * `spur task gate <wbs> <mode>`.
  *
  * Reproduces the former task-pipeline `test:onEnter` and `test-recheck:onEnter` shell
  * pipelines:
@@ -1060,4 +1061,74 @@ export function runQualityGate(
     }
 
     return { status, attempts: gateAttempt, logFile, findingsFile, statusFile, attemptFile, receiptFile };
+}
+
+// ─── Mode dispatch (`spur task gate <wbs> <mode>`, script-absorption PR-3) ──────────────
+
+/** The five gate modes, in usage order. */
+export const QUALITY_GATE_MODES = ['run', 'recheck', 'light', 'deferred', 'status'] as const;
+
+/** One gate mode. */
+export type QualityGateMode = (typeof QUALITY_GATE_MODES)[number];
+
+/** Usage line for an unknown mode or a missing `wbs` (exit 2). */
+export const QUALITY_GATE_USAGE =
+    'usage: spur task gate <wbs> <run|recheck|light|deferred|status>  (env: qualityGateCmd, gateProbeCmd, proofDigest, runId)';
+
+/**
+ * Dispatch one gate mode — the behavioral contract the retired `plugins/sp/scripts/quality-gate.ts`
+ * glue carried (moved verbatim): exit 0 on PASS/reuse/DEFERRED, 1 on FAIL, 2 on usage error; in
+ * `status` mode the `{reuse, reason}` JSON stays the last stdout line.
+ */
+export function qualityGateMain(
+    argv: string[],
+    rawEnv: Partial<QualityGateEnv> = getEnvVars(),
+    options: QualityGateOptions = {},
+): number {
+    const mode = argv[0];
+    if (!QUALITY_GATE_MODES.includes(mode as QualityGateMode)) {
+        process.stderr.write(`${QUALITY_GATE_USAGE}\n`);
+        return 2;
+    }
+    const wbs = rawEnv.wbs ?? '';
+    if (wbs.length === 0) {
+        process.stderr.write('quality-gate: env `wbs` is required\n');
+        return 2;
+    }
+    const env: QualityGateEnv = { ...rawEnv, wbs };
+    if (mode === 'light') {
+        runLightGate(env, options);
+        return 0;
+    }
+    if (mode === 'deferred') {
+        // 1111 R1: light tier for per-task feedback, `DEFERRED`/`FAIL` for the status token —
+        // exit 0 on DEFERRED so the YAML's `; exit 0` wrapper and the action result agree.
+        return runDeferredGate(env, options).status === 'DEFERRED' ? 0 : 1;
+    }
+    if (mode === 'status') {
+        const runDir = join(options.cwd ?? '.', '.spur', 'run');
+        // Task 1136 R3: the gate owns its reuse identity — recompute the proof-input fingerprint
+        // before consulting the receipt, so a caller-copied digest can never trigger reuse.
+        const decision = resolveReceiptReuse(
+            join(runDir, `${env.wbs}-check-receipt.json`),
+            env,
+            options.cwd ?? process.cwd(),
+            options.recomputeFingerprint,
+        );
+        const verdict = decision.receiptStatus;
+        if (decision.refusal !== undefined) {
+            const line = `check.reuse-refused — ${decision.refusal}\n`;
+            process.stdout.write(line); // tee: stdout and the log
+            appendFileSync(join(runDir, `${env.wbs}-test-gate.log`), line);
+        } else if (verdict.reuse) {
+            // 0940 R3: reuse is observable in the gate log and on stdout (the action result
+            // `data`); the `{reuse, reason}` JSON stays the last stdout line for machine readers.
+            const line = `check.reused — full-tier receipt reused for input digest ${env.proofDigest ?? ''}\n`;
+            process.stdout.write(line); // tee: stdout and the log
+            appendFileSync(join(runDir, `${env.wbs}-test-gate.log`), line);
+        }
+        process.stdout.write(`${JSON.stringify(verdict)}\n`);
+        return 0;
+    }
+    return runQualityGate(mode as 'run' | 'recheck', env, options).status === 'PASS' ? 0 : 1;
 }

@@ -221,7 +221,7 @@ predicates — the digest-locked measured-PASS comparison keeps its fail-closed 
 
 0823 rebuilt the over-budget programs under the ADR-115 caps: the three lifecycle transitions are
 now `command.gate` built-ins (option c), the quality gate is the `quality-gate.ts` extension
-(option d), and the remaining compounds are condensed in place (option e). Dispositions marked
+(option d; `spur task gate` since script-absorption PR-3), and the remaining compounds are condensed in place (option e). Dispositions marked
 `warn` sit in the advisory band; each keeps its one-line reason as a YAML comment directly above
 the action (R1) — as does the warn-band `verify → test-fix` guard, whose sibling `verify → record`
 collapsed to the single `jq -e` verdict predicate.
@@ -238,10 +238,10 @@ write order without a subprocess pipe-buffer cap before appending each attempt t
 | `precheck:onEnter:5` | GLUE (warn) | route-reason lookup + routes log |
 | `implement:onEnter:1` | BUILTIN | `command.gate` `task update wip --no-lifecycle` with transient retry |
 | `implement:onEnter:2` | POLICY | `$formatCmd ; exit 0`; project-only formatter, best-effort |
-| `test:onEnter:6` | EXT (warn) | wrapper for `quality-gate.ts run` (option d); runs the per-project `qualityGateCmd` |
+| `test:onEnter:6` | EXT (warn) | wrapper for `spur task gate <wbs> run` (option d); runs the per-project `qualityGateCmd` |
 | `test-fix:onEnter:0` | GLUE | mutation-policy gate |
 | `test-fix:onEnter:1` | GLUE (warn) | fixall attempt counter + verdict hand-off |
-| `test-recheck:onEnter:1` | EXT (warn) | wrapper for `quality-gate.ts recheck`; `gateProbeCmd` fast path, then `qualityGateCmd` |
+| `test-recheck:onEnter:1` | EXT (warn) | wrapper for `spur task gate <wbs> recheck`; `gateProbeCmd` fast path, then `qualityGateCmd` |
 | `verify:onEnter:2` | EXT | wrapper for `verify-answer-lint.ts` (option d) |
 | `verify:onEnter:3` | SIMPLE | single `task verdict --from-answer` |
 | `verify:onEnter:4` | GLUE (warn) | proof-digest injection into the verdict json (one jq mutation) |

@@ -1,7 +1,6 @@
 import { afterAll, beforeAll, describe, expect, test } from 'bun:test';
 import { existsSync, readdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { bundleQualityGateLib, bundleResidualScanLib } from './bundle-plugin-lib';
 
 // Regeneration tests bundle into the real committed `plugins/sp/lib/` paths. Snapshot the
 // bundles before the first regeneration and restore them after the last, so a stale or
@@ -117,55 +116,6 @@ describe('bundleHistoryAnatomyLib (task 1005 R2)', () => {
         const dmts = readFileSync(join(lib, 'history-anatomy.generated.d.mts'), 'utf8');
         const declared = [...dmts.matchAll(/^export declare (?:const|function) (\w+)/gm)].map((m) => m[1]).sort();
         expect(declared).toEqual(exported);
-    });
-});
-
-describe('bundleResidualScanLib (task 1003 R5)', () => {
-    test('generated artifacts exist and are committed', () => {
-        const mjs = join(import.meta.dir, '../../plugins/sp/lib/residual-scan.generated.mjs');
-        const dmts = join(import.meta.dir, '../../plugins/sp/lib/residual-scan.generated.d.mts');
-        expect(existsSync(mjs)).toBeTrue();
-        expect(existsSync(dmts)).toBeTrue();
-    });
-
-    test('regeneration is deterministic and exports the pure core', async () => {
-        const before = readFileSync(join(import.meta.dir, '../../plugins/sp/lib/residual-scan.generated.mjs'), 'utf8');
-        const result = await bundleResidualScanLib();
-        expect(result.mjs.endsWith('residual-scan.generated.mjs')).toBeTrue();
-        expect(result.dmts.endsWith('residual-scan.generated.d.mts')).toBeTrue();
-        const after = readFileSync(join(import.meta.dir, '../../plugins/sp/lib/residual-scan.generated.mjs'), 'utf8');
-        for (const name of ['scanResiduals', 'classify', 'foldVerdict', 'renderReport', 'parseReviewFindings']) {
-            expect(after).toContain(name);
-        }
-        expect(after).toBe(before);
-    });
-});
-
-describe('bundleQualityGateLib (task 1006 R1)', () => {
-    test('generated artifacts exist and are committed', () => {
-        const mjs = join(import.meta.dir, '../../plugins/sp/lib/quality-gate.generated.mjs');
-        const dmts = join(import.meta.dir, '../../plugins/sp/lib/quality-gate.generated.d.mts');
-        expect(existsSync(mjs)).toBeTrue();
-        expect(existsSync(dmts)).toBeTrue();
-    });
-
-    test('regeneration is deterministic and exports the gate core', async () => {
-        const before = readFileSync(join(import.meta.dir, '../../plugins/sp/lib/quality-gate.generated.mjs'), 'utf8');
-        const result = await bundleQualityGateLib();
-        expect(result.mjs.endsWith('quality-gate.generated.mjs')).toBeTrue();
-        expect(result.dmts.endsWith('quality-gate.generated.d.mts')).toBeTrue();
-        const after = readFileSync(join(import.meta.dir, '../../plugins/sp/lib/quality-gate.generated.mjs'), 'utf8');
-        for (const name of [
-            'runQualityGate',
-            'runLightGate',
-            'buildReceipt',
-            'readReceiptStatus',
-            'planLightChecks',
-            'lightScope',
-        ]) {
-            expect(after).toContain(name);
-        }
-        expect(after).toBe(before);
     });
 });
 

@@ -1,35 +1,30 @@
 import { describe, expect, test } from 'bun:test';
 import * as fsp from 'node:fs';
-import {
-    chmodSync,
-    existsSync,
-    mkdirSync,
-    mkdtempSync,
-    readFileSync,
-    rmSync,
-    utimesSync,
-    writeFileSync,
-} from 'node:fs';
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, utimesSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import {
     blockingAnchors,
     blockingReviewFindings,
     classify,
-    collectAddedLines,
     findUncheckedBoxes,
     foldVerdict,
-    listStagingResidue,
-    main,
     makeItemId,
     parseDiffMarkers,
     parseReviewFindings,
-    RESIDUAL_SCAN_USAGE,
     type ResidualArtifact,
     recordedVerdictPath,
     renderReport,
-    scanResiduals,
-} from '../scripts/residual-scan';
+} from '../../src/services/residual-scan';
+import {
+    collectAddedLines,
+    listStagingResidue,
+    RESIDUAL_SCAN_USAGE,
+    type ResidualTaskPort,
+    residualScanMain,
+    type ScanIo,
+    scanResidualsAt,
+} from '../../src/services/residual-scan-run';
 
 function scratch(prefix: string): { dir: string; cleanup: () => void } {
     const dir = mkdtempSync(join(tmpdir(), prefix));
@@ -143,7 +138,7 @@ describe('parseReviewFindings', () => {
         expect(rows[1]?.deferral).toBeUndefined();
 
         const { dir, cleanup } = scratch('rs-disp-');
-        const art = scanResiduals(dir, '0998', tmpdir(), review, {});
+        const art = scanResidualsAt(dir, '0998', tmpdir(), review);
         cleanup();
         const classes = art.items.filter((i) => i.category === 'review-finding').map((i) => [i.priority, i.class]);
         expect(classes).toEqual([
@@ -188,7 +183,7 @@ describe('diff markers', () => {
         const { dir, cleanup } = scratch('rs-nobase-');
         try {
             writeFileSync(join(dir, 't.md'), '- [ ] open\n');
-            const art = scanResiduals(dir, '0999', tmpdir(), '- [ ] open\n', {});
+            const art = scanResidualsAt(dir, '0999', tmpdir(), '- [ ] open\n');
             expect(art.scanned['diff-marker']).toBe(false);
             expect(art.base).toBeNull();
             expect(art.items.some((i) => i.category === 'diff-marker')).toBe(false);
@@ -378,13 +373,13 @@ describe('verdict copy freshness', () => {
         }
     });
 
-    test('fresh run PASS + stale durable PARTIAL → fold resolves PASS and says why (R3a)', () => {
+    test('fresh run PASS + stale durable PARTIAL → fold resolves PASS and says why (R3a)', async () => {
         const { dir, cleanup } = seeded('rs-pass-');
         try {
             writeVerdict(dir, 'durable', 'PARTIAL', 60);
             const run = writeVerdict(dir, 'run', 'PASS', 0);
             const cap = capture();
-            expect(main(['fold', '1065', '--root', dir], {}, cap)).toBe(0);
+            expect(await runMode(['fold', '1065', '--root', dir], fakeTasks(), cap.io)).toBe(0);
             const reported = cap.lines.join('');
             expect(reported).toContain('verdict copies disagree');
             expect(reported).toContain('chose run');
@@ -394,13 +389,13 @@ describe('verdict copy freshness', () => {
         }
     });
 
-    test('fresh run PARTIAL + stale durable PASS → fold resolves PARTIAL (R3b)', () => {
+    test('fresh run PARTIAL + stale durable PASS → fold resolves PARTIAL (R3b)', async () => {
         const { dir, cleanup } = seeded('rs-part-');
         try {
             writeVerdict(dir, 'durable', 'PASS', 60);
             const run = writeVerdict(dir, 'run', 'PARTIAL', 0);
             const cap = capture();
-            expect(main(['fold', '1065', '--root', dir], {}, cap)).toBe(0);
+            expect(await runMode(['fold', '1065', '--root', dir], fakeTasks(), cap.io)).toBe(0);
             const reported = cap.lines.join('');
             expect(reported).toContain('durable');
             expect(reported).toContain('chose run');
@@ -410,13 +405,13 @@ describe('verdict copy freshness', () => {
         }
     });
 
-    test('equal copies fold silently (R3c)', () => {
+    test('equal copies fold silently (R3c)', async () => {
         const { dir, cleanup } = seeded('rs-equal-');
         try {
             writeVerdict(dir, 'durable', 'PASS', 60);
             writeVerdict(dir, 'run', 'PASS', 0);
             const cap = capture();
-            expect(main(['fold', '1065', '--root', dir], {}, cap)).toBe(0);
+            expect(await runMode(['fold', '1065', '--root', dir], fakeTasks(), cap.io)).toBe(0);
             expect(cap.lines.join('')).not.toContain('disagree');
         } finally {
             cleanup();
@@ -424,24 +419,46 @@ describe('verdict copy freshness', () => {
     });
 });
 
-const SILENT = { io: { out: () => {}, err: () => {} } } as const;
+const SILENT: { io: ScanIo } = { io: { out: () => {}, err: () => {} } };
+
+/** In-memory task port (replaces the former `--spur-bin` shell stubs); `calls` logs create/update. */
+function fakeTasks(
+    spec: { content?: string; create?: string; showFails?: boolean; createFails?: boolean; updateFails?: boolean } = {},
+    calls: string[] = [],
+): ResidualTaskPort {
+    return {
+        show: async (wbs) => {
+            if (spec.showFails === true) throw new Error(`no task ${wbs}`);
+            return { content: spec.content ?? '', featureId: 'F96' };
+        },
+        create: async (title) => {
+            calls.push(`create ${title}`);
+            if (spec.createFails === true) throw new Error('create failed');
+            return spec.create ?? '';
+        },
+        updateSection: async (wbs, section, fromFile) => {
+            calls.push(`update ${wbs} --section ${section} --from-file ${fromFile}`);
+            if (spec.updateFails === true) throw new Error('update failed');
+        },
+    };
+}
+
+/** Run one mode through the async entry point. */
+function runMode(argv: string[], tasks: ResidualTaskPort = fakeTasks(), io: ScanIo = SILENT.io): Promise<number> {
+    return residualScanMain(argv, { tasks, io });
+}
 
 describe('CLI modes', () => {
-    test('usage on bad args', () => {
-        expect(main([], {}, SILENT)).toBe(2);
+    test('usage on bad args', async () => {
+        expect(await runMode([])).toBe(2);
     });
 
-    test('scan via main writes artifact; report is no-op on passing sweep, writes on failing', () => {
+    test('scan via main writes artifact; report is no-op on passing sweep, writes on failing', async () => {
         const { dir, cleanup } = scratch('rs-cli-');
         try {
-            const stub = join(dir, 'stub-spur.sh');
-            writeFileSync(
-                stub,
-                `#!/bin/sh\ncase "$2" in\n  show) echo '{"content":"### Review\\\\n\\\\n| Priority | Finding |\\\\n| --- | --- |\\\\n| P3 | Bad |","frontmatter":{"feature_id":"F96"}}' ;;\nesac\n`,
-            );
-            chmodSync(stub, 0o755);
-            const argv = ['scan', '0949', '--spur-bin', stub, '--root', dir];
-            expect(main(argv, {}, SILENT)).toBe(0);
+            const stub = fakeTasks({ content: '### Review\n\n| Priority | Finding |\n| --- | --- |\n| P3 | Bad |' });
+            const argv = ['scan', '0949', '--root', dir];
+            expect(await runMode(argv, stub)).toBe(0);
             const artPath = join(dir, '.spur', 'run', '0949-residuals.json');
             expect(existsSync(artPath)).toBe(true);
             const art = JSON.parse(readFileSync(artPath, 'utf8')) as ResidualArtifact;
@@ -454,7 +471,7 @@ describe('CLI modes', () => {
                     checks: [{ name: 'residual-sweep', status: 'pass', evidence: 'blocking=0' }],
                 }),
             );
-            expect(main(['report', '0949', '--spur-bin', stub, '--root', dir], {}, SILENT)).toBe(0);
+            expect(await runMode(['report', '0949', '--root', dir], stub)).toBe(0);
             expect(existsSync(join(dir, '.spur', 'run', '0949-residual-report.md'))).toBe(false);
             // failing sweep → report written
             writeFileSync(
@@ -465,7 +482,7 @@ describe('CLI modes', () => {
                 }),
             );
             writeFileSync(join(dir, '.spur', 'run', '0949-test-fix-attempt'), '2\n');
-            expect(main(['report', '0949', '--spur-bin', stub, '--root', dir], {}, SILENT)).toBe(0);
+            expect(await runMode(['report', '0949', '--root', dir], stub)).toBe(0);
             const report = readFileSync(join(dir, '.spur', 'run', '0949-residual-report.md'), 'utf8');
             expect(report).toContain('Attempt: 2');
             expect(report).toContain('review-finding');
@@ -475,26 +492,21 @@ describe('CLI modes', () => {
         }
     });
 
-    test('report mode is a no-op without a verdict artifact (gate-exhaustion path)', () => {
+    test('report mode is a no-op without a verdict artifact (gate-exhaustion path)', async () => {
         // Task 1178 run 1 (2026-10-12): a run that exhausts the fixed budget at the quality gate
         // never reaches `verify`, so `.spur/run/<wbs>-verdict.json` does not exist. The failed
         // state's report action then threw ENOENT and produced nothing; it must exit 0 instead.
         const { dir, cleanup } = scratch('rs-report-noverdict-');
         try {
-            const stub = join(dir, 'stub-spur.sh');
-            writeFileSync(
-                stub,
-                `#!/bin/sh\ncase "$2" in\n  show) echo '{"content":"","frontmatter":{"feature_id":"F96"}}' ;;\nesac\n`,
-            );
-            chmodSync(stub, 0o755);
-            expect(main(['report', '0949', '--spur-bin', stub, '--root', dir], {}, SILENT)).toBe(0);
+            const stub = fakeTasks();
+            expect(await runMode(['report', '0949', '--root', dir], stub)).toBe(0);
             expect(existsSync(join(dir, '.spur', 'run', '0949-residual-report.md'))).toBe(false);
         } finally {
             cleanup();
         }
     });
 
-    test('fold via main rewrites verdict + findings files', () => {
+    test('fold via main rewrites verdict + findings files', async () => {
         const { dir, cleanup } = scratch('rs-fold-');
         try {
             const runDir = join(dir, '.spur', 'run');
@@ -525,7 +537,7 @@ describe('CLI modes', () => {
             const stale = new Date(Date.now() - 60_000);
             utimesSync(join(runDir, '0949-verdict.json'), stale, stale);
             utimesSync(durable, new Date(), new Date());
-            expect(main(['fold', '0949', '--root', dir], {}, SILENT)).toBe(0);
+            expect(await runMode(['fold', '0949', '--root', dir])).toBe(0);
             const verdict = JSON.parse(readFileSync(join(runDir, '0949-verdict.json'), 'utf8')) as {
                 verdict: string;
                 checks: Array<{ name: string; status: string }>;
@@ -542,54 +554,70 @@ describe('CLI modes', () => {
         }
     });
 
-    test('settle files follow-up once (idempotent) and cleans only wbs-prefixed tmp files', () => {
+    test('settle files follow-up once (idempotent) and cleans only wbs-prefixed tmp files', async () => {
         const { dir, cleanup } = scratch('rs-settle-');
         try {
             const calls: string[] = [];
-            const stub = join(dir, 'stub-spur.sh');
-            writeFileSync(
-                stub,
-                `#!/bin/sh\necho "$3 $4 $5 $6" >> ${JSON.stringify(join(dir, 'calls.log'))}\ncase "$2" in\n  show) echo '{"content":"- [ ] box","frontmatter":{"feature_id":"F96"}}' ;;\n  create) echo '{"wbs":"0960"}' ;;\n  update) echo '{}' ;;\nesac\n`,
-            );
-            chmodSync(stub, 0o755);
+            let stub = fakeTasks({ content: '- [ ] box', create: '0960' }, calls);
             // unchecked box stays blocking → no deferrals → no create; tmp cleanup still runs
             writeFileSync(join(tmpdir(), `0949-leftover.txt`), 'x');
             const otherTmp = join(tmpdir(), `9999-keep.txt`);
             writeFileSync(otherTmp, 'x');
             const tmpScoped = join(dir, 'tmpdir');
             mkdirSync(tmpScoped);
-            const argv = ['settle', '0949', '--spur-bin', stub, '--root', dir, '--tmp-dir', tmpScoped];
-            expect(main(argv, {}, SILENT)).toBe(0);
-            expect(main(argv, {}, SILENT)).toBe(0);
+            const argv = ['settle', '0949', '--root', dir, '--tmp-dir', tmpScoped];
+            expect(await runMode(argv, stub)).toBe(0);
+            expect(await runMode(argv, stub)).toBe(0);
             expect(existsSync(join(tmpScoped, '0949-leftover.txt'))).toBe(false);
             expect(existsSync(otherTmp)).toBe(true);
             // deferral path: mark the box deferrable via deferrals file, settle creates task once
             // unchecked boxes are immune; use a diff-marker instead
-            writeFileSync(
-                stub,
-                `#!/bin/sh\necho "$@" >> ${JSON.stringify(join(dir, 'calls.log'))}\ncase "$2" in\n  show) echo '{"content":"### Review\\\\n\\\\n| Priority | Finding |\\\\n| --- | --- |\\\\n| P3 | Soft |","frontmatter":{"feature_id":"F96"}}' ;;\n  create) echo '{"wbs":"0961"}' ;;\n  update) echo '{}' ;;\nesac\n`,
+            stub = fakeTasks(
+                { content: '### Review\n\n| Priority | Finding |\n| --- | --- |\n| P3 | Soft |', create: '0961' },
+                calls,
             );
             const p3Id = makeItemId('review-finding', '', 'Soft');
             writeFileSync(
                 join(dir, '.spur', 'run', '0949-residual-deferrals.json'),
                 JSON.stringify([{ id: p3Id, reason: 'post-merge' }]),
             );
-            expect(main(argv, {}, SILENT)).toBe(0);
-            const callsTxt = readFileSync(join(dir, 'calls.log'), 'utf8');
+            expect(await runMode(argv, stub)).toBe(0);
+            const callsTxt = calls.join('\n');
             expect(callsTxt).toContain('create');
             // The follow-up is filed unlinked: a feature edge to the completing feature would fail
             // that feature's done-gate (L4.verifying-incomplete-tasks) as soon as a residual defers.
             const createLine = callsTxt.split('\n').find((l) => l.includes('create')) ?? '';
             expect(createLine).toContain('Residuals from 0949');
             expect(createLine).not.toContain('--feature');
-            expect(main(argv, {}, SILENT)).toBe(0);
-            const callsAfterSecond = readFileSync(join(dir, 'calls.log'), 'utf8');
+            expect(await runMode(argv, stub)).toBe(0);
+            const callsAfterSecond = calls.join('\n');
             expect(callsAfterSecond.split('\n').filter((l) => l.includes('create'))).toHaveLength(1);
             const residuals = JSON.parse(readFileSync(join(dir, '.spur', 'run', '0949-residuals.json'), 'utf8')) as {
                 followUp?: string;
             };
             expect(residuals.followUp).toBe('0961');
-            void calls;
+        } finally {
+            cleanup();
+        }
+    });
+
+    test('settle reports a failed create and a failed background write with the re-run command', async () => {
+        const { dir, cleanup } = scratch('rs-settle-fail-');
+        try {
+            const review = '### Review\n\n| Priority | Finding |\n| --- | --- |\n| P3 | Soft |';
+            writeFileSync(
+                join(dir, '.spur', 'run', '0949-residual-deferrals.json'),
+                JSON.stringify([{ id: makeItemId('review-finding', '', 'Soft'), reason: 'post-merge' }]),
+            );
+            const errors: string[] = [];
+            const io: ScanIo = { out: () => {}, err: (line) => errors.push(line) };
+            const argv = ['settle', '0949', '--root', dir, '--tmp-dir', join(dir, 'tmp')];
+            expect(await runMode(argv, fakeTasks({ content: review, createFails: true }), io)).toBe(0);
+            expect(errors.join('')).toContain(
+                'task create failed or unreadable wbs; re-run: spur task residual 0949 settle',
+            );
+            expect(await runMode(argv, fakeTasks({ content: review, create: '0962', updateFails: true }), io)).toBe(0);
+            expect(errors.join('')).toContain('background write failed; re-run: spur task residual 0949 settle');
         } finally {
             cleanup();
         }
@@ -610,7 +638,7 @@ describe('blockingReviewFindings (task 1122 R1)', () => {
     test('review-only content classifies identically to the record sweep review slice', () => {
         const { dir, cleanup } = scratch('rs-brf-');
         try {
-            const sweep = scanResiduals(dir, '1122', dir, REVIEW_BOTH_ORDERS, {});
+            const sweep = scanResidualsAt(dir, '1122', dir, REVIEW_BOTH_ORDERS);
             const slice = sweep.items.filter((i) => i.category === 'review-finding');
             expect(blockingReviewFindings(REVIEW_BOTH_ORDERS, [])).toEqual(slice);
         } finally {
@@ -664,13 +692,7 @@ describe('blockingReviewFindings (task 1122 R1)', () => {
 describe('review-gate mode (task 1122 R2/AC1)', () => {
     const REVIEW_TABLE_HEAD =
         '### Review\n\n| Priority | Finding | Location | Disposition |\n| --- | --- | --- | --- |\n';
-    const stubSpurShow = (dir: string, content: string): string => {
-        const stub = join(dir, 'stub-spur.sh');
-        const payload = JSON.stringify({ content, frontmatter: { feature_id: 'H15' } }).replaceAll("'", "'\\''");
-        writeFileSync(stub, `#!/bin/sh\ncase "$2" in\n  show) printf '%s' '${payload}' ;;\nesac\n`);
-        chmodSync(stub, 0o755);
-        return stub;
-    };
+    const stubSpurShow = (_dir: string, content: string): ResidualTaskPort => fakeTasks({ content });
     const capture = () => {
         const lines: string[] = [];
         return { lines, io: { out: (line: string) => lines.push(line), err: () => {} } };
@@ -703,12 +725,12 @@ describe('review-gate mode (task 1122 R2/AC1)', () => {
             'src/c.ts:8',
         ],
         ['OPEN P1 fails', `${REVIEW_TABLE_HEAD}| P1 (blocker) | Off by one | src/b.ts:3 | OPEN |\n`, 1, 'src/b.ts:3'],
-    ] as const)('review-gate: %s', (_name, content, expected, anchor) => {
+    ] as const)('review-gate: %s', async (_name, content, expected, anchor) => {
         const { dir, cleanup } = scratch('rs-gate-');
         try {
             const stub = stubSpurShow(dir, content);
             const cap = capture();
-            expect(main(['review-gate', '1122', '--spur-bin', stub, '--root', dir], {}, { io: cap.io })).toBe(expected);
+            expect(await runMode(['review-gate', '1122', '--root', dir], stub, cap.io)).toBe(expected);
             const art = JSON.parse(
                 readFileSync(join(dir, '.spur', 'run', '1122-residuals.json'), 'utf8'),
             ) as ResidualArtifact;
@@ -732,7 +754,7 @@ describe('review-gate mode (task 1122 R2/AC1)', () => {
         }
     });
 
-    test('file deferrals apply: a deferred P3 exits 0', () => {
+    test('file deferrals apply: a deferred P3 exits 0', async () => {
         const { dir, cleanup } = scratch('rs-gate-def-');
         try {
             const content = `${REVIEW_TABLE_HEAD}| P3 | Magic number | src/a.ts:12 | OPEN |\n`;
@@ -742,19 +764,19 @@ describe('review-gate mode (task 1122 R2/AC1)', () => {
                 join(dir, '.spur', 'run', '1122-residual-deferrals.json'),
                 `${JSON.stringify([{ id, reason: 'post-merge regen' }])}\n`,
             );
-            expect(main(['review-gate', '1122', '--spur-bin', stub, '--root', dir], {}, SILENT)).toBe(0);
+            expect(await runMode(['review-gate', '1122', '--root', dir], stub)).toBe(0);
         } finally {
             cleanup();
         }
     });
 
-    test('task load failure fails closed (non-zero)', () => {
+    test('task load failure fails closed (non-zero)', async () => {
         const { dir, cleanup } = scratch('rs-gate-err-');
         try {
-            const stub = join(dir, 'stub-fail.sh');
-            writeFileSync(stub, '#!/bin/sh\nexit 3\n');
-            chmodSync(stub, 0o755);
-            expect(() => main(['review-gate', '1122', '--spur-bin', stub, '--root', dir], {}, SILENT)).toThrow();
+            const stub = fakeTasks({ showFails: true });
+            await expect(runMode(['review-gate', '1122', '--root', dir], stub)).rejects.toThrow(
+                'task show 1122 failed',
+            );
         } finally {
             cleanup();
         }

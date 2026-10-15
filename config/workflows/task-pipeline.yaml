@@ -492,11 +492,12 @@ states:
                 var: proofDigest
                 taskFile: ${vars.taskSpecPath}
                 featureFile: ${vars.featureSpecPath}
-          # (d) quality-gate.ts owns the gate; shell only resolves it and fails closed.
+          # (d) `spur task gate` owns the gate; shell only picks the mode and fails closed
+          # (a non-0/1 exit — spur missing, usage error, crash — writes FAIL).
           - kind: shell
             options:
                 command: >-
-                    eval "$(jq -r 'if .mode=="source-repo" then "S="+@sh"\(.dir)/quality-gate.ts"+" RUNNER=bun" elif .mode=="installed" then "S="+@sh"\(.dir)/quality-gate.mjs"+" RUNNER=node" else empty end' ".spur/run/$__runId-script-root.json" 2>/dev/null)"; M=run; [ "$deferQualityGate" = "true" ] && M=deferred; if [ -f "$S" ]; then "$RUNNER" "$S" "$M"; else echo "quality gate failed closed — quality-gate script not found — run 'superskill install sp --marketplace gobing-ai/spur'" >&2; printf 'FAIL\n' > ".spur/run/$wbs-test-gate.status"; fi; exit 0
+                    M=run; [ "$deferQualityGate" = "true" ] && M=deferred; $spurBin task gate "$wbs" "$M" --no-logo; rc=$?; if [ "$rc" -gt 1 ]; then echo "quality gate failed closed — spur task gate exited $rc" >&2; printf 'FAIL\n' > ".spur/run/$wbs-test-gate.status"; fi; exit 0
 
     - id: test-fix
       display:
@@ -597,12 +598,12 @@ states:
           # a green probe (or empty gateProbeCmd) falls through to the full-gate loop unchanged.
           # Only the full gate writes PASS, so the `test-recheck → review` guard (reads PASS)
           # still means a full green qualityGateCmd ran — invariant preserved by construction.
-          # (d) quality-gate.ts owns the recheck; shell only resolves it and fails closed
+          # (d) `spur task gate` owns the recheck; shell only picks the mode and fails closed
           # (0587 R3 probe-then-full: a red gateProbeCmd is the recheck verdict, the full gate is skipped).
           - kind: shell
             options:
                 command: >-
-                    eval "$(jq -r 'if .mode=="source-repo" then "S="+@sh"\(.dir)/quality-gate.ts"+" RUNNER=bun" elif .mode=="installed" then "S="+@sh"\(.dir)/quality-gate.mjs"+" RUNNER=node" else empty end' ".spur/run/$__runId-script-root.json" 2>/dev/null)"; M=recheck; [ "$deferQualityGate" = "true" ] && M=deferred; if [ -f "$S" ]; then "$RUNNER" "$S" "$M"; else echo "quality gate failed closed — quality-gate script not found — run 'superskill install sp --marketplace gobing-ai/spur'" >&2; printf 'FAIL\n' > ".spur/run/$wbs-test-gate.status"; fi; exit 0
+                    M=recheck; [ "$deferQualityGate" = "true" ] && M=deferred; $spurBin task gate "$wbs" "$M" --no-logo; rc=$?; if [ "$rc" -gt 1 ]; then echo "quality gate failed closed — spur task gate exited $rc" >&2; printf 'FAIL\n' > ".spur/run/$wbs-test-gate.status"; fi; exit 0
 
     - id: triage
       display:
@@ -620,13 +621,13 @@ states:
           when neither a caller mode nor the deterministic guard resolved the lane. The resolved
           lane lands in the `mode` var for the triage → verify/review guards.
       onEnter:
-          # (a) diffstat producer: task-diffstat.ts owns git reading and sensitive-path
-          # classification; shell only resolves it and fails closed (writes sensitive:true,
+          # (a) diffstat producer: `spur task diffstat` owns git reading and sensitive-path
+          # classification; shell only fails closed on a non-zero exit (writes sensitive:true,
           # which the pre-guard below maps to the safety lane).
           - kind: shell
             options:
                 command: >-
-                    eval "$(jq -r 'if .mode=="source-repo" then "S="+@sh"\(.dir)/task-diffstat.ts"+" RUNNER=bun" elif .mode=="installed" then "S="+@sh"\(.dir)/task-diffstat.mjs"+" RUNNER=node" else empty end' ".spur/run/$__runId-script-root.json" 2>/dev/null)"; if [ -f "$S" ]; then "$RUNNER" "$S" --spur-bin "$spurBin"; else echo "task-diffstat failed closed — task-diffstat script not found — run 'superskill install sp --marketplace gobing-ai/spur'" >&2; printf '{"files":0,"insertions":0,"deletions":0,"paths":[],"sensitive":true}\n' > ".spur/run/$wbs-diffstat.json"; fi; exit 0
+                    $spurBin task diffstat "$wbs" --no-logo || { echo "task-diffstat failed closed — spur task diffstat exited $?" >&2; printf '{"files":0,"insertions":0,"deletions":0,"paths":[],"sensitive":true}\n' > ".spur/run/$wbs-diffstat.json"; }; exit 0
           # (b)+(c) lane pre-guard BEFORE decide: a caller-set mode is projected verbatim (R2b);
           # a sensitive path or >400 changed lines pins safety (R2c) and the decide result below
           # is never consulted. A missing/malformed diffstat row (producer crashed or never ran,
@@ -953,7 +954,7 @@ states:
             options:
                 command: >-
                     if [ "$deferFeatureSync" = "true" ]; then echo "feature sync deferred to batch integration" >> ".spur/run/$wbs-report.txt"; else FID="$($spurBin task show $wbs --json 2>/dev/null | jq -r '(.feature_id // .frontmatter.feature_id) // empty' 2>/dev/null)"; if [ -n "$FID" ]; then $spurBin feature sync "$FID" --json || echo "feature sync failed — re-run: $spurBin feature sync $FID" >> ".spur/run/$wbs-report.txt"; else echo "Orphan task $wbs — no feature_id linked — proposal: consider linking to a parent feature." >> ".spur/run/$wbs-report.txt"; fi; fi; exit 0
-          # (d) F96 (0983): residual-scan.ts owns the sweep; shell only resolves it. The
+          # (d) F96 (0983): `spur task residual` owns the sweep; shell only sequences it. The
           # scan moved here from verify: it must read the task file AFTER `task record`
           # flipped the verdict-proven Requirement/AC boxes (0692), or a proven-but-unticked
           # box folds every good run to PARTIAL and the done guard is unreachable (0967).
@@ -963,7 +964,7 @@ states:
           - kind: shell
             options:
                 command: >-
-                    eval "$(jq -r 'if .mode=="source-repo" then "S="+@sh"\(.dir)/residual-scan.ts"+" RUNNER=bun" elif .mode=="installed" then "S="+@sh"\(.dir)/residual-scan.mjs"+" RUNNER=node" else empty end' ".spur/run/$__runId-script-root.json" 2>/dev/null)"; if [ ! -f "$S" ]; then echo "residual-scan failed closed — scanner not found in plugins/sp/scripts/ nor staged — run 'superskill install sp --marketplace gobing-ai/spur'" >&2; exit 1; fi; "$RUNNER" "$S" scan "$wbs" --spur-bin "$spurBin" && "$RUNNER" "$S" fold "$wbs" --spur-bin "$spurBin"
+                    $spurBin task residual "$wbs" scan --no-logo && $spurBin task residual "$wbs" fold --no-logo
           # (e) F96 R5 (0983): a sweep downgrade must reach the task record — re-record from
           # the FINAL (post-fold) artifact so Testing carries the downgraded verdict; a failed
           # task must not retain a stale PASS Testing narrative. Soft (exit 0): the downgrade
@@ -983,13 +984,13 @@ states:
           guard runs `spur task check` before certifying; a genuinely non-compliant
           task routes to `failed` instead of a silent bad `done`.
       onEnter:
-          # (d) F96 R4 (0950): residual-scan.ts owns the settle; shell only resolves it.
+          # (d) F96 R4 (0950): `spur task residual` owns the settle.
           # Soft best-effort (exit 0) — runs after certification and must never change
           # the outcome; failure prints the re-run command.
           - kind: shell
             options:
                 command: >-
-                    eval "$(jq -r 'if .mode=="source-repo" then "S="+@sh"\(.dir)/residual-scan.ts"+" RUNNER=bun" elif .mode=="installed" then "S="+@sh"\(.dir)/residual-scan.mjs"+" RUNNER=node" else empty end' ".spur/run/$__runId-script-root.json" 2>/dev/null)"; if [ -f "$S" ]; then "$RUNNER" "$S" settle "$wbs" --spur-bin "$spurBin" || echo "residual-settle failed — re-run: residual-scan settle $wbs" >&2; else echo "residual-scan not staged — settle skipped — re-run: residual-scan settle $wbs" >&2; fi; exit 0
+                    $spurBin task residual "$wbs" settle --no-logo || echo "residual-settle failed — re-run: spur task residual $wbs settle" >&2; exit 0
           # (c) command.gate owns the done transition with classified transient retry.
           - kind: command.gate
             options:
@@ -1029,13 +1030,13 @@ states:
                     printf '\n## Escalation bound reached\n\nThe implement step asked an operator question %s times (bound %s) and ended without a resumable answer. Unanswered question:\n\n' "$n" "$maxEscalations" >> .spur/run/$wbs-report.txt;
                     cat .spur/run/$wbs-question.md >> .spur/run/$wbs-report.txt;
                     exit 0
-          # (d) F96 R5 (0950): residual-scan.ts owns the report; shell only resolves it.
+          # (d) F96 R5 (0950): `spur task residual` owns the report.
           # Soft (exit 0): a run that exhausts its fix budget on residuals leaves the
           # report + recovery line while the task stays `wip`.
           - kind: shell
             options:
                 command: >-
-                    eval "$(jq -r 'if .mode=="source-repo" then "S="+@sh"\(.dir)/residual-scan.ts"+" RUNNER=bun" elif .mode=="installed" then "S="+@sh"\(.dir)/residual-scan.mjs"+" RUNNER=node" else empty end' ".spur/run/$__runId-script-root.json" 2>/dev/null)"; if [ -f "$S" ]; then "$RUNNER" "$S" report "$wbs" --spur-bin "$spurBin" || echo "residual-report failed — re-run: residual-scan report $wbs" >&2; else echo "residual-scan not staged — report skipped — re-run: residual-scan report $wbs" >&2; fi; exit 0
+                    $spurBin task residual "$wbs" report --no-logo || echo "residual-report failed — re-run: spur task residual $wbs report" >&2; exit 0
 
     - id: cancelled
       description: Terminal — pipeline cancelled by operator at the approval gate (R1).
@@ -1295,8 +1296,7 @@ transitions:
               command: >-
                   test "$profile" = auto &&
                   grep -qiE '^[[:space:]]*\**Verdict:\** *PASS' ".spur/run/$__runId-review-answer.txt" &&
-                  eval "$(jq -r 'if .mode=="source-repo" then "S="+@sh"\(.dir)/residual-scan.ts"+" RUNNER=bun" elif .mode=="installed" then "S="+@sh"\(.dir)/residual-scan.mjs"+" RUNNER=node" else empty end' ".spur/run/$__runId-script-root.json" 2>/dev/null)" &&
-                  [ -f "$S" ] && "$RUNNER" "$S" review-gate "$wbs" --spur-bin "$spurBin" >&2
+                  $spurBin task residual "$wbs" review-gate --no-logo >&2
     - from: review
       to: approve
       description: Review certified a PASS with no open P1-P3 finding — gate on human approval before verification.
@@ -1305,8 +1305,7 @@ transitions:
           options:
               command: >-
                   grep -qiE '^[[:space:]]*\**Verdict:\** *PASS' ".spur/run/$__runId-review-answer.txt" &&
-                  eval "$(jq -r 'if .mode=="source-repo" then "S="+@sh"\(.dir)/residual-scan.ts"+" RUNNER=bun" elif .mode=="installed" then "S="+@sh"\(.dir)/residual-scan.mjs"+" RUNNER=node" else empty end' ".spur/run/$__runId-script-root.json" 2>/dev/null)" &&
-                  [ -f "$S" ] && "$RUNNER" "$S" review-gate "$wbs" --spur-bin "$spurBin" >&2
+                  $spurBin task residual "$wbs" review-gate --no-logo >&2
     - from: review
       to: review-fail-triage
       description: >-

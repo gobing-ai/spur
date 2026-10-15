@@ -28,16 +28,6 @@
             "twin": "pr-reviewing.mjs"
         },
         {
-            "rel": "quality-gate.ts",
-            "contract": "standard",
-            "twin": "quality-gate.mjs"
-        },
-        {
-            "rel": "residual-scan.ts",
-            "contract": "standard",
-            "twin": "residual-scan.mjs"
-        },
-        {
             "rel": "run-summary.ts",
             "contract": "standard",
             "twin": "run-summary.mjs"
@@ -51,11 +41,6 @@
             "rel": "session-timeline.ts",
             "contract": "standard",
             "twin": "session-timeline.mjs"
-        },
-        {
-            "rel": "task-diffstat.ts",
-            "contract": "standard",
-            "twin": "task-diffstat.mjs"
         },
         {
             "rel": "workflow-step-profile.ts",

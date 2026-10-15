@@ -1,15 +1,5 @@
 import { describe, expect, test } from 'bun:test';
-import {
-    chmodSync,
-    copyFileSync,
-    cpSync,
-    existsSync,
-    mkdirSync,
-    mkdtempSync,
-    readFileSync,
-    rmSync,
-    writeFileSync,
-} from 'node:fs';
+import { chmodSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { getEnvVar, getEnvVars } from '@gobing-ai/ts-utils';
@@ -246,22 +236,23 @@ esac`,
         expect(argsOf('done')).toContain('--no-lifecycle');
     });
 
-    // 0823 (d): the gate shells are thin resolvers — quality-gate.ts owns the retry loop,
-    // findings cap, bounded summary and status artifact (behavioral coverage lives in
-    // plugins/sp/tests/quality-gate.test.ts). Here: resolution order and fail-closed shape.
-    test('gate shells resolve quality-gate through the script-root probe and fail closed (0823 d, 1007 R4)', () => {
+    // 0823 (d): the gate shells are thin dispatchers — the gate core (`spur task gate`, script-absorption
+    // PR-3) owns the retry loop, findings cap, bounded summary and status artifact (behavioral
+    // coverage lives in packages/app/tests/services/quality-gate*.test.ts). Here: dispatch and
+    // fail-closed shape.
+    test('gate shells dispatch `spur task gate` and fail closed (0823 d, PR-3)', () => {
         // 1135 R5 inserted the gate-paths snapshot shell ahead of the digest capture in both
-        // states, so the gate resolver's index moved with it.
+        // states, so the gate dispatcher's index moved with it.
         const gateShellIndex = (stateId: 'test' | 'test-recheck'): number => {
             const shells = (PIPELINE.states.find((s) => s.id === stateId)?.onEnter ?? [])
                 .filter((action) => action.kind === 'shell')
                 .map((action) => action.options?.command ?? '');
             const matches = shells
                 .map((command, index) => ({ command, index }))
-                .filter(({ command }) => command.includes('quality-gate'));
+                .filter(({ command }) => command.includes('task gate'));
             const only = matches[0]?.index;
             if (only === undefined || matches.length !== 1) {
-                throw new Error(`expected exactly one quality-gate shell in ${stateId}, found ${matches.length}`);
+                throw new Error(`expected exactly one task-gate shell in ${stateId}, found ${matches.length}`);
             }
             return only;
         };
@@ -270,20 +261,42 @@ esac`,
             ['test-recheck', 'recheck'],
         ] as const) {
             const command = commandFor(stateId, gateShellIndex(stateId));
-            expect(command).toContain('@sh"\\(.dir)/quality-gate.ts"+" RUNNER=bun"');
-            expect(command).toContain('@sh"\\(.dir)/quality-gate.mjs"+" RUNNER=node"');
             // 1111: the mode is selected through `M` so `--defer-gate` can swap the tier without
-            // a second dispatch line; the resolver contract above is unchanged.
+            // a second dispatch line.
             expect(command).toContain(`M=${mode};`);
-            expect(command).toContain('"$RUNNER" "$S" "$M"');
+            expect(command).toContain('$spurBin task gate "$wbs" "$M" --no-logo');
+            expect(command).not.toContain('script-root.json');
             expect(command).not.toContain('superskill script path');
-            // Fail closed: an unresolvable gate writes FAIL (never PASS) and stays soft.
+            // Fail closed: a gate that cannot run (exit > 1) writes FAIL (never PASS) and stays soft.
             expect(command).toContain('failed closed');
             expect(command).toContain(`printf 'FAIL\\n' > ".spur/run/$wbs-test-gate.status"`);
             expect(command.trim().endsWith('exit 0')).toBe(true);
             // The retired loop is gone: no inline classifier or gate command remains.
             expect(command).not.toContain('qualityGateCmd');
             expect(command).not.toContain('grep -Eq');
+        }
+    });
+
+    test('gate shell writes FAIL when spur cannot run the gate, and leaves a real verdict alone', () => {
+        const dir = mkdtempSync(join(tmpdir(), 'spur-pr3-gate-'));
+        try {
+            mkdirSync(join(dir, '.spur', 'run'), { recursive: true });
+            const command =
+                (PIPELINE.states.find((st) => st.id === 'test')?.onEnter ?? [])
+                    .filter((action) => action.kind === 'shell')
+                    .map((action) => action.options?.command ?? '')
+                    .find((c) => c.includes('task gate')) ?? '';
+            const status = join(dir, '.spur', 'run', '0823-test-gate.status');
+            // Missing binary (127) → fail closed.
+            expect(runShell(command, dir, { wbs: '0823', spurBin: 'spur-missing-binary-pr3' }).exitCode).toBe(0);
+            expect(readFileSync(status, 'utf8')).toBe('FAIL\n');
+            // A gate verdict (exit 1 = FAIL written by the gate itself) is not overwritten.
+            writeFileSync(status, 'GATE-WROTE\n');
+            const failing = executable(dir, 'spur-gate-fail', 'exit 1');
+            expect(runShell(command, dir, { wbs: '0823', spurBin: failing }).exitCode).toBe(0);
+            expect(readFileSync(status, 'utf8')).toBe('GATE-WROTE\n');
+        } finally {
+            rmSync(dir, { recursive: true, force: true });
         }
     });
     test('precheck dirty-tree action names task-corpus dirt without the non-corpus warning', () => {
@@ -310,9 +323,9 @@ esac`,
         expect(result.output).not.toContain('precheck: WARNING');
     });
 
-    // 0772 R1 (behavior moved into quality-gate.ts, 0823 d): the bounded-summary contract —
+    // 0772 R1 (behavior moved into the gate core, 0823 d / PR-3): the bounded-summary contract —
     // green gates print a one-line status, red gates print at most the last 40 lines, and the
-    // durable log keeps everything — is asserted in plugins/sp/tests/quality-gate.test.ts.
+    // durable log keeps everything — is asserted in packages/app/tests/services/quality-gate.test.ts.
 
     // F96 residual sweep (0950, reordered 0983): scan/fold wired into record AFTER the
     // `task record` box flips and before the done guard; settle/report at the terminal
@@ -342,20 +355,21 @@ esac`,
         const bindIdx = cmds.findIndex((c) => c.includes('+ {proof:'));
         expect(verdictIdx).toBeGreaterThanOrEqual(0);
         expect(bindIdx).toBeGreaterThan(verdictIdx);
-        expect(cmds.find((c) => c.includes('residual-scan'))).toBeUndefined();
+        expect(cmds.find((c) => c.includes('task residual'))).toBeUndefined();
     });
 
     test('record sweeps after the box flips and before the done guard (0983 R1/R3)', () => {
         const cmds = shellCommands('record');
-        const foldIdx = cmds.findIndex((c) => c.includes('residual-scan') && c.includes('fold'));
+        const foldIdx = cmds.findIndex((c) => c.includes('task residual') && c.includes('fold'));
         expect(foldIdx).toBeGreaterThan(0); // after the feature-sync soft step (index 0)
         expect(foldIdx).toBe(cmds.length - 2); // followed only by the R5 re-record step
         // Hard action: no exit-0 blanket — a scanner crash must fail record closed.
         expect(cmds[foldIdx]?.trim().endsWith('exit 0')).toBe(false);
-        // Resolves through the run-scoped script-root probe, failing closed (1007 R4).
-        expect(cmds[foldIdx]).toContain('@sh"\\(.dir)/residual-scan.ts"+" RUNNER=bun"');
-        expect(cmds[foldIdx]).toContain('@sh"\\(.dir)/residual-scan.mjs"+" RUNNER=node"');
-        expect(cmds[foldIdx]).not.toContain('superskill script path');
+        // Scan then fold through `spur task residual` (PR-3); a non-zero exit fails record closed.
+        expect(cmds[foldIdx]).toContain(
+            '$spurBin task residual "$wbs" scan --no-logo && $spurBin task residual "$wbs" fold',
+        );
+        expect(cmds[foldIdx]).not.toContain('script-root.json');
         // Fail-closed completion gate: the done guard still re-asserts PASS + proof digest,
         // so a fold-downgraded PARTIAL verdict can never certify done (0983 R3).
         const doneGuard = PIPELINE.transitions?.find((t) => t.from === 'record' && t.to === 'done')?.guard?.options
@@ -369,43 +383,36 @@ esac`,
         const dir = mkdtempSync(join(tmpdir(), 'spur-0983-sweep-'));
         try {
             mkdirSync(join(dir, '.spur', 'run'), { recursive: true });
-            // Stage the scanner exactly as the pipeline finds it in-repo. Its ../lib
-            // imports (env, spur-bin, generated bundle twins) must resolve — stage the
-            // whole lib dir rather than a per-file list (1019 R2).
-            mkdirSync(join(dir, 'plugins', 'sp', 'scripts'), { recursive: true });
-            mkdirSync(join(dir, 'plugins', 'sp', 'lib'), { recursive: true });
-            // 0960: the project-first probe is gated on the source-repo marker.
-            mkdirSync(join(dir, 'config'), { recursive: true });
-            writeFileSync(join(dir, 'config', 'plugin-scripts.json'), '{}\n');
-            copyFileSync(
-                join(import.meta.dir, '..', 'scripts', 'residual-scan.ts'),
-                join(dir, 'plugins', 'sp', 'scripts', 'residual-scan.ts'),
-            );
-            cpSync(join(import.meta.dir, '..', 'lib'), join(dir, 'plugins', 'sp', 'lib'), { recursive: true });
-            // 1007 R4: the sweep resolves through the run-scoped script-root probe — stage
-            // the identity file the snippet reads (source-repo → the staged scripts dir).
-            writeFileSync(
-                join(dir, '.spur', 'run', '0983-script-root.json'),
-                `${JSON.stringify({ mode: 'source-repo', source: 'project', dir: join(dir, 'plugins', 'sp', 'scripts') })}\n`,
-            );
-            const fold = shellCommands('record').find((c) => c.includes('residual-scan') && c.includes('fold'));
+            // Script-absorption PR-3: the sweep is `spur task residual`, which reads the task
+            // in-process — seed a REAL task through the source CLI and hand that CLI as spurBin.
+            const spurCli = [process.execPath, join(ROOT, 'apps', 'cli', 'src', 'index.ts')];
+            const spurIn = (args: string[]): string => {
+                const run = Bun.spawnSync([...spurCli, ...args, '--no-logo'], {
+                    cwd: dir,
+                    stdout: 'pipe',
+                    stderr: 'pipe',
+                });
+                if (run.exitCode !== 0) throw new Error(`spur ${args.join(' ')} failed: ${run.stderr.toString()}`);
+                return run.stdout.toString();
+            };
+            mkdirSync(join(dir, 'docs', 'tasks'), { recursive: true });
+            const wbs = (
+                JSON.parse(spurIn(['task', 'create', '--skip-ready', 'Sweep fixture', '--json'])) as { wbs: string }
+            ).wbs;
+            const setPlan = (plan: string): void => {
+                writeFileSync(join(dir, 'plan.md'), plan);
+                spurIn(['task', 'update', wbs, '--section', 'Plan', '--from-file', join(dir, 'plan.md')]);
+            };
+            const fold = shellCommands('record').find((c) => c.includes('task residual') && c.includes('fold'));
             if (fold === undefined) throw new Error('record sweep command missing');
-            const verdict = { wbs: '0983', verdict: 'PASS', requirements: [], checks: [] };
-            const stubFor = (content: string): string =>
-                executable(
-                    dir,
-                    `spur-${content.length}`,
-                    `printf '%s\\n' '${JSON.stringify({ content, feature_id: 'F96' })}'`,
-                );
+            const verdict = { wbs, verdict: 'PASS', requirements: [], checks: [] };
+            const spurBin = spurCli.join(' ');
             // Pass path: post-record, every box flipped (record flipped the proven R/AC ones).
-            writeFileSync(join(dir, '.spur', 'run', '0983-verdict.json'), `${JSON.stringify(verdict)}\n`);
-            const pass = runShell(fold, dir, {
-                __runId: '0983',
-                wbs: '0983',
-                spurBin: stubFor('## Plan\n\n- [x] plan step\n'),
-            });
+            setPlan('- [x] plan step\n');
+            writeFileSync(join(dir, '.spur', 'run', `${wbs}-verdict.json`), `${JSON.stringify(verdict)}\n`);
+            const pass = runShell(fold, dir, { __runId: '0983', wbs, spurBin });
             expect(pass.exitCode).toBe(0);
-            const kept = JSON.parse(readFileSync(join(dir, '.spur', 'run', '0983-verdict.json'), 'utf8')) as {
+            const kept = JSON.parse(readFileSync(join(dir, '.spur', 'run', `${wbs}-verdict.json`), 'utf8')) as {
                 verdict: string;
                 checks: Array<{ name: string; status: string }>;
             };
@@ -414,14 +421,11 @@ esac`,
 
             // Fail path: one open Plan box stays blocking and downgrades PASS → PARTIAL —
             // no section becomes deferrable (0983 R2).
-            writeFileSync(join(dir, '.spur', 'run', '0983-verdict.json'), `${JSON.stringify(verdict)}\n`);
-            const fail = runShell(fold, dir, {
-                __runId: '0983',
-                wbs: '0983',
-                spurBin: stubFor('## Plan\n\n- [ ] open plan step\n'),
-            });
+            setPlan('- [ ] open plan step\n');
+            writeFileSync(join(dir, '.spur', 'run', `${wbs}-verdict.json`), `${JSON.stringify(verdict)}\n`);
+            const fail = runShell(fold, dir, { __runId: '0983', wbs, spurBin });
             expect(fail.exitCode).toBe(0);
-            const folded = JSON.parse(readFileSync(join(dir, '.spur', 'run', '0983-verdict.json'), 'utf8')) as {
+            const folded = JSON.parse(readFileSync(join(dir, '.spur', 'run', `${wbs}-verdict.json`), 'utf8')) as {
                 verdict: string;
                 checks: Array<{ name: string; status: string }>;
             };
@@ -465,7 +469,7 @@ esac`,
 
     test('done settles residuals as a soft action after the transition (F96 R4)', () => {
         const cmds = shellCommands('done');
-        const settleIdx = cmds.findIndex((c) => c.includes('residual-scan') && c.includes('settle'));
+        const settleIdx = cmds.findIndex((c) => c.includes('task residual') && c.includes('settle'));
         expect(settleIdx).toBe(0);
         expect(cmds[settleIdx]?.trim().endsWith('exit 0')).toBe(true);
     });
@@ -473,7 +477,7 @@ esac`,
     test('failed renders the residual report as a soft action (F96 R5)', () => {
         const cmds = shellCommands('failed');
         expect(cmds.length).toBeGreaterThan(0);
-        const report = cmds.find((c) => c.includes('residual-scan') && c.includes('report'));
+        const report = cmds.find((c) => c.includes('task residual') && c.includes('report'));
         expect(report).toBeDefined();
         expect(report?.trim().endsWith('exit 0')).toBe(true);
     });
@@ -727,8 +731,8 @@ describe('standalone verify residual-sweep ordering (0987 R4)', () => {
         const text = readFileSync(surfaces['code-verification'], 'utf8');
         const block = text.slice(text.indexOf('# write .spur/run/<wbs>-verdict.json'));
         const record = block.indexOf('spur task record <wbs> --verdict-file');
-        const scan = block.indexOf('node "$RESIDUAL" scan <wbs>');
-        const fold = block.indexOf('node "$RESIDUAL" fold <wbs>');
+        const scan = block.indexOf('spur task residual <wbs> scan');
+        const fold = block.indexOf('spur task residual <wbs> fold');
         const rerecord = block.indexOf('= PASS ]');
         expect(record).toBeGreaterThanOrEqual(0);
         expect(scan).toBeGreaterThan(record);

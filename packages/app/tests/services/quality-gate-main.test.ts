@@ -2,12 +2,10 @@ import { expect, test } from 'bun:test';
 import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { main, QUALITY_GATE_USAGE } from '../scripts/quality-gate';
+import { qualityGateMain as main, QUALITY_GATE_USAGE } from '../../src/services/quality-gate';
 
-// Task 1006 R1: the gate's behavioral suite moved with the core to
-// packages/app/tests/services/quality-gate.test.ts; this file pins only the script glue —
-// `main` is the plugin surface the generated twin invokes, so its argv/env validation and
-// usage text stay contract-tested here.
+// Script-absorption PR-3: the mode dispatch behind `spur task gate` (formerly the plugin
+// script glue) — argv/env validation, exit codes and usage text stay contract-tested here.
 test('main: run and recheck return the gate failure exit code in the selected cwd', () => {
     const dir = mkdtempSync(join(tmpdir(), 'quality-gate-main-'));
     const original = process.stdout.write;

@@ -2,8 +2,8 @@
  * task-triage — the sensitive-path policy that decides whether a task's diff may be lane-negotiated
  * (task 1176 ownership move, ADR-130).
  *
- * Moved out of `plugins/sp/scripts/task-diffstat.ts`: the script keeps git capture and its output
- * artifact, while the safety floor — which paths always take the sensitive lane, never a model
+ * Moved out of the former `plugins/sp/scripts/task-diffstat.ts`: `./task-diffstat.ts`
+ * (`spur task diffstat`) keeps git capture and its output artifact, while the safety floor — which paths always take the sensitive lane, never a model
  * decision — lives with the workflow/task owner. Pure and side-effect free (also Node-compatible).
  */
 
