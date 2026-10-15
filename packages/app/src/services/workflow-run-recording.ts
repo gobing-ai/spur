@@ -1,6 +1,6 @@
 import type { DbAdapter } from '@gobing-ai/spur-domain';
 import { RunDao, type RunDefinitionSource } from '@gobing-ai/spur-domain';
-import type { WorkflowPersistenceAdapter } from '@gobing-ai/ts-dual-workflow-engine';
+import type { WorkflowDef, WorkflowPersistenceAdapter } from '@gobing-ai/ts-dual-workflow-engine';
 
 /**
  * Send SIGTERM to an async run's worker and the agent subprocess it spawned.
@@ -161,4 +161,14 @@ export function withRunIdentityRecording(
             return typeof value === 'function' ? value.bind(target) : value;
         },
     });
+}
+
+/**
+ * A definition's public version identity (0768): the declared non-empty
+ * `version` literal, or `null` for a known-unversioned definition. `undefined`
+ * is reserved for pre-0768 rows with no recorded identity and is never derived
+ * from a definition.
+ */
+export function workflowVersionLiteral(workflow: WorkflowDef): string | null {
+    return typeof workflow.version === 'string' && workflow.version !== '' ? workflow.version : null;
 }
