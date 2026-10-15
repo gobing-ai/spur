@@ -1,14 +1,16 @@
 ---
 schema_version: 1
 name: "Script-absorption and hook-boundary handoff: finish PR-6..PR-9, retire Pi guard-extension, merge stack, comprehensive review"
-status: todo
+status: wip
 template: meta
 created_at: 2026-10-15T17:20:58.394Z
-updated_at: "2026-10-15T17:20:58.569Z"
+updated_at: "2026-10-15T17:52:25.483Z"
 priority: P1
 ac_numbering: task-local
 ac_altitude: task-local
 
+feature_id: A91
+dependencies: ["1212", "1213"]
 ---
 
 ## 1211. Script-absorption and hook-boundary handoff: finish PR-6..PR-9, retire Pi guard-extension, merge stack, comprehensive review
@@ -159,6 +161,14 @@ Then careful-guard's ask is rendered as deny with a reason (fail-closed) and the
 
 Closed: task 1211 lives on its own branch `chore/task-1211-absorption-handoff` off origin/main (task files live in docs/tasks5 on main; #15 carries only the plan doc), so it can merge independently of the stack. Closed: #23's top commit already retires the Pi guard-extension; it is kept in #23 (gate green) rather than split, and #23 is gated on the superskill release. Open for owner: PR-10 re-scope (AC3); whether #23 may merge before superskill release (AC4).
 
+#### Q&A entry — 2026-10-15T17:51:56.821Z
+
+The operator changed landing to one reviewed dev branch, then main after integrated checks; remaining implementation is delegated later. Ready stack: #27, #15, #20, #21, #22, #25, #24, and release-dependent #23. Draft #26 remains unfinished and is owned by task 1212; task 1213 owns final infrastructure retirement and depends on 1212. Existing active A91 owns these records; task-local AC avoid redefining feature ship criteria. The parent remains wip until all original acceptance criteria are satisfied.
+
+PR-10 is closed as originally designed. Record Spur >=0.5.0 as the documented plugin prerequisite; optional runtime minimum-version enforcement/diagnostics are explicitly deferred. No new manifest field is approved.
+
+Independent review found artifact identity traversal, nested launch argv breakage for paths with spaces, stale fail-open ask claims, staged hook timeout metadata loss and current contract-doc drift. Integration fixes and repeat checks are required before accepting the ready stack. Superskill 0.3.38 published the initial generic/native-Pi implementation; use the subsequent verified corrected release for final staged timeout proof.
+
 ### Design
 
 No new design. Follow plan §3/§4 dispositions and Revision 2026-10-15. Every absorbed script: logic + tests move to `packages/app`, a thin adapter under `apps/cli/src/commands/<noun>/`, a golden parity test captured from the legacy script on main (`apps/cli/tests/script-absorption-prN-parity.test.ts` + `fixtures/script-absorption-prN*`), then delete the script, its `.mjs` twin, its `plugin-scripts.json` row and baseline entry, and update skills/commands/help/matrix/design docs in the same PR.
@@ -175,18 +185,45 @@ No new design. Follow plan §3/§4 dispositions and Revision 2026-10-15. Every a
 
 #### Comprehensive review checklist (owner requires this at the end; fix all findings; record each finding as a P1–P4 row in Review)
 
-- [ ] Cross-repo contract: `plugins/sp/hooks/hooks.json` ids/events/matchers/timeouts vs superskill lookup (`hooks/<id>.*` then `scripts/hooks/<id>.*`) and staging (`.agents/scripts/<plugin>/hooks/`); every hook id resolves to a file on every install layout (Claude cache, omp cache, Grok installed-plugins, staged, Pi extensions).
-- [ ] Hook output formats (allow silent / deny+reason / ask / block+reason) vs `apps/cli/src/hook-host.ts` renderers for Claude, Codex, omp, Grok, Pi, including fail-closed ask on non-Claude hosts and timeout = hooks.json − 500 ms.
-- [ ] Stale references (rg across skills, commands, docs, README, ADRs, CHANGELOG, `.spur/rules`, config/rules): `spur self hook`, lazy loading, `--splitting`, old `hook run` naming, `superskill script path sp`, `bun plugins/sp/scripts/…`, `scripts/test-shims`, `guard-extension`.
-- [ ] Deleted scripts referenced anywhere: rg every deleted path/basename from #15 #20–#26 and PR-8 (incl. `.mjs` twins and `*.generated.*`).
-- [ ] `config/plugin-scripts.json` and `.mjs` twins consistent (until PR-8 deletes both); `script-placement-baseline.json` entries match reality.
-- [ ] `spur <noun> --help`, `docs/help/cmd_*.md`, `docs/help2/*.md`, `docs/help/spur-cli-matrix.md` (counts), `plugins/sp/skills/spur-cli/references/*.md` and `check-cli-surface.yaml` all match registered commands (`help-docs-parity`, `cli-surface-parity` tests).
-- [ ] Coverage: every new module from these PRs >= 90% line and function (check the gate's per-file table, not just totals).
-- [ ] `config/transition-shims.json`: each remaining entry still needed; remove ones whose target no longer exists.
-- [ ] Docs vs behaviour: plan doc, ADR-130 amendment, `docs/design/harness-surface-governance.md` noun freeze (builder: bump-ver, drop-tags, pr, publish), cli-contracts, plugins/sp/README.
-- [ ] No TODO/FIXME/XXX added by these PRs (`git diff origin/main@{2026-10-14}..main | rg '^\+.*(TODO|FIXME|XXX)'`).
-- [ ] superskill genericity: mapper, hook-host, Pi adapter and docs contain no `sp`/spur-specific references (rg `\bsp/|spur` in superskill apps/ and docs/).
-- [ ] bunfig.toml (root, scripts/) unchanged vs main@2026-10-14.
+- Cross-repo contract: `plugins/sp/hooks/hooks.json` ids/events/matchers/timeouts vs superskill lookup (`hooks/<id>.*` then `scripts/hooks/<id>.*`) and staging (`.agents/scripts/<plugin>/hooks/`); every hook id resolves to a file on every install layout (Claude cache, omp cache, Grok installed-plugins, staged, Pi extensions).
+- Hook output formats (allow silent / deny+reason / ask / block+reason) vs `apps/cli/src/hook-host.ts` renderers for Claude, Codex, omp, Grok, Pi, including fail-closed ask on non-Claude hosts and timeout = hooks.json − 500 ms.
+- Stale references (rg across skills, commands, docs, README, ADRs, CHANGELOG, `.spur/rules`, config/rules): `spur self hook`, lazy loading, `--splitting`, old `hook run` naming, `superskill script path sp`, `bun plugins/sp/scripts/…`, `scripts/test-shims`, `guard-extension`.
+- Deleted scripts referenced anywhere: rg every deleted path/basename from #15 #20–#26 and PR-8 (incl. `.mjs` twins and `*.generated.*`).
+- `config/plugin-scripts.json` and `.mjs` twins consistent (until PR-8 deletes both); `script-placement-baseline.json` entries match reality.
+- `spur <noun> --help`, `docs/help/cmd_*.md`, `docs/help2/*.md`, `docs/help/spur-cli-matrix.md` (counts), `plugins/sp/skills/spur-cli/references/*.md` and `check-cli-surface.yaml` all match registered commands (`help-docs-parity`, `cli-surface-parity` tests).
+- Coverage: every new module from these PRs >= 90% line and function (check the gate's per-file table, not just totals).
+- `config/transition-shims.json`: each remaining entry still needed; remove ones whose target no longer exists.
+- Docs vs behaviour: plan doc, ADR-130 amendment, `docs/design/harness-surface-governance.md` noun freeze (builder: bump-ver, drop-tags, pr, publish), cli-contracts, plugins/sp/README.
+- No TODO/FIXME/XXX added by these PRs (`git diff origin/main@{2026-10-14}..main | rg '^\+.*(TODO|FIXME|XXX)'`).
+- superskill genericity: mapper, hook-host, Pi adapter and docs contain no `sp`/spur-specific references (rg `\bsp/|spur` in superskill apps/ and docs/).
+- bunfig.toml (root, scripts/) unchanged vs main@2026-10-14.
+
+
+
+
+#### Current execution contract — 2026-10-15
+
+The operator now requires ready PRs to land together through a reviewed development branch, followed by main only after the integrated gate and CI pass. This replaces the earlier per-PR merge-main/full-gate choreography; original commits are preserved with merge commits, no rebase or force push.
+
+Two cohesive implementation tasks remain; they are deliberately not executed by the landing reviewer:
+
+1. Task 1212: complete draft PR #26 (PR-9), its four known CLI documentation/flag parity failures, coverage proof, release/migration safety tests and callers.
+2. Task 1213 (depends on 1212): retire the exhausted script-root/generated/build/baseline infrastructure (PR-8), preserve plugin-owned hooks and required libs, and finalize the distribution/prerequisite documentation.
+
+Both are linked to existing active feature A91. Their acceptance criteria are task-local refinements of its consolidation scope; A9 remains completed. The parent retains integration, cross-repo review, acceptance and final cleanup. Child submission requires the exact tested head, gate/coverage receipts and root reviewer acceptance before landing; no task is done merely because its PR exists.
+
+PR-10's context-shim implementation is closed as obsolete. The plugin's documented minimum is Spur 0.5.0, following the approved clean break; optional runtime minimum-version enforcement and diagnostics are explicitly deferred. No unsupported manifest field or replacement compatibility layer is introduced. This resolves the handoff's explicit choice to re-scope or close PR-10.
+
+Current layout supersedes historical plan summaries: `hooks/` retains the registry; registered executable entries live in `scripts/hooks/`, with plugin hook-only libs. Non-hook reusable scripts move to approved CLI nouns. The final retirement is task 1213, not a claim that the present integrated tree has no infrastructure remaining.
+
+Remote deletion authorization covers the newly created integration dev branch after a successful landing. Keep pre-existing PR/abandoned remote branches unless the operator separately authorizes their deletion; historical `/workspace` worktrees do not exist in this checkout.
+
+<!-- AUTO-GENERATED by spur task refresh-roster -->
+| WBS | Sub-task | Status |
+| --- | -------- | ------ |
+| 1212 | Complete PR-9 release and workflow-cost CLI absorption | todo |
+| 1213 | Retire obsolete script infrastructure and finalize the sp CLI prerequisite | todo |
+<!-- END AUTO-GENERATED -->
 
 ### Root Cause
 
@@ -213,3 +250,6 @@ N/A — handoff/meta task.
 - ADR-130 (script placement) and its amendment in #23; tasks 1173–1178 (A91), A9 plan.
 
 ### History
+
+- 2026-10-15T17:50:40.395Z todo → wip (system)
+

@@ -1,7 +1,7 @@
 ---
 kind: plan
 title: Spur script absorption — scripts/, plugins/sp/{hooks,scripts,lib} → `spur <noun> <verb>`
-status: draft (planning only — no code changed)
+status: partial — ready stack integrated; implementation tasks 1212 and 1213 remain
 created_at: 2026-10-14
 updated_at: 2026-10-15
 tags: [plan, architecture, scripts, hooks, cli]
@@ -11,6 +11,48 @@ related: [A9, A91, ADR-130, ADR-129, ADR-065, ADR-051]
 ---
 
 # Spur script absorption plan
+
+## Landing revision 2026-10-15 — integration and remaining work
+
+This revision records the current delivery scope and supersedes conflicting layout, runtime and status statements below. The original inventory and proposals remain as historical evidence; they do not authorize restoring withdrawn surfaces. Task 1211 owns final acceptance, under existing active feature A91.
+
+The operator requested one dev branch, comprehensive review/refinement, integrated quality gates and CI, then an ancestry-preserving merge to main and deletion of the new dev branch. This replaces the older per-PR merge-main/gate choreography. No rebases or force pushes are part of the landing.
+
+| Item | Current disposition |
+| --- | --- |
+| PR-1 / #15 | Included in the reviewed landing batch #28: proven one-off deletions, test shim relocation, original plan. |
+| PR-2a / #16, PR-2b / #18, PR-L / #17, splitting / #19 | Withdrawn; keep closed. No `spur self hook`, lazy-loading or splitting implementation. |
+| S-1 as originally designed | Withdrawn. Replaced by generic superskill #3/#4, landed through superskill #5; hook logic remains plugin-owned. |
+| PR-3 / #20 | Included in #28: task gate, residual and diffstat with their migrated callers/tests. |
+| PR-4 / #21 | Included in #28: workflow inline and commit-guard. |
+| PR-5 / #22 | Included in #28: task wrapup/preflight/batch-plan and feature verify/handoff. |
+| PR-6 / #25 | Included in #28 after #20–#22; remaining generated bundles and bundle-plugin-lib retired. |
+| PR-7 / #24 | Included in #28: builder PR operations and agent dogfood. |
+| Hook conformance / #23 | Release-gated member of #28; final main landing requires the verified superskill release containing generic dispatch, native Pi adapters and staged timeout metadata. Pi/omp installations require reinstalling after upgrade. |
+| PR-9 / #26 | Draft and unfinished. Task 1212 owns completion, coverage proof and the four known CLI help/reference/shared-option parity failures. |
+| PR-8 | Task 1213, after 1212: retire exhausted script-root, generated/twin/build/baseline infrastructure and simplify distribution checks. |
+| PR-10 | Closed as originally designed: no context shims remain to retire. Document Spur >=0.5.0; optional runtime version enforcement and diagnostics are explicitly deferred. No new manifest field or compatibility layer. |
+
+**Remaining implementation is two cohesive tasks, not one task per file or gate.** Task 1212 completes the already-open release/cost migration; task 1213 owns the final distribution/retirement contract and depends on 1212. Each includes its callers, tests, help, matrix, coverage and gate receipts. The landing reviewer accepts their exact tested heads before merging. Task 1211 stays open until their results and the final cross-repo checks satisfy its original acceptance criteria.
+
+**Current layout and inventory status.**
+
+| Original inventory group | Current disposition and reason |
+| --- | --- |
+| §3.1 root script tooling and shim | Preserve the repository-only KEEP set with its recorded reasons; shim is now tests/shims/spur. |
+| §3.2 proven one-off tools | Deletions included in PR-1. surface-drift-inventory remains only while I3 needs its reproducible inventory; task 1213 checks live feature status before deciding. |
+| §3.2 release/cost/schema tooling | Migration is unfinished in #26, owned by task 1212. Existing repository promotion/cohort policy remains repository-owned. |
+| §3.3 hook registry and executable entries | hooks/hooks.json stays the registry. Executable entries move to scripts/hooks/<id>.ts so native and flattened installations resolve the same plugin-owned implementation. The old Pi guard extension is retired through #23 after its superskill dependency is released. |
+| §3.4 reusable non-hook skill scripts | Absorbed into existing task/feature/workflow/history/builder/agent CLI owners by the landing batch; no standalone generated compatibility bundle remains. |
+| §3.4 script-root and build/placement infrastructure | Intentionally pending task 1213. Do not claim the entire scripts directory disappears: canonical scripts/hooks entries remain. |
+| §3.5 handwritten plugin libs | Keep env.ts and actual hook-only backing libs; remove migrated non-hook cores and generated bundles. spur-bin is pending task 1213 after its final consumers retire. |
+| §3 generated twins/bundles and build wrappers | Absorption deletions are included; task 1213 removes the last exhausted infrastructure and records any retained project-only file reason. |
+
+**Q1–Q7 disposition.** Q1: existing nouns only, with plugin-owned hooks run by superskill. Q2: retain the generic superskill hook runner. Q3: Spur is a hard skill/workflow prerequisite; hook runtime errors retain their documented fail-open policy. Q4: clean break in 0.5.0, with a documented minimum; optional runtime minimum-version diagnostics are deferred by the PR-10 closure decision. Q5: builder release plumbing remains approved and is completed by 1212. Q6: proven one-offs are deleted; surface-drift-inventory is conditional on I3, and repository-only link/drift/coverage gates retain their reasons. Q7: root and scripts bunfig.toml remain unchanged.
+
+**Current final-acceptance interpretation of §12.** Preserve hooks/hooks.json, canonical scripts/hooks entries and hook-only libs; remove exhausted reusable non-hook infrastructure after 1212/1213. Unconfirmable PreToolUse asks deny on Codex/omp through superskill; runner errors/timeouts are a separate fail-open contract. Native and flattened installations must preserve declared hook timeouts with the runtime margin. Main acceptance requires resolved review findings, per-file coverage and successful integrated checks, not the older plan's raw deletion counts.
+
+Only newly created integration/planning branches and worktrees are cleanup targets authorized here. Existing remote PR/abandoned branches are retained pending separate operator consent; the prior Linux /workspace worktrees are absent from this checkout.
 
 ## Revision 2026-10-15 (owner decision: new boundary)
 
