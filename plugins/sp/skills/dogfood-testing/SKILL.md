@@ -109,7 +109,7 @@ The command forwards these via `$ARGUMENTS`:
      of two independent mutation sources (task 0293); its two refuse lines are the ones quoted
      verbatim in the repo-mutation warning above.
    - Exit **0** → proceed. Do not auto-substitute `--max-retry 0`.
-   - The matcher contract is unit-checked by `tests/dogfood-testing/pipeline-detect.test.ts`.
+   - The matcher contract is unit-checked by `packages/app/tests/services/dogfood/pipeline-detect.test.ts`.
      See [§Pipeline-driving word-boundary contract](#pipeline-driving-word-boundary-contract) and
      [§Mutating `--fix` mode contract](#mutating---fix-mode-contract).
 1. **Resolve + classify** the testee: slash command (`/sp:...`), agent skill (`Skill(...)`), or shell
@@ -347,7 +347,7 @@ spur agent dogfood gate --testee "<testee>" [--max-retry-present] [--steps "…"
 | Bare noun | <!-- pipeline-tokens:start -->`run`, `runall`, `wrap`, `wrapall`, `idea`, `refineall`, `verifyall`<!-- pipeline-tokens:end --> | `task run 0042` | `runaway`, `wrapper`, `idealist` |
 
 `-` is a **word character** for boundaries: a token must be a distinct hyphen-word. Contract tests:
-`plugins/sp/tests/dogfood-testing/pipeline-detect.test.ts`. Helpers:
+`packages/app/tests/services/dogfood/pipeline-detect.test.ts`. Helpers:
 `detectPipelineDriving`, `isImplementHeavyStep`, `detectImplementHeavy`, `evaluateDogfoodGate` in
 `spur agent dogfood gate` (absorbed into the CLI; was `plugins/sp/scripts/dogfood-testing/detect-pipeline-driving.ts`).
 

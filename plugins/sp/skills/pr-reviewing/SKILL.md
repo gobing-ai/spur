@@ -128,44 +128,43 @@ root causes rather than wording, prefer the smallest coherent patch, avoid drive
 ## Workflow-backed spine (`full`, `submit`, `rerun`)
 
 Run the workflow YAML's declared states in order. Every deterministic state invokes the
-staged entrypoint below, supports `--json`, and must be parsed. Stop at the first red gate and
+`spur builder pr` operation below, supports `--json`, and must be parsed. Stop at the first red gate and
 report its artifact. The canonical installed invocation is:
 
 ```sh
 spur builder pr <subcommand> [flags]
 ```
 
-Installed targets resolve the staged `.mjs` twin and execute it with Node, matching the standard
-superskill script contract.
+The installed Spur CLI owns these operations; no staged script, Node twin or plugin resolver is used.
 
-1. **Preflight** — `<script> preflight --base "$base" --json`. Hard-fails on a
+1. **Preflight** — `spur builder pr preflight --base "$base" --json`. Hard-fails on a
    detached HEAD, missing `gh` auth, no GitHub remote, a dirty tree, or the current branch
    being the base branch (a PR reviews a feature branch against the base; nothing on the
    base branch is reviewable, and the guard runs before any push can publish it). On a
    dirty tree, triage with the user (commit/stash/exclude) before continuing — the
    workflow refuses to guess.
-2. **Hygiene** — `<script> hygiene --base "$base" --json`. `BLOCK` (secrets, `.env`, conflict markers,
+2. **Hygiene** — `spur builder pr hygiene --base "$base" --json`. `BLOCK` (secrets, `.env`, conflict markers,
    private keys) stops the run — never submit a tainted diff. `WARN` (debug residue) rides along
    into the report. This is a submission sanity check, not a second local review.
 3. **Precheck** — if the workflow YAML's `preReviewCmd` var is set, run it; a red check stops the
    run (do not spend a review request on code that fails its own gate). When unset, report that
    pre-review verification was not configured rather than inventing project commands.
-4. **Push** — `<script> push --json`. Normal push only; sets upstream when missing.
-5. **Ensure PR** — `<script> ensure-pr --base "$base" --json`. Reuses the branch's PR; creates with
+4. **Push** — `spur builder pr push --json`. Normal push only; sets upstream when missing.
+5. **Ensure PR** — `spur builder pr ensure-pr --base "$base" --json`. Reuses the branch's PR; creates with
    `gh pr create --fill` only when absent. Never a duplicate PR.
-6. **Request** — `<script> request --focus "<focus>" --json` (`--force` in `rerun` mode). Dedupes when
+6. **Request** — `spur builder pr request --focus "<focus>" --json` (`--force` in `rerun` mode). Dedupes when
    Codex already reviewed the exact pushed HEAD (`ALREADY_REVIEWED` → skip to collect) or a marked
    request by the current GitHub user is still in flight (`ALREADY_REQUESTED` → pending). The
    request body is concise when the repo has `## Code Review Rules`, else carries the default
    actionable-issues focus. Records PR, URL, HEAD, and request time.
 7. **Wait** (full/rerun unless `--no-wait`; submit stops before it) —
-   `<script> wait --since "$requestedAt" --head "$requestHead" --json`, using the request result so
+   `spur builder pr wait --since "$requestedAt" --head "$requestHead" --json`, using the request result so
    a fast response is not missed, `rerun` cannot reuse the prior review, and a moved HEAD fails loud.
    Polls every ~30s for up to
    ~10 minutes across the current HEAD's PR review and inline comments. Uncorrelated conversation
    comments are ignored. A current-HEAD clean review is a completed `CLEAN` outcome; findings are
    `FOUND`; timeout or no current-HEAD result is **pending, not failed** — collect later.
-8. **Collect** — `<script> collect --since "$requestedAt" --head "$requestHead" --json`. Normalize
+8. **Collect** — `spur builder pr collect --since "$requestedAt" --head "$requestHead" --json`. Normalize
    only the requested HEAD and request window; then invoke `status` with the same bounds for
    PR/base/CI/local state. Never turn an absent, stale, or moved-HEAD result into `clean`.
    `--head` is mandatory on wait/collect/status (0771): an empty or missing pin fails loud

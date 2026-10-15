@@ -23,7 +23,7 @@ see_also:
 
 # sp:spur-check — the two-tier check primitive (ADR-124)
 
-One check primitive with two tiers behind the shipped `quality-gate` script
+One check primitive with two tiers behind `spur task gate <wbs> <mode>`
 ([task 0939](../../../../docs/tasks5/0939_add-the-two-tier-spur-check-primitive-with-fingerprint-bound.md),
 [workflow catalogue refactor §4](../../../../docs/design/workflow-catalogue-refactor.md)): light
 checks accumulate during development, the full chain runs once at the quality boundary, and every
@@ -36,8 +36,10 @@ gate writes a fingerprint-bound receipt that downstream stages read instead of r
 | `light` | `spur task gate <wbs> light` | after each implement/fix edit | `bunx biome check` on the changed files (`git diff --name-only HEAD` + untracked), `bun run typecheck` per touched workspace, and related tests (`<ws>/src/**/x.ts` → `<ws>/tests/**/x.test.ts` filename mapping) run via `cd <ws> && bun test …` — never from the repo root, whose bunfig preload does not apply inside the workspace |
 | `full` | `spur task gate <wbs> run` | once at the task quality boundary (`test`) | today's chain: `bun run lint` + `bun run test-pre-check` + `bun run test` + `bun run test-post-check` (=`bun run spur-check`), with bounded findings, SQLite-busy retry, and the `recheck` probe |
 
-Soft-fail contract: both tiers always exit 0; the verdict lives in files (`*-test-gate.status`,
-receipt `status`), never in the exit code.
+Exit contract: `run` and `recheck` return 0 on PASS and 1 on FAIL; `deferred` returns 0 on
+DEFERRED and 1 on FAIL. `light` and `status` return 0; invalid usage returns 2. The pipeline
+wraps selected calls with `; exit 0` and branches on `*-test-gate.status` or receipt `status`;
+that soft shell wrapper does not change the standalone CLI contract.
 
 ## Receipt
 
@@ -60,7 +62,7 @@ receipt `status`), never in the exit code.
   sources). The plugin never computes it — the pipeline captures it with the `proof.fingerprint`
   action into `env.proofDigest` (ADR-124: no second fingerprint, no `@gobing-ai/*` import);
   standalone callers use `spur workflow inline fingerprint`.
-- Only `run`/`full` writes a reusable receipt. Without a digest, `run` writes no receipt and says
+- `run` and `recheck` write full-tier receipts; only a PASS at the current digest is reusable. Without a digest, `run` writes no receipt and says
   so in the gate log. The gate executes `qualityGateCmd` as one unit, so the full receipt carries a
   single `test` row for the whole chain; `lint`, `typecheck`, `test-pre-check`,
   `test-post-check` name the chain steps the full tier covers.
@@ -74,7 +76,7 @@ Check `status` mode before re-running a gate. The gate ships inside the CLI (no 
 resolve):
 
 ```bash
-spur task gate <wbs> status --proof-digest "$proofDigest" --no-logo   # prints {"reuse":…,"reason":…}
+spur task gate <wbs> status --proof-digest "$proofDigest" --no-logo   # final stdout line: {"reuse":…,"reason":…}
 ```
 
 `reuse: true` only when the receipt is `status: PASS`, `tier: full`, and `inputDigest` equals the
@@ -102,8 +104,8 @@ preserved by construction. `recheck` stays the no-progress probe path for fix lo
 
 ## Gotchas
 
-1. **Never value-import `@gobing-ai/*` into the script** — the plugin standalone contract fails
-   the install; the digest arrives via `env.proofDigest`.
+1. **Keep gate logic in the CLI/application owner** — plugin skills invoke `spur task gate`;
+   they do not restore a script or bundle. The digest arrives via `--proof-digest` or `env.proofDigest`.
 2. **Never run light tests from the repo root** — the workspace `bunfig.toml` preload (coverage,
    thresholds) only applies inside the workspace; `cd <ws> && bun test …` is the contract.
 3. **Light is a filter, not a boundary** — unmapped files (root-level scripts, non-src layouts)

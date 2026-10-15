@@ -66,7 +66,7 @@ lifecycle, the gates, and the section-write contract (`cross-cutting.md`).
 ```
 vague description
   → intake (clarify scope, constraints — prompt work)
-  → spur feature create … ; AC authored/generated (spur agent run, bdd templates)
+  → spur feature create … ; AC authored/generated (host-inline competency, BDD templates)
   → GATE: spur feature check   (BDD validator; loop until clean)
   → decomposition (prompt work) → task-batch JSON
   → GATE: task-batch.schema.json + spur task batch-create (atomic: all-or-nothing)

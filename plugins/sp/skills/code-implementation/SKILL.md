@@ -169,7 +169,7 @@ that single full gate.
 
 **Worker iteration check order (task 1142 R3):**
 1. The **changed-path matrix** below (narrow behavior tests + affected consumers);
-2. the resolved `quality-gate` script in `light` mode (source-repo probe, else the installed twin) (biome on changed files, per-workspace typecheck, rule presets `rules:pre`/`rules:post`, related tests).
+2. `spur task gate <wbs> light` (biome on changed files, per-workspace typecheck, rule presets `rules:pre`/`rules:post`, related tests).
 
 Neither step takes the full project gate. The full gate is named only for the pipeline's `test` and `test-recheck` hops.
 

@@ -2,11 +2,11 @@
 schema_version: 1
 id: "A91"
 name: "Harness script ownership consolidation and exception retirement"
-status: active
+status: done
 priority: P2
 tags: []
 created_at: "2026-10-12T03:30:19.795Z"
-updated_at: "2026-10-13T02:15:40.475Z"
+updated_at: "2026-10-15T23:03:06.162Z"
 ---
 
 # A91: Harness script ownership consolidation and exception retirement
@@ -86,9 +86,9 @@ Feature: Harness script ownership consolidation
 | 1176 | Centralize task readiness triage and feature receipt operations | done |
 | 1177 | Consolidate inline workflow adapters on the application runtime owner | done |
 | 1178 | Unify workflow and history measurements used by repo and skill tools | done |
-| 1211 | Script-absorption and hook-boundary handoff: finish PR-6..PR-9, retire Pi guard-extension, merge stack, comprehensive review | wip |
-| 1212 | Complete PR-9 release and workflow-cost CLI absorption | todo |
-| 1213 | Retire obsolete script infrastructure and finalize the sp CLI prerequisite | todo |
+| 1211 | Script-absorption and hook-boundary handoff: finish PR-6..PR-9, retire Pi guard-extension, merge stack, comprehensive review | done |
+| 1212 | Complete PR-9 release and workflow-cost CLI absorption | done |
+| 1213 | Retire obsolete script infrastructure and finalize the sp CLI prerequisite | done |
 <!-- END AUTO-GENERATED -->
 
 ## Notes
@@ -96,4 +96,6 @@ Feature: Harness script ownership consolidation
 ## History
 
 - 2026-10-13T02:15:40.475Z backlog → active (system)
+- 2026-10-15T23:02:30.469Z active → verifying (system)
+- 2026-10-15T23:03:06.162Z verifying → done (system)
 

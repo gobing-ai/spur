@@ -42,7 +42,10 @@ what* or *how to write a scenario*, this skill.
 
 `refresh` never runs lifecycle gates. `sync` never rewrites the Tasks table — run both when you need both.
 
-All verbs accept `--json` and `--folder <path>`.
+Corpus verbs advertise `--json` and `--folder <path>` in the table. The workflow-internal
+`verify` and `handoff` verbs accept neither: they write run artifacts and diagnostic stdout.
+`verify` exits 0 after a completed PASS or FAIL; inspect its bound receipt/status file.
+An execution/usage failure exits nonzero.
 
 ## Hierarchical IDs (DD-14)
 

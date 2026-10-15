@@ -118,6 +118,7 @@ The skill's logic divides by **whether the LLM adds value**:
 | `progress` | `spur workflow progress` (CLI) | `<run-id>` | The `projectWorkflowProgress` projection for that run — current state, per-action attempts, candidate next transitions, diagnostics. Read-only; the verb renders, `packages/app` derives. Unknown run id exits 1 with `Run <id> not found.` |
 | `summary` | `spur workflow summary` (CLI) | `--progress <[label=]file>`… \| `--rollup <[label=]file>`… `[--transcript] [--since] [--markdown]` | Measured execution summary (per-stage time, wait, tool calls, tokens, actor split) or the batch roll-up `/sp:dev-runall` prints. `n/a` exit 0 without a transcript; exit 2 on usage or unreadable input |
 | `profile` | `spur workflow profile` (CLI) | `<workflow> [--last n] [--window sec] [--spur-bin cmd] [--json]` | Read-only per-node step profile from `spur workflow trace` with the ADR-115 cache-window flags, for `sp:spur-doctor`. Exit 1 when a trace read fails |
+| `cost` | `spur workflow cost` (CLI) | `[--workflow <name>]… [--by-state] [--include-bookkeeping] [--since <date>] [--budget <file>] [--measured-file <json>] [--json]` | Real terminal non-dry run measurements, or a budget result; unknown measurements stay null. Budget failures exit 1 |
 | `inline` | `spur workflow inline <op>` (CLI) | `begin`, `fingerprint`, `node-enter`, `action`, `actions`, `close`, `decide`, `persist-out`, `persist-check`, `attribution`, `dispatch-failure` | The host-inline driver's run lifecycle transport ([inline-pipeline-driver.md](../../spur-dev/references/inline-pipeline-driver.md)); exit 0 ok / 1 fail closed / 2 usage |
 | `commit-guard` | `spur workflow commit-guard <op>` (CLI) | `start\|stage\|check --run <id> [--base <sha>] [-- <paths…>]` | Stages only paths this run wrote; exit 2 when a listed path is refused, 3 on unmerged/conflict-marked targets |
 | `add` | agent procedure | `"<nl-description>" [--kind <state-machine\|transition-flow>] [--file <path>]` | **Mode chosen (confirmed)** → first reconciled against existing workflows (extend an existing flow rather than duplicate) → YAML authored in real schema shape → **validated AND dry-run** (reaches the expected terminal state) → [add](workflows/operations.md#add) |
@@ -276,6 +277,31 @@ spur workflow cost     [--workflow <name>]... [--by-state] [--include-bookkeepin
 spur workflow inline   <op> [options]
 spur workflow commit-guard <op> [options]
 ```
+
+### `cost` — real-run measurements and budgets
+
+`spur workflow cost` reads `.spur/spur.db`; its default cohort is the project definitions in
+`.spur/workflows/`, excluding bookkeeping. Use repeatable `--workflow <name>` filters to select
+workflows explicitly; bookkeeping names still require `--include-bookkeeping`. Report mode
+considers terminal, non-dry runs; `--since YYYY-MM-DD` filters
+creation time in UTC. Missing measurements remain unknown (`null`), never fabricated zeros.
+
+`--json` emits the stable workflow/state report; `--by-state` selects human state rows when JSON
+is not requested. `--budget <file>` instead emits the budget result (including `ok`, errors and
+exitCode with `--json`) and exits 1 for over-budget, missing-budget or silent-raise failures.
+`--measured-file <json>` is valid only with `--budget`. Budget mode uses its own cohort inputs;
+report-only `--since`, `--by-state` and `--include-bookkeeping` do not change the budget pass.
+Repository promotion policy keeps its selected-run domain query; aggregate cost JSON does not
+replace that distribution.
+
+### CLI launch strings
+
+Workflow `spurBin` defaults to the current absolute CLI invocation: a compiled executable, or
+`<runtime> <entry-module>` for source/JavaScript installs. Shell actions expand this multi-part
+string as `$spurBin`, not `"$spurBin"`; quoting the whole value makes it one executable name.
+The current string transport requires launch paths without spaces. Native `splitLaunchCommand`
+consumers also reject shell metacharacters and shell-quoted command strings; shell expansion itself
+does not validate those strings. Native callers with explicit launch argv preserve argument boundaries.
 
 ### `show` - project a definition
 

@@ -109,7 +109,7 @@ describe('worker iteration order (task 1142 R3)', () => {
         test(`${name}: the matrix precedes the light tier, and the full gate is named only for test/test-recheck`, () => {
             const order = doc.indexOf('task 1142 R3');
             const matrix = doc.indexOf('1. ', order);
-            const light = doc.indexOf('2. the resolved `quality-gate` script in `light` mode', order);
+            const light = doc.indexOf('2. `spur task gate <wbs> light`', order);
             expect(order).toBeGreaterThanOrEqual(0);
             expect(doc.slice(matrix, light)).toContain('changed-path matrix');
             expect(light).toBeGreaterThan(matrix);

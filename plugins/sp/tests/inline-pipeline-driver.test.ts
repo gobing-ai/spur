@@ -6,6 +6,8 @@ import { getEnvVars } from '@gobing-ai/ts-utils';
 import { parse } from 'yaml';
 
 interface ActionOptions {
+    id?: string;
+    args?: string[];
     command?: string;
     input?: string;
     answerFile?: string;
@@ -59,6 +61,16 @@ const ROOT = join(import.meta.dir, '..', '..', '..');
 const PIPELINE = parse(
     readFileSync(join(ROOT, 'config', 'workflows', 'task-pipeline.yaml'), 'utf8'),
 ) as PipelineDefinition;
+
+test('inline record guidance suppresses nested task lifecycle runs like the workflow', () => {
+    const driver = readFileSync(join(ROOT, 'plugins/sp/skills/spur-dev/references/inline-pipeline-driver.md'), 'utf8');
+    expect(driver).toContain('spur task record <wbs> --solution-from-diff --transition testing --no-lifecycle');
+    const record = PIPELINE.states.find((state) => state.id === 'record');
+    const transition = record?.onEnter?.find(
+        (action) => action.kind === 'command.gate' && action.options?.id === 'task-record-transition',
+    );
+    expect(transition?.options?.args).toContain('--no-lifecycle');
+});
 
 // Catalog fallbacks (task 1115): the smoke's decide simulation writes the decisionMaker-off
 // degraded row, whose value is the INLINE default pre-migration and the catalog `fallback`

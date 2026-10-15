@@ -755,7 +755,7 @@ host-owned gate sat between the stages, or when the platform cannot address comp
 
 **Implement and test-fix workers never run the full gate (task 1142 R3).** Workers use the light tier as their iteration check (task 1142 R3) in exact order:
 1. the **changed-path matrix** (`code-implementation/SKILL.md` § Changed-path targeted checks) over the paths they touched;
-2. the resolved `quality-gate` script in `light` mode (source-repo probe, else the installed twin) (biome, per-workspace typecheck, rule presets, related tests).
+2. `spur task gate <wbs> light` (biome, per-workspace typecheck, rule presets, related tests).
 Neither step takes the full gate. The pipeline's `test` and `test-recheck` hops remain the only full gate. Carry
 `--gate-log <path>` through to the child **verbatim**: never paraphrase it into "re-run the named
 gate command". That paraphrase is not cosmetic — it sent a worker into a full gate run instead of
@@ -854,7 +854,7 @@ documented beside `DEFAULT_EXCLUDE_GLOBS` in `proof-input-fingerprint.ts`).
 Order matters for the `testing → done` hop: the sections must not be hand-written **before** the
 verdict artifact exists (tasks 0617, 0619 — the clobbering spiral).
 
-1. **Write the verdict artifact first.** `spur task record --solution-from-diff --transition testing`
+1. **Write the verdict artifact first.** `spur task record <wbs> --solution-from-diff --transition testing --no-lifecycle`
    reads `.spur/run/<wbs>-verdict.json` (default attempt output) on every invocation and atomically retains the recorded verdict under `.spur/memory/evidence/`. A missing or malformed artifact
    yields **UNKNOWN**: bare Testing receives a "No requirements recorded" stub, while already-authored
    Testing is preserved. `--solution-from-diff` backfills only a bare Solution. The clobbering above is
@@ -868,7 +868,7 @@ verdict artifact exists (tasks 0617, 0619 — the clobbering spiral).
    # Both calls are per-call pinned (task 1058): the record hop selects the execution tree inside
    # the same tool call — never through a cwd a previous call happened to leave behind.
    spur task update <wbs> wip --no-lifecycle
-   spur task record <wbs> --solution-from-diff --transition testing
+   spur task record <wbs> --solution-from-diff --transition testing --no-lifecycle
    ```
 
    The engine now preserves an already-authored Testing when the verdict is UNKNOWN (task-service

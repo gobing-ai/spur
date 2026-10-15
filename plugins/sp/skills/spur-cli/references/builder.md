@@ -8,7 +8,7 @@ see_also:
 # spur builder - release plumbing
 
 `spur builder` is the CLI for **version bumps and release tags**. It wraps the internal
-`release-ops` implementation behind a public two-verb surface. The repo-local forwarder
+`release-ops` implementation behind a public four-verb surface. The repo-local forwarder
 (`scripts/commands/release.ts`) and its `spur-dev` dispatcher cases were retired in task 1173; the
 root `bun run bump-ver` / `bun run drop-tags` names route to `spur builder` directly. Package ids are
 the unscoped short names (`@gobing-ai/spur` → `spur`); the released set and the aggregate tag are
@@ -22,7 +22,7 @@ This noun is **frozen at exactly four verbs** (`bump-ver`, `drop-tags`, plus `pr
 
 | Verb | Purpose | Key flags |
 | ---- | ------- | --------- |
-| `bump-ver [package-id] <version>` | Bump one package (manifest + in-source `binaryVersion` + consumer `workspace:` pins), commit, tag, optionally push; `--check [package-id]` only verifies marketplace/plugin versions (exit 1 on drift) | `--all` `--push` `--check` `--json` |
+| `bump-ver [package-id] [version]` | Bump one package (manifest + in-source `binaryVersion` + consumer `workspace:` pins), commit, tag, optionally push; `--check [package-id]` only verifies marketplace/plugin versions (exit 1 on drift) | `--all` `--push` `--check` `--json` |
 | `drop-tags [package-id] <version>` | Delete a package's release tag (local only by default) | `--all` `--remote` `--json` |
 | `publish <dir>` | CI npm publish: resolve `workspace:`/`catalog:` ranges, `build:bundle`, `npm publish --access public`, restore the manifest | `--otp` |
 | `pr <op>` | PR-review spine ops for `/sp:dev-pr-review`: `preflight` `push` `ensure` `hygiene` `request` `wait` `collect` `status` | `--base` `--since` `--head` `--json` `--status-file` |
@@ -33,16 +33,23 @@ tags plus the aggregate `@<scope>/<root>-v<version>` publish tag. `drop-tags --a
 for deletion.
 
 **Exit codes:** `0` success, `1` error (invalid semver, unknown package id, dirty tree, detached
-HEAD, or an existing local/origin tag). **Errors abort before any write** — a re-run after fixing
-the cause is safe.
+HEAD, or an existing local/origin tag). Release preflight errors abort before mutation. `publish` temporarily rewrites dependency
+ranges for packaging and restores the original manifest in `finally`, including build/publish
+failures; npm publication itself is an external side effect.
 
 ## `bump-ver` - bump and tag a release
 
 ```bash
+spur builder bump-ver --check               # aggregate marketplace/plugin version drift, read-only
+spur builder bump-ver --check spur          # named package drift, read-only
 spur builder bump-ver spur 0.1.4            # one package: manifest, pins, commit, tag @gobing-ai/spur-v0.1.4
 spur builder bump-ver --all 0.1.4           # every workspace:-pinned package + aggregate tag
 spur builder bump-ver --all 0.1.4 --push    # also push branch + tags to origin
 ```
+
+`--check` accepts only an optional package id; it rejects a version argument and `--all`/`--push`.
+Normal bump mode requires a version. `publish <dir> [--otp <code>]` builds and publishes the
+package using native argv, then restores the original manifest on success or failure.
 
 ## `drop-tags` - delete release tags
 
