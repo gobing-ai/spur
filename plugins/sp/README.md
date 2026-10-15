@@ -515,8 +515,8 @@ inbox work to a session joined as a fleet guest at turn end; any other session p
 asks the operator to confirm destructive shell commands (`rm -rf`, `DROP TABLE`, `git push --force`,
 …); rebuildable caches (`rm -rf node_modules`, `dist`, …) pass. The policy is
 `lib/destructive-policy.ts`. On Pi, superskill's native adapter routes the `ask` to `ctx.ui.confirm`
-(and blocks when Pi has no UI). Hosts that cannot confirm (Codex, omp) fail the `ask` open, so there
-it is advisory only. Fail-open by contract; escape hatch
+(and blocks when Pi has no UI). Hosts that cannot confirm (Codex, omp, generic) deny an
+unconfirmable `ask` with the reason. Malformed input and runner errors still fail open; escape hatch
 `SPUR_CAREFUL=off`.
 
 **Runtime contract (superskill ADR-039).** `superskill hook run sp <id>` runs the plugin's own
@@ -527,7 +527,7 @@ block/ask prints one JSON object that superskill renders per host:
 - `fleet-guest-stop` prints the host-neutral `{"decision":"block","reason"}`.
 - The two `PreToolUse` guards print Claude-native JSON with the reason in both
   `permissionDecisionReason` and `systemMessage`. On Codex/omp, `hook run` turns a deny into exit 2
-  with that reason on stderr. They stay Claude-native because the neutral form cannot carry
+  with that reason on stderr, and an unconfirmable ask becomes the same fail-closed denial. They stay Claude-native because the neutral form cannot carry
   `systemMessage`, Claude Code's user-facing warning.
 
 **Why `scripts/hooks/` (one canonical location).** superskill resolves `hooks/<id>` first, then
@@ -554,12 +554,14 @@ declared hook, each running `superskill hook run sp <id>` with `SUPERSKILL_HOOK_
 applies the decision with Pi's primitives — `{block}` for deny, `ctx.ui.confirm` for `ask`, a
 follow-up message for a Stop `block`. Requirements:
 
-- **superskill with the native Pi adapter** — the first superskill release that contains PR #4
-  (later than 0.3.37). Older superskill emits only the `@vahor/pi-hooks` shim, which cannot raise
-  `ask` or continue a Stop.
-- **A reinstall to Pi** after upgrading either side: `superskill install sp --targets pi`. Reinstall
+- **Superskill 0.3.39 or newer** for the native Pi adapter and staged-hook timeout metadata.
+  Older installs may retain the `@vahor/pi-hooks` shim or omit hook-specific timeout budgets.
+- **A reinstall to Pi and omp** after upgrading: `superskill install sp --targets pi,omp`. Reinstall
   removes the old `sp` extension package and any shim entries, so a hook never runs twice. An
   existing Pi install keeps the retired extension until it is reinstalled.
+
+**Spur CLI requirement:** sp requires Spur 0.5.0 or newer on PATH. The script absorption is a clean break;
+older CLI versions do not provide the absorbed commands.
 
 #### 5. Scripts (`scripts/` + `hooks/`)
 

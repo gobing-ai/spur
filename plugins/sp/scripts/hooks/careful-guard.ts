@@ -16,8 +16,8 @@
  * **Output contract** (superskill ADR-039 `hook run`): allow prints **nothing** (exit 0). Ask prints
  * Claude-native PreToolUse JSON with the reason in `permissionDecisionReason` (the confirm prompt) and
  * `systemMessage` (Claude Code's user-facing warning, which the host-neutral `{decision,reason}` form
- * cannot carry). Hosts that cannot confirm (Codex, omp, generic) get nothing from `hook run` — an
- * unconfirmable ask fails open, exactly as a neutral `ask` would.
+ * cannot carry). Hosts that cannot confirm (Codex, omp, generic) receive a deny with the reason:
+ * superskill fails an unconfirmable ask closed. Pi confirms through its native host adapter.
  *
  * **Fail-open contract:** every error path — unparseable payload, non-Bash tool, empty command —
  * allows (prints nothing). A broken guard must never wedge an agent tool call.
@@ -25,7 +25,7 @@
  * **Escape hatch:** `SPUR_CAREFUL=off` short-circuits to allow.
  *
  * Classification itself lives in `lib/destructive-policy.ts` — one policy, every platform
- * adapter (the Pi extension calls it directly). This file owns the hook payload/decision shape only.
+ * adapter runs this hook through superskill). This file owns the hook payload/decision shape only.
  * Registered in `hooks/hooks.json` as `PreToolUse` / matcher `Bash` (task 0215 R3).
  */
 

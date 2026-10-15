@@ -1,5 +1,14 @@
 import { describe, expect, test } from 'bun:test';
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
+import {
+    existsSync,
+    mkdirSync,
+    mkdtempSync,
+    readFileSync,
+    realpathSync,
+    rmSync,
+    symlinkSync,
+    writeFileSync,
+} from 'node:fs';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { applyCliMigrations } from '@gobing-ai/spur-domain';
@@ -40,6 +49,9 @@ test('run storage root never latches onto the shared OS temp dir, marker or not'
         // With the marker present, the walk must still refuse tmpdir() as project root:
         // otherwise every unmarked temp project re-roots to the shared dir (CI: /tmp).
         expect(runStoragePaths(root).projectRoot).toBe(root);
+        // macOS process cwd canonicalizes /var to /private/var before the same walk.
+        const canonical = realpathSync(root);
+        expect(runStoragePaths(canonical).projectRoot).toBe(canonical);
     } finally {
         if (created) rmSync(sharedSpur, { recursive: true, force: true });
         rmSync(root, { recursive: true, force: true });

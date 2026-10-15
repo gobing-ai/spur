@@ -312,12 +312,13 @@ writer-blind. Task 0915 replaces it with a bound receipt service; the status fil
 remains as coarse routing evidence for the `feature-verification` workflow's internal
 `verify→done` transition, but it no longer satisfies completion by itself.
 
-**Writer.** The `feature-verification` workflow's `onEnter` script
-(`plugins/sp/scripts/feature-verification-steps.ts`) is the single writer: it resolves
+**Writer.** The `feature-verification` workflow invokes `spur feature verify`, whose application
+operation in `packages/app/src/workflow/feature-verification-run.ts` owns the pass: it resolves
 the workflow definition, captures the before digest, records a RUNNING receipt, shells
 the configured command via `splitLaunchCommand` (log appended to
 `.spur/run/<runId>-feature-verification.log`, 4h timeout), captures the after digest and
-completes the receipt atomically (tmp+rename). The CLI `feature verify` verb is removed.
+completes the receipt atomically (tmp+rename). The former plugin script was retired when the
+`feature verify` transport absorbed this operation.
 
 **Artifacts** (written by the receipt service in `packages/app/src/workflow/feature-verification-receipt.ts`,
 schema `feature-verification-receipt/v1`):

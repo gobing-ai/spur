@@ -163,15 +163,14 @@ config/
 
 **Build → install → init flow:**
 
-The CLI package's `build:bundle` first invokes `scripts/commands/bundle-plugin-lib.ts`, the
-same generator exported to the deterministic bundle tests, before staging the plugin. Changed
-application source therefore refreshes the committed plugin libraries and their packaged copies
-through one owner; callers do not need a separate regeneration pass.
+The CLI package's `build:bundle` bundles the application services into the CLI and stages the
+plugin for installation. Script absorption retired the generated plugin libraries and their
+`bundle-plugin-lib.ts` generator: plugin prompts invoke the installed owning-noun CLI commands,
+while hook entries and their plugin-local cores are staged with the plugin.
 
 Every Spur bundle inlines `packages/app`, which reaches `@johnhenry/laya` through
 `ts-laya-mlx` 0.5.22+. Laya imports its optional GPU peer from `io-node.js`, so bundlers fail on
-the uninstalled package; Spur never selects that backend, so `bundle-plugin-lib.ts` stubs the
-peer and the CLI/compiled builds (`apps/cli` `build:bundle`, `build-cli`, `build-binaries`, and
+the uninstalled package; Spur never selects that backend, so the CLI/compiled builds (`apps/cli` `build:bundle`, `build-cli`, `build-binaries`, and
 `build-server` through `buildCompiledBinary`) pass `--external @johnhenry/backend-webgpu` —
 `--compile` accepts no Bun.build plugins.
 

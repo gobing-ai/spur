@@ -177,7 +177,7 @@ consumes the recorded run-scoped PASS/FAIL instead of re-running `spur feature c
 | `decompose:onEnter:2` | GLUE | jq validation of batch order/dep uniqueness (workflow-local predicate) |
 | `batch-create-run:onEnter:0` | GLUE | idempotent `task batch-create --skip-ready` + jq verify + done/failed markers |
 | `ready-prepare:onEnter:1` | GLUE | normalize absent ready-evidence sidecar to empty + jq fail-closed shape validation (0788) |
-| `handoff-finalize:onEnter:0` | EXT | bundled plugin script over the shared `finalizeIdeaHandoff` (0824): the monorepo runs the TS writer directly; seeded projects run the registered `idea-handoff.mjs` twin over the generated `plugins/sp/lib/idea-handoff.generated.mjs`, and a missing script fails closed |
+| `handoff-finalize:onEnter:0` | EXT | `spur feature handoff` invokes the shared `finalizeIdeaHandoff` application operation in source and installed projects; the former plugin script, twin and generated bundle were retired by script absorption |
 
 ### docs-pipeline.yaml
 
@@ -301,18 +301,15 @@ invokes must resolve in a seeded project or degrade deliberately:
 
 - **Built-in action kinds** (`doctor.probe`, `command.gate`, `run.artifact`) run in-process in the
   `spur` CLI, which seeded projects install — portable by construction.
-- **External extensions** under `plugins/sp/scripts/` resolve via
-  `bun "$(superskill script path sp <name>.ts)"`; the workflows that use them carry a `spur`-verb
-  fallback for projects without the plugin.
-- **Application services** in `packages/app` are monorepo-only by source, but a plugin script can
-  reach one through a generated bundle: `scripts/commands/bundle-plugin-lib.ts` emits a committed,
-  standalone `plugins/sp/lib/*.generated.mjs` ESM module (the 0669 `artifact-digest` precedent),
-  and the registered ADR-065 twin imports it by relative URL, so bare `node` in a seeded project
-  runs the same tested application function the monorepo branch executes. The idea handoff has
-  used this bridge since 0824 (`idea-handoff.ts` over `lib/idea-handoff.generated.mjs`, with the
-  bundle's `import.meta.main` pinned off and the workflow failing closed when the script is
-  absent). A shell copy of the application logic stays rejected — one implementation, two
-  transports.
+- **Reusable application operations** in `packages/app` are bundled into the installed Spur CLI.
+  Shipped workflows invoke their owning-noun transports, including `spur feature handoff` and
+  `spur workflow inline`; they do not resolve plugin scripts or generated library bundles.
+- **Plugin hooks** remain plugin-owned entries and cores, executed by
+  `superskill hook run sp <id>` from the installed plugin layout. They invoke ordinary Spur
+  commands when they need project operations.
+
+The earlier generated-bundle bridge (0824/0669) was retired by script absorption on 2026-10-15.
+Application logic still has one implementation, shared by the source and installed CLI.
 
 ## Precedent this record sets
 
