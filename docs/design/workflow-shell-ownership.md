@@ -177,7 +177,7 @@ consumes the recorded run-scoped PASS/FAIL instead of re-running `spur feature c
 | `decompose:onEnter:2` | GLUE | jq validation of batch order/dep uniqueness (workflow-local predicate) |
 | `batch-create-run:onEnter:0` | GLUE | idempotent `task batch-create --skip-ready` + jq verify + done/failed markers |
 | `ready-prepare:onEnter:1` | GLUE | normalize absent ready-evidence sidecar to empty + jq fail-closed shape validation (0788) |
-| `handoff-finalize:onEnter:0` | EXT | bundled plugin script over the shared `finalizeIdeaHandoff` (0824): the monorepo runs the TS writer directly; seeded projects run the registered `idea-handoff.mjs` twin over the generated `plugins/sp/lib/idea-handoff.generated.mjs`, and a missing script fails closed |
+| `handoff-finalize:onEnter:0` | EXT | `spur feature handoff` invokes the shared `finalizeIdeaHandoff` application operation in source and installed projects; the former plugin script, twin and generated bundle were retired by script absorption |
 
 ### docs-pipeline.yaml
 
@@ -221,7 +221,7 @@ predicates — the digest-locked measured-PASS comparison keeps its fail-closed 
 
 0823 rebuilt the over-budget programs under the ADR-115 caps: the three lifecycle transitions are
 now `command.gate` built-ins (option c), the quality gate is the `quality-gate.ts` extension
-(option d), and the remaining compounds are condensed in place (option e). Dispositions marked
+(option d; `spur task gate` since script-absorption PR-3), and the remaining compounds are condensed in place (option e). Dispositions marked
 `warn` sit in the advisory band; each keeps its one-line reason as a YAML comment directly above
 the action (R1) — as does the warn-band `verify → test-fix` guard, whose sibling `verify → record`
 collapsed to the single `jq -e` verdict predicate.
@@ -238,10 +238,10 @@ write order without a subprocess pipe-buffer cap before appending each attempt t
 | `precheck:onEnter:5` | GLUE (warn) | route-reason lookup + routes log |
 | `implement:onEnter:1` | BUILTIN | `command.gate` `task update wip --no-lifecycle` with transient retry |
 | `implement:onEnter:2` | POLICY | `$formatCmd ; exit 0`; project-only formatter, best-effort |
-| `test:onEnter:6` | EXT (warn) | wrapper for `quality-gate.ts run` (option d); runs the per-project `qualityGateCmd` |
+| `test:onEnter:6` | EXT (warn) | wrapper for `spur task gate <wbs> run` (option d); runs the per-project `qualityGateCmd` |
 | `test-fix:onEnter:0` | GLUE | mutation-policy gate |
 | `test-fix:onEnter:1` | GLUE (warn) | fixall attempt counter + verdict hand-off |
-| `test-recheck:onEnter:1` | EXT (warn) | wrapper for `quality-gate.ts recheck`; `gateProbeCmd` fast path, then `qualityGateCmd` |
+| `test-recheck:onEnter:1` | EXT (warn) | wrapper for `spur task gate <wbs> recheck`; `gateProbeCmd` fast path, then `qualityGateCmd` |
 | `verify:onEnter:2` | EXT | wrapper for `verify-answer-lint.ts` (option d) |
 | `verify:onEnter:3` | SIMPLE | single `task verdict --from-answer` |
 | `verify:onEnter:4` | GLUE (warn) | proof-digest injection into the verdict json (one jq mutation) |
@@ -301,18 +301,15 @@ invokes must resolve in a seeded project or degrade deliberately:
 
 - **Built-in action kinds** (`doctor.probe`, `command.gate`, `run.artifact`) run in-process in the
   `spur` CLI, which seeded projects install — portable by construction.
-- **External extensions** under `plugins/sp/scripts/` resolve via
-  `bun "$(superskill script path sp <name>.ts)"`; the workflows that use them carry a `spur`-verb
-  fallback for projects without the plugin.
-- **Application services** in `packages/app` are monorepo-only by source, but a plugin script can
-  reach one through a generated bundle: `scripts/commands/bundle-plugin-lib.ts` emits a committed,
-  standalone `plugins/sp/lib/*.generated.mjs` ESM module (the 0669 `artifact-digest` precedent),
-  and the registered ADR-065 twin imports it by relative URL, so bare `node` in a seeded project
-  runs the same tested application function the monorepo branch executes. The idea handoff has
-  used this bridge since 0824 (`idea-handoff.ts` over `lib/idea-handoff.generated.mjs`, with the
-  bundle's `import.meta.main` pinned off and the workflow failing closed when the script is
-  absent). A shell copy of the application logic stays rejected — one implementation, two
-  transports.
+- **Reusable application operations** in `packages/app` are bundled into the installed Spur CLI.
+  Shipped workflows invoke their owning-noun transports, including `spur feature handoff` and
+  `spur workflow inline`; they do not resolve plugin scripts or generated library bundles.
+- **Plugin hooks** remain plugin-owned entries and cores, executed by
+  `superskill hook run sp <id>` from the installed plugin layout. They invoke ordinary Spur
+  commands when they need project operations.
+
+The earlier generated-bundle bridge (0824/0669) was retired by script absorption on 2026-10-15.
+Application logic still has one implementation, shared by the source and installed CLI.
 
 ## Precedent this record sets
 

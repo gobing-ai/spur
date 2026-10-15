@@ -63,6 +63,7 @@ export const SHARED_OPTIONS = {
     runAgentPin: ['--run <runId>', 'Pin a specific run id (default: spec latest run)'] as const,
     runIdTask: ['--run-id <id>', 'Explicit run_id (auto-generated when omitted)'] as const,
     runIdWorkflow: ['--run-id <id>', 'Persisted run id for workflow run'] as const,
+    runIdInline: ['--run-id <id>', 'Inline run id (one safe filename component under .spur/run/)'] as const,
     sourceLink: ['--source <source>', 'Link source identifier (e.g. next-auto)'] as const,
     sourceHistory: [
         '--source <source>',
@@ -121,6 +122,10 @@ export const SHARED_OPTIONS = {
         'Force applying reopen proposals without confirmation; also bypasses repeated-BLOCKED suppression',
     ] as const,
     forceInitRecreate: ['--force', 'Recreate files that already exist'] as const,
+    forceTaskPreflight: [
+        '--force',
+        'Verify-only: re-verify an already-done/cancelled task instead of skipping',
+    ] as const,
     forceWorkflowClean: ['--force', 'Clean ALL non-terminal runs regardless of age (overrides --older-than)'] as const,
     forceWorkflowContinue: ['--force', 'Proceed with resume even if workflow definition drift is detected'] as const,
     strictFeature: ['--strict', 'Elevate warnings to failures'] as const,

@@ -138,12 +138,6 @@ states:
       Pipeline start. Task statuses are NOT mutated by wrap-up — wrap-up consumes
       completed tasks and produces learning/metrics/doc artifacts only.
     onEnter:
-      # 0960 R2: run-start script-resolution identity — record which tree this run
-      # resolved (source-repo vs installed) before any step executes. Never aborts.
-      - kind: shell
-        options:
-          command: >-
-            S=plugins/sp/scripts/script-root.ts; [ -f config/plugin-scripts.json -a -f "$S" ] || S="$(superskill script path sp script-root.mjs 2>/dev/null)"; RUNNER=bun; case "$S" in *.mjs) RUNNER=node ;; esac; [ -f "$S" ] && "$RUNNER" "$S" --run-id "$__runId" --spur-bin "$spurBin" || echo "script-root failed closed — run 'superskill install sp --marketplace gobing-ai/spur'" >&2; exit 0
       - kind: note
         options:
           message: "Wrap-up pipeline start for tasks: ${vars.tasks}. Task statuses are NOT mutated."
@@ -173,25 +167,20 @@ states:
       - kind: note
         options:
           message: "Resolving task list: ${vars.tasks} (proportional mode: ${vars.mode})"
-      # (d) wrapup-steps.ts resolve owns task capture and status resolution (0824);
-      # the wrapper only locates it (monorepo first, registered twin under node) and
+      # (d) `spur task wrapup resolve` owns task capture and status resolution (0824;
+      # script-absorption PR-5 retired the wrapup-steps plugin script). A nonzero exit
       # fails closed, writing FAIL for the failed defense edge — never PASS.
       - kind: shell
         options:
           command: >-
             mkdir -p .spur/run &&
-            eval "$(jq -r 'if .mode=="source-repo" then "S="+@sh"\(.dir)/wrapup-steps.ts"+" RUNNER=bun" elif .mode=="installed" then "S="+@sh"\(.dir)/wrapup-steps.mjs"+" RUNNER=node" else empty end' ".spur/run/$__runId-script-root.json" 2>/dev/null)"; if [ -f "$S" ]; then
-              "$RUNNER" "$S" resolve;
-            else
-              echo "wrapup-steps failed closed — script not found — run 'superskill install sp --marketplace gobing-ai/spur'" >&2;
-              printf 'FAIL\n' > ".spur/run/$__runId-wrapup-resolve.status";
-            fi
+            $spurBin task wrapup resolve --no-logo || { rc=$?; echo "task wrapup resolve failed closed (rc=$rc)" >&2; printf 'FAIL\n' > ".spur/run/$__runId-wrapup-resolve.status"; }
       # (0944 R1-R3) deterministic drift probe — runs ONLY when the caller left mode
       # empty (a caller-set mode is projected verbatim and the probe never runs). It
       # writes <runId>-drift-probe.json {clean,reasons,paths} and projects the wrapup
       # mode by writing <runId>-mode.txt: caller mode verbatim, `fast` when the probe
-      # is clean, empty when dirty (the probe script fails safe on any lookup or parse
-      # problem; a missing script writes a dirty probe + empty mode here). The next
+      # is clean, empty when dirty (`spur task wrapup drift-probe` fails safe on any lookup
+      # or parse problem; a nonzero exit writes a dirty probe + empty mode here). The next
       # action reads the mode file into vars.mode via file.read.into-var.
       - kind: shell
         options:
@@ -199,13 +188,11 @@ states:
             if [ -n "$mode" ]; then
               printf '%s\n' "$mode" > ".spur/run/$__runId-mode.txt";
             else
-              eval "$(jq -r 'if .mode=="source-repo" then "S="+@sh"\(.dir)/wrapup-drift-probe.ts"+" RUNNER=bun" elif .mode=="installed" then "S="+@sh"\(.dir)/wrapup-drift-probe.mjs"+" RUNNER=node" else empty end' ".spur/run/$__runId-script-root.json" 2>/dev/null)";
-              if [ -f "$S" ]; then
-                "$RUNNER" "$S";
-              else
-                printf '{"clean":false,"reasons":["probe script not found"],"paths":[]}' > ".spur/run/$__runId-drift-probe.json";
+              $spurBin task wrapup drift-probe --no-logo || {
+                rc=$?;
+                printf '{"clean":false,"reasons":["drift probe failed (rc=%s)"],"paths":[]}' "$rc" > ".spur/run/$__runId-drift-probe.json";
                 printf '\n' > ".spur/run/$__runId-mode.txt";
-              fi;
+              };
             fi
       - kind: file.read.into-var
         options:
@@ -213,7 +200,7 @@ states:
           var: mode
       # (e) route-reason writer: one table lookup over the projected mode var over
       # the validated capture and the drift probe verdict; workflow-local routing
-      # glue (0824, moved behind the wrapup-steps locator in 0944 to stay inside the
+      # glue (0824, moved behind `spur task wrapup` in 0944/PR-5 to stay inside the
       # ADR-115 shell caps). Runs AFTER the probe/projection so the reason reflects
       # the projected mode. Reads ONLY .spur/run/<runId>-wrapup-tasks.json and the
       # probe verdict — never raw vars.tasks (0783 R2/R5). A FAIL resolve exits
@@ -226,12 +213,7 @@ states:
         options:
           command: >-
             mkdir -p .spur/run .spur/memory &&
-            eval "$(jq -r 'if .mode=="source-repo" then "S="+@sh"\(.dir)/wrapup-steps.ts"+" RUNNER=bun" elif .mode=="installed" then "S="+@sh"\(.dir)/wrapup-steps.mjs"+" RUNNER=node" else empty end' ".spur/run/$__runId-script-root.json" 2>/dev/null)"; if [ -f "$S" ]; then
-              "$RUNNER" "$S" route-reason;
-            else
-              echo "wrapup-steps failed closed — script not found — run 'superskill install sp --marketplace gobing-ai/spur'" >&2;
-              printf 'FAIL\n' > ".spur/run/$__runId-wrapup-resolve.status";
-            fi
+            $spurBin task wrapup route-reason --no-logo || { rc=$?; echo "task wrapup route-reason failed closed (rc=$rc)" >&2; printf 'FAIL\n' > ".spur/run/$__runId-wrapup-resolve.status"; }
 
   - id: doc-sync
     description: >
@@ -259,11 +241,7 @@ states:
         options:
           command: >-
             mkdir -p .spur/run &&
-            eval "$(jq -r 'if .mode=="source-repo" then "S="+@sh"\(.dir)/wrapup-steps.ts"+" RUNNER=bun" elif .mode=="installed" then "S="+@sh"\(.dir)/wrapup-steps.mjs"+" RUNNER=node" else empty end' ".spur/run/$__runId-script-root.json" 2>/dev/null)"; if [ -f "$S" ]; then
-              "$RUNNER" "$S" doc-sync-snapshot;
-            else
-              echo "wrapup-steps failed closed — script not found — run 'superskill install sp --marketplace gobing-ai/spur'" >&2;
-            fi
+            $spurBin task wrapup doc-sync-snapshot --no-logo || echo "task wrapup doc-sync-snapshot failed (rc=$?) — the scope check fails closed on the missing snapshot" >&2
       # (warn) free-form prompt: no /sp:doc-evolve command surface yet (ADR-043
       # residual, 0607 R2 one-query merge); capture is bounded by expectFile.
       - kind: agent.run
@@ -296,12 +274,7 @@ states:
         options:
           command: >-
             mkdir -p .spur/run &&
-            eval "$(jq -r 'if .mode=="source-repo" then "S="+@sh"\(.dir)/wrapup-steps.ts"+" RUNNER=bun" elif .mode=="installed" then "S="+@sh"\(.dir)/wrapup-steps.mjs"+" RUNNER=node" else empty end' ".spur/run/$__runId-script-root.json" 2>/dev/null)"; if [ -f "$S" ]; then
-              "$RUNNER" "$S" doc-sync-scope;
-            else
-              echo "wrapup-steps failed closed — script not found — run 'superskill install sp --marketplace gobing-ai/spur'" >&2;
-              printf 'scope-violation: wrapup-steps script not found\n' > ".spur/run/$__runId-wrapup-doc-sync-scope.status";
-            fi
+            $spurBin task wrapup doc-sync-scope --no-logo || { rc=$?; echo "task wrapup doc-sync-scope failed closed (rc=$rc)" >&2; printf 'scope-violation: task wrapup doc-sync-scope failed\n' > ".spur/run/$__runId-wrapup-doc-sync-scope.status"; }
       # (1147 R2) supersession pins re-run: a doc-sync that resurrects a deliberately
       # delinked index row (`repo-wide-tests/adr-supersession.test.ts`, g2) fails HERE,
       # named with the pin, instead of being attributed to the later doc-tripwire
@@ -310,12 +283,7 @@ states:
         options:
           command: >-
             mkdir -p .spur/run &&
-            eval "$(jq -r 'if .mode=="source-repo" then "S="+@sh"\(.dir)/wrapup-steps.ts"+" RUNNER=bun" elif .mode=="installed" then "S="+@sh"\(.dir)/wrapup-steps.mjs"+" RUNNER=node" else empty end' ".spur/run/$__runId-script-root.json" 2>/dev/null)"; if [ -f "$S" ]; then
-              "$RUNNER" "$S" doc-supersession;
-            else
-              echo "wrapup-steps failed closed — script not found — run 'superskill install sp --marketplace gobing-ai/spur'" >&2;
-              printf 'supersession-pin-failed: wrapup-steps script not found\n' > ".spur/run/$__runId-wrapup-doc-supersession.status";
-            fi
+            $spurBin task wrapup doc-supersession --no-logo || { rc=$?; echo "task wrapup doc-supersession failed closed (rc=$rc)" >&2; printf 'supersession-pin-failed: task wrapup doc-supersession failed\n' > ".spur/run/$__runId-wrapup-doc-supersession.status"; }
 
   - id: learnings-validate
     description: >
@@ -421,18 +389,13 @@ states:
       is UNKNOWN telemetry, never proof of completion; previously written valid rows
       survive a failure.
     onEnter:
-      # (d) wrapup-steps.ts metrics owns the JSONL row append (0824); the wrapper
-      # only locates it and fails closed — FAIL, never a silent skip.
+      # (d) `spur task wrapup metrics` owns the JSONL row append (0824); a nonzero
+      # exit fails closed — FAIL, never a silent skip.
       - kind: shell
         options:
           command: >-
             mkdir -p .spur/run &&
-            eval "$(jq -r 'if .mode=="source-repo" then "S="+@sh"\(.dir)/wrapup-steps.ts"+" RUNNER=bun" elif .mode=="installed" then "S="+@sh"\(.dir)/wrapup-steps.mjs"+" RUNNER=node" else empty end' ".spur/run/$__runId-script-root.json" 2>/dev/null)"; if [ -f "$S" ]; then
-              "$RUNNER" "$S" metrics;
-            else
-              echo "wrapup-steps failed closed — script not found — run 'superskill install sp --marketplace gobing-ai/spur'" >&2;
-              printf 'FAIL\n' > ".spur/run/$__runId-wrapup-metrics.status";
-            fi
+            $spurBin task wrapup metrics --no-logo || { rc=$?; echo "task wrapup metrics failed closed (rc=$rc)" >&2; printf 'FAIL\n' > ".spur/run/$__runId-wrapup-metrics.status"; }
 
   - id: feature-transition
     description: >
@@ -450,9 +413,9 @@ states:
       (the engine only enters this state when vars.feature is set) and fails
       loud (dogfood 2026-08-15, feature I3).
     onEnter:
-      # (d) wrapup-steps.ts feature-transition owns the bounded sync, observation
-      # and the gate (0824); the wrapper only locates it and fails closed. The
-      # script terminates exit 0 on every path so artifacts that already landed
+      # (d) `spur task wrapup feature-transition` owns the bounded sync, observation
+      # and the gate (0824); a nonzero exit fails closed. The
+      # step terminates exit 0 on every path so artifacts that already landed
       # are never discarded; soft TERMINATION is not soft TRUTH — only a verified
       # sync writes PASS (0783 R4). A gate PASS can never convert a failed sync
       # into success, and a gate FAIL fails the step (0770 failure routing).
@@ -460,12 +423,7 @@ states:
         options:
           command: >-
             mkdir -p .spur/run &&
-            eval "$(jq -r 'if .mode=="source-repo" then "S="+@sh"\(.dir)/wrapup-steps.ts"+" RUNNER=bun" elif .mode=="installed" then "S="+@sh"\(.dir)/wrapup-steps.mjs"+" RUNNER=node" else empty end' ".spur/run/$__runId-script-root.json" 2>/dev/null)"; if [ -f "$S" ]; then
-              "$RUNNER" "$S" feature-transition;
-            else
-              echo "wrapup-steps failed closed — script not found — run 'superskill install sp --marketplace gobing-ai/spur'" >&2;
-              printf 'FAIL\n' > ".spur/run/$__runId-wrapup-sync.status";
-            fi
+            $spurBin task wrapup feature-transition --no-logo || { rc=$?; echo "task wrapup feature-transition failed closed (rc=$rc)" >&2; printf 'FAIL\n' > ".spur/run/$__runId-wrapup-sync.status"; }
 
   - id: feature-verify
     description: >

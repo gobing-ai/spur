@@ -34,6 +34,7 @@ import {
     mkdirSync,
     readdirSync,
     readFileSync,
+    realpathSync,
     renameSync,
     statSync,
     unlinkSync,
@@ -83,7 +84,7 @@ export function runStoragePaths(cwd: string): RunStoragePaths {
 function resolveRunStorageRoot(cwd: string): string {
     const start = resolve(cwd);
     // `/tmp` too: a nested TMPDIR (`/tmp/claude-501`) puts the walk through `/tmp` after tmpdir().
-    const sharedTmp = new Set([resolve(tmpdir()), '/tmp', '/private/tmp']);
+    const sharedTmp = new Set([resolve(tmpdir()), realpathSync(tmpdir()), '/tmp', '/private/tmp']);
     let current = start;
     for (;;) {
         if (

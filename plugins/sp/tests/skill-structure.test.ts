@@ -540,7 +540,7 @@ describe('sp plugin structure — functional split invariants (task 0161 / ADR-0
         expect(executionBatch).toContain('optional parallel fan-out');
         expect(devRunall).toContain('--mode <sequential|parallel|auto>');
         expect(devRunall).toContain('--feature <id>');
-        expect(executionBatch).toContain('batch-plan.mjs)" order --tasks');
+        expect(executionBatch).toContain('spur task batch-plan order --tasks');
         expect(executionBatch).toContain('### 2.4a `--mode auto` resolution');
     });
 
@@ -1027,15 +1027,11 @@ describe('sp plugin structure — functional split invariants (task 0161 / ADR-0
         expect(text).toContain('--out .spur/run');
     });
 
-    // HA-S1 (0660 R9): workflow fixtures cover the eight cache cases. Task 1005: the logic moved
-    // to packages/app, so the matrix is covered across both the plugin script pins and the app
-    // module tests — the union of the two fixture files must carry every case.
+    // HA-S1 (0660 R9): workflow fixtures cover the eight cache cases. Task 1005 moved the logic
+    // to packages/app; script-absorption PR-6 moved the op pins next to it (`spur history
+    // anatomy`) — the union of the two fixture files must carry every case.
     test('history-anatomy workflow fixtures cover the cache decision matrix (0660 R9)', () => {
-        const testsDir = join(PLUGIN_ROOT, 'tests');
-        const fixture = join(testsDir, 'history-anatomy-cache.test.ts');
-        if (!existsSync(fixture)) {
-            return;
-        }
+        const fixture = join(REPO_ROOT, 'packages/app/tests/services/history-anatomy-cli.test.ts');
         const text = [
             readFileSync(fixture, 'utf8'),
             readFileSync(join(REPO_ROOT, 'packages/app/tests/services/history-anatomy.test.ts'), 'utf8'),
@@ -2388,9 +2384,9 @@ describe('task 0820 — spur-composer and spur-doctor skills compose, evaluate a
 describe('task 0827 — spur-doctor judges workflows by composition findings and step profiles', () => {
     const doctor = readFileSync(join(SKILLS_DIR, 'spur-doctor', 'SKILL.md'), 'utf8');
 
-    test('R1 — the workflow evidence row names the profile script and `workflow validate --json`', () => {
-        expect(doctor).toContain('workflow-step-profile.mjs');
-        expect(doctor).toContain('superskill script path sp workflow-step-profile.mjs');
+    test('R1 — the workflow evidence row names `spur workflow profile` and `workflow validate --json`', () => {
+        expect(doctor).toContain('spur workflow profile <workflow> --json');
+        expect(doctor).not.toContain('workflow-step-profile.mjs');
         expect(doctor).toContain('spur workflow validate --json');
         expect(doctor).toContain('findings by `level`');
     });

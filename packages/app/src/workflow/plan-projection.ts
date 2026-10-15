@@ -7,11 +7,9 @@
  * workflow actions or guards.
  *
  * Lives beside `step-reporter.ts` and reuses `VisibleItem`/`VisibleOutcome`.
- * It is a separate file because it is a standalone bundle entrypoint:
- * `plugins/sp/scripts/batch-plan.ts` reaches these functions through the
- * generated `plugins/sp/lib/plan-projection.generated.mjs` (node-builtin only,
- * so the committed `.mjs` twin runs under bare `node`). Regenerate with the
- * `bundlePlanProjectionLib` entry in `scripts/commands/bundle-plugin-lib.ts`.
+ * It is a separate file because it was a standalone bundle entrypoint for the
+ * plugin scripts; script-absorption PR-6 retired that bundle, and `spur task
+ * batch-plan` (./batch-plan.ts, PR-5) imports these functions directly.
  */
 import type { StateDef, StateDisplay, StateMachineWorkflowDef, WorkflowDef } from '@gobing-ai/ts-dual-workflow-engine';
 import type { VisibleItem, VisibleOutcome } from './step-reporter';

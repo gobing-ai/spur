@@ -55,7 +55,7 @@ record saves the returned table under `docs/reports/`; the doctor creates no art
 | task | `spur task check <wbs> --json` |
 | feature | `spur feature check <id> --json` |
 | rule | `spur rule trace --json`, `spur rule validate` |
-| workflow | `spur workflow validate --json` (findings by `level`), `node "$(superskill script path sp workflow-step-profile.mjs)" <workflow> --json` |
+| workflow | `spur workflow validate --json` (findings by `level`), `spur workflow profile <workflow> --json` |
 | agent spec | `spur agent list --specs --json` |
 | history | A `sp:history-anatomy` report ([../history-anatomy/SKILL.md](../history-anatomy/SKILL.md)), never raw history records |
 | plan/design Markdown | The file itself, the project constitution, the relevant spur-dev template, and inbound index/links; no new CLI needed |
@@ -105,13 +105,13 @@ rows stay per file. Flagged rows wait for the operator's answer.
 
 ## Workflow step profile and cache-window flags
 
-The step profile (`plugins/sp/scripts/workflow-step-profile`, ADR-065 plugin entrypoint whose aggregation core lives in `packages/app/src/workflow/step-profile.ts`) reads
+The step profile (`spur workflow profile`, aggregation core in `packages/app/src/workflow/step-profile.ts`) reads
 `spur workflow trace` for a workflow's last N completed, non-dry runs. Per node and action kind it
 reports run count, executions, p50 and max `durationMs`, p50 idle gap before the step, session mode
 (`fresh`, `resumed` or `mixed`) and `cacheHit` p50 with its coverage — satellite §10 step evidence.
 
 ```bash
-node "$(superskill script path sp workflow-step-profile.mjs)" <workflow> --json
+spur workflow profile <workflow> --json
 ```
 
 `W` is the cache window, **300** seconds by default (satellite §10). The script computes every flag

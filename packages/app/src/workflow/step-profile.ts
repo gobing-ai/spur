@@ -7,11 +7,8 @@
  * aggregation core over those events — per node/action-kind rows with durations, idle gaps, session
  * mode and `cacheHit` coverage, plus the four cache-window flags the doctor turns into proposals.
  *
- * Moved from `plugins/sp/scripts/workflow-step-profile.ts` (task 1005 R1, ADR-130 lib rule): the
- * plugin script keeps argv/IO glue and reaches this module through the generated standalone bundle
- * `plugins/sp/lib/step-profile.generated.mjs` — node-builtin only, so the script's committed `.mjs`
- * twin runs under bare `node`. Regenerate with `bun run build:plugin-lib`; do not hand-edit
- * generated files.
+ * Moved from `plugins/sp/scripts/workflow-step-profile.ts` (task 1005 R1, ADR-130 lib rule); the
+ * argv/IO glue is `./step-profile-cli.ts` behind `spur workflow profile` (script-absorption PR-6).
  */
 // ── Input shapes (a subset of the live `spur workflow trace --json` payload) ─────────────
 

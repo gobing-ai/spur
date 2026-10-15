@@ -284,9 +284,8 @@ the deterministic Testing writer `spur task record` (section authorship never ha
 # write .spur/run/<wbs>-verdict.json (shape in references/verdict-schema.md), then:
 spur task record <wbs> --verdict-file .spur/run/<wbs>-verdict.json  # renders ## Testing, flips proven boxes
 # F96 residual sweep (observe-only): scan + fold AFTER record, under every --fix mode (0987).
-RESIDUAL=$(superskill script path sp residual-scan.mjs)
-node "$RESIDUAL" scan <wbs>
-node "$RESIDUAL" fold <wbs>
+spur task residual <wbs> scan
+spur task residual <wbs> fold
 # Downgrade only: re-record so Testing carries the final (folded) verdict.
 [ "$(jq -r .verdict .spur/run/<wbs>-verdict.json)" = PASS ] \
   || spur task record <wbs> --verdict-file .spur/run/<wbs>-verdict.json
@@ -297,10 +296,9 @@ node "$RESIDUAL" fold <wbs>
 > `residual-sweep` check in place (PASS → PARTIAL when a blocking residual exists), and the
 > downgrade-only re-record transcribes it — a manual verify cannot certify what the pipeline would
 > reject. The sweep runs after `record` (same order as the pipeline, 0983/0987): before it, a
-> verdict-proven box is still unticked and a clean PASS would fold to PARTIAL. Resolve the
-> script via `superskill script path sp residual-scan.mjs`; shipped surfaces never reference
-> `plugins/sp/scripts/` directly (script-contract-check rule 4). When the task reaches `done`
-> through `--next`, run `residual-scan settle` (links follow-up tasks; best-effort).
+> verdict-proven box is still unticked and a clean PASS would fold to PARTIAL. The sweep is the
+> `spur task residual` verb (no plugin script to resolve). When the task reaches `done` through
+> `--next`, run `spur task residual <wbs> settle` (files the follow-up task; best-effort).
 
 > **Corrections: the answer file is the source of truth.** `spur task record` re-transcribes
 > `## Testing` from the verdict artifact — direct `--section Testing` writes are futile. Fix

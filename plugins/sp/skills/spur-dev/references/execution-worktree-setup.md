@@ -20,7 +20,7 @@ lifecycle for the sequential batch loop. `--mode parallel` has its own per-task 
 rejected there (parallel mode already isolates each task in its own worktree).
 
 **Startup ordering (task 0814 R3).** Resolve the selector/status filter and run the quick
-command-aware readiness (the `quickReadiness` contract in `batch-preflight.ts`) **before** creating
+command-aware readiness (the `quickReadiness` contract behind `spur task preflight --operation`) **before** creating
 or adopting the tree. The admission decision is what determines whether a tree should be cut at all;
 all subsequent tools, agents, task/feature writes, and run artifacts use the confirmed execution
 tree's cwd. A stale or empty selector, an unsupported mode, or an invalid target creates no tree and
@@ -209,7 +209,7 @@ the worktree directory before launching the loop.
 
 `.spur/memory/evidence/` and `.spur/run/` are **untracked per-tree** planes, so a fresh worktree
 starts with neither while the invoking tree holds every earlier task's verdict. Both
-`preflightFeature` (`plugins/sp/scripts/wrapup-steps.ts` → `spur feature check --strict --as done`
+`preflightFeature` (`spur task wrapup resolve` → `spur feature check --strict --as done`
 with cwd = the worktree) and `runMetrics` resolve verdict artifacts relative to the tree they run
 in, so without this step an already-`done` linked task reads as missing evidence
 (`L4.evidence-not-recoverable`, `L4.scenario-unverified`) and its metrics row degrades to
@@ -346,14 +346,13 @@ fingerprints the invoking tree, which is also where its commit lands. The confli
 fingerprints the invoking tree for the same reason (its own step 1b).
 
 ```bash
-GUARD=plugins/sp/scripts/commit-guard.ts; [ -f config/plugin-scripts.json -a -f "$GUARD" ] || GUARD="$(superskill script path sp commit-guard.mjs 2>/dev/null)"
 # Pinned subshell, same discipline as WT-3b: select the execution tree for this one call.
 (
   cd -- "../<worktree-dir>" || { echo "tree missing: expected ../<worktree-dir>" >&2; exit 1; }
   [ "$(git branch --show-current)" = "$BRANCH" ] \
     || { echo "branch mismatch: expected $BRANCH, got $(git branch --show-current)" >&2; exit 1; }
   RUN_ID="<marker-id>"   # the WT-3 marker's id — the same id WT-3b's stage call uses
-  bun "$GUARD" start --run "$RUN_ID"   # <worktree>/.spur/run/$RUN_ID-tree-start.json = { head, dirty[] }
+  spur workflow commit-guard start --run "$RUN_ID"   # <worktree>/.spur/run/$RUN_ID-tree-start.json = { head, dirty[] }
 )
 ```
 
@@ -369,9 +368,8 @@ same call, verifies the WT-3 identity, and never relies on a persistent `cd` or 
   cd -- "../<worktree-dir>" || { echo "tree missing: expected ../<worktree-dir>" >&2; exit 1; }
   [ "$(git branch --show-current)" = "$BRANCH" ] \
     || { echo "branch mismatch: expected $BRANCH, got $(git branch --show-current)" >&2; exit 1; }
-  GUARD=plugins/sp/scripts/commit-guard.ts; [ -f config/plugin-scripts.json -a -f "$GUARD" ] || GUARD="$(superskill script path sp commit-guard.mjs 2>/dev/null)"
-  bun "$GUARD" check --run "$RUN_ID"        # 1129 R3: concurrent foreign writers; a non-empty list goes in the batch report
-  bun "$GUARD" stage --run "$RUN_ID" -- <files-the-batch-wrote> \
+  spur workflow commit-guard check --run "$RUN_ID"        # 1129 R3: concurrent foreign writers; a non-empty list goes in the batch report
+  spur workflow commit-guard stage --run "$RUN_ID" -- <files-the-batch-wrote> \
     || { echo "WT-3b halt: commit-guard refused a path (foreign, unmerged or conflict-marked); nothing committed" >&2; exit 1; }
   git commit -m "<type>(<scope>): <command> <selector> batch writes"
 )
@@ -379,7 +377,7 @@ same call, verifies the WT-3 identity, and never relies on a persistent `cd` or 
 
 > **Forbidden in every driver commit step:** `git add -A` and `git add .`. They stage whatever a
 > concurrent writer happened to leave in the tree — the two incidents this guard exists for are
-> `a94f9f431` and `36f274590` — so a driver stages only through `commit-guard stage`.
+> `a94f9f431` and `36f274590` — so a driver stages only through `spur workflow commit-guard stage`.
 
 > **`stage` takes files, never directories.** A directory argument is refused as `(unchanged since
 > base)` and stages *nothing*, so a task whose diff lives in a moved tree must expand the changed

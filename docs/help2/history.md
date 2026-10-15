@@ -12,6 +12,9 @@ a local SQLite corpus you can query for spend, cache efficiency, and per-task fo
 | `reset` | Destructively wipe every history table (requires `--yes`) |
 | `report` | Render a previously generated artifact as a spend + forensic report |
 | `daily` | Run-once pipeline: import-all → analyze → write artifact → prune old reports |
+| `anatomy <op>` | history-anatomy cache ops (digest, check, paths, assert-clean, probe, stamp, refresh, publish) |
+| `timeline` | Per-prompt work/wait time and tokens from the host transcript (JSON) |
+| `summary` | Daily summary report: tokens, git activity, history health, annotations |
 
 ## spur history import
 
@@ -93,3 +96,37 @@ References: live spur CLI --help output (authoritative; snapshots: history.txt +
 docs/help carry-over (accuracy) > DeepWiki TOC (structure signal only).
 Verified: every command, verb, and flag above matches the live snapshots.
 -->
+
+## spur history anatomy
+
+```bash
+spur history anatomy <op> [op flags...]
+```
+
+Deterministic cache ops behind the `history-anatomy` workflow: `digest`, `check`, `paths`,
+`assert-clean`, `probe`, `stamp`, `refresh`, `publish`. Exit `0` ok, `1` usage or op failure.
+
+## spur history timeline
+
+```bash
+spur history timeline [--transcript <path>] [--group <spec>]
+```
+
+| Flag | Description |
+| --- | --- |
+| `--transcript <path>` | Transcript JSONL path (default: the active host session) |
+| `--group <spec>` | Sum segments into stages, e.g. `"1-3,4"` |
+
+## spur history summary
+
+```bash
+spur history summary [--date <date>] [--dry-run] [--output <path>] [--no-git] [--no-ccusage]
+```
+
+| Flag | Description |
+| --- | --- |
+| `--date <date>` | `YYYY-MM-DD`, `today` or `yesterday` (default: today) |
+| `--dry-run` | Print without writing the file |
+| `--output <path>` | Write to a custom path |
+| `--no-git` | Skip git history collection |
+| `--no-ccusage` | Skip token usage collection |

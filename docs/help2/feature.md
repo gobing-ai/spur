@@ -17,6 +17,8 @@ its whole subtree. Backed by the same CLI-gated write path as `spur task`.
 | `refresh` | Rebuild INDEX.md and per-feature task tables (docs only) |
 | `check [id]` | Validate feature file(s) through the four-layer check |
 | `sync [id]` | Align feature status with linked task states |
+| `verify [id]` | Run the feature verification pass and record its receipt |
+| `handoff [id]` | Finalize the idea pipeline and write the handoff report |
 
 ## spur feature create
 
@@ -123,6 +125,25 @@ bypasses repeated-BLOCKED suppression (task 1004). Docs regeneration is `refresh
 spur feature sync F7 --dry-run --json
 spur feature sync --all --json
 ```
+
+## spur feature verify
+
+```bash
+spur feature verify <id> --run-id <id> [--cmd <command>] [--confidence <level>] [--ack-low-confidence]
+```
+
+The `feature-verification` workflow pass: runs the feature's verification command once and
+records a PASS/FAIL receipt bound to the run. Exits 0 after a completed pass and 1 when the
+pass could not run.
+
+## spur feature handoff
+
+```bash
+spur feature handoff <id> --run-id <id> [--spur-bin <cmd>]
+```
+
+The `idea-pipeline` finalization: applies task ordering, refreshes the feature roster, checks
+the created tasks and writes the handoff report with exactly one next command. Fails closed.
 
 ## See also
 

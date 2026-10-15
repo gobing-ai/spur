@@ -15,6 +15,8 @@ import type { CliContext } from '../context';
 import { toEnvelopeJson, writeJsonError } from '../output';
 import { makePlanningEmitter } from '../planning-emitter';
 import { makeLifecycleAdapter } from '../workflow/make-lifecycle-adapter';
+import { registerFeatureHandoffCommand } from './feature/handoff';
+import { registerFeatureVerifyCommand } from './feature/verify';
 import { SHARED_OPTIONS } from './shared-options';
 
 /** Register the `spur feature` command and its subcommands on the CLI program. */
@@ -614,6 +616,10 @@ export function registerFeatureCommand(program: Command, context: CliContext): v
                 context.setExitCode(1);
             }
         });
+
+    // ── verify / handoff (script-absorption PR-5: feature-verification-steps, idea-handoff) ──
+    registerFeatureVerifyCommand(feature, context);
+    registerFeatureHandoffCommand(feature, context);
 }
 
 /**

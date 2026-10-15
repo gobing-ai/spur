@@ -276,34 +276,26 @@ function runInlineSmoke(
                 // handled by the fake — it therefore consumes one CHECK_COUNTER slot.
                 // 1003 R2: the verify-stage lint gate is `spur task verdict` itself — the fake
                 // spur already handles `task verdict`, no separate lint step remains to simulate.
-                // 0823: the quality gate is a plugin script (quality-gate.ts run|recheck) the
-                // shell resolves like the other checkers, so the smoke simulates its verdict
-                // contract (plugins/sp/tests/quality-gate.test.ts owns the script): run resets
+                // 0823 / PR-3: the quality gate is `spur task gate <wbs> run|recheck`, so the smoke
+                // simulates its verdict contract (packages/app/tests/services/quality-gate*.test.ts
+                // own the gate): run resets
                 // the attempt counter and executes qualityGateCmd; recheck runs gateProbeCmd
                 // first (bun run lint is red in this sandbox, so the probe IS the recheck
                 // verdict, gate skipped). Both always leave status/findings/log for the guards.
                 // 1111: the gate shell selects the mode through `M` (run|recheck|deferred), so the
                 // stub keys on the assignment + the `"$M"` invocation instead of a literal mode.
-                if (
-                    command.includes('quality-gate.ts') &&
-                    command.includes('M=run;') &&
-                    command.includes('"$RUNNER" "$S" "$M"')
-                ) {
+                if (command.includes('M=run;') && command.includes('$spurBin task gate "$wbs" "$M"')) {
                     command =
                         'mkdir -p .spur/run; : > ".spur/run/$wbs-test-gate.log"; echo 0 > ".spur/run/$wbs-test-fix-attempt"; if $qualityGateCmd; then s=PASS; else s=FAIL; fi; printf "%s\\n" "$s" > ".spur/run/$wbs-test-gate.status"; : > ".spur/run/$wbs-test-gate.findings"; printf "proof-digest: %s\\n" "$proofDigest" >> ".spur/run/$wbs-test-gate.log"';
                 }
-                if (
-                    command.includes('quality-gate.ts') &&
-                    command.includes('M=recheck;') &&
-                    command.includes('"$RUNNER" "$S" "$M"')
-                ) {
+                if (command.includes('M=recheck;') && command.includes('$spurBin task gate "$wbs" "$M"')) {
                     command =
                         'mkdir -p .spur/run; : > ".spur/run/$wbs-test-gate.log"; if $gateProbeCmd; then s=PASS; else s=FAIL; fi; if [ "$s" = PASS ]; then if $qualityGateCmd; then s=PASS; else s=FAIL; fi; fi; printf "%s\\n" "$s" > ".spur/run/$wbs-test-gate.status"; : > ".spur/run/$wbs-test-gate.findings"; printf "proof-digest: %s\\n" "$proofDigest" >> ".spur/run/$wbs-test-gate.log"';
                 }
-                // F96 (0950): residual-scan is a plugin script like quality-gate — the smoke
-                // simulates its clean-tree contract (empty residual list, soft terminal
-                // actions); residual-scan.test.ts owns the script itself.
-                if (command.includes('residual-scan.ts') && command.includes('"$S" fold')) {
+                // F96 (0950) / PR-3: the residual sweep is `spur task residual` like the gate — the
+                // smoke simulates its clean-tree contract (empty residual list, soft terminal
+                // actions); residual-scan-run.test.ts owns the sweep itself.
+                if (command.includes('task residual "$wbs" fold')) {
                     command = 'mkdir -p .spur/run; printf "[]\\n" > ".spur/run/$wbs-residuals.json"';
                 }
                 // 1122 R3: the precheck script-root probe resolves cwd-first (the source-repo
@@ -315,8 +307,8 @@ function runInlineSmoke(
                     command = 'exit 0';
                 }
                 if (
-                    command.includes('residual-scan.ts') &&
-                    (command.includes('"$S" settle') || command.includes('"$S" report'))
+                    command.includes('task residual "$wbs" settle') ||
+                    command.includes('task residual "$wbs" report')
                 ) {
                     command = 'exit 0';
                 }

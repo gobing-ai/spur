@@ -85,14 +85,14 @@ batch can never destroy its own evidence. Reuse mode retains its operator-owned 
 persists the Step 5 report under the invoking tree; the reused tree's `.spur/run/` remains the live
 copy while that tree lives on. The per-run provenance — the worktree DB's run/action rows and the
 `.spur/memory/runs/<runId>.md` + `.state.json` records — is persisted mechanically by WT-4a's
-`inline-run-setup.ts --persist-out --from <worktree> [--task-file <merged-task>]...` call,
+`spur workflow inline persist-out --from <worktree> [--task-file <merged-task>]...` call,
 not by hand.
 
 **Stage records are worktree-local too (0948 R9, E7 Finding 5; persisted by 0975 R1).** Each task's
 own per-stage run record (`.spur/memory/runs/<runId>.md` + `.state.json`) and the worktree DB's run rows are
 written inside the worktree and **are removed with it** in create mode — the E7 batch lost exactly
 this evidence. Copying them out is no longer a manual audit-time duty: WT-4a (create-mode block
-below) runs `inline-run-setup.ts --persist-out --from "$WT_PATH"` **before** WT-4b holder cleanup,
+below) runs `spur workflow inline persist-out --from "$WT_PATH"` **before** WT-4b holder cleanup,
 which copies the run/action/phase/transition/workflow-state rows and both record files into the
 invoking tree.
 
@@ -106,7 +106,7 @@ obligation; neither do root-qualified paths (`knowledge-kit/.spur/run/…`, `/ab
 which cite another project's evidence — cite foreign run artifacts that way, never bare. A citation missing in BOTH trees, a divergent cited file (never overwritten — reconcile
 by hand), an unreadable task file, or more than 64 distinct cited files fails the pass → WT-5.
 
-**Durable planes ride it too (E71).** Persist-out copies canonical task verdicts, feature run/latest receipts, nested run artifacts and owned sessions before teardown. Artifact and task-run-link rows are exported with run rows, and stored path references are redirected to the invoking tree. Conflicting or unreadable **owned** retained evidence refuses teardown. A divergent copy of evidence a forwarded task does **not** own (its WBS is not a forwarded task's and its receipt `runId` is not a worktree run row) is `foreign-divergent` (1139 R5): it is skipped, reported as `evidenceSkipped[{name, reason:'foreign-divergent', newer:'invoking'|'worktree'}]`, and the invoking-tree copy is never overwritten — another task's newer verdict can no longer block this batch's teardown. A divergent **owned** file still fails with `durable evidence conflicts`. `persist-out-check` accepts the same foreign-divergent set from the success JSON and does not recompute it.
+**Durable planes ride it too (E71).** Persist-out copies canonical task verdicts, feature run/latest receipts, nested run artifacts and owned sessions before teardown. Artifact and task-run-link rows are exported with run rows, and stored path references are redirected to the invoking tree. Conflicting or unreadable **owned** retained evidence refuses teardown. A divergent copy of evidence a forwarded task does **not** own (its WBS is not a forwarded task's and its receipt `runId` is not a worktree run row) is `foreign-divergent` (1139 R5): it is skipped, reported as `evidenceSkipped[{name, reason:'foreign-divergent', newer:'invoking'|'worktree'}]`, and the invoking-tree copy is never overwritten — another task's newer verdict can no longer block this batch's teardown. A divergent **owned** file still fails with `durable evidence conflicts`. `spur workflow inline persist-check` accepts the same foreign-divergent set from the success JSON and does not recompute it.
 
 **Owned evidence rides it too (1012).** With at least one `--task-file`, persist-out also treats as
 copy obligations the worktree's `.spur/run/` direct children named `<wbs>-…` (the WBS is each
@@ -124,7 +124,7 @@ pass before the invoking tree is written → WT-5. Without `--task-file` nothing
 The shapes are pinned (task 0975 R1; `record-missing`, citation behavior per 0984; `evidenceSkipped` per 1139 R5): idempotent on re-persist;
 success exits 0 printing
 `{"ok":true,"persisted":<n>,"skipped":[{"id":<run-id>,"reason":"id-exists"|"external-key-conflict"|"record-conflict:<file>"|"record-missing:<file>"|"cited-directory:<name>"|"cited-symlink:<name>"|"cited-non-file:<name>"}],"evidenceSkipped":[{"name":<file>,"reason":"foreign-divergent","newer":"invoking"|"worktree"}]}`
-(`evidenceSkipped` is omitted when empty; the same object is written to `<invoking-tree>/.spur/run/persist-out.json` for `persist-out-check` to read)
+(`evidenceSkipped` is omitted when empty; the same object is written to `<invoking-tree>/.spur/run/persist-out.json` for `spur workflow inline persist-check` to read)
 — an `external-key-conflict` skip leaves the target run unchanged **and fails the pass (1049)**: the delegate exits 1 printing `{"ok":false,"error":…}` naming the skipped source run ids, because that (workflow, external key) identity already belongs to a different receiving run — the batch was not persisted, so reconcile the source worktree by hand (it stays the provenance owner of record) before any teardown: auditable reconciliation names the original archived DB snapshot and the skipped source run identities, verifies the archive by file hash and by merged-commit ancestry of the source branch, and treats any residual deletion as explicit operator-authorized cleanup under the strict canonical evidence rules above. Task 1149 R1 grades a terminal duplicate lifecycle row (`task-lifecycle`/`feature-lifecycle`) as `external-key-conflict-bookkeeping` (non-fatal), so guarded transitions driven inside the worktree do not block teardown; the receiving lifecycle row is reconciled automatically during persist-out. An `id-exists` replay repairs missing owned artifacts and task links without duplicating them. A
 `record-conflict:<file>` never overwrites a divergent invoking-tree record and causes the delegate to exit 1, retaining the worktree. Before reconciling one by hand, check **what** the invoking record is: when the run closed `done` inside a linked worktree the owning tree holds that run's **WT-0 landing obligation** (`landing: required branch=… path=… base=…`, see [execution-worktree-landing.md § WT-0](execution-worktree-landing.md#wt-0--markerless-worktree-runs)) — a 3-line record that is *not* a stub of the worktree's stage narrative, so copying the worktree record over it destroys the very obligation a later merge must rewrite. The reconciliation is therefore: discharge the obligation in place (`landing: merged <sha>` or `landing: retained`), and preserve the worktree narrative beside it (e.g. `<runId>.worktree-provenance.md`) rather than in place of it. A
 `record-missing:<file>` skip is a known `task-lifecycle`/`feature-lifecycle` row with no record file
@@ -140,7 +140,7 @@ invoking tree shows the merged run `done` with its per-action rows.
 the batch roll-up built from the per-run files:
 
 ```bash
-node "$(superskill script path sp run-summary.mjs)" --rollup <runId>-summary.json --rollup <runId2>-summary.json
+spur workflow summary --rollup <runId>-summary.json --rollup <runId2>-summary.json
 ```
 
 One row per run carrying that run's own Total, a bold total of the sums, and — when run windows overlap —
@@ -155,7 +155,7 @@ The wrap receives only what it would accept:
 
 1. `vars.tasks` = the JSON-encoded array of batch WBS whose terminal status is `done`. A task that
    is `failed`/`blocked`/`skipped`/`not-attempted`/`recheck`/`not-admitted` is **excluded** —
-   `wrapup task-resolve` refuses non-done members (wrapup-steps.ts task-resolve), so the driver
+   `wrapup task-resolve` refuses non-done members (`spur task wrapup resolve`), so the driver
    simply stops handing the wrap tasks it would refuse.
 2. `vars.feature` = the batch feature **only when every task in the frozen batch is `done` or
    `cancelled`**. Otherwise omit it and print `feature lifecycle not advanced: <n> task(s)
@@ -173,7 +173,7 @@ an empty string disables the check while still recording PASS. A FAIL routes the
 with already-written learnings/docs preserved — fix the flagged working-diff violation and re-run
 the wrap.
 
-Filtering lives here, in the batch driver — no change to wrapup-pipeline.yaml or wrapup-steps.ts;
+Filtering lives here, in the batch driver — no change to wrapup-pipeline.yaml or `spur task wrapup`;
 the wrap's refusal of non-done tasks remains the hard invariant.
 
 **Close-out commit (1129 R2/R5).** In sequential mode the wrap's writes (learnings, metrics,
@@ -185,12 +185,11 @@ batch tip — the step that makes the close-out the report's own contradiction).
 is never a point on the base ref.
 Stage them through the guard — never a free-form `git add` — so a concurrent writer's file cannot
 ride into the close-out commit (incident `36f274590`). `$RUN_ID` is the id Step 3 fixed before
-`commit-guard start` (execution-batch.md § Step 3); an unset id makes the guard exit 1 — fail closed:
+`spur workflow commit-guard start` (execution-batch.md § Step 3); an unset id makes the guard exit 1 — fail closed:
 
 ```bash
-GUARD=plugins/sp/scripts/commit-guard.ts; [ -f config/plugin-scripts.json -a -f "$GUARD" ] || GUARD="$(superskill script path sp commit-guard.mjs 2>/dev/null)"
-bun "$GUARD" check --run "$RUN_ID"                    # 1129 R3: a non-empty foreign list goes in the batch report
-bun "$GUARD" stage --run "$RUN_ID" -- <files the wrap wrote> \
+spur workflow commit-guard check --run "$RUN_ID"      # 1129 R3: a non-empty foreign list goes in the batch report
+spur workflow commit-guard stage --run "$RUN_ID" -- <files the wrap wrote> \
   || { echo "close-out halt: commit-guard refused a path (foreign, unmerged or conflict-marked); nothing committed" >&2; exit 1; }
 git commit -m "chore(wrap): <command> <selector> close-out writes"
 ```

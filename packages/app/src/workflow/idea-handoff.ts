@@ -29,6 +29,8 @@ export interface FinalizeIdeaHandoffOptions {
     featureId: string;
     /** Spur binary name or path. */
     spurBin?: string;
+    /** Lossless CLI default launch. */
+    spurArgv?: readonly string[];
     /** FileSystem abstraction. */
     fileSystem?: FileSystem;
     /** ProcessExecutor abstraction. */
@@ -118,7 +120,9 @@ export async function finalizeIdeaHandoff(options: FinalizeIdeaHandoffOptions): 
     // under the JS-runtime launch modes (resolveSpurBin), and the executor hands `command`
     // verbatim to execa without shell-splitting — a multi-word string would ENOENT. Reject
     // before any subprocess and any report (R1/R4).
-    const spurSplit = splitLaunchCommand(spurBin, 'idea-handoff "spurBin"');
+    const spurSplit = options.spurArgv?.length
+        ? { command: options.spurArgv[0] as string, leadingArgs: options.spurArgv.slice(1) }
+        : splitLaunchCommand(spurBin, 'idea-handoff "spurBin"');
     if ('error' in spurSplit) {
         return {
             ok: false,

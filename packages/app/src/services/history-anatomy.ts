@@ -13,10 +13,8 @@
  * Moved from `plugins/sp/scripts/history-anatomy-cache.ts` (task 1005 R2, ADR-130 lib rule): every
  * exported function except argv parsing/dispatch, plus the frozen REPORT_SECTIONS /
  * FINDING_FIELDS contract consts (pinned by plugins/sp/tests/skill-structure.test.ts against this
- * module now). The plugin script keeps the CLI glue and reaches this module through the generated
- * standalone bundle `plugins/sp/lib/history-anatomy.generated.mjs` — node-builtin only (the
- * artifact-digest dependency imports packages/domain directly), so the committed `.mjs` twin runs
- * under bare `node`. Regenerate with `bun run build:plugin-lib`; do not hand-edit generated files.
+ * module now). The op glue is `./history-anatomy-cli.ts` behind `spur history anatomy`
+ * (script-absorption PR-6 retired the plugin script and its generated bundle).
  */
 import { createHash } from 'node:crypto';
 import {
@@ -574,6 +572,8 @@ export function resolvePaths(opts: {
     mode?: string;
     since?: string;
     until?: string;
+    /** Explicit skill directory (`spur history anatomy paths --skill-dir`); wins over the helper layout. */
+    skillDir?: string;
 }): string {
     // Layouts: monorepo `<root>/scripts/<file>` → skill `<root>/skills/history-anatomy`;
     // superskill-installed `<root>/scripts/<plugin>/<file>` → skill `<root>/skills/<plugin>-history-anatomy`.
@@ -581,7 +581,10 @@ export function resolvePaths(opts: {
     // silently degrading probe contract/skill digests to "not available".)
     const m = opts.helper.match(/\/scripts\/(?:([^/]+)\/)?[^/]+$/);
     const pluginRoot = m ? opts.helper.slice(0, m.index) : opts.helper;
-    const skill = `${pluginRoot}/skills/${m?.[1] ? `${m[1]}-history-anatomy` : 'history-anatomy'}`;
+    const skill =
+        opts.skillDir !== undefined && opts.skillDir !== ''
+            ? opts.skillDir
+            : `${pluginRoot}/skills/${m?.[1] ? `${m[1]}-history-anatomy` : 'history-anatomy'}`;
     const tz = opts.tz ?? Intl.DateTimeFormat().resolvedOptions().timeZone ?? 'UTC';
     const date = opts.date !== undefined && opts.date !== '' ? opts.date : localDay(tz, opts.now ?? new Date());
     const target =

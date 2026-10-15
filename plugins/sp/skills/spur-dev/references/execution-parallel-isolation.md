@@ -47,7 +47,7 @@ emit batch report (per-task outcomes + preflight skips + recovery hints + batch 
   rebase over theirs. Omitting `--mode` stays sequential; this loop is entered only via
   `--mode parallel` on `/sp:dev-runall`, directly or as a `--mode auto` resolution
   ([execution-batch.md § 2.4a](execution-batch.md#24a---mode-auto-resolution)).
-- **Fan-out set.** Run order and eligibility come from the § 2.4 `batch-plan.mjs order` schedule;
+- **Fan-out set.** Run order and eligibility come from the § 2.4 `spur task batch-plan order` schedule;
   its file-overlap edges are in-set dependencies here, so overlapping tasks never run at once.
 - **Workdir.** `spur workflow run` records the launch workdir (0784 R1), so launch with `cwd` = the
   task worktree: resume and `.spur/run/` artifact paths resolve there. Read the verdict from

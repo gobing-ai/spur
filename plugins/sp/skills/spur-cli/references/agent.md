@@ -30,6 +30,7 @@ that before using `run` for fan-out dispatch.
 | `leave` | Leave the fleet: release the guest lease, retire the occupant, return claimed messages to `queued` | `[id]` `--session-id <sid>` `--json` |
 | `status` | Agent specs with live process status and member session (requires `spur self serve`) | `--server <url>` `--json` |
 | `doctor [agent]` | Check agent readiness | `--json` `--probe-health` `--force-refresh` |
+| `dogfood <gate\|validate-report>` | `sp:dogfood-testing` gates: pipeline-driving refusal (exit 2) and report-contract validation (exit 2) | `--testee` `--max-retry-present` `--steps` `--file` `--json` |
 | `usage` | Run-once provider usage capture (codexbar) → quota-owned availability refresh; scheduled externally | `--dry-run` `--source <name>` `--json` |
 | `start <spec-id>` | Start a supervised agent process (requires `spur self serve`) | `--server <url>` `--json` |
 | `stop <spec-id>` | Stop a supervised agent process (requires `spur self serve`) | `--server <url>` `--json` |
@@ -320,6 +321,17 @@ spur agent stop myapp-coder-1 --json
 Posts to the supervisor API
 (`POST /api/agents/:id/stop`) and prints `stopped <id>`. Same server requirement and flags as
 `start`.
+
+## `dogfood` - dogfood-testing gates
+
+```bash
+spur agent dogfood gate --testee "/sp:dev-run 0123" --json        # exit 2 = refuse (pipeline-driving, no --max-retry)
+spur agent dogfood gate --testee "…" --steps "plan||implement"     # Phase 1 W8 re-check
+spur agent dogfood validate-report --file report.md --json         # exit 2 = contract errors
+```
+
+Absorbed from `plugins/sp/scripts/dogfood-testing/` (script-absorption PR-7). `--json` here prints
+the raw result object (no envelope).
 
 ## `usage` - run-once provider usage capture (quota-owned availability refresh)
 

@@ -6,8 +6,9 @@
  * receipt as a run artifact, run the effective command through the safe argv splitter (never `sh -c`),
  * capture the after digest, then complete the receipt PASS/FAIL plus the coarse status file.
  *
- * Ownership: the plugin entry (`plugins/sp/scripts/feature-verification-steps.ts`) keeps argv, usage
- * and exit codes only. It no longer opens the project DB, constructs an `ArtifactDao`, or scans a
+ * Ownership: the CLI verb (`spur feature verify`, apps/cli/src/commands/feature/verify.ts; it replaced
+ * the plugin script `feature-verification-steps` in script-absorption PR-5) keeps argv, usage and
+ * exit codes only. It no longer opens the project DB, constructs an `ArtifactDao`, or scans a
  * feature directory — those are application concerns and this module owns them. Every seam below is
  * injectable for tests (in-memory filesystem, canned launcher, canned receipts, in-memory artifact
  * registration), with the application defaults used in production.

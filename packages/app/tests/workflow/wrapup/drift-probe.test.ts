@@ -1,0 +1,293 @@
+import { describe, expect, test } from 'bun:test';
+import { chmodSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+import { getEnvVars } from '@gobing-ai/spur-config';
+import {
+    changedPathsOf,
+    DOC_OWNED_SURFACES,
+    type DriftProbeEnv,
+    driftReasonForPath,
+    runDriftProbe,
+    type SpurRunner,
+    type SpurShowResult,
+    solutionSectionOf,
+} from '../../../src/workflow/wrapup/drift-probe';
+
+/**
+ * 0944: execution pins for the wrapup drift probe (script-absorption PR-5 moved it from the
+ * retired `plugins/sp/scripts/wrapup-drift-probe.ts` into the app). These call the exported
+ * `runDriftProbe(env, options, spur)` with a fake `SpurRunner` — the same entry
+ * `spur task wrapup drift-probe` runs with the spawning default runner. One case per doc-owned surface glob (R2), plus the fail-safe contract:
+ * any lookup or parse problem is dirty, never a silent clean.
+ */
+
+function cleanup(cwd: string): void {
+    rmSync(cwd, { recursive: true, force: true });
+}
+
+function newCwd(): string {
+    return mkdtempSync(join(tmpdir(), 'wrapup-drift-probe-'));
+}
+
+function solutionWith(paths: string[]): string {
+    const map = paths.map((p) => `- \`${p}:1\``).join('\n');
+    return `# 0944 some task\n\n## Intent\n\nDo things.\n\n### Solution\n\n${map}\n\n### Plan\n\nSteps.\n`;
+}
+
+function fakeSpur(responses: Record<string, SpurShowResult>): SpurRunner & { calls: string[][] } {
+    const calls: string[][] = [];
+    const runner = (args: string[]): SpurShowResult => {
+        calls.push(args);
+        return responses[args.join(' ')] ?? { status: 1, stdout: '' };
+    };
+    return Object.assign(runner, { calls });
+}
+
+function writeCapture(cwd: string, runId: string, tasks: string[]): void {
+    mkdirSync(join(cwd, '.spur', 'run'), { recursive: true });
+    writeFileSync(join(cwd, '.spur', 'run', `${runId}-wrapup-tasks.json`), `${JSON.stringify(tasks)}\n`);
+}
+
+function probe(cwd: string, runId: string, spur: ReturnType<typeof fakeSpur>, env: Partial<DriftProbeEnv> = {}) {
+    return runDriftProbe({ __runId: runId, spurBin: 'unused', ...env }, { cwd }, spur);
+}
+
+/**
+ * A fail-safe case's diagnostic is the operator's, not the test runner's: capture the write
+ * so the assertion still pins the message without leaking it into the suite output.
+ */
+function capturingStderr<T>(body: () => T): { result: T; stderr: string } {
+    const seen: string[] = [];
+    const original = process.stderr.write;
+    process.stderr.write = ((chunk: unknown): boolean => {
+        seen.push(String(chunk));
+        return true;
+    }) as typeof process.stderr.write;
+    try {
+        return { result: body(), stderr: seen.join('') };
+    } finally {
+        process.stderr.write = original;
+    }
+}
+
+describe('wrapup-drift-probe 0944', () => {
+    test('one case per doc-owned surface glob — a changed path under each is dirty', () => {
+        const representative: Record<(typeof DOC_OWNED_SURFACES)[number], string> = {
+            'packages/contracts/**': 'packages/contracts/src/wrapup.ts',
+            'apps/cli/src/commands/**': 'apps/cli/src/commands/wrap.ts',
+            'packages/config/src/**': 'packages/config/src/env.ts',
+            'drizzle/*.sql': 'drizzle/0099_wrapup_probe.sql',
+            [`${join('config', 'workflows')}/**`]: `${join('config', 'workflows', 'wrapup-pipeline.yaml')}`,
+            'plugins/sp/commands/**': 'plugins/sp/commands/dev-wrap.md',
+            'plugins/sp/skills/**': 'plugins/sp/skills/spur-cli/SKILL.md',
+            'plugins/sp/hooks/**': 'plugins/sp/hooks/session-start.ts',
+            'package.json': 'package.json',
+            'docs/00_ADR.md': 'docs/00_ADR.md',
+            'docs/03_ARCHITECTURE.md': 'docs/03_ARCHITECTURE.md',
+            'docs/04_DESIGN.md': 'docs/04_DESIGN.md',
+            'docs/design/**': 'docs/design/workflow-catalogue-refactor.md',
+        };
+        for (const glob of DOC_OWNED_SURFACES) {
+            const path = representative[glob];
+            if (path === undefined) throw new Error(`no representative path for doc-owned surface ${glob}`);
+            expect(driftReasonForPath(path), glob).toBe(`matches doc-owned surface ${glob}`);
+            const cwd = newCwd();
+            try {
+                writeCapture(cwd, 's1', ['0944']);
+                const result = probe(
+                    cwd,
+                    's1',
+                    fakeSpur({
+                        'task show 0944 --json': {
+                            status: 0,
+                            stdout: JSON.stringify({ status: 'done', content: solutionWith([path]) }),
+                        },
+                    }),
+                );
+                expect(result.clean, glob).toBe(false);
+                expect(result.reasons, glob).toEqual([`0944: ${path} matches doc-owned surface ${glob}`]);
+                expect(readFileSync(join(cwd, '.spur', 'run', 's1-mode.txt'), 'utf8')).toBe('\n');
+                expect(JSON.parse(readFileSync(join(cwd, '.spur', 'run', 's1-drift-probe.json'), 'utf8'))).toEqual({
+                    clean: false,
+                    reasons: [`0944: ${path} matches doc-owned surface ${glob}`],
+                    paths: [path],
+                });
+            } finally {
+                cleanup(cwd);
+            }
+        }
+    });
+
+    test('a clean change map (no doc-owned surface) projects mode=fast', () => {
+        const cwd = newCwd();
+        try {
+            writeCapture(cwd, 'c1', ['0944']);
+            const spur = fakeSpur({
+                'task show 0944 --json': {
+                    status: 0,
+                    stdout: JSON.stringify({
+                        status: 'done',
+                        content: solutionWith([
+                            'packages/app/src/workflow/engine.ts',
+                            'apps/server/src/index.ts',
+                            'packages/app/src/workflow/engine.ts',
+                        ]),
+                    }),
+                },
+            });
+            const result = probe(cwd, 'c1', spur);
+            expect(spur.calls).toEqual([['task', 'show', '0944', '--json']]);
+            expect(result.clean).toBe(true);
+            expect(result.reasons).toEqual([]);
+            // Sorted, deduped across repeated line cites of one file.
+            expect(result.paths).toEqual(['apps/server/src/index.ts', 'packages/app/src/workflow/engine.ts']);
+            expect(readFileSync(join(cwd, '.spur', 'run', 'c1-mode.txt'), 'utf8')).toBe('fast\n');
+            expect(JSON.parse(readFileSync(join(cwd, '.spur', 'run', 'c1-drift-probe.json'), 'utf8'))).toEqual({
+                clean: true,
+                reasons: [],
+                paths: result.paths,
+            });
+        } finally {
+            cleanup(cwd);
+        }
+    });
+
+    test('task and feature corpus paths are never drift', () => {
+        expect(driftReasonForPath('docs/tasks5/0944_skip-clean-model-passes.md')).toBeNull();
+        expect(driftReasonForPath('docs/features/D64-wrapup.json')).toBeNull();
+        const cwd = newCwd();
+        try {
+            writeCapture(cwd, 's2', ['0944']);
+            const result = probe(
+                cwd,
+                's2',
+                fakeSpur({
+                    'task show 0944 --json': {
+                        status: 0,
+                        stdout: JSON.stringify({
+                            status: 'done',
+                            content: solutionWith(['docs/tasks5/0944_x.md:12', 'docs/features/D64.json:3']),
+                        }),
+                    },
+                }),
+            );
+            expect(result.clean).toBe(true);
+        } finally {
+            cleanup(cwd);
+        }
+    });
+
+    test('a new top-level workspace directory is doc-owned by default', () => {
+        expect(driftReasonForPath('tooling/probe.ts')).toBe('new top-level workspace directory');
+        expect(driftReasonForPath('README.md')).toBeNull();
+    });
+
+    test('an empty or unparseable Solution fails safe (dirty)', () => {
+        const cwd = newCwd();
+        try {
+            writeCapture(cwd, 's3', ['0944']);
+            const spur = fakeSpur({
+                'task show 0944 --json': {
+                    status: 0,
+                    stdout: JSON.stringify({ status: 'done', content: '# 0944\n\n### Solution\n\n(no map yet)\n' }),
+                },
+            });
+            const result = probe(cwd, 's3', spur);
+            expect(result.clean).toBe(false);
+            expect(result.reasons).toEqual(['0944: Solution empty or unparseable']);
+        } finally {
+            cleanup(cwd);
+        }
+    });
+
+    test('a task show failure and an unparseable body each fail safe (dirty)', () => {
+        const cwd = newCwd();
+        try {
+            writeCapture(cwd, 's4', ['0944', '0945']);
+            const result = probe(
+                cwd,
+                's4',
+                fakeSpur({
+                    'task show 0944 --json': { status: 1, stdout: '' },
+                    'task show 0945 --json': { status: 0, stdout: 'not json at all' },
+                }),
+            );
+            expect(result.clean).toBe(false);
+            expect(result.reasons).toEqual(['0944: task show failed (status=1)', '0945: task show output unparseable']);
+        } finally {
+            cleanup(cwd);
+        }
+    });
+
+    test('a missing or corrupted normalized capture fails safe (dirty)', () => {
+        const cwd = newCwd();
+        try {
+            const { result, stderr } = capturingStderr(() => probe(cwd, 's5', fakeSpur({})));
+            expect(stderr).toContain('normalized task capture is missing or corrupted');
+            expect(result.clean).toBe(false);
+            expect(result.reasons).toEqual(['normalized task capture missing or corrupted']);
+            expect(readFileSync(join(cwd, '.spur', 'run', 's5-mode.txt'), 'utf8')).toBe('\n');
+        } finally {
+            cleanup(cwd);
+        }
+    });
+
+    test('an empty __runId is a hard mis-invocation and writes nothing', () => {
+        const cwd = newCwd();
+        try {
+            const { result, stderr } = capturingStderr(() => probe(cwd, '', fakeSpur({})));
+            expect(stderr).toContain('__runId is empty — refusing the legacy fixed-path fallback');
+            expect(result.exitCode).toBe(1);
+            const exists = (p: string): boolean => {
+                try {
+                    readFileSync(join(cwd, p), 'utf8');
+                    return true;
+                } catch {
+                    return false;
+                }
+            };
+            expect(exists(join('.spur', 'run', '-drift-probe.json'))).toBe(false);
+            expect(exists(join('.spur', 'run', '-mode.txt'))).toBe(false);
+        } finally {
+            cleanup(cwd);
+        }
+    });
+
+    test('the default runner spawns the configured spurBin for each task show lookup', () => {
+        const cwd = newCwd();
+        try {
+            writeCapture(cwd, 'dr', ['0944']);
+            const payload = join(cwd, 'show.json');
+            writeFileSync(payload, JSON.stringify({ content: solutionWith(['apps/server/src/x.ts']) }));
+            const argvLog = join(cwd, 'argv.log');
+            const stub = join(cwd, 'stub-spur');
+            // The stub sees the step env (childEnv), so PROBE_MARK reaches it.
+            writeFileSync(stub, `#!/bin/sh\necho "$PROBE_MARK $*" >> '${argvLog}'\ncat '${payload}'\n`);
+            chmodSync(stub, 0o755);
+            const result = runDriftProbe(
+                { __runId: 'dr', spurBin: stub, PROBE_MARK: 'seen', PATH: getEnvVars().PATH },
+                { cwd },
+            );
+            expect(result.exitCode).toBe(0);
+            expect(result.clean).toBe(true);
+            expect(result.paths).toEqual(['apps/server/src/x.ts']);
+            expect(readFileSync(argvLog, 'utf8')).toBe('seen task show 0944 --json\n');
+        } finally {
+            cleanup(cwd);
+        }
+    });
+
+    test('Solution parsing pins: heading depth tolerance, section boundary, path-like filter, line stripping', () => {
+        const section = solutionSectionOf('# t\n\n## Solution\n\n- `a/b.ts:1`\n\n### Plan\n\n- `c:2`\n');
+        expect(changedPathsOf(section)).toEqual(['a/b.ts']);
+        expect(changedPathsOf(solutionSectionOf('# t\n\n#### Solution\n- `x/y.ts:3-9`\n'))).toEqual(['x/y.ts']);
+        // The extractor keeps one entry per cite; the probe dedupes across cites.
+        expect(changedPathsOf(solutionSectionOf('### Solution\n- `d/e.ts:7`\n- `d/e.ts:41`\n'))).toEqual([
+            'd/e.ts',
+            'd/e.ts',
+        ]);
+        expect(solutionSectionOf('# t\n\nNo solution here.\n')).toBeNull();
+        expect(changedPathsOf(solutionSectionOf('### Solution\n\nsee `the docs:12` and `plain`\n'))).toEqual([]);
+    });
+});

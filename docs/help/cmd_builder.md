@@ -3,9 +3,9 @@
 > Release plumbing for the package workspace: bump one package (or the `workspace:`-pinned
 > release set), commit, tag, and optionally push. Promoted from the internal `spur-dev release`
 > script (task 0617, ADR-051); `scripts/commands/release.ts` is now a thin forwarder to the same
-> implementation. The noun is **frozen at these two verbs** — future promotions from `spur-dev`
-> land as new nouns only with their own justification
-> (`docs/design/harness-surface-governance.md` §3).
+> implementation. The noun is **frozen at these three verbs** (`bump-ver`, `drop-tags`, and `pr`, added by the
+> 2026-10-15 script-absorption consent entry) — future promotions land only with their own
+> justification (`docs/design/harness-surface-governance.md` §3).
 
 ## Subcommands
 
@@ -15,6 +15,7 @@
 | `bump-ver --all <version>` | Bump every `workspace:`-pinned package, plus aggregate publish tag |
 | `drop-tags <package-id> <version>` | Delete one package's local release tag |
 | `drop-tags --all <version>` | Delete all local per-package + aggregate release tags |
+| `pr <op> [flags]` | Deterministic PR-review spine ops for `/sp:dev-pr-review` (`preflight`, `push`, `ensure`, `hygiene`, `request`, `wait`, `collect`, `status`) |
 
 ## spur builder bump-ver
 
@@ -53,3 +54,27 @@ spur builder drop-tags [options] <package-id|--all> <version>
 | `--json` | Output machine-readable JSON |
 
 No-ops gracefully when a local or remote tag is already absent.
+
+## spur builder pr
+
+```
+spur builder pr <op> [flags]
+```
+
+The deterministic spine behind `/sp:dev-pr-review` (`sp:pr-reviewing`, driven by
+the `pr-review` workflow). Absorbed from the retired `plugins/sp/scripts/pr-reviewing.ts`
+(script-absorption PR-7); output and exit codes are byte-identical to the script.
+
+| Op | Description |
+|---|---|
+| `preflight` | git/gh/repo checks; FAILs on detached HEAD or a dirty tree |
+| `push` | Push the branch (never force); sets upstream when missing |
+| `ensure [--base b]` | Reuse the branch's PR or create one with `gh pr create --fill` (`ensure-pr` is an alias) |
+| `hygiene [--base b]` | Scan `base...HEAD` for secrets/.env/conflict markers (BLOCK) and debug residue (WARN) |
+| `request [--force] [--focus text]` | Post `@codex review` (dedupes a reviewed/in-flight HEAD unless `--force`) |
+| `wait [--since iso] [--head sha] [--timeout 600] [--interval 30]` | Poll for Codex output; exit 3 on timeout |
+| `collect [--since iso] [--head sha]` | Fetch the current-HEAD Codex result (FINDINGS, CLEAN, or PENDING) |
+| `status [--since iso] [--head sha]` | Composite repo/PR/CI/Codex status (read-only) |
+
+Global flags: `--json` (single JSON object), `--status-file <path>` (one-word verdict).
+Exit codes: `0` ok, `1` usage, `2` hard failure, `3` wait timeout.

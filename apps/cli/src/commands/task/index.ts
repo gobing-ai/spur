@@ -1,16 +1,21 @@
 import type { Command } from '@commander-js/extra-typings';
 import type { CliContext } from '../../context';
 import { registerTaskBatchCreateCommand } from './batch-create';
+import { registerTaskBatchPlanCommand } from './batch-plan';
 import { registerTaskCheckCommand } from './check';
 import { registerTaskCreateCommand } from './create';
 import { registerTaskDepsCommand } from './deps';
+import { registerTaskDiffstatCommand } from './diffstat';
+import { registerTaskGateCommand } from './gate';
 import { registerTaskListCommand } from './list';
 import { registerTaskMigrateCommand } from './migrate';
 import { registerTaskMigrateAnchorsCommand } from './migrate-anchors';
 import { registerTaskPathCommand } from './path';
+import { registerTaskPreflightCommand } from './preflight';
 import { registerTaskRecordCommand } from './record';
 import { registerTaskRefreshCommand } from './refresh';
 import { registerTaskRefreshRosterCommand } from './refresh-roster';
+import { registerTaskResidualCommand } from './residual';
 import { registerTaskResolveCommand } from './resolve';
 import { registerTaskRunLinkCommand } from './run-link';
 import { registerTaskScaffoldTestsCommand } from './scaffold-tests';
@@ -19,6 +24,7 @@ import { registerTaskShowCommand } from './show';
 import { registerTaskUpdateCommand } from './update';
 import { registerTaskVerdictCommand } from './verdict';
 import { registerTaskVerifyallAggregateCommand } from './verifyall-aggregate';
+import { registerTaskWrapupCommand } from './wrapup';
 
 /** Register the `spur task` command and its subcommands on the CLI program. */
 export function registerTaskCommand(program: Command, context: CliContext): void {
@@ -34,6 +40,10 @@ export function registerTaskCommand(program: Command, context: CliContext): void
     registerTaskMigrateAnchorsCommand(task, context);
     registerTaskRefreshRosterCommand(task, context);
     registerTaskBatchCreateCommand(task, context);
+    // Script-absorption PR-5: batch driver + wrapup-pipeline steps.
+    registerTaskBatchPlanCommand(task, context);
+    registerTaskPreflightCommand(task, context);
+    registerTaskWrapupCommand(task, context);
     registerTaskRecordCommand(task, context);
     registerTaskVerdictCommand(task, context);
     registerTaskVerifyallAggregateCommand(task, context);
@@ -42,6 +52,9 @@ export function registerTaskCommand(program: Command, context: CliContext): void
     registerTaskPathCommand(task, context);
     registerTaskRunLinkCommand(task, context);
     registerTaskScaffoldTestsCommand(task, context);
+    registerTaskGateCommand(task, context);
+    registerTaskResidualCommand(task, context);
+    registerTaskDiffstatCommand(task, context);
 }
 
 export { makeCheckService, makeService, makeTaskLocator } from './shared';

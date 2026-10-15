@@ -92,7 +92,7 @@ Optional class tag, closed set: `environment` | `testee` | `waste`. Finding line
 
 When the testee is a skill or command, a defect in **that testee's contract** (the protocol the run is grading) is `testee` and may be repaired in fix-mode. The same file tagged `environment` (always-loaded steering, placement, a check that should exist, a review-path standard) is a proposal only. Class, not path, decides mutation.
 
-`validate-report` (`plugins/sp/scripts/dogfood-testing/validate-report.ts`) checks headings, protocol string, footer, Issues subheads, and ledger cardinality. It does not parse §6 bullets. A class tag cannot fail `@1.2`; the validator gains no required fields.
+`validate-report` (`spur agent dogfood validate-report`) checks headings, protocol string, footer, Issues subheads, and ledger cardinality. It does not parse §6 bullets. A class tag cannot fail `@1.2`; the validator gains no required fields.
 
 **Fix-mode (ADR-085).** Environment-tagged findings are recommended actions in §6 only. Bounded retries do not `Edit` or `Write` `AGENTS.md`, `CLAUDE.md`, skills, rules, numbered docs, or plugin references for those findings. Step-failure fixes against a `testee`-class finding are unchanged. `--task` remains an opt-in sink and may copy an environment finding into a review task; it does not apply the change.
 
@@ -132,7 +132,7 @@ Section 9 projected-candidate line (additive; existing numbered prose without th
 
 The report contains no applied change, no diff, and no command it claims to have run.
 
-**Structure gate.** `checkReportStructure` (`plugins/sp/scripts/history-anatomy-cache.ts`) matches pipe-rows whose first segment is already in the closed vocabulary, then scans Findings bullet blocks for `key` + triage fields. A retro-as-category key currently misses the pipe-row regex and does not fail. Extend the gate so a finding whose `category` or key first segment is a retro name fails:
+**Structure gate.** `checkReportStructure` (`packages/app/src/services/history-anatomy.ts`, run by `spur history anatomy check`) matches pipe-rows whose first segment is already in the closed vocabulary, then scans Findings bullet blocks for `key` + triage fields. A retro-as-category key currently misses the pipe-row regex and does not fail. Extend the gate so a finding whose `category` or key first segment is a retro name fails:
 
 ```text
 navigation | automated-checks | coding-standards | agents-md-placement | tool-economy | no-ops | information-access

@@ -14,6 +14,7 @@ import { describe, expect, test } from 'bun:test';
 import { chmodSync, existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
+import { getEnvVar, getEnvVars, removeEnvVar, setEnvVar } from '../../lib/env';
 import {
     lifecycleStateFor,
     parseHookPayload,
@@ -22,10 +23,9 @@ import {
     reportSeq,
     runHookFromStdin,
     SPEC_ID_ENV,
-} from '../../hooks/agent-lifecycle';
-import { getEnvVar, getEnvVars, removeEnvVar, setEnvVar } from '../../lib/env';
+} from '../../scripts/hooks/agent-lifecycle';
 
-const HOOK = resolve(import.meta.dir, '../../hooks', 'agent-lifecycle.ts');
+const HOOK = resolve(import.meta.dir, '../../scripts/hooks', 'agent-lifecycle.ts');
 
 /** Run the hook binary with a stdin payload; returns its exit code. */
 async function runHook(payload: unknown, env: Record<string, string> = {}): Promise<number> {

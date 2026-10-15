@@ -1,9 +1,9 @@
 /**
  * planning-admission — the pure readiness/admission policy (task 1176 ownership move).
  *
- * These assertions belong to the owner of the decision. The plugin adapter keeps its own contract
- * tests (`plugins/sp/tests/batch-preflight.test.ts`) for the CLI surface and recovery hints it still
- * owns; here the policy itself is exercised directly against the app module.
+ * These assertions belong to the owner of the decision. The planner adapter keeps its own contract
+ * tests (`./planning-preflight.test.ts`, `spur task preflight`) for the CLI surface and recovery
+ * hints it owns; here the policy itself is exercised directly against the app module.
  */
 
 import { describe, expect, test } from 'bun:test';

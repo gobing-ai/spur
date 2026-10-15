@@ -27,14 +27,16 @@
 
 import { describe, expect, test } from 'bun:test';
 import { spawnSync } from 'node:child_process';
-import { copyFileSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { getEnvVars } from '@gobing-ai/spur-config';
 import { parse as parseYaml } from 'yaml';
 
 const WORKFLOWS_DIR = join(import.meta.dir, '../../../../config', 'workflows');
-const DIFFSTAT_SCRIPT = join(import.meta.dir, '../../../../plugins/sp/scripts', 'task-diffstat.ts');
+// Script-absorption PR-3: the triage onEnter calls `$spurBin task diffstat` — run the REAL CLI from
+// source so the shell exercises the shipped verb (no plugin script staging).
+const SPUR_BIN = `${process.execPath} ${join(import.meta.dir, '../../../../apps/cli/src/index.ts')}`;
 const WBS = '0943';
 const RUN_ID = 'run-triage';
 const MAX_ATTEMPTS = '2';
@@ -149,33 +151,6 @@ function stage(options: {
         mkdirSync(join(cwd, '.spur/run'), { recursive: true });
         writeFileSync(join(cwd, '.spur/run', `${WBS}-base.sha`), `${sha}\n`);
     }
-    // The onEnter diffstat shell resolves plugins/sp/scripts/task-diffstat.ts relative to cwd —
-    // run the REAL script there (repo-local first branch of the resolution chain), which imports
-    // ../lib/env, so the plugin lib tree is copied alongside it.
-    mkdirSync(join(cwd, 'plugins/sp/scripts'), { recursive: true });
-    mkdirSync(join(cwd, 'plugins/sp/lib'), { recursive: true });
-    // 0960: the source-repo marker gates the project-first probe (this fixture is the repo).
-    mkdirSync(join(cwd, 'config'), { recursive: true });
-    writeFileSync(join(cwd, 'config', 'plugin-scripts.json'), '{}\n');
-    copyFileSync(DIFFSTAT_SCRIPT, join(cwd, 'plugins/sp/scripts/task-diffstat.ts'));
-    copyFileSync(join(import.meta.dir, '../../../../plugins/sp/lib', 'env.ts'), join(cwd, 'plugins/sp/lib/env.ts'));
-    // task 1176: the sensitive-path policy is app-owned and reached through the generated pure
-    // bundle, which ships with the plugin — the sandbox must carry it exactly as an install does.
-    copyFileSync(
-        join(import.meta.dir, '../../../../plugins/sp/lib', 'plan-projection.generated.mjs'),
-        join(cwd, 'plugins/sp/lib/plan-projection.generated.mjs'),
-    );
-    // The scaffolding is committed into the fixture's base, so it is not counted as part of the
-    // fixture diff: the generated policy bundle alone exceeds the >400-changed-lines safety floor
-    // this suite exercises (task 1176).
-    spawnSync('git', ['add', '-A'], { cwd, encoding: 'utf8' });
-    spawnSync('git', ['commit', '-q', '-m', 'fixture scaffolding'], { cwd, encoding: 'utf8' });
-    // Re-point the diff base at the scaffold commit: the recorded base predates the copies, so
-    // leaving it would keep the scaffolding inside the fixture diff.
-    if (options.anchorBase !== false) {
-        const scaffoldSha = spawnSync('git', ['rev-parse', 'HEAD'], { cwd, encoding: 'utf8' }).stdout.trim();
-        writeFileSync(join(cwd, '.spur', 'run', `${WBS}-base.sha`), `${scaffoldSha}\n`);
-    }
     for (const [path, content] of Object.entries(options.files ?? {})) {
         mkdirSync(join(cwd, path, '..'), { recursive: true });
         writeFileSync(join(cwd, path), content);
@@ -186,12 +161,6 @@ function stage(options: {
     }
     const runDir = join(cwd, '.spur/run');
     mkdirSync(runDir, { recursive: true });
-    // 1007 R4: shells resolve scripts through the run-scoped script-root probe — stage the
-    // identity file the snippet reads (source-repo → the staged scripts dir).
-    writeFileSync(
-        join(runDir, `${RUN_ID}-script-root.json`),
-        `${JSON.stringify({ mode: 'source-repo', source: 'project', dir: join(cwd, 'plugins/sp/scripts') })}\n`,
-    );
     if (options.triageDecision !== undefined && options.triageDecision !== null) {
         writeFileSync(join(runDir, `${WBS}-triage.decision`), `${JSON.stringify(options.triageDecision)}\n`);
     }
@@ -202,7 +171,13 @@ function stage(options: {
     if (options.attempts !== undefined) writeFileSync(join(runDir, `${WBS}-test-fix-attempt`), options.attempts);
     return {
         cwd,
-        vars: { wbs: WBS, __runId: RUN_ID, mode: options.callerMode ?? '', qualityGateMaxFixAttempts: MAX_ATTEMPTS },
+        vars: {
+            wbs: WBS,
+            __runId: RUN_ID,
+            mode: options.callerMode ?? '',
+            qualityGateMaxFixAttempts: MAX_ATTEMPTS,
+            spurBin: SPUR_BIN,
+        },
     };
 }
 
@@ -332,12 +307,21 @@ describe('task-pipeline 0943 — triage state routing (R1/R2)', () => {
         // ABSENT row must resolve the lane. An empty mode file would then let the `low` decide
         // row project `fast` downstream (the fail-open path a loaded full-suite run exposed).
         const staged = stage({ triageDecision: { value: 'low' } });
-        writeFileSync(join(staged.cwd, 'plugins/sp/scripts/task-diffstat.ts'), "throw new Error('producer down');\n");
-        runOnEnterShells('triage', staged.cwd, staged.vars);
+        // A producer that exits 0 without writing (`true` as the spur binary).
+        runOnEnterShells('triage', staged.cwd, { ...staged.vars, spurBin: 'true' });
         expect(existsSync(join(staged.cwd, '.spur/run', `${WBS}-diffstat.json`))).toBe(false);
         expect(readMode(staged)).toBe('safety');
         expect(firstPassingEdge('triage', staged.cwd, edgeVars(staged)).to).toBe('review');
         expect(lastRouteLine(staged)).toBe(`${RUN_ID} ${WBS} safety:triage deterministic-high`);
+        rmSync(staged.cwd, { recursive: true, force: true });
+    });
+
+    test('fail-closed: a spur that cannot run `task diffstat` writes the sensitive row (safety)', () => {
+        const staged = stage({ triageDecision: { value: 'low' } });
+        runOnEnterShells('triage', staged.cwd, { ...staged.vars, spurBin: 'false' });
+        const row = JSON.parse(readFileSync(join(staged.cwd, '.spur/run', `${WBS}-diffstat.json`), 'utf8'));
+        expect(row).toEqual({ files: 0, insertions: 0, deletions: 0, paths: [], sensitive: true });
+        expect(readMode(staged)).toBe('safety');
         rmSync(staged.cwd, { recursive: true, force: true });
     });
 });

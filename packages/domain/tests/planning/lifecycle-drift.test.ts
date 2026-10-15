@@ -308,10 +308,9 @@ describe('task-pipeline.yaml structure (task 0062)', () => {
             (c) =>
                 // Literal form and 0931's resolver form (`S=plugins/sp/scripts/x.ts; … bun "$S"`)
                 // both shell spur through a bundled script.
-                (c.includes('bun plugins/sp/scripts/') || c.includes('S=plugins/sp/scripts/')) &&
-                // 0823 (d): quality-gate.ts never shells spur (it runs the gate command),
-                // so it needs no --spur-bin.
-                !c.includes('quality-gate.ts'),
+                // (Script-absorption PR-3: the gate, diffstat and residual sweep are `spur task` verbs
+                // now — they take `$spurBin` as the command itself, not a `--spur-bin` flag.)
+                c.includes('bun plugins/sp/scripts/') || c.includes('S=plugins/sp/scripts/'),
         );
         expect(spurShellingScripts.length).toBeGreaterThan(0);
         for (const cmd of spurShellingScripts) {
@@ -332,9 +331,9 @@ describe('task-pipeline.yaml structure (task 0062)', () => {
                 .map((a) => String(a.options?.command ?? ''));
 
         // 1. Both gate hops extract anchors into the digest file. 0823 (d): the extraction moved
-        // into quality-gate.ts; 1006 R1 moved the gate core into the app service (the script is
-        // dispatch glue) — assert the wrappers delegate and the app core owns the log and
-        // findings artifacts with the bounded cap (MAX_FINDINGS = 20).
+        // into the gate; 1006 R1 moved the gate core into the app service and script-absorption
+        // PR-3 made `spur task gate` its entry — assert the wrappers delegate to the verb and the
+        // app core owns the log and findings artifacts with the bounded cap (MAX_FINDINGS = 20).
         const gateCore = readFileSync(
             join(REPO_ROOT, 'packages', 'app', 'src', 'services', 'quality-gate.ts'),
             'utf-8',
@@ -342,14 +341,11 @@ describe('task-pipeline.yaml structure (task 0062)', () => {
         for (const gateState of ['test', 'test-recheck']) {
             const cmds = shellCmds(gateState).join('\n');
             const verb = gateState === 'test' ? 'run' : 'recheck';
-            expect(cmds, `${gateState}: gate hop must delegate to quality-gate.ts`).toContain(
-                'quality-gate.ts"+" RUNNER=bun',
-            );
             // 1111: the mode rides the `M` var (run|recheck|deferred) so the opt-in deferred
             // policy swaps the tier without a second dispatch line.
-            expect(cmds, `${gateState}: gate hop must run the script via the resolver`).toContain(`M=${verb};`);
-            expect(cmds, `${gateState}: gate hop must run the script via the resolver`).toContain(
-                '"$RUNNER" "$S" "$M"',
+            expect(cmds, `${gateState}: gate hop must pick the mode`).toContain(`M=${verb};`);
+            expect(cmds, `${gateState}: gate hop must delegate to spur task gate`).toContain(
+                '$spurBin task gate "$wbs" "$M"',
             );
         }
         expect(gateCore).toContain('-test-gate.log');

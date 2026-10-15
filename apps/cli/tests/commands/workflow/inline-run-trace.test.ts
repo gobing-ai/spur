@@ -1,0 +1,769 @@
+import { Database } from 'bun:sqlite';
+import { expect, test } from 'bun:test';
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+
+/**
+ * Task 0868 (ADR-117) — the inline driver's structured trace emission.
+ *
+ * The driver reports each action boundary and closes its run row through the shared
+ * `WorkflowActionTraceWriter` delegate (`inline-run-setup.ts --action` / `--close`).
+ * R4: every executed action lands an `action_runs` row queryable by run id. R12: an
+ * action-emission failure is recorded to the run log and the delegate still exits 0, so
+ * the run reaches its declared terminal state. `--close` is bookkeeping, not emission:
+ * a missing run row or a persistence failure exits 1 (findings #1/#4).
+ */
+
+// Script-absorption PR-4: the plugin script became `spur workflow inline <op>`. This suite kept its
+// legacy-argv bodies; the shim translates them (tests/workflow-inline/legacy-argv.ts) and runs the
+// real CLI entry, so every case now exercises the installed transport.
+const SCRIPT = join(import.meta.dir, '..', '..', 'workflow-inline', 'legacy-inline-shim.ts');
+
+const WORKFLOW = `name: inline-smoke
+initialState: start
+terminalStates:
+    - end
+states:
+    - id: start
+      onEnter:
+          - kind: shell
+            options:
+                command: echo smoke
+    - id: end
+transitions:
+    - from: start
+      to: end
+      guard:
+          kind: always
+`;
+
+/** Fixture project with a resolvable project-layer definition (mirrors the inline layout). */
+function makeProject(): { workdir: string; cleanup: () => void } {
+    const root = mkdtempSync(join(tmpdir(), 'spur-0868-trace-script-'));
+    const workdir = join(root, 'wt');
+    mkdirSync(join(workdir, '.spur', 'workflows'), { recursive: true });
+    mkdirSync(join(workdir, '.spur', 'run'), { recursive: true });
+    writeFileSync(join(workdir, '.spur', 'workflows', 'inline-smoke.yaml'), WORKFLOW);
+    return { workdir, cleanup: () => rmSync(root, { recursive: true, force: true }) };
+}
+
+/**
+ * Async spawn (not spawnSync) so the file's tests can run as `test.concurrent`: every test owns
+ * its temp project, and the ~0.4 s per-spawn bundle load dominated the serial wall time.
+ */
+async function runScript(
+    workdir: string,
+    args: readonly string[],
+): Promise<{ status: number | null; stdout: string; stderr: string }> {
+    const proc = Bun.spawn(['bun', SCRIPT, ...args], { cwd: workdir, stdout: 'pipe', stderr: 'pipe' });
+    const [stdout, stderr, status] = await Promise.all([
+        new Response(proc.stdout).text(),
+        new Response(proc.stderr).text(),
+        proc.exited,
+    ]);
+    return { status, stdout, stderr };
+}
+
+interface ActionRow {
+    run_id: string;
+    node: string;
+    kind: string;
+    status: string;
+    duration_ms: number;
+    ok: number;
+}
+
+test.concurrent('R4: setup → --action → --close lands an action_runs row queryable by run id and a terminal run row', async () => {
+    const p = makeProject();
+    const runId = 'run-0868-trace-e2e';
+    try {
+        const setup = await runScript(p.workdir, ['--run-id', runId, '--file', '.spur/workflows/inline-smoke.yaml']);
+        expect(setup.status, setup.stderr).toBe(0);
+
+        const action = await runScript(p.workdir, [
+            '--action',
+            '--run-id',
+            runId,
+            '--node',
+            'implement',
+            '--kind',
+            'agent.run',
+            '--status',
+            'done',
+            '--ok',
+            'true',
+            '--duration-ms',
+            '50',
+        ]);
+        expect(action.status, action.stderr).toBe(0);
+        expect(JSON.parse(action.stdout)).toMatchObject({ ok: true, runId });
+
+        const close = await runScript(p.workdir, ['--close', '--run-id', runId, '--status', 'done']);
+        expect(close.status, close.stderr).toBe(0);
+        expect(JSON.parse(close.stdout)).toMatchObject({ ok: true, runId });
+
+        // Queryable by run id through the DB — no run-record file read at all (R2).
+        const db = new Database(join(p.workdir, '.spur', 'spur.db'), { readonly: true });
+        try {
+            const rows = db
+                .query<ActionRow, [string]>(
+                    'SELECT run_id, node, kind, status, duration_ms, ok FROM action_runs WHERE run_id = ?',
+                )
+                .all(runId);
+            expect(rows).toHaveLength(1);
+            expect(rows[0]).toMatchObject({
+                run_id: runId,
+                node: 'implement',
+                kind: 'agent.run',
+                status: 'done',
+                duration_ms: 50,
+                ok: 1,
+            });
+            const run = db
+                .query<{ status: string; completed_at: string | null }, [string]>(
+                    'SELECT status, completed_at FROM runs WHERE id = ?',
+                )
+                .get(runId);
+            expect(run?.status).toBe('done');
+            expect(run?.completed_at).not.toBeNull();
+        } finally {
+            db.close();
+        }
+    } finally {
+        p.cleanup();
+    }
+}, 60_000);
+
+test.concurrent('R12/1136 R1: an action with no run row is a loud RUN_NOT_FOUND (never a silent no-op), and the run record names it', async () => {
+    const p = makeProject();
+    const runId = 'run-0868-trace-fail';
+    try {
+        // Task 1136 R1 changed this contract: a missing run row is a correctness failure, not a
+        // best-effort emission failure. The call exits 1 and the run record carries the miss.
+        const proc = await runScript(p.workdir, [
+            '--action',
+            '--run-id',
+            runId,
+            '--node',
+            'implement',
+            '--kind',
+            'agent.run',
+            '--status',
+            'done',
+            '--ok',
+            'true',
+            '--duration-ms',
+            '10',
+        ]);
+
+        expect(proc.status, proc.stderr).toBe(1);
+        expect(JSON.parse(proc.stdout)).toMatchObject({ ok: false, runId, code: 'RUN_NOT_FOUND' });
+
+        // And the failure is recorded where the driver can see it — the run-record
+        // markdown (task 0927 R1; a fresh run has no legacy `.log` to fall back to).
+        const logPath = join(p.workdir, '.spur', 'memory', 'runs', `${runId}.md`);
+        expect(existsSync(logPath)).toBe(true);
+        const log = readFileSync(logPath, 'utf8');
+        expect(log).toContain('trace-emission-failed');
+        expect(log).toContain(`run=${runId}`);
+        expect(existsSync(join(p.workdir, '.spur', 'memory', 'runs', `${runId}.log`))).toBe(false);
+    } finally {
+        p.cleanup();
+    }
+}, 60_000);
+
+test.concurrent('--ok false is a valid value (ok=0), only miscased/omitted values are usage errors', async () => {
+    const p = makeProject();
+    const runId = 'run-0868-ok-false';
+    try {
+        const setup = await runScript(p.workdir, ['--run-id', runId, '--file', '.spur/workflows/inline-smoke.yaml']);
+        expect(setup.status, setup.stderr).toBe(0);
+
+        const action = await runScript(p.workdir, [
+            '--action',
+            '--run-id',
+            runId,
+            '--node',
+            'start',
+            '--kind',
+            'shell',
+            '--status',
+            'failed',
+            '--ok',
+            'false',
+            '--duration-ms',
+            '7',
+        ]);
+        expect(action.status, action.stderr).toBe(0);
+        expect(JSON.parse(action.stdout)).toMatchObject({ ok: true, runId });
+
+        const db = new Database(join(p.workdir, '.spur', 'spur.db'), { readonly: true });
+        try {
+            const row = db.query<{ ok: number }, [string]>('SELECT ok FROM action_runs WHERE run_id = ?').get(runId);
+            expect(row?.ok).toBe(0);
+        } finally {
+            db.close();
+        }
+    } finally {
+        p.cleanup();
+    }
+}, 60_000);
+
+test.concurrent('--ok is required and exact; --duration-ms is optional but malformed values are usage errors (exit 2)', async () => {
+    const p = makeProject();
+    try {
+        for (const args of [
+            // --ok omitted
+            [
+                '--action',
+                '--run-id',
+                'r1',
+                '--node',
+                'start',
+                '--kind',
+                'shell',
+                '--status',
+                'done',
+                '--duration-ms',
+                '5',
+            ],
+            // --ok miscased
+            [
+                '--action',
+                '--run-id',
+                'r1',
+                '--node',
+                'start',
+                '--kind',
+                'shell',
+                '--status',
+                'done',
+                '--ok',
+                'True',
+                '--duration-ms',
+                '5',
+            ],
+            // --duration-ms malformed
+            [
+                '--action',
+                '--run-id',
+                'r1',
+                '--node',
+                'start',
+                '--kind',
+                'shell',
+                '--status',
+                'done',
+                '--ok',
+                'true',
+                '--duration-ms',
+                'nope',
+            ],
+            // --duration-ms negative
+            [
+                '--action',
+                '--run-id',
+                'r1',
+                '--node',
+                'start',
+                '--kind',
+                'shell',
+                '--status',
+                'done',
+                '--ok',
+                'true',
+                '--duration-ms',
+                '-1',
+            ],
+        ]) {
+            const proc = await runScript(p.workdir, args);
+            expect(proc.status, `expected usage exit 2 for ${args.join(' ')}`).toBe(2);
+        }
+    } finally {
+        p.cleanup();
+    }
+}, 60_000); // 1150 R3: 4 spawns measured at 1043ms isolated, 5243ms under load; aligns with file 60_000 budget
+
+test.concurrent('1136 R4: --node-enter makes the duration optional — the emitter measures it and stamps provenance measured', async () => {
+    const p = makeProject();
+    const runId = 'run-1136-node-enter';
+    try {
+        const setup = await runScript(p.workdir, ['--run-id', runId, '--file', '.spur/workflows/inline-smoke.yaml']);
+        expect(setup.status, setup.stderr).toBe(0);
+
+        const enter = await runScript(p.workdir, ['--node-enter', '--run-id', runId, '--node', 'implement']);
+        expect(enter.status, enter.stderr).toBe(0);
+        expect(JSON.parse(enter.stdout)).toMatchObject({ ok: true, runId, node: 'implement' });
+
+        const action = await runScript(p.workdir, [
+            '--action',
+            '--run-id',
+            runId,
+            '--node',
+            'implement',
+            '--kind',
+            'agent.run',
+            '--status',
+            'done',
+            '--ok',
+            'true',
+        ]);
+        expect(action.status, action.stderr).toBe(0);
+        expect(JSON.parse(action.stdout)).toMatchObject({ ok: true, runId });
+
+        const db = new Database(join(p.workdir, '.spur', 'spur.db'), { readonly: true });
+        try {
+            const row = db
+                .query<{ duration_ms: number; result_json: string | null }, [string]>(
+                    'SELECT duration_ms, result_json FROM action_runs WHERE run_id = ?',
+                )
+                .get(runId);
+            expect(row?.duration_ms).toBeGreaterThanOrEqual(0);
+            expect(JSON.parse(row?.result_json ?? '{}')).toMatchObject({ provenance: 'measured' });
+        } finally {
+            db.close();
+        }
+    } finally {
+        p.cleanup();
+    }
+}, 60_000);
+
+test.concurrent('1136 R4: --action without --duration-ms and without a --node-enter stamp exits 1 naming the missing stamp', async () => {
+    const p = makeProject();
+    const runId = 'run-1136-no-enter';
+    try {
+        const setup = await runScript(p.workdir, ['--run-id', runId, '--file', '.spur/workflows/inline-smoke.yaml']);
+        expect(setup.status, setup.stderr).toBe(0);
+        const action = await runScript(p.workdir, [
+            '--action',
+            '--run-id',
+            runId,
+            '--node',
+            'implement',
+            '--kind',
+            'agent.run',
+            '--status',
+            'done',
+            '--ok',
+            'true',
+        ]);
+        expect(action.status, action.stderr).toBe(1);
+        expect(JSON.parse(action.stdout)).toMatchObject({
+            ok: false,
+            runId,
+            code: 'ACTION_DURATION_UNAVAILABLE',
+        });
+    } finally {
+        p.cleanup();
+    }
+}, 60_000);
+
+test.concurrent('--close for a run id with no row fails loudly with a named error, never {"ok":true} (finding #4)', async () => {
+    const p = makeProject();
+    const runId = 'run-0868-does-not-exist';
+    try {
+        const proc = await runScript(p.workdir, ['--close', '--run-id', runId, '--status', 'done']);
+        expect(proc.status, proc.stderr).toBe(1);
+        const out = JSON.parse(proc.stdout);
+        expect(out.ok).toBe(false);
+        expect(out.runId).toBe(runId);
+        expect(out.code).toBe('RUN_NOT_FOUND');
+        expect(out.error).toContain(runId);
+    } finally {
+        p.cleanup();
+    }
+}, 60_000);
+
+test.concurrent('a malformed invocation is a usage error (exit 2), never a silent emission', async () => {
+    const p = makeProject();
+    try {
+        // Missing --kind / --node / --status on the action mode.
+        for (const args of [
+            [
+                '--action',
+                '--run-id',
+                'r1',
+                '--node',
+                'implement',
+                '--status',
+                'done',
+                '--ok',
+                'true',
+                '--duration-ms',
+                '1',
+            ],
+            ['--action', '--run-id', 'r1', '--node', 'implement', '--kind', 'agent.run', '--duration-ms', '1'],
+            ['--close', '--run-id', 'r1', '--status', 'sideways'],
+            [
+                '--action',
+                '--run-id',
+                '../escape',
+                '--node',
+                'n',
+                '--kind',
+                'k',
+                '--status',
+                'done',
+                '--duration-ms',
+                '1',
+            ],
+        ]) {
+            const proc = await runScript(p.workdir, args);
+            expect(proc.status, `expected usage/guard exit for ${args.join(' ')}`).toBeGreaterThanOrEqual(1);
+        }
+    } finally {
+        p.cleanup();
+    }
+}, 60_000); // 1150 R3: 4 spawns measured at 651ms isolated, 4120ms under load; aligns with file 60_000 budget
+
+// ── Task 0975 R2: a `done` close with zero action rows is a named failure ────────
+
+test.concurrent('0975 AC4: --close --status done with zero action rows exits 1 with code NO_ACTION_ROWS, row still finalized', async () => {
+    const p = makeProject();
+    const runId = 'run-0975-no-rows';
+    try {
+        const setup = await runScript(p.workdir, ['--run-id', runId, '--file', '.spur/workflows/inline-smoke.yaml']);
+        expect(setup.status, setup.stderr).toBe(0);
+
+        // No --action in between: the run reached `done` without a single recorded action.
+        const close = await runScript(p.workdir, ['--close', '--run-id', runId, '--status', 'done']);
+        expect(close.status).toBe(1);
+        const out = JSON.parse(close.stdout) as {
+            ok: boolean;
+            runId: string;
+            code?: string;
+            actionRows?: number;
+            error?: string;
+        };
+        expect(out).toMatchObject({ ok: false, runId, code: 'NO_ACTION_ROWS', actionRows: 0 });
+        expect(out.error).toContain(runId);
+
+        // The row IS terminal — the defect is the bookkeeping, and the finding is recorded.
+        const db = new Database(join(p.workdir, '.spur', 'spur.db'), { readonly: true });
+        try {
+            const run = db.query<{ status: string }, [string]>('SELECT status FROM runs WHERE id = ?').get(runId);
+            expect(run?.status).toBe('done');
+        } finally {
+            db.close();
+        }
+        expect(readFileSync(join(p.workdir, '.spur', 'memory', 'runs', `${runId}.md`), 'utf8')).toContain(
+            'trace-close-failed',
+        );
+    } finally {
+        p.cleanup();
+    }
+}, 60_000);
+
+test.concurrent('0975 AC4: --close --status done with at least one action row exits 0 reporting actionRows', async () => {
+    const p = makeProject();
+    const runId = 'run-0975-with-rows';
+    try {
+        const setup = await runScript(p.workdir, ['--run-id', runId, '--file', '.spur/workflows/inline-smoke.yaml']);
+        expect(setup.status, setup.stderr).toBe(0);
+        const action = await runScript(p.workdir, [
+            '--action',
+            '--run-id',
+            runId,
+            '--node',
+            'implement',
+            '--kind',
+            'shell',
+            '--status',
+            'done',
+            '--ok',
+            'true',
+            '--duration-ms',
+            '7',
+        ]);
+        expect(action.status, action.stderr).toBe(0);
+
+        const close = await runScript(p.workdir, ['--close', '--run-id', runId, '--status', 'done']);
+        expect(close.status, close.stderr).toBe(0);
+        // 1136 R5: the close JSON also reports the visited nodes that never emitted a row.
+        // 1146 R1: the close also reports the execution-summary file it produced.
+        expect(JSON.parse(close.stdout)).toEqual({
+            ok: true,
+            runId,
+            actionRows: 1,
+            missingNodes: [],
+            summaryFile: `.spur/run/${runId}-summary.md`,
+        });
+    } finally {
+        p.cleanup();
+    }
+}, 60_000);
+
+test.concurrent('1146 AC3: --no-summary suppresses the summary at close and is refused outside --close', async () => {
+    const p = makeProject();
+    const runId = 'run-1146-no-summary';
+    try {
+        const setup = await runScript(p.workdir, ['--run-id', runId, '--file', '.spur/workflows/inline-smoke.yaml']);
+        expect(setup.status, setup.stderr).toBe(0);
+        const action = await runScript(p.workdir, [
+            '--action',
+            '--run-id',
+            runId,
+            '--node',
+            'implement',
+            '--kind',
+            'shell',
+            '--status',
+            'done',
+            '--ok',
+            'true',
+            '--duration-ms',
+            '7',
+        ]);
+        expect(action.status, action.stderr).toBe(0);
+
+        const misuse = await runScript(p.workdir, [
+            '--node-enter',
+            '--run-id',
+            runId,
+            '--node',
+            'implement',
+            '--no-summary',
+        ]);
+        expect(misuse.status).toBe(2);
+        expect(misuse.stderr).toContain('Usage:');
+
+        const close = await runScript(p.workdir, ['--close', '--run-id', runId, '--status', 'done', '--no-summary']);
+        expect(close.status, close.stderr).toBe(0);
+        expect(JSON.parse(close.stdout)).not.toHaveProperty('summaryFile');
+        expect(existsSync(join(p.workdir, '.spur', 'run', `${runId}-summary.md`))).toBe(false);
+        expect(existsSync(join(p.workdir, '.spur', 'run', `${runId}-summary.json`))).toBe(false);
+    } finally {
+        p.cleanup();
+    }
+}, 60_000);
+
+test.concurrent('0975 AC4: --close --status failed with zero action rows stays a clean close (exit 0)', async () => {
+    const p = makeProject();
+    const runId = 'run-0975-failed-zero';
+    try {
+        const setup = await runScript(p.workdir, ['--run-id', runId, '--file', '.spur/workflows/inline-smoke.yaml']);
+        expect(setup.status, setup.stderr).toBe(0);
+
+        // A failed close may legitimately carry zero action rows (failure before any
+        // boundary executed) — only `done` demands recorded work.
+        const close = await runScript(p.workdir, [
+            '--close',
+            '--run-id',
+            runId,
+            '--status',
+            'failed',
+            '--reason',
+            'failed-check',
+        ]);
+        expect(close.status, close.stderr).toBe(0);
+        expect(JSON.parse(close.stdout)).toEqual({
+            ok: true,
+            runId,
+            actionRows: 0,
+            missingNodes: [],
+            summaryFile: `.spur/run/${runId}-summary.md`,
+        });
+
+        const db = new Database(join(p.workdir, '.spur', 'spur.db'), { readonly: true });
+        try {
+            const run = db
+                .query<{ status: string; terminal_reason: string | null }, [string]>(
+                    'SELECT status, terminal_reason FROM runs WHERE id = ?',
+                )
+                .get(runId);
+            expect(run?.status).toBe('failed');
+            expect(run?.terminal_reason).toBe('failed-check');
+        } finally {
+            db.close();
+        }
+    } finally {
+        p.cleanup();
+    }
+}, 60_000);
+
+// ─── 1007 R5: `--actions-file` batch emission ───────────────────────────────
+
+/** The exact entry shape the inline driver's per-state batch JSON carries. */
+function actionsFile(entries: readonly unknown[]): string {
+    const path = join(tmpdir(), `actions-${Math.random().toString(36).slice(2)}.json`);
+    writeFileSync(path, `${JSON.stringify(entries)}\n`);
+    return path;
+}
+
+test.concurrent('1007 R5: --actions-file records one action_runs row per entry through the --action writer', async () => {
+    const p = makeProject();
+    const runId = 'run-1007-batch-e2e';
+    try {
+        const setup = await runScript(p.workdir, ['--run-id', runId, '--file', '.spur/workflows/inline-smoke.yaml']);
+        expect(setup.status, setup.stderr).toBe(0);
+
+        const file = actionsFile([
+            { node: 'implement', kind: 'agent.run', status: 'done', ok: true, durationMs: 1234 },
+            { node: 'test', kind: 'shell', status: 'failed', ok: false, durationMs: 88 },
+        ]);
+        const batch = await runScript(p.workdir, ['--actions-file', file, '--run-id', runId]);
+        expect(batch.status, batch.stderr).toBe(0);
+        expect(JSON.parse(batch.stdout)).toMatchObject({ ok: true, runId, recorded: 2 });
+
+        const db = new Database(join(p.workdir, '.spur', 'spur.db'), { readonly: true });
+        try {
+            const rows = db
+                .query<ActionRow, [string]>(
+                    'SELECT node, kind, status, duration_ms, ok FROM action_runs WHERE run_id = ?',
+                )
+                .all(runId);
+            expect(rows).toHaveLength(2);
+            expect(rows[0]).toMatchObject({
+                node: 'implement',
+                kind: 'agent.run',
+                status: 'done',
+                duration_ms: 1234,
+                ok: 1,
+            });
+            expect(rows[1]).toMatchObject({ node: 'test', kind: 'shell', status: 'failed', duration_ms: 88, ok: 0 });
+        } finally {
+            db.close();
+        }
+
+        // The rows are real action_runs rows: --close done sees them (no zero-row defect).
+        const close = await runScript(p.workdir, ['--close', '--run-id', runId, '--status', 'done']);
+        expect(close.status, close.stderr).toBe(0);
+        expect(JSON.parse(close.stdout)).toMatchObject({ ok: true, actionRows: 2 });
+    } finally {
+        p.cleanup();
+    }
+}, 60_000);
+
+test.concurrent('1007 R5: invalid JSON or a malformed row exits 1 with no partial writes', async () => {
+    const p = makeProject();
+    const runId = 'run-1007-batch-invalid';
+    try {
+        const setup = await runScript(p.workdir, ['--run-id', runId, '--file', '.spur/workflows/inline-smoke.yaml']);
+        expect(setup.status, setup.stderr).toBe(0);
+
+        const invalid = join(p.workdir, 'actions-invalid.json');
+        writeFileSync(invalid, '[{"node":"a","kind":"b","status":"done","ok":true,"durationMs":1}\n');
+        const badJson = await runScript(p.workdir, ['--actions-file', invalid, '--run-id', runId]);
+        expect(badJson.status).toBe(1);
+        expect(JSON.parse(badJson.stdout)).toMatchObject({ ok: false, runId });
+        expect(badJson.stdout).toContain('cannot read actions file');
+
+        const malformed = actionsFile([
+            { node: 'good', kind: 'shell', status: 'done', ok: true, durationMs: 5 },
+            { node: '', kind: 'shell', status: 'done', ok: true, durationMs: 5 },
+        ]);
+        const badRow = await runScript(p.workdir, ['--actions-file', malformed, '--run-id', runId]);
+        expect(badRow.status).toBe(1);
+        expect(JSON.parse(badRow.stdout)).toMatchObject({ ok: false, runId });
+        expect(badRow.stdout).toContain('node must be a non-empty string');
+
+        // Validate-before-write: neither run left an action_runs row behind.
+        const db = new Database(join(p.workdir, '.spur', 'spur.db'), { readonly: true });
+        try {
+            expect(db.query<unknown, [string]>('SELECT 1 FROM action_runs WHERE run_id = ?').get(runId)).toBeNull();
+        } finally {
+            db.close();
+        }
+    } finally {
+        p.cleanup();
+    }
+}, 60_000);
+
+test.concurrent('1007 R5: --actions-file rejects other mode flags and --action still works (no regression)', async () => {
+    const p = makeProject();
+    const runId = 'run-1007-batch-usage';
+    try {
+        const file = actionsFile([{ node: 'a', kind: 'b', status: 'done', ok: true, durationMs: 1 }]);
+        const mixed = await runScript(p.workdir, ['--actions-file', file, '--run-id', runId, '--node', 'x']);
+        expect(mixed.status).toBe(2);
+        expect(mixed.stderr).toContain('Usage:');
+
+        // Status outside the finalize vocabulary is a batch-validation error, not a pause.
+        const paused = actionsFile([{ node: 'a', kind: 'b', status: 'paused', ok: true, durationMs: 1 }]);
+        const badStatus = await runScript(p.workdir, ['--actions-file', paused, '--run-id', runId]);
+        expect(badStatus.status).toBe(1);
+        expect(JSON.parse(badStatus.stdout).error).toContain('status must be');
+    } finally {
+        p.cleanup();
+    }
+}, 60_000);
+
+// ─── 1070 R2: host-reported provenance for `--action` rows ───────────────────
+
+test.concurrent('1070 R2/AC1: --action --estimated stamps host-reported provenance and the estimated flag', async () => {
+    const p = makeProject();
+    const runId = 'run-1070-estimated';
+    try {
+        const setup = await runScript(p.workdir, ['--run-id', runId, '--file', '.spur/workflows/inline-smoke.yaml']);
+        expect(setup.status, setup.stderr).toBe(0);
+
+        // `--estimated` sits FIRST: as a boolean flag it must not swallow the next argv token.
+        const action = await runScript(p.workdir, [
+            '--estimated',
+            '--action',
+            '--run-id',
+            runId,
+            '--node',
+            'implement',
+            '--kind',
+            'agent.run',
+            '--status',
+            'done',
+            '--ok',
+            'true',
+            '--duration-ms',
+            '50',
+        ]);
+        expect(action.status, action.stderr).toBe(0);
+        expect(JSON.parse(action.stdout)).toMatchObject({ ok: true, runId });
+
+        const db = new Database(join(p.workdir, '.spur', 'spur.db'), { readonly: true });
+        try {
+            const row = db
+                .query<{ result_json: string | null; ok: number; duration_ms: number }, [string]>(
+                    'SELECT result_json, ok, duration_ms FROM action_runs WHERE run_id = ?',
+                )
+                .get(runId);
+            expect(row).toMatchObject({ ok: 1, duration_ms: 50 });
+            expect(JSON.parse(row?.result_json ?? '')).toEqual({ provenance: 'host-reported', estimated: true });
+        } finally {
+            db.close();
+        }
+    } finally {
+        p.cleanup();
+    }
+}, 60_000);
+
+test.concurrent('1070 R2: --estimated is valid only with --action — other modes exit 2 before any write', async () => {
+    const p = makeProject();
+    const runId = 'run-1070-estimated-usage';
+    try {
+        const setup = await runScript(p.workdir, ['--run-id', runId, '--file', '.spur/workflows/inline-smoke.yaml']);
+        expect(setup.status, setup.stderr).toBe(0);
+
+        const batchFile = actionsFile([{ node: 'a', kind: 'b', status: 'done', ok: true, durationMs: 1 }]);
+        for (const args of [
+            ['--close', '--run-id', runId, '--status', 'done', '--estimated'],
+            ['--actions-file', batchFile, '--run-id', runId, '--estimated'],
+            ['--run-id', runId, '--file', '.spur/workflows/inline-smoke.yaml', '--estimated'],
+        ]) {
+            const proc = await runScript(p.workdir, args);
+            expect(proc.status, `expected usage exit 2 for ${args.join(' ')}`).toBe(2);
+            expect(proc.stderr).toContain('Usage:');
+        }
+
+        // A refused mode flag writes nothing: no action rows, and the run is not closed.
+        const db = new Database(join(p.workdir, '.spur', 'spur.db'), { readonly: true });
+        try {
+            expect(db.query<unknown, [string]>('SELECT 1 FROM action_runs WHERE run_id = ?').get(runId)).toBeNull();
+            expect(
+                db.query<{ status: string }, [string]>('SELECT status FROM runs WHERE id = ?').get(runId)?.status,
+            ).toBe('running');
+        } finally {
+            db.close();
+        }
+    } finally {
+        p.cleanup();
+    }
+}, 60_000);

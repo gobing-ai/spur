@@ -27,8 +27,7 @@ const OUT_FILE = fileURLToPath(new URL('../../dist/cli/spur', import.meta.url));
  * GPU peer from `io-node.js`, and a single-file bundle fails resolving an uninstalled package.
  * Spur only ever asks laya for backend `mlx` (the `ts-laya-mlx` native client hardcodes it), so
  * the import stays for the runtime and is never executed. `--compile` accepts no Bun.build
- * plugins, which is why the compiled and CLI bundles pass this flag while
- * `bundle-plugin-lib.ts` stubs the same peer.
+ * plugins, which is why the compiled and CLI bundles pass this flag.
  */
 export const UNUSED_LAYA_PEER = '@johnhenry/backend-webgpu';
 

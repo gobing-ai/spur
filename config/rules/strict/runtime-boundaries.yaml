@@ -36,6 +36,13 @@ rules:
             - "apps/desktop/src/server-process.ts"
 
             # Low-level system primitives:
+            # `spur builder pr` spine (script-absorption PR-7, moved from plugins/sp/scripts/pr-reviewing.ts):
+            # every git/gh call goes through ONE synchronous, test-injectable CommandRunner seam
+            # (`setCommandRunner`); the spine is synchronous end to end (wait polls with a sync sleep).
+            # The ts-runtime sync executors cannot stand in: NodeSyncProcessExecutor maps a spawn
+            # failure (gh/git missing) to a bare exit 1 and drops the reason the spine reports, and
+            # both strip the final newline. Output bytes are pinned by the PR-7 golden.
+            - "packages/app/src/services/pr-review/index.ts"
             - "packages/app/src/services/quality-gate.ts" # gate runs `sh -c` with stdout+stderr merged onto ONE fd; ProcessExecutor captures streams separately and cannot reproduce the stream-order contract (task 1006 R1; mirrors the history-anatomy bundling exemptions)
             # The feature-verification pass runs one long command with stdout+stderr merged onto the
             # run's single log fd and a 4 h ceiling (the frozen contract from task 0915: `safe argv
@@ -43,6 +50,13 @@ rules:
             # and exposes no timeout, so it cannot reproduce either half (task 1176 R2; same class as
             # the quality-gate exemption above).
             - "packages/app/src/workflow/feature-verification-run.ts"
+            # `spur task wrapup` steps (script-absorption PR-5, plan §3.4), pinned to the retired plugin
+            # scripts' golden output by apps/cli/tests/script-absorption-pr5-parity.test.ts. The feature gate
+            # (`sh -c`) and `task resolve` run with stdio/stderr INHERITED so their output streams into the
+            # workflow run log in order, and every step is synchronous; ProcessExecutor captures the streams
+            # separately and cannot inherit them (same class as the quality-gate exemption above).
+            - "packages/app/src/workflow/wrapup/steps.ts"
+            - "packages/app/src/workflow/wrapup/drift-probe.ts" # sync nested `spur task show` reads beside steps.ts (same exemption)
 
   - id: no-direct-fs-io
     description: "Prefer ts-runtime's FileSystem seam for fs IO."
@@ -65,6 +79,15 @@ rules:
 
             # Low-level system primitives (O_EXCL locks, FD byte-tailing, FS watcher, atomic registry, Vite glob fallback):
             - "packages/domain/src/planning/locks.ts" # POSIX atomic O_EXCL file locks
+            # Script-absorption PR-6: synchronous op modules whose file bytes are pinned by the
+            # PR-6 golden (apps/cli/tests/script-absorption-pr6). They keep the retired scripts'
+            # sync node:fs reads/writes (atomic publish rename, porcelain baselines, env/report
+            # writes, transcript and progress reads, the daily summary file + latest.json pointer);
+            # the async FileSystem seam would turn every op async and reorder their output.
+            - "packages/app/src/services/history-anatomy-cli.ts"
+            - "packages/app/src/services/session-timeline.ts"
+            - "packages/app/src/workflow/run-summary-cli.ts"
+            - "packages/app/src/services/daily-summary.ts"
             - "packages/domain/src/retention.ts" # recursive backup-dir reclamation + mtime stat (task 0622 R8); ts-runtime FileSystem seam has no recursive dir remove
             - "packages/app/src/services/token-ledger-service.ts" # FD byte-window log tailing
             - "packages/app/src/services/token-ledger-watcher.ts" # node:fs watch() live watcher
@@ -77,11 +100,27 @@ rules:
             - "packages/app/src/services/history-anatomy.ts" # deterministic history-anatomy cache core (task 1005 R2): fsync'd tmp+rename atomic publish, readdir digest scans and sync report reads must stay byte-stable; bundled standalone for the bare-node plugin twin (mirrors agent-usage-producer.ts / history-service.ts exemptions)
             - "packages/app/src/observability/workflow-run-log-sink.ts" # sync FD append for mid-run tail-able all-in-one run log (task 0426 / feature D2); append() is sync from the observability bus
             - "packages/app/src/observability/agent-run-log.ts" # same primitive as the sink above for the per-run agent stream (task 1076 R1, ADR-132); append() is sync from the agent service's own onOutput hook, and the byte cap needs the FD position it tracks
+            # Inline-driver transports (script-absorption PR-4, `spur workflow inline|commit-guard`): moved
+            # verbatim from the plugin scripts with their golden output pinned; synchronous probes and
+            # atomic tmp+rename snapshot writes inside one short-lived CLI process.
+            - "packages/app/src/workflow/commit-guard.ts" # .spur/run/<run>-tree-start.json atomic snapshot + target conflict-marker reads
+            - "packages/app/src/workflow/persist-check.ts" # recursive evidence-tree listing + byte comparison of both trees
+            - "packages/app/src/workflow/run-summary-render.ts" # close-step .spur/run/<run>-summary.{md,json} write (1146 R1)
+            - "packages/app/src/workflow/transcript.ts" # read-only host-transcript resolution (existsSync/readdirSync)
             # commands/workflow.ts was split per verb (commands/workflow/<verb>.ts); the FD tail lives in trace.ts.
             - "apps/cli/src/commands/workflow/trace.ts" # FD byte-window tail of the mid-run run log for `workflow trace --follow` streaming (task 0428 / feature D2); readSync at offset over the observability sink's FDs
             - "apps/web/src/modules/discover.ts" # Vite/Astro module scanner fallback under bun test
-            - "packages/app/src/services/quality-gate.ts" # gate artifacts (log/findings/receipt) written directly; merged-fd gate log and fsync-free atomic writes must stay byte-stable; bundled standalone for the bare-node plugin twin (task 1006 R1; mirrors history-anatomy.ts)
+            - "packages/app/src/services/quality-gate.ts" # gate artifacts (log/findings/receipt) written directly; merged-fd gate log and fsync-free atomic writes must stay byte-stable (task 1006 R1; `spur task gate` since script-absorption PR-3; mirrors history-anatomy.ts)
+            - "packages/app/src/workflow/wrapup/steps.ts" # `spur task wrapup` steps (script-absorption PR-5): sync status/metrics appends and run-artifact writes byte-pinned to the retired plugin scripts' golden output (apps/cli/tests/script-absorption-pr5-parity.test.ts); the FileSystem seam is async and has no append
+            - "packages/app/src/workflow/wrapup/drift-probe.ts" # drift-probe step beside steps.ts (same exemption)
+            # Script-absorption PR-3: the residual sweep and triage diffstat glue moved here from the retired
+            # plugin scripts (`spur task residual` / `spur task diffstat`). Same class as quality-gate.ts:
+            # synchronous `wx`/tmp+rename artifact writes, mtime-ordered verdict copies, and an fstat(1)
+            # dev/ino identity check (1067 R3) that the async FileSystem seam cannot express.
+            - "packages/app/src/services/residual-scan-run.ts"
+            - "packages/app/src/workflow/task-diffstat.ts"
             - "packages/app/src/workflow/feature-verification-run.ts" # the pass opens the run's single merged log fd (`openSync(path,'a')`) and mkdirs the run dir beside the receipt writer, exactly as the plugin entry did before the move; the fd cannot be expressed through the FileSystem seam (task 1176 R2; same class as the quality-gate exemption above)
+            - "packages/app/src/services/pr-review/index.ts" # `spur builder pr` (PR-7): sync --status-file verdict writes and the AGENTS.md review-rules probe inside the synchronous spine (same exemption as its process seam above)
             - "packages/app/src/services/run-storage.ts" # durable-evidence migration core (task 1025 R4): atomic tmp+rename byte copies with digest reread and atomic manifest publish must stay byte-stable (mirrors agent-usage-producer.ts / project-registry.ts exemptions)
             - "packages/app/src/services/durable-plane-ignore.ts" # .git/info/exclude append moved verbatim out of run-storage.ts to break an import cycle (same exemption)
 

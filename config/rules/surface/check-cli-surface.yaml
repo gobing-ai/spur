@@ -27,6 +27,8 @@ rules:
     exclude:
       # Per-noun shared.ts holds helpers used by 2+ verbs; it registers nothing.
       - "apps/cli/src/commands/*/shared.ts"
+      # Byte-exact stdout/stderr writer for the absorbed pipeline steps (script-absorption PR-5); registers nothing.
+      - "apps/cli/src/commands/task/step-output.ts"
     evaluator:
       type: rg
       config:
@@ -50,6 +52,37 @@ rules:
       - "apps/cli/src/commands/agent/loop.ts"
       - "apps/cli/src/commands/agent/start.ts"
       - "apps/cli/src/commands/agent/stop.ts"
+      # Absorbed pipeline steps (script-absorption PR-5): the app operation renders the golden-pinned
+      # text/JSON (planning-preflight.ts JSON.stringify for `task preflight --json`, batch-plan.ts for
+      # `task batch-plan`); wrapup, feature verify/handoff declare no --json. step-output.ts writes bytes.
+      - "apps/cli/src/commands/task/batch-plan.ts"
+      - "apps/cli/src/commands/task/preflight.ts"
+      - "apps/cli/src/commands/task/step-output.ts"
+      - "apps/cli/src/commands/task/wrapup.ts"
+      - "apps/cli/src/commands/feature/handoff.ts"
+      - "apps/cli/src/commands/feature/verify.ts"
+      # commit-guard declares no --json: its {staged, foreign} / {foreign} lines are rendered by
+      # @gobing-ai/spur-app/commit-guard (byte-identical to the retired script, PR-4 golden).
+      - "apps/cli/src/commands/workflow/commit-guard.ts"
+      # Pipeline-internal task verbs (script-absorption PR-3) declare no --json: their contract is
+      # the .spur/run artifact they write (gate status/receipt, residuals.json, diffstat.json) and
+      # the exit code; the gate's own status line is serialized by the app service.
+      - "apps/cli/src/commands/task/gate.ts"
+      - "apps/cli/src/commands/task/residual.ts"
+      - "apps/cli/src/commands/task/diffstat.ts"
+      # Absorbed measurement/report verbs (script-absorption PR-6): the app module serializes the
+      # golden-pinned JSON (step-profile-cli for `workflow profile --json`, run-summary-cli for
+      # `workflow summary`, session-timeline for `history timeline`, history-anatomy-cli for the
+      # anatomy ops); `history summary` writes Markdown and declares no --json.
+      - "apps/cli/src/commands/workflow/profile.ts"
+      - "apps/cli/src/commands/workflow/summary.ts"
+      - "apps/cli/src/commands/history/anatomy.ts"
+      - "apps/cli/src/commands/history/timeline.ts"
+      - "apps/cli/src/commands/history/summary.ts"
+      # Absorbed dogfood / PR-review spines (script-absorption PR-7): --json is rendered by
+      # @gobing-ai/spur-app/dogfood and @gobing-ai/spur-app/pr-review (JSON.stringify), not the CLI envelope.
+      - "apps/cli/src/commands/agent/dogfood.ts"
+      - "apps/cli/src/commands/builder/pr.ts"
     evaluator:
       type: rg
       config:

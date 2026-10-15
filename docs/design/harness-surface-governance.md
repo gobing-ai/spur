@@ -91,7 +91,8 @@ migration subjects, not proof that every current file already follows the target
 | `scripts/commands` | internal spur-dev commands | **Spur self-dev only** — packaging/release, building Spur, monorepo gates and repo evaluation runners. Tests/fixtures follow the owning workspace. Reusable noun queries/rules are application-owned even when the only current caller is this repo; repository policy may compose those services |
 | `package.json` scripts | repo-wide developer entrypoints | a **repo developer** invokes it by name (`bun run …`); it composes existing binaries, adds no logic, and its name is the contract |
 | `plugins/sp/scripts` | executable skill/command/pipeline adapters | translates arguments, invokes `spur`/git/gh, and renders results; no helper-only modules or tests. Standard installed scripts use `superskill script run`; `script path` remains the supported resolver where a path is required. ADR-065 owns generated twins and manifest/runtime contracts. No direct corpus parsing, DB access or lifecycle policy, including through a generated bundle |
-| `plugins/sp/hooks` | registered host hook entries and required host extensions | one authored entry per registered hook identity; an entry may serve several events. Normalizes host input and delegates. Installed hooks use `superskill hook run`; Pi extensions retain their host loader. Helpers/cores belong in lib, unit tests/fixtures in `plugins/sp/tests` |
+| `plugins/sp/hooks` | the `hooks.json` registry | `hooks.json` only. Pi renders it through superskill's native Pi hook adapter; the plugin-owned `pi/guard-extension.ts` is retired (2026-10-15). No hook entries: one would shadow the staged entry on native installs, and staged targets never receive this tree (2026-10-15, superskill ADR-039) |
+| `plugins/sp/scripts/hooks` | registered host hook entries | one authored entry per registered hook identity, `<id>.ts`; an entry may serve several events. It normalizes host input and delegates. Installed hooks run through `superskill hook run sp <id>`, which finds this path on every target: it is in the native plugin tree, and staged installs place it at `.agents/scripts/sp/hooks/`. An entry prints nothing on allow, or one decision object. The hook-script exception to the scripts row: no manifest row or `.mjs` twin. Helpers/cores belong in lib, unit tests/fixtures in `plugins/sp/tests` |
 | `plugins/sp/lib` | plugin-local helpers and justified local hook cores | pure skill helpers, shared transport helpers and ADR-129 bounded capture/guard cores may live here, including a substantial core extracted from one entry for a clear adapter boundary. A trivial single-use helper stays inline. No application behavior hidden here to pass an entry LOC check. Existing generated app bundles require explicit migration exceptions; nothing outside the plugin imports lib at runtime |
 | `plugins/sp/tests` | plugin unit tests and fixtures | owns hook, extension and skill-helper tests, including behavioral-eval judge/fixtures. Live evaluation runner is repository tooling, opt-in, outside normal gates (`scripts/commands/skill-eval.ts`, task 1175). No eval surface ships: the corpus sits under `plugins/sp/tests/evals` and the packager prunes `tests/`/`evals/` |
 
@@ -156,6 +157,13 @@ nothing else. No additional `spur-dev` verb may be promoted onto `builder`, and 
 spur-dev → public-noun promotion of any kind may ride this record. Every future promotion needs
 its **own** consent-gate entry (audience + surface + justification) exactly like the rows above;
 without one, the command stays internal under `scripts/commands/`.
+
+**Amendment (2026-10-15, script absorption PR-7).** Owner decision Q1 of
+`docs/plans/2026-10-14-spur-script-absorption.md` (no new nouns) is the consent-gate entry for a
+third `builder` verb: `spur builder pr <op>` (audience: the `/sp:dev-pr-review` spine and its
+operator; surface: the eight PR-review ops of the retired `plugins/sp/scripts/pr-reviewing.ts`;
+justification: plugin scripts may only be thin wrappers, and the ops are release-adjacent repo
+plumbing). `builder` is now frozen at `bump-ver`, `drop-tags`, `pr`.
 
 ## 4. Subsequent consent applications
 

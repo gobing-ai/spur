@@ -1,4 +1,3 @@
-import { getEnvVars } from '@gobing-ai/spur-config';
 import { echo, echoError } from '@gobing-ai/ts-utils';
 import { type FinalizeIdeaHandoffResult, finalizeIdeaHandoff } from './idea-handoff';
 
@@ -16,6 +15,8 @@ export interface IdeaHandoffCliEnv {
     featureId?: string;
     /** PATH-independent spur invocation resolved by the CLI at run start. */
     spurBin?: string;
+    /** Lossless CLI default launch. */
+    spurArgv?: readonly string[];
 }
 
 /** Outcome of one entrypoint invocation: the process exit code plus the underlying result. */
@@ -29,10 +30,9 @@ export interface IdeaHandoffCliOutcome {
 /**
  * Run the deterministic idea handoff finalization for one pipeline run.
  *
- * This is the monorepo writer the `idea-pipeline.yaml` `handoff-finalize` state prefers;
- * seeded projects fall back to the registered plugin-script twin `idea-handoff.mjs`,
- * generated from this entrypoint by `bun run build:scripts` (`scripts/commands/
- * bundle-plugin-lib.ts`).
+ * Behind `spur feature handoff`, which the `idea-pipeline.yaml` `handoff-finalize` state
+ * invokes (script-absorption PR-5 retired the plugin script `idea-handoff` and its generated
+ * bundle).
  *
  * @param env - Environment slice carrying the run id, feature id, and spur invocation.
  * @param run - Finalization implementation; injectable for tests.
@@ -45,13 +45,18 @@ export async function runIdeaHandoffCli(
     const runId = env.__runId ?? '';
     const featureId = env.featureId ?? '';
     if (runId === '' || featureId === '') {
-        // Pinned verbatim by idea-handoff-cli.test.ts and the idea-handoff.mjs twin (0824 R1:
+        // Pinned verbatim by idea-handoff-cli.test.ts and the PR-5 golden parity (0824 R1:
         // test-pinned messages stay the same; 'failed closed' is the script-missing wrapper).
         echoError('idea-handoff: __runId and featureId env vars are required');
         return { exitCode: 1 };
     }
 
-    const result = await run({ runId, featureId, spurBin: env.spurBin ?? 'spur' });
+    const result = await run({
+        runId,
+        featureId,
+        spurBin: env.spurBin ?? 'spur',
+        ...(env.spurArgv === undefined ? {} : { spurArgv: env.spurArgv }),
+    });
     if (!result.ok) {
         echoError(`idea-handoff: ${result.error ?? 'failed'}`);
         return { exitCode: 1, result };
@@ -61,10 +66,3 @@ export async function runIdeaHandoffCli(
     echo(`idea-handoff: next -> ${result.nextCommand}`);
     return { exitCode: 0, result };
 }
-
-/* c8 ignore start -- process-level wiring, exercised by the pipeline rather than unit tests */
-if (import.meta.main) {
-    const outcome = await runIdeaHandoffCli(getEnvVars() as IdeaHandoffCliEnv);
-    process.exit(outcome.exitCode);
-}
-/* c8 ignore stop */

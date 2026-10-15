@@ -35,7 +35,7 @@ task runs and frames the work above them.
 You are the **batch driver**. You run the loop documented in
 **[references/execution-batch.md](../skills/spur-dev/references/execution-batch.md)** - resolve the
 task set from the selector, freeze it, topologically order by dependencies, **preflight** each WBS
-against TABLE A STOP rows (via `sp:next-router` / `plugins/sp/scripts/batch-preflight.ts`), run each
+against TABLE A STOP rows (via `sp:next-router` / `spur task preflight`), run each
 ready task through the standard single-task pipeline, inspect each terminal verdict, optional
 **one-shot recovery** hop, decide continue/halt, and emit a structured batch report.
 
@@ -75,13 +75,13 @@ You own the spaces **between** task runs:
 - **Topologically order** the frozen set by `dependencies[]` (Step 2). Abort on cycle; pre-block
   unmet out-of-set deps.
 - **Preflight (Step 2.5 / 3.0)** - before each pipeline launch, evaluate TABLE A STOP rows
-  (`batch-preflight.ts` or equivalent). Skip A2/A7/A8/A9; still **launch `task-pipeline.yaml`** for
+  (`spur task preflight` or equivalent). Skip A2/A7/A8/A9; still **launch `task-pipeline.yaml`** for
   ready WBS (never substitute a `dev-next` loop for the happy path).
 - **Run each ready task** through `task-pipeline.yaml` via `spur workflow run --async`
   (Step 3). The command/script layer polls `spur workflow trace` to terminal state - polling is
   transport, not planner reasoning (R3: the poll loop must not live in this agent's body; the planner
   inspects the terminal verdict, not the poll iterations). Follow the
-  `plugins/sp/scripts/batch-preflight.ts` precedent for scripted transport.
+  `spur task preflight` precedent for scripted transport.
 - **Parallelize only when requested** by applying `sp:parallel-execution` to a proven-independent
   subset (Step 3 optional path). Serialize when dependency, file-overlap, or budget checks fail.
   Preflight still runs per WBS before fan-out; recovery stays sequential.
@@ -156,14 +156,14 @@ When you fan out or dispatch a subagent, apply the four disciplines the SSOT
 - [ ] Drive the loop in execution-batch.md - resolve -> freeze -> order -> **preflight** -> run -> inspect
       -> optional recovery -> decide -> report.
 - [ ] **Preflight** each WBS before `workflow run` using
-      `node "$(superskill script path sp batch-preflight.mjs)"` (or the pure `preflightTask` helper) with
+      `spur task preflight <wbs>` (or the pure `preflightTask` helper) with
       `spur task show --json` deps. On `action: skip` (A2/A7/A8/A9), do **not** start the pipeline;
       record skip in the batch report with the reason string.
 - [ ] Launch each **ready** per-task pipeline with `--async`. The command/script layer polls
       `spur workflow trace` to terminal state - this is transport, not planner reasoning (R3). A
       pipeline with `agent.run` stages runs for many minutes; the planner inspects the terminal
       verdict + `.spur/run/<wbs>-verdict.json`, never the poll iterations. Synchronous invocation
-      risks orphaned runs; follow the `batch-preflight.ts` precedent for scripted transport.
+      risks orphaned runs; follow the `spur task preflight` precedent for scripted transport.
 - [ ] Forward `--auto` and `--agent` into each per-task `--vars` and nothing else.
 - [ ] Freeze the set at kickoff; never re-query `spur task list` to recompute membership mid-batch.
 - [ ] Abort the whole batch on a dependency cycle before running any task.

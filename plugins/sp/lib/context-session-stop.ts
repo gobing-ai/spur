@@ -18,7 +18,7 @@
  * Self-contained by design (task 0232). Installed hook configs use the portable
  * `superskill hook run sp context-session-stop` entrypoint.
  *
- * Task 1174: this core lives in `plugins/sp/lib/`; `plugins/sp/hooks/context-session-stop.ts` keeps the argv/stdin adapter.
+ * Task 1174: this core lives in `plugins/sp/lib/`; `plugins/sp/scripts/hooks/context-session-stop.ts` keeps the argv/stdin adapter.
  */
 
 import { appendFileSync, existsSync, readFileSync, rmSync } from 'node:fs';

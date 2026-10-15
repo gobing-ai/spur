@@ -16,6 +16,7 @@
 | `report` | Report a fleet member lifecycle state (`working`/`idle`/`blocked`) from a host hook |
 | `join` / `leave` | Join or leave the fleet as a guest occupant (a live session that pulls its own work) |
 | `doctor [agent]` | Check agent readiness (usable, authenticated, version) |
+| `dogfood <gate\|validate-report>` | Dogfood-testing gates: pipeline-driving refusal and report validation |
 | `trace <runId>` | Run lineage (workflow → agent runs), optionally followed to completion |
 | `wait [specId]` | Identity-pinned wait for an occupant run to reach a lifecycle state, or (`--inbox`) for a guest's queued work |
 | `loop` | Supervisor-internal self-draining loop for an agent spec (hidden from `--help`) |
@@ -372,6 +373,40 @@ Stops a supervised agent process via `spur self serve`.
 |---|---|
 | `--server <url>` | Server API URL (default: this project's registry serve port, `http://localhost:<port>/api`; `http://localhost:3000/api` only when the project has no live entry) |
 | `--json` | Output machine-readable JSON |
+
+## spur agent dogfood gate
+
+```
+spur agent dogfood gate [options] [testee]
+```
+
+Deterministic Phase 1.0 / W8 gate for the `sp:dogfood-testing` skill, absorbed from the retired
+`plugins/sp/scripts/dogfood-testing/detect-pipeline-driving.ts` (script-absorption PR-7). Exit `2`
+refuses a testee that drives a pipeline, or a mutating `--fix` mode, without an explicit
+`--max-retry`; exit `0` proceeds (stdout may carry the implement-heavy advisory); exit `1` is a
+usage error.
+
+| Flag | Description |
+|---|---|
+| `--testee <string>` | The testee invocation under evaluation (positional alias) |
+| `--max-retry-present` | The operator already supplied an explicit `--max-retry` |
+| `--steps <labels>` | Derived step labels joined by `\|\|` (Phase 1 W8 re-check) |
+| `--json` | Print the gate result as JSON |
+
+## spur agent dogfood validate-report
+
+```
+spur agent dogfood validate-report [options] [file]
+```
+
+Validate a dogfood report against the report contract, Cost block included (absorbed from the
+retired `validate-report.ts`). Exit `0` clean, `2` validation failed (error codes on stdout),
+`1` usage error or unreadable file.
+
+| Flag | Description |
+|---|---|
+| `--file <path>` | Report markdown path (positional alias) |
+| `--json` | Print the validation result as JSON |
 
 ## Agent spec sources
 

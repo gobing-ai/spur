@@ -21,7 +21,7 @@ the interpreter and trace instructions must match. Never hand-edit the installed
 
 ## Driver state checklist (re-read this after a compaction)
 
-- **Run id** — the run row `inline-run-setup` persisted (`.spur/run/<run-id>-inline-setup.json`
+- **Run id** — the run row `spur workflow inline begin` persisted (`.spur/run/<run-id>-inline-setup.json`
   sidecar, `.spur/memory/runs/<run-id>.md` + `.state.json`); never re-derive it from the transcript.
 - **Markers under `.spur/run/`** — `<run-id>-inline-setup.json` (frozen invocation identity),
   `<run-id>-tree-start.json` (commit-guard fingerprint), `<wbs>-verdict.json` (per-stage verdict),
@@ -98,14 +98,12 @@ fallback) — labels are display addresses only, never an execution key.
    accept the inline run (0785 R3):
 
    ```bash
-   SETUP_SCRIPT=plugins/sp/scripts/inline-run-setup.ts; [ -f config/plugin-scripts.json -a -f "$SETUP_SCRIPT" ] || SETUP_SCRIPT="$(superskill script path sp inline-run-setup.mjs 2>/dev/null)";
    # 0960 R2: record the run's script-resolution identity beside the run row (the same file the
    # pipelines' run-start action writes) so the inline path carries the same provenance.
    RS=plugins/sp/scripts/script-root.ts; [ -f config/plugin-scripts.json -a -f "$RS" ] || RS="$(superskill script path sp script-root.mjs 2>/dev/null)";
    RUNNER=bun; case "$RS" in *.mjs) RUNNER=node ;; esac; [ -f "$RS" ] && "$RUNNER" "$RS" --run-id "$RUN_ID" || echo "script-root failed closed — run 'superskill install sp --marketplace gobing-ai/spur'" >&2
-   [ -n "$SETUP_SCRIPT" ] && [ -f "$SETUP_SCRIPT" ] && \
-     bun "$SETUP_SCRIPT" --run-id "$RUN_ID" --file <selected-pipeline-yaml> \
-     || { echo "inline run setup failed closed — checker not found; run 'superskill install sp --marketplace gobing-ai/spur'" >&2; exit 1; }
+   spur workflow inline begin --run-id "$RUN_ID" --file <selected-pipeline-yaml> \
+     || { echo "inline run setup failed closed — see the spur workflow inline begin error above" >&2; exit 1; }
    ```
 
    **Commit fingerprint (1129 R1).** Fingerprint the tree the task commit will land in — before the
@@ -118,21 +116,18 @@ fallback) — labels are display addresses only, never an execution key.
 
    ```bash
    RUN_ID="<marker-id>"   # the WT-3 marker's id (execution-batch.md), or the run id allocated at setup
-   GUARD=plugins/sp/scripts/commit-guard.ts; [ -f config/plugin-scripts.json -a -f "$GUARD" ] || GUARD="$(superskill script path sp commit-guard.mjs 2>/dev/null)";
-   bun "$GUARD" start --run "$RUN_ID"     # <this tree>/.spur/run/$RUN_ID-tree-start.json = { head, dirty[] }
+   spur workflow commit-guard start --run "$RUN_ID"     # <this tree>/.spur/run/$RUN_ID-tree-start.json = { head, dirty[] }
    ```
 
-   The delegate uses the source app service when the SPUR_BIN chain identifies a checkout;
-   otherwise it loads the generated application bundle shipped with the plugin. Both setup paths
-   obtains the selected definition from the existing CLI `workflow show --format todo --json`
-   projection and revalidates its schema/name/digest before preserving its source layer.
-   Both paths create-or-attach the row,
+   `spur workflow inline begin` (the installed CLI transport; the plugin requires spur) obtains the
+   selected definition from the CLI's `workflow show --format todo --json` projection — through
+   `--spur-bin`/`SPUR_BIN` when set, else the running spur — and revalidates its
+   schema/name/digest before preserving its source layer. It create-or-attaches the row,
    and writes the run-record state `.spur/memory/runs/<run-id>.state.json` plus the `.md` run-start
    header (task 0927; a legacy pre-0927 run keeps its `<run-id>-inline-setup.json` sidecar).
    Seed `__runId` and `__definitionDigest`
    from that state so proof capture and bound registration verify against the persisted identity.
-   Bun remains required for SQLite; the Node-runnable installed twin re-enters Bun on PATH.
-   A non-zero exit (missing runtime/bundle, invalid projection, missing row identity, changed definition) stops the run —
+   A non-zero exit (invalid projection, missing row identity, changed definition) stops the run —
    never continue unbound and never fabricate a PASS. (The delegate persists the authoritative
    RUN row only — the 0808 inline record is the registration-equivalent convention below, not a
    setup-time artifact-ledger insert.)
@@ -173,7 +168,7 @@ fallback) — labels are display addresses only, never an execution key.
    Publishing executes nothing, so it safely precedes readiness and isolation, which keep their
    existing order below.
 6. **Quick deterministic readiness (R2), before isolation.** Evaluate `quickReadiness` from
-   `plugins/sp/scripts/batch-preflight.ts` with the operation, status, filtered-set size, the
+   `spur task preflight <wbs> --operation <op>` with the operation, status, filtered-set size, the
    matrix-selected required/present sections, and content-policy findings. Record the outcome
    (runnable / needs-refinement / blocked / skipped / invalid) in the run log. Admission decision
    only — no model, no full tests/lint, no live-data probe, no feature mutation, no corpus-wide
@@ -414,15 +409,15 @@ After each executed action settles, record its boundary before the next action, 
 or terminal close. Measure its actual duration and preserve its declared failure policy:
 
 ```bash
-bun "$SETUP_SCRIPT" --action --run-id "$RUN_ID" --node <state-id> --kind <action-kind> \
+spur workflow inline action --run-id "$RUN_ID" --node <state-id> --kind <action-kind> \
   --status <done|failed> --ok <true|false> --duration-ms <measured-ms> [--estimated]
 ```
 
 `--duration-ms` is the wall clock measured around the action. Pass `--estimated` when you did
 **not** time it — for example a duration reconstructed after a subagent returned — so the row is
-labelled instead of presented as measured. `--estimated` is valid only with `--action`.
+labelled instead of presented as measured. `--estimated` is valid only on `inline action`.
 
-For a multi-action state, `--actions-file` may emit the measured boundaries together before leaving
+For a multi-action state, `spur workflow inline actions --file <json>` may emit the measured boundaries together before leaving
 that state. Follow [Structured trace emission](#structured-trace-emission-adr-117-task-0868) for the
 payload, delegated `decide` emission and best-effort failure handling. Never retry a failed batch
 or backfill at close; a zero-row done close fails with `NO_ACTION_ROWS`.
@@ -488,7 +483,7 @@ Action semantics come from the YAML and the workflow action contract:
   state mutates the task, the host validates the same refusal conditions inline — the declared
   artifact exists at the resolved path and is canonical-valid for the run's wbs (for
   `verify-verdict`: verdict `PASS`), `proofBinding: current` is honored against a freshly captured
-  proof digest — capture it with `bun "$SETUP_SCRIPT" --fingerprint --task-file <task path>
+  proof digest — capture it with `spur workflow inline fingerprint --task-file <task path>
   [--feature-file <feature path>]`, the same entry point used at Run setup, which prints the engine
   `sha256:<hex>` digest. Run it inside a per-call pin subshell for the confirmed execution tree
   (the cwd feeds the git-tree half of the digest)
@@ -560,8 +555,7 @@ run collapses into one serial host worker with no executor diversity. So classif
 failure before falling back:
 
 ```bash
-DISPATCH_SCRIPT=plugins/sp/scripts/inline-run-dispatch.ts; [ -f config/plugin-scripts.json -a -f "$DISPATCH_SCRIPT" ] || DISPATCH_SCRIPT="$(superskill script path sp inline-run-dispatch.mjs 2>/dev/null)"
-bun "$DISPATCH_SCRIPT" --dispatch-failure --run-id "$RUN_ID" --stage <state-id> --decision <escalate|stop> \
+spur workflow inline dispatch-failure --run-id "$RUN_ID" --stage <state-id> --decision <escalate|stop> \
   --text-file <bounded failure record> [--executor <name>] [--agent <a>] [--model <m>]
 ```
 
@@ -586,7 +580,7 @@ record the executor identity the stage will use, so a later classified exhaustio
 to a rung configuration can disable:
 
 ```bash
-bun "$DISPATCH_SCRIPT" --attribution --run-id "$RUN_ID" --stage <state-id> \
+spur workflow inline attribution --run-id "$RUN_ID" --stage <state-id> \
   [--executor <name>] [--agent <name>] [--model <m>]     # omit --executor for the no-attribution marker
 ```
 
@@ -908,16 +902,15 @@ verdict artifact exists (tasks 0617, 0619 — the clobbering spiral).
    conflict markers — both mean "resolve it, do not commit":
 
    ```bash
-   GUARD=plugins/sp/scripts/commit-guard.ts; [ -f config/plugin-scripts.json -a -f "$GUARD" ] || GUARD="$(superskill script path sp commit-guard.mjs 2>/dev/null)";
-   bun "$GUARD" check --run "$RUN_ID"
-   bun "$GUARD" stage --run "$RUN_ID" -- <files this run wrote> \
+   spur workflow commit-guard check --run "$RUN_ID"
+   spur workflow commit-guard stage --run "$RUN_ID" -- <files this run wrote> \
      || { echo "record halt: commit-guard refused a path (foreign, unmerged or conflict-marked); nothing committed" >&2; exit 1; }
    git commit -m "<type>(<scope>): <wbs> <summary>"
    ```
 
-5. **Print the run's execution summary (1146).** The terminal `--close` returns `summaryFile`; print
+5. **Print the run's execution summary (1146).** The terminal `spur workflow inline close` returns `summaryFile`; print
    that file's contents verbatim under an `### Execution summary` heading, and pass `--no-summary`
-   through to `--close` when the operator asked for it. The window is the run row's `started_at` →
+   through to `inline close` when the operator asked for it. The window is the run row's `started_at` →
    close time — the driver records no `SINCE` and assembles no measurement of its own
    (structured-trace-emission.md § the close step owns the contract).
 
@@ -967,17 +960,15 @@ were both violated once on 2026-10-10, aborting the run's own verification):
 
 Each item below cost a driver cycle to discover. They are contracts, not tips.
 
-- **`--decide --options-json <file>` takes one option object, never an array.** Shape:
+- **`spur workflow inline decide --options-json <file>` takes one option object, never an array.** Shape:
   `{id, decision, params?, evidence? | instructions?, resultFile}`; `evidence` and `instructions` are
   mutually exclusive (`CatalogDecideOptionsSchema`). A JSON array parses as neither dialect and
   surfaces as `decide: invalid options — Invalid input` with no field detail. `resultFile` resolves
   against the confirmed tree's cwd, so pass a worktree-relative path such as
   `.spur/run/<wbs>-triage.decision`.
-- **`task-diffstat.ts` reads `wbs` from the environment and writes an artifact.** Invoke it as
-  `wbs=<wbs> node "$(superskill script path sp task-diffstat.mjs)"`; stdout stays empty, so assert success on
-  `.spur/run/<wbs>-diffstat.json` and never on command output. Never the bare unguarded
-  source-repo path form — the script-contract check forbids it on a shipped surface because it
-  shadows the installed twin in a consumer.
+- **`spur task diffstat <wbs>` writes an artifact, not output.** stdout stays empty, so assert
+  success on `.spur/run/<wbs>-diffstat.json` and never on command output; a missing or malformed
+  run base still exits 0 with `sensitive: true` (fail safe).
 - **The verify answer grammar is exact.** One `Verdict:` line, then
   `### Per-Requirement Traceability` (`| Req | Status | Evidence |`) and
   `### Acceptance Criteria Verification` (`| AC | Status | Evidence Type | Evidence |`). Requirement

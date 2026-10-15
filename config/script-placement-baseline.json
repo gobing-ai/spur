@@ -1,33 +1,5 @@
 {
     "schemaVersion": 1,
     "description": "ADR-130 placement baseline (task 1000, seeded from plan \u00a72 inventory). Entries suppress sp-script-placement findings; kinds[] rows are migration-ledger entries for plan \u00a72 rows with no current findings. Baseline can only shrink: a listed kind the file no longer produces is a stale-baseline finding. Tasks 1001-1007 delete their entries in the same commit as the move.",
-    "entries": {
-        "plugins/sp/scripts/pr-reviewing.ts": {
-            "kinds": ["budget"],
-            "reason": "Keep, sp-owned git/gh loop; cited exemption (plan \u00a72)"
-        },
-        "plugins/sp/scripts/wrapup-steps.ts": {
-            "kinds": ["budget", "corpus-parse"],
-            "reason": "Keep (budget exemption), W2 (plan \u00a72). corpus-parse: the 1147 R1 doc-sync write-scope guard excludes the task/feature corpus by path prefix -- a scope exclusion, not corpus parsing (same class as wrapup-drift-probe.ts).",
-            "exempt": true
-        },
-        "plugins/sp/scripts/batch-preflight.ts": {
-            "kinds": ["budget"],
-            "reason": "Keep (budget exemption; reviewed W4) (plan \u00a72)",
-            "exempt": true
-        },
-        "plugins/sp/scripts/wrapup-drift-probe.ts": {
-            "kinds": ["budget", "corpus-parse"],
-            "reason": "Keep (glue over capture file; budget exemption) (plan \u00a72)",
-            "exempt": true
-        },
-        "plugins/sp/scripts/daily-summary/daily-summary.ts": {
-            "kinds": ["budget"],
-            "reason": "Keep (daily-summary/, plan \u00a72); read-only history-health reads via the app service (task 1178)"
-        },
-        "plugins/sp/hooks/pi/guard-extension.ts": {
-            "kinds": ["budget"],
-            "reason": "Keep (ADR-129 normalizer) (plan \u00a72)"
-        }
-    }
+    "entries": {}
 }

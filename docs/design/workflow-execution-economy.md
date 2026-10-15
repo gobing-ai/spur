@@ -110,6 +110,11 @@ bundle instead of letting a missing export surface as a bare failure (1120); the
 project-layer consumer requiring a retired export — is diagnosed app-side (1185, receipt contract below). Retiring the exception
 itself needs a separately approved owning-noun transport; it is not implied by any of the above.
 
+**Amendment (2026-10-15, script absorption).** That transport was approved: PR-4..PR-6 moved every
+consumer onto `spur <noun> <verb>` (`workflow inline`, `feature verify`, `task batch-plan|preflight|diffstat`,
+`history anatomy|timeline|summary`, `workflow summary|profile`), and PR-6 deleted every generated
+bundle and `inline-run-app.ts`. The paragraphs above are historical.
+
 For source and installed setup, the selected Spur CLI's existing `workflow show --format todo --json`
 projection owns project/registered/shared resolution. The application service validates the
 projection and re-loads its selected definition under schema validation, checks name and digest,
@@ -189,7 +194,6 @@ The per-task pipeline's quality gate is `bun run spur-check` (task-pipeline `qua
 | `inline-pipeline-parity-check` | the inline driver's documented action/guard set ≡ the resolved sets across all `config/workflows/*.yaml` | repo-wide (driver↔catalogue parity) |
 | `dependency-drift-check` | `bun.lock` ↔ installed `@gobing-ai/ts-*` versions | repo-wide (environment invariant) |
 | `importer-schema-check` | the SQLite DB's recorded importer schema version ≡ the installed importer package | repo-wide (shared-DB invariant) |
-| `history-surface-freeze-check` | the frozen History UI + transport contract are unchanged vs the merge base (E91) | repo-wide (whole-branch frozen-surface invariant) |
 | `lint` (biome + typecheck) | the workspaces and standalone `scripts/` and `plugins/sp/` TypeScript trees compile and are formatted | task-local (violated by the diff that breaks it) |
 | `test-pre-check` (rule preset) | source respects the typescript/structure/boundary/surface/ui/strict rules | task-local (violated by the diff that introduces the pattern) |
 | `test` (`bun test`) | each package's tests pass | task-local, **except** repo-wide test files relocated to `repo-wide-tests/` (e.g. `adr-supersession.test.ts`, which diffs `docs/00_ADR.md` against HEAD and fires on a sibling's uncommitted ADR addition) |
@@ -308,12 +312,13 @@ writer-blind. Task 0915 replaces it with a bound receipt service; the status fil
 remains as coarse routing evidence for the `feature-verification` workflow's internal
 `verify→done` transition, but it no longer satisfies completion by itself.
 
-**Writer.** The `feature-verification` workflow's `onEnter` script
-(`plugins/sp/scripts/feature-verification-steps.ts`) is the single writer: it resolves
+**Writer.** The `feature-verification` workflow invokes `spur feature verify`, whose application
+operation in `packages/app/src/workflow/feature-verification-run.ts` owns the pass: it resolves
 the workflow definition, captures the before digest, records a RUNNING receipt, shells
 the configured command via `splitLaunchCommand` (log appended to
 `.spur/run/<runId>-feature-verification.log`, 4h timeout), captures the after digest and
-completes the receipt atomically (tmp+rename). The CLI `feature verify` verb is removed.
+completes the receipt atomically (tmp+rename). The former plugin script was retired when the
+`feature verify` transport absorbed this operation.
 
 **Artifacts** (written by the receipt service in `packages/app/src/workflow/feature-verification-receipt.ts`,
 schema `feature-verification-receipt/v1`):

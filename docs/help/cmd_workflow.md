@@ -17,8 +17,12 @@
 | `list` | List available workflow YAML files across project + global layers |
 | `trace [run-id]` | Show persisted workflow run history (or follow a live run) |
 | `progress <run-id>` | Project a run's structured progress: current state, per-action attempts, candidate next transitions |
+| `summary` | Measured execution summary of runs (per-stage time, wait, tool calls, tokens) or a batch roll-up |
+| `profile <workflow>` | Per-node step profile of a workflow's last N runs with the cache-window flags (read-only) |
 | `cancel <run-id>` | Cancel a single non-terminal run by id (mark as failed; SIGTERM async worker when live) |
 | `clean` | Housekeeping: finalize stale non-terminal runs **and** reclaim retained run logs |
+| `inline <op>` | Host-inline run lifecycle transport for the inline pipeline driver (begin, trace, close, decide, persist-out/check, dispatch) |
+| `commit-guard <op>` | Run-scoped commit guard: stage only the paths this run wrote (`start` / `stage` / `check`) |
 
 ## spur workflow validate
 
@@ -326,6 +330,50 @@ empty success.
 spur workflow progress <run-id> --json
 ```
 
+## spur workflow summary
+
+```
+spur workflow summary (--progress <[label=]file>... | --rollup <[label=]file>...) [--transcript <path>] [--since <iso>] [--markdown]
+```
+
+| Flag | Description |
+|---|---|
+| `--progress <[label=]file>` | `spur workflow progress <run-id> --json` output of a run (repeatable) |
+| `--rollup <[label=]file>` | Close-written `.spur/run/<run>-summary.json` (repeatable; excludes `--progress`) |
+| `--transcript <path>` | Transcript JSONL path (default: the active host session) |
+| `--since <iso>` | Measure from this instant |
+| `--markdown` | Render the Markdown table instead of JSON |
+
+The measured execution summary `/sp:dev-run` and `/sp:dev-runall` print: the host transcript
+windowed by each state visit's attempt timestamps, per stage time, operator wait, tool calls,
+tokens (total / non-cached) and the actor split, with driver overhead as its own row. `--rollup`
+renders one row per run plus the batch total (and the wall span when runs overlap). No transcript
+or no window → `n/a`, exit `0`. Exit `2`: usage error, untimed progress or unreadable input.
+Absorbed from the retired `run-summary` plugin script (script-absorption PR-6).
+
+## spur workflow profile
+
+```
+spur workflow profile <workflow> [--last <n>] [--window <sec>] [--spur-bin <cmd>] [--json]
+```
+
+| Argument | Description |
+|---|---|
+| `workflow` | Workflow name |
+
+| Flag | Description |
+|---|---|
+| `--last <n>` | Number of recent done runs to sample (default 20) |
+| `--window <sec>` | Cache window W in seconds (default 300) |
+| `--spur-bin <cmd>` | spur invocation for the trace reads (default: this spur) |
+| `--json` | Output machine-readable JSON |
+
+Read-only per-node step profile for `sp:spur-doctor`, built from `spur workflow trace`: per node and
+action kind the run count, executions, p50/max `durationMs`, p50 idle gap, session mode and
+`cacheHit` p50 with coverage, plus the ADR-115 cache-window flags (`step-over-window`,
+`resume-after-idle`, `resume-cold-cache`, `agent-run-over-2w`). Unknown evidence is `?`/`null`,
+never `0`. Exit `0` profile produced, `1` a spur call failed or its JSON did not parse.
+
 ## spur workflow cancel
 
 ```
@@ -363,6 +411,166 @@ Housekeeping **two scopes** (unless scoped by flag):
 2. **Run-log reclamation** — remove retained `.spur/run/<RUNID>.log` files older than
    `workflows.logRetentionDays` in `.spur/config.yaml` (default 30 days). Never touches
    `.spur/workflow/<RUNID>.jsonl` or `*-partial.md`.
+
+## spur workflow inline
+
+```
+spur workflow inline <op> [options]
+```
+
+The installed-CLI transport the inline pipeline driver
+(`plugins/sp/skills/spur-dev/references/inline-pipeline-driver.md`) calls around a host-inline run.
+It replaced the plugin scripts `inline-run-setup`, `inline-run-dispatch` and `persist-out-check`
+(script-absorption PR-4). These ops boot without the CLI database or config: they never create
+`.spur/spur.db` in the cwd (the runners open the run-owning tree's database), print no banner, and
+load config only for `decide` and `dispatch-failure`. Exit codes: `0` ok, `1` fail closed (the
+driver must stop), `2` usage error (an unknown flag included). A run id must be one safe filename
+component; an unsafe one is refused before any write.
+
+## spur workflow inline begin
+
+| Flag | Description |
+|---|---|
+| `--run-id <id>` | Inline run id (one safe filename component under `.spur/run/`) |
+| `--file <definition>` | Workflow definition file or name to resolve |
+| `--spur-bin <path>` | Spur invocation that resolves the definition (default: `SPUR_BIN`, then this CLI) |
+
+Create or idempotently attach the authoritative run row and the two-file run record.
+
+## spur workflow inline fingerprint
+
+| Flag | Description |
+|---|---|
+| `--task-file <path>` | Task spec file (required) |
+| `--feature-file <path>` | Feature spec file |
+
+Print the engine's `sha256:<hex>` proof-input digest; creates nothing.
+
+## spur workflow inline action
+
+| Flag | Description |
+|---|---|
+| `--run-id <id>` | Inline run id |
+| `--node <state>` | State the action ran in |
+| `--kind <kind>` | Action kind (`shell`, `agent.run`, `operator-wait`, …) |
+| `--status <status>` | `done` \| `failed` |
+| `--ok <bool>` | `true` \| `false` (required, exact) |
+| `--duration-ms <n>` | Host-measured duration; omitted, it is measured from `node-enter` |
+| `--estimated` | The duration was host-reported, not timed around the action |
+| `--project-root <path>` | Tree that owns the run row (default: the cwd tree) |
+
+## spur workflow inline node-enter
+
+| Flag | Description |
+|---|---|
+| `--run-id <id>` | Inline run id |
+| `--node <state>` | State being entered |
+| `--project-root <path>` | Tree that owns the run row |
+
+## spur workflow inline actions
+
+| Flag | Description |
+|---|---|
+| `--run-id <id>` | Inline run id |
+| `--file <json>` | JSON array of `{node, kind, status, ok, durationMs, estimated?}` rows, validated before any write |
+| `--project-root <path>` | Tree that owns the run row |
+
+## spur workflow inline close
+
+| Flag | Description |
+|---|---|
+| `--run-id <id>` | Inline run id |
+| `--status <status>` | `done` \| `failed` \| `paused` |
+| `--reason <terminal-reason>` | Closed enum; required with `--status failed` |
+| `--no-summary` | Skip the measured execution summary (`.spur/run/<run-id>-summary.md`) |
+| `--project-root <path>` | Tree that owns the run row |
+
+## spur workflow inline decide
+
+| Flag | Description |
+|---|---|
+| `--run-id <id>` | Inline run id |
+| `--node <state>` | State the decision belongs to |
+| `--options-json <file>` | One decide option object (`{id, decision, params?, evidence? \| instructions?, resultFile}`) |
+
+## spur workflow inline persist-out
+
+| Flag | Description |
+|---|---|
+| `--from <worktree>` | Source worktree |
+| `--task-file <path>` | Merged task file whose cited/owned evidence rides along (repeatable) |
+
+Copy a worktree's inline-run provenance and owned evidence into this tree (fail closed).
+
+## spur workflow inline persist-check
+
+| Flag | Description |
+|---|---|
+| `--from <worktree>` | Worktree about to be removed |
+| `--task-file <path>` | Task file whose `<wbs>-` evidence the worktree owns (repeatable) |
+| `--run-id <id>` | Run id whose `<run-id>-` evidence the worktree owns (repeatable) |
+| `--root <invoke-tree>` | Invoking (main) tree (default: the git common dir's parent) |
+| `--success-json <path>` | `persist-out` result to read skips from |
+
+WT-4 pre-removal assertion: exit `1` when owned evidence is missing, divergent or unforwarded.
+
+## spur workflow inline attribution
+
+| Flag | Description |
+|---|---|
+| `--run-id <id>` | Inline run id |
+| `--stage <state>` | Inline stage |
+| `--executor <name>` | Executor used; omitted records the explicit no-attribution marker |
+| `--agent <name>` | Agent used |
+| `--model <m>` | Model used |
+
+## spur workflow inline dispatch-failure
+
+| Flag | Description |
+|---|---|
+| `--run-id <id>` | Inline run id |
+| `--stage <state>` | Inline stage whose dispatch failed |
+| `--decision <decision>` | `escalate` \| `stop` \| `host-inline` |
+| `--text <record>` | Bounded failure record |
+| `--text-file <path>` | File holding the failure record (exactly one of `--text` / `--text-file`) |
+| `--executor <name>` | Executor that failed |
+| `--agent <name>` | Agent that failed |
+| `--model <m>` | Model that failed |
+
+Classifies the record (capacity vs capability) and writes `.spur/run/<run-id>-dispatch-fallback.json`.
+
+## spur workflow commit-guard
+
+```
+spur workflow commit-guard <start|stage|check> [options] [-- <paths…>]
+```
+
+Run-scoped staging guard for driver commit steps (replaced the plugin script `commit-guard`,
+script-absorption PR-4). `start` fingerprints HEAD and the dirty files into
+`.spur/run/<run>-tree-start.json`; `stage` stages only listed paths the run wrote and prints
+`{staged, foreign}`; `check` prints `{foreign}` and stages nothing. Exit codes: `0` ok, `1` usage or
+a failed probe (nothing staged), `2` `stage` refused a path, `3` a target is unmerged or carries
+conflict markers.
+
+## spur workflow commit-guard start
+
+| Flag | Description |
+|---|---|
+| `--run <id>` | Run id the snapshot belongs to |
+
+## spur workflow commit-guard stage
+
+| Flag | Description |
+|---|---|
+| `--run <id>` | Run id whose tree-start snapshot partitions the paths |
+| `--base <sha>` | Diff base (default: the snapshot HEAD) |
+
+## spur workflow commit-guard check
+
+| Flag | Description |
+|---|---|
+| `--run <id>` | Run id whose tree-start snapshot defines "written by this run" |
+| `--base <sha>` | Diff base (default: the snapshot HEAD) |
 
 ## Workflow Action and Guard Kinds
 

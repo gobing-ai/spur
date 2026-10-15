@@ -1110,7 +1110,7 @@ describe('(i) task 0316 — dev-debug and dev-daily entry points', () => {
         expect(implSection(raw)).toContain('Skill(skill="sp:sys-debugging", args="$ARGUMENTS")');
     });
 
-    test('dev-daily runs the daily-summary script inline (NOT Skill() — the skill is disable-model-invocation)', () => {
+    test('dev-daily runs spur history summary inline (NOT Skill() — the skill is disable-model-invocation)', () => {
         const raw = readFileSync(join(COMMANDS_DIR, 'dev-daily.md'), 'utf8');
         expect(raw).toContain('description:');
         expect(raw).toContain('argument-hint:');
@@ -1119,8 +1119,8 @@ describe('(i) task 0316 — dev-debug and dev-daily entry points', () => {
         expect(raw).toContain('## Usage');
         expect(raw).toContain('## Implementation');
         // sp:daily-summary carries disable-model-invocation, so a Skill() dispatch would never fire
-        // (docs/tasks2/0187 Q&A). dev-daily must run the script directly, not via Skill().
-        expect(implSection(raw)).toContain('daily-summary/daily-summary.mjs');
+        // (docs/tasks2/0187 Q&A). dev-daily must run the CLI verb directly, not via Skill().
+        expect(implSection(raw)).toContain('spur history summary');
         expect(implSection(raw)).toContain('$ARGUMENTS');
         expect(raw).not.toContain('Skill(skill="sp:daily-summary"');
     });

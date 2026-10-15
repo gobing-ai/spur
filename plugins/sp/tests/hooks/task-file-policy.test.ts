@@ -29,7 +29,7 @@ describe('couldBeTaskFile — matches the corpus convention', () => {
             'apps/web/src/modules/task-kanban/TaskDetail.tsx',
             'README.md',
             'docs/00_ADR.md',
-            'plugins/sp/hooks/careful-guard.ts',
+            'plugins/sp/scripts/hooks/careful-guard.ts',
             '.spur/config.yaml',
         ]) {
             expect(couldBeTaskFile(p), p).toBe(false);

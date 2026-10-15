@@ -20,7 +20,19 @@ import { join, resolve } from 'node:path';
 
 const REPO_ROOT = resolve(import.meta.dir, '..', '..', '..', '..');
 const CLI_ENTRY = join(REPO_ROOT, 'apps', 'cli', 'src', 'index.ts');
-const INLINE_RUN_ENTRY = join(REPO_ROOT, 'plugins', 'sp', 'lib', 'inline-run.generated.mjs');
+// The shipped `inline-run.generated.mjs` was retired (script-absorption PR-6). The stale fixture
+// models an older install whose entry still ships the then-current seams but not the two retired
+// ones, so the project carries that entry under a vendored install path.
+const LEGACY_ENTRY_REL = join('vendor', 'spur', 'plugins', 'sp', 'lib', 'inline-run.generated.mjs');
+const LEGACY_ENTRY_BODY = [
+    'startFeatureVerificationReceipt',
+    'completeFeatureVerificationReceipt',
+    'captureFeatureReceiptDigest',
+    'resolveWorkflowDefinition',
+    'splitLaunchCommand',
+]
+    .map((name) => `export function ${name}() {}`)
+    .join('\n');
 const STATE_MACHINE_SCHEMA = join(REPO_ROOT, 'apps', 'cli', 'schemas', 'state-machine-workflow.schema.json');
 const FEATURE_ID = 'F1';
 
@@ -148,9 +160,7 @@ const flag = (name) => {
     return i >= 0 ? (process.argv[i + 1] ?? '') : '';
 };
 const spurBin = flag('--spur-bin');
-const main = spurBin.split(/\\s+/).find((t) => /\\.(ts|mjs|js)$/.test(t)) ?? '';
-const root = main.replace(/\\/apps\\/cli\\/src\\/index\\.ts$/, '');
-const entry = \`\${root}/plugins/sp/lib/inline-run.generated.mjs\`;
+const entry = \`\${process.cwd()}/${LEGACY_ENTRY_REL}\`;
 `;
 
 /** The pre-retirement port: requires the retired names as functions of the shipped entry. */
@@ -175,15 +185,14 @@ if (missing.length > 0) {
 console.log('feature-verify: seams present');
 `;
 
-/** The migrated consumer: the current app-owned operation, reached through the generated bundle. */
+/** The migrated consumer: the current app-owned operation, reached through \`spur feature verify\`. */
 const MIGRATED_CONSUMER = `${CONSUMER_PRELUDE}
-const { runFeatureVerification } = await import(entry);
-const result = await runFeatureVerification({
-    workdir: process.cwd(),
-    featureId: flag('--feature-id'),
-    runId: flag('--run-id'),
+import { spawnSync } from 'node:child_process';
+const [cmd, ...pre] = spurBin.split(/\\s+/).filter((t) => t !== '');
+const result = spawnSync(cmd, [...pre, 'feature', 'verify', flag('--feature-id'), '--run-id', flag('--run-id'), '--no-logo'], {
+    stdio: 'inherit',
 });
-console.log(\`feature-verify: \${result.status} \${result.message}\`);
+process.exit(result.status ?? 1);
 `;
 
 interface FixtureKind {
@@ -216,6 +225,8 @@ function makeProject(kind: keyof typeof FIXTURES): string {
         overrideBody(FIXTURES[kind].verificationCmd),
     );
     writeFileSync(join(root, '.spur', 'scripts', 'feature-verify.mjs'), FIXTURES[kind].consumer);
+    mkdirSync(join(root, LEGACY_ENTRY_REL, '..'), { recursive: true });
+    writeFileSync(join(root, LEGACY_ENTRY_REL), LEGACY_ENTRY_BODY);
     const git = (args: string): void => {
         Bun.spawnSync(['git', '-c', 'user.email=t@t', '-c', 'user.name=t', ...args.split(' ')], { cwd: root });
     };
@@ -265,7 +276,7 @@ describe('feature-lifecycle verifying entry: stale consumer diagnosis (1185)', (
             expect(sync.output).toContain(join(root, '.spur', 'workflows', 'feature-verification.yaml'));
             expect(sync.output).toContain(join(root, '.spur', 'scripts', 'feature-verify.mjs'));
             expect(sync.output).toContain('openInlineRunProjectDb');
-            expect(sync.output).toContain(INLINE_RUN_ENTRY);
+            expect(sync.output).toContain(join(root, LEGACY_ENTRY_REL));
             // AC2: only the two remedies that can work are offered.
             expect(sync.output).toContain('remove the project-layer override');
             expect(sync.output).toContain('migrate');
@@ -291,7 +302,7 @@ describe('feature-lifecycle verifying entry: stale consumer diagnosis (1185)', (
             expect(parsed.transitionsTaken).toBe(0);
             expect(parsed.reason ?? '').toContain(join(root, '.spur', 'scripts', 'feature-verify.mjs'));
             expect(parsed.reason ?? '').toContain('openInlineRunProjectDb');
-            expect(parsed.reason ?? '').toContain(INLINE_RUN_ENTRY);
+            expect(parsed.reason ?? '').toContain(join(root, LEGACY_ENTRY_REL));
         });
     });
 

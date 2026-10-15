@@ -1,6 +1,6 @@
 # spur builder
 
-Release plumbing: version bumps and release tags. Two verbs, both guard-railed.
+Release plumbing: version bumps, release tags, and the PR-review spine ops.
 
 ## Subcommands
 
@@ -8,6 +8,7 @@ Release plumbing: version bumps and release tags. Two verbs, both guard-railed.
 | --- | --- |
 | `bump-ver [target] [version]` | Bump a package version, commit, tag, optionally push |
 | `drop-tags [target] [version]` | Delete release tags locally and optionally on origin |
+| `pr <op> [flags]` | PR-review spine ops for `/sp:dev-pr-review` |
 
 ## spur builder bump-ver
 
@@ -35,6 +36,16 @@ spur builder drop-tags [target] [version] [--all] [--remote] [--json]
 
 Delete release tags locally (`--remote` also deletes them on origin) — the cleanup twin of
 `bump-ver` for a botched release. `--all` drops every released tag plus the aggregate tag.
+
+## spur builder pr
+
+```bash
+spur builder pr <preflight|push|ensure|hygiene|request|wait|collect|status> [--base b] [--since iso] [--head sha] [--json] [--status-file <path>]
+```
+
+The deterministic spine for `/sp:dev-pr-review`: preflight, push (never force), reuse-or-create
+the PR, hygiene scan, request and wait for the Codex review, and a read-only composite `status`.
+Exit `3` from `wait` means pending, not failed.
 
 ## See also
 

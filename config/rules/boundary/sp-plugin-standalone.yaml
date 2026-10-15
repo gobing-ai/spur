@@ -11,7 +11,7 @@
 # - plugins/sp/hooks/**, plugins/sp/scripts/**, plugins/sp/lib/** may value-import
 #   only `node:*` builtins and relative paths (vendored helpers live in plugins/sp/lib/).
 # - `import type` / `export type` from any package is fine — erased before bundling
-#   (e.g. inline-run-setup.ts's type-only import from @gobing-ai/app).
+#   (a type-only import from @gobing-ai/app is safe).
 # - This rule is the author-time tripwire over DIRECT imports; the transitive closure
 #   and the real `superskill install` path are checked by `bun run plugin-smoke`, and
 #   script-contract-check Rule 5 (manifest-aware) fails the spur-check gate.

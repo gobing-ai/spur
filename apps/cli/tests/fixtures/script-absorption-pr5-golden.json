@@ -1,0 +1,851 @@
+{
+    "_meta": {
+        "capturedFrom": "plugins/sp/scripts/{wrapup-steps,wrapup-drift-probe,batch-preflight,batch-plan,feature-verification-steps,idea-handoff}.ts",
+        "commit": "d17990f2bee0816935f6a8492309b305aa68ecff",
+        "bun": "1.4.3",
+        "note": "Old-side outcomes per case (exit code, stdout, stderr, .spur/run + .spur/memory files, nested spur argv). Regenerating requires the retired scripts; see harness.ts."
+    },
+    "wrapup": {
+        "resolve-pass-dedupe": {
+            "steps": [
+                {
+                    "exitCode": 0,
+                    "stdout": "",
+                    "stderr": ""
+                }
+            ],
+            "files": {
+                ".spur/run/r1-wrapup-resolve.status": "PASS\n",
+                ".spur/run/r1-wrapup-tasks.json": "[\"0101\",\"0102\"]\n"
+            },
+            "stubArgv": ["task show 0101 --json", "task show 0102 --json"]
+        },
+        "resolve-invalid-tasks": {
+            "steps": [
+                {
+                    "exitCode": 0,
+                    "stdout": "",
+                    "stderr": "task-resolve: tasks must be a JSON array of canonical four-digit WBS strings (whitespace is rejected, not trimmed)\n"
+                }
+            ],
+            "files": {
+                ".spur/run/r1-route-reason.txt": "failed:tasks is not a JSON array of canonical four-digit WBS strings",
+                ".spur/run/r1-wrapup-resolve.status": "FAIL\n"
+            },
+            "stubArgv": []
+        },
+        "resolve-unresolved": {
+            "steps": [
+                {
+                    "exitCode": 0,
+                    "stdout": "",
+                    "stderr": "task-resolve: task 0101 did not resolve to a completed status (status=todo)\ntask-resolve: task 0102 did not resolve to a completed status (status=unresolved)\n"
+                }
+            ],
+            "files": {
+                ".spur/run/r1-route-reason.txt": "failed:unresolved or non-completed task (see .spur/run/r1-wrapup-tasks.json)",
+                ".spur/run/r1-wrapup-resolve.status": "FAIL\n",
+                ".spur/run/r1-wrapup-tasks.json": "[\"0101\",\"0102\"]\n"
+            },
+            "stubArgv": ["task show 0101 --json", "task show 0102 --json"]
+        },
+        "resolve-empty-run-id": {
+            "steps": [
+                {
+                    "exitCode": 1,
+                    "stdout": "",
+                    "stderr": "task-resolve: __runId is empty — refusing the legacy fixed-path fallback\n"
+                }
+            ],
+            "files": {},
+            "stubArgv": []
+        },
+        "resolve-preflight-gate-blocked": {
+            "steps": [
+                {
+                    "exitCode": 0,
+                    "stdout": "",
+                    "stderr": ""
+                }
+            ],
+            "files": {
+                ".spur/run/r1-route-reason.txt": "failed:preflight:gate-blocked L2.a,L2.b",
+                ".spur/run/r1-wrapup-resolve.status": "FAIL\n",
+                ".spur/run/r1-wrapup-tasks.json": "[\"0101\"]\n"
+            },
+            "stubArgv": ["task show 0101 --json", "feature sync F1 --dry-run --json"]
+        },
+        "resolve-preflight-done-gate": {
+            "steps": [
+                {
+                    "exitCode": 0,
+                    "stdout": "",
+                    "stderr": ""
+                }
+            ],
+            "files": {
+                ".spur/run/r1-route-reason.txt": "failed:preflight:done-gate L4.scenario-unverified",
+                ".spur/run/r1-wrapup-preflight.json": "[{\"findings\":[{\"severity\":\"error\",\"code\":\"L4.feature-receipt-missing\"},{\"severity\":\"error\",\"code\":\"L4.scenario-unverified\"}]}]\n",
+                ".spur/run/r1-wrapup-resolve.status": "FAIL\n",
+                ".spur/run/r1-wrapup-tasks.json": "[\"0101\"]\n"
+            },
+            "stubArgv": [
+                "task show 0101 --json",
+                "feature sync F1 --dry-run --json",
+                "feature check F1 --strict --as done --json"
+            ]
+        },
+        "resolve-preflight-not-done-pass": {
+            "steps": [
+                {
+                    "exitCode": 0,
+                    "stdout": "",
+                    "stderr": ""
+                }
+            ],
+            "files": {
+                ".spur/run/r1-wrapup-resolve.status": "PASS\n",
+                ".spur/run/r1-wrapup-tasks.json": "[\"0101\"]\n"
+            },
+            "stubArgv": ["task show 0101 --json", "feature sync F1 --dry-run --json"]
+        },
+        "resolve-preflight-sync-unreadable": {
+            "steps": [
+                {
+                    "exitCode": 0,
+                    "stdout": "",
+                    "stderr": ""
+                }
+            ],
+            "files": {
+                ".spur/run/r1-route-reason.txt": "failed:preflight:sync-unreadable",
+                ".spur/run/r1-wrapup-resolve.status": "FAIL\n",
+                ".spur/run/r1-wrapup-tasks.json": "[\"0101\"]\n"
+            },
+            "stubArgv": ["task show 0101 --json", "feature sync F1 --dry-run --json"]
+        },
+        "route-reason-modes": {
+            "steps": [
+                {
+                    "exitCode": 0,
+                    "stdout": "",
+                    "stderr": ""
+                },
+                {
+                    "exitCode": 0,
+                    "stdout": "",
+                    "stderr": ""
+                },
+                {
+                    "exitCode": 0,
+                    "stdout": "",
+                    "stderr": ""
+                },
+                {
+                    "exitCode": 0,
+                    "stdout": "",
+                    "stderr": ""
+                },
+                {
+                    "exitCode": 0,
+                    "stdout": "",
+                    "stderr": ""
+                },
+                {
+                    "exitCode": 0,
+                    "stdout": "",
+                    "stderr": ""
+                }
+            ],
+            "files": {
+                ".spur/run/r1-drift-probe.json": "{\"clean\":true,\"reasons\":[],\"paths\":[]}",
+                ".spur/run/r1-route-reason.txt": "fast:drift-probe-clean\n",
+                ".spur/run/r1-wrapup-resolve.status": "PASS\n",
+                ".spur/run/r1-wrapup-tasks.json": "[\"0101\"]\n",
+                ".spur/memory/wrapup-routes.log": "r1 safety:missing evidence (mode empty)\nr1 fast:evidence complete+consistent\nr1 safety:conflicting evidence\nr1 safety:unrecognized evidence (mode=weird)\nr1 fast:drift-probe-clean\n"
+            },
+            "stubArgv": ["task show 0101 --json"]
+        },
+        "route-reason-skipped-and-failed": {
+            "steps": [
+                {
+                    "exitCode": 0,
+                    "stdout": "",
+                    "stderr": ""
+                },
+                {
+                    "exitCode": 0,
+                    "stdout": "",
+                    "stderr": ""
+                },
+                {
+                    "exitCode": 0,
+                    "stdout": "",
+                    "stderr": ""
+                }
+            ],
+            "files": {
+                ".spur/run/r1-route-reason.txt": "skipped:empty task list\n",
+                ".spur/run/r1-wrapup-resolve.status": "FAIL\n",
+                ".spur/run/r1-wrapup-tasks.json": "[]\n",
+                ".spur/memory/wrapup-routes.log": "r1 skipped:empty task list\n"
+            },
+            "stubArgv": []
+        },
+        "route-reason-empty-run-id": {
+            "steps": [
+                {
+                    "exitCode": 1,
+                    "stdout": "",
+                    "stderr": "task-resolve: __runId is empty — refusing to write a route reason\n"
+                }
+            ],
+            "files": {},
+            "stubArgv": []
+        },
+        "metrics-verdict-sources": {
+            "steps": [
+                {
+                    "exitCode": 0,
+                    "stdout": "",
+                    "stderr": "metrics-record: task 0103 has no certifying verdict — .spur/memory/evidence/0103-verdict.json: UNKNOWN, tracked Testing: no Verdict: line — recording UNKNOWN telemetry\nmetrics-record: task 0104 lookup failed or was malformed — recording FAIL instead of silently omitting its metrics row\nmetrics-record: task 0105 has no certifying verdict — .spur/run/0105-verdict.json: missing or carries none, tracked Testing: no Verdict: line — recording UNKNOWN telemetry\n"
+                }
+            ],
+            "files": {
+                ".spur/run/0102-verdict.json": "{\"verdict\":\"PARTIAL\"}",
+                ".spur/run/r1-wrapup-metrics.status": "FAIL\n",
+                ".spur/run/r1-wrapup-tasks.json": "[\"0101\",\"0102\",\"0103\",\"0104\",\"0105\"]\n",
+                ".spur/memory/evidence/0103-verdict.json": "{\"verdict\":null}",
+                ".spur/memory/wrapup-metrics.jsonl": "{\"wbs\":\"0101\",\"feature_id\":\"F1\",\"status\":\"done\",\"verdict\":\"PASS\",\"timestamp\":\"<TS>\"}\n{\"wbs\":\"0102\",\"feature_id\":\"F1\",\"status\":\"done\",\"verdict\":\"PARTIAL\",\"timestamp\":\"<TS>\"}\n{\"wbs\":\"0103\",\"feature_id\":\"\",\"status\":\"done\",\"verdict\":\"UNKNOWN\",\"timestamp\":\"<TS>\"}\n{\"wbs\":\"0105\",\"feature_id\":\"F2\",\"status\":\"done\",\"verdict\":\"UNKNOWN\",\"timestamp\":\"<TS>\"}\n"
+            },
+            "stubArgv": [
+                "task show 0101 --json",
+                "task show 0102 --json",
+                "task show 0103 --json",
+                "task show 0104 --json",
+                "task show 0105 --json"
+            ]
+        },
+        "metrics-invalid-capture": {
+            "steps": [
+                {
+                    "exitCode": 0,
+                    "stdout": "",
+                    "stderr": "metrics-record: run-scoped task capture missing, corrupted or non-canonical — refusing to record metrics\n"
+                }
+            ],
+            "files": {
+                ".spur/run/r1-wrapup-metrics.status": "FAIL\n",
+                ".spur/run/r1-wrapup-tasks.json": "{\"not\":\"array\"}"
+            },
+            "stubArgv": []
+        },
+        "feature-transition-empty-feature": {
+            "steps": [
+                {
+                    "exitCode": 1,
+                    "stdout": "",
+                    "stderr": "feature-transition: vars.feature is empty — refusing no-op feature sync (mis-invocation, not a blocked sync)\n"
+                }
+            ],
+            "files": {},
+            "stubArgv": []
+        },
+        "feature-transition-applied-gate-pass": {
+            "steps": [
+                {
+                    "exitCode": 0,
+                    "stdout": "{\"proposal\":{\"featureId\":\"F1\",\"from\":\"wip\",\"to\":\"verifying\"},\"applied\":true}\nfeature-transition: sync applied or failed after a possible partial transition for F1 — running feature gate: echo gate-ran\ngate-ran\nfeature-transition: feature gate PASS for feature F1\nfeature-transition: feature sync verified for F1 (applied, observed=verifying, gate=PASS)\n",
+                    "stderr": ""
+                }
+            ],
+            "files": {
+                ".spur/run/r1-wrapup-sync.status": "PASS\n"
+            },
+            "stubArgv": ["feature sync F1 --json", "feature show F1 --json"]
+        },
+        "feature-transition-noop": {
+            "steps": [
+                {
+                    "exitCode": 0,
+                    "stdout": "{\"proposal\":{\"featureId\":\"F1\",\"from\":\"wip\",\"to\":\"wip\"},\"applied\":false}\nfeature-transition: sync did not apply a transition (rc=0, applied=false) — feature gate skipped\nfeature-transition: feature sync verified for F1 (from==to observed at wip, gate=skipped) — explicit no-change\n",
+                    "stderr": ""
+                }
+            ],
+            "files": {
+                ".spur/run/r1-wrapup-sync.status": "PASS\n"
+            },
+            "stubArgv": ["feature sync F1 --json", "feature show F1 --json"]
+        },
+        "feature-transition-sync-failed-gate-fail": {
+            "steps": [
+                {
+                    "exitCode": 0,
+                    "stdout": "boom\nfeature-transition: sync applied or failed after a possible partial transition for F1 — running feature gate: exit 3\n",
+                    "stderr": "feature-transition: feature gate FAIL for feature F1 — inspect findings before reporting the transition complete\nfeature-transition: required synchronization failed for F1 — sync exited nonzero (rc=2); gate=FAIL\n"
+                }
+            ],
+            "files": {
+                ".spur/run/r1-wrapup-sync.status": "FAIL\n"
+            },
+            "stubArgv": ["feature sync F1 --json", "feature show F1 --json"]
+        },
+        "feature-transition-blocked-and-mismatch": {
+            "steps": [
+                {
+                    "exitCode": 0,
+                    "stdout": "{\"proposal\":{\"featureId\":\"F1\",\"from\":\"wip\",\"to\":\"done\",\"gateBlocked\":true},\"applied\":false}\nfeature-transition: sync did not apply a transition (rc=0, applied=false) — feature gate skipped\n",
+                    "stderr": "feature-transition: required synchronization failed for F1 — sync proposal is gate-blocked — a blocked sync is not a no-change success; gate=skipped\n"
+                },
+                {
+                    "exitCode": 0,
+                    "stdout": "{\"proposal\":{\"featureId\":\"F9\",\"from\":\"wip\",\"to\":\"wip\"},\"applied\":false}\nfeature-transition: sync did not apply a transition (rc=0, applied=false) — feature gate skipped\n",
+                    "stderr": "feature-transition: required synchronization failed for F1 — sync proposal does not match feature F1; gate=skipped\n"
+                },
+                {
+                    "exitCode": 0,
+                    "stdout": "{\"proposal\":{\"featureId\":\"F1\",\"from\":\"wip\",\"to\":\"wip\",\"requiresConfirm\":true},\"applied\":false}\nfeature-transition: sync did not apply a transition (rc=0, applied=false) — feature gate skipped\n",
+                    "stderr": "feature-transition: required synchronization failed for F1 — sync proposal requires operator confirmation; gate=skipped\n"
+                }
+            ],
+            "files": {
+                ".spur/run/r1-wrapup-sync.status": "FAIL\n"
+            },
+            "stubArgv": [
+                "feature sync F1 --json",
+                "feature show F1 --json",
+                "feature sync F1 --json",
+                "feature show F1 --json",
+                "feature sync F1 --json",
+                "feature show F1 --json"
+            ]
+        },
+        "doc-sync-scope-violation": {
+            "steps": [
+                {
+                    "exitCode": 0,
+                    "stdout": "",
+                    "stderr": ""
+                },
+                {
+                    "exitCode": 0,
+                    "stdout": "",
+                    "stderr": "doc-sync-scope: scope-violation: docs/tasks/0101_t.md src/\\\"q.ts src/x.ts\n"
+                }
+            ],
+            "files": {
+                ".spur/run/r1-wrapup-doc-sync-scope.status": "scope-violation: docs/tasks/0101_t.md src/\\\"q.ts src/x.ts\n",
+                ".spur/run/r1-wrapup-doc-sync-snapshot.txt": " M pre-dirty.txt\n?? .spur/run/r1-wrapup-doc-sync-snapshot.txt\n",
+                ".spur/run/r1-wrapup-learnings.md": "l\n"
+            },
+            "stubArgv": []
+        },
+        "doc-sync-scope-pass": {
+            "steps": [
+                {
+                    "exitCode": 0,
+                    "stdout": "",
+                    "stderr": ""
+                },
+                {
+                    "exitCode": 0,
+                    "stdout": "",
+                    "stderr": ""
+                }
+            ],
+            "files": {
+                ".spur/run/r1-wrapup-doc-sync-scope.status": "PASS\n",
+                ".spur/run/r1-wrapup-doc-sync-snapshot.txt": "?? .spur/run/r1-wrapup-doc-sync-snapshot.txt\n"
+            },
+            "stubArgv": []
+        },
+        "doc-sync-scope-snapshot-missing-and-no-git": {
+            "steps": [
+                {
+                    "exitCode": 0,
+                    "stdout": "",
+                    "stderr": "doc-sync-scope: scope-violation: snapshot-missing\n"
+                },
+                {
+                    "exitCode": 0,
+                    "stdout": "",
+                    "stderr": "doc-sync-snapshot: git status unavailable — scope check skips (fatal: not a git repository (or any of the parent directories): .git)\n"
+                },
+                {
+                    "exitCode": 0,
+                    "stdout": "",
+                    "stderr": "doc-sync-scope: entry snapshot recorded no git listing — scope check skipped\n"
+                }
+            ],
+            "files": {
+                ".spur/run/r1-wrapup-doc-sync-scope.status": "PASS\n",
+                ".spur/run/r1-wrapup-doc-sync-snapshot.txt": "# git-unavailable: fatal: not a git repository (or any of the parent directories): .git\n"
+            },
+            "stubArgv": []
+        },
+        "doc-supersession": {
+            "steps": [
+                {
+                    "exitCode": 0,
+                    "stdout": "",
+                    "stderr": ""
+                },
+                {
+                    "exitCode": 0,
+                    "stdout": "",
+                    "stderr": ""
+                }
+            ],
+            "files": {
+                ".spur/run/r1-wrapup-doc-supersession.status": "PASS\n"
+            },
+            "stubArgv": []
+        },
+        "unknown-op": {
+            "steps": [
+                {
+                    "exitCode": 2,
+                    "stdout": "",
+                    "stderr": "usage: wrapup-steps.ts <resolve|route-reason|metrics|feature-transition|doc-sync-snapshot|doc-sync-scope|doc-supersession>  (env: __runId, tasks, mode, feature, featureGateCmd, spurBin)\n"
+                }
+            ],
+            "files": {},
+            "stubArgv": []
+        },
+        "drift-probe-clean": {
+            "steps": [
+                {
+                    "exitCode": 0,
+                    "stdout": "",
+                    "stderr": ""
+                }
+            ],
+            "files": {
+                ".spur/run/r1-drift-probe.json": "{\"clean\":true,\"reasons\":[],\"paths\":[\"apps/server/src/x.ts\"]}\n",
+                ".spur/run/r1-mode.txt": "fast\n",
+                ".spur/run/r1-wrapup-tasks.json": "[\"0101\"]"
+            },
+            "stubArgv": ["task show 0101 --json"]
+        },
+        "drift-probe-dirty": {
+            "steps": [
+                {
+                    "exitCode": 0,
+                    "stdout": "",
+                    "stderr": ""
+                }
+            ],
+            "files": {
+                ".spur/run/r1-drift-probe.json": "{\"clean\":false,\"reasons\":[\"0101: packages/contracts/src/a.ts matches doc-owned surface packages/contracts/**\",\"0101: newtop/x.ts new top-level workspace directory\",\"0101: <BUNDLED_WORKFLOWS>/w.yaml matches doc-owned surface <BUNDLED_WORKFLOWS>/**\",\"0102: Solution empty or unparseable\",\"0103: task show output unparseable\",\"0104: task show failed (status=4)\"],\"paths\":[\"apps/web/src/a.ts\",\"<BUNDLED_WORKFLOWS>/w.yaml\",\"newtop/x.ts\",\"packages/contracts/src/a.ts\"]}\n",
+                ".spur/run/r1-mode.txt": "\n",
+                ".spur/run/r1-wrapup-tasks.json": "[\"0101\",\"0102\",\"0103\",\"0104\"]"
+            },
+            "stubArgv": [
+                "task show 0101 --json",
+                "task show 0102 --json",
+                "task show 0103 --json",
+                "task show 0104 --json"
+            ]
+        },
+        "drift-probe-missing-capture": {
+            "steps": [
+                {
+                    "exitCode": 0,
+                    "stdout": "",
+                    "stderr": "wrapup-drift-probe: normalized task capture is missing or corrupted — failing safe (dirty)\n"
+                }
+            ],
+            "files": {
+                ".spur/run/r1-drift-probe.json": "{\"clean\":false,\"reasons\":[\"normalized task capture missing or corrupted\"],\"paths\":[]}\n",
+                ".spur/run/r1-mode.txt": "\n"
+            },
+            "stubArgv": []
+        },
+        "drift-probe-empty-run-id": {
+            "steps": [
+                {
+                    "exitCode": 1,
+                    "stdout": "",
+                    "stderr": "wrapup-drift-probe: __runId is empty — refusing the legacy fixed-path fallback\n"
+                }
+            ],
+            "files": {},
+            "stubArgv": []
+        }
+    },
+    "preflight": {
+        "preflight-table-a": {
+            "steps": [
+                {
+                    "exitCode": 0,
+                    "stdout": "run: preflight clear — launch task-pipeline for 0101\n",
+                    "stderr": ""
+                },
+                {
+                    "exitCode": 2,
+                    "stdout": "skip A2: dev-next: blocked by deps — unmet: 0100 (0101)\n",
+                    "stderr": ""
+                },
+                {
+                    "exitCode": 0,
+                    "stdout": "{\n  \"action\": \"run\",\n  \"code\": \"OK\",\n  \"reason\": \"preflight clear — launch task-pipeline for 0101\"\n}\n",
+                    "stderr": ""
+                },
+                {
+                    "exitCode": 2,
+                    "stdout": "{\n  \"action\": \"skip\",\n  \"code\": \"A7\",\n  \"reason\": \"dev-next: blocked — do not launch pipeline; human/handover first (0101)\"\n}\n",
+                    "stderr": ""
+                },
+                {
+                    "exitCode": 2,
+                    "stdout": "skip A8: dev-next: already done — batch does not auto-wrap (0101)\n",
+                    "stderr": ""
+                },
+                {
+                    "exitCode": 0,
+                    "stdout": "run: preflight clear — launch task-pipeline for 0101\n",
+                    "stderr": ""
+                }
+            ],
+            "files": {},
+            "stubArgv": []
+        },
+        "preflight-recovery": {
+            "steps": [
+                {
+                    "exitCode": 0,
+                    "stdout": "/sp:dev-run 0101 --mode implement --auto --next\n",
+                    "stderr": ""
+                },
+                {
+                    "exitCode": 0,
+                    "stdout": "{\n  \"recovery\": {\n    \"code\": \"A6\",\n    \"command\": \"/sp:dev-verify 0101 --auto --next\"\n  }\n}\n",
+                    "stderr": ""
+                },
+                {
+                    "exitCode": 0,
+                    "stdout": "/sp:dev-handover \"blocked task 0101 — see Notes/History\"\n",
+                    "stderr": ""
+                },
+                {
+                    "exitCode": 0,
+                    "stdout": "no recovery hop\n",
+                    "stderr": ""
+                },
+                {
+                    "exitCode": 0,
+                    "stdout": "{\n  \"recovery\": null\n}\n",
+                    "stderr": ""
+                }
+            ],
+            "files": {},
+            "stubArgv": []
+        },
+        "preflight-quick-readiness": {
+            "steps": [
+                {
+                    "exitCode": 0,
+                    "stdout": "runnable OK: quick-readiness: run ready for 0101\n",
+                    "stderr": ""
+                },
+                {
+                    "exitCode": 2,
+                    "stdout": "{\n  \"action\": \"skipped\",\n  \"code\": \"EMPTY\",\n  \"reason\": \"quick-readiness: empty status-filtered set — nothing to run (0101)\"\n}\n",
+                    "stderr": ""
+                },
+                {
+                    "exitCode": 0,
+                    "stdout": "runnable OK: quick-readiness: refine ready for 0101 (1 planning gap(s) to fill)\n",
+                    "stderr": ""
+                },
+                {
+                    "exitCode": 2,
+                    "stdout": "skipped DONE: quick-readiness: already done — no verify hop (0101)\n",
+                    "stderr": ""
+                },
+                {
+                    "exitCode": 0,
+                    "stdout": "{\n  \"action\": \"runnable\",\n  \"code\": \"FORCE\",\n  \"reason\": \"quick-readiness: verify --force re-verification of done task 0101\"\n}\n",
+                    "stderr": ""
+                },
+                {
+                    "exitCode": 2,
+                    "stdout": "blocked DEP: quick-readiness: unmet deps — 0100 (0101)\n",
+                    "stderr": ""
+                }
+            ],
+            "files": {},
+            "stubArgv": []
+        },
+        "preflight-classify-feature": {
+            "steps": [
+                {
+                    "exitCode": 0,
+                    "stdout": "{\n  \"aborting\": [],\n  \"nonAborting\": [\n    {\n      \"code\": \"L4.scenario-unverified\",\n      \"severity\": \"error\"\n    }\n  ],\n  \"shouldAbort\": false\n}\n",
+                    "stderr": ""
+                },
+                {
+                    "exitCode": 1,
+                    "stdout": "{\n  \"aborting\": [\n    {\n      \"code\": \"L2.missing\",\n      \"severity\": \"error\"\n    }\n  ],\n  \"nonAborting\": [\n    {\n      \"code\": \"L4.verifying-incomplete-tasks\",\n      \"severity\": \"error\"\n    }\n  ],\n  \"shouldAbort\": true\n}\n",
+                    "stderr": ""
+                },
+                {
+                    "exitCode": 1,
+                    "stdout": "",
+                    "stderr": "Invalid JSON for --classify-feature: SyntaxError: JSON Parse error: Expected '}'\n"
+                }
+            ],
+            "files": {},
+            "stubArgv": []
+        },
+        "preflight-missing-status": {
+            "steps": [
+                {
+                    "exitCode": 1,
+                    "stdout": "",
+                    "stderr": "Usage:\n  bun plugins/sp/scripts/batch-preflight.ts --wbs <wbs> --status <status> \\\n    [--deps 0275,0276] [--dep-status 0275:done,0276:todo] [--recovery] [--json]\n  bun plugins/sp/scripts/batch-preflight.ts --operation <run|refine|verify> --wbs <wbs> --status <status>     [--filtered-count <n>] [--required-sections A,B] [--present-sections A,B] [--force] [--json]\n\nExit: 0 = run (or recovery hint printed); 2 = skip; 1 = usage.\n"
+                }
+            ],
+            "files": {},
+            "stubArgv": []
+        }
+    },
+    "batchPlan": {
+        "batch-plan-waves": {
+            "steps": [
+                {
+                    "exitCode": 0,
+                    "stdout": "{\"waves\":[[{\"label\":\"A\",\"id\":\"prepare\",\"outcome\":\"pending\",\"title\":\"Prepare batch\",\"text\":\"A Prepare batch\"},{\"label\":\"A1\",\"id\":\"prepare.1\",\"outcome\":\"pending\",\"parent\":\"A\",\"title\":\"Resolve and freeze task set\",\"text\":\"A1 Resolve and freeze task set\"},{\"label\":\"A2\",\"id\":\"prepare.2\",\"outcome\":\"pending\",\"parent\":\"A\",\"title\":\"Order by dependencies\",\"text\":\"A2 Order by dependencies\"},{\"label\":\"A3\",\"id\":\"prepare.3\",\"outcome\":\"pending\",\"parent\":\"A\",\"title\":\"Prepare Git\",\"text\":\"A3 Prepare Git\"},{\"label\":\"A4\",\"id\":\"prepare.4\",\"outcome\":\"pending\",\"parent\":\"A\",\"title\":\"Publish plan\",\"text\":\"A4 Publish plan\"},{\"label\":\"B\",\"id\":\"task.0101\",\"outcome\":\"pending\",\"title\":\"0101 First task\",\"text\":\"B 0101 First task\"},{\"label\":\"C\",\"id\":\"task.0102\",\"outcome\":\"pending\",\"title\":\"0102 A very long task name that will need to be truncated in the…\",\"text\":\"C 0102 A very long task name that will need to be truncated in the…\"},{\"label\":\"D\",\"id\":\"task.0103\",\"outcome\":\"pending\",\"title\":\"0103 Third\",\"text\":\"D 0103 Third\"},{\"label\":\"Z\",\"id\":\"report\",\"outcome\":\"pending\",\"title\":\"Batch report\",\"text\":\"Z Batch report\"}]]}\n",
+                    "stderr": ""
+                },
+                {
+                    "exitCode": 1,
+                    "stdout": "",
+                    "stderr": "batch-plan: --tasks file must be a JSON array of {wbs, name}\n"
+                },
+                {
+                    "exitCode": 1,
+                    "stdout": "",
+                    "stderr": "batch-plan: cannot read broken.json — JSON Parse error: Expected '}'\n"
+                },
+                {
+                    "exitCode": 1,
+                    "stdout": "",
+                    "stderr": "batch-plan: cannot read missing.json — ENOENT: no such file or directory, open 'missing.json'\n"
+                },
+                {
+                    "exitCode": 2,
+                    "stdout": "",
+                    "stderr": "usage: batch-plan.ts waves --tasks <tasks.json> | order --tasks <tasks.json> [--concurrency <n>] | task-children --letter <A-Z> --plan <plan.json>\n"
+                }
+            ],
+            "files": {},
+            "stubArgv": []
+        },
+        "batch-plan-order": {
+            "steps": [
+                {
+                    "exitCode": 0,
+                    "stdout": "{\"order\":[\"0101\",\"0102\",\"0103\",\"0104\"],\"waves\":[[\"0101\",\"0102\",\"0104\"],[\"0103\"]],\"cycle\":null,\"overlaps\":[{\"before\":\"0101\",\"after\":\"0103\",\"files\":[\"a.ts\"]}],\"mode\":\"parallel\",\"reason\":\"widest wave holds 3 independent tasks\"}\n",
+                    "stderr": ""
+                },
+                {
+                    "exitCode": 0,
+                    "stdout": "{\"order\":[\"0101\",\"0102\",\"0103\",\"0104\"],\"waves\":[[\"0101\",\"0102\",\"0104\"],[\"0103\"]],\"cycle\":null,\"overlaps\":[{\"before\":\"0101\",\"after\":\"0103\",\"files\":[\"a.ts\"]}],\"mode\":\"parallel\",\"reason\":\"widest wave holds 3 independent tasks\"}\n",
+                    "stderr": ""
+                },
+                {
+                    "exitCode": 0,
+                    "stdout": "{\"order\":[],\"waves\":[],\"cycle\":[\"0101\",\"0102\",\"0101\"],\"overlaps\":[],\"mode\":\"sequential\",\"reason\":\"dependency cycle 0101 → 0102 → 0101\"}\n",
+                    "stderr": ""
+                },
+                {
+                    "exitCode": 1,
+                    "stdout": "",
+                    "stderr": "batch-plan: --tasks file must be a JSON array of {wbs, dependencies?, files?}\n"
+                },
+                {
+                    "exitCode": 2,
+                    "stdout": "",
+                    "stderr": "usage: batch-plan.ts waves --tasks <tasks.json> | order --tasks <tasks.json> [--concurrency <n>] | task-children --letter <A-Z> --plan <plan.json>\n"
+                },
+                {
+                    "exitCode": 2,
+                    "stdout": "",
+                    "stderr": "usage: batch-plan.ts waves --tasks <tasks.json> | order --tasks <tasks.json> [--concurrency <n>] | task-children --letter <A-Z> --plan <plan.json>\n"
+                }
+            ],
+            "files": {},
+            "stubArgv": []
+        },
+        "batch-plan-task-children": {
+            "steps": [
+                {
+                    "exitCode": 0,
+                    "stdout": "[{\"label\":\"D1\",\"id\":\"phase.plan\",\"outcome\":\"completed\",\"parent\":\"D\",\"title\":\"Plan\",\"text\":\"D1 Plan\"},{\"label\":\"D2\",\"id\":\"phase.build\",\"outcome\":\"active\",\"parent\":\"D\",\"title\":\"Build\",\"text\":\"D2 Build\"}]\n",
+                    "stderr": ""
+                },
+                {
+                    "exitCode": 0,
+                    "stdout": "[{\"label\":\"E1\",\"id\":\"phase.plan\",\"outcome\":\"completed\",\"parent\":\"E\",\"title\":\"Plan\",\"text\":\"E1 Plan\"},{\"label\":\"E2\",\"id\":\"phase.build\",\"outcome\":\"active\",\"parent\":\"E\",\"title\":\"Build\",\"text\":\"E2 Build\"}]\n",
+                    "stderr": ""
+                },
+                {
+                    "exitCode": 1,
+                    "stdout": "",
+                    "stderr": "batch-plan: --plan file must be a plan array or a todo --json payload with a `plan` field\n"
+                },
+                {
+                    "exitCode": 2,
+                    "stdout": "",
+                    "stderr": "usage: batch-plan.ts waves --tasks <tasks.json> | order --tasks <tasks.json> [--concurrency <n>] | task-children --letter <A-Z> --plan <plan.json>\n"
+                }
+            ],
+            "files": {},
+            "stubArgv": []
+        },
+        "batch-plan-unknown-mode": {
+            "steps": [
+                {
+                    "exitCode": 2,
+                    "stdout": "",
+                    "stderr": "usage: batch-plan.ts waves --tasks <tasks.json> | order --tasks <tasks.json> [--concurrency <n>] | task-children --letter <A-Z> --plan <plan.json>\n"
+                }
+            ],
+            "files": {},
+            "stubArgv": []
+        }
+    },
+    "featureVerify": {
+        "verify-pass-and-fail": {
+            "steps": [
+                {
+                    "exitCode": 0,
+                    "stdout": "feature-verification-steps: D9 verification PASS (run v1, confidence MEDIUM, log <CWD>/.spur/run/v1-feature-verification.log)\n",
+                    "stderr": ""
+                },
+                {
+                    "exitCode": 0,
+                    "stdout": "feature-verification-steps: D9 verification FAIL (run v2, confidence LOW, log <CWD>/.spur/run/v2-feature-verification.log)\n",
+                    "stderr": ""
+                }
+            ],
+            "files": {
+                ".spur/run/v1-feature-verification.log": "",
+                ".spur/run/v1-feature-verification.status": "PASS\n",
+                ".spur/run/v2-feature-verification.log": "",
+                ".spur/run/v2-feature-verification.status": "FAIL\n",
+                ".spur/memory/evidence/D9-feature-verification.json": "{\n    \"schemaVersion\": 1,\n    \"featureId\": \"D9\",\n    \"runId\": \"v2\",\n    \"workdir\": \"<CWD>\",\n    \"verifier\": {\n        \"name\": \"feature-verification\",\n        \"sourcePath\": \"<REPO>/<BUNDLED_WORKFLOWS>/feature-verification.yaml\",\n        \"layer\": \"shared\",\n        \"definitionDigest\": \"sha256:<DIGEST>\"\n    },\n    \"verificationCmd\": \"false\",\n    \"inputDigest\": \"sha256:<DIGEST>\",\n    \"status\": \"FAIL\",\n    \"startedAt\": \"<TS>\",\n    \"completedAt\": \"<TS>\",\n    \"confidence\": \"LOW\",\n    \"confidenceBasis\": [\n        \"verification command did not exit 0\",\n        \"proof-input digest unchanged across the pass\"\n    ]\n}\n",
+                ".spur/memory/evidence/v1-feature-verification.json": "{\n    \"schemaVersion\": 1,\n    \"featureId\": \"D9\",\n    \"runId\": \"v1\",\n    \"workdir\": \"<CWD>\",\n    \"verifier\": {\n        \"name\": \"feature-verification\",\n        \"sourcePath\": \"<REPO>/<BUNDLED_WORKFLOWS>/feature-verification.yaml\",\n        \"layer\": \"shared\",\n        \"definitionDigest\": \"sha256:<DIGEST>\"\n    },\n    \"verificationCmd\": \"true\",\n    \"inputDigest\": \"sha256:<DIGEST>\",\n    \"status\": \"PASS\",\n    \"startedAt\": \"<TS>\",\n    \"completedAt\": \"<TS>\",\n    \"confidence\": \"MEDIUM\",\n    \"confidenceBasis\": [\n        \"verification command exited 0\",\n        \"proof-input digest unchanged across the pass\",\n        \"caller command override: true\",\n        \"the selected definition declares: bun run spur-check-feature\"\n    ]\n}\n",
+                ".spur/memory/evidence/v2-feature-verification.json": "{\n    \"schemaVersion\": 1,\n    \"featureId\": \"D9\",\n    \"runId\": \"v2\",\n    \"workdir\": \"<CWD>\",\n    \"verifier\": {\n        \"name\": \"feature-verification\",\n        \"sourcePath\": \"<REPO>/<BUNDLED_WORKFLOWS>/feature-verification.yaml\",\n        \"layer\": \"shared\",\n        \"definitionDigest\": \"sha256:<DIGEST>\"\n    },\n    \"verificationCmd\": \"false\",\n    \"inputDigest\": \"sha256:<DIGEST>\",\n    \"status\": \"FAIL\",\n    \"startedAt\": \"<TS>\",\n    \"completedAt\": \"<TS>\",\n    \"confidence\": \"LOW\",\n    \"confidenceBasis\": [\n        \"verification command did not exit 0\",\n        \"proof-input digest unchanged across the pass\"\n    ]\n}\n"
+            },
+            "stubArgv": []
+        },
+        "verify-env-fallback-and-confidence": {
+            "steps": [
+                {
+                    "exitCode": 0,
+                    "stdout": "feature-verification-steps: D9 verification PASS (run v3, confidence LOW, log <CWD>/.spur/run/v3-feature-verification.log)\n",
+                    "stderr": ""
+                },
+                {
+                    "exitCode": 0,
+                    "stdout": "feature-verification-steps: D9 verification PASS (run v4, confidence MEDIUM, log <CWD>/.spur/run/v4-feature-verification.log)\n",
+                    "stderr": ""
+                }
+            ],
+            "files": {
+                ".spur/run/v3-feature-verification.log": "",
+                ".spur/run/v3-feature-verification.status": "PASS\n",
+                ".spur/run/v4-feature-verification.log": "",
+                ".spur/run/v4-feature-verification.status": "PASS\n",
+                ".spur/memory/evidence/D9-feature-verification.json": "{\n    \"schemaVersion\": 1,\n    \"featureId\": \"D9\",\n    \"runId\": \"v4\",\n    \"workdir\": \"<CWD>\",\n    \"verifier\": {\n        \"name\": \"feature-verification\",\n        \"sourcePath\": \"<REPO>/<BUNDLED_WORKFLOWS>/feature-verification.yaml\",\n        \"layer\": \"shared\",\n        \"definitionDigest\": \"sha256:<DIGEST>\"\n    },\n    \"verificationCmd\": \"true\",\n    \"inputDigest\": \"sha256:<DIGEST>\",\n    \"status\": \"PASS\",\n    \"startedAt\": \"<TS>\",\n    \"completedAt\": \"<TS>\",\n    \"confidence\": \"MEDIUM\",\n    \"confidenceBasis\": [\n        \"operator-declared MEDIUM\",\n        \"verification command exited 0\",\n        \"proof-input digest unchanged across the pass\",\n        \"caller command override: true\",\n        \"the selected definition declares: bun run spur-check-feature\"\n    ]\n}\n",
+                ".spur/memory/evidence/v3-feature-verification.json": "{\n    \"schemaVersion\": 1,\n    \"featureId\": \"D9\",\n    \"runId\": \"v3\",\n    \"workdir\": \"<CWD>\",\n    \"verifier\": {\n        \"name\": \"feature-verification\",\n        \"sourcePath\": \"<REPO>/<BUNDLED_WORKFLOWS>/feature-verification.yaml\",\n        \"layer\": \"shared\",\n        \"definitionDigest\": \"sha256:<DIGEST>\"\n    },\n    \"verificationCmd\": \"true\",\n    \"inputDigest\": \"sha256:<DIGEST>\",\n    \"status\": \"PASS\",\n    \"startedAt\": \"<TS>\",\n    \"completedAt\": \"<TS>\",\n    \"confidence\": \"LOW\",\n    \"confidenceBasis\": [\n        \"operator-declared LOW\",\n        \"verification command exited 0\",\n        \"proof-input digest unchanged across the pass\",\n        \"caller command override: true\",\n        \"the selected definition declares: bun run spur-check-feature\"\n    ],\n    \"confidenceAcknowledged\": true\n}\n",
+                ".spur/memory/evidence/v4-feature-verification.json": "{\n    \"schemaVersion\": 1,\n    \"featureId\": \"D9\",\n    \"runId\": \"v4\",\n    \"workdir\": \"<CWD>\",\n    \"verifier\": {\n        \"name\": \"feature-verification\",\n        \"sourcePath\": \"<REPO>/<BUNDLED_WORKFLOWS>/feature-verification.yaml\",\n        \"layer\": \"shared\",\n        \"definitionDigest\": \"sha256:<DIGEST>\"\n    },\n    \"verificationCmd\": \"true\",\n    \"inputDigest\": \"sha256:<DIGEST>\",\n    \"status\": \"PASS\",\n    \"startedAt\": \"<TS>\",\n    \"completedAt\": \"<TS>\",\n    \"confidence\": \"MEDIUM\",\n    \"confidenceBasis\": [\n        \"operator-declared MEDIUM\",\n        \"verification command exited 0\",\n        \"proof-input digest unchanged across the pass\",\n        \"caller command override: true\",\n        \"the selected definition declares: bun run spur-check-feature\"\n    ]\n}\n"
+            },
+            "stubArgv": []
+        },
+        "verify-refusals": {
+            "steps": [
+                {
+                    "exitCode": 1,
+                    "stdout": "",
+                    "stderr": "feature-verification-steps: Error: refusing unsafe feature id: ../x\n"
+                },
+                {
+                    "exitCode": 1,
+                    "stdout": "",
+                    "stderr": "feature-verification-steps: Error: feature D9 not found in the configured features directory\n"
+                },
+                {
+                    "exitCode": 1,
+                    "stdout": "",
+                    "stderr": "feature-verification-steps: Error: refusing unsafe run id: \n"
+                }
+            ],
+            "files": {},
+            "stubArgv": []
+        }
+    },
+    "featureHandoff": {
+        "handoff-missing-env": {
+            "steps": [
+                {
+                    "exitCode": 1,
+                    "stdout": "",
+                    "stderr": "idea-handoff: __runId and featureId env vars are required\n"
+                }
+            ],
+            "files": {},
+            "stubArgv": []
+        },
+        "handoff-missing-files": {
+            "steps": [
+                {
+                    "exitCode": 1,
+                    "stdout": "",
+                    "stderr": "idea-handoff: Required batch, result, or order files missing in .spur/run/\n"
+                }
+            ],
+            "files": {},
+            "stubArgv": []
+        },
+        "handoff-success": {
+            "steps": [
+                {
+                    "exitCode": 0,
+                    "stdout": "idea-handoff: wrote <CWD>/.spur/run/r1-idea-handoff.md (2 task(s))\nidea-handoff: next -> /sp:dev-refineall --feature F1 --auto --depth ready\n",
+                    "stderr": ""
+                }
+            ],
+            "files": {
+                ".spur/run/r1-idea-batch-create-result.json": "{\"wbs\":[\"0201\",\"0202\"]}",
+                ".spur/run/r1-idea-handoff.md": "# Idea pipeline handoff report\n\nFeature: F1\nRun ID: r1\n\n## Created tasks\n  - 0201\n  - 0202\n\n## Per-task readiness (evidence + digest + task check)\n\n| WBS | Outcome | Reason |\n|-----|---------|--------|\n| 0201 | UNREADY | no ready evidence recorded for this run |\n| 0202 | UNREADY | no ready evidence recorded for this run |\n\n## Preparation actions\n\n  - 0201: /sp:dev-refine 0201 --auto --depth ready\n  - 0202: /sp:dev-refine 0202 --auto --depth ready\n\n## Next command\n\n/sp:dev-refineall --feature F1 --auto --depth ready\n",
+                ".spur/run/r1-idea-task-batch.json": "[{\"name\":\"alpha\"},{\"name\":\"beta\"}]",
+                ".spur/run/r1-idea-task-order.json": "[{\"name\":\"alpha\"},{\"name\":\"beta\",\"depends_on_names\":[\"alpha\"]}]"
+            },
+            "stubArgv": [
+                "task show 0201 --json",
+                "task deps 0202 set 0201 --json",
+                "feature refresh --feature F1 --json",
+                "task path 0201 --json",
+                "task path 0202 --json"
+            ]
+        },
+        "handoff-deps-failure": {
+            "steps": [
+                {
+                    "exitCode": 1,
+                    "stdout": "",
+                    "stderr": "idea-handoff: Failed to set dependencies for task 0202: exit=1: no stderr\n"
+                }
+            ],
+            "files": {
+                ".spur/run/r1-idea-batch-create-result.json": "{\"wbs\":[\"0201\",\"0202\"]}",
+                ".spur/run/r1-idea-task-batch.json": "[{\"name\":\"alpha\"},{\"name\":\"beta\"}]",
+                ".spur/run/r1-idea-task-order.json": "[{\"name\":\"alpha\"},{\"name\":\"beta\",\"depends_on_names\":[\"alpha\"]}]"
+            },
+            "stubArgv": ["task show 0201 --json", "task deps 0202 set 0201 --json"]
+        }
+    }
+}

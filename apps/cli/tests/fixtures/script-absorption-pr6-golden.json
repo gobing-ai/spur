@@ -1,0 +1,175 @@
+{
+    "source": "origin/main @ f6bcda129 (PR-5 + PR-4 + PR-3 stack base) plugins/sp/scripts",
+    "cases": {
+        "anatomy digest": {
+            "exitCode": 0,
+            "stdout": "dcba73d81e47094b643b0c2aa1ae006aed1c2f8f44c5a1a45dcef2a97ba0ba99\n",
+            "stderr": ""
+        },
+        "anatomy check pass": {
+            "exitCode": 0,
+            "stdout": "PASS\n",
+            "stderr": ""
+        },
+        "anatomy check bad category": {
+            "exitCode": 1,
+            "stdout": "FAIL\n- finding-invalid-category:navigation\n",
+            "stderr": ""
+        },
+        "anatomy check bad confidence": {
+            "exitCode": 1,
+            "stdout": "FAIL\n- finding-invalid-confidence:certain\n",
+            "stderr": ""
+        },
+        "anatomy check missing sections": {
+            "exitCode": 1,
+            "stdout": "FAIL\n- section-missing-or-out-of-order:Scope and provenance\n- section-missing-or-out-of-order:Executive summary\n- section-missing-or-out-of-order:Baseline comparison\n- section-missing-or-out-of-order:Recurrence ledger\n- section-missing-or-out-of-order:Telemetry gaps\n- section-missing-or-out-of-order:Remediation options\n- section-missing-or-out-of-order:Performance analysis\n- section-missing-or-out-of-order:Workflow and process improvements\n- section-missing-or-out-of-order:Report-only advisories\n- section-missing-or-out-of-order:Positive patterns\n- section-missing-or-out-of-order:Evidence ledger\n",
+            "stderr": ""
+        },
+        "anatomy check usage": {
+            "exitCode": 1,
+            "stdout": "",
+            "stderr": "usage: <script> check <report.md>\n"
+        },
+        "anatomy unknown op": {
+            "exitCode": 1,
+            "stdout": "",
+            "stderr": "valid commands: digest, check, paths, assert-clean, probe, stamp, refresh, publish\n"
+        },
+        "anatomy no op": {
+            "exitCode": 1,
+            "stdout": "",
+            "stderr": "valid commands: digest, check, paths, assert-clean, probe, stamp, refresh, publish\n"
+        },
+        "anatomy paths env": {
+            "exitCode": 0,
+            "stdout": "--- paths.env\nHA_HELPER=<FIXTURES>/ha-artifact.json\nHA_SKILL=<FIXTURES>/ha-artifact.json/skills/history-anatomy\nHA_TARGET=docs/report/2026-08-24-history-anatomy.md\nHA_DATE=2026-08-24\nHA_SINCE=2026-08-24T00:00:00.000+00:00\nHA_UNTIL=2026-08-24T23:59:59.999+00:00\nHA_BASELINE_SINCE=2026-08-23T00:00:00.000+00:00\nHA_BASELINE_UNTIL=2026-08-23T23:59:59.999+00:00\n",
+            "stderr": ""
+        },
+        "anatomy paths daily rejects --output": {
+            "exitCode": 1,
+            "stdout": "",
+            "stderr": "daily mode rejects --output\n"
+        },
+        "anatomy paths bad date": {
+            "exitCode": 1,
+            "stdout": "",
+            "stderr": "--date must be a real YYYY-MM-DD calendar day, got \"2026-13-40\"\n"
+        },
+        "anatomy paths no out": {
+            "exitCode": 1,
+            "stdout": "",
+            "stderr": "usage: <script> paths --helper <p> --out <env> [--report-dir <d>] [--date <d>] [--output <p>] [--mode <m>] [--since <s>] [--until <u>] [--focus <text>] [--recompute true|false] [--run-id <id>]\n"
+        },
+        "timeline no session": {
+            "exitCode": 0,
+            "stdout": "{\"available\":false,\"reason\":\"no host session id; pass --transcript <path> (pi: ~/.pi/agent/sessions/<cwd-slug>/<file>.jsonl, or set PI_SESSION_FILE)\"}\n",
+            "stderr": ""
+        },
+        "timeline claude transcript": {
+            "exitCode": 0,
+            "stdout": "{\"available\":true,\"segments\":[{\"index\":1,\"start\":\"2026-10-04T03:00:00.000Z\",\"prompt\":\"/sp:dev-run 1\",\"workMs\":25000,\"waitMs\":15000,\"toolCalls\":4,\"tokens\":{\"input\":6,\"cacheCreate\":300,\"cacheRead\":3000,\"output\":21},\"work\":\"0:25\",\"wait\":\"0:15\",\"token\":\"3k / 327\"},{\"index\":2,\"start\":\"2026-10-04T03:00:40.000Z\",\"prompt\":\"continue\",\"workMs\":55000,\"waitMs\":0,\"toolCalls\":1,\"tokens\":{\"input\":4,\"cacheCreate\":200,\"cacheRead\":2000,\"output\":6},\"work\":\"0:55\",\"wait\":\"0:00\",\"token\":\"2k / 210\"}],\"totals\":{\"workMs\":80000,\"waitMs\":15000,\"toolCalls\":5,\"tokens\":{\"input\":10,\"cacheCreate\":500,\"cacheRead\":5000,\"output\":27},\"elapsedMs\":95000,\"elapsed\":\"1:35\",\"work\":\"1:20\",\"wait\":\"0:15\",\"token\":\"6k / 537\"},\"skippedLines\":0,\"transcript\":\"<FIXTURES>/transcript.jsonl\"}\n",
+            "stderr": ""
+        },
+        "timeline grouped": {
+            "exitCode": 0,
+            "stdout": "{\"available\":true,\"segments\":[{\"index\":1,\"start\":\"2026-10-04T03:00:00.000Z\",\"prompt\":\"/sp:dev-run 1\",\"workMs\":25000,\"waitMs\":15000,\"toolCalls\":4,\"tokens\":{\"input\":6,\"cacheCreate\":300,\"cacheRead\":3000,\"output\":21},\"work\":\"0:25\",\"wait\":\"0:15\",\"token\":\"3k / 327\"},{\"index\":2,\"start\":\"2026-10-04T03:00:40.000Z\",\"prompt\":\"continue\",\"workMs\":55000,\"waitMs\":0,\"toolCalls\":1,\"tokens\":{\"input\":4,\"cacheCreate\":200,\"cacheRead\":2000,\"output\":6},\"work\":\"0:55\",\"wait\":\"0:00\",\"token\":\"2k / 210\"}],\"totals\":{\"workMs\":80000,\"waitMs\":15000,\"toolCalls\":5,\"tokens\":{\"input\":10,\"cacheCreate\":500,\"cacheRead\":5000,\"output\":27},\"elapsedMs\":95000,\"elapsed\":\"1:35\",\"work\":\"1:20\",\"wait\":\"0:15\",\"token\":\"6k / 537\"},\"skippedLines\":0,\"stages\":[{\"workMs\":25000,\"waitMs\":15000,\"toolCalls\":4,\"tokens\":{\"input\":6,\"cacheCreate\":300,\"cacheRead\":3000,\"output\":21},\"segments\":\"1\",\"work\":\"0:25\",\"wait\":\"0:15\",\"token\":\"3k / 327\"},{\"workMs\":55000,\"waitMs\":0,\"toolCalls\":1,\"tokens\":{\"input\":4,\"cacheCreate\":200,\"cacheRead\":2000,\"output\":6},\"segments\":\"2\",\"work\":\"0:55\",\"wait\":\"0:00\",\"token\":\"2k / 210\"}],\"transcript\":\"<FIXTURES>/transcript.jsonl\"}\n",
+            "stderr": ""
+        },
+        "timeline bad group": {
+            "exitCode": 2,
+            "stdout": "",
+            "stderr": "session-timeline: invalid --group \"3-1\" (segments 1-2, ascending, no overlap)\n"
+        },
+        "timeline missing transcript": {
+            "exitCode": 0,
+            "stdout": "{\"available\":false,\"reason\":\"no transcript\"}\n",
+            "stderr": ""
+        },
+        "timeline pi transcript": {
+            "exitCode": 0,
+            "stdout": "{\"available\":true,\"segments\":[{\"index\":1,\"start\":\"2026-10-08T18:45:35.336Z\",\"prompt\":\"<user text placeholder>\",\"workMs\":161826,\"waitMs\":12838,\"toolCalls\":9,\"tokens\":{\"input\":155314,\"cacheCreate\":0,\"cacheRead\":270976,\"output\":1483},\"compactions\":1,\"work\":\"2:42\",\"wait\":\"0:13\",\"token\":\"428k / 157k\"},{\"index\":2,\"start\":\"2026-10-08T18:48:30.000Z\",\"prompt\":\"<user text placeholder>\",\"workMs\":20000,\"waitMs\":70000,\"toolCalls\":1,\"tokens\":{\"input\":10300,\"cacheCreate\":0,\"cacheRead\":122500,\"output\":238},\"compactions\":0,\"work\":\"0:20\",\"wait\":\"1:10\",\"token\":\"133k / 11k\"},{\"index\":3,\"start\":\"2026-10-08T18:50:00.000Z\",\"prompt\":\"operator note: the <skill name=\\\"x\\\"> wrapper above is injected, so it is not my p…\",\"workMs\":5000,\"waitMs\":5000,\"toolCalls\":0,\"tokens\":{\"input\":7,\"cacheCreate\":0,\"cacheRead\":0,\"output\":3},\"compactions\":0,\"work\":\"0:05\",\"wait\":\"0:05\",\"token\":\"10 / 10\"},{\"index\":4,\"start\":\"2026-10-08T18:50:10.000Z\",\"prompt\":\"/sp-dev-run --triage\",\"workMs\":10000,\"waitMs\":10000,\"toolCalls\":0,\"tokens\":{\"input\":10,\"cacheCreate\":0,\"cacheRead\":0,\"output\":5},\"compactions\":0,\"work\":\"0:10\",\"wait\":\"0:10\",\"token\":\"15 / 15\"},{\"index\":5,\"start\":\"2026-10-08T18:50:30.000Z\",\"prompt\":\"/rd3-anti-hallucination\",\"workMs\":10000,\"waitMs\":0,\"toolCalls\":0,\"tokens\":{\"input\":8,\"cacheCreate\":0,\"cacheRead\":0,\"output\":4},\"compactions\":0,\"work\":\"0:10\",\"wait\":\"0:00\",\"token\":\"12 / 12\"}],\"totals\":{\"workMs\":206826,\"waitMs\":97838,\"toolCalls\":10,\"tokens\":{\"input\":165639,\"cacheCreate\":0,\"cacheRead\":393476,\"output\":1733},\"elapsedMs\":304664,\"elapsed\":\"5:05\",\"compactions\":1,\"work\":\"3:27\",\"wait\":\"1:38\",\"token\":\"561k / 167k\"},\"skippedLines\":0,\"transcript\":\"<FIXTURES>/pi-session.jsonl\"}\n",
+            "stderr": ""
+        },
+        "timeline pi via PI_SESSION_FILE": {
+            "exitCode": 0,
+            "stdout": "{\"available\":true,\"segments\":[{\"index\":1,\"start\":\"2026-10-08T18:45:35.336Z\",\"prompt\":\"<user text placeholder>\",\"workMs\":161826,\"waitMs\":12838,\"toolCalls\":9,\"tokens\":{\"input\":155314,\"cacheCreate\":0,\"cacheRead\":270976,\"output\":1483},\"compactions\":1,\"work\":\"2:42\",\"wait\":\"0:13\",\"token\":\"428k / 157k\"},{\"index\":2,\"start\":\"2026-10-08T18:48:30.000Z\",\"prompt\":\"<user text placeholder>\",\"workMs\":20000,\"waitMs\":70000,\"toolCalls\":1,\"tokens\":{\"input\":10300,\"cacheCreate\":0,\"cacheRead\":122500,\"output\":238},\"compactions\":0,\"work\":\"0:20\",\"wait\":\"1:10\",\"token\":\"133k / 11k\"},{\"index\":3,\"start\":\"2026-10-08T18:50:00.000Z\",\"prompt\":\"operator note: the <skill name=\\\"x\\\"> wrapper above is injected, so it is not my p…\",\"workMs\":5000,\"waitMs\":5000,\"toolCalls\":0,\"tokens\":{\"input\":7,\"cacheCreate\":0,\"cacheRead\":0,\"output\":3},\"compactions\":0,\"work\":\"0:05\",\"wait\":\"0:05\",\"token\":\"10 / 10\"},{\"index\":4,\"start\":\"2026-10-08T18:50:10.000Z\",\"prompt\":\"/sp-dev-run --triage\",\"workMs\":10000,\"waitMs\":10000,\"toolCalls\":0,\"tokens\":{\"input\":10,\"cacheCreate\":0,\"cacheRead\":0,\"output\":5},\"compactions\":0,\"work\":\"0:10\",\"wait\":\"0:10\",\"token\":\"15 / 15\"},{\"index\":5,\"start\":\"2026-10-08T18:50:30.000Z\",\"prompt\":\"/rd3-anti-hallucination\",\"workMs\":10000,\"waitMs\":0,\"toolCalls\":0,\"tokens\":{\"input\":8,\"cacheCreate\":0,\"cacheRead\":0,\"output\":4},\"compactions\":0,\"work\":\"0:10\",\"wait\":\"0:00\",\"token\":\"12 / 12\"}],\"totals\":{\"workMs\":206826,\"waitMs\":97838,\"toolCalls\":10,\"tokens\":{\"input\":165639,\"cacheCreate\":0,\"cacheRead\":393476,\"output\":1733},\"elapsedMs\":304664,\"elapsed\":\"5:05\",\"compactions\":1,\"work\":\"3:27\",\"wait\":\"1:38\",\"token\":\"561k / 167k\"},\"skippedLines\":0,\"transcript\":\"<FIXTURES>/pi-session.jsonl\"}\n",
+            "stderr": ""
+        },
+        "summary usage": {
+            "exitCode": 2,
+            "stdout": "",
+            "stderr": "usage: run-summary (--progress [<label>=]<file> [--progress ...] | --rollup [<label>=]<summary.json> [--rollup ...]) [--transcript <path>] [--since <iso>] [--markdown]\n"
+        },
+        "summary progress json": {
+            "exitCode": 0,
+            "stdout": "{\"available\":true,\"rows\":[{\"stage\":\"implement\",\"status\":\"passed\",\"workMs\":20000,\"waitMs\":0,\"toolCalls\":3,\"tokens\":{\"input\":4,\"cacheCreate\":200,\"cacheRead\":2000,\"output\":20},\"time\":\"0:20\",\"wait\":\"0:00\",\"token\":\"2k / 224\"},{\"stage\":\"verify\",\"status\":\"passed\",\"workMs\":20000,\"waitMs\":0,\"toolCalls\":1,\"tokens\":{\"input\":2,\"cacheCreate\":100,\"cacheRead\":1000,\"output\":5},\"time\":\"0:20\",\"wait\":\"0:00\",\"token\":\"1k / 107\"},{\"stage\":\"record\",\"status\":\"passed\",\"workMs\":1000,\"waitMs\":0,\"toolCalls\":null,\"tokens\":null,\"time\":\"0:01\",\"wait\":\"0:00\",\"token\":\"n/a\"},{\"stage\":\"driver overhead\",\"status\":\"\",\"workMs\":35000,\"waitMs\":0,\"toolCalls\":0,\"tokens\":{\"input\":0,\"cacheCreate\":0,\"cacheRead\":0,\"output\":0},\"time\":\"0:35\",\"wait\":\"0:00\",\"token\":\"0 / 0\"}],\"total\":{\"stage\":\"Total\",\"status\":\"done\",\"workMs\":76000,\"waitMs\":0,\"toolCalls\":4,\"tokens\":{\"input\":6,\"cacheCreate\":300,\"cacheRead\":3000,\"output\":25},\"time\":\"1:16\",\"wait\":\"0:00\",\"token\":\"3k / 331\"},\"actors\":{\"operatorMs\":0,\"longestOperatorWaitMs\":0,\"modelMs\":76000,\"shellMs\":0,\"subagentMs\":0,\"otherToolMs\":0,\"idleMs\":0,\"compactions\":0,\"subagentErrors\":0},\"gate\":{\"ms\":null,\"reason\":\"no matching check receipt\"},\"skippedLines\":0,\"transcript\":\"<FIXTURES>/transcript.jsonl\"}\n",
+            "stderr": ""
+        },
+        "summary progress markdown": {
+            "exitCode": 0,
+            "stdout": "| Stage | Status | Time | Wait | Tool calls | Token (total / non-cached) |\n| --- | --- | ---: | ---: | ---: | ---: |\n| implement | passed | 0:20 | 0:00 | 3 | 2k / 224 |\n| verify | passed | 0:20 | 0:00 | 1 | 1k / 107 |\n| record | passed | 0:01 | 0:00 | n/a | n/a |\n| driver overhead |  | 0:35 | 0:00 | 0 | 0 / 0 |\n| **Total** | done | 1:16 | 0:00 | 4 | 3k / 331 |\n\n| Actor | Time | Share |\n| --- | ---: | ---: |\n| operator wait (longest 0:00) | 0:00 | 0% |\n| model | 1:16 | 100% |\n| shell | 0:00 | 0% |\n|   of which gate (informational) | n/a (no matching check receipt) | — |\n| subagent | 0:00 | 0% |\n| other tools | 0:00 | 0% |\n| idle / unattributed | 0:00 | 0% |\n\nCompactions: 0 · Subagent errors: 0\n",
+            "stderr": ""
+        },
+        "summary since": {
+            "exitCode": 0,
+            "stdout": "{\"available\":true,\"rows\":[{\"stage\":\"implement\",\"status\":\"passed\",\"workMs\":20000,\"waitMs\":0,\"toolCalls\":3,\"tokens\":{\"input\":4,\"cacheCreate\":200,\"cacheRead\":2000,\"output\":20},\"time\":\"0:20\",\"wait\":\"0:00\",\"token\":\"2k / 224\"},{\"stage\":\"verify\",\"status\":\"passed\",\"workMs\":20000,\"waitMs\":0,\"toolCalls\":1,\"tokens\":{\"input\":2,\"cacheCreate\":100,\"cacheRead\":1000,\"output\":5},\"time\":\"0:20\",\"wait\":\"0:00\",\"token\":\"1k / 107\"},{\"stage\":\"record\",\"status\":\"passed\",\"workMs\":1000,\"waitMs\":0,\"toolCalls\":null,\"tokens\":null,\"time\":\"0:01\",\"wait\":\"0:00\",\"token\":\"n/a\"},{\"stage\":\"driver overhead\",\"status\":\"\",\"workMs\":34000,\"waitMs\":0,\"toolCalls\":-2,\"tokens\":{\"input\":0,\"cacheCreate\":0,\"cacheRead\":0,\"output\":-9},\"time\":\"0:34\",\"wait\":\"0:00\",\"token\":\"-9 / -9\"}],\"total\":{\"stage\":\"Total\",\"status\":\"done\",\"workMs\":75000,\"waitMs\":0,\"toolCalls\":2,\"tokens\":{\"input\":6,\"cacheCreate\":300,\"cacheRead\":3000,\"output\":16},\"time\":\"1:15\",\"wait\":\"0:00\",\"token\":\"3k / 322\"},\"actors\":{\"operatorMs\":0,\"longestOperatorWaitMs\":0,\"modelMs\":75000,\"shellMs\":0,\"subagentMs\":0,\"otherToolMs\":0,\"idleMs\":0,\"compactions\":0,\"subagentErrors\":0},\"gate\":{\"ms\":null,\"reason\":\"no matching check receipt\"},\"skippedLines\":0,\"transcript\":\"<FIXTURES>/transcript.jsonl\"}\n",
+            "stderr": ""
+        },
+        "summary no transcript": {
+            "exitCode": 0,
+            "stdout": "{\"available\":false,\"reason\":\"no host session id; pass --transcript <path> (pi: ~/.pi/agent/sessions/<cwd-slug>/<file>.jsonl, or set PI_SESSION_FILE)\"}\n",
+            "stderr": ""
+        },
+        "summary untimed progress": {
+            "exitCode": 2,
+            "stdout": "",
+            "stderr": "run-summary: progress for run r0 has no timed attempts\n"
+        },
+        "summary malformed progress": {
+            "exitCode": 2,
+            "stdout": "",
+            "stderr": "run-summary: JSON Parse error: Unable to parse JSON string\n"
+        },
+        "summary rollup json": {
+            "exitCode": 0,
+            "stdout": "| Run | Status | Time | Wait | Tool calls | Token (total / non-cached) | Operator wait | Subagent |\n| --- | --- | ---: | ---: | ---: | ---: | ---: | ---: |\n| a | done | 0:01 | 0:00 | 1 | 2 / 2 | 0:00 | 0:00 |\n| b | done | 0:01 | 0:00 | 1 | 2 / 2 | 0:00 | 0:00 |\n| **Batch total** |  | 3:00 | 0:00 | 2 | 4 / 4 | 0:00 | 0:00 |\n\nWall span: 2026-10-09T00:00:00.000Z → 2026-10-09T00:30:00.000Z\n",
+            "stderr": ""
+        },
+        "summary rollup markdown": {
+            "exitCode": 0,
+            "stdout": "| Run | Status | Time | Wait | Tool calls | Token (total / non-cached) | Operator wait | Subagent |\n| --- | --- | ---: | ---: | ---: | ---: | ---: | ---: |\n| ra | done | 0:01 | 0:00 | 1 | 2 / 2 | 0:00 | 0:00 |\n| rb | done | 0:01 | 0:00 | 1 | 2 / 2 | 0:00 | 0:00 |\n| **Batch total** |  | 3:00 | 0:00 | 2 | 4 / 4 | 0:00 | 0:00 |\n\nWall span: 2026-10-09T00:00:00.000Z → 2026-10-09T00:30:00.000Z\n",
+            "stderr": ""
+        },
+        "summary rollup with progress": {
+            "exitCode": 2,
+            "stdout": "",
+            "stderr": "usage: run-summary (--progress [<label>=]<file> [--progress ...] | --rollup [<label>=]<summary.json> [--rollup ...]) [--transcript <path>] [--since <iso>] [--markdown]\n"
+        },
+        "profile json": {
+            "exitCode": 0,
+            "stdout": "{\n  \"workflow\": \"idea-pipeline\",\n  \"windowSec\": 300,\n  \"sampledRuns\": 1,\n  \"rows\": [\n    {\n      \"node\": \"implement\",\n      \"actionKind\": \"agent.run\",\n      \"runs\": 1,\n      \"executions\": 1,\n      \"durationMs\": {\n        \"p50\": 20000,\n        \"max\": 20000\n      },\n      \"idleGapMs\": {\n        \"p50\": null\n      },\n      \"session\": \"resumed\",\n      \"cacheHit\": {\n        \"p50\": 0.3,\n        \"known\": 1,\n        \"of\": 1\n      },\n      \"flags\": [\n        \"resume-cold-cache\"\n      ]\n    },\n    {\n      \"node\": \"test\",\n      \"actionKind\": \"shell\",\n      \"runs\": 1,\n      \"executions\": 1,\n      \"durationMs\": {\n        \"p50\": 4000,\n        \"max\": 4000\n      },\n      \"idleGapMs\": {\n        \"p50\": 380000\n      },\n      \"session\": null,\n      \"cacheHit\": {\n        \"p50\": null,\n        \"known\": 0,\n        \"of\": 1\n      },\n      \"flags\": []\n    }\n  ]\n}\n",
+            "stderr": ""
+        },
+        "profile human": {
+            "exitCode": 0,
+            "stdout": "step profile — idea-pipeline (window 300s, 1 sampled runs)\nimplement            agent.run      1/1      p50=20.0s    max=20.0s    idle=?       session=resumed cacheHit=0.30 (1/1)  flags=resume-cold-cache\ntest                 shell          1/1      p50=4.0s     max=4.0s     idle=380.0s  session=?       cacheHit=? (0/1)     flags=-\n",
+            "stderr": ""
+        },
+        "profile window and last": {
+            "exitCode": 0,
+            "stdout": "{\n  \"workflow\": \"idea-pipeline\",\n  \"windowSec\": 60,\n  \"sampledRuns\": 1,\n  \"rows\": [\n    {\n      \"node\": \"implement\",\n      \"actionKind\": \"agent.run\",\n      \"runs\": 1,\n      \"executions\": 1,\n      \"durationMs\": {\n        \"p50\": 20000,\n        \"max\": 20000\n      },\n      \"idleGapMs\": {\n        \"p50\": null\n      },\n      \"session\": \"resumed\",\n      \"cacheHit\": {\n        \"p50\": 0.3,\n        \"known\": 1,\n        \"of\": 1\n      },\n      \"flags\": [\n        \"resume-cold-cache\"\n      ]\n    },\n    {\n      \"node\": \"test\",\n      \"actionKind\": \"shell\",\n      \"runs\": 1,\n      \"executions\": 1,\n      \"durationMs\": {\n        \"p50\": 4000,\n        \"max\": 4000\n      },\n      \"idleGapMs\": {\n        \"p50\": 380000\n      },\n      \"session\": null,\n      \"cacheHit\": {\n        \"p50\": null,\n        \"known\": 0,\n        \"of\": 1\n      },\n      \"flags\": []\n    }\n  ]\n}\n",
+            "stderr": ""
+        },
+        "profile failing spur": {
+            "exitCode": 1,
+            "stdout": "",
+            "stderr": "workflow-step-profile: spur workflow trace --workflow idea-pipeline --status done --last 20 --json failed (exit 1) [<FIXTURES>/no-such-spur]\n"
+        },
+        "daily summary dry run": {
+            "exitCode": 0,
+            "stdout": "Generating daily summary for 2026-01-02...\n\n# Daily Summary — 2026-01-02\n\n**Generated:** <NOW>\n\n## Meta\n\n- **Date:** 2026-01-02\n- **Platforms:** unknown\n\n---\n\n*Generated by sp:daily-summary at <NOW>*\n\n(dry-run) Summary not written to file\n\n📊 Summary Statistics:\n   Date: 2026-01-02\n   Platforms: none\n",
+            "stderr": ""
+        }
+    }
+}

@@ -33,8 +33,8 @@ gate writes a fingerprint-bound receipt that downstream stages read instead of r
 
 | Tier | Mode | When | Scope |
 | --- | --- | --- | --- |
-| `light` | `quality-gate.ts light` | after each implement/fix edit | `bunx biome check` on the changed files (`git diff --name-only HEAD` + untracked), `bun run typecheck` per touched workspace, and related tests (`<ws>/src/**/x.ts` → `<ws>/tests/**/x.test.ts` filename mapping) run via `cd <ws> && bun test …` — never from the repo root, whose bunfig preload does not apply inside the workspace |
-| `full` | `quality-gate.ts run` | once at the task quality boundary (`test`) | today's chain: `bun run lint` + `bun run test-pre-check` + `bun run test` + `bun run test-post-check` (=`bun run spur-check`), with bounded findings, SQLite-busy retry, and the `recheck` probe |
+| `light` | `spur task gate <wbs> light` | after each implement/fix edit | `bunx biome check` on the changed files (`git diff --name-only HEAD` + untracked), `bun run typecheck` per touched workspace, and related tests (`<ws>/src/**/x.ts` → `<ws>/tests/**/x.test.ts` filename mapping) run via `cd <ws> && bun test …` — never from the repo root, whose bunfig preload does not apply inside the workspace |
+| `full` | `spur task gate <wbs> run` | once at the task quality boundary (`test`) | today's chain: `bun run lint` + `bun run test-pre-check` + `bun run test` + `bun run test-post-check` (=`bun run spur-check`), with bounded findings, SQLite-busy retry, and the `recheck` probe |
 
 Soft-fail contract: both tiers always exit 0; the verdict lives in files (`*-test-gate.status`,
 receipt `status`), never in the exit code.
@@ -59,7 +59,7 @@ receipt `status`), never in the exit code.
 - `inputDigest` is the shared `ProofInputFingerprint` (task markdown + git tree of tracked
   sources). The plugin never computes it — the pipeline captures it with the `proof.fingerprint`
   action into `env.proofDigest` (ADR-124: no second fingerprint, no `@gobing-ai/*` import);
-  standalone callers use `inline-run-setup.ts --fingerprint`.
+  standalone callers use `spur workflow inline fingerprint`.
 - Only `run`/`full` writes a reusable receipt. Without a digest, `run` writes no receipt and says
   so in the gate log. The gate executes `qualityGateCmd` as one unit, so the full receipt carries a
   single `test` row for the whole chain; `lint`, `typecheck`, `test-pre-check`,
@@ -70,12 +70,11 @@ receipt `status`), never in the exit code.
 
 ## Reuse rule
 
-Check `status` mode before re-running a gate. Resolve the shipped script through the superskill
-runtime (shipped surfaces never hard-code repo paths):
+Check `status` mode before re-running a gate. The gate ships inside the CLI (no plugin script to
+resolve):
 
 ```bash
-QG="$(superskill script path sp quality-gate.mjs)"
-bun "$QG" status   # env: wbs, proofDigest → prints {"reuse":…,"reason":…}
+spur task gate <wbs> status --proof-digest "$proofDigest" --no-logo   # prints {"reuse":…,"reason":…}
 ```
 
 `reuse: true` only when the receipt is `status: PASS`, `tier: full`, and `inputDigest` equals the

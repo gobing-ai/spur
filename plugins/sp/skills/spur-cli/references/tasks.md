@@ -49,6 +49,9 @@ re-reading or re-tokenizing the task.
 | `migrate-anchors` | Qualify in-repo evidence anchors to repo-relative paths (0583 R1–R3); `--wbs` scopes to one task file (1109 R1); retargets scratch `done_reason` verdict pointers (1140) | `--wbs` `--dry-run` `--json` |
 | `refresh-roster <wbs>` | Regenerate a parent task's sub-task roster block in `## Plan` | `--folder` `--json` |
 | `batch-create` | Create many tasks from a validated JSON array | `--file <path>` `--skip-ready` `--agent <selector>` `--folder` `--json` |
+| `batch-plan <mode>` | Batch plan projection: `waves` / `order` / `task-children` (JSON on stdout; the batch driver's visible plan) | `--tasks <file>` `--concurrency <n>` `--letter <A-Z>` `--plan <file>` |
+| `preflight [wbs]` | Read-only batch admission: TABLE A STOP check, quick readiness (`--operation`), one-shot recovery hop; status/deps read from the corpus unless given | `--status <s>` `--deps <list>` `--dep-status <map>` `--operation <op>` `--filtered-count <n>` `--required-sections <list>` `--present-sections <list>` `--force` `--recovery` `--classify-feature <json>` `--folder` `--json` |
+| `wrapup <op>` | One deterministic `wrapup-pipeline` step (`resolve`, `route-reason`, `metrics`, `feature-transition`, `doc-sync-snapshot`, `doc-sync-scope`, `doc-supersession`, `drift-probe`) — workflow-internal | `--run-id <id>` `--tasks <json>` `--mode <m>` `--feature <id>` `--feature-gate-cmd <cmd>` `--spur-bin <cmd>` |
 | `record <wbs>` | Write `Testing` from a verify verdict (deterministic); bare-`## Review` fallback only; optional Solution + transition | `--verdict-file <path>` `--solution-from-diff` `--transition <status>` `--folder` `--json` |
 | `verdict <wbs>` | Derive PASS/PARTIAL/FAIL/UNKNOWN from verify answer text → verdict JSON; see [answer-file shape](tasks/verbs.md#answer-file-shape-what---from-answer-parses) | `--from-answer <path>` `--folder` `--json` |
 | `check [wbs]` | Four-layer validation; `--fix` repairs structure; `--corpus` is the explicit unsuppressed audit; `--precheck` adds the pipeline precheck gate (size + evidence channel, WBS required) | `--strict` `--as <status>` `--strict-core` `--precheck` `--fix` `--folder` `--corpus` `--since <ref>` `--json` |
@@ -57,9 +60,13 @@ re-reading or re-tokenizing the task.
 | `run-link <wbs>` | Record pipeline run provenance link for task | `--source <src>` `--run-id <id>` `--json` |
 | `verifyall-aggregate` | Aggregate per-task verify outcomes into a batch verdict (NOT-STARTED excluded) | `--from-file <path>` `--json` |
 | `scaffold-tests <wbs>` | Generate BDD test stubs from task Acceptance Criteria | `--file <path>` `--folder` `--json` |
+| `gate <wbs> <mode>` | Task-pipeline quality gate (`run`, `recheck`, `light`, `deferred`, `status`); exit 0 PASS, 1 FAIL | `--cmd <c>` `--probe-cmd <c>` `--proof-digest <d>` `--run-id <id>` |
+| `residual <wbs> <step>` | F96 residual sweep step (`scan`, `review-gate`, `fold`, `settle`, `report`) | `--root <dir>` `--tmp-dir <dir>` `--folder` |
+| `diffstat <wbs>` | Write the triage diffstat artifact against the run base (fails safe to `sensitive: true`) | — |
 
-All verbs accept `--json` for machine consumption and `--folder <path>` to target a non-default
-tasks folder. **Exit codes:** `0` success, `1` error, `2` invalid usage.
+All verbs except the pipeline-internal `gate`, `residual` and `diffstat` (which write `.spur/run`
+artifacts instead) accept `--json` for machine consumption and `--folder <path>` to target a
+non-default tasks folder. **Exit codes:** `0` success, `1` error, `2` invalid usage.
 
 ## Creating tasks
 

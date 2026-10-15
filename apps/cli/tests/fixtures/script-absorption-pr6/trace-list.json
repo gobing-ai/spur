@@ -1,0 +1,7 @@
+{
+    "entries": [
+        { "runId": "run-a", "workflowName": "idea-pipeline", "status": "done", "isDryRun": false },
+        { "runId": "run-dry", "workflowName": "idea-pipeline", "status": "done", "isDryRun": true }
+    ],
+    "total": 2
+}

@@ -272,16 +272,15 @@ plugins/sp/
 │   └── wayfinder/                   # Multi-session investigation maps (SKILL.md only)
 ├── commands/                        # Slash-command wrappers — the SSOT (hand-editable thin wrappers; see Commands below)
 ├── agents/                          # 4 specialist subagents (expert-spur, super-coder, super-planner, super-reviewer)
-├── hooks/                           # hooks.json + one thin entry per registered identity
-│                                    # + task-write-guard.ts (compat shim) + careful-guard.ts (opt-in, unwired)
-│                                    # + pi/guard-extension.ts (plugin.json `extensions.pi` entry point)
-│                                    # entries delegate to lib cores (task 1174); hook suites live in tests/hooks/
+├── hooks/                           # hooks.json (the registry) only — Pi runs it through superskill's native Pi adapter
+│                                    # — no hook entries here; see scripts/hooks/ (superskill ADR-039)
 ├── lib/                             # Handwritten plugin cores — context-{post-tool,session-start,session-stop}.ts,
 │                                    # agent-hint.ts, context-owner.ts, destructive-policy.ts, task-file-policy.ts,
-│                                    # env.ts, plus generated *.generated.mjs|.d.mts bundles over packages/app
-├── scripts/                         # Executable helpers, split from prompts (ADR-031) — batch-preflight.ts + scripts/<skill>/
-│                                    # (daily-summary: daily-summary.ts; dogfood-testing: {detect-pipeline-driving, validate-report}.ts)
-├── tests/                           # Plugin tests — skill-structure.test.ts + hooks/ (guard, context, Pi suites)
+│                                    # env.ts (no generated bundles: script absorption retired them)
+├── scripts/                         # Hook entries plus script-root (pending infrastructure retirement)
+│   └── hooks/                       # One entry per hook identity, run by `superskill hook run sp <id>`;
+│                                    # entries delegate to lib cores; suites live in tests/hooks/
+├── tests/                           # Plugin tests — skill-structure.test.ts + hooks/ (guard, context, lifecycle suites)
 │                                    # + evals/ (behavioral eval corpus + judge; see tests/evals/README.md,
 │                                    # runner at scripts/commands/skill-eval.ts) + per-skill suites
 ├── plugin.json                      # Marketplace entry
@@ -348,7 +347,7 @@ surface or run one workflow. All skills target the same five core platforms: `cl
 | `conflict-finding`          | 1.0   | Authority-aware semantic audit — four-pillar (source/task/feature/authority) conflict discovery, claim-specific authority resolution, reproducible evidence, confirmed owner-routed remediation; backs `/sp:dev-find-conflict`             |
 | `fleet-join`                | 1.0   | Guest fleet occupancy — join as a live guest occupant, loop `spur agent wait --inbox` to pull work, reply through `spur message reply`, then leave; G73 (task 1081)                                                                          |
 | `next-feature`              | 1.0   | Prompt-first feature frontier prioritizer — sync-first precondition, B3 actionability gate (cited, never restated), tiered rubric over measured signals, D1–D4 defect proposals conforming to the restructure map schema; backs `/sp:dev-find-next` |
-| `pr-reviewing`              | 1.0   | GitHub Codex PR review — PR prepare/reuse, `@codex review` request with per-HEAD dedupe, bounded polling, findings normalization, validated fix + re-review; spine SSOT `pr-review.yaml` + `scripts/pr-reviewing.ts`; backs `/sp:dev-pr-review`     |
+| `pr-reviewing`              | 1.0   | GitHub Codex PR review — PR prepare/reuse, `@codex review` request with per-HEAD dedupe, bounded polling, findings normalization, validated fix + re-review; spine SSOT `pr-review.yaml` + `spur builder pr`; backs `/sp:dev-pr-review`     |
 | `indexed-context`           | 1.0   | Cross-agent project context — anatomy/learnings/pitfalls/buglog/memory in `.spur/context/`; hook-tracked token-ledger; graceful degradation on agents without hooks                                                                        |
 | `history-anatomy`           | 1.0   | Diagnostic interpretation owner over already-imported history — daily/ad-hoc mode contract, closed finding taxonomy, twelve-section report contract, `enrich`/`validate` rubrics; no workflow launch, no JSONL fallback, no corpus mutation                                                                   |
 | `session-review`            | 1.1   | Inline review of the active coding-agent session — compact outcomes, evidence-backed resolved/open issue classification, proposal-only improvements, and next actions; no workflow, import, delegation, or mutation                                                                                           |
@@ -411,14 +410,10 @@ hand-editable source for the operator command surface. Per-platform adapters are
 output** owned by `superskill` (`superskill install sp`) and never committed here. Plugin `sp` ships
 no per-platform artifacts — only the platform-independent thin wrappers.
 
-**Install-time `lib/` ownership (1120).** Staging and refreshing the plugin's sibling
-`lib/inline-run.generated.mjs` app bundle into the shared scripts root is `superskill`'s install
-contract (superskill commit `b42961b`, first release after 0.3.35): spur ships the bundle, superskill
-places it. The inline scripts carry a skew guard for the window where the installed bundle is older
-than its scripts (e.g. superskill ≤ 0.3.35): they fail with a named version-skew error — bundle
-path, missing exports, and both remedies — instead of an `is not a function` TypeError. Until a
-superskill release containing `b42961b` is installed and `sp` reinstalled, pass
-`--spur-bin <spur checkout>/apps/cli/src/index.ts`.
+**No install-time app bundle.** The plugin used to ship a `lib/inline-run.generated.mjs` app bundle
+that `superskill` staged beside the scripts (1120). Script absorption (PR-4..PR-6) moved every
+consumer onto `spur <noun> <verb>`, so the bundle and its skew guard are gone: the skills call the
+installed `spur` CLI directly.
 
 **Thin-wrapper contract** is enforced by `scripts/commands/validate-commands.ts`:
 
@@ -487,11 +482,12 @@ the agent provides an isolated context window.
 #### 4. Hooks (`hooks/`)
 
 Event-driven enforcement that runs automatically without user invocation. `hooks.json` registers
-six handlers across seven events:
+seven handlers across seven events:
 
 | Event          | Matcher                               | Handler                                        | Timeout |
 | -------------- | ------------------------------------- | ---------------------------------------------- | ------- |
 | `PreToolUse`   | `Write\|Edit`                         | `superskill hook run sp task-write-guard`      | 10s     |
+| `PreToolUse`   | `Bash`                                | `superskill hook run sp careful-guard`         | 10s     |
 | `PostToolUse`  | `Bash\|Grep\|Glob\|Read\|Write\|Edit` | `superskill hook run sp context-post-tool`     | 10s     |
 | `SessionStart` | —                                     | `superskill hook run sp context-session-start` | 15s     |
 | `SessionStart`, `UserPromptSubmit`, `Stop` | —         | `superskill hook run sp agent-lifecycle`       | 5s      |
@@ -515,13 +511,57 @@ hint on first launch, and `context-session-stop` closes out the session record.
 `SPUR_SPEC_ID` is set, so outside a fleet it makes no call. `fleet-guest-stop` delivers pending
 inbox work to a session joined as a fleet guest at turn end; any other session passes through.
 
-**Available but unwired:** `careful-guard.ts` ships in `hooks/` (its suite is
-`tests/hooks/careful-guard.test.ts`) as an opt-in `PreToolUse` guard that asks before destructive
-shell commands (`rm -rf`, `DROP TABLE`,
-`git push --force`, …) — it is **not** registered in `hooks.json`. Fail-open by contract; escape
-hatch `SPUR_CAREFUL=off`.
+**Destructive-command guard.** `careful-guard` (task 0215 R3) fires on every `Bash` tool call and
+asks the operator to confirm destructive shell commands (`rm -rf`, `DROP TABLE`, `git push --force`,
+…); rebuildable caches (`rm -rf node_modules`, `dist`, …) pass. The policy is
+`lib/destructive-policy.ts`. On Pi, superskill's native adapter routes the `ask` to `ctx.ui.confirm`
+(and blocks when Pi has no UI). Hosts that cannot confirm (Codex, omp, generic) deny an
+unconfirmable `ask` with the reason. Malformed input and runner errors still fail open; escape hatch
+`SPUR_CAREFUL=off`.
+
+**Runtime contract (superskill ADR-039).** `superskill hook run sp <id>` runs the plugin's own
+`scripts/hooks/<id>.ts` under Bun with the canonical payload on stdin. An allow prints **nothing**
+(a printed Claude `permissionDecision:"allow"` would bypass the user's permission rules). A
+block/ask prints one JSON object that superskill renders per host:
+
+- `fleet-guest-stop` prints the host-neutral `{"decision":"block","reason"}`.
+- The two `PreToolUse` guards print Claude-native JSON with the reason in both
+  `permissionDecisionReason` and `systemMessage`. On Codex/omp, `hook run` turns a deny into exit 2
+  with that reason on stderr, and an unconfirmable ask becomes the same fail-closed denial. They stay Claude-native because the neutral form cannot carry
+  `systemMessage`, Claude Code's user-facing warning.
+
+**Why `scripts/hooks/` (one canonical location).** superskill resolves `hooks/<id>` first, then
+`scripts/hooks/<id>`, under every plugin root. But install delivers different trees to different
+targets:
+
+- Codex, OpenCode, Antigravity and Hermes get only `scripts/`, staged as
+  `.agents/scripts/sp/`, with `lib/` beside it as `.agents/scripts/lib/`.
+- Native targets (Claude Code, omp, Grok) get the whole plugin.
+
+So `scripts/hooks/<id>.ts`, importing `../../lib/…`, is the only path that resolves the same way on
+every target. `hooks/` keeps the registry only. `script-contract-check`
+rejects a hook entry there: on native installs it would shadow the staged one, and staged targets
+would never receive it. Hook logic stays in the plugin (Revision 2026-10-15); the files are entries
+and lib cores, not `spur` commands.
 
 **Escape hatch:** `SPUR_WRITE_GUARD=off` short-circuits the write guard before any subprocess.
+
+**Pi.** The plugin ships no Pi-specific extension any more: the former
+`hooks/pi/guard-extension.ts` (declared through `plugin.json` `extensions.pi`) is retired. Pi gets
+the same seven `hooks.json` hooks as every other host, through superskill's **native Pi hook
+adapter** (superskill PR #4, ADR-039): `superskill install` generates one Pi extension module per
+declared hook, each running `superskill hook run sp <id>` with `SUPERSKILL_HOOK_HOST=pi`, and
+applies the decision with Pi's primitives — `{block}` for deny, `ctx.ui.confirm` for `ask`, a
+follow-up message for a Stop `block`. Requirements:
+
+- **Superskill 0.3.39 or newer** for the native Pi adapter and staged-hook timeout metadata.
+  Older installs may retain the `@vahor/pi-hooks` shim or omit hook-specific timeout budgets.
+- **A reinstall to Pi and omp** after upgrading: `superskill install sp --targets pi,omp`. Reinstall
+  removes the old `sp` extension package and any shim entries, so a hook never runs twice. An
+  existing Pi install keeps the retired extension until it is reinstalled.
+
+**Spur CLI requirement:** sp requires Spur 0.5.0 or newer on PATH. The script absorption is a clean break;
+older CLI versions do not provide the absorbed commands.
 
 #### 5. Scripts (`scripts/` + `hooks/`)
 
@@ -532,20 +572,12 @@ hold `SKILL.md` and prompt-side companions only.
 
 | Script                                               | Role                                                                                                                                                                                                                                                                                              |
 | ---------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `hooks/task-write-guard.ts`                          | Compatibility shim for older installs that still execute the script path directly. Forwards stdin to the stable PATH command `superskill hook run sp task-write-guard`, mirrors parseable PreToolUse decisions, and fails open if the runtime is unavailable. Performs no source-tree CLI lookup. |
-| `hooks/context-*.ts`                                 | argv/stdin entries for the three registered context hooks; the capture, ledger and session logic is the `lib/context-*.ts` core (task 1174)                                                                                                                                                        |
-| `hooks/{agent-lifecycle,fleet-guest-stop}.ts`       | Fleet hooks (1080/1081): member lifecycle reports via `spur agent report`; turn-end inbox delivery to joined guests |
-| `hooks/careful-guard.ts`                             | Opt-in destructive-command guard (unwired — see Hooks above); policy is `lib/destructive-policy.ts`                                                                                                                                                                                                |
+| `scripts/hooks/task-write-guard.ts`                  | PreToolUse `Write\|Edit` guard: denies raw edits of task-corpus files (ownership from `spur task resolve --strict`), silent on allow, fail-open on every error path |
+| `scripts/hooks/context-*.ts`                                 | argv/stdin entries for the three registered context hooks; the capture, ledger and session logic is the `lib/context-*.ts` core (task 1174)                                                                                                                                                        |
+| `scripts/hooks/{agent-lifecycle,fleet-guest-stop}.ts` | Fleet hooks (1080/1081): member lifecycle reports via `spur agent report`; turn-end inbox delivery to joined guests |
+| `scripts/hooks/careful-guard.ts`                     | PreToolUse `Bash` destructive-command confirm (see Hooks above); policy is `lib/destructive-policy.ts`                                                                                                                                                                                                |
 | `lib/context-{post-tool,session-start,session-stop}.ts` | Redaction-capped ledger append, session open/ownership and owner-gated teardown for `sp:indexed-context`                                                                                                                                                                                       |
 | `lib/{agent-hint,context-owner,destructive-policy,task-file-policy}.ts` | Shared hook cores — agent/model hint resolution, host-native session owner derivation, destructive-command classification, task-file matching                                                                                                                              |
-| `scripts/batch-preflight.ts`                         | Pure TABLE A STOP evaluation for `super-planner` — skip doomed pipeline launches without spawning a Skill subprocess; recovery hints map stuck statuses to a single `/sp:dev-*` hop                                                                                                               |
-| `scripts/workflow-step-profile.ts`                   | Thin glue over the generated lib bundle (`lib/step-profile.generated.mjs` from `packages/app/src/workflow/step-profile.ts`) — read-only step profile from `spur workflow trace`: per node and action-kind durations, idle gaps, session mode and `cacheHit` coverage, plus the ADR-115 cache-window flags `sp:spur-doctor` turns into workflow-optimization proposals |
-| `scripts/dogfood-testing/detect-pipeline-driving.ts` | Live Phase 1.0 CLI gate over `lib/dogfood-pipeline.ts` — word-boundary detector for pipeline-driving testees (leading-space invariant)                                                                                                                                  |
-| `scripts/dogfood-testing/validate-report.ts`         | CLI entry over `lib/dogfood-report.ts` — pure `validateReport(md)`, footer-mandatory + 7-check finalize-or-abort contract with stable error codes                                                                                                                |
-| `scripts/daily-summary/daily-summary.ts`               | ccusage + git-history orchestration helpers for `sp:daily-summary`, with its own console toggle                                                                                                                                                                                                  |
-| `scripts/task-diffstat.ts`                           | 0943 triage-lane diffstat producer — numstat + untracked scan vs the run base; writes `<wbs>-diffstat.json` with the sensitive-path flag; fails safe (sensitive)                                                       |
-| `scripts/run-summary.ts`                             | Measured execution summary `/sp:dev-run` / `/sp:dev-runall` print by default (`--no-summary` skips) — windows the host transcript by `spur workflow progress` attempt timestamps; per stage/run time, wait, tool calls, total / non-cached tokens; `n/a` for subprocess windows |
-| `scripts/session-timeline.ts`                        | Measured Time/Wait/Token evidence for `sp:session-review` — reads the active Claude Code transcript read-only, one segment per operator prompt, usage deduplicated by message id, tokens split total / non-cached; `{available:false}` exit 0 when no transcript |
 | `scripts/commands/validate-flag-contracts.ts`        | Mechanical consistency gate — compares flag claims across command files, flag-glossary, cross-cutting, dev-operations, and ADR; reports disagreements                                                                                    |
 | `*.test.ts`                                          | Unit suites — `tests/hooks/` for the hook entries and their lib cores, `tests/<skill>/` per ADR-031 pairing                                                                                                                                                                                        |
 
@@ -580,7 +612,7 @@ graph TB
 
     subgraph "Execution layer"
         CLI["spur CLI<br/>task · feature · rule · workflow<br/>· agent · history · message"]
-        SCRIPT["hooks/task-write-guard.ts"]
+        SCRIPT["scripts/hooks/task-write-guard.ts"]
     end
 
     subgraph "Corpus layer"
@@ -695,7 +727,7 @@ root codex/opencode use in global mode.
 | `skills/*.md`      | `~/.claude/skills/`                      | Adapted as Skills 2.0 skill directories — all platforms receive skills uniformly                |
 | `commands/*.md`    | `~/.claude/commands/`                    | Adapted as Skills 2.0 skill entries (`disable-model-invocation: true`)                          |
 | `agents/*.md`      | `~/.claude/agents/`                      | Adapted as Skills 2.0 skill entries (model-invocable); Pi additionally gets native agent format |
-| `hooks/hooks.json` | `~/.claude/hooks/`                       | Converted to target-native format (pi-hooks shim for pi/omp, HOOK.yaml for hermes)              |
+| `hooks/hooks.json` | `~/.claude/hooks/`                       | Converted to target-native format (generated native extensions for pi, pi-hooks shim for omp, HOOK.yaml for hermes) |
 | `hooks/*.ts`       | plugin hook runtime / compatibility copy | Copied alongside platform output only for environments that still invoke script paths directly  |
 
 Each skill declares its own platform support in `metadata.platforms` frontmatter.
