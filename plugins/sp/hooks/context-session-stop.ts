@@ -1,19 +1,13 @@
 #!/usr/bin/env bun
-/**
- * context-session-stop — installed SessionEnd entry for indexed-context (session teardown).
- *
- * Task 1174: the owner-gated finalization logic lives in `plugins/sp/lib/context-session-stop.ts`;
- * this file is the argv/stdin adapter. Every error path exits 0 with no output, and a nested
- * `agent.run`'s shutdown stays a no-op because the owner gate lives in the core, not here.
- */
+/** @transition-shim(sp-context-hook-imports) superskill ≤0.3.37 imports this export; the logic is `spur self hook context-session-stop`. */
+import { runSpurHook } from '../lib/spur-hook';
 
-import { recordSessionEndFromPayloadText } from '../lib/context-session-stop';
-
-if (import.meta.main) {
-    try {
-        recordSessionEndFromPayloadText(await Bun.stdin.text());
-    } catch {
-        /* fail-open: every error path exits 0 */
-    }
-    process.exit(0);
+/** Forward a SessionEnd payload to spur (fail-open). Returns null: the totals row is written by spur. */
+export function recordSessionEndFromPayloadText(
+    text: string,
+    env?: Record<string, string | undefined>,
+): Record<string, unknown> | null {
+    runSpurHook('context-session-stop', text, { host: 'auto', ...(env ? { env } : {}) });
+    return null;
 }
+if (import.meta.main) recordSessionEndFromPayloadText(await Bun.stdin.text());

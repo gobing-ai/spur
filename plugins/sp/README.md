@@ -272,16 +272,14 @@ plugins/sp/
 │   └── wayfinder/                   # Multi-session investigation maps (SKILL.md only)
 ├── commands/                        # Slash-command wrappers — the SSOT (hand-editable thin wrappers; see Commands below)
 ├── agents/                          # 4 specialist subagents (expert-spur, super-coder, super-planner, super-reviewer)
-├── hooks/                           # hooks.json + one thin entry per registered identity
-│                                    # + task-write-guard.ts (compat shim) + careful-guard.ts (opt-in, unwired)
-│                                    # + pi/guard-extension.ts (plugin.json `extensions.pi` entry point)
-│                                    # entries delegate to lib cores (task 1174); hook suites live in tests/hooks/
-├── lib/                             # Handwritten plugin cores — context-{post-tool,session-start,session-stop}.ts,
-│                                    # agent-hint.ts, context-owner.ts, destructive-policy.ts, task-file-policy.ts,
+├── hooks/                           # hooks.json (every identity runs `spur self hook <id>`)
+│                                    # + context-*.ts (transition shims for released superskill, until PR-10)
+│                                    # + pi/guard-extension.ts (plugin.json `extensions.pi` thin wrapper)
+├── lib/                             # Handwritten plugin helpers — spur-hook.ts (hook transport), spur-bin.ts,
 │                                    # env.ts, plus generated *.generated.mjs|.d.mts bundles over packages/app
 ├── scripts/                         # Executable helpers, split from prompts (ADR-031) — batch-preflight.ts + scripts/<skill>/
 │                                    # (daily-summary: daily-summary.ts; dogfood-testing: {detect-pipeline-driving, validate-report}.ts)
-├── tests/                           # Plugin tests — skill-structure.test.ts + hooks/ (guard, context, Pi suites)
+├── tests/                           # Plugin tests — skill-structure.test.ts + hooks/ (shim + Pi wrapper suites)
 │                                    # + evals/ (behavioral eval corpus + judge; see tests/evals/README.md,
 │                                    # runner at scripts/commands/skill-eval.ts) + per-skill suites
 ├── plugin.json                      # Marketplace entry
@@ -499,11 +497,28 @@ six handlers across seven events:
 | `Stop`         | —                                     | `superskill hook run sp fleet-guest-stop`      | 10s     |
 | `SessionEnd`   | —                                     | `superskill hook run sp context-session-stop`  | 15s     |
 
+**Transport (script-absorption PR-2a/2b).** The hook logic lives in spur, not in this plugin:
+`spur self hook <id> --host claude|codex|pi|auto` reads the host payload on stdin and prints the
+host-shaped decision (`spur self hook list` shows the seven ids). The plugin ships no per-hook
+scripts — only `hooks.json`, the Pi wrapper and three transition shims:
+
+- **Claude Code / Codex** run `superskill hook run sp <id>`. Released superskill (≤0.3.37) still
+  imports `hooks/context-{session-start,session-stop,post-tool}.ts` in-process; those files are
+  10-line `@transition-shim(sp-context-hook-imports)` stand-ins that forward the payload to
+  `spur self hook context-* --host auto`. superskill S-1 replaces that import with a direct
+  `spur self hook <id>` call for all seven ids; PR-10 then deletes the shims.
+- **Pi** loads `hooks/pi/guard-extension.ts` (plugin.json `extensions.pi`), a ~80-line wrapper that
+  awaits spur's `{action, reason}` for the guards (deny → block, ask → `ctx.ui.confirm`) and
+  queues capture/lifecycle events serially, draining the queue at `session_shutdown`.
+- spur is found via `SPUR_BIN` (may carry args), the checkout-local CLI when the plugin runs from a
+  spur source tree, `spur` on PATH, then `~/.bun/bin`, `/opt/homebrew/bin`, `/usr/local/bin`.
+- **Fail-open when spur is missing.** No spur, a broken interpreter, a timeout or unparseable
+  output means *allow* and *no capture* — a hook never blocks or crashes the host.
+
 **Write guard.** The `PreToolUse` hook fires on every `Write`/`Edit` tool call and checks whether
 the target path is **owned by a task** (i.e. it is a file in the task corpus under `docs/tasks/`).
 If so, the write is denied — task files are mutated through the `spur task` CLI only, never by
-hand. The hook is **pure delegation**: it asks `spur task resolve <path>` whether the path is owned
-and decides the exit code alone; it contains zero validation logic of its own.
+hand. Ownership comes from `spur task resolve <path>`; only `NNNN_*.md` names are probed.
 
 **Context hooks.** The `context-*` trio backs the `sp:indexed-context` skill: `context-post-tool`
 estimates the token cost of each matched tool call and appends it to `.spur/context/token-ledger.jsonl`
@@ -515,13 +530,13 @@ hint on first launch, and `context-session-stop` closes out the session record.
 `SPUR_SPEC_ID` is set, so outside a fleet it makes no call. `fleet-guest-stop` delivers pending
 inbox work to a session joined as a fleet guest at turn end; any other session passes through.
 
-**Available but unwired:** `careful-guard.ts` ships in `hooks/` (its suite is
-`tests/hooks/careful-guard.test.ts`) as an opt-in `PreToolUse` guard that asks before destructive
-shell commands (`rm -rf`, `DROP TABLE`,
-`git push --force`, …) — it is **not** registered in `hooks.json`. Fail-open by contract; escape
-hatch `SPUR_CAREFUL=off`.
+**Available but unwired:** `careful-guard` is an opt-in `PreToolUse(Bash)` guard that asks before
+destructive shell commands (`rm -rf`, `DROP TABLE`, `git push --force`, …) — it is **not**
+registered in `hooks.json` (the Pi wrapper always runs it). To opt in on Claude Code, add a
+`PreToolUse` `Bash` hook with the command `spur self hook careful-guard --host claude`.
+Fail-open by contract; escape hatch `SPUR_CAREFUL=off`.
 
-**Escape hatch:** `SPUR_WRITE_GUARD=off` short-circuits the write guard before any subprocess.
+**Escape hatch:** `SPUR_WRITE_GUARD=off` short-circuits the write guard before any ownership probe.
 
 #### 5. Scripts (`scripts/` + `hooks/`)
 
@@ -532,12 +547,9 @@ hold `SKILL.md` and prompt-side companions only.
 
 | Script                                               | Role                                                                                                                                                                                                                                                                                              |
 | ---------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `hooks/task-write-guard.ts`                          | Compatibility shim for older installs that still execute the script path directly. Forwards stdin to the stable PATH command `superskill hook run sp task-write-guard`, mirrors parseable PreToolUse decisions, and fails open if the runtime is unavailable. Performs no source-tree CLI lookup. |
-| `hooks/context-*.ts`                                 | argv/stdin entries for the three registered context hooks; the capture, ledger and session logic is the `lib/context-*.ts` core (task 1174)                                                                                                                                                        |
-| `hooks/{agent-lifecycle,fleet-guest-stop}.ts`       | Fleet hooks (1080/1081): member lifecycle reports via `spur agent report`; turn-end inbox delivery to joined guests |
-| `hooks/careful-guard.ts`                             | Opt-in destructive-command guard (unwired — see Hooks above); policy is `lib/destructive-policy.ts`                                                                                                                                                                                                |
-| `lib/context-{post-tool,session-start,session-stop}.ts` | Redaction-capped ledger append, session open/ownership and owner-gated teardown for `sp:indexed-context`                                                                                                                                                                                       |
-| `lib/{agent-hint,context-owner,destructive-policy,task-file-policy}.ts` | Shared hook cores — agent/model hint resolution, host-native session owner derivation, destructive-command classification, task-file matching                                                                                                                              |
+| `hooks/context-*.ts`                                 | `@transition-shim(sp-context-hook-imports)` stand-ins for the exports released superskill imports (`recordSessionStartFromPayloadText`, `recordSessionEndFromPayloadText`, `recordToolUseEvent`); each forwards to `spur self hook context-* --host auto`, fail-open. Removed in PR-10 |
+| `hooks/pi/guard-extension.ts`                        | Thin Pi wrapper over `spur self hook <id> --host pi` (see Hooks above)                                                                                                                                                                                                                            |
+| `lib/spur-hook.ts`                                   | The plugin → `spur self hook` transport: spur resolution order, sync (`runSpurHook`) and async (`runSpurHookAsync`) runners, fail-open on every error                                                                                                                                            |
 | `scripts/batch-preflight.ts`                         | Pure TABLE A STOP evaluation for `super-planner` — skip doomed pipeline launches without spawning a Skill subprocess; recovery hints map stuck statuses to a single `/sp:dev-*` hop                                                                                                               |
 | `scripts/workflow-step-profile.ts`                   | Thin glue over the generated lib bundle (`lib/step-profile.generated.mjs` from `packages/app/src/workflow/step-profile.ts`) — read-only step profile from `spur workflow trace`: per node and action-kind durations, idle gaps, session mode and `cacheHit` coverage, plus the ADR-115 cache-window flags `sp:spur-doctor` turns into workflow-optimization proposals |
 | `scripts/dogfood-testing/detect-pipeline-driving.ts` | Live Phase 1.0 CLI gate over `lib/dogfood-pipeline.ts` — word-boundary detector for pipeline-driving testees (leading-space invariant)                                                                                                                                  |
@@ -547,7 +559,7 @@ hold `SKILL.md` and prompt-side companions only.
 | `scripts/run-summary.ts`                             | Measured execution summary `/sp:dev-run` / `/sp:dev-runall` print by default (`--no-summary` skips) — windows the host transcript by `spur workflow progress` attempt timestamps; per stage/run time, wait, tool calls, total / non-cached tokens; `n/a` for subprocess windows |
 | `scripts/session-timeline.ts`                        | Measured Time/Wait/Token evidence for `sp:session-review` — reads the active Claude Code transcript read-only, one segment per operator prompt, usage deduplicated by message id, tokens split total / non-cached; `{available:false}` exit 0 when no transcript |
 | `scripts/commands/validate-flag-contracts.ts`        | Mechanical consistency gate — compares flag claims across command files, flag-glossary, cross-cutting, dev-operations, and ADR; reports disagreements                                                                                    |
-| `*.test.ts`                                          | Unit suites — `tests/hooks/` for the hook entries and their lib cores, `tests/<skill>/` per ADR-031 pairing                                                                                                                                                                                        |
+| `*.test.ts`                                          | Unit suites — `tests/hooks/` for the shims and the Pi wrapper (hook logic is tested in `packages/app/tests/hooks` and pinned by `apps/cli/tests/self-hook-parity.test.ts`), `tests/<skill>/` per ADR-031 pairing                                                                                                                                                                                        |
 
 **Design principle:** Scripts are **deterministic enforcement**. Unlike skills (which are advisory
 knowledge consumed by the LLM), scripts run as code and make binary allow/deny decisions. They are
@@ -580,7 +592,7 @@ graph TB
 
     subgraph "Execution layer"
         CLI["spur CLI<br/>task · feature · rule · workflow<br/>· agent · history · message"]
-        SCRIPT["hooks/task-write-guard.ts"]
+        SCRIPT["spur self hook task-write-guard"]
     end
 
     subgraph "Corpus layer"

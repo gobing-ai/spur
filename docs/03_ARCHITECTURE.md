@@ -1267,25 +1267,27 @@ compatibility limits: [downstream Board module contract](design/downstream-board
 
 ## 31. Cross-Platform Hook Core — built (ADR-129; task 0969)
 
-`plugins/sp/hooks` owns one indexed-context implementation. `recordToolUseEvent`
-(`context-post-tool.ts`), `recordSessionStart` (`context-session-start.ts`) and `recordSessionEnd`
-(`context-session-stop.ts`) append to `.spur/context/token-ledger.jsonl` and manage `.session.json`;
-`context-owner.ts` is the shared, import-free module both session cores derive host-native owner
-identity from (task 1159), so adapter subprocess entrypoints stay free of untested logic.
-Claude Code reaches them through its hook entries; the Pi extension (`hooks/pi/guard-extension.ts`)
-normalizes `tool_result` / `session_start` / `session_shutdown` into the canonical Claude payload via
-`normalizePiToolEvent` and calls the same cores (agent fallback `pi`). Hosts never re-implement the
-row schema, token cascade, redaction or session reuse — a new host adds a normalizer. Two ownership
-invariants hold at the pointer: redaction and both byte caps apply before any summary is persisted,
-and only the pointer's recorded `{host, sessionId}` owner may append the `session_end` rollup or
-remove it, so a nested run reuses the parent ledger without being able to close it. Row and
-session-event contracts: [observability contracts](design/observability-contracts.md) §7.8b.
+`packages/app/src/hooks` owns the one indexed-context implementation (moved out of the plugin by
+script-absorption PR-2a/2b). `recordToolUseEvent` (`context-post-tool.ts`), `recordSessionStart`
+(`context-session-start.ts`) and `recordSessionEnd` (`context-session-stop.ts`) append to
+`.spur/context/token-ledger.jsonl` and manage `.session.json`; `context-owner.ts` derives the
+host-native owner identity both session cores gate on (task 1159). Every host reaches them — and
+the guard, lifecycle and fleet hooks — through one transport, `spur self hook <id> --host
+claude|codex|pi|auto`, whose `pi-event.ts` normalizes Pi `tool_result` / `session_start` /
+`session_shutdown` events into the canonical Claude payload (agent fallback `pi`). Hosts never
+re-implement the row schema, token cascade, redaction or session reuse — a new host adds a
+normalizer. Two ownership invariants hold at the pointer: redaction and both byte caps apply before
+any summary is persisted, and only the pointer's recorded `{host, sessionId}` owner may append the
+`session_end` rollup or remove it, so a nested run reuses the parent ledger without being able to
+close it. Row and session-event contracts: [observability contracts](design/observability-contracts.md) §7.8b.
 
-**Accepted target, migration pending:** ADR-130's 2026-10-11 amendment keeps this standalone
-capture behavior but places its cores/helpers in `plugins/sp/lib`, tests in `plugins/sp/tests`,
-and only registered hook/host-extension entries in `plugins/sp/hooks`. Reusable noun behavior
-remains application-owned; generated plugin bundles are temporary compatibility exceptions,
-not a second persistence owner. Current paths above describe the implementation before cutover.
+The plugin keeps only adapters (ADR-130 placement): `plugins/sp/hooks/hooks.json` (`superskill hook
+run sp <id>`), the thin Pi extension `hooks/pi/guard-extension.ts` (Pi can only load in-process
+TypeScript; blocking and `ctx.ui.confirm` need a return value) and, until superskill S-1 ships and
+PR-10 raises the floor, three `@transition-shim(sp-context-hook-imports)` stand-ins at
+`hooks/context-*.ts` that released superskill imports. All of them call spur through
+`plugins/sp/lib/spur-hook.ts` and fail open when spur is missing. Behavior parity with the retired
+plugin implementation is pinned by golden output in `apps/cli/tests/self-hook-parity.test.ts`.
 Placement contract: [harness surface governance](design/harness-surface-governance.md) §2.
 
 ## 32. Disposable Run Storage and Durable Evidence (ADR-131; E71)

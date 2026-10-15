@@ -88,6 +88,6 @@ describe('EXCLUDE filter', () => {
         expect(EXCLUDE.test(rel('sp/plugin.json'))).toBe(false);
         expect(EXCLUDE.test(rel('sp/skills/dev-plan/SKILL.md'))).toBe(false);
         expect(EXCLUDE.test(rel('sp/scripts/batch-preflight.ts'))).toBe(false);
-        expect(EXCLUDE.test(rel('sp/hooks/careful-guard.ts'))).toBe(false);
+        expect(EXCLUDE.test(rel('sp/hooks/context-post-tool.ts'))).toBe(false);
     });
 });

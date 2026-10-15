@@ -1,0 +1,1054 @@
+{
+    "_meta": {
+        "what": "Golden outputs of the retired sp hook implementation (plugins/sp/hooks/*.ts + the 304-line Pi extension), frozen by script-absorption PR-2b before those files were deleted. self-hook-parity.test.ts asserts the live `spur self hook` transport, the superskill-import shims and the thin Pi wrapper reproduce them.",
+        "capturedFrom": "gobing-ai/spur c8aaf547e (perf/cli-lazy-commands) — the old files as of feat/spur-self-hook cbad976aa",
+        "capturedWith": "bun 1.4.3; the PR-2a parity suite (76/76 old==new at capture time)",
+        "normalization": "<PROJECT> = scratch project dir, <TS> = ISO time, <SESSION> = minted session id, <SEQ> = lifecycle seq",
+        "keys": "hosts: \"<host>|<first hook id>|<fixture name>\"; pi: \"guard|<fixture name>\", \"ledger\", \"lifecycle\""
+    },
+    "hosts": {
+        "claude|task-write-guard|owned task file → deny": {
+            "steps": [
+                {
+                    "id": "task-write-guard",
+                    "stdout": "{\"hookSpecificOutput\":{\"hookEventName\":\"PreToolUse\",\"permissionDecision\":\"deny\"},\"systemMessage\":\"docs/tasks/0001_owned.md is a task file owned by the spur corpus. Edit it through the spur CLI (e.g. `spur task update <wbs> --section <name> --from-file <file>`), not a raw Write/Edit. Set SPUR_WRITE_GUARD=off to bypass.\"}",
+                    "exitCode": 0
+                }
+            ],
+            "effects": {
+                "ledger": null,
+                "pointer": null,
+                "spurArgv": "task resolve docs/tasks/0001_owned.md --strict --json\n"
+            }
+        },
+        "claude|task-write-guard|unowned task-shaped name → allow (probed)": {
+            "steps": [
+                {
+                    "id": "task-write-guard",
+                    "stdout": "{\"hookSpecificOutput\":{\"hookEventName\":\"PreToolUse\",\"permissionDecision\":\"allow\"}}",
+                    "exitCode": 0
+                }
+            ],
+            "effects": {
+                "ledger": null,
+                "pointer": null,
+                "spurArgv": "task resolve docs/tasks/0002_free.md --strict --json\n"
+            }
+        },
+        "claude|task-write-guard|source file → allow (no probe)": {
+            "steps": [
+                {
+                    "id": "task-write-guard",
+                    "stdout": "{\"hookSpecificOutput\":{\"hookEventName\":\"PreToolUse\",\"permissionDecision\":\"allow\"}}",
+                    "exitCode": 0
+                }
+            ],
+            "effects": {
+                "ledger": null,
+                "pointer": null,
+                "spurArgv": null
+            }
+        },
+        "claude|task-write-guard|non-write tool → allow": {
+            "steps": [
+                {
+                    "id": "task-write-guard",
+                    "stdout": "{\"hookSpecificOutput\":{\"hookEventName\":\"PreToolUse\",\"permissionDecision\":\"allow\"}}",
+                    "exitCode": 0
+                }
+            ],
+            "effects": {
+                "ledger": null,
+                "pointer": null,
+                "spurArgv": null
+            }
+        },
+        "claude|task-write-guard|empty path → allow": {
+            "steps": [
+                {
+                    "id": "task-write-guard",
+                    "stdout": "{\"hookSpecificOutput\":{\"hookEventName\":\"PreToolUse\",\"permissionDecision\":\"allow\"}}",
+                    "exitCode": 0
+                }
+            ],
+            "effects": {
+                "ledger": null,
+                "pointer": null,
+                "spurArgv": null
+            }
+        },
+        "claude|task-write-guard|empty stdin → allow": {
+            "steps": [
+                {
+                    "id": "task-write-guard",
+                    "stdout": "{\"hookSpecificOutput\":{\"hookEventName\":\"PreToolUse\",\"permissionDecision\":\"allow\"}}",
+                    "exitCode": 0
+                }
+            ],
+            "effects": {
+                "ledger": null,
+                "pointer": null,
+                "spurArgv": null
+            }
+        },
+        "claude|task-write-guard|malformed stdin → allow": {
+            "steps": [
+                {
+                    "id": "task-write-guard",
+                    "stdout": "{\"hookSpecificOutput\":{\"hookEventName\":\"PreToolUse\",\"permissionDecision\":\"allow\"}}",
+                    "exitCode": 0
+                }
+            ],
+            "effects": {
+                "ledger": null,
+                "pointer": null,
+                "spurArgv": null
+            }
+        },
+        "claude|task-write-guard|SPUR_WRITE_GUARD=off → allow": {
+            "steps": [
+                {
+                    "id": "task-write-guard",
+                    "stdout": "{\"hookSpecificOutput\":{\"hookEventName\":\"PreToolUse\",\"permissionDecision\":\"allow\"}}",
+                    "exitCode": 0
+                }
+            ],
+            "effects": {
+                "ledger": null,
+                "pointer": null,
+                "spurArgv": null
+            }
+        },
+        "codex|task-write-guard|owned task file → deny": {
+            "steps": [
+                {
+                    "id": "task-write-guard",
+                    "stdout": "{\"hookSpecificOutput\":{\"hookEventName\":\"PreToolUse\",\"permissionDecision\":\"deny\"},\"systemMessage\":\"docs/tasks/0001_owned.md is a task file owned by the spur corpus. Edit it through the spur CLI (e.g. `spur task update <wbs> --section <name> --from-file <file>`), not a raw Write/Edit. Set SPUR_WRITE_GUARD=off to bypass.\"}",
+                    "exitCode": 0
+                }
+            ],
+            "effects": {
+                "ledger": null,
+                "pointer": null,
+                "spurArgv": "task resolve docs/tasks/0001_owned.md --strict --json\n"
+            }
+        },
+        "codex|task-write-guard|unowned task-shaped name → allow (probed)": {
+            "steps": [
+                {
+                    "id": "task-write-guard",
+                    "stdout": "{\"hookSpecificOutput\":{\"hookEventName\":\"PreToolUse\",\"permissionDecision\":\"allow\"}}",
+                    "exitCode": 0
+                }
+            ],
+            "effects": {
+                "ledger": null,
+                "pointer": null,
+                "spurArgv": "task resolve docs/tasks/0002_free.md --strict --json\n"
+            }
+        },
+        "codex|task-write-guard|source file → allow (no probe)": {
+            "steps": [
+                {
+                    "id": "task-write-guard",
+                    "stdout": "{\"hookSpecificOutput\":{\"hookEventName\":\"PreToolUse\",\"permissionDecision\":\"allow\"}}",
+                    "exitCode": 0
+                }
+            ],
+            "effects": {
+                "ledger": null,
+                "pointer": null,
+                "spurArgv": null
+            }
+        },
+        "codex|task-write-guard|non-write tool → allow": {
+            "steps": [
+                {
+                    "id": "task-write-guard",
+                    "stdout": "{\"hookSpecificOutput\":{\"hookEventName\":\"PreToolUse\",\"permissionDecision\":\"allow\"}}",
+                    "exitCode": 0
+                }
+            ],
+            "effects": {
+                "ledger": null,
+                "pointer": null,
+                "spurArgv": null
+            }
+        },
+        "codex|task-write-guard|empty path → allow": {
+            "steps": [
+                {
+                    "id": "task-write-guard",
+                    "stdout": "{\"hookSpecificOutput\":{\"hookEventName\":\"PreToolUse\",\"permissionDecision\":\"allow\"}}",
+                    "exitCode": 0
+                }
+            ],
+            "effects": {
+                "ledger": null,
+                "pointer": null,
+                "spurArgv": null
+            }
+        },
+        "codex|task-write-guard|empty stdin → allow": {
+            "steps": [
+                {
+                    "id": "task-write-guard",
+                    "stdout": "{\"hookSpecificOutput\":{\"hookEventName\":\"PreToolUse\",\"permissionDecision\":\"allow\"}}",
+                    "exitCode": 0
+                }
+            ],
+            "effects": {
+                "ledger": null,
+                "pointer": null,
+                "spurArgv": null
+            }
+        },
+        "codex|task-write-guard|malformed stdin → allow": {
+            "steps": [
+                {
+                    "id": "task-write-guard",
+                    "stdout": "{\"hookSpecificOutput\":{\"hookEventName\":\"PreToolUse\",\"permissionDecision\":\"allow\"}}",
+                    "exitCode": 0
+                }
+            ],
+            "effects": {
+                "ledger": null,
+                "pointer": null,
+                "spurArgv": null
+            }
+        },
+        "codex|task-write-guard|SPUR_WRITE_GUARD=off → allow": {
+            "steps": [
+                {
+                    "id": "task-write-guard",
+                    "stdout": "{\"hookSpecificOutput\":{\"hookEventName\":\"PreToolUse\",\"permissionDecision\":\"allow\"}}",
+                    "exitCode": 0
+                }
+            ],
+            "effects": {
+                "ledger": null,
+                "pointer": null,
+                "spurArgv": null
+            }
+        },
+        "claude|careful-guard|rm -rf / → ask": {
+            "steps": [
+                {
+                    "id": "careful-guard",
+                    "stdout": "{\"hookSpecificOutput\":{\"hookEventName\":\"PreToolUse\",\"permissionDecision\":\"ask\",\"permissionDecisionReason\":\"This command looks like a recursive remove outside the project (rm -r on an absolute, ~, or ../ path) — a destructive operation. Confirm you intend to run it. Set SPUR_CAREFUL=off to disable this guard.\"},\"systemMessage\":\"This command looks like a recursive remove outside the project (rm -r on an absolute, ~, or ../ path) — a destructive operation. Confirm you intend to run it. Set SPUR_CAREFUL=off to disable this guard.\"}",
+                    "exitCode": 0
+                }
+            ],
+            "effects": {
+                "ledger": null,
+                "pointer": null,
+                "spurArgv": null
+            }
+        },
+        "claude|careful-guard|git push --force → ask": {
+            "steps": [
+                {
+                    "id": "careful-guard",
+                    "stdout": "{\"hookSpecificOutput\":{\"hookEventName\":\"PreToolUse\",\"permissionDecision\":\"ask\",\"permissionDecisionReason\":\"This command looks like a force push (git push --force / -f) — a destructive operation. Confirm you intend to run it. Set SPUR_CAREFUL=off to disable this guard.\"},\"systemMessage\":\"This command looks like a force push (git push --force / -f) — a destructive operation. Confirm you intend to run it. Set SPUR_CAREFUL=off to disable this guard.\"}",
+                    "exitCode": 0
+                }
+            ],
+            "effects": {
+                "ledger": null,
+                "pointer": null,
+                "spurArgv": null
+            }
+        },
+        "claude|careful-guard|DROP TABLE → ask": {
+            "steps": [
+                {
+                    "id": "careful-guard",
+                    "stdout": "{\"hookSpecificOutput\":{\"hookEventName\":\"PreToolUse\",\"permissionDecision\":\"ask\",\"permissionDecisionReason\":\"This command looks like a SQL DROP/TRUNCATE (DROP TABLE/DATABASE, TRUNCATE) — a destructive operation. Confirm you intend to run it. Set SPUR_CAREFUL=off to disable this guard.\"},\"systemMessage\":\"This command looks like a SQL DROP/TRUNCATE (DROP TABLE/DATABASE, TRUNCATE) — a destructive operation. Confirm you intend to run it. Set SPUR_CAREFUL=off to disable this guard.\"}",
+                    "exitCode": 0
+                }
+            ],
+            "effects": {
+                "ledger": null,
+                "pointer": null,
+                "spurArgv": null
+            }
+        },
+        "claude|careful-guard|rm -rf node_modules → allow": {
+            "steps": [
+                {
+                    "id": "careful-guard",
+                    "stdout": "{\"hookSpecificOutput\":{\"hookEventName\":\"PreToolUse\",\"permissionDecision\":\"allow\"}}",
+                    "exitCode": 0
+                }
+            ],
+            "effects": {
+                "ledger": null,
+                "pointer": null,
+                "spurArgv": null
+            }
+        },
+        "claude|careful-guard|ls → allow": {
+            "steps": [
+                {
+                    "id": "careful-guard",
+                    "stdout": "{\"hookSpecificOutput\":{\"hookEventName\":\"PreToolUse\",\"permissionDecision\":\"allow\"}}",
+                    "exitCode": 0
+                }
+            ],
+            "effects": {
+                "ledger": null,
+                "pointer": null,
+                "spurArgv": null
+            }
+        },
+        "claude|careful-guard|blank command → allow": {
+            "steps": [
+                {
+                    "id": "careful-guard",
+                    "stdout": "{\"hookSpecificOutput\":{\"hookEventName\":\"PreToolUse\",\"permissionDecision\":\"allow\"}}",
+                    "exitCode": 0
+                }
+            ],
+            "effects": {
+                "ledger": null,
+                "pointer": null,
+                "spurArgv": null
+            }
+        },
+        "claude|careful-guard|non-Bash tool → allow": {
+            "steps": [
+                {
+                    "id": "careful-guard",
+                    "stdout": "{\"hookSpecificOutput\":{\"hookEventName\":\"PreToolUse\",\"permissionDecision\":\"allow\"}}",
+                    "exitCode": 0
+                }
+            ],
+            "effects": {
+                "ledger": null,
+                "pointer": null,
+                "spurArgv": null
+            }
+        },
+        "claude|careful-guard|malformed stdin → allow": {
+            "steps": [
+                {
+                    "id": "careful-guard",
+                    "stdout": "{\"hookSpecificOutput\":{\"hookEventName\":\"PreToolUse\",\"permissionDecision\":\"allow\"}}",
+                    "exitCode": 0
+                }
+            ],
+            "effects": {
+                "ledger": null,
+                "pointer": null,
+                "spurArgv": null
+            }
+        },
+        "claude|careful-guard|SPUR_CAREFUL=off → allow": {
+            "steps": [
+                {
+                    "id": "careful-guard",
+                    "stdout": "{\"hookSpecificOutput\":{\"hookEventName\":\"PreToolUse\",\"permissionDecision\":\"allow\"}}",
+                    "exitCode": 0
+                }
+            ],
+            "effects": {
+                "ledger": null,
+                "pointer": null,
+                "spurArgv": null
+            }
+        },
+        "codex|careful-guard|rm -rf / → ask": {
+            "steps": [
+                {
+                    "id": "careful-guard",
+                    "stdout": "{\"hookSpecificOutput\":{\"hookEventName\":\"PreToolUse\",\"permissionDecision\":\"ask\",\"permissionDecisionReason\":\"This command looks like a recursive remove outside the project (rm -r on an absolute, ~, or ../ path) — a destructive operation. Confirm you intend to run it. Set SPUR_CAREFUL=off to disable this guard.\"},\"systemMessage\":\"This command looks like a recursive remove outside the project (rm -r on an absolute, ~, or ../ path) — a destructive operation. Confirm you intend to run it. Set SPUR_CAREFUL=off to disable this guard.\"}",
+                    "exitCode": 0
+                }
+            ],
+            "effects": {
+                "ledger": null,
+                "pointer": null,
+                "spurArgv": null
+            }
+        },
+        "codex|careful-guard|git push --force → ask": {
+            "steps": [
+                {
+                    "id": "careful-guard",
+                    "stdout": "{\"hookSpecificOutput\":{\"hookEventName\":\"PreToolUse\",\"permissionDecision\":\"ask\",\"permissionDecisionReason\":\"This command looks like a force push (git push --force / -f) — a destructive operation. Confirm you intend to run it. Set SPUR_CAREFUL=off to disable this guard.\"},\"systemMessage\":\"This command looks like a force push (git push --force / -f) — a destructive operation. Confirm you intend to run it. Set SPUR_CAREFUL=off to disable this guard.\"}",
+                    "exitCode": 0
+                }
+            ],
+            "effects": {
+                "ledger": null,
+                "pointer": null,
+                "spurArgv": null
+            }
+        },
+        "codex|careful-guard|DROP TABLE → ask": {
+            "steps": [
+                {
+                    "id": "careful-guard",
+                    "stdout": "{\"hookSpecificOutput\":{\"hookEventName\":\"PreToolUse\",\"permissionDecision\":\"ask\",\"permissionDecisionReason\":\"This command looks like a SQL DROP/TRUNCATE (DROP TABLE/DATABASE, TRUNCATE) — a destructive operation. Confirm you intend to run it. Set SPUR_CAREFUL=off to disable this guard.\"},\"systemMessage\":\"This command looks like a SQL DROP/TRUNCATE (DROP TABLE/DATABASE, TRUNCATE) — a destructive operation. Confirm you intend to run it. Set SPUR_CAREFUL=off to disable this guard.\"}",
+                    "exitCode": 0
+                }
+            ],
+            "effects": {
+                "ledger": null,
+                "pointer": null,
+                "spurArgv": null
+            }
+        },
+        "codex|careful-guard|rm -rf node_modules → allow": {
+            "steps": [
+                {
+                    "id": "careful-guard",
+                    "stdout": "{\"hookSpecificOutput\":{\"hookEventName\":\"PreToolUse\",\"permissionDecision\":\"allow\"}}",
+                    "exitCode": 0
+                }
+            ],
+            "effects": {
+                "ledger": null,
+                "pointer": null,
+                "spurArgv": null
+            }
+        },
+        "codex|careful-guard|ls → allow": {
+            "steps": [
+                {
+                    "id": "careful-guard",
+                    "stdout": "{\"hookSpecificOutput\":{\"hookEventName\":\"PreToolUse\",\"permissionDecision\":\"allow\"}}",
+                    "exitCode": 0
+                }
+            ],
+            "effects": {
+                "ledger": null,
+                "pointer": null,
+                "spurArgv": null
+            }
+        },
+        "codex|careful-guard|blank command → allow": {
+            "steps": [
+                {
+                    "id": "careful-guard",
+                    "stdout": "{\"hookSpecificOutput\":{\"hookEventName\":\"PreToolUse\",\"permissionDecision\":\"allow\"}}",
+                    "exitCode": 0
+                }
+            ],
+            "effects": {
+                "ledger": null,
+                "pointer": null,
+                "spurArgv": null
+            }
+        },
+        "codex|careful-guard|non-Bash tool → allow": {
+            "steps": [
+                {
+                    "id": "careful-guard",
+                    "stdout": "{\"hookSpecificOutput\":{\"hookEventName\":\"PreToolUse\",\"permissionDecision\":\"allow\"}}",
+                    "exitCode": 0
+                }
+            ],
+            "effects": {
+                "ledger": null,
+                "pointer": null,
+                "spurArgv": null
+            }
+        },
+        "codex|careful-guard|malformed stdin → allow": {
+            "steps": [
+                {
+                    "id": "careful-guard",
+                    "stdout": "{\"hookSpecificOutput\":{\"hookEventName\":\"PreToolUse\",\"permissionDecision\":\"allow\"}}",
+                    "exitCode": 0
+                }
+            ],
+            "effects": {
+                "ledger": null,
+                "pointer": null,
+                "spurArgv": null
+            }
+        },
+        "codex|careful-guard|SPUR_CAREFUL=off → allow": {
+            "steps": [
+                {
+                    "id": "careful-guard",
+                    "stdout": "{\"hookSpecificOutput\":{\"hookEventName\":\"PreToolUse\",\"permissionDecision\":\"allow\"}}",
+                    "exitCode": 0
+                }
+            ],
+            "effects": {
+                "ledger": null,
+                "pointer": null,
+                "spurArgv": null
+            }
+        },
+        "claude|context-session-start|ledger sequence": {
+            "steps": [
+                {
+                    "id": "context-session-start",
+                    "stdout": "",
+                    "exitCode": 0
+                },
+                {
+                    "id": "context-post-tool",
+                    "stdout": "",
+                    "exitCode": 0
+                },
+                {
+                    "id": "context-post-tool",
+                    "stdout": "",
+                    "exitCode": 0
+                },
+                {
+                    "id": "context-post-tool",
+                    "stdout": "",
+                    "exitCode": 0
+                },
+                {
+                    "id": "context-post-tool",
+                    "stdout": "",
+                    "exitCode": 0
+                },
+                {
+                    "id": "context-post-tool",
+                    "stdout": "",
+                    "exitCode": 0
+                },
+                {
+                    "id": "context-session-start",
+                    "stdout": "",
+                    "exitCode": 0
+                },
+                {
+                    "id": "context-session-stop",
+                    "stdout": "",
+                    "exitCode": 0
+                },
+                {
+                    "id": "context-session-stop",
+                    "stdout": "",
+                    "exitCode": 0
+                }
+            ],
+            "effects": {
+                "ledger": "{\"ts\":\"<TS>\",\"session\":\"<SESSION>\",\"type\":\"session_start\",\"contextFreshness\":{\"stale\":true,\"reason\":\"never stamped\"}}\n{\"ts\":\"<TS>\",\"session\":\"<SESSION>\",\"type\":\"write\",\"file\":\"a.ts\",\"tokens\":5,\"action\":\"create\",\"sessionId\":\"host-1\"}\n{\"ts\":\"<TS>\",\"session\":\"<SESSION>\",\"type\":\"bash\",\"summary\":\"curl -H \\\"Authorization: ***\",\"tokens\":1,\"sessionId\":\"host-1\"}\n{\"ts\":\"<TS>\",\"session\":\"<SESSION>\",\"type\":\"grep\",\"summary\":\"/TODO/ src\"}\n{\"ts\":\"<TS>\",\"session\":\"<SESSION>\",\"type\":\"session_end\",\"totals\":{\"reads\":0,\"writes\":1,\"tokens\":6}}\n",
+                "pointer": null,
+                "spurArgv": null
+            }
+        },
+        "codex|context-session-start|ledger sequence": {
+            "steps": [
+                {
+                    "id": "context-session-start",
+                    "stdout": "",
+                    "exitCode": 0
+                },
+                {
+                    "id": "context-post-tool",
+                    "stdout": "",
+                    "exitCode": 0
+                },
+                {
+                    "id": "context-post-tool",
+                    "stdout": "",
+                    "exitCode": 0
+                },
+                {
+                    "id": "context-post-tool",
+                    "stdout": "",
+                    "exitCode": 0
+                },
+                {
+                    "id": "context-post-tool",
+                    "stdout": "",
+                    "exitCode": 0
+                },
+                {
+                    "id": "context-post-tool",
+                    "stdout": "",
+                    "exitCode": 0
+                },
+                {
+                    "id": "context-session-start",
+                    "stdout": "",
+                    "exitCode": 0
+                },
+                {
+                    "id": "context-session-stop",
+                    "stdout": "",
+                    "exitCode": 0
+                },
+                {
+                    "id": "context-session-stop",
+                    "stdout": "",
+                    "exitCode": 0
+                }
+            ],
+            "effects": {
+                "ledger": "{\"ts\":\"<TS>\",\"session\":\"<SESSION>\",\"type\":\"session_start\",\"contextFreshness\":{\"stale\":true,\"reason\":\"never stamped\"}}\n{\"ts\":\"<TS>\",\"session\":\"<SESSION>\",\"type\":\"write\",\"file\":\"a.ts\",\"tokens\":5,\"action\":\"create\",\"sessionId\":\"host-1\"}\n{\"ts\":\"<TS>\",\"session\":\"<SESSION>\",\"type\":\"bash\",\"summary\":\"curl -H \\\"Authorization: ***\",\"tokens\":1,\"sessionId\":\"host-1\"}\n{\"ts\":\"<TS>\",\"session\":\"<SESSION>\",\"type\":\"grep\",\"summary\":\"/TODO/ src\"}\n{\"ts\":\"<TS>\",\"session\":\"<SESSION>\",\"type\":\"session_end\",\"totals\":{\"reads\":0,\"writes\":1,\"tokens\":6}}\n",
+                "pointer": null,
+                "spurArgv": null
+            }
+        },
+        "claude|context-session-stop|ownerless": {
+            "steps": [
+                {
+                    "id": "context-session-stop",
+                    "stdout": "",
+                    "exitCode": 0
+                },
+                {
+                    "id": "context-session-start",
+                    "stdout": "",
+                    "exitCode": 0
+                },
+                {
+                    "id": "context-session-start",
+                    "stdout": "",
+                    "exitCode": 0
+                },
+                {
+                    "id": "context-session-stop",
+                    "stdout": "",
+                    "exitCode": 0
+                }
+            ],
+            "effects": {
+                "ledger": "{\"ts\":\"<TS>\",\"session\":\"<SESSION>\",\"type\":\"session_start\",\"contextFreshness\":{\"stale\":true,\"reason\":\"never stamped\"}}\n",
+                "pointer": "{\"session\":\"<SESSION>\",\"started\":\"<TS>\",\"reads\":0,\"writes\":0,\"tokens\":0}",
+                "spurArgv": null
+            }
+        },
+        "claude|context-session-start|nested run": {
+            "steps": [
+                {
+                    "id": "context-session-start",
+                    "stdout": "",
+                    "exitCode": 0
+                },
+                {
+                    "id": "context-session-start",
+                    "stdout": "",
+                    "exitCode": 0
+                },
+                {
+                    "id": "context-session-stop",
+                    "stdout": "",
+                    "exitCode": 0
+                }
+            ],
+            "effects": {
+                "ledger": "{\"ts\":\"<TS>\",\"session\":\"<SESSION>\",\"type\":\"session_start\",\"contextFreshness\":{\"stale\":true,\"reason\":\"never stamped\"}}\n{\"ts\":\"<TS>\",\"session\":\"<SESSION>\",\"type\":\"session_end\",\"totals\":{\"reads\":0,\"writes\":0,\"tokens\":0}}\n",
+                "pointer": null,
+                "spurArgv": null
+            }
+        },
+        "claude|agent-lifecycle|SessionStart in fleet → idle": {
+            "steps": [
+                {
+                    "id": "agent-lifecycle",
+                    "stdout": "",
+                    "exitCode": 0
+                }
+            ],
+            "effects": {
+                "ledger": null,
+                "pointer": null,
+                "spurArgv": "agent report --state idle --seq <SEQ>\n"
+            }
+        },
+        "claude|agent-lifecycle|UserPromptSubmit → working": {
+            "steps": [
+                {
+                    "id": "agent-lifecycle",
+                    "stdout": "",
+                    "exitCode": 0
+                }
+            ],
+            "effects": {
+                "ledger": null,
+                "pointer": null,
+                "spurArgv": "agent report --state working --seq <SEQ>\n"
+            }
+        },
+        "claude|agent-lifecycle|permission_prompt → blocked": {
+            "steps": [
+                {
+                    "id": "agent-lifecycle",
+                    "stdout": "",
+                    "exitCode": 0
+                }
+            ],
+            "effects": {
+                "ledger": null,
+                "pointer": null,
+                "spurArgv": "agent report --state blocked --seq <SEQ>\n"
+            }
+        },
+        "claude|agent-lifecycle|Stop → idle": {
+            "steps": [
+                {
+                    "id": "agent-lifecycle",
+                    "stdout": "",
+                    "exitCode": 0
+                }
+            ],
+            "effects": {
+                "ledger": null,
+                "pointer": null,
+                "spurArgv": "agent report --state idle --seq <SEQ>\n"
+            }
+        },
+        "claude|agent-lifecycle|idle_prompt → nothing": {
+            "steps": [
+                {
+                    "id": "agent-lifecycle",
+                    "stdout": "",
+                    "exitCode": 0
+                }
+            ],
+            "effects": {
+                "ledger": null,
+                "pointer": null,
+                "spurArgv": null
+            }
+        },
+        "claude|agent-lifecycle|outside a fleet → nothing": {
+            "steps": [
+                {
+                    "id": "agent-lifecycle",
+                    "stdout": "",
+                    "exitCode": 0
+                }
+            ],
+            "effects": {
+                "ledger": null,
+                "pointer": null,
+                "spurArgv": null
+            }
+        },
+        "claude|agent-lifecycle|malformed → nothing": {
+            "steps": [
+                {
+                    "id": "agent-lifecycle",
+                    "stdout": "",
+                    "exitCode": 0
+                }
+            ],
+            "effects": {
+                "ledger": null,
+                "pointer": null,
+                "spurArgv": null
+            }
+        },
+        "codex|agent-lifecycle|SessionStart in fleet → idle": {
+            "steps": [
+                {
+                    "id": "agent-lifecycle",
+                    "stdout": "",
+                    "exitCode": 0
+                }
+            ],
+            "effects": {
+                "ledger": null,
+                "pointer": null,
+                "spurArgv": "agent report --state idle --seq <SEQ>\n"
+            }
+        },
+        "codex|agent-lifecycle|UserPromptSubmit → working": {
+            "steps": [
+                {
+                    "id": "agent-lifecycle",
+                    "stdout": "",
+                    "exitCode": 0
+                }
+            ],
+            "effects": {
+                "ledger": null,
+                "pointer": null,
+                "spurArgv": "agent report --state working --seq <SEQ>\n"
+            }
+        },
+        "codex|agent-lifecycle|permission_prompt → blocked": {
+            "steps": [
+                {
+                    "id": "agent-lifecycle",
+                    "stdout": "",
+                    "exitCode": 0
+                }
+            ],
+            "effects": {
+                "ledger": null,
+                "pointer": null,
+                "spurArgv": "agent report --state blocked --seq <SEQ>\n"
+            }
+        },
+        "codex|agent-lifecycle|Stop → idle": {
+            "steps": [
+                {
+                    "id": "agent-lifecycle",
+                    "stdout": "",
+                    "exitCode": 0
+                }
+            ],
+            "effects": {
+                "ledger": null,
+                "pointer": null,
+                "spurArgv": "agent report --state idle --seq <SEQ>\n"
+            }
+        },
+        "codex|agent-lifecycle|idle_prompt → nothing": {
+            "steps": [
+                {
+                    "id": "agent-lifecycle",
+                    "stdout": "",
+                    "exitCode": 0
+                }
+            ],
+            "effects": {
+                "ledger": null,
+                "pointer": null,
+                "spurArgv": null
+            }
+        },
+        "codex|agent-lifecycle|outside a fleet → nothing": {
+            "steps": [
+                {
+                    "id": "agent-lifecycle",
+                    "stdout": "",
+                    "exitCode": 0
+                }
+            ],
+            "effects": {
+                "ledger": null,
+                "pointer": null,
+                "spurArgv": null
+            }
+        },
+        "codex|agent-lifecycle|malformed → nothing": {
+            "steps": [
+                {
+                    "id": "agent-lifecycle",
+                    "stdout": "",
+                    "exitCode": 0
+                }
+            ],
+            "effects": {
+                "ledger": null,
+                "pointer": null,
+                "spurArgv": null
+            }
+        },
+        "claude|fleet-guest-stop|joined + queued → block": {
+            "steps": [
+                {
+                    "id": "fleet-guest-stop",
+                    "stdout": "{\"decision\":\"block\",\"reason\":\"Pending fleet messages for proj-g:\\n- lead: please do X\\n\\nHandle them, then `spur message reply <msgId> …` and continue.\"}\n",
+                    "exitCode": 0
+                }
+            ],
+            "effects": {
+                "ledger": null,
+                "pointer": null,
+                "spurArgv": "agent wait --inbox proj-g --timeout 2000\nmessage inbox --agent proj-g --json\n"
+            }
+        },
+        "claude|fleet-guest-stop|joined + nothing queued → silent": {
+            "steps": [
+                {
+                    "id": "fleet-guest-stop",
+                    "stdout": "",
+                    "exitCode": 0
+                }
+            ],
+            "effects": {
+                "ledger": null,
+                "pointer": null,
+                "spurArgv": "agent wait --inbox proj-g --timeout 2000\n"
+            }
+        },
+        "claude|fleet-guest-stop|not joined → silent, no CLI call": {
+            "steps": [
+                {
+                    "id": "fleet-guest-stop",
+                    "stdout": "",
+                    "exitCode": 0
+                }
+            ],
+            "effects": {
+                "ledger": null,
+                "pointer": null,
+                "spurArgv": null
+            }
+        },
+        "claude|fleet-guest-stop|stop_hook_active → silent": {
+            "steps": [
+                {
+                    "id": "fleet-guest-stop",
+                    "stdout": "",
+                    "exitCode": 0
+                }
+            ],
+            "effects": {
+                "ledger": null,
+                "pointer": null,
+                "spurArgv": null
+            }
+        },
+        "claude|fleet-guest-stop|malformed → silent": {
+            "steps": [
+                {
+                    "id": "fleet-guest-stop",
+                    "stdout": "",
+                    "exitCode": 0
+                }
+            ],
+            "effects": {
+                "ledger": null,
+                "pointer": null,
+                "spurArgv": null
+            }
+        },
+        "codex|fleet-guest-stop|joined + queued → block": {
+            "steps": [
+                {
+                    "id": "fleet-guest-stop",
+                    "stdout": "{\"decision\":\"block\",\"reason\":\"Pending fleet messages for proj-g:\\n- lead: please do X\\n\\nHandle them, then `spur message reply <msgId> …` and continue.\"}\n",
+                    "exitCode": 0
+                }
+            ],
+            "effects": {
+                "ledger": null,
+                "pointer": null,
+                "spurArgv": "agent wait --inbox proj-g --timeout 2000\nmessage inbox --agent proj-g --json\n"
+            }
+        },
+        "codex|fleet-guest-stop|joined + nothing queued → silent": {
+            "steps": [
+                {
+                    "id": "fleet-guest-stop",
+                    "stdout": "",
+                    "exitCode": 0
+                }
+            ],
+            "effects": {
+                "ledger": null,
+                "pointer": null,
+                "spurArgv": "agent wait --inbox proj-g --timeout 2000\n"
+            }
+        },
+        "codex|fleet-guest-stop|not joined → silent, no CLI call": {
+            "steps": [
+                {
+                    "id": "fleet-guest-stop",
+                    "stdout": "",
+                    "exitCode": 0
+                }
+            ],
+            "effects": {
+                "ledger": null,
+                "pointer": null,
+                "spurArgv": null
+            }
+        },
+        "codex|fleet-guest-stop|stop_hook_active → silent": {
+            "steps": [
+                {
+                    "id": "fleet-guest-stop",
+                    "stdout": "",
+                    "exitCode": 0
+                }
+            ],
+            "effects": {
+                "ledger": null,
+                "pointer": null,
+                "spurArgv": null
+            }
+        },
+        "codex|fleet-guest-stop|malformed → silent": {
+            "steps": [
+                {
+                    "id": "fleet-guest-stop",
+                    "stdout": "",
+                    "exitCode": 0
+                }
+            ],
+            "effects": {
+                "ledger": null,
+                "pointer": null,
+                "spurArgv": null
+            }
+        }
+    },
+    "divergences": {
+        "write guard: JSON null": {
+            "id": "task-write-guard",
+            "stdin": "null",
+            "oldExitCode": 1,
+            "oldStderrContains": "TypeError",
+            "oldStdout": ""
+        },
+        "write guard: numeric file_path": {
+            "id": "task-write-guard",
+            "stdin": "{\"tool_name\":\"Write\",\"tool_input\":{\"file_path\":5}}",
+            "oldExitCode": 1,
+            "oldStderrContains": "TypeError",
+            "oldStdout": ""
+        },
+        "careful guard: JSON null": {
+            "id": "careful-guard",
+            "stdin": "null",
+            "oldExitCode": 1,
+            "oldStderrContains": "TypeError",
+            "oldStdout": ""
+        },
+        "careful guard: numeric command": {
+            "id": "careful-guard",
+            "stdin": "{\"tool_name\":\"Bash\",\"tool_input\":{\"command\":5}}",
+            "oldExitCode": 1,
+            "oldStderrContains": "TypeError",
+            "oldStdout": ""
+        }
+    },
+    "pi": {
+        "guard|write to owned task → deny": {
+            "action": "deny",
+            "reason": "Denied: <PROJECT>/docs/tasks/0001_owned.md is a Spur task file. Use 'spur task update' instead."
+        },
+        "guard|edit to unowned task name → allow": {
+            "action": "deny",
+            "reason": "Denied: <PROJECT>/docs/tasks/0002_free.md is a Spur task file. Use 'spur task update' instead."
+        },
+        "guard|write to source → allow": {
+            "action": "allow"
+        },
+        "guard|write guard off → allow": {
+            "action": "allow"
+        },
+        "guard|bash rm -rf / → ask": {
+            "action": "ask",
+            "reason": "Warning: destructive command — a recursive remove outside the project (rm -r on an absolute, ~, or ../ path): rm -rf /"
+        },
+        "guard|bash git reset --hard → ask": {
+            "action": "ask",
+            "reason": "Warning: destructive command — a hard reset (git reset --hard): git reset --hard HEAD~3"
+        },
+        "guard|bash ls → allow": {
+            "action": "allow"
+        },
+        "guard|careful off → allow": {
+            "action": "allow"
+        },
+        "ledger": {
+            "ledger": "{\"ts\":\"<TS>\",\"session\":\"<SESSION>\",\"type\":\"session_start\",\"agent\":\"pi\",\"contextFreshness\":{\"stale\":true,\"reason\":\"never stamped\"}}\n{\"ts\":\"<TS>\",\"session\":\"<SESSION>\",\"type\":\"bash\",\"summary\":\"ls\",\"tokens\":1,\"sessionId\":\"pi-sess\",\"agent\":\"pi\"}\n{\"ts\":\"<TS>\",\"session\":\"<SESSION>\",\"type\":\"read\",\"file\":\"README.md\",\"tokens\":2,\"sessionId\":\"pi-sess\",\"agent\":\"pi\"}\n{\"ts\":\"<TS>\",\"session\":\"<SESSION>\",\"type\":\"session_end\",\"totals\":{\"reads\":1,\"writes\":0,\"tokens\":3}}\n",
+            "pointer": null,
+            "spurArgv": null
+        },
+        "lifecycle": {
+            "ledger": null,
+            "pointer": null,
+            "spurArgv": "agent report --state working --seq <SEQ>\n"
+        }
+    }
+}

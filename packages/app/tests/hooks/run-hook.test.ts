@@ -42,7 +42,6 @@ describe('registry', () => {
         ]);
         for (const definition of HOOK_DEFINITIONS) {
             expect(definition.events.length).toBeGreaterThan(0);
-            expect(existsSync(join(import.meta.dir, '../../../..', definition.pluginSource))).toBe(true);
         }
         expect(HOOK_HOSTS).toEqual(['claude', 'codex', 'pi', 'auto']);
     });

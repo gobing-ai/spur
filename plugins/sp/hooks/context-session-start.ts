@@ -1,19 +1,13 @@
 #!/usr/bin/env bun
-/**
- * context-session-start — installed SessionStart entry for indexed-context.
- *
- * Task 1174: the session open + ownership logic lives in `plugins/sp/lib/context-session-start.ts`;
- * this file is the argv/stdin adapter. Malformed/absent stdin still opens the session ownerless
- * (legacy policy) and every error path exits 0 with no output.
- */
+/** @transition-shim(sp-context-hook-imports) superskill ≤0.3.37 imports this export; the logic is `spur self hook context-session-start`. */
+import { runSpurHook } from '../lib/spur-hook';
 
-import { recordSessionStartFromPayloadText } from '../lib/context-session-start';
-
-if (import.meta.main) {
-    try {
-        recordSessionStartFromPayloadText(await Bun.stdin.text());
-    } catch {
-        /* fail-open */
-    }
-    process.exit(0);
+/** Forward a SessionStart payload to spur (fail-open). Returns null: the session id now lives in spur. */
+export function recordSessionStartFromPayloadText(
+    text: string,
+    env?: Record<string, string | undefined>,
+): string | null {
+    runSpurHook('context-session-start', text, { host: 'auto', ...(env ? { env } : {}) });
+    return null;
 }
+if (import.meta.main) recordSessionStartFromPayloadText(await Bun.stdin.text());

@@ -453,17 +453,18 @@ function createPlacementFixture(): string {
     writeFileSync(join(scriptsDir, 'typed.ts'), `import type { Database } from 'bun:sqlite';\nexport const t = 1;\n`);
     writeFileSync(join(repoCommandsDir, 'task.ts'), 'export const glue = 1;\n');
     writeFileSync(join(cliCommandsDir, 'task.ts'), 'export const noun = 1;\n');
-    // A hook entry must be a registered identity (task 1174 activates checkHookLayout), so the
-    // fixture registers the one clean entry it expects to produce no finding.
+    // Registered identities must be `spur self hook` ids, and the only hook files allowed beside the
+    // Pi extension are marked transition shims (script-absorption PR-2b), so the fixture registers a
+    // real id and its one clean hook file carries a shim marker.
     writeFileSync(
         join(hooksDir, 'hooks.json'),
         JSON.stringify(
-            { hooks: { Stop: [{ hooks: [{ type: 'command', command: 'superskill hook run sp fine' }] }] } },
+            { hooks: { Stop: [{ hooks: [{ type: 'command', command: 'superskill hook run sp agent-lifecycle' }] }] } },
             null,
             4,
         ),
     );
-    writeFileSync(join(hooksDir, 'fine.ts'), 'export const fine = 1;\n');
+    writeFileSync(join(hooksDir, 'fine.ts'), '// @transition-shim(fixture)\nexport const fine = 1;\n');
     writeFileSync(join(scriptsDir, 'skipped.test.ts'), `import { test } from 'bun:test';\ntest('skip', () => {});\n`);
     return root;
 }
@@ -706,7 +707,7 @@ test('checkPlacement includes the hook source-layout findings (task 1174 R3 acti
     const root = createPlacementFixture();
     try {
         const hooks = join(root, 'plugins', 'sp', 'hooks');
-        // Stray helper: not registered, not a supported extension entry.
+        // Stray helper: neither the Pi extension nor a marked transition shim.
         writeFileSync(join(hooks, 'stray-helper.ts'), 'export const helper = 1;\n');
         // Misplaced test: hook tests belong to plugins/sp/tests/hooks.
         writeFileSync(join(hooks, 'fine.test.ts'), `import { test } from 'bun:test';\ntest('x', () => {});\n`);
@@ -717,7 +718,7 @@ test('checkPlacement includes the hook source-layout findings (task 1174 R3 acti
             'plugins/sp/hooks/stray-helper.ts',
         ]);
         expect(hookFindings.every((f) => f.detail.length > 0)).toBe(true);
-        // The registered entry itself stays clean.
+        // The marked shim itself stays clean.
         expect(hookFindings.some((f) => f.file === 'plugins/sp/hooks/fine.ts')).toBe(false);
     } finally {
         rmSync(root, { recursive: true, force: true });
@@ -761,29 +762,29 @@ function group(identities: string[], matcher?: string): Record<string, unknown> 
     };
 }
 
-test('checkHookLayout resolves one authored entry per registered identity (task 1173 R1)', () => {
+test('registered identities need no plugin entry; an unmarked hook file is a finding (PR-2b)', () => {
     const root = createHookFixture({ hooks: { Stop: [group(['task-write-guard'])] } });
     try {
-        const hooks = join(root, 'plugins', 'sp', 'hooks');
-        writeFileSync(join(hooks, 'task-write-guard.ts'), 'export const guard = 1;\n');
         writeFileSync(join(root, 'plugins', 'sp', 'hooks', 'agent-lifecycle.ts'), 'export const stray = 1;\n');
         const findings = checkHookLayout({ repoRoot: root });
         expect(findings.map((f) => [f.file, f.kind])).toEqual([['plugins/sp/hooks/agent-lifecycle.ts', 'hook-layout']]);
+        expect(findings[0]?.detail).toContain('spur self hook');
         expect(findings[0]?.detail).toContain('plugins/sp/lib');
     } finally {
         rmSync(root, { recursive: true, force: true });
     }
 });
 
-test('checkHookLayout flags a registered identity with no authored entry (task 1173 R1)', () => {
-    const root = createHookFixture({ hooks: { SessionStart: [group(['context-session-start', 'agent-lifecycle'])] } });
+test('checkHookLayout flags a registered identity that is not a spur self hook id (PR-2b)', () => {
+    const root = createHookFixture({ hooks: { SessionStart: [group(['context-session-start', 'bogus-hook'])] } });
     try {
-        const hooks = join(root, 'plugins', 'sp', 'hooks');
-        writeFileSync(join(hooks, 'agent-lifecycle.ts'), 'export const entry = 1;\n');
         const findings = checkHookLayout({ repoRoot: root });
         expect(findings).toHaveLength(1);
-        expect(findings[0]?.file).toBe('plugins/sp/hooks/context-session-start.ts');
-        expect(findings[0]?.detail).toContain('no authored entry');
+        expect(findings[0]?.file).toBe('plugins/sp/hooks/hooks.json');
+        expect(findings[0]?.detail).toContain("'bogus-hook' is not a `spur self hook` id");
+        // The registry is injectable: with an explicit id list only unlisted identities are flagged.
+        const custom = checkHookLayout({ repoRoot: root, knownIds: ['bogus-hook'] });
+        expect(custom.map((f) => f.detail)).toEqual([expect.stringContaining("'context-session-start'")]);
     } finally {
         rmSync(root, { recursive: true, force: true });
     }
@@ -798,7 +799,6 @@ test('one identity may serve several events but not twice in one group (task 117
         },
     });
     try {
-        writeFileSync(join(root, 'plugins', 'sp', 'hooks', 'agent-lifecycle.ts'), 'export const entry = 1;\n');
         writeFileSync(join(root, 'plugins', 'sp', 'hooks', 'stop-lifecycle.ts'), 'export const helper = 1;\n');
         // The multi-event registration itself is legal; only the duplicated group and the unregistered
         // sibling helper are findings.
@@ -813,13 +813,14 @@ test('one identity may serve several events but not twice in one group (task 117
     }
 });
 
-test('hook tests belong to the plugin test owner, and both extension entries are entries (task 1173 R1)', () => {
+test('hook tests belong to the plugin test owner; the Pi extension and marked shims are allowed (PR-2b)', () => {
     const root = createHookFixture({ hooks: { Stop: [group(['fleet-guest-stop'])] } });
     try {
         const hooks = join(root, 'plugins', 'sp', 'hooks');
-        for (const entry of ['fleet-guest-stop.ts', 'careful-guard.ts']) {
-            writeFileSync(join(hooks, entry), 'export const entry = 1;\n');
-        }
+        writeFileSync(
+            join(hooks, 'context-post-tool.ts'),
+            '/** @transition-shim(sp-context-hook-imports) */\nexport {};\n',
+        );
         writeFileSync(join(hooks, 'pi', 'guard-extension.ts'), 'export const extension = 1;\n');
         writeFileSync(
             join(hooks, 'fleet-guest-stop.test.ts'),
@@ -837,7 +838,6 @@ test('hook tests belong to the plugin test owner, and both extension entries are
 test('checkHookLayout is clean on its own fixture and reports unreadable hooks.json (task 1173 R1)', () => {
     const root = createHookFixture({ hooks: { SessionStart: [group(['agent-lifecycle'])] } });
     try {
-        writeFileSync(join(root, 'plugins', 'sp', 'hooks', 'agent-lifecycle.ts'), 'export const entry = 1;\n');
         expect(checkHookLayout({ repoRoot: root })).toEqual([]);
         writeFileSync(join(root, 'plugins', 'sp', 'hooks', 'hooks.json'), '{ not json');
         const broken = checkHookLayout({ repoRoot: root });

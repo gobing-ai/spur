@@ -13,7 +13,7 @@
  *      list; mutating commands are recorded unverified, never passing.
  *   B. Scripts: extract the argv arrays `runSpur`/`runSpurJson` build and
  *      help-check them; execute the two spur-shelling scripts against a fake bin.
- *   C. Hooks: `hooks.json` parses, every referenced hook script exists, the `pi`
+ *   C. Hooks: `hooks.json` parses, every referenced hook id is a `spur self hook` id, the `pi`
  *      extension from plugin.json exists. Host-side event-name contract is not
  *      in this repo — recorded unverified.
  *   D. Workflows: `spur workflow validate` (live engine, schema + semantic) and a
@@ -29,6 +29,8 @@
 import { execFileSync } from 'node:child_process';
 import { existsSync, mkdirSync, readdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { dirname, join, relative, resolve } from 'node:path';
+// Deep relative import (0775): the root node_modules has no @gobing-ai/spur-app workspace link.
+import { HOOK_IDS } from '../../packages/app/src/hooks/run-hook';
 import { captureCliSurface } from '../../plugins/sp/tests/helpers/cli-surface';
 
 const REPO_ROOT = resolve(import.meta.dir, '..', '..');
@@ -566,12 +568,14 @@ export function sweepHooks(root: string = PLUGIN_ROOT): void {
                     );
                     continue;
                 }
-                const script = join(root, 'hooks', `${m[1]}.ts`);
+                // Since script-absorption PR-2b a hook identity has no plugin script: superskill runs
+                // `spur self hook <id>`, so the identity must be one the transport registers.
+                const known = HOOK_IDS.includes(m[1] as string);
                 record(
-                    `hook ${m[1]} script exists`,
+                    `hook ${m[1]} resolves to spur self hook`,
                     'file-resolution',
-                    existsSync(script) ? 'ok' : 'mismatch',
-                    existsSync(script) ? rel(script) : `${rel(script)} missing`,
+                    known ? 'ok' : 'mismatch',
+                    known ? `spur self hook ${m[1]}` : `'${m[1]}' is not a spur self hook id`,
                     { file: rel(hooksJsonPath), line: 1 },
                 );
             }

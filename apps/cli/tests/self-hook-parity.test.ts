@@ -1,22 +1,27 @@
 /**
- * Parity proof for `spur self hook <id>` (script-absorption plan PR-2a, §5).
+ * Parity proof for `spur self hook <id>` against the **retired** sp hook implementation
+ * (script-absorption plan PR-2a/PR-2b, §5).
  *
- * The same fixture stdin payloads are fed to the **old** plugin hook file
- * (`bun plugins/sp/hooks/<id>.ts`) and to the **new** transport
- * (`bun apps/cli/src/index.ts self hook <id> --host <host>`), each in its own identical scratch
- * project, and the test asserts byte-identical stdout, identical exit codes and identical side
- * effects (context-ledger rows, the session pointer, and the argv every `spur` child received).
+ * PR-2a compared the old plugin hook files and the new transport side by side. PR-2b deleted the
+ * old files, so their observable behavior was frozen first: `fixtures/self-hook-golden.json` holds
+ * the old side's stdout, exit codes and normalized side effects (context-ledger rows, the session
+ * pointer, the argv every `spur` child received) for every fixture below, captured from the old
+ * implementation at the commit named in its `_meta` while the PR-2a suite passed 76/76.
  *
- * - Claude and Codex hosts: compared against the plugin hook files.
- * - Pi host: compared against the Pi extension's real handlers (`hooks/pi/guard-extension.ts`),
- *   mapping `{block, reason}` ↔ `{"action":"deny"}`, `ctx.ui.confirm(msg)` ↔ `{"action":"ask"}`
- *   and `{}` ↔ `{"action":"allow"}`.
- * - Intentional divergences are pinned explicitly: the plugin guards crash (exit 1, stack trace)
- *   on a non-object payload or a non-string field; the new transport fails open as documented.
+ * Routes asserted against that golden output:
+ * - **direct** — `bun apps/cli/src/index.ts self hook <id> --host <claude|codex>` (what superskill S-1
+ *   and every other host call).
+ * - **shim** — the three `hooks/context-*.ts` transition shims, imported and called exactly as
+ *   released superskill (≤0.3.37) does; they forward to `spur self hook` (`@transition-shim`).
+ * - **pi** — the thin Pi extension's real handlers, in-process, mapping `{block, reason}` ↔ deny,
+ *   `ctx.ui.confirm(msg)` ↔ ask and `{}` ↔ allow.
+ * Intentional divergences stay pinned: the old guards crashed (exit 1, TypeError) on a non-object
+ * payload or non-string field; the transport fails open.
  *
- * `spur` children run through a fake `spur` (on PATH and as `SPUR_BIN`) that records its argv,
- * so both sides' CLI calls are compared without a real fleet or task corpus.
- * Set `SPUR_HOOK_PARITY_REPORT=<file>` to write one JSON line per compared fixture.
+ * `spur` is a fake (on PATH and as `SPUR_BIN`) that records its argv and `exec`s the real CLI for
+ * `self hook` (the shim and Pi hops), so the CLI calls the transport makes in turn are compared
+ * without a real fleet or task corpus; the `self hook` hop lines themselves are not part of the
+ * golden effects. Set `SPUR_HOOK_PARITY_REPORT=<file>` to write one JSON line per fixture.
  */
 
 import { afterAll, beforeAll, describe, expect, test } from 'bun:test';
@@ -34,15 +39,28 @@ import {
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import { getEnvVar, setEnvVar } from '@gobing-ai/spur-config';
+import guardExtension from '../../../plugins/sp/hooks/pi/guard-extension';
+import golden from './fixtures/self-hook-golden.json';
 
 const REPO_ROOT = resolve(import.meta.dir, '..', '..', '..');
 const CLI = join(REPO_ROOT, 'apps', 'cli', 'src', 'index.ts');
 const PLUGIN_HOOKS = join(REPO_ROOT, 'plugins', 'sp', 'hooks');
 const REPORT = getEnvVar('SPUR_HOOK_PARITY_REPORT');
 
+interface GoldenRun {
+    steps: Array<{ id: string; stdout: string; exitCode: number }>;
+    effects: Record<string, unknown>;
+}
+const GOLDEN = golden as unknown as {
+    hosts: Record<string, GoldenRun>;
+    divergences: Record<string, Record<string, unknown>>;
+    pi: Record<string, unknown>;
+};
+
 const FAKE_SPUR = `#!/bin/sh
 echo "$*" >> "$FAKE_SPUR_LOG"
 case "$1 $2" in
+  "self hook") exec "${process.execPath}" "${CLI}" "$@";;
   "task resolve") case "$3" in *owned*) echo '{"wbs":"0001"}'; exit 0;; *) exit 1;; esac;;
   "agent wait") if [ "$FAKE_QUEUED" = 1 ]; then exit 0; else exit 1; fi;;
   "message inbox") echo '[{"from_id":"lead","body":"please   do X","status":"queued"},{"from_id":"x","body":"old","status":"read"}]'; exit 0;;
@@ -51,8 +69,20 @@ esac
 exit 1
 `;
 
+/** Calls a context shim the way superskill's `loadSpPluginDelegate` does: import, then call the export. */
+const SHIM_RUNNER = `import { join } from 'node:path';
+const [id, hooks, project] = Bun.argv.slice(2);
+const text = await Bun.stdin.text();
+try {
+    if (id === 'context-session-start') (await import(join(hooks, 'context-session-start.ts'))).recordSessionStartFromPayloadText(text);
+    if (id === 'context-session-stop') (await import(join(hooks, 'context-session-stop.ts'))).recordSessionEndFromPayloadText(text);
+    if (id === 'context-post-tool') (await import(join(hooks, 'context-post-tool.ts'))).recordToolUseEvent(join(project, '.spur', 'context'), JSON.parse(text));
+} catch {}
+`;
+
 let root: string;
 let fakeDir: string;
+let shimRunner: string;
 
 beforeAll(() => {
     root = realpathSync(mkdtempSync(join(tmpdir(), 'spur-hook-parity-')));
@@ -60,11 +90,14 @@ beforeAll(() => {
     mkdirSync(fakeDir);
     writeFileSync(join(fakeDir, 'spur'), FAKE_SPUR);
     chmodSync(join(fakeDir, 'spur'), 0o755);
+    shimRunner = join(root, 'shim-runner.ts');
+    writeFileSync(shimRunner, SHIM_RUNNER);
 });
 
 afterAll(() => rmSync(root, { recursive: true, force: true }));
 
 type Host = 'claude' | 'codex' | 'pi';
+type Route = 'direct' | 'shim';
 
 interface Step {
     id: string;
@@ -117,16 +150,22 @@ async function spawnHook(argv: string[], side: Side, host: Host, step: Step) {
     return { stdout, stderr, exitCode };
 }
 
-const oldArgv = (id: string) => [process.execPath, join(PLUGIN_HOOKS, `${id}.ts`)];
 const newArgv = (id: string, host: Host) => [process.execPath, CLI, 'self', 'hook', id, '--host', host];
+const shimArgv = (id: string, side: Side) => [process.execPath, shimRunner, id, PLUGIN_HOOKS, side.project];
 
 const ISO = /\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d+)?Z/g;
 const SESSION = /session-\d{4}-\d{2}-\d{2}-\d{6}-[0-9a-f]{8}/g;
 
-/** Side-effect snapshot with run-specific values (time, minted ids, paths, seq) normalized. */
+/** Side-effect snapshot normalized like the golden capture; `self hook` transport hops are dropped. */
 async function snapshot(side: Side, waitForLog = 0): Promise<Record<string, unknown>> {
-    for (let i = 0; i < waitForLog && !existsSync(side.log); i++) await Bun.sleep(50);
     const read = (path: string) => (existsSync(path) ? readFileSync(path, 'utf-8') : null);
+    const argvLog = (): string | null => {
+        const lines = (read(side.log) ?? '')
+            .split('\n')
+            .filter((line) => line !== '' && !line.startsWith('self hook '));
+        return lines.length > 0 ? `${lines.join('\n')}\n` : null;
+    };
+    for (let i = 0; i < waitForLog && argvLog() === null; i++) await Bun.sleep(50);
     const norm = (text: string | null) =>
         text === null
             ? null
@@ -136,11 +175,11 @@ async function snapshot(side: Side, waitForLog = 0): Promise<Record<string, unkn
                   .replace(SESSION, '<SESSION>')
                   .replace(/--seq \d+/g, '--seq <SEQ>')
                   .replace(/"(durationMs|elapsedMs)":\d+/g, '"$1":0');
+    expect(existsSync(join(side.project, '.spur', 'spur.db'))).toBe(false);
     return {
         ledger: norm(read(join(side.project, '.spur', 'context', 'token-ledger.jsonl'))),
         pointer: norm(read(join(side.project, '.spur', 'context', '.session.json'))),
-        spurArgv: norm(read(side.log)),
-        db: existsSync(join(side.project, '.spur', 'spur.db')),
+        spurArgv: norm(argvLog()),
     };
 }
 
@@ -148,47 +187,54 @@ function report(entry: Record<string, unknown>): void {
     if (REPORT !== undefined) appendFileSync(REPORT, `${JSON.stringify(entry)}\n`);
 }
 
-/** Run a fixture's steps through both sides; assert per-step stdout/exit parity and final side effects. */
-async function assertParity(
+/** Run a fixture's steps through one route; assert per-step stdout/exit and final effects equal golden. */
+async function assertGolden(
     name: string,
     host: Exclude<Host, 'pi'>,
     steps: Step[],
-    opts: { guest?: boolean; waitForLog?: number } = {},
+    opts: { guest?: boolean; waitForLog?: number; route?: Route } = {},
 ): Promise<{ stdout: string[]; effects: Record<string, unknown> }> {
+    const route = opts.route ?? 'direct';
+    const key = `${host}|${steps[0]?.id}|${name}`;
+    const expected = GOLDEN.hosts[key];
+    if (expected === undefined) throw new Error(`no golden entry for ${key}`);
+    expect(expected.steps.map((s) => s.id)).toEqual(steps.map((s) => s.id));
+    const side = makeSide(`${route}-${host}-${name}`.replace(/[^a-z0-9-]+/gi, '_'), opts.guest === true);
     const outputs: string[] = [];
-    const key = `${host}-${name}`.replace(/[^a-z0-9-]+/gi, '_');
-    const oldSide = makeSide(`old-${key}`, opts.guest === true);
-    const newSide = makeSide(`new-${key}`, opts.guest === true);
-    for (const step of steps) {
-        const [before, after] = await Promise.all([
-            spawnHook(oldArgv(step.id), oldSide, host, step),
-            spawnHook(newArgv(step.id, host), newSide, host, step),
-        ]);
-        expect({ step: step.id, stdout: after.stdout, exitCode: after.exitCode }).toEqual({
-            step: step.id,
-            stdout: before.stdout,
-            exitCode: before.exitCode,
-        });
+    for (const [i, step] of steps.entries()) {
+        const want = expected.steps[i] as GoldenRun['steps'][number];
+        const after = await spawnHook(
+            route === 'shim' ? shimArgv(step.id, side) : newArgv(step.id, host),
+            side,
+            host,
+            step,
+        );
+        if (route === 'direct') {
+            expect({ step: step.id, stdout: after.stdout, exitCode: after.exitCode }).toEqual({
+                step: step.id,
+                stdout: want.stdout,
+                exitCode: want.exitCode,
+            });
+        } else {
+            // A shim prints nothing and never fails its importer; capture ids printed nothing before either.
+            expect({ stdout: after.stdout, exitCode: after.exitCode, golden: want.stdout }).toEqual({
+                stdout: '',
+                exitCode: 0,
+                golden: '',
+            });
+        }
         expect(after.stderr).toBe('');
         outputs.push(after.stdout);
-        report({
-            host,
-            fixture: name,
-            id: step.id,
-            exitCode: after.exitCode,
-            stdoutBytes: after.stdout.length,
-            identical: true,
-        });
+        report({ host, route, fixture: name, id: step.id, exitCode: after.exitCode, matchesGolden: true });
     }
-    const [a, b] = await Promise.all([snapshot(oldSide, opts.waitForLog), snapshot(newSide, opts.waitForLog)]);
-    expect(b.db).toBe(false);
-    expect({ ...b, db: a.db } as Record<string, unknown>).toEqual(a);
-    return { stdout: outputs, effects: b };
+    const effects = await snapshot(side, opts.waitForLog);
+    expect(effects).toEqual(expected.effects);
+    return { stdout: outputs, effects };
 }
 
 /** Guard fixtures name their expected decision after the arrow (`… → deny`). */
-async function assertGuardParity(name: string, host: Exclude<Host, 'pi'>, step: Step): Promise<void> {
-    const { stdout } = await assertParity(name, host, [step]);
+async function assertGuardGolden(name: string, host: Exclude<Host, 'pi'>, step: Step): Promise<void> {
+    const { stdout } = await assertGolden(name, host, [step]);
     const decision = /→ (allow|deny|ask)/.exec(name)?.[1];
     expect(stdout[0]).toContain(`"permissionDecision":"${decision}"`);
 }
@@ -197,7 +243,14 @@ const write = (path: string, tool = 'Write') => JSON.stringify({ tool_name: tool
 const bash = (command: string) => JSON.stringify({ tool_name: 'Bash', tool_input: { command } });
 const TIMEOUT = 30_000;
 
-describe('parity: task-write-guard (claude, codex)', () => {
+test('the golden file covers every fixture and records its provenance', () => {
+    expect(Object.keys(GOLDEN.hosts)).toHaveLength(62);
+    expect(Object.keys(GOLDEN.divergences)).toHaveLength(4);
+    expect(Object.keys(GOLDEN.pi).sort()).toContain('ledger');
+    expect((golden as { _meta: { capturedFrom: string } })._meta.capturedFrom).toContain('cbad976aa');
+});
+
+describe('golden: task-write-guard (claude, codex)', () => {
     const fixtures: Array<[string, Step]> = [
         ['owned task file → deny', { id: 'task-write-guard', stdin: write('docs/tasks/0001_owned.md') }],
         [
@@ -216,12 +269,12 @@ describe('parity: task-write-guard (claude, codex)', () => {
     ];
     for (const host of ['claude', 'codex'] as const) {
         for (const [name, step] of fixtures) {
-            test(`${host}: ${name}`, () => assertGuardParity(name, host, step), TIMEOUT);
+            test(`${host}: ${name}`, () => assertGuardGolden(name, host, step), TIMEOUT);
         }
     }
 });
 
-describe('parity: careful-guard (claude, codex)', () => {
+describe('golden: careful-guard (claude, codex)', () => {
     const fixtures: Array<[string, Step]> = [
         ['rm -rf / → ask', { id: 'careful-guard', stdin: bash('rm -rf /') }],
         ['git push --force → ask', { id: 'careful-guard', stdin: bash('git push --force origin main') }],
@@ -235,12 +288,12 @@ describe('parity: careful-guard (claude, codex)', () => {
     ];
     for (const host of ['claude', 'codex'] as const) {
         for (const [name, step] of fixtures) {
-            test(`${host}: ${name}`, () => assertGuardParity(name, host, step), TIMEOUT);
+            test(`${host}: ${name}`, () => assertGuardGolden(name, host, step), TIMEOUT);
         }
     }
 });
 
-describe('parity: context ledger (claude, codex)', () => {
+describe('golden: context ledger (claude, codex)', () => {
     const sequence: Step[] = [
         {
             id: 'context-session-start',
@@ -277,7 +330,9 @@ describe('parity: context ledger (claude, codex)', () => {
         test(
             `${host}: start → tool events → foreign stop → owner stop`,
             async () => {
-                const { effects } = await assertParity('ledger sequence', host, sequence);
+                const { effects } = await assertGolden('ledger sequence', host, sequence);
+                // superskill ≤0.3.37 reaches the same logic through the import shims.
+                await assertGolden('ledger sequence', host, sequence, { route: 'shim' });
                 const types = String(effects.ledger)
                     .split('\n')
                     .filter(Boolean)
@@ -290,28 +345,34 @@ describe('parity: context ledger (claude, codex)', () => {
     }
     test(
         'claude: empty/malformed starts open an ownerless session; stop without pointer is a no-op',
-        () =>
-            assertParity('ownerless', 'claude', [
+        async () => {
+            const steps: Step[] = [
                 { id: 'context-session-stop', stdin: '' },
                 { id: 'context-session-start', stdin: '' },
                 { id: 'context-session-start', stdin: 'garbage' },
                 { id: 'context-session-stop', stdin: 'garbage' },
-            ]),
+            ];
+            await assertGolden('ownerless', 'claude', steps);
+            await assertGolden('ownerless', 'claude', steps, { route: 'shim' });
+        },
         TIMEOUT,
     );
     test(
         'claude: SPUR_RUN_ID reuse and CLAUDE_CODE_SESSION_ID owner fallback',
-        () =>
-            assertParity('nested run', 'claude', [
+        async () => {
+            const steps: Step[] = [
                 { id: 'context-session-start', stdin: '{}', env: { CLAUDE_CODE_SESSION_ID: 'env-owner' } },
                 { id: 'context-session-start', stdin: '{}', env: { SPUR_RUN_ID: 'run-9' } },
                 { id: 'context-session-stop', stdin: '{}', env: { CLAUDE_CODE_SESSION_ID: 'env-owner' } },
-            ]),
+            ];
+            await assertGolden('nested run', 'claude', steps);
+            await assertGolden('nested run', 'claude', steps, { route: 'shim' });
+        },
         TIMEOUT,
     );
 });
 
-describe('parity: agent-lifecycle (claude, codex)', () => {
+describe('golden: agent-lifecycle (claude, codex)', () => {
     const fleet = { SPUR_SPEC_ID: 'proj-worker-1' };
     const event = (name: string, extra: Record<string, unknown> = {}) =>
         JSON.stringify({ hook_event_name: name, ...extra });
@@ -341,7 +402,7 @@ describe('parity: agent-lifecycle (claude, codex)', () => {
             test(
                 `${host}: ${name}`,
                 async () => {
-                    const { effects } = await assertParity(name, host, [step], { waitForLog: wait * 4 });
+                    const { effects } = await assertGolden(name, host, [step], { waitForLog: wait * 4 });
                     if (wait > 0) {
                         expect(String(effects.spurArgv)).toMatch(
                             /^agent report --state (idle|working|blocked) --seq <SEQ>\n$/,
@@ -356,7 +417,7 @@ describe('parity: agent-lifecycle (claude, codex)', () => {
     }
 });
 
-describe('parity: fleet-guest-stop (claude, codex)', () => {
+describe('golden: fleet-guest-stop (claude, codex)', () => {
     const fixtures: Array<[string, Step]> = [
         [
             'joined + queued → block',
@@ -385,7 +446,7 @@ describe('parity: fleet-guest-stop (claude, codex)', () => {
             test(
                 `${host}: ${name}`,
                 async () => {
-                    const { stdout } = await assertParity(name, host, [step], { guest: true });
+                    const { stdout } = await assertGolden(name, host, [step], { guest: true });
                     if (name.includes('→ block')) {
                         expect(JSON.parse(stdout[0] ?? '')).toMatchObject({ decision: 'block' });
                     } else {
@@ -398,7 +459,7 @@ describe('parity: fleet-guest-stop (claude, codex)', () => {
     }
 });
 
-describe('pinned divergences (plugin crashes, transport fails open)', () => {
+describe('pinned divergences (the retired plugin crashed, the transport fails open)', () => {
     const cases: Array<[string, Step, string]> = [
         [
             'write guard: JSON null',
@@ -426,12 +487,14 @@ describe('pinned divergences (plugin crashes, transport fails open)', () => {
             name,
             async () => {
                 const side = makeSide(`div-${name.replace(/[^a-z0-9]+/gi, '_')}`, false);
-                const [before, after] = await Promise.all([
-                    spawnHook(oldArgv(step.id), side, 'claude', step),
-                    spawnHook(newArgv(step.id, 'claude'), side, 'claude', step),
-                ]);
-                expect(before.exitCode).toBe(1);
-                expect(before.stderr).toContain('TypeError');
+                const golden = GOLDEN.divergences[name];
+                expect(golden).toMatchObject({
+                    id: step.id,
+                    stdin: step.stdin,
+                    oldExitCode: 1,
+                    oldStderrContains: 'TypeError',
+                });
+                const after = await spawnHook(newArgv(step.id, 'claude'), side, 'claude', step);
                 expect(after).toEqual({ stdout: expected, stderr: '', exitCode: 0 });
                 report({
                     host: 'claude',
@@ -445,28 +508,18 @@ describe('pinned divergences (plugin crashes, transport fails open)', () => {
     }
 });
 
-// ─── Pi: the extension's real handlers vs `spur self hook --host pi` ─────────
+// ─── Pi: the thin extension's real handlers vs golden ────────────────────
 
 type PiHandler = (event: unknown, ctx: unknown) => Promise<unknown>;
-
-async function loadExtension(): Promise<Map<string, PiHandler>> {
-    const mod = (await import(join(PLUGIN_HOOKS, 'pi', 'guard-extension.ts'))) as { default: (pi: unknown) => void };
-    const handlers = new Map<string, PiHandler>();
-    mod.default({ on: (event: string, fn: PiHandler) => handlers.set(event, fn) });
-    return handlers;
-}
+const piHandlers = new Map<string, PiHandler>();
+guardExtension({ on: (event: string, fn: PiHandler) => piHandlers.set(event, fn) } as unknown as Parameters<
+    typeof guardExtension
+>[0]);
 
 /** Run one extension handler with cwd and env pinned to `side`, returning its normalized verdict. */
-async function piOld(
-    handlers: Map<string, PiHandler>,
-    piEvent: string,
-    event: Record<string, unknown>,
-    side: Side,
-    env: Record<string, string> = {},
-) {
+async function piNew(piEvent: string, event: Record<string, unknown>, side: Side, env: Record<string, string> = {}) {
     const vars = childEnv(side, 'pi', env);
-    const saved = new Map(Object.keys(vars).map((key) => [key, getEnvVar(key)]));
-    const savedSpec = getEnvVar('SPUR_SPEC_ID');
+    const saved = new Map([...Object.keys(vars), 'SPUR_SPEC_ID'].map((key) => [key, getEnvVar(key)]));
     if (env.SPUR_SPEC_ID === undefined) setEnvVar('SPUR_SPEC_ID', undefined);
     for (const [key, value] of Object.entries(vars)) setEnvVar(key, value);
     const previous = process.cwd();
@@ -483,23 +536,20 @@ async function piOld(
                 },
             },
         };
-        const result = (await handlers.get(piEvent)?.(event, ctx)) as { block?: boolean; reason?: string } | undefined;
+        const result = (await piHandlers.get(piEvent)?.(event, ctx)) as
+            | { block?: boolean; reason?: string }
+            | undefined;
         if (asked !== undefined) return { action: 'ask', reason: asked };
-        if (result?.block === true) return { action: 'deny', reason: result.reason };
+        if (result?.block === true)
+            return { action: 'deny', reason: result.reason?.replaceAll(side.project, '<PROJECT>') };
         return { action: 'allow' };
     } finally {
         process.chdir(previous);
         for (const [key, value] of saved) setEnvVar(key, value);
-        setEnvVar('SPUR_SPEC_ID', savedSpec);
     }
 }
 
-describe('parity: Pi host (extension handlers vs --host pi)', () => {
-    let handlers: Map<string, PiHandler>;
-    beforeAll(async () => {
-        handlers = await loadExtension();
-    });
-
+describe('golden: Pi host (thin extension handlers)', () => {
     const guardCases: Array<[string, string, Record<string, unknown>, Record<string, string>?]> = [
         [
             'write to owned task → deny',
@@ -532,27 +582,25 @@ describe('parity: Pi host (extension handlers vs --host pi)', () => {
             { SPUR_CAREFUL: 'off' },
         ],
     ];
-    for (const [name, id, event, env] of guardCases) {
+    for (const [name, , event, env] of guardCases) {
         test(
             `pi: ${name}`,
             async () => {
                 const side = makeSide(`pi-${name.replace(/[^a-z0-9]+/gi, '_')}`, false);
-                // Only one guard runs per extension tool_call, so each case isolates its guard.
-                const before = await piOld(handlers, 'tool_call', event, side, env);
-                const after = await spawnHook(newArgv(id, 'pi'), side, 'pi', { id, stdin: JSON.stringify(event), env });
-                expect(after.exitCode).toBe(0);
-                expect(JSON.parse(after.stdout)).toEqual(before);
-                report({ host: 'pi', fixture: name, id, verdict: before, identical: true });
+                const verdict = await piNew('tool_call', event, side, env);
+                expect(verdict as Record<string, unknown>).toEqual(
+                    GOLDEN.pi[`guard|${name}`] as Record<string, unknown>,
+                );
+                report({ host: 'pi', fixture: name, verdict, matchesGolden: true });
             },
             TIMEOUT,
         );
     }
 
     test(
-        'pi: session_start → tool_result → session_shutdown ledgers are identical',
+        'pi: session_start → tool_result → session_shutdown ledger matches golden',
         async () => {
-            const oldSide = makeSide('pi-ledger-old', false);
-            const newSide = makeSide('pi-ledger-new', false);
+            const side = makeSide('pi-ledger', false);
             const steps: Array<[string, string, Record<string, unknown>]> = [
                 ['session_start', 'context-session-start', { event: 'session_start', sessionId: 'pi-sess' }],
                 [
@@ -573,15 +621,11 @@ describe('parity: Pi host (extension handlers vs --host pi)', () => {
                 ['tool_result', 'context-post-tool', { toolName: 'web_search', input: {}, sessionId: 'pi-sess' }],
                 ['session_shutdown', 'context-session-stop', { event: 'session_shutdown', sessionId: 'pi-sess' }],
             ];
-            for (const [piEvent, id, event] of steps) {
-                await piOld(handlers, piEvent, event, oldSide);
-                const after = await spawnHook(newArgv(id, 'pi'), newSide, 'pi', { id, stdin: JSON.stringify(event) });
-                expect(after).toEqual({ stdout: '', stderr: '', exitCode: 0 });
-            }
-            const [a, b] = await Promise.all([snapshot(oldSide), snapshot(newSide)]);
-            expect(b).toEqual(a);
-            expect(String(a.ledger).split('\n').filter(Boolean)).toHaveLength(4);
-            report({ host: 'pi', fixture: 'ledger sequence', id: 'context-*', identical: true });
+            for (const [piEvent, , event] of steps) await piNew(piEvent, event, side);
+            const effects = await snapshot(side);
+            expect(effects).toEqual(GOLDEN.pi.ledger as Record<string, unknown>);
+            expect(String(effects.ledger).split('\n').filter(Boolean)).toHaveLength(4);
+            report({ host: 'pi', fixture: 'ledger sequence', id: 'context-*', matchesGolden: true });
         },
         TIMEOUT,
     );
@@ -589,20 +633,12 @@ describe('parity: Pi host (extension handlers vs --host pi)', () => {
     test(
         'pi: agent_start in a fleet reports working through the same CLI argv',
         async () => {
-            const oldSide = makeSide('pi-life-old', false);
-            const newSide = makeSide('pi-life-new', false);
-            const env = { SPUR_SPEC_ID: 'proj-worker-1' };
-            await piOld(handlers, 'agent_start', { event: 'agent_start' }, oldSide, env);
-            const after = await spawnHook(newArgv('agent-lifecycle', 'pi'), newSide, 'pi', {
-                id: 'agent-lifecycle',
-                stdin: JSON.stringify({ event: 'agent_start' }),
-                env,
-            });
-            expect(after.exitCode).toBe(0);
-            const [a, b] = await Promise.all([snapshot(oldSide, 200), snapshot(newSide, 200)]);
-            expect(b.spurArgv).toBe('agent report --state working --seq <SEQ>\n');
-            expect(b).toEqual(a);
-            report({ host: 'pi', fixture: 'agent_start', id: 'agent-lifecycle', identical: true });
+            const side = makeSide('pi-life', false);
+            await piNew('agent_start', { event: 'agent_start' }, side, { SPUR_SPEC_ID: 'proj-worker-1' });
+            const effects = await snapshot(side, 200);
+            expect(effects.spurArgv).toBe('agent report --state working --seq <SEQ>\n');
+            expect(effects).toEqual(GOLDEN.pi.lifecycle as Record<string, unknown>);
+            report({ host: 'pi', fixture: 'agent_start', id: 'agent-lifecycle', matchesGolden: true });
         },
         TIMEOUT,
     );

@@ -44,12 +44,15 @@ rules:
             # the quality-gate exemption above).
             - "packages/app/src/workflow/feature-verification-run.ts"
 
-            # Host hook ports (script-absorption PR-2a, docs/plans/2026-10-14-spur-script-absorption.md §5):
-            # ported verbatim from plugins/sp/hooks + plugins/sp/lib and proven output-identical by
-            # apps/cli/tests/self-hook-parity.test.ts. They need a synchronous spawn WITH a
-            # timeout (guards' `task resolve` 8 s, fleet inbox 5 s) and a detached, unref'd fire-and-forget
+            # Host hook implementations behind `spur self hook` (script-absorption PR-2a/2b,
+            # docs/plans/2026-10-14-spur-script-absorption.md §5), pinned to the retired plugin hooks'
+            # golden output by apps/cli/tests/self-hook-parity.test.ts. They need a synchronous spawn WITH
+            # a timeout (guards' `task resolve` 8 s, fleet inbox 5 s) and a detached, unref'd fire-and-forget
             # spawn (agent-lifecycle `agent report`); ts-runtime's SyncProcessExecutor omits `timeout` and
-            # neither executor offers detached launch. Revisit when PR-2b reduces the plugin copies.
+            # neither executor offers detached launch. Re-checked in PR-2b: still required. The two
+            # timeout-free `git rev-parse HEAD` probes could use SyncProcessExecutor, but importing
+            # @gobing-ai/ts-runtime costs ~75-95 ms per hook process (vs ~13 ms for all of src/hooks),
+            # which would undo the `spur self hook` latency budget (compiled p50 < 150 ms).
             - "packages/app/src/hooks/agent-lifecycle.ts"
             - "packages/app/src/hooks/context-post-tool.ts" # sync `git rev-parse HEAD` probe
             - "packages/app/src/hooks/context-session-start.ts" # sync `git rev-parse HEAD` probe
@@ -89,9 +92,10 @@ rules:
             - "packages/app/src/services/history-anatomy.ts" # deterministic history-anatomy cache core (task 1005 R2): fsync'd tmp+rename atomic publish, readdir digest scans and sync report reads must stay byte-stable; bundled standalone for the bare-node plugin twin (mirrors agent-usage-producer.ts / history-service.ts exemptions)
             - "packages/app/src/observability/workflow-run-log-sink.ts" # sync FD append for mid-run tail-able all-in-one run log (task 0426 / feature D2); append() is sync from the observability bus
             - "packages/app/src/observability/agent-run-log.ts" # same primitive as the sink above for the per-run agent stream (task 1076 R1, ADR-132); append() is sync from the agent service's own onOutput hook, and the byte cap needs the FD position it tracks
-            # Host hook ports (script-absorption PR-2a): synchronous ledger append/read + pointer writes that
-            # must complete inside one short-lived hook process and match the plugin copies byte-for-byte
-            # (mirrors the workflow-run-log-sink sync-append exemption). Revisit in PR-2b.
+            # Host hook implementations (script-absorption PR-2a/2b): synchronous ledger append/read + pointer
+            # writes that must complete inside one short-lived hook process and stay byte-identical to the
+            # retired plugin hooks' golden output (mirrors the workflow-run-log-sink sync-append exemption).
+            # Re-checked in PR-2b: the FileSystem seam is async and lives in ts-runtime (same import cost).
             - "packages/app/src/hooks/context-post-tool.ts"
             - "packages/app/src/hooks/context-session-start.ts"
             - "packages/app/src/hooks/context-session-stop.ts"

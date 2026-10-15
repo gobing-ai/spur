@@ -57,8 +57,6 @@ export interface HookDefinition {
     /** Host events the id is wired to (Claude/Codex event names; Pi event names in parentheses). */
     events: readonly string[];
     summary: string;
-    /** Plugin source this id was ported from (removed by later absorption PRs). */
-    pluginSource: string;
 }
 
 /** The seven sp hook ids, in `hooks.json` order. */
@@ -68,35 +66,30 @@ export const HOOK_DEFINITIONS: readonly HookDefinition[] = [
         kind: 'guard',
         events: ['PreToolUse(Write|Edit)', '(tool_call: write|edit)'],
         summary: 'deny raw Write/Edit of a spur-owned task file',
-        pluginSource: 'plugins/sp/hooks/task-write-guard.ts',
     },
     {
         id: 'careful-guard',
         kind: 'guard',
         events: ['PreToolUse(Bash) [opt-in]', '(tool_call: bash)'],
         summary: 'ask before a destructive shell command',
-        pluginSource: 'plugins/sp/hooks/careful-guard.ts',
     },
     {
         id: 'context-post-tool',
         kind: 'capture',
         events: ['PostToolUse', '(tool_result)'],
         summary: 'append one tool-use event to .spur/context/token-ledger.jsonl',
-        pluginSource: 'plugins/sp/hooks/context-post-tool.ts',
     },
     {
         id: 'context-session-start',
         kind: 'capture',
         events: ['SessionStart', '(session_start)'],
         summary: 'open (or reuse) the context-ledger session',
-        pluginSource: 'plugins/sp/hooks/context-session-start.ts',
     },
     {
         id: 'context-session-stop',
         kind: 'capture',
         events: ['SessionEnd', '(session_shutdown)'],
         summary: 'finalize the owned context-ledger session',
-        pluginSource: 'plugins/sp/hooks/context-session-stop.ts',
     },
     {
         id: 'agent-lifecycle',
@@ -110,14 +103,12 @@ export const HOOK_DEFINITIONS: readonly HookDefinition[] = [
             '(agent_settled)',
         ],
         summary: 'report fleet member state via a detached `spur agent report`',
-        pluginSource: 'plugins/sp/hooks/agent-lifecycle.ts',
     },
     {
         id: 'fleet-guest-stop',
         kind: 'delivery',
         events: ['Stop'],
         summary: "deliver a joined guest's queued fleet inbox at turn end",
-        pluginSource: 'plugins/sp/hooks/fleet-guest-stop.ts',
     },
 ];
 

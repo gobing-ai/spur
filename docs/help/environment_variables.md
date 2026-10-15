@@ -7,7 +7,7 @@
 > `@gobing-ai/ts-utils` gateway (`getEnvVar`/`getEnvVars`), never direct `process.env`/`Bun.env`.
 > Enforcement: the `env-var-hygiene` rule (error severity, zero exclusions), with raw access
 > confined to `packages/config/src/**` and the dependency-free mirrors in `plugins/sp/scripts/`
-> and `plugins/sp/hooks/`. User-settable variables are documented in `.env.example`.
+> and `plugins/sp/lib/env.ts` (used by `plugins/sp/hooks/`). User-settable variables are documented in `.env.example`.
 
 ## Deployment plane (user-settable — see `.env.example`)
 
@@ -71,8 +71,8 @@ the per-job contract is still env.
 | --- | --- | --- |
 | `SPUR_JSON_ENVELOPE` | packages/app (output envelope), apps/cli | Flag+env contract (ADR-091): wrap output in the machine envelope, equivalent to `--json-envelope` |
 | `SPUR_HITL_AUTO_APPROVE` | apps/cli (context, errors, HITL responder) | Auto-approve HITL gates in non-interactive runs |
-| `SPUR_CAREFUL` | plugin hooks: `careful-guard.ts` (Claude Code; opt-in, unwired by default) and the Pi extension (always on) | `off` → skip the destructive-Bash-command confirmation prompt |
-| `SPUR_WRITE_GUARD` | plugin hooks: `task-write-guard.ts` (Claude Code) and the Pi extension | `off` → allow raw Write/Edit on task files (only `off` is recognised) |
+| `SPUR_CAREFUL` | `spur self hook careful-guard` (packages/app hooks; Claude Code opt-in, unwired by default; the Pi extension always runs it) | `off` → skip the destructive-Bash-command confirmation prompt |
+| `SPUR_WRITE_GUARD` | `spur self hook task-write-guard` (packages/app hooks; Claude Code, Codex and the Pi extension) | `off` → allow raw Write/Edit on task files (only `off` is recognised) |
 | `SPUR_DEBUG` | apps/cli (`serve`) | `1` → include stack traces in served error responses |
 | `SPUR_QUALITY_GATE_RETRY_DELAY_MS` | plugin scripts (`quality-gate`) | Retry delay for the quality gate script |
 | `SP_DAILY_SUMMARY_NO_PROMPT` | plugin scripts (`daily-summary`) | Suppress the interactive prompt in daily summary |

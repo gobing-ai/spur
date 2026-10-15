@@ -313,14 +313,14 @@ describe('flattenKeys — json envelope shape flattening', () => {
 // ─── sweepHooks (repo-owned files — deterministic) ───────────────────────
 
 describe('sweepHooks — hook contract against the real plugin tree', () => {
-    test('hooks.json parses and every referenced hook script resolves', () => {
+    test('hooks.json parses and every referenced hook id resolves to spur self hook', () => {
         const before = rows.length;
         sweepHooks();
         const added = rows.slice(before);
 
         expect(added.find((r) => r.asserted === 'hooks.json parses')?.status).toBe('ok');
 
-        const scriptRows = added.filter((r) => r.asserted.endsWith('script exists'));
+        const scriptRows = added.filter((r) => r.asserted.endsWith('resolves to spur self hook'));
         expect(scriptRows.length).toBeGreaterThan(0);
         for (const r of scriptRows) expect(r.status).toBe('ok');
 
@@ -358,7 +358,7 @@ describe('sweepHooks — hook contract against the real plugin tree', () => {
             sweepHooks(dir);
 
             expect(rowFor('event PreToolUse matcher')?.status).toBe('mismatch');
-            expect(rowFor('hook absent-hook script exists')?.status).toBe('mismatch');
+            expect(rowFor('hook absent-hook resolves to spur self hook')?.status).toBe('mismatch');
             expect(rowFor('hook command ./ad-hoc.sh')?.status).toBe('unverified');
             expect(rowFor('pi extension ./hooks/pi/absent.ts')?.status).toBe('mismatch');
         } finally {

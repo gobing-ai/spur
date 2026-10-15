@@ -27,6 +27,8 @@ import { spawnSync } from 'node:child_process';
 import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, statSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { dirname, join, resolve } from 'node:path';
+// Deep relative import (0775): the root node_modules has no @gobing-ai/spur-app workspace link.
+import { HOOK_IDS } from '../../packages/app/src/hooks/run-hook';
 
 export type ScriptContractType = 'standard' | 'repo-only';
 
@@ -605,11 +607,14 @@ interface HooksJson {
 }
 
 /**
- * Entry mechanisms outside the `hooks.json` registry (ADR-129): the Pi extension normalizer and
- * the opt-in conditional guard. Each is one authored entry file, exactly like a registered
- * identity — only the registration channel differs.
+ * The one entry mechanism outside the `hooks.json` registry (ADR-129): the Pi extension, which Pi
+ * can only load as in-process TypeScript. Since script-absorption PR-2b the registered identities
+ * have no plugin entry files — `superskill hook run sp <id>` reaches `spur self hook <id>`.
  */
-const EXTRA_HOOK_ENTRIES = ['careful-guard.ts', 'pi/guard-extension.ts'];
+const EXTRA_HOOK_ENTRIES = ['pi/guard-extension.ts'];
+
+/** A registered transition shim (config/transition-shims.json) may stand at a legacy entry path. */
+const TRANSITION_SHIM_MARKER = '@transition-shim(';
 
 /** Identity from `superskill hook run sp <identity>`; null for any other command shape. */
 function hookIdentity(command: string | undefined): string | null {
@@ -617,14 +622,16 @@ function hookIdentity(command: string | undefined): string | null {
 }
 
 /**
- * Hook source-layout contract (ADR-129, task 1173): one registered identity has one authored
- * entry under `plugins/sp/hooks`, reusable helpers live in `plugins/sp/lib`, and hook tests live
- * in `plugins/sp/tests/hooks`. Pure and side-effect free; task 1174 activates the strict call in
- * `checkPlacement` after the relocation lands.
+ * Hook source-layout contract (ADR-129, task 1173; script-absorption PR-2b): every identity
+ * registered in `hooks.json` is a `spur self hook` id (the logic lives in `@gobing-ai/spur-app`),
+ * so `plugins/sp/hooks` holds only `hooks.json`, the Pi extension and marked transition shims;
+ * reusable helpers live in `plugins/sp/lib` and hook tests in `plugins/sp/tests/hooks`. Pure and
+ * side-effect free; `knownIds` defaults to the transport's registry.
  */
-export function checkHookLayout(opts: { repoRoot: string }): PlacementFinding[] {
+export function checkHookLayout(opts: { repoRoot: string; knownIds?: readonly string[] }): PlacementFinding[] {
     const root = resolve(opts.repoRoot);
     const hooksDir = join(root, 'plugins', 'sp', 'hooks');
+    const known = new Set(opts.knownIds ?? HOOK_IDS);
     const findings: PlacementFinding[] = [];
     if (!existsSync(hooksDir)) return findings;
 
@@ -643,7 +650,7 @@ export function checkHookLayout(opts: { repoRoot: string }): PlacementFinding[] 
         }
         for (const [event, groups] of Object.entries(parsed.hooks ?? {})) {
             // One identity per event: a second registration for the same event would run the same
-            // entry twice for any tool matching both matchers (task 1173 R1 — one identity, one entry).
+            // hook twice for any tool matching both matchers (task 1173 R1 — one identity, one entry).
             const seen = new Set<string>();
             for (const group of groups) {
                 for (const entry of group.hooks ?? []) {
@@ -664,17 +671,16 @@ export function checkHookLayout(opts: { repoRoot: string }): PlacementFinding[] 
     }
 
     for (const identity of [...registered].sort()) {
-        if (!existsSync(join(hooksDir, `${identity}.ts`))) {
+        if (!known.has(identity)) {
             findings.push({
-                file: `plugins/sp/hooks/${identity}.ts`,
+                file: 'plugins/sp/hooks/hooks.json',
                 kind: 'hook-layout',
-                detail: `registered hook identity '${identity}' has no authored entry under plugins/sp/hooks`,
+                detail: `registered hook identity '${identity}' is not a \`spur self hook\` id (known: ${[...known].join(', ')})`,
             });
         }
     }
 
-    const allowedEntries = new Set([...registered].map((identity) => `${identity}.ts`));
-    for (const extra of EXTRA_HOOK_ENTRIES) allowedEntries.add(extra);
+    const allowedEntries = new Set(EXTRA_HOOK_ENTRIES);
     for (const abs of collectHookTsFiles(hooksDir).sort()) {
         const rel = abs.slice(hooksDir.length + 1);
         if (rel.endsWith('.test.ts')) {
@@ -685,13 +691,12 @@ export function checkHookLayout(opts: { repoRoot: string }): PlacementFinding[] 
             });
             continue;
         }
-        if (!allowedEntries.has(rel)) {
-            findings.push({
-                file: `plugins/sp/hooks/${rel}`,
-                kind: 'hook-layout',
-                detail: 'not a registered hook entry or a supported extension entry — reusable helpers belong in plugins/sp/lib',
-            });
-        }
+        if (allowedEntries.has(rel) || readFileSync(abs, 'utf8').includes(TRANSITION_SHIM_MARKER)) continue;
+        findings.push({
+            file: `plugins/sp/hooks/${rel}`,
+            kind: 'hook-layout',
+            detail: 'hook logic lives behind `spur self hook <id>` (packages/app/src/hooks) — only the Pi extension and registered transition shims stay here; reusable helpers belong in plugins/sp/lib',
+        });
     }
     return findings;
 }

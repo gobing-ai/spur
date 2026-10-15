@@ -7,6 +7,13 @@
             "file": "packages/app/src/services/agent-resolver.ts",
             "keepsWorking": "a bare coding-agent binary name (codex, omp, claude with no matching agent.executors entry) remains a valid --agent value during the role transition, with a one-time warning emitted by warnBareBinaryOnce",
             "removalCondition": "no bare-binary --agent value remains in docs/, config/workflows/, or plugins/sp/ (scan for --agent <binary-name> usages against agent.executors names)"
+        },
+        {
+            "id": "sp-context-hook-imports",
+            "wbs": "script-absorption PR-2b",
+            "file": "plugins/sp/hooks/context-session-start.ts, plugins/sp/hooks/context-session-stop.ts, plugins/sp/hooks/context-post-tool.ts",
+            "keepsWorking": "released superskill 0.3.28–0.3.37 imports these three plugin paths and calls recordSessionStartFromPayloadText / recordSessionEndFromPayloadText / recordToolUseEvent in-process; each export now forwards the payload to `spur self hook context-* --host auto` (fail-open), so those hosts reach the spur-owned logic instead of falling back to superskill's drifted in-CLI copies",
+            "removalCondition": "plugins/sp/hooks/hooks.json declares \"minCliVersion\" >= the superskill release that ships S-1 (spurDelegate -> `spur self hook`), and both the @gobing-ai/superskill catalog version in package.json and the `superskill@0.3.28` install pin in .github/workflows/publish.yml are at or above that release (plan §5.2, PR-10)"
         }
     ]
 }
