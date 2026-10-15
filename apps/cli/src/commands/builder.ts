@@ -40,6 +40,8 @@ export function registerBuilderCommand(program: Command, context: CliContext): v
             try {
                 if (options.check === true) {
                     if (version !== undefined) throw new Error('bump-ver --check takes only a package id');
+                    if (options.all === true || options.push === true)
+                        throw new Error('bump-ver --check rejects incompatible write flags (--push/--all)');
                     const code = await checkVersionDrift(target, context.cwd, context.output, context.spurConfig);
                     if (options.json === true) {
                         context.output.write(

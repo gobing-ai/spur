@@ -138,6 +138,20 @@ describe('spur builder command wiring', () => {
         expect(tags).toContain('@demo/lib-v0.2.0');
     });
 
+    test('bump-ver --check rejects incompatible write flags (--push/--all) instead of ignoring them', async () => {
+        const repo = mkRepo();
+        for (const flags of [['--push'], ['--all']]) {
+            const { context, lines, exitCode } = makeContext(repo);
+            const program = new Command();
+            program.exitOverride();
+            registerBuilderCommand(program, context);
+
+            await program.parseAsync(['builder', 'bump-ver', '--check', 'lib', ...flags], { from: 'user' });
+            expect(exitCode()).toBe(1);
+            expect(lines.join('\n')).toContain('rejects incompatible write flags (--push/--all)');
+        }
+    });
+
     test('bump-ver --json success renders a machine summary', async () => {
         const repo = mkRepo();
         const { context, lines, exitCode } = makeContext(repo);
