@@ -10,13 +10,24 @@
  * touch the marker (or only invalidate it), so they can neither certify nor clobber
  * a certified artifact — a stale byte or tree mismatch fails the post-check closed.
  *
- * Tree digest: content hash over the tracked working tree (path + on-disk bytes per
- * `git ls-files -z` entry); only start/finish equality of the SAME run is compared.
- * `.coverage/` is gitignored, so marker writes never move the fingerprint.
+ * Each producer writes isolated LCOV. Publication and pending-window replacement
+ * share a short exclusive lock; only the owning run can publish its own bytes.
+ * The tree digest includes tracked and nonignored new files, excluding coverage output.
  */
 import { createHash, randomUUID } from 'node:crypto';
-import { existsSync, mkdirSync, readFileSync, renameSync, writeFileSync } from 'node:fs';
+import {
+    closeSync,
+    existsSync,
+    mkdirSync,
+    openSync,
+    readFileSync,
+    renameSync,
+    unlinkSync,
+    writeFileSync,
+} from 'node:fs';
 import { join, resolve } from 'node:path';
+// Repo-command precedent (0775): spur-app has no root workspace link.
+import { computeProofInputFingerprint } from '../../packages/app/src/workflow/proof-input-fingerprint';
 
 export const CERT_RELATIVE_PATH = join('.coverage', 'coverage-certification.json');
 export const LCOV_RELATIVE_PATH = join('.coverage', 'lcov.info');
@@ -48,15 +59,29 @@ export interface CanonicalRunStart {
     runId: string;
     treeDigest: string;
     startedAt: string;
+    coverageDir: string;
 }
 
-export type CertificationRefusalReason = 'superseded' | 'stale-tree' | 'missing-lcov';
+export type CertificationRefusalReason =
+    | 'superseded'
+    | 'stale-tree'
+    | 'missing-lcov'
+    | 'malformed-lcov'
+    | 'publication-locked';
 
 export type ValidationResult =
     | { ok: true; marker: CertificationMarker }
     | {
           ok: false;
-          reason: 'missing' | 'malformed' | 'pending' | 'superseded' | 'stale-tree' | 'missing-lcov' | 'lcov-mismatch';
+          reason:
+              | 'missing'
+              | 'malformed'
+              | 'pending'
+              | 'superseded'
+              | 'stale-tree'
+              | 'missing-lcov'
+              | 'lcov-mismatch'
+              | 'tree-unavailable';
           message: string;
       };
 
@@ -79,25 +104,21 @@ function writeMarkerAtomic(cwd: string, marker: CertificationMarker): void {
     renameSync(tmp, certPath(cwd));
 }
 
+/** No awaits inside: a competing start cannot replace ownership during publication. */
+function withPublicationLock<T>(cwd: string, visit: () => T): T {
+    const path = resolve(cwd, '.coverage', 'publication.lock');
+    mkdirSync(resolve(cwd, '.coverage'), { recursive: true });
+    const fd = openSync(path, 'wx');
+    try {
+        return visit();
+    } finally {
+        closeSync(fd);
+        unlinkSync(path);
+    }
+}
+
 export async function treeFingerprint(cwd: string): Promise<string> {
-    // Content hash over the tracked working tree. `git ls-files -s` alone only sees
-    // the index, so a mid-run worktree edit (no `git add`) would slip through — the
-    // digest must cover on-disk bytes of every tracked file. Untracked files are out
-    // of scope: certification guards the committed source set the suite imported.
-    const listed = Bun.spawnSync(['git', 'ls-files', '-z'], { cwd, stdout: 'pipe', stderr: 'pipe' });
-    if (listed.exitCode !== 0) {
-        throw new Error(`coverage-certification: git ls-files failed: ${listed.stderr.toString().trim()}`);
-    }
-    const hash = createHash('sha256');
-    for (const path of listed.stdout.toString().split('\0').filter(Boolean)) {
-        hash.update(path).update('\0');
-        try {
-            hash.update(readFileSync(join(cwd, path)));
-        } catch {
-            hash.update('<missing>'); // tracked but deleted from the worktree
-        }
-    }
-    return `sha256:${hash.digest('hex')}`;
+    return computeProofInputFingerprint({ cwd });
 }
 
 /**
@@ -110,23 +131,27 @@ export async function startCanonicalRun(cwd: string): Promise<CanonicalRunStart>
     const startedAt = new Date().toISOString();
     const treeDigest = await treeFingerprint(cwd);
     const runId = randomUUID();
-    const previous = readMarker(cwd);
-    const marker: CertificationMarker = {
-        schemaVersion: SCHEMA_VERSION,
-        status: 'pending',
-        runId,
-        pid: process.pid,
-        startedAt,
-        treeDigest,
-        ...(previous !== undefined ? { supersedes: previous.runId } : {}),
-    };
-    writeMarkerAtomic(cwd, marker);
-    return { runId, treeDigest, startedAt };
+    const coverageDir = resolve(cwd, '.coverage', `run-${runId}`);
+    mkdirSync(coverageDir, { recursive: true });
+    withPublicationLock(cwd, () => {
+        const previous = readMarker(cwd);
+        writeMarkerAtomic(cwd, {
+            schemaVersion: SCHEMA_VERSION,
+            status: 'pending',
+            runId,
+            pid: process.pid,
+            startedAt,
+            treeDigest,
+            ...(previous !== undefined ? { supersedes: previous.runId } : {}),
+        });
+    });
+    return { runId, treeDigest, startedAt, coverageDir };
 }
 
 function readMarker(cwd: string): CertificationMarker | undefined {
     try {
-        return JSON.parse(readFileSync(certPath(cwd), 'utf8')) as CertificationMarker;
+        const marker = JSON.parse(readFileSync(certPath(cwd), 'utf8')) as CertificationMarker | null;
+        return marker && typeof marker.runId === 'string' ? marker : undefined;
     } catch {
         return undefined;
     }
@@ -159,17 +184,42 @@ export async function certifyCanonicalRun(
                 'working tree changed during the canonical run — the tested fingerprint is stale, certification refused',
         };
     }
-    if (!existsSync(lcovPath(cwd))) {
+    const producedPath = join(start.coverageDir, 'lcov.info');
+    if (!existsSync(producedPath)) {
         return { ok: false, reason: 'missing-lcov', message: `${LCOV_RELATIVE_PATH} was not produced by the run` };
     }
-    const certified: CertificationMarker = {
-        ...current,
-        status: 'certified',
-        certifiedAt: new Date().toISOString(),
-        lcovDigest: sha256File(lcovPath(cwd)),
-    };
-    writeMarkerAtomic(cwd, certified);
-    return { ok: true };
+    const produced = readFileSync(producedPath);
+    const records = produced.toString().trim().split('end_of_record');
+    if (
+        records.length < 2 ||
+        records.pop()?.trim() !== '' ||
+        records.some((record) => !/^SF:.+$/m.test(record) || !/^LF:\d+$/m.test(record) || !/^LH:\d+$/m.test(record))
+    ) {
+        return { ok: false, reason: 'malformed-lcov', message: 'run LCOV is empty or contains incomplete records' };
+    }
+    try {
+        return withPublicationLock(cwd, () => {
+            const owner = readMarker(cwd);
+            if (owner?.status !== 'pending' || owner.runId !== start.runId) {
+                return { ok: false, reason: 'superseded', message: 'a later run owns the publication window' } as const;
+            }
+            renameSync(producedPath, lcovPath(cwd));
+            writeMarkerAtomic(cwd, {
+                ...owner,
+                status: 'certified',
+                certifiedAt: new Date().toISOString(),
+                lcovDigest: createHash('sha256').update(produced).digest('hex'),
+            });
+            return { ok: true } as const;
+        });
+    } catch (error) {
+        if ((error as NodeJS.ErrnoException).code !== 'EEXIST') throw error;
+        return {
+            ok: false,
+            reason: 'publication-locked',
+            message: 'another coverage publisher holds publication.lock',
+        };
+    }
 }
 
 /**
@@ -199,6 +249,8 @@ export async function validateCoverageCertification(cwd: string): Promise<Valida
             marker.schemaVersion !== SCHEMA_VERSION ||
             typeof marker.runId !== 'string' ||
             typeof marker.treeDigest !== 'string' ||
+            (marker.supersedes !== undefined && typeof marker.supersedes !== 'string') ||
+            (marker.status === 'certified' && typeof marker.lcovDigest !== 'string') ||
             (marker.status !== 'pending' && marker.status !== 'certified')
         ) {
             return {
@@ -234,7 +286,12 @@ export async function validateCoverageCertification(cwd: string): Promise<Valida
             message: `${LCOV_RELATIVE_PATH} bytes changed after certification — a non-canonical producer overwrote the tracefile`,
         };
     }
-    const currentTree = await treeFingerprint(cwd);
+    let currentTree: string;
+    try {
+        currentTree = await treeFingerprint(cwd);
+    } catch (error) {
+        return { ok: false, reason: 'tree-unavailable', message: `cannot capture tested tree: ${String(error)}` };
+    }
     if (currentTree !== marker.treeDigest) {
         return {
             ok: false,

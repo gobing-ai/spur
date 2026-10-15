@@ -28,18 +28,24 @@
  * spawning and, only on an exit-zero run over an unchanged working tree, certifies
  * `.coverage/lcov.info` in `.coverage/coverage-certification.json`. Targeted `bun test`,
  * heavy/repo-wide gates and interrupted runs never publish. Recovery for a refused
- * artifact: rerun `bun run test:full` (see coverage-certification.ts). Certifying adds
+ * artifact: rerun `bun run test:full` (see coverage-certification.ts). Each child writes
+ * isolated LCOV; only a canonical publisher can replace the shared artifact. Certifying adds
  * no second suite execution — the digests come from the run this process already drove.
  */
-import { mkdtempSync, rmSync } from 'node:fs';
+import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { availableParallelism, loadavg, tmpdir } from 'node:os';
-import { delimiter, join } from 'node:path';
+import { delimiter, dirname, join, resolve } from 'node:path';
 import { getEnvVar, getEnvVars } from '@gobing-ai/spur-config';
 import { certifyCanonicalRun, startCanonicalRun } from './coverage-certification';
 
 // Internal launcher flag (task 1203): consumed BEFORE forwarding; never reaches Bun.
 const publishCoverage = Bun.argv.includes('--publish-coverage');
 const forwardedArgs = Bun.argv.slice(2).filter((arg) => arg !== '--publish-coverage');
+
+interface TestConfig {
+    test?: { coverageDir?: string; preload?: string[]; [key: string]: unknown };
+    [key: string]: unknown;
+}
 
 // One disposable registry for the whole run: registry paths must be visible to children,
 // and a per-file path would drift between workers.
@@ -72,8 +78,8 @@ delete env.TYPESAFE_BASE_URL;
 // names the host load. Advisory only — one stderr line, printed before bun is spawned; it never
 // touches the forwarded argv or this process's exit code. NOTE: dropping --parallel is NOT a
 // viable mitigation — the suite drifted parallel-only after d6189d3ab (serial run: 7 shared-
-// state failures + cross-file happy-dom fetch pollution). A contended host must wait for a
-// quieter window instead.
+// state failures + cross-file happy-dom fetch pollution). The root test script caps workers at two
+// to bound subprocess fan-out while retaining isolation; external contention can still require a quieter window.
 const [load1 = 0, load5 = 0, load15 = 0] = loadavg();
 const cores = availableParallelism();
 if (Math.max(load1, load5, load15) > cores) {
@@ -85,25 +91,49 @@ if (Math.max(load1, load5, load15) > cores) {
 // Canonical coverage window (task 1203 R1): invalidate prior certification and capture
 // the tested-tree fingerprint BEFORE launching, so the window is closed while the suite
 // runs and any mid-run source change is caught at publish time.
-const canonicalStart = publishCoverage ? await startCanonicalRun(process.cwd()) : undefined;
-
-const result = Bun.spawnSync(['bun', ...forwardedArgs], {
-    env,
-    stdio: ['inherit', 'inherit', 'inherit'],
-});
-const exitCode = result.exitCode ?? 1;
-
-if (canonicalStart !== undefined && exitCode === 0) {
-    // Certify only the completed successful run (R1). A refused publish fails closed:
-    // the suite passed, but the artifact cannot be certified (superseded or the tree
-    // changed mid-run), so the post-check must not see green evidence (R4/AC4).
-    const certified = await certifyCanonicalRun(process.cwd(), canonicalStart);
-    if (!certified.ok) {
-        rmSync(registryDir, { recursive: true, force: true });
-        process.stderr.write(`coverage-certification: refused (${certified.reason}) — ${certified.message}\n`);
-        process.exit(1);
+let exitCode = 1;
+try {
+    const canonicalStart = publishCoverage ? await startCanonicalRun(process.cwd()) : undefined;
+    const coverageDir = canonicalStart?.coverageDir ?? join(registryDir, 'coverage');
+    let configPath = resolve('bunfig.toml');
+    let explicitConfig = false;
+    const suiteArgs: string[] = [];
+    for (let i = 0; i < forwardedArgs.length; i++) {
+        const arg = forwardedArgs[i] as string;
+        if (arg === '--config' || arg === '-c' || arg.startsWith('--config=')) {
+            const value = arg.startsWith('--config=') ? arg.slice('--config='.length) : forwardedArgs[++i];
+            if (!value || value.startsWith('-')) throw new Error('run-tests: --config requires a file path');
+            configPath = resolve(value);
+            explicitConfig = true;
+        } else if (arg === '--coverage-dir') i++;
+        else if (!arg.startsWith('--coverage-dir=')) suiteArgs.push(arg);
     }
-}
+    if (explicitConfig && !existsSync(configPath)) throw new Error(`run-tests: config file not found: ${configPath}`);
+    const config = (existsSync(configPath) ? Bun.TOML.parse(readFileSync(configPath, 'utf8')) : {}) as TestConfig;
+    config.test ??= {};
+    config.test.coverageDir = coverageDir;
+    if (config.test.preload) {
+        config.test.preload = config.test.preload.map((path) => resolve(dirname(configPath), path));
+    }
+    // Bun's configured coverageDir overrides its CLI flag; copy the config without changing its gates.
+    const isolatedConfig = join(registryDir, 'bunfig.toml');
+    writeFileSync(isolatedConfig, Bun.TOML.stringify(config));
+    const result = Bun.spawnSync(['bun', `--config=${isolatedConfig}`, ...suiteArgs], {
+        env,
+        stdio: ['inherit', 'inherit', 'inherit'],
+    });
+    exitCode = result.exitCode ?? 1;
 
-rmSync(registryDir, { recursive: true, force: true });
+    if (canonicalStart !== undefined && exitCode === 0) {
+        const certified = await certifyCanonicalRun(process.cwd(), canonicalStart);
+        if (certified.ok) {
+            rmSync(canonicalStart.coverageDir, { recursive: true, force: true });
+        } else {
+            process.stderr.write(`coverage-certification: refused (${certified.reason}) — ${certified.message}\n`);
+            exitCode = 1;
+        }
+    }
+} finally {
+    rmSync(registryDir, { recursive: true, force: true });
+}
 process.exit(exitCode);

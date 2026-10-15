@@ -1,5 +1,16 @@
 import { afterAll, describe, expect, test } from 'bun:test';
-import { chmodSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import {
+    chmodSync,
+    closeSync,
+    existsSync,
+    mkdirSync,
+    mkdtempSync,
+    openSync,
+    readFileSync,
+    rmSync,
+    unlinkSync,
+    writeFileSync,
+} from 'node:fs';
 import { tmpdir } from 'node:os';
 import { delimiter, join } from 'node:path';
 import { getEnvVar, getEnvVars } from '@gobing-ai/spur-config';
@@ -7,6 +18,7 @@ import type { ConstraintRule } from '@gobing-ai/ts-rule-engine';
 import { RuleEngine } from '@gobing-ai/ts-rule-engine';
 import {
     CANONICAL_RECOVERY,
+    type CanonicalRunStart,
     CERT_RELATIVE_PATH,
     certifyCanonicalRun,
     LCOV_RELATIVE_PATH,
@@ -33,6 +45,7 @@ afterAll(() => {
  *  run measures nothing and Bun emits no tracefile at all). */
 function initFixtureRepo(testBody: string, sleepMs = 0): string {
     const dir = newFixture();
+    writeFileSync(join(dir, '.gitignore'), '.coverage/\n');
     mkdirSync(join(dir, 'case'), { recursive: true });
     writeFileSync(
         join(dir, 'bunfig.toml'),
@@ -86,6 +99,10 @@ function writeLcov(fixture: string, body: string): void {
     writeFileSync(join(fixture, LCOV_RELATIVE_PATH), body);
 }
 
+function writeRunLcov(start: CanonicalRunStart, body: string): void {
+    writeFileSync(join(start.coverageDir, 'lcov.info'), body);
+}
+
 async function refuseReason(fixture: string): Promise<Extract<ValidationResult, { ok: false }>['reason']> {
     const result = await validateCoverageCertification(fixture);
     expect(result.ok).toBe(false);
@@ -106,18 +123,120 @@ async function waitUntilExists(path: string, timeoutMs = 8000): Promise<void> {
 }
 
 describe('canonical certification producer (task 1203)', () => {
+    test('an old canonical artifact cannot satisfy a run that produced no LCOV', async () => {
+        const fixture = initFixtureRepo(PASSING);
+        writeLcov(fixture, FIXTURE_LCOV);
+        const start = await startCanonicalRun(fixture);
+        const result = await certifyCanonicalRun(fixture, start);
+        expect(result.ok).toBe(false);
+        if (!result.ok) expect(result.reason).toBe('missing-lcov');
+    });
+
+    test('a newly added source file invalidates the tested tree', async () => {
+        const fixture = initFixtureRepo(PASSING);
+        const start = await startCanonicalRun(fixture);
+        writeRunLcov(start, FIXTURE_LCOV);
+        writeFileSync(join(fixture, 'case', 'new-source.ts'), 'export const added = true;\n');
+        const result = await certifyCanonicalRun(fixture, start);
+        expect(result.ok).toBe(false);
+        if (!result.ok) expect(result.reason).toBe('stale-tree');
+    });
+
+    test('a noncanonical launcher cannot overwrite certified full-suite coverage', async () => {
+        const fixture = initFixtureRepo(PASSING);
+        writeFileSync(join(fixture, 'case', 'extra.ts'), 'export const extra = () => 2;\n');
+        writeFileSync(
+            join(fixture, 'case', 'extra.test.ts'),
+            "import {test,expect} from 'bun:test'; import {extra} from './extra'; test('extra',()=>expect(extra()).toBe(2));\n",
+        );
+        const canonical = runProducer(fixture);
+        expect(canonical.exitCode, canonical.stderr).toBe(0);
+        const before = readFileSync(join(fixture, LCOV_RELATIVE_PATH), 'utf8');
+        const targeted = Bun.spawnSync([process.execPath, PRODUCER, 'test', join(fixture, 'case', 'tiny.test.ts')], {
+            cwd: fixture,
+            env: getEnvVars(),
+            stdout: 'pipe',
+            stderr: 'pipe',
+        });
+        expect(targeted.exitCode).toBe(0);
+        expect(readFileSync(join(fixture, LCOV_RELATIVE_PATH), 'utf8')).toBe(before);
+        expect((await validateCoverageCertification(fixture)).ok).toBe(true);
+    }, 30000);
+
+    test('publication and a new pending window require the same exclusive lock', async () => {
+        const fixture = initFixtureRepo(PASSING);
+        const start = await startCanonicalRun(fixture);
+        writeRunLcov(start, FIXTURE_LCOV);
+        const lockPath = join(fixture, '.coverage', 'publication.lock');
+        const fd = openSync(lockPath, 'wx');
+        try {
+            const result = await certifyCanonicalRun(fixture, start);
+            expect(result.ok).toBe(false);
+            if (!result.ok) expect(result.reason).toBe('publication-locked');
+            await expect(startCanonicalRun(fixture)).rejects.toThrow();
+            expect(readMarker(fixture).runId).toBe(start.runId);
+            expect(readMarker(fixture).status).toBe('pending');
+        } finally {
+            closeSync(fd);
+            unlinkSync(lockPath);
+        }
+        expect((await certifyCanonicalRun(fixture, start)).ok).toBe(true);
+    });
+
+    test('an explicit test config keeps preload, ignores and coverage-disabled behavior', () => {
+        const fixture = initFixtureRepo(PASSING);
+        writeFileSync(join(fixture, 'state.ts'), 'export const state = { loaded: false };\n');
+        writeFileSync(join(fixture, 'preload.ts'), "import { state } from './state'; state.loaded = true;\n");
+        writeFileSync(
+            join(fixture, 'selected.toml'),
+            '[test]\ncoverage = false\npreload = ["./preload.ts"]\npathIgnorePatterns = ["**/ignored.test.ts"]\n',
+        );
+        writeFileSync(
+            join(fixture, 'case', 'tiny.test.ts'),
+            "import {test,expect} from 'bun:test'; import {state} from '../state'; test('preload',()=>expect(state.loaded).toBe(true));\n",
+        );
+        writeFileSync(join(fixture, 'case', 'ignored.test.ts'), "throw new Error('ignored test must not load');\n");
+        const result = Bun.spawnSync(
+            [process.execPath, PRODUCER, '--config=selected.toml', 'test', join(fixture, 'case')],
+            { cwd: fixture, env: getEnvVars(), stdout: 'pipe', stderr: 'pipe' },
+        );
+        expect(result.exitCode, result.stderr.toString()).toBe(0);
+        expect(existsSync(join(fixture, LCOV_RELATIVE_PATH))).toBe(false);
+        expect(existsSync(join(fixture, CERT_RELATIVE_PATH))).toBe(false);
+        const missing = Bun.spawnSync([process.execPath, PRODUCER, '--config=missing.toml', 'test'], {
+            cwd: fixture,
+            env: getEnvVars(),
+            stdout: 'pipe',
+            stderr: 'pipe',
+        });
+        expect(missing.exitCode).not.toBe(0);
+        expect(missing.stderr.toString()).toContain('config file not found');
+    }, 30000);
+
+    test('empty or incomplete run LCOV cannot be certified', async () => {
+        for (const body of ['', 'SF:case/tiny.ts\nLF:1\nLH:1\n']) {
+            const fixture = initFixtureRepo(PASSING);
+            const start = await startCanonicalRun(fixture);
+            writeRunLcov(start, body);
+            const result = await certifyCanonicalRun(fixture, start);
+            expect(result.ok).toBe(false);
+            if (!result.ok) expect(result.reason).toBe('malformed-lcov');
+            expect(readMarker(fixture).status).toBe('pending');
+        }
+    });
+
     test('a passing canonical run certifies the artifact and launches exactly one suite child (AC4)', async () => {
         const fixture = initFixtureRepo(PASSING);
         // Counting shim: every suite child spawned through PATH logs one line.
         const shim = join(fixture, 'shim');
-        const log = join(fixture, 'spawn.log');
+        const log = join(newFixture(), 'spawn.log');
         mkdirSync(shim, { recursive: true });
         const shimBin = join(shim, 'bun');
         writeFileSync(shimBin, `#!/bin/sh\necho child >> '${log}'\nexec '${process.execPath}' "$@"\n`);
         chmodSync(shimBin, 0o755);
 
-        const { exitCode } = runProducer(fixture, { PATH: `${shim}${delimiter}${getEnvVar('PATH') ?? ''}` });
-        expect(exitCode).toBe(0);
+        const { exitCode, stderr } = runProducer(fixture, { PATH: `${shim}${delimiter}${getEnvVar('PATH') ?? ''}` });
+        expect(exitCode, stderr).toBe(0);
         const marker = readMarker(fixture);
         expect(marker.status).toBe('certified');
         expect(typeof marker.lcovDigest).toBe('string');
@@ -157,7 +276,7 @@ describe('canonical certification producer (task 1203)', () => {
     test('a source change during the run refuses publish and the window stays pending (AC3)', async () => {
         const fixture = initFixtureRepo(PASSING);
         const start = await startCanonicalRun(fixture);
-        writeLcov(fixture, FIXTURE_LCOV);
+        writeRunLcov(start, FIXTURE_LCOV);
         writeFileSync(
             join(fixture, 'case', 'tiny.test.ts'),
             `${readFileSync(join(fixture, 'case', 'tiny.test.ts'), 'utf8')}\n// drifted\n`,
@@ -180,7 +299,7 @@ describe('canonical certification producer (task 1203)', () => {
         if (!refused.ok) {
             expect(refused.reason).toBe('superseded');
         }
-        writeLcov(fixture, FIXTURE_LCOV);
+        writeRunLcov(second, FIXTURE_LCOV);
         const certified = await certifyCanonicalRun(fixture, second);
         expect(certified.ok).toBe(true);
         expect(readMarker(fixture).status).toBe('certified');
@@ -192,6 +311,7 @@ describe('canonical certification producer (task 1203)', () => {
         // default, so the measured set is empty and no lcov is emitted — the producer
         // must refuse to certify, exit nonzero, and leave the window pending.
         const dir = newFixture();
+        writeFileSync(join(dir, '.gitignore'), '.coverage/\n');
         mkdirSync(join(dir, 'case'), { recursive: true });
         writeFileSync(
             join(dir, 'bunfig.toml'),
@@ -221,7 +341,7 @@ describe('canonical certification producer (task 1203)', () => {
     test('a targeted producer overwriting certified lcov bytes fails the post-check closed (AC1/AC3)', async () => {
         const fixture = initFixtureRepo(PASSING);
         const start = await startCanonicalRun(fixture);
-        writeLcov(fixture, 'SF:case/tiny.test.ts\nDA:1,1\nLF:1\nLH:1\nend_of_record\n');
+        writeRunLcov(start, 'SF:case/tiny.test.ts\nDA:1,1\nLF:1\nLH:1\nend_of_record\n');
         expect((await certifyCanonicalRun(fixture, start)).ok).toBe(true);
         // Simulate `bun test <file>` rewriting the tracefile with partial data.
         writeLcov(fixture, 'SF:case/tiny.test.ts\nDA:1,1\nLF:4\nLH:1\nend_of_record\n');
@@ -280,11 +400,20 @@ describe('post-check provenance refusals are distinct (task 1203 R2)', () => {
     test('stale tree', async () => {
         const fixture = initFixtureRepo(PASSING);
         const start = await startCanonicalRun(fixture);
-        writeLcov(fixture, FIXTURE_LCOV);
+        writeRunLcov(start, FIXTURE_LCOV);
         expect((await certifyCanonicalRun(fixture, start)).ok).toBe(true);
         writeFileSync(join(fixture, 'case', 'tiny.test.ts'), '// source changed after certification\n');
         expect(await refuseReason(fixture)).toBe('stale-tree');
     }, 30000);
+
+    test('a failed tree capture is a named provenance refusal', async () => {
+        const fixture = initFixtureRepo(PASSING);
+        const start = await startCanonicalRun(fixture);
+        writeRunLcov(start, FIXTURE_LCOV);
+        expect((await certifyCanonicalRun(fixture, start)).ok).toBe(true);
+        rmSync(join(fixture, '.git'), { recursive: true, force: true });
+        expect(await refuseReason(fixture)).toBe('tree-unavailable');
+    });
 
     test('the precondition CLI exits nonzero with a coverage-artifact diagnostic and recovery hint (AC5)', async () => {
         const fixture = newFixture();
@@ -308,11 +437,14 @@ describe('certified evidence still reaches the real evaluator unchanged (task 12
     };
 
     test('an 89% production file keeps its below-threshold finding', async () => {
-        const fixture = newFixture();
-        writeLcov(
-            fixture,
+        const fixture = initFixtureRepo(PASSING);
+        const start = await startCanonicalRun(fixture);
+        writeRunLcov(
+            start,
             'SF:src/low.ts\nDA:1,1\nLF:100\nLH:89\nend_of_record\nSF:src/ok.ts\nDA:1,1\nLF:10\nLH:10\nend_of_record\n',
         );
+        expect((await certifyCanonicalRun(fixture, start)).ok).toBe(true);
+        expect((await validateCoverageCertification(fixture)).ok).toBe(true);
         // RuleEngine's constructor registers builtin evaluators (host alone does not).
         const evaluator = new RuleEngine().host.evaluators.get('coverage-gate');
         const result = await evaluator.evaluate(rule, { workdir: fixture, rule });
@@ -321,8 +453,11 @@ describe('certified evidence still reaches the real evaluator unchanged (task 12
     });
 
     test('a 90% production file passes', async () => {
-        const fixture = newFixture();
-        writeLcov(fixture, 'SF:src/ok.ts\nDA:1,1\nLF:100\nLH:90\nend_of_record\n');
+        const fixture = initFixtureRepo(PASSING);
+        const start = await startCanonicalRun(fixture);
+        writeRunLcov(start, 'SF:src/ok.ts\nDA:1,1\nLF:100\nLH:90\nend_of_record\n');
+        expect((await certifyCanonicalRun(fixture, start)).ok).toBe(true);
+        expect((await validateCoverageCertification(fixture)).ok).toBe(true);
         const evaluator = new RuleEngine().host.evaluators.get('coverage-gate');
         const result = await evaluator.evaluate(rule, { workdir: fixture, rule });
         expect(result.findings).toHaveLength(0);
