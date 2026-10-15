@@ -161,7 +161,11 @@ export function registerTaskBatchCreateCommand(task: Command, context: CliContex
                 }
             } finally {
                 if (tmpPath !== undefined) {
-                    await rm(tmpPath, { force: true }).catch(() => {});
+                    try {
+                        await rm(tmpPath, { force: true });
+                    } catch {
+                        // Best-effort cleanup of the staged batch file; never masks the result.
+                    }
                 }
             }
         });
