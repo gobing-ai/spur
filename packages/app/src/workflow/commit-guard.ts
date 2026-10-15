@@ -36,6 +36,7 @@ export interface GitRunResult {
     status: number;
     stdout: string;
 }
+/** Runs `git <args>` and returns its exit status and stdout; injected so tests can fake git. */
 export type GitRunner = (args: string[]) => GitRunResult;
 /** The `.spur/run/<id>-tree-start.json` snapshot. */
 export interface TreeStart {
@@ -55,6 +56,7 @@ export interface CommitGuardStageReport extends CommitGuardReport {
     foreign: string[];
 }
 
+/** One-line usage printed when an op or its required `--run` is missing (exit 1). */
 export const COMMIT_GUARD_USAGE =
     'usage: spur workflow commit-guard start --run <id> | stage --run <id> [--base <sha>] -- <paths…> | check --run <id> [--base <sha>]';
 

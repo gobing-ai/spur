@@ -23,6 +23,7 @@ const PREFIX_CAP = 64;
  *  silent abandonment WT-4 exists to prevent, even when the driver forwarded no matching prefix. */
 const DURABLE_FAMILY_RE = /^\d{4}-(?:verdict|feature-verification)\.json$/;
 
+/** One-line usage printed when `persist-check` is invoked without `--from`. */
 export const PERSIST_CHECK_USAGE =
     'usage: spur workflow inline persist-check --from <worktree> [--task-file <path>]… [--run-id <id>]… [--root <invoke-tree>] [--success-json <path>]';
 
@@ -32,6 +33,7 @@ export function wbsOfTaskFile(path: string): string | null {
     return m?.[1] ?? null;
 }
 
+/** Evidence files a worktree owes the invoke tree, plus how many plane files no task/run owns. */
 export interface ListObligationsResult {
     files: string[];
     unowned: number;
