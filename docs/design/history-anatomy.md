@@ -241,7 +241,8 @@ become permanent. Retirement is a separate change.
 
 `/sp:dev-history-load` is removed along with its plugin helper script, `.mjs` twin, test,
 build-conversion entry, and `config/plugin-scripts.json` declaration — its two supported import
-owners (`bun run load-history`, History UI **Import & Analyze**) remain. `package.json`'s
+owners (`bun run load-history`, History UI **Import & Analyze**) remain. (`config/plugin-scripts.json`
+itself was retired in task 1213; the entry existed when this removal landed.) `package.json`'s
 `load-history` script is preserved exactly.
 
 `spur history analyze`, `report`, and `daily` are all preserved. The workflow composes `analyze` and

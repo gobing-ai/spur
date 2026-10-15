@@ -753,7 +753,13 @@ parity obligation. Repository-only tooling retains its existing runtime.
 **Amendment (2026-08-24).** The history-anatomy cache helper joins the portable shipping category.
 The manifest owns the roster; this register does not duplicate it.
 
-**Detail:** config/plugin-scripts.json; Superskill ADR-015/022; 04 §2.6.
+**Amendment (2026-10-15, task 1213).** The manifest/twin gate is retired: nothing ships from
+`plugins/sp/scripts/` except registered hook entries (`scripts/hooks/<id>.ts`, invoked via
+`superskill hook run sp <id>`), no `.mjs` twins are generated, and reusable behavior lives in
+approved CLI surfaces (ADR-130). `config/plugin-scripts.json` is deleted; the gate is now the
+hook-only contract in `scripts/commands/script-contract-check.ts`.
+
+**Detail:** `plugins/sp/hooks/hooks.json` (hook roster); Superskill ADR-015/022; 04 §2.6.
 
 ## ADR-066: Cataloged System Events Use Exhaustive Server-Side Presenters
 

@@ -190,7 +190,7 @@ The per-task pipeline's quality gate is `bun run spur-check` (task-pipeline `qua
 | --- | --- | --- |
 | `link-check` | no `bun link`-ed `@gobing-ai/*` package serves a `dist/` older than its `src/` | repo-wide (developer-environment invariant, not caused by any task diff) |
 | `transition-shim-check` | every `@transition-shim(<id>)` marker ↔ `config/transition-shims.json` entry (two-sided) | repo-wide (whole-repo manifest/marker consistency) |
-| `script-contract-check` | every `plugins/sp/scripts/` entry ↔ `config/plugin-scripts.json` and its `.mjs` twin (two-sided) | repo-wide (whole-repo script-contract consistency) |
+| `script-contract-check` | `plugins/sp/scripts/` holds only registered hook entries (`scripts/hooks/<id>.ts`, helpers in `lib`, tests in the plugin test owner) and no retired invocations — hook-only contract (task 1213) | repo-wide (whole-repo script-contract consistency) |
 | `inline-pipeline-parity-check` | the inline driver's documented action/guard set ≡ the resolved sets across all `config/workflows/*.yaml` | repo-wide (driver↔catalogue parity) |
 | `dependency-drift-check` | `bun.lock` ↔ installed `@gobing-ai/ts-*` versions | repo-wide (environment invariant) |
 | `importer-schema-check` | the SQLite DB's recorded importer schema version ≡ the installed importer package | repo-wide (shared-DB invariant) |
