@@ -21,6 +21,7 @@ import {
     mkdtempSync,
     readdirSync,
     readFileSync,
+    realpathSync,
     rmSync,
     writeFileSync,
 } from 'node:fs';
@@ -148,7 +149,7 @@ function seedRuns(cwd: string, ids: string[], baseEnv: Record<string, string | u
 
 /** Run one case against the retired script (`old`) or the absorbing spur command (`new`). */
 export function runCase(c: GoldenCase, side: 'old' | 'new', baseEnv: Record<string, string | undefined>): CaseOutcome {
-    const cwd = mkdtempSync(join(tmpdir(), `pr5-golden-${c.id}-`));
+    const cwd = realpathSync(mkdtempSync(join(tmpdir(), `pr5-golden-${c.id}-`)));
     try {
         const stub = join(cwd, 'stub-spur');
         writeFileSync(stub, STUB);

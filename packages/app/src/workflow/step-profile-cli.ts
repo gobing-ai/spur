@@ -61,8 +61,8 @@ export function parseStepProfileCliArgs(argv: string[], defaultSpurBin = 'spur')
 
 type SpawnResult = { stdout: string; stderr: string; exitCode: number; ok: boolean };
 
-function runSpurJson(spurBin: string, args: string[]): SpawnResult {
-    const { cmd, prefix } = spurCommand(spurBin);
+function runSpurJson(spurBin: string, args: string[], spurArgv?: readonly string[]): SpawnResult {
+    const { cmd, prefix } = spurCommand(spurBin, spurArgv);
     const r = new NodeSyncProcessExecutor().runSync({ command: cmd, args: [...prefix, ...args] });
     return { stdout: r.stdout, stderr: r.stderr, exitCode: r.exitCode ?? 1, ok: r.exitCode === 0 };
 }
@@ -95,7 +95,12 @@ function runFailure(spurBin: string, result: SpawnResult, what: string): StepPro
 }
 
 /** Run one profile; `defaultSpurBin` is the spur invocation used when `--spur-bin` is absent. */
-export function runStepProfileCli(argv: string[], defaultSpurBin = 'spur'): StepProfileCliResult {
+export function runStepProfileCli(
+    argv: string[],
+    defaultSpurBin = 'spur',
+    defaultSpurArgv?: readonly string[],
+): StepProfileCliResult {
+    const spurArgv = argv.includes('--spur-bin') ? undefined : defaultSpurArgv;
     const args = parseStepProfileCliArgs(argv, defaultSpurBin);
     if (args.help) return { exitCode: 0, stdout: `${STEP_PROFILE_USAGE}\n`, stderr: '' };
     if (args.workflow === '') return failure(`a workflow name is required\n${STEP_PROFILE_USAGE}`);
@@ -111,7 +116,7 @@ export function runStepProfileCli(argv: string[], defaultSpurBin = 'spur'): Step
         String(args.last),
         '--json',
     ];
-    const list = runSpurJson(args.spurBin, listArgs);
+    const list = runSpurJson(args.spurBin, listArgs, spurArgv);
     if (!list.ok) return runFailure(args.spurBin, list, `spur ${listArgs.join(' ')}`);
 
     let entries: TraceRunEntry[];
@@ -126,7 +131,7 @@ export function runStepProfileCli(argv: string[], defaultSpurBin = 'spur'): Step
     const runs: StepProfileRun[] = [];
     for (const entry of nonDryRuns(entries)) {
         const runArgs = ['workflow', 'trace', entry.runId, '--json'];
-        const timeline = runSpurJson(args.spurBin, runArgs);
+        const timeline = runSpurJson(args.spurBin, runArgs, spurArgv);
         if (!timeline.ok) return runFailure(args.spurBin, timeline, `spur ${runArgs.join(' ')}`);
         try {
             const parsed = JSON.parse(timeline.stdout) as { events?: unknown };

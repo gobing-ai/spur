@@ -1,4 +1,5 @@
 import type { Command } from '@commander-js/extra-typings';
+import { acceptArtifactId } from '../../artifact-id';
 import type { CliContext } from '../../context';
 
 /** Register `spur task diffstat` — triage diff evidence (script-absorption PR-3). */
@@ -13,6 +14,7 @@ export function registerTaskDiffstatCommand(task: Command, context: CliContext):
         )
         .argument('<wbs>', 'Task WBS number')
         .action(async (wbs) => {
+            if (!acceptArtifactId(wbs, 'task WBS', context)) return;
             const { runDiffstat } = await import('@gobing-ai/spur-app/task-diffstat');
             const result = runDiffstat(
                 { wbs },

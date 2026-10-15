@@ -6,7 +6,7 @@
  */
 import type { Command } from '@commander-js/extra-typings';
 import type { CliContext } from '../../context';
-import { resolveSpurBin } from '../../workflow/resolve-spur-bin';
+import { resolveSpurArgv, resolveSpurBin } from '../../workflow/resolve-spur-bin';
 import { SHARED_OPTIONS } from '../shared-options';
 import { writeStepText } from '../task/step-output';
 
@@ -35,7 +35,7 @@ export function registerWorkflowProfileCommand(workflow: Command, context: CliCo
             if (options.window !== undefined) argv.push('--window', options.window);
             if (options.spurBin !== undefined) argv.push('--spur-bin', options.spurBin);
             if (options.json === true) argv.push('--json');
-            const result = runStepProfileCli(argv, resolveSpurBin());
+            const result = runStepProfileCli(argv, resolveSpurBin(), resolveSpurArgv());
             writeStepText(context.output, 'stdout', result.stdout);
             writeStepText(context.output, 'stderr', result.stderr);
             context.setExitCode(result.exitCode);

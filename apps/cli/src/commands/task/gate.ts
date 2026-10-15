@@ -1,4 +1,5 @@
 import type { Command } from '@commander-js/extra-typings';
+import { acceptArtifactId } from '../../artifact-id';
 import type { CliContext } from '../../context';
 
 /** Register `spur task gate` — the task-pipeline quality gate (script-absorption PR-3). */
@@ -25,6 +26,7 @@ export function registerTaskGateCommand(task: Command, context: CliContext): voi
         )
         .option('--run-id <id>', 'Receipt run identity (overrides env runId; default pipeline-<wbs>)')
         .action(async (wbs, mode, options) => {
+            if (!acceptArtifactId(wbs, 'task WBS', context)) return;
             const { qualityGateMain } = await import('@gobing-ai/spur-app/quality-gate');
             const env = {
                 ...context.env,

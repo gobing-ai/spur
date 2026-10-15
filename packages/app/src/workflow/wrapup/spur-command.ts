@@ -5,7 +5,8 @@
  * PR-5): a workflow's `spurBin` var may be a multi-word launch (`bun apps/cli/src/index.ts`), so it
  * splits on whitespace into a command plus prefix args.
  */
-export function spurCommand(spurBin: string | undefined): { cmd: string; prefix: string[] } {
+export function spurCommand(spurBin: string | undefined, argv?: readonly string[]): { cmd: string; prefix: string[] } {
+    if (argv && argv.length > 0) return { cmd: argv[0] as string, prefix: argv.slice(1) };
     const parts = (spurBin ?? 'spur')
         .trim()
         .split(/\s+/)

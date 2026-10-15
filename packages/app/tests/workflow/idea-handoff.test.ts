@@ -126,8 +126,11 @@ describe('finalizeIdeaHandoff', () => {
         const res = await finalizeIdeaHandoff({
             runId,
             featureId,
+            spurArgv: ['/runtime with spaces/bun', '/project with spaces/spur.ts'],
             processExecutor: mockExecutor,
         });
+        expect(executedCommands.every((c) => c.command === '/runtime with spaces/bun')).toBe(true);
+        expect(executedCommands.every((c) => c.args?.[0] === '/project with spaces/spur.ts')).toBe(true);
 
         expect(res.ok).toBe(true);
         expect(res.wbsList).toEqual(['0601', '0602']);

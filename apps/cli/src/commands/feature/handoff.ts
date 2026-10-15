@@ -1,6 +1,7 @@
 import type { Command } from '@commander-js/extra-typings';
+import { acceptArtifactId } from '../../artifact-id';
 import type { CliContext } from '../../context';
-import { resolveSpurBin } from '../../workflow/resolve-spur-bin';
+import { resolveSpurArgv, resolveSpurBin } from '../../workflow/resolve-spur-bin';
 
 /**
  * Register `spur feature handoff [id]` — the idea-pipeline finalization (task 0518/0824): zip the
@@ -32,10 +33,13 @@ export function registerFeatureHandoffCommand(feature: Command, context: CliCont
             'spur invocation for the nested task/feature calls (env: spurBin; default: this spur)',
         )
         .action(async (id, options) => {
+            const runId = options.runId ?? context.env.__runId;
+            if (runId && !acceptArtifactId(runId, 'run id', context)) return;
             const { runIdeaHandoffCli } = await import('@gobing-ai/spur-app');
             const env = context.env;
             const outcome = await runIdeaHandoffCli({
                 __runId: options.runId ?? env.__runId,
+                ...(options.spurBin === undefined && env.spurBin === undefined ? { spurArgv: resolveSpurArgv() } : {}),
                 featureId: id ?? env.featureId,
                 spurBin: options.spurBin ?? env.spurBin ?? resolveSpurBin(),
             });

@@ -57,6 +57,8 @@ export interface WrapupStepsEnv {
 export interface WrapupStepsOptions {
     /** Base directory for `.spur/run` / `.spur/memory`; defaults to the process cwd. */
     cwd?: string;
+    /** Lossless default launch; explicit spurBin overrides are still command strings. */
+    spurArgv?: readonly string[];
 }
 
 /** jq `//` chain: first value that is neither null, undefined nor false; otherwise the fallback. */
@@ -78,9 +80,9 @@ export const WBS_PATTERN = /^[0-9]{4}$/;
 function spur(
     env: WrapupStepsEnv,
     args: string[],
-    options: { cwd?: string; stderr?: 'inherit' } = {},
+    options: WrapupStepsOptions & { stderr?: 'inherit' } = {},
 ): { status: number; stdout: string } {
-    const { cmd, prefix } = spurCommand(env.spurBin);
+    const { cmd, prefix } = spurCommand(env.spurBin, options.spurArgv);
     const result = spawnSync(cmd, [...prefix, ...args], {
         cwd: options.cwd,
         env: childEnv(env),
@@ -174,7 +176,7 @@ export function resolveTasks(env: WrapupStepsEnv, options: WrapupStepsOptions = 
 
     let unresolved = false;
     for (const wbs of deduped) {
-        const shown = spur(env, ['task', 'show', wbs, '--json'], { cwd });
+        const shown = spur(env, ['task', 'show', wbs, '--json'], { cwd, spurArgv: options.spurArgv });
         const status = shown.status === 0 ? statusDisplay(shown.stdout) : 'unresolved';
         if (status !== 'done' && status !== 'cancelled') {
             echoError(`task-resolve: task ${wbs} did not resolve to a completed status (status=${status})`);
@@ -185,7 +187,7 @@ export function resolveTasks(env: WrapupStepsEnv, options: WrapupStepsOptions = 
         return writeFail(`failed:unresolved or non-completed task (see ${relTasksFile})`);
     }
     if ((env.feature ?? '') !== '') {
-        const pf = preflightFeature(env, cwd);
+        const pf = preflightFeature(env, cwd, options.spurArgv);
         if (pf) return writeFail(pf);
     }
     writeFileSync(abs(relStatusFile), 'PASS\n');
@@ -236,11 +238,11 @@ function sortedUniqueCodes(findings: PreflightFinding[]): string[] {
  * relaxes the later feature-transition / feature-verify gates, and uses the same `spurBin`
  * env as `runFeatureTransition`.
  */
-export function preflightFeature(env: WrapupStepsEnv, cwd?: string): string | null {
+export function preflightFeature(env: WrapupStepsEnv, cwd?: string, spurArgv?: readonly string[]): string | null {
     const feature = env.feature ?? '';
     const abs = (p: string): string => (cwd ? join(cwd, p) : p);
 
-    const syncOut = spur(env, ['feature', 'sync', feature, '--dry-run', '--json'], { cwd });
+    const syncOut = spur(env, ['feature', 'sync', feature, '--dry-run', '--json'], { cwd, spurArgv });
     let sync: PreflightSyncPayload | undefined;
     if (syncOut.status === 0) {
         try {
@@ -272,7 +274,7 @@ export function preflightFeature(env: WrapupStepsEnv, cwd?: string): string | nu
     const reachesDone = proposal.to === 'done' || (proposal.hops ?? []).includes('done');
     if (!reachesDone) return null;
 
-    const checkOut = spur(env, ['feature', 'check', feature, '--strict', '--as', 'done', '--json'], { cwd });
+    const checkOut = spur(env, ['feature', 'check', feature, '--strict', '--as', 'done', '--json'], { cwd, spurArgv });
     let check: unknown;
     try {
         check = JSON.parse(checkOut.stdout);
@@ -470,7 +472,7 @@ export function runMetrics(env: WrapupStepsEnv, options: WrapupStepsOptions = {}
 
     let metricsRc = 0;
     for (const wbs of captured as string[]) {
-        const shown = spur(env, ['task', 'show', wbs, '--json'], { cwd });
+        const shown = spur(env, ['task', 'show', wbs, '--json'], { cwd, spurArgv: options.spurArgv });
         const lookup = shown.status === 0 ? taskStatusOf(shown.stdout) : { resolved: null, present: false };
         if (!lookup.present) {
             echoError(
@@ -613,12 +615,16 @@ export function runFeatureTransition(env: WrapupStepsEnv, options: WrapupStepsOp
     // so the bounded-wrapper resolution branches are gone.
     let syncOutput = '';
     let syncRc = 1;
-    const sync = spur(env, ['feature', 'sync', feature, '--json'], { cwd, stderr: 'inherit' });
+    const sync = spur(env, ['feature', 'sync', feature, '--json'], {
+        cwd,
+        spurArgv: options.spurArgv,
+        stderr: 'inherit',
+    });
     syncOutput = sync.stdout;
     syncRc = sync.status;
     echo(`${syncOutput}`);
 
-    const shown = spur(env, ['feature', 'show', feature, '--json'], { cwd });
+    const shown = spur(env, ['feature', 'show', feature, '--json'], { cwd, spurArgv: options.spurArgv });
     let observed = '';
     if (shown.status === 0) {
         try {

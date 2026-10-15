@@ -42,6 +42,8 @@ export interface DriftProbeEnv {
 export interface DriftProbeOptions {
     /** Base directory for `.spur/run`; defaults to the process cwd. */
     cwd?: string;
+    /** Lossless CLI default launch. */
+    spurArgv?: readonly string[];
 }
 
 /** Minimal spawnable spur surface — tests fake this to return canned `task show` output. */
@@ -163,8 +165,9 @@ export function driftReasonForPath(path: string): string | null {
     return match ? `matches doc-owned surface ${match.glob}` : null;
 }
 
-function defaultSpurRunner(env: DriftProbeEnv, cwd?: string): SpurRunner {
-    const { cmd, prefix } = spurCommand(env.spurBin);
+function defaultSpurRunner(env: DriftProbeEnv, options: DriftProbeOptions): SpurRunner {
+    const cwd = options.cwd;
+    const { cmd, prefix } = spurCommand(env.spurBin, options.spurArgv);
     return (args: string[]): SpurShowResult => {
         const run = spawnSync(cmd, [...prefix, ...args], {
             cwd,
@@ -183,7 +186,7 @@ function defaultSpurRunner(env: DriftProbeEnv, cwd?: string): SpurRunner {
 export function runDriftProbe(
     env: DriftProbeEnv,
     options: DriftProbeOptions = {},
-    spur = defaultSpurRunner(env, options.cwd),
+    spur = defaultSpurRunner(env, options),
 ): DriftProbeResult {
     const cwd = options.cwd;
     const runId = env.__runId ?? '';

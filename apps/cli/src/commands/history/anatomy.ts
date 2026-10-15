@@ -5,6 +5,7 @@
  * `@gobing-ai/spur-app/history-anatomy-cli`: the op keeps its own argv grammar and exit codes.
  */
 import type { Command } from '@commander-js/extra-typings';
+import { acceptArtifactId } from '../../artifact-id';
 import type { CliContext } from '../../context';
 import { writeStepText } from '../task/step-output';
 
@@ -39,6 +40,9 @@ export function registerHistoryAnatomyCommand(history: Command, context: CliCont
         .allowExcessArguments(true)
         .argument('[argv...]', 'op and its flags (see description)')
         .action(async (argv: string[]) => {
+            for (let i = 0; i < argv.length; i++) {
+                if (argv[i] === '--run-id' && !acceptArtifactId(argv[i + 1] ?? '', 'run id', context)) return;
+            }
             const { runCacheCli } = await import('@gobing-ai/spur-app/history-anatomy-cli');
             const result = runCacheCli(argv, {
                 helper: spurEntryPath(),

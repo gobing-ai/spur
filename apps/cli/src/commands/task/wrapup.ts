@@ -1,6 +1,7 @@
 import type { Command } from '@commander-js/extra-typings';
+import { acceptArtifactId } from '../../artifact-id';
 import type { CliContext } from '../../context';
-import { resolveSpurBin } from '../../workflow/resolve-spur-bin';
+import { resolveSpurArgv, resolveSpurBin } from '../../workflow/resolve-spur-bin';
 
 /** Every `spur task wrapup` operation (the seven steps plus the drift probe), in help order. */
 const WRAPUP_OPS = [
@@ -64,8 +65,10 @@ export function registerTaskWrapupCommand(task: Command, context: CliContext): v
                 ['spurBin', options.spurBin],
             ];
             for (const [key, value] of overrides) if (value !== undefined) env[key] = value;
+            if (env.__runId && !acceptArtifactId(env.__runId, 'run id', context)) return;
+            const spurArgv = env.spurBin === undefined ? resolveSpurArgv() : undefined;
             env.spurBin ??= resolveSpurBin();
-            const runOptions = { cwd: context.cwd };
+            const runOptions = { cwd: context.cwd, spurArgv };
             if (op === 'drift-probe') {
                 context.setExitCode(runDriftProbe(env, runOptions).exitCode);
                 return;

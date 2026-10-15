@@ -15,6 +15,7 @@ import {
     commitGuardStart,
     commitGuardUsage,
 } from '@gobing-ai/spur-app/commit-guard';
+import { acceptArtifactId } from '../../artifact-id';
 import type { CliContext } from '../../context';
 
 type GuardContext = Pick<CliContext, 'cwd' | 'output' | 'setExitCode'>;
@@ -27,8 +28,14 @@ export function registerWorkflowCommitGuardCommand(workflow: Command, context: G
         context.setExitCode(report.exitCode);
     };
     /** A missing `--run` is the guard's own usage line (exit 1), not a Commander error. */
-    const withRun = (run: string | undefined, guarded: (run: string) => CommitGuardReport): void =>
-        emit(run === undefined || run === '' ? commitGuardUsage() : guarded(run));
+    const withRun = (run: string | undefined, guarded: (run: string) => CommitGuardReport): void => {
+        if (run === undefined || run === '') {
+            emit(commitGuardUsage());
+            return;
+        }
+        if (!acceptArtifactId(run, 'run id', context)) return;
+        emit(guarded(run));
+    };
 
     const guard = workflow
         .command('commit-guard')

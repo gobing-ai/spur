@@ -1,4 +1,5 @@
 import type { Command } from '@commander-js/extra-typings';
+import { acceptArtifactId } from '../../artifact-id';
 import type { CliContext } from '../../context';
 import { SHARED_OPTIONS } from '../shared-options';
 import { makeService } from './shared';
@@ -27,6 +28,7 @@ export function registerTaskResidualCommand(task: Command, context: CliContext):
         .option('--tmp-dir <dir>', 'Staging directory scanned for <wbs>-* residue (default: OS tmpdir)')
         .option(...SHARED_OPTIONS.folderTasks)
         .action(async (wbs, step, options) => {
+            if (!acceptArtifactId(wbs, 'task WBS', context)) return;
             const { residualScanMain } = await import('@gobing-ai/spur-app/residual-scan-run');
             const argv = [step, wbs];
             if (options.root !== undefined) argv.push('--root', options.root);

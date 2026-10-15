@@ -15,6 +15,8 @@ export interface IdeaHandoffCliEnv {
     featureId?: string;
     /** PATH-independent spur invocation resolved by the CLI at run start. */
     spurBin?: string;
+    /** Lossless CLI default launch. */
+    spurArgv?: readonly string[];
 }
 
 /** Outcome of one entrypoint invocation: the process exit code plus the underlying result. */
@@ -49,7 +51,12 @@ export async function runIdeaHandoffCli(
         return { exitCode: 1 };
     }
 
-    const result = await run({ runId, featureId, spurBin: env.spurBin ?? 'spur' });
+    const result = await run({
+        runId,
+        featureId,
+        spurBin: env.spurBin ?? 'spur',
+        ...(env.spurArgv === undefined ? {} : { spurArgv: env.spurArgv }),
+    });
     if (!result.ok) {
         echoError(`idea-handoff: ${result.error ?? 'failed'}`);
         return { exitCode: 1, result };
