@@ -1,23 +1,18 @@
 #!/usr/bin/env bun
 /**
  * commit-guard — refuse a driver commit that would sweep a *foreign* writer's working-tree changes
- * (task 1129, feature H1). Incidents: `a94f9f431` (a batch pipeline commit swept another session's
- * uncommitted files) and `36f274590` (a close-out commit swept two other tasks' files through
- * `git add -A`). The runbooks already said "stage only what the batch wrote"; nothing enforced it.
- *
+ * (task 1129, feature H1; incidents `a94f9f431`, `36f274590` — commits swept other sessions' files).
  * Read/write `.spur/run/<id>-tree-start.json`; stage only the listed paths this run wrote; report
- * the ones it did not. "Written by this run" = "changed since base" (task-diffstat semantics) minus
- * start-dirty paths whose content still matches the start snapshot — a path dirty at start and
- * untouched by the run belongs to another writer. Exit codes: 0 = staged all requested · 2 = some
- * refused as foreign · 3 = conflict or unmerged target (nothing staged) · 1 = mis-invocation, or a
- * missing start snapshot (`start` first).
- *
+ * the rest. "Written by this run" = "changed since base" (task-diffstat semantics) minus start-dirty
+ * paths whose content still matches the snapshot — a path dirty at start and untouched by the run
+ * belongs to another writer. Exit codes: 0 = staged all requested · 2 = some refused as foreign ·
+ * 3 = conflict or unmerged target (nothing staged) · 1 = mis-invocation, a missing start snapshot
+ * (`start` first), or a failed Git safety probe (nothing staged/reported).
  * `node:*` builtins and relative imports only (sp-plugin-standalone); `options.git` is the test
  * seam; `.spur/` is excluded from both sets (run bookkeeping is not product work — task-diffstat).
- *
- * shortcut: a foreign edit to a path that was CLEAN at `start` is indistinguishable from this run's
- * own write — git records content, not authorship — so it is caught only once it is dirty in the
- * start snapshot. Upgrade path: a per-run write journal if that case ever recurs.
+ * shortcut: a foreign edit to a path CLEAN at `start` is indistinguishable from this run's own
+ * write — git records content, not authorship — caught only once dirty at start. Upgrade: a
+ * per-run write journal if that case recurs.
  */
 
 import { spawnSync } from 'node:child_process';
@@ -41,23 +36,17 @@ export interface TreeStart {
     /** Working-file blob hashes at start; `sha` is null when the path did not exist. */
     dirty: Array<{ path: string; sha: string | null }>;
 }
-/** `exitCode` is what `main` returns: 0 all staged · 2 some refused · 3 conflict · 1 usage. */
+/** `exitCode` is what `main` returns: 0 all staged · 2 some refused · 3 conflict · 1 usage or a failed Git probe. */
 export type StageResult = { staged: string[]; foreign: string[]; exitCode: number };
 
 export const COMMIT_GUARD_USAGE =
     'usage: commit-guard start --run <id> | stage --run <id> [--base <sha>] -- <paths…> | check --run <id>';
 
 /** Run bookkeeping is not product work — neither set may contain it (task-diffstat's rule). */
-function isBookkeeping(path: string): boolean {
-    return path === '.spur' || path.startsWith('.spur/');
-}
+const isBookkeeping = (path: string): boolean => path === '.spur' || path.startsWith('.spur/');
 /** Probe/artifact paths are repo-relative; `cwd` only anchors them for tests and callers. */
-function at(options: GuardOptions, rel: string): string {
-    return options.cwd ? join(options.cwd, rel) : rel;
-}
-function artifactPath(run: string): string {
-    return join('.spur', 'run', `${run}-tree-start.json`);
-}
+const at = (options: GuardOptions, rel: string): string => (options.cwd ? join(options.cwd, rel) : rel);
+const artifactPath = (run: string): string => join('.spur', 'run', `${run}-tree-start.json`);
 function gitOf(options: GuardOptions): GitRunner {
     if (options.git) return options.git;
     return (args: string[]): GitRunResult => {
@@ -70,8 +59,7 @@ function hashPath(path: string, git: GitRunner): string | null {
     const run = git(['hash-object', '--', path]);
     return run.status === 0 ? run.stdout.trim() : null;
 }
-/** Paths from `git status --porcelain=v1 -z` (`XY <path>` entries; a rename's source token is
- * consumed, not registered). */
+/** Paths from `git status --porcelain=v1 -z` (`XY <path>` entries; a rename's source token is consumed, not registered). */
 export function parsePorcelainZ(stdout: string): string[] {
     const tokens = stdout.split('\u0000');
     const paths: string[] = [];
@@ -95,11 +83,13 @@ export function conflictMarkerLine(content: string): boolean {
     }
     return opener;
 }
-/** "Changed since base" (task-diffstat semantics): tracked changes + untracked, minus bookkeeping. */
+/** "Changed since base" (task-diffstat semantics): tracked changes + untracked, minus bookkeeping.
+ * A failed probe throws (1209): an empty set would certify a tree the guard never actually saw. */
 function changedSinceBase(base: string, git: GitRunner): Set<string> {
     const tracked = git(['diff', '--name-only', base]);
+    if (tracked.status !== 0) throw new Error(`git diff --name-only failed (status ${tracked.status})`);
     const others = git(['ls-files', '--others', '--exclude-standard', '-z']);
-    if (tracked.status !== 0 || others.status !== 0) return new Set();
+    if (others.status !== 0) throw new Error(`git ls-files --others failed (status ${others.status})`);
     const clean = (out: string, sep: string): string[] =>
         out
             .split(sep)
@@ -116,8 +106,7 @@ function readTreeStart(run: string, options: GuardOptions): TreeStart | null {
     }
     return null;
 }
-/** Start snapshot + resolved base + the paths this run wrote: "changed since base", keeping only
- * start-dirty paths whose content its own edits changed. */
+/** Start snapshot + resolved base + the paths this run wrote: "changed since base" minus start-dirty paths unchanged since. */
 function runContext(run: string, options: GuardOptions) {
     const git = gitOf(options);
     const start = readTreeStart(run, options);
@@ -159,13 +148,12 @@ export function runStart(run: string, options: GuardOptions = {}): number {
     renameSync(`${abs}.tmp`, abs); // atomic: a concurrent reader never sees a half-written snapshot
     return 0;
 }
-/** The first path that is unmerged or carries conflict markers, or null (R4, fail closed). */
+/** The first path that is unmerged or carries conflict markers, or null (R4, fail closed).
+ * The unmerged probe is a safety gate too: a failed one throws instead of staging blind (1209 R2). */
 function conflictingTarget(paths: string[], options: GuardOptions, git: GitRunner): string | null {
-    const unmerged = new Set(
-        git(['diff', '--name-only', '--diff-filter=U'])
-            .stdout.split('\n')
-            .map((p) => p.trim()),
-    );
+    const probe = git(['diff', '--name-only', '--diff-filter=U']);
+    if (probe.status !== 0) throw new Error(`git diff --name-only --diff-filter=U failed (status ${probe.status})`);
+    const unmerged = new Set(probe.stdout.split('\n').map((p) => p.trim()));
     for (const path of paths) {
         if (unmerged.has(path)) return `${path} (unmerged)`;
         try {
@@ -176,15 +164,28 @@ function conflictingTarget(paths: string[], options: GuardOptions, git: GitRunne
     }
     return null;
 }
+/** Print the usage line and report exit 1 — shared by runStage's empty-path guard and `main`. */
+function usageError(): number {
+    process.stderr.write(`${COMMIT_GUARD_USAGE}\n`);
+    return 1;
+}
+/** One diagnostic for any failed safety probe: the tree state is unproven, so nothing else happens. */
+function probeDiagnostic(err: unknown): string {
+    const detail = err instanceof Error ? err.message : String(err);
+    return `commit-guard: git probe failed (${detail}) — tree state unproven, nothing staged or reported\n`;
+}
 /** Stage only the listed paths this run wrote (R2) and print `{staged, foreign}` (AC1). */
 export function runStage(run: string, paths: string[], options: GuardOptions = {}): StageResult {
-    if (paths.length === 0) {
-        process.stderr.write(`${COMMIT_GUARD_USAGE}\n`);
+    if (paths.length === 0) return { staged: [], foreign: [], exitCode: usageError() };
+    let context: ReturnType<typeof runContext>, conflict: string | null;
+    try {
+        context = runContext(run, options);
+        if (!context) return { staged: [], foreign: [], exitCode: missingStart(run) };
+        conflict = conflictingTarget(paths, options, context.git);
+    } catch (err) {
+        process.stderr.write(probeDiagnostic(err)); // 1209 R2: git add is never reached after a failed probe
         return { staged: [], foreign: [], exitCode: 1 };
     }
-    const context = runContext(run, options);
-    if (!context) return { staged: [], foreign: [], exitCode: missingStart(run) };
-    const conflict = conflictingTarget(paths, options, context.git);
     if (conflict) {
         process.stderr.write(`commit-guard: refusing to stage ${conflict}; nothing staged\n`);
         return { staged: [], foreign: [], exitCode: 3 };
@@ -206,13 +207,17 @@ export function runStage(run: string, paths: string[], options: GuardOptions = {
 }
 /** Report the working-tree changes this run did not write, staging nothing (R3). */
 export function runCheck(run: string, options: GuardOptions = {}): number {
-    const context = runContext(run, options);
-    if (!context) return missingStart(run);
-    const foreign = [...changedSinceBase(context.base, context.git)]
-        .filter((path) => !context.written.has(path))
-        .sort();
-    process.stdout.write(`${JSON.stringify({ foreign })}\n`);
-    return 0;
+    try {
+        const context = runContext(run, options); // first changed-path scan
+        if (!context) return missingStart(run);
+        const { base, git, written } = context; // second changed-path scan — guarded too (1209 R1)
+        const foreign = [...changedSinceBase(base, git)].filter((path) => !written.has(path)).sort();
+        process.stdout.write(`${JSON.stringify({ foreign })}\n`);
+        return 0;
+    } catch (err) {
+        process.stderr.write(probeDiagnostic(err)); // a failed probe emits no success JSON (R1)
+        return 1;
+    }
 }
 /** Pull one `--flag value` pair out of argv, or undefined when absent (a missing value is usage). */
 function takeFlag(args: string[], name: string): string | undefined {
@@ -226,24 +231,18 @@ export function main(argv: string[], options: GuardOptions = {}): number {
     const args = [...argv];
     takeFlag(args, '--spur-bin'); // 0482 R2: pipelines hand every plugin script this flag
     const sub = args.shift();
-    const run = takeFlag(args, '--run');
-    const base = takeFlag(args, '--base');
-    const usage = (): number => {
-        process.stderr.write(`${COMMIT_GUARD_USAGE}\n`);
-        return 1;
-    };
-    if (!run) return usage();
-    if (sub === 'start') return args.length === 0 ? runStart(run, options) : usage();
-    if (sub === 'check') return args.length === 0 ? runCheck(run, { ...options, base }) : usage();
+    const run = takeFlag(args, '--run'),
+        base = takeFlag(args, '--base');
+    if (!run) return usageError();
+    if (sub === 'start') return args.length === 0 ? runStart(run, options) : usageError();
+    if (sub === 'check') return args.length === 0 ? runCheck(run, { ...options, base }) : usageError();
     if (sub === 'stage')
         return runStage(
             run,
             args.filter((arg) => arg !== '--'),
             { ...options, base },
         ).exitCode;
-    return usage();
+    return usageError();
 }
 
-if (import.meta.main) {
-    process.exit(main(process.argv.slice(2)));
-}
+if (import.meta.main) process.exit(main(process.argv.slice(2)));
