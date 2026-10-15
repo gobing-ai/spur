@@ -3,7 +3,7 @@ kind: plan
 title: Spur script absorption — scripts/, plugins/sp/{hooks,scripts,lib} → `spur <noun> <verb>`
 status: draft (planning only — no code changed)
 created_at: 2026-10-14
-updated_at: 2026-10-14
+updated_at: 2026-10-15
 tags: [plan, architecture, scripts, hooks, cli]
 base: origin/main @ ed29340f8 (release 0.4.8)
 superskill_base: origin/main @ a480736 (@gobing-ai/superskill 0.3.37)
@@ -11,6 +11,28 @@ related: [A9, A91, ADR-130, ADR-129, ADR-065, ADR-051]
 ---
 
 # Spur script absorption plan
+
+## Revision 2026-10-15 (owner decision: new boundary)
+
+- **Boundary.** superskill (separate repo) is the generic foundation for agent skills and hooks. spur is the harness toolkit.
+- **Hooks stay in the sp plugin.** Their logic stays where it is on `main`:
+  - `plugins/sp/hooks/*.ts` and `plugins/sp/hooks/pi/guard-extension.ts`;
+  - their `plugins/sp/lib` backing (`agent-hint`, `context-owner`, `context-{post-tool,session-start,session-stop}`, `destructive-policy`, `task-file-policy`).
+- **superskill runs the hooks.** It becomes a generic hook runner for them.
+- **Hooks may call spur.** They may keep calling ordinary spur commands (for example `spur task resolve`), as they already do.
+- **Withdrawn.** None of these will land:
+  - **PR-2a** (`spur self hook` + hook logic ported to `packages/app/src/hooks`, #16);
+  - **PR-2b** (plugin hooks routed through `spur self hook`, #18);
+  - **PR-L** (lazy CLI command loading + ESM bytecode compile, #17);
+  - **S-1 as designed** (superskill `spurDelegate` runners that delegate to `spur self hook`).
+- **PR-10 is moot as designed.** It existed to remove the context transition shims, and with PR-2b withdrawn there are no shims to remove.
+- **§5 (hook transport design) is superseded.** It is kept for the record only.
+- **Unchanged.** SKILL scripts (`plugins/sp/scripts/*.ts`, their `.mjs` twins and their `lib`/generated bundles) are still absorbed into `spur <noun> <verb>` per §3.4/§4:
+  - PR-review ops go under `spur builder`;
+  - `builder publish` and `bump-ver --check` come later (PR-9).
+- **New bases.** PR-3/4/5 no longer depend on PR-2a. They are re-landed directly on `main` as independent PRs.
+- **Dispositions in §3.3 and §3.5 updated.** Every `plugins/sp/hooks/` file and the hook-only lib files are now **K**. Reason: owner boundary — hook logic belongs to the plugin and is run generically by superskill.
+- **Superseded wording.** Where older text below says "ABSORB into `spur self hook`", this revision takes precedence.
 
 > **Execution status (2026-10-15).** PR-1 and PR-2a are in review. **Owner decisions:** Q1 — **no new nouns**. Hooks run as `spur self hook <id> [--host …]` and `spur self hook list` under the existing `self` noun, and the PR-review ops go under `builder` (`spur builder pr <op>`). Q2–Q7 are confirmed as recommended. This revision rewrites the earlier `spur hook run` / `spur pr` proposals accordingly.
 >
@@ -23,9 +45,9 @@ related: [A9, A91, ADR-130, ADR-129, ADR-065, ADR-051]
 
 | Directory | What remains |
 | --- | --- |
-| `plugins/sp/hooks/` | `hooks.json` plus **one** genuine wrapper: the Pi native extension |
+| `plugins/sp/hooks/` | Unchanged (Revision 2026-10-15): `hooks.json`, every hook entry and `pi/guard-extension.ts` |
 | `plugins/sp/scripts/` | **Nothing — deleted** |
-| `plugins/sp/lib/` | `env.ts` only |
+| `plugins/sp/lib/` | `env.ts` plus the hook-only backing libs (Revision 2026-10-15) |
 | repo-root `scripts/` | Spur-repo build, release and dev tooling only |
 
 **Headline counts** (live tree; every file is listed in §3):
@@ -35,13 +57,13 @@ related: [A9, A91, ADR-130, ADR-129, ADR-065, ADR-051]
 | `scripts/` (top level) | 5 | 0 | 0 | 0 | 4 | 1 (`test-shims/spur` → `tests/shims/`) |
 | `scripts/commands/*.ts` (non-test modules) | 34 | 5 | 5 | 0 | 24 | 0 |
 | `scripts/commands/*.test.ts` | 28 | 5 (subject deleted) | 3 (move with subject) | 0 | 20 | 0 |
-| `plugins/sp/hooks/` | 9 | 0 (see note) | 7 | 1 (`pi/guard-extension.ts`) | 1 (`hooks.json`) | 0 |
+| `plugins/sp/hooks/` | 9 | 0 | 0 | 0 | 9 (Revision 2026-10-15) | 0 |
 | `plugins/sp/scripts/` (`.ts` sources) | 22 | 1 (`script-root`) | 21 | 0 | 0 | 0 |
 | `plugins/sp/scripts/` (`.mjs` twins) | 22 | 22 (generated) | — | — | — | — |
-| `plugins/sp/lib/` hand-written `.ts` | 14 | 2 (`inline-run-app`, `spur-bin`) | 11 | 0 | 1 (`env.ts`) | 0 |
+| `plugins/sp/lib/` hand-written `.ts` | 14 | 2 (`inline-run-app`, `spur-bin`) | 4 | 0 | 8 (`env.ts` + 7 hook-only libs, Revision 2026-10-15) | 0 |
 | `plugins/sp/lib/*.generated.{mjs,d.mts}` | 14 | 14 (generated) | — | — | — | — |
 
-Note on hooks: ABSORB means the logic moves into `spur self hook <id>` and the file is deleted afterwards. Three of them, `hooks/context-{post-tool,session-start,session-stop}.ts`, cannot be deleted straight away. They live on as ≤10-line spawn shims until the superskill floor is raised (§5.2), and PR-10 deletes them.
+Note on hooks (Revision 2026-10-15): every hook file is KEEP. Hook logic belongs to the plugin and is run generically by superskill, so nothing under `plugins/sp/hooks/` moves into spur.
 
 **Net effect.**
 
@@ -253,15 +275,15 @@ Test-only files (no module of the same name):
 
 | File | LOC | What it does | Runtime callers (evidence) | Spur equivalent today | Disp. | Target |
 | --- | ---: | --- | --- | --- | :-: | --- |
-| `agent-lifecycle.ts` | 155 | Maps the host event to `idle`/`working`/`blocked`; when `SPUR_SPEC_ID` is set, spawns a detached `spur agent report --state --seq` | Wired in `hooks.json` for 4 events, **but superskill has no `sp/agent-lifecycle` runner, so it is a no-op today**. The Pi extension imports `reportLifecycleHook` | `spur agent report` (the side effect) | **A** | `spur self hook agent-lifecycle`. The core (`lifecycleStateFor`, `reportSeq`) → `packages/app/src/hooks/agent-lifecycle.ts`. The report calls the same app service as `agent report`, in-process and fail-open. Registering the delegate in superskill (S-1) fixes the no-op |
-| `careful-guard.ts` | 74 | PreToolUse `ask` before destructive Bash commands | **Not wired** (README: "opt-in, unwired"). Pi uses `lib/destructive-policy` directly | none | **A** | `spur self hook careful-guard`. Stays opt-in, documented as a `hooks.json` snippet `superskill hook run sp careful-guard` (needs the S-1 runner). Policy → `packages/app/src/hooks/destructive-policy.ts` |
-| `context-post-tool.ts` | 28 | stdin adapter → `recordToolUseEvent` in `lib/context-post-tool` | `hooks.json` PostToolUse. **Superskill imports this file path in-process and needs the export `recordToolUseEvent`** | `TokenLedgerService` reads the ledger (`packages/app/src/services/token-ledger-service.ts`) | **A** (transitional shim until PR-10) | `spur self hook context-post-tool`. The writer moves next to the reader in `packages/app/src/services/context-ledger/`. PR-2b reduces this file to a ≤10-line shim that keeps the export and spawns `spur self hook`, so superskill ≤0.3.37 keeps working. PR-10 deletes it |
-| `context-session-start.ts` | 19 | stdin adapter → `recordSessionStartFromPayloadText` | Same as above (export `recordSessionStartFromPayloadText`) | — | **A** (transitional shim) | `spur self hook context-session-start` |
-| `context-session-stop.ts` | 19 | stdin adapter → `recordSessionEndFromPayloadText` | Same as above | — | **A** (transitional shim) | `spur self hook context-session-stop` |
-| `fleet-guest-stop.ts` | 180 | On Stop, delivers a joined guest's pending fleet inbox (`decision:block`) | `hooks.json` Stop, **but no superskill runner, so a no-op today** | `spur agent wait --inbox` plus `spur message inbox` (it shells out to both) | **A** | `spur self hook fleet-guest-stop`. Logic → `packages/app/src/hooks/fleet-guest-stop.ts`, calling `FleetGuestService` and the message services in-process, so there is no double spawn |
-| `hooks.json` | 95 | Canonical hook config | superskill install (native and rulesync) | — | K | Required artifact for superskill and Claude native install. Commands stay `superskill hook run sp <id>`. PR-10 adds `"minCliVersion": "<S-1 release>"` |
-| `pi/guard-extension.ts` | 304 | Native Pi extension: write guard, careful guard, context capture, lifecycle | `plugin.json` `extensions.pi` (Pi loads it in-process) | — | **W** | Cannot be inlined: Pi requires a TS extension module that exports `default(pi)`; guards must return `{block}` or use `ctx.ui.confirm`; and `hooks.json` has no form for blocking on Pi (superskill drops matchers when converting to pi-hooks). Target shape in §5.3 (about 70 lines) |
-| `task-write-guard.ts` | 89 | PreToolUse: denies a raw Write/Edit to a task file | **No runtime caller.** Superskill implements `sp/task-write-guard` itself (`runSpTaskWriteGuard`) and never loads this file; Pi imports `lib/task-file-policy`, not this file | `spur task resolve --strict --json` | **A** (file D in PR-2b) | `spur self hook task-write-guard` (deny shaped per host). S-1 switches superskill's runner to delegate here, so the guard text lives in one place. Evidence the file is dead: the imports in superskill's `hook-run.ts` and in `guard-extension.ts` |
+| `agent-lifecycle.ts` | 155 | Maps the host event to `idle`/`working`/`blocked`; when `SPUR_SPEC_ID` is set, spawns a detached `spur agent report --state --seq` | Wired in `hooks.json` for 4 events, **but superskill has no `sp/agent-lifecycle` runner, so it is a no-op today**. The Pi extension imports `reportLifecycleHook` | `spur agent report` (the side effect) | **K** | KEEP — owner boundary (Revision 2026-10-15): hook logic belongs to the plugin, run generically by superskill. Unchanged from `main` |
+| `careful-guard.ts` | 74 | PreToolUse `ask` before destructive Bash commands | **Not wired** (README: "opt-in, unwired"). Pi uses `lib/destructive-policy` directly | none | **K** | KEEP — owner boundary (Revision 2026-10-15): hook logic belongs to the plugin, run generically by superskill. Unchanged from `main` |
+| `context-post-tool.ts` | 28 | stdin adapter → `recordToolUseEvent` in `lib/context-post-tool` | `hooks.json` PostToolUse. **Superskill imports this file path in-process and needs the export `recordToolUseEvent`** | `TokenLedgerService` reads the ledger (`packages/app/src/services/token-ledger-service.ts`) | **K** | KEEP — owner boundary (Revision 2026-10-15): hook logic belongs to the plugin, run generically by superskill. Unchanged from `main` |
+| `context-session-start.ts` | 19 | stdin adapter → `recordSessionStartFromPayloadText` | Same as above (export `recordSessionStartFromPayloadText`) | — | **K** | KEEP — owner boundary (Revision 2026-10-15): hook logic belongs to the plugin, run generically by superskill. Unchanged from `main` |
+| `context-session-stop.ts` | 19 | stdin adapter → `recordSessionEndFromPayloadText` | Same as above | — | **K** | KEEP — owner boundary (Revision 2026-10-15): hook logic belongs to the plugin, run generically by superskill. Unchanged from `main` |
+| `fleet-guest-stop.ts` | 180 | On Stop, delivers a joined guest's pending fleet inbox (`decision:block`) | `hooks.json` Stop, **but no superskill runner, so a no-op today** | `spur agent wait --inbox` plus `spur message inbox` (it shells out to both) | **K** | KEEP — owner boundary (Revision 2026-10-15): hook logic belongs to the plugin, run generically by superskill. Unchanged from `main` |
+| `hooks.json` | 95 | Canonical hook config | superskill install (native and rulesync) | — | **K** | KEEP — owner boundary (Revision 2026-10-15): hook logic belongs to the plugin, run generically by superskill. Unchanged from `main` |
+| `pi/guard-extension.ts` | 304 | Native Pi extension: write guard, careful guard, context capture, lifecycle | `plugin.json` `extensions.pi` (Pi loads it in-process) | — | **K** | KEEP — owner boundary (Revision 2026-10-15): hook logic belongs to the plugin, run generically by superskill. Unchanged from `main` |
+| `task-write-guard.ts` | 89 | PreToolUse: denies a raw Write/Edit to a task file | **No runtime caller.** Superskill implements `sp/task-write-guard` itself (`runSpTaskWriteGuard`) and never loads this file; Pi imports `lib/task-file-policy`, not this file | `spur task resolve --strict --json` | **K** | KEEP — owner boundary (Revision 2026-10-15): hook logic belongs to the plugin, run generically by superskill. Unchanged from `main` |
 
 ### 3.4 `plugins/sp/scripts/` (all invoked via `superskill script path` / `script-root`; `.mjs` twins listed after)
 
@@ -296,19 +318,19 @@ Test-only files (no module of the same name):
 
 | File | LOC | What it does | Importers | Disp. | Target |
 | --- | ---: | --- | --- | :-: | --- |
-| `agent-hint.ts` | 61 | Detects the host agent and model | `lib/context-session-start` | A | `packages/app/src/hooks/agent-hint.ts` |
-| `context-owner.ts` | 56 | Derives the host-native session owner from the payload | `lib/context-session-*`, Pi extension | A | `packages/app/src/services/context-ledger/owner.ts` |
-| `context-post-tool.ts` | 432 | Writes ledger events: token cascade, redaction, freshness | hook, Pi, `lib/context-session-start` | A | `…/context-ledger/record-tool-use.ts` |
-| `context-session-start.ts` | 214 | Session pointer and `session_start` event | hook, Pi | A | `…/context-ledger/session-start.ts` |
-| `context-session-stop.ts` | 196 | `session_end` rollup, gated on the owner | hook, Pi | A | `…/context-ledger/session-stop.ts` |
-| `destructive-policy.ts` | 146 | Classifies destructive commands | careful-guard, Pi | A | `packages/app/src/hooks/destructive-policy.ts` (pure; could move to `packages/domain` if a second consumer appears) |
+| `agent-hint.ts` | 61 | Detects the host agent and model | `lib/context-session-start` | **K** | KEEP — owner boundary (Revision 2026-10-15): hook logic belongs to the plugin, run generically by superskill. Unchanged from `main` |
+| `context-owner.ts` | 56 | Derives the host-native session owner from the payload | `lib/context-session-*`, Pi extension | **K** | KEEP — owner boundary (Revision 2026-10-15): hook logic belongs to the plugin, run generically by superskill. Unchanged from `main` |
+| `context-post-tool.ts` | 432 | Writes ledger events: token cascade, redaction, freshness | hook, Pi, `lib/context-session-start` | **K** | KEEP — owner boundary (Revision 2026-10-15): hook logic belongs to the plugin, run generically by superskill. Unchanged from `main` |
+| `context-session-start.ts` | 214 | Session pointer and `session_start` event | hook, Pi | **K** | KEEP — owner boundary (Revision 2026-10-15): hook logic belongs to the plugin, run generically by superskill. Unchanged from `main` |
+| `context-session-stop.ts` | 196 | `session_end` rollup, gated on the owner | hook, Pi | **K** | KEEP — owner boundary (Revision 2026-10-15): hook logic belongs to the plugin, run generically by superskill. Unchanged from `main` |
+| `destructive-policy.ts` | 146 | Classifies destructive commands | careful-guard, Pi | **K** | KEEP — owner boundary (Revision 2026-10-15): hook logic belongs to the plugin, run generically by superskill. Unchanged from `main` |
 | `dogfood-pipeline.ts` | 265 | Detects pipeline-driving testees | dogfood script | A | `packages/app/src/services/dogfood/pipeline-detect.ts` |
 | `dogfood-report.ts` | 278 | Validates dogfood reports | dogfood script; mentioned by the `packages/domain` stage-registry | A | `packages/app/src/services/dogfood/report.ts` |
 | `env.ts` | 46 | Vendored env gateway for standalone plugin code | every hook, script and lib | **K** | Still needed by `hooks/pi/guard-extension.ts`, which must stay standalone: targets have no `node_modules`, so it cannot import `@gobing-ai/ts-utils`. The `env-var-hygiene` and `sp-plugin-standalone` rules require env access to go through this gateway. Shrinks to `getEnvVar` only |
 | `inline-run-app.ts` | 68 | Loads the source app or the `inline-run.generated.mjs` bundle; stale-bundle guard | inline scripts, daily-summary | **D** (PR-4/6) | A bundle loader with no bundle left. Comments and diagnostics in `packages/app/src/workflow/consumer-compat.ts` that reference it are updated |
 | `run-summary-core.ts` | 225 | Summary rendering, close callback, report writing | `run-summary` script | A | `packages/app/src/workflow/run-summary-render.ts` |
 | `spur-bin.ts` | 36 | `spurCommand` / `defaultSpurBin` helpers for scripts | residual-scan, step-profile, wrapup-* | **D** (PR-8) | Every importer is absorbed, and the CLI has its own resolver (`apps/cli` `resolve-spur-bin`). The Pi wrapper keeps its own 3-candidate resolution (§5.3) |
-| `task-file-policy.ts` | 31 | `couldBeTaskFile` pre-filter | task-write-guard, Pi | A | `packages/app/src/hooks/task-file-policy.ts`, used inside `spur self hook task-write-guard`. The superskill-side pre-filter (`couldBeTaskCorpusPath`) stays, so non-task paths never spawn spur |
+| `task-file-policy.ts` | 31 | `couldBeTaskFile` pre-filter | task-write-guard, Pi | **K** | KEEP — owner boundary (Revision 2026-10-15): hook logic belongs to the plugin, run generically by superskill. Unchanged from `main` |
 | `transcript.ts` | 112 | Resolves the host transcript, sniffs its format, parses rows | run-summary, session-timeline | A | `packages/app/src/workflow/transcript.ts` (or `services/history-transcript.ts`) |
 | `history-anatomy.generated.{mjs,d.mts}` | 691/112 | Bundle of `services/history-anatomy.ts` | history-anatomy-cache | D (PR-6) | Replaced by `spur history anatomy` |
 | `idea-handoff.generated.*` | 1446/17 | Bundle of `idea-handoff-cli.ts` | idea-handoff | D (PR-5) | Replaced by `spur feature handoff` |
@@ -650,22 +672,22 @@ Sizes are rough, as hand-written lines added and removed; generated deletions ar
 | PR | Repo | Scope | Size (hand / generated) | Depends on |
 | --- | --- | --- | --- | --- |
 | **PR-1** | spur | Delete `history-latency-measure`, `history-surface-freeze-check`, `run-storage-census` and `surface-drift-inventory` (the last only if I3 is closed), plus their tests and package-script entries. Move `scripts/test-shims/spur` → `tests/shims/spur` (3 refs + 1 doc) | +40 / −2.6k | — |
-| **PR-2a** | spur | `spur self hook <id>` / `self hook list` (thin CLI layer under `self`). Port the hook and lib logic into `packages/app/src/hooks`, with tests and a parity proof against the plugin hook files. Plugin files are unchanged (both paths live) | +2.2k | — (independent of PR-1) |
-| **PR-2b** | spur | Plugin hooks delegate: `hooks/context-*.ts` → transition shims; delete `agent-lifecycle`, `careful-guard`, `fleet-guest-stop`, `task-write-guard` and the 11 hook-only lib files; rewrite the Pi wrapper; README and ADR-130 amendment | +250 / −2.9k | PR-2a |
-| **S-1** | superskill | Generic `spurDelegate` runners (registers agent-lifecycle, fleet-guest-stop, careful-guard); remove `loadSpPluginDelegate` and the drifted copies; release | +200 / −450 | PR-2a released |
-| **PR-3** | spur | `task gate`, `task residual`, `task diffstat`; task-pipeline YAML + verification docs; delete those 3 scripts + twins + `quality-gate`/`residual-scan` bundles | +900 / −1.0k (−31k gen) | PR-2a |
-| **PR-4** | spur | `workflow inline` (all ops, incl. persist-check and dispatch), `workflow commit-guard`; driver and worktree references; delete those scripts + twins | +1.3k / −1.0k (−3k gen) | PR-2a |
-| **PR-5** | spur | `task wrapup` (incl. drift-probe), `feature verify`, `feature handoff`, `task preflight`, `task batch-plan`; wrapup, idea and feature-verification YAML; delete the idea-handoff bundle | +1.5k / −1.4k (−3.5k gen) | PR-2a |
+| ~~**PR-2a**~~ (withdrawn 2026-10-15) | spur | `spur self hook <id>` / `self hook list` (thin CLI layer under `self`). Port the hook and lib logic into `packages/app/src/hooks`, with tests and a parity proof against the plugin hook files. Plugin files are unchanged (both paths live) | +2.2k | — (independent of PR-1) |
+| ~~**PR-2b**~~ (withdrawn 2026-10-15) | spur | Plugin hooks delegate: `hooks/context-*.ts` → transition shims; delete `agent-lifecycle`, `careful-guard`, `fleet-guest-stop`, `task-write-guard` and the 11 hook-only lib files; rewrite the Pi wrapper; README and ADR-130 amendment | +250 / −2.9k | PR-2a |
+| ~~**S-1**~~ (withdrawn as designed 2026-10-15; superskill becomes the generic hook runner instead) | superskill | Generic `spurDelegate` runners (registers agent-lifecycle, fleet-guest-stop, careful-guard); remove `loadSpPluginDelegate` and the drifted copies; release | +200 / −450 | PR-2a released |
+| **PR-3** | spur | `task gate`, `task residual`, `task diffstat`; task-pipeline YAML + verification docs; delete those 3 scripts + twins + `quality-gate`/`residual-scan` bundles | +900 / −1.0k (−31k gen) | — (was PR-2a; Revision 2026-10-15) |
+| **PR-4** | spur | `workflow inline` (all ops, incl. persist-check and dispatch), `workflow commit-guard`; driver and worktree references; delete those scripts + twins | +1.3k / −1.0k (−3k gen) | — (was PR-2a; Revision 2026-10-15) |
+| **PR-5** | spur | `task wrapup` (incl. drift-probe), `feature verify`, `feature handoff`, `task preflight`, `task batch-plan`; wrapup, idea and feature-verification YAML; delete the idea-handoff bundle | +1.5k / −1.4k (−3.5k gen) | — (was PR-2a; Revision 2026-10-15) |
 | **PR-6** | spur | `history anatomy\|timeline\|summary`, `workflow summary\|profile`; history-anatomy YAML; delete the remaining bundles (`history-anatomy`, `step-profile`, `plan-projection`, `inline-run`) and `lib/inline-run-app.ts`, `transcript.ts`, `run-summary-core.ts` | +2.3k / −2.6k (−5k gen) | PR-4, PR-5 |
-| **PR-7** | spur | `builder pr`, `agent dogfood`; pr-review YAML + skills; delete pr-reviewing and dogfood scripts + libs | +1.5k / −1.7k (−2k gen) | PR-2a |
+| **PR-7** | spur | `builder pr`, `agent dogfood`; pr-review YAML + skills; delete pr-reviewing and dogfood scripts + libs | +1.5k / −1.7k (−2k gen) | — (was PR-2a; Revision 2026-10-15) |
 | **PR-8** | spur | Retire the script infrastructure: delete `script-root`, `lib/spur-bin.ts`, `bundle-plugin-lib` (+test), `config/plugin-scripts.json`, `script-placement-baseline.json`, `build:plugin-lib`/`build:scripts`; rewrite `script-contract-check` and the `sp-script-placement` rule; simplify `plugin-install-smoke`/`verify-pack`/`bundle-plugins` | +300 / −2.6k | PR-3 to PR-7 |
 | **PR-9** | spur | `self migrate --check`, `workflow cost [--budget]`; if Q5 is approved, `builder publish` and `bump-ver --check` (with new tests); shrink `spur-dev`; update `publish.yml` | +900 / −700 | PR-1 (any time) |
-| **PR-10** | spur | `hooks.json` `minCliVersion`; delete the context shims + transition-shim entry; bump superskill pins (`package.json` plugin-smoke, `publish.yml`) | +30 / −80 | S-1 released |
+| ~~**PR-10**~~ (moot as designed 2026-10-15: no context shims exist) | spur | `hooks.json` `minCliVersion`; delete the context shims + transition-shim entry; bump superskill pins (`package.json` plugin-smoke, `publish.yml`) | +30 / −80 | S-1 released |
 
 **Ordering.**
 
-1. PR-1, then PR-2a, then PR-2b. S-1 runs in parallel once PR-2a is released.
-2. PR-3, PR-4, PR-5 and PR-7 can run in parallel after PR-2a.
+1. PR-1. (PR-2a, PR-2b and S-1 as designed were withdrawn on 2026-10-15.)
+2. PR-3, PR-4, PR-5 and PR-7 can run in parallel, each directly on `main`.
 3. PR-6 after PR-4 and PR-5.
 4. PR-8 last of the absorption PRs.
 5. PR-9 is independent.
@@ -700,11 +722,11 @@ Sizes are rough, as hand-written lines added and removed; generated deletions ar
 ## 12. Acceptance checklist (end state)
 
 - [ ] `plugins/sp/scripts/` does not exist.
-- [ ] `plugins/sp/hooks/` = `hooks.json` + `pi/guard-extension.ts`.
-- [ ] `plugins/sp/lib/` = `env.ts`.
+- [ ] `plugins/sp/hooks/` unchanged from `main` (Revision 2026-10-15).
+- [ ] `plugins/sp/lib/` = `env.ts` + the 7 hook-only libs (Revision 2026-10-15).
 - [ ] No `*.generated.*`, no `config/plugin-scripts.json`, no `bundle-plugin-lib`.
 - [ ] `grep -r "superskill script path sp\|bun plugins/sp/\|scriptRoot" plugins config` finds nothing.
-- [ ] All 7 hook ids work in Claude, Codex and Pi through `spur self hook`; `agent-lifecycle` and `fleet-guest-stop` actually fire.
+- [ ] ~~All 7 hook ids work through `spur self hook`~~ (withdrawn 2026-10-15; hooks stay plugin-owned, run by superskill).
 - [ ] `bun run gate` passes 100% with per-file line and function coverage ≥ 90%; `spur-check:full` passes; `spur-check-feature` is not in gate/CI.
 - [ ] Root `bunfig.toml` is unchanged (or changed only with recorded owner approval).
 - [ ] `scripts/` holds only the KEEP set in §3.1 and §3.2, each with its reason recorded here.
