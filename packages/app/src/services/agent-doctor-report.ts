@@ -17,10 +17,6 @@ import {
     getExecutorTier,
 } from './executor-tier';
 
-// ---------------------------------------------------------------------------
-// Internal helpers (not exported)
-// ---------------------------------------------------------------------------
-
 // --- Detection cache (B4/0683) ----------------------------------------------
 
 export const DOCTOR_CACHE_REL = '.spur/run/agent-doctor.json';
@@ -44,6 +40,7 @@ export interface DoctorUsageInfo {
     stale: boolean;
 }
 
+/** Detection-cache provenance reported by `agent doctor` (hit, age, cache path). */
 export interface DoctorCacheInfo {
     hit: boolean;
     ageMs: number | null;
@@ -77,7 +74,6 @@ export function executorFingerprint(executors: readonly AgentExecutorConfig[] | 
     return createHash('sha256').update(lines.join('\n')).digest('hex');
 }
 
-/** Any read failure, malformed payload, wrong schema/fingerprint, or expired entry → miss (R6). */
 /**
  * Read the agent-usage snapshot for doctor (0893 R2). Absent or malformed → null
  * (R3: the producer is optional, so a missing snapshot is a silent `none`, never
@@ -103,6 +99,7 @@ export function readUsageSnapshot(
     }
 }
 
+/** Fresh doctor-cache rows for `fingerprint`. Any read failure, malformed payload, wrong schema/fingerprint, or expired entry → miss (R6). */
 export function readFreshDoctorCache(
     fileSystem: FileSystem,
     fingerprint: string,
@@ -362,16 +359,7 @@ export function withoutAuthenticated<T extends { authenticated?: unknown }>(row:
     return rest;
 }
 
-/** Render the `spur agent doctor` text output as an aligned table with a header,
- * a ✓/✗ state glyph, and a usage summary footer. `--json` output is unaffected
- * and keeps no auth field at all (0621 removed the column; 0682 dropped `authenticated`).
- * Columns (B4/0681): EXECUTOR holds the executor name, AGENT the underlying
- * binary, MODEL the pinned config model (`—` when undeclared), TIER the
- * capability tier, ROLES the eligible roles with `*` marking election. B8 R3:
- * CAPS renders the runner-declared session capability (`r`esume/`d`ir/`s`tdin/
- * `o`utput, ✓/✗), `—` when the binary is unknown to the runner, `⚠` appended
- * when the detected version is stale against `verifiedAgainst` (B8 R5).
- */
+/** CAPS cell flags: `r`esume/`d`ir/`s`tdin/`o`utput with ✓/✗; `—` when the binary is unknown to the runner. */
 function renderCapsFlags(row: DoctorRow): string {
     if (row.capabilities === null) return '—';
     const caps = row.capabilities;
@@ -384,6 +372,16 @@ function renderCapsCell(row: DoctorRow): string {
         : renderCapsFlags(row);
 }
 
+/** Render the `spur agent doctor` text output as an aligned table with a header,
+ * a ✓/✗ state glyph, and a usage summary footer. `--json` output is unaffected
+ * and keeps no auth field at all (0621 removed the column; 0682 dropped `authenticated`).
+ * Columns (B4/0681): EXECUTOR holds the executor name, AGENT the underlying
+ * binary, MODEL the pinned config model (`—` when undeclared), TIER the
+ * capability tier, ROLES the eligible roles with `*` marking election. B8 R3:
+ * CAPS renders the runner-declared session capability (`r`esume/`d`ir/`s`tdin/
+ * `o`utput, ✓/✗), `—` when the binary is unknown to the runner, `⚠` appended
+ * when the detected version is stale against `verifiedAgainst` (B8 R5).
+ */
 export function renderDoctorTable(results: DoctorRow[], usage?: DoctorUsageInfo | null): string {
     const dash = '—';
     const rows = results.map((result) => {

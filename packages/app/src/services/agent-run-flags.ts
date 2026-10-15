@@ -1,8 +1,10 @@
+/** String value of a parsed CLI flag, or `fallback` when absent or boolean. */
 export function stringFlag(flags: Record<string, string | boolean>, name: string, fallback: string): string {
     const value = flags[name];
     return typeof value === 'string' ? value : fallback;
 }
 
+/** True only when the flag was passed as a bare boolean switch. */
 export function booleanFlag(flags: Record<string, string | boolean>, name: string): boolean {
     return flags[name] === true;
 }
@@ -13,6 +15,7 @@ export function jsonEnvelopeFlag(flags: Record<string, string | boolean>): boole
     return typeof value === 'boolean' ? value : undefined;
 }
 
+/** Numeric value of a string flag; undefined when absent, boolean, or not a finite number. */
 export function numberFlag(flags: Record<string, string | boolean>, name: string): number | undefined {
     const value = flags[name];
     if (value === undefined) return undefined;

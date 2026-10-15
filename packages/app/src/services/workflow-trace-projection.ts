@@ -27,7 +27,7 @@ export async function outputArtifactForRun(cwd: string, runId: string): Promise<
 }
 
 // ---------------------------------------------------------------------------
-// Trace helpers (not exported)
+// Trace helpers
 // ---------------------------------------------------------------------------
 
 export function rowToTraceEntry(
@@ -136,10 +136,12 @@ function durationBetween(startedAt: string, completedAt: string | null): number 
     return Number.isFinite(start) && Number.isFinite(end) && end >= start ? end - start : null;
 }
 
+/** A persisted ISO timestamp as-is, or `unavailable` when it does not parse. */
 export function traceTimestamp(value: string): string {
     return Number.isFinite(Date.parse(value)) ? value : 'unavailable';
 }
 
+/** Epoch-ms timestamp as ISO 8601, or `unavailable` for an invalid date. */
 export function persistedTimestamp(value: number): string {
     const date = new Date(value);
     return Number.isNaN(date.getTime()) ? 'unavailable' : date.toISOString();
@@ -152,6 +154,7 @@ function traceOutcome(status: string): string {
     return 'unavailable';
 }
 
+/** Trace outcome vocabulary for one action row: running/pending pass through, then success/failure/unavailable by `ok`. */
 export function actionOutcome(status: string, ok: boolean | null): string {
     if (status === 'running' || status === 'pending') return status;
     if (ok === true) return 'success';
@@ -159,6 +162,7 @@ export function actionOutcome(status: string, ok: boolean | null): string {
     return 'unavailable';
 }
 
+/** Suggested follow-up for a run (follow, continue, or inspect the run log); undefined when none applies or the id is unsafe to echo. */
 export function traceNextAction(run: WorkflowTraceEntry, outputArtifact?: string): SystemEventAction | undefined {
     if (!TRACE_IDENTIFIER.test(run.runId)) return undefined;
     if (run.status === 'running' || run.status === 'pending') {
@@ -173,6 +177,7 @@ export function traceNextAction(run: WorkflowTraceEntry, outputArtifact?: string
     return undefined;
 }
 
+/** Project a persisted action result into bounded, redacted trace fields (result, invocation, decision, error). */
 export function projectActionTraceResult(
     resultJson: string | null,
     secretValues: readonly string[] = [],
@@ -289,6 +294,7 @@ function projectDecisionProvenance(value: unknown, secretValues: readonly string
     };
 }
 
+/** Relative path of a failed action's partial-output artifact — the retained copy first, then the scratch file; undefined when neither exists. */
 export async function partialArtifactForAction(
     cwd: string,
     runId: string,

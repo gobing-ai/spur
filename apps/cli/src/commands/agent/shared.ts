@@ -229,6 +229,7 @@ export interface LiveProcess {
     session?: MemberSessionObservation;
 }
 
+/** Live process table from the `spur serve` supervisor, keyed by spec id; null when the server is unreachable or answers non-OK. */
 export async function fetchServerProcesses(server: string): Promise<Map<string, LiveProcess> | null> {
     try {
         const res = await (_testFetch ?? fetch)(`${server}/processes`, {
@@ -522,6 +523,7 @@ export function parseTimeout(raw: string | boolean | undefined): number | undefi
     return n;
 }
 
+/** Build the fleet strategy runtime (coordination + delivery seams) over this CLI context. */
 export async function makeFleetRuntime(context: CliContext): Promise<StrategyRuntime> {
     const coordination = new AgentCoordinationService(context);
     return new StrategyRuntime({

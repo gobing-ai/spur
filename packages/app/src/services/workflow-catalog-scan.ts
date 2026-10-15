@@ -32,6 +32,7 @@ export async function newestMtime(path: string): Promise<number | null> {
     return newest;
 }
 
+/** Recursively collect workflow definition files under `rootPath` for the catalog. */
 export async function scanWorkflowFiles(
     rootPath: string,
     source: WorkflowLayerId,
