@@ -19,6 +19,7 @@
 | `progress <run-id>` | Project a run's structured progress: current state, per-action attempts, candidate next transitions |
 | `summary` | Measured execution summary of runs (per-stage time, wait, tool calls, tokens) or a batch roll-up |
 | `profile <workflow>` | Per-node step profile of a workflow's last N runs with the cache-window flags (read-only) |
+| `cost` | Per-workflow wall-clock/cost from real (terminal, non-dry) runs; with `--budget`, the pipeline budget gate |
 | `cancel <run-id>` | Cancel a single non-terminal run by id (mark as failed; SIGTERM async worker when live) |
 | `clean` | Housekeeping: finalize stale non-terminal runs **and** reclaim retained run logs |
 | `inline <op>` | Host-inline run lifecycle transport for the inline pipeline driver (begin, trace, close, decide, persist-out/check, dispatch) |
@@ -373,6 +374,31 @@ action kind the run count, executions, p50/max `durationMs`, p50 idle gap, sessi
 `cacheHit` p50 with coverage, plus the ADR-115 cache-window flags (`step-over-window`,
 `resume-after-idle`, `resume-cold-cache`, `agent-run-over-2w`). Unknown evidence is `?`/`null`,
 never `0`. Exit `0` profile produced, `1` a spur call failed or its JSON did not parse.
+
+## spur workflow cost
+
+```
+spur workflow cost [--workflow <name>]... [--by-state] [--include-bookkeeping] [--since <YYYY-MM-DD>] [--budget <file>] [--measured-file <json>] [--json]
+```
+
+| Flag | Description |
+|---|---|
+| `--workflow <name>` | Restrict to a workflow (repeatable) |
+| `--by-state` | Report per-state rows instead of per-workflow rows |
+| `--include-bookkeeping` | Keep bookkeeping workflows in the default cohort |
+| `--since <YYYY-MM-DD>` | Only runs created on/after this UTC date |
+| `--budget <file>` | Run the pipeline budget gate against this budget file |
+| `--measured-file <json>` | With `--budget`: read measured values from this file instead of the DB |
+| `--json` | Output machine-readable JSON |
+
+Per-workflow wall-clock and cost from REAL (terminal, non-dry) runs in `.spur/spur.db`; the
+default cohort is every definition in `.spur/workflows/` minus bookkeeping workflows. Unknown
+measurements render as `null`, never `0`. With `--budget <file>` the command runs the
+per-pipeline budget gate instead (measured-file requires budget): exit `1` on any over-budget,
+missing-budget, or silent-raise failure. `--json` emits the byte-stable baseline payload
+(workflow + state rows, key-sorted). Absorbed from the retired `real-run-cost` and
+`pipeline-budgets` scripts (script-absorption PR-9); workflow-promotion keeps its own
+selected-run replay query and is not served by this aggregate payload.
 
 ## spur workflow cancel
 

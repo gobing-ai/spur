@@ -1,0 +1,8 @@
+# script-absorption PR-9 golden fixture: one model query, no budget entry (MISSING BUDGET).
+name: zz-unbudgeted
+states:
+  - id: ask
+    onEnter:
+      - kind: agent.run
+        options:
+          input: say hi

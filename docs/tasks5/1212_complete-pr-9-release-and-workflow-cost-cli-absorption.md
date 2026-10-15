@@ -1,10 +1,10 @@
 ---
 schema_version: 1
 name: Complete PR-9 release and workflow-cost CLI absorption
-status: todo
+status: done
 template: standard
 created_at: 2026-10-15T17:50:40.221Z
-updated_at: "2026-10-15T18:32:35.518Z"
+updated_at: "2026-10-15T20:20:11.146Z"
 ac_altitude: task-local
 ac_numbering: task-local
 parent_wbs: "1211"
@@ -15,6 +15,8 @@ tags:
 estimate_hours: 6
 
 feature_id: A91
+done_forced: "false"
+done_reason: unforced close; PASS artifact at .spur/memory/evidence/1212-verdict.json
 ---
 
 ## 1212. Complete PR-9 release and workflow-cost CLI absorption
@@ -34,11 +36,11 @@ The recorded CI run https://github.com/gobing-ai/spur/actions/runs/38776447947 i
 
 ### Requirements
 
-- [ ] R1. Complete only the existing approved workflow cost, builder publish, builder bump-ver --check and self migrate --check implementations in #26. Preserve measurement/cohort/null semantics, existing normal bump/migration behavior, and manifest restoration on publish success/failure; verification never performs a real publish or tag push.
-- [ ] R2. Resolve the recorded help/reference/shared-option parity failures against the reconciled source: use the existing shared option registry and document every actual workflow cost and self migrate --check flag in both help trees and the spur-cli references. Preserve all existing source-scan assertions.
-- [ ] R3. Remove live callers of scripts/commands/{publish,real-run-cost,pipeline-budgets,importer-schema-check,check-marketplace-version}.ts and obsolete corresponding tests. Keep repository workflow-promotion policy and its selected-run domain query intact; do not substitute aggregate cost JSON for its per-run data.
-- [ ] R4. Reconcile package exports/scripts, root/workspace manifests, CLI matrix, surface/runtime rules, existing publish.yml caller and owning design contracts. Preserve accepted commands/hooks, root/scripts bunfig.toml and gate scope; no new noun, verb or compatibility layer beyond #26's approved delta.
-- [ ] R5. Submit a ready #26 with fresh focused/parity/full-gate evidence and at least 90% function AND line coverage for every changed measured executable file, exact tested head, documented historical skips, and no new skips or weakened assertions. Root reviewer accepts and lands the result before 1213 begins.
+- [x] R1. Complete only the existing approved workflow cost, builder publish, builder bump-ver --check and self migrate --check implementations in #26. Preserve measurement/cohort/null semantics, existing normal bump/migration behavior, and manifest restoration on publish success/failure; verification never performs a real publish or tag push.
+- [x] R2. Resolve the recorded help/reference/shared-option parity failures against the reconciled source: use the existing shared option registry and document every actual workflow cost and self migrate --check flag in both help trees and the spur-cli references. Preserve all existing source-scan assertions.
+- [x] R3. Remove live callers of scripts/commands/{publish,real-run-cost,pipeline-budgets,importer-schema-check,check-marketplace-version}.ts and obsolete corresponding tests. Keep repository workflow-promotion policy and its selected-run domain query intact; do not substitute aggregate cost JSON for its per-run data.
+- [x] R4. Reconcile package exports/scripts, root/workspace manifests, CLI matrix, surface/runtime rules, existing publish.yml caller and owning design contracts. Preserve accepted commands/hooks, root/scripts bunfig.toml and gate scope; no new noun, verb or compatibility layer beyond #26's approved delta.
+- [x] R5. Submit a ready #26 with fresh focused/parity/full-gate evidence and at least 90% function AND line coverage for every changed measured executable file, exact tested head, documented historical skips, and no new skips or weakened assertions. Root reviewer accepts and lands the result before 1213 begins.
 
 ### Acceptance Criteria
 
@@ -94,15 +96,142 @@ Non-goals: PR-8 cleanup, new public surfaces, changing promotion statistics, liv
 
 ### Solution
 
-<!-- Filled during implementation: file:line change map and concise rationale. -->
+Change-map (auto-generated — implement step did not record a Solution).
+Each entry cites the first changed line per file (`file:line`).
+
+| Change (`file:line`) |
+|----------------------|
+| `.github/workflows/publish.yml:85` |
+| `apps/cli/package.json:56` |
+| `apps/cli/src/commands/builder.ts:10` |
+| `apps/cli/src/commands/builder.ts:142` |
+| `apps/cli/src/commands/builder.ts:24` |
+| `apps/cli/src/commands/builder.ts:29` |
+| `apps/cli/src/commands/builder.ts:4` |
+| `apps/cli/src/commands/builder.ts:41` |
+| `apps/cli/src/commands/migrate.ts:1` |
+| `apps/cli/src/commands/migrate.ts:15` |
+| `apps/cli/src/commands/migrate.ts:3` |
+| `apps/cli/src/commands/migrate.ts:68` |
+| `apps/cli/src/commands/migrate.ts:81` |
+| `apps/cli/src/commands/migrate.ts:95` |
+| `apps/cli/src/commands/workflow/cost.ts:1` |
+| `apps/cli/src/commands/workflow/index.ts:37` |
+| `apps/cli/src/commands/workflow/index.ts:7` |
+| `apps/cli/src/context.ts:198` |
+| `apps/cli/src/context.ts:209` |
+| `apps/cli/src/release-ops.ts:828` |
+| `apps/cli/tests/commands/builder.test.ts:141` |
+| `apps/cli/tests/commands/builder.test.ts:65` |
+| `apps/cli/tests/commands/builder.test.ts:75` |
+| `apps/cli/tests/commands/builder.test.ts:77` |
+| `apps/cli/tests/commands/self-migrate-check.test.ts:1` |
+| `apps/cli/tests/commands/workflow/cost.test.ts:1` |
+| `apps/cli/tests/fixtures/script-absorption-pr9-golden.json:1` |
+| `apps/cli/tests/fixtures/script-absorption-pr9/measured-over.json:1` |
+| `apps/cli/tests/fixtures/script-absorption-pr9/pipeline-budgets.json:1` |
+| `apps/cli/tests/fixtures/script-absorption-pr9/seed.sql:1` |
+| `apps/cli/tests/fixtures/script-absorption-pr9/workflows/pr-review.yaml:1` |
+| `apps/cli/tests/fixtures/script-absorption-pr9/workflows/task-lifecycle.yaml:1` |
+| `apps/cli/tests/fixtures/script-absorption-pr9/workflows/wrapup-pipeline.yaml:1` |
+| `apps/cli/tests/fixtures/script-absorption-pr9/workflows/zz-unbudgeted.yaml:1` |
+| `apps/cli/tests/release-ops-publish.test.ts:1` |
+| `apps/cli/tests/script-absorption-pr9-parity.test.ts:1` |
+| `apps/cli/tests/script-absorption-pr9/capture.ts:1` |
+| `apps/cli/tests/script-absorption-pr9/cases.ts:1` |
+| `config/pipeline-budgets.json:4` |
+| `docs/design/cli-contracts.md:165` |
+| `docs/design/cli-contracts.md:48` |
+| `docs/design/harness-surface-governance.md:168` |
+| `docs/help/cmd_builder.md:20` |
+| `docs/help/cmd_builder.md:35` |
+| `docs/help/cmd_builder.md:47` |
+| `docs/help/cmd_builder.md:6` |
+| `docs/help/cmd_migrate.md:12` |
+| `docs/help/cmd_migrate.md:17` |
+| `docs/help/cmd_migrate.md:27` |
+| `docs/help/cmd_migrate.md:39` |
+| `docs/help/cmd_workflow.md:22` |
+| `docs/help/cmd_workflow.md:378` |
+| `docs/help/spur-cli-matrix.md:114` |
+| `docs/help/spur-cli-matrix.md:118` |
+| `docs/help/spur-cli-matrix.md:33` |
+| `docs/help/spur-cli-matrix.md:59` |
+| `docs/help/spur-cli-matrix.md:92` |
+| `docs/help2/builder.md:11` |
+| `docs/help2/builder.md:3` |
+| `docs/help2/builder.md:41` |
+| `docs/help2/migrate.md:10` |
+| `docs/help2/migrate.md:18` |
+| `docs/help2/migrate.md:28` |
+| `docs/help2/workflow.md:159` |
+| `docs/help2/workflow.md:21` |
+| `package.json:112` |
+| `packages/app/package.json:28` |
+| `packages/app/src/workflow/run-cost.ts:1` |
+| `packages/app/src/workflow/run-measurements.ts:13` |
+| `packages/app/tests/workflow/run-cost-budget.test.ts:1` |
+| `packages/app/tests/workflow/run-cost.test.ts:1` |
+| `packages/app/tests/workflow/run-measurements.test.ts:4` |
+| `packages/app/tests/workflow/run-measurements.test.ts:8` |
+| `packages/domain/src/analytics/workflow-measurements.ts:5` |
+| `plugins/sp/skills/spur-cli/references/builder.md:18` |
+| `plugins/sp/skills/spur-cli/references/builder.md:25` |
+| `plugins/sp/skills/spur-cli/references/builder.md:27` |
+| `plugins/sp/skills/spur-cli/references/builder.md:3` |
+| `plugins/sp/skills/spur-cli/references/self.md:22` |
+| `plugins/sp/skills/spur-cli/references/self.md:66` |
+| `plugins/sp/skills/spur-cli/references/self.md:69` |
+| `plugins/sp/skills/spur-cli/references/workflows.md:0` |
+| `plugins/sp/skills/spur-cli/references/workflows.md:100` |
+| `plugins/sp/skills/spur-cli/references/workflows.md:275` |
+| `scripts/commands/fleet-e2e.ts:0` |
+| `scripts/commands/fleet-e2e.ts:47` |
+| `scripts/commands/verify-pack.test.ts:0` |
+| `scripts/commands/verify-pack.test.ts:2` |
+| `scripts/commands/verify-pack.test.ts:5` |
+| `scripts/spur-dev.ts:102` |
+| `scripts/spur-dev.ts:13` |
+| `scripts/spur-dev.ts:22` |
+| `scripts/spur-dev.ts:24` |
+| `scripts/spur-dev.ts:34` |
+| `scripts/spur-dev.ts:39` |
+| `scripts/spur-dev.ts:45` |
+| `scripts/spur-dev.ts:53` |
+| `scripts/spur-dev.ts:75` |
+| `scripts/spur-dev.ts:9` |
 
 ### Testing
 
-<!-- Filled during verification: commands run, outcomes, coverage claim or N/A. -->
+**Pipeline verify results**
+
+- Verdict: PASS (from verdict artifact)
+
+| Requirement | Status | Evidence |
+|-------------|--------|----------|
+| R1 | MET | All four absorbed surfaces in the diff: `apps/cli/src/commands/workflow/cost.ts:43-49` (all seven cost flags declared over the shared registry), `apps/cli/src/commands/builder.ts:41-53` (--check guard rejects --push/--all and a version arg before any write, then calls the read-only drift check) and `apps/cli/src/commands/builder.ts:142` (publish verb), `apps/cli/src/commands/migrate.ts:81-91` (--check branch reports and returns before the boot-migration path), `apps/cli/src/release-ops.ts:867` (checkVersionDrift, read-only drift guard) and `apps/cli/src/release-ops.ts:1017-1030` (publishPackage restores original manifest bytes in finally on every exit path); behavior tests: `apps/cli/tests/release-ops-publish.test.ts:186-237` (success, build failure, publish failure, CLI failure rendering — fake runner, temporary workspace, no real publication), `apps/cli/tests/commands/self-migrate-check.test.ts:77-128` (absent DB not created, matching OK, stale stamp exit 1 without write), `apps/cli/tests/commands/workflow/cost.test.ts:35-56` and `packages/app/tests/workflow/run-cost.test.ts:189-226` (measured/null semantics). No publish or tag push was executed during verification (read-only spot runs only). |
+| R2 | MET | Owning help trees document every actual flag: `docs/help/cmd_workflow.md:378-391` (all seven cost flags: --workflow, --by-state, --include-bookkeeping, --since, --budget, --measured-file, --json), `docs/help/cmd_migrate.md:12-17` (--check read-only, exit 1 on drift) and `docs/help/cmd_builder.md:35,56-65` (bump-ver --check and publish --otp); help2 mirrors updated: `docs/help2/workflow.md:159-162`, `docs/help2/migrate.md:10-18`; spur-cli noun references updated: `plugins/sp/skills/spur-cli/references/workflows.md:275`, `plugins/sp/skills/spur-cli/references/self.md:22`, `plugins/sp/skills/spur-cli/references/builder.md:27`; cost.ts declares --json through the existing shared option registry (`apps/cli/src/commands/workflow/cost.ts:49`), no scanner weakening (`apps/cli/tests/command-modules.ts:25` per-noun folder scanner unchanged); live match confirmed this session: `workflow cost --help` exited 0 listing all seven registered flags, `self migrate --check --help` and `builder --help` show --check/publish as documented. |
+| R3 | MET | All five retired scripts are deleted in the diff (git diff --name-status 604afe09..42ced0f68: D scripts/commands/publish.ts, real-run-cost.ts, pipeline-budgets.ts, importer-schema-check.ts plus its test, check-marketplace-version.ts); dispatcher entries removed from `scripts/spur-dev.ts:25,45`; a grep over apps/packages/scripts/config/.github for imports of the retired paths finds only provenance comments, zero live callers; obsolete tests retired by rename: real-run-cost.test.ts and pipeline-budgets.test.ts became `packages/app/tests/workflow/run-cost.test.ts` and `packages/app/tests/workflow/run-cost-budget.test.ts` (R059/R089 in the diff); promotion policy intact: `scripts/commands/workflow-promotion.ts` is untouched by the diff (empty diff-stat) and keeps the selected-run domain query at `scripts/commands/workflow-promotion.ts:242`, with its guard still wired in root scripts (`package.json:95` workflow-promotion-check). |
+| R4 | MET | Manifests and scripts reconciled: `apps/cli/package.json:56` repoints prepublishOnly to `builder bump-ver --check spur`, `package.json:112` repoints importer-schema-check to `self migrate` plus `self migrate --check`, `packages/app/package.json:29` exports `./run-cost`; CLI matrix recomputed with cost and publish rows (`docs/help/spur-cli-matrix.md:33,59`; unique verbs 69 to 71, noun-verb cells 96 to 98); the approved publish.yml caller change is in (`.github/workflows/publish.yml:85` runs `builder publish apps/cli --no-logo`, a registered global flag per `apps/cli/src/index.ts:239`); owning design contracts updated (`docs/design/harness-surface-governance.md:169-174` builder publish consent-gate entry; docs/design/cli-contracts.md modified in the same diff); surface/runtime rule consistency proven by the gate itself: 51 pre-check and 2 post-check rules pass with no violations (`.spur/run/1212-test-gate.log:26`, `.spur/run/1212-test-gate.log:596`); no new noun/verb beyond the approved delta (matrix delta is exactly cost and publish). |
+| R5 | MET | Fresh full-gate evidence at this exact head: `.spur/run/1212-test-gate.status` = PASS with 11135 pass / 0 fail across 707 files (`.spur/run/1212-test-gate.log:591-593`), zero skip occurrences in the entire run log (so no new skips); coverage for every changed measured executable file is at least 93.60 percent line and 100 percent function: `apps/cli/src/commands/builder.ts` 100/100 (`.spur/run/1212-test-gate.log:59`), `apps/cli/src/commands/migrate.ts` 100/100 (`:72`), `apps/cli/src/commands/workflow/cost.ts` 100/100 (`:110`), `apps/cli/src/release-ops.ts` 100/93.60 (`:132`), `packages/app/src/workflow/run-cost.ts` 100/99.53 (`:436`), all-files 99.18/99.10 (`:39`); exact tested head re-verified this session: git rev-parse HEAD = 42ced0f682512df943945662f3329a16a2265bf5; certified proof digest sha256:3da6d8ccb29fa3e5989bbe8c3d5fc5c5bc9e3fb127ce7dc76515fb8922c3d888 matches `.spur/run/59e711b6-0e5e-4caa-8f02-f41621abc65b-review-proof.digest:1` and the event trace bracket MATCH (`.spur/run/59e711b6-0e5e-4caa-8f02-f41621abc65b-event-trace.md:48-56`, review answer PASS, 0 open P1-P3); root-reviewer acceptance and landing remain parent 1211's ownership per the task Background. |
+
+| Acceptance Criteria | Status | Evidence Type | Evidence |
+|---------------------|--------|---------------|----------|
+| Scenario: AC1 — PR-9 is complete and green (req: R1, R2, R3, R4, R5) | MET | test | Merged baseline without losing commands/safeguards: merge commit 3b01cf777 in this worktree (git log this session), gate-fix ae5a4158d routes absorbed surfaces through the domain DB facade and .spur runtime paths, matrix recomputed (`docs/help/spur-cli-matrix.md:33,59`); cost measured/null/cohort semantics: `packages/app/tests/workflow/run-cost.test.ts:189-226` (null-USD token rows, no-cost runs report nulls never 0, empty cohort nulls) and `apps/cli/tests/commands/workflow/cost.test.ts:35-56`, frozen golden parity `apps/cli/tests/script-absorption-pr9-parity.test.ts:53-58` over `apps/cli/tests/fixtures/script-absorption-pr9-golden.json`; documented flags match live registrations (this session `workflow cost --help` exit 0 vs `docs/help/cmd_workflow.md:378-391`); publish restoration on success, returned failures and thrown errors without real publication: `apps/cli/tests/release-ops-publish.test.ts:186,203,216,237`; check-only paths have no side effects: `apps/cli/tests/commands/builder.test.ts:141` (rejection, exit 1 — reproduced live this session: `builder bump-ver --check --push` exited 1 with the guard message, no manifest/tag mutation observed) and `apps/cli/tests/commands/self-migrate-check.test.ts:77,104` (absent DB not created; stale stamp exit 1 without write); retired script paths caller-free while promotion keeps selected-run replay: grep clean plus `scripts/commands/workflow-promotion.ts:242`; required full gate passes with coverage: `.spur/run/1212-test-gate.log:591` (11135 pass / 0 fail) and `.spur/run/1212-test-gate.log:59,72,110,132,436-437` (min 93.60 line / 100 function); exact head and receipts recorded: HEAD 42ced0f68 verified this session, digest match `.spur/run/59e711b6-0e5e-4caa-8f02-f41621abc65b-review-proof.digest:1`. |
+- Coverage: N/A (verdict-based; verify pipeline does not measure code coverage)
 
 ### Review
 
-<!-- Filled during review: P1-P4 findings, residual risk, and final disposition. -->
+<!-- spur:record-review -->
+
+**SECU findings** (pipeline verify step — verdict: PASS)
+
+| Priority | Dimension | Location | Finding |
+|----------|-----------|----------|----------|
+| P4 | reconciliation: merge-commit strategy | — | Merge commit 3b01cf777 (no rebase/force-push), followed by fix commits ae5a4158d, a2f815913, 42ced0f68 on the absorption chain. |
+| P4 | reconciliation: main transports/security win | — | ae5a4158d routes the absorbed PR-9 surfaces through the domain DB facade and .spur runtime paths (commit subject verified this session via git log). |
+| P4 | reconciliation: SHARED_OPTIONS.json static-test path | — | cost.ts declares --json via the shared registry (`apps/cli/src/commands/workflow/cost.ts:49`); the per-noun scanner `apps/cli/tests/command-modules.ts:25` is preserved and all source-scan assertions pass at the gate. |
+| P4 | P4 deferral to 1213 | — | Recorded in the certified review answer; not counted as a gap for 1212. |
 
 ### References
 
@@ -114,3 +243,8 @@ Non-goals: PR-8 cleanup, new public surfaces, changing promotion statistics, liv
 - One main worktree and only parent 1211 at wip were observed at freeze; recheck immediately before implementation.
 
 ### History
+
+- 2026-10-15T19:28:20.304Z todo → wip (system)
+- 2026-10-15T20:20:08.803Z wip → testing (system)
+- 2026-10-15T20:20:11.139Z testing → done (system)
+

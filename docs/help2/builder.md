@@ -1,6 +1,6 @@
 # spur builder
 
-Release plumbing: version bumps, release tags, and the PR-review spine ops.
+Release plumbing: version bumps, release tags, npm publish, and the PR-review spine ops.
 
 ## Subcommands
 
@@ -8,6 +8,7 @@ Release plumbing: version bumps, release tags, and the PR-review spine ops.
 | --- | --- |
 | `bump-ver [target] [version]` | Bump a package version, commit, tag, optionally push |
 | `drop-tags [target] [version]` | Delete release tags locally and optionally on origin |
+| `publish <dir> [--otp code]` | Resolve workspace/catalog ranges, build, and `npm publish` a package (CI) |
 | `pr <op> [flags]` | PR-review spine ops for `/sp:dev-pr-review` |
 
 ## spur builder bump-ver
@@ -36,6 +37,19 @@ spur builder drop-tags [target] [version] [--all] [--remote] [--json]
 
 Delete release tags locally (`--remote` also deletes them on origin) — the cleanup twin of
 `bump-ver` for a botched release. `--all` drops every released tag plus the aggregate tag.
+
+## spur builder publish
+
+```bash
+spur builder publish <dir> [--otp <code>]
+spur builder bump-ver --check [target]
+```
+
+`publish` is the CI publish step (npm Trusted Publishing): it rewrites `workspace:`/`catalog:`
+ranges in `<dir>/package.json`, runs `bun run build:bundle`, `npm publish --access public`, and
+restores the manifest on every exit path. `bump-ver --check` is the read-only pre-publish guard
+(`prepublishOnly`): exit `1` when `.claude-plugin/marketplace.json` or a listed `plugin.json`
+drifted from the package version.
 
 ## spur builder pr
 

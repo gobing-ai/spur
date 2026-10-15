@@ -30,6 +30,7 @@
 | **clean** |  |  | |  |  |  | ✅ |  |  |  | ✅ |
 | **commit-guard** |  |  | |  |  |  |  |  |  |  | ✅ |
 | **continue** |  |  | |  |  |  |  |  |  |  | ✅ |
+| **cost** |  |  | |  |  |  |  |  |  |  | ✅ |
 | **create** |  |  | | ✅ |  |  |  |  |  | ✅ |  |
 | **daily** |  |  | |  | ✅ |  |  |  |  |  |  |
 | **deps** |  |  | |  |  |  |  |  |  | ✅ |  |
@@ -55,6 +56,7 @@
 | **preflight** |  |  | |  |  |  |  |  |  | ✅ |  |
 | **profile** |  |  | |  |  |  |  |  |  |  | ✅ |
 | **progress** |  |  | |  |  |  |  |  |  |  | ✅ |
+| **publish** |  | ✅ | |  |  |  |  |  |  |  |  |
 | **record** |  |  | |  |  |  |  |  |  | ✅ |  |
 | **refresh** |  |  | | ✅ |  |  |  |  |  | ✅ |  |
 | **refresh-roster** |  |  | |  |  |  |  |  |  | ✅ |  |
@@ -87,6 +89,7 @@
 | **wait** | ✅ |  | |  |  |  |  |  |  |  |  |
 | **watch** |  |  | |  |  | ✅ |  |  |  |  |  |
 | **wrapup** |  |  | |  |  |  |  |  |  | ✅ |  |
+| **Verb count** | **13** | **4** | **4** | **11** | **8** | **4** | **6** | **4** | **5** | **25** | **14** |
 
 ## Hidden Legacy Aliases
 
@@ -108,8 +111,8 @@ from the top-level help listing, still fully functional for scripts and workflow
 | Total nouns | **16** |
 | Compound nouns (with verbs) | **11** |
 | Hidden legacy aliases | **5** |
-| Unique verbs | **69** |
-| Total noun×verb cells | **96** |
+| Unique verbs | **71** |
+| Total noun×verb cells | **98** |
 
 > [!NOTE]
-> `task` has the richest surface at 25 verbs, followed by `agent` (13), `feature` (11) and `workflow` (13, including the inline driver's `inline` and `commit-guard` transports and the `summary`/`profile` measurements). `builder` (3 verbs: `bump-ver`, `drop-tags`, `pr`) hosts the release plumbing promoted from `spur-dev`. `decision` (4 verbs: `list`, `run`, `show`, `status`) is the frozen decision-catalog transport (task 1093). Several verbs are shared across nouns — e.g., `list` (7 nouns), `run`/`show` (4 nouns each), `check`/`clean`/`create`/`migrate`/`refresh`/`start`/`stop`/`trace`/`update`/`validate` (2 nouns each). `self` (5 verbs) hosts every self-management operation.
+> `task` has the richest surface at 25 verbs, followed by `agent` (13), `workflow` (14, including the inline driver's `inline` and `commit-guard` transports, the `summary`/`profile` measurements and `cost`) and `feature` (11). `builder` (4 verbs: `bump-ver`, `drop-tags`, `publish`, `pr`) hosts the release plumbing promoted from `spur-dev`. `decision` (4 verbs: `list`, `run`, `show`, `status`) is the frozen decision-catalog transport (task 1093). Several verbs are shared across nouns — e.g., `list` (7 nouns), `run`/`show` (4 nouns each), `check`/`clean`/`create`/`migrate`/`refresh`/`start`/`stop`/`trace`/`update`/`validate` (2 nouns each). `self` (5 verbs) hosts every self-management operation.

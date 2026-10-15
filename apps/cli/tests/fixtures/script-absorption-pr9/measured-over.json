@@ -1,0 +1,7 @@
+{
+    "wrapup-pipeline": {
+        "modelQueries": 3,
+        "wallClockMs": 50,
+        "tokenCostUsd": null
+    }
+}

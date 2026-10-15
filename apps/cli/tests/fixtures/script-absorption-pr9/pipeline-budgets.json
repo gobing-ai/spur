@@ -1,0 +1,28 @@
+{
+    "schemaVersion": 1,
+    "generatedAt": "2026-10-15",
+    "note": "script-absorption PR-9 golden fixture",
+    "budgets": {
+        "wrapup-pipeline": {
+            "modelQueries": 1,
+            "wallClockMs": 100000,
+            "tokenCostUsd": null,
+            "source": "fixture",
+            "decision": null
+        },
+        "pr-review": {
+            "modelQueries": 0,
+            "wallClockMs": null,
+            "tokenCostUsd": null,
+            "source": "fixture",
+            "decision": null
+        },
+        "idea-pipeline": {
+            "modelQueries": 6,
+            "wallClockMs": null,
+            "tokenCostUsd": null,
+            "source": "fixture (unmeasured)",
+            "decision": null
+        }
+    }
+}

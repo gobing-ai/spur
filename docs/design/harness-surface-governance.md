@@ -124,11 +124,16 @@ This accepts placement policy, not any public CLI expansion or premature removal
 ### 2.2 Enforcement and migration
 
 **Current enforcement:** `sp-script-placement` uses a 250 LOC entry budget and detects direct DB
-imports/corpus parsing with the shrinking `config/script-placement-baseline.json`. A small entry
+imports/corpus parsing; any finding fails — the shrink-only `config/script-placement-baseline.json`
+ledger was retired with the 0600 manifest in task 1213 (no historical findings remain to baseline).
+A small entry
 is not proof of correct ownership. **Landed (task 1173):** the same DB/corpus boundary now covers
 handwritten `plugins/sp/lib` sources (no line budget — a line count is a review trigger, not an
 architecture test), and `checkHookLayout` answers for hook source layout: one authored entry per
-registered identity, helpers in lib, tests in the plugin test owner. The hook check is unit-fixtured
+registered identity, helpers in lib, tests in the plugin test owner. **Landed (task 1213):** the
+strict hook-only contract over `plugins/sp/scripts` is active — registered hook entries only, no
+non-hook skill scripts, no twins, no manifest — and reusable behavior lives only in approved CLI
+surfaces (ADR-130). The hook check is unit-fixtured
 and its strict call activates in 1174, once the relocation it judges has landed. **Remaining:**
 reusable helper dependencies beyond that boundary still need focused semantic review, since import
 checks cannot classify behavior. No second exception registry.
@@ -164,6 +169,15 @@ third `builder` verb: `spur builder pr <op>` (audience: the `/sp:dev-pr-review` 
 operator; surface: the eight PR-review ops of the retired `plugins/sp/scripts/pr-reviewing.ts`;
 justification: plugin scripts may only be thin wrappers, and the ops are release-adjacent repo
 plumbing). `builder` is now frozen at `bump-ver`, `drop-tags`, `pr`.
+
+**Amendment (2026-10-15, script absorption PR-9).** Owner decision Q5 of the same plan is the
+consent-gate entry for a fourth `builder` verb, `spur builder publish <dir> [--otp]` (audience: the
+`publish.yml` release job and a local maintainer; surface: the retired `scripts/commands/publish.ts`
+— workspace/catalog range resolution, `build:bundle`, `npm publish --access public`, manifest
+restore; justification: publishing is release plumbing and the CI job should call the shipped CLI,
+not a repo script), and for the read-only `--check` flag on `bump-ver` (the retired
+`check-marketplace-version` pre-publish guard). `builder` is now frozen at `bump-ver`, `drop-tags`,
+`publish`, `pr`.
 
 ## 4. Subsequent consent applications
 

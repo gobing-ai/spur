@@ -1,10 +1,10 @@
 ---
 schema_version: 1
 name: Retire obsolete script infrastructure and finalize the sp CLI prerequisite
-status: todo
+status: done
 template: standard
 created_at: 2026-10-15T17:50:40.227Z
-updated_at: "2026-10-15T18:32:43.810Z"
+updated_at: "2026-10-15T22:12:58.678Z"
 ac_altitude: task-local
 ac_numbering: task-local
 parent_wbs: "1211"
@@ -17,6 +17,8 @@ estimate_hours: 6
 
 dependencies: ["1212"]
 feature_id: A91
+done_forced: "false"
+done_reason: unforced close; PASS artifact at .spur/memory/evidence/1213-verdict.json
 ---
 
 ## 1213. Retire obsolete script infrastructure and finalize the sp CLI prerequisite
@@ -36,13 +38,13 @@ Current inventory: seven scripts/hooks entries, script-root.ts/.mjs, nine lib TS
 
 ### Requirements
 
-- [ ] R1. Delete script-root.ts/.mjs, lib/spur-bin.ts and their obsolete tests, config/plugin-scripts.json, config/script-placement-baseline.json and build:scripts plus its build caller. Keep already-deleted bundle infrastructure absent; preserve the seven canonical hook entries and eight needed hook-only libs.
-- [ ] R2. Rewrite script-contract-check and the sp-script-placement rule for the final hook-only script layout without registry/twin/baseline machinery. Preserve hook identity/layout, standalone import, forbidden invocation, trust-boundary and application ownership checks without a blanket waiver.
-- [ ] R3. Remove script-root consumers from task-pipeline run-start and the inline driver, and simplify plugin-install-smoke, verify-pack and bundle-plugins tests for the surviving installation. Remove live deleted-skill-script invocations; preserve independent CLI resolution, base-sha capture, evidence persistence and guard behavior. Audit transition shims but retain unrelated live agent-bare-binary-name compatibility.
-- [ ] R4. Check I3 status through the feature CLI before touching surface-drift-inventory; retain it with a specific repository-only reason while I3 needs it, otherwise delete only when closure and replacement consumers are proven. Record a current reason for each retained old-path script.
-- [ ] R6. Reconcile current plan dispositions and final checklist with the actual hook-only scripts layout, retained libs, already-completed PR-10 closure and documented Spur >=0.5.0/Superskill >=0.3.39 prerequisites. Preserve dated history and the explicit runtime-version-enforcement deferral.
-- [ ] R7. Keep root/scripts bunfig.toml and gate scope unchanged. Prove checker, packaging and actual isolated staged-hook installation behavior with focused tests, serialized required gate and per-file function/line coverage >=90%; root reviewer accepts the result.
-- [ ] R8. Align the root Superskill catalog/lockfile and existing publish workflow installation pin to a released supported version, using 0.3.39 as the minimum verified baseline. Pin one consistent exact version unless a newer version is explicitly selected before implementation; do not mix in the separately planned ts-* dependency upgrade.
+- [x] R1. Delete script-root.ts/.mjs, lib/spur-bin.ts and their obsolete tests, config/plugin-scripts.json, config/script-placement-baseline.json and build:scripts plus its build caller. Keep already-deleted bundle infrastructure absent; preserve the seven canonical hook entries and eight needed hook-only libs.
+- [x] R2. Rewrite script-contract-check and the sp-script-placement rule for the final hook-only script layout without registry/twin/baseline machinery. Preserve hook identity/layout, standalone import, forbidden invocation, trust-boundary and application ownership checks without a blanket waiver.
+- [x] R3. Remove script-root consumers from task-pipeline run-start and the inline driver, and simplify plugin-install-smoke, verify-pack and bundle-plugins tests for the surviving installation. Remove live deleted-skill-script invocations; preserve independent CLI resolution, base-sha capture, evidence persistence and guard behavior. Audit transition shims but retain unrelated live agent-bare-binary-name compatibility.
+- [x] R4. Check I3 status through the feature CLI before touching surface-drift-inventory; retain it with a specific repository-only reason while I3 needs it, otherwise delete only when closure and replacement consumers are proven. Record a current reason for each retained old-path script.
+- [x] R6. Reconcile current plan dispositions and final checklist with the actual hook-only scripts layout, retained libs, already-completed PR-10 closure and documented Spur >=0.5.0/Superskill >=0.3.39 prerequisites. Preserve dated history and the explicit runtime-version-enforcement deferral.
+- [x] R7. Keep root/scripts bunfig.toml and gate scope unchanged. Prove checker, packaging and actual isolated staged-hook installation behavior with focused tests, serialized required gate and per-file function/line coverage >=90%; root reviewer accepts the result.
+- [x] R8. Align the root Superskill catalog/lockfile and existing publish workflow installation pin to a released supported version, using 0.3.39 as the minimum verified baseline. Pin one consistent exact version unless a newer version is explicitly selected before implementation; do not mix in the separately planned ts-* dependency upgrade.
 
 ### Acceptance Criteria
 
@@ -104,15 +106,205 @@ Non-goals: new minCliVersion schema/runtime version check, unrelated transition 
 
 ### Solution
 
-<!-- Filled during implementation: file:line change map and concise rationale. -->
+Change-map (auto-generated — implement step did not record a Solution).
+Each entry cites the first changed line per file (`file:line`).
+
+| Change (`file:line`) |
+|----------------------|
+| `.github/workflows/publish.yml:45` |
+| `.github/workflows/publish.yml:48` |
+| `biome.json:0` |
+| `biome.json:21` |
+| `config/rules/boundary/sp-script-placement.yaml:0` |
+| `config/rules/boundary/sp-script-placement.yaml:8` |
+| `config/workflows/task-pipeline.yaml:232` |
+| `docs/design/configuration-contracts.md:316` |
+| `docs/design/harness-surface-governance.md:127` |
+| `docs/design/harness-surface-governance.md:133` |
+| `docs/plans/2026-10-14-spur-script-absorption.md:33` |
+| `docs/plans/2026-10-14-spur-script-absorption.md:47` |
+| `docs/plans/2026-10-14-spur-script-absorption.md:766` |
+| `docs/tasks5/1212_complete-pr-9-release-and-workflow-cost-cli-absorption.md:18` |
+| `docs/tasks5/1212_complete-pr-9-release-and-workflow-cost-cli-absorption.md:206` |
+| `docs/tasks5/1212_complete-pr-9-release-and-workflow-cost-cli-absorption.md:225` |
+| `docs/tasks5/1212_complete-pr-9-release-and-workflow-cost-cli-absorption.md:248` |
+| `docs/tasks5/1212_complete-pr-9-release-and-workflow-cost-cli-absorption.md:39` |
+| `docs/tasks5/1212_complete-pr-9-release-and-workflow-cost-cli-absorption.md:4` |
+| `docs/tasks5/1212_complete-pr-9-release-and-workflow-cost-cli-absorption.md:7` |
+| `docs/tasks5/1212_complete-pr-9-release-and-workflow-cost-cli-absorption.md:99` |
+| `package.json:44` |
+| `package.json:69` |
+| `packages/domain/tests/planning/lifecycle-drift.test.ts:296` |
+| `packages/domain/tests/planning/lifecycle-drift.test.ts:302` |
+| `packages/domain/tests/planning/lifecycle-drift.test.ts:319` |
+| `plugins/sp/README.md:0` |
+| `plugins/sp/README.md:280` |
+| `plugins/sp/skills/pr-reviewing/SKILL.md:43` |
+| `plugins/sp/skills/spur-dev/references/inline-pipeline-driver.md:100` |
+| `plugins/sp/tests/inline-pipeline-driver.test.ts:0` |
+| `plugins/sp/tests/inline-pipeline-driver.test.ts:163` |
+| `plugins/sp/tests/inline-pipeline-driver.test.ts:177` |
+| `plugins/sp/tests/inline-pipeline-driver.test.ts:183` |
+| `plugins/sp/tests/inline-pipeline-driver.test.ts:289` |
+| `plugins/sp/tests/task-pipeline-resilience.test.ts:132` |
+| `plugins/sp/tests/task-pipeline-resilience.test.ts:135` |
+| `plugins/sp/tests/task-pipeline-resilience.test.ts:146` |
+| `plugins/sp/tests/task-pipeline-resilience.test.ts:162` |
+| `plugins/sp/tests/task-pipeline-resilience.test.ts:294` |
+| `plugins/sp/tests/task-pipeline-resilience.test.ts:306` |
+| `plugins/sp/tests/task-pipeline-resilience.test.ts:5` |
+| `scripts/commands/bundle-plugins.test.ts:11` |
+| `scripts/commands/bundle-plugins.test.ts:56` |
+| `scripts/commands/bundle-plugins.test.ts:89` |
+| `scripts/commands/plugin-install-smoke.ts:10` |
+| `scripts/commands/plugin-install-smoke.ts:4` |
+| `scripts/commands/plugin-install-smoke.ts:67` |
+| `scripts/commands/plugin-install-smoke.ts:71` |
+| `scripts/commands/plugin-install-smoke.ts:76` |
+| `scripts/commands/plugin-install-smoke.ts:79` |
+| `scripts/commands/script-contract-check.test.ts:1` |
+| `scripts/commands/script-contract-check.test.ts:101` |
+| `scripts/commands/script-contract-check.test.ts:103` |
+| `scripts/commands/script-contract-check.test.ts:106` |
+| `scripts/commands/script-contract-check.test.ts:11` |
+| `scripts/commands/script-contract-check.test.ts:115` |
+| `scripts/commands/script-contract-check.test.ts:118` |
+| `scripts/commands/script-contract-check.test.ts:129` |
+| `scripts/commands/script-contract-check.test.ts:132` |
+| `scripts/commands/script-contract-check.test.ts:146` |
+| `scripts/commands/script-contract-check.test.ts:148` |
+| `scripts/commands/script-contract-check.test.ts:15` |
+| `scripts/commands/script-contract-check.test.ts:151` |
+| `scripts/commands/script-contract-check.test.ts:160` |
+| `scripts/commands/script-contract-check.test.ts:163` |
+| `scripts/commands/script-contract-check.test.ts:17` |
+| `scripts/commands/script-contract-check.test.ts:171` |
+| `scripts/commands/script-contract-check.test.ts:173` |
+| `scripts/commands/script-contract-check.test.ts:176` |
+| `scripts/commands/script-contract-check.test.ts:186` |
+| `scripts/commands/script-contract-check.test.ts:189` |
+| `scripts/commands/script-contract-check.test.ts:19` |
+| `scripts/commands/script-contract-check.test.ts:197` |
+| `scripts/commands/script-contract-check.test.ts:200` |
+| `scripts/commands/script-contract-check.test.ts:204` |
+| `scripts/commands/script-contract-check.test.ts:206` |
+| `scripts/commands/script-contract-check.test.ts:21` |
+| `scripts/commands/script-contract-check.test.ts:210` |
+| `scripts/commands/script-contract-check.test.ts:219` |
+| `scripts/commands/script-contract-check.test.ts:228` |
+| `scripts/commands/script-contract-check.test.ts:230` |
+| `scripts/commands/script-contract-check.test.ts:233` |
+| `scripts/commands/script-contract-check.test.ts:241` |
+| `scripts/commands/script-contract-check.test.ts:249` |
+| `scripts/commands/script-contract-check.test.ts:25` |
+| `scripts/commands/script-contract-check.test.ts:265` |
+| `scripts/commands/script-contract-check.test.ts:268` |
+| `scripts/commands/script-contract-check.test.ts:271` |
+| `scripts/commands/script-contract-check.test.ts:273` |
+| `scripts/commands/script-contract-check.test.ts:28` |
+| `scripts/commands/script-contract-check.test.ts:281` |
+| `scripts/commands/script-contract-check.test.ts:290` |
+| `scripts/commands/script-contract-check.test.ts:292` |
+| `scripts/commands/script-contract-check.test.ts:297` |
+| `scripts/commands/script-contract-check.test.ts:300` |
+| `scripts/commands/script-contract-check.test.ts:303` |
+| `scripts/commands/script-contract-check.test.ts:307` |
+| `scripts/commands/script-contract-check.test.ts:315` |
+| `scripts/commands/script-contract-check.test.ts:320` |
+| `scripts/commands/script-contract-check.test.ts:323` |
+| `scripts/commands/script-contract-check.test.ts:327` |
+| `scripts/commands/script-contract-check.test.ts:34` |
+| `scripts/commands/script-contract-check.test.ts:48` |
+| `scripts/commands/script-contract-check.test.ts:51` |
+| `scripts/commands/script-contract-check.test.ts:55` |
+| `scripts/commands/script-contract-check.test.ts:63` |
+| `scripts/commands/script-contract-check.test.ts:65` |
+| `scripts/commands/script-contract-check.test.ts:68` |
+| `scripts/commands/script-contract-check.test.ts:76` |
+| `scripts/commands/script-contract-check.test.ts:79` |
+| `scripts/commands/script-contract-check.test.ts:8` |
+| `scripts/commands/script-contract-check.test.ts:88` |
+| `scripts/commands/script-contract-check.test.ts:91` |
+| `scripts/commands/script-contract-check.ts:133` |
+| `scripts/commands/script-contract-check.ts:144` |
+| `scripts/commands/script-contract-check.ts:185` |
+| `scripts/commands/script-contract-check.ts:21` |
+| `scripts/commands/script-contract-check.ts:243` |
+| `scripts/commands/script-contract-check.ts:247` |
+| `scripts/commands/script-contract-check.ts:25` |
+| `scripts/commands/script-contract-check.ts:256` |
+| `scripts/commands/script-contract-check.ts:26` |
+| `scripts/commands/script-contract-check.ts:270` |
+| `scripts/commands/script-contract-check.ts:279` |
+| `scripts/commands/script-contract-check.ts:282` |
+| `scripts/commands/script-contract-check.ts:284` |
+| `scripts/commands/script-contract-check.ts:286` |
+| `scripts/commands/script-contract-check.ts:290` |
+| `scripts/commands/script-contract-check.ts:296` |
+| `scripts/commands/script-contract-check.ts:3` |
+| `scripts/commands/script-contract-check.ts:312` |
+| `scripts/commands/script-contract-check.ts:32` |
+| `scripts/commands/script-contract-check.ts:329` |
+| `scripts/commands/script-contract-check.ts:336` |
+| `scripts/commands/script-contract-check.ts:35` |
+| `scripts/commands/script-contract-check.ts:41` |
+| `scripts/commands/script-contract-check.ts:44` |
+| `scripts/commands/script-contract-check.ts:463` |
+| `scripts/commands/script-contract-check.ts:47` |
+| `scripts/commands/script-contract-check.ts:50` |
+| `scripts/commands/script-contract-check.ts:517` |
+| `scripts/commands/script-contract-check.ts:519` |
+| `scripts/commands/script-contract-check.ts:521` |
+| `scripts/commands/script-contract-check.ts:53` |
+| `scripts/commands/script-contract-check.ts:55` |
+| `scripts/commands/script-contract-check.ts:564` |
+| `scripts/commands/script-contract-check.ts:570` |
+| `scripts/commands/script-contract-check.ts:576` |
+| `scripts/commands/script-contract-check.ts:579` |
+| `scripts/commands/script-contract-check.ts:58` |
+| `scripts/commands/script-contract-check.ts:586` |
+| `scripts/commands/script-contract-check.ts:590` |
+| `scripts/commands/script-contract-check.ts:592` |
+| `scripts/commands/script-contract-check.ts:594` |
+| `scripts/commands/script-contract-check.ts:6` |
+| `scripts/commands/script-contract-check.ts:62` |
+| `scripts/commands/script-contract-check.ts:64` |
+| `scripts/commands/script-contract-check.ts:72` |
+| `scripts/commands/script-contract-check.ts:74` |
+| `scripts/commands/script-contract-check.ts:93` |
+| `scripts/commands/script-contract-check.ts:99` |
 
 ### Testing
 
-<!-- Filled during verification: commands run, outcomes, coverage claim or N/A. -->
+**Pipeline verify results**
+
+- Verdict: PASS (from verdict artifact)
+
+| Requirement | Status | Evidence |
+|-------------|--------|----------|
+| R1 | MET | Frozen targets absent, verified this run (`test -e` loop: script-root.ts/.mjs, lib/spur-bin.ts, tests/{script-root,spur-bin}.test.ts, config/plugin-scripts.json, config/script-placement-baseline.json all absent); `ls plugins/sp/scripts` → hooks/ only with the 7 canonical entries (agent-lifecycle, careful-guard, context-post-tool, context-session-start, context-session-stop, fleet-guest-stop, task-write-guard; hooks.json distinct ids = 7); lib holds exactly the 8 hook-only libs (env, agent-hint, context-owner, context-post-tool, context-session-start, context-session-stop, destructive-policy, task-file-policy); `build:scripts` gone and `build` caller clean at package.json:69; `rg 'build:plugin-lib\|bundle-plugin-lib\|plugin-lib' package.json` rc=1 (bundle infra still absent); biome.json .mjs ignore rules removed in step (diff). |
+| R2 | MET | script-contract-check.ts rewritten hook-only: header rules 1–4 at scripts/commands/script-contract-check.ts:1-11 (stray script/twin, ADR-129 hook layout incl. shadow-entry ban, @gobing-ai/* value-import ban at script-contract-check.ts:9, retired-invocation scan), `checkPlacement` retained at scripts/commands/script-contract-check.ts:517 with --placement-only wired at scripts/commands/script-contract-check.ts:578-579; no blanket waiver — placement findings fail raw per config/rules/boundary/sp-script-placement.yaml:8; registry/twin/baseline machinery gone. Ran this turn: `bun scripts/commands/script-contract-check.ts` → "0 violation(s) — PASS", rc=0. 19 substantive fixture tests incl. real-tree hook-only assertion at scripts/commands/script-contract-check.test.ts:307. |
+| R3 | MET | Only the 0960 script-root identity action removed from task-pipeline.yaml precheck (diff verified); base-sha capture + dirty-tree advisory retained at config/workflows/task-pipeline.yaml:240; driver probe removed from inline-pipeline-driver.md (diff) with CLI resolution/provenance retained at plugins/sp/skills/spur-dev/references/inline-pipeline-driver.md:120 and :622; resilience test rewritten to assert no retired probes + surviving base-sha at plugins/sp/tests/task-pipeline-resilience.test.ts:138; lifecycle-drift R2 flipped to hook-only at packages/domain/tests/planning/lifecycle-drift.test.ts:319 (`expect(spurShellingScripts).toEqual([])`); plugin-install-smoke.ts simplified to uniform strict import scan + superskill install --dry-run (scripts/commands/plugin-install-smoke.ts:7-10); `rg 'script-root\|spur-bin\|plugin-scripts.json\|script-placement-baseline' package.json apps/cli/package.json .github/workflows/publish.yml` rc=1 (no live references); config/workflows + plugins/sp/hooks sweep clean (only historical comments/docs hits). |
+| R4 | MET | I3 status checked through the feature CLI this run: `bun apps/cli/src/index.ts feature show I3 --json` → status "verifying"; surface-drift-inventory retained with repository-only reason at docs/plans/2026-10-14-spur-script-absorption.md:33 and :81, tool + test still present (scripts/commands/surface-drift-inventory.ts); unrelated live shim retained at config/transition-shims.json:5 (agent-bare-binary-name); every retained old-path script has a current reason (scripts/ now holds only registered hook entries). |
+| R6 | MET | docs/plans/2026-10-14-spur-script-absorption.md:33 PR-8 landed overlay dated 2026-10-15, :43 §3.2 disposition, :51 Q1–Q7 disposition (PR-10 closure + version-enforcement deferral preserved), §12 overlay reconciles raw-deletion wording with hooks-remaining reality; docs/design/configuration-contracts.md:316 "Retired (2026-10-15, task 1213)" overlay; docs/design/harness-surface-governance.md:128 and :133 document the strict hook-only contract + baseline retirement; plugins/sp/README.md:558 documents Superskill 0.3.39 floor and :564 Spur 0.5.0 prerequisite; dated history preserved (diff is additive overlay, no history deletions). |
+| R7 | MET | bunfig.toml and scripts/bunfig.toml untouched: `git diff base..HEAD -- bunfig.toml scripts/bunfig.toml` = 0 lines; gate scope unchanged; certified serialized required gate PASS (.spur/run/1213-test-gate.log: 11108 pass / 0 fail, 705 files; per-file coverage table: hooks 90.00–100.00% funcs, libs 98.65–100%); checker (19 tests), packaging (bundle-plugins, verify-pack), standalone and resilience tests green in-gate; root reviewer accepted (review answer PASS, 0 blocking findings). |
+| R8 | MET | One consistent exact pin: root catalog @gobing-ai/superskill 0.3.39 at package.json:44; bun.lock catalog + resolved entry 0.3.39 at bun.lock:503; publish smoke installs @gobing-ai/superskill@0.3.39 at .github/workflows/publish.yml:48; ts-* stays ^0.5.28 (bun.lock:227-228) — unrelated upgrade not mixed in; workspace 0.4.8 bumps are 1212's landed change merged not undone. |
+
+| Acceptance Criteria | Status | Evidence Type | Evidence |
+|---------------------|--------|---------------|----------|
+| AC1 — PR-8 retires the script infrastructure (req: R1, R2, R3, R4, R6, R7) | MET | test | script-root/spur-bin/manifests/build:scripts absent without resurrection (absence loop + `rg` rc=1 this run; package.json:69); 7 canonical hooks + 8 libs resolve with registry↔entry consistency (hooks.json ids=7; contract-check PASS rc=0 this run exercising hook-layout both directions); pipeline keeps base-sha/CLI-resolution/evidence safeguards without the probe (task-pipeline.yaml:240; task-pipeline-resilience.test.ts:138; lifecycle-drift.test.ts:319); placement rejects forbidden imports, non-hook scripts, shadow entries, retired invocations (fixture tests script-contract-check.test.ts:76-230); I3 inventory + agent-bare-binary-name shim retained (config/transition-shims.json:5; docs/plans/2026-10-14-spur-script-absorption.md:33); bunfig unchanged (0-line diff) and required gate PASS with per-file coverage (.spur/run/1213-test-gate.log). |
+| AC3 — Distribution uses the supported hook runtime (req: R6, R7, R8) | MET | command | Pins and lockfile aligned at one exact version (package.json:44, bun.lock:503, .github/workflows/publish.yml:48); all seven hook identities resolve via superskill hook run sp (hooks.json; contract-check PASS run this turn); staged timeouts declared 5/10/15s unchanged (plugins/sp/hooks/hooks.json:11,49,99 — registry untouched by the diff); inert force-push exit-2 denial covered by committed careful-guard/task-write-guard tests green in the certified gate; Spur 0.5.0 prerequisite + PR-10 closure/deferral documented without invented manifest field (plugins/sp/README.md:558-564; docs/plans/2026-10-14-spur-script-absorption.md:51). Residual routed per certified review F1 (P3, non-blocking): the one-shot actual isolated Codex-install receipt is not durably captured; the spec's design permits the packaging-harness path (plugin-install-smoke dry-run gate runs at release on publish.yml) and R7's root-reviewer acceptance clause is satisfied by the certified PASS — parent 1211 closes the receipt-or-waiver at umbrella. |
+- Coverage: N/A (verdict-based; verify pipeline does not measure code coverage)
 
 ### Review
 
-<!-- Filled during review: P1-P4 findings, residual risk, and final disposition. -->
+<!-- spur:record-review -->
+
+**SECU findings** (pipeline verify step — verdict: PASS)
+
+| Priority | Dimension | Location | Finding |
+|----------|-----------|----------|----------|
+| P4 | — | — | No findings (verify verdict PASS) |
 
 ### References
 
@@ -125,3 +317,8 @@ Non-goals: new minCliVersion schema/runtime version check, unrelated transition 
 - One main worktree and only orchestration parent1211 at wip were observed; execution remains serial after1212.
 
 ### History
+
+- 2026-10-15T21:05:17.704Z todo → wip (system)
+- 2026-10-15T22:12:53.941Z wip → testing (system)
+- 2026-10-15T22:12:58.665Z testing → done (system)
+

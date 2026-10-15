@@ -1,0 +1,52 @@
+{
+    "cost text": {
+        "stdout": "pr-review: wall=n=1 mean=5s median=5s min=5s max=5s cost=n/a\nwrapup-pipeline: wall=n=2 mean=210s median=210s min=120s max=300s cost=n/a [excluded 1 dry, 0 non-terminal]\nzz-unbudgeted: wall=n/a (no terminal non-dry run with bounds) cost=n/a\n",
+        "stderr": "",
+        "exitCode": 0
+    },
+    "cost json": {
+        "stdout": "{\"states\":[{\"agentRunCount\":0,\"retries\":0,\"state\":\"review\",\"visits\":0,\"wallMsP50\":4000,\"wallMsP90\":4000,\"workflow\":\"pr-review\"},{\"agentRunCount\":3,\"retries\":1,\"state\":\"doc-sync\",\"visits\":3,\"wallMsP50\":60000,\"wallMsP90\":120000,\"workflow\":\"wrapup-pipeline\"},{\"agentRunCount\":0,\"retries\":0,\"state\":\"end\",\"visits\":2,\"wallMsP50\":null,\"wallMsP90\":null,\"workflow\":\"wrapup-pipeline\"}],\"workflows\":[{\"activeMs\":null,\"activeRuns\":0,\"agentRunCountMedian\":0,\"dryRuns\":0,\"historyRows\":0,\"mappedRuns\":0,\"nonTerminalRuns\":0,\"runs\":1,\"terminalReasonMix\":{\"unclassified\":1},\"terminalRuns\":1,\"tokenCostUsd\":null,\"tokens\":null,\"usdRows\":0,\"wallClockMs\":{\"max\":5000,\"mean\":5000,\"median\":5000,\"min\":5000},\"wallMsP50\":5000,\"wallMsP90\":5000,\"workflow\":\"pr-review\"},{\"activeMs\":{\"max\":289000,\"mean\":194000,\"median\":194000,\"min\":99000},\"activeRuns\":2,\"agentRunCountMedian\":1,\"dryRuns\":1,\"historyRows\":0,\"mappedRuns\":0,\"nonTerminalRuns\":0,\"runs\":3,\"terminalReasonMix\":{\"unclassified\":2},\"terminalRuns\":2,\"tokenCostUsd\":null,\"tokens\":null,\"usdRows\":0,\"wallClockMs\":{\"max\":300000,\"mean\":210000,\"median\":210000,\"min\":120000},\"wallMsP50\":120000,\"wallMsP90\":300000,\"workflow\":\"wrapup-pipeline\"},{\"activeMs\":null,\"activeRuns\":0,\"agentRunCountMedian\":null,\"dryRuns\":0,\"historyRows\":0,\"mappedRuns\":0,\"nonTerminalRuns\":0,\"runs\":0,\"terminalReasonMix\":{},\"terminalRuns\":0,\"tokenCostUsd\":null,\"tokens\":null,\"usdRows\":0,\"wallClockMs\":null,\"wallMsP50\":null,\"wallMsP90\":null,\"workflow\":\"zz-unbudgeted\"}]}\n",
+        "stderr": "",
+        "exitCode": 0
+    },
+    "cost by-state": {
+        "stdout": "pr-review/review: visits=0 agent.run=0 wall=p50=4000ms p90=4000ms retries=0\nwrapup-pipeline/doc-sync: visits=3 agent.run=3 wall=p50=60000ms p90=120000ms retries=1\nwrapup-pipeline/end: visits=2 agent.run=0 wall=n/a retries=0\n",
+        "stderr": "",
+        "exitCode": 0
+    },
+    "cost include-bookkeeping": {
+        "stdout": "pr-review: wall=n=1 mean=5s median=5s min=5s max=5s cost=n/a\ntask-lifecycle: wall=n/a (no terminal non-dry run with bounds) cost=n/a\nwrapup-pipeline: wall=n=2 mean=210s median=210s min=120s max=300s cost=n/a [excluded 1 dry, 0 non-terminal]\nzz-unbudgeted: wall=n/a (no terminal non-dry run with bounds) cost=n/a\n",
+        "stderr": "",
+        "exitCode": 0
+    },
+    "cost workflow filters": {
+        "stdout": "pr-review: wall=n=1 mean=5s median=5s min=5s max=5s cost=n/a\nwrapup-pipeline: wall=n=2 mean=210s median=210s min=120s max=300s cost=n/a [excluded 1 dry, 0 non-terminal]\n",
+        "stderr": "",
+        "exitCode": 0
+    },
+    "cost since": {
+        "stdout": "pr-review: wall=n=1 mean=5s median=5s min=5s max=5s cost=n/a\nwrapup-pipeline: wall=n=1 mean=300s median=300s min=300s max=300s cost=n/a [excluded 1 dry, 0 non-terminal]\nzz-unbudgeted: wall=n/a (no terminal non-dry run with bounds) cost=n/a\n",
+        "stderr": "",
+        "exitCode": 0
+    },
+    "cost since by-state": {
+        "stdout": "pr-review/review: visits=0 agent.run=0 wall=p50=4000ms p90=4000ms retries=0\nwrapup-pipeline/doc-sync: visits=2 agent.run=2 wall=p50=120000ms p90=120000ms retries=1\nwrapup-pipeline/end: visits=1 agent.run=0 wall=n/a retries=0\n",
+        "stderr": "",
+        "exitCode": 0
+    },
+    "budget from db": {
+        "stdout": "check-pipeline-budgets: FAIL (2 failure(s))\n",
+        "stderr": "MISSING BUDGET: pipeline=zz-unbudgeted modelQueries=1 has no entry in config/pipeline-budgets.json\nBUDGET EXCEEDED: pipeline=wrapup-pipeline wallClockMs: budget=100000ms measured=210000ms (over budget)\n",
+        "exitCode": 1
+    },
+    "budget workflow filter": {
+        "stdout": "note: wrapup-pipeline has no real-run measurement — budget unenforced until a run is recorded (R5)\nnote: idea-pipeline has no real-run measurement — budget unenforced until a run is recorded (R5)\ncheck-pipeline-budgets: FAIL (1 failure(s))\n",
+        "stderr": "MISSING BUDGET: pipeline=zz-unbudgeted modelQueries=1 has no entry in config/pipeline-budgets.json\n",
+        "exitCode": 1
+    },
+    "budget measured-file over": {
+        "stdout": "note: pr-review has no real-run measurement — budget unenforced until a run is recorded (R5)\nnote: idea-pipeline has no real-run measurement — budget unenforced until a run is recorded (R5)\ncheck-pipeline-budgets: FAIL (2 failure(s))\n",
+        "stderr": "MISSING BUDGET: pipeline=zz-unbudgeted modelQueries=1 has no entry in config/pipeline-budgets.json\nBUDGET EXCEEDED: pipeline=wrapup-pipeline modelQueries: budget=1 measured=3 (over budget)\n",
+        "exitCode": 1
+    }
+}

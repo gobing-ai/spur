@@ -39,7 +39,7 @@
     },
     "apps/cli": {
       "name": "@gobing-ai/spur",
-      "version": "0.4.6",
+      "version": "0.4.8",
       "bin": {
         "spur": "spur.js",
       },
@@ -72,7 +72,7 @@
     },
     "apps/desktop": {
       "name": "@gobing-ai/spur-desktop",
-      "version": "0.4.6",
+      "version": "0.4.8",
       "dependencies": {
         "@gobing-ai/spur-config": "workspace:*",
       },
@@ -86,7 +86,7 @@
     },
     "apps/server": {
       "name": "@gobing-ai/spur-server",
-      "version": "0.4.6",
+      "version": "0.4.8",
       "dependencies": {
         "@gobing-ai/spur-app": "workspace:*",
         "@gobing-ai/spur-config": "workspace:*",
@@ -154,7 +154,7 @@
     },
     "packages/app": {
       "name": "@gobing-ai/spur-app",
-      "version": "0.4.6",
+      "version": "0.4.8",
       "dependencies": {
         "@gobing-ai/spur-config": "workspace:0.4.8",
         "@gobing-ai/spur-contracts": "workspace:*",
@@ -179,7 +179,7 @@
     },
     "packages/config": {
       "name": "@gobing-ai/spur-config",
-      "version": "0.4.6",
+      "version": "0.4.8",
       "dependencies": {
         "@gobing-ai/ts-runtime": "catalog:",
         "yaml": "catalog:",
@@ -192,7 +192,7 @@
     },
     "packages/contracts": {
       "name": "@gobing-ai/spur-contracts",
-      "version": "0.4.6",
+      "version": "0.4.8",
       "dependencies": {
         "@gobing-ai/spur-domain": "workspace:0.4.8",
         "@orpc/contract": "catalog:",
@@ -205,7 +205,7 @@
     },
     "packages/domain": {
       "name": "@gobing-ai/spur-domain",
-      "version": "0.4.6",
+      "version": "0.4.8",
       "dependencies": {
         "@gobing-ai/ts-db": "catalog:",
         "@gobing-ai/ts-dual-workflow-engine": "catalog:",
@@ -223,7 +223,7 @@
   },
   "catalog": {
     "@commander-js/extra-typings": "^14.0.0",
-    "@gobing-ai/superskill": "0.3.37",
+    "@gobing-ai/superskill": "0.3.39",
     "@gobing-ai/ts-ai-decision": "^0.5.28",
     "@gobing-ai/ts-ai-runner": "^0.5.28",
     "@gobing-ai/ts-db": "^0.5.28",
@@ -500,7 +500,7 @@
 
     "@gobing-ai/spur-web": ["@gobing-ai/spur-web@workspace:apps/web"],
 
-    "@gobing-ai/superskill": ["@gobing-ai/superskill@0.3.37", "", { "dependencies": { "@gobing-ai/ts-ai-runner": "^0.5.24", "@gobing-ai/ts-db": "^0.5.24", "@gobing-ai/ts-runtime": "^0.5.24", "@gobing-ai/ts-utils": "^0.5.24", "commander": "^14.0.0", "drizzle-orm": "^0.44.0", "drizzle-zod": "^0.7.0", "rulesync": "^8.28.1", "yaml": "^2.9.0", "zod": "^3.25.0" }, "bin": { "superskill": "dist/index.js" } }, "sha512-FAquGRiJ2p5F6u/Y9LOvd0zPiDX6wH0dI6rzKt/dFlpQJOImhYI/m7yqW9G/cPwrwRO1nSb0zDTi3Zz2mm1Bxg=="],
+    "@gobing-ai/superskill": ["@gobing-ai/superskill@0.3.39", "", { "dependencies": { "@gobing-ai/ts-ai-runner": "^0.5.24", "@gobing-ai/ts-db": "^0.5.24", "@gobing-ai/ts-runtime": "^0.5.24", "@gobing-ai/ts-utils": "^0.5.24", "commander": "^14.0.0", "drizzle-orm": "^0.44.0", "drizzle-zod": "^0.7.0", "rulesync": "^8.28.1", "yaml": "^2.9.0", "zod": "^3.25.0" }, "bin": { "superskill": "dist/index.js" } }, "sha512-ukpbr7Cql6vHGRTrH5MH+oBK6tcUpQ6+anVmKTuX05oa4ka4xmM4DIrrq7hMFjTwVeQpbXDWH//YlgksLwvcqA=="],
 
     "@gobing-ai/ts-ai-decision": ["@gobing-ai/ts-ai-decision@0.5.28", "", { "dependencies": { "@gobing-ai/ts-ai-runner": "^0.5.28", "@gobing-ai/ts-decision-fm": "^0.5.28", "@gobing-ai/ts-laya-mlx": "^0.5.28", "@gobing-ai/ts-runtime": "^0.5.28", "zod": "^4.1.0" } }, "sha512-+mYRIhDUpmQcrqKz8MNj+RVwYFF8lm9/5QDu8bYzFmrBA3bVR0YffhlTibQ0B05IbXULy+7G89uTKrlhY1rxsA=="],
 

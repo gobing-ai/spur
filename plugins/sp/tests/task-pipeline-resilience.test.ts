@@ -2,7 +2,7 @@ import { describe, expect, test } from 'bun:test';
 import { chmodSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { getEnvVar, getEnvVars } from '@gobing-ai/ts-utils';
+import { getEnvVars } from '@gobing-ai/ts-utils';
 import { parse } from 'yaml';
 
 interface PipelineAction {
@@ -129,33 +129,21 @@ describe('0503 task-pipeline resilience', () => {
         expect(commands.join('\n')).not.toContain('precheck-size');
         expect(commands.join('\n')).not.toContain('precheck-evidence');
         // Feature reactivation surfaces failure instead of swallowing it (no `|| true`).
-        expect(commandFor('precheck', 2)).not.toContain('|| true');
+        expect(commandFor('precheck', 1)).not.toContain('|| true');
     });
 
-    test('run-start script-root runs a resolved .mjs twin under node, not bun (0960 R2)', () => {
-        const dir = mkdtempSync(join(tmpdir(), 'spur-0960-runner-'));
-        try {
-            // Consumer: no source-repo marker, so the staged .mjs twin is the only resolution.
-            const bin = join(dir, 'bin');
-            mkdirSync(bin, { recursive: true });
-            const twin = join(dir, 'script-root.mjs');
-            writeFileSync(twin, '');
-            const ran = join(dir, 'runner');
-            executable(bin, 'superskill', `echo "${twin}"`);
-            executable(bin, 'node', `echo node > "${ran}"`);
-            executable(bin, 'bun', `echo bun > "${ran}"`);
-            const command = commandFor('precheck', 0);
-            expect(command).toContain('script-root');
-            const result = runShell(command, dir, {
-                __runId: 'r0960',
-                spurBin: 'spur',
-                PATH: `${bin}:${getEnvVar('PATH') ?? ''}`,
-            });
-            expect(result.exitCode).toBe(0);
-            expect(readFileSync(ran, 'utf8')).toBe('node\n');
-        } finally {
-            rmSync(dir, { recursive: true, force: true });
+    // 1213: the 0960 run-start script-root probe is retired — no precheck shell may resolve or
+    // execute plugins/sp/scripts machinery (run-start identity is now owned by the driver +
+    // `spur workflow` itself); the base-sha capture and dirty-tree advisory remain.
+    test('precheck carries no retired script probes and keeps its base-sha capture (1213)', () => {
+        const commands = shellCommands('precheck');
+        expect(commands.length).toBeGreaterThanOrEqual(2);
+        for (const command of commands) {
+            expect(command).not.toContain('script-root');
+            expect(command).not.toContain('superskill script path');
+            expect(command).not.toContain('plugins/sp/scripts');
         }
+        expect(commands.some((c) => c.includes('-base.sha'))).toBe(true);
     });
 
     test('auto feature reactivation: single-shot on success, blocking on real failure (0723 R3)', () => {
@@ -171,7 +159,7 @@ describe('0503 task-pipeline resilience', () => {
   feature:update) echo y >> "${calls}"; exit "\${UPDATE_RC:-0}" ;;
 esac`,
             );
-            const command = commandFor('precheck', 2);
+            const command = commandFor('precheck', 1);
 
             // Green path: one sync call, exit 0.
             const ok = runShell(command, dir, { profile: 'auto', wbs: '0723', spurBin: spur });
@@ -303,7 +291,7 @@ esac`,
         const dir = mkdtempSync(join(tmpdir(), 'spur-0511-corpus-dirty-'));
         initGitRepo(dir);
         writeFileSync(join(dir, 'docs', 'tasks4', 'uncommitted.md'), 'corpus edit');
-        const command = commandFor('precheck', 1);
+        const command = commandFor('precheck', 0);
         const result = runShell(command, dir, {});
 
         expect(result.exitCode).toBe(0);
@@ -315,7 +303,7 @@ esac`,
     test('precheck dirty-tree action stays quiet on a clean task corpus', () => {
         const dir = mkdtempSync(join(tmpdir(), 'spur-0511-corpus-clean-'));
         initGitRepo(dir);
-        const command = commandFor('precheck', 1);
+        const command = commandFor('precheck', 0);
         const result = runShell(command, dir, {});
 
         expect(result.exitCode).toBe(0);

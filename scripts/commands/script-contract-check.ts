@@ -1,154 +1,77 @@
 #!/usr/bin/env bun
 /**
- * script-contract-check — two-sided gate over plugins/sp script entrypoint contracts
- * (task 0600, feature I, ADR-065).
+ * script-contract-check — final hook-only contract over plugins/sp scripts
+ * (task 1213; supersedes the 0600 manifest/twin gate retired with script-root).
  *
- * Enforces superskill's standard plugin script contract across plugins/sp:
- * 1. A 'standard' entry must have a valid .mjs twin byte-identical to a fresh convert of its .ts source.
- * 2. A .mjs twin on disk must be registered under a 'standard' entry (never 'repo-only' or unlisted).
- * 3. Every script file under plugins/sp/scripts/ must have a manifest entry (two-sided).
- * 4. No shipped surface (commands/, skills/, agents/, README.md) may reference 'bun plugins/sp/scripts/'.
+ * plugins/sp/scripts holds ONLY registered hook entries; everything else moved to
+ * approved CLI surfaces (script absorption PR-1..PR-9). Enforced here:
+ * 1. No non-hook script files under plugins/sp/scripts (everything lives in scripts/hooks/)
+ *    and no `.mjs` twins — the standard/repo-only registry and `superskill script convert`
+ *    machinery are retired.
+ * 2. Hook identity/layout (ADR-129): every `hooks.json` identity resolves to one authored
+ *    `scripts/hooks/<id>.ts` entry, no shadow entries under `hooks/`, no unregistered
+ *    entries, hook tests only in `plugins/sp/tests/hooks`.
+ * 3. No bundled surface (scripts, hooks, lib) value-imports `@gobing-ai/*` — install-time
+ *    bundling runs with no node_modules (task 0669); `import type` is exempt.
+ * 4. No shipped surface (commands/, skills/, agents/, README.md, repo workflows) invokes the
+ *    retired script machinery: direct `bun plugins/sp/scripts/…` calls, project-first script
+ *    probes, or `superskill script path`.
  *
  * Usage:
  *   bun scripts/commands/script-contract-check.ts
- *     [--manifest <path>]     default: config/plugin-scripts.json
  *     [--scripts-dir <path>]  default: plugins/sp/scripts
  *     [--plugin-dir <path>]   default: plugins/sp
  *
- * Placement scan (ADR-130, task 1000) — plugins/sp script placement contract only:
+ * Placement scan (ADR-130) — plugins/sp script placement contract only:
  *   bun scripts/commands/script-contract-check.ts --placement-only
- *     [--baseline <path>]     default: config/script-placement-baseline.json
  *     [--repo-root <dir>]     default: . (fixture tests point this at a temp tree)
  *
  * Exit code: 0 on success, 1 on any violation.
  */
 
-import { spawnSync } from 'node:child_process';
-import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, statSync } from 'node:fs';
-import { tmpdir } from 'node:os';
-import { dirname, join, resolve } from 'node:path';
+import { existsSync, readdirSync, readFileSync, statSync } from 'node:fs';
+import { join, resolve } from 'node:path';
 
-export type ScriptContractType = 'standard' | 'repo-only';
-
-export interface ScriptManifestEntry {
-    rel: string;
-    contract: ScriptContractType;
-    twin?: string;
-}
-
-export interface ScriptManifest {
-    schema_version?: number;
-    description?: string;
-    entries: ScriptManifestEntry[];
-}
-
-export interface Violation {
-    kind:
-        | 'missing_twin'
-        | 'stale_twin'
-        | 'unexpected_twin'
-        | 'unregistered_script'
-        | 'forbidden_invocation'
-        | 'converter_unavailable'
-        | 'gobing_ai_import'
-        | 'incomplete';
+export interface ScriptViolation {
+    kind: 'stray_script' | 'stray_twin' | 'hook-layout' | 'gobing_ai_import' | 'forbidden_invocation';
     target: string;
     message: string;
 }
 
 export function parseArgs(argv: string[]): {
-    manifest: string;
     scriptsDir: string;
     pluginDir: string;
     placementOnly: boolean;
-    baseline: string;
     repoRoot: string;
     cwd: string;
 } {
-    let manifest = 'config/plugin-scripts.json';
     let scriptsDir = 'plugins/sp/scripts';
     let pluginDir = 'plugins/sp';
     let placementOnly = false;
-    let baseline = 'config/script-placement-baseline.json';
     let repoRoot = '.';
     for (let i = 0; i < argv.length; i++) {
-        if (argv[i] === '--manifest') manifest = argv[++i] ?? manifest;
-        else if (argv[i] === '--scripts-dir') scriptsDir = argv[++i] ?? scriptsDir;
+        if (argv[i] === '--scripts-dir') scriptsDir = argv[++i] ?? scriptsDir;
         else if (argv[i] === '--plugin-dir') pluginDir = argv[++i] ?? pluginDir;
         else if (argv[i] === '--placement-only') placementOnly = true;
-        else if (argv[i] === '--baseline') baseline = argv[++i] ?? baseline;
         else if (argv[i] === '--repo-root') repoRoot = argv[++i] ?? repoRoot;
     }
-    return { manifest, scriptsDir, pluginDir, placementOnly, baseline, repoRoot, cwd: process.cwd() };
-}
-
-export function loadManifest(path: string): { manifest: ScriptManifest | null; error: string | null } {
-    if (!existsSync(path)) return { manifest: null, error: `manifest not found at ${path}` };
-    try {
-        const raw = readFileSync(path, 'utf8');
-        const parsed = JSON.parse(raw) as ScriptManifest;
-        if (!Array.isArray(parsed.entries)) {
-            return { manifest: null, error: `${path}: missing "entries" array` };
-        }
-        return { manifest: parsed, error: null };
-    } catch (err) {
-        return { manifest: null, error: `malformed JSON at ${path}: ${String(err)}` };
-    }
-}
-
-export function listDiskScripts(scriptsDir: string): { tsFiles: string[]; mjsFiles: string[] } {
-    const tsFiles: string[] = [];
-    const mjsFiles: string[] = [];
-
-    function walk(dir: string, base: string): void {
-        let entries: string[];
-        try {
-            entries = readdirSync(dir);
-        } catch {
-            return;
-        }
-        for (const entry of entries) {
-            const fullPath = join(dir, entry);
-            let st: ReturnType<typeof statSync>;
-            try {
-                st = statSync(fullPath);
-            } catch {
-                continue;
-            }
-            if (st.isDirectory()) {
-                // `scripts/hooks/` holds hook entries run by `superskill hook run` under Bun (ADR-039):
-                // not script-path entrypoints, so no manifest row and no `.mjs` twin. checkHookLayout owns them.
-                if (base === '' && entry === 'hooks') continue;
-                walk(fullPath, base ? `${base}/${entry}` : entry);
-            } else if (st.isFile()) {
-                const rel = base ? `${base}/${entry}` : entry;
-                if (entry.endsWith('.ts')) {
-                    tsFiles.push(rel);
-                } else if (entry.endsWith('.mjs')) {
-                    mjsFiles.push(rel);
-                }
-            }
-        }
-    }
-
-    walk(scriptsDir, '');
-    return { tsFiles: tsFiles.sort(), mjsFiles: mjsFiles.sort() };
+    return { scriptsDir, pluginDir, placementOnly, repoRoot, cwd: process.cwd() };
 }
 
 export function scanShippedSurfaces(pluginDir: string): Array<{ file: string; line: number; content: string }> {
     const matches: Array<{ file: string; line: number; content: string }> = [];
-    const guardMarker = 'config/plugin-scripts.json';
 
-    // 0960 R5: the probe shapes the guard idiom introduces, plus the legacy literal. A hit is
-    // legal only when its line (or, for a YAML command block, its folded block) names the
-    // source-repo marker — otherwise it is a project-first probe that shadows the installed
-    // twin in a consumer.
-    const projectFirstPatterns = [
+    // 1213: every pattern names retired machinery — a hit is always a violation. The 0960-era
+    // same-line `config/plugin-scripts.json` guard exemption is gone with the manifest: there is
+    // no legal way to probe a plugin script path anymore (the five absorbed scripts and their
+    // resolver are deleted; workflows and the driver call `$spurBin` CLI nouns directly).
+    const retiredPatterns = [
         /\[ -f "?plugins\/sp\/scripts\//,
         /\b[A-Z_]*S(?:CRIPT)?="?plugins\/sp\/scripts\//,
         /\bbun plugins\/sp\/scripts\//,
+        /\bsuperskill script path\b/,
     ];
-    const isHit = (line: string): boolean => projectFirstPatterns.some((pattern) => pattern.test(line));
+    const isHit = (line: string): boolean => retiredPatterns.some((pattern) => pattern.test(line));
 
     function push(file: string, line: number, content: string): void {
         matches.push({ file, line, content: content.trim() });
@@ -168,17 +91,14 @@ export function scanShippedSurfaces(pluginDir: string): Array<{ file: string; li
             const trimmed = line.trim();
             if (trimmed.startsWith('#')) continue; // comment lines are not executable probes
             if (!isHit(line)) continue;
-            if (line.includes(guardMarker)) continue; // same-line source-repo guard
             push(filePath, i + 1, trimmed);
         }
     }
 
     /**
-     * 0960 R5: the repo-root workflow definitions also ship, and their shell lives in folded
-     * `command:` blocks. A guard on one physical line legalizes the invocation on the next, so
-     * the block — not the line — is the unit of judgment. Markdown prose references (backticked
-     * paths with no `[ -f` / assignment / `bun ` prefix) never match the patterns, so they stay
-     * legal.
+     * The repo-root workflow definitions also ship, and their shell lives in folded
+     * `command:` blocks. The block — not the line — is the unit of judgment: any retired
+     * pattern inside the block fails, comments excepted.
      */
     function scanYamlCommands(filePath: string): void {
         if (!existsSync(filePath)) return;
@@ -210,21 +130,18 @@ export function scanShippedSurfaces(pluginDir: string): Array<{ file: string; li
                     block.push({ no: j + 1, text: next });
                     j++;
                 }
-                if (!block.some((b) => b.text.includes(guardMarker))) {
-                    for (const b of block) {
-                        const trimmed = b.text.trim();
-                        if (trimmed.startsWith('#')) continue;
-                        if (!isHit(b.text)) continue;
-                        if (b.text.includes(guardMarker)) continue;
-                        push(filePath, b.no, trimmed);
-                    }
+                for (const b of block) {
+                    const trimmed = b.text.trim();
+                    if (trimmed.startsWith('#')) continue;
+                    if (!isHit(b.text)) continue;
+                    push(filePath, b.no, trimmed);
                 }
                 i = j;
                 continue;
             }
             if (inlineKey) {
                 const value = inlineKey[2] ?? '';
-                if (!line.trim().startsWith('#') && isHit(value) && !value.includes(guardMarker)) {
+                if (!line.trim().startsWith('#') && isHit(value)) {
                     push(filePath, i + 1, line.trim());
                 }
                 i++;
@@ -265,7 +182,7 @@ export function scanShippedSurfaces(pluginDir: string): Array<{ file: string; li
     }
     scanLines(join(pluginDir, 'README.md'));
 
-    // 0960 R5: the workflow tree is repo-only (resolved from pluginDir/../..); a consumer's own
+    // The workflow tree is repo-only (resolved from pluginDir/../..); a consumer's own
     // workflow definitions are not this rule's subject.
     const workflowsDir = resolve(pluginDir, '..', '..', 'config', 'workflows');
     let workflowFiles: string[] = [];
@@ -323,154 +240,62 @@ function findGobingAiValueImports(dir: string): { file: string; line: number }[]
     return hits;
 }
 
-/** Regenerates a standard script's twin into `outPath`; false when conversion could not run. */
-export type ConvertTwin = (rel: string, outPath: string) => boolean;
+export function validateScriptLayout(opts: { scriptsDir: string; pluginDir: string }): ScriptViolation[] {
+    const violations: ScriptViolation[] = [];
+    const { scriptsDir, pluginDir } = opts;
 
-/**
- * The real converter: `superskill script convert sp <rel> --out <outPath>` run from the repo
- * root, because `convert` resolves `plugins/<plugin>/scripts/<rel>` against the process cwd.
- * Returns false — never throws — on spawn error, non-zero exit, or a missing output file, and
- * records the command plus stderr in `lastError` for the `converter_unavailable` violation.
- */
-export function spawnConvertTwin(repoRoot: string, bin = 'superskill'): ConvertTwin & { lastError?: string } {
-    const convert: ConvertTwin & { lastError?: string } = (rel, outPath) => {
-        const args = ['script', 'convert', 'sp', rel, '--out', outPath];
-        const res = spawnSync(bin, args, { cwd: repoRoot, encoding: 'utf-8' });
-        if (res.error || res.status !== 0 || !existsSync(outPath)) {
-            const detail = (res.stderr ?? '').trim() || res.error?.message || `exit ${res.status}`;
-            convert.lastError = `${bin} ${args.join(' ')}: ${detail}`;
-            return false;
+    // Rule 1: hook-only script layout — every file under scripts/ is an authored hook entry
+    // under scripts/hooks/, authored as .ts (no .mjs twins, no registry).
+    function walkScripts(dir: string, base: string): void {
+        let entries: string[];
+        try {
+            entries = readdirSync(dir);
+        } catch {
+            return;
         }
-        return true;
-    };
-    return convert;
-}
-
-export function validateContract(
-    manifest: ScriptManifest,
-    scriptsDir: string,
-    pluginDir: string,
-    opts: { convertTwin?: ConvertTwin } = {},
-): Violation[] {
-    const violations: Violation[] = [];
-    const { tsFiles, mjsFiles } = listDiskScripts(scriptsDir);
-
-    const manifestMap = new Map<string, ScriptManifestEntry>();
-    for (const entry of manifest.entries) {
-        if (!entry.rel || !entry.contract) {
-            violations.push({
-                kind: 'incomplete',
-                target: entry.rel ?? '<missing>',
-                message: `manifest entry missing required fields (rel, contract)`,
-            });
-            continue;
-        }
-        manifestMap.set(entry.rel, entry);
-    }
-
-    // Rule 1: standard entries must have a .mjs twin byte-identical to a fresh convert.
-    // mtime is never consulted: git does not store mtimes, so a committed stale twin looks
-    // freshly checked-out in every clone and worktree. Only regenerating the twin proves it
-    // matches its source (task 0970; replaces the 0606 sub-second mtime tolerance).
-    const twinTmpDir = mkdtempSync(join(tmpdir(), 'script-twin-'));
-    try {
-        const convertTwin = opts.convertTwin ?? spawnConvertTwin(resolve(pluginDir, '..', '..'));
-        let converterDown = false;
-        for (const entry of manifest.entries) {
-            if (entry.rel && entry.contract === 'standard') {
-                const expectedTwinRel = entry.twin ?? entry.rel.replace(/\.ts$/, '.mjs');
-                const twinPath = join(scriptsDir, expectedTwinRel);
-                const tsPath = join(scriptsDir, entry.rel);
-
-                if (!existsSync(twinPath)) {
+        for (const entry of entries) {
+            const fullPath = join(dir, entry);
+            let st: ReturnType<typeof statSync>;
+            try {
+                st = statSync(fullPath);
+            } catch {
+                continue;
+            }
+            if (st.isDirectory()) {
+                walkScripts(fullPath, base ? `${base}/${entry}` : entry);
+            } else if (st.isFile()) {
+                const rel = base ? `${base}/${entry}` : entry;
+                if (rel.endsWith('.mjs')) {
                     violations.push({
-                        kind: 'missing_twin',
-                        target: entry.rel,
-                        message: `standard script ${entry.rel} is missing its .mjs twin (${expectedTwinRel})`,
+                        kind: 'stray_twin',
+                        target: rel,
+                        message: `.mjs twin ${rel} is retired machinery — delete it; hook entries are authored .ts run by \`superskill hook run\``,
                     });
-                } else if (existsSync(tsPath) && !converterDown) {
-                    const outPath = join(twinTmpDir, expectedTwinRel);
-                    mkdirSync(dirname(outPath), { recursive: true });
-                    if (!convertTwin(entry.rel, outPath)) {
-                        // One violation, then stop: a broken converter is one environment failure,
-                        // not 17 stale twins. It never silently passes (task 0970 R3).
-                        const detail = (convertTwin as { lastError?: string }).lastError;
-                        violations.push({
-                            kind: 'converter_unavailable',
-                            target: entry.rel,
-                            message: `could not regenerate ${expectedTwinRel} from ${entry.rel}${detail ? ` — ${detail}` : ''}; twin content cannot be verified`,
-                        });
-                        converterDown = true;
-                    } else if (!readFileSync(outPath).equals(readFileSync(twinPath))) {
-                        violations.push({
-                            kind: 'stale_twin',
-                            target: entry.rel,
-                            message: `standard script .mjs twin ${expectedTwinRel} does not match a fresh convert of ${entry.rel} — run bun run build:scripts`,
-                        });
-                    }
+                } else if (!rel.startsWith('hooks/') || !rel.endsWith('.ts')) {
+                    violations.push({
+                        kind: 'stray_script',
+                        target: rel,
+                        message: `non-hook script ${rel} under plugins/sp/scripts — reusable behavior belongs in an approved CLI surface (ADR-130), hook entries in scripts/hooks/`,
+                    });
                 }
             }
         }
-    } finally {
-        rmSync(twinTmpDir, { recursive: true, force: true });
     }
+    walkScripts(scriptsDir, '');
 
-    // Rule 2: committed .mjs files must belong to a 'standard' entry
-    for (const mjsRel of mjsFiles) {
-        const correspondingTsRel = mjsRel.replace(/\.mjs$/, '.ts');
-        const entry = manifestMap.get(correspondingTsRel);
-        if (!entry) {
-            violations.push({
-                kind: 'unexpected_twin',
-                target: mjsRel,
-                message: `.mjs twin ${mjsRel} exists on disk but has no manifest entry for ${correspondingTsRel}`,
-            });
-        } else if (entry.contract === 'repo-only') {
-            violations.push({
-                kind: 'unexpected_twin',
-                target: mjsRel,
-                message: `repo-only script ${correspondingTsRel} must not have a .mjs twin (${mjsRel})`,
-            });
-        }
-    }
-
-    // Rule 3: all .ts files on disk must have a manifest entry
-    const diskTsSet = new Set(tsFiles);
-    for (const tsRel of tsFiles) {
-        if (!manifestMap.has(tsRel)) {
-            violations.push({
-                kind: 'unregistered_script',
-                target: tsRel,
-                message: `script ${tsRel} exists in scripts dir but is not registered in manifest`,
-            });
-        }
-    }
-
-    // Also verify manifest entries exist on disk
-    for (const [rel] of manifestMap) {
-        if (!diskTsSet.has(rel)) {
-            violations.push({
-                kind: 'unregistered_script',
-                target: rel,
-                message: `manifest entry ${rel} does not exist on disk in ${scriptsDir}`,
-            });
-        }
-    }
-
-    // Rule 4: scan shipped surfaces for forbidden invocation
-    const forbiddenHits = scanShippedSurfaces(pluginDir);
-    for (const hit of forbiddenHits) {
+    // Rule 2: hook identity/layout (ADR-129) — registry ↔ entries, no shadow entries, tests
+    // in the plugin test owner.
+    for (const finding of checkHookLayout({ repoRoot: resolve(pluginDir, '..', '..') })) {
         violations.push({
-            kind: 'forbidden_invocation',
-            target: `${hit.file}:${hit.line}`,
-            message: `shipped surface ${hit.file}:${hit.line} contains forbidden invocation 'bun plugins/sp/scripts/': ${hit.content}`,
+            kind: 'hook-layout',
+            target: finding.file,
+            message: finding.detail,
         });
     }
 
-    // Rule 5: bundled surfaces (scripts, hooks, lib) must not value-import @gobing-ai/*.
-    // superskill install bundles them where no node_modules exists; resolution then
-    // depends on the host superskill's private dep tree (0.3.28+ happens to carry
-    // ts-utils — an accident we do not depend on). Vendor into plugins/sp/lib/ instead.
+    // Rule 3: bundled surfaces (scripts, hooks, lib) must not value-import @gobing-ai/*.
+    // superskill install bundles them with no node_modules; vendor into plugins/sp/lib/
+    // or use a relative import instead.
     for (const dir of [scriptsDir, join(pluginDir, 'hooks'), join(pluginDir, 'lib')]) {
         for (const hit of findGobingAiValueImports(dir)) {
             violations.push({
@@ -484,6 +309,16 @@ export function validateContract(
         }
     }
 
+    // Rule 4: scan shipped surfaces for retired invocations.
+    const forbiddenHits = scanShippedSurfaces(pluginDir);
+    for (const hit of forbiddenHits) {
+        violations.push({
+            kind: 'forbidden_invocation',
+            target: `${hit.file}:${hit.line}`,
+            message: `shipped surface ${hit.file}:${hit.line} invokes retired script machinery: ${hit.content}`,
+        });
+    }
+
     return violations;
 }
 
@@ -491,47 +326,12 @@ export function validateContract(
 
 export const GLUE_BUDGET_LINES = 250;
 
-export type PlacementFindingKind =
-    | 'budget'
-    | 'db-import'
-    | 'corpus-parse'
-    | 'noun-clash'
-    | 'hook-layout'
-    | 'stale-baseline';
+export type PlacementFindingKind = 'budget' | 'db-import' | 'corpus-parse' | 'noun-clash' | 'hook-layout';
 
 export interface PlacementFinding {
     file: string;
     kind: PlacementFindingKind;
     detail: string;
-}
-
-export interface PlacementBaselineEntry {
-    kinds: string[];
-    reason?: string;
-    exempt?: boolean;
-}
-
-export interface PlacementBaseline {
-    schemaVersion: number;
-    entries: Record<string, PlacementBaselineEntry>;
-}
-
-export function loadPlacementBaseline(path: string): { baseline: PlacementBaseline | null; error: string | null } {
-    if (!existsSync(path)) return { baseline: null, error: `baseline not found: ${path}` };
-    try {
-        const parsed = JSON.parse(readFileSync(path, 'utf8')) as PlacementBaseline;
-        if (
-            typeof parsed !== 'object' ||
-            parsed === null ||
-            typeof parsed.entries !== 'object' ||
-            parsed.entries === null
-        ) {
-            return { baseline: null, error: `malformed baseline (missing entries object): ${path}` };
-        }
-        return { baseline: parsed, error: null };
-    } catch (error) {
-        return { baseline: null, error: `unreadable baseline: ${(error as Error).message}` };
-    }
 }
 
 function placementLineCount(content: string): number {
@@ -660,7 +460,7 @@ function registeredHookIdentities(hooksJsonPath: string): { registered: Set<stri
  * sibling) for Codex/OpenCode/Antigravity/Hermes. `scripts/hooks/<id>.ts` is therefore the single
  * location every target reaches. `plugins/sp/hooks` keeps the registry and the Pi extension only — an
  * entry there would shadow the staged one on native installs and never ship to staged targets.
- * Pure and side-effect free; task 1174 activates the strict call in `checkPlacement`.
+ * Pure and side-effect free.
  */
 export function checkHookLayout(opts: { repoRoot: string }): PlacementFinding[] {
     const root = resolve(opts.repoRoot);
@@ -714,18 +514,11 @@ export function checkHookLayout(opts: { repoRoot: string }): PlacementFinding[] 
     return findings;
 }
 
-export function checkPlacement(opts: { repoRoot: string; baselinePath: string }): PlacementFinding[] {
+export function checkPlacement(opts: { repoRoot: string }): PlacementFinding[] {
     const root = resolve(opts.repoRoot);
     const findings: PlacementFinding[] = [];
-    const produced = new Map<string, Set<PlacementFindingKind>>();
     const record = (file: string, kind: PlacementFindingKind, detail: string): void => {
         findings.push({ file, kind, detail });
-        let kinds = produced.get(file);
-        if (!kinds) {
-            kinds = new Set<PlacementFindingKind>();
-            produced.set(file, kinds);
-        }
-        kinds.add(kind);
     };
 
     const cliCommandsDir = join(root, 'apps', 'cli', 'src', 'commands');
@@ -768,44 +561,22 @@ export function checkPlacement(opts: { repoRoot: string; baselinePath: string })
         recordDbAndCorpusFindings(abs.slice(root.length + 1), readFileSync(abs, 'utf8'), record);
     }
 
-    // Hook source layout (ADR-129, task 1173 helper — activated in 1174 once the relocation landed):
-    // one authored entry per registered identity, helpers in lib, tests in the plugin test owner.
+    // Hook source layout (ADR-129): one authored entry per registered identity, helpers in lib,
+    // tests in the plugin test owner.
     for (const finding of checkHookLayout({ repoRoot: root })) {
         record(finding.file, finding.kind, finding.detail);
     }
 
-    const { baseline, error } = loadPlacementBaseline(resolve(opts.baselinePath));
-    if (error || !baseline) {
-        // No baseline: report raw findings (fail closed for placement purposes).
-        return findings;
-    }
-    const entries = baseline.entries;
-    const out: PlacementFinding[] = [];
-    for (const finding of findings) {
-        const entry = entries[finding.file];
-        if (entry?.kinds.includes(finding.kind)) continue;
-        out.push(finding);
-    }
-    for (const [file, entry] of Object.entries(entries)) {
-        const has = produced.get(file);
-        for (const kind of entry.kinds) {
-            if (!has?.has(kind as PlacementFindingKind)) {
-                out.push({
-                    file,
-                    kind: 'stale-baseline',
-                    detail: `baseline lists '${kind}' but the file no longer produces it (baseline can only shrink)`,
-                });
-            }
-        }
-    }
-    return out;
+    // 1213: no baseline machinery — findings always report raw (fail closed). The ADR-130
+    // baseline file was an empty migration ledger retired with the manifest.
+    return findings;
 }
 
 export function run(argv: string[] = process.argv.slice(2)): number {
-    const { manifest, scriptsDir, pluginDir, placementOnly, baseline, repoRoot, cwd } = parseArgs(argv);
+    const { scriptsDir, pluginDir, placementOnly, repoRoot, cwd } = parseArgs(argv);
 
     if (placementOnly) {
-        const findings = checkPlacement({ repoRoot: resolve(cwd, repoRoot), baselinePath: resolve(cwd, baseline) });
+        const findings = checkPlacement({ repoRoot: resolve(cwd, repoRoot) });
         for (const f of findings) console.error(`script-contract-check: FAIL (${f.kind}) - ${f.file}: ${f.detail}`);
         console.log(
             `script-contract-check: placement scan over plugins/sp scripts+hooks — ${findings.length} finding(s) — ${findings.length === 0 ? 'PASS' : 'FAIL'}`,
@@ -813,24 +584,14 @@ export function run(argv: string[] = process.argv.slice(2)): number {
         return findings.length === 0 ? 0 : 1;
     }
 
-    const manifestPath = resolve(cwd, manifest);
     const absScriptsDir = resolve(cwd, scriptsDir);
     const absPluginDir = resolve(cwd, pluginDir);
 
-    const { manifest: parsed, error } = loadManifest(manifestPath);
-    if (error || !parsed) {
-        console.error(`script-contract-check: FAIL - ${error}`);
-        return 1;
-    }
-
-    const violations = validateContract(parsed, absScriptsDir, absPluginDir);
+    const violations = validateScriptLayout({ scriptsDir: absScriptsDir, pluginDir: absPluginDir });
     const ok = violations.length === 0;
 
-    const standardCount = parsed.entries.filter((e) => e.contract === 'standard').length;
-    const repoOnlyCount = parsed.entries.filter((e) => e.contract === 'repo-only').length;
-
     console.log(
-        `script-contract-check: ${parsed.entries.length} script(s) baselined (${standardCount} standard, ${repoOnlyCount} repo-only), ` +
+        `script-contract-check: hook-only script layout over plugins/sp — ` +
             `${violations.length} violation(s) — ${ok ? 'PASS' : 'FAIL'}`,
     );
 
