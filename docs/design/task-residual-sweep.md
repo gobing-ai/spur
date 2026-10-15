@@ -52,7 +52,7 @@ verify:  agent answer → answer-lint → task verdict → proof bind (jq)
          ├─ PARTIAL, attempts < max → test-fix (verifier non-PASS) → recheck → review → verify
          └─ otherwise               → failed (+ residual-report.md, recovery line)
 record:  task record (flips verdict-proven R/AC boxes) → feature sync
-         → residual-scan scan+fold (post-record sweep)
+         → spur task residual scan+fold (post-record sweep)
          ├─ PASS (no blocking)      → done (settle: file follow-ups, clean /tmp/<wbs>-*)
          └─ blocking downgrade      → re-record Testing from the final artifact (R5) → failed
                                        (+ residual-report.md, recovery line); task stays testing
@@ -69,9 +69,11 @@ through `review-fail-triage` into bounded repair before verification.
 
 ## Scanner
 
-`plugins/sp/scripts/residual-scan.ts`, with an `.mjs` twin resolved through
-`superskill script path sp residual-scan.mjs`. It follows the plugin standalone contract
-(`node:`/`bun:` imports only).
+`spur task residual <wbs> <mode>` (script-absorption PR-3; formerly the plugin script
+`plugins/sp/scripts/residual-scan.ts` and its `.mjs` twin). The IO glue lives in
+`packages/app/src/services/residual-scan-run.ts` over the pure core
+`packages/app/src/services/residual-scan.ts`; task reads and writes go through the in-process task
+service instead of shelling `spur task show|create|update`.
 
 | Mode | Caller | Effect |
 | --- | --- | --- |
@@ -126,8 +128,8 @@ downgrade; `housekeeping` is cleaned on `done` entry.
 `settle` is idempotent. It records the follow-up WBS as `followUp` in `<wbs>-residuals.json`.
 The follow-up's Background names the source task and every deferred item with its reason. The
 source side is covered by the verdict's `residual-sweep` evidence, which lists the deferred ids
-before registration. `settle` failures are printed with a re-run command (`residual-scan settle
-<wbs>`); they never demote a certified `done`.
+before registration. `settle` failures are printed with a re-run command (`spur task residual
+<wbs> settle`); they never demote a certified `done`.
 
 ## Terminal path for unfixable leftovers
 

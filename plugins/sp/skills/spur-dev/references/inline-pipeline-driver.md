@@ -973,11 +973,9 @@ Each item below cost a driver cycle to discover. They are contracts, not tips.
   surfaces as `decide: invalid options — Invalid input` with no field detail. `resultFile` resolves
   against the confirmed tree's cwd, so pass a worktree-relative path such as
   `.spur/run/<wbs>-triage.decision`.
-- **`task-diffstat.ts` reads `wbs` from the environment and writes an artifact.** Invoke it as
-  `wbs=<wbs> node "$(superskill script path sp task-diffstat.mjs)"`; stdout stays empty, so assert success on
-  `.spur/run/<wbs>-diffstat.json` and never on command output. Never the bare unguarded
-  source-repo path form — the script-contract check forbids it on a shipped surface because it
-  shadows the installed twin in a consumer.
+- **`spur task diffstat <wbs>` writes an artifact, not output.** stdout stays empty, so assert
+  success on `.spur/run/<wbs>-diffstat.json` and never on command output; a missing or malformed
+  run base still exits 0 with `sensitive: true` (fail safe).
 - **The verify answer grammar is exact.** One `Verdict:` line, then
   `### Per-Requirement Traceability` (`| Req | Status | Evidence |`) and
   `### Acceptance Criteria Verification` (`| AC | Status | Evidence Type | Evidence |`). Requirement

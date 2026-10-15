@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'bun:test';
-import { chmodSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { getEnvVars } from '@gobing-ai/spur-config';
@@ -41,7 +41,38 @@ const cmdOf = (from: string, to: string): string =>
 
 // The repo's scanner sources — behavioral guard tests resolve the review-gate through the same
 // source-repo pair the record step uses (task 1122).
-const SCRIPTS_DIR = join(import.meta.dir, '../../../../plugins/sp/scripts');
+// Script-absorption PR-3: the review PASS edges call `$spurBin task residual <wbs> review-gate`,
+// which reads the task in-process — the behavioral cases seed a REAL task through the source CLI.
+const SPUR_CLI = [process.execPath, join(import.meta.dir, '../../../../apps/cli/src/index.ts')];
+const SPUR_BIN = SPUR_CLI.join(' ');
+
+/** Run the source CLI in `dir`; throws on a non-zero exit. */
+function spurIn(dir: string, args: string[]): string {
+    const run = Bun.spawnSync([...SPUR_CLI, ...args, '--no-logo'], {
+        cwd: dir,
+        env: { ...getEnvVars() },
+        stdout: 'pipe',
+        stderr: 'pipe',
+    });
+    if (run.exitCode !== 0) throw new Error(`spur ${args.join(' ')} failed: ${run.stderr.toString()}`);
+    return run.stdout.toString();
+}
+
+/** Create a backlog task in `dir` and return its wbs. */
+function seedTask(dir: string): string {
+    mkdirSync(join(dir, 'docs', 'tasks'), { recursive: true });
+    const created = JSON.parse(spurIn(dir, ['task', 'create', '--skip-ready', 'Review fixture', '--json'])) as {
+        wbs: string;
+    };
+    return created.wbs;
+}
+
+/** Replace the task's Review section body (`review` may carry its `### Review` heading). */
+function setReview(dir: string, wbs: string, review: string): void {
+    const body = join(dir, 'review-body.md');
+    writeFileSync(body, review.replace(/^### Review\n\n/, ''));
+    spurIn(dir, ['task', 'update', wbs, '--section', 'Review', '--from-file', body]);
+}
 
 describe('task-pipeline proof chain (task 0703, ADR-071)', () => {
     test('verify certifies observe-only: --fix none, never --fix all (R1)', () => {
@@ -387,7 +418,7 @@ describe('task-pipeline busy-retry classifiers, done guard projection, route-id 
     // ── R3 (0823): the three lifecycle transitions and the quality-gate loop moved to owners
     // (governance §1.1 (c)/(d)). The classified transient retry lives in the command.gate retry
     // options; the gate lock-classifier behavior is behavioral-tested in
-    // plugins/sp/tests/quality-gate.test.ts against plugins/sp/scripts/quality-gate.ts.
+    // packages/app/tests/services/quality-gate*.test.ts (the core behind `spur task gate`).
 
     test('the three lifecycle transitions are command.gate actions with classified transient retry (R3)', () => {
         const gates = DEF.states
@@ -615,26 +646,20 @@ describe('task-pipeline review-failure routing (session finding after 1088)', ()
         try {
             mkdirSync(join(dir, '.spur', 'run'), { recursive: true });
             // Since 1122 the PASS edge continues into the review-gate residual check, so a passing
-            // case must satisfy the whole chain: seed the scanner resolution and a stub spur that
-            // serves a clean review (P4-only row).
-            const stub = join(dir, 'stub-spur.sh');
-            const cleanReview = JSON.stringify({
-                content:
-                    '### Review\n\n| Priority | Finding | Location | Disposition |\n| --- | --- | --- | --- |\n| P4 (advisory) | Note | src/d.ts:1 | ACCEPTED |\n',
-            }).replaceAll("'", "'\\''");
-            writeFileSync(stub, `#!/bin/sh\ncase "$2" in\n  show) printf '%s' '${cleanReview}' ;;\nesac\n`);
-            chmodSync(stub, 0o755);
-            writeFileSync(
-                join(dir, '.spur', 'run', 'run-t-review-script-root.json'),
-                `${JSON.stringify({ mode: 'source-repo', dir: SCRIPTS_DIR })}\n`,
+            // case must satisfy the whole chain: seed a real task whose review is clean (P4-only row).
+            const wbs = seedTask(dir);
+            setReview(
+                dir,
+                wbs,
+                '| Priority | Finding | Location | Disposition |\n| --- | --- | --- | --- |\n| P4 (advisory) | Note | src/d.ts:1 | ACCEPTED |\n',
             );
             const answer = join(dir, '.spur', 'run', 'run-t-review-review-answer.txt');
             const guard = cmdOf('review', 'verify')
                 .replaceAll('$profile', 'auto')
                 .replaceAll('$__runId', 'run-t-review')
                 .replaceAll('../..', dir)
-                .replaceAll('$spurBin', stub)
-                .replaceAll('$wbs', '1122');
+                .replaceAll('$spurBin', SPUR_BIN)
+                .replaceAll('$wbs', wbs);
             for (const [body, expected] of [
                 ['Verdict: PASS\n', 0],
                 ['**Verdict: PASS**\n', 0],
@@ -664,23 +689,19 @@ describe('task-pipeline review PASS-edge review-gate (task 1122)', () => {
     // by the same gate): every fixture below carries it, so these tests exercise the finding rules.
     const TABLE_HEAD =
         '### Review\n\n**Confidence:** HIGH\n\n| Priority | Finding | Location | Disposition |\n| --- | --- | --- | --- |\n';
-    const runSh = (script: string, cwd: string, spurBin: string): number =>
+    const runSh = (script: string, cwd: string, spurBin: string, wbs: string): number =>
         Bun.spawnSync(['sh', '-c', script], {
             cwd,
-            env: { ...getEnvVars(), wbs: '1122', spurBin },
+            env: { ...getEnvVars(), wbs, spurBin },
             stdout: 'pipe',
             stderr: 'pipe',
         }).exitCode ?? -1;
 
     test('both PASS edges chain review-gate into the Verdict check (R3, AC2/AC3)', () => {
         for (const guard of [cmdOf('review', 'verify'), cmdOf('review', 'approve')]) {
-            expect(guard).toContain('review-gate');
-            expect(guard).toContain('script-root.json');
-            expect(guard).toContain('residual-scan.ts');
-            expect(guard).toContain('residual-scan.mjs');
-            expect(guard).toContain('$wbs');
-            expect(guard).toContain('$spurBin');
-            // One AND-list: the gate runs only after the Verdict grep, so a missing scanner or an
+            expect(guard).toContain('$spurBin task residual "$wbs" review-gate');
+            expect(guard).not.toContain('script-root.json');
+            // One AND-list: the gate runs only after the Verdict grep, so an unavailable spur or an
             // open P1-P3 finding fails the edge closed into the review-fail-triage catch-all. The
             // grade rides the scanner; since F511 no answer file is handed over and no ack exists.
             expect(guard).not.toContain('--review-answer');
@@ -694,48 +715,39 @@ describe('task-pipeline review PASS-edge review-gate (task 1122)', () => {
         expect(fixShells.some((c) => c.includes('cat ".spur/run/$wbs-residuals.json"'))).toBe(true);
     });
 
-    test('behavioral: PASS with an open P2 falls through to triage; clean PASS advances; missing scanner fails closed', () => {
+    test('behavioral: PASS with an open P2 falls through to triage; clean PASS advances; unavailable spur fails closed', () => {
         const dir = mkdtempSync(join(tmpdir(), 'spur-1122-gate-'));
         try {
             mkdirSync(join(dir, '.spur', 'run'), { recursive: true });
             const runId = 'run-t-1122';
             writeFileSync(join(dir, '.spur', 'run', `${runId}-review-answer.txt`), 'Verdict: PASS\nConfidence: HIGH\n');
-            writeFileSync(
-                join(dir, '.spur', 'run', `${runId}-script-root.json`),
-                `${JSON.stringify({ mode: 'source-repo', dir: SCRIPTS_DIR })}\n`,
-            );
-            const spurStub = join(dir, 'stub-spur.sh');
-            const serve = (review: string): void => {
-                const payload = JSON.stringify({ content: review }).replaceAll("'", "'\\''");
-                writeFileSync(spurStub, `#!/bin/sh\ncase "$2" in\n  show) printf '%s' '${payload}' ;;\nesac\n`);
-                chmodSync(spurStub, 0o755);
-            };
+            const wbs = seedTask(dir);
             const verifyGuard = cmdOf('review', 'verify').replaceAll('$profile', 'auto').replaceAll('$__runId', runId);
             const approveGuard = cmdOf('review', 'approve').replaceAll('$__runId', runId);
 
             // AC2: PASS + open P2 → neither PASS edge passes → review-fail-triage; the artifact
             // the fix hop consumes is staged with the blocking finding.
-            serve(`${TABLE_HEAD}| P2 (major) | Missing validation | src/c.ts:8 | OPEN |\n`);
-            expect(runSh(verifyGuard, dir, spurStub)).not.toBe(0);
-            expect(runSh(approveGuard, dir, spurStub)).not.toBe(0);
-            const artifact = JSON.parse(readFileSync(join(dir, '.spur', 'run', '1122-residuals.json'), 'utf8')) as {
+            setReview(dir, wbs, `${TABLE_HEAD}| P2 (major) | Missing validation | src/c.ts:8 | OPEN |\n`);
+            expect(runSh(verifyGuard, dir, SPUR_BIN, wbs)).not.toBe(0);
+            expect(runSh(approveGuard, dir, SPUR_BIN, wbs)).not.toBe(0);
+            const artifact = JSON.parse(readFileSync(join(dir, '.spur', 'run', `${wbs}-residuals.json`), 'utf8')) as {
                 items: Array<{ category: string; class: string; location: string }>;
             };
             expect(artifact.items.map((i) => i.category)).toEqual(['review-finding']);
             expect(artifact.items.some((i) => i.class === 'blocking' && i.location === 'src/c.ts:8')).toBe(true);
 
             // AC3: clean PASS (P4 + RESOLVED rows only) still advances, auto and interactive.
-            serve(
+            setReview(
+                dir,
+                wbs,
                 `${TABLE_HEAD}| P4 (advisory) | Note | src/d.ts:1 | ACCEPTED |\n| P3 (minor) | Fixed | src/e.ts:2 | RESOLVED — in pass |\n`,
             );
-            expect(runSh(verifyGuard, dir, spurStub)).toBe(0);
-            expect(runSh(approveGuard, dir, spurStub)).toBe(0);
+            expect(runSh(verifyGuard, dir, SPUR_BIN, wbs)).toBe(0);
+            expect(runSh(approveGuard, dir, SPUR_BIN, wbs)).toBe(0);
 
-            // Missing scanner resolution fails closed into the catch-all (triage), never verify.
-            rmSync(join(dir, '.spur', 'run', `${runId}-script-root.json`));
-            serve(`${TABLE_HEAD}| P4 (advisory) | Note | src/d.ts:1 | ACCEPTED |\n`);
-            expect(runSh(verifyGuard, dir, spurStub)).not.toBe(0);
-            expect(runSh(approveGuard, dir, spurStub)).not.toBe(0);
+            // A spur that cannot run the review-gate fails closed into the catch-all, never verify.
+            expect(runSh(verifyGuard, dir, 'false', wbs)).not.toBe(0);
+            expect(runSh(approveGuard, dir, 'false', wbs)).not.toBe(0);
         } finally {
             rmSync(dir, { recursive: true, force: true });
         }
