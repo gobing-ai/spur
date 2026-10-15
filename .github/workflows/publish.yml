@@ -42,10 +42,10 @@ jobs:
             # Release gate for the plugin standalone contract (AGENTS.md): plugins/sp
             # bundled surfaces must install on targets with no node_modules — the class
             # of failure that broke releases 0.3.81–0.3.88 (task 0669). Pinned to the
-            # superskill version the smoke was validated against.
+            # documented supported runtime floor (1213, same as the workspace catalog).
             - name: Plugin install smoke (standalone contract)
               run: |
-                  bun install -g @gobing-ai/superskill@0.3.28
+                  bun install -g @gobing-ai/superskill@0.3.39
                   bun run plugin-smoke
 
             - name: Verify version match
@@ -82,4 +82,4 @@ jobs:
                   echo "Release assets OK (config/ + web/ present in pack)"
 
             - name: Publish spur-cli
-              run: bun scripts/spur-dev.ts publish apps/cli
+              run: bun apps/cli/src/index.ts builder publish apps/cli --no-logo

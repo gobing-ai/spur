@@ -1,15 +1,26 @@
+import { Database } from 'bun:sqlite';
 import { describe, expect, test } from 'bun:test';
-import { readdir } from 'node:fs/promises';
+import { mkdir, mkdtemp, readdir, rm, writeFile } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import {
     checkBudgetCoverage,
     checkBudgets,
+    defaultGitShow,
     detectSilentRaises,
     formatViolation,
     loadPipelineBudgets,
     loadQueryCounts,
     type PipelineBudget,
-} from './pipeline-budgets';
+    runBudgetGate,
+} from '../../src/workflow/run-cost';
+
+const REPO_ROOT = join(import.meta.dir, '../../../..');
+// WHY split join (as in workflow/wrapup/drift-probe.ts): rule sp-runtime-path forbids the
+// config/<dir> literal; this anchors the repo's build-time definition tree — the coverage
+// target of config/pipeline-budgets.json — not a runtime config read.
+const WORKFLOWS_DIR = join(REPO_ROOT, 'config', 'workflows');
+const BUDGETS_PATH = join(REPO_ROOT, 'config/pipeline-budgets.json');
 
 const budget = (over: Partial<PipelineBudget> = {}): PipelineBudget => ({
     modelQueries: 4,
@@ -162,8 +173,6 @@ describe('detectSilentRaises (0607 R3 — no silent budget bump)', () => {
 });
 
 describe('checkBudgetCoverage (0826 R2)', () => {
-    const REPO_ROOT = join(import.meta.dir, '..', '..');
-
     test('a model-query workflow without an entry is returned by name', () => {
         expect(checkBudgetCoverage({ 'new-pipeline': 2 }, {})).toEqual(['new-pipeline']);
     });
@@ -176,8 +185,8 @@ describe('checkBudgetCoverage (0826 R2)', () => {
         expect(checkBudgetCoverage({ 'pr-review': 0 }, { 'pr-review': budget({ modelQueries: 0 }) })).toEqual([]);
     });
 
-    test('every live config/workflows definition with a query count has an entry (anti-vacuous)', async () => {
-        const counts = await loadQueryCounts();
+    test('every live workflow definition with a query count has an entry (anti-vacuous)', async () => {
+        const counts = await loadQueryCounts(WORKFLOWS_DIR);
         // loadQueryCounts returns {} on any read or parse error — pin the key set to the
         // directory so a swallowed error cannot make this test pass vacuously.
         const files = (await readdir(join(REPO_ROOT, 'config', 'workflows')))
@@ -185,7 +194,7 @@ describe('checkBudgetCoverage (0826 R2)', () => {
             .map((f) => f.replace(/\.ya?ml$/, ''))
             .sort();
         expect(Object.keys(counts).sort()).toEqual(files);
-        const { budgets } = await loadPipelineBudgets();
+        const { budgets } = await loadPipelineBudgets(BUDGETS_PATH);
         expect(checkBudgetCoverage(counts, budgets)).toEqual([]);
         const measured = Object.fromEntries(
             Object.entries(counts).map(([name, modelQueries]) => [
@@ -194,5 +203,123 @@ describe('checkBudgetCoverage (0826 R2)', () => {
             ]),
         );
         expect(checkBudgets(measured, budgets)).toEqual([]);
+    });
+});
+
+describe('runBudgetGate (spur workflow cost --budget)', () => {
+    async function scratch(): Promise<string> {
+        const dir = await mkdtemp(join(tmpdir(), 'budget-gate-'));
+        await mkdir(join(dir, 'wf'), { recursive: true });
+        await writeFile(
+            join(dir, 'budgets.json'),
+            JSON.stringify({ schemaVersion: 1, generatedAt: 'x', note: 'n', budgets: { a: budget(), b: budget() } }),
+        );
+        return dir;
+    }
+    const noGit = async (): Promise<string | null> => null;
+
+    test('PASS with notes when no DB exists (never creates one)', async () => {
+        const dir = await scratch();
+        try {
+            const r = await runBudgetGate({
+                cwd: dir,
+                budgetPath: 'budgets.json',
+                workflowsDir: join(dir, 'wf'),
+                dbPath: join(dir, 'missing.db'),
+                filters: [],
+                gitShow: noGit,
+            });
+            expect(r.exitCode).toBe(0);
+            expect(r.errors).toEqual([]);
+            expect(r.lines.at(-1)).toBe('workflow cost --budget: PASS (2 pipelines, 0 violations)');
+            expect(r.lines.filter((l) => l.startsWith('note: '))).toHaveLength(2);
+        } finally {
+            await rm(dir, { recursive: true, force: true });
+        }
+    });
+
+    test('measured-file over budget, a silent raise vs HEAD, and a missing budget all fail', async () => {
+        const dir = await scratch();
+        try {
+            await writeFile(
+                join(dir, 'measured.json'),
+                JSON.stringify({ a: { modelQueries: 9, wallClockMs: null, tokenCostUsd: null } }),
+            );
+            await writeFile(
+                join(dir, 'wf', 'c.yaml'),
+                'name: c\ninitial: s\nstates:\n  s:\n    actions:\n      - type: agent.run\n        prompt: hi\n    on:\n      done: end\n  end:\n    type: final\n',
+            );
+            const head = JSON.stringify({ budgets: { b: budget({ wallClockMs: 1 }) } });
+            const r = await runBudgetGate({
+                cwd: dir,
+                budgetPath: join(dir, 'budgets.json'),
+                workflowsDir: join(dir, 'wf'),
+                dbPath: join(dir, 'missing.db'),
+                filters: [],
+                measuredFile: join(dir, 'measured.json'),
+                gitShow: async () => head,
+            });
+            expect(r.exitCode).toBe(1);
+            expect(r.errors.some((e) => e.startsWith('BUDGET EXCEEDED: pipeline=a modelQueries'))).toBe(true);
+            expect(
+                r.errors.some((e) => e.startsWith('SILENT BUDGET RAISE: pipeline=b wallClockMs: 1 -> 2300000')),
+            ).toBe(true);
+            expect(r.lines.at(-1)).toMatch(/^workflow cost --budget: FAIL \(\d+ failure\(s\)\)$/);
+        } finally {
+            await rm(dir, { recursive: true, force: true });
+        }
+    });
+
+    test('reads the DB when present; a DB without tables reads as unmeasured; junk HEAD is ignored', async () => {
+        const dir = await scratch();
+        try {
+            const dbPath = join(dir, 'spur.db');
+            new Database(dbPath).close();
+            const r = await runBudgetGate({
+                cwd: dir,
+                budgetPath: 'budgets.json',
+                workflowsDir: join(dir, 'wf'),
+                dbPath,
+                filters: ['a'],
+                gitShow: async () => 'not json',
+            });
+            expect(r.exitCode).toBe(0);
+        } finally {
+            await rm(dir, { recursive: true, force: true });
+        }
+    });
+
+    test('a DB error other than a missing table propagates', async () => {
+        const dir = await scratch();
+        try {
+            const dbPath = join(dir, 'spur.db');
+            await writeFile(dbPath, '');
+            const failing = {
+                close: () => {},
+            };
+            await expect(
+                runBudgetGate({
+                    cwd: dir,
+                    budgetPath: 'budgets.json',
+                    workflowsDir: join(dir, 'wf'),
+                    dbPath,
+                    filters: [],
+                    gitShow: noGit,
+                    openDb: async () => failing as never,
+                }),
+            ).rejects.toThrow();
+        } finally {
+            await rm(dir, { recursive: true, force: true });
+        }
+    });
+
+    test('defaultGitShow returns null outside a repo and the committed text inside one', async () => {
+        const dir = await mkdtemp(join(tmpdir(), 'budget-git-'));
+        try {
+            expect(await defaultGitShow(dir, 'nope.json')).toBeNull();
+            expect(await defaultGitShow(REPO_ROOT, 'config/pipeline-budgets.json')).toContain('"budgets"');
+        } finally {
+            await rm(dir, { recursive: true, force: true });
+        }
     });
 });

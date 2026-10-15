@@ -825,3 +825,209 @@ export async function dropTags(
     }
     await dropTagsFor(ctx, config, version, { remote: args.includes('--remote') }, output);
 }
+
+// ── Pre-publish guard + publish (script-absorption PR-9) ─────────────────────────
+
+/**
+ * Collect marketplace / plugin-manifest versions that differ from `pkgVersion` (task 0500 R6;
+ * absorbed from the retired `scripts/commands/check-marketplace-version.ts`). Pure form:
+ * `plugins` is each listed plugin's `plugin.json` label + version.
+ */
+export function findMarketplaceVersionDriftFrom(
+    marketplaceText: string,
+    plugins: Array<{ label: string; version: string }>,
+    pkgVersion: string,
+): string[] {
+    let marketplace: { plugins?: Array<{ name?: string; version?: string }> };
+    try {
+        marketplace = JSON.parse(marketplaceText) as typeof marketplace;
+    } catch (error) {
+        throw new Error(
+            `.claude-plugin/marketplace.json is not valid JSON: ${error instanceof Error ? error.message : String(error)}`,
+        );
+    }
+    const drift: string[] = [];
+    for (const entry of marketplace.plugins ?? []) {
+        if (entry.version !== pkgVersion) {
+            drift.push(`marketplace plugin "${entry.name}": ${entry.version} (package is ${pkgVersion})`);
+        }
+    }
+    for (const plugin of plugins) {
+        if (plugin.version !== pkgVersion) drift.push(`${plugin.label}: ${plugin.version} (package is ${pkgVersion})`);
+    }
+    return drift;
+}
+
+/**
+ * `spur builder bump-ver --check [target]` — fail when `.claude-plugin/marketplace.json` or a
+ * listed plugin's `plugin.json` drifted from `target`'s package version (default: the aggregate
+ * package whose tag triggers publish). Read-only; runs on `prepublishOnly`, so it reads the
+ * repo-root sources, never staged copies. Returns the exit code (1 on drift).
+ */
+export async function checkVersionDrift(
+    target: string | undefined,
+    repoRoot: string = process.cwd(),
+    output: CommandOutput = consoleOutput,
+    spurConfig?: Pick<SpurConfig, 'builder'> | null,
+): Promise<number> {
+    const ctx = await releaseContext(repoRoot, resolveBuilderBumpVerConfig(spurConfig));
+    const config = target === undefined ? ctx.aggregate : ctx.packages.get(target);
+    if (config === undefined) {
+        throw releaseUsage(
+            target === undefined
+                ? 'bump-ver --check needs a package id (no aggregate package is configured)'
+                : `unknown package "${target}". Package IDs: ${[...ctx.packages.keys()].join(', ')}`,
+        );
+    }
+    const manifest = await readJson(join(repoRoot, config.packageDir, 'package.json'));
+    const pkgVersion = typeof manifest?.version === 'string' ? manifest.version : '';
+    const marketplacePath = join(repoRoot, '.claude-plugin', 'marketplace.json');
+    const marketplaceFile = Bun.file(marketplacePath);
+    if (!(await marketplaceFile.exists())) {
+        output.write('No .claude-plugin/marketplace.json — nothing to check.');
+        return 0;
+    }
+    const marketplaceText = await marketplaceFile.text();
+    const plugins: Array<{ label: string; version: string }> = [];
+    try {
+        const parsed = JSON.parse(marketplaceText) as { plugins?: Array<{ source?: unknown }> };
+        for (const entry of parsed.plugins ?? []) {
+            if (typeof entry.source !== 'string') continue;
+            const label = join(entry.source, 'plugin.json').replace(/^\.\//, '');
+            const pluginJson = await readJson(join(repoRoot, entry.source, 'plugin.json'));
+            plugins.push({ label, version: typeof pluginJson?.version === 'string' ? pluginJson.version : '' });
+        }
+    } catch {
+        // Malformed JSON is reported by findMarketplaceVersionDriftFrom below.
+    }
+    const drift = findMarketplaceVersionDriftFrom(marketplaceText, plugins, pkgVersion);
+    if (drift.length > 0) {
+        output.error(`Marketplace/plugin version drift:\n  ${drift.join('\n  ')}`);
+        return 1;
+    }
+    output.write('Marketplace/plugin versions match package version.');
+    return 0;
+}
+
+/** Command runner seam for {@link publishPackage} (tests stub the build and `npm publish`). */
+export type PublishRunner = (
+    cwd: string,
+    cmd: string[],
+) => Promise<{ ok: boolean; stdout: string; stderr: string; exitCode: number | null }>;
+
+const PUBLISH_TIMEOUT_MS = 30 * 60_000;
+
+/** Default {@link PublishRunner}: the process seam, buffered, 30-minute ceiling. */
+export const defaultPublishRunner: PublishRunner = async (cwd, cmd) => {
+    const executor = new NodeProcessExecutor({ defaultMaxOutput: 16 * 1024 * 1024 });
+    const result = await executor.run({
+        command: cmd[0] ?? '',
+        args: cmd.slice(1),
+        cwd,
+        forceBuffered: true,
+        timeout: PUBLISH_TIMEOUT_MS,
+        rejectOnError: false,
+    });
+    return {
+        ok: result.exitCode === 0,
+        stdout: result.stdout.toString().trim(),
+        stderr: result.stderr.toString().trim(),
+        exitCode: result.exitCode,
+    };
+};
+
+/**
+ * Rewrite a manifest's `workspace:` and `catalog:` ranges for npm: private workspace packages
+ * (bundled at build time) are dropped, public ones pinned `^<version>`, catalog ranges resolved
+ * from the root `workspaces.catalog`. Mutates `manifest`; returns the number of rewrites.
+ */
+export function resolvePublishRanges(
+    manifest: Record<string, unknown>,
+    workspaces: Map<string, { version?: string; private: boolean }>,
+    catalog: Record<string, string>,
+): number {
+    let changed = 0;
+    for (const field of ['dependencies', 'devDependencies', 'peerDependencies'] as const) {
+        const deps = manifest[field] as Record<string, string> | undefined;
+        if (!deps) continue;
+        for (const [name, range] of Object.entries(deps)) {
+            if (range.startsWith('workspace:')) {
+                const info = workspaces.get(name);
+                if (info === undefined) throw new Error(`workspace package not found: ${name}`);
+                if (info.private) {
+                    delete deps[name];
+                } else {
+                    if (!info.version) throw new Error(`workspace package has no version: ${name}`);
+                    deps[name] = `^${info.version}`;
+                }
+                changed++;
+            } else if (range === 'catalog:') {
+                const resolved = catalog[name];
+                if (!resolved) throw new Error(`catalog entry not found in root workspaces.catalog: ${name}`);
+                deps[name] = resolved;
+                changed++;
+            }
+        }
+    }
+    return changed;
+}
+
+/**
+ * `spur builder publish <dir> [--otp <code>]` — CI publish for npm Trusted Publishing (OIDC;
+ * absorbed from the retired `scripts/commands/publish.ts`). Resolves workspace/catalog ranges
+ * in `<dir>/package.json`, builds (`bun run build:bundle`, so bin files exist before npm ≥ 11
+ * validates them), runs `npm publish --access public`, and restores the manifest on every path.
+ */
+export async function publishPackage(
+    target: string | undefined,
+    opts: { repoRoot?: string; otp?: string; output?: CommandOutput; runner?: PublishRunner } = {},
+): Promise<void> {
+    if (!target) throw new Error('usage: spur builder publish <package-dir> [--otp <code>]');
+    const repoRoot = opts.repoRoot ?? process.cwd();
+    const output = opts.output ?? consoleOutput;
+    const runner = opts.runner ?? defaultPublishRunner;
+    const dir = (target.startsWith('/') ? target : join(repoRoot, target)).replace(/\/+$/, '');
+    const manifestPath = join(dir, 'package.json');
+    const manifestFile = Bun.file(manifestPath);
+    if (!(await manifestFile.exists())) throw new Error(`no package.json at ${dir}`);
+    const original = await manifestFile.text();
+    const manifest = JSON.parse(original) as Record<string, unknown>;
+
+    const workspaces = new Map<string, { version?: string; private: boolean }>();
+    for (const wsDir of workspaceDirs(repoRoot)) {
+        const pkg = await readJson(join(repoRoot, wsDir, 'package.json'));
+        if (pkg !== null && typeof pkg.name === 'string') {
+            workspaces.set(pkg.name, {
+                ...(typeof pkg.version === 'string' ? { version: pkg.version } : {}),
+                private: pkg.private === true,
+            });
+        }
+    }
+    const root = await readJson(join(repoRoot, 'package.json'));
+    const catalog = ((root?.workspaces as { catalog?: Record<string, string> } | undefined)?.catalog ?? {}) as Record<
+        string,
+        string
+    >;
+
+    const changed = resolvePublishRanges(manifest, workspaces, catalog);
+    if (changed > 0) {
+        await Bun.write(manifestPath, `${JSON.stringify(manifest, null, 4)}\n`);
+        output.write(`Resolved ${changed} workspace/catalog range(s)`);
+    }
+    // The resolved manifest must never outlive this call — restore on every exit path.
+    try {
+        const build = await runner(dir, ['bun', 'run', 'build:bundle']);
+        if (!build.ok) {
+            if (build.stderr) output.error(build.stderr);
+            throw new Error(`build:bundle failed (exit ${build.exitCode})`);
+        }
+        const publishArgs = ['npm', 'publish', '--access', 'public'];
+        if (opts.otp) publishArgs.push('--otp', opts.otp);
+        const result = await runner(dir, publishArgs);
+        const text = [result.stdout, result.stderr].filter(Boolean).join('\n').trim();
+        if (text) output.write(text);
+        if (!result.ok) throw new Error(`npm publish failed (exit ${result.exitCode})`);
+    } finally {
+        if (changed > 0) await Bun.write(manifestPath, original);
+    }
+}

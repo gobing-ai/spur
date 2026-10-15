@@ -25,7 +25,8 @@
         "./run-summary-cli": "./src/workflow/run-summary-cli.ts",
         "./step-profile-cli": "./src/workflow/step-profile-cli.ts",
         "./dogfood": "./src/services/dogfood/index.ts",
-        "./pr-review": "./src/services/pr-review/index.ts"
+        "./pr-review": "./src/services/pr-review/index.ts",
+        "./run-cost": "./src/workflow/run-cost.ts"
     },
     "scripts": {
         "build": "bun build src/index.ts --outdir dist --target bun",

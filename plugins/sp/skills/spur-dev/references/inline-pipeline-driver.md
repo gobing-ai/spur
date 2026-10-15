@@ -98,10 +98,6 @@ fallback) — labels are display addresses only, never an execution key.
    accept the inline run (0785 R3):
 
    ```bash
-   # 0960 R2: record the run's script-resolution identity beside the run row (the same file the
-   # pipelines' run-start action writes) so the inline path carries the same provenance.
-   RS=plugins/sp/scripts/script-root.ts; [ -f config/plugin-scripts.json -a -f "$RS" ] || RS="$(superskill script path sp script-root.mjs 2>/dev/null)";
-   RUNNER=bun; case "$RS" in *.mjs) RUNNER=node ;; esac; [ -f "$RS" ] && "$RUNNER" "$RS" --run-id "$RUN_ID" || echo "script-root failed closed — run 'superskill install sp --marketplace gobing-ai/spur'" >&2
    spur workflow inline begin --run-id "$RUN_ID" --file <selected-pipeline-yaml> \
      || { echo "inline run setup failed closed — see the spur workflow inline begin error above" >&2; exit 1; }
    ```

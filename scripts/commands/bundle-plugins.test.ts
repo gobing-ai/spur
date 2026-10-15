@@ -8,8 +8,8 @@
  *     staged tree and ignores `.gitignore`;
  *  2. shipping tests/evals bloat the tarball (superskill 0113 measured the gap).
  *
- * Superskill's `find plugins -type d -name tests -prune` misses the five
- * `*.test.ts` files outside any `tests/` dir; the EXCLUDE regex here must prune
+ * Superskill's `find plugins -type d -name tests -prune` misses any
+ * `*.test.ts` files outside a `tests/` dir; the EXCLUDE regex here must prune
  * by content type, not by directory name.
  */
 import { afterEach, describe, expect, test } from 'bun:test';
@@ -53,7 +53,7 @@ describe('bundlePlugins', () => {
 
         // Nothing under a tests/ directory ships.
         expect(rel.some((f) => f.includes('/tests/') || f.startsWith('tests/'))).toBe(false);
-        // No *.test.ts anywhere (the five outside tests/ dirs must be pruned too).
+        // No *.test.ts anywhere (any file outside tests/ dirs must be pruned too).
         expect(rel.some((f) => f.endsWith('.test.ts'))).toBe(false);
         // evals/ (monorepo-only) pruned.
         expect(rel.some((f) => f.includes('/evals/'))).toBe(false);
@@ -87,7 +87,6 @@ describe('EXCLUDE filter', () => {
         expect(EXCLUDE.test(rel('README.md'))).toBe(false);
         expect(EXCLUDE.test(rel('sp/plugin.json'))).toBe(false);
         expect(EXCLUDE.test(rel('sp/skills/dev-plan/SKILL.md'))).toBe(false);
-        expect(EXCLUDE.test(rel('sp/scripts/batch-preflight.ts'))).toBe(false);
         expect(EXCLUDE.test(rel('sp/scripts/hooks/careful-guard.ts'))).toBe(false);
     });
 });

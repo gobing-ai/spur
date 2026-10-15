@@ -62,7 +62,7 @@ afterEach(() => {
 });
 
 describe('spur builder command wiring', () => {
-    test('registers the noun with exactly its three verbs (bump-ver, drop-tags, pr)', () => {
+    test('registers the noun with exactly its four verbs (bump-ver, drop-tags, publish, pr)', () => {
         const program = new Command();
         const { context } = makeContext(process.cwd());
         registerBuilderCommand(program, context);
@@ -72,8 +72,9 @@ describe('spur builder command wiring', () => {
         const verbs = builder?.commands.map((c) => c.name()) ?? [];
         expect(verbs).toContain('bump-ver');
         expect(verbs).toContain('drop-tags');
+        expect(verbs).toContain('publish');
         expect(verbs).toContain('pr');
-        expect(verbs).toHaveLength(3);
+        expect(verbs).toHaveLength(4);
     });
 
     test('help renders both verbs without invoking actions', () => {
@@ -135,6 +136,20 @@ describe('spur builder command wiring', () => {
         expect(lines.join('\n')).toContain('@demo/lib-v0.2.0');
         const tags = Bun.spawnSync(['git', 'tag', '-l'], { cwd: repo }).stdout.toString();
         expect(tags).toContain('@demo/lib-v0.2.0');
+    });
+
+    test('bump-ver --check rejects incompatible write flags (--push/--all) instead of ignoring them', async () => {
+        const repo = mkRepo();
+        for (const flags of [['--push'], ['--all']]) {
+            const { context, lines, exitCode } = makeContext(repo);
+            const program = new Command();
+            program.exitOverride();
+            registerBuilderCommand(program, context);
+
+            await program.parseAsync(['builder', 'bump-ver', '--check', 'lib', ...flags], { from: 'user' });
+            expect(exitCode()).toBe(1);
+            expect(lines.join('\n')).toContain('rejects incompatible write flags (--push/--all)');
+        }
     });
 
     test('bump-ver --json success renders a machine summary', async () => {

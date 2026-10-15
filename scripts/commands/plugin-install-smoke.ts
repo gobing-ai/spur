@@ -1,16 +1,14 @@
 #!/usr/bin/env bun
 // plugin-install-smoke — release gate for the sp plugin's standalone contract.
 //
-// (1) hooks/** and lib/** are bundled by superskill AT INSTALL time on targets with
-//     no node_modules, so they may value-import only node:*/bun:* builtins or
-//     relative paths (*:*.test.ts never bundles). scripts/** ship as prebuilt
-//     in-repo .mjs twins (any import inlines there), so they only ban @gobing-ai/*
-//     value imports — the class that broke install-time re-conversion of stale
-//     twins in releases 0.3.81–0.3.88 (task 0669). We scan ourselves rather than
-//     trusting superskill's resolution, which 0.3.28+ masks via its private deps.
+// (1) hooks/**, lib/** and the hook entries under scripts/hooks/** are bundled by
+//     superskill AT INSTALL time on targets with no node_modules, so they may
+//     value-import only node:*/bun:* builtins or relative paths (*:*.test.ts never
+//     bundles). We scan ourselves rather than trusting superskill's resolution,
+//     which 0.3.28+ masks via its private deps.
 // (2) A synthetic marketplace snapshot installs clean via `superskill install
-//     --dry-run` — validates plugin.json, hooks.json, manifest/twin layout and the
-//     install pipeline without writing to real targets.
+//     --dry-run` — validates plugin.json, hooks.json and the install pipeline
+//     without writing to real targets.
 
 import { cpSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, statSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
@@ -66,25 +64,18 @@ const failures: string[] = [];
 
 // Gate 1: install-bundled surfaces (hooks, lib, and the hook entries under scripts/hooks, which
 // `superskill hook run` executes as-is under Bun on targets with no node_modules) — node:*/bun:*
-// builtins + relative only.
-// Gate 1b: other scripts — no @gobing-ai/* value imports (twins are prebuilt in-repo; this
-// guards the install-time re-conversion path that requires host-side resolution).
-const HOOK_ENTRIES = join(PLUGIN, 'scripts', 'hooks');
+// builtins + relative only. After 1213 every file under scripts/ is a hook entry, so the scan
+// is uniformly strict.
 for (const dir of ['hooks', 'lib', 'scripts']) {
     for (const file of walkTs(join(PLUGIN, dir))) {
         if (file.endsWith('.test.ts')) continue;
-        const strict = dir !== 'scripts' || file.startsWith(`${HOOK_ENTRIES}/`);
         const source = readFileSync(file, 'utf8');
         scanValueImports(source, (specifier) => {
             const builtin = specifier.startsWith('node:') || specifier.startsWith('bun:');
             const relative = specifier.startsWith('.') || specifier.startsWith('/');
-            if (strict && !builtin && !relative) {
+            if (!builtin && !relative) {
                 failures.push(
                     `${file}: value-imports '${specifier}' — install-bundled surface must import node:*/bun:* or relative paths only`,
-                );
-            } else if (!strict && specifier.startsWith('@gobing-ai/')) {
-                failures.push(
-                    `${file}: value-imports '${specifier}' — scripts must not import @gobing-ai/* (bundle/convert happens without workspace node_modules)`,
                 );
             }
         });

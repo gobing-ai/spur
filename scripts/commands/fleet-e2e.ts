@@ -44,7 +44,7 @@ import { StrategyRuntime } from '../../packages/app/src/services/strategy-runtim
 import { CoordinationRunDao } from '../../packages/domain/src/dao/coordination-run-dao';
 import { InboxUnfinishedDao } from '../../packages/domain/src/dao/inbox-unfinished-dao';
 import { readMemberSessions } from '../../packages/domain/src/dao/member-session';
-// Deep relative imports (the precedent in `real-run-cost.ts`): the root node_modules has no
+// Deep relative imports (the precedent set by the retired `real-run-cost.ts`): the root node_modules has no
 // workspace link for `scripts/commands`, so `@gobing-ai/spur-*` cannot resolve here.
 import { ProjectClaimDao } from '../../packages/domain/src/dao/project-claim-dao';
 import { SystemEventDao } from '../../packages/domain/src/dao/system-event-dao';

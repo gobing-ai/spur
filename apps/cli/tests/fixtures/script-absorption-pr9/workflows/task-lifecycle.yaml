@@ -1,0 +1,209 @@
+# Externally driven FSM (requestTransition) — not an auto-running pipeline.
+#
+# [CRITICAL] One transition per (from, to) pair. `requestTransition` selects with
+# `transitions.find(t => t.from === … && t.to === …)` and denies on that single
+# transition's guard — it never falls through to a sibling with the same pair
+# (dual-workflow-engine/src/service.ts requestTransition). Guard-paired siblings
+# (e.g. a `mode = fast` fast path beside a `mode != fast` safety path) are only
+# valid in auto-run pipelines, where `firstPassingTransition` evaluates every
+# outbound edge. Adding a sibling here blocks the forward path outright: task 0758
+# did exactly that and denied every wip→testing and testing→done write until it
+# was reverted.
+#
+# Reliability (aligned with task-pipeline / ADR-043 — lifecycle-only contract):
+#   - Hard shell guards only at wip→testing and testing→done
+#     (no soft probe needed: requestTransition fails closed when guard shell is non-zero)
+#   - CLI done verdict guard is a second layer (0292) covering --no-lifecycle
+#     paths
+#   - No agent.run nodes (by design — pure status graph)
+#   - cancelled is the sole terminal; done is re-enterable (reopen → wip)
+"$schema": "@gobing-ai/spur/schemas/state-machine-workflow.schema.json"
+kind: state-machine
+name: task-lifecycle
+version: "1"
+description: >
+  Task lifecycle FSM (design §2.3, §5.1). States are the canonical TaskStatus
+  vocabulary (DD-01); transitions encode the §2.3 graph; guards invoke
+  `${vars.spurBin} task check --as <target>` at the wip→testing and testing→done
+  placements (F92 R3): each guard evaluates the task AS the transition target so
+  testing→done checks the `done` row instead of the current `testing` row.
+  `done` is re-enterable (reopen with a warning); `cancelled` is terminal.
+  Guard commands reference the check verb (0051). Unconditional transitions
+  use the `always` guard (externally-driven via `requestTransition`, not
+  auto-advance).
+
+  Two-layer done gate (task 0292): this workflow's testing→done guard
+  (`spur task check --as done`, F92 R3 — target-aware) is the FIRST gate.
+  The CLI verdict guard (`packages/app/src/services/done-transition-guard.ts`)
+  is the SECOND gate, invoked by `apps/cli/src/commands/task/update.ts` for every
+  `spur task update <wbs> done` call — it reads `.spur/run/<wbs>-verdict.json`
+  and blocks non-PASS verdicts unless `--force-done --reason "<why>"` is
+  supplied. The CLI gate covers the `--no-lifecycle` and adapter-unavailable
+  paths that bypass this workflow. Overrides are recorded via the `done_forced`
+  / `done_reason` frontmatter fields.
+initialState: backlog
+terminalStates:
+  - cancelled
+vars:
+  spurBin: "spur"
+  wbs: "0000"
+
+states:
+  - id: backlog
+    description: Initial state — task exists but has not been triaged.
+  - id: todo
+    description: Triaged and ready to start.
+  - id: wip
+    description: Actively being worked on.
+  - id: testing
+    description: Implementation complete; under test/verification.
+  - id: blocked
+    description: Impediment; work suspended.
+  - id: done
+    description: >
+      Completed. Re-enterable (reopen with warning + mandatory History entry).
+  - id: cancelled
+    description: Terminal — abandoned.
+  - id: deprecated
+    description: >
+      Retained and frozen (ADR-137). Non-terminal: the record stays readable and
+      countable, nothing new may attach to it, and leaving it is explicit —
+      un-deprecate to todo, or cancelled once the task is removed.
+
+transitions:
+  # Forward path: backlog → todo → wip → testing → done
+  - from: backlog
+    to: todo
+    description: Triage — task is ready to start
+    guard:
+      kind: always
+  - from: todo
+    to: wip
+    description: Start work
+    guard:
+      kind: always
+  - from: wip
+    to: testing
+    description: Implementation complete; enter testing
+    guard:
+      kind: shell
+      options:
+        command: '$spurBin task check $wbs --as testing'
+  - from: testing
+    to: done
+    description: Testing passed; mark done
+    guard:
+      kind: shell
+      options:
+        command: '$spurBin task check $wbs --as done'
+
+  # Reopen: done → wip (warned, mandatory History entry)
+  - from: done
+    to: wip
+    description: Reopen — work resumed (warning + mandatory History entry)
+    guard:
+      kind: always
+
+  # Blocked ↔ (todo, wip, testing) — bidirectional from/to active states
+  - from: todo
+    to: blocked
+    description: Blocked by an impediment
+    guard:
+      kind: always
+  - from: blocked
+    to: todo
+    description: Impediment resolved — back to todo
+    guard:
+      kind: always
+  - from: wip
+    to: blocked
+    description: Blocked by an impediment
+    guard:
+      kind: always
+  - from: blocked
+    to: wip
+    description: Impediment resolved — back to wip
+    guard:
+      kind: always
+  - from: testing
+    to: blocked
+    description: Blocked by an impediment
+    guard:
+      kind: always
+  - from: blocked
+    to: testing
+    description: Impediment resolved — back to testing
+    guard:
+      kind: always
+
+  # Cancel: any non-terminal → cancelled (terminal)
+  - from: backlog
+    to: cancelled
+    description: Cancel task
+    guard:
+      kind: always
+  - from: todo
+    to: cancelled
+    description: Cancel task
+    guard:
+      kind: always
+  - from: wip
+    to: cancelled
+    description: Cancel task
+    guard:
+      kind: always
+  - from: testing
+    to: cancelled
+    description: Cancel task
+    guard:
+      kind: always
+  - from: blocked
+    to: cancelled
+    description: Cancel task
+    guard:
+      kind: always
+
+  # Deprecate: any non-terminal-or-done state → deprecated (frozen, retained — ADR-137)
+  - from: backlog
+    to: deprecated
+    description: Deprecate task (frozen, retained)
+    guard:
+      kind: always
+  - from: todo
+    to: deprecated
+    description: Deprecate task (frozen, retained)
+    guard:
+      kind: always
+  - from: wip
+    to: deprecated
+    description: Deprecate task (frozen, retained)
+    guard:
+      kind: always
+  - from: testing
+    to: deprecated
+    description: Deprecate task (frozen, retained)
+    guard:
+      kind: always
+  - from: blocked
+    to: deprecated
+    description: Deprecate task (frozen, retained)
+    guard:
+      kind: always
+  - from: done
+    to: deprecated
+    description: Deprecate task (frozen, retained)
+    guard:
+      kind: always
+
+  # Exits out of deprecated: un-deprecate or remove only. Any other edge is
+  # undeclared and refused by the graph (ADR-135).
+  - from: deprecated
+    to: todo
+    description: Un-deprecate (mandatory History entry)
+    guard:
+      kind: always
+  - from: deprecated
+    to: cancelled
+    description: Remove deprecated task
+    guard:
+      kind: always
