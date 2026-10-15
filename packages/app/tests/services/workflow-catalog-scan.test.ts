@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, test } from 'bun:test';
-import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises';
+import { mkdir, mkdtemp, rm, symlink, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { extractWorkflowMeta, newestMtime, scanWorkflowFiles } from '../../src/services/workflow-catalog-scan';
@@ -51,6 +51,20 @@ describe('scanWorkflowFiles', () => {
     test('a missing root yields no entries', async () => {
         const dir = await tempDir();
         expect(await scanWorkflowFiles(join(dir, 'absent'), 'project', extractWorkflowMeta)).toEqual([]);
+    });
+
+    test('paths stay relative when the catalog root is a directory symlink', async () => {
+        const dir = await tempDir();
+        const target = join(dir, 'catalog');
+        await mkdir(join(target, 'sub'), { recursive: true });
+        await writeFile(join(target, 'sub', 'workflow.yaml'), 'name: linked\n');
+        const link = join(dir, 'linked');
+        await symlink(target, link, 'junction');
+
+        const entries = await scanWorkflowFiles(link, 'project', extractWorkflowMeta);
+        expect(entries.map((entry) => [entry.path, entry.name, entry.source])).toEqual([
+            [join('sub', 'workflow.yaml'), 'linked', 'project'],
+        ]);
     });
 });
 

@@ -3,7 +3,7 @@ kind: design
 title: Decision observability and staged workflow adoption
 status: accepted
 created_at: 2026-10-06
-updated_at: 2026-10-11
+updated_at: 2026-10-15
 related: [ADR-134, ADR-125, feature P, feature P1, decision-catalog.md]
 tags: [decision, events, workflow, observability]
 ---
@@ -169,7 +169,7 @@ preserves the full recorded timestamp. Values
 never render as raw JSON: the layer counts, duplicates and overrides render as `name value` pairs.
 `SERVES` is a count — the ids are the `MAKER` column of the Decisions table — while the full id
 list stays on `makers[].serves` in `--json`. The renderer follows the readiness shape
-`agent doctor` established (`packages/app/src/services/agent-service.ts:3158`).
+`agent doctor` established (`packages/app/src/services/agent-doctor-report.ts:385`).
 
 **Evidence.** The `recorded`/`accepted`/`lastSeen` columns come from the same recorded
 `decision.end` rows as §3.4, folded per maker (`DecisionStatusReadiness` in

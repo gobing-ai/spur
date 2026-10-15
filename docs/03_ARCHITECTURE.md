@@ -2,10 +2,10 @@
 doc: 03_ARCHITECTURE
 owns: HOW — module boundaries, data flow, runtime model, invariants
 authority: derived
-version: 1.73.0
+version: 1.74.0
 derived_from: [01_PRD, 00_ADR]
 owner: Robin Min
-updated_at: 2026-10-11
+updated_at: 2026-10-15
 read_before: cross-module, seam, or schema work
 edit_rules: 99 §6.4
 sync: [T1]
@@ -187,9 +187,11 @@ No file inventory here — that rots (99 §6.4 lesson); boundaries only:
   a large noun is a folder `commands/<noun>/` with `index.ts` (creates the noun and calls each
   verb's register function), one `<verb>.ts` per verb (`registerXxxYyyCommand(noun, context)`),
   and `shared.ts` holding only helpers two or more verbs use. Tests mirror it under
-  `tests/commands/<noun>/`. Services keep one class per noun in `packages/app/src/services/`;
-  pure helpers live in focused sibling modules (e.g. `agent-doctor-report.ts`,
-  `workflow-trace-projection.ts`, `task-service-errors.ts`) re-exported by the service file.
+  `tests/commands/<noun>/`. Services keep their public facade in `packages/app/src/services/`;
+  task, workflow and agent facades construct private collaborators grouped by responsibility.
+  Collaborators call public facade methods through a host reference when needed to preserve
+  overrides. Imports back to service types are type-only, avoiding runtime cycles. Pure helpers
+  live in focused sibling modules and existing public exports remain on the service facade.
 - **Commands** parse flags, call a `packages/app` service, format output, return an exit code —
   no business logic in the app (ADR-021).
 - **CliContext** carries cwd/env/fs/output/`setExitCode`. The CLI composition root creates and
