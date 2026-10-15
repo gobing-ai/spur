@@ -147,7 +147,7 @@ describe('checkVersionDrift (spur builder bump-ver --check)', () => {
 
 describe('resolvePublishRanges', () => {
     test('drops private workspace deps, pins public ones, resolves catalog, leaves others', () => {
-        const manifest = {
+        const manifest: Record<string, Record<string, string>> = {
             dependencies: { a: 'workspace:*', b: 'workspace:^', c: 'catalog:', d: '^1' },
             devDependencies: { c: 'catalog:' },
         };
