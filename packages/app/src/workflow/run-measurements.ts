@@ -10,7 +10,7 @@ import { isTerminalReason, type TerminalReason } from './terminal-reason';
 
 /**
  * Workflow run/state measurement (task 1178 R1) — the reusable aggregation over the
- * domain run/state queries, previously inlined in `scripts/commands/real-run-cost.ts`.
+ * domain run/state queries, previously inlined in the retired `scripts/commands/real-run-cost.ts` (now `spur workflow cost`, `run-cost.ts`).
  *
  * The database input is explicit (a {@link DbAdapter}) so callers pick the project
  * history plane or an in-memory fixture; there is no pinned repository path here. The

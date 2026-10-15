@@ -53,7 +53,7 @@
         "test": "bun test tests --coverage --coverage-dir=../../.coverage --pass-with-no-tests",
         "typecheck": "tsc --noEmit",
         "prepack": "bun run build:bundle",
-        "prepublishOnly": "bun run ../../scripts/spur-dev.ts check-marketplace-version"
+        "prepublishOnly": "cd ../.. && bun run apps/cli/src/index.ts builder bump-ver --check spur --no-logo"
     },
     "devDependencies": {
         "@commander-js/extra-typings": "catalog:",

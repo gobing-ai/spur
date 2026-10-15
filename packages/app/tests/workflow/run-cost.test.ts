@@ -3,17 +3,41 @@ import { describe, expect, test } from 'bun:test';
 import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import { createDbAdapter } from '@gobing-ai/ts-db';
 import {
-    buildReportJson,
+    buildReportJson as buildReportJsonWithDb,
     inScopeWorkflows,
     nearestRankPercentile,
-    readStateMetrics,
-    readWorkflowMetrics,
-    realRunCost,
-    scopedWorkflows,
+    parseSince,
+    readStateMetrics as readStateMetricsWithDb,
+    readWorkflowMetrics as readWorkflowMetricsWithDb,
+    renderStateLines,
+    renderWorkflowLines,
+    scopedWorkflows as scopedWorkflowsFs,
     stableJson,
     type WorkflowMetrics,
-} from './real-run-cost';
+} from '../../src/workflow/run-cost';
+
+// Path-keyed wrappers (the legacy script opened the DB by path; the app module takes an adapter).
+async function withDb<T>(
+    dbPath: string,
+    fn: (db: Awaited<ReturnType<typeof createDbAdapter>>) => Promise<T>,
+): Promise<T> {
+    const db = await createDbAdapter({ driver: 'bun-sqlite', url: dbPath });
+    try {
+        return await fn(db);
+    } finally {
+        db.close();
+    }
+}
+const readWorkflowMetrics = (dbPath: string, w: string[], o: { sinceMs?: number } = {}) =>
+    withDb(dbPath, (db) => readWorkflowMetricsWithDb(db, w, o));
+const readStateMetrics = (dbPath: string, w: string[], o: { sinceMs?: number } = {}) =>
+    withDb(dbPath, (db) => readStateMetricsWithDb(db, w, o));
+const buildReportJson = (dbPath: string, w: string[], o: { sinceMs?: number } = {}) =>
+    withDb(dbPath, (db) => buildReportJsonWithDb(db, w, o));
+const scopedWorkflows = (filters: string[], opts: { includeBookkeeping: boolean; workflowsDir: string }) =>
+    scopedWorkflowsFs(filters, opts);
 
 /**
  * Build a temp DB shaped like the live history plane (runs.metadata_json + status +
@@ -493,10 +517,9 @@ describe('0938 R4 --since window (epoch ms on runs.created_at)', () => {
         }
     });
 
-    test('the CLI rejects a non-date --since before touching the DB', async () => {
-        expect(realRunCost(['--since', 'not-a-date'])).rejects.toThrow(/--since/);
-        expect(realRunCost(['--since'])).rejects.toThrow(/--since requires a value/);
-        expect(realRunCost(['--bogus'])).rejects.toThrow(/unknown argument/);
+    test('parseSince rejects a non-date before touching the DB', () => {
+        expect(() => parseSince('not-a-date')).toThrow(/--since needs a date/);
+        expect(parseSince('2026-01-02')).toBe(Date.UTC(2026, 0, 2));
     });
 });
 
@@ -561,5 +584,35 @@ describe('scopedWorkflows (0938 R3 bookkeeping exclusion)', () => {
         } finally {
             await rm(dir, { recursive: true, force: true });
         }
+    });
+});
+
+describe('text renderers (legacy real-run-cost line formats)', () => {
+    test('workflow lines: measured wall/cost with exclusions, and the n/a forms', () => {
+        const base = {
+            workflow: 'w',
+            terminalRuns: 2,
+            dryRuns: 1,
+            nonTerminalRuns: 0,
+            wallClockMs: { mean: 2000, median: 2000, min: 1000, max: 3000 },
+            tokenCostUsd: 0.5,
+            tokens: 10,
+            usdRows: 1,
+            historyRows: 2,
+        } as unknown as WorkflowMetrics;
+        expect(renderWorkflowLines([base])).toEqual([
+            'w: wall=n=2 mean=2s median=2s min=1s max=3s cost=$0.5000 (10 tokens, 1/2 rows with USD) [excluded 1 dry, 0 non-terminal]',
+        ]);
+        const bare = { ...base, dryRuns: 0, wallClockMs: null, tokenCostUsd: null } as unknown as WorkflowMetrics;
+        expect(renderWorkflowLines([bare])).toEqual(['w: wall=n/a (no terminal non-dry run with bounds) cost=n/a']);
+        const noTokens = { ...bare, tokenCostUsd: 1, tokens: null } as unknown as WorkflowMetrics;
+        expect(renderWorkflowLines([noTokens])[0]).toContain('(n/a tokens,');
+    });
+    test('state lines: p50/p90 or n/a', () => {
+        const row = { workflow: 'w', state: 's', visits: 2, agentRunCount: 1, wallMsP50: 5, wallMsP90: 9, retries: 1 };
+        expect(renderStateLines([row as never, { ...row, wallMsP50: null } as never])).toEqual([
+            'w/s: visits=2 agent.run=1 wall=p50=5ms p90=9ms retries=1',
+            'w/s: visits=2 agent.run=1 wall=n/a retries=1',
+        ]);
     });
 });

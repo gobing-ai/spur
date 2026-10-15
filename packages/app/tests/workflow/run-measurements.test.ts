@@ -1,11 +1,11 @@
 /**
  * Workflow run/state measurement owner (task 1178 R1) — the extraction of the
  * `readWorkflowRuns`/`readWorkflowMetrics`/`readStateMetrics` measurement out of
- * `scripts/commands/real-run-cost.ts`.
+ * `scripts/commands/real-run-cost.ts` (retired; now `spur workflow cost`).
  *
  * These cases observe REAL query/aggregation behavior against an in-memory SQLite history
  * plane (`createDbAdapter({ driver: 'bun-sqlite', url: ':memory:' })`) — no real history
- * DB, no paid models. The `scripts/commands/real-run-cost.test.ts` parity suite keeps
+ * DB, no paid models. The `packages/app/tests/workflow/run-cost.test.ts` suite (ported from the retired `real-run-cost.test.ts`) keeps
  * pinning the repository wrapper/CLI behavior over the same semantics.
  */
 import { describe, expect, test } from 'bun:test';

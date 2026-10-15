@@ -1,0 +1,809 @@
+# Wrap-up pipeline — post-execution wrap-up for one task or a batch (design
+# §wrapup-pipeline).
+#
+# Orchestration is configuration (ADR-022 / §3.2): this is YAML over the
+# existing
+# dual-workflow engine — zero new engine code. The pipeline NEVER mutates task
+# status —
+# wrap-up consumes completed tasks and produces learning/metrics/doc artifacts
+# only.
+# Feature transitions go through `spur feature update` so the feature-lifecycle
+# guards
+# apply identically. Branch cleanup is an irreversible HITL gate — it always
+# pauses,
+# even under --auto (Iron Law #6: irreversible action -> surface to human).
+#
+# Shape: start -> task-resolve -> doc-sync -> learnings-validate -> learnings-append
+#          -> doc-tripwire (1037: repo-wide tripwire over the still-uncommitted wrap
+#          diff; repair also enters it; the task-resolve fast path does not)
+#          -> metrics-record
+#          -> feature-transition (conditional: if vars.feature set)
+#          -> feature-verify (post-transition feature check gate, 0915 F1)
+#          -> branch-cleanup (conditional: if vars.merge=true)
+#          -> done
+#        doc-sync routes a contract violation to `repair` (cheap, no
+#        re-dispatch — ADR-118 pilot) and an executor failure to `failed`;
+#        1147 adds two deterministic post-doc-sync checks that fail the step
+#        BEFORE the tripwire backstop and name doc-sync. Those edges are
+#        declared before the contract-violation edge, so a doc-sync that both
+#        misses its learnings post-condition and trips a deterministic check
+#        fails the step instead of taking repair. The checks are: the write-scope check
+#        (the entry snapshot diffed against the working listing; allowed paths
+#        are docs/** minus docs/tasks*/docs/features* plus the declared learnings
+#        capture — a violation writes scope-violation: <paths> and is reported,
+#        never auto-reverted) and the supersession-pin re-run
+#        (repo-wide-tests/adr-supersession.test.ts), so a resurrected delinked
+#        index row is attributable to doc-sync; doc-tripwire stays the full
+#        backstop and is never weakened;
+#        learnings-validate (0986) rejects a nonempty narration-only capture to
+#        the same `repair` edge with a distinct invalid-learnings-shape status —
+#        expectFile proves existence, never shape — while empty/missing captures
+#        keep the soft skip by passing through to learnings-append;
+#        learnings-append and repair converge on doc-tripwire (1037), which runs
+#        docTripwireCmd — the repo-wide tripwires over the still-uncommitted wrap
+#        diff — before metrics-record; the task-resolve fast path never enters it;
+#        task-resolve with a VALIDATED empty list short-circuits to `skipped`;
+#        invalid wrap input, an unresolved/non-completed task, a failed metrics
+#        capture, a failed required sync, a failed repo-wide tripwire (1037), or
+#        a failed feature gate routes to `failed` (0770) instead of being
+#        absorbed by an always-defensive skip.
+#
+# Vars (passed as a JSON object via `--vars`):
+# tasks    — JSON array of WBS strings, passed as a JSON-encoded STRING value
+# (the CLI
+# rejects non-string --vars values), e.g. --vars '{"tasks":"[\"0167\"]"}'
+#   feature  — feature id to advance through legal lifecycle edges (optional)
+#   profile  — set --vars '{"profile":"auto"}' to skip objective confirmations
+# merge    — set --vars '{"merge":"true"}' to run branch cleanup (irreversible
+# HITL)
+#   spurBin  — PATH-independent spur invocation (overridden by CLI at run start)
+#   agent    — agent for agent.run steps (default: auto → `agent.default` in config)
+#
+# Reliability (aligned with task-pipeline / ADR-043):
+# - Prefer pure slash commands when a command exists; free-form inputs remain
+# only
+#     where capture artifacts (answerFile) have no dedicated slash surface yet.
+#   - doc-sync / metrics-record use expectFile + soft append (empty capture
+# does not abort wrap-up after prior steps already landed). The doc-sync hop is
+# a
+# single model query that both repairs doc drift (sp:doc-evolve) and captures
+#     working learnings (task 0607 R2 — one query answers both; count 2 -> 1).
+# - feature-transition is a soft shell (always exit 0); a failed required sync
+#     or feature gate records FAIL and routes to `failed` instead of claiming
+#     success (0770).
+# - 0770 truthful outcomes: vars.tasks is parsed and validated ONCE at
+#     task-resolve (JSON array of non-empty WBS strings, every member resolved
+#     via `task show` to a completed status); siblings consume the normalized
+#     run-scoped artifact and never re-parse raw input (malformed input can no
+#     longer be silently re-interpreted as an empty list). All captures are
+#     run-scoped under .spur/run/<runId>-wrapup-*; a lookup failure is
+#     recorded, never silently omitted as success.
+#   - 0783 validated consumers (audit 0781 F-04): validation accepts only
+#     canonical four-digit WBS strings (whitespace is rejected, not trimmed);
+#     the route writer, every guard, model prompt and operator note after
+#     resolution read the run-scoped capture, never raw vars.tasks, and a
+#     missing/corrupted capture or status refuses progression. Metrics
+#     revalidate the capture, require well-shaped task lookups, serialize rows
+#     with jq (never interpolated printf), and write PASS only after every
+#     required append succeeds. Required feature sync succeeds only for a
+#     valid matching proposal with no gateBlocked/requiresConfirm condition
+#     whose target status is freshly observed; applied:false is a successful
+#     no-op only when from == to and that status is observed — nonzero,
+#     malformed, partial, blocked or unreadable outcomes fail explicitly, and
+#     an affected-feature check can never convert a failed sync into success.
+# - branch-cleanup HITL is exhaustive (yes/no/cancel → done; missing answer
+# defense) and consent-only: it records the decision, performs no git op.
+#   - Wrap-up never mutates task status (consumes completed work only).
+
+"$schema": "@gobing-ai/spur/schemas/state-machine-workflow.schema.json"
+kind: state-machine
+name: wrapup-pipeline
+version: "9"
+description: "Post-execution wrap-up: doc-sync (doc drift + learning capture), metrics, feature-transition, branch-cleanup"
+iterationBound: 10
+initialState: start
+terminalStates:
+  - done
+  - skipped
+  - failed
+failureStates:
+  - failed
+vars:
+  tasks: "[]"
+  feature: ""
+  profile: "standard"
+  merge: "false"
+  spurBin: "spur"
+  agent: "auto"
+  __runId: ""
+  mode: ""
+  stepTimeoutMs: "1800000"
+  # Recheck the affected feature after sync (D61 / ADR-108), not the corpus
+  # or full code suite. Explicit caller overrides remain supported.
+  # TRUSTED CONFIG ONLY — this string is executed via `sh -c` (same surface as
+  # task-pipeline's qualityGateCmd). Never interpolate untrusted input into it.
+  featureGateCmd: '$spurBin feature check "$feature"'
+  # Repo-wide tripwire over the wrap diff (1037): runs `bun run test-repo-wide`
+  # only when package.json declares the script, so other projects no-op. Callers
+  # can override it with --vars; an empty string disables the check (the hop
+  # still writes PASS).
+  # TRUSTED CONFIG ONLY — this string is executed via `sh -c` (same surface as
+  # featureGateCmd). Never interpolate untrusted input into it.
+  docTripwireCmd: 'if jq -e ''.scripts["test-repo-wide"]'' package.json >/dev/null 2>&1; then bun run test-repo-wide; fi'
+  __hitlAnswer: ""
+
+states:
+  - id: start
+    description: >
+      Pipeline start. Task statuses are NOT mutated by wrap-up — wrap-up consumes
+      completed tasks and produces learning/metrics/doc artifacts only.
+    onEnter:
+      # 0960 R2: run-start script-resolution identity — record which tree this run
+      # resolved (source-repo vs installed) before any step executes. Never aborts.
+      - kind: shell
+        options:
+          command: >-
+            S=plugins/sp/scripts/script-root.ts; [ -f config/plugin-scripts.json -a -f "$S" ] || S="$(superskill script path sp script-root.mjs 2>/dev/null)"; RUNNER=bun; case "$S" in *.mjs) RUNNER=node ;; esac; [ -f "$S" ] && "$RUNNER" "$S" --run-id "$__runId" --spur-bin "$spurBin" || echo "script-root failed closed — run 'superskill install sp --marketplace gobing-ai/spur'" >&2; exit 0
+      - kind: note
+        options:
+          message: "Wrap-up pipeline start for tasks: ${vars.tasks}. Task statuses are NOT mutated."
+
+  - id: task-resolve
+    description: >
+      Validate the task list ONCE and evaluate closed proportional routing (0758
+      R1-R4). When vars.feature is set, resolve also runs the feature pre-flight
+      (1033 R2). Validation (0770 + 0783): vars.tasks must be a JSON array of
+      canonical four-digit WBS strings — non-arrays, non-strings, whitespace or
+      other shapes are rejected, not trimmed — deduplicated in first-seen
+      order, with __runId present, and every member must resolve via `spur task
+      show` to a completed status (done/cancelled); failed or malformed
+      lookups fail. Invalid input or an unresolved/non-completed task records
+      FAIL (reason into the run-scoped reason file) and routes to `failed`;
+      the route writer and every guard, prompt and note after resolution read
+      the normalized run-scoped artifact
+      .spur/run/<runId>-wrapup-tasks.json and never re-parse raw input — a
+      missing or corrupted capture refuses progression. A validated empty list
+      -> skipped; length > 0 && mode == fast -> fast-path (metrics-record,
+      bypassing doc-sync); missing/unknown/conflict -> doc-sync (safety-path).
+      Writes bounded machine-readable reason to reasonFile. When the caller leaves
+      mode empty, a deterministic drift probe (0944) projects mode=fast only when
+      no changed path matches a doc-owned surface and every task's Solution
+      change map parsed — any doubt stays on the safety path.
+    onEnter:
+      - kind: note
+        options:
+          message: "Resolving task list: ${vars.tasks} (proportional mode: ${vars.mode})"
+      # (d) wrapup-steps.ts resolve owns task capture and status resolution (0824);
+      # the wrapper only locates it (monorepo first, registered twin under node) and
+      # fails closed, writing FAIL for the failed defense edge — never PASS.
+      - kind: shell
+        options:
+          command: >-
+            mkdir -p .spur/run &&
+            eval "$(jq -r 'if .mode=="source-repo" then "S="+@sh"\(.dir)/wrapup-steps.ts"+" RUNNER=bun" elif .mode=="installed" then "S="+@sh"\(.dir)/wrapup-steps.mjs"+" RUNNER=node" else empty end' ".spur/run/$__runId-script-root.json" 2>/dev/null)"; if [ -f "$S" ]; then
+              "$RUNNER" "$S" resolve;
+            else
+              echo "wrapup-steps failed closed — script not found — run 'superskill install sp --marketplace gobing-ai/spur'" >&2;
+              printf 'FAIL\n' > ".spur/run/$__runId-wrapup-resolve.status";
+            fi
+      # (0944 R1-R3) deterministic drift probe — runs ONLY when the caller left mode
+      # empty (a caller-set mode is projected verbatim and the probe never runs). It
+      # writes <runId>-drift-probe.json {clean,reasons,paths} and projects the wrapup
+      # mode by writing <runId>-mode.txt: caller mode verbatim, `fast` when the probe
+      # is clean, empty when dirty (the probe script fails safe on any lookup or parse
+      # problem; a missing script writes a dirty probe + empty mode here). The next
+      # action reads the mode file into vars.mode via file.read.into-var.
+      - kind: shell
+        options:
+          command: >-
+            if [ -n "$mode" ]; then
+              printf '%s\n' "$mode" > ".spur/run/$__runId-mode.txt";
+            else
+              eval "$(jq -r 'if .mode=="source-repo" then "S="+@sh"\(.dir)/wrapup-drift-probe.ts"+" RUNNER=bun" elif .mode=="installed" then "S="+@sh"\(.dir)/wrapup-drift-probe.mjs"+" RUNNER=node" else empty end' ".spur/run/$__runId-script-root.json" 2>/dev/null)";
+              if [ -f "$S" ]; then
+                "$RUNNER" "$S";
+              else
+                printf '{"clean":false,"reasons":["probe script not found"],"paths":[]}' > ".spur/run/$__runId-drift-probe.json";
+                printf '\n' > ".spur/run/$__runId-mode.txt";
+              fi;
+            fi
+      - kind: file.read.into-var
+        options:
+          path: .spur/run/${vars.__runId}-mode.txt
+          var: mode
+      # (e) route-reason writer: one table lookup over the projected mode var over
+      # the validated capture and the drift probe verdict; workflow-local routing
+      # glue (0824, moved behind the wrapup-steps locator in 0944 to stay inside the
+      # ADR-115 shell caps). Runs AFTER the probe/projection so the reason reflects
+      # the projected mode. Reads ONLY .spur/run/<runId>-wrapup-tasks.json and the
+      # probe verdict — never raw vars.tasks (0783 R2/R5). A FAIL resolve exits
+      # without writing: the failed reason written by validation stands, and the
+      # skip reason can never mask it. A clean probe yields `fast:drift-probe-clean`
+      # (0944); mode `safety` claims `safety:operator-forced doc-sync`; a missing or
+      # corrupted capture fails the lookup (no skipped or clean claim can be
+      # invented); the failed defense edge owns the run.
+      - kind: shell
+        options:
+          command: >-
+            mkdir -p .spur/run .spur/memory &&
+            eval "$(jq -r 'if .mode=="source-repo" then "S="+@sh"\(.dir)/wrapup-steps.ts"+" RUNNER=bun" elif .mode=="installed" then "S="+@sh"\(.dir)/wrapup-steps.mjs"+" RUNNER=node" else empty end' ".spur/run/$__runId-script-root.json" 2>/dev/null)"; if [ -f "$S" ]; then
+              "$RUNNER" "$S" route-reason;
+            else
+              echo "wrapup-steps failed closed — script not found — run 'superskill install sp --marketplace gobing-ai/spur'" >&2;
+              printf 'FAIL\n' > ".spur/run/$__runId-wrapup-resolve.status";
+            fi
+
+  - id: doc-sync
+    description: >
+      ONE model query that both repairs project-level doc drift for the batch
+      (04_DESIGN, 03_ARCHITECTURE, 00_ADR, docs/design/*) and captures working
+      learnings (task 0607 R2: two adjacent agent.run hops merged, count 2 -> 1;
+      no operator-decision pause or verdict boundary sits between them). No dedicated
+      slash command yet — free-form skill pointer until a /sp:doc-evolve command
+      exists (ADR-043 residual). This is the expensive stage; a contract violation
+      (a clean exit that missed its declared answerFile/expectFile post-condition)
+      routes to the cheap `repair` edge instead of a full re-dispatch (ADR-118
+      pilot, 0871) — `onError: continue` lets the transition guards read the
+      agent's result instead of halting the run. 1147 R1/R2 wrap it with a
+      deterministic write-scope guard (entry snapshot before the query, diff after
+      it; a violation writes scope-violation: <paths> and routes to `failed`, the
+      edits are reported and never auto-reverted) and a supersession-pin re-run, so
+      an out-of-scope or delinked-row write is attributed here instead of surfacing
+      late at doc-tripwire.
+    onEnter:
+      # (1147 R1) entry snapshot: the working listing is recorded BEFORE the model
+      # query so the post-doc-sync check can attribute only this step's writes. Never
+      # aborts; a git failure or a missing script leaves the snapshot absent and the
+      # check fails closed rather than guessing.
+      - kind: shell
+        options:
+          command: >-
+            mkdir -p .spur/run &&
+            eval "$(jq -r 'if .mode=="source-repo" then "S="+@sh"\(.dir)/wrapup-steps.ts"+" RUNNER=bun" elif .mode=="installed" then "S="+@sh"\(.dir)/wrapup-steps.mjs"+" RUNNER=node" else empty end' ".spur/run/$__runId-script-root.json" 2>/dev/null)"; if [ -f "$S" ]; then
+              "$RUNNER" "$S" doc-sync-snapshot;
+            else
+              echo "wrapup-steps failed closed — script not found — run 'superskill install sp --marketplace gobing-ai/spur'" >&2;
+            fi
+      # (warn) free-form prompt: no /sp:doc-evolve command surface yet (ADR-043
+      # residual, 0607 R2 one-query merge); capture is bounded by expectFile.
+      - kind: agent.run
+        onError: continue
+        options:
+          agent: ${vars.agent}
+          input: >-
+            First run Skill(skill="sp:doc-evolve", args="wrapup") to repair drift in
+            docs/00_ADR.md, docs/03_ARCHITECTURE.md, docs/04_DESIGN.md, docs/design/* per constitution edit
+            rules; do not write task/feature corpus. Write ONLY inside docs/ (never docs/tasks* or
+            docs/features*) — any other changed path fails the wrap step with a scope violation. A row
+            absent from docs/04_DESIGN.md for a superseded satellite is intentional: do NOT re-add it.
+            The batch task list is the normalized, validated
+            capture at .spur/run/${vars.__runId}-wrapup-tasks.json — read it for the WBS ids; never
+            re-parse raw input. THEN extract working learnings from those tasks —
+            conventions, errors fixed, patterns, gotchas, grouped by date and task WBS — as raw markdown
+            (no fences) and END your final message with that markdown (it is captured to the
+            run-scoped .spur/run/${vars.__runId}-wrapup-learnings.md).
+          # Declared Layer-1 role (0538 R2): routing reason beside the agent:
+          # pin.
+          role: coder
+          answerFile: .spur/run/${vars.__runId}-wrapup-learnings.md
+          expectFile: .spur/run/${vars.__runId}-wrapup-learnings.md
+          timeoutMs: ${vars.stepTimeoutMs}
+      # (1147 R1) post-doc-sync write-scope guard: the script diffs the working listing
+      # against the entry snapshot and writes PASS or `scope-violation: <paths>` — the
+      # action always exits 0 so status truth lives in the file (0783 R4) and the
+      # declared guard routes. Violating edits are reported, never reverted.
+      - kind: shell
+        options:
+          command: >-
+            mkdir -p .spur/run &&
+            eval "$(jq -r 'if .mode=="source-repo" then "S="+@sh"\(.dir)/wrapup-steps.ts"+" RUNNER=bun" elif .mode=="installed" then "S="+@sh"\(.dir)/wrapup-steps.mjs"+" RUNNER=node" else empty end' ".spur/run/$__runId-script-root.json" 2>/dev/null)"; if [ -f "$S" ]; then
+              "$RUNNER" "$S" doc-sync-scope;
+            else
+              echo "wrapup-steps failed closed — script not found — run 'superskill install sp --marketplace gobing-ai/spur'" >&2;
+              printf 'scope-violation: wrapup-steps script not found\n' > ".spur/run/$__runId-wrapup-doc-sync-scope.status";
+            fi
+      # (1147 R2) supersession pins re-run: a doc-sync that resurrects a deliberately
+      # delinked index row (`repo-wide-tests/adr-supersession.test.ts`, g2) fails HERE,
+      # named with the pin, instead of being attributed to the later doc-tripwire
+      # backstop. Skips in a project without the pin; always exits 0 (0783 R4).
+      - kind: shell
+        options:
+          command: >-
+            mkdir -p .spur/run &&
+            eval "$(jq -r 'if .mode=="source-repo" then "S="+@sh"\(.dir)/wrapup-steps.ts"+" RUNNER=bun" elif .mode=="installed" then "S="+@sh"\(.dir)/wrapup-steps.mjs"+" RUNNER=node" else empty end' ".spur/run/$__runId-script-root.json" 2>/dev/null)"; if [ -f "$S" ]; then
+              "$RUNNER" "$S" doc-supersession;
+            else
+              echo "wrapup-steps failed closed — script not found — run 'superskill install sp --marketplace gobing-ai/spur'" >&2;
+              printf 'supersession-pin-failed: wrapup-steps script not found\n' > ".spur/run/$__runId-wrapup-doc-supersession.status";
+            fi
+
+  - id: learnings-validate
+    description: >
+      Structural shape gate between doc-sync and the append (0986): expectFile
+      asserts the capture EXISTS and nothing about its shape, so a
+      stream-of-thought capture could be appended verbatim to the tracked
+      memory file. This state classifies a NONEMPTY capture — a date, a
+      four-digit task WBS, and at least one markdown bullet — and writes PASS
+      or invalid-learnings-shape to a run-scoped status. An empty or missing
+      capture keeps the existing soft skip (PASS) so learnings-append still
+      performs its no-op; an unclassifiable status fails loud instead of
+      appending it. Structural check only — the doc-sync prompt owns prose
+      quality; no new engine-level content contract.
+    onEnter:
+      # (warn) structural check only; the doc-sync prompt owns prose quality (0986 Design).
+      # The WBS predicate excludes digit/dash neighbours so a date's year cannot satisfy it.
+      - kind: shell
+        options:
+          command: >-
+            mkdir -p .spur/run &&
+            S=".spur/run/$__runId-wrapup-learnings.status" &&
+            F=".spur/run/$__runId-wrapup-learnings.md" &&
+            if [ ! -s "$F" ] || awk '/[0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]/{d=1} /(^|[^0-9-])[0-9][0-9][0-9][0-9]([^0-9-]|$)/{w=1} /^[[:space:]]*[-*] /{b=1} END{exit !(d+w+b==3)}' "$F"; then
+              printf 'PASS\n' > "$S";
+            else
+              printf 'invalid-learnings-shape\n' > "$S";
+            fi &&
+            exit 0
+
+  - id: learnings-append
+    description: >
+      Best-effort soft append of the captured learnings to .spur/memory/learnings.md
+      (0607 R2): an empty capture skips without aborting wrap-up. Runs only after
+      doc-sync's contract held; a contract violation never reaches this state.
+    onEnter:
+      # (warn) learnings append is intentionally soft (empty capture skips
+      # without aborting wrap-up, 0607 R2).
+      - kind: shell
+        options:
+          command: >-
+            mkdir -p .spur/run .spur/memory &&
+            LEARNINGS_FILE=".spur/run/$__runId-wrapup-learnings.md" &&
+            if test -s "$LEARNINGS_FILE"; then
+              cat "$LEARNINGS_FILE" >> .spur/memory/learnings.md &&
+              printf '\n' >> .spur/memory/learnings.md;
+            else
+              echo "wrapup: learning capture missing or empty at $PWD/$LEARNINGS_FILE - append skipped" >&2;
+            fi &&
+            exit 0
+
+  - id: repair
+    description: >
+      Contract-violation repair (ADR-118 pilot, 0871): doc-sync's agent.run missed
+      its declared post-condition after a clean exit, so wrap-up does NOT re-dispatch
+      the expensive agent on this attempt. Also the destination for a nonempty
+      capture that fails learnings-validate's shape gate (0986). The miss is
+      recorded to a run-scoped repair status — text distinguishing a narration-only
+      shape failure from the missing-file contract violation — and wrap-up proceeds
+      through the doc-tripwire hop (1037) to metrics-record; the run log and
+      action trace already name the violated contract and the observed value.
+    onEnter:
+      - kind: shell
+        options:
+          command: >-
+            mkdir -p .spur/run &&
+            R=".spur/run/$__runId-wrapup-repair.status" &&
+            V="$(cat .spur/run/$__runId-wrapup-learnings.status 2>/dev/null || true)" &&
+            if [ "$V" = invalid-learnings-shape ]; then printf 'invalid-learnings-shape: narration-only learnings capture — append skipped, repair recorded (0986)\n' > "$R";
+            else printf 'contract-violation: doc-sync learnings capture missed its declared contract — repair skipped re-dispatch (ADR-118 pilot)\n' > "$R";
+            fi &&
+            exit 0
+
+  - id: doc-tripwire
+    description: >
+      Repo-wide tripwire over the wrap diff (1037): the doc-sync edits are still
+      uncommitted when wrap-up reaches a terminal success, and the repo-wide
+      tripwires (repo-wide-tests/) execute only inside spur-check-feature — once
+      a wrap edit is committed on a clean tree, the working-diff tests (e.g.
+      adr-supersession (e)) can no longer see it. Entered from learnings-append
+      and repair, before metrics or feature state mutate, it runs the trusted
+      `docTripwireCmd` and records PASS or FAIL to a run-scoped status file; the
+      action always exits 0 so status truth lives in the file (0783 R4). Only a
+      verified run writes PASS; an empty docTripwireCmd disables the check and
+      still writes PASS. The no-doc-sync fast path (task-resolve →
+      metrics-record) never enters this state.
+    onEnter:
+      - kind: shell
+        options:
+          command: >-
+            sh -c "$docTripwireCmd" &&
+            printf 'PASS\n' > ".spur/run/$__runId-wrapup-doc-tripwire.status" ||
+            printf 'FAIL\n' > ".spur/run/$__runId-wrapup-doc-tripwire.status"
+
+  - id: metrics-record
+    description: >
+      Append one JSONL row per task to .spur/memory/wrapup-metrics.jsonl deterministically.
+      Revalidates the normalized run-scoped capture from task-resolve (0770 + 0783):
+      a missing, corrupted or non-canonical capture records FAIL; every member must
+      produce a successful, well-shaped `task show` lookup (a missing metrics row is
+      never silently absorbed as success); rows are serialized with jq — never
+      interpolated printf JSON — so escaped fields stay parseable; and PASS is
+      written only after every required append succeeds. A missing per-task verdict
+      is UNKNOWN telemetry, never proof of completion; previously written valid rows
+      survive a failure.
+    onEnter:
+      # (d) wrapup-steps.ts metrics owns the JSONL row append (0824); the wrapper
+      # only locates it and fails closed — FAIL, never a silent skip.
+      - kind: shell
+        options:
+          command: >-
+            mkdir -p .spur/run &&
+            eval "$(jq -r 'if .mode=="source-repo" then "S="+@sh"\(.dir)/wrapup-steps.ts"+" RUNNER=bun" elif .mode=="installed" then "S="+@sh"\(.dir)/wrapup-steps.mjs"+" RUNNER=node" else empty end' ".spur/run/$__runId-script-root.json" 2>/dev/null)"; if [ -f "$S" ]; then
+              "$RUNNER" "$S" metrics;
+            else
+              echo "wrapup-steps failed closed — script not found — run 'superskill install sp --marketplace gobing-ai/spur'" >&2;
+              printf 'FAIL\n' > ".spur/run/$__runId-wrapup-metrics.status";
+            fi
+
+  - id: feature-transition
+    description: >
+      If vars.feature is set, sync feature status via `spur feature sync` (repeated-BLOCKED
+      suppression is built into the sync service, so no wrapper script is needed)
+      (0411). The shell terminates `exit 0` so artifacts already landed are never
+      discarded, but the outcome is truthful (0770 + 0783 R4): sync succeeds only
+      with a valid proposal matching vars.feature, no gateBlocked/requiresConfirm
+      condition, and a freshly observed feature status equal to proposal.to;
+      applied:false is a successful explicit no-change only when from == to and
+      that status is observed. A nonzero, malformed, partial, blocked or
+      unreadable outcome records FAIL in the run-scoped sync status and routes
+      to `failed` — an affected-feature check cannot convert a failed sync into
+      success. Empty vars.feature is NOT a blocked sync but a mis-invocation
+      (the engine only enters this state when vars.feature is set) and fails
+      loud (dogfood 2026-08-15, feature I3).
+    onEnter:
+      # (d) wrapup-steps.ts feature-transition owns the bounded sync, observation
+      # and the gate (0824); the wrapper only locates it and fails closed. The
+      # script terminates exit 0 on every path so artifacts that already landed
+      # are never discarded; soft TERMINATION is not soft TRUTH — only a verified
+      # sync writes PASS (0783 R4). A gate PASS can never convert a failed sync
+      # into success, and a gate FAIL fails the step (0770 failure routing).
+      - kind: shell
+        options:
+          command: >-
+            mkdir -p .spur/run &&
+            eval "$(jq -r 'if .mode=="source-repo" then "S="+@sh"\(.dir)/wrapup-steps.ts"+" RUNNER=bun" elif .mode=="installed" then "S="+@sh"\(.dir)/wrapup-steps.mjs"+" RUNNER=node" else empty end' ".spur/run/$__runId-script-root.json" 2>/dev/null)"; if [ -f "$S" ]; then
+              "$RUNNER" "$S" feature-transition;
+            else
+              echo "wrapup-steps failed closed — script not found — run 'superskill install sp --marketplace gobing-ai/spur'" >&2;
+              printf 'FAIL\n' > ".spur/run/$__runId-wrapup-sync.status";
+            fi
+
+  - id: feature-verify
+    description: >
+      Post-feature-transition verification hop (D63 task 0915, review finding
+      F1): wrapup's doc-sync and the feature transition mutate the corpus AFTER
+      the feature-scoped verification pass ran. The proof digest deliberately
+      excludes docs/tasks*/docs/features* (shared evidence, concurrent writers),
+      so the bound receipt stays valid — but the feature's completion boundary
+      must still observe the post-wrapup state. This hop re-runs the feature
+      check gate (`featureGateCmd`). When the configured command is the done-
+      boundary variant (`feature check --as done`), it validates the bound
+      evidence receipt (feature identity, verifier definition digest, terminal
+      recording run, artifact registration, checked-input digest) against the
+      current feature contract; a plain gate command observes the post-wrapup
+      corpus state but does not enforce the receipt (0915 re-review P3). A FAIL
+      fails the wrapup loudly instead of letting a stale PASS ride; only a
+      verified gate writes PASS (0783 R4).
+    onEnter:
+      - kind: shell
+        options:
+          command: >-
+            sh -c "$featureGateCmd" &&
+            printf 'PASS\n' > ".spur/run/$__runId-wrapup-feature-verify.status" ||
+            printf 'FAIL\n' > ".spur/run/$__runId-wrapup-feature-verify.status"
+
+  - id: branch-cleanup
+    description: >
+      Irreversible-operation HITL gate, consent-only (0770). If vars.merge=true,
+      branch cleanup (merge or delete) is a candidate — but this gate records
+      the operator decision and performs NO git operation itself; an operator
+      or a separate approved surface executes any actual merge/delete. This
+      gate ALWAYS pauses — even under --auto — because branch operations are
+      irreversible (Auto-Decision Principle #6).
+    pause: true
+    onEnter:
+      - kind: hitl.confirm
+        options:
+          prompt: "Branch cleanup for the validated task list (.spur/run/${vars.__runId}-wrapup-tasks.json). This is IRREVERSIBLE (merge or delete). Confirm to proceed?"
+          decision:
+            mode: never
+
+  - id: done
+    description: >
+      Terminal — wrap-up complete. Summary: tasks wrapped, learnings captured,
+      metrics recorded, feature advanced or explicitly no-change (if applicable),
+      branch-cleanup decision recorded (consent-only; no git operation performed).
+    onEnter:
+      - kind: note
+        options:
+          message: "Wrap-up pipeline complete for the validated task list at .spur/run/${vars.__runId}-wrapup-tasks.json. Learnings at .spur/memory/learnings.md, metrics at .spur/memory/wrapup-metrics.jsonl. Branch cleanup: consent recorded only (merge=${vars.merge}); no git operation performed by wrap-up."
+
+  - id: skipped
+    description: Terminal — wrap-up skipped (empty task list or operator abort).
+
+  - id: failed
+    description: >
+      Terminal — wrap-up failed (0770): invalid wrap input, an unresolved or
+      non-completed task, a failed metrics capture, a failed required sync, a
+      failed repo-wide tripwire (1037), a failed feature gate, or one of the
+      deterministic post-doc-sync checks (1147: write scope, supersession pins).
+      Already-written artifacts (learnings, metrics rows, route reason) are
+      preserved; nothing is rolled back.
+
+transitions:
+  # ── start -> task-resolve ──
+  - from: start
+    to: task-resolve
+    description: Begin wrap-up.
+    guard:
+      kind: always
+
+  # ── task-resolve: validation fail + proportional route table (0758 R1-R4, 0770) ──
+  - from: task-resolve
+    to: failed
+    terminalReason: failed-check
+    description: >
+      Validation FAIL (0770): malformed wrap input, a non-string/empty entry, an
+      unresolved or non-completed task, or an empty __runId. Declared before the
+      route edges so invalid input can never be absorbed by the empty-list skip.
+    guard:
+      kind: shell
+      options:
+        command: 'test "$(cat .spur/run/$__runId-wrapup-resolve.status 2>/dev/null)" = FAIL'
+  # Route edges key on the validated run-scoped capture, never raw vars.tasks
+  # (0783 R2). A missing or corrupted capture yields -1, which satisfies none
+  # of the numeric edges, so the run falls through to the always-defense
+  # `failed` edge instead of claiming a skip or a route.
+  - from: task-resolve
+    to: skipped
+    description: Validated task list is empty — skip wrap-up (only a validated [] may skip).
+    guard:
+      kind: shell
+      options:
+        command: 'test "$(jq length .spur/run/$__runId-wrapup-tasks.json 2>/dev/null || echo -1)" -eq 0'
+  - from: task-resolve
+    to: metrics-record
+    description: Proportional fast path — complete and consistent evidence bypasses doc-sync.
+    guard:
+      kind: shell
+      options:
+        command: 'test "$(jq length .spur/run/$__runId-wrapup-tasks.json 2>/dev/null || echo -1)" -gt 0 && test "$mode" = fast'
+  - from: task-resolve
+    to: doc-sync
+    description: Proportional safety path — missing/unknown/conflicting evidence routes to full doc-sync.
+    guard:
+      kind: shell
+      options:
+        command: 'test "$(jq length .spur/run/$__runId-wrapup-tasks.json 2>/dev/null || echo -1)" -gt 0 && test "$mode" != fast'
+  - from: task-resolve
+    to: failed
+    terminalReason: failed-check
+    description: >
+      Defense (0770) — no PASS/FAIL resolve status (shell crashed or never ran):
+      route to `failed` rather than claiming a skip.
+    guard:
+      kind: always
+
+  # ── doc-sync: deterministic checks, then contract repair (ADR-118; 1147 R1/R2) ──
+  # Declaration order matters. The engine takes the first passing guard. The two
+  # deterministic post-doc-sync checks (write scope, supersession pins) are tried
+  # first, so a doc-sync that both misses its learnings post-condition and writes
+  # out of scope (or resurrects a delinked row) fails the step. A violation they
+  # recorded can never be absorbed by repair or by the success edge. Contract
+  # violation is next (repair only when neither deterministic check fired), then
+  # success (action-ok), then the executor-failure defense (always). A failed
+  # agent.run reaches these guards because doc-sync's agent.run declares onError: continue.
+  - from: doc-sync
+    to: failed
+    terminalReason: failed-check
+    description: >
+      Write-scope violation (1147 R1): the post-doc-sync check found a changed path
+      outside docs/** minus the task/feature corpus (and the declared learnings
+      capture) — the status file names the paths and the failing step is doc-sync
+      itself. The edits are reported, never auto-reverted; already-written artifacts
+      stay on disk. Declared before contract-violation so a compound miss fails here.
+    guard:
+      kind: shell
+      options:
+        command: 'grep -q "^scope-violation:" .spur/run/$__runId-wrapup-doc-sync-scope.status 2>/dev/null'
+  - from: doc-sync
+    to: failed
+    terminalReason: failed-check
+    description: >
+      Supersession drift (1147 R2): the post-doc-sync re-run of
+      repo-wide-tests/adr-supersession.test.ts failed — doc-sync re-added a
+      deliberately delinked index row. Attributed here (named with the pin) rather
+      than at the later doc-tripwire backstop, which stays unchanged. Declared
+      before contract-violation so a compound miss fails here.
+    guard:
+      kind: shell
+      options:
+        command: 'grep -q "^supersession-pin-failed:" .spur/run/$__runId-wrapup-doc-supersession.status 2>/dev/null'
+  - from: doc-sync
+    to: repair
+    description: >
+      Contract violation (ADR-118): the agent exited 0 but missed its declared
+      post-condition, and neither deterministic check fired. Route to the cheap
+      repair edge — never re-dispatch the full agent.run on this attempt.
+    trigger: contract-violation
+    guard:
+      kind: contract-violation
+  - from: doc-sync
+    to: learnings-validate
+    description: Doc drift repair + learning capture succeeded — validate the capture's shape before appending.
+    guard:
+      kind: action-ok
+  - from: doc-sync
+    to: failed
+    terminalReason: failed-check
+    description: >
+      Executor failure (non-zero exit, signal, or dispatch error) — keep the
+      existing fail semantics. A scope or supersession violation is declared
+      earlier and fails the step; a contract violation never falls through here
+      because its edge is declared before this defense.
+    trigger: executor-failure
+    guard:
+      kind: always
+
+  # ── learnings-validate: shape gate (0986) — invalid-shape to repair, PASS to append ──
+  # Declaration order matters: the discriminating invalid-shape edge is tried
+  # first, then PASS; an unreadable status fails loud rather than appending an
+  # unclassified capture.
+  - from: learnings-validate
+    to: repair
+    description: >
+      Nonempty capture failed the structural shape gate (no date/WBS/bullet) —
+      route to the cheap repair edge and never append narration (0986 R2).
+    guard:
+      kind: shell
+      options:
+        command: 'test "$(cat .spur/run/$__runId-wrapup-learnings.status 2>/dev/null)" = invalid-learnings-shape'
+  - from: learnings-validate
+    to: learnings-append
+    description: Capture is shape-valid (or empty/missing, keeping the soft skip) — append.
+    guard:
+      kind: shell
+      options:
+        command: 'test "$(cat .spur/run/$__runId-wrapup-learnings.status 2>/dev/null)" = PASS'
+  - from: learnings-validate
+    to: failed
+    terminalReason: failed-check
+    description: >
+      Validation status missing or unreadable — fail loud instead of appending
+      a capture whose shape was never classified.
+    guard:
+      kind: always
+
+  # ── doc-sync exits converge on the doc-tripwire hop (1037) before metrics ──
+  - from: learnings-append
+    to: doc-tripwire
+    description: Learning capture appended (or soft-skipped) — run the repo-wide tripwire over the wrap diff.
+    guard:
+      kind: always
+
+  - from: repair
+    to: doc-tripwire
+    description: Contract-violation repair recorded — run the tripwire before metrics without re-dispatch.
+    guard:
+      kind: always
+
+  # ── doc-tripwire: repo-wide tripwire gate (1037) ──
+  # Declaration order matters: the FAIL edge is tried first so a failed tripwire
+  # can never be absorbed by the PASS edge; a missing status matches neither
+  # edge and follows the engine's no-match behavior for status-file states.
+  - from: doc-tripwire
+    to: failed
+    terminalReason: failed-check
+    description: >
+      Repo-wide tripwire FAILED on the still-uncommitted wrap diff (1037): an
+      edit the doc-sync stage made (e.g. an in-place historical ADR change)
+      violates a working-diff test. Learnings and docs already on disk stay
+      put; nothing is rolled back.
+    guard:
+      kind: shell
+      options:
+        command: 'test "$(cat .spur/run/$__runId-wrapup-doc-tripwire.status 2>/dev/null)" = FAIL'
+  - from: doc-tripwire
+    to: metrics-record
+    description: Repo-wide tripwire PASS (or the check disabled by an empty docTripwireCmd) — record metrics.
+    guard:
+      kind: shell
+      options:
+        command: 'test "$(cat .spur/run/$__runId-wrapup-doc-tripwire.status 2>/dev/null)" = PASS'
+
+  # ── metrics-record: fail edge, then conditional routing (feature → merge → done) ──
+  # Declaration order matters: the FAIL edge is tried first (0770), then
+  # feature-transition (if feature is set), then branch-cleanup (if merge=true
+  # but no feature), then done (neither). Routing edges additionally require
+  # the metrics status PASS so a missing status can never claim success.
+  - from: metrics-record
+    to: failed
+    terminalReason: failed-check
+    description: >
+      Metrics capture failed for at least one task — a missing metrics row is
+      recorded as failure, never silently omitted as success (0770).
+    guard:
+      kind: shell
+      options:
+        command: 'test "$(cat .spur/run/$__runId-wrapup-metrics.status 2>/dev/null)" = FAIL'
+  - from: metrics-record
+    to: feature-transition
+    description: Metrics PASS and feature id is set — advance feature through legal lifecycle edges.
+    guard:
+      kind: shell
+      options:
+        command: 'test "$(cat .spur/run/$__runId-wrapup-metrics.status 2>/dev/null)" = PASS && test -n "$feature"'
+  - from: metrics-record
+    to: branch-cleanup
+    description: Metrics PASS, no feature id, but merge is requested — go to branch cleanup.
+    guard:
+      kind: shell
+      options:
+        command: 'test "$(cat .spur/run/$__runId-wrapup-metrics.status 2>/dev/null)" = PASS && test -z "$feature" && test "$merge" = true'
+  - from: metrics-record
+    to: done
+    description: Metrics PASS, no feature id and no merge — wrap-up is done.
+    guard:
+      kind: shell
+      options:
+        command: 'test "$(cat .spur/run/$__runId-wrapup-metrics.status 2>/dev/null)" = PASS && test -z "$feature" && test "$merge" != true'
+
+  # ── feature-transition: fail edge, then branch-cleanup (if merge) or done ──
+  - from: feature-transition
+    to: failed
+    terminalReason: failed-check
+    description: >
+      Required synchronization failed (0770): non-zero sync exit, an invalid
+      sync result, or a failed feature gate. The failed status carries the
+      actual reason; already-written learnings/metrics stay on disk.
+    guard:
+      kind: shell
+      options:
+        command: 'test "$(cat .spur/run/$__runId-wrapup-sync.status 2>/dev/null)" = FAIL'
+  - from: feature-transition
+    to: feature-verify
+    description: Sync PASS — re-run the feature check gate against the post-wrapup state.
+    guard:
+      kind: shell
+      options:
+        command: 'test "$(cat .spur/run/$__runId-wrapup-sync.status 2>/dev/null)" = PASS'
+  - from: feature-verify
+    to: failed
+    terminalReason: failed-check
+    description: >
+      Post-wrapup feature check failed (0915 F1): the bound receipt no longer
+      validates against the current feature contract. Already-written
+      learnings/metrics stay on disk.
+    guard:
+      kind: shell
+      options:
+        command: 'test "$(cat .spur/run/$__runId-wrapup-feature-verify.status 2>/dev/null)" = FAIL'
+  - from: feature-verify
+    to: branch-cleanup
+    description: Post-wrapup feature check PASS — merge is requested.
+    guard:
+      kind: shell
+      options:
+        command: 'test "$(cat .spur/run/$__runId-wrapup-feature-verify.status 2>/dev/null)" = PASS && test "$merge" = true'
+  - from: feature-verify
+    to: done
+    description: Post-wrapup feature check PASS — no merge requested.
+    guard:
+      kind: shell
+      options:
+        command: 'test "$(cat .spur/run/$__runId-wrapup-feature-verify.status 2>/dev/null)" = PASS && test "$merge" != true'
+
+  # ── branch-cleanup: HITL exhaustive routing (yes / no / cancel → done) ──
+  # No irreversible git op is wired yet; confirmation is recorded, then wrap
+  # completes.
+  - from: branch-cleanup
+    to: done
+    description: Branch cleanup HITL answered — wrap-up complete.
+    guard:
+      kind: shell
+      options:
+        command: 'test "$__hitlAnswer" = yes || test "$__hitlAnswer" = no || test "$__hitlAnswer" = cancel'
+  - from: branch-cleanup
+    to: done
+    description: Defense — missing HITL answer still completes wrap (cleanup is optional).
+    guard:
+      kind: always

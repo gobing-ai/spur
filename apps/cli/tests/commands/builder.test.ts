@@ -62,7 +62,7 @@ afterEach(() => {
 });
 
 describe('spur builder command wiring', () => {
-    test('registers the noun with exactly its three verbs (bump-ver, drop-tags, pr)', () => {
+    test('registers the noun with exactly its four verbs (bump-ver, drop-tags, publish, pr)', () => {
         const program = new Command();
         const { context } = makeContext(process.cwd());
         registerBuilderCommand(program, context);
@@ -72,8 +72,9 @@ describe('spur builder command wiring', () => {
         const verbs = builder?.commands.map((c) => c.name()) ?? [];
         expect(verbs).toContain('bump-ver');
         expect(verbs).toContain('drop-tags');
+        expect(verbs).toContain('publish');
         expect(verbs).toContain('pr');
-        expect(verbs).toHaveLength(3);
+        expect(verbs).toHaveLength(4);
     });
 
     test('help renders both verbs without invoking actions', () => {

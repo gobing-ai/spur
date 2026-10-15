@@ -3,6 +3,7 @@ import type { CliContext } from '../../context';
 import { registerWorkflowCancelCommand } from './cancel';
 import { registerWorkflowCleanCommand } from './clean';
 import { registerWorkflowContinueCommand } from './continue';
+import { registerWorkflowCostCommand } from './cost';
 import { registerWorkflowListCommand } from './list';
 import { registerWorkflowProgressCommand } from './progress';
 import { registerWorkflowRunCommand } from './run';
@@ -22,6 +23,7 @@ export function registerWorkflowCommand(program: Command, context: CliContext): 
     registerWorkflowShowCommand(workflow, context);
     registerWorkflowTraceCommand(workflow, context);
     registerWorkflowProgressCommand(workflow, context);
+    registerWorkflowCostCommand(workflow, context);
 }
 
 export { waitForResumeClaim } from './continue';
