@@ -2,8 +2,8 @@
 
 The skill resolves exactly two modes. Everything else fails loud. This matrix is the enforcement
 surface the workflow (0660) and the skill share; keep the vocabulary frozen. Execution note
-(0920): argument validation runs deterministically in the `history-anatomy-cache` helper `paths`
-command (logic core: `packages/app/src/services/history-anatomy.ts`, task 1005) before the
+(0920): argument validation runs deterministically in `spur history anatomy paths`
+(formerly the `history-anatomy-cache` helper) (logic core: `packages/app/src/services/history-anatomy.ts`, task 1005) before the
 workflow starts; the model hop no longer performs it.
 
 ## Mode vocabulary (frozen)

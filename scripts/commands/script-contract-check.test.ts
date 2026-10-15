@@ -649,8 +649,9 @@ test('placement baseline reconciles with plan §2 (task 1000 R7)', () => {
     }
     const dirKeys = keys.filter((k) => /^(plugins\/sp\/scripts\/)?(daily-summary|dogfood-testing)\//.test(k));
     // task 1173: the dogfood-testing rows left with the move of their pure logic into plugins/sp/lib —
-    // both entries dropped under the 250-line budget, so the baseline shrank by two rows.
-    expect(dirKeys).toEqual(['plugins/sp/scripts/daily-summary/daily-summary.ts']);
+    // both entries dropped under the 250-line budget; script-absorption PR-6 retired daily-summary/
+    // (absorbed into `spur history summary`), so no directory row remains.
+    expect(dirKeys).toEqual([]);
 
     // direction A: plan §2 Move/Delete/→scripts/over-budget rows are all baselined
     // (script-contract-check excluded: task 1000 itself moved it to scripts/commands)
@@ -843,12 +844,12 @@ test('checkHookLayout is clean on its own fixture and reports unreadable hooks.j
     }
 });
 
-test('daily-summary db-import exception is retired and the real tree is clean (task 1018 AC3, retired by 1178 R3)', () => {
+test('daily-summary baseline row is retired and the real tree is clean (task 1018 AC3, retired by 1178 R3 and PR-6)', () => {
     const repoRoot = join(import.meta.dir, '..', '..');
     const baselinePath = join(repoRoot, 'config', 'script-placement-baseline.json');
     const loaded = loadPlacementBaseline(baselinePath);
     if (!loaded.baseline) throw new Error(loaded.error ?? 'placement baseline missing');
-    const entry = loaded.baseline.entries['plugins/sp/scripts/daily-summary/daily-summary.ts'];
-    expect(entry?.kinds).toEqual(['budget']); // 1178 R3 dropped the dynamic bun:sqlite read
+    // Script-absorption PR-6 absorbed the script into `spur history summary`, so its row left.
+    expect(loaded.baseline.entries['plugins/sp/scripts/daily-summary/daily-summary.ts']).toBeUndefined();
     expect(checkPlacement({ repoRoot, baselinePath })).toEqual([]);
 });

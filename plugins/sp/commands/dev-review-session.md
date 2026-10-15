@@ -15,7 +15,7 @@ documentation work and one-to-two-line fixes) inline and files everything remain
 implement-ready tasks for further fixing; `--triage` is an alias of `--fix auto`. With `--fix all`,
 it defers nothing: every actionable finding is fixed inline and no task is filed. The result includes a non-overlapping time breakdown —
 work time, operator wait, tool calls and tokens (total / non-cached) per stage, measured from the host transcript by
-`session-timeline.mjs` — with durations in `M:SS` or `H:MM:SS` form and `n/a` only when that
+`spur history timeline` — with durations in `M:SS` or `H:MM:SS` form and `n/a` only when that
 measurement is unavailable. The transcript resolves from `--transcript`, else
 `CLAUDE_CODE_SESSION_ID`, else `PI_SESSION_FILE` (the pi host sets it and no Claude session id); a
 pi `<skill name="…">` wrapper row is the operator's `/skill` invocation and opens a segment

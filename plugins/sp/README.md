@@ -278,9 +278,9 @@ plugins/sp/
 │                                    # entries delegate to lib cores (task 1174); hook suites live in tests/hooks/
 ├── lib/                             # Handwritten plugin cores — context-{post-tool,session-start,session-stop}.ts,
 │                                    # agent-hint.ts, context-owner.ts, destructive-policy.ts, task-file-policy.ts,
-│                                    # env.ts, plus generated *.generated.mjs|.d.mts bundles over packages/app
+│                                    # env.ts (no generated bundles: script absorption retired them)
 ├── scripts/                         # Executable helpers, split from prompts (ADR-031) — scripts/<skill>/ + the remaining standalone helpers
-│                                    # (daily-summary: daily-summary.ts; dogfood-testing: {detect-pipeline-driving, validate-report}.ts)
+│                                    # (dogfood-testing: {detect-pipeline-driving, validate-report}.ts)
 ├── tests/                           # Plugin tests — skill-structure.test.ts + hooks/ (guard, context, Pi suites)
 │                                    # + evals/ (behavioral eval corpus + judge; see tests/evals/README.md,
 │                                    # runner at scripts/commands/skill-eval.ts) + per-skill suites
@@ -411,14 +411,10 @@ hand-editable source for the operator command surface. Per-platform adapters are
 output** owned by `superskill` (`superskill install sp`) and never committed here. Plugin `sp` ships
 no per-platform artifacts — only the platform-independent thin wrappers.
 
-**Install-time `lib/` ownership (1120).** Staging and refreshing the plugin's sibling
-`lib/inline-run.generated.mjs` app bundle into the shared scripts root is `superskill`'s install
-contract (superskill commit `b42961b`, first release after 0.3.35): spur ships the bundle, superskill
-places it. The inline scripts carry a skew guard for the window where the installed bundle is older
-than its scripts (e.g. superskill ≤ 0.3.35): they fail with a named version-skew error — bundle
-path, missing exports, and both remedies — instead of an `is not a function` TypeError. Until a
-superskill release containing `b42961b` is installed and `sp` reinstalled, pass
-`--spur-bin <spur checkout>/apps/cli/src/index.ts`.
+**No install-time app bundle.** The plugin used to ship a `lib/inline-run.generated.mjs` app bundle
+that `superskill` staged beside the scripts (1120). Script absorption (PR-4..PR-6) moved every
+consumer onto `spur <noun> <verb>`, so the bundle and its skew guard are gone: the skills call the
+installed `spur` CLI directly.
 
 **Thin-wrapper contract** is enforced by `scripts/commands/validate-commands.ts`:
 
@@ -538,12 +534,8 @@ hold `SKILL.md` and prompt-side companions only.
 | `hooks/careful-guard.ts`                             | Opt-in destructive-command guard (unwired — see Hooks above); policy is `lib/destructive-policy.ts`                                                                                                                                                                                                |
 | `lib/context-{post-tool,session-start,session-stop}.ts` | Redaction-capped ledger append, session open/ownership and owner-gated teardown for `sp:indexed-context`                                                                                                                                                                                       |
 | `lib/{agent-hint,context-owner,destructive-policy,task-file-policy}.ts` | Shared hook cores — agent/model hint resolution, host-native session owner derivation, destructive-command classification, task-file matching                                                                                                                              |
-| `scripts/workflow-step-profile.ts`                   | Thin glue over the generated lib bundle (`lib/step-profile.generated.mjs` from `packages/app/src/workflow/step-profile.ts`) — read-only step profile from `spur workflow trace`: per node and action-kind durations, idle gaps, session mode and `cacheHit` coverage, plus the ADR-115 cache-window flags `sp:spur-doctor` turns into workflow-optimization proposals |
 | `scripts/dogfood-testing/detect-pipeline-driving.ts` | Live Phase 1.0 CLI gate over `lib/dogfood-pipeline.ts` — word-boundary detector for pipeline-driving testees (leading-space invariant)                                                                                                                                  |
 | `scripts/dogfood-testing/validate-report.ts`         | CLI entry over `lib/dogfood-report.ts` — pure `validateReport(md)`, footer-mandatory + 7-check finalize-or-abort contract with stable error codes                                                                                                                |
-| `scripts/daily-summary/daily-summary.ts`               | ccusage + git-history orchestration helpers for `sp:daily-summary`, with its own console toggle                                                                                                                                                                                                  |
-| `scripts/run-summary.ts`                             | Measured execution summary `/sp:dev-run` / `/sp:dev-runall` print by default (`--no-summary` skips) — windows the host transcript by `spur workflow progress` attempt timestamps; per stage/run time, wait, tool calls, total / non-cached tokens; `n/a` for subprocess windows |
-| `scripts/session-timeline.ts`                        | Measured Time/Wait/Token evidence for `sp:session-review` — reads the active Claude Code transcript read-only, one segment per operator prompt, usage deduplicated by message id, tokens split total / non-cached; `{available:false}` exit 0 when no transcript |
 | `scripts/commands/validate-flag-contracts.ts`        | Mechanical consistency gate — compares flag claims across command files, flag-glossary, cross-cutting, dev-operations, and ADR; reports disagreements                                                                                    |
 | `*.test.ts`                                          | Unit suites — `tests/hooks/` for the hook entries and their lib cores, `tests/<skill>/` per ADR-031 pairing                                                                                                                                                                                        |
 

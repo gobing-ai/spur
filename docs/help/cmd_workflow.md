@@ -17,6 +17,8 @@
 | `list` | List available workflow YAML files across project + global layers |
 | `trace [run-id]` | Show persisted workflow run history (or follow a live run) |
 | `progress <run-id>` | Project a run's structured progress: current state, per-action attempts, candidate next transitions |
+| `summary` | Measured execution summary of runs (per-stage time, wait, tool calls, tokens) or a batch roll-up |
+| `profile <workflow>` | Per-node step profile of a workflow's last N runs with the cache-window flags (read-only) |
 | `cancel <run-id>` | Cancel a single non-terminal run by id (mark as failed; SIGTERM async worker when live) |
 | `clean` | Housekeeping: finalize stale non-terminal runs **and** reclaim retained run logs |
 | `inline <op>` | Host-inline run lifecycle transport for the inline pipeline driver (begin, trace, close, decide, persist-out/check, dispatch) |
@@ -327,6 +329,50 @@ empty success.
 ```bash
 spur workflow progress <run-id> --json
 ```
+
+## spur workflow summary
+
+```
+spur workflow summary (--progress <[label=]file>... | --rollup <[label=]file>...) [--transcript <path>] [--since <iso>] [--markdown]
+```
+
+| Flag | Description |
+|---|---|
+| `--progress <[label=]file>` | `spur workflow progress <run-id> --json` output of a run (repeatable) |
+| `--rollup <[label=]file>` | Close-written `.spur/run/<run>-summary.json` (repeatable; excludes `--progress`) |
+| `--transcript <path>` | Transcript JSONL path (default: the active host session) |
+| `--since <iso>` | Measure from this instant |
+| `--markdown` | Render the Markdown table instead of JSON |
+
+The measured execution summary `/sp:dev-run` and `/sp:dev-runall` print: the host transcript
+windowed by each state visit's attempt timestamps, per stage time, operator wait, tool calls,
+tokens (total / non-cached) and the actor split, with driver overhead as its own row. `--rollup`
+renders one row per run plus the batch total (and the wall span when runs overlap). No transcript
+or no window → `n/a`, exit `0`. Exit `2`: usage error, untimed progress or unreadable input.
+Absorbed from the retired `run-summary` plugin script (script-absorption PR-6).
+
+## spur workflow profile
+
+```
+spur workflow profile <workflow> [--last <n>] [--window <sec>] [--spur-bin <cmd>] [--json]
+```
+
+| Argument | Description |
+|---|---|
+| `workflow` | Workflow name |
+
+| Flag | Description |
+|---|---|
+| `--last <n>` | Number of recent done runs to sample (default 20) |
+| `--window <sec>` | Cache window W in seconds (default 300) |
+| `--spur-bin <cmd>` | spur invocation for the trace reads (default: this spur) |
+| `--json` | Output machine-readable JSON |
+
+Read-only per-node step profile for `sp:spur-doctor`, built from `spur workflow trace`: per node and
+action kind the run count, executions, p50/max `durationMs`, p50 idle gap, session mode and
+`cacheHit` p50 with coverage, plus the ADR-115 cache-window flags (`step-over-window`,
+`resume-after-idle`, `resume-cold-cache`, `agent-run-over-2w`). Unknown evidence is `?`/`null`,
+never `0`. Exit `0` profile produced, `1` a spur call failed or its JSON did not parse.
 
 ## spur workflow cancel
 

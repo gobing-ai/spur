@@ -11,10 +11,8 @@ import type { HistoryArtifact } from './artifact';
  * field to `HistoryArtifact` without classifying it fails `tsc` naming the key.
  *
  * Consumers: `packages/app/src/services/history-anatomy.ts` imports this module directly (task
- * 1005 R2) and reaches the ADR-065 plugin script through the generated standalone bundle
- * `plugins/sp/lib/history-anatomy.generated.mjs` — no monorepo import may survive into the
- * script's committed `.mjs` twin. Regenerate with `bun run build:plugin-lib`; do not hand-edit the
- * generated files.
+ * 1005 R2); `spur history anatomy` reaches it through that service (script-absorption PR-6 retired
+ * the generated plugin bundle).
  */
 
 /** JSON-compatible value — the shape of canonicalized artifact material. */

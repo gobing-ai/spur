@@ -1,0 +1,34 @@
+{
+    "run": { "runId": "run-a", "workflowName": "idea-pipeline", "status": "done", "isDryRun": false },
+    "events": [
+        {
+            "kind": "phase",
+            "phase": "implement",
+            "status": "done",
+            "startedAt": "2026-09-11T10:00:00.000Z",
+            "completedAt": "2026-09-11T10:00:20.000Z"
+        },
+        {
+            "kind": "action",
+            "actionId": "a1",
+            "node": "implement",
+            "actionKind": "agent.run",
+            "status": "done",
+            "durationMs": 20000,
+            "startedAt": "2026-09-11T10:00:00.000Z",
+            "completedAt": "2026-09-11T10:00:20.000Z",
+            "invocation": { "continue": true },
+            "cost": { "exact": { "totals": {}, "cacheHit": 0.3, "estimated": false }, "estimated": null }
+        },
+        {
+            "kind": "action",
+            "actionId": "a2",
+            "node": "test",
+            "actionKind": "shell",
+            "status": "done",
+            "durationMs": 4000,
+            "startedAt": "2026-09-11T10:06:40.000Z",
+            "completedAt": "2026-09-11T10:06:44.000Z"
+        }
+    ]
+}

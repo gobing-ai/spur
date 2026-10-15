@@ -1,0 +1,32 @@
+{
+    "runId": "rb",
+    "startedAt": "2026-10-09T00:05:00Z",
+    "completedAt": "2026-10-09T00:30:00Z",
+    "total": {
+        "stage": "Total",
+        "status": "done",
+        "workMs": 120000,
+        "waitMs": 0,
+        "toolCalls": 1,
+        "tokens": {
+            "input": 1,
+            "cacheCreate": 0,
+            "cacheRead": 0,
+            "output": 1
+        },
+        "time": "0:01",
+        "wait": "0:00",
+        "token": "2 / 2"
+    },
+    "actors": {
+        "operatorMs": 0,
+        "longestOperatorWaitMs": 0,
+        "modelMs": 0,
+        "shellMs": 0,
+        "subagentMs": 0,
+        "otherToolMs": 0,
+        "idleMs": 0,
+        "compactions": 0,
+        "subagentErrors": 0
+    }
+}

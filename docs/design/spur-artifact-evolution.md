@@ -163,8 +163,8 @@ Plugin readers learn both from the `sp:spur-cli` reference
 **Doctor's workflow evidence.**
 
 - `spur workflow validate --json`: composition findings by `level`.
-- The step profile: the plugin script `plugins/sp/scripts/workflow-step-profile` (ADR-065
-  entrypoint contract) reads `spur workflow trace --json` for a workflow's last N completed runs and
+- The step profile: `spur workflow profile` (formerly the plugin script
+  `workflow-step-profile`, absorbed by script-absorption PR-6) reads `spur workflow trace --json` for a workflow's last N completed runs and
   returns, per node and action kind: run count, p50 and max `durationMs`, p50 idle gap before the
   step, session mode (`fresh` or `resumed`) and `cacheHit` p50 with its coverage. Only executors
   that report token usage yield cache evidence; a missing value is unknown, never zero.

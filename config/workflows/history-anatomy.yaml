@@ -4,7 +4,7 @@
 # Orchestration is configuration (ADR-022): a state machine over the existing dual-workflow
 # engine. The YAML owns ONLY the cache branch, deterministic stage ordering, executor dispatch,
 # bounded correction, and atomic publication sequencing. The deterministic cache/digest/
-# structure/publish work is 0659's dependency-free helper script; the judgment (mode validity,
+# structure/publish work is `spur history anatomy <op>` (0659's helper, absorbed by script-absorption PR-6); the judgment (mode validity,
 # what counts as evidence, the report contract, enrich/validate rubrics) is 0658's skill. Per
 # ADR-069 R1, cache-decide / digest / structure-check / publish must NOT be inline shell — every
 # shell action here is glue length (a single helper invocation), because each of those programs
@@ -100,16 +100,6 @@ states:
           # reclamation path (unlike the run-record pair and legacy `.log` files, which
           # `spur workflow clean --logs` owns). It is deliberately NOT a run record and is
           # exempt from the catalog record-name sweep (see run-record-catalog.test.ts).
-
-
-      # 1007 R8: run-start script-resolution identity (same command as feature-verification
-      # verify's first action), placed AFTER the id allocation above — the snippet reads
-      # .spur/run/$__runId-script-root.json, so it needs the allocated id. Later
-      # plugin-script actions resolve through it (1007 R4 snippet). Never aborts.
-      - kind: shell
-        options:
-          command: >-
-            S=plugins/sp/scripts/script-root.ts; [ -f config/plugin-scripts.json -a -f "$S" ] || S="$(superskill script path sp script-root.mjs 2>/dev/null)"; RUNNER=bun; case "$S" in *.mjs) RUNNER=node ;; esac; [ -f "$S" ] && "$RUNNER" "$S" --run-id "$__runId" --spur-bin "$spurBin" || echo "script-root failed closed — run 'superskill install sp --marketplace gobing-ai/spur'" >&2; exit 0
   - id: resolve-paths
     description: >
       Resolve the helper, the skill/contract logic paths, and the publication target once, into a
@@ -118,11 +108,11 @@ states:
     onEnter:
       - kind: shell
         options:
-          # Path arithmetic lives in the helper (ADR-069 R1); the shell only locates it. Avoid
+          # Path arithmetic lives in `spur history anatomy paths` (ADR-069 R1; script-absorption
+          # PR-6 — HA_HELPER is the running spur, HA_SKILL the resolved skill dir). Avoid
           # `${...}` here — that syntax collides with the engine's own template interpolation.
           command: >-
-            eval "$(jq -r 'if .mode=="source-repo" then "S="+@sh"\(.dir)/history-anatomy-cache.ts"+" RUNNER=bun" elif .mode=="installed" then "S="+@sh"\(.dir)/history-anatomy-cache.mjs"+" RUNNER=node" else empty end' ".spur/run/$__runId-script-root.json" 2>/dev/null)";
-            "$RUNNER" "$S" paths --helper "$S" --report-dir "$reportDir" --date "$date"
+            $spurBin history anatomy paths --report-dir "$reportDir" --date "$date"
             --output "$output" --mode "$mode" --since "$since" --until "$until"
             --focus "$focus" --recompute "$recompute" --run-id "$__runId"
             --out .spur/run/$__runId-paths.txt
@@ -155,13 +145,12 @@ states:
       - kind: shell
         options:
           command: >-
-            eval "$(jq -r 'if .mode=="source-repo" then "S="+@sh"\(.dir)/history-anatomy-cache.ts"+" RUNNER=bun" elif .mode=="installed" then "S="+@sh"\(.dir)/history-anatomy-cache.mjs"+" RUNNER=node" else empty end' ".spur/run/$__runId-script-root.json" 2>/dev/null)";
             . .spur/run/$__runId-paths.txt;
-            "$RUNNER" "$S" probe --artifact .spur/run/$__runId-history-anatomy-current.json
+            $spurBin history anatomy probe --artifact .spur/run/$__runId-history-anatomy-current.json
             --baseline .spur/run/$__runId-history-anatomy-baseline.json --target "$HA_TARGET"
             --mode "$mode" --date "$HA_DATE" --recompute "$recompute" --executor "$agent"
             --skill-dir "$HA_SKILL" --contract "$HA_SKILL/references/report-contract.md"
-            --workflow "$workflowFile" --helper "$S" --contract-version "$contractVersion" --run-id "$__runId"
+            --workflow "$workflowFile" --helper "$HA_HELPER" --contract-version "$contractVersion" --run-id "$__runId"
             --out .spur/run/$__runId-provenance.json
             > .spur/run/$__runId-cache-disposition.txt
 
@@ -198,7 +187,7 @@ states:
       - kind: shell
         options:
           command: >-
-            eval "$(jq -r 'if .mode=="source-repo" then "S="+@sh"\(.dir)/history-anatomy-cache.ts"+" RUNNER=bun" elif .mode=="installed" then "S="+@sh"\(.dir)/history-anatomy-cache.mjs"+" RUNNER=node" else empty end' ".spur/run/$__runId-script-root.json" 2>/dev/null)"; "$RUNNER" "$S" assert-clean --baseline .spur/run/$__runId-baseline-enrich.txt --expect .spur/run/$__runId-candidate.md
+            $spurBin history anatomy assert-clean --baseline .spur/run/$__runId-baseline-enrich.txt --expect .spur/run/$__runId-candidate.md
 
   - id: structure-gate
     description: >
@@ -209,7 +198,7 @@ states:
       - kind: shell
         options:
           command: >-
-            eval "$(jq -r 'if .mode=="source-repo" then "S="+@sh"\(.dir)/history-anatomy-cache.ts"+" RUNNER=bun" elif .mode=="installed" then "S="+@sh"\(.dir)/history-anatomy-cache.mjs"+" RUNNER=node" else empty end' ".spur/run/$__runId-script-root.json" 2>/dev/null)"; "$RUNNER" "$S" check \
+            $spurBin history anatomy check \
               .spur/run/$__runId-candidate.md > .spur/run/$__runId-structure-gate.txt 2>&1 || true
 
   - id: validate
@@ -275,7 +264,7 @@ states:
       - kind: shell
         options:
           command: >-
-            eval "$(jq -r 'if .mode=="source-repo" then "S="+@sh"\(.dir)/history-anatomy-cache.ts"+" RUNNER=bun" elif .mode=="installed" then "S="+@sh"\(.dir)/history-anatomy-cache.mjs"+" RUNNER=node" else empty end' ".spur/run/$__runId-script-root.json" 2>/dev/null)"; "$RUNNER" "$S" assert-clean --baseline .spur/run/$__runId-baseline-validate.txt --expect .spur/run/$__runId-validation.txt
+            $spurBin history anatomy assert-clean --baseline .spur/run/$__runId-baseline-validate.txt --expect .spur/run/$__runId-validation.txt
 
   - id: correct
     description: >
@@ -312,7 +301,7 @@ states:
       - kind: shell
         options:
           command: >-
-            eval "$(jq -r 'if .mode=="source-repo" then "S="+@sh"\(.dir)/history-anatomy-cache.ts"+" RUNNER=bun" elif .mode=="installed" then "S="+@sh"\(.dir)/history-anatomy-cache.mjs"+" RUNNER=node" else empty end' ".spur/run/$__runId-script-root.json" 2>/dev/null)"; "$RUNNER" "$S" assert-clean --baseline .spur/run/$__runId-baseline-correct.txt --expect .spur/run/$__runId-candidate.md
+            $spurBin history anatomy assert-clean --baseline .spur/run/$__runId-baseline-correct.txt --expect .spur/run/$__runId-candidate.md
 
   - id: refresh-provenance
     description: >
@@ -324,9 +313,8 @@ states:
       - kind: shell
         options:
           command: >-
-            eval "$(jq -r 'if .mode=="source-repo" then "S="+@sh"\(.dir)/history-anatomy-cache.ts"+" RUNNER=bun" elif .mode=="installed" then "S="+@sh"\(.dir)/history-anatomy-cache.mjs"+" RUNNER=node" else empty end' ".spur/run/$__runId-script-root.json" 2>/dev/null)";
             . .spur/run/$__runId-paths.txt;
-            "$RUNNER" "$S" refresh --report "$HA_TARGET"
+            $spurBin history anatomy refresh --report "$HA_TARGET"
             --out .spur/run/$__runId-publishable.md --disposition hit
 
   - id: stamp
@@ -339,9 +327,8 @@ states:
       - kind: shell
         options:
           command: >-
-            eval "$(jq -r 'if .mode=="source-repo" then "S="+@sh"\(.dir)/history-anatomy-cache.ts"+" RUNNER=bun" elif .mode=="installed" then "S="+@sh"\(.dir)/history-anatomy-cache.mjs"+" RUNNER=node" else empty end' ".spur/run/$__runId-script-root.json" 2>/dev/null)";
             . .spur/run/$__runId-paths.txt;
-            "$RUNNER" "$S" stamp --candidate .spur/run/$__runId-candidate.md
+            $spurBin history anatomy stamp --candidate .spur/run/$__runId-candidate.md
             --provenance .spur/run/$__runId-provenance.json
             --out .spur/run/$__runId-publishable.md
 
@@ -354,10 +341,9 @@ states:
       - kind: shell
         options:
           command: >-
-            eval "$(jq -r 'if .mode=="source-repo" then "S="+@sh"\(.dir)/history-anatomy-cache.ts"+" RUNNER=bun" elif .mode=="installed" then "S="+@sh"\(.dir)/history-anatomy-cache.mjs"+" RUNNER=node" else empty end' ".spur/run/$__runId-script-root.json" 2>/dev/null)";
             . .spur/run/$__runId-paths.txt;
             mkdir -p "$(dirname "$HA_TARGET")";
-            "$RUNNER" "$S" publish .spur/run/$__runId-publishable.md "$HA_TARGET"
+            $spurBin history anatomy publish .spur/run/$__runId-publishable.md "$HA_TARGET"
 
   - id: published
     description: Terminal — report published atomically after a passing validation.

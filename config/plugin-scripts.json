@@ -3,11 +3,6 @@
     "description": "Registry of plugin sp scripts and their entrypoint contracts (standard with .mjs twin vs repo-only).",
     "entries": [
         {
-            "rel": "daily-summary/daily-summary.ts",
-            "contract": "standard",
-            "twin": "daily-summary/daily-summary.mjs"
-        },
-        {
             "rel": "dogfood-testing/detect-pipeline-driving.ts",
             "contract": "standard",
             "twin": "dogfood-testing/detect-pipeline-driving.mjs"
@@ -18,34 +13,14 @@
             "twin": "dogfood-testing/validate-report.mjs"
         },
         {
-            "rel": "history-anatomy-cache.ts",
-            "contract": "standard",
-            "twin": "history-anatomy-cache.mjs"
-        },
-        {
             "rel": "pr-reviewing.ts",
             "contract": "standard",
             "twin": "pr-reviewing.mjs"
         },
         {
-            "rel": "run-summary.ts",
-            "contract": "standard",
-            "twin": "run-summary.mjs"
-        },
-        {
             "rel": "script-root.ts",
             "contract": "standard",
             "twin": "script-root.mjs"
-        },
-        {
-            "rel": "session-timeline.ts",
-            "contract": "standard",
-            "twin": "session-timeline.mjs"
-        },
-        {
-            "rel": "workflow-step-profile.ts",
-            "contract": "standard",
-            "twin": "workflow-step-profile.mjs"
         }
     ]
 }
