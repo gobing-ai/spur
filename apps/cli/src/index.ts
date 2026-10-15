@@ -35,12 +35,12 @@ import { registerServeCommand } from './commands/serve';
 import { registerStatusCommand } from './commands/status';
 import { registerTaskCommand } from './commands/task';
 import { registerWorkflowCommand } from './commands/workflow';
+import type { WorkflowInlineDeps } from './commands/workflow/inline';
 import { CLI_CONFIG } from './config';
 import { EMBEDDED_SPUR_SCHEMAS } from './config/embedded-schemas';
 import { createCliContext, createMigratedDbAdapter } from './context';
 import { errorMessage } from './errors';
 import { type CommandOutput, consoleOutput, toJson } from './output';
-import type { WorkflowInlineDeps } from './commands/workflow/inline';
 import { isWorkflowTransportInvocation, registerWorkflowTransportCommands } from './workflow-transport';
 /** Options for programmatic CLI execution in tests. */
 export interface MainOptions {
