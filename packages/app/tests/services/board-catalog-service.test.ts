@@ -232,7 +232,7 @@ describe('prepareBoardModules fail-closed canonical verification (task 1208 R1)'
         }
     });
 
-    test('each unverified canonical path is refused naming the declaration and path', async () => {
+    test('each undefined or throwing canonical path is refused naming the declaration and path', async () => {
         const { root, moduleDir, cleanup } = await realTree();
         try {
             const cases = [
@@ -241,16 +241,23 @@ describe('prepareBoardModules fail-closed canonical verification (task 1208 R1)'
                 { absent: join(moduleDir, 'app.css'), message: 'style asset', styles: ['app.css'] },
             ];
             for (const { absent, message, styles } of cases) {
-                const undefinedThere = (path: string) => (path === absent ? undefined : realpathSync(path));
-                const error = await prepareBoardModules({
-                    projectRoot: root,
-                    declarations: [reactModule({ styles })],
-                    host,
-                    probe: realProbe(undefinedThere),
-                }).catch((thrown: unknown) => thrown);
-                expect(error).toBeInstanceOf(BoardModuleConfigError);
-                expect((error as Error).message).toContain(absent);
-                expect((error as Error).message).toContain(message);
+                for (const failure of ['undefined', 'throw']) {
+                    const error = await prepareBoardModules({
+                        projectRoot: root,
+                        declarations: [reactModule({ styles })],
+                        host,
+                        probe: realProbe((path) => {
+                            if (path !== absent) return realpathSync(path);
+                            if (failure === 'throw') throw new Error('canonical path unavailable');
+                            return undefined;
+                        }),
+                    }).catch((thrown: unknown) => thrown);
+                    expect(error).toBeInstanceOf(BoardModuleConfigError);
+                    expect((error as Error).message).toContain('bootstrap.modules[0]');
+                    expect((error as Error).message).toContain('kanban');
+                    expect((error as Error).message).toContain(absent);
+                    expect((error as Error).message).toContain(message);
+                }
             }
         } finally {
             await cleanup();
@@ -290,19 +297,20 @@ describe('prepareBoardModules fail-closed canonical verification (task 1208 R1)'
         }
     });
 
-    test('contained real symlinks and iframe-only declarations keep working (R3)', async () => {
+    test('contained real entry and stylesheet symlinks keep working (R3)', async () => {
         const { root, moduleDir, cleanup } = await realTree();
         try {
             await symlink(join(moduleDir, 'index.js'), join(moduleDir, 'boot.js'));
+            await symlink(join(moduleDir, 'app.css'), join(moduleDir, 'linked.css'));
             const prepared = await prepareBoardModules({
                 projectRoot: root,
-                declarations: [reactModule()],
+                declarations: [reactModule({ entry: 'boot.js', styles: ['linked.css'] })],
                 host,
                 probe: realProbe(),
             });
             expect(prepared.catalog.modules[0]).toMatchObject({
-                entryUrl: '/modules/kanban/index.js',
-                styles: [],
+                entryUrl: '/modules/kanban/boot.js',
+                styles: ['/modules/kanban/linked.css'],
             });
         } finally {
             await cleanup();

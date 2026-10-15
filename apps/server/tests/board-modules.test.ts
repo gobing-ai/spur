@@ -279,36 +279,47 @@ describe('declared module asset serving (R5/AC3)', () => {
 // to 403 — never to the lexical path that would hand out symlinked outside bytes.
 
 describe('fail-closed request-time canonicalization (task 1208 R2/R3)', () => {
-    test('an existing asset is 403 when the filesystem has no realPath at all', async () => {
+    test('an escaping asset is 403 on GET and HEAD when the filesystem has no realPath', async () => {
         const { root, cleanup } = await projectTree();
         try {
             const full = createNodeFileSystem(root);
             const withoutRealPath = { stat: (path: string) => full.stat(path) } as unknown as FileSystem;
             const app = appWith(await prepare(root, declarations()), withoutRealPath);
-            const res = await app.request('/modules/kanban/index.js');
+            const res = await app.request('/modules/kanban/escape.js');
             expect(res.status).toBe(403);
-            expect(await res.text()).not.toContain('webModule');
+            expect(await res.text()).not.toContain('secret');
+            const head = await app.request('/modules/kanban/escape.js', { method: 'HEAD' });
+            expect(head.status).toBe(403);
+            expect(await head.text()).toBe('');
         } finally {
             await cleanup();
         }
     });
 
-    test('an existing asset is 403 when root or target resolution throws', async () => {
+    test('an existing asset is 403 on GET and HEAD when either real path is undefined or throws', async () => {
         const { root, cleanup } = await projectTree();
         try {
             const full = createNodeFileSystem(root);
-            const throwing = {
-                stat: (path: string) => full.stat(path),
-                realPath: () => {
-                    throw new Error('no symlink resolution here');
-                },
-            } as unknown as FileSystem;
-            const app = appWith(await prepare(root, declarations()), throwing);
-            expect((await app.request('/modules/kanban/index.js')).status).toBe(403);
-
-            const head = await app.request('/modules/kanban/index.js', { method: 'HEAD' });
-            expect(head.status).toBe(403);
-            expect(await head.text()).toBe('');
+            const prepared = await prepare(root, declarations());
+            for (const failedPath of [join(root, 'board', 'kanban'), join(root, 'board', 'kanban', 'index.js')]) {
+                for (const failure of ['undefined', 'throw']) {
+                    const unavailable = {
+                        stat: (path: string) => full.stat(path),
+                        realPath: (path: string) => {
+                            if (path !== failedPath) return full.realPath?.(path);
+                            if (failure === 'throw') throw new Error('canonical path unavailable');
+                            return undefined;
+                        },
+                    } as unknown as FileSystem;
+                    const app = appWith(prepared, unavailable);
+                    const res = await app.request('/modules/kanban/index.js');
+                    expect(res.status).toBe(403);
+                    expect(await res.text()).not.toContain('webModule');
+                    const head = await app.request('/modules/kanban/index.js', { method: 'HEAD' });
+                    expect(head.status).toBe(403);
+                    expect(await head.text()).toBe('');
+                }
+            }
         } finally {
             await cleanup();
         }
