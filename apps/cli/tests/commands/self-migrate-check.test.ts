@@ -74,7 +74,7 @@ async function recorded(dbPath: string): Promise<string | null> {
 }
 
 describe('spur self migrate --check', () => {
-    test('an absent database is OK and is not created (direct check; the CLI boot itself creates the DB)', async () => {
+    test('an absent database is OK and is not created by either CLI spelling', async () => {
         await withProject(null, async (dir, dbPath) => {
             const result = await checkImporterSchema({ cwd: dir, env: {}, fs: createNodeFileSystem() });
             expect(result).toEqual({ state: 'absent', url: dbPath });
@@ -82,7 +82,36 @@ describe('spur self migrate --check', () => {
                 'importer schema OK — database file absent (.spur/spur.db).',
             ]);
             expect(existsSync(dbPath)).toBe(false);
+            for (const argv of [['self', 'migrate'], ['migrate']]) {
+                const checked = await run(dir, ['--no-logo', ...argv, '--check', '--json']);
+                expect(checked.exitCode).toBe(0);
+                expect(JSON.parse(checked.stdout)).toMatchObject({ state: 'absent' });
+                expect(existsSync(dbPath)).toBe(false);
+            }
         });
+    });
+
+    test('CLI check reports missing tables without migrating the existing database', async () => {
+        await withProject(
+            async (db) => {
+                await db.exec('CREATE TABLE history_message (record_hash TEXT PRIMARY KEY)');
+            },
+            async (dir, dbPath) => {
+                const tables = async () => {
+                    const db = await createDbAdapter({ driver: 'bun-sqlite', url: dbPath });
+                    try {
+                        return await db.queryAll("SELECT name FROM sqlite_master WHERE type = 'table' ORDER BY name");
+                    } finally {
+                        db.close();
+                    }
+                };
+                const before = await tables();
+                const checked = await run(dir, ['self', 'migrate', '--check', '--json']);
+                expect(checked.exitCode).toBe(1);
+                expect(JSON.parse(checked.stdout)).toMatchObject({ state: 'drift' });
+                expect(await tables()).toEqual(before);
+            },
+        );
     });
 
     test('a matching recorded version is OK (text and --json)', async () => {

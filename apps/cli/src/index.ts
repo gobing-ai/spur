@@ -91,10 +91,14 @@ export async function main(argv = process.argv.slice(2), options: MainOptions = 
         }
     }
 
+    const migrationCheck =
+        (commandTokens[0] === 'migrate' || (commandTokens[0] === 'self' && commandTokens[1] === 'migrate')) &&
+        argv.includes('--check');
     // `workflow inline|commit-guard` are the inline driver's transports (script-absorption PR-4):
     // like the plugin scripts they replace, they never create a database in the cwd (the runners
     // open the run-owning tree's database) and load config only for the ops that read it.
-    if (isWorkflowTransportInvocation(argv)) {
+    // Migration checks must also bypass boot, which would create or repair the database being checked.
+    if (isWorkflowTransportInvocation(argv) || migrationCheck) {
         const program = new Command().name('spur').exitOverride();
         program.option('--no-logo').option('-v, --cli-verbose');
         program.configureOutput({ writeOut: (str) => output.write(str), writeErr: (str) => output.error(str) });
@@ -106,7 +110,13 @@ export async function main(argv = process.argv.slice(2), options: MainOptions = 
                 exitCode = code;
             },
         };
-        registerWorkflowTransportCommands(program.command('workflow'), context, options.workflowTransport);
+        if (migrationCheck) {
+            const migrationContext = createCliContext(context);
+            registerMigrateCommand(program, migrationContext, { hidden: true });
+            registerMigrateCommand(program.command('self'), migrationContext);
+        } else {
+            registerWorkflowTransportCommands(program.command('workflow'), context, options.workflowTransport);
+        }
         try {
             await program.parseAsync(argv, { from: 'user' });
             return exitCode;

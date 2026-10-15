@@ -4,7 +4,7 @@ name: Complete PR-9 release and workflow-cost CLI absorption
 status: done
 template: standard
 created_at: 2026-10-15T17:50:40.221Z
-updated_at: "2026-10-15T20:20:11.146Z"
+updated_at: "2026-10-15T22:37:17.333Z"
 ac_altitude: task-local
 ac_numbering: task-local
 parent_wbs: "1211"
@@ -200,6 +200,12 @@ Each entry cites the first changed line per file (`file:line`).
 | `scripts/spur-dev.ts:53` |
 | `scripts/spur-dev.ts:75` |
 | `scripts/spur-dev.ts:9` |
+
+#### Forced verification fix — 2026-10-15
+
+Fresh CLI-level verification reproduced a read-only contract violation: self migrate --check created/migrated an absent database before its handler. Existing tests covered only the direct helper for absence, hiding CLI boot mutation. The shared dispatch now routes canonical and legacy migration checks through the existing boot-free Commander path with a lazy context, before database/configuration boot; normal migration and workflow transports retain their existing paths.
+
+Changed apps/cli/src/index.ts and apps/cli/tests/commands/self-migrate-check.test.ts. Two end-to-end regressions fail before the fix and pass afterward: absent DB remains absent for both spellings, and a partially populated existing DB retains its table list and reports drift. No new public API or dependency. Before/after executable receipts: .spur/run/verifyall-1212-1213/migrate-boot-repro.json and migrate-boot-fixed.json.
 
 ### Testing
 
