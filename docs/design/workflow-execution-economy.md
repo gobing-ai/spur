@@ -189,7 +189,6 @@ The per-task pipeline's quality gate is `bun run spur-check` (task-pipeline `qua
 | `inline-pipeline-parity-check` | the inline driver's documented action/guard set ≡ the resolved sets across all `config/workflows/*.yaml` | repo-wide (driver↔catalogue parity) |
 | `dependency-drift-check` | `bun.lock` ↔ installed `@gobing-ai/ts-*` versions | repo-wide (environment invariant) |
 | `importer-schema-check` | the SQLite DB's recorded importer schema version ≡ the installed importer package | repo-wide (shared-DB invariant) |
-| `history-surface-freeze-check` | the frozen History UI + transport contract are unchanged vs the merge base (E91) | repo-wide (whole-branch frozen-surface invariant) |
 | `lint` (biome + typecheck) | the workspaces and standalone `scripts/` and `plugins/sp/` TypeScript trees compile and are formatted | task-local (violated by the diff that breaks it) |
 | `test-pre-check` (rule preset) | source respects the typescript/structure/boundary/surface/ui/strict rules | task-local (violated by the diff that introduces the pattern) |
 | `test` (`bun test`) | each package's tests pass | task-local, **except** repo-wide test files relocated to `repo-wide-tests/` (e.g. `adr-supersession.test.ts`, which diffs `docs/00_ADR.md` against HEAD and fires on a sibling's uncommitted ADR addition) |

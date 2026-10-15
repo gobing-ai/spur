@@ -29,7 +29,6 @@ const REPO_WIDE_CHECKS = [
     'inline-pipeline-parity-check',
     'dependency-drift-check',
     'importer-schema-check',
-    'history-surface-freeze-check',
 ] as const;
 
 function readScripts(): Record<string, string> {

@@ -17,7 +17,7 @@ import { fileURLToPath } from 'node:url';
 import { getEnvVar, getEnvVars } from '@gobing-ai/spur-config';
 
 const REPO_ROOT = resolve(fileURLToPath(new URL('../../..', import.meta.url)));
-const SHIM_DIR = join(REPO_ROOT, 'scripts', 'test-shims');
+const SHIM_DIR = join(REPO_ROOT, 'tests', 'shims');
 const SHIM = join(SHIM_DIR, 'spur');
 
 interface RunResult {
@@ -72,7 +72,7 @@ describe('0818 R1 — source-local spur launcher', () => {
         expect(source).toContain('apps/cli/src/index.ts');
         expect(source).not.toContain('dist/');
         // Mode is asserted through git so the committed bit — not just the working tree — is proven.
-        const indexed = Bun.spawnSync(['git', 'ls-files', '-s', 'scripts/test-shims/spur'], { cwd: REPO_ROOT });
+        const indexed = Bun.spawnSync(['git', 'ls-files', '-s', 'tests/shims/spur'], { cwd: REPO_ROOT });
         expect(new TextDecoder().decode(indexed.stdout).trim()).toStartWith('100755 ');
     });
 
@@ -99,9 +99,9 @@ describe('0818 R1 — source-local spur launcher', () => {
         try {
             const checkout = join(spacedRoot, 'my checkout');
             mkdirSync(join(checkout, 'apps', 'cli', 'src'), { recursive: true });
-            mkdirSync(join(checkout, 'scripts', 'test-shims'), { recursive: true });
-            cpSync(SHIM, join(checkout, 'scripts', 'test-shims', 'spur'));
-            chmodSync(join(checkout, 'scripts', 'test-shims', 'spur'), 0o755);
+            mkdirSync(join(checkout, 'tests', 'shims'), { recursive: true });
+            cpSync(SHIM, join(checkout, 'tests', 'shims', 'spur'));
+            chmodSync(join(checkout, 'tests', 'shims', 'spur'), 0o755);
             writeFileSync(
                 join(checkout, 'apps', 'cli', 'src', 'index.ts'),
                 [
@@ -116,7 +116,7 @@ describe('0818 R1 — source-local spur launcher', () => {
             const result = await runBareSpur(['task', 'show', 'a b c'], {
                 cwd: callerCwd,
                 // Spaced checkout first, sentinel later: the spaced path must still win.
-                path: `${join(checkout, 'scripts', 'test-shims')}:${sentinelDir}:${getEnvVar('PATH') ?? ''}`,
+                path: `${join(checkout, 'tests', 'shims')}:${sentinelDir}:${getEnvVar('PATH') ?? ''}`,
             });
 
             expect(result.code).toBe(7); // underlying exit status propagated, not collapsed to 0/1
@@ -131,8 +131,8 @@ describe('0818 R1 — source-local spur launcher', () => {
     test('the preload prepends a directory that actually exists for a spaced checkout path', () => {
         const setup = readFileSync(join(REPO_ROOT, 'tests', 'setup.ts'), 'utf8');
         // `URL.pathname` percent-encodes a space, prepending a directory that cannot exist.
-        expect(setup).toContain("fileURLToPath(new URL('../scripts/test-shims'");
-        expect(setup).not.toContain("new URL('../scripts/test-shims', import.meta.url).pathname");
+        expect(setup).toContain("fileURLToPath(new URL('./shims'");
+        expect(setup).not.toContain("new URL('./shims', import.meta.url).pathname");
     });
 
     test('the launcher inherits config-skip precedence instead of setting it', () => {

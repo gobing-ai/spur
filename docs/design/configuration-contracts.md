@@ -230,7 +230,7 @@ dependency graph stays Workers-safe:
   (in-process `main()`, spawned helpers, tests) never resolves the checkout's own
   `.spur/config.yaml`. A caller that passes an explicit `cwd` always keeps its config regardless
   of the env (fixture projects are unaffected); `tests/setup.ts` sets both vars so `bun run test`
-  is hermetic. The preload also prepends `scripts/test-shims/` to PATH (task 0818 R1): the tracked
+  is hermetic. The preload also prepends `tests/shims/` to PATH (task 0818 R1): the tracked
   `100755` launcher there exec's this checkout's `apps/cli/src/index.ts` via bun, resolving to its
   own location (`fileURLToPath`, space-safe) rather than the caller's cwd, preserving caller cwd and
   exit status — so a bare `spur` spawned inside a test child resolves to the checkout's CLI source,
