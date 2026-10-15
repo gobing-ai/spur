@@ -13,6 +13,9 @@ include:
   - "scripts/**/*.ts"
 exclude:
   - "**/tests/**"
+  # The PR-review hygiene scanner matches the word in diff text (a /\bdebugger\b/ WARN pattern);
+  # it holds no statement. Biome noDebugger still guards the file (script-absorption PR-7).
+  - "packages/app/src/services/pr-review/index.ts"
 rules:
   - id: no-debugger-statement
     description: >

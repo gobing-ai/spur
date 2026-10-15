@@ -1,0 +1,105 @@
+{
+    "source": "origin/main @ ed29340f8 plugins/sp/scripts",
+    "cases": {
+        "gate refuses pipeline-driving": {
+            "exitCode": 2,
+            "stdout": "⚠ pipeline-driving testee detected; pass --max-retry 0 (observe-only) or --max-retry N (fix mode, tree mutation acknowledged)\n",
+            "stderr": ""
+        },
+        "gate refuses mutating fix": {
+            "exitCode": 2,
+            "stdout": "⚠ mutating --fix mode detected (--fix all | --fix blockers-first); pass --max-retry 0 (observe-only for the driver; the testee still mutates the tree) or --max-retry N (fix mode, driver + testee both mutate)\n",
+            "stderr": ""
+        },
+        "gate proceeds with max-retry": {
+            "exitCode": 0,
+            "stdout": "⚠ implement-heavy pipeline dogfood: prefer --max-retry 0 (observe-only) or step-split; operator --max-retry N overrides\n",
+            "stderr": ""
+        },
+        "gate advisory on implement-heavy steps": {
+            "exitCode": 0,
+            "stdout": "⚠ implement-heavy pipeline dogfood: prefer --max-retry 0 (observe-only) or step-split; operator --max-retry N overrides\n",
+            "stderr": ""
+        },
+        "gate clean json": {
+            "exitCode": 0,
+            "stdout": "{\n  \"pipelineDriving\": false,\n  \"mutatingFix\": false,\n  \"maxRetryPresent\": false,\n  \"implementHeavy\": false,\n  \"refuse\": false,\n  \"advisory\": false,\n  \"message\": null,\n  \"exitCode\": 0\n}\n",
+            "stderr": ""
+        },
+        "gate refuse json": {
+            "exitCode": 2,
+            "stdout": "{\n  \"pipelineDriving\": true,\n  \"mutatingFix\": false,\n  \"maxRetryPresent\": false,\n  \"implementHeavy\": true,\n  \"refuse\": true,\n  \"advisory\": false,\n  \"message\": \"⚠ pipeline-driving testee detected; pass --max-retry 0 (observe-only) or --max-retry N (fix mode, tree mutation acknowledged)\",\n  \"exitCode\": 2\n}\n",
+            "stderr": ""
+        },
+        "gate positional testee": {
+            "exitCode": 2,
+            "stdout": "⚠ pipeline-driving testee detected; pass --max-retry 0 (observe-only) or --max-retry N (fix mode, tree mutation acknowledged)\n",
+            "stderr": ""
+        },
+        "gate usage error": {
+            "exitCode": 1,
+            "stdout": "",
+            "stderr": "Usage:\n  bun plugins/sp/scripts/dogfood-testing/detect-pipeline-driving.ts \\\n    --testee \"<testee string>\" [--max-retry-present] [--steps \"s1||s2\"] [--json]\n\nExit codes:\n  0  proceed (stdout may carry implement-heavy advisory)\n  2  refuse — pipeline-driving OR mutating --fix mode without --max-retry\n  1  usage error\n\nPhase 1.0: run BEFORE deriving steps (omit --steps).\nPhase 1 W8: re-run AFTER step derivation with --steps \"label1||label2\".\n"
+        },
+        "validate complete report": {
+            "exitCode": 0,
+            "stdout": "ok\n",
+            "stderr": ""
+        },
+        "validate missing footer": {
+            "exitCode": 2,
+            "stdout": "missing_footer\nmissing_live_path\nmissing_report_path\ncost_total_mismatch:cost_expected_2100\n",
+            "stderr": ""
+        },
+        "validate missing footer json": {
+            "exitCode": 2,
+            "stdout": "{\n  \"ok\": false,\n  \"errors\": [\n    \"missing_footer\",\n    \"missing_live_path\",\n    \"missing_report_path\",\n    \"cost_total_mismatch:cost_expected_2100\"\n  ]\n}\n",
+            "stderr": ""
+        },
+        "validate complete json positional": {
+            "exitCode": 0,
+            "stdout": "{\n  \"ok\": true,\n  \"errors\": []\n}\n",
+            "stderr": ""
+        },
+        "validate usage error": {
+            "exitCode": 1,
+            "stdout": "",
+            "stderr": "Usage:\n  bun plugins/sp/scripts/dogfood-testing/validate-report.ts --file <report.md> [--json]\n\nExit codes:\n  0  report validates clean (complete-report shape)\n  2  validation failed (errors on stdout / --json)\n  1  usage error\n\nCost evidence (task 0913): a complete report must carry the Cost block\n(Ledger estimate / Method / Meter), percentages within 0..100, totals equal to\nthe ledger sums of observable rows (fresh + cached), and 'n/a' (never a\nfabricated number) when no observable rows exist. Display-rounding tolerance\nfor the cache share is ±1 percentage point.\n\nPhase 4 finalize MUST run this before status: complete (task 0278 R6).\nOn exit 2: set status: aborted and list error codes under #### Unresolved.\n"
+        },
+        "validate unreadable file": {
+            "exitCode": 1,
+            "stdout": "",
+            "stderr": "Failed to read <FIXTURES>/does-not-exist.md: ENOENT: no such file or directory, open '<FIXTURES>/does-not-exist.md'\n"
+        },
+        "pr unknown subcommand": {
+            "exitCode": 1,
+            "stdout": "",
+            "stderr": "error: unknown subcommand: bogus\n"
+        },
+        "pr unknown argument": {
+            "exitCode": 2,
+            "stdout": "",
+            "stderr": "error: unknown argument: --bogus\n"
+        },
+        "pr value flag without value": {
+            "exitCode": 2,
+            "stdout": "",
+            "stderr": "error: flag --timeout requires a value\n"
+        },
+        "pr unknown argument json": {
+            "exitCode": 2,
+            "stdout": "",
+            "stderr": "error: unknown argument: --bogus\n"
+        },
+        "pr preflight outside a git repo": {
+            "exitCode": 2,
+            "stdout": "{\"ok\":false,\"error\":\"git rev-parse --show-toplevel failed: fatal: not a git repository (or any of the parent directories): .git\"}\n",
+            "stderr": "error: git rev-parse --show-toplevel failed: fatal: not a git repository (or any of the parent directories): .git\n"
+        },
+        "pr help": {
+            "exitCode": 0,
+            "stdout": "pr-reviewing.ts — deterministic spine for /sp:dev-pr-review (sp:pr-reviewing)\n\nInstalled usage: node \"$(superskill script path sp pr-reviewing.mjs)\" <subcommand> [flags]\nSource-tree usage: bun plugins/sp/scripts/pr-reviewing.ts <subcommand> [flags]\n\nSubcommands:\n  preflight            git/gh/repo checks; FAILs on detached HEAD or a dirty tree\n  push                 push the branch (never force); sets upstream when missing\n  ensure-pr [--base b] reuse the branch's PR or create one with gh pr create --fill\n  hygiene  [--base b]  scan base...HEAD for secrets/.env/conflict markers (BLOCK) and debug residue (WARN)\n  request  [--force] [--focus text]\n                       post @codex review (dedupes reviewed/in-flight HEAD unless --force)\n  wait     [--since iso] [--head sha] [--timeout 600] [--interval 30]\n                       poll for Codex output; exit 3 on timeout (pending, not failed)\n  collect  [--since iso] [--head sha]\n                       fetch the current-HEAD Codex result (FINDINGS, CLEAN, or PENDING)\n  status   [--since iso] [--head sha] composite repo/PR/CI/Codex status (read-only)\n\nGlobal flags: --json (single JSON object)  --status-file <path> (one-word verdict)\nExit codes: 0 ok · 1 usage · 2 hard failure · 3 wait timeout\n",
+            "stderr": ""
+        }
+    }
+}

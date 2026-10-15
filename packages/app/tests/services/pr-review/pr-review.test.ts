@@ -7,13 +7,13 @@
  * directory and record argv — no real GitHub or git repository is touched (history-load pattern).
  */
 
-import { afterEach, beforeEach, describe, expect, type Mock, spyOn, test } from 'bun:test';
+import { afterEach, beforeEach, describe, expect, test } from 'bun:test';
 import { spawnSync } from 'node:child_process';
 import { appendFileSync, existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { getEnvVar, setEnvVar } from '@gobing-ai/ts-utils';
-import type { CmdResult, CommandRunner } from '../scripts/pr-reviewing';
+import type { CmdResult, CommandRunner } from '../../../src/services/pr-review';
 import {
     buildRequestBody,
     extractSeverity,
@@ -29,7 +29,7 @@ import {
     scanHygiene,
     setCommandRunner,
     spawnRunner,
-} from '../scripts/pr-reviewing';
+} from '../../../src/services/pr-review';
 
 // ─── Pure: argument parsing ─────────────────────────────────────────────────
 
@@ -47,13 +47,21 @@ describe('parseArgs', () => {
         expect(() => parseArgs(['wait', '--timeout'])).toThrow('requires a value');
     });
 
-    test('staged TypeScript entrypoint runs under Bun', () => {
-        const result = spawnSync('bun', [join(import.meta.dir, '..', 'scripts', 'pr-reviewing.ts'), '--help'], {
-            encoding: 'utf8',
-        });
+    test('spur builder pr --help prints the absorbed spine usage', () => {
+        const result = spawnSync(
+            'bun',
+            [
+                join(import.meta.dir, '..', '..', '..', '..', '..', 'apps', 'cli', 'src', 'index.ts'),
+                'builder',
+                'pr',
+                '--help',
+                '--no-logo',
+            ],
+            { encoding: 'utf8' },
+        );
         expect(result.status).toBe(0);
-        expect(result.stdout).toContain('Installed usage: node "$(superskill script path sp pr-reviewing.mjs)"');
-        expect(result.stdout).toContain('Source-tree usage: bun plugins/sp/scripts/pr-reviewing.ts');
+        expect(result.stdout).toContain('spur builder pr');
+        expect(result.stdout).toContain('Subcommands:');
     });
 
     test('the default runner really spawns, and reports a missing binary instead of throwing', () => {
@@ -70,13 +78,13 @@ describe('parseArgs', () => {
 
     test('workflow carries request freshness through wait/collect and records composite status', () => {
         const workflow = readFileSync(
-            join(import.meta.dir, '..', '..', '..', 'config', 'workflows', 'pr-review.yaml'),
+            join(import.meta.dir, '..', '..', '..', '..', '..', 'config', 'workflows', 'pr-review.yaml'),
             'utf8',
         );
         expect(workflow.match(/--since "\$prSince"/g)?.length).toBe(3);
         expect(workflow.match(/--head "\$prHead"/g)?.length).toBe(3);
         // 1007 R4: status runs behind the script-root snippet resolution.
-        expect(workflow).toContain('"$RUNNER" "$S" status --since "$prSince" --head "$prHead" --json');
+        expect(workflow).toContain('$spurBin builder pr status --since "$prSince" --head "$prHead" --json');
         expect(workflow).not.toContain('node -e');
         expect(workflow).toContain('-pr-status.json');
         expect(workflow).toContain('sh -c "$preReviewCmd"');
@@ -84,7 +92,7 @@ describe('parseArgs', () => {
 
     test('request extracts requestedAt/head once; wait/collect read them via file.read.into-var (0771)', () => {
         const workflow = readFileSync(
-            join(import.meta.dir, '..', '..', '..', 'config', 'workflows', 'pr-review.yaml'),
+            join(import.meta.dir, '..', '..', '..', '..', '..', 'config', 'workflows', 'pr-review.yaml'),
             'utf8',
         );
         // Extraction happens once, in the request state; downstream states read the .txt files.
@@ -314,8 +322,6 @@ let fix = '';
 let origPath = '';
 let logs: string[] = [];
 let errs: string[] = [];
-let logSpy: Mock<(...data: unknown[]) => void>;
-let errSpy: Mock<(...data: unknown[]) => void>;
 
 /**
  * In-process stand-in for the fixture `git`/`gh` binaries.
@@ -445,7 +451,7 @@ function seedHealthy(dir: string): void {
 function runScript(argv: readonly string[]): { code: number; stdout: string; stderr: string } {
     logs = [];
     errs = [];
-    const code = main(argv);
+    const code = main(argv, { out: (line) => logs.push(line), err: (line) => errs.push(line) });
     return { code, stdout: logs.join('\n'), stderr: errs.join('\n') };
 }
 
@@ -460,17 +466,9 @@ beforeEach(() => {
     seedHealthy(fix);
     origPath = getEnvVar('PATH') ?? '';
     setEnvVar('PATH', `${fix}:${origPath}`);
-    logSpy = spyOn(console, 'log').mockImplementation((...data: unknown[]) => {
-        logs.push(data.map(String).join(' '));
-    });
-    errSpy = spyOn(console, 'error').mockImplementation((...data: unknown[]) => {
-        errs.push(data.map(String).join(' '));
-    });
 });
 
 afterEach(() => {
-    logSpy.mockRestore();
-    errSpy.mockRestore();
     setCommandRunner();
     setEnvVar('PATH', origPath);
     rmSync(fix, { recursive: true, force: true });

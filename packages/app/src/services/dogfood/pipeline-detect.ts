@@ -1,33 +1,7 @@
 /**
- * dogfood pipeline-driving detection — the pure detector core.
+ * dogfood pipeline-driving detector.
  *
- * Extracted from `plugins/sp/scripts/dogfood-testing/detect-pipeline-driving.ts` (task 1173, plan
- * P7/ADR-130): the reusable detection logic lives in lib, and the script keeps only the live
- * Phase 1.0 CLI gate. Callers and tests may keep importing the script — it re-exports this module.
- *
- * Contract (0274 §3 dogfood-pipeline-detect, 0277 R1):
- *   - Word-boundary matchers with `-` treated as a word char (NOT a boundary).
- *     A token counts only when it is a distinct hyphen-word, not when it is a
- *     substring of a longer alphanumeric or hyphen run. This removes the
- *     leading-space dependency of the @1.1 prose detector.
- *   - Two token shapes, both with strict `[^\w-]` boundaries:
- *       (a) complete tokens — `--next`, `dev-run`, `dev-runall`, `dev-wrap`,
- *           `dev-wrapall`, `dev-idea` — matched as whole hyphen-words so the
- *           slash form `/sp:dev-run` matches on its `dev-run` tail whether or
- *           not it is preceded by a space, but `--next` does NOT match inside
- *           `--next-gen` (the trailing `-gen` breaks the boundary).
- *       (b) bare nouns — `run`, `runall`, `wrap`, `wrapall`, `idea` — matched
- *           only as standalone words, so `run` matches in
- *           `bun ... task run 0042` but NOT inside `runaway`/`prerun`, and
- *           `idea` does NOT match inside `idealist`/`ideal`.
- *   - Listing both shapes is what makes the detector leading-space invariant
- *     (the slash form is caught by its `dev-*` tail; the bare noun is caught
- *     when it appears as its own word) without letting `run` leak into every
- *     `-run-` identifier.
- *
- * Non-goals of detectPipelineDriving: decides ambiguity only. It does NOT decide
- * observe vs fix — any explicit `--max-retry` value proceeds regardless.
- * Implement-heavy advisory is a separate helper (detectImplementHeavy).
+ * Absorbed from plugins/sp/lib/dogfood-pipeline.ts (script-absorption PR-7).
  */
 
 /**
@@ -173,6 +147,7 @@ export function detectImplementHeavy(testee: string, derivedSteps: string[] = []
     return derivedSteps.some((step) => isImplementHeavyStep(step));
 }
 
+/** Outcome of the dogfood pipeline gate: the detected signals and the proceed/refuse verdict. */
 export interface GateResult {
     pipelineDriving: boolean;
     mutatingFix: boolean;

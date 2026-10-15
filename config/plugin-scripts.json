@@ -23,16 +23,6 @@
             "twin": "daily-summary/daily-summary.mjs"
         },
         {
-            "rel": "dogfood-testing/detect-pipeline-driving.ts",
-            "contract": "standard",
-            "twin": "dogfood-testing/detect-pipeline-driving.mjs"
-        },
-        {
-            "rel": "dogfood-testing/validate-report.ts",
-            "contract": "standard",
-            "twin": "dogfood-testing/validate-report.mjs"
-        },
-        {
             "rel": "idea-handoff.ts",
             "contract": "standard",
             "twin": "idea-handoff.mjs"
@@ -66,11 +56,6 @@
             "rel": "feature-verification-steps.ts",
             "contract": "standard",
             "twin": "feature-verification-steps.mjs"
-        },
-        {
-            "rel": "pr-reviewing.ts",
-            "contract": "standard",
-            "twin": "pr-reviewing.mjs"
         },
         {
             "rel": "quality-gate.ts",

@@ -1,25 +1,18 @@
 /**
- * validate-report — CLI entry for the @1.2 dogfood report contract checker (task 0276 W6, 0278 R6).
- *
- * The validation logic is application-owned in `plugins/sp/lib/dogfood-report.ts` (task 1173); this
- * script opens the file, runs the check and prints — argv, usage, exit codes and every exported
- * symbol stay as they were, so callers and tests keep importing this path.
- *
- * CLI (task 0278 R6): `bun …/validate-report.ts --file <report.md> [--json]`
+ * CLI argv / exit-code contract for `spur agent dogfood validate-report`.
+ * Absorbed from plugins/sp/scripts/dogfood-testing/validate-report.ts (script-absorption PR-7).
  */
+import { validateReport } from './report';
 
-import { readFileSync } from 'node:fs';
-import { validateReport } from '../../lib/dogfood-report';
-
-export * from '../../lib/dogfood-report';
-
-export interface ValidateCliArgs {
+/** Parsed `spur agent dogfood validate-report` arguments. */
+export interface DogfoodValidateCliArgs {
     file: string | null;
     json: boolean;
     help: boolean;
 }
 
-export function parseValidateCliArgs(argv: string[]): ValidateCliArgs {
+/** Parse `spur agent dogfood validate-report` argv (`--file`, `--json`, `--help`). */
+export function parseDogfoodValidateArgs(argv: readonly string[]): DogfoodValidateCliArgs {
     let file: string | null = null;
     let json = false;
     let help = false;
@@ -34,8 +27,9 @@ export function parseValidateCliArgs(argv: string[]): ValidateCliArgs {
     return { file, json, help };
 }
 
-export const VALIDATE_CLI_USAGE = `Usage:
-  bun plugins/sp/scripts/dogfood-testing/validate-report.ts --file <report.md> [--json]
+/** Usage text for `spur agent dogfood validate-report`. */
+export const DOGFOOD_VALIDATE_USAGE = `Usage:
+  spur agent dogfood validate-report --file <report.md> [--json]
 
 Exit codes:
   0  report validates clean (complete-report shape)
@@ -51,18 +45,22 @@ for the cache share is ±1 percentage point.
 Phase 4 finalize MUST run this before status: complete (task 0278 R6).
 On exit 2: set status: aborted and list error codes under #### Unresolved.`;
 
-export function runValidateCli(
-    argv: string[],
-    readFile: (path: string) => string,
-): { exitCode: number; stdout: string; stderr: string } {
-    const { file, json, help } = parseValidateCliArgs(argv);
-    if (help) return { exitCode: 0, stdout: '', stderr: VALIDATE_CLI_USAGE };
+/** Reads the report text; the CLI passes its FileSystem seam (sync or async). */
+export type DogfoodReportReader = (path: string) => string | Promise<string>;
+
+/** Run `spur agent dogfood validate-report`: read the report through `readFile` and validate it. */
+export async function runDogfoodValidateCli(
+    argv: readonly string[],
+    readFile: DogfoodReportReader,
+): Promise<{ exitCode: number; stdout: string; stderr: string }> {
+    const { file, json, help } = parseDogfoodValidateArgs(argv);
+    if (help) return { exitCode: 0, stdout: '', stderr: DOGFOOD_VALIDATE_USAGE };
     if (file === null || file.length === 0) {
-        return { exitCode: 1, stdout: '', stderr: VALIDATE_CLI_USAGE };
+        return { exitCode: 1, stdout: '', stderr: DOGFOOD_VALIDATE_USAGE };
     }
     let markdown: string;
     try {
-        markdown = readFile(file);
+        markdown = await readFile(file);
     } catch (err) {
         const msg = err instanceof Error ? err.message : String(err);
         return { exitCode: 1, stdout: '', stderr: `Failed to read ${file}: ${msg}` };
@@ -83,16 +81,4 @@ export function runValidateCli(
         stdout: `${result.errors.join('\n')}\n`,
         stderr: '',
     };
-}
-
-/** CLI entry for Phase 4 self-validate (import.meta.main). */
-export function mainCli(argv: string[] = process.argv.slice(2)): number {
-    const { exitCode, stdout, stderr } = runValidateCli(argv, (p) => readFileSync(p, 'utf8'));
-    if (stdout) process.stdout.write(stdout);
-    if (stderr) process.stderr.write(`${stderr}\n`);
-    return exitCode;
-}
-
-if (import.meta.main) {
-    process.exit(mainCli());
 }

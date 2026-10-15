@@ -1,26 +1,11 @@
 /**
- * detect-pipeline-driving — live Phase 1.0 CLI gate over the @1.2 detector (task 0277 W7).
- *
- * The detector and its policy helpers are application-owned in
- * `plugins/sp/lib/dogfood-pipeline.ts` (task 1173); this script keeps the shell entry the dogfood
- * driver calls, with argv, usage, exit codes and refusal messages unchanged. Callers and tests may
- * keep importing this path — every former export is re-exported.
- *
- *   bun plugins/sp/scripts/dogfood-testing/detect-pipeline-driving.ts \
- *     --testee "/sp:dev-run 0125 --auto --next" [--max-retry-present] \
- *     [--steps "step1||step2"] [--json]
- *
- * Exit codes:
- *   0 — proceed (may print implement-heavy advisory on stderr)
- *   2 — refuse: pipeline-driving without explicit --max-retry
- *   1 — usage / argument error
+ * CLI argv / exit-code contract for `spur agent dogfood gate`.
+ * Absorbed from plugins/sp/scripts/dogfood-testing/detect-pipeline-driving.ts (script-absorption PR-7).
  */
+import { evaluateDogfoodGate } from './pipeline-detect';
 
-import { evaluateDogfoodGate } from '../../lib/dogfood-pipeline';
-
-export * from '../../lib/dogfood-pipeline';
-
-export interface CliArgs {
+/** Parsed `spur agent dogfood gate` arguments. */
+export interface DogfoodGateCliArgs {
     testee: string | null;
     maxRetryPresent: boolean;
     steps: string[];
@@ -28,8 +13,8 @@ export interface CliArgs {
     help: boolean;
 }
 
-/** Parse CLI argv (everything after the script name). Exported for unit tests. */
-export function parseCliArgs(argv: string[]): CliArgs {
+/** Parse CLI argv (everything after the verb). Exported for unit tests. */
+export function parseDogfoodGateArgs(argv: readonly string[]): DogfoodGateCliArgs {
     let testee: string | null = null;
     let maxRetryPresent = false;
     let steps: string[] = [];
@@ -67,9 +52,9 @@ export function parseCliArgs(argv: string[]): CliArgs {
     return { testee, maxRetryPresent, steps, json, help };
 }
 
-export const CLI_USAGE = `Usage:
-  bun plugins/sp/scripts/dogfood-testing/detect-pipeline-driving.ts \\
-    --testee "<testee string>" [--max-retry-present] [--steps "s1||s2"] [--json]
+/** Usage text for `spur agent dogfood gate`. */
+export const DOGFOOD_GATE_USAGE = `Usage:
+  spur agent dogfood gate --testee "<testee string>" [--max-retry-present] [--steps "s1||s2"] [--json]
 
 Exit codes:
   0  proceed (stdout may carry implement-heavy advisory)
@@ -83,13 +68,17 @@ Phase 1 W8: re-run AFTER step derivation with --steps "label1||label2".`;
  * Pure CLI runner for tests: returns { exitCode, stdout, stderr } without
  * process.exit / console I/O side effects.
  */
-export function runCli(argv: string[]): { exitCode: number; stdout: string; stderr: string } {
-    const { testee, maxRetryPresent, steps, json, help } = parseCliArgs(argv);
+export function runDogfoodGateCli(argv: readonly string[]): {
+    exitCode: number;
+    stdout: string;
+    stderr: string;
+} {
+    const { testee, maxRetryPresent, steps, json, help } = parseDogfoodGateArgs(argv);
     if (help) {
-        return { exitCode: 0, stdout: '', stderr: CLI_USAGE };
+        return { exitCode: 0, stdout: '', stderr: DOGFOOD_GATE_USAGE };
     }
     if (testee === null || testee.length === 0) {
-        return { exitCode: 1, stdout: '', stderr: CLI_USAGE };
+        return { exitCode: 1, stdout: '', stderr: DOGFOOD_GATE_USAGE };
     }
 
     const result = evaluateDogfoodGate(testee, { maxRetryPresent, steps });
@@ -100,11 +89,4 @@ export function runCli(argv: string[]): { exitCode: number; stdout: string; stde
         return { exitCode: result.exitCode, stdout: `${result.message}\n`, stderr: '' };
     }
     return { exitCode: result.exitCode, stdout: '', stderr: '' };
-}
-
-if (import.meta.main) {
-    const { exitCode, stdout, stderr } = runCli(process.argv.slice(2));
-    if (stdout) process.stdout.write(stdout);
-    if (stderr) process.stderr.write(`${stderr}\n`);
-    process.exit(exitCode);
 }

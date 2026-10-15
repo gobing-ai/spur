@@ -92,7 +92,7 @@ Optional class tag, closed set: `environment` | `testee` | `waste`. Finding line
 
 When the testee is a skill or command, a defect in **that testee's contract** (the protocol the run is grading) is `testee` and may be repaired in fix-mode. The same file tagged `environment` (always-loaded steering, placement, a check that should exist, a review-path standard) is a proposal only. Class, not path, decides mutation.
 
-`validate-report` (`plugins/sp/scripts/dogfood-testing/validate-report.ts`) checks headings, protocol string, footer, Issues subheads, and ledger cardinality. It does not parse §6 bullets. A class tag cannot fail `@1.2`; the validator gains no required fields.
+`validate-report` (`spur agent dogfood validate-report`) checks headings, protocol string, footer, Issues subheads, and ledger cardinality. It does not parse §6 bullets. A class tag cannot fail `@1.2`; the validator gains no required fields.
 
 **Fix-mode (ADR-085).** Environment-tagged findings are recommended actions in §6 only. Bounded retries do not `Edit` or `Write` `AGENTS.md`, `CLAUDE.md`, skills, rules, numbered docs, or plugin references for those findings. Step-failure fixes against a `testee`-class finding are unchanged. `--task` remains an opt-in sink and may copy an environment finding into a review task; it does not apply the change.
 

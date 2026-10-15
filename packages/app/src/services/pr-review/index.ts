@@ -1,28 +1,18 @@
-#!/usr/bin/env bun
 /**
- * pr-reviewing.ts — deterministic spine for the sp:pr-reviewing skill (/sp:dev-pr-review).
+ * pr-review — deterministic spine for the sp:pr-reviewing skill (`spur builder pr`).
  *
- * Owns every git/gh interaction of the GitHub Codex PR-review loop: preflight, push,
- * find-or-create PR, submission hygiene scan, `@codex review` request with per-HEAD dedupe,
- * bounded polling, findings collection, and a composite status read. All model-bearing work
- * (finding triage, fixes, AGENTS.md rules authoring) stays in the skill; this script is the
- * testable core that `.spur/workflows/pr-review.yaml` (the workflow SSOT) shells out to.
+ * Absorbed from plugins/sp/scripts/pr-reviewing.ts (script-absorption PR-7). Owns every
+ * git/gh interaction of the GitHub Codex PR-review loop. Model-bearing work stays in the
+ * skill; this module is the testable core that `.spur/workflows/pr-review.yaml` shells out to.
  *
- * Subcommands: preflight | push | ensure-pr | hygiene | request | wait | collect | status
- * Flags: --json (single JSON object on stdout), --status-file <path> (one-word verdict),
- * plus per-subcommand flags documented in --help.
- *
- * Exit codes: 0 success (including WARN / ALREADY_REVIEWED / UP_TO_DATE verdicts),
- * 1 usage error, 2 hard failure, 3 wait timeout (pending — never a failure).
- *
- * Non-negotiable routing: the external review goes through the GitHub PR and an
- * `@codex review` comment. This script never invokes a local Codex CLI as a substitute.
+ * Subcommands: preflight | push | ensure | hygiene | request | wait | collect | status
+ * (ensure-pr is accepted as an alias of ensure).
  */
 
 import { spawnSync } from 'node:child_process';
 import { existsSync, readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { getEnvVars } from '../lib/env';
+import { getEnvVars } from '@gobing-ai/spur-config';
 
 // ─── Types ──────────────────────────────────────────────────────────────────
 
@@ -163,6 +153,7 @@ function parseJson<T>(raw: string, what: string): T {
 const VALUE_FLAGS = new Set(['--base', '--focus', '--since', '--head', '--timeout', '--interval', '--status-file']);
 const BOOL_FLAGS = new Set(['--json', '--force']);
 
+/** Parse `spur builder pr <op>` argv into the op, its value flags and its boolean flags. */
 export function parseArgs(argv: readonly string[]): ParsedArgs {
     const [subcommand = '', ...rest] = argv;
     const flags = new Map<string, string>();
@@ -186,18 +177,27 @@ export function parseArgs(argv: readonly string[]): ParsedArgs {
 
 // ─── Output helpers ─────────────────────────────────────────────────────────
 
+/** Line sink for every spine write; each call is one line (the sink adds the terminator). */
+export interface PrReviewIo {
+    out(line: string): void;
+    err(line: string): void;
+}
+
+/** The caller's sink, installed by {@link main} for the duration of one op. */
+let io: PrReviewIo | null = null;
+
 function emit(args: ParsedArgs, payload: Record<string, unknown>, human: string): void {
     if (args.booleans.has('--json')) {
-        console.log(JSON.stringify(payload));
+        io?.out(JSON.stringify(payload));
     } else {
-        console.log(human);
+        io?.out(human);
     }
 }
 
 /**
  * Carries an intended CLI exit. Thrown anywhere, rendered once by {@link main}; an empty
  * message is a silent exit (the payload was already emitted). Keeps `main` in-process
- * testable — only the `import.meta.main` entrypoint calls `process.exit`.
+ * testable — the CLI adapter maps the returned code onto the process exit code.
  */
 class ScriptExit extends Error {
     constructor(
@@ -296,12 +296,14 @@ const DEFAULT_FOCUS =
     'API/backward compatibility, migration safety, error handling, and missing high-value tests. ' +
     'Prioritize actionable issues over style or nits.';
 
+/** True when the repo's AGENTS.md carries a `## Code Review Rules` section. */
 export function hasCodeReviewRules(repoRoot: string): boolean {
     const agentsPath = join(repoRoot, 'AGENTS.md');
     if (!existsSync(agentsPath)) return false;
     return /^## Code Review Rules\s*$/m.test(readFileSync(agentsPath, 'utf8'));
 }
 
+/** The `@codex review` request comment, with the default focus unless the repo has its own rules. */
 export function buildRequestBody(rulesPresent: boolean, focus: string): string {
     const base = rulesPresent ? '@codex review' : `@codex review ${DEFAULT_FOCUS}`;
     const trimmed = focus.trim();
@@ -422,6 +424,7 @@ export function normalizeFindings(
     return findings.sort((a, b) => a.at.localeCompare(b.at));
 }
 
+/** Render collected review findings as the numbered human summary. */
 export function renderFindings(findings: readonly Finding[]): string {
     if (findings.length === 0) return 'Codex review completed without actionable findings.';
     const lines: string[] = [`Findings (${findings.length})`, ''];
@@ -872,15 +875,14 @@ function cmdStatus(args: ParsedArgs): void {
 
 // ─── Entrypoint ─────────────────────────────────────────────────────────────
 
-const HELP = `pr-reviewing.ts — deterministic spine for /sp:dev-pr-review (sp:pr-reviewing)
+export const PR_REVIEW_HELP = `spur builder pr — deterministic spine for /sp:dev-pr-review (sp:pr-reviewing)
 
-Installed usage: node "$(superskill script path sp pr-reviewing.mjs)" <subcommand> [flags]
-Source-tree usage: bun plugins/sp/scripts/pr-reviewing.ts <subcommand> [flags]
+Usage: spur builder pr <subcommand> [flags]
 
 Subcommands:
   preflight            git/gh/repo checks; FAILs on detached HEAD or a dirty tree
   push                 push the branch (never force); sets upstream when missing
-  ensure-pr [--base b] reuse the branch's PR or create one with gh pr create --fill
+  ensure [--base b]    reuse the branch's PR or create one with gh pr create --fill
   hygiene  [--base b]  scan base...HEAD for secrets/.env/conflict markers (BLOCK) and debug residue (WARN)
   request  [--force] [--focus text]
                        post @codex review (dedupes reviewed/in-flight HEAD unless --force)
@@ -893,7 +895,21 @@ Subcommands:
 Global flags: --json (single JSON object)  --status-file <path> (one-word verdict)
 Exit codes: 0 ok · 1 usage · 2 hard failure · 3 wait timeout`;
 
-export function main(argv: readonly string[]): number {
+/**
+ * Run one spine op. Every line goes to `sink`; the CLI passes its command output so
+ * `spur builder pr` writes through the shared output seam.
+ */
+export function main(argv: readonly string[], sink: PrReviewIo): number {
+    const previous = io;
+    io = sink;
+    try {
+        return runSpine(argv);
+    } finally {
+        io = previous;
+    }
+}
+
+function runSpine(argv: readonly string[]): number {
     let args: ParsedArgs | null = null;
     try {
         args = parseArgs(argv);
@@ -904,6 +920,7 @@ export function main(argv: readonly string[]): number {
             case 'push':
                 cmdPush(args);
                 return 0;
+            case 'ensure':
             case 'ensure-pr':
                 cmdEnsurePr(args);
                 return 0;
@@ -925,7 +942,7 @@ export function main(argv: readonly string[]): number {
             case '':
             case '--help':
             case 'help':
-                console.log(HELP);
+                io?.out(PR_REVIEW_HELP);
                 return 0;
             default:
                 fail(args, `unknown subcommand: ${args.subcommand}`, 1);
@@ -934,19 +951,15 @@ export function main(argv: readonly string[]): number {
         if (error instanceof ScriptExit) {
             if (error.code === 2 && error.message !== '') writeFailureStatus(args);
             if (error.message !== '') {
-                if (error.json) console.log(JSON.stringify({ ok: false, error: error.message }));
-                console.error(`error: ${error.message}`);
+                if (error.json) io?.out(JSON.stringify({ ok: false, error: error.message }));
+                io?.err(`error: ${error.message}`);
             }
             return error.code;
         }
         const message = error instanceof Error ? error.message : String(error);
         writeFailureStatus(args);
-        if (args?.booleans.has('--json')) console.log(JSON.stringify({ ok: false, error: message }));
-        console.error(`error: ${message}`);
+        if (args?.booleans.has('--json')) io?.out(JSON.stringify({ ok: false, error: message }));
+        io?.err(`error: ${message}`);
         return 2;
     }
-}
-
-if (import.meta.main) {
-    process.exit(main(process.argv.slice(2)));
 }

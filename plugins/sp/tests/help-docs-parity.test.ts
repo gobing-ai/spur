@@ -55,12 +55,25 @@ function live(commandPath: string[]): CliSurfaceCapture {
     return capture;
 }
 
+/**
+ * A verb's live flags, plus those of its own subcommands when the verb is a group
+ * (`spur agent dogfood gate|validate-report`): docs name the group-level path
+ * `spur <noun> <verb> <sub> --flag`, which the two-token scan reads as `<noun> <verb>`.
+ */
+function verbFlags(noun: string, verb: string): string[] {
+    const capture = live([noun, verb]);
+    const subFlags = capture.commands
+        .filter((sub) => sub !== HELP_NOUN)
+        .flatMap((sub) => live([noun, verb, sub]).flags);
+    return [...new Set([...capture.flags, ...subFlags])];
+}
+
 /** noun → verb → live flags. */
 const surface = new Map<string, Map<string, string[]>>();
 for (const noun of live([]).commands.filter((c) => c !== HELP_NOUN)) {
     const verbs = new Map<string, string[]>();
     for (const verb of live([noun]).commands.filter((v) => v !== HELP_NOUN)) {
-        verbs.set(verb, live([noun, verb]).flags);
+        verbs.set(verb, verbFlags(noun, verb));
     }
     surface.set(noun, verbs);
 }
@@ -290,7 +303,7 @@ describe('help-docs parity', () => {
                 documentedNotOnCli.push(`${inv.file}: unknown verb \`spur ${inv.noun} ${inv.verb}\``);
                 continue;
             }
-            const liveFlags = inv.verb ? live([inv.noun, inv.verb]).flags : undefined;
+            const liveFlags = inv.verb ? verbFlags(inv.noun, inv.verb) : undefined;
             for (const flag of inv.flags) {
                 if (liveFlags && !liveFlags.includes(flag) && !FLAG_EXEMPT.has(flag)) {
                     documentedNotOnCli.push(
