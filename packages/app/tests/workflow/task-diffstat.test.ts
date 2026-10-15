@@ -3,14 +3,8 @@ import { spawnSync } from 'node:child_process';
 import { closeSync, mkdirSync, mkdtempSync, openSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { getEnvVars } from '@gobing-ai/ts-utils';
-import {
-    type Diffstat,
-    main,
-    runDiffstat,
-    sensitiveReasonForPath,
-    TASK_DIFFSTAT_USAGE,
-} from '../scripts/task-diffstat';
+import { type Diffstat, defaultGitRunner, runDiffstat } from '../../src/workflow/task-diffstat';
+import { sensitiveReasonForPath } from '../../src/workflow/task-triage';
 
 /**
  * 0943 R2a/R2c: the diffstat producer's evidence contract, exercised against a real temp
@@ -50,18 +44,9 @@ function readRow(cwd: string, wbs = '0943'): Record<string, unknown> {
  * A fail-safe case's diagnostic is the operator's, not the test runner's: capture the write
  * so the assertion still pins the message without leaking it into the suite output.
  */
-function capturingStderr<T>(body: () => T): { result: T; stderr: string } {
+function capturingWarn<T>(body: (warn: (line: string) => void) => T): { result: T; stderr: string } {
     const seen: string[] = [];
-    const original = process.stderr.write;
-    process.stderr.write = ((chunk: unknown): boolean => {
-        seen.push(String(chunk));
-        return true;
-    }) as typeof process.stderr.write;
-    try {
-        return { result: body(), stderr: seen.join('') };
-    } finally {
-        process.stderr.write = original;
-    }
+    return { result: body((line) => seen.push(line)), stderr: seen.join('') };
 }
 
 describe('task-diffstat (0943)', () => {
@@ -149,7 +134,7 @@ describe('task-diffstat (0943)', () => {
     test('missing run base fails safe (sensitive, empty diff, exit 0)', () => {
         const cwd = makeRepo();
         writeFileSync(join(cwd, 'apps/cli/src/index.ts'), 'export const changed = true;\n');
-        const { result, stderr } = capturingStderr(() => runDiffstat({ wbs: '0943' }, { cwd }));
+        const { result, stderr } = capturingWarn((warn) => runDiffstat({ wbs: '0943' }, { cwd, warn }));
         expect(stderr).toContain('run base .spur/run/<wbs>-base.sha missing or malformed');
         expect(result.exitCode).toBe(0);
         expect(result).toMatchObject({ files: 0, insertions: 0, deletions: 0, sensitive: true });
@@ -159,38 +144,23 @@ describe('task-diffstat (0943)', () => {
     test('a failing git probe fails safe instead of throwing', () => {
         const cwd = makeRepo();
         anchorBase(cwd);
-        const { result, stderr } = capturingStderr(() =>
-            runDiffstat({ wbs: '0943' }, { cwd }, () => ({ status: 128, stdout: '' })),
+        const { result, stderr } = capturingWarn((warn) =>
+            runDiffstat({ wbs: '0943' }, { cwd, warn }, () => ({ status: 128, stdout: '' })),
         );
         expect(stderr).toContain('git diff --numstat failed (status=128)');
         expect(result.exitCode).toBe(0);
         expect(result.sensitive).toBe(true);
     });
 
-    test('an empty wbs is a mis-invocation (exit 1) and stray argv is usage (exit 2)', () => {
-        const { result, stderr } = capturingStderr(() => {
-            const exitCode = runDiffstat({}, {}).exitCode;
-            return { exitCode, usageExit: main(['unexpected'], { wbs: '0943' }) };
-        });
+    test('an empty wbs is a mis-invocation (exit 1)', () => {
+        const { result, stderr } = capturingWarn((warn) => runDiffstat({}, { warn }));
         expect(stderr).toContain('wbs is empty — refusing to guess the run artifact path');
-        expect(stderr).toContain(TASK_DIFFSTAT_USAGE);
         expect(result.exitCode).toBe(1);
-        expect(result.usageExit).toBe(2);
-        expect(TASK_DIFFSTAT_USAGE).toContain('wbs');
     });
 
-    test('the workflow wrapper contract: plain `bun` invocation writes the row via env', () => {
-        const cwd = makeRepo();
-        anchorBase(cwd);
-        writeFileSync(join(cwd, 'apps/cli/src/index.ts'), 'export const wrapped = true;\n');
-        const run = spawnSync('bun', [join(import.meta.dir, '../scripts/task-diffstat.ts')], {
-            cwd,
-            encoding: 'utf8',
-            env: { ...getEnvVars(), wbs: '0943' },
-        });
-        expect(run.status).toBe(0);
-        expect(readRow(cwd)).toMatchObject({ files: 1, sensitive: false });
-        rmSync(cwd, { recursive: true, force: true });
+    test('the default git runner reports a spawn failure as a non-zero status', () => {
+        const run = defaultGitRunner(join(tmpdir(), 'task-diffstat-no-such-dir'))(['status']);
+        expect(run.status).not.toBe(0);
     });
 });
 
@@ -262,7 +232,7 @@ describe('task-diffstat → verify dispatch floor (1039)', () => {
             'stage verify executed inline in session sess-1 (below dispatch floor: diffstat files 1 lines 3)',
         );
         const driver = readFileSync(
-            join(import.meta.dir, '../skills/spur-dev/references/inline-pipeline-driver.md'),
+            join(import.meta.dir, '../../../../plugins/sp/skills/spur-dev/references/inline-pipeline-driver.md'),
             'utf8',
         );
         expect(driver.replace(/\s+/g, ' ')).toContain(
@@ -362,8 +332,15 @@ describe('task-diffstat → verify dispatch floor (1039)', () => {
     });
 });
 
+// ─── 1160: raw NUL numstat framing + raw-path sensitive matching ─────────────
+
+const gitIn = (cwd: string, args: string[]): void => {
+    const run = spawnSync('git', args, { cwd, encoding: 'utf8' });
+    if (run.status !== 0) throw new Error(`git ${args.join(' ')} failed: ${run.stderr}`);
+};
+
 describe('task-diffstat stdout-redirect guard (1067 R3)', () => {
-    test('redirecting stdout onto the artifact keeps the artifact correct and exits nonzero (AC3)', () => {
+    test('a stdout descriptor onto the artifact keeps the artifact correct and exits nonzero (AC3)', () => {
         const cwd = makeRepo();
         anchorBase(cwd, '1067');
         writeFileSync(join(cwd, 'apps/cli/src/index.ts'), 'export const start = 1;\nexport const end = 2;\n');
@@ -372,14 +349,11 @@ describe('task-diffstat stdout-redirect guard (1067 R3)', () => {
         // The shell-equivalent: open the artifact for write (truncating) and hand the fd as stdout.
         const fd = openSync(artifact, 'w');
         try {
-            const run = spawnSync(process.execPath, [join(import.meta.dir, '../scripts/task-diffstat.ts')], {
-                cwd,
-                encoding: 'utf8',
-                env: { ...getEnvVars(), wbs: '1067' },
-                stdio: ['ignore', fd, 'pipe'],
-            });
-            expect(run.status).toBe(1);
-            expect(run.stderr).toContain('redirect stdout elsewhere');
+            const { result, stderr } = capturingWarn((warn) =>
+                runDiffstat({ wbs: '1067' }, { cwd, warn, stdoutFd: fd }),
+            );
+            expect(result.exitCode).toBe(1);
+            expect(stderr).toContain('redirect stdout elsewhere');
         } finally {
             closeSync(fd);
         }
@@ -388,27 +362,7 @@ describe('task-diffstat stdout-redirect guard (1067 R3)', () => {
         expect(row.sensitive).toBe(false);
         rmSync(cwd, { recursive: true, force: true });
     });
-
-    test('normal invocation stays silent and exits zero', () => {
-        const cwd = makeRepo();
-        anchorBase(cwd, '1067');
-        const run = spawnSync(process.execPath, [join(import.meta.dir, '../scripts/task-diffstat.ts')], {
-            cwd,
-            encoding: 'utf8',
-            env: { ...getEnvVars(), wbs: '1067' },
-        });
-        expect(run.status).toBe(0);
-        expect(run.stdout).toBe('');
-        rmSync(cwd, { recursive: true, force: true });
-    });
 });
-
-// ─── 1160: raw NUL numstat framing + raw-path sensitive matching ─────────────
-
-const gitIn = (cwd: string, args: string[]): void => {
-    const run = spawnSync('git', args, { cwd, encoding: 'utf8' });
-    if (run.status !== 0) throw new Error(`git ${args.join(' ')} failed: ${run.stderr}`);
-};
 
 describe('task-diffstat -z numstat parsing (1160)', () => {
     const NUL = '\u0000';
@@ -417,8 +371,8 @@ describe('task-diffstat -z numstat parsing (1160)', () => {
         const cwd = makeRepo();
         anchorBase(cwd);
         const seen: string[][] = [];
-        const { result } = capturingStderr(() =>
-            runDiffstat({ wbs: '0943' }, { cwd }, (args) => {
+        const { result } = capturingWarn((warn) =>
+            runDiffstat({ wbs: '0943' }, { cwd, warn }, (args) => {
                 seen.push(args);
                 if (args[0] === 'diff')
                     return { status: 0, stdout: `3\t1\tplugins/sp/hooks/保護.ts${NUL}2\t0\tdrizzle/a.sql${NUL}` };
@@ -436,8 +390,8 @@ describe('task-diffstat -z numstat parsing (1160)', () => {
     test('a rename record contributes both raw paths and its counts exactly once', () => {
         const cwd = makeRepo();
         anchorBase(cwd);
-        const { result } = capturingStderr(() =>
-            runDiffstat({ wbs: '0943' }, { cwd }, (args) =>
+        const { result } = capturingWarn((warn) =>
+            runDiffstat({ wbs: '0943' }, { cwd, warn }, (args) =>
                 args[0] === 'diff'
                     ? {
                           status: 0,
@@ -458,8 +412,8 @@ describe('task-diffstat -z numstat parsing (1160)', () => {
     test('paths containing tabs, newlines and literal arrows stay byte-exact', () => {
         const cwd = makeRepo();
         anchorBase(cwd);
-        const { result } = capturingStderr(() =>
-            runDiffstat({ wbs: '0943' }, { cwd }, (args) =>
+        const { result } = capturingWarn((warn) =>
+            runDiffstat({ wbs: '0943' }, { cwd, warn }, (args) =>
                 args[0] === 'diff'
                     ? {
                           status: 0,
@@ -478,8 +432,8 @@ describe('task-diffstat -z numstat parsing (1160)', () => {
     test('binary and untracked rows keep working under -z', () => {
         const cwd = makeRepo();
         anchorBase(cwd);
-        const { result } = capturingStderr(() =>
-            runDiffstat({ wbs: '0943' }, { cwd }, (args) =>
+        const { result } = capturingWarn((warn) =>
+            runDiffstat({ wbs: '0943' }, { cwd, warn }, (args) =>
                 args[0] === 'diff'
                     ? { status: 0, stdout: `-\t-\tassets/logo.png${NUL}` }
                     : { status: 0, stdout: `apps/cli/src/untracked.ts${NUL}` },
@@ -497,8 +451,8 @@ describe('task-diffstat -z numstat parsing (1160)', () => {
     test('empty output is an empty diff, not a framing error', () => {
         const cwd = makeRepo();
         anchorBase(cwd);
-        const { result, stderr } = capturingStderr(() =>
-            runDiffstat({ wbs: '0943' }, { cwd }, (_args) => ({ status: 0, stdout: '' })),
+        const { result, stderr } = capturingWarn((warn) =>
+            runDiffstat({ wbs: '0943' }, { cwd, warn }, (_args) => ({ status: 0, stdout: '' })),
         );
         expect(stderr).toBe('');
         expect(result).toMatchObject({ files: 0, insertions: 0, deletions: 0, sensitive: false });
@@ -514,8 +468,8 @@ describe('task-diffstat -z numstat parsing (1160)', () => {
     ])('%s fails safe with a named diagnostic', (_label, stdout) => {
         const cwd = makeRepo();
         anchorBase(cwd);
-        const { result, stderr } = capturingStderr(() =>
-            runDiffstat({ wbs: '0943' }, { cwd }, (args) =>
+        const { result, stderr } = capturingWarn((warn) =>
+            runDiffstat({ wbs: '0943' }, { cwd, warn }, (args) =>
                 args[0] === 'diff' ? { status: 0, stdout } : { status: 0, stdout: '' },
             ),
         );
@@ -552,27 +506,6 @@ describe('task-diffstat -z numstat parsing (1160)', () => {
         expect(result.paths).toContain('drizzle/moved.sql');
         expect(result.paths).toContain('apps/cli/src/index.ts');
         expect(result.sensitive).toBe(true);
-        rmSync(cwd, { recursive: true, force: true });
-    });
-
-    test('the Node twin parses the same -z fixture identically', () => {
-        const cwd = makeRepo();
-        gitIn(cwd, ['config', 'core.quotepath', 'true']);
-        anchorBase(cwd);
-        mkdirSync(join(cwd, 'plugins/sp/hooks'), { recursive: true });
-        writeFileSync(join(cwd, 'plugins/sp/hooks/保護.ts'), 'export const hook = 1;\n');
-        const twin = spawnSync('node', [join(import.meta.dir, '../scripts/task-diffstat.mjs')], {
-            cwd,
-            encoding: 'utf8',
-            env: { ...getEnvVars(), wbs: '0943' },
-        });
-        expect(twin.status).toBe(0);
-        const source = runDiffstat({ wbs: '0943' }, { cwd });
-        expect(readRow(cwd)).toMatchObject({
-            paths: source.paths,
-            files: source.files,
-            sensitive: source.sensitive,
-        });
         rmSync(cwd, { recursive: true, force: true });
     });
 });

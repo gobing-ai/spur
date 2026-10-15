@@ -27,13 +27,13 @@ describe('task-pipeline check dedup (0940 R4)', () => {
         for (const id of ['precheck', 'verify', 'record']) {
             const commands = onEnterCommands(id);
             expect(commands).not.toContain('qualityGateCmd');
-            expect(commands).not.toContain('quality-gate.ts');
+            expect(commands).not.toContain('task gate');
         }
     });
 
     test('test and test-recheck still own the quality gate', () => {
         for (const id of ['test', 'test-recheck']) {
-            expect(onEnterCommands(id)).toContain('quality-gate.ts');
+            expect(onEnterCommands(id)).toContain('$spurBin task gate \\"$wbs\\" \\"$M\\"');
         }
     });
 });

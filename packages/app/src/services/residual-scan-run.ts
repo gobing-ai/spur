@@ -1,32 +1,47 @@
-#!/usr/bin/env bun
-/** F96 residual IO glue. Pure logic: residual-scan.generated.mjs; contract: task-residual-sweep.md. */
-import { spawnSync } from 'node:child_process';
+/**
+ * F96 residual sweep IO — `spur task residual <wbs> <scan|fold|settle|report|review-gate>`
+ * (script-absorption PR-3; moved from the retired `plugins/sp/scripts/residual-scan.ts`). Pure
+ * logic: `./residual-scan.ts`; contract: docs/design/task-residual-sweep.md.
+ *
+ * The plugin glue shelled `spur task show|create|update`; here those go through an injected
+ * {@link ResidualTaskPort} (the CLI binds it to the in-process task service), so the modes are
+ * async. Git reads use ts-runtime's sync executor. Artifacts, stdout lines and exit codes are
+ * unchanged: exit 0 except `review-gate` with an open P1-P3 finding (1) and usage errors (2).
+ */
 import * as fs from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { getEnvVars } from '../lib/env';
-import * as core from '../lib/residual-scan.generated.mjs';
-import { spurCommand } from '../lib/spur-bin';
+import { NodeSyncProcessExecutor } from '@gobing-ai/ts-runtime';
+import * as core from './residual-scan';
 
-export * from '../lib/residual-scan.generated.mjs';
+/** Usage line printed with exit 2. */
 export const RESIDUAL_SCAN_USAGE =
-    'usage: residual-scan.ts <scan|fold|settle|report|review-gate> <wbs> [--spur-bin <bin>] [--root <dir>] [--tmp-dir <dir>]';
-export type ScanEnv = { spurBin?: string } & Record<string, string | undefined>;
+    'usage: spur task residual <wbs> <scan|fold|settle|report|review-gate> [--root <dir>] [--tmp-dir <dir>]';
+
+/** The task operations the sweep needs — `task show`, `task create --skip-ready`, `task update --section`. */
+export interface ResidualTaskPort {
+    /** Task body and feature id; throws when the task cannot be read. */
+    show(wbs: string): Promise<{ content: string; featureId: string }>;
+    /** Create an unlinked backlog capture (no ready preparation); resolves to its wbs. */
+    create(title: string): Promise<string>;
+    /** Replace a section's body from a file. */
+    updateSection(wbs: string, section: string, fromFile: string): Promise<void>;
+}
+
+/** Line sinks (each call carries its own trailing newline). */
 export type ScanIo = { out: (line: string) => void; err: (line: string) => void };
-export type ScanOptions = { cwd?: string; io?: ScanIo };
+
+/** Invocation context: the task port, an optional cwd for relative `--root`, and the line sinks. */
+export type ScanOptions = { tasks: ResidualTaskPort; cwd?: string; io?: ScanIo };
+
 type RunResult = { status: number; stdout: string };
 type ParsedArgs = core.ParsedScanArgs;
-type ModeFn = (o: ParsedArgs, e: ScanEnv, i: ScanIo) => number;
+type ModeFn = (o: ParsedArgs, tasks: ResidualTaskPort, i: ScanIo) => Promise<number>;
 type ScanTask = { content: string; featureId: string };
 type VerdictFile = { verdict: string; checks: Array<{ name: string; status: string; evidence: string }> };
 function run(cmd: string, args: string[], cwd: string): RunResult {
-    const result = spawnSync(cmd, args, { cwd, encoding: 'utf8' });
-    if (result.error !== undefined) return { status: result.status ?? 1, stdout: '' };
-    return { status: result.status ?? 1, stdout: result.stdout ?? '' };
-}
-function spur(env: ScanEnv, spurBinFlag: string | undefined, args: string[], cwd: string): RunResult {
-    const { cmd, prefix } = spurCommand(spurBinFlag ?? env.spurBin);
-    return run(cmd, [...prefix, ...args], cwd);
+    const result = new NodeSyncProcessExecutor().runSync({ command: cmd, args, cwd, rejectOnError: false });
+    return { status: result.exitCode ?? 1, stdout: result.stdout ?? '' };
 }
 function isRegularFile(path: string): boolean {
     try {
@@ -35,6 +50,7 @@ function isRegularFile(path: string): boolean {
         return false;
     }
 }
+/** Lines added since `base` (`git diff -U0`) plus every line of each untracked regular file. */
 export function collectAddedLines(root: string, base: string): Array<{ file: string; line: number; text: string }> {
     const out: Array<{ file: string; line: number; text: string }> = [];
     const diff = run('git', ['diff', '--unified=0', base], root);
@@ -54,6 +70,7 @@ export function collectAddedLines(root: string, base: string): Array<{ file: str
     }
     return out;
 }
+/** `<tmpDir>/<wbs>-*` regular files left by staging writes. */
 export function listStagingResidue(tmpDir: string, wbs: string): string[] {
     let names: string[];
     try {
@@ -72,7 +89,8 @@ function readDeferrals(runDir: string, wbs: string): core.Deferral[] {
         return [];
     }
 }
-export function scanResiduals(root: string, wbs: string, tmpDir: string, taskContent: string, _env: ScanEnv) {
+/** Run the pure sweep over the run base, staging residue and recorded deferrals. */
+export function scanResidualsAt(root: string, wbs: string, tmpDir: string, taskContent: string) {
     const runDir = join(root, '.spur', 'run');
     const basePath = join(runDir, `${wbs}-base.sha`);
     const base = fs.existsSync(basePath) ? fs.readFileSync(basePath, 'utf8').trim() : null;
@@ -81,22 +99,20 @@ export function scanResiduals(root: string, wbs: string, tmpDir: string, taskCon
     const addedLines = base === null ? [] : collectAddedLines(root, base);
     return core.scanResiduals({ wbs, base, taskContent, addedLines, stagingResidue, deferrals });
 }
-function loadTask(env: ScanEnv, spurBinFlag: string | undefined, wbs: string, root: string): ScanTask {
-    const res = spur(env, spurBinFlag, ['task', 'show', wbs, '--json'], root);
-    if (res.status !== 0) throw new Error(`task show ${wbs} failed`);
-    type TaskJson = { content?: unknown; feature_id?: unknown; frontmatter?: { feature_id?: unknown } | null };
-    const parsed = JSON.parse(res.stdout) as TaskJson;
-    const featureId =
-        [parsed.feature_id, parsed.frontmatter?.feature_id].find((v): v is string => typeof v === 'string') ?? '';
-    return { content: typeof parsed.content === 'string' ? parsed.content : '', featureId };
+async function loadTask(tasks: ResidualTaskPort, wbs: string): Promise<ScanTask> {
+    try {
+        return await tasks.show(wbs);
+    } catch {
+        throw new Error(`task show ${wbs} failed`);
+    }
 }
 const loadVerdict = (runDir: string, wbs: string): VerdictFile =>
     JSON.parse(fs.readFileSync(core.recordedVerdictPath(runDir, wbs, fs), 'utf8'));
-function scanMode(opts: ParsedArgs, env: ScanEnv, io: ScanIo): number {
+async function scanMode(opts: ParsedArgs, tasks: ResidualTaskPort, io: ScanIo): Promise<number> {
     const runDir = join(opts.root, '.spur', 'run');
     fs.mkdirSync(runDir, { recursive: true });
-    const { content } = loadTask(env, opts.spurBin, opts.wbs, opts.root);
-    const artifact = scanResiduals(opts.root, opts.wbs, opts.tmpDir, content, env);
+    const { content } = await loadTask(tasks, opts.wbs);
+    const artifact = scanResidualsAt(opts.root, opts.wbs, opts.tmpDir, content);
     fs.writeFileSync(join(runDir, `${opts.wbs}-residuals.json`), `${JSON.stringify(artifact, null, 2)}\n`);
     io.out(
         `residual-scan: ${opts.wbs} blocking=${artifact.counts.blocking} deferrable=${artifact.counts.deferrable} advisory=${artifact.counts.advisory} housekeeping=${artifact.counts.housekeeping}\n`,
@@ -109,16 +125,16 @@ function scanMode(opts: ParsedArgs, env: ScanEnv, io: ScanIo): number {
  * the test-fix hop reads. Exit 1 on an open P1-P3 finding. The answer-grade rule (1204) was
  * retired with the asserted confidence machinery (F511); findings stay the gate.
  */
-function reviewGateMode(opts: ParsedArgs, env: ScanEnv, io: ScanIo): number {
+async function reviewGateMode(opts: ParsedArgs, tasks: ResidualTaskPort, io: ScanIo): Promise<number> {
     const runDir = join(opts.root, '.spur', 'run');
     fs.mkdirSync(runDir, { recursive: true });
-    const { content } = loadTask(env, opts.spurBin, opts.wbs, opts.root);
+    const { content } = await loadTask(tasks, opts.wbs);
     const gate = core.buildReviewGateArtifact(opts.wbs, content, readDeferrals(runDir, opts.wbs));
     fs.writeFileSync(join(runDir, `${opts.wbs}-residuals.json`), `${JSON.stringify(gate.artifact, null, 2)}\n`);
     io.out(gate.note);
     return gate.artifact.counts.blocking > 0 ? 1 : 0;
 }
-function foldMode(opts: ParsedArgs, _env: ScanEnv, io: ScanIo): number {
+async function foldMode(opts: ParsedArgs, _tasks: ResidualTaskPort, io: ScanIo): Promise<number> {
     const runDir = join(opts.root, '.spur', 'run');
     const scan = JSON.parse(
         fs.readFileSync(join(runDir, `${opts.wbs}-residuals.json`), 'utf8'),
@@ -150,11 +166,11 @@ function foldMode(opts: ParsedArgs, _env: ScanEnv, io: ScanIo): number {
     );
     return 0;
 }
-function settleMode(opts: ParsedArgs, env: ScanEnv, io: ScanIo): number {
+async function settleMode(opts: ParsedArgs, tasks: ResidualTaskPort, io: ScanIo): Promise<number> {
     const wbs = opts.wbs;
-    const task = loadTask(env, opts.spurBin, wbs, opts.root);
+    const task = await loadTask(tasks, wbs);
     const runDir = join(opts.root, '.spur', 'run');
-    const scan = scanResiduals(opts.root, wbs, opts.tmpDir, task.content, env);
+    const scan = scanResidualsAt(opts.root, wbs, opts.tmpDir, task.content);
     const residualsPath = join(runDir, `${wbs}-residuals.json`);
     let prior: Partial<core.ResidualArtifact & { followUp?: string }> = {};
     if (fs.existsSync(residualsPath)) prior = JSON.parse(fs.readFileSync(residualsPath, 'utf8'));
@@ -162,27 +178,26 @@ function settleMode(opts: ParsedArgs, env: ScanEnv, io: ScanIo): number {
     if (deferred.length > 0 && prior.followUp === undefined) {
         // Filed UNLINKED: a feature edge failed that feature's done-gate (`L4.verifying-incomplete-tasks`,
         // E72/1086→1087); the Background still names the source task and feature for traceability.
-        const args = ['task', 'create', `Residuals from ${wbs}`, '--skip-ready', '--json'];
-        const created = spur(env, opts.spurBin, args, opts.root);
         let wbsNew = '';
         try {
-            const parsed = JSON.parse(created.stdout) as { wbs?: unknown; data?: { wbs?: unknown } | null };
-            const data = typeof parsed.data === 'object' && parsed.data !== null ? parsed.data : {};
-            wbsNew = [parsed.wbs, data.wbs].find((v): v is string => typeof v === 'string') ?? '';
+            wbsNew = await tasks.create(`Residuals from ${wbs}`);
         } catch {
             wbsNew = '';
         }
-        if (created.status !== 0 || wbsNew === '') {
-            io.err(`residual-settle: task create failed or unreadable wbs; re-run: residual-scan settle ${wbs}\n`);
+        if (wbsNew === '') {
+            io.err(`residual-settle: task create failed or unreadable wbs; re-run: spur task residual ${wbs} settle\n`);
             return 0;
         }
         const rows = deferred.map((i) => `- ${i.id} — ${i.location}: ${i.text}`);
         const head = `Source task: ${wbs}${task.featureId === '' ? '' : ` (feature ${task.featureId})`} — deferred residuals filed by residual-scan settle (unlinked: a deferral must not hold the completing feature open).`;
         const bgFile = join(runDir, `${wbs}-residual-background.md`);
         fs.writeFileSync(bgFile, `${[head, '', ...rows].join('\n')}\n`);
-        const updArgs = ['task', 'update', wbsNew, '--section', 'Background', '--from-file', bgFile];
-        if (spur(env, opts.spurBin, updArgs, opts.root).status !== 0) {
-            io.err(`residual-settle: background write failed; re-run: residual-scan settle ${wbs}\n`);
+        const updated = await tasks.updateSection(wbsNew, 'Background', bgFile).then(
+            () => true,
+            () => false,
+        );
+        if (!updated) {
+            io.err(`residual-settle: background write failed; re-run: spur task residual ${wbs} settle\n`);
             return 0;
         }
         prior.followUp = wbsNew;
@@ -192,14 +207,14 @@ function settleMode(opts: ParsedArgs, env: ScanEnv, io: ScanIo): number {
         try {
             fs.rmSync(path, { force: true });
         } catch {
-            io.err(`residual-settle: could not remove ${path}; re-run: residual-scan settle ${wbs}\n`);
+            io.err(`residual-settle: could not remove ${path}; re-run: spur task residual ${wbs} settle\n`);
             return 0;
         }
     }
     fs.writeFileSync(residualsPath, `${JSON.stringify({ ...scan, ...prior }, null, 2)}\n`);
     return 0;
 }
-function reportMode(opts: ParsedArgs, env: ScanEnv, io: ScanIo): number {
+async function reportMode(opts: ParsedArgs, tasks: ResidualTaskPort, io: ScanIo): Promise<number> {
     const runDir = join(opts.root, '.spur', 'run');
     // A fix-budget-exhausted run never reaches verify: no verdict is a no-op, not ENOENT (1178 run 1).
     const verdictPath = core.recordedVerdictPath(runDir, opts.wbs, fs);
@@ -209,8 +224,8 @@ function reportMode(opts: ParsedArgs, env: ScanEnv, io: ScanIo): number {
     }
     const sweep = loadVerdict(runDir, opts.wbs).checks.find((c) => c.name === 'residual-sweep');
     if (sweep === undefined || sweep.status !== 'fail') return 0;
-    const { content } = loadTask(env, opts.spurBin, opts.wbs, opts.root);
-    const scan = scanResiduals(opts.root, opts.wbs, opts.tmpDir, content, env);
+    const { content } = await loadTask(tasks, opts.wbs);
+    const scan = scanResidualsAt(opts.root, opts.wbs, opts.tmpDir, content);
     const blocking = scan.items.filter((i) => i.class === 'blocking');
     const attemptFile = join(runDir, `${opts.wbs}-test-fix-attempt`);
     const attempts = fs.existsSync(attemptFile)
@@ -223,11 +238,9 @@ function reportMode(opts: ParsedArgs, env: ScanEnv, io: ScanIo): number {
     io.out(`Recovery: fix the items in .spur/run/${opts.wbs}-residual-report.md, then /sp:dev-run ${opts.wbs}\n`);
     return 0;
 }
-export function main(argv: string[], env: ScanEnv = getEnvVars(), options: ScanOptions = {}): number {
-    const io: ScanIo = options.io ?? {
-        out: (line) => process.stdout.write(line),
-        err: (line) => process.stderr.write(line),
-    };
+/** Parse `<mode> <wbs> [--root] [--tmp-dir]` (a legacy `--spur-bin` is accepted and ignored) and run the mode. */
+export async function residualScanMain(argv: string[], options: ScanOptions): Promise<number> {
+    const io: ScanIo = options.io ?? { out: () => {}, err: () => {} };
     const cwd = options.cwd ?? process.cwd();
     const opts = core.parseScanArgs(argv, cwd, tmpdir());
     const modes: Record<string, ModeFn> = {
@@ -243,6 +256,5 @@ export function main(argv: string[], env: ScanEnv = getEnvVars(), options: ScanO
         return 2;
     }
     const resolved: ParsedArgs = { ...opts, root: opts.root.startsWith('/') ? opts.root : join(cwd, opts.root) };
-    return modeFn(resolved, env, io);
+    return modeFn(resolved, options.tasks, io);
 }
-if (import.meta.main) process.exit(main(process.argv.slice(2)));

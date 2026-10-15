@@ -182,7 +182,7 @@ the cell, not the sentence. `OPEN` states "still live", and `ACCEPTED` marks a n
 observation you are deliberately not acting on; both behave as an ordinary open row.
 
 **Pipeline cost of an open finding (1122).** The review PASS edges run this same classification
-before verify (`residual-scan review-gate`): a PASS whose table still carries an open P1-P3 row
+before verify (`spur task residual <wbs> review-gate`): a PASS whose table still carries an open P1-P3 row
 routes into `review-fail-triage` → the bounded repair hop instead of verify. Open P1-P3 findings
 block `done`; fixing one invalidates the certified digest and re-runs quality → review → verify on
 a fresh digest. Only P4 rows and `DEFER`-ed P3 rows are wrap residuals — disposition the finding in
@@ -247,7 +247,7 @@ assert no external claim and need no citation. An uncited external claim is an a
 as an explicit gap in the report body (above), so a reader can re-check it.
 
 
-**Machine-checked at the gate (findings table).** `residual-scan review-gate` applies the same two
+**Machine-checked at the gate (findings table).** `spur task residual <wbs> review-gate` applies the same two
 predicates to every finding row: a Finding cell carrying one of the verify lint's claim markers with
 no citation form becomes a **blocking** `review-contract` item, so `review → verify` stops and the
 run enters `review-fail-triage`. The `Location` column is deliberately not consulted as a citation —

@@ -905,7 +905,7 @@ export interface GitDiffU0Options extends SolutionPathFilter {
 }
 
 /**
- * A run-base capture must look like a commit-ish. Mirrors `task-diffstat.ts`'s shape check,
+ * A run-base capture must look like a commit-ish. Mirrors `workflow/task-diffstat.ts`'s shape check,
  * so a truncated or hand-mangled `.spur/run/<wbs>-base.sha` falls back to `HEAD` instead of
  * making `git diff` exit non-zero — which the caller's `catch`-to-`''` would otherwise
  * surface as a silent "no changes detected" (the 1090 review's P4).

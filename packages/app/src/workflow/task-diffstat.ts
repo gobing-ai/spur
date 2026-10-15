@@ -1,53 +1,49 @@
-#!/usr/bin/env bun
 /**
- * task-diffstat — deterministic diff-evidence producer behind the task-pipeline `triage`
- * onEnter (task 0943, feature D64, ADR-125 lane routing).
+ * Task diffstat — deterministic diff-evidence producer behind the task-pipeline `triage` onEnter
+ * (task 0943, feature D64, ADR-125 lane routing), reached as `spur task diffstat <wbs>`
+ * (script-absorption PR-3; moved verbatim from the retired `plugins/sp/scripts/task-diffstat.ts`).
  *
- * Reads the run's anchored base commit `.spur/run/<wbs>-base.sha` (written once by
- * `precheck`, F96 R1) and the current working tree, then writes:
- *   `.spur/run/<wbs>-diffstat.json`  `{ files, insertions, deletions, paths[], sensitive }`
+ * Reads the run's anchored base commit `.spur/run/<wbs>-base.sha` (written once by `precheck`,
+ * F96 R1) and the working tree, then writes `.spur/run/<wbs>-diffstat.json`
+ * `{ files, insertions, deletions, paths[], sensitive }`.
  *
- * Counts come from `git diff --numstat -z <base>` (tracked changes; binary rows count the path
- * but no lines; NUL records carry RAW paths, so a non-ASCII or newline-bearing path reaches the
- * sensitive matchers intact) plus untracked files (`git ls-files --others --exclude-standard -z`,
- * newline-counted — # ponytail: untracked line counts are a newline scan, numstat-grade binary
- * detection is unnecessary here; switch to `--numstat --no-index` if a miscount flips a lane).
- *
- * `sensitive` is true when ANY changed path matches the exported SENSITIVE list (0943 R2c);
- * the workflow's pre-decide guard maps sensitive (or >400 changed lines) to the safety lane
- * without a model call. Fail safe: a missing/malformed base, a failing git call, or any
- * other probe problem writes `sensitive: true` (and exits 0) so the lane degrades to
- * safety, never to fast.
- *
- * The artifact is written atomically (tmp + rename), so redirecting stdout onto the artifact path
- * cannot corrupt it — the rename swaps in the real JSON after the shell's redirect truncates the
- * old inode (1067 R3); that redirect is still refused with a nonzero exit. Normal output is silent.
- *
- * Node-builtin imports only; the git lookup is a spawnable `GitRunner` so tests can fake
- * it; `main(argv, env, options)` is the same injection point the workflow wrapper and its
- * node twin exercise. Only an empty `wbs` (mis-invocation) exits nonzero.
+ * Counts come from `git diff --numstat -z <base>` (binary rows count the path but no lines; NUL
+ * records carry RAW paths, so a non-ASCII or newline-bearing path reaches the sensitive matchers
+ * intact) plus untracked files (`git ls-files --others --exclude-standard -z`, newline-counted).
+ * `sensitive` is true when ANY changed path matches the SENSITIVE list (`task-triage.ts`, 0943
+ * R2c). Fail safe: a missing/malformed base, a failing git call or malformed framing writes
+ * `sensitive: true` and exits 0, so the lane degrades to safety, never to fast. The artifact is
+ * written atomically (tmp + rename); a stdout redirect onto the artifact is refused with exit 1
+ * (1067 R3). Only an empty `wbs` (mis-invocation) is otherwise a non-zero exit.
  */
 
-import { spawnSync } from 'node:child_process';
 import { fstatSync, mkdirSync, readFileSync, renameSync, statSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { getEnvVars } from '../lib/env';
+import { NodeSyncProcessExecutor } from '@gobing-ai/ts-runtime';
+import { sensitiveReasonForPath } from './task-triage';
 
+/** Gate env: only `wbs` is read. */
 export interface DiffstatEnv {
     wbs?: string;
     [key: string]: string | undefined;
 }
 
+/** Probe knobs (cwd + diagnostics sink). */
 export interface DiffstatOptions {
     /** Base directory for `.spur/run` and the git probes; defaults to the process cwd. */
     cwd?: string;
+    /** Diagnostic sink (one newline-terminated line per call); the CLI routes it to stderr. */
+    warn?: (line: string) => void;
+    /** Descriptor compared against the artifact for the 1067 R3 redirect guard; defaults to stdout (1). */
+    stdoutFd?: number;
 }
 
-/** Minimal spawnable git surface — tests fake this to return canned probe output. */
+/** One git invocation's exit status and captured stdout. */
 export interface GitRunResult {
     status: number;
     stdout: string;
 }
+/** Minimal spawnable git surface — tests fake this to return canned probe output. */
 export type GitRunner = (args: string[]) => GitRunResult;
 
 /** Diffstat row written to `.spur/run/<wbs>-diffstat.json` (0943 R2a, frozen shape). */
@@ -59,25 +55,23 @@ export interface Diffstat {
     sensitive: boolean;
 }
 
+/** The written row plus where it landed and the exit code. */
 export interface DiffstatResult extends Diffstat {
     resultFile: string;
     /** Exit code the workflow wrapper observes (only an empty wbs is a hard failure). */
     exitCode: number;
 }
 
-// Task 1176: the sensitive-path policy (0943 R2c) moved to the workflow/task owner —
-// `packages/app/src/workflow/task-triage.ts`, reached through the generated pure bundle. That policy
-// still forces the safety lane for any changed path under the frozen sensitive list before the
-// `task-triage` decide runs, so sensitive work is never lane-negotiated with a model; this entry
-// keeps git capture and the output artifact, and re-exports the policy for existing callers.
-import { SENSITIVE_GLOBS, SENSITIVE_PREFIXES, sensitiveReasonForPath } from '../lib/plan-projection.generated.mjs';
-
-export { SENSITIVE_GLOBS, SENSITIVE_PREFIXES, sensitiveReasonForPath };
-
-function defaultGitRunner(cwd?: string): GitRunner {
+/** Git through ts-runtime's sync executor (never rejects; a spawn failure is a non-zero status). */
+export function defaultGitRunner(cwd?: string): GitRunner {
     return (args: string[]): GitRunResult => {
-        const run = spawnSync('git', args, { cwd, encoding: 'utf8' });
-        return { status: run.status ?? 1, stdout: run.stdout ?? '' };
+        const run = new NodeSyncProcessExecutor().runSync({
+            command: 'git',
+            args,
+            ...(cwd !== undefined ? { cwd } : {}),
+            rejectOnError: false,
+        });
+        return { status: run.exitCode ?? 1, stdout: run.stdout ?? '' };
     };
 }
 
@@ -110,9 +104,10 @@ export function runDiffstat(
     git: GitRunner = defaultGitRunner(options.cwd),
 ): DiffstatResult {
     const cwd = options.cwd;
+    const warn = options.warn ?? (() => {});
     const wbs = env.wbs ?? '';
     if (wbs.length === 0) {
-        process.stderr.write('task-diffstat: wbs is empty — refusing to guess the run artifact path\n');
+        warn('task-diffstat: wbs is empty — refusing to guess the run artifact path\n');
         return { files: 0, insertions: 0, deletions: 0, paths: [], sensitive: true, resultFile: '', exitCode: 1 };
     }
     const relRun = join('.spur', 'run');
@@ -121,7 +116,7 @@ export function runDiffstat(
     mkdirSync(abs(relRun), { recursive: true });
 
     const failSafe = (reason: string): DiffstatResult => {
-        process.stderr.write(`task-diffstat: ${reason} — failing safe (sensitive)\n`);
+        warn(`task-diffstat: ${reason} — failing safe (sensitive)\n`);
         const row: Diffstat = { files: 0, insertions: 0, deletions: 0, paths: [], sensitive: true };
         writeArtifact(abs(relResult), row);
         return { ...row, resultFile: relResult, exitCode: 0 };
@@ -129,7 +124,7 @@ export function runDiffstat(
 
     let stdoutIsArtifact = false; // 1067 R3: stdout redirected onto the artifact itself clobbered it once
     try {
-        const [out, art] = [fstatSync(1), statSync(abs(relResult))];
+        const [out, art] = [fstatSync(options.stdoutFd ?? 1), statSync(abs(relResult))];
         stdoutIsArtifact = out.dev === art.dev && out.ino === art.ino;
     } catch {
         /* artifact absent or stdout not a regular file — nothing to compare */
@@ -186,7 +181,7 @@ export function runDiffstat(
     const row: Diffstat = { files: all.length, insertions, deletions, paths: all, sensitive };
     writeArtifact(abs(relResult), row);
     if (stdoutIsArtifact)
-        process.stderr.write('task-diffstat: stdout redirected onto the artifact — kept; redirect stdout elsewhere\n');
+        warn('task-diffstat: stdout redirected onto the artifact — kept; redirect stdout elsewhere\n');
     return { ...row, resultFile: relResult, exitCode: stdoutIsArtifact ? 1 : 0 };
 }
 
@@ -195,25 +190,4 @@ function writeArtifact(absPath: string, row: Diffstat): void {
     const tmp = `${absPath}.tmp`;
     writeFileSync(tmp, `${JSON.stringify(row)}\n`);
     renameSync(tmp, absPath);
-}
-
-export const TASK_DIFFSTAT_USAGE = 'usage: task-diffstat  (env: wbs)';
-
-export function main(argv: string[], env: DiffstatEnv = getEnvVars(), options: DiffstatOptions = {}): number {
-    // 0482 R2: the workflow hands every plugin script `--spur-bin` for PATH-independence.
-    // task-diffstat shells only git (never spur), so the flag is accepted and unused;
-    // any other argv stays a usage error.
-    for (let i = 0; i < argv.length; i++) {
-        if (argv[i] === '--spur-bin') {
-            i++;
-            continue;
-        }
-        process.stderr.write(`${TASK_DIFFSTAT_USAGE}\n`);
-        return 2;
-    }
-    return runDiffstat(env, options).exitCode;
-}
-
-if (import.meta.main) {
-    process.exit(main(process.argv.slice(2)));
 }
