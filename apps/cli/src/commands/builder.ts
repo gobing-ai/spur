@@ -2,15 +2,16 @@ import type { Command } from '@commander-js/extra-typings';
 import type { CliContext } from '../context';
 import { toEnvelopeJson } from '../output';
 import { bumpVer, dropTags } from '../release-ops';
+import { registerBuilderPrCommand } from './builder/pr';
 import { SHARED_OPTIONS } from './shared-options';
 
 /**
  * Register `spur builder` — release plumbing promoted from spur-dev (task 0617, ADR-051
- * amendment R5). Exactly two verbs, by explicit operator consent: `bump-ver` and
- * `drop-tags`. Anything else stays internal until it argues against that line explicitly.
+ * amendment R5; charter extended by script-absorption Q1/Q5 for `pr`, and later `publish`
+ * / `bump-ver --check`). Verbs: `bump-ver`, `drop-tags`, `pr`.
  */
 export function registerBuilderCommand(program: Command, context: CliContext): void {
-    const noun = program.command('builder').summary('release plumbing: version bumps and release tags');
+    const noun = program.command('builder').summary('release plumbing: version bumps, tags, and PR-review ops');
 
     noun.command('bump-ver')
         .summary('bump a package version, commit, tag, optionally push')
@@ -117,4 +118,6 @@ export function registerBuilderCommand(program: Command, context: CliContext): v
                 context.setExitCode(1);
             }
         });
+
+    registerBuilderPrCommand(noun, context);
 }

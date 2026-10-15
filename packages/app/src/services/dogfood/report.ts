@@ -1,21 +1,7 @@
 /**
- * dogfood report contract — the pure `validateReport(markdown)` core.
+ * dogfood report validator (@1.2 contract).
  *
- * Extracted from `plugins/sp/scripts/dogfood-testing/validate-report.ts` (task 1173, plan P7/ADR-130):
- * the reusable validation logic lives in lib, and the script keeps only the CLI entry that opens and
- * prints. Callers and tests may keep importing the script — it re-exports this module.
- *
- * Pure function over a report markdown string → { ok, errors[] } with stable error
- * codes, callable from tests and by agents finalizing a run. It validates the
- * *complete-report* shape: the six unique section headings, Issues subheads, the
- * mandatory summary footer with both delivery paths, frontmatter protocol string,
- * ledger↔declared-steps cardinality, and the Cost evidence contract (task 0913):
- * a complete report must carry a Cost block (Ledger estimate / Method / Meter),
- * percentages within 0..100, observable token totals consistent with the ledger
- * row sums (fresh + cached), and no fabricated share when no observable rows
- * exist. Unknown cells are never folded into zero; all-unknown evidence must
- * render `n/a`. Aborted/partial reports remain out of scope — they legitimately
- * lack the footer and Steps line.
+ * Absorbed from plugins/sp/lib/dogfood-report.ts (script-absorption PR-7).
  */
 
 export interface ReportValidation {
@@ -233,6 +219,7 @@ function validateCostEvidence(markdown: string, errors: string[]): void {
     checkTotals('footer', footerTotals);
 }
 
+/** Validate a dogfood report against the complete-report contract (footer, totals, sections). */
 export function validateReport(markdown: string): ReportValidation {
     const errors: string[] = [];
 

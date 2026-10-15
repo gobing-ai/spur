@@ -82,11 +82,11 @@ The command forwards these via `$ARGUMENTS`:
 >   <!-- pipeline-tokens:end -->
 >   matched as a **distinct hyphen-word**
 >   (machine-checked by
->   [`detectPipelineDriving`](../../lib/dogfood-pipeline.ts);
+>   `detectPipelineDriving` (`spur agent dogfood gate`);
 >   see [§Pipeline-driving word-boundary contract](#pipeline-driving-word-boundary-contract))
 >   → `⚠ pipeline-driving testee detected; pass --max-retry 0 (observe-only) or --max-retry N (fix mode, tree mutation acknowledged)`.
 > - **Mutating `--fix` modes** — `--fix all` / `--fix blockers-first`, boundary-guarded via
->   [`hasMutatingFixMode`](../../lib/dogfood-pipeline.ts) (never matches
+>   `hasMutatingFixMode` (`spur agent dogfood gate`) (never matches
 >   `--fix none` / `--focus all` / `--prefix all`). No pipeline token required: a verify/review leg
 >   with `--fix all` mutates the tree on its own (0280 dogfood P2, task 0293). Honesty note:
 >   `--max-retry 0` here bounds **the driver only** — the testee still mutates the tree — so the
@@ -100,7 +100,7 @@ The command forwards these via `$ARGUMENTS`:
    in-agent):
 
    ```bash
-   node "$(superskill script path sp dogfood-testing/detect-pipeline-driving.mjs)" \
+   spur agent dogfood gate \
      --testee "<raw testee string>" \
      [--max-retry-present]
    ```
@@ -121,7 +121,7 @@ The command forwards these via `$ARGUMENTS`:
     re-run the gate with the derived step labels:
 
     ```bash
-    node "$(superskill script path sp dogfood-testing/detect-pipeline-driving.mjs)" \
+    spur agent dogfood gate \
       --testee "<raw testee string>" \
       --max-retry-present \
       --steps "step1 label||step2 label||..."
@@ -232,7 +232,7 @@ contract violation**.
    **before** claiming `status: complete`:
 
    ```bash
-   node "$(superskill script path sp dogfood-testing/validate-report.mjs)" --file <report-path>
+   spur agent dogfood validate-report --file <report-path>
    ```
 
    Exit **0** → proceed. Exit **2** → set `status: aborted`, list every error code under §5
@@ -338,7 +338,7 @@ Do **not** use this skill for:
 Pipeline-driving detection is **word-boundary**, not leading-space substring. The live gate is:
 
 ```bash
-node "$(superskill script path sp dogfood-testing/detect-pipeline-driving.mjs)" --testee "<testee>" [--max-retry-present] [--steps "…"] [--json]
+spur agent dogfood gate --testee "<testee>" [--max-retry-present] [--steps "…"] [--json]
 ```
 
 | Token shape | Examples | Matches | Rejects |
@@ -349,7 +349,7 @@ node "$(superskill script path sp dogfood-testing/detect-pipeline-driving.mjs)" 
 `-` is a **word character** for boundaries: a token must be a distinct hyphen-word. Contract tests:
 `plugins/sp/tests/dogfood-testing/pipeline-detect.test.ts`. Helpers:
 `detectPipelineDriving`, `isImplementHeavyStep`, `detectImplementHeavy`, `evaluateDogfoodGate` in
-[`detect-pipeline-driving.ts`](../../scripts/dogfood-testing/detect-pipeline-driving.ts).
+`spur agent dogfood gate` (absorbed into the CLI; was `plugins/sp/scripts/dogfood-testing/detect-pipeline-driving.ts`).
 
 ## Mutating `--fix` mode contract
 

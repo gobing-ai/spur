@@ -8,7 +8,7 @@
 #         never a raw lifecycle abort — same reliability contract as basic.yaml)
 #
 # This YAML is the SSOT for the review spine's state order and guards. Every state shells
-# out to the staged pr-reviewing.ts entrypoint (the tested deterministic core); no gh/git
+# out to `spur builder pr` (the tested deterministic core); no gh/git
 # logic lives in this file. All model-bearing work — finding triage, `fix` mode, `rules`
 # mode — stays in the sp:pr-reviewing skill and never enters this machine.
 #
@@ -66,14 +66,7 @@ states:
       before any push can publish it).
       Writes PASS|FAIL to .spur/run/${vars.__runId}-pr-preflight.status; always exit 0.
     onEnter:
-      # 1007 R8: run-start script-resolution identity (same command as feature-verification
-      # verify's first action) — records which tree this run resolved (source-repo vs
-      # installed) into .spur/run/$__runId-script-root.json; later plugin-script actions
-      # resolve through it (1007 R4 snippet). Never aborts.
-      - kind: shell
-        options:
-          command: >-
-            S=plugins/sp/scripts/script-root.ts; [ -f config/plugin-scripts.json -a -f "$S" ] || S="$(superskill script path sp script-root.mjs 2>/dev/null)"; RUNNER=bun; case "$S" in *.mjs) RUNNER=node ;; esac; [ -f "$S" ] && "$RUNNER" "$S" --run-id "$__runId" --spur-bin "$spurBin" || echo "script-root failed closed — run 'superskill install sp --marketplace gobing-ai/spur'" >&2; exit 0
+      # script-root retired for this workflow: actions call `$spurBin builder pr` directly (PR-7).
       - kind: shell
         options:
           # (e) 0825: 10 lines — detached-HEAD/dirty/gh-auth/base-refusal probes must record
@@ -82,7 +75,7 @@ states:
             
             STATUS_FILE=".spur/run/$__runId-pr-preflight.status" &&
             set +e &&
-            eval "$(jq -r 'if .mode=="source-repo" then "S="+@sh"\(.dir)/pr-reviewing.ts"+" RUNNER=bun" elif .mode=="installed" then "S="+@sh"\(.dir)/pr-reviewing.mjs"+" RUNNER=node" else empty end' ".spur/run/$__runId-script-root.json" 2>/dev/null)"; "$RUNNER" "$S" preflight --base "$baseBranch" --json > ".spur/run/$__runId-pr-context.json";
+            $spurBin builder pr preflight --base "$baseBranch" --json > ".spur/run/$__runId-pr-context.json";
             rc=$?; set -e &&
             if [ "$rc" -eq 0 ]; then printf 'PASS\n' > "$STATUS_FILE"; else printf 'FAIL\n' > "$STATUS_FILE"; fi &&
             exit 0
@@ -100,7 +93,7 @@ states:
             
             STATUS_FILE=".spur/run/$__runId-pr-hygiene.status" &&
             set +e &&
-            eval "$(jq -r 'if .mode=="source-repo" then "S="+@sh"\(.dir)/pr-reviewing.ts"+" RUNNER=bun" elif .mode=="installed" then "S="+@sh"\(.dir)/pr-reviewing.mjs"+" RUNNER=node" else empty end' ".spur/run/$__runId-script-root.json" 2>/dev/null)"; "$RUNNER" "$S" hygiene --base "$baseBranch" --json
+            $spurBin builder pr hygiene --base "$baseBranch" --json
             --status-file "$STATUS_FILE" > ".spur/run/$__runId-pr-hygiene.json";
             rc=$?; set -e &&
             if [ ! -f "$STATUS_FILE" ]; then printf 'FAIL\n' > "$STATUS_FILE"; fi &&
@@ -131,7 +124,7 @@ states:
             mkdir -p .spur/run &&
             STATUS_FILE=".spur/run/$__runId-pr-push.status" &&
             set +e &&
-            eval "$(jq -r 'if .mode=="source-repo" then "S="+@sh"\(.dir)/pr-reviewing.ts"+" RUNNER=bun" elif .mode=="installed" then "S="+@sh"\(.dir)/pr-reviewing.mjs"+" RUNNER=node" else empty end' ".spur/run/$__runId-script-root.json" 2>/dev/null)"; "$RUNNER" "$S" push --json --status-file "$STATUS_FILE"
+            $spurBin builder pr push --json --status-file "$STATUS_FILE"
             > ".spur/run/$__runId-pr-push.json";
             rc=$?; set -e &&
             if [ ! -f "$STATUS_FILE" ]; then printf 'FAIL\n' > "$STATUS_FILE"; fi &&
@@ -148,7 +141,7 @@ states:
             mkdir -p .spur/run &&
             STATUS_FILE=".spur/run/$__runId-pr-ensure.status" &&
             set +e &&
-            eval "$(jq -r 'if .mode=="source-repo" then "S="+@sh"\(.dir)/pr-reviewing.ts"+" RUNNER=bun" elif .mode=="installed" then "S="+@sh"\(.dir)/pr-reviewing.mjs"+" RUNNER=node" else empty end' ".spur/run/$__runId-script-root.json" 2>/dev/null)"; "$RUNNER" "$S" ensure-pr --base "$baseBranch" --json
+            $spurBin builder pr ensure-pr --base "$baseBranch" --json
             --status-file "$STATUS_FILE" > ".spur/run/$__runId-pr.json";
             rc=$?; set -e &&
             if [ ! -f "$STATUS_FILE" ]; then printf 'FAIL\n' > "$STATUS_FILE"; fi &&
@@ -164,7 +157,7 @@ states:
           # (e) 0825: 10 lines — the write-then-read split is the file-var transport feeding
           # wait/collect and must stay one action (same record, same run scope).
           command: >-
-            F="$([ "$mode" = rerun ] && echo --force)"; eval "$(jq -r 'if .mode=="source-repo" then "S="+@sh"\(.dir)/pr-reviewing.ts"+" RUNNER=bun" elif .mode=="installed" then "S="+@sh"\(.dir)/pr-reviewing.mjs"+" RUNNER=node" else empty end' ".spur/run/$__runId-script-root.json" 2>/dev/null)"; "$RUNNER" "$S" request --focus "$focus" $F --json --status-file ".spur/run/$__runId-pr-request.status" > ".spur/run/$__runId-pr-request.json"; [ -f ".spur/run/$__runId-pr-request.status" ] || echo FAIL > ".spur/run/$__runId-pr-request.status"; jq -e . ".spur/run/$__runId-pr-request.json" >/dev/null 2>&1 && jq -r '.requestedAt // ""' ".spur/run/$__runId-pr-request.json" > ".spur/run/$__runId-pr-since.txt" && jq -r '.head // ""' ".spur/run/$__runId-pr-request.json" > ".spur/run/$__runId-pr-head.txt"; exit 0
+            F="$([ "$mode" = rerun ] && echo --force)"; $spurBin builder pr request --focus "$focus" $F --json --status-file ".spur/run/$__runId-pr-request.status" > ".spur/run/$__runId-pr-request.json"; [ -f ".spur/run/$__runId-pr-request.status" ] || echo FAIL > ".spur/run/$__runId-pr-request.status"; jq -e . ".spur/run/$__runId-pr-request.json" >/dev/null 2>&1 && jq -r '.requestedAt // ""' ".spur/run/$__runId-pr-request.json" > ".spur/run/$__runId-pr-since.txt" && jq -r '.head // ""' ".spur/run/$__runId-pr-request.json" > ".spur/run/$__runId-pr-head.txt"; exit 0
 
   - id: wait
     description: >
@@ -189,7 +182,7 @@ states:
             mkdir -p .spur/run &&
             STATUS_FILE=".spur/run/$__runId-pr-wait.status" &&
             set +e &&
-            eval "$(jq -r 'if .mode=="source-repo" then "S="+@sh"\(.dir)/pr-reviewing.ts"+" RUNNER=bun" elif .mode=="installed" then "S="+@sh"\(.dir)/pr-reviewing.mjs"+" RUNNER=node" else empty end' ".spur/run/$__runId-script-root.json" 2>/dev/null)"; "$RUNNER" "$S" wait --since "$prSince" --head "$prHead" --timeout "$waitTimeoutSec" --interval "$waitIntervalSec"
+            $spurBin builder pr wait --since "$prSince" --head "$prHead" --timeout "$waitTimeoutSec" --interval "$waitIntervalSec"
             --json --status-file "$STATUS_FILE" > ".spur/run/$__runId-pr-wait.json";
             rc=$?; set -e &&
             if [ ! -f "$STATUS_FILE" ]; then printf 'FAIL\n' > "$STATUS_FILE"; fi &&
@@ -213,7 +206,7 @@ states:
           # (e) 0825: 9 lines — collect + status must run against the same since/head pair
           # before the composite status is decided (same 0771 record contract).
           command: >-
-            mkdir -p .spur/run; eval "$(jq -r 'if .mode=="source-repo" then "S="+@sh"\(.dir)/pr-reviewing.ts"+" RUNNER=bun" elif .mode=="installed" then "S="+@sh"\(.dir)/pr-reviewing.mjs"+" RUNNER=node" else empty end' ".spur/run/$__runId-script-root.json" 2>/dev/null)"; "$RUNNER" "$S" collect --since "$prSince" --head "$prHead" --json --status-file ".spur/run/$__runId-pr-collect.status" > ".spur/run/$__runId-pr-findings.json"; c=$?; "$RUNNER" "$S" status --since "$prSince" --head "$prHead" --json > ".spur/run/$__runId-pr-status.json" && [ "$c" -eq 0 ] && [ -f ".spur/run/$__runId-pr-collect.status" ] || printf 'FAIL\n' > ".spur/run/$__runId-pr-collect.status"; cat ".spur/run/$__runId-pr-findings.json" 2>/dev/null; exit 0
+            mkdir -p .spur/run; $spurBin builder pr collect --since "$prSince" --head "$prHead" --json --status-file ".spur/run/$__runId-pr-collect.status" > ".spur/run/$__runId-pr-findings.json"; c=$?; $spurBin builder pr status --since "$prSince" --head "$prHead" --json > ".spur/run/$__runId-pr-status.json" && [ "$c" -eq 0 ] && [ -f ".spur/run/$__runId-pr-collect.status" ] || printf 'FAIL\n' > ".spur/run/$__runId-pr-collect.status"; cat ".spur/run/$__runId-pr-findings.json" 2>/dev/null; exit 0
 
   - id: done
     description: Terminal — review collected; findings artifact at .spur/run/${vars.__runId}-pr-findings.json

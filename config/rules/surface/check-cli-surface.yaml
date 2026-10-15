@@ -79,6 +79,10 @@ rules:
       - "apps/cli/src/commands/history/anatomy.ts"
       - "apps/cli/src/commands/history/timeline.ts"
       - "apps/cli/src/commands/history/summary.ts"
+      # Absorbed dogfood / PR-review spines (script-absorption PR-7): --json is rendered by
+      # @gobing-ai/spur-app/dogfood and @gobing-ai/spur-app/pr-review (JSON.stringify), not the CLI envelope.
+      - "apps/cli/src/commands/agent/dogfood.ts"
+      - "apps/cli/src/commands/builder/pr.ts"
     evaluator:
       type: rg
       config:

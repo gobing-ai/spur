@@ -10,9 +10,7 @@ import {
     MUTATING_FIX_REFUSE_MESSAGE,
     PIPELINE_DRIVING_REFUSE_MESSAGE,
     PIPELINE_TOKENS,
-    parseCliArgs,
-    runCli,
-} from '../../scripts/dogfood-testing/detect-pipeline-driving';
+} from '../../../src/services/dogfood';
 
 /**
  * dogfood-pipeline-detect — @1.2 pipeline-driving detector contract (task 0277 W7).
@@ -138,7 +136,19 @@ describe('dogfood-pipeline-detect — detectPipelineDriving word-boundary contra
 
     test('SKILL.md pipeline-token inventories match PIPELINE_TOKENS', () => {
         const skillMd = readFileSync(
-            join(import.meta.dir, '..', '..', 'skills', 'dogfood-testing', 'SKILL.md'),
+            join(
+                import.meta.dir,
+                '..',
+                '..',
+                '..',
+                '..',
+                '..',
+                'plugins',
+                'sp',
+                'skills',
+                'dogfood-testing',
+                'SKILL.md',
+            ),
             'utf8',
         );
         const blocks: string[][] = [];
@@ -237,69 +247,19 @@ describe('dogfood implement-heavy + Phase 1.0 gate (task 0277 W8 + live CLI)', (
         expect(r.message).toBeNull();
     });
 
-    test('parseCliArgs — flags, positional, -- remainder, empty steps', () => {
-        expect(parseCliArgs(['--help']).help).toBe(true);
-        expect(parseCliArgs(['-h']).help).toBe(true);
-        expect(parseCliArgs(['--testee', '/sp:dev-run 1', '--max-retry-present', '--json'])).toEqual({
-            testee: '/sp:dev-run 1',
-            maxRetryPresent: true,
-            steps: [],
-            json: true,
-            help: false,
-        });
-        expect(parseCliArgs(['/sp:dev-verify 1']).testee).toBe('/sp:dev-verify 1');
-        expect(parseCliArgs(['--', 'a', 'b', 'c']).testee).toBe('a b c');
-        expect(parseCliArgs(['--steps', 's1||s2||']).steps).toEqual(['s1', 's2']);
-        expect(parseCliArgs(['--steps', '']).steps).toEqual([]);
-        expect(parseCliArgs(['--testee']).testee).toBeNull();
-    });
-
-    test('runCli — refuse / advisory / help / usage / clean proceed', () => {
-        const refuse = runCli(['--testee', '/sp:dev-run 0125 --auto']);
-        expect(refuse.exitCode).toBe(2);
-        expect(refuse.stdout).toContain('pipeline-driving testee detected');
-
-        const advisory = runCli([
-            '--testee',
-            '/sp:dev-run 0125 --next',
-            '--max-retry-present',
-            '--steps',
-            'implement||verify',
-            '--json',
-        ]);
-        expect(advisory.exitCode).toBe(0);
-        const parsed = JSON.parse(advisory.stdout);
-        expect(parsed.advisory).toBe(true);
-        expect(parsed.refuse).toBe(false);
-
-        const help = runCli(['--help']);
-        expect(help.exitCode).toBe(0);
-        expect(help.stderr).toContain('Usage:');
-
-        const usage = runCli([]);
-        expect(usage.exitCode).toBe(1);
-        expect(usage.stderr).toContain('Usage:');
-
-        const clean = runCli([
-            '--testee',
-            '/sp:dev-verify 0277 --next',
-            '--max-retry-present',
-            '--steps',
-            'load||verify',
-        ]);
-        expect(clean.exitCode).toBe(0);
-        expect(clean.stdout).toBe('');
-    });
-
     test('CLI binary — refuses pipeline-driving without --max-retry-present (exit 2)', async () => {
         const proc = Bun.spawn({
             cmd: [
                 'bun',
-                'plugins/sp/scripts/dogfood-testing/detect-pipeline-driving.ts',
+                'apps/cli/src/index.ts',
+                'agent',
+                'dogfood',
+                'gate',
                 '--testee',
                 '/sp:dev-run 0125 --auto',
+                '--no-logo',
             ],
-            cwd: join(import.meta.dir, '..', '..', '..', '..'),
+            cwd: join(import.meta.dir, '..', '..', '..', '..', '..'),
             stdout: 'pipe',
             stderr: 'pipe',
         });
@@ -377,11 +337,15 @@ describe('dogfood implement-heavy + Phase 1.0 gate (task 0277 W8 + live CLI)', (
             const proc = Bun.spawn({
                 cmd: [
                     'bun',
-                    'plugins/sp/scripts/dogfood-testing/detect-pipeline-driving.ts',
+                    'apps/cli/src/index.ts',
+                    'agent',
+                    'dogfood',
+                    'gate',
                     '--testee',
                     '/sp:dev-verify 0299 --force --fix all',
+                    '--no-logo',
                 ],
-                cwd: join(import.meta.dir, '..', '..', '..', '..'),
+                cwd: join(import.meta.dir, '..', '..', '..', '..', '..'),
                 stdout: 'pipe',
                 stderr: 'pipe',
             });

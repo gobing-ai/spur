@@ -36,6 +36,13 @@ rules:
             - "apps/desktop/src/server-process.ts"
 
             # Low-level system primitives:
+            # `spur builder pr` spine (script-absorption PR-7, moved from plugins/sp/scripts/pr-reviewing.ts):
+            # every git/gh call goes through ONE synchronous, test-injectable CommandRunner seam
+            # (`setCommandRunner`); the spine is synchronous end to end (wait polls with a sync sleep).
+            # The ts-runtime sync executors cannot stand in: NodeSyncProcessExecutor maps a spawn
+            # failure (gh/git missing) to a bare exit 1 and drops the reason the spine reports, and
+            # both strip the final newline. Output bytes are pinned by the PR-7 golden.
+            - "packages/app/src/services/pr-review/index.ts"
             - "packages/app/src/services/quality-gate.ts" # gate runs `sh -c` with stdout+stderr merged onto ONE fd; ProcessExecutor captures streams separately and cannot reproduce the stream-order contract (task 1006 R1; mirrors the history-anatomy bundling exemptions)
             # The feature-verification pass runs one long command with stdout+stderr merged onto the
             # run's single log fd and a 4 h ceiling (the frozen contract from task 0915: `safe argv
@@ -113,6 +120,7 @@ rules:
             - "packages/app/src/services/residual-scan-run.ts"
             - "packages/app/src/workflow/task-diffstat.ts"
             - "packages/app/src/workflow/feature-verification-run.ts" # the pass opens the run's single merged log fd (`openSync(path,'a')`) and mkdirs the run dir beside the receipt writer, exactly as the plugin entry did before the move; the fd cannot be expressed through the FileSystem seam (task 1176 R2; same class as the quality-gate exemption above)
+            - "packages/app/src/services/pr-review/index.ts" # `spur builder pr` (PR-7): sync --status-file verdict writes and the AGENTS.md review-rules probe inside the synchronous spine (same exemption as its process seam above)
             - "packages/app/src/services/run-storage.ts" # durable-evidence migration core (task 1025 R4): atomic tmp+rename byte copies with digest reread and atomic manifest publish must stay byte-stable (mirrors agent-usage-producer.ts / project-registry.ts exemptions)
             - "packages/app/src/services/durable-plane-ignore.ts" # .git/info/exclude append moved verbatim out of run-storage.ts to break an import cycle (same exemption)
 

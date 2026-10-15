@@ -42,7 +42,7 @@ sp:pr-reviewing (this skill — mode routing, triage, fix, rules)
 pr-review.yaml ← workflow SSOT (seeded by spur init; project-tunable)
       │  every state resolves with `superskill script path` and shells out to:
       ▼
-staged pr-reviewing.ts         ← Bun entrypoint for the tested git/gh core
+`spur builder pr`         ← Bun entrypoint for the tested git/gh core
 ```
 
 - **State order and guards** are defined once, in the workflow YAML. Do not re-derive them in
@@ -132,7 +132,7 @@ staged entrypoint below, supports `--json`, and must be parsed. Stop at the firs
 report its artifact. The canonical installed invocation is:
 
 ```sh
-node "$(superskill script path sp pr-reviewing.mjs)" <subcommand> [flags]
+spur builder pr <subcommand> [flags]
 ```
 
 Installed targets resolve the staged `.mjs` twin and execute it with Node, matching the standard
@@ -288,7 +288,7 @@ or review requests.
 
 - **Workflow SSOT:** `pr-review.yaml` (seeded by `spur init`; tune per project —
   wait budget, `preReviewCmd`, dedupe policy)
-- **Script source:** [scripts/pr-reviewing.ts](../../scripts/pr-reviewing.ts) — subcommand CLI
-- **Tests:** [tests/pr-reviewing.test.ts](../../tests/pr-reviewing.test.ts) — stubbed git/gh suites
+- **Script source:** `spur builder pr` (absorbed; was `plugins/sp/scripts/pr-reviewing.ts`) — subcommand CLI
+- **Tests:** `packages/app/tests/services/pr-review/pr-review.test.ts` — stubbed git/gh suites
 - **Related skills:** `sp:code-verification` (local SECUA review), `sp:functional-review`
   (requirements traceability) — complements, never substitutes, the independent Codex review

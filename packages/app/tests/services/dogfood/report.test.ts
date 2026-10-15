@@ -1,9 +1,9 @@
 import { describe, expect, test } from 'bun:test';
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { mainCli, runValidateCli, validateReport } from '../../scripts/dogfood-testing/validate-report';
+import { validateReport } from '../../../src/services/dogfood';
 
-const SKILL_DIR = join(import.meta.dir, '..', '..', 'skills', 'dogfood-testing');
+const SKILL_DIR = join(import.meta.dir, '..', '..', '..', '..', '..', 'plugins', 'sp', 'skills', 'dogfood-testing');
 const FIXTURES = join(import.meta.dir, 'fixtures');
 
 const passFixture = readFileSync(join(FIXTURES, 'report-complete.md'), 'utf8');
@@ -154,59 +154,6 @@ describe('dogfood @1.2 report contract (task 0276)', () => {
         expect(result.ok).toBe(false);
         expect(result.errors).toContain('missing_footer');
         expect(result.errors.some((e) => e.startsWith('missing_section:'))).toBe(true);
-    });
-
-    test('validate CLI — pass fixture exits 0; §-style exits 2 (task 0278 R6)', () => {
-        const files = new Map<string, string>([
-            ['pass.md', passFixture],
-            ['bad.md', '## §1 Summary\nprotocol: sp:dogfood-testing@1.2\n'],
-        ]);
-        const read = (p: string) => {
-            const v = files.get(p);
-            if (v === undefined) throw new Error(`missing ${p}`);
-            return v;
-        };
-        const ok = runValidateCli(['--file', 'pass.md'], read);
-        expect(ok.exitCode).toBe(0);
-        expect(ok.stdout.trim()).toBe('ok');
-
-        const badJson = runValidateCli(['--file', 'bad.md', '--json'], read);
-        expect(badJson.exitCode).toBe(2);
-        const parsed = JSON.parse(badJson.stdout) as { ok: boolean; errors: string[] };
-        expect(parsed.ok).toBe(false);
-        expect(parsed.errors.length).toBeGreaterThan(0);
-
-        const badPlain = runValidateCli(['bad.md'], read);
-        expect(badPlain.exitCode).toBe(2);
-        expect(badPlain.stdout).toContain('missing_footer');
-
-        const help = runValidateCli(['--help'], read);
-        expect(help.exitCode).toBe(0);
-        expect(help.stderr).toContain('Usage:');
-
-        const usage = runValidateCli([], read);
-        expect(usage.exitCode).toBe(1);
-        expect(usage.stderr).toContain('Usage:');
-
-        const missing = runValidateCli(['--file', 'nope.md'], read);
-        expect(missing.exitCode).toBe(1);
-        expect(missing.stderr).toContain('Failed to read');
-
-        // mainCli uses real fs and real stdout — capture the write so the
-        // success banner ('ok') doesn't leak into the test reporter output.
-        const origWrite = process.stdout.write;
-        let captured = '';
-        process.stdout.write = ((chunk: unknown) => {
-            captured += String(chunk);
-            return true;
-        }) as typeof process.stdout.write;
-        try {
-            const realExit = mainCli(['--file', join(FIXTURES, 'report-complete.md')]);
-            expect(realExit).toBe(0);
-            expect(captured.trim()).toBe('ok');
-        } finally {
-            process.stdout.write = origWrite;
-        }
     });
 });
 

@@ -157,6 +157,13 @@ spur-dev → public-noun promotion of any kind may ride this record. Every futur
 its **own** consent-gate entry (audience + surface + justification) exactly like the rows above;
 without one, the command stays internal under `scripts/commands/`.
 
+**Amendment (2026-10-15, script absorption PR-7).** Owner decision Q1 of
+`docs/plans/2026-10-14-spur-script-absorption.md` (no new nouns) is the consent-gate entry for a
+third `builder` verb: `spur builder pr <op>` (audience: the `/sp:dev-pr-review` spine and its
+operator; surface: the eight PR-review ops of the retired `plugins/sp/scripts/pr-reviewing.ts`;
+justification: plugin scripts may only be thin wrappers, and the ops are release-adjacent repo
+plumbing). `builder` is now frozen at `bump-ver`, `drop-tags`, `pr`.
+
 ## 4. Subsequent consent applications
 
 | Date | Task | Public change | Granted scope and reason |

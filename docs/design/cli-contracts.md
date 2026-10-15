@@ -45,7 +45,7 @@ spur <noun> [<verb>] [positionals] [--flags]
 - Every multi-verb noun follows `spur <noun> <verb> …`. The verb is the second positional token.
 - **`builder`** is the noun hosting the release plumbing — `spur builder bump-ver|drop-tags`
   (task 0617, ADR-051). Promoted verbatim from the internal `spur-dev release` script; frozen at
-  these two verbs (see `docs/design/harness-surface-governance.md` §3).
+  these verbs plus `pr` (2026-10-15 amendment; see `docs/design/harness-surface-governance.md` §3).
 - **`self`** is the noun hosting the self-management verbs — `spur self init|maintain|migrate|serve|status`.
   Each verb mounts the same command builder as its legacy top-level noun, so behavior, flags,
   output, and exit codes are identical on both paths.
@@ -162,7 +162,8 @@ project. Re-running fills missing assets and preserves existing configuration/cu
 release verbs formerly hidden behind the internal `bun run scripts/spur-dev.ts release` command.
 The repo-local forwarder `scripts/commands/release.ts` and its `spur-dev` dispatcher cases were
 retired in task 1173 — `bun run bump-ver` / `bun run drop-tags` route here directly. The noun is
-**frozen at exactly these two verbs** — no further spur-dev verb may be promoted onto it, and any
+**frozen at exactly these verbs plus `pr`** (the PR-review spine ops, 2026-10-15 script-absorption
+amendment) — no further spur-dev verb may be promoted onto it, and any
 future spur-dev → public-noun promotion needs its own consent-gate entry
 (`docs/design/harness-surface-governance.md` §3).
 

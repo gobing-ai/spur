@@ -2,6 +2,7 @@ import type { Command } from '@commander-js/extra-typings';
 import type { AgentLoopRuntime, AgentRunDeps } from '@gobing-ai/spur-app';
 import type { CliContext } from '../../context';
 import { registerAgentDoctorCommand } from './doctor';
+import { registerAgentDogfoodCommand } from './dogfood';
 import { registerAgentJoinCommand } from './join';
 import { registerAgentLeaveCommand } from './leave';
 import { registerAgentListCommand } from './list';
@@ -39,6 +40,7 @@ export function registerAgentCommand(program: Command, context: CliContext): voi
     registerAgentStatusCommand(agent, context);
     registerAgentUsageCommand(agent, context);
     registerAgentDoctorCommand(agent, context);
+    registerAgentDogfoodCommand(agent, context);
     registerAgentReportCommand(agent, context);
     registerAgentRunCommand(agent, context);
     registerAgentLoopCommand(agent, context);

@@ -3,21 +3,6 @@
     "description": "Registry of plugin sp scripts and their entrypoint contracts (standard with .mjs twin vs repo-only).",
     "entries": [
         {
-            "rel": "dogfood-testing/detect-pipeline-driving.ts",
-            "contract": "standard",
-            "twin": "dogfood-testing/detect-pipeline-driving.mjs"
-        },
-        {
-            "rel": "dogfood-testing/validate-report.ts",
-            "contract": "standard",
-            "twin": "dogfood-testing/validate-report.mjs"
-        },
-        {
-            "rel": "pr-reviewing.ts",
-            "contract": "standard",
-            "twin": "pr-reviewing.mjs"
-        },
-        {
             "rel": "script-root.ts",
             "contract": "standard",
             "twin": "script-root.mjs"
