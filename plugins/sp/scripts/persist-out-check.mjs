@@ -9,6 +9,7 @@ var EVIDENCE_DIR = join(".spur", "memory", "evidence");
 var RUN_DIR = join(".spur", "run");
 var NAMED_CAP = 32;
 var PREFIX_CAP = 64;
+var DURABLE_FAMILY_RE = /^\d{4}-(?:verdict|feature-verification)\.json$/;
 function wbsOfTaskFile(path) {
   const m = /^(\d+)_/.exec(basename(path));
   return m?.[1] ?? null;
@@ -49,7 +50,7 @@ function listObligations(wtRoot, wbsList, runIds) {
   const evDir = join(wtRoot, EVIDENCE_DIR);
   const runDir = join(wtRoot, RUN_DIR);
   const evFiles = walkFiles(evDir, wtRoot);
-  const runFiles = existsSync(runDir) ? readdirSync(runDir, { withFileTypes: true }).filter((e) => e.isFile()).map((e) => join(RUN_DIR, e.name)).sort() : [];
+  const runFiles = walkFiles(runDir, wtRoot);
   const files = [];
   const counts = new Map;
   if (!collectOwned(evFiles, prefixes, counts, files))
@@ -57,7 +58,7 @@ function listObligations(wtRoot, wbsList, runIds) {
   if (!collectOwned(runFiles, prefixes, counts, files))
     return null;
   const unowned = evFiles.length - files.filter((f) => f.startsWith(EVIDENCE_DIR)).length;
-  return { files: [...new Set(files)].sort(), unowned };
+  return { files: [...new Set(files)].sort(), unowned, planeFiles: [...evFiles, ...runFiles] };
 }
 function compareTrees(wtRoot, invokeRoot, files, foreignDivergent = new Set) {
   const missing = [];
@@ -174,11 +175,14 @@ persist-out-check: --from must be an existing worktree directory
 `);
     return 1;
   }
-  const { files, unowned } = obligations;
+  const { files, unowned, planeFiles } = obligations;
+  const unforwarded = planeFiles.filter((rel) => DURABLE_FAMILY_RE.test(basename(rel))).filter((rel) => !files.includes(rel) && !foreignDivergent.has(rel) && !foreignDivergent.has(basename(rel)));
+  const unforwardedFindings = unforwarded.map((f) => `UNFORWARDED ${f} \u2014 durable verdict/receipt outside the forwarded prefixes`);
   const { missing, divergent, ok } = compareTrees(wtRoot, invokeRoot, files, foreignDivergent);
   const findings = [
     ...missing.map((f) => `MISSING ${f}`),
-    ...divergent.map((f) => `DIVERGENT ${f} \u2014 reconcile by hand (persist-out never overwrites)`)
+    ...divergent.map((f) => `DIVERGENT ${f} \u2014 reconcile by hand (persist-out never overwrites)`),
+    ...unforwardedFindings
   ];
   for (const line of findings.slice(0, NAMED_CAP))
     process.stdout.write(`${line}
@@ -196,7 +200,7 @@ persist-out-check: --from must be an existing worktree directory
 `);
     return 0;
   }
-  process.stderr.write(`persist-out-check: BLOCKED ${missing.length} missing, ${divergent.length} divergent \u2014 run inline-run-setup --persist-out --from <worktree> before worktree removal
+  process.stderr.write(`persist-out-check: BLOCKED ${missing.length} missing, ${divergent.length} divergent` + `${unforwarded.length > 0 ? `, ${unforwarded.length} unforwarded durable verdict/receipt` : ""}` + ` \u2014 run inline-run-setup --persist-out --from <worktree> (--task-file <docs/tasks5/<wbs>_\u2026>) before worktree removal
 `);
   return 1;
 }
