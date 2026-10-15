@@ -10,6 +10,7 @@
  */
 import { mkdirSync, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
+import { getEnvVars } from '@gobing-ai/spur-config';
 
 /** Which retired plugin script a step's `old` argv belonged to. */
 export type GoldenScript = 'inline-run-setup' | 'inline-run-dispatch' | 'persist-out-check' | 'commit-guard';
@@ -64,7 +65,7 @@ function write(root: string, rel: string, content: string): void {
 function git(cwd: string, args: string[]): void {
     const res = Bun.spawnSync(['git', ...args], {
         cwd,
-        env: { ...process.env, ...GIT_ENV },
+        env: { ...getEnvVars(), ...GIT_ENV },
         stdout: 'pipe',
         stderr: 'pipe',
     });

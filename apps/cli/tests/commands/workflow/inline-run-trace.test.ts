@@ -15,7 +15,10 @@ import { join } from 'node:path';
  * a missing run row or a persistence failure exits 1 (findings #1/#4).
  */
 
-const SCRIPT = join(import.meta.dir, '..', 'scripts', 'inline-run-setup.ts');
+// Script-absorption PR-4: the plugin script became `spur workflow inline <op>`. This suite kept its
+// legacy-argv bodies; the shim translates them (tests/workflow-inline/legacy-argv.ts) and runs the
+// real CLI entry, so every case now exercises the installed transport.
+const SCRIPT = join(import.meta.dir, '..', '..', 'workflow-inline', 'legacy-inline-shim.ts');
 
 const WORKFLOW = `name: inline-smoke
 initialState: start

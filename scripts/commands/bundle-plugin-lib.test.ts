@@ -253,18 +253,17 @@ test('the inline bundle exposes no DB/DAO surface (task 1177 R2)', async () => {
     expect(exported).toContain('runFeatureVerification');
 });
 
-test('setup and dispatch share one application-entry resolution (task 1177 R1)', async () => {
-    const setup = readFileSync(join(import.meta.dir, '../../plugins/sp/scripts/inline-run-setup.ts'), 'utf8');
-    const dispatch = readFileSync(join(import.meta.dir, '../../plugins/sp/scripts/inline-run-dispatch.ts'), 'utf8');
+test('inline-bundle consumers share one application-entry resolution (task 1177 R1)', async () => {
+    // Script-absorption PR-4 retired inline-run-setup/-dispatch (now `spur workflow inline`);
+    // daily-summary is the remaining loadInlineApp consumer until PR-6.
+    const daily = readFileSync(
+        join(import.meta.dir, '../../plugins/sp/scripts/daily-summary/daily-summary.ts'),
+        'utf8',
+    );
     const loader = readFileSync(join(import.meta.dir, '../../plugins/sp/lib/inline-run-app.ts'), 'utf8');
-    for (const [name, source] of [
-        ['inline-run-setup', setup],
-        ['inline-run-dispatch', dispatch],
-    ] as const) {
-        expect(source, `${name} must not define its own resolver`).not.toContain('function resolveAppEntry');
-        expect(source, `${name} must import the shared resolver`).toContain(
-            "import { loadInlineApp, resolveAppEntry } from '../lib/inline-run-app';",
-        );
-    }
+    expect(daily, 'daily-summary must not define its own resolver').not.toContain('function resolveAppEntry');
+    expect(daily, 'daily-summary must import the shared resolver').toContain(
+        "import { loadInlineApp, resolveAppEntry } from '../../lib/inline-run-app';",
+    );
     expect(loader).toContain('export function resolveAppEntry');
 });

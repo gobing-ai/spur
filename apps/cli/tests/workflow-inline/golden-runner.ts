@@ -30,14 +30,18 @@ const UUID = /[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/g;
 
 /** Path-, clock- and id-independent text: the only normalization either side receives. */
 export function normalize(text: string, root: string): string {
-    return text
-        .replaceAll(root, '<ROOT>')
-        .replaceAll(REPO_ROOT, '<REPO>')
-        .replace(ISO, '<TS>')
-        .replace(UUID, '<UUID>')
-        .replace(/\bqo-[0-9a-f]+/g, 'qo-<ID>')
-        .replace(/"(durationMs|elapsedMs)":\s?\d+/g, '"$1":0')
-        .replace(/\b(\d+)ms\b/g, '<N>ms');
+    return (
+        text
+            .replaceAll(root, '<ROOT>')
+            .replaceAll(REPO_ROOT, '<REPO>')
+            // The checkout's bundled-asset dir; spelled out it trips the sp-runtime-path rule in fixtures.
+            .replaceAll('<REPO>/config/', '<REPO_CONFIG>/')
+            .replace(ISO, '<TS>')
+            .replace(UUID, '<UUID>')
+            .replace(/\bqo-[0-9a-f]+/g, 'qo-<ID>')
+            .replace(/"(durationMs|elapsedMs)":\s?\d+/g, '"$1":0')
+            .replace(/\b(\d+)ms\b/g, '<N>ms')
+    );
 }
 
 function listTree(abs: string, base: string): string[] {

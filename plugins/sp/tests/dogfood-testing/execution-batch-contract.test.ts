@@ -183,7 +183,8 @@ describe('execution-batch spec contract (task 0975 R1 — per-run provenance per
     test('WT-4a — the persist-out call is wired before WT-4b with the shared WT_PATH hoisted above both', () => {
         // The create-mode block resolves WT_PATH once, runs persist-out, then holder cleanup.
         const wtPath = SPEC.indexOf('WT_PATH="$(cd "../<worktree-dir>" && pwd)"');
-        const persistOut = SPEC.indexOf('bun "$SETUP_SCRIPT" --persist-out --from "$WT_PATH"');
+        // The prose above the block names the same call, so search from the hoisted WT_PATH.
+        const persistOut = SPEC.indexOf('spur workflow inline persist-out --from "$WT_PATH"', wtPath);
         const holderCleanup = SPEC.indexOf('WT-4b — bounded CWD-holder cleanup');
         expect(wtPath).toBeGreaterThanOrEqual(0);
         expect(persistOut).toBeGreaterThan(wtPath);
@@ -199,7 +200,7 @@ describe('execution-batch spec contract (task 0975 R1 — per-run provenance per
 
     test('prose — stage-record copy-out is the mechanical persist-out, not a manual duty', () => {
         expect(SPEC).toContain('persisted by 0975 R1');
-        expect(SPEC).toContain('inline-run-setup.ts --persist-out --from <worktree>');
+        expect(SPEC).toContain('spur workflow inline persist-out --from <worktree>');
         expect(SPEC).toContain('idempotent on re-persist');
         expect(SPEC).not.toContain('must copy those records out');
         expect(SPEC).toContain('spur workflow progress --json` in the\ninvoking tree shows the merged run `done`');
@@ -208,7 +209,7 @@ describe('execution-batch spec contract (task 0975 R1 — per-run provenance per
 
 describe('execution-batch spec contract (task 0984 — cited run evidence survives teardown)', () => {
     test('WT-4a — the persist-out call forwards the merged task file(s) via repeatable --task-file', () => {
-        expect(SPEC).toContain(`bun "$SETUP_SCRIPT" --persist-out --from "$WT_PATH" "\${TASK_FILE_ARGS[@]}"`);
+        expect(SPEC).toContain(`spur workflow inline persist-out --from "$WT_PATH" "\${TASK_FILE_ARGS[@]}"`);
         expect(SPEC).toContain('spur task show <wbs> --json | jq -r .filePath');
         expect(SPEC).toContain('repeatable `--task-file <path>`');
         // The driver resolves paths in the invoking tree post-merge, via the task-show fast path.

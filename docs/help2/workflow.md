@@ -17,6 +17,8 @@ phases.
 | `trace [run-id]` | Show persisted workflow run history |
 | `progress <run-id>` | Project a run's structured progress: current state, action attempts, next transitions |
 | `clean` | Housekeeping: finalize stale runs and reclaim retained logs |
+| `inline <op>` | Inline pipeline driver transport: run lifecycle, trace rows, decide, persist-out/check, dispatch |
+| `commit-guard <op>` | Stage only the paths this run wrote (`start` / `stage` / `check`) |
 
 ## spur workflow validate
 
@@ -139,6 +141,21 @@ run id exits `1` with `Run <run-id> not found.`
 ```bash
 spur workflow progress <run-id> --json
 ```
+
+## spur workflow inline / commit-guard
+
+```bash
+spur workflow inline <op> [options]
+spur workflow commit-guard <op> [options]
+```
+
+The transports the host-inline pipeline driver calls (they replaced the plugin scripts
+`inline-run-setup`, `inline-run-dispatch`, `persist-out-check` and `commit-guard`). `inline` ops:
+`begin`, `fingerprint`, `node-enter`, `action`, `actions`, `close`, `decide`, `persist-out`,
+`persist-check`, `attribution`, `dispatch-failure`; `commit-guard` ops: `start`, `stage`, `check`.
+They never create a database in the cwd and print no banner. Exit codes: `0` ok, `1` fail closed,
+`2` usage (inline) or a refused path (commit-guard `stage`). Per-op flags:
+[cmd_workflow.md](../help/cmd_workflow.md#spur-workflow-inline).
 
 ## See also
 

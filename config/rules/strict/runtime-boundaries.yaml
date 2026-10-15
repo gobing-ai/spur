@@ -44,6 +44,14 @@ rules:
             # the quality-gate exemption above).
             - "packages/app/src/workflow/feature-verification-run.ts"
 
+            # Inline-driver transports (script-absorption PR-4, `spur workflow inline|commit-guard`): moved
+            # verbatim from the plugin scripts with their golden output pinned; synchronous probes and
+            # atomic tmp+rename snapshot writes inside one short-lived CLI process.
+            - "packages/app/src/workflow/commit-guard.ts" # .spur/run/<run>-tree-start.json atomic snapshot + target conflict-marker reads
+            - "packages/app/src/workflow/persist-check.ts" # recursive evidence-tree listing + byte comparison of both trees
+            - "packages/app/src/workflow/run-summary-render.ts" # close-step .spur/run/<run>-summary.{md,json} write (1146 R1)
+            - "packages/app/src/workflow/transcript.ts" # read-only host-transcript resolution (existsSync/readdirSync)
+
   - id: no-direct-fs-io
     description: "Prefer ts-runtime's FileSystem seam for fs IO."
     severity: warning

@@ -78,6 +78,9 @@ export function registerWorkflowInlineCommand(
                 'Exit codes: 0 ok, 1 fail closed (the driver must stop), 2 usage error.',
             ].join('\n'),
         )
+        // Every op inherits both (Commander copies them onto subcommands created after this):
+        // a parse error prints the op's usage like the scripts did, and exits 2.
+        .showHelpAfterError()
         .exitOverride(usageExit);
     const app = deps.loadApp ?? (() => import('@gobing-ai/spur-app'));
     const loadConfig = deps.loadConfig ?? (async () => context.spurConfig ?? ({} as SpurConfig));

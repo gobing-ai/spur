@@ -50,6 +50,9 @@ rules:
       - "apps/cli/src/commands/agent/loop.ts"
       - "apps/cli/src/commands/agent/start.ts"
       - "apps/cli/src/commands/agent/stop.ts"
+      # commit-guard declares no --json: its {staged, foreign} / {foreign} lines are rendered by
+      # @gobing-ai/spur-app/commit-guard (byte-identical to the retired script, PR-4 golden).
+      - "apps/cli/src/commands/workflow/commit-guard.ts"
     evaluator:
       type: rg
       config:

@@ -116,6 +116,8 @@ The skill's logic divides by **whether the LLM adds value**:
 | `list` | `spur workflow list` (CLI) | — | Available workflow **YAML definition files** (not run records) |
 | `trace` | `spur workflow trace` (CLI) | `[run-id] [--workflow <n>] [--status <s>] [--since <iso>] [--last <n>] [--follow] [--poll <ms>] [--output] [--timeout <ms>]` | Run history list or per-run timeline |
 | `progress` | `spur workflow progress` (CLI) | `<run-id>` | The `projectWorkflowProgress` projection for that run — current state, per-action attempts, candidate next transitions, diagnostics. Read-only; the verb renders, `packages/app` derives. Unknown run id exits 1 with `Run <id> not found.` |
+| `inline` | `spur workflow inline <op>` (CLI) | `begin`, `fingerprint`, `node-enter`, `action`, `actions`, `close`, `decide`, `persist-out`, `persist-check`, `attribution`, `dispatch-failure` | The host-inline driver's run lifecycle transport ([inline-pipeline-driver.md](../../spur-dev/references/inline-pipeline-driver.md)); exit 0 ok / 1 fail closed / 2 usage |
+| `commit-guard` | `spur workflow commit-guard <op>` (CLI) | `start\|stage\|check --run <id> [--base <sha>] [-- <paths…>]` | Stages only paths this run wrote; exit 2 when a listed path is refused, 3 on unmerged/conflict-marked targets |
 | `add` | agent procedure | `"<nl-description>" [--kind <state-machine\|transition-flow>] [--file <path>]` | **Mode chosen (confirmed)** → first reconciled against existing workflows (extend an existing flow rather than duplicate) → YAML authored in real schema shape → **validated AND dry-run** (reaches the expected terminal state) → [add](workflows/operations.md#add) |
 | `refine` | agent procedure | `<workflow-file> [--intent "<goal>"] [--dry-run]` | Smallest change meeting the intent, re-validated and re-dry-run; `--dry-run` emits a diff only → [refine](workflows/operations.md#refine) |
 
@@ -266,6 +268,8 @@ spur workflow clean    [--older-than <minutes>] [--force] [--logs] [--dry-run] [
 spur workflow list     [--json]
 spur workflow trace    [run-id] [--workflow <name>] [--status <s>] [--since <iso>] [--last <n>] [--follow] [--poll <ms>] [--output] [--timeout <ms>] [--json]
 spur workflow progress <run-id> [--json]
+spur workflow inline   <op> [options]
+spur workflow commit-guard <op> [options]
 ```
 
 ### `show` - project a definition

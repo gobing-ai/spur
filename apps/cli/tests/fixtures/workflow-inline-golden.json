@@ -3,7 +3,7 @@
         "what": "Golden observations of the retired plugin scripts plugins/sp/scripts/{inline-run-setup,inline-run-dispatch,persist-out-check,commit-guard}.ts, frozen by script-absorption PR-4 before those scripts were deleted. workflow-inline-parity.test.ts replays every case through `spur workflow inline <op>` / `spur workflow commit-guard <op>` and asserts the same exit codes, stdout, stderr (modulo the documented rewrites) and side effects.",
         "capturedFrom": "gobing-ai/spur d17990f2b (feat/sp-hooks-via-spur) \u2014 the old scripts launched as `bun plugins/sp/scripts/<script>.ts <old argv>`",
         "capturedWith": "bun 1.4.3; apps/cli/tests/workflow-inline/golden-runner.ts runCase(case, 'old'); two captures byte-identical",
-        "normalization": "<ROOT> scratch tree, <REPO> checkout, <TS> ISO timestamps, <UUID> ids, qo-<ID> quota observation ids, durationMs/elapsedMs -> 0, <N>ms"
+        "normalization": "<ROOT> scratch tree, <REPO> checkout (<REPO_CONFIG> its bundled-asset dir), <TS> ISO timestamps, <UUID> ids, qo-<ID> quota observation ids, durationMs/elapsedMs -> 0, <N>ms"
     },
     "cases": {
         "commit-guard: missing --run is a usage error (exit 1)": {
@@ -277,11 +277,11 @@
                 {
                     "exitCode": 1,
                     "stdout": "",
-                    "stderr": "inline-run-setup: FAIL \u2014 could not resolve the workflow definition: could not resolve the workflow definition with the installed CLI: workflow show: file not found: <ROOT>/no-such-workflow (shared: <REPO>/config/workflows/no-such-workflow.yaml)\n"
+                    "stderr": "inline-run-setup: FAIL \u2014 could not resolve the workflow definition: could not resolve the workflow definition with the installed CLI: workflow show: file not found: <ROOT>/no-such-workflow (shared: <REPO_CONFIG>/workflows/no-such-workflow.yaml)\n"
                 }
             ],
             "artifacts": {
-                ".spur/memory/runs/r-missing.state.json": "{\n    \"schemaVersion\": 1,\n    \"runId\": \"r-missing\",\n    \"startedAt\": \"<TS>\",\n    \"updatedAt\": \"<TS>\",\n    \"ok\": false,\n    \"error\": \"could not resolve the workflow definition: could not resolve the workflow definition with the installed CLI: workflow show: file not found: <ROOT>/no-such-workflow (shared: <REPO>/config/workflows/no-such-workflow.yaml)\"\n}\n"
+                ".spur/memory/runs/r-missing.state.json": "{\n    \"schemaVersion\": 1,\n    \"runId\": \"r-missing\",\n    \"startedAt\": \"<TS>\",\n    \"updatedAt\": \"<TS>\",\n    \"ok\": false,\n    \"error\": \"could not resolve the workflow definition: could not resolve the workflow definition with the installed CLI: workflow show: file not found: <ROOT>/no-such-workflow (shared: <REPO_CONFIG>/workflows/no-such-workflow.yaml)\"\n}\n"
             },
             "db": {}
         },

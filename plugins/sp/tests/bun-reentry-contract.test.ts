@@ -42,13 +42,9 @@ const CONSUMERS = listTsScripts(SCRIPTS_DIR).filter((file) => {
 
 test('1197 R3/AC3: every inline-bundle consumer re-enters Bun in its Node twin', () => {
     const rel = CONSUMERS.map((file) => file.slice(SCRIPTS_DIR.length + 1));
-    // The four known consumers, feature-verification-steps.ts included (the 1176 arrival).
-    for (const expected of [
-        'feature-verification-steps.ts',
-        'inline-run-setup.ts',
-        'inline-run-dispatch.ts',
-        'daily-summary/daily-summary.ts',
-    ]) {
+    // The known consumers, feature-verification-steps.ts included (the 1176 arrival). The inline
+    // run setup/dispatch scripts left with script-absorption PR-4 (`spur workflow inline`).
+    for (const expected of ['feature-verification-steps.ts', 'daily-summary/daily-summary.ts']) {
         expect(rel, `${expected} loads the inline bundle and must be scanned`).toContain(expected);
     }
     for (const file of CONSUMERS) {
