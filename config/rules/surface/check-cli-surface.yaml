@@ -50,6 +50,12 @@ rules:
       - "apps/cli/src/commands/agent/loop.ts"
       - "apps/cli/src/commands/agent/start.ts"
       - "apps/cli/src/commands/agent/stop.ts"
+      # Pipeline-internal task verbs (script-absorption PR-3) declare no --json: their contract is
+      # the .spur/run artifact they write (gate status/receipt, residuals.json, diffstat.json) and
+      # the exit code; the gate's own status line is serialized by the app service.
+      - "apps/cli/src/commands/task/gate.ts"
+      - "apps/cli/src/commands/task/residual.ts"
+      - "apps/cli/src/commands/task/diffstat.ts"
     evaluator:
       type: rg
       config:

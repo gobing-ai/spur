@@ -57,9 +57,13 @@ re-reading or re-tokenizing the task.
 | `run-link <wbs>` | Record pipeline run provenance link for task | `--source <src>` `--run-id <id>` `--json` |
 | `verifyall-aggregate` | Aggregate per-task verify outcomes into a batch verdict (NOT-STARTED excluded) | `--from-file <path>` `--json` |
 | `scaffold-tests <wbs>` | Generate BDD test stubs from task Acceptance Criteria | `--file <path>` `--folder` `--json` |
+| `gate <wbs> <mode>` | Task-pipeline quality gate (`run`, `recheck`, `light`, `deferred`, `status`); exit 0 PASS, 1 FAIL | `--cmd <c>` `--probe-cmd <c>` `--proof-digest <d>` `--run-id <id>` |
+| `residual <wbs> <step>` | F96 residual sweep step (`scan`, `review-gate`, `fold`, `settle`, `report`) | `--root <dir>` `--tmp-dir <dir>` `--folder` |
+| `diffstat <wbs>` | Write the triage diffstat artifact against the run base (fails safe to `sensitive: true`) | — |
 
-All verbs accept `--json` for machine consumption and `--folder <path>` to target a non-default
-tasks folder. **Exit codes:** `0` success, `1` error, `2` invalid usage.
+All verbs except the pipeline-internal `gate`, `residual` and `diffstat` (which write `.spur/run`
+artifacts instead) accept `--json` for machine consumption and `--folder <path>` to target a
+non-default tasks folder. **Exit codes:** `0` success, `1` error, `2` invalid usage.
 
 ## Creating tasks
 

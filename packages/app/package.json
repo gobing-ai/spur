@@ -12,6 +12,9 @@
         "./system-event-tap": "./src/services/system-event-tap.ts",
         "./system-events": "./src/services/system-events.ts",
         "./decision-readiness": "./src/workflow/decision-readiness.ts",
+        "./quality-gate": "./src/services/quality-gate.ts",
+        "./residual-scan-run": "./src/services/residual-scan-run.ts",
+        "./task-diffstat": "./src/workflow/task-diffstat.ts",
         "./testing": "./src/testing/history-board-mock.ts",
         "./hooks": "./src/hooks/index.ts"
     },
