@@ -11,7 +11,10 @@
         "./system-event-tap": "./src/services/system-event-tap.ts",
         "./system-events": "./src/services/system-events.ts",
         "./decision-readiness": "./src/workflow/decision-readiness.ts",
-        "./testing": "./src/testing/history-board-mock.ts"
+        "./testing": "./src/testing/history-board-mock.ts",
+        "./commit-guard": "./src/workflow/commit-guard.ts",
+        "./persist-check": "./src/workflow/persist-check.ts",
+        "./close-summary": "./src/workflow/run-summary-render.ts"
     },
     "scripts": {
         "build": "bun build src/index.ts --outdir dist --target bun",

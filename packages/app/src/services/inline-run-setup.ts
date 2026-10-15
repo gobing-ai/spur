@@ -203,6 +203,11 @@ export interface ReadInstalledInventoryInput {
     readonly spurBin: string;
     /** Repo-checkout CLI entry the caller resolved from its own plugin layout (the `--spur-bin`-less fallback). */
     readonly localCli: string;
+    /**
+     * Lossless argv of the running CLI (`spur workflow inline begin` passes its own launch, so a
+     * path with spaces survives). Used when `spurBin` is empty; it takes precedence over `localCli`.
+     */
+    readonly launchArgv?: readonly string[];
     /** Project root the installed CLI resolves layers against. Defaults to the process cwd. */
     readonly workdir?: string;
 }
@@ -216,11 +221,14 @@ export interface ReadInstalledInventoryInput {
  * `no-direct-process-spawn` rule forbids `node:child_process`).
  */
 export async function readInstalledInventory(input: ReadInstalledInventoryInput): Promise<unknown> {
+    const [selfCommand, ...selfArgs] = input.launchArgv ?? [];
     const launch = input.spurBin
         ? splitLaunchCommand(input.spurBin, 'inline-run-setup "spurBin"')
-        : existsSync(input.localCli)
-          ? { command: 'bun', leadingArgs: [input.localCli] }
-          : { command: 'spur', leadingArgs: [] };
+        : selfCommand !== undefined
+          ? { command: selfCommand, leadingArgs: selfArgs }
+          : existsSync(input.localCli)
+            ? { command: 'bun', leadingArgs: [input.localCli] }
+            : { command: 'spur', leadingArgs: [] };
     if ('error' in launch) throw new Error(launch.error);
     const res = await new NodeProcessExecutor().run({
         command: launch.command,
