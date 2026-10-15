@@ -1,10 +1,10 @@
 ---
 schema_version: 1
 name: Complete PR-9 release and workflow-cost CLI absorption
-status: todo
+status: wip
 template: standard
 created_at: 2026-10-15T17:50:40.221Z
-updated_at: "2026-10-15T18:32:35.518Z"
+updated_at: "2026-10-15T19:28:20.304Z"
 ac_altitude: task-local
 ac_numbering: task-local
 parent_wbs: "1211"
@@ -114,3 +114,6 @@ Non-goals: PR-8 cleanup, new public surfaces, changing promotion statistics, liv
 - One main worktree and only parent 1211 at wip were observed at freeze; recheck immediately before implementation.
 
 ### History
+
+- 2026-10-15T19:28:20.304Z todo → wip (system)
+
