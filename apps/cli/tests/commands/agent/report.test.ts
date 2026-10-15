@@ -88,4 +88,16 @@ describe('spur agent report (1080)', () => {
             await cleanup();
         }
     });
+
+    test('--json usage errors carry a structured usage code', async () => {
+        const { ctx, out, cleanup } = await makeCtx({});
+        try {
+            expect(await runAgentReport(ctx, { state: 'idle', seq: '1', json: true })).toBe(2);
+            expect(JSON.parse(out.messages.at(-1) ?? '{}')).toEqual({
+                error: { code: 'usage', message: 'no member id (set SPUR_SPEC_ID or --spec)' },
+            });
+        } finally {
+            await cleanup();
+        }
+    });
 });

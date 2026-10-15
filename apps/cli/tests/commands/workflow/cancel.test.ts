@@ -2,10 +2,10 @@
  * Thin-wrapper integration tests for `spur workflow cancel` (apps/cli/src/commands/workflow/cancel.ts).
  * Behavioral tests for WorkflowAppService live in packages/app/tests/services/workflow-service.test.ts.
  */
-import { beforeEach, describe, expect, test } from 'bun:test';
+import { beforeEach, describe, expect, spyOn, test } from 'bun:test';
 import { rm, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
-import { _resetAgentServiceShimsForTest } from '@gobing-ai/spur-app';
+import { _resetAgentServiceShimsForTest, WorkflowAppService } from '@gobing-ai/spur-app';
 import { createMigratedDb } from '@gobing-ai/spur-domain';
 import { main } from '../../../src/index';
 import { createCapturedOutput, createTempProject, runCli } from '../../helpers';
@@ -106,5 +106,41 @@ describe('workflow command (main)', () => {
         });
         expect(exitCode).toBe(1);
         expect(output.errors).toContain('Run nonexistent-run-id not found.');
+    });
+});
+
+describe('workflow cancel — text outcomes', () => {
+    type CancelResult = Awaited<ReturnType<WorkflowAppService['cancel']>>;
+    async function cancelWith(result: Partial<CancelResult>, json = false) {
+        const cancel = spyOn(WorkflowAppService.prototype, 'cancel').mockResolvedValue(result as CancelResult);
+        try {
+            const output = createCapturedOutput();
+            const code = await main(['workflow', 'cancel', 'run-7', ...(json ? ['--json'] : [])], {
+                output,
+                dbUrl: ':memory:',
+            });
+            return { code, output };
+        } finally {
+            cancel.mockRestore();
+        }
+    }
+
+    test('a finalized cancel reports the process-group signal when one was sent', async () => {
+        const killed = await cancelWith({ status: 'failed', finalized: true, killed: true });
+        expect(killed.code).toBe(0);
+        expect(killed.output.messages.at(-1)).toBe(
+            'Cancelled run run-7 (marked failed + signalled worker process group).',
+        );
+        const quiet = await cancelWith({ status: 'failed', finalized: true, killed: false });
+        expect(quiet.output.messages.at(-1)).toBe('Cancelled run run-7 (marked failed).');
+    });
+
+    test('an already-terminal run is a no-op; --json prints the result as-is', async () => {
+        const done = await cancelWith({ status: 'done', finalized: false });
+        expect(done.code).toBe(0);
+        expect(done.output.messages.at(-1)).toBe('Run run-7 already terminal (done) — no change.');
+        const json = await cancelWith({ status: 'not_found', finalized: false }, true);
+        expect(json.code).toBe(0);
+        expect(JSON.parse(json.output.messages.at(-1) ?? '{}')).toMatchObject({ status: 'not_found' });
     });
 });

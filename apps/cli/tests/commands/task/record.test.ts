@@ -5,10 +5,11 @@
  * These exercise the verb surface through the real `main()` entry point:
  * golden paths, the `--json` envelope shape, and exit codes 0/1/2 (design §10, R5).
  */
-import { afterAll, beforeAll, describe, expect, test } from 'bun:test';
+import { afterAll, beforeAll, describe, expect, spyOn, test } from 'bun:test';
 import { rmSync } from 'node:fs';
 import { mkdir, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
+import { TaskService } from '@gobing-ai/spur-app';
 import { MarkdownDocument } from '@gobing-ai/spur-domain';
 import { main } from '../../../src/index';
 import { type CapturedOutput, createCapturedOutput } from '../../helpers';
@@ -172,5 +173,47 @@ describe('spur task CLI', () => {
 
         // Status at the done hop — terminal, with no lifecycle machinery involved.
         expect(MarkdownDocument.parse(await Bun.file(taskPath).text(), 'task').frontmatterData?.status).toBe('done');
+    });
+});
+
+describe('spur task record — text rendering of every result field', () => {
+    test('warnings and secondary outcomes go to stderr; the summary lists each written part', async () => {
+        const record = spyOn(TaskService.prototype, 'record').mockResolvedValue({
+            testingWritten: true,
+            reviewWritten: true,
+            solutionBackfilled: true,
+            transitionedTo: 'testing',
+            scenarioWarnings: ['scenario key S1 dropped'],
+            closeAuditError: 'audit boom',
+            bookkeepingError: 'row boom',
+            verdictState: 'stale',
+            verdictMessage: 're-run verify',
+        } as unknown as Awaited<ReturnType<TaskService['record']>>);
+        try {
+            const output = createCapturedOutput();
+            expect(await main(['task', 'record', '0001'], { cwd, output })).toBe(0);
+            expect(output.messages.at(-1)).toBe('Testing written, Review written, Solution backfilled, 0001 → testing');
+            const errors = output.errors.join('\n');
+            expect(errors).toContain('scenario key S1 dropped');
+            expect(errors).toContain('failed to record done close audit fields: audit boom');
+            expect(errors).toContain('failed to reconcile task-lifecycle bookkeeping row: row boom');
+            expect(errors).toContain('ⓘ verdict artifact stale: re-run verify');
+        } finally {
+            record.mockRestore();
+        }
+    });
+
+    test('an empty result prints "no changes"', async () => {
+        const record = spyOn(TaskService.prototype, 'record').mockResolvedValue({
+            testingWritten: false,
+            reviewWritten: false,
+        } as unknown as Awaited<ReturnType<TaskService['record']>>);
+        try {
+            const output = createCapturedOutput();
+            expect(await main(['task', 'record', '0001'], { cwd, output })).toBe(0);
+            expect(output.messages.at(-1)).toBe('no changes');
+        } finally {
+            record.mockRestore();
+        }
     });
 });

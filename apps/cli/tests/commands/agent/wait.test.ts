@@ -1,8 +1,11 @@
-import { describe, expect, test } from 'bun:test';
+import { describe, expect, spyOn, test } from 'bun:test';
 import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { CoordinationRunDao, createMigratedDb, SystemEventDao } from '@gobing-ai/spur-domain';
+import { FleetGuestService } from '@gobing-ai/spur-app';
+import { CoordinationRunDao, createMigratedDb, InboxMessageDao, SystemEventDao } from '@gobing-ai/spur-domain';
+import { runAgentJoin, runAgentWaitInbox } from '../../../src/commands/agent';
+import { createCliContext } from '../../../src/context';
 import { main } from '../../../src/index';
 import { createCapturedOutput } from '../../helpers';
 
@@ -320,6 +323,84 @@ describe('spur agent wait — seeded occupant resolves', () => {
             expect(parsed.satisfied).toBe('idle');
             expect(parsed.pin.runId).toBe('R1');
         } finally {
+            await cleanup();
+        }
+    });
+});
+
+describe('spur agent wait — text output and selector failures', () => {
+    test('text mode prints the reached state', async () => {
+        const { cwd, out, cleanup } = await makeCtx();
+        const dbUrl = join(cwd, 'test.db');
+        await seedOccupant({
+            dbUrl,
+            specId: 'reviewer',
+            runId: 'R1',
+            events: [{ eventName: 'agent.invoke.exit', sequence: 2 }],
+        });
+        try {
+            expect(await main(['agent', 'wait', 'reviewer'], { cwd, output: out, dbUrl })).toBe(0);
+            expect(out.messages.at(-1)).toBe('reviewer/R1 reached idle');
+        } finally {
+            await cleanup();
+        }
+    });
+
+    test('an unknown --role is a usage error (exit 2) in text and --json', async () => {
+        const { cwd, out, cleanup } = await makeCtx();
+        try {
+            expect(await main(['agent', 'wait', '--role', 'nosuch'], { cwd, output: out, dbUrl: ':memory:' })).toBe(2);
+            expect(out.errors.join('\n')).toContain('nosuch');
+            const json = createCapturedOutput();
+            expect(
+                await main(['agent', 'wait', '--role', 'nosuch', '--json'], { cwd, output: json, dbUrl: ':memory:' }),
+            ).toBe(2);
+            expect(JSON.parse(json.messages.at(-1) ?? '{}')).toMatchObject({ error: { code: 'unknown_selector' } });
+        } finally {
+            await cleanup();
+        }
+    });
+});
+
+describe('spur agent wait --inbox — JSON and lease surfaces', () => {
+    async function guestCtx() {
+        const { cwd, out, cleanup } = await makeCtx();
+        return { ctx: createCliContext({ cwd, output: out, dbUrl: ':memory:' }), out, cleanup };
+    }
+
+    test('a never-joined guest fails with a not-joined JSON error', async () => {
+        const { ctx, out, cleanup } = await guestCtx();
+        try {
+            expect(await runAgentWaitInbox(ctx, { id: 'ghost', timeoutMs: 50, json: true, pollMs: 10 })).toBe(1);
+            expect(JSON.parse(out.messages.at(-1) ?? '{}')).toMatchObject({ error: { code: 'not-joined' } });
+        } finally {
+            await cleanup();
+        }
+    });
+
+    test('pending work is reported as JSON', async () => {
+        const { ctx, out, cleanup } = await guestCtx();
+        try {
+            await runAgentJoin(ctx, { role: 'reviewer', id: 'g-json', json: false });
+            await new InboxMessageDao(await ctx.getDb()).enqueue('proj-lead', 'g-json', 'hello');
+            expect(await runAgentWaitInbox(ctx, { id: 'g-json', timeoutMs: 5000, json: true, pollMs: 10 })).toBe(0);
+            expect(JSON.parse(out.messages.at(-1) ?? '{}')).toEqual({ id: 'g-json', pending: 1 });
+        } finally {
+            await cleanup();
+        }
+    });
+
+    test('a released lease fails instead of waiting, in text and --json', async () => {
+        const { ctx, out, cleanup } = await guestCtx();
+        const heartbeat = spyOn(FleetGuestService.prototype, 'heartbeat').mockResolvedValue(false);
+        try {
+            await runAgentJoin(ctx, { role: 'reviewer', id: 'g-gone', json: false });
+            expect(await runAgentWaitInbox(ctx, { id: 'g-gone', timeoutMs: 50, json: false, pollMs: 10 })).toBe(1);
+            expect(out.errors.join('\n')).toContain('lease was released');
+            expect(await runAgentWaitInbox(ctx, { id: 'g-gone', timeoutMs: 50, json: true, pollMs: 10 })).toBe(1);
+            expect(JSON.parse(out.messages.at(-1) ?? '{}')).toMatchObject({ error: { code: 'lease-released' } });
+        } finally {
+            heartbeat.mockRestore();
             await cleanup();
         }
     });

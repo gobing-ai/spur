@@ -13,7 +13,8 @@ import type { UsageSource } from '@gobing-ai/spur-app';
 import { runAgentUsageProducer, UsageSourceError } from '@gobing-ai/spur-app';
 import { loadSpurConfig } from '@gobing-ai/spur-config/loader';
 import { main } from '../../../src';
-import { setAgentUsageSourceForTesting } from '../../../src/commands/agent';
+import { resetAgentUsageSourceForTesting, setAgentUsageSourceForTesting } from '../../../src/commands/agent';
+import { runAgentUsage } from '../../../src/commands/agent/usage';
 import { EMBEDDED_SPUR_SCHEMAS } from '../../../src/config/embedded-schemas';
 import { type CliContext, createCliContext } from '../../../src/context';
 import { createCapturedOutput } from '../../helpers';
@@ -306,5 +307,75 @@ describe('spur agent usage (0892)', () => {
         );
         expect(serveModule).not.toContain('codexbar');
         expect(serveModule).not.toContain('agent-usage');
+    });
+});
+
+describe('spur agent usage — flag and output surfaces', () => {
+    test('an unknown --source is a usage error (exit 2) in text and --json', async () => {
+        const { cwd, out, cleanup } = await makeProjectCtx();
+        try {
+            expect(await main(['agent', 'usage', '--source', 'nope'], { cwd, output: out, dbUrl: ':memory:' })).toBe(2);
+            expect(out.errors.join('\n')).toContain('agent usage: unknown usage source "nope"');
+            const json = createCapturedOutput();
+            expect(
+                await main(['agent', 'usage', '--source', 'nope', '--json'], { cwd, output: json, dbUrl: ':memory:' }),
+            ).toBe(2);
+            expect(JSON.parse(json.messages.at(-1) ?? '{}')).toMatchObject({ error: { code: 'unknown_source' } });
+        } finally {
+            await cleanup();
+        }
+    });
+
+    test('--json prints the producer result; a capture failure prints a JSON error (exit 1)', async () => {
+        const { cwd, home, out, cleanup } = await makeProjectCtx();
+        try {
+            const snapshotPath = join(home, '.config', 'spur', 'agent-usage.json');
+            const fixture = await fixtureStdout();
+            setAgentUsageSourceForTesting({
+                source: stubSource(() => ({ stdout: fixture, stderr: '' })),
+                snapshotPath,
+            });
+            expect(await main(['agent', 'usage', '--dry-run', '--json'], { cwd, output: out, dbUrl: ':memory:' })).toBe(
+                0,
+            );
+            const result = JSON.parse(out.messages.at(-1) ?? '{}') as { source?: string; changes?: unknown[] };
+            expect(result.source).toBe('codexbar');
+            expect(Array.isArray(result.changes)).toBe(true);
+            resetAgentUsageSourceForTesting();
+            const failed = createCapturedOutput();
+            const code = await runAgentUsage(
+                producerContext(cwd, failed),
+                { dryRun: true, source: 'codexbar', json: true },
+                { source: stubSource(() => ({ stdout: 'not json', stderr: '' })), snapshotPath },
+            );
+            expect(code).toBe(1);
+            expect(JSON.parse(failed.messages.at(-1) ?? '{}')).toMatchObject({
+                error: { code: 'usage_capture_failed' },
+            });
+        } finally {
+            resetAgentUsageSourceForTesting();
+            await cleanup();
+        }
+    });
+
+    test('a non-usage error from the source propagates instead of being reported as a capture failure', async () => {
+        const { cwd, home, out, cleanup } = await makeProjectCtx();
+        try {
+            const boom: UsageSource = {
+                name: 'codexbar',
+                capture: async () => {
+                    throw new TypeError('programming error');
+                },
+            };
+            await expect(
+                runAgentUsage(
+                    producerContext(cwd, out),
+                    { dryRun: true, source: 'codexbar', json: false },
+                    { source: boom, snapshotPath: join(home, 'agent-usage.json') },
+                ),
+            ).rejects.toThrow('programming error');
+        } finally {
+            await cleanup();
+        }
     });
 });

@@ -183,6 +183,21 @@ describe('spur task CLI', () => {
             rmSync(root, { recursive: true, force: true });
         }
     });
+    test('explicit corpus audit in text mode prints the summary line and each new error on stderr', async () => {
+        const root = await mkdtemp(join(tmpdir(), 'spur-explicit-audit-text-'));
+        try {
+            await mkdir(join(root, 'docs', 'tasks'), { recursive: true });
+            await writeFile(join(root, 'docs/tasks/9999_broken.md'), '---\nstatus: invalid\n---\n');
+            const output = createCapturedOutput();
+            expect(await main(['task', 'check', '--corpus'], { cwd: root, output })).toBe(1);
+            expect(output.messages.join('\n')).toMatch(
+                /^corpus-check: [1-9]\d* errors, \d+ warnings; no suppressions\. Use --json for full findings\.$/m,
+            );
+            expect(output.errors.join('\n')).toMatch(/task:9999:/);
+        } finally {
+            rmSync(root, { recursive: true, force: true });
+        }
+    });
     test('explicit corpus audit rejects ambiguous scopes and reports usage errors as JSON', async () => {
         for (const args of [
             ['--since', 'HEAD'],

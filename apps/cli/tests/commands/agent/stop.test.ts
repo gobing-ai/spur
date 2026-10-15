@@ -6,9 +6,10 @@
  *   `task.assigned` (0371 R6; renamed by 0860 R2).
  */
 import { describe, expect, test } from 'bun:test';
-import { mkdir, mkdtemp, rm } from 'node:fs/promises';
+import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import { removeEnvVar, setEnvVar } from '@gobing-ai/spur-config';
 import { main } from '../../../src';
 import { resetAgentServerFetchForTesting, setAgentServerFetchForTesting } from '../../../src/commands/agent';
 import { type CapturedOutput, createCapturedOutput } from '../../helpers';
@@ -72,6 +73,33 @@ describe('spur agent start|stop', () => {
                 },
             );
         } finally {
+            await cleanup();
+        }
+    });
+});
+
+describe('spur agent stop default-server resolution', () => {
+    test('an unreadable project registry warns on stderr and falls back to the default server', async () => {
+        const { cwd, out, cleanup } = await makeCtx();
+        const registryFile = join(cwd, 'projects.json');
+        await writeFile(registryFile, '{not json');
+        setEnvVar('SPUR_PROJECTS_FILE', registryFile);
+        try {
+            const calls: string[] = [];
+            await withMockedFetch(
+                async (url) => {
+                    calls.push(String(url));
+                    return jsonResponse(200, { ok: true, pid: 5, status: 'running' });
+                },
+                async () => {
+                    const code = await main(['agent', 'stop', 'planner'], { cwd, output: out, dbUrl: ':memory:' });
+                    expect(code).toBe(0);
+                    expect(calls).toEqual(['http://localhost:3000/api/agents/planner/stop']);
+                    expect(out.errors.join('\n')).toContain('project registry unreadable');
+                },
+            );
+        } finally {
+            removeEnvVar('SPUR_PROJECTS_FILE');
             await cleanup();
         }
     });

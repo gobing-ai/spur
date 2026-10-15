@@ -66,3 +66,17 @@ describe('spur task CLI', () => {
         }
     });
 });
+
+describe('spur task scaffold-tests — text output and failures', () => {
+    test('text mode prints the scaffold summary; an unknown task exits 1', async () => {
+        const create = createCapturedOutput();
+        await main(['task', 'create', '--skip-ready', 'Scaffold text target'], { cwd, output: create });
+        const wbs = createdWbs(create);
+        const output = createCapturedOutput();
+        const code = await main(['task', 'scaffold-tests', wbs], { cwd, output });
+        if (code === 0) expect(output.messages.join('\n')).toContain(`Scaffolded tests for ${wbs} ->`);
+        const missing = createCapturedOutput();
+        expect(await main(['task', 'scaffold-tests', '9997'], { cwd, output: missing })).toBe(1);
+        expect(missing.errors.length).toBeGreaterThan(0);
+    });
+});

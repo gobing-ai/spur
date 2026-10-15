@@ -2,10 +2,11 @@
  * Tests for `spur agent` (apps/cli/src/commands/agent/).
  */
 import { afterEach, beforeEach, describe, expect, test } from 'bun:test';
-import { mkdtempSync, rmSync } from 'node:fs';
+import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { _resetAgentServiceShimsForTest, AgentCoordinationService } from '@gobing-ai/spur-app';
+import { removeEnvVar, setEnvVar } from '@gobing-ai/spur-config';
 import { createMigratedDb, type DbAdapter } from '@gobing-ai/spur-domain';
 import { resetAgentServerFetchForTesting, setAgentServerFetchForTesting } from '../../../src/commands/agent';
 import { createCliContext } from '../../../src/context';
@@ -67,6 +68,17 @@ describe('agent list --specs', () => {
         });
         expect(exitCode).toBe(0);
         expect(output.stdout.join('\n')).toContain('No agent specs found');
+    });
+
+    test('list --specs --json when no specs exist outputs an empty array', async () => {
+        const output = captureOutput();
+        const exitCode = await main(['agent', 'list', '--specs', '--json'], {
+            cwd: tempDir,
+            output,
+            db,
+        });
+        expect(exitCode).toBe(0);
+        expect(JSON.parse(output.stdout.join(''))).toEqual({ specs: [] });
     });
 
     test('list --specs --json when specs exist outputs JSON array', async () => {
@@ -192,6 +204,23 @@ describe('member session rendering (0897)', () => {
             id: 'sess-3f9c2a1d-beef',
         });
         expect(parsed.specs.find((sp) => sp.id === 'worker')?.session).toBeUndefined();
+    });
+
+    test('list --specs with an unreadable project registry warns on stderr and uses the default server', async () => {
+        await seedSpecs();
+        stubProcessesFeed();
+        const registryFile = join(tempDir, 'projects.json');
+        writeFileSync(registryFile, '{not json');
+        setEnvVar('SPUR_PROJECTS_FILE', registryFile);
+        try {
+            const output = captureOutput();
+            const exitCode = await main(['agent', 'list', '--specs'], { cwd: tempDir, output, db });
+            expect(exitCode).toBe(0);
+            expect(output.stderr.join('\n')).toContain('project registry unreadable');
+            expect(output.stdout.join('\n')).toContain('planner\t');
+        } finally {
+            removeEnvVar('SPUR_PROJECTS_FILE');
+        }
     });
 
     slowTest('status renders live status and session per spec; unreachable server reports stopped', async () => {

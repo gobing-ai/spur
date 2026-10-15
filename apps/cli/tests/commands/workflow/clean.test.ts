@@ -2,10 +2,10 @@
  * Thin-wrapper integration tests for `spur workflow clean` (apps/cli/src/commands/workflow/clean.ts).
  * Behavioral tests for WorkflowAppService live in packages/app/tests/services/workflow-service.test.ts.
  */
-import { beforeEach, describe, expect, test } from 'bun:test';
+import { beforeEach, describe, expect, spyOn, test } from 'bun:test';
 import { access, mkdir, rm, utimes, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
-import { _resetAgentServiceShimsForTest } from '@gobing-ai/spur-app';
+import { _resetAgentServiceShimsForTest, WorkflowAppService } from '@gobing-ai/spur-app';
 import { createMigratedDb } from '@gobing-ai/spur-domain';
 import { main } from '../../../src/index';
 import { createCapturedOutput, createTempProject } from '../../helpers';
@@ -315,5 +315,54 @@ describe('workflow command (main)', () => {
         expect(output.messages.some((m) => m.includes('Finalized 1 stale run(s)'))).toBe(true);
         expect(output.messages.some((m) => m.includes('stale-run-1'))).toBe(true);
         await rm(cwd, { recursive: true, force: true });
+    });
+});
+
+describe('workflow clean — text rendering of every reclamation scope', () => {
+    type Svc = WorkflowAppService;
+    test('lists finalized runs, reclaimed logs/checkpoints/scratch, kept checkpoints and every failure', async () => {
+        const cwd = await createTempProject();
+        const spies = [
+            spyOn(WorkflowAppService.prototype, 'migrateRunStorage').mockResolvedValue({
+                entries: [{ outcome: 'migrated' }, { outcome: 'already-present' }],
+                failures: [],
+            } as unknown as Awaited<ReturnType<Svc['migrateRunStorage']>>),
+            spyOn(WorkflowAppService.prototype, 'clean').mockResolvedValue({
+                cleaned: [{ runId: 'r-old', startedAt: '2026-10-01T00:00:00Z' }],
+            } as unknown as Awaited<ReturnType<Svc['clean']>>),
+            spyOn(WorkflowAppService.prototype, 'cleanRunLogs').mockResolvedValue({
+                reclaimed: [{ runId: 'r-log', mtime: '2026-09-01' }],
+                failures: [{ path: '/x.log', error: 'EPERM' }],
+            } as unknown as Awaited<ReturnType<Svc['cleanRunLogs']>>),
+            spyOn(WorkflowAppService.prototype, 'cleanCheckpoints').mockResolvedValue({
+                reclaimed: [{ name: 'cp-1', age: '40d' }],
+                skipped: [{ name: 'cp-2', reason: 'run still active' }],
+                failures: [{ path: '/cp-3', error: 'EBUSY' }],
+            } as unknown as Awaited<ReturnType<Svc['cleanCheckpoints']>>),
+            spyOn(WorkflowAppService.prototype, 'cleanScratch').mockResolvedValue({
+                reclaimed: [{ name: 'tmp-1', mtime: '2026-09-02' }],
+                failures: [{ path: '/s', error: 'EACCES' }],
+            } as unknown as Awaited<ReturnType<Svc['cleanScratch']>>),
+        ];
+        try {
+            const output = createCapturedOutput();
+            expect(await main(['workflow', 'clean', '--force'], { output, cwd, dbUrl: ':memory:' })).toBe(0);
+            const text = output.messages.join('\n');
+            expect(text).toContain(
+                'Finalized 1 stale run(s) (all non-terminal):\n  r-old (started 2026-10-01T00:00:00Z)',
+            );
+            expect(text).toContain('Reclaimed 1 retained run log(s) (>30d):\n  r-log (mtime 2026-09-01)');
+            expect(text).toContain('Reclaimed 1 expired terminal checkpoint(s) (>30d):\n  cp-1 (age 40d)');
+            expect(text).toContain('  kept cp-2: run still active');
+            expect(text).toContain('Reclaimed 1 .spur/run scratch entr(ies) (>30d):\n  tmp-1 (mtime 2026-09-02)');
+            expect(text).toContain('Evidence migration: 1 migrated, 1 already present, 0 failed.');
+            const errors = output.errors.join('\n');
+            expect(errors).toContain('Failed to remove run log /x.log: EPERM');
+            expect(errors).toContain('Failed to remove checkpoint /cp-3: EBUSY');
+            expect(errors).toContain('Failed to reclaim scratch /s: EACCES');
+        } finally {
+            for (const spy of spies) spy.mockRestore();
+            await rm(cwd, { recursive: true, force: true });
+        }
     });
 });

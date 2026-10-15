@@ -239,3 +239,49 @@ describe('spur task CLI', () => {
         }
     });
 });
+
+describe('spur task batch-create — flag conflicts', () => {
+    test('--agent with --skip-ready is a usage error (exit 2), JSON and text', async () => {
+        const file = join(cwd, 'unused-batch.json');
+        const json = createCapturedOutput();
+        expect(
+            await main(['task', 'batch-create', '--file', file, '--skip-ready', '--agent', 'claude', '--json'], {
+                cwd,
+                output: json,
+            }),
+        ).toBe(2);
+        expect(json.messages.join('\n')).toContain('--agent has no effect with --skip-ready');
+        const text = createCapturedOutput();
+        expect(
+            await main(['task', 'batch-create', '--file', file, '--skip-ready', '--agent', 'claude'], {
+                cwd,
+                output: text,
+            }),
+        ).toBe(2);
+        expect(text.errors.join('\n')).toContain('--agent has no effect with --skip-ready');
+    });
+
+    test('--json surfaces per-item normalizations and parent-feature reopens only when present', async () => {
+        const batchCreate = spyOn(TaskService.prototype, 'batchCreate').mockResolvedValue({
+            children: [
+                { ref: { id: '0101', filePath: 'a.md' }, normalized: ['status: Backlog → backlog'] },
+                { ref: { id: '0102', filePath: 'b.md' } },
+            ],
+            parentsWired: [],
+            featureReopened: [undefined, { featureId: 'F1', from: 'verifying', to: 'in_progress' }],
+        } as unknown as Awaited<ReturnType<TaskService['batchCreate']>>);
+        try {
+            const output = createCapturedOutput();
+            const file = join(cwd, 'spied-batch.json');
+            expect(
+                await main(['task', 'batch-create', '--skip-ready', '--file', file, '--json'], { cwd, output }),
+            ).toBe(0);
+            const parsed = JSON.parse(lastMessage(output));
+            expect(parsed.wbs).toEqual(['0101', '0102']);
+            expect(parsed.normalized).toEqual([{ wbs: '0101', normalized: ['status: Backlog → backlog'] }]);
+            expect(parsed.featureReopened).toEqual([null, { featureId: 'F1', from: 'verifying', to: 'in_progress' }]);
+        } finally {
+            batchCreate.mockRestore();
+        }
+    });
+});

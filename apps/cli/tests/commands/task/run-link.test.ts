@@ -73,3 +73,19 @@ describe('spur task CLI', () => {
         expect(result.existed).toBe(true);
     });
 });
+
+describe('spur task run-link — text output', () => {
+    test('text mode reports a new link, then the skipped duplicate', async () => {
+        const create = createCapturedOutput();
+        await main(['task', 'create', '--skip-ready', 'run-link text'], { cwd, output: create });
+        const wbs = createdWbs(create);
+        const first = createCapturedOutput();
+        expect(await main(['task', 'run-link', wbs, '--source', 'next-auto'], { cwd, output: first })).toBe(0);
+        expect(first.messages.at(-1)).toMatch(
+            new RegExp(`^Recorded pipeline run-link .+ for task ${wbs} \\(source: next-auto\\)$`),
+        );
+        const second = createCapturedOutput();
+        expect(await main(['task', 'run-link', wbs, '--source', 'next-auto'], { cwd, output: second })).toBe(0);
+        expect(second.messages.at(-1)).toContain(`Pipeline run-link already exists for ${wbs}`);
+    });
+});
