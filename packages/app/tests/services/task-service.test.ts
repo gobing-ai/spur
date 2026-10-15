@@ -2127,10 +2127,11 @@ describe('TaskService 0416: WBS collision guard + baseCounter', () => {
     // Helper: shadow the private allocateWbs on an instance to force a specific WBS.
     // allocateWbsChecked calls this.allocateWbs(), so the shadow is picked up.
     function forceAllocateWbs(svc: TaskService, wbs: string): void {
-        // Private method shadow: allocateWbsChecked calls this.allocateWbs(),
-        // so an own property on the instance is picked up at call time.
+        // Private method shadow: allocation lives on the service's TaskFiles collaborator
+        // (`files`), whose allocateWbsChecked calls this.allocateWbs(), so an own property on
+        // that instance is picked up at call time.
         type Allocatable = { allocateWbs: () => Promise<string> };
-        const target = svc as unknown as Allocatable;
+        const target = (svc as unknown as { files: Allocatable }).files;
         target.allocateWbs = async () => wbs;
     }
 
