@@ -43,8 +43,8 @@ const CONSUMERS = listTsScripts(SCRIPTS_DIR).filter((file) => {
 
 test('1197 R3/AC3: every inline-bundle consumer re-enters Bun in its Node twin', () => {
     const rel = CONSUMERS.map((file) => file.slice(SCRIPTS_DIR.length + 1));
-    // The known consumers (feature-verification-steps.ts left with script-absorption PR-5).
-    for (const expected of ['inline-run-setup.ts', 'inline-run-dispatch.ts', 'daily-summary/daily-summary.ts']) {
+    // After PR-4 (inline scripts) and PR-5 (feature-verification), only daily-summary remains.
+    for (const expected of ['daily-summary/daily-summary.ts']) {
         expect(rel, `${expected} loads the inline bundle and must be scanned`).toContain(expected);
     }
     for (const file of CONSUMERS) {

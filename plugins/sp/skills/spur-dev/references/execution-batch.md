@@ -325,7 +325,7 @@ plan = resolve(--tasks) → freeze → order(deps)        # may abort (cycle) or
 report = []
 publish visible plan §2.7: A/Z rows now; one letter per task after this freeze (task batch-plan waves)
 RUN_ID = WT-3 marker id under --worktree, else "batch-$(date -u +%Y%m%dT%H%M%SZ)"   # fixed ONCE here; the close-out reuses it
-commit-guard start --run "$RUN_ID"                     # 1129 R1: fingerprint before the first task writes; the close-out commit stages through it
+spur workflow commit-guard start --run "$RUN_ID"       # 1129 R1: fingerprint before the first task writes; the close-out commit stages through it
 for wbs in plan:                                       # default sequential mode
     if any dependency of wbs failed earlier in THIS batch:
         report += skipped(wbs, reason); continue       # only relevant under --keep-going

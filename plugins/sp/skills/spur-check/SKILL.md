@@ -59,7 +59,7 @@ receipt `status`), never in the exit code.
 - `inputDigest` is the shared `ProofInputFingerprint` (task markdown + git tree of tracked
   sources). The plugin never computes it — the pipeline captures it with the `proof.fingerprint`
   action into `env.proofDigest` (ADR-124: no second fingerprint, no `@gobing-ai/*` import);
-  standalone callers use `inline-run-setup.ts --fingerprint`.
+  standalone callers use `spur workflow inline fingerprint`.
 - Only `run`/`full` writes a reusable receipt. Without a digest, `run` writes no receipt and says
   so in the gate log. The gate executes `qualityGateCmd` as one unit, so the full receipt carries a
   single `test` row for the whole chain; `lint`, `typecheck`, `test-pre-check`,

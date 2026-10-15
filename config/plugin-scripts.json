@@ -3,11 +3,6 @@
     "description": "Registry of plugin sp scripts and their entrypoint contracts (standard with .mjs twin vs repo-only).",
     "entries": [
         {
-            "rel": "commit-guard.ts",
-            "contract": "standard",
-            "twin": "commit-guard.mjs"
-        },
-        {
             "rel": "daily-summary/daily-summary.ts",
             "contract": "standard",
             "twin": "daily-summary/daily-summary.mjs"
@@ -28,16 +23,6 @@
             "twin": "history-anatomy-cache.mjs"
         },
         {
-            "rel": "inline-run-setup.ts",
-            "contract": "standard",
-            "twin": "inline-run-setup.mjs"
-        },
-        {
-            "rel": "inline-run-dispatch.ts",
-            "contract": "standard",
-            "twin": "inline-run-dispatch.mjs"
-        },
-        {
             "rel": "pr-reviewing.ts",
             "contract": "standard",
             "twin": "pr-reviewing.mjs"
@@ -46,11 +31,6 @@
             "rel": "quality-gate.ts",
             "contract": "standard",
             "twin": "quality-gate.mjs"
-        },
-        {
-            "rel": "persist-out-check.ts",
-            "contract": "standard",
-            "twin": "persist-out-check.mjs"
         },
         {
             "rel": "residual-scan.ts",

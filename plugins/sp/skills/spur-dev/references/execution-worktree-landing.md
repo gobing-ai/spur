@@ -116,8 +116,7 @@ WT_PATH="$(cd "../<worktree-dir>" && pwd)"   # hoisted: needed by WT-4a AND WT-4
 # automatically reconciles each forwarded terminal task's receiving lifecycle row in
 # the invoking tree (finalizing any stale in-flight or interrupted row left from the
 # task's creation), so a manual DB edit is never required:
-SETUP_SCRIPT=plugins/sp/scripts/inline-run-setup.ts; [ -f config/plugin-scripts.json -a -f "$SETUP_SCRIPT" ] || SETUP_SCRIPT="$(superskill script path sp inline-run-setup.mjs 2>/dev/null)"
-bun "$SETUP_SCRIPT" --persist-out --from "$WT_PATH" "${TASK_FILE_ARGS[@]}" \
+spur workflow inline persist-out --from "$WT_PATH" "${TASK_FILE_ARGS[@]}" \
   || { echo "halt: worktree run-record persist-out failed - worktree retained (WT-5)" >&2; write_marker retained; exit 1; }
 #
 # WT-4b — bounded CWD-holder cleanup (task 0720 R1). $WT_PATH above is the EXACT
@@ -156,10 +155,9 @@ fi                                           #   NO prune/remove/branch delete
 # worktree while it still owns evidence absent from (or divergent from) the invoking tree —
 # the D63 landing skipped persist-out and silently lost verdicts + receipts. WBSes ride the
 # same TASK_FILE_ARGS resolved for WT-4a; run ids are a separate `--run-id <id>` per run and
-# belong to THIS check only — `inline-run-setup.ts --persist-out` accepts `--from` and
+# belong to THIS check only — `spur workflow inline persist-out` accepts `--from` and
 # `--task-file` alone and exits 2 on `--run-id` (1089 driver note).
-CHECK_SCRIPT=plugins/sp/scripts/persist-out-check.ts; [ -f config/plugin-scripts.json -a -f "$CHECK_SCRIPT" ] || CHECK_SCRIPT="$(superskill script path sp persist-out-check.mjs 2>/dev/null)"
-bun "$CHECK_SCRIPT" --from "$WT_PATH" "${TASK_FILE_ARGS[@]}" \
+spur workflow inline persist-check --from "$WT_PATH" "${TASK_FILE_ARGS[@]}" \
   || { echo "WT-4 halt: worktree evidence would be abandoned - persist-out missing or stale (WT-5)" >&2; write_marker retained; exit 1; }
 git worktree remove "../<worktree-dir>" \
   || { echo "WT-4 halt: worktree remove failed after landed merge $BATCH_TIP" >&2; write_marker retained; exit 1; }
@@ -423,15 +421,14 @@ git checkout <base-ref> && git merge --no-ff -m "<prepared message>" <branch>
 #     the batch's run id, the same one WT-3b's worktree fingerprint used — the two trees keep two
 #     artifacts under the same id):
 #       RUN_ID="<marker-id>"   # the WT-3 marker's id
-#       GUARD=plugins/sp/scripts/commit-guard.ts; [ -f config/plugin-scripts.json -a -f "$GUARD" ] || GUARD="$(superskill script path sp commit-guard.mjs 2>/dev/null)"
-#       bun "$GUARD" start --run "$RUN_ID"
+#       spur workflow commit-guard start --run "$RUN_ID"
 #     git checkout <base-ref> && git merge --no-commit <branch>
 # 2. resolve source conflicts by hand; generated files are then regenerated with the project's
 #    generator, never hand-merged
 #    (this repo: bun run build:plugin-lib && bun run --filter @gobing-ai/spur build:bundle)
 # 3. stage every resolved path and regenerated bundle through the guard — an unmerged or
 #    unstaged path makes step 5 abort, and a conflict-marked path exits 3 (resolve, then retry):
-#      bun "$GUARD" stage --run "$RUN_ID" -- <resolved paths and regenerated bundles>
+#      spur workflow commit-guard stage --run "$RUN_ID" -- <resolved paths and regenerated bundles>
 #    Forbidden here as in every driver commit step: `git add -A` and `git add .`.
 # 4. run qualityGateCmd once, after ALL conflicts are resolved
 # 5. commit the merge with the prepared message file — CHECK THE PARENTS FIRST (step 5a)
@@ -446,7 +443,7 @@ git checkout <base-ref> && git merge --no-ff -m "<prepared message>" <branch>
 #     ancestry).
 
 # 6. persist evidence out (WT-4a), then WT-4b/4c cleanup, and set the marker to merged
-inline-run-setup --persist-out --from <worktree> --task-file …
+spur workflow inline persist-out --from <worktree> --task-file …
 ```
 
 The report reuses the [`--next` chain contract](flag-glossary.md#--next-chain-contract) halt-report

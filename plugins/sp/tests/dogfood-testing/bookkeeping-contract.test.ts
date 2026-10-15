@@ -5,6 +5,8 @@ import { join } from 'node:path';
 export function findBookkeepingSuppression(snippet: string, filename = 'snippet.md'): string[] {
     const violations: string[] = [];
     const forbiddenPatterns = [
+        // Script-absorption PR-4: the inline run lifecycle and persist-check are CLI ops now.
+        /spur workflow inline\b[^\n]*?(?:>[^&]*\/dev\/null|2>\s*\/dev\/null|&>\s*\/dev\/null)/,
         /(?:bun|node|\$SETUP_SCRIPT|\$RS|\$CHECK_SCRIPT)\s+(?:"?\$[A-Za-z0-9_]+"|\S*inline-run-setup|\S*quality-gate|\S*persist-out)[^\n]*?(?:>[^&]*\/dev\/null|2>\s*\/dev\/null|&>\s*\/dev\/null)/,
         /(?<!superskill script path [^\n]*)(?:inline-run-setup|quality-gate|persist-out)\.(?:ts|mjs)[^\n]*?(?:>[^&]*\/dev\/null|2>\s*\/dev\/null|&>\s*\/dev\/null)/,
     ];
@@ -36,7 +38,14 @@ describe('bookkeeping suppression and scratch pin (task 1136 R2/R6)', () => {
         expect(violations).toEqual([]);
     });
 
-    test('AC2/R2: a snippet redirecting inline-run-setup to /dev/null is rejected naming file and line', () => {
+    test('AC2/R2: a snippet redirecting spur workflow inline to /dev/null is rejected naming file and line', () => {
+        const cli = 'spur workflow inline action --run-id 123 --node test >/dev/null 2>&1';
+        expect(findBookkeepingSuppression(cli, 'test-doc.md')).toEqual([`test-doc.md:1: ${cli}`]);
+        expect(findBookkeepingSuppression('spur workflow inline persist-check --from x 2>/dev/null')).toHaveLength(1);
+        expect(findBookkeepingSuppression('spur workflow inline close --run-id r')).toEqual([]);
+    });
+
+    test('AC2/R2: a snippet redirecting the retired inline-run-setup script is still rejected', () => {
         const snippet = 'bun plugins/sp/scripts/inline-run-setup.ts --action --run-id 123 --node test >/dev/null 2>&1';
         const violations = findBookkeepingSuppression(snippet, 'test-doc.md');
         expect(violations).toEqual([
@@ -73,6 +82,6 @@ describe('bookkeeping suppression and scratch pin (task 1136 R2/R6)', () => {
             'utf8',
         );
         expect(traceRef).toContain('Never suppress this output');
-        expect(traceRef).toContain('redirecting `inline-run-setup`');
+        expect(traceRef).toContain('redirecting `spur workflow inline`');
     });
 });

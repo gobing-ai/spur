@@ -6,7 +6,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 // Test-side parity anchor: the plugin standalone contract forbids a VALUE import in
 // plugins/sp shipped code, so the comparison imports the app source directly here.
-import { TERMINAL_REASONS } from '../../../packages/app/src/workflow/terminal-reason';
+import { TERMINAL_REASONS } from '../../../../../packages/app/src/workflow/terminal-reason';
 
 /**
  * Task 0937 R2 — the inline driver's `--close` reason contract. Task 1136 moved the close-mode
@@ -17,15 +17,17 @@ import { TERMINAL_REASONS } from '../../../packages/app/src/workflow/terminal-re
  * non-enum one) BEFORE any write.
  */
 
-const SCRIPT = join(import.meta.dir, '..', 'scripts', 'inline-run-setup.ts');
+// Script-absorption PR-4: the plugin script became `spur workflow inline <op>`. This suite kept its
+// legacy-argv bodies; the shim translates them (tests/workflow-inline/legacy-argv.ts) and runs the
+// real CLI entry, so every case now exercises the installed transport.
+const SCRIPT = join(import.meta.dir, '..', '..', 'workflow-inline', 'legacy-inline-shim.ts');
 
-test('no plugins/sp source re-copies the terminal-reason enum (single owner, parity held)', () => {
-    const scriptSource = readFileSync(SCRIPT, 'utf8');
-    expect(scriptSource).not.toContain('const TERMINAL_REASONS = new Set([');
-    // And the script stays standalone: the app package appears only as a type-only namespace
-    // import; no runtime value import exists.
-    expect(scriptSource).toContain("import type * as spurApp from '@gobing-ai/spur-app'");
-    expect(scriptSource).not.toMatch(/(^|\n)import (?!type )[^;\n]*'@gobing-ai\/spur-app'/);
+test('the terminal-reason enum has one owner (the app), and the CLI adapter does not copy it', () => {
+    const adapter = readFileSync(
+        join(import.meta.dir, '..', '..', '..', 'src', 'commands', 'workflow', 'inline.ts'),
+        'utf8',
+    );
+    expect(adapter).not.toContain('TERMINAL_REASONS');
     // The one owner still declares the full closed enum.
     expect([...TERMINAL_REASONS]).toEqual([
         'done',
