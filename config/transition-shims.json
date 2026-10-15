@@ -4,7 +4,7 @@
         {
             "id": "agent-bare-binary-name",
             "wbs": "0536",
-            "file": "packages/app/src/services/agent-service.ts",
+            "file": "packages/app/src/services/agent-resolver.ts",
             "keepsWorking": "a bare coding-agent binary name (codex, omp, claude with no matching agent.executors entry) remains a valid --agent value during the role transition, with a one-time warning emitted by warnBareBinaryOnce",
             "removalCondition": "no bare-binary --agent value remains in docs/, config/workflows/, or plugins/sp/ (scan for --agent <binary-name> usages against agent.executors names)"
         }
