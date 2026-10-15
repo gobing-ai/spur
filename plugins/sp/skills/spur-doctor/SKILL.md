@@ -34,7 +34,8 @@ binary, host session or tool install is healthy is `spur agent doctor`'s job, no
 
 ## Read-only invariant
 
-The doctor **writes nothing and names no mutating verb**. It performs no task, feature, rule,
+The doctor **writes nothing and executes no mutating verb**. Proposal `apply` cells may name
+the authorized writer and its CLI route; they do not execute it. It performs no task, feature, rule,
 workflow or document write. The operator accepts rows; `sp:spur-composer`
 ([../spur-composer/SKILL.md](../spur-composer/SKILL.md)) applies corpus rows, while a document
 author applies plan/design rows using the

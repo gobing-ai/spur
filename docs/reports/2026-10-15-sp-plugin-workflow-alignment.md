@@ -1,7 +1,7 @@
 ---
 kind: report
 title: SP plugin and workflow alignment after CLI absorption
-status: verification-pending
+status: verified
 created_at: 2026-10-15
 updated_at: 2026-10-15
 related: [A91, '1211', '1212', '1213', ADR-130]
@@ -28,18 +28,27 @@ edits were preserved.
 | Dogfood references pointed at deleted detector tests | RESOLVED: current app-owned detector test path | Skill link checks |
 | Inline record snippet omitted no-lifecycle | RESOLVED: match pipeline invocation and prevent orphaned lifecycle runs | New driver/YAML parity assertion |
 | History rescue quoted a multi-part CLI invocation as one executable | RESOLVED: expand the existing launch contract consistently | New behavioral regression failed before fix, passes after |
+| Shippability instructions checked active-state structure instead of strict completion | RESOLVED: projected done/strict check includes receipts and dogfood evidence; command/spine references agree | New shipping instruction contract test |
+| Doctor read-only invariant forbade naming proposal write routes | RESOLVED: proposals may name an approved apply route; doctor executes no mutations | Capability validation and source review |
 | Planning spine diagram implied subprocess AC authoring by default | RESOLVED: host-inline competency routing matches current default | Source review and skill contracts |
 
 ## Verification scope
 
-- Capability structure: Superskill validates all 88 skills/commands/agents; wrapper/flag contracts
+- Capability structure: Superskill validates all 88 skills/commands/agents (one intentional
+  placeholder-link warning in wayfinder); wrapper/flag contracts
   cover all 43 commands and 87 contract surfaces. No wrappers needed semantic rewrites.
 - All nine workflows pass schema and semantic validation. Composition findings are existing
   advisory warnings, not schema failures. Bare dry runs in empty scratch projects intentionally
   fail closed (missing producer/corpus artifacts) or hit iteration bounds on externally-driven
   lifecycle graphs. These are not completed pipeline proofs and no guards were weakened.
 - Behavioral fixtures exercise history rescue, inline task pipeline, iteration ordering and CLI
-  gate exits. Required full gate and fresh feature verification are run after final edits.
+  gate exits. Runtime/workflow full gate: 11,111 tests, zero failures, all typechecks and 53 rules;
+  measured files meet both 90% thresholds. Final documentation-only shipping/doctor corrections
+  additionally pass 205 contract/structure tests, capability validation and wrapper/flag gates.
+  The feature-scoped receipt is refreshed after all edits.
+- One fleet test timed out at 20 seconds in the first complete-suite attempt; its exact retry
+  passed in 53 ms and the unchanged full-gate retry passed. The interrupted attempts are
+  preserved and are not counted as successful gates. No thresholds/assertions were weakened.
 - Receipts and raw validation output: `.spur/run/plugin-alignment/`.
 
 ## Existing launch restriction
@@ -53,5 +62,6 @@ runtime contract change; this alignment does not claim that capability.
 ## Delivery
 
 Task 1211 residual scan initially found zero items; its final review/record and residual sweep are
-rechecked after refinement. No new task, public CLI noun/verb, compatibility script, commit or push
-is introduced. All edits remain available for the operator's next commit step.
+rechecked after refinement. No new task, public CLI noun/verb or compatibility script is introduced. This driver made no
+commit or push. Earlier alignment changes appeared in commits 21d89c1aa and 06e5b7047 during
+the session; the final shippability/doctor refinements remain uncommitted for the next step.
