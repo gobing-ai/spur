@@ -40,7 +40,7 @@ sp:pr-reviewing (this skill — mode routing, triage, fix, rules)
       │  deterministic spine, state order + guards:
       ▼
 pr-review.yaml ← workflow SSOT (seeded by spur init; project-tunable)
-      │  every state resolves with `superskill script path` and shells out to:
+      │  every deterministic action shells out to:
       ▼
 `spur builder pr`         ← Bun entrypoint for the tested git/gh core
 ```

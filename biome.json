@@ -18,10 +18,7 @@
             "!**/vendors",
             "!docs/.tasks",
             "!drizzle",
-            "!**/.spur",
-            "!plugins/sp/scripts/**/*.mjs",
-            "!plugins/sp/lib/*.generated.mjs",
-            "!plugins/sp/lib/*.generated.d.mts"
+            "!**/.spur"
         ]
     },
     "formatter": {

@@ -5,7 +5,7 @@
 # stays in spur-check-feature.
 rules:
   - id: sp-script-placement
-    description: "Plugins/sp scripts must honor the ADR-130 placement contract (glue budget, no db imports, no corpus parsing, no noun clash); baseline config/script-placement-baseline.json can only shrink."
+    description: "Plugins/sp scripts must honor the ADR-130 placement contract (glue budget, no db imports, no corpus parsing, no noun clash, ADR-129 hook layout); any finding fails (task 1213 retired the baseline ledger)."
     severity: error
     evaluator:
       type: exit-code

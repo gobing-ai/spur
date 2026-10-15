@@ -1,905 +1,330 @@
-import { expect, spyOn, test } from 'bun:test';
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, utimesSync, writeFileSync } from 'node:fs';
+import { expect, test } from 'bun:test';
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import {
     checkHookLayout,
     checkPlacement,
-    loadManifest,
-    loadPlacementBaseline,
+    GLUE_BUDGET_LINES,
     parseArgs,
     run,
-    type ScriptManifest,
-    spawnConvertTwin,
-    validateContract,
+    validateScriptLayout,
 } from './script-contract-check';
 
 function createTempEnv() {
     const root = mkdtempSync(join(tmpdir(), 'script-contract-test-'));
-    const configDir = join(root, 'config');
     const scriptsDir = join(root, 'plugins', 'sp', 'scripts');
-    const commandsDir = join(root, 'plugins', 'sp', 'commands');
-    const skillsDir = join(root, 'plugins', 'sp', 'skills');
-    const agentsDir = join(root, 'plugins', 'sp', 'agents');
+    const hooksDir = join(root, 'plugins', 'sp', 'hooks');
     const pluginDir = join(root, 'plugins', 'sp');
 
-    mkdirSync(configDir, { recursive: true });
     mkdirSync(scriptsDir, { recursive: true });
-    mkdirSync(commandsDir, { recursive: true });
-    mkdirSync(skillsDir, { recursive: true });
-    mkdirSync(agentsDir, { recursive: true });
-
+    mkdirSync(hooksDir, { recursive: true });
+    writeFileSync(join(hooksDir, 'hooks.json'), JSON.stringify({ hooks: {} }));
     writeFileSync(join(pluginDir, 'README.md'), '# Plugin\n');
 
-    return {
-        root,
-        configDir,
-        scriptsDir,
-        pluginDir,
-        cleanup: () => rmSync(root, { recursive: true, force: true }),
-    };
+    return { root, scriptsDir, pluginDir, cleanup: () => rmSync(root, { recursive: true, force: true }) };
 }
 
-/** Deterministic stand-in for the real `superskill script convert` output. */
-const twinOf = (source: string): string => `// twin\n${source}`;
+function writeEntry(root: string, name: string, body = 'export {};\n'): void {
+    const dir = join(root, 'plugins', 'sp', 'scripts', 'hooks');
+    mkdirSync(dir, { recursive: true });
+    writeFileSync(join(dir, `${name}.ts`), body);
+}
 
-/** A fake converter that regenerates a fixture twin exactly as the real one would. */
-const fakeConvert =
-    (scriptsDir: string) =>
-    (rel: string, outPath: string): boolean => {
-        writeFileSync(outPath, twinOf(readFileSync(join(scriptsDir, rel), 'utf8')));
-        return true;
-    };
+function writeHooksJson(root: string, identities: string[]): void {
+    writeFileSync(
+        join(root, 'plugins', 'sp', 'hooks', 'hooks.json'),
+        JSON.stringify({
+            hooks: Object.fromEntries(
+                identities.map((id) => ['SessionStart', [{ hooks: [{ command: `superskill hook run sp ${id}` }] }]]),
+            ),
+        }),
+    );
+}
+
+// ---- flags ----
 
 test('parseArgs parses custom flags', () => {
-    const res = parseArgs(['--manifest', 'foo.json', '--scripts-dir', 'bar', '--plugin-dir', 'baz']);
-    expect(res.manifest).toBe('foo.json');
+    const res = parseArgs(['--scripts-dir', 'bar', '--plugin-dir', 'baz', '--placement-only', '--repo-root', 'zed']);
     expect(res.scriptsDir).toBe('bar');
     expect(res.pluginDir).toBe('baz');
+    expect(res.placementOnly).toBe(true);
+    expect(res.repoRoot).toBe('zed');
 });
 
-test('loadManifest handles missing, malformed, and valid files', () => {
+test('parseArgs defaults to the real plugin layout', () => {
+    const res = parseArgs([]);
+    expect(res.scriptsDir).toBe('plugins/sp/scripts');
+    expect(res.pluginDir).toBe('plugins/sp');
+    expect(res.placementOnly).toBe(false);
+    expect(res.repoRoot).toBe('.');
+});
+
+// ---- rule 1: hook-only layout under plugins/sp/scripts ----
+
+test('a registered hook entry with hooks.json is clean', () => {
     const env = createTempEnv();
     try {
-        const missing = loadManifest(join(env.root, 'missing.json'));
-        expect(missing.manifest).toBeNull();
-        expect(missing.error).toContain('not found');
-
-        const badJson = join(env.root, 'bad.json');
-        writeFileSync(badJson, '{ bad json');
-        const malformed = loadManifest(badJson);
-        expect(malformed.manifest).toBeNull();
-        expect(malformed.error).toContain('malformed JSON');
-
-        const noEntries = join(env.root, 'no-entries.json');
-        writeFileSync(noEntries, JSON.stringify({ note: 'no entries' }));
-        const missingEntries = loadManifest(noEntries);
-        expect(missingEntries.manifest).toBeNull();
-        expect(missingEntries.error).toContain('missing "entries" array');
-
-        const goodJson = join(env.root, 'good.json');
-        writeFileSync(goodJson, JSON.stringify({ entries: [{ rel: 'a.ts', contract: 'repo-only' }] }));
-        const good = loadManifest(goodJson);
-        expect(good.manifest?.entries.length).toBe(1);
+        writeHooksJson(env.root, ['loop-safety']);
+        writeEntry(env.root, 'loop-safety');
+        expect(validateScriptLayout({ scriptsDir: env.scriptsDir, pluginDir: env.pluginDir })).toEqual([]);
     } finally {
         env.cleanup();
     }
 });
 
-test('R1 — missing .mjs twin for a standard script fails the gate', () => {
+test('a non-hook script under plugins/sp/scripts is a violation', () => {
     const env = createTempEnv();
     try {
-        writeFileSync(join(env.scriptsDir, 'my-tool.ts'), 'console.log("hello");\n');
-        const manifest: ScriptManifest = {
-            entries: [{ rel: 'my-tool.ts', contract: 'standard', twin: 'my-tool.mjs' }],
-        };
-        const violations = validateContract(manifest, env.scriptsDir, env.pluginDir);
-        expect(violations.some((v) => v.kind === 'missing_twin' && v.target === 'my-tool.ts')).toBe(true);
+        writeFileSync(join(env.scriptsDir, 'stray-skill.ts'), 'console.log(1);\n');
+        const violations = validateScriptLayout({ scriptsDir: env.scriptsDir, pluginDir: env.pluginDir });
+        expect(violations.map((v) => v.kind)).toContain('stray_script');
+        expect(violations.find((v) => v.kind === 'stray_script')?.target).toBe('stray-skill.ts');
     } finally {
         env.cleanup();
     }
 });
 
-test('R5 — @gobing-ai value import in a bundled surface fails the gate', () => {
+test('an .mjs twin anywhere under plugins/sp/scripts is a violation', () => {
     const env = createTempEnv();
     try {
+        const hooksDir = join(env.scriptsDir, 'hooks');
+        mkdirSync(hooksDir, { recursive: true });
+        writeFileSync(join(hooksDir, 'loop-safety.mjs'), '// generated twin\n');
+        const violations = validateScriptLayout({ scriptsDir: env.scriptsDir, pluginDir: env.pluginDir });
+        expect(violations.map((v) => v.kind)).toContain('stray_twin');
+    } finally {
+        env.cleanup();
+    }
+});
+
+// ---- rule 2: hook identity/layout (ADR-129) ----
+
+test('a registered identity without an authored entry fails hook layout', () => {
+    const env = createTempEnv();
+    try {
+        writeHooksJson(env.root, ['missing-entry']);
+        const violations = validateScriptLayout({ scriptsDir: env.scriptsDir, pluginDir: env.pluginDir });
+        expect(violations.map((v) => v.kind)).toContain('hook-layout');
+        expect(violations.find((v) => v.kind === 'hook-layout')?.message).toContain('missing-entry');
+    } finally {
+        env.cleanup();
+    }
+});
+
+test('an unregistered entry and a shadow entry in plugins/sp/hooks fail hook layout', () => {
+    const env = createTempEnv();
+    try {
+        writeEntry(env.root, 'unregistered');
+        writeFileSync(join(env.root, 'plugins', 'sp', 'hooks', 'shadow.ts'), 'export {};\n');
+        const violations = validateScriptLayout({ scriptsDir: env.scriptsDir, pluginDir: env.pluginDir });
+        const hookLayout = violations.filter((v) => v.kind === 'hook-layout').map((v) => v.target);
+        expect(hookLayout).toContain('plugins/sp/scripts/hooks/unregistered.ts');
+        expect(hookLayout).toContain('plugins/sp/hooks/shadow.ts');
+    } finally {
+        env.cleanup();
+    }
+});
+
+test('hook tests under the entries tree are misplaced (ADR-129 test owner)', () => {
+    const env = createTempEnv();
+    try {
+        writeHooksJson(env.root, ['loop-safety']);
+        writeEntry(env.root, 'loop-safety');
         writeFileSync(
-            join(env.scriptsDir, 'my-tool.ts'),
-            "import { getEnvVar } from '@gobing-ai/ts-utils';\nconsole.log(getEnvVar('X'));\n",
+            join(env.root, 'plugins', 'sp', 'scripts', 'hooks', 'loop-safety.test.ts'),
+            'test("x", () => {});\n',
         );
-        const manifest: ScriptManifest = {
-            entries: [{ rel: 'my-tool.ts', contract: 'standard', twin: 'my-tool.mjs' }],
-        };
-        const violations = validateContract(manifest, env.scriptsDir, env.pluginDir);
-        expect(violations.some((v) => v.kind === 'gobing_ai_import' && v.target.includes('my-tool.ts'))).toBe(true);
+        expect(checkHookLayout({ repoRoot: env.root }).map((f) => f.file)).toContain(
+            'plugins/sp/scripts/hooks/loop-safety.test.ts',
+        );
     } finally {
         env.cleanup();
     }
 });
 
-test('R5 — type-only @gobing-ai imports are exempt (erased at bundle)', () => {
+// ---- rule 3: bundled surfaces must not value-import @gobing-ai/* ----
+
+test('a value import of @gobing-ai/* in a bundled surface is a violation', () => {
     const env = createTempEnv();
     try {
+        writeHooksJson(env.root, ['loop-safety']);
+        writeEntry(env.root, 'loop-safety', "import { x } from '@gobing-ai/ts-utils';\nexport {};\n");
+        const violations = validateScriptLayout({ scriptsDir: env.scriptsDir, pluginDir: env.pluginDir });
+        expect(violations.map((v) => v.kind)).toContain('gobing_ai_import');
+    } finally {
+        env.cleanup();
+    }
+});
+
+test('import type of @gobing-ai/* is exempt', () => {
+    const env = createTempEnv();
+    try {
+        writeHooksJson(env.root, ['loop-safety']);
+        writeEntry(env.root, 'loop-safety', "import type { Foo } from '@gobing-ai/ts-utils';\nexport {};\n");
+        expect(validateScriptLayout({ scriptsDir: env.scriptsDir, pluginDir: env.pluginDir })).toEqual([]);
+    } finally {
+        env.cleanup();
+    }
+});
+
+// ---- rule 4: shipped surfaces must not invoke retired script machinery ----
+
+test('a skill invoking bun plugins/sp/scripts/… is a violation', () => {
+    const env = createTempEnv();
+    try {
+        const skills = join(env.pluginDir, 'skills', 'demo');
+        mkdirSync(skills, { recursive: true });
+        writeFileSync(join(skills, 'SKILL.md'), 'run: bun plugins/sp/scripts/demo.ts\n');
+        const violations = validateScriptLayout({ scriptsDir: env.scriptsDir, pluginDir: env.pluginDir });
+        expect(violations.map((v) => v.kind)).toContain('forbidden_invocation');
+    } finally {
+        env.cleanup();
+    }
+});
+
+test('`superskill script path` in README is a violation', () => {
+    const env = createTempEnv();
+    try {
+        writeFileSync(join(env.pluginDir, 'README.md'), 'node "$(superskill script path sp demo.mjs)"\n');
+        const violations = validateScriptLayout({ scriptsDir: env.scriptsDir, pluginDir: env.pluginDir });
+        expect(violations.map((v) => v.kind)).toContain('forbidden_invocation');
+    } finally {
+        env.cleanup();
+    }
+});
+
+test('a retired probe inside a workflow command block is a violation', () => {
+    const env = createTempEnv();
+    try {
+        const workflowsDir = join(env.root, 'config', 'workflows');
+        mkdirSync(workflowsDir, { recursive: true });
         writeFileSync(
-            join(env.scriptsDir, 'my-tool.ts'),
-            "import type { WorkflowActionTraceWriter } from '@gobing-ai/app';\nimport { join } from 'node:path';\nconsole.log(join('a', 'b'));\n",
-        );
-        const manifest: ScriptManifest = {
-            entries: [{ rel: 'my-tool.ts', contract: 'standard', twin: 'my-tool.mjs' }],
-        };
-        const violations = validateContract(manifest, env.scriptsDir, env.pluginDir);
-        expect(violations.some((v) => v.kind === 'gobing_ai_import')).toBe(false);
-    } finally {
-        env.cleanup();
-    }
-});
-
-test('R1 — twin content differing from a fresh convert fails stale_twin, even with a newer mtime', () => {
-    const env = createTempEnv();
-    try {
-        const tsPath = join(env.scriptsDir, 'tool.ts');
-        const mjsPath = join(env.scriptsDir, 'tool.mjs');
-        writeFileSync(tsPath, 'A\n');
-        writeFileSync(mjsPath, twinOf('B\n'));
-
-        // The twin is 100s NEWER than its source: the old mtime rule passed this, which is
-        // exactly the committed-stale-twin case the gate exists to catch.
-        const future = (Date.now() + 100_000) / 1000;
-        utimesSync(mjsPath, future, future);
-
-        const manifest: ScriptManifest = {
-            entries: [{ rel: 'tool.ts', contract: 'standard', twin: 'tool.mjs' }],
-        };
-        const violations = validateContract(manifest, env.scriptsDir, env.pluginDir, {
-            convertTwin: fakeConvert(env.scriptsDir),
-        });
-        expect(violations.some((v) => v.kind === 'stale_twin' && v.target === 'tool.ts')).toBe(true);
-    } finally {
-        env.cleanup();
-    }
-});
-
-test('R1 — twin content matching a fresh convert passes, even with an older mtime', () => {
-    const env = createTempEnv();
-    try {
-        const tsPath = join(env.scriptsDir, 'tool.ts');
-        const mjsPath = join(env.scriptsDir, 'tool.mjs');
-        writeFileSync(tsPath, 'A\n');
-        writeFileSync(mjsPath, twinOf('A\n'));
-
-        const past = (Date.now() - 100_000) / 1000;
-        utimesSync(mjsPath, past, past);
-
-        const manifest: ScriptManifest = {
-            entries: [{ rel: 'tool.ts', contract: 'standard', twin: 'tool.mjs' }],
-        };
-        const violations = validateContract(manifest, env.scriptsDir, env.pluginDir, {
-            convertTwin: fakeConvert(env.scriptsDir),
-        });
-        expect(violations.some((v) => v.kind === 'stale_twin')).toBe(false);
-    } finally {
-        env.cleanup();
-    }
-});
-
-test('R3 — a converter that cannot run reports one converter_unavailable and no stale_twin', () => {
-    const env = createTempEnv();
-    try {
-        writeFileSync(join(env.scriptsDir, 'a.ts'), 'A\n');
-        writeFileSync(join(env.scriptsDir, 'a.mjs'), 'old-a\n');
-        writeFileSync(join(env.scriptsDir, 'b.ts'), 'B\n');
-        writeFileSync(join(env.scriptsDir, 'b.mjs'), 'old-b\n');
-        const manifest: ScriptManifest = {
-            entries: [
-                { rel: 'a.ts', contract: 'standard', twin: 'a.mjs' },
-                { rel: 'b.ts', contract: 'standard', twin: 'b.mjs' },
-            ],
-        };
-        const violations = validateContract(manifest, env.scriptsDir, env.pluginDir, {
-            convertTwin: () => false,
-        });
-        expect(violations.filter((v) => v.kind === 'converter_unavailable')).toHaveLength(1);
-        expect(violations.some((v) => v.kind === 'stale_twin')).toBe(false);
-    } finally {
-        env.cleanup();
-    }
-});
-
-test('R3 — the default converter fails loudly when its binary is missing', () => {
-    const env = createTempEnv();
-    try {
-        writeFileSync(join(env.scriptsDir, 'tool.ts'), 'A\n');
-        writeFileSync(join(env.scriptsDir, 'tool.mjs'), 'old\n');
-        const manifest: ScriptManifest = {
-            entries: [{ rel: 'tool.ts', contract: 'standard', twin: 'tool.mjs' }],
-        };
-        const convert = spawnConvertTwin(env.root, 'superskill-not-installed');
-        expect(convert('tool.ts', join(env.root, 'out.mjs'))).toBe(false);
-        expect(convert.lastError ?? '').toContain('superskill-not-installed');
-
-        const violations = validateContract(manifest, env.scriptsDir, env.pluginDir, {
-            convertTwin: convert,
-        });
-        expect(violations.some((v) => v.kind === 'converter_unavailable')).toBe(true);
-    } finally {
-        env.cleanup();
-    }
-});
-
-test('R2 — repo-only script with a .mjs twin fails unexpected_twin', () => {
-    const env = createTempEnv();
-    try {
-        writeFileSync(join(env.scriptsDir, 'internal.ts'), 'console.log("internal");\n');
-        writeFileSync(join(env.scriptsDir, 'internal.mjs'), 'console.log("internal mjs");\n');
-        const manifest: ScriptManifest = {
-            entries: [{ rel: 'internal.ts', contract: 'repo-only' }],
-        };
-        const violations = validateContract(manifest, env.scriptsDir, env.pluginDir);
-        expect(violations.some((v) => v.kind === 'unexpected_twin')).toBe(true);
-    } finally {
-        env.cleanup();
-    }
-});
-
-test('R2 — unexpected .mjs twin with no corresponding ts entry fails unexpected_twin', () => {
-    const env = createTempEnv();
-    try {
-        writeFileSync(join(env.scriptsDir, 'orphan.mjs'), 'console.log("orphan");\n');
-        const manifest: ScriptManifest = {
-            entries: [],
-        };
-        const violations = validateContract(manifest, env.scriptsDir, env.pluginDir);
-        expect(violations.some((v) => v.kind === 'unexpected_twin' && v.target === 'orphan.mjs')).toBe(true);
-    } finally {
-        env.cleanup();
-    }
-});
-
-test('R3 — unlisted script on disk fails unregistered_script', () => {
-    const env = createTempEnv();
-    try {
-        writeFileSync(join(env.scriptsDir, 'rogue.ts'), 'console.log("rogue");\n');
-        const manifest: ScriptManifest = {
-            entries: [],
-        };
-        const violations = validateContract(manifest, env.scriptsDir, env.pluginDir);
-        expect(violations.some((v) => v.kind === 'unregistered_script' && v.target === 'rogue.ts')).toBe(true);
-    } finally {
-        env.cleanup();
-    }
-});
-
-test('R3 — hook entries under scripts/hooks are not script-path entrypoints and need no manifest row (ADR-039)', () => {
-    const env = createTempEnv();
-    try {
-        mkdirSync(join(env.scriptsDir, 'hooks'), { recursive: true });
-        writeFileSync(join(env.scriptsDir, 'hooks', 'guard.ts'), 'process.exit(0);\n');
-        // A nested `hooks/` deeper in the tree is an ordinary feature dir and still needs a row.
-        mkdirSync(join(env.scriptsDir, 'feature', 'hooks'), { recursive: true });
-        writeFileSync(join(env.scriptsDir, 'feature', 'hooks', 'tool.ts'), 'console.log("tool");\n');
-        const violations = validateContract({ entries: [] }, env.scriptsDir, env.pluginDir);
-        expect(violations.some((v) => v.target === 'hooks/guard.ts')).toBe(false);
-        expect(violations.some((v) => v.kind === 'unregistered_script' && v.target === 'feature/hooks/tool.ts')).toBe(
-            true,
-        );
-    } finally {
-        env.cleanup();
-    }
-});
-
-test('R3 — manifest entry not present on disk fails unregistered_script', () => {
-    const env = createTempEnv();
-    try {
-        const manifest: ScriptManifest = {
-            entries: [{ rel: 'missing.ts', contract: 'repo-only' }],
-        };
-        const violations = validateContract(manifest, env.scriptsDir, env.pluginDir);
-        expect(violations.some((v) => v.kind === 'unregistered_script' && v.target === 'missing.ts')).toBe(true);
-    } finally {
-        env.cleanup();
-    }
-});
-
-test('Incomplete manifest entry without rel or contract fails incomplete', () => {
-    const env = createTempEnv();
-    try {
-        const manifest: ScriptManifest = {
-            // @ts-expect-error
-            entries: [{ contract: 'standard' }],
-        };
-        const violations = validateContract(manifest, env.scriptsDir, env.pluginDir);
-        expect(violations.some((v) => v.kind === 'incomplete')).toBe(true);
-    } finally {
-        env.cleanup();
-    }
-});
-
-test('R4 — forbidden invocation in shipped command/skill/agent/README fails', () => {
-    const env = createTempEnv();
-    try {
-        writeFileSync(join(env.scriptsDir, 'tool.ts'), 'console.log("tool");\n');
-        writeFileSync(join(env.scriptsDir, 'tool.mjs'), twinOf('console.log("tool");\n'));
-        writeFileSync(
-            join(env.pluginDir, 'commands', 'bad-command.md'),
-            '# Bad Command\n\nRun `bun plugins/sp/scripts/tool.ts` here\n',
-        );
-        const manifest: ScriptManifest = {
-            entries: [{ rel: 'tool.ts', contract: 'standard', twin: 'tool.mjs' }],
-        };
-        const violations = validateContract(manifest, env.scriptsDir, env.pluginDir, {
-            convertTwin: fakeConvert(env.scriptsDir),
-        });
-        expect(violations.some((v) => v.kind === 'forbidden_invocation' && v.message.includes('bad-command.md'))).toBe(
-            true,
-        );
-    } finally {
-        env.cleanup();
-    }
-});
-
-test('R5 — an ungated project-first probe in a workflow YAML fails; a guarded probe passes', () => {
-    const env = createTempEnv();
-    try {
-        const wfDir = join(env.root, 'config', 'workflows');
-        mkdirSync(wfDir, { recursive: true });
-        writeFileSync(join(env.scriptsDir, 'tool.ts'), 'console.log("tool");\n');
-        writeFileSync(join(env.scriptsDir, 'tool.mjs'), twinOf('console.log("tool");\n'));
-        const manifest: ScriptManifest = { entries: [{ rel: 'tool.ts', contract: 'standard', twin: 'tool.mjs' }] };
-
-        const command = (guard: string): string =>
+            join(workflowsDir, 'p.yaml'),
             [
-                'name: fixture',
-                'kind: state-machine',
                 'states:',
-                '  - id: start',
+                '  - id: precheck',
                 '    onEnter:',
                 '      - kind: shell',
                 '        options:',
-                '          command: >-',
-                `            ${guard}`,
-                '            [ -f "$S" ] || S="$(superskill script path sp tool.mjs 2>/dev/null)";',
-                '            bun "$S"',
-                '',
-            ].join('\n');
-
-        // Ungated: the probe names the project tree with no source-repo marker in the block.
-        writeFileSync(join(wfDir, 'ungated.yaml'), command('S=plugins/sp/scripts/tool.ts;'));
-        const ungated = validateContract(manifest, env.scriptsDir, env.pluginDir, {
-            convertTwin: fakeConvert(env.scriptsDir),
-        });
-        expect(ungated.some((v) => v.kind === 'forbidden_invocation' && v.target.includes('ungated.yaml'))).toBe(true);
-
-        // Guarded: the same probe, marker on the guard line — the folded block is legal.
-        // Remove the ungated fixture first: the scanner covers the whole workflows dir.
-        rmSync(join(wfDir, 'ungated.yaml'), { force: true });
-        writeFileSync(
-            join(wfDir, 'guarded.yaml'),
-            command('S=; [ -f config/plugin-scripts.json ] && S=plugins/sp/scripts/tool.ts;'),
+                '            command: >-',
+                '                S=plugins/sp/scripts/script-root.ts; [ -f "$S" ] && bun "$S"',
+                '      - kind: shell',
+                '        options:',
+                '            command: >-',
+                '                # a comment naming bun plugins/sp/scripts/x.ts is skipped',
+                '                spur task check "$WBS" --precheck',
+            ].join('\n'),
         );
-        const guarded = validateContract(manifest, env.scriptsDir, env.pluginDir, {
-            convertTwin: fakeConvert(env.scriptsDir),
-        });
-        expect(guarded.filter((v) => v.kind === 'forbidden_invocation')).toEqual([]);
+        const violations = validateScriptLayout({ scriptsDir: env.scriptsDir, pluginDir: env.pluginDir });
+        expect(violations).toHaveLength(1);
+        expect(violations[0]?.kind).toBe('forbidden_invocation');
+        expect(violations[0]?.target).toContain('p.yaml:7');
     } finally {
         env.cleanup();
     }
 });
 
-test('Clean setup with standard twins and repo-only scripts passes', () => {
-    const env = createTempEnv();
+// ---- placement scan (--placement-only, ADR-130) ----
+
+test('placement scan reports line budget, db-import, corpus-parse and noun-clash findings', () => {
+    const root = mkdtempSync(join(tmpdir(), 'script-placement-test-'));
     try {
-        writeFileSync(join(env.scriptsDir, 'ship.ts'), 'console.log("ship");\n');
-        writeFileSync(join(env.scriptsDir, 'ship.mjs'), twinOf('console.log("ship");\n'));
-        writeFileSync(join(env.scriptsDir, 'local.ts'), 'console.log("local");\n');
+        const scriptsDir = join(root, 'plugins', 'sp', 'scripts');
+        mkdirSync(join(scriptsDir, 'hooks'), { recursive: true });
+        mkdirSync(join(root, 'scripts', 'commands'), { recursive: true });
+        mkdirSync(join(root, 'apps', 'cli', 'src', 'commands', 'shared'), { recursive: true });
+        writeFileSync(join(root, 'apps', 'cli', 'src', 'commands', 'shared', 'index.ts'), 'export const shared = 1;\n');
+        writeFileSync(join(root, 'scripts', 'commands', 'shared.ts'), 'export {};\n');
+        writeFileSync(join(scriptsDir, 'fat.ts'), `${'const x = 1;\n'.repeat(GLUE_BUDGET_LINES + 1)}`);
         writeFileSync(
-            join(env.pluginDir, 'commands', 'good-command.md'),
-            '# Good Command\n\nRun `node "$(superskill script path sp ship.mjs)"` here\n',
+            join(scriptsDir, 'db.ts'),
+            [
+                '// import { Database } from "bun:sqlite"; — comment is exempt',
+                "import { Database } from 'bun:sqlite';",
+                "const mod = await import('drizzle-orm/bun-sqlite');",
+                "const p = 'docs/tasks/0001.md';",
+            ].join('\n'),
         );
-        const manifest: ScriptManifest = {
-            entries: [
-                { rel: 'ship.ts', contract: 'standard', twin: 'ship.mjs' },
-                { rel: 'local.ts', contract: 'repo-only' },
-            ],
-        };
-        const violations = validateContract(manifest, env.scriptsDir, env.pluginDir, {
-            convertTwin: fakeConvert(env.scriptsDir),
-        });
-        expect(violations).toEqual([]);
-    } finally {
-        env.cleanup();
-    }
-});
-
-test('in-process run() handles success, manifest error, and validation failure', () => {
-    const logSpy = spyOn(console, 'log').mockImplementation(() => {});
-    const errSpy = spyOn(console, 'error').mockImplementation(() => {});
-    const env = createTempEnv();
-    try {
-        const errCode = run(['--manifest', join(env.root, 'nonexistent.json')]);
-        expect(errCode).toBe(1);
-
-        // repo-only: run() supplies the real spawn-based converter, so a standard entry here
-        // would need a genuine `superskill script convert` twin. Rule 1's content check is
-        // covered by the validateContract tests; the live repo itself is checked by
-        // `bun run script-contract-check` (spur-check-feature / spur-check:full).
-        writeFileSync(join(env.scriptsDir, 'ship.ts'), 'console.log("ship");\n');
-        const manifestPath = join(env.configDir, 'plugin-scripts.json');
-        writeFileSync(manifestPath, JSON.stringify({ entries: [{ rel: 'ship.ts', contract: 'repo-only' }] }));
-
-        const successCode = run([
-            '--manifest',
-            manifestPath,
-            '--scripts-dir',
-            env.scriptsDir,
-            '--plugin-dir',
-            env.pluginDir,
+        writeFileSync(join(scriptsDir, 'hooks', 'entry.ts'), 'const q = "docs/features/x.md";\n');
+        const findings = checkPlacement({ repoRoot: root });
+        const byKind = Object.groupBy(findings, (f) => f.kind);
+        expect(byKind.budget?.map((f) => f.file)).toContain('plugins/sp/scripts/fat.ts');
+        expect(byKind['db-import']?.map((f) => f.file)).toEqual(['plugins/sp/scripts/db.ts']);
+        expect(byKind['db-import']?.every((f) => !f.detail.includes('comment'))).toBe(true);
+        expect(byKind['corpus-parse']?.map((f) => f.file).sort()).toEqual([
+            'plugins/sp/scripts/db.ts',
+            'plugins/sp/scripts/hooks/entry.ts',
         ]);
-        expect(successCode).toBe(0);
-
-        writeFileSync(join(env.scriptsDir, 'untracked.ts'), 'console.log("untracked");\n');
-        const failCode = run([
-            '--manifest',
-            manifestPath,
-            '--scripts-dir',
-            env.scriptsDir,
-            '--plugin-dir',
-            env.pluginDir,
-        ]);
-        expect(failCode).toBe(1);
-    } finally {
-        logSpy.mockRestore();
-        errSpy.mockRestore();
-        env.cleanup();
-    }
-});
-
-// ---- Placement scan (task 1000: --placement-only, baseline, plan §2 reconcile) ----
-
-function createPlacementFixture(): string {
-    const root = mkdtempSync(join(tmpdir(), 'placement-test-'));
-    const scriptsDir = join(root, 'plugins', 'sp', 'scripts');
-    const hooksDir = join(root, 'plugins', 'sp', 'hooks');
-    const libDir = join(root, 'plugins', 'sp', 'lib');
-    const repoCommandsDir = join(root, 'scripts', 'commands');
-    const cliCommandsDir = join(root, 'apps', 'cli', 'src', 'commands');
-    for (const dir of [scriptsDir, hooksDir, libDir, repoCommandsDir, cliCommandsDir]) {
-        mkdirSync(dir, { recursive: true });
-    }
-    writeFileSync(join(scriptsDir, 'big.ts'), `${Array.from({ length: 301 }, (_, i) => `// line ${i}`).join('\n')}\n`);
-    writeFileSync(join(scriptsDir, 'db.ts'), `import { Database } from 'bun:sqlite';\nexport const db = 1;\n`);
-    writeFileSync(join(scriptsDir, 'corpus.ts'), `export const path = 'docs/tasks/0099_task.md';\n`);
-    writeFileSync(join(scriptsDir, 'typed.ts'), `import type { Database } from 'bun:sqlite';\nexport const t = 1;\n`);
-    writeFileSync(join(repoCommandsDir, 'task.ts'), 'export const glue = 1;\n');
-    writeFileSync(join(cliCommandsDir, 'task.ts'), 'export const noun = 1;\n');
-    // A hook entry must be a registered identity (task 1174 activates checkHookLayout), so the
-    // fixture registers the one clean entry it expects to produce no finding.
-    writeFileSync(
-        join(hooksDir, 'hooks.json'),
-        JSON.stringify(
-            { hooks: { Stop: [{ hooks: [{ type: 'command', command: 'superskill hook run sp fine' }] }] } },
-            null,
-            4,
-        ),
-    );
-    mkdirSync(join(scriptsDir, 'hooks'), { recursive: true });
-    writeFileSync(join(scriptsDir, 'hooks', 'fine.ts'), 'export const fine = 1;\n');
-    writeFileSync(join(scriptsDir, 'skipped.test.ts'), `import { test } from 'bun:test';\ntest('skip', () => {});\n`);
-    return root;
-}
-
-test('checkPlacement reports each finding kind once per file', () => {
-    const root = createPlacementFixture();
-    try {
-        const findings = checkPlacement({ repoRoot: root, baselinePath: join(root, 'config', 'missing.json') });
-        const byFile = new Map(findings.map((f) => [f.file, f.kind]));
-        expect(byFile.get('plugins/sp/scripts/big.ts')).toBe('budget');
-        expect(findings.find((f) => f.file === 'plugins/sp/scripts/big.ts')?.detail).toContain('301');
-        expect(byFile.get('plugins/sp/scripts/db.ts')).toBe('db-import');
-        expect(byFile.get('plugins/sp/scripts/corpus.ts')).toBe('corpus-parse');
-        expect(byFile.get('scripts/commands/task.ts')).toBe('noun-clash');
-        expect(findings.some((f) => f.file.endsWith('typed.ts'))).toBe(false);
-        expect(findings.some((f) => f.file.endsWith('skipped.test.ts'))).toBe(false);
-        expect(findings.some((f) => f.file.endsWith('fine.ts'))).toBe(false);
+        expect(byKind['noun-clash']?.map((f) => f.file)).toEqual(['scripts/commands/shared.ts']);
     } finally {
         rmSync(root, { recursive: true, force: true });
     }
 });
 
-test('checkPlacement treats a per-verb CLI noun folder (commands/<noun>/index.ts) as a noun', () => {
-    const root = createPlacementFixture();
+test('placement scan reports a double-registered hook identity once per registration', () => {
+    const root = mkdtempSync(join(tmpdir(), 'script-placement-test-'));
     try {
-        mkdirSync(join(root, 'apps', 'cli', 'src', 'commands', 'agent'), { recursive: true });
-        writeFileSync(join(root, 'apps', 'cli', 'src', 'commands', 'agent', 'index.ts'), 'export const noun = 1;\n');
-        writeFileSync(join(root, 'scripts', 'commands', 'agent.ts'), 'export const glue = 1;\n');
-        // A folder without index.ts is not a noun.
-        mkdirSync(join(root, 'apps', 'cli', 'src', 'commands', 'notes'), { recursive: true });
-        writeFileSync(join(root, 'scripts', 'commands', 'notes.ts'), 'export const glue = 1;\n');
-        const findings = checkPlacement({ repoRoot: root, baselinePath: join(root, 'config', 'missing.json') });
-        const byFile = new Map(findings.map((f) => [f.file, f.kind]));
-        expect(byFile.get('scripts/commands/agent.ts')).toBe('noun-clash');
-        expect(byFile.has('scripts/commands/notes.ts')).toBe(false);
-    } finally {
-        rmSync(root, { recursive: true, force: true });
-    }
-});
-
-test('checkPlacement reports dynamic DB imports as db-import (task 1018 AC1)', () => {
-    const root = createPlacementFixture();
-    try {
+        const hooksDir = join(root, 'plugins', 'sp', 'hooks');
+        mkdirSync(hooksDir, { recursive: true });
         writeFileSync(
-            join(root, 'plugins', 'sp', 'scripts', 'dyn-sqlite.ts'),
-            `export async function open() {\n    const { Database } = await import('bun:sqlite');\n    return Database;\n}\n`,
-        );
-        writeFileSync(
-            join(root, 'plugins', 'sp', 'scripts', 'dyn-drizzle.ts'),
-            `export async function open() {\n    const db = await import("drizzle-orm/bun-sqlite");\n    return db;\n}\n`,
-        );
-        const findings = checkPlacement({ repoRoot: root, baselinePath: join(root, 'config', 'missing.json') });
-        const sqlite = findings.filter((f) => f.file === 'plugins/sp/scripts/dyn-sqlite.ts');
-        expect(sqlite).toHaveLength(1);
-        expect(sqlite[0]?.kind).toBe('db-import');
-        expect(sqlite[0]?.detail).toBe('dynamic import of bun:sqlite');
-        const drizzle = findings.filter((f) => f.file === 'plugins/sp/scripts/dyn-drizzle.ts');
-        expect(drizzle).toHaveLength(1);
-        expect(drizzle[0]?.kind).toBe('db-import');
-        expect(drizzle[0]?.detail).toBe('dynamic import of drizzle-orm/bun-sqlite');
-    } finally {
-        rmSync(root, { recursive: true, force: true });
-    }
-});
-
-test('checkPlacement skips type imports, comment lines and bare string literals (task 1018 AC2)', () => {
-    const root = createPlacementFixture();
-    try {
-        const scripts = join(root, 'plugins', 'sp', 'scripts');
-        writeFileSync(
-            join(scripts, 'type-import.ts'),
-            `import type { Database } from 'bun:sqlite';\nexport const t = 1;\n`,
-        );
-        writeFileSync(join(scripts, 'line-comment.ts'), `// await import('bun:sqlite')\nexport const t = 1;\n`);
-        writeFileSync(join(scripts, 'jsdoc.ts'), `/**\n * import('bun:sqlite')\n */\nexport const t = 1;\n`);
-        writeFileSync(
-            join(scripts, 'single-line-block.ts'),
-            `/** Opens DB via import('bun:sqlite') */\nexport const t = 1;\n`,
-        );
-        writeFileSync(join(scripts, 'bare-literal.ts'), `const x = 'bun:sqlite';\nexport const t = x;\n`);
-        const findings = checkPlacement({ repoRoot: root, baselinePath: join(root, 'config', 'missing.json') });
-        expect(findings.filter((f) => f.kind === 'db-import').map((f) => f.file)).toEqual(['plugins/sp/scripts/db.ts']);
-    } finally {
-        rmSync(root, { recursive: true, force: true });
-    }
-});
-
-test('baseline suppresses listed kinds and flags stale entries', () => {
-    const root = createPlacementFixture();
-    try {
-        const baselinePath = join(root, 'config', 'script-placement-baseline.json');
-        mkdirSync(join(root, 'config'), { recursive: true });
-        writeFileSync(
-            baselinePath,
+            join(hooksDir, 'hooks.json'),
             JSON.stringify({
-                schemaVersion: 1,
-                entries: {
-                    'plugins/sp/scripts/big.ts': { kinds: ['budget'] },
-                    'plugins/sp/scripts/db.ts': { kinds: ['budget', 'db-import'] },
-                    'plugins/sp/scripts/hooks/fine.ts': { kinds: ['budget'] },
+                hooks: {
+                    PreToolUse: [
+                        { matcher: 'Bash', hooks: [{ command: 'superskill hook run sp loop-safety' }] },
+                        { matcher: 'Edit', hooks: [{ command: 'superskill hook run sp loop-safety' }] },
+                    ],
                 },
             }),
         );
-        const findings = checkPlacement({ repoRoot: root, baselinePath });
-        expect(findings.some((f) => f.file === 'plugins/sp/scripts/big.ts')).toBe(false);
-        expect(
-            findings.find((f) => f.file === 'plugins/sp/scripts/db.ts' && f.kind === 'stale-baseline'),
-        ).toBeDefined();
-        expect(
-            findings.find((f) => f.file === 'plugins/sp/scripts/hooks/fine.ts' && f.kind === 'stale-baseline'),
-        ).toBeDefined();
-        expect(findings.some((f) => f.file === 'plugins/sp/scripts/corpus.ts')).toBe(true);
+        const findings = checkPlacement({ repoRoot: root });
+        const dup = findings.filter((f) => f.kind === 'hook-layout' && f.detail.includes('registered twice'));
+        expect(dup).toHaveLength(1);
+        expect(dup[0]?.detail).toContain('loop-safety');
     } finally {
         rmSync(root, { recursive: true, force: true });
     }
 });
 
-test('--placement-only run() exits 1 with findings and 0 when fully suppressed', () => {
-    const logSpy = spyOn(console, 'log').mockImplementation(() => {});
-    const errSpy = spyOn(console, 'error').mockImplementation(() => {});
-    const root = createPlacementFixture();
+// ---- real tree: the shipped plugin is clean end to end (1213) ----
+
+test('run() passes over the real tree in both modes', () => {
+    expect(run([])).toBe(0);
+    expect(run(['--placement-only'])).toBe(0);
+});
+
+test('run() fails with violations under a fixture root', () => {
+    const env = createTempEnv();
     try {
-        expect(run(['--placement-only', '--repo-root', root, '--baseline', join(root, 'config', 'none.json')])).toBe(1);
-        const baselinePath = join(root, 'config', 'b.json');
-        mkdirSync(join(root, 'config'), { recursive: true });
-        writeFileSync(
-            baselinePath,
-            JSON.stringify({
-                schemaVersion: 1,
-                entries: {
-                    'plugins/sp/scripts/big.ts': { kinds: ['budget'] },
-                    'plugins/sp/scripts/db.ts': { kinds: ['db-import'] },
-                    'plugins/sp/scripts/corpus.ts': { kinds: ['corpus-parse'] },
-                    'scripts/commands/task.ts': { kinds: ['noun-clash'] },
-                },
-            }),
-        );
-        expect(run(['--placement-only', '--repo-root', root, '--baseline', baselinePath])).toBe(0);
+        writeFileSync(join(env.scriptsDir, 'db.ts'), "import { Database } from 'bun:sqlite';\n");
+        expect(run(['--repo-root', env.root, '--placement-only'])).toBe(1);
     } finally {
-        logSpy.mockRestore();
-        errSpy.mockRestore();
-        rmSync(root, { recursive: true, force: true });
+        env.cleanup();
     }
 });
 
-test('placement baseline reconciles with plan §2 (task 1000 R7)', () => {
-    const repoRoot = join(import.meta.dir, '..', '..');
-    const section: string[] = [];
-    let inSection = false;
-    for (const line of readFileSync(join(repoRoot, 'docs', 'plans', 'A9-script-placement-migration.md'), 'utf8').split(
-        '\n',
-    )) {
-        if (line.startsWith('## 2.')) inSection = true;
-        else if (line.startsWith('## 3.')) inSection = false;
-        else if (inSection) section.push(line);
+test('the real plugin is hook-only: retired machinery is gone (spec R1/R3)', () => {
+    const pluginDir = join(import.meta.dir, '..', '..', 'plugins', 'sp');
+    const scriptsDir = join(pluginDir, 'scripts');
+    const entries = Array.from(new Bun.Glob('**/*').scanSync({ cwd: scriptsDir })).sort();
+    for (const rel of entries) {
+        expect(rel.startsWith('hooks/') && rel.endsWith('.ts')).toBe(true);
+        expect(rel.endsWith('.mjs')).toBe(false);
     }
-    const loaded = loadPlacementBaseline(join(repoRoot, 'config', 'script-placement-baseline.json'));
-    if (!loaded.baseline) throw new Error(loaded.error ?? 'placement baseline missing');
-    const entries = loaded.baseline.entries;
-    const keys = Object.keys(entries);
+    expect(entries).toContain('hooks/careful-guard.ts');
+    expect(entries).not.toContain('script-root.ts');
+    expect(entries).not.toContain('script-root.mjs');
+    expect(entries.filter((rel) => rel.endsWith('.mjs'))).toEqual([]);
 
-    const rows = section
-        .map((line) => line.match(/^\| ([a-z0-9-]+) \| (\d+|—) \| .* \| (.+) \| ([A-Z0-9—-]+) \|$/))
-        .filter((m): m is RegExpMatchArray => m !== null)
-        .map((m) => ({ name: m[1] ?? '', loc: m[2] ?? '—', target: m[3] ?? '' }));
-    expect(rows.length).toBeGreaterThan(20);
-    const scriptNames = new Set(rows.map((m) => m.name));
+    const lib = Array.from(new Bun.Glob('*.ts').scanSync({ cwd: join(pluginDir, 'lib') })).sort();
+    expect(lib).not.toContain('spur-bin.ts');
 
-    // direction B: every baseline key is accounted for by plan §2
-    const hookCell = section.find((line) => line.startsWith('| context-post-tool'));
-    const hookNames = new Set(hookCell?.match(/[a-z][a-z0-9-]+/g) ?? []);
-    for (const key of keys) {
-        expect(key.startsWith('plugins/sp/')).toBe(true);
-        const inScripts =
-            key.startsWith('plugins/sp/scripts/') &&
-            scriptNames.has(key.replace('plugins/sp/scripts/', '').replace(/\.ts$/, ''));
-        const underDirs = /^(plugins\/sp\/scripts\/)?(daily-summary|dogfood-testing)\//.test(key);
-        const hookFile = key.split('/').at(-1)?.replace(/\.ts$/, '') ?? '';
-        const inHooks = key.startsWith('plugins/sp/hooks/') && hookNames.has(hookFile);
-        expect(inScripts || underDirs || inHooks).toBe(true);
+    const root = join(import.meta.dir, '..', '..');
+    for (const retired of ['config/plugin-scripts.json', 'config/script-placement-baseline.json']) {
+        expect(existsSync(join(root, retired)), `${retired} must not exist`).toBe(false);
     }
-    const dirKeys = keys.filter((k) => /^(plugins\/sp\/scripts\/)?(daily-summary|dogfood-testing)\//.test(k));
-    // task 1173: the dogfood-testing rows left with the move of their pure logic into plugins/sp/lib —
-    // both entries dropped under the 250-line budget; script-absorption PR-6 retired daily-summary/
-    // (absorbed into `spur history summary`), so no directory row remains.
-    expect(dirKeys).toEqual([]);
-
-    // direction A: plan §2 Move/Delete/→scripts/over-budget rows are all baselined
-    // (script-contract-check excluded: task 1000 itself moved it to scripts/commands)
-    const expected = rows
-        .filter((m) => m.name !== 'script-contract-check')
-        // task 1005 R6 / 1006 R5: the W3 scripts' logic moved into packages/app lib bundles; the
-        // ≤250 glue stays, so their plan-§2 rows left the baseline instead of their files.
-        // task 1007 R7: residual-scan (W2, same shape) leaves too — its row listed no kinds.
-        // task 1176: feature-verification-steps joins them — its verify body moved to the app
-        // operation, so the ≤250 argv adapter keeps no budget row.
-        .filter(
-            (m) =>
-                ![
-                    'history-anatomy-cache',
-                    'workflow-step-profile',
-                    'quality-gate',
-                    'inline-run-setup',
-                    'residual-scan',
-                    'feature-verification-steps',
-                ].includes(m.name),
-        )
-        .filter(
-            (m) =>
-                /Delete|→scripts|Move→CLI/.test(m.target) ||
-                (m.loc !== '—' && Number(m.loc) > 250 && !/within budget/.test(m.target)),
-        )
-        .map((m) => `plugins/sp/scripts/${m.name}.ts`)
-        .filter((p) => existsSync(join(repoRoot, p)))
-        .sort();
-    const actual = keys
-        .filter(
-            (k) =>
-                k.startsWith('plugins/sp/scripts/') &&
-                !/^(daily-summary|dogfood-testing)\//.test(k.replace('plugins/sp/scripts/', '')),
-        )
-        .sort();
-    expect(actual).toEqual(expected);
-
-    // exempt: true listed the three over-budget Keep files (task-frozen list). The context-post-tool
-    // row left in task 1174 (hook → lib core adapter) and the feature-verification-steps row left in
-    // task 1176 (verify body → app operation), both because the entry fell under the budget; the
-    // batch-preflight, wrapup-drift-probe and wrapup-steps rows left with script-absorption PR-5
-    // (absorbed into `spur task preflight` / `spur task wrapup`), so no exemption remains.
-    const exempt = keys.filter((k) => entries[k]?.exempt === true).sort();
-    expect(exempt).toEqual([]);
-});
-
-test('checkPlacement includes the hook source-layout findings (task 1174 R3 activation)', () => {
-    const root = createPlacementFixture();
-    try {
-        const hooks = join(root, 'plugins', 'sp', 'hooks');
-        const entries = join(root, 'plugins', 'sp', 'scripts', 'hooks');
-        // A hook entry left in hooks/ would shadow the staged scripts/hooks entry (superskill ADR-039).
-        writeFileSync(join(hooks, 'stray-helper.ts'), 'export const helper = 1;\n');
-        // Misplaced test: hook tests belong to plugins/sp/tests/hooks.
-        writeFileSync(join(entries, 'fine.test.ts'), `import { test } from 'bun:test';\ntest('x', () => {});\n`);
-        const findings = checkPlacement({ repoRoot: root, baselinePath: join(root, 'config', 'missing.json') });
-        const hookFindings = findings.filter((f) => f.kind === 'hook-layout');
-        expect(hookFindings.map((f) => f.file).sort()).toEqual([
-            'plugins/sp/hooks/stray-helper.ts',
-            'plugins/sp/scripts/hooks/fine.test.ts',
-        ]);
-        expect(hookFindings.every((f) => f.detail.length > 0)).toBe(true);
-        // The registered entry itself stays clean.
-        expect(hookFindings.some((f) => f.file === 'plugins/sp/scripts/hooks/fine.ts')).toBe(false);
-    } finally {
-        rmSync(root, { recursive: true, force: true });
-    }
-});
-
-test('checkPlacement applies the DB/corpus boundary to handwritten lib without a line budget (task 1173 R1)', () => {
-    const root = createPlacementFixture();
-    try {
-        const lib = join(root, 'plugins', 'sp', 'lib');
-        writeFileSync(join(lib, 'lib-db.ts'), `import { Database } from 'bun:sqlite';\nexport const db = 1;\n`);
-        writeFileSync(join(lib, 'lib-corpus.ts'), `export const path = 'docs/features/A91_x.md';\n`);
-        // Over budget, as the real lib cores are: lib has no line budget by design (plan P2).
-        writeFileSync(join(lib, 'lib-big.ts'), `${Array.from({ length: 301 }, (_, i) => `// line ${i}`).join('\n')}\n`);
-        writeFileSync(join(lib, 'lib-typed.ts'), `import type { Database } from 'bun:sqlite';\nexport const t = 1;\n`);
-        const findings = checkPlacement({ repoRoot: root, baselinePath: join(root, 'config', 'missing.json') });
-        const byFile = new Map(findings.map((f) => [f.file, f.kind]));
-        expect(byFile.get('plugins/sp/lib/lib-db.ts')).toBe('db-import');
-        expect(byFile.get('plugins/sp/lib/lib-corpus.ts')).toBe('corpus-parse');
-        expect(findings.some((f) => f.file === 'plugins/sp/lib/lib-big.ts')).toBe(false);
-        expect(findings.some((f) => f.file === 'plugins/sp/lib/lib-typed.ts')).toBe(false);
-    } finally {
-        rmSync(root, { recursive: true, force: true });
-    }
-});
-
-// ---- Hook source layout (ADR-129, task 1173 R1: helper unit-fixtured here, wired in 1174) ----
-
-/** Registered identities match real hooks.json: `superskill hook run sp <identity>`. */
-function createHookFixture(hooksJson: unknown = { hooks: {} }): string {
-    const root = mkdtempSync(join(tmpdir(), 'hook-layout-test-'));
-    mkdirSync(join(root, 'plugins', 'sp', 'hooks', 'pi'), { recursive: true });
-    mkdirSync(join(root, 'plugins', 'sp', 'scripts', 'hooks'), { recursive: true });
-    writeFileSync(join(root, 'plugins', 'sp', 'hooks', 'hooks.json'), JSON.stringify(hooksJson, null, 4));
-    return root;
-}
-
-/** Where a registered identity's authored entry lives (superskill ADR-039 `scripts/hooks/<id>.ts`). */
-const entryPath = (root: string, file: string): string => join(root, 'plugins', 'sp', 'scripts', 'hooks', file);
-
-function group(identities: string[], matcher?: string): Record<string, unknown> {
-    return {
-        ...(matcher ? { matcher } : {}),
-        hooks: identities.map((identity) => ({ type: 'command', command: `superskill hook run sp ${identity}` })),
-    };
-}
-
-test('checkHookLayout resolves one authored entry per registered identity (task 1173 R1)', () => {
-    const root = createHookFixture({ hooks: { Stop: [group(['task-write-guard'])] } });
-    try {
-        writeFileSync(entryPath(root, 'task-write-guard.ts'), 'export const guard = 1;\n');
-        writeFileSync(entryPath(root, 'agent-lifecycle.ts'), 'export const stray = 1;\n');
-        const findings = checkHookLayout({ repoRoot: root });
-        expect(findings.map((f) => [f.file, f.kind])).toEqual([
-            ['plugins/sp/scripts/hooks/agent-lifecycle.ts', 'hook-layout'],
-        ]);
-        expect(findings[0]?.detail).toContain('plugins/sp/lib');
-    } finally {
-        rmSync(root, { recursive: true, force: true });
-    }
-});
-
-test('checkHookLayout flags a registered identity with no authored entry (task 1173 R1)', () => {
-    const root = createHookFixture({ hooks: { SessionStart: [group(['context-session-start', 'agent-lifecycle'])] } });
-    try {
-        writeFileSync(entryPath(root, 'agent-lifecycle.ts'), 'export const entry = 1;\n');
-        const findings = checkHookLayout({ repoRoot: root });
-        expect(findings).toHaveLength(1);
-        expect(findings[0]?.file).toBe('plugins/sp/scripts/hooks/context-session-start.ts');
-        expect(findings[0]?.detail).toContain('no authored entry');
-    } finally {
-        rmSync(root, { recursive: true, force: true });
-    }
-});
-
-test('an entry under plugins/sp/hooks is a finding even when registered — it would shadow the staged one (ADR-039)', () => {
-    const root = createHookFixture({ hooks: { PreToolUse: [group(['careful-guard'], 'Bash')] } });
-    try {
-        writeFileSync(entryPath(root, 'careful-guard.ts'), 'export const entry = 1;\n');
-        writeFileSync(join(root, 'plugins', 'sp', 'hooks', 'careful-guard.ts'), 'export const shadow = 1;\n');
-        const findings = checkHookLayout({ repoRoot: root });
-        expect(findings.map((f) => f.file)).toEqual(['plugins/sp/hooks/careful-guard.ts']);
-        expect(findings[0]?.detail).toContain('plugins/sp/scripts/hooks');
-    } finally {
-        rmSync(root, { recursive: true, force: true });
-    }
-});
-
-test('one identity may serve several events but not twice in one group (task 1173 R1)', () => {
-    const root = createHookFixture({
-        hooks: {
-            SessionStart: [group(['agent-lifecycle'])],
-            UserPromptSubmit: [group(['agent-lifecycle'])],
-            Stop: [group(['agent-lifecycle']), group(['agent-lifecycle'], 'Bash')],
-        },
-    });
-    try {
-        writeFileSync(entryPath(root, 'agent-lifecycle.ts'), 'export const entry = 1;\n');
-        writeFileSync(entryPath(root, 'stop-lifecycle.ts'), 'export const helper = 1;\n');
-        // The multi-event registration itself is legal; only the duplicated group and the unregistered
-        // sibling helper are findings.
-        const findings = checkHookLayout({ repoRoot: root });
-        expect(findings.map((f) => f.file)).toEqual([
-            'plugins/sp/hooks/hooks.json',
-            'plugins/sp/scripts/hooks/stop-lifecycle.ts',
-        ]);
-        expect(findings[0]?.detail).toContain('registered twice for Stop');
-    } finally {
-        rmSync(root, { recursive: true, force: true });
-    }
-});
-
-test('hook tests belong to the plugin test owner in either hook tree; a retired Pi extension is flagged (task 1173 R1)', () => {
-    const root = createHookFixture({ hooks: { Stop: [group(['fleet-guest-stop'])] } });
-    try {
-        const hooks = join(root, 'plugins', 'sp', 'hooks');
-        writeFileSync(entryPath(root, 'fleet-guest-stop.ts'), 'export const entry = 1;\n');
-        // Pi runs hooks.json through superskill's native adapter; a plugin-owned extension is no longer an entry.
-        writeFileSync(join(hooks, 'pi', 'guard-extension.ts'), 'export const extension = 1;\n');
-        const testBody = `import { test } from 'bun:test';\ntest('x', () => {});\n`;
-        writeFileSync(entryPath(root, 'fleet-guest-stop.test.ts'), testBody);
-        writeFileSync(join(hooks, 'guard.test.ts'), testBody);
-        const findings = checkHookLayout({ repoRoot: root });
-        expect(findings.map((f) => f.file)).toEqual([
-            'plugins/sp/hooks/guard.test.ts',
-            'plugins/sp/hooks/pi/guard-extension.ts',
-            'plugins/sp/scripts/hooks/fleet-guest-stop.test.ts',
-        ]);
-        expect(
-            findings
-                .filter((f) => f.file.endsWith('.test.ts'))
-                .every((f) => f.detail.includes('plugins/sp/tests/hooks')),
-        ).toBe(true);
-        expect(findings.find((f) => f.file.endsWith('guard-extension.ts'))?.detail).toContain('hooks.json only');
-    } finally {
-        rmSync(root, { recursive: true, force: true });
-    }
-});
-
-test('checkHookLayout is clean on its own fixture and reports unreadable hooks.json (task 1173 R1)', () => {
-    const root = createHookFixture({ hooks: { SessionStart: [group(['agent-lifecycle'])] } });
-    try {
-        writeFileSync(entryPath(root, 'agent-lifecycle.ts'), 'export const entry = 1;\n');
-        expect(checkHookLayout({ repoRoot: root })).toEqual([]);
-        writeFileSync(join(root, 'plugins', 'sp', 'hooks', 'hooks.json'), '{ not json');
-        const broken = checkHookLayout({ repoRoot: root });
-        expect(broken.some((f) => f.detail.includes('unreadable hooks.json'))).toBe(true);
-    } finally {
-        rmSync(root, { recursive: true, force: true });
-    }
-});
-
-test('checkHookLayout is empty when the plugin has no hooks directory', () => {
-    const root = mkdtempSync(join(tmpdir(), 'hook-layout-none-'));
-    try {
-        expect(checkHookLayout({ repoRoot: root })).toEqual([]);
-    } finally {
-        rmSync(root, { recursive: true, force: true });
-    }
-});
-
-test('daily-summary baseline row is retired and the real tree is clean (task 1018 AC3, retired by 1178 R3 and PR-6)', () => {
-    const repoRoot = join(import.meta.dir, '..', '..');
-    const baselinePath = join(repoRoot, 'config', 'script-placement-baseline.json');
-    const loaded = loadPlacementBaseline(baselinePath);
-    if (!loaded.baseline) throw new Error(loaded.error ?? 'placement baseline missing');
-    // Script-absorption PR-6 absorbed the script into `spur history summary`, so its row left.
-    expect(loaded.baseline.entries['plugins/sp/scripts/daily-summary/daily-summary.ts']).toBeUndefined();
-    expect(checkPlacement({ repoRoot, baselinePath })).toEqual([]);
+    const pkg = readFileSync(join(root, 'package.json'), 'utf8');
+    expect(pkg.includes('build:scripts')).toBe(false);
+    expect(pkg.includes('superskill script convert')).toBe(false);
 });
