@@ -91,40 +91,7 @@ export class WorkflowEngineFactory {
         } catch {
             // keep agent-run defaults (docs/tasks3 + docs/features) when folder resolve fails
         }
-        // 0942/ADR-126: the fleet executor surface deps — composed from the same ctx
-        // slice the CLI threads (A5/ADR-082). Both services are cheap and lazy (the DB
-        // opens on first use); selecting the surface still requires the run var, so an
-        // engine host that never opts in keeps today's dispatch behavior byte-for-byte.
-        const fleetFs = createNodeFileSystem(this.ctx.cwd);
-        const fleetCoordination = new AgentCoordinationService({
-            cwd: this.ctx.cwd,
-            env: getEnvVars(),
-            ...(this.ctx.spurConfig !== undefined ? { spurConfig: this.ctx.spurConfig } : {}),
-            ...(this.ctx.reloadAgentConfig !== undefined ? { reloadAgentConfig: this.ctx.reloadAgentConfig } : {}),
-            getDb: () => this.ctx.getDb(),
-            fs: fleetFs,
-            ...(bus !== undefined ? { eventBus: bus as unknown as CoordinationEventBus } : {}),
-        });
-        const fleetDispatchDeps: FleetDispatchDeps = {
-            fleet: new FleetService({
-                fs: fleetFs,
-                ...(this.ctx.spurConfig !== undefined ? { spurConfig: this.ctx.spurConfig } : {}),
-                ...(this.ctx.reloadAgentConfig !== undefined ? { reloadAgentConfig: this.ctx.reloadAgentConfig } : {}),
-                openDb: () => this.ctx.getDb(),
-            }),
-            // G71 R1/R5: the one fleet dispatch primitive — the stage adapter resolves
-            // the role + prompt and hands the enqueue and receipt wait to this.
-            dispatcher: new FleetDispatcher({
-                coordination: fleetCoordination,
-                // Lazy: the workflow ctx opens its DB asynchronously, so resolve the
-                // adapter per receipt read rather than at composition time.
-                runs: {
-                    listByMessageId: async (messageId: string) =>
-                        new CoordinationRunDao(await this.ctx.getDb()).listByMessageId(messageId),
-                },
-            }),
-            now: () => Date.now(),
-        };
+        const fleetDispatchDeps = this.buildFleetDispatchDeps(bus);
         registerSpurBuiltins(host, {
             agentService: this.ctx.agentService(),
             ruleService: this.ctx.ruleService(),
@@ -198,6 +165,47 @@ export class WorkflowEngineFactory {
               )
             : persistence;
         return new EngineWorkflowService(host, adapter);
+    }
+
+    /**
+     * The fleet executor surface deps for `agent.run` (0942/ADR-126), composed from the same
+     * ctx slice the CLI threads (A5/ADR-082).
+     */
+    private buildFleetDispatchDeps(bus?: WorkflowObservabilityBus): FleetDispatchDeps {
+        // 0942/ADR-126: the fleet executor surface deps — composed from the same ctx
+        // slice the CLI threads (A5/ADR-082). Both services are cheap and lazy (the DB
+        // opens on first use); selecting the surface still requires the run var, so an
+        // engine host that never opts in keeps today's dispatch behavior byte-for-byte.
+        const fleetFs = createNodeFileSystem(this.ctx.cwd);
+        const fleetCoordination = new AgentCoordinationService({
+            cwd: this.ctx.cwd,
+            env: getEnvVars(),
+            ...(this.ctx.spurConfig !== undefined ? { spurConfig: this.ctx.spurConfig } : {}),
+            ...(this.ctx.reloadAgentConfig !== undefined ? { reloadAgentConfig: this.ctx.reloadAgentConfig } : {}),
+            getDb: () => this.ctx.getDb(),
+            fs: fleetFs,
+            ...(bus !== undefined ? { eventBus: bus as unknown as CoordinationEventBus } : {}),
+        });
+        return {
+            fleet: new FleetService({
+                fs: fleetFs,
+                ...(this.ctx.spurConfig !== undefined ? { spurConfig: this.ctx.spurConfig } : {}),
+                ...(this.ctx.reloadAgentConfig !== undefined ? { reloadAgentConfig: this.ctx.reloadAgentConfig } : {}),
+                openDb: () => this.ctx.getDb(),
+            }),
+            // G71 R1/R5: the one fleet dispatch primitive — the stage adapter resolves
+            // the role + prompt and hands the enqueue and receipt wait to this.
+            dispatcher: new FleetDispatcher({
+                coordination: fleetCoordination,
+                // Lazy: the workflow ctx opens its DB asynchronously, so resolve the
+                // adapter per receipt read rather than at composition time.
+                runs: {
+                    listByMessageId: async (messageId: string) =>
+                        new CoordinationRunDao(await this.ctx.getDb()).listByMessageId(messageId),
+                },
+            }),
+            now: () => Date.now(),
+        };
     }
 
     /**
