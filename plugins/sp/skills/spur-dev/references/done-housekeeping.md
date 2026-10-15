@@ -139,8 +139,9 @@ silently incomplete (H6 shipped at 23/48 that way, with one verdict carrying an 
    parses zero AC rows while lint still reports PASS.
 3. A behavioral AC marked `MET` with a non-executable evidence type (`static-ref`,
    `manual-review`, `llm-judge`) is **downgraded to PARTIAL** by `task verdict`, making the whole
-   verdict PARTIAL. Use `test`/`command` (grep-based verification counts as `command`), or tag the
-   AC id `[non-behavior]`/`[advisory]` when executable evidence genuinely doesn't apply.
+   verdict PARTIAL. Use `test`/`command` (grep-based verification counts as `command`). Only the
+   task author can exempt an AC, by tagging the AC item in the task file `[non-behavior]`/`[advisory]`;
+   the same tag added in the verify answer alone is ignored.
 
 **Invariant:** a force-done task has a non-empty `done_reason` naming the timeout, a verdict
 artifact whose AC rows cover every declared scenario, and a green lint/test run recorded in

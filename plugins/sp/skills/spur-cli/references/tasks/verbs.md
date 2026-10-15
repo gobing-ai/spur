@@ -377,8 +377,10 @@ rows), there is no checklist label: cite each row by its exact scenario title â€
 matches nothing and the verdict is rejected.
 
 **Evidence rule (behavior-bearing AC):** an AC row with `status: MET` on a behavior-bearing id
-(no `[advisory]`/`[non-core]`/`[non-behavior]`/`[docs-only]` marker) MUST carry `test` or
-`command` evidence; any other evidence type downgrades the row to `PARTIAL` and caps the verdict.
+(no `[advisory]`/`[non-core]`/`[non-behavior]`/`[docs-only]` marker **on the AC item in the task
+file**) MUST carry `test` or `command` evidence; any other evidence type downgrades the row to
+`PARTIAL` and caps the verdict. Tags written only in the answer are ignored and reported by the
+advisory `ac-exemption-not-in-task` check.
 
 **Worked example** â€” a minimal PASS-producing answer file:
 

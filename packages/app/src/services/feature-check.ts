@@ -1613,6 +1613,26 @@ export async function readFeatureAcBody(
 }
 
 /**
+ * The task file's own `## Acceptance Criteria` section, as written by the task author. The
+ * verdict derivation reads evidence-rule exemption tags only from here (P2). An unresolvable
+ * task yields '' (no exemptions), so a missing task can never widen the evidence rule.
+ */
+export async function readTaskAcceptanceCriteria(wbs: string, deps: VerdictScenarioKeyGapDeps): Promise<string> {
+    try {
+        const hit = await new TaskLocator({
+            fs: deps.fs,
+            tasksDir: deps.tasksDir,
+            ...(deps.foldersConfig !== undefined ? { foldersConfig: deps.foldersConfig } : {}),
+        }).findByWbs(wbs);
+        if (hit === null) return '';
+        const doc = MarkdownDocument.parse(await deps.fs.readFile(hit.filePath), 'task');
+        return stripAcFence(doc.getSection('Acceptance Criteria') ?? '');
+    } catch {
+        return '';
+    }
+}
+
+/**
  * 1003 R2: run the verify-answer lint over one task's answer with corpus-resolved context.
  * Resolution mirrors {@link verdictScenarioKeyGap}: an unresolvable task file or linked
  * feature fails OPEN (no findings — checklist labels/scenario titles are simply unavailable)

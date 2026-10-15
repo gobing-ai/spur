@@ -1423,6 +1423,7 @@ export function registerTaskCommand(program: Command, context: CliContext): void
                 ANSWER_LINT_MAX_FINDINGS,
                 deriveVerdict,
                 lintVerifyAnswerForTask,
+                readTaskAcceptanceCriteria,
                 summarizeRowIds,
                 VERDICT_SCENARIO_KEY_FORMS,
                 verdictScenarioKeyGap,
@@ -1466,7 +1467,9 @@ export function registerTaskCommand(program: Command, context: CliContext): void
             // transition already gates on task check independently, so the
             // answer text is the sole input here.
             const taskCheckPassed = true; // Pipeline runs its own check guard
-            const result = deriveVerdict(answerText, taskCheckPassed);
+            // P2: evidence-rule exemption tags come only from the task file's own AC items.
+            const taskAc = await readTaskAcceptanceCriteria(wbs, corpusDeps);
+            const result = deriveVerdict(answerText, taskCheckPassed, taskAc);
 
             // 0958 R2: the 0700 R3 removal retired an unclearable, requirements-only warning;
             // this check is its scoped successor — covering tasks only, so re-keying one row

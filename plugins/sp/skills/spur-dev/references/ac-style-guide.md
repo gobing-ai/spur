@@ -219,7 +219,9 @@ clean at authoring time.
 ### Which tags exempt a row from executable evidence
 
 A `MET` row is silently demoted to `PARTIAL` unless it carries `test` or `command` evidence — the
-executable-evidence rule. Five tags opt a row out, because not every scenario is behavioral:
+executable-evidence rule. Five tags opt a row out, because not every scenario is behavioral. The
+tag counts only when the task author writes it on the AC item in the task file; `spur task verdict`
+ignores (and flags) a tag that appears only in the verify answer:
 
 `[doc-only]` · `[docs-only]` · `[non-behavior]` · `[advisory]` · `[non-core]`
 
