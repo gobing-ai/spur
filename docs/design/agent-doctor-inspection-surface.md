@@ -217,5 +217,5 @@ enough that `doctor.probe`'s 1–2 calls per pipeline precheck hit warm.
 - `plugins/sp/skills/spur-cli/references/agent.md` — parity-gated; the flag table and `--json` shape.
 - `plugins/sp/skills/spur-dev/references/cross-cutting.md` — the "do not read provider quota from
   `spur agent doctor`" paragraph now describes a surface with no auth field at all.
-- `apps/cli/tests/commands/agent.test.ts`, `packages/app/tests/services/agent-service.test.ts`,
+- `apps/cli/tests/commands/agent/doctor.test.ts`, `packages/app/tests/services/agent-service.test.ts`,
   `packages/app/tests/workflow/actions/doctor-probe.test.ts` — pinned output and classifier assertions.

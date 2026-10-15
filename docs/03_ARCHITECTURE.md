@@ -183,6 +183,13 @@ No file inventory here — that rots (99 §6.4 lesson); boundaries only:
 - **Dispatch:** one commander `Command`; each noun registers via
   `registerXxxCommand(program, context)` (ADR-014). Commander owns parsing, subcommand dispatch,
   and `--help` rendering.
+- **Module layout mirrors `spur <noun> <verb>`:** a small noun is one file `commands/<noun>.ts`;
+  a large noun is a folder `commands/<noun>/` with `index.ts` (creates the noun and calls each
+  verb's register function), one `<verb>.ts` per verb (`registerXxxYyyCommand(noun, context)`),
+  and `shared.ts` holding only helpers two or more verbs use. Tests mirror it under
+  `tests/commands/<noun>/`. Services keep one class per noun in `packages/app/src/services/`;
+  pure helpers live in focused sibling modules (e.g. `agent-doctor-report.ts`,
+  `workflow-trace-projection.ts`, `task-service-errors.ts`) re-exported by the service file.
 - **Commands** parse flags, call a `packages/app` service, format output, return an exit code —
   no business logic in the app (ADR-021).
 - **CliContext** carries cwd/env/fs/output/`setExitCode`. The CLI composition root creates and

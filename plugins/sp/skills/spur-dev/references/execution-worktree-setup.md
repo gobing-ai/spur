@@ -202,7 +202,7 @@ install rule (source: task 0481) — create mode always installs because a fresh
 
 After creation or adoption, immediately write/adopt the state marker (WT-3), then run the
 existing batch loop (Steps 1–5) with the worktree as process cwd. `spur workflow run` resolves cwd
-from the process (`apps/cli/src/commands/workflow.ts:124`), so no CLI change is needed — `cd` into
+from the process (`apps/cli/src/commands/workflow/run.ts`), so no CLI change is needed — `cd` into
 the worktree directory before launching the loop.
 
 #### Evidence staging before the first task (create and reuse mode)

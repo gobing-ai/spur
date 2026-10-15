@@ -43,7 +43,7 @@ Feature P1 owns two things:
   row (`packages/app/src/services/event-names.ts:14`, `:76`). The model for decision events is
   `agent.invoke.start`/`exit` (`event-names.ts:281`).
 - **Persistence.** The CLI stores events through `attachSystemEventLedger`. It is wired today for
-  `task`/`agent` commands (`apps/cli/src/commands/agent.ts:1397`) and workflow run/continue.
+  `task`/`agent` commands (`apps/cli/src/commands/agent/shared.ts`) and workflow run/continue.
   `spur decision run` is not wired.
 - **Payload privacy.** Decision inputs can contain task text, and evidence can contain diffs.
   Payloads therefore carry only metadata, and maker errors are redacted and bounded the same way

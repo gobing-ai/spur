@@ -188,7 +188,7 @@ transition to `done`.
 > in-sandbox for the same reason.
 >
 > **Triage without a baseline run:** list the failing test *files*, then grep them for the surface
-> you changed. If your change touches `task.ts` and no failing file references task/lifecycle, the
+> you changed. If your change touches `commands/task/` and no failing file references task/lifecycle, the
 > failure is not yours. This costs seconds and mutates nothing — do **not** `git stash` to get a
 > clean baseline on a shared working tree. Treat any failure that does *not* name a port/listen/`ps`
 > cause as yours until proven otherwise; the count is a moving baseline, not a constant.

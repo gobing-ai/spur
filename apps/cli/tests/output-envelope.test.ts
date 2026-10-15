@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, spyOn, test } from 'bun:test';
-import { mkdtempSync, readdirSync, readFileSync, writeFileSync } from 'node:fs';
+import { mkdtempSync, readFileSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { getEnvVars, removeEnvVar, setEnvVar } from '@gobing-ai/spur-config';
@@ -9,6 +9,7 @@ import { z } from 'zod';
 import { type MainOptions, main as runMain } from '../src/index';
 import type { CommandOutput } from '../src/output';
 import { envelopeEnabled, toEnvelopeError, toEnvelopeJson, toJson, writeJsonError } from '../src/output';
+import { readCommandModules } from './command-modules';
 
 /** Stable probe state for envelope comparisons; version detection has its own tests. */
 const DETECTED_AGENTS: DetectedAgent[] = [
@@ -382,9 +383,7 @@ describe('raw default byte-identity vs pre-change baseline (0697 AC3)', () => {
 
 describe('jsonEnvelope registration sweep (0697 AC4)', () => {
     const commandsDir = join(import.meta.dir, '..', 'src', 'commands');
-    const modules = readdirSync(commandsDir)
-        .filter((f) => f.endsWith('.ts') && f !== 'shared-options.ts')
-        .map((f) => ({ file: f, src: readFileSync(join(commandsDir, f), 'utf8') }));
+    const modules = readCommandModules(commandsDir, ['shared-options.ts']);
 
     /** Verbs whose action delegates to a helper/service that emits through the seam. */
     const DELEGATED_EMITTERS: Record<string, { helper: string; file: string }> = {

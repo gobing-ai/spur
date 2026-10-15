@@ -296,7 +296,7 @@ Include the per-requirement traceability table in the report:
 fragment to the coordinator (`sp:super-reviewer` — the invoking session under `/sp:dev-review`),
 which writes the combined `## Review`. The
 `record` step transcribes only `## Testing` from the verdict artifact and backfills `## Review`
-only when the section is bare (`sectionIsBare` guard, `task-service.ts`); it never overwrites the
+only when the section is bare (`sectionIsBare` guard, `task-section-bodies.ts`); it never overwrites the
 coordinator's authored Review. Keep the priority-table lead stable in the fragment so the L3 gate
 stays satisfied through `record` → `done`.
 

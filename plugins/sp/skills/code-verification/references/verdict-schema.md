@@ -161,7 +161,7 @@ every Testing/Solution anchor against the repo root. A basename citation — `de
 `spur task update <wbs> done`, because the gate cannot tell which file the row meant. Write the
 repo-root-relative form from the first pass:
 
-- Right: `packages/app/src/decision/decision-events.ts:83`, `apps/cli/tests/commands/task.test.ts:42`
+- Right: `packages/app/src/decision/decision-events.ts:83`, `apps/cli/tests/commands/task/verdict.test.ts:42`
 - Wrong: `decision-events.ts:83`, `../services/foo.ts:12`, `@gobing-ai/ts-x/src/persistence.ts:108`
   (a scoped package is never repo-relative — use the external named-origin form below)
 

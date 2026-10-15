@@ -77,7 +77,8 @@ rules:
             - "packages/app/src/services/history-anatomy.ts" # deterministic history-anatomy cache core (task 1005 R2): fsync'd tmp+rename atomic publish, readdir digest scans and sync report reads must stay byte-stable; bundled standalone for the bare-node plugin twin (mirrors agent-usage-producer.ts / history-service.ts exemptions)
             - "packages/app/src/observability/workflow-run-log-sink.ts" # sync FD append for mid-run tail-able all-in-one run log (task 0426 / feature D2); append() is sync from the observability bus
             - "packages/app/src/observability/agent-run-log.ts" # same primitive as the sink above for the per-run agent stream (task 1076 R1, ADR-132); append() is sync from the agent service's own onOutput hook, and the byte cap needs the FD position it tracks
-            - "apps/cli/src/commands/workflow.ts" # FD byte-window tail of the mid-run run log for `workflow trace --follow` streaming (task 0428 / feature D2); readSync at offset over the observability sink's FDs
+            # commands/workflow.ts was split per verb (commands/workflow/<verb>.ts); the FD tail lives in trace.ts.
+            - "apps/cli/src/commands/workflow/trace.ts" # FD byte-window tail of the mid-run run log for `workflow trace --follow` streaming (task 0428 / feature D2); readSync at offset over the observability sink's FDs
             - "apps/web/src/modules/discover.ts" # Vite/Astro module scanner fallback under bun test
             - "packages/app/src/services/quality-gate.ts" # gate artifacts (log/findings/receipt) written directly; merged-fd gate log and fsync-free atomic writes must stay byte-stable; bundled standalone for the bare-node plugin twin (task 1006 R1; mirrors history-anatomy.ts)
             - "packages/app/src/workflow/feature-verification-run.ts" # the pass opens the run's single merged log fd (`openSync(path,'a')`) and mkdirs the run dir beside the receipt writer, exactly as the plugin entry did before the move; the fd cannot be expressed through the FileSystem seam (task 1176 R2; same class as the quality-gate exemption above)
@@ -98,8 +99,11 @@ rules:
             - "apps/cli/src/commands/serve.ts" # sync resolveServeCwd() directory validation before server startup (task 0805 R2); mirrors task.ts sync-template exemption
 
             # Synchronous template & workflow resolvers:
-            - "apps/cli/src/commands/task.ts" # sync loadTemplateContent/Bodies callbacks
+            # commands/task.ts was split per verb (commands/task/<verb>.ts); the exempt fs use moved verbatim:
+            - "apps/cli/src/commands/task/shared.ts" # sync loadTemplateContent/Bodies callbacks
+            - "apps/cli/src/commands/task/batch-create.ts" # temp batch payload write + cleanup for `task batch-create` (moved verbatim from task.ts, same exemption)
             - "packages/app/src/services/workflow-service.ts" # run-log/checkpoint reclamation realpath confinement (:988, :1014)
+            - "packages/app/src/services/workflow-catalog-scan.ts" # `workflow list` catalogue scan (lstat/readdir newest-mtime walk) moved verbatim out of workflow-service.ts (same exemption)
             - "packages/app/src/workflow/run-record.ts" # confined sync run-record reads: realpath + fstat byte-window (moved from workflow-service.ts, 0962)
             - "apps/cli/src/release-ops.ts" # sync manifest/workspace reads + Bun.write rewrites inside the git release flow (task 0617); mirrors task.ts sync-template exemption
             - "apps/cli/src/version-carriers.ts" # sync manifest reads + Bun.write rewrites for registered release carriers (task 0854); mirrors release-ops.ts sync exemption
