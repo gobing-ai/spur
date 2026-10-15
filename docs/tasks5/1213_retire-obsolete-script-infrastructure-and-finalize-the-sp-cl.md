@@ -1,10 +1,10 @@
 ---
 schema_version: 1
 name: Retire obsolete script infrastructure and finalize the sp CLI prerequisite
-status: todo
+status: wip
 template: standard
 created_at: 2026-10-15T17:50:40.227Z
-updated_at: "2026-10-15T18:32:43.810Z"
+updated_at: "2026-10-15T21:05:17.704Z"
 ac_altitude: task-local
 ac_numbering: task-local
 parent_wbs: "1211"
@@ -125,3 +125,6 @@ Non-goals: new minCliVersion schema/runtime version check, unrelated transition 
 - One main worktree and only orchestration parent1211 at wip were observed; execution remains serial after1212.
 
 ### History
+
+- 2026-10-15T21:05:17.704Z todo → wip (system)
+
