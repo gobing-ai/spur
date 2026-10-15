@@ -3,7 +3,7 @@ kind: design
 title: Feature `deprecated` status — frozen-but-retained lifecycle state
 status: current
 created_at: 2026-10-11
-updated_at: 2026-10-12
+updated_at: 2026-10-15
 related: [F42, ADR-136, ADR-135, DD-13]
 tags: [feature, lifecycle, status, planning]
 ---
@@ -49,7 +49,7 @@ attach new work to it or advance it. Leaving the state is explicit — un-deprec
 | S5 | Status derivation | `packages/app/src/services/feature-service.ts:452,473` | `deriveFeatureStatus` returns `to: 'deprecated'` (reason `Feature is deprecated (frozen)`) before any task rule — sticky; not terminal, never reopened. |
 | S6 | Feature writes | `feature-service.ts:276` (`updateSection`, shared by CLI and server) | Write lands; append a freeze note to `warnings[]`. |
 | S7 | One-active-goal | `feature-service.ts:706`, `feature-check.ts:511` | No change: only `active` counts. |
-| S8 | Task link guard | `packages/app/src/services/task-service.ts:216,834` (`guardParentFeature`; batch-create phase 1 at `:2076`) | One branch rejects `deprecated` parents on create / update `--feature` / batch-create; no reopen, `--no-reopen` irrelevant. |
+| S8 | Task link guard | `packages/app/src/services/task-feature-link.ts:87` (`guardParentFeature`; shared by create, update and batch-create) | One branch rejects `deprecated` parents on create / update `--feature` / batch-create; no reopen, `--no-reopen` irrelevant. |
 | S9 | Task check | `packages/app/src/services/task-check.ts:1148` (beside `L4_FEATURE_TERMINAL`) | New warning `L4.feature-deprecated` for a live task under a deprecated feature. |
 | S10 | Feature check | `packages/app/src/services/feature-check.ts:239,706,806,821` | No verifying/done probes for `deprecated`; no new errors. |
 | S11 | CLI `advance` | `apps/cli/src/commands/feature.ts:210` | Already stops (no `forwardPath` entry); add the un-deprecate hint. `list --status deprecated` works through the enum. |

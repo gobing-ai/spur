@@ -1,5 +1,5 @@
 import { lstat, readdir } from 'node:fs/promises';
-import { join, resolve } from 'node:path';
+import { join, relative, resolve } from 'node:path';
 import { createNodeFileSystem, parseYamlObject } from '@gobing-ai/ts-runtime';
 import type { WorkflowLayerId } from '../workflow/workflow-resolver';
 import type { WorkflowListEntry } from './workflow-service';
@@ -57,7 +57,7 @@ export async function scanWorkflowFiles(
             if (st.isDirectory()) {
                 await walk(fullPath);
             } else if (st.isFile() && (name.endsWith('.yaml') || name.endsWith('.yml'))) {
-                const displayPath = fullPath.startsWith(rootPath) ? fullPath.slice(rootPath.length + 1) : fullPath;
+                const displayPath = relative(realPath, fullPath);
                 const entry = await loadEntry(fullPath);
                 entries.push({ ...entry, path: displayPath, source });
             }
