@@ -1,10 +1,10 @@
 ---
 schema_version: 1
 name: Review answer files carry a confidence level (HIGH/MEDIUM/LOW)
-status: done
+status: deprecated
 template: standard
 created_at: 2026-10-14T03:44:43.514Z
-updated_at: "2026-10-14T06:29:12.935Z"
+updated_at: "2026-10-15T00:32:56.278Z"
 
 ac_altitude: graduating
 ac_numbering: task-local
@@ -13,6 +13,7 @@ priority: P2
 estimate_hours: 1
 done_forced: "false"
 done_reason: unforced close; PASS artifact at .spur/memory/evidence/1204-verdict.json
+tags: ["superseded:1207"]
 ---
 
 ## 1204. Review answer files carry a confidence level (HIGH/MEDIUM/LOW)
@@ -112,22 +113,21 @@ Final verification: full sequential gate passed 11447 tests across 660 files, li
 
 **Pipeline verify results**
 
-- Verdict: PASS (from verdict artifact)
-- Confidence: HIGH
+- Verdict: FAIL (from verdict artifact)
 
 | Requirement | Status | Evidence |
 |-------------|--------|----------|
-| R1 | MET | plugins/sp/commands/dev-review.md:46 and plugins/sp/agents/super-reviewer.md:202 define Verdict, Confidence and evidence-based semantics; fresh contract assertion exited 0. |
-| R2 | MET | packages/app/src/services/residual-scan.ts:370 grades HIGH/MEDIUM and exact acknowledgement; config/workflows/task-pipeline.yaml:1329 and :1340 pass the answer to the scanner; fresh focused suite: 73 pass, 0 fail, exit 0. |
-| R3 | MET | packages/app/src/services/residual-scan.ts:426 preserves independent contract/finding blockers; packages/app/tests/workflow/task-pipeline-proof-chain.test.ts:945 proves acknowledgement cannot bypass findings, invalid recorded contract or missing scanner; FAIL/absent verdict cells also refuse. |
-| R4 | MET | packages/app/tests/workflow/task-pipeline-proof-chain.test.ts:915 runs both transitions against real source and installed scanners; packages/app/tests/services/residual-scan.test.ts:30 and :42 cover exact acknowledgement, unknown grades and file boundaries; generated-bundle determinism: 18 pass, 0 fail. |
+| R1 | UNMET | `plugins/sp/commands/dev-review.md:46` now requires Verdict only; `plugins/sp/agents/super-reviewer.md:228` explicitly retires the asserted confidence line under task 1207 and ADR-138. This historical requirement is superseded, not a current defect to restore. |
+| R2 | UNMET | `packages/app/tests/workflow/task-pipeline-proof-chain.test.ts:757` pins PASS-edge delegation without an answer grade or acknowledgement. The 425-test focused run passed; the old confidence policy was deliberately removed by 1207. |
+| R3 | MET | `packages/app/tests/workflow/task-pipeline-proof-chain.test.ts:613` and `packages/app/tests/workflow/task-pipeline-proof-chain.test.ts:697` freshly passed FAIL/absent verdict, open-P2 and missing-scanner refusals; acknowledgement is no longer consumed and cannot waive these blockers. |
+| R4 | MET | `packages/app/tests/workflow/task-pipeline-proof-chain.test.ts:697` executes rendered guards against real scanners; 425 app and 40 plugin tests passed. Current source/bundled gate behavior agrees and adds no public API or new workflow state. |
 
 | Acceptance Criteria | Status | Evidence Type | Evidence |
 |---------------------|--------|---------------|----------|
-| Scenario: Authoring contract is explicit | MET | command | Fresh contract assertions exited 0; plugins/sp/commands/dev-review.md:46 and plugins/sp/agents/super-reviewer.md:244 name the line and grading owner. |
-| Scenario: Both PASS boundaries apply confidence policy | MET | test | packages/app/tests/workflow/task-pipeline-proof-chain.test.ts:915 executes source/installed HIGH, MEDIUM, LOW, absent and unknown grade cases for both edges; final focused suite 73 pass, 0 fail. |
-| Scenario: Other review failures still block | MET | test | packages/app/tests/workflow/task-pipeline-proof-chain.test.ts:945 executes acknowledged open-P2, recorded-contract and missing-scanner refusals; :928 pins FAIL/absent verdict refusal; final focused suite exit 0. |
-| Scenario: Implementation stays in its deterministic owner | MET | test | packages/app/tests/workflow/task-pipeline-proof-chain.test.ts:899 pins delegated guards; scripts/commands/bundle-plugin-lib.test.ts:131 pins generation; workflow validation valid=true, exit 0; all 18 bundler tests pass. |
+| Authoring contract is explicit | UNMET | command | Fresh static audit and `plugins/sp/agents/super-reviewer.md:228` confirm that Confidence is explicitly retired by 1207; the historical two-line authoring contract is absent. |
+| Both PASS boundaries apply confidence policy | UNMET | test | `packages/app/tests/workflow/task-pipeline-proof-chain.test.ts:757` passed and confirms both edges have no confidence grade or acknowledgement; this is the intended replacement policy. |
+| Other review failures still block | MET | test | `packages/app/tests/workflow/task-pipeline-proof-chain.test.ts:613` and `packages/app/tests/workflow/task-pipeline-proof-chain.test.ts:697` passed FAIL/absent, open-P2 and missing-scanner refusals in the 425-test app suite. |
+| Implementation stays in its deterministic owner | UNMET | test | `packages/app/tests/workflow/task-pipeline-proof-chain.test.ts:757` passed and proves the historical required answer-grade argument is absent. Review-gate still owns findings, but the confidence-specific AC is superseded. |
 - Coverage: N/A (verdict-based; verify pipeline does not measure code coverage)
 
 ### Review
@@ -175,4 +175,11 @@ Fresh gate: lint/typecheck, 51 pre-check rules, 11447 tests with 0 failures, and
 - 2026-10-14T03:57:36.288Z todo → wip (system)
 - 2026-10-14T06:28:32.800Z wip → testing (system)
 - 2026-10-14T06:28:52.702Z testing → done (system)
+- 2026-10-15T00:32:56.278Z done → deprecated (system)
+
+### Notes
+
+Forced re-verification on 2026-10-14: the historical confidence-specific requirements R1/R2 and AC1/AC2/AC4 are no longer implemented. Task 1207 and ADR-138 deliberately retired them and F51 is cancelled. Fresh verification records FAIL against this historical contract; no retired policy is restored and the existing done status is not silently demoted. Independent verdict/findings/scanner blockers still pass focused behavioral tests. See the fresh Testing receipt and .spur/run/1204-verify-answer.txt (gitignored); prior scratch/durable verdicts were preserved under .spur/run/verifyall-before-1204-*.json.
+
+**Superseded disposition (2026-10-15).** Task 1207 and the operator-authorized ADR-138 retired this task's asserted-confidence capability and cancelled its owning feature F51. This task has no remaining current implementation to ship. Archive it as `deprecated` (the legal retained-history transition from done), with replacement 1207/F511. Preserve its original requirements, historical PASS delivery receipts and the current-tree FAIL re-audit; neither restore the retired policy nor relabel absent historical behavior as MET. The rejected N/A experiment is retained only in scratch diagnostics: the current authoring linter permits N/A for AC, not requirement rows. Release readiness is evaluated on the replacement feature F511 and C3; 1204 is a retired historical record, not a current PASS claim.
 
