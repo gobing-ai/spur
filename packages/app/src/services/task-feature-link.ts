@@ -120,8 +120,8 @@ export class TaskFeatureLink {
     /**
      * Resolve the linked feature's Acceptance Criteria body for a task file —
      * frontmatter `feature_id` → `<tasksDir>/../features/<id>_*.md` via feature-check's
-     * {@link readFeatureAcBody}. Shared by {@link checkAcSubsetWarning} and
-     * {@link checkScenarioKeyRegression}. Returns null on any miss — no feature_id,
+     * {@link readFeatureAcBody}. Shared by `TaskUpdateOps.checkAcSubsetWarning` and
+     * `TaskRecordOps.checkScenarioKeyRegression`. Returns null on any miss — no feature_id,
      * no feature file, empty AC — so both callers stay silent in the same cases.
      */
     async resolveFeatureAcBody(
