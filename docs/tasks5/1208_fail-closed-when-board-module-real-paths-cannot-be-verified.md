@@ -1,15 +1,17 @@
 ---
 schema_version: 1
 name: Fail closed when Board module real paths cannot be verified
-status: todo
+status: done
 template: feature-impl
 created_at: 2026-10-14T23:25:06.054Z
-updated_at: "2026-10-14T23:34:23.833Z"
+updated_at: "2026-10-15T00:30:43.482Z"
 feature_id: A8
 
 priority: P2
 ac_altitude: task-local
 estimate_hours: 3
+done_forced: "false"
+done_reason: unforced close
 ---
 
 ## 1208. Fail closed when Board module real paths cannot be verified
@@ -30,17 +32,17 @@ Premises rechecked with `.spur/run/refineall-1208-1209-audit.ts`; output `.spur/
 
 ### Requirements
 
-- [ ] R1. Refuse startup for an enabled React declaration when canonical project/module/entry/style paths cannot be resolved or escape their allowed roots.
-- [ ] R2. Refuse an existing module asset at request time when either canonical module root or canonical target cannot be resolved; never return its bytes via a lexical fallback.
-- [ ] R3. Preserve valid internal symlinks, ordinary assets, HEAD, disabled modules, missing-asset 404, and application deep-route fallback.
+- [x] R1. Refuse startup for an enabled React declaration when canonical project/module/entry/style paths cannot be resolved or escape their allowed roots.
+- [x] R2. Refuse an existing module asset at request time when either canonical module root or canonical target cannot be resolved; never return its bytes via a lexical fallback.
+- [x] R3. Preserve valid internal symlinks, ordinary assets, HEAD, disabled modules, missing-asset 404, and application deep-route fallback.
 
 Out of scope: filesystem sandbox redesign, race-free open-by-handle APIs, public CLI/schema changes, UI changes, iframe URL policy, static Board distribution hosting.
 
 ### Acceptance Criteria
 
-- [ ] AC1 — Startup refuses unverified native paths (req: R1): Given an enabled React declaration with real files and a correctly typed BoardModuleFileProbe, when project, module root, entry or any stylesheet canonicalization returns undefined, throws, or resolves outside its allowed root, then prepareBoardModules rejects with BoardModuleConfigError naming the declaration and path; cover each path and a real escaping stylesheet symlink in packages/app/tests/services/board-catalog-service.test.ts.
-- [ ] AC2 — Requests never serve unverified symlink bytes (req: R2): Given an existing symlink escaping the declared asset root, when the optional FileSystem.realPath method is absent or root/target resolution throws, then GET and HEAD return 403 without outside bytes; use real files through the mounted HTTP handler in apps/server/tests/board-modules.test.ts.
-- [ ] AC3 — Valid asset and catalog behavior stays available (req: R3): Given valid normal assets and contained entry/style symlinks, then startup and GET/HEAD succeed with existing URLs and HEAD has no body; missing/non-file/dangling assets stay 404, disabled assets remain inaccessible, empty/disabled/iframe catalogs perform no canonical IO, existing host-version errors remain, and module deep routes reach the SPA. Prove in packages/app/tests/services/board-catalog-service.test.ts and apps/server/tests/board-modules.test.ts.
+- [x] AC1 — Startup refuses unverified native paths (req: R1): Given an enabled React declaration with real files and a correctly typed BoardModuleFileProbe, when project, module root, entry or any stylesheet canonicalization returns undefined, throws, or resolves outside its allowed root, then prepareBoardModules rejects with BoardModuleConfigError naming the declaration and path; cover each path and a real escaping stylesheet symlink in packages/app/tests/services/board-catalog-service.test.ts.
+- [x] AC2 — Requests never serve unverified symlink bytes (req: R2): Given an existing symlink escaping the declared asset root, when the optional FileSystem.realPath method is absent or root/target resolution throws, then GET and HEAD return 403 without outside bytes; use real files through the mounted HTTP handler in apps/server/tests/board-modules.test.ts.
+- [x] AC3 — Valid asset and catalog behavior stays available (req: R3): Given valid normal assets and contained entry/style symlinks, then startup and GET/HEAD succeed with existing URLs and HEAD has no body; missing/non-file/dangling assets stay 404, disabled assets remain inaccessible, empty/disabled/iframe catalogs perform no canonical IO, existing host-version errors remain, and module deep routes reach the SPA. Prove in packages/app/tests/services/board-catalog-service.test.ts and apps/server/tests/board-modules.test.ts.
 
 ### Q&A
 
@@ -74,23 +76,56 @@ Execution boundary: estimate 3 hours, one task pipeline; keep partial evidence i
 
 ### Plan
 
-- [ ] R1/R2: add failing startup tests using valid required probe functions returning undefined or throwing for project/root/entry/style; use real canonical temporary paths and real stylesheet symlinks so /tmp aliases cannot mask the premise.
-- [ ] R1: implement required startup canonicalization for project/root/entry/styles, enforce existing containment and normalize undefined/throws to BoardModuleConfigError; preserve snapshot/catalog URLs and disabled/iframe/no-module IO behavior.
-- [ ] R2: add real-filesystem HTTP GET/HEAD tests for missing optional realPath and thrown root/target resolution; stat missing/non-file assets to 404 before canonical checks, refuse unverified existing assets with 403, and remove lexical serving fallback.
-- [ ] R3: retain normal assets, contained entry/style symlinks, escaping symlinks, missing/dangling 404, disabled assets, host-version failures and SPA deep-route tests; update stale comments in the modified files only.
-- [ ] Run bun test tests/services/board-catalog-service.test.ts inside packages/app and bun test tests/board-modules.test.ts inside apps/server; then use the task pipeline's gate and verify, recording proof under .spur/run/1208-*. Do not rerun unrelated suites per fix or sweep the pre-existing composite-key change into this task.
+- [x] R1/R2: add failing startup tests using valid required probe functions returning undefined or throwing for project/root/entry/style; use real canonical temporary paths and real stylesheet symlinks so /tmp aliases cannot mask the premise.
+- [x] R1: implement required startup canonicalization for project/root/entry/styles, enforce existing containment and normalize undefined/throws to BoardModuleConfigError; preserve snapshot/catalog URLs and disabled/iframe/no-module IO behavior.
+- [x] R2: add real-filesystem HTTP GET/HEAD tests for missing optional realPath and thrown root/target resolution; stat missing/non-file assets to 404 before canonical checks, refuse unverified existing assets with 403, and remove lexical serving fallback.
+- [x] R3: retain normal assets, contained entry/style symlinks, escaping symlinks, missing/dangling 404, disabled assets, host-version failures and SPA deep-route tests; update stale comments in the modified files only.
+- [x] Run bun test tests/services/board-catalog-service.test.ts inside packages/app and bun test tests/board-modules.test.ts inside apps/server; then use the task pipeline's gate and verify, recording proof under .spur/run/1208-*. Do not rerun unrelated suites per fix or sweep the pre-existing composite-key change into this task.
 
 ### Solution
 
-<!-- Filled during implementation: file:line change map and concise rationale. -->
+Fail-closed real-path verification at startup and request time; lexical fallback removed from both consumers.
+
+Change map:
+- `packages/app/src/services/board-catalog-service.ts:161-181` — replaced the lazy `realPath(...) ?? lexical` project-root fallback with `verifiedRealPath`: every canonical answer is required; absent or THROWN probe resolutions normalize into `BoardModuleConfigError` naming the declaration index/id and the affected path. Project root resolves once, lazily, only when an enabled react declaration needs it (empty/disabled/iframe-only configs still perform no canonical IO).
+- `packages/app/src/services/board-catalog-service.ts:200-206` — stylesheet paths now carry their declared name alongside the absolute path (`styles` pairs), removing indexed access and keeping messages exact.
+- `packages/app/src/services/board-catalog-service.ts:233-254` — canonical verification is unconditional for enabled react declarations: canonical project root, module root (must satisfy `isInsideRoot(realProject, realRoot)`), entry and EVERY stylesheet (each must satisfy `isInsideRoot(realRoot, real)`); no `undefined` skip-branch remains. Existence checks, host-version checks, lexical `resolveContained` gates, catalog URLs and roots DTO unchanged.
+- `packages/app/src/services/board-catalog-service.ts:57-62` — probe contract comment updated: `BoardModuleFileProbe.realPath` stays REQUIRED (`string | undefined`); "cannot verify" now means fail closed (task 1208), no signature change.
+- `apps/server/src/modules/board/index.ts:90-105` — request-time order is now: method/decode/traversal/declaration gates (unchanged) → lexical-stat gate (missing, non-file, dangling → 404 BEFORE any canonical IO) → fail-closed canonical gate: absent `FileSystem.realPath`, thrown resolution, or unresolved helper output → 403; `isInsideRoot(realRoot, realTarget)` required; the `resolvedTarget ?? target` lexical serving fallback is deleted. GET/HEAD share the gates; HEAD stays bodyless. Contained internal symlinks verify and serve.
+- `apps/server/src/modules/board/index.ts:5-8` — `resolvedOrUndefined` doc updated: absence means "cannot verify" → 403, not skip.
+- `packages/app/tests/services/board-catalog-service.test.ts:166-310` — real temp canonical paths + real escaping stylesheet symlink: unresolvable project root (undefined and thrown), unverified module root/entry/style each refused naming path, escaping module root refused, real escaping stylesheet symlink refused, contained real symlinks still prepare.
+- `apps/server/tests/board-modules.test.ts:260-357` — mounted-handler GET/HEAD on real files: contained symlink served, escaping symlink 403 (GET + bodyless HEAD, outside bytes never served), absent realPath 403, throwing resolution 403, missing/dangling/non-file 404, normal asset + bodyless HEAD preserved.
+
+Rationale: a lexical path inside a declared module does not prove where a symlink lands, so both consumers now refuse (config error / 403) instead of skipping or falling back when canonicalization is unavailable. No public API, schema, dependency or option changed; docs untouched.
 
 ### Testing
 
-<!-- Filled during verification: commands run, outcomes, coverage claim or N/A. -->
+**Pipeline verify results**
+
+- Verdict: PASS (from verdict artifact)
+
+| Requirement | Status | Evidence |
+|-------------|--------|----------|
+| R1 | MET | Startup fail-closed canonicalization implemented: `packages/app/src/services/board-catalog-service.ts:166-181` (`verifiedRealPath` normalizes undefined AND thrown probe answers into `BoardModuleConfigError` naming index/id + path; `projectRootRealPath` has no lexical fallback), `:233-254` (canonical project root, `isInsideRoot(realProject, realRoot)` module-root gate, entry `:251`, every stylesheet `:252-254`). Tests, re-run fresh this session in `packages/app` → 15 pass / 0 fail, exit 0: project-root undefined (`packages/app/tests/services/board-catalog-service.test.ts:196`), thrown normalized (`:213`), module dir/entry/style undefined each refused naming declaration+path (`:235`), module-root escape (`:260`), real escaping stylesheet symlink refused at startup (`:276`). |
+| R2 | MET | Request-time fail-closed gate implemented: `apps/server/src/modules/board/index.ts:92` (lexical-stat 404 for missing/non-file/dangling BEFORE canonical IO), `:97-100` (absent realPath, thrown resolution or unresolved helper output → 403; `isInsideRoot(realRoot, realTarget)` required), `:103` (`Bun.file(realTarget)` opens only verified real paths); the `resolvedTarget ?? target` lexical serving fallback is deleted in the diff. Tests, re-run fresh this session in `apps/server` → 27 pass / 0 fail, exit 0, through the mounted HTTP handler on real files: absent realPath → 403 without module bytes (`apps/server/tests/board-modules.test.ts:282`), throwing resolution → 403 GET + bodyless HEAD (`:296`), escaping symlink → 403 GET + bodyless HEAD with outside bytes asserted never served (`:317`). |
+| R3 | MET | Valid behavior preserved, proven in the same fresh 27/27 + 15/15 runs: contained internal symlink served (`apps/server/tests/board-modules.test.ts:260`; `packages/app/tests/services/board-catalog-service.test.ts:293`), ordinary asset 200 + HEAD headers with empty body (`apps/server/tests/board-modules.test.ts:347`), missing/dangling/non-file 404 incl. HEAD (`:332`), disabled declarations inaccessible with no files/code and pre-existing missing-asset-404 / deep-route-SPA / host-version-refusal tests all passing in the run ("disabled declarations are absent and require no files or code", "a missing asset is a real 404, never the SPA document", "the module deep route still reaches the SPA fallback", "an incompatible distribution version is refused"); zero canonical IO for empty/disabled/iframe catalogs: static `packages/app/src/services/board-catalog-service.ts:184` (`if (!declaration.enabled) continue`) and `:187-190` (iframe branch continues before canonical IO) plus pre-existing recording-probe tests asserting `probe.calls` empty (passing in the fresh 15/15). |
+
+| Acceptance Criteria | Status | Evidence Type | Evidence |
+|---------------------|--------|---------------|----------|
+| AC1 — Startup refuses unverified native paths (req: R1): Given an enabled React declaration with real files and a correctly typed BoardModuleFileProbe, when project, module root, entry or any stylesheet canonicalization returns undefined, throws, or resolves outside its allowed root, then prepareBoardModules rejects with BoardModuleConfigError naming the declaration and path; cover each path and a real escaping stylesheet symlink in packages/app/tests/services/board-catalog-service.test.ts. | MET | test | `prepareBoardModules` rejects with `BoardModuleConfigError` naming declaration and path for project/module-root/entry/style canonicalization returning undefined (`packages/app/tests/services/board-catalog-service.test.ts:196`, `:235` — three cases asserting label + path), throwing (`:213`, raw error message asserted absent), or resolving outside its root (`:260` module root, `:276` real escaping stylesheet symlink created in `realTree()` `:172-181` with a real-`realpathSync` probe `:184-194`); static enforcement at `packages/app/src/services/board-catalog-service.ts:166-181`, `:233-254`. Fresh re-run: 15 pass / 0 fail, exit 0. |
+| AC2 — Requests never serve unverified symlink bytes (req: R2): Given an existing symlink escaping the declared asset root, when the optional FileSystem.realPath method is absent or root/target resolution throws, then GET and HEAD return 403 without outside bytes; use real files through the mounted HTTP handler in apps/server/tests/board-modules.test.ts. | MET | test | Real files through the mounted HTTP handler in `apps/server/tests/board-modules.test.ts`: escaping symlink GET 403 + bodyless HEAD, `await res.text()` asserted not to contain outside bytes (`:317`); absent `FileSystem.realPath` → 403 (`:282`); root/target resolution throws → 403 GET + bodyless HEAD (`:296`); missing/dangling/non-file stay 404 before canonical IO (`:332`). Static: `apps/server/src/modules/board/index.ts:92-103`; lexical fallback removed (diff bdcdae77…). Fresh re-run: 27 pass / 0 fail, exit 0; matches the prior HTTP probe result (escaping symlink GET/HEAD → 403 bodyless) cited in the task inputs. |
+| AC3 — Valid asset and catalog behavior stays available (req: R3): Given valid normal assets and contained entry/style symlinks, then startup and GET/HEAD succeed with existing URLs and HEAD has no body; missing/non-file/dangling assets stay 404, disabled assets remain inaccessible, empty/disabled/iframe catalogs perform no canonical IO, existing host-version errors remain, and module deep routes reach the SPA. Prove in packages/app/tests/services/board-catalog-service.test.ts and apps/server/tests/board-modules.test.ts. | MET | test | Fresh 27/27 (`apps/server/tests/board-modules.test.ts`) + 15/15 (`packages/app/tests/services/board-catalog-service.test.ts`) runs, exit 0: startup + GET/HEAD succeed on existing URLs with bodyless HEAD (`:347`, `packages/app/tests/services/board-catalog-service.test.ts:293` contained symlink prepared with lexical `entryUrl` intact); missing/non-file/dangling 404 (`:332`); disabled/undeclared assets inaccessible (pre-existing "disabled declarations are absent and require no files or code", "an undeclared root is indistinguishable from a missing one" — passing); empty/disabled/iframe catalogs perform no canonical IO (recording-probe `probe.calls` empty tests passing; static `packages/app/src/services/board-catalog-service.ts:184`, `:187-190`); existing host-version errors remain ("an incompatible distribution version is refused" — passing); module deep routes reach the SPA ("the module deep route still reaches the SPA fallback" — passing). |
+- Coverage: N/A (verdict-based; verify pipeline does not measure code coverage)
 
 ### Review
 
-<!-- Filled during review: P1-P4 findings, residual risk, and final disposition. -->
+<!-- spur:record-review -->
+
+**SECU findings** (pipeline verify step — verdict: PASS)
+
+| Priority | Dimension | Location | Finding |
+|----------|-----------|----------|----------|
+| P4 | — | — | No findings (verify verdict PASS) |
 
 ### References
 
@@ -106,4 +141,7 @@ Execution boundary: estimate 3 hours, one task pipeline; keep partial evidence i
 ### History
 
 - 2026-10-14T23:26:13.401Z backlog → todo (system)
+- 2026-10-15T00:26:58.857Z todo → wip (system)
+- 2026-10-15T00:27:00.075Z wip → testing (system)
+- 2026-10-15T00:30:43.477Z testing → done (system)
 
