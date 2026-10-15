@@ -712,7 +712,12 @@ export function checkPlacement(opts: { repoRoot: string; baselinePath: string })
 
     const cliCommandsDir = join(root, 'apps', 'cli', 'src', 'commands');
     const cliCommandNames = existsSync(cliCommandsDir)
-        ? new Set(readdirSync(cliCommandsDir).filter((f) => f.endsWith('.ts')))
+        ? new Set(
+              // A noun is `commands/<noun>.ts` or a per-verb folder `commands/<noun>/` (index.ts inside).
+              readdirSync(cliCommandsDir)
+                  .map((f) => (existsSync(join(cliCommandsDir, f, 'index.ts')) ? `${f}.ts` : f))
+                  .filter((f) => f.endsWith('.ts')),
+          )
         : new Set<string>();
     const repoCommandsDir = join(root, 'scripts', 'commands');
     if (existsSync(repoCommandsDir)) {

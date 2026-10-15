@@ -4,9 +4,15 @@
 #
 # Part of the recommended-pre-check preset. Run:
 #   spur rule run --preset recommended-pre-check
+#
+# Layout: single-file nouns live at commands/<noun>.ts; large nouns are split
+# into commands/<noun>/{index.ts, <verb>.ts..., shared.ts} (one module per
+# `spur <noun> <verb>`). Both shapes are covered below.
 
 include:
   - "apps/cli/src/commands/*.ts"
+  # Per-noun folders (commands/task/, commands/workflow/, commands/agent/).
+  - "apps/cli/src/commands/*/*.ts"
 
 exclude:
   # Not a command file: shared-options.ts is the option registry.
@@ -18,6 +24,9 @@ rules:
       Every CLI command file must export a registerXxxCommand(program, context)
       function matching the standard Commander.js wiring pattern.
     severity: error
+    exclude:
+      # Per-noun shared.ts holds helpers used by 2+ verbs; it registers nothing.
+      - "apps/cli/src/commands/*/shared.ts"
     evaluator:
       type: rg
       config:
@@ -30,6 +39,17 @@ rules:
       (ADR-091 envelope seam), toJson(), or JSON.stringify() to produce
       machine-readable output.
     severity: error
+    exclude:
+      # Per-noun index.ts only creates the noun and calls each verb's register
+      # function; it declares no options, so there is no --json to back.
+      - "apps/cli/src/commands/*/index.ts"
+      # Verbs that hand JSON rendering to the code that serializes it:
+      # doctor -> AgentService.doctor (spur-app); start/stop -> runAgentLifecycle
+      # in commands/agent/shared.ts (checked). loop declares no --json.
+      - "apps/cli/src/commands/agent/doctor.ts"
+      - "apps/cli/src/commands/agent/loop.ts"
+      - "apps/cli/src/commands/agent/start.ts"
+      - "apps/cli/src/commands/agent/stop.ts"
     evaluator:
       type: rg
       config:

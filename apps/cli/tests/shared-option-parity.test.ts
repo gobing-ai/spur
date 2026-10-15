@@ -1,7 +1,7 @@
 import { describe, expect, test } from 'bun:test';
-import { readdirSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { SHARED_OPTION_FLAGS, SHARED_OPTIONS } from '../src/commands/shared-options';
+import { readCommandModules } from './command-modules';
 
 // Every shared flag string (membership set) and every registry entry lives here.
 // 0618 R3: re-declaring a shared option inline (literal .option/.requiredOption)
@@ -14,9 +14,7 @@ import { SHARED_OPTION_FLAGS, SHARED_OPTIONS } from '../src/commands/shared-opti
 // and every shared flag string is consumed by at least two distinct command modules.
 
 const commandsDir = join(import.meta.dir, '..', 'src', 'commands');
-const modules = readdirSync(commandsDir)
-    .filter((f) => f.endsWith('.ts') && f !== 'shared-options.ts')
-    .map((f) => ({ name: f, src: readFileSync(join(commandsDir, f), 'utf8') }));
+const modules = readCommandModules(commandsDir, ['shared-options.ts']).map(({ file, src }) => ({ name: file, src }));
 
 // .option('  --flag <v>  ', 'desc' — first string arg is the flags literal; strip
 // leading dashes / brackets variants conservatively via the raw literal text.
