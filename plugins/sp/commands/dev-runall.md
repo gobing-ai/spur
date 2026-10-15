@@ -42,7 +42,7 @@ feature-derived, `dev-runall` runs `spur feature check <id> --fix --json` then `
 resolving tasks — a non-zero strict check aborts the batch with verdict `aborted` and the
 structured findings, before any task pipeline action, task 0510 R2; scoped: `L4.scenario-unverified` and `L4.verifying-incomplete-tasks`
 (expected pre-run states of a not-yet-run or reopened feature) are reported verbatim but do not abort (the non-aborting set is
-`NON_ABORTING_PREFLIGHT_CODES` in `plugins/sp/scripts/batch-preflight.ts`; `--fix` repairs land in the report's `autoRepairs`) —
+`NON_ABORTING_PREFLIGHT_CODES` behind `spur task preflight --classify-feature`; `--fix` repairs land in the report's `autoRepairs`) —
 any other strict error aborts), `--mode`
 `<sequential|parallel|auto>` (default `sequential`; `parallel` fans out a proven-independent subset —
 see `execution-parallel-isolation.md`; `auto` picks one per batch — see below), `--concurrency <n>`
@@ -63,7 +63,7 @@ creates a fresh tree, `<name>` form adopts an existing worktree by name/path/bra
 `execution-worktree-setup.md` + `execution-worktree-landing.md`).
 
 **`--mode auto` (smart scheduling).** Ordering is always dependency-correct — every mode
-topo-sorts the frozen set with `batch-plan.mjs order` (deterministic, never hand-sorted). `auto`
+topo-sorts the frozen set with `spur task batch-plan order` (deterministic, never hand-sorted). `auto`
 additionally reads that schedule's dependency waves (tasks declaring the same file are serialized)
 and decides once, before the first task: `parallel` when some wave holds ≥2 independent tasks and
 `--concurrency` ≥2; otherwise `sequential` in the host session. `--worktree` or explicit
@@ -101,8 +101,8 @@ full distinction.
 
 - **Bootstrap reads (1128):** before the first dispatch, read [SKILL.md § Bootstrap reads](../skills/spur-dev/SKILL.md#bootstrap-reads) and load only that mode's files — the section whose trigger has not fired is on demand.
 - **Publish the visible batch plan first (1105):** publish `A Prepare batch` (A1–A4) and `Z Batch
-  report` before the first task, then one letter per task from `batch-plan.mjs waves` after
-  freeze/order and digit children from `batch-plan.mjs task-children` at task start —
+  report` before the first task, then one letter per task from `spur task batch-plan waves` after
+  freeze/order and digit children from `spur task batch-plan task-children` at task start —
   [execution-batch.md](../skills/spur-dev/references/execution-batch.md#27-visible-batch-plan-1105-r3)
   § 2.7 Visible batch plan.
 - Apply the [inline-default execution-surface contract](../skills/spur-dev/references/cross-cutting.md#inline-default-execution-surface). Interactive sequential omit/`inline` keeps the orchestrator in the host session through the [inline pipeline driver](../skills/spur-dev/references/inline-pipeline-driver.md); the resolved selector applies uniformly — eligible `agent.run` stages dispatch once to a native subagent with host fallback (0508). `--agent auto`, a name, or parallel mode retains the isolated per-task workflow boundary.

@@ -104,7 +104,7 @@ was meant to avoid. Let the reviewer reach its own conclusion.
 
 - **`sp:spur-dev`** owns task selection and lifecycle. When a batch contains independent tasks, the spine consults this skill for the fan-out pattern.
 - **`sp:super-planner`** is the orchestrator that executes the fan-out. Its parallel mode (documented in its agent definition) applies the patterns from this skill.
-- **`/sp:dev-runall --mode parallel|auto`** is the task-batch entry point; its `batch-plan.mjs order` schedule applies this skill's dependency and file-overlap rows deterministically.
+- **`/sp:dev-runall --mode parallel|auto`** is the task-batch entry point; its `spur task batch-plan order` schedule applies this skill's dependency and file-overlap rows deterministically.
 
 ## When to use
 

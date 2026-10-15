@@ -5,20 +5,22 @@ import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { getEnvVar, getEnvVars, setEnvVar } from '@gobing-ai/ts-utils';
 import {
-    main,
+    isWrapupStepOp,
+    runWrapupStep,
     verdictFromTestingSection,
     WBS_PATTERN,
-    WRAPUP_STEPS_USAGE,
+    WRAPUP_STEP_OPS,
+    type WrapupStepOp,
     type WrapupStepsEnv,
     writeRouteReason,
-} from '../scripts/wrapup-steps';
+} from '../../../src/workflow/wrapup/steps';
 
 /**
- * 0824: execution pins for the wrapup-steps plugin script, migrated from the workflow
- * suite (`packages/app/tests/workflow/wrapup-pipeline.test.ts`), which now pins wrapper
- * delegation and fail-closed routing instead of the implementation. These tests call the
- * exported `main(argv, env, { cwd })` — the same entry the spawned script and its node
- * twin run under `import.meta.main`.
+ * 0824: execution pins for the wrapup steps, migrated from the workflow suite
+ * (`packages/app/tests/workflow/wrapup-pipeline.test.ts`), which pins wrapper delegation and
+ * fail-closed routing instead of the implementation. Script-absorption PR-5 moved them with the
+ * logic from the retired `plugins/sp/scripts/wrapup-steps.ts` into the app; these tests call
+ * `runWrapupStep(op, env, { cwd })` — the same entry `spur task wrapup <op>` runs.
  */
 
 interface FtStubOptions {
@@ -110,13 +112,13 @@ function stubFeatureEnv(cwd: string, opts: FtStubOptions): WrapupStepsEnv {
     };
 }
 
-/** Runs the script with a temp cwd plus a stub-first PATH (for the superskill probe). */
+/** Runs one step with a temp cwd plus a stub-first PATH (for the superskill probe). */
 function runSteps(argv: string[], env: WrapupStepsEnv, cwd: string): { code: number; out: string; err: string } {
     const prevPath = getEnvVar('PATH');
     const cap = capture();
     setEnvVar('PATH', `${cwd}${prevPath ? `:${prevPath}` : ''}`);
     try {
-        const code = main(argv, { ...getEnvVars(), ...env }, { cwd });
+        const code = runWrapupStep(argv[0] as WrapupStepOp, { ...getEnvVars(), ...env }, { cwd });
         return { code, out: cap.out(), err: cap.err() };
     } finally {
         setEnvVar('PATH', prevPath);
@@ -124,15 +126,10 @@ function runSteps(argv: string[], env: WrapupStepsEnv, cwd: string): { code: num
     }
 }
 
-test('0824 wrapup-steps rejects unknown subcommands with usage and exit 2', () => {
-    const cwd = mkdtempSync(join(tmpdir(), 'wrapup-steps-usage-'));
-    try {
-        const run = runSteps(['bogus'], {}, cwd);
-        expect(run.code).toBe(2);
-        expect(run.err).toContain(WRAPUP_STEPS_USAGE);
-    } finally {
-        cleanup(cwd);
-    }
+test('0824 wrapup steps recognize exactly the declared ops (the CLI rejects the rest with exit 2)', () => {
+    for (const op of WRAPUP_STEP_OPS) expect(isWrapupStepOp(op)).toBe(true);
+    expect(isWrapupStepOp('bogus')).toBe(false);
+    expect(isWrapupStepOp('drift-probe')).toBe(false);
 });
 
 test('0824 wrapup-steps canonical WBS pattern is the four-digit anchored regex', () => {
@@ -439,7 +436,7 @@ test('0783 R3: escaped JSON fields survive serialization as parseable rows', () 
         const jsonFile = join(cwd, 'stub-payload.json');
         writeFileSync(jsonFile, payload);
         const stub = join(cwd, 'stub-spur');
-        // Spawned children inherit getEnvVars(), not the env object given to main(), so the
+        // The payload path is baked into the stub rather than passed through the step env, so the
         // payload path is baked into the stub (same pattern as the quality-gate scripts).
         writeFileSync(stub, `#!/bin/sh\ncase "$1 $2" in "task show") cat '${jsonFile}';; esac\nexit 0\n`);
         chmodSync(stub, 0o755);
@@ -787,8 +784,8 @@ function anchorStatement(source: string): string {
 }
 
 test('0994 P3: the local verdict literals stay identical to the canonical parser', () => {
-    const canonical = readFileSync(join(import.meta.dir, '../../../packages/app/src/services/task-record.ts'), 'utf8');
-    const local = readFileSync(join(import.meta.dir, '../scripts/wrapup-steps.ts'), 'utf8');
+    const canonical = readFileSync(join(import.meta.dir, '../../../src/services/task-record.ts'), 'utf8');
+    const local = readFileSync(join(import.meta.dir, '../../../src/workflow/wrapup/steps.ts'), 'utf8');
     expect(canonical).toContain(TESTING_HEADING_LITERAL);
     expect(local).toContain(TESTING_HEADING_LITERAL);
     expect(canonical).toContain(VERDICT_LINE_LITERAL);

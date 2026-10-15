@@ -20,7 +20,7 @@ lifecycle for the sequential batch loop. `--mode parallel` has its own per-task 
 rejected there (parallel mode already isolates each task in its own worktree).
 
 **Startup ordering (task 0814 R3).** Resolve the selector/status filter and run the quick
-command-aware readiness (the `quickReadiness` contract in `batch-preflight.ts`) **before** creating
+command-aware readiness (the `quickReadiness` contract behind `spur task preflight --operation`) **before** creating
 or adopting the tree. The admission decision is what determines whether a tree should be cut at all;
 all subsequent tools, agents, task/feature writes, and run artifacts use the confirmed execution
 tree's cwd. A stale or empty selector, an unsupported mode, or an invalid target creates no tree and
@@ -209,7 +209,7 @@ the worktree directory before launching the loop.
 
 `.spur/memory/evidence/` and `.spur/run/` are **untracked per-tree** planes, so a fresh worktree
 starts with neither while the invoking tree holds every earlier task's verdict. Both
-`preflightFeature` (`plugins/sp/scripts/wrapup-steps.ts` → `spur feature check --strict --as done`
+`preflightFeature` (`spur task wrapup resolve` → `spur feature check --strict --as done`
 with cwd = the worktree) and `runMetrics` resolve verdict artifacts relative to the tree they run
 in, so without this step an already-`done` linked task reads as missing evidence
 (`L4.evidence-not-recoverable`, `L4.scenario-unverified`) and its metrics row degrades to

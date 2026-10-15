@@ -12,10 +12,10 @@
  *        consult the feature pass or the relocated repo-wide test tree.
  */
 import { describe, expect, test } from 'bun:test';
-import { chmodSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { chmodSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { getEnvVar, getEnvVars } from '@gobing-ai/ts-utils';
+import { getEnvVars } from '@gobing-ai/ts-utils';
 import ts from 'typescript';
 import { parse as parseYaml } from 'yaml';
 
@@ -120,8 +120,9 @@ describe('feature-verification scope split (task 0872)', () => {
         for (const state of (wf.states as Array<{ onEnter?: Array<{ kind: unknown }> }>) ?? []) {
             for (const action of state.onEnter ?? []) actionKinds.push(action.kind);
         }
-        // 0960: `verify` now also carries the run-start script-resolution action.
-        expect(actionKinds).toEqual(['shell', 'shell']);
+        // Script-absorption PR-5 dropped the 0960 run-start script-resolution action: the single
+        // shell is `spur feature verify`.
+        expect(actionKinds).toEqual(['shell']);
         expect(actionKinds).not.toContain('agent.run');
 
         const guardKinds = new Set<unknown>();
@@ -131,26 +132,24 @@ describe('feature-verification scope split (task 0872)', () => {
         expect([...guardKinds].sort()).toEqual(['always', 'shell']);
     });
 
-    test('0960 R7: with no resolvable script, verify writes FAIL naming the install command in a fresh consumer', () => {
+    test('0960 R7 / PR-5: when `spur feature verify` cannot run, verify writes FAIL and exits 0', () => {
         const wf = readWorkflow('feature-verification.yaml');
         const verify = (wf.states as Array<{ id: string; onEnter?: Array<{ options?: { command?: string } }> }>).find(
             (s) => s.id === 'verify',
         );
-        const command = verify?.onEnter?.[1]?.options?.command ?? '';
+        const command = verify?.onEnter?.[0]?.options?.command ?? '';
+        expect(command).toContain('$spurBin feature verify "$featureId" --run-id "$__runId"');
         const dir = mkdtempSync(join(tmpdir(), 'spur-0960-fv-'));
         try {
-            // No marker, no .spur/run, and a superskill stub that resolves nothing.
-            mkdirSync(join(dir, 'bin'));
-            writeFileSync(join(dir, 'bin', 'superskill'), '#!/bin/sh\nexit 2\n');
-            chmodSync(join(dir, 'bin', 'superskill'), 0o755);
+            // A spur that fails every call (no .spur/run yet): the guard must still see FAIL.
             const result = Bun.spawnSync(['sh', '-c', command], {
                 cwd: dir,
-                env: { ...getEnvVars(), PATH: `${join(dir, 'bin')}:${getEnvVar('PATH') ?? ''}`, __runId: 'r0960' },
+                env: { ...getEnvVars(), spurBin: 'false', __runId: 'r0960', featureId: 'F1' },
             });
             expect(result.exitCode).toBe(0);
             const status = readFileSync(join(dir, '.spur/run/r0960-feature-verification.status'), 'utf8');
             expect(status).toStartWith('FAIL');
-            expect(status).toContain('superskill install sp --marketplace gobing-ai/spur');
+            expect(status).toContain('spur feature verify exited nonzero');
         } finally {
             rmSync(dir, { recursive: true, force: true });
         }

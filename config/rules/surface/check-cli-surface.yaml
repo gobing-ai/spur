@@ -27,6 +27,8 @@ rules:
     exclude:
       # Per-noun shared.ts holds helpers used by 2+ verbs; it registers nothing.
       - "apps/cli/src/commands/*/shared.ts"
+      # Byte-exact stdout/stderr writer for the absorbed pipeline steps (script-absorption PR-5); registers nothing.
+      - "apps/cli/src/commands/task/step-output.ts"
     evaluator:
       type: rg
       config:
@@ -50,6 +52,15 @@ rules:
       - "apps/cli/src/commands/agent/loop.ts"
       - "apps/cli/src/commands/agent/start.ts"
       - "apps/cli/src/commands/agent/stop.ts"
+      # Absorbed pipeline steps (script-absorption PR-5): the app operation renders the golden-pinned
+      # text/JSON (planning-preflight.ts JSON.stringify for `task preflight --json`, batch-plan.ts for
+      # `task batch-plan`); wrapup, feature verify/handoff declare no --json. step-output.ts writes bytes.
+      - "apps/cli/src/commands/task/batch-plan.ts"
+      - "apps/cli/src/commands/task/preflight.ts"
+      - "apps/cli/src/commands/task/step-output.ts"
+      - "apps/cli/src/commands/task/wrapup.ts"
+      - "apps/cli/src/commands/feature/handoff.ts"
+      - "apps/cli/src/commands/feature/verify.ts"
     evaluator:
       type: rg
       config:

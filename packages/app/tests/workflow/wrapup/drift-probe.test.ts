@@ -1,25 +1,24 @@
 import { describe, expect, test } from 'bun:test';
-import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { chmodSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import { getEnvVars } from '@gobing-ai/spur-config';
 import {
     changedPathsOf,
     DOC_OWNED_SURFACES,
     type DriftProbeEnv,
     driftReasonForPath,
-    main,
     runDriftProbe,
     type SpurRunner,
     type SpurShowResult,
     solutionSectionOf,
-    WRAPUP_DRIFT_PROBE_USAGE,
-} from '../scripts/wrapup-drift-probe';
+} from '../../../src/workflow/wrapup/drift-probe';
 
 /**
- * 0944: execution pins for the wrapup-drift-probe plugin script. These call the exported
- * `runDriftProbe(env, options, spur)` with a fake `SpurRunner` — the same spawnable
- * interface the workflow wrapper and its node twin exercise through `main(argv, env,
- * { cwd })`. One case per doc-owned surface glob (R2), plus the fail-safe contract:
+ * 0944: execution pins for the wrapup drift probe (script-absorption PR-5 moved it from the
+ * retired `plugins/sp/scripts/wrapup-drift-probe.ts` into the app). These call the exported
+ * `runDriftProbe(env, options, spur)` with a fake `SpurRunner` — the same entry
+ * `spur task wrapup drift-probe` runs with the spawning default runner. One case per doc-owned surface glob (R2), plus the fail-safe contract:
  * any lookup or parse problem is dirty, never a silent clean.
  */
 
@@ -255,10 +254,28 @@ describe('wrapup-drift-probe 0944', () => {
         }
     });
 
-    test('main rejects positional args with the usage line', () => {
-        const { result, stderr } = capturingStderr(() => main(['unexpected'], { __runId: 'x' }, { cwd: newCwd() }));
-        expect(result).toBe(2);
-        expect(stderr).toContain(WRAPUP_DRIFT_PROBE_USAGE);
+    test('the default runner spawns the configured spurBin for each task show lookup', () => {
+        const cwd = newCwd();
+        try {
+            writeCapture(cwd, 'dr', ['0944']);
+            const payload = join(cwd, 'show.json');
+            writeFileSync(payload, JSON.stringify({ content: solutionWith(['apps/server/src/x.ts']) }));
+            const argvLog = join(cwd, 'argv.log');
+            const stub = join(cwd, 'stub-spur');
+            // The stub sees the step env (childEnv), so PROBE_MARK reaches it.
+            writeFileSync(stub, `#!/bin/sh\necho "$PROBE_MARK $*" >> '${argvLog}'\ncat '${payload}'\n`);
+            chmodSync(stub, 0o755);
+            const result = runDriftProbe(
+                { __runId: 'dr', spurBin: stub, PROBE_MARK: 'seen', PATH: getEnvVars().PATH },
+                { cwd },
+            );
+            expect(result.exitCode).toBe(0);
+            expect(result.clean).toBe(true);
+            expect(result.paths).toEqual(['apps/server/src/x.ts']);
+            expect(readFileSync(argvLog, 'utf8')).toBe('seen task show 0944 --json\n');
+        } finally {
+            cleanup(cwd);
+        }
     });
 
     test('Solution parsing pins: heading depth tolerance, section boundary, path-like filter, line stripping', () => {

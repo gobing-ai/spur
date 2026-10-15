@@ -1,7 +1,10 @@
-#!/usr/bin/env bun
 /**
- * wrapup-drift-probe — deterministic doc-ownership drift probe behind the wrapup-pipeline
- * task-resolve onEnter (task 0944, feature D64, ADR-115 composition budgets).
+ * `spur task wrapup drift-probe` — deterministic doc-ownership drift probe behind the
+ * wrapup-pipeline task-resolve onEnter (task 0944, feature D64, ADR-115 composition budgets).
+ *
+ * Absorbed from the retired sp plugin script `plugins/sp/scripts/wrapup-drift-probe.ts`
+ * (script-absorption plan PR-5); behavior pinned by
+ * `apps/cli/tests/script-absorption-pr5-parity.test.ts` against its captured golden output.
  *
  * Reads the validated wrapup capture `.spur/run/<runId>-wrapup-tasks.json` (never raw
  * vars.tasks — 0783 contract), runs `spur task show <wbs> --json` per member, collects the
@@ -10,7 +13,7 @@
  *   - `<runId>-mode.txt`          projected wrapup mode: `fast` when clean, empty otherwise
  *
  * The probe runs ONLY when the caller left `mode` empty; a caller-set mode is projected
- * verbatim by the workflow wrapper and this script is never invoked (0944 R3).
+ * verbatim by the workflow wrapper and this step is never invoked (0944 R3).
  *
  * Dirty (clean=false, mode stays empty → the safety route) whenever ANY changed path
  * matches a doc-owned surface (AGENTS.md doc map + docs/99_PROJECT_CONSTITUTION.md
@@ -18,24 +21,24 @@
  * a wrapup without a readable change map must still reach doc-sync). Paths under the
  * task/feature corpus are never treated as drift.
  *
- * Node-builtin imports only; the spur lookup is a spawnable `SpurRunner` so tests can
- * fake it; `main(argv, env, options)` is the same injection point the workflow wrapper
- * and its node twin exercise. Always exits 0 after probing; only an empty `__runId`
- * (mis-invocation) exits 1.
+ * The spur lookup is a spawnable `SpurRunner` so tests can fake it. Always exits 0 after
+ * probing; only an empty `__runId` (mis-invocation) exits 1.
  */
 
 import { spawnSync } from 'node:child_process';
 import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { getEnvVars } from '../lib/env';
-import { spurCommand } from '../lib/spur-bin';
+import { echoError } from '@gobing-ai/ts-utils';
+import { childEnv, spurCommand } from './spur-command';
 
+/** Env the wrapup workflow passes to the drift probe (`__runId` is required; `spurBin` overrides the spur resolution). */
 export interface DriftProbeEnv {
     __runId?: string;
     spurBin?: string;
     [key: string]: string | undefined;
 }
 
+/** Injectable seams for the drift probe. */
 export interface DriftProbeOptions {
     /** Base directory for `.spur/run`; defaults to the process cwd. */
     cwd?: string;
@@ -46,8 +49,10 @@ export interface SpurShowResult {
     status: number;
     stdout: string;
 }
+/** Runs one spur invocation synchronously; the probe uses it for `spur task show`. */
 export type SpurRunner = (args: string[]) => SpurShowResult;
 
+/** Outcome of one drift probe: the verdict, its reasons and paths, the two files written and the exit code. */
 export interface DriftProbeResult {
     clean: boolean;
     reasons: string[];
@@ -58,6 +63,7 @@ export interface DriftProbeResult {
     exitCode: number;
 }
 
+const WORKFLOWS_GLOB = ['config', 'workflows', '**'].join('/');
 /**
  * Doc-owned surfaces (0944 R2): a changed path under any of these means doc-sync must
  * still run. Mirrors the AGENTS.md documentation map and the
@@ -66,11 +72,10 @@ export interface DriftProbeResult {
  * authoritative docs (00_ADR, 03_ARCHITECTURE, 04_DESIGN, docs/design). docs/tasks* and
  * docs/features/* (the corpus) are intentionally absent — they are never drift.
  *
- * WHY join('config', 'workflows'): rule sp-runtime-path forbids the literal
+ * WHY ['config', 'workflows'].join('/'): rule sp-runtime-path forbids the literal
  * config/<dir> in runtime source; this constant is a drift TARGET (Solution
  * change-map paths against the build-time SSOT), not a runtime config read.
  */
-const WORKFLOWS_GLOB = `${join('config', 'workflows')}/**`;
 export const DOC_OWNED_SURFACES = [
     'packages/contracts/**',
     'apps/cli/src/commands/**',
@@ -164,7 +169,7 @@ function defaultSpurRunner(env: DriftProbeEnv, cwd?: string): SpurRunner {
         const run = spawnSync(cmd, [...prefix, ...args], {
             cwd,
             encoding: 'utf8',
-            env: getEnvVars(),
+            env: childEnv(env),
         });
         return { status: run.status ?? 1, stdout: run.stdout ?? '' };
     };
@@ -183,7 +188,7 @@ export function runDriftProbe(
     const cwd = options.cwd;
     const runId = env.__runId ?? '';
     if (runId.length === 0) {
-        process.stderr.write('wrapup-drift-probe: __runId is empty — refusing the legacy fixed-path fallback\n');
+        echoError('wrapup-drift-probe: __runId is empty — refusing the legacy fixed-path fallback');
         return { clean: false, reasons: [], paths: [], probeFile: '', modeFile: '', exitCode: 1 };
     }
     const relProbeFile = join('.spur', 'run', `${runId}-drift-probe.json`);
@@ -207,9 +212,7 @@ export function runDriftProbe(
         tasks = undefined;
     }
     if (!Array.isArray(tasks) || !tasks.every((wbs) => typeof wbs === 'string')) {
-        process.stderr.write(
-            'wrapup-drift-probe: normalized task capture is missing or corrupted — failing safe (dirty)\n',
-        );
+        echoError('wrapup-drift-probe: normalized task capture is missing or corrupted — failing safe (dirty)');
         return finish(false, ['normalized task capture missing or corrupted'], []);
     }
 
@@ -244,18 +247,4 @@ export function runDriftProbe(
         }
     }
     return finish(reasons.length === 0, reasons, [...allPaths].sort());
-}
-
-export const WRAPUP_DRIFT_PROBE_USAGE = 'usage: wrapup-drift-probe  (env: __runId, spurBin)';
-
-export function main(argv: string[], env: DriftProbeEnv = getEnvVars(), options: DriftProbeOptions = {}): number {
-    if (argv.length > 0) {
-        process.stderr.write(`${WRAPUP_DRIFT_PROBE_USAGE}\n`);
-        return 2;
-    }
-    return runDriftProbe(env, options).exitCode;
-}
-
-if (import.meta.main) {
-    process.exit(main(process.argv.slice(2)));
 }

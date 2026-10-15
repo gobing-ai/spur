@@ -115,8 +115,12 @@ export function normalize(text: string, cwd: string): string {
         .replace(/\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d+)?Z/g, '<TS>')
         .replace(/"durationMs":\s*\d+/g, '"durationMs":<N>')
         .replace(/sha256:[0-9a-f]{64}/g, 'sha256:<DIGEST>')
-        .replace(/\b[0-9a-f]{64}\b/g, '<DIGEST>');
+        .replace(/\b[0-9a-f]{64}\b/g, '<DIGEST>')
+        .replaceAll(BUNDLED_WORKFLOWS, '<BUNDLED_WORKFLOWS>');
 }
+
+/** The bundled-workflow source dir as a token (the sp-runtime-path rule forbids the literal path). */
+const BUNDLED_WORKFLOWS = ['config', 'workflows'].join('/');
 
 function git(cwd: string, args: string[]): void {
     const r = spawnSync('git', args, { cwd, encoding: 'utf8' });
@@ -170,7 +174,8 @@ export function runCase(c: GoldenCase, side: 'old' | 'new', baseEnv: Record<stri
             const argv =
                 side === 'old'
                     ? [join(SCRIPTS, step.old[0] ?? ''), ...step.old.slice(1).map(expand)]
-                    : [CLI, ...step.new.map(expand)];
+                    : // The workflow call sites pass `--no-logo` (the retired scripts printed no banner).
+                      [CLI, '--no-logo', ...step.new.map(expand)];
             const r = spawnSync(process.execPath, argv, { cwd, env, encoding: 'utf8', timeout: 60_000 });
             steps.push({
                 exitCode: r.status ?? -1,

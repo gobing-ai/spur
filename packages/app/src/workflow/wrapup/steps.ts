@@ -1,7 +1,11 @@
-#!/usr/bin/env bun
 /**
- * wrapup-steps — deterministic wrap-up capture, metrics and feature sync behind the
+ * `spur task wrapup <op>` — deterministic wrap-up capture, metrics and feature sync behind the
  * wrapup-pipeline wrappers (task 0824, feature I21, governance §1.2 composition budgets).
+ *
+ * Absorbed from the retired sp plugin script `plugins/sp/scripts/wrapup-steps.ts`
+ * (script-absorption plan PR-5, docs/plans/2026-10-14-spur-script-absorption.md §3.4): the
+ * workflow now calls `$spurBin task wrapup <op>`; the behavior below is the script's, pinned by
+ * `apps/cli/tests/script-absorption-pr5-parity.test.ts` against its captured golden output.
  *
  * Reproduces the former wrapup-pipeline `task-resolve:onEnter:0`, `task-resolve:onEnter:1`
  * (route-reason writer, moved here in 0944), `metrics-record:onEnter:0` and
@@ -20,7 +24,8 @@
  *
  * Environment comes from the workflow vars: `__runId`, `tasks`, `feature`, `featureGateCmd`
  * and `spurBin` (split on whitespace into a command plus prefix args, so
- * `bun apps/cli/src/index.ts` works).
+ * `bun apps/cli/src/index.ts` works). The nested `task show` / `feature sync|show|check` lookups
+ * still go through `spurBin` so a workflow's PATH-independent override (and test stubs) apply.
  *
  * Truthfulness contract (0770 + 0783): wrap-up never mutates task status; a lookup failure is
  * recorded as FAIL, never silently omitted as success; metrics rows are serialized as JSON
@@ -29,16 +34,16 @@
  * a failed sync into success. The process always exits 0 after resolve/metrics/
  * feature-transition; the verdict lives in the status file (an empty `feature` is a
  * mis-invocation and exits 1).
- *
- * Node-builtin imports only; pure helpers are exported for unit testing (ADR-065).
  */
 
 import { spawnSync } from 'node:child_process';
 import { appendFileSync, existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { getEnvVars } from '../lib/env';
-import { spurCommand } from '../lib/spur-bin';
+import { DEFAULT_FEATURES_DIR, DEFAULT_TASKS_DIR } from '@gobing-ai/spur-config';
+import { echo, echoError } from '@gobing-ai/ts-utils';
+import { childEnv, spurCommand } from './spur-command';
 
+/** Env the wrapup workflow passes to the wrapup steps (run id, task/feature ids, spur override). */
 export interface WrapupStepsEnv {
     __runId?: string;
     tasks?: string;
@@ -48,6 +53,7 @@ export interface WrapupStepsEnv {
     [key: string]: string | undefined;
 }
 
+/** Injectable seams for the wrapup steps. */
 export interface WrapupStepsOptions {
     /** Base directory for `.spur/run` / `.spur/memory`; defaults to the process cwd. */
     cwd?: string;
@@ -77,6 +83,7 @@ function spur(
     const { cmd, prefix } = spurCommand(env.spurBin);
     const result = spawnSync(cmd, [...prefix, ...args], {
         cwd: options.cwd,
+        env: childEnv(env),
         encoding: 'utf8',
         ...(options.stderr === 'inherit' ? { stdio: ['ignore', 'pipe', 'inherit'] as const } : {}),
     });
@@ -114,6 +121,7 @@ function statusDisplay(taskJson: string): string {
     return jqText(resolved);
 }
 
+/** Outcome of the `resolve` step: PASS/FAIL, the status and resolved-tasks files written, and the exit code. */
 export interface ResolveResult {
     status: 'PASS' | 'FAIL';
     statusFile: string;
@@ -127,7 +135,7 @@ export function resolveTasks(env: WrapupStepsEnv, options: WrapupStepsOptions = 
     const cwd = options.cwd;
     const runId = env.__runId ?? '';
     if (runId.length === 0) {
-        process.stderr.write('task-resolve: __runId is empty — refusing the legacy fixed-path fallback\n');
+        echoError('task-resolve: __runId is empty — refusing the legacy fixed-path fallback');
         return { status: 'FAIL', statusFile: '', tasksFile: '', exitCode: 1 };
     }
     mkdirSync(cwd ? join(cwd, '.spur', 'run') : join('.spur', 'run'), { recursive: true });
@@ -151,8 +159,8 @@ export function resolveTasks(env: WrapupStepsEnv, options: WrapupStepsOptions = 
     const validArray =
         Array.isArray(parsedTasks) && parsedTasks.every((w) => typeof w === 'string' && WBS_PATTERN.test(w));
     if (!validArray) {
-        process.stderr.write(
-            'task-resolve: tasks must be a JSON array of canonical four-digit WBS strings (whitespace is rejected, not trimmed)\n',
+        echoError(
+            'task-resolve: tasks must be a JSON array of canonical four-digit WBS strings (whitespace is rejected, not trimmed)',
         );
         return writeFail('failed:tasks is not a JSON array of canonical four-digit WBS strings');
     }
@@ -169,9 +177,7 @@ export function resolveTasks(env: WrapupStepsEnv, options: WrapupStepsOptions = 
         const shown = spur(env, ['task', 'show', wbs, '--json'], { cwd });
         const status = shown.status === 0 ? statusDisplay(shown.stdout) : 'unresolved';
         if (status !== 'done' && status !== 'cancelled') {
-            process.stderr.write(
-                `task-resolve: task ${wbs} did not resolve to a completed status (status=${status})\n`,
-            );
+            echoError(`task-resolve: task ${wbs} did not resolve to a completed status (status=${status})`);
             unresolved = true;
         }
     }
@@ -311,6 +317,7 @@ const ROUTE_REASON_TABLE: Record<string, string> = {
     safety: 'safety:operator-forced doc-sync',
 };
 
+/** Outcome of the `route-reason` step: the routing reason, the file it was written to, and the exit code. */
 export interface RouteReasonResult {
     reason: string;
     reasonFile: string;
@@ -327,7 +334,7 @@ export function writeRouteReason(env: WrapupStepsEnv, options: WrapupStepsOption
     const cwd = options.cwd;
     const runId = env.__runId ?? '';
     if (runId.length === 0) {
-        process.stderr.write('task-resolve: __runId is empty — refusing to write a route reason\n');
+        echoError('task-resolve: __runId is empty — refusing to write a route reason');
         return { reason: '', reasonFile: '', exitCode: 1 };
     }
     mkdirSync(cwd ? join(cwd, '.spur', 'run') : join('.spur', 'run'), { recursive: true });
@@ -384,9 +391,10 @@ function readFileSyncSafe(path: string): string | null {
 /**
  * Verdict from a task record's tracked `Testing` section — the durable copy that outlives a
  * worktree teardown or clone (F93). Local copy of `parseVerdictLine` and of the `Testing` slice
- * in `extractTestingSection` (`packages/app/src/services/task-record.ts`) because ADR-065 keeps
- * plugin scripts on builtin and relative imports only; keep the three literals in step by hand
- * (the parity guard in `plugins/sp/tests/wrapup-steps.test.ts` reads the canonical literals).
+ * in `extractTestingSection` (`packages/app/src/services/task-record.ts`), carried verbatim from
+ * the retired plugin script (ADR-065 kept it on builtin imports; script-absorption PR-5 moved it
+ * here unchanged to preserve behavior); keep the three literals in step by hand (the parity
+ * guard in `packages/app/tests/workflow/wrapup/steps.test.ts` reads the canonical literals).
  *
  * The slice rule is the canonical one verbatim — `#{1,6}` heading, end at the next
  * same-or-higher heading — so an `# Testing` or `#### Testing` heading, and an h4 subheading
@@ -424,6 +432,7 @@ function verdictOfArtifact(verdictPath: string): string | null {
     }
 }
 
+/** Outcome of the `metrics` step: PASS/FAIL and the status file written. */
 export interface MetricsResult {
     status: 'PASS' | 'FAIL';
     statusFile: string;
@@ -453,8 +462,8 @@ export function runMetrics(env: WrapupStepsEnv, options: WrapupStepsOptions = {}
     }
     const validCapture = Array.isArray(captured) && captured.every((w) => typeof w === 'string' && WBS_PATTERN.test(w));
     if (!validCapture) {
-        process.stderr.write(
-            'metrics-record: run-scoped task capture missing, corrupted or non-canonical — refusing to record metrics\n',
+        echoError(
+            'metrics-record: run-scoped task capture missing, corrupted or non-canonical — refusing to record metrics',
         );
         return fail();
     }
@@ -464,8 +473,8 @@ export function runMetrics(env: WrapupStepsEnv, options: WrapupStepsOptions = {}
         const shown = spur(env, ['task', 'show', wbs, '--json'], { cwd });
         const lookup = shown.status === 0 ? taskStatusOf(shown.stdout) : { resolved: null, present: false };
         if (!lookup.present) {
-            process.stderr.write(
-                `metrics-record: task ${wbs} lookup failed or was malformed — recording FAIL instead of silently omitting its metrics row\n`,
+            echoError(
+                `metrics-record: task ${wbs} lookup failed or was malformed — recording FAIL instead of silently omitting its metrics row`,
             );
             metricsRc = 1;
             continue;
@@ -491,8 +500,8 @@ export function runMetrics(env: WrapupStepsEnv, options: WrapupStepsOptions = {}
         if (verdict === 'UNKNOWN') {
             // R3: name the task, the artifact path and the tracked state. An explicit UNKNOWN on
             // either source is still an uncertified row, so it reports the same way as a miss.
-            process.stderr.write(
-                `metrics-record: task ${wbs} has no certifying verdict — ${verdictPath}: ${artifactVerdict ?? 'missing or carries none'}, tracked Testing: ${trackedVerdict ?? 'no Verdict: line'} — recording UNKNOWN telemetry\n`,
+            echoError(
+                `metrics-record: task ${wbs} has no certifying verdict — ${verdictPath}: ${artifactVerdict ?? 'missing or carries none'}, tracked Testing: ${trackedVerdict ?? 'no Verdict: line'} — recording UNKNOWN telemetry`,
             );
         }
 
@@ -501,8 +510,8 @@ export function runMetrics(env: WrapupStepsEnv, options: WrapupStepsOptions = {}
         try {
             appendFileSync(abs(relMetricsFile), `${JSON.stringify(row)}\n`);
         } catch {
-            process.stderr.write(
-                `metrics-record: metrics append failed for task ${wbs} — recording FAIL instead of claiming the row landed\n`,
+            echoError(
+                `metrics-record: metrics append failed for task ${wbs} — recording FAIL instead of claiming the row landed`,
             );
             metricsRc = 1;
         }
@@ -512,6 +521,7 @@ export function runMetrics(env: WrapupStepsEnv, options: WrapupStepsOptions = {}
     return { status, statusFile: relStatusFile };
 }
 
+/** Outcome of the `feature-transition` step: PASS/FAIL, the status file written, and the exit code. */
 export interface FeatureTransitionResult {
     status: 'PASS' | 'FAIL';
     statusFile: string;
@@ -592,8 +602,8 @@ export function runFeatureTransition(env: WrapupStepsEnv, options: WrapupStepsOp
     const relStatusFile = join('.spur', 'run', `${runId}-wrapup-sync.status`);
     const abs = (p: string): string => (cwd ? join(cwd, p) : p);
     if (feature.length === 0) {
-        process.stderr.write(
-            'feature-transition: vars.feature is empty — refusing no-op feature sync (mis-invocation, not a blocked sync)\n',
+        echoError(
+            'feature-transition: vars.feature is empty — refusing no-op feature sync (mis-invocation, not a blocked sync)',
         );
         return { status: 'FAIL', statusFile: relStatusFile, exitCode: 1 };
     }
@@ -606,7 +616,7 @@ export function runFeatureTransition(env: WrapupStepsEnv, options: WrapupStepsOp
     const sync = spur(env, ['feature', 'sync', feature, '--json'], { cwd, stderr: 'inherit' });
     syncOutput = sync.stdout;
     syncRc = sync.status;
-    process.stdout.write(`${syncOutput}\n`);
+    echo(`${syncOutput}`);
 
     const shown = spur(env, ['feature', 'show', feature, '--json'], { cwd });
     let observed = '';
@@ -631,41 +641,41 @@ export function runFeatureTransition(env: WrapupStepsEnv, options: WrapupStepsOp
 
     let gate = 'skipped';
     if (applied === 'true' || syncRc !== 0) {
-        process.stdout.write(
-            `feature-transition: sync applied or failed after a possible partial transition for ${feature} — running feature gate: ${env.featureGateCmd ?? ''}\n`,
+        echo(
+            `feature-transition: sync applied or failed after a possible partial transition for ${feature} — running feature gate: ${env.featureGateCmd ?? ''}`,
         );
-        const gateResult = spawnSync('sh', ['-c', env.featureGateCmd ?? ''], { cwd, stdio: 'inherit' });
+        const gateResult = spawnSync('sh', ['-c', env.featureGateCmd ?? ''], {
+            cwd,
+            env: childEnv(env),
+            stdio: 'inherit',
+        });
         if ((gateResult.status ?? 1) === 0) {
             gate = 'PASS';
-            process.stdout.write(`feature-transition: feature gate PASS for feature ${feature}\n`);
+            echo(`feature-transition: feature gate PASS for feature ${feature}`);
         } else {
             gate = 'FAIL';
-            process.stderr.write(
-                `feature-transition: feature gate FAIL for feature ${feature} — inspect findings before reporting the transition complete\n`,
+            echoError(
+                `feature-transition: feature gate FAIL for feature ${feature} — inspect findings before reporting the transition complete`,
             );
         }
     } else {
-        process.stdout.write(
-            `feature-transition: sync did not apply a transition (rc=${syncRc}, applied=${applied}) — feature gate skipped\n`,
+        echo(
+            `feature-transition: sync did not apply a transition (rc=${syncRc}, applied=${applied}) — feature gate skipped`,
         );
     }
 
     let syncStatus: 'PASS' | 'FAIL';
     if (!syncOk || gate === 'FAIL') {
         syncStatus = 'FAIL';
-        process.stderr.write(
-            `feature-transition: required synchronization failed for ${feature} — ${reason}; gate=${gate}\n`,
-        );
+        echoError(`feature-transition: required synchronization failed for ${feature} — ${reason}; gate=${gate}`);
     } else if (applied === 'false') {
         syncStatus = 'PASS';
-        process.stdout.write(
-            `feature-transition: feature sync verified for ${feature} (from==to observed at ${observed}, gate=${gate}) — explicit no-change\n`,
+        echo(
+            `feature-transition: feature sync verified for ${feature} (from==to observed at ${observed}, gate=${gate}) — explicit no-change`,
         );
     } else {
         syncStatus = 'PASS';
-        process.stdout.write(
-            `feature-transition: feature sync verified for ${feature} (applied, observed=${observed}, gate=${gate})\n`,
-        );
+        echo(`feature-transition: feature sync verified for ${feature} (applied, observed=${observed}, gate=${gate})`);
     }
     writeFileSync(abs(relStatusFile), `${syncStatus}\n`);
     return { status: syncStatus, statusFile: relStatusFile, exitCode: 0 };
@@ -709,7 +719,7 @@ export function porcelainPath(line: string): string {
 export function isDocSyncAllowedPath(path: string, allowedExtra: readonly string[]): boolean {
     if (allowedExtra.includes(path)) return true;
     if (!path.startsWith('docs/')) return false;
-    return !path.startsWith('docs/tasks') && !path.startsWith('docs/features');
+    return !path.startsWith(DEFAULT_TASKS_DIR) && !path.startsWith(DEFAULT_FEATURES_DIR);
 }
 
 /**
@@ -782,7 +792,7 @@ export function runDocSyncSnapshot(env: WrapupStepsEnv, options: WrapupStepsOpti
     const listing = gitPorcelain(cwd);
     if (!listing.ok) {
         writeFileSync(paths.abs(DOC_SYNC_SNAPSHOT_SUFFIX), `${GIT_UNAVAILABLE_MARKER} ${listing.detail}\n`);
-        process.stderr.write(`doc-sync-snapshot: git status unavailable — scope check skips (${listing.detail})\n`);
+        echoError(`doc-sync-snapshot: git status unavailable — scope check skips (${listing.detail})`);
         return { statusFile: paths.rel(DOC_SYNC_SNAPSHOT_SUFFIX), captured: false, exitCode: 0 };
     }
     writeFileSync(paths.abs(DOC_SYNC_SNAPSHOT_SUFFIX), listing.listing);
@@ -810,7 +820,7 @@ export function runDocSyncScope(env: WrapupStepsEnv, options: WrapupStepsOptions
     const statusFile = paths.rel(DOC_SYNC_SCOPE_STATUS_SUFFIX);
     const write = (status: DocSyncScopeResult['status'], detail: string): DocSyncScopeResult => {
         writeFileSync(paths.abs(DOC_SYNC_SCOPE_STATUS_SUFFIX), `${detail}\n`);
-        if (status !== 'PASS') process.stderr.write(`doc-sync-scope: ${detail}\n`);
+        if (status !== 'PASS') echoError(`doc-sync-scope: ${detail}`);
         return { status, statusFile, violations: status === 'PASS' ? [] : [detail], exitCode: 0 };
     };
 
@@ -819,7 +829,7 @@ export function runDocSyncScope(env: WrapupStepsEnv, options: WrapupStepsOptions
         return write('scope-violation', `scope-violation: ${SNAPSHOT_MISSING}`);
     }
     if (snapshot.startsWith(GIT_UNAVAILABLE_MARKER)) {
-        process.stderr.write('doc-sync-scope: entry snapshot recorded no git listing — scope check skipped\n');
+        echoError('doc-sync-scope: entry snapshot recorded no git listing — scope check skipped');
         return write('PASS', 'PASS');
     }
     const current = gitPorcelain(cwd);
@@ -861,31 +871,51 @@ export function runDocSupersessionCheck(env: WrapupStepsEnv, options: WrapupStep
     }
     writeFileSync(paths.abs(DOC_SYNC_SUPERSESSION_STATUS_SUFFIX), `supersession-pin-failed: ${SUPERSESSION_PIN}\n`);
     const detail = `${pin.stdout ?? ''}${pin.stderr ?? ''}`.trim();
-    process.stderr.write(
-        `doc-supersession: ${SUPERSESSION_PIN} failed (exit ${String(pin.status ?? 1)}) — the doc-sync step introduced or kept superseded index content:\n${detail.slice(-2000)}\n`,
+    echoError(
+        `doc-supersession: ${SUPERSESSION_PIN} failed (exit ${String(pin.status ?? 1)}) — the doc-sync step introduced or kept superseded index content:\n${detail.slice(-2000)}`,
     );
     return { status: 'supersession-pin-failed', statusFile, exitCode: 0 };
 }
 
-export const WRAPUP_STEPS_USAGE =
-    'usage: wrapup-steps.ts <resolve|route-reason|metrics|feature-transition|doc-sync-snapshot|doc-sync-scope|doc-supersession>  (env: __runId, tasks, mode, feature, featureGateCmd, spurBin)';
+/** The `spur task wrapup` operations, in help order (`drift-probe` lives in ./drift-probe.ts). */
+export const WRAPUP_STEP_OPS = [
+    'resolve',
+    'route-reason',
+    'metrics',
+    'feature-transition',
+    'doc-sync-snapshot',
+    'doc-sync-scope',
+    'doc-supersession',
+] as const;
 
-export function main(argv: string[], env: WrapupStepsEnv = getEnvVars(), options: WrapupStepsOptions = {}): number {
-    const sub = argv[0];
-    if (sub === 'resolve') return resolveTasks(env, options).exitCode;
-    if (sub === 'route-reason') return writeRouteReason(env, options).exitCode;
-    if (sub === 'metrics') {
-        runMetrics(env, options);
-        return 0;
-    }
-    if (sub === 'feature-transition') return runFeatureTransition(env, options).exitCode;
-    if (sub === 'doc-sync-snapshot') return runDocSyncSnapshot(env, options).exitCode;
-    if (sub === 'doc-sync-scope') return runDocSyncScope(env, options).exitCode;
-    if (sub === 'doc-supersession') return runDocSupersessionCheck(env, options).exitCode;
-    process.stderr.write(`${WRAPUP_STEPS_USAGE}\n`);
-    return 2;
+/** One `spur task wrapup` step operation. */
+export type WrapupStepOp = (typeof WRAPUP_STEP_OPS)[number];
+
+/** True when `op` names a {@link WrapupStepOp}. */
+export function isWrapupStepOp(op: string): op is WrapupStepOp {
+    return (WRAPUP_STEP_OPS as readonly string[]).includes(op);
 }
 
-if (import.meta.main) {
-    process.exit(main(process.argv.slice(2)));
+/**
+ * Run one wrap-up step and return the process exit code the workflow wrapper observes (0 after
+ * every completed step — the verdict lives in its status file; 1 for a mis-invocation).
+ */
+export function runWrapupStep(op: WrapupStepOp, env: WrapupStepsEnv, options: WrapupStepsOptions = {}): number {
+    switch (op) {
+        case 'resolve':
+            return resolveTasks(env, options).exitCode;
+        case 'route-reason':
+            return writeRouteReason(env, options).exitCode;
+        case 'metrics':
+            runMetrics(env, options);
+            return 0;
+        case 'feature-transition':
+            return runFeatureTransition(env, options).exitCode;
+        case 'doc-sync-snapshot':
+            return runDocSyncSnapshot(env, options).exitCode;
+        case 'doc-sync-scope':
+            return runDocSyncScope(env, options).exitCode;
+        case 'doc-supersession':
+            return runDocSupersessionCheck(env, options).exitCode;
+    }
 }

@@ -540,7 +540,7 @@ describe('sp plugin structure — functional split invariants (task 0161 / ADR-0
         expect(executionBatch).toContain('optional parallel fan-out');
         expect(devRunall).toContain('--mode <sequential|parallel|auto>');
         expect(devRunall).toContain('--feature <id>');
-        expect(executionBatch).toContain('batch-plan.mjs)" order --tasks');
+        expect(executionBatch).toContain('spur task batch-plan order --tasks');
         expect(executionBatch).toContain('### 2.4a `--mode auto` resolution');
     });
 

@@ -155,7 +155,7 @@ The wrap receives only what it would accept:
 
 1. `vars.tasks` = the JSON-encoded array of batch WBS whose terminal status is `done`. A task that
    is `failed`/`blocked`/`skipped`/`not-attempted`/`recheck`/`not-admitted` is **excluded** —
-   `wrapup task-resolve` refuses non-done members (wrapup-steps.ts task-resolve), so the driver
+   `wrapup task-resolve` refuses non-done members (`spur task wrapup resolve`), so the driver
    simply stops handing the wrap tasks it would refuse.
 2. `vars.feature` = the batch feature **only when every task in the frozen batch is `done` or
    `cancelled`**. Otherwise omit it and print `feature lifecycle not advanced: <n> task(s)
@@ -173,7 +173,7 @@ an empty string disables the check while still recording PASS. A FAIL routes the
 with already-written learnings/docs preserved — fix the flagged working-diff violation and re-run
 the wrap.
 
-Filtering lives here, in the batch driver — no change to wrapup-pipeline.yaml or wrapup-steps.ts;
+Filtering lives here, in the batch driver — no change to wrapup-pipeline.yaml or `spur task wrapup`;
 the wrap's refusal of non-done tasks remains the hard invariant.
 
 **Close-out commit (1129 R2/R5).** In sequential mode the wrap's writes (learnings, metrics,

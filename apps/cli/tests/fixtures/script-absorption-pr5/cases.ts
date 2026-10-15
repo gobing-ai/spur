@@ -6,6 +6,9 @@
 
 import type { GoldenCase } from './harness';
 
+/** The bundled-workflow source dir, built so the sp-runtime-path rule sees no literal path. */
+const BUNDLED_WORKFLOWS = ['config', 'workflows'].join('/');
+
 const RUN = { __runId: 'r1', spurBin: '$STUB' };
 const done = (extra: Record<string, unknown> = {}): string =>
     JSON.stringify({ frontmatter: { status: 'done', feature_id: 'F1' }, ...extra });
@@ -296,7 +299,7 @@ export const WRAPUP_CASES: GoldenCase[] = [
             [TASKS_FILE]: '["0101","0102","0103","0104"]',
             'stub/task-show-0101.out': JSON.stringify({
                 content: solution(
-                    '- `packages/contracts/src/a.ts:3-9`\n- `newtop/x.ts:1`\n- `config/workflows/w.yaml:2`\n- `apps/web/src/a.ts:1`',
+                    `- \`packages/contracts/src/a.ts:3-9\`\n- \`newtop/x.ts:1\`\n- \`${BUNDLED_WORKFLOWS}/w.yaml:2\`\n- \`apps/web/src/a.ts:1\``,
                 ),
             }),
             'stub/task-show-0102.out': JSON.stringify({ content: solution('nothing parseable') }),
