@@ -1577,6 +1577,58 @@ describe('sp plugin structure — functional split invariants (task 0161 / ADR-0
         expect(source).toContain('single sp owner');
     });
 
+    test('the docs rule family verifies HIGH-confidence honesty — a claim cannot claim HIGH without its source', () => {
+        // `cited-api-claims-confidence` only checks that a level TOKEN exists, so an uncited HIGH — the
+        // one level the contract defines as "verified against the pinned source this session" — was
+        // unfalsifiable. `cited-high-confidence` is that honesty half. The patterns are read from the
+        // rule file (the SSOT an author edits) instead of being restated here, so this test cannot drift
+        // from the rule; the JS regex engine is a faithful proxy for the line shapes the rg evaluator
+        // matched when the rule was calibrated (measured 2026-10-16).
+        const rule = readFileSync(join(REPO_ROOT, 'config', 'rules', 'docs', 'sourced-api-claims.yaml'), 'utf8');
+        const patternOf = (id: string): RegExp => {
+            const block = rule.slice(rule.indexOf(`- id: ${id}`));
+            const raw = /pattern: "((?:[^"\\]|\\.)*)"/.exec(block)?.[1];
+            expect(raw, `${id} must declare a pattern`).toBeTruthy();
+            // This file's YAML double-quoted escapes are JSON-compatible (`\\` backslash, `\"` quote).
+            return new RegExp(JSON.parse(`"${raw ?? ''}"`) as string);
+        };
+        const honesty = patternOf('cited-high-confidence');
+        const presence = patternOf('cited-api-claims-confidence');
+
+        // Fires: a claim line that claims HIGH with no anchor on the same line.
+        expect(honesty.test('The endpoint was deprecated since 1.2 (HIGH).')).toBe(true);
+        expect(honesty.test('The option was added in 2.0 (HIGH).')).toBe(true);
+
+        // Silent: the same claim carrying the anchor the level promises.
+        expect(honesty.test('Deprecated since 1.2 (HIGH) — see https://example.com/docs')).toBe(false);
+        expect(honesty.test('Added in 2.0 (HIGH) — see packages/app/src/index.ts:42')).toBe(false);
+
+        // Silent: no claim verb, so not a claim line — a decision record's own `Confidence:` grade
+        // (the brainstorm family) and ordinary prose must never be dragged into this rule.
+        expect(honesty.test('**Confidence:** HIGH')).toBe(false);
+        expect(honesty.test('The risk is HIGH and the coupling is tight.')).toBe(false);
+
+        // Silent: MEDIUM and LOW need no anchor by contract.
+        expect(honesty.test('Deprecated since 1.2 (MEDIUM).')).toBe(false);
+        expect(honesty.test('Deprecated since 1.2 (LOW).')).toBe(false);
+
+        // Division of labour: a claim line with no level at all is the presence rule's finding, not this
+        // one's — the two must never both fire on the same line, and neither may miss it.
+        expect(honesty.test('The endpoint was deprecated since 1.2.')).toBe(false);
+        expect(presence.test('The endpoint was deprecated since 1.2.')).toBe(true);
+        expect(presence.test('The endpoint was deprecated since 1.2 (HIGH).')).toBe(false);
+
+        // Family policy: advisory only. Both halves stay info-severity and out of every preset — the
+        // category was pulled from `recommended-pre-check` for noise and must not creep back in. The
+        // preset's comments DO name the doc rules (explaining why they are excluded), so assert the
+        // invariant that matters: no active `- docs` entry, and this rule unmentioned as a gate.
+        expect(rule.slice(rule.indexOf('- id: cited-high-confidence'))).toContain('severity: info');
+        const preCheck = readFileSync(join(REPO_ROOT, 'config', 'rules', 'recommended-pre-check.yaml'), 'utf8');
+        expect(preCheck).not.toMatch(/^\s*-\s*docs\b/m);
+        expect(preCheck).toContain('DO NOT ENABLE THIS LINE');
+        expect(preCheck).not.toContain('cited-high-confidence');
+    });
+
     test('R49 — Wave 3 enrichment landed (0214 R7/R8/R9)', () => {
         // R7: sys-debugging hardening — untrusted error output, non-reproducible decision tree,
         // instrumentation keep/remove — with the feedback-loop-first Phase 1 unchanged.

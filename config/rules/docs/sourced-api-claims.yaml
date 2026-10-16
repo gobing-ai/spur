@@ -28,12 +28,23 @@
 # citation (URL or path:line) AND a confidence level (HIGH/MEDIUM/LOW) — is
 # owned by the sp-source-driven-development skill and verified in SECUA review
 # (code-verification secu-review checklist). These rules are its deterministic
-# backstop: the two `cited-*` rules cover the citation half, and
-# `cited-api-claims-confidence` covers the level half. All are severity `info`,
+# backstop: the three `cited-*` rules cover the citation half, and
+# `cited-api-claims-confidence` covers the level half.
+# `cited-high-confidence` covers the HONESTY half — the level is a claim like
+# any other, so the one level that asserts "verified this session" must show the
+# source it was verified against. MEDIUM (recalled, plausibly stale) and LOW
+# (memory only) require no anchor by contract and are deliberately not flagged.
+# All are severity `info`,
 # and the category is deliberately NOT in `recommended-pre-check` — it surfaces
 # findings for review without reddening gates. The 2026-10-12 audit below settled
 # the promotion question: the residual findings stay a review-surface concern
 # (SECUA checklist), not a gate one — do not add `- docs` to that preset.
+#
+# Fenced-code behavior (measured 2026-10-16, `spur rule run --file … --json` over a
+# probe doc): code fences are NOT skipped by the regex evaluator — every rule here
+# fires on a matching line inside a fence. The earlier note claiming fenced lines
+# were "out of regex reach" was wrong; fence noise is one more reason these stay
+# `info` and ad hoc rather than gated.
 include:
   - "docs/**/*.md"
   - "plugins/sp/skills/**/references/**/*.md"
@@ -65,11 +76,12 @@ rules:
         # contains a semver-ish token. Lookarounds exclude IPs (127.0.0.1),
         # longer dotted numerics, a heading's section number (`### 1.0.1 Title`),
         # a document-version metadata line (`version: 1.69.0`) and a `§`-numbered
-        # section reference (`§7.3.1`) — none of which is an external claim;
-        # fenced-code lines are out of regex reach — that residual noise is why
-        # this is info, not warning. The `§` guard sits on the token itself, not on
-        # the line, so a line carrying both a section reference and a real version
-        # still fires on the version.
+        # section reference (`§7.3.1`) — none of which is an external claim.
+        # Fenced code and command examples can legitimately carry bare versions and
+        # are NOT skipped by the evaluator (measured 2026-10-16) — that residual
+        # noise, with the above, is why this is info, not warning. The `§` guard sits
+        # on the token itself, not on the line, so a line carrying both a section
+        # reference and a real version still fires on the version.
         pattern: "^(?!.*(?:https?://|(?:[\\w.-]+/)+[\\w.-]+:\\d+))(?!\\s*#{1,6}\\s+\\d+\\.\\d+\\.\\d+)(?!\\s*[\\w-]+:\\s*\\d+\\.\\d+\\.\\d+\\s*$).*(?<![\\d.§])\\d+\\.\\d+\\.\\d+(?!\\.\\d)"
   - id: cited-api-claims
     description: >
@@ -102,3 +114,29 @@ rules:
         # `cited-api-claims` exactly, so the two rules never disagree about which
         # lines are claims.
         pattern: "^(?!.*\\b(?:HIGH|MEDIUM|LOW)\\b).*\\b(?:deprecated (?:since|in|as of)|introduced in|added in|available since|stable since)\\b"
+  - id: cited-high-confidence
+    description: >
+      A line stating HIGH confidence about an external API/library claim must
+      carry a source citation anchor on the same line — URL or repo path:line.
+      The claim contract (sp-source-driven-development) defines HIGH as
+      "verified against the pinned version's docs/source THIS SESSION", so an
+      uncited HIGH is the one level that cannot be honest: MEDIUM is recalled and
+      plausibly stale, LOW is memory only, and both are explicitly allowed
+      without a source (LOW must never be presented as fact — that stays a review
+      judgment, not a regex). Scoped to the same claim verbs as
+      `cited-api-claims`, so the two rules agree on which lines are claims: a
+      decision record's own `Confidence:` grade (the brainstorm family) is a
+      different contract and is deliberately out of scope. Pairs with
+      `cited-api-claims-confidence`, which catches a claim line carrying no level
+      at all.
+    severity: info
+    evaluator:
+      type: regex
+      config:
+        mode: forbid
+        # Fires when a claim line names HIGH but carries no anchor. The anchor
+        # vocabulary is identical to its siblings (URL or `path:line`), so one
+        # line cannot read as cited for one rule and uncited for another. The level
+        # is asserted with a lookahead so either prose order matches — `(HIGH)` after
+        # the claim (the usual form) and `HIGH — <claim>` both count.
+        pattern: "^(?!.*(?:https?://|(?:[\\w.-]+/)+[\\w.-]+:\\d+))(?=.*\\bHIGH\\b).*\\b(?:deprecated (?:since|in|as of)|introduced in|added in|available since|stable since)\\b"
