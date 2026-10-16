@@ -42,13 +42,13 @@ sp:pr-reviewing (this skill — mode routing, triage, fix, rules)
 pr-review.yaml ← workflow SSOT (seeded by spur init; project-tunable)
       │  every deterministic action shells out to:
       ▼
-`spur builder pr`         ← Bun entrypoint for the tested git/gh core
+`spur builder pr-<verb>`  ← flat verbs over the tested git/gh core
 ```
 
 - **State order and guards** are defined once, in the workflow YAML. Do not re-derive them in
   prose; when the YAML and this file disagree, the YAML wins and this file gets fixed.
-- **Deterministic work** (every git/gh call) goes through the script subcommands — never
-  hand-rolled `gh` invocations that drift from the tested core.
+- **Deterministic work** (every git/gh call) goes through the four flat `spur builder pr-<verb>`
+  commands — never hand-rolled `gh` invocations that drift from the tested core.
 - **Model-bearing work** (finding triage, `fix` edits, `rules` authoring) is this skill's job and
   never enters the workflow machine.
 - The workflow YAML exposes only its declared spine modes (`full`, `submit`, and `rerun`). The
@@ -71,12 +71,12 @@ Parse the first positional argument as the mode; default `full`.
 
 | Mode | Route | Behavior |
 | --- | --- | --- |
-| `full` | Workflow YAML | Preflight → hygiene → precheck → push → ensure-pr → request (reviewed/in-flight HEAD dedupe) → wait → collect → report. No source edits. |
-| `submit` | Workflow YAML | Run the spine through `request`; return pending for a new request (`--no-wait` has the same effect). If the exact current HEAD was already reviewed, collect that result instead of requesting a duplicate. |
-| `rerun` | Workflow YAML | Run the spine and request a fresh review of the current pushed HEAD with `--force`. No source edits. |
-| `collect` | Direct script | Do not start the workflow or request a review. Collect the current PR's result and composite status; a missing current-HEAD result is **pending**, never clean. |
-| `fix` | Direct script + model work | Collect first, independently validate current-HEAD findings, fix legitimate issues, verify, make one focused commit, push, then force-request/review/collect the new HEAD. Do not pass `mode=fix` to the workflow. |
-| `status` | Direct script | Read-only composite: repository, branch, local HEAD, PR/base, local changes, CI, and Codex state for the current PR HEAD. Do not start the workflow. |
+| `full` | Workflow YAML | check → precheck → open → review → report (`pr-check`, `pr-open`, `pr-review` carry the reviewed/in-flight HEAD dedupe). No source edits. |
+| `submit` | Workflow YAML | Run the spine with `mode=submit`: `pr-review --no-wait` posts the request and returns pending. If the exact current HEAD was already reviewed, collect that result instead of requesting a duplicate. |
+| `rerun` | Workflow YAML | Run the spine with `mode=rerun`: `pr-review --force` requests a fresh review of the current pushed HEAD. No source edits. |
+| `collect` | Direct verb | Do not start the workflow or request a review. `spur builder pr-status --json` reads the current PR's result and composite status; a missing current-HEAD result is **pending**, never clean. |
+| `fix` | Direct verb + model work | Collect first, independently validate current-HEAD findings, fix legitimate issues, verify, make one focused commit, push, then force-request/review/collect the new HEAD. Do not pass `mode=fix` to the workflow. |
+| `status` | Direct verb | `spur builder pr-status --json`: read-only composite — repository, branch, local HEAD, PR/base, local changes, CI, and Codex state for the current PR HEAD. Do not start the workflow. |
 | `rules` | Model work only | Create or improve the repo-root `AGENTS.md` section `## Code Review Rules`; do not invoke the workflow, request a review, commit, or push. |
 
 ## Arguments
@@ -127,55 +127,58 @@ root causes rather than wording, prefer the smallest coherent patch, avoid drive
 
 ## Workflow-backed spine (`full`, `submit`, `rerun`)
 
-Run the workflow YAML's declared states in order. Every deterministic state invokes the
-`spur builder pr` operation below, supports `--json`, and must be parsed. Stop at the first red gate and
-report its artifact. The canonical installed invocation is:
+Run the workflow YAML's declared states in order; it calls the four flat verbs below, each of which
+composes its absorbed operations in the service (so this file never sequences shell itself). Every
+deterministic state invokes one `spur builder pr-<verb>` command, supports `--json`, and must be
+parsed. Stop at the first red gate and report its artifact.
 
 ```sh
-spur builder pr <subcommand> [flags]
+spur builder pr-check --base "$base" --json          # preflight + hygiene submission gate
+spur builder pr-open --base "$base" --json           # push + reuse-or-create the PR
+spur builder pr-review --focus "$focus" --json       # request + wait + collect
+spur builder pr-status --json                        # read-only composite status
 ```
 
-The installed Spur CLI owns these operations; no staged script, Node twin or plugin resolver is used.
+The installed Spur CLI owns these verbs; no staged script, Node twin or plugin resolver is used.
 
-1. **Preflight** — `spur builder pr preflight --base "$base" --json`. Hard-fails on a
-   detached HEAD, missing `gh` auth, no GitHub remote, a dirty tree, or the current branch
-   being the base branch (a PR reviews a feature branch against the base; nothing on the
-   base branch is reviewable, and the guard runs before any push can publish it). On a
-   dirty tree, triage with the user (commit/stash/exclude) before continuing — the
-   workflow refuses to guess.
-2. **Hygiene** — `spur builder pr hygiene --base "$base" --json`. `BLOCK` (secrets, `.env`, conflict markers,
-   private keys) stops the run — never submit a tainted diff. `WARN` (debug residue) rides along
-   into the report. This is a submission sanity check, not a second local review.
-3. **Precheck** — if the workflow YAML's `preReviewCmd` var is set, run it; a red check stops the
+1. **Check** — `spur builder pr-check --base "$base" --json --status-file <run>/pr-check.status`.
+   Preflight first: a detached HEAD, missing `gh` auth, no GitHub remote, a dirty tree, or the
+   current branch being the base branch hard-fails (a PR reviews a feature branch against the base;
+   nothing on the base branch is reviewable, and the guard runs before any push can publish it) —
+   on a dirty tree, triage with the user (commit/stash/exclude) before continuing, because the
+   workflow refuses to guess. Preflight failing stops the command before hygiene. Then hygiene:
+   `BLOCK` (secrets, `.env`, conflict markers, private keys) stops the run — never submit a tainted
+   diff; `WARN` (debug residue) rides along into the report. This is a submission sanity check, not
+   a second local review.
+2. **Precheck** — if the workflow YAML's `preReviewCmd` var is set, run it; a red check stops the
    run (do not spend a review request on code that fails its own gate). When unset, report that
    pre-review verification was not configured rather than inventing project commands.
-4. **Push** — `spur builder pr push --json`. Normal push only; sets upstream when missing.
-5. **Ensure PR** — `spur builder pr ensure-pr --base "$base" --json`. Reuses the branch's PR; creates with
-   `gh pr create --fill` only when absent. Never a duplicate PR.
-6. **Request** — `spur builder pr request --focus "<focus>" --json` (`--force` in `rerun` mode). Dedupes when
-   Codex already reviewed the exact pushed HEAD (`ALREADY_REVIEWED` → skip to collect) or a marked
-   request by the current GitHub user is still in flight (`ALREADY_REQUESTED` → pending). The
-   request body is concise when the repo has `## Code Review Rules`, else carries the default
-   actionable-issues focus. Records PR, URL, HEAD, and request time.
-7. **Wait** (full/rerun unless `--no-wait`; submit stops before it) —
-   `spur builder pr wait --since "$requestedAt" --head "$requestHead" --json`, using the request result so
-   a fast response is not missed, `rerun` cannot reuse the prior review, and a moved HEAD fails loud.
-   Polls every ~30s for up to
-   ~10 minutes across the current HEAD's PR review and inline comments. Uncorrelated conversation
-   comments are ignored. A current-HEAD clean review is a completed `CLEAN` outcome; findings are
-   `FOUND`; timeout or no current-HEAD result is **pending, not failed** — collect later.
-8. **Collect** — `spur builder pr collect --since "$requestedAt" --head "$requestHead" --json`. Normalize
-   only the requested HEAD and request window; then invoke `status` with the same bounds for
-   PR/base/CI/local state. Never turn an absent, stale, or moved-HEAD result into `clean`.
-   `--head` is mandatory on wait/collect/status (0771): an empty or missing pin fails loud
-   instead of silently reviewing whatever HEAD is current.
+3. **Open** — `spur builder pr-open --base "$base" --json`. Normal push only; sets upstream when
+   missing. A rejected push stops before any PR work — never force-push as a workaround. Then it
+   reuses the branch's PR or creates it with `gh pr create --fill` only when absent. Never a
+   duplicate PR.
+4. **Review** — `spur builder pr-review --focus "<focus>" --json --status-file <run>/pr-review.status`
+   (`--force` in `rerun` mode; `--no-wait` in `submit` mode or when the `noWait` var is true). It
+   posts the `@codex review` request, polls for the result, and collects it: dedupes when Codex
+   already reviewed the exact pushed HEAD (collected without a second request) or when a marked
+   request by the current GitHub user is still in flight (reports `PENDING`). The request body is
+   concise when the repo has `## Code Review Rules`, else carries the default actionable-issues
+   focus. Polls every ~30s for up to ~10 minutes across the current HEAD's PR review and inline
+   comments; uncorrelated conversation comments are ignored. A current-HEAD clean review is `CLEAN`,
+   findings are `FINDINGS`, and a timeout is `PENDING` with exit 3 — **pending, not failed**;
+   collect later. Never turn an absent, stale, or moved-HEAD result into `clean`: a head that moved
+   while waiting fails loud (exit 2) instead of accepting an old-head result.
+5. **Status** — `spur builder pr-status --json`. Read-only composite of PR/base/branch/HEAD/local
+   changes/CI plus `.review` (the current-HEAD Codex record). `--head` pins the reviewed commit and
+   defaults to the current local HEAD; an explicit pin that no longer matches the PR head fails
+   loud (0771) instead of silently reviewing whatever HEAD is current.
 
 ## Fix mode
 
 Only in `fix` mode:
 
-1. **Collect before editing.** Invoke direct `collect --json --head "$(git rev-parse HEAD)"` plus
-   `status --json --head "$(git rev-parse HEAD)"` and require a
+1. **Collect before editing.** Invoke direct `spur builder pr-status --json` (its `.review` is the
+   current-HEAD Codex record) and require a
    completed result for the current pushed HEAD. If the result is pending, stale, or unavailable,
    report it and stop without source edits. If it is explicitly clean, report no fixes and stop.
 2. **Validate each finding.** Open the referenced code; trace callers/callees; verify the problem
@@ -192,9 +195,10 @@ Only in `fix` mode:
    (`fix: prevent duplicate transaction retry`), never `fix codex comments`. No unrelated files.
 6. **Push** normally to the existing PR branch (never force), record the new HEAD, and discard the
    previous review identity.
-7. **Re-review:** invoke the staged `request --force`, then wait/collect as usual. The new review
-   must correspond to the new pushed HEAD — never present stale findings from the previous HEAD as
-   the new result. Include composite CI/status fields in the final report.
+7. **Re-review:** invoke `spur builder pr-review --force --json`, which requests a fresh review of
+   the new pushed HEAD, waits, and collects it. The new review must correspond to the new pushed
+   HEAD — never present stale findings from the previous HEAD as the new result. Include composite
+   CI/status fields in the final report.
 
 ## Rules mode
 
@@ -287,7 +291,9 @@ or review requests.
 
 - **Workflow SSOT:** `pr-review.yaml` (seeded by `spur init`; tune per project —
   wait budget, `preReviewCmd`, dedupe policy)
-- **Script source:** `spur builder pr` (absorbed; was `plugins/sp/scripts/pr-reviewing.ts`) — subcommand CLI
+- **Command source:** the four flat verbs `pr-check` / `pr-open` / `pr-review` / `pr-status`
+  (absorbed from `plugins/sp/scripts/pr-reviewing.ts`; the `pr <op>` layer is a hidden, deprecated
+  one-release alias) — see `sp:spur-cli` `references/builder.md`
 - **Tests:** `packages/app/tests/services/pr-review/pr-review.test.ts` — stubbed git/gh suites
 - **Related skills:** `sp:code-verification` (local SECUA review), `sp:functional-review`
   (requirements traceability) — complements, never substitutes, the independent Codex review

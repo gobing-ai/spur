@@ -23,6 +23,7 @@ import {
 import { tmpdir } from 'node:os';
 import { basename, join } from 'node:path';
 import { getEnvVar, getEnvVars, setEnvVar } from '@gobing-ai/ts-utils';
+import { parse as parseYaml } from 'yaml';
 import type { CmdResult, CommandRunner, PrReviewContext } from '../../../src/services/pr-review';
 import {
     buildRequestBody,
@@ -37,6 +38,7 @@ import {
     normalizeFindings,
     parseArgs,
     renderFindings,
+    runPrVerb,
     scanHygiene,
     setCommandRunner,
     spawnRunner,
@@ -87,33 +89,152 @@ describe('parseArgs', () => {
         expect(missing.error ?? '').not.toBe('');
     });
 
-    test('workflow carries request freshness through wait/collect and records composite status', () => {
+    test('the workflow runs the four flat verbs: check → precheck → open → review', () => {
         const workflow = readFileSync(
             join(import.meta.dir, '..', '..', '..', '..', '..', 'config', 'workflows', 'pr-review.yaml'),
             'utf8',
         );
-        expect(workflow.match(/--since "\$prSince"/g)?.length).toBe(3);
-        expect(workflow.match(/--head "\$prHead"/g)?.length).toBe(3);
-        // 1007 R4: status runs behind the script-root snippet resolution.
-        expect(workflow).toContain('$spurBin builder pr status --since "$prSince" --head "$prHead" --json');
-        expect(workflow).not.toContain('node -e');
-        expect(workflow).toContain('-pr-status.json');
+        // 1219: the op sequencing lives in `runPrVerb`, so each state calls one flat verb.
+        expect(workflow).toContain('$spurBin builder pr-check --base "$baseBranch" --json --status-file');
+        expect(workflow).toContain('$spurBin builder pr-open --base "$baseBranch" --json --status-file');
+        expect(workflow).toContain('$spurBin builder pr-review --focus "$focus" $O');
+        expect(workflow).toContain('$spurBin builder pr-status --json > ".spur/run/$__runId-pr-status.json"');
         expect(workflow).toContain('sh -c "$preReviewCmd"');
+        expect(workflow).toContain('-pr-findings.json');
+        expect(workflow).not.toContain('node -e');
+        // No per-op shell states and no request-record file-var plumbing remain.
+        expect(workflow.match(/^ {2}- id: (\w+)$/gm)?.map((line) => line.replace('  - id: ', ''))).toEqual([
+            'check',
+            'precheck',
+            'open',
+            'review',
+            'done',
+            'pending',
+            'failed',
+        ]);
+        expect(workflow).not.toContain('builder pr ');
+        expect(workflow).not.toContain('file.read.into-var');
+        expect(workflow).not.toContain('prSince');
     });
 
-    test('request extracts requestedAt/head once; wait/collect read them via file.read.into-var (0771)', () => {
+    test('the workflow keeps its mode and tuning vars and its terminal-state contract (R3)', () => {
         const workflow = readFileSync(
             join(import.meta.dir, '..', '..', '..', '..', '..', 'config', 'workflows', 'pr-review.yaml'),
             'utf8',
         );
-        // Extraction happens once, in the request state; downstream states read the .txt files.
-        expect(workflow.match(/pr-since\.txt/g)?.length).toBe(3); // write + 2 reads
-        expect(workflow.match(/pr-head\.txt/g)?.length).toBe(3);
-        expect(workflow.match(/kind: file\.read\.into-var/g)?.length).toBe(4);
-        expect(workflow.match(/PAIR=/g)?.length ?? 0).toBe(0);
-        expect(workflow).toContain('var: prSince');
-        expect(workflow).toContain('var: prHead');
+        for (const varName of [
+            'mode',
+            'baseBranch',
+            'focus',
+            'noWait',
+            'waitTimeoutSec',
+            'waitIntervalSec',
+            'preReviewCmd',
+        ]) {
+            expect(workflow).toContain(`  ${varName}: `);
+        }
+        expect(workflow).toContain('initialState: check');
         expect(workflow).toContain('version: "1"');
+        // The three verdict routes the shell drives: collected, pending (never a failure), red gate.
+        expect(workflow).toContain('grep -qE "^(PASS|WARN)$" .spur/run/$__runId-pr-check.status');
+        expect(workflow).toContain('grep -qE "^(FOUND|CREATED)$" .spur/run/$__runId-pr-open.status');
+        expect(workflow).toContain('grep -qE "^(FINDINGS|CLEAN)$" .spur/run/$__runId-pr-review.status');
+        expect(workflow).toContain('= PENDING');
+        // The review action must test all three conditions the mode contract names; the emitted
+        // flag words they produce are pinned behaviourally below.
+        expect(workflow).toContain('[ "$mode" = submit ]');
+        expect(workflow).toContain('[ "$mode" = rerun ]');
+        expect(workflow).toContain('[ "$noWait" = "true" ]');
+    });
+
+    // ── review-action flag composition (1219 review round) ──────────────────
+    //
+    // `mode=submit` and/or `noWait=true` must pass `--no-wait`; `mode=rerun` must pass `--force`;
+    // each flag must stay its own shell word. The bug pinned here: the substitution tested only
+    // `noWait` (so `submit` polled and could report `done` where the contract says `pending`) and
+    // concatenated its halves with no separator (so `rerun` + `noWait=true` emitted the single
+    // token `--no-wait--force`, which the verb rejects — no status file, `FAIL` fallback, `failed`).
+
+    /** The `review` state's first shell action, parsed from the workflow SSOT. */
+    function reviewActionCommand(): string {
+        const def = parseYaml(
+            readFileSync(
+                join(import.meta.dir, '..', '..', '..', '..', '..', 'config', 'workflows', 'pr-review.yaml'),
+                'utf8',
+            ),
+        ) as { states?: { id: string; onEnter?: { kind: string; options?: { command?: string } }[] }[] };
+        const action = def.states?.find((state) => state.id === 'review')?.onEnter?.find((a) => a.kind === 'shell');
+        if (typeof action?.options?.command !== 'string') {
+            throw new Error('pr-review.yaml: the review state has no shell command');
+        }
+        return action.options.command;
+    }
+
+    /**
+     * Run the real review action under `/bin/sh -c` with the workflow vars as env and a stub
+     * `$spurBin` for the verb. The stub records its argv, rejects a concatenated boolean flag the
+     * way Commander does (exit 2, no status file), and otherwise writes the verb's verdict — so the
+     * action's `FAIL` fallback firing is observable as the status file content.
+     */
+    function runReviewAction(mode: string, noWait: string): { flags: string[]; statusFile: string } {
+        const dir = mkdtempSync(join(tmpdir(), 'pr-review-action-'));
+        try {
+            const argvFile = join(dir, 'argv.txt');
+            const stub = join(dir, 'stub-spur');
+            writeFileSync(
+                stub,
+                [
+                    '#!/bin/sh',
+                    `printf '%s\\n' "$*" >> "$PROBE_ARGV"`,
+                    'for a in "$@"; do case "$a" in --no-wait-*|--force-*) echo "error: unknown option" >&2; exit 2;; esac; done',
+                    'printf \'PENDING\\n\' > ".spur/run/$__runId-pr-review.status"',
+                    '',
+                ].join('\n'),
+            );
+            chmodSync(stub, 0o755);
+            const res = spawnSync('/bin/sh', ['-c', reviewActionCommand()], {
+                cwd: dir,
+                encoding: 'utf8',
+                env: {
+                    PATH: getEnvVar('PATH') ?? '',
+                    PROBE_ARGV: argvFile,
+                    spurBin: stub,
+                    __runId: 'n1',
+                    mode,
+                    noWait,
+                    focus: '',
+                    waitTimeoutSec: '600',
+                    waitIntervalSec: '30',
+                },
+            });
+            expect(res.status).toBe(0);
+            const argv = existsSync(argvFile) ? readFileSync(argvFile, 'utf8').trim() : '';
+            const statusPath = join(dir, '.spur', 'run', 'n1-pr-review.status');
+            return {
+                flags: argv.split(/\s+/).filter((token) => token === '--no-wait' || token === '--force'),
+                statusFile: existsSync(statusPath) ? readFileSync(statusPath, 'utf8').trim() : 'NO-STATUS-FILE',
+            };
+        } finally {
+            rmSync(dir, { recursive: true, force: true });
+        }
+    }
+
+    test('the review action emits one word per flag for every mode/noWait combination', () => {
+        const cases: { mode: string; noWait: string; want: string[] }[] = [
+            { mode: 'full', noWait: 'false', want: [] },
+            { mode: 'submit', noWait: 'false', want: ['--no-wait'] },
+            { mode: 'full', noWait: 'true', want: ['--no-wait'] },
+            { mode: 'rerun', noWait: 'false', want: ['--force'] },
+            { mode: 'rerun', noWait: 'true', want: ['--no-wait', '--force'] },
+            { mode: 'submit', noWait: 'true', want: ['--no-wait'] },
+        ];
+        for (const c of cases) {
+            const combo = `mode=${c.mode} noWait=${c.noWait}`;
+            const observed = runReviewAction(c.mode, c.noWait);
+            expect({ combo, flags: observed.flags }).toEqual({ combo, flags: c.want });
+            // The verb accepted the invocation: its own verdict landed, the FAIL fallback did not.
+            expect({ combo, statusFile: observed.statusFile }).toEqual({ combo, statusFile: 'PENDING' });
+        }
     });
 });
 
@@ -1396,5 +1517,92 @@ describe('invocation execution context (1215)', () => {
         const runner = createSpawnRunner({ cwd: repoB, env: { PATH: origPath, PR_REVIEW_FIXTURE_ENV: 'bound' } });
         expect(runner(['/bin/sh', '-c', 'pwd']).stdout.trim()).toBe(repoB);
         expect(runner(['/bin/sh', '-c', 'printf %s "$PR_REVIEW_FIXTURE_ENV"']).stdout).toBe('bound');
+    });
+});
+
+// ─── Flat composer verbs (task 1219) ────────────────────────────────────────
+//
+// `runPrVerb` is the sequencing layer the four `spur builder pr-<verb>` commands call. The CLI
+// suite pins stdout/verdict/exit parity against the former op sequence; these cases pin the
+// service contract itself: the human summary (the ops' own text exists only in JSON runs because
+// the composition always reads their records), the read-only status head default, and the
+// PENDING override for a request that stops before collection.
+
+describe('flat composer verbs (1219)', () => {
+    function runComposer(verb: 'status' | 'check' | 'open' | 'review', opts: Record<string, unknown>) {
+        logs = [];
+        errs = [];
+        const code = runPrVerb(
+            verb,
+            opts,
+            { out: (line) => logs.push(line), err: (line) => errs.push(line) },
+            {
+                cwd: fix,
+            },
+        );
+        return { code, stdout: logs.join('\n'), stderr: errs.join('\n') };
+    }
+
+    test('pr-status defaults --head to the current local HEAD and reports the collected review', () => {
+        const res = runComposer('status', { json: true });
+        expect(res.code).toBe(0);
+        const payload = JSON.parse(res.stdout);
+        expect(payload.pr.number).toBe(7);
+        expect(payload.review).toMatchObject({ verdict: 'PENDING' });
+        expect(calls()).toContain('git rev-parse HEAD');
+    });
+
+    test('pr-status renders the status block plus the review line in human mode', () => {
+        const res = runComposer('status', {});
+        expect(res.code).toBe(0);
+        expect(res.stdout).toContain('PR:         #7 https://github.com/octo/repo/pull/7');
+        expect(res.stdout).toContain('Codex:      not requested');
+        expect(res.stdout).toContain('Review:     PENDING');
+    });
+
+    test('pr-check renders the preflight and hygiene lines, and skips preflight with --scan-only', () => {
+        const full = runComposer('check', {});
+        expect(full.code).toBe(0);
+        expect(full.stdout).toContain('Preflight:  octo/repo feat/x @ aaaa111');
+        expect(full.stdout).toContain('Hygiene:    PASS');
+
+        const scanOnly = runComposer('check', { scanOnly: true });
+        expect(scanOnly.code).toBe(0);
+        expect(scanOnly.stdout).toContain('Preflight:  skipped (--scan-only)');
+    });
+
+    test('pr-check fails the human summary loud when preflight is red', () => {
+        writeFileSync(join(fix, 'dirty'), ' M src/a.ts\n');
+        const res = runComposer('check', {});
+        expect(res.code).toBe(2);
+        expect(res.stderr).toContain('working tree is dirty');
+        expect(res.stdout).toContain('Preflight:  FAIL — working tree is dirty');
+        expect(res.stdout).not.toContain('Hygiene:');
+    });
+
+    test('pr-open renders the push and PR lines', () => {
+        const res = runComposer('open', {});
+        expect(res.code).toBe(0);
+        expect(res.stdout).toContain('Push:       UP_TO_DATE aaaa111');
+        expect(res.stdout).toContain('PR:         #7 https://github.com/octo/repo/pull/7 (FOUND)');
+    });
+
+    test('pr-review --no-wait reports PENDING and writes the verb verdict, not REQUESTED', () => {
+        const statusFile = join(fix, 'review.status');
+        const res = runComposer('review', { noWait: true, statusFile });
+        expect(res.code).toBe(0);
+        expect(res.stdout).toContain('Request:    REQUESTED PR #7 https://github.com/octo/repo/pull/7');
+        expect(res.stdout).toContain('Review:     PENDING');
+        expect(readFileSync(statusFile, 'utf8').trim()).toBe('PENDING');
+        expect(existsSync(join(fix, 'comments_posted.txt'))).toBe(true);
+    });
+
+    test('pr-review rejects a bad poll budget before the request posts anything', () => {
+        const statusFile = join(fix, 'review.status');
+        const res = runComposer('review', { interval: '0', statusFile });
+        expect(res.code).toBe(1);
+        expect(res.stderr).toContain('--interval must be a positive number');
+        expect(existsSync(statusFile)).toBe(false);
+        expect(existsSync(join(fix, 'comments_posted.txt'))).toBe(false);
     });
 });

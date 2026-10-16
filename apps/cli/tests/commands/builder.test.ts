@@ -62,7 +62,7 @@ afterEach(() => {
 });
 
 describe('spur builder command wiring', () => {
-    test('registers the noun with exactly its five verbs (bump-ver, drop-tags, publish, show-branches, pr)', () => {
+    test('registers the noun with exactly its eight verbs plus the hidden deprecated pr alias', () => {
         const program = new Command();
         const { context } = makeContext(process.cwd());
         registerBuilderCommand(program, context);
@@ -70,12 +70,19 @@ describe('spur builder command wiring', () => {
         const builder = program.commands.find((c) => c.name() === 'builder');
         expect(builder).toBeDefined();
         const verbs = builder?.commands.map((c) => c.name()) ?? [];
-        expect(verbs).toContain('bump-ver');
-        expect(verbs).toContain('drop-tags');
-        expect(verbs).toContain('publish');
-        expect(verbs).toContain('show-branches');
-        expect(verbs).toContain('pr');
-        expect(verbs).toHaveLength(5);
+        expect(verbs).toEqual([
+            'bump-ver',
+            'drop-tags',
+            'publish',
+            'show-branches',
+            'pr-status',
+            'pr-check',
+            'pr-open',
+            'pr-review',
+            'pr',
+        ]);
+        // 1219: the flat verbs are the surface; `pr` stays hidden for one release.
+        expect(builder?.helpInformation() ?? '').not.toMatch(/^\s+pr \[options\]/m);
     });
 
     test('help renders both verbs without invoking actions', () => {

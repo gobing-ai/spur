@@ -17,7 +17,7 @@
 
 | Verb \ Noun | agent | builder | decision | feature | history | message | projects | rule | self | task | workflow |
 |---|---|---|---|---|---|---|---|---|---|---|---|
-| **Verb count** | **13** | **3** | **4** | **11** | **8** | **4** | **6** | **4** | **5** | **25** | **13** |
+| **Verb count** | **13** | **8** | **4** | **11** | **8** | **4** | **6** | **4** | **5** | **25** | **13** |
 | **add** |  |  | |  |  |  | ✅ |  |  |  |  |
 | **advance** |  |  | | ✅ |  |  |  |  |  |  |  |
 | **analyze** |  |  | |  | ✅ |  |  |  |  |  |  |
@@ -51,8 +51,11 @@
 | **migrate** |  |  | |  |  |  |  |  | ✅ | ✅ |  |
 | **migrate-anchors** |  |  | |  |  |  |  |  |  | ✅ |  |
 | **move** |  |  | | ✅ |  |  |  |  |  |  |  |
-| **pr** |  | ✅ | |  |  |  |  |  |  |  |  |
 | **path** |  |  | |  |  |  |  |  |  | ✅ |  |
+| **pr-check** |  | ✅ | |  |  |  |  |  |  |  |  |
+| **pr-open** |  | ✅ | |  |  |  |  |  |  |  |  |
+| **pr-review** |  | ✅ | |  |  |  |  |  |  |  |  |
+| **pr-status** |  | ✅ | |  |  |  |  |  |  |  |  |
 | **preflight** |  |  | |  |  |  |  |  |  | ✅ |  |
 | **profile** |  |  | |  |  |  |  |  |  |  | ✅ |
 | **progress** |  |  | |  |  |  |  |  |  |  | ✅ |
@@ -90,7 +93,7 @@
 | **wait** | ✅ |  | |  |  |  |  |  |  |  |  |
 | **watch** |  |  | |  |  | ✅ |  |  |  |  |  |
 | **wrapup** |  |  | |  |  |  |  |  |  | ✅ |  |
-| **Verb count** | **13** | **5** | **4** | **11** | **8** | **4** | **6** | **4** | **5** | **25** | **14** |
+| **Verb count** | **13** | **8** | **4** | **11** | **8** | **4** | **6** | **4** | **5** | **25** | **14** |
 
 ## Hidden Legacy Aliases
 
@@ -112,8 +115,8 @@ from the top-level help listing, still fully functional for scripts and workflow
 | Total nouns | **16** |
 | Compound nouns (with verbs) | **11** |
 | Hidden legacy aliases | **5** |
-| Unique verbs | **72** |
-| Total noun×verb cells | **99** |
+| Unique verbs | **75** |
+| Total noun×verb cells | **102** |
 
 > [!NOTE]
-> `task` has the richest surface at 25 verbs, followed by `agent` (13), `workflow` (14, including the inline driver's `inline` and `commit-guard` transports, the `summary`/`profile` measurements and `cost`) and `feature` (11). `builder` (5 verbs: `bump-ver`, `drop-tags`, `publish`, `show-branches`, `pr`) hosts the release plumbing promoted from `spur-dev`. `decision` (4 verbs: `list`, `run`, `show`, `status`) is the frozen decision-catalog transport (task 1093). Several verbs are shared across nouns — e.g., `list` (7 nouns), `run`/`show` (4 nouns each), `check`/`clean`/`create`/`migrate`/`refresh`/`start`/`stop`/`trace`/`update`/`validate` (2 nouns each). `self` (5 verbs) hosts every self-management operation.
+> `task` has the richest surface at 25 verbs, followed by `agent` (13), `workflow` (14, including the inline driver's `inline` and `commit-guard` transports, the `summary`/`profile` measurements and `cost`) and `feature` (11). `builder` (8 verbs: `bump-ver`, `drop-tags`, `publish`, `show-branches`, `pr-check`, `pr-open`, `pr-review`, `pr-status`) hosts the release plumbing promoted from `spur-dev` and the flat PR-review verbs (the deprecated `pr <op>` pass-through stays registered but hidden from `--help`, so it is not a matrix cell). `decision` (4 verbs: `list`, `run`, `show`, `status`) is the frozen decision-catalog transport (task 1093). Several verbs are shared across nouns — e.g., `list` (7 nouns), `run`/`show` (4 nouns each), `check`/`clean`/`create`/`migrate`/`refresh`/`start`/`stop`/`trace`/`update`/`validate` (2 nouns each). `self` (5 verbs) hosts every self-management operation.

@@ -192,6 +192,25 @@ a config entry, the index or a worktree). Rejected shapes recorded at the gate: 
 noun, a full-history gitGraph, and a `--prune` flag. `builder` is now frozen at `bump-ver`,
 `drop-tags`, `publish`, `show-branches`, `pr`.
 
+**Amendment (2026-10-16, feature L1 — flat `pr-<verb>` verbs).** The operator's feature-L1 choice
+of four flat verbs over a `pr` sub-noun (task 1219) is the consent-gate entry for replacing the
+`pr <op>` pass-through with `spur builder pr-status`, `pr-check`, `pr-open` and `pr-review`
+(audience: the operator's daily PR loop, the `sp:pr-reviewing` skill and the `/sp:dev-pr-review`
+spine; surface: four new public verbs, each composing the absorbed ops — status+collect,
+preflight+hygiene, push+ensure, request+wait+collect — with only its own flags plus `--json` and
+`--status-file`, its documented verdict words (`PASS|WARN|BLOCK|FAIL`, `FOUND|CREATED|FAIL`,
+`CLEAN|FINDINGS|PENDING|FAIL`) and the unchanged exit contract `0 ok · 1 usage · 2 hard failure ·
+3 wait timeout` where exit 3 is `PENDING`, never a failure; justification: `pr [argv...]` was a raw
+pass-through with `allowUnknownOption`, so per-op help did not exist and typos were silently
+accepted, and the sequencing now lives once in `runPrVerb`, which lets `pr-review.yaml` shrink from
+eight states to four and drop the `prSince`/`prHead` `file.read.into-var` plumbing). Rejected shapes
+recorded at the gate: eight `pr <op>` Commander subcommands (adds a command layer), eight flat
+`pr-<op>` verbs (noisy `builder --help`, eight consent rows), and deleting `pr` immediately
+(installed plugin copies in other projects may still call it). `spur builder pr <op>` stays
+registered but **hidden** for one release and prints one stderr deprecation line naming the
+replacement verb; removing it is a follow-up task. `builder` is now frozen at `bump-ver`,
+`drop-tags`, `publish`, `show-branches`, `pr-status`, `pr-check`, `pr-open`, `pr-review`.
+
 ## 4. Subsequent consent applications
 
 | Date | Task | Public change | Granted scope and reason |
