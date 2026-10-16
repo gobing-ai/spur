@@ -168,13 +168,20 @@ export function normalizeProjectPath(pathInput: string): string {
 export type PortProbeResult = 'available' | 'in-use' | 'denied';
 
 /** Test override function type for port probing. */
-export type PortProbe = (port: number) => Promise<PortProbeResult>;
+export type PortProbe = (port: number, host?: string) => Promise<PortProbeResult>;
 
 let testPortProbe: PortProbe | undefined;
 
 /** Install or clear the process-wide port probe override (tests only). */
 export function setPortProbeForTests(probe: PortProbe | undefined): void {
     testPortProbe = probe;
+}
+
+/** Check whether a host is local (localhost, 127.0.0.1, ::1, or empty/omitted). */
+export function isLocalHost(host?: string): boolean {
+    if (!host) return true;
+    const trimmed = host.trim().toLowerCase();
+    return trimmed === 'localhost' || trimmed === '127.0.0.1' || trimmed === '::1' || trimmed === '';
 }
 
 /** Classify a net.Server bind error code into a PortProbeResult. */
@@ -194,36 +201,38 @@ export function classifyPortBindError(err: unknown): PortProbeResult {
 async function isPortLiveOnHost(port: number, host: string, timeoutMs: number): Promise<boolean> {
     return new Promise<boolean>((resolve) => {
         const socket = connect({ port, host, timeout: timeoutMs });
-        socket.on('connect', () => {
+        socket.unref();
+        let settled = false;
+        const cleanup = (res: boolean) => {
+            if (settled) return;
+            settled = true;
             socket.destroy();
-            resolve(true);
-        });
-        socket.on('timeout', () => {
-            socket.destroy();
-            resolve(false);
-        });
-        socket.on('error', () => {
-            socket.destroy();
-            resolve(false);
-        });
+            resolve(res);
+        };
+        socket.on('connect', () => cleanup(true));
+        socket.on('timeout', () => cleanup(false));
+        socket.on('error', () => cleanup(false));
     });
 }
 
 /**
- * Check if a TCP port is currently listening on localhost (IPv4 or IPv6).
+ * Check if a TCP port is currently listening on localhost (IPv4 or IPv6) or a remote host.
  *
- * Important: probing only `127.0.0.1` misses servers bound to `::1` when the
- * bind host is `localhost` (common Bun/macOS dual-stack behavior). That made
- * project-start health polls fail even after `spur serve` was up.
+ * For localhost, Bun.serve({ hostname: 'localhost' }) often binds IPv6-only on macOS,
+ * so probing localhost tries both IPv4 (127.0.0.1) and IPv6 (::1).
+ * For remote hosts, it probes host:port directly.
  */
-export async function isPortLive(port: number, timeoutMs = 200): Promise<boolean> {
+export async function isPortLive(port: number, timeoutMs = 200, host = 'localhost'): Promise<boolean> {
     if (testPortProbe) {
-        return (await testPortProbe(port)) === 'in-use';
+        return (await testPortProbe(port, host)) === 'in-use';
     }
-    if (port <= 0) return false;
-    if (await isPortLiveOnHost(port, '127.0.0.1', timeoutMs)) return true;
-    if (await isPortLiveOnHost(port, '::1', timeoutMs)) return true;
-    return false;
+    if (port <= 0 || port > 65535) return false;
+    if (isLocalHost(host)) {
+        if (await isPortLiveOnHost(port, '127.0.0.1', timeoutMs)) return true;
+        if (await isPortLiveOnHost(port, '::1', timeoutMs)) return true;
+        return false;
+    }
+    return isPortLiveOnHost(port, host, timeoutMs);
 }
 
 /**

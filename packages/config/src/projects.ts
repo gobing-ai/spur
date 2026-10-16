@@ -9,12 +9,22 @@ export const projectEntrySchema = z.object({
     name: z.string().min(1),
     /** Absolute or tilde-expandable project root path. */
     path: z.string().min(1),
+    /** Host for local or remote project (default: 'localhost'). In case of missing or omitted, treated as 'localhost'. */
+    host: z.string().optional(),
     /** 0 = stopped; >0 = active listening port. */
     port: z.number().int().nonnegative().default(0),
 });
 
 /** Inferred type for {@link projectEntrySchema}. */
 export type ProjectEntry = z.infer<typeof projectEntrySchema>;
+
+/** Resolve the effective host for a project entry (default: 'localhost'). */
+export function resolveProjectHost(entry?: { host?: string | null }): string {
+    if (!entry?.host || entry.host.trim() === '') {
+        return 'localhost';
+    }
+    return entry.host.trim();
+}
 
 /** Zod schema for ~/.config/spur/projects.json registry file. */
 export const projectsFileSchema = z.object({

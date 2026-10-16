@@ -891,5 +891,85 @@ describe('ProjectRegistry', () => {
             };
             expect(await findListeningPid(3001, failingExecutor as never, 'win32')).toBeUndefined();
         });
+
+        it('resets closed port to 0 for local project during refreshProjects', async () => {
+            const existingDir = mkdtempSync(join(tmpdir(), 'spur-local-proj-'));
+            try {
+                await registry.upsert({ name: 'Local Closed Port', path: existingDir, port: 3888, host: 'localhost' });
+                setPortProbeForTests(async () => 'available'); // port 3888 is closed (not in-use)
+
+                const result = await registry.refreshProjects();
+                expect(result.removed).toHaveLength(0);
+                expect(result.resetPorts).toHaveLength(1);
+                expect(result.resetPorts[0]?.name).toBe('Local Closed Port');
+                expect(result.resetPorts[0]?.port).toBe(3888);
+
+                const updated = await registry.getByPath(existingDir);
+                expect(updated?.port).toBe(0);
+            } finally {
+                if (existsSync(existingDir)) {
+                    rmSync(existingDir, { recursive: true, force: true });
+                }
+            }
+        });
+
+        it('skips folder existence checking for remote project and resets port when inaccessible', async () => {
+            const remotePath = '/non/existent/remote/path';
+            await registry.upsert({
+                name: 'Remote Inaccessible',
+                path: remotePath,
+                port: 4567,
+                host: 'remote.cloud.internal',
+            });
+
+            // Port 4567 is not accessible
+            setPortProbeForTests(async (port, host) => {
+                if (host === 'remote.cloud.internal' && port === 4567) {
+                    return 'available';
+                }
+                return 'available';
+            });
+
+            const result = await registry.refreshProjects();
+            // Remote project must NOT be purged
+            expect(result.removed).toHaveLength(0);
+            expect(result.resetPorts).toHaveLength(1);
+            expect(result.resetPorts[0]?.name).toBe('Remote Inaccessible');
+            expect(result.resetPorts[0]?.host).toBe('remote.cloud.internal');
+
+            const projects = await registry.list();
+            const remoteEntry = projects.find((p) => p.name === 'Remote Inaccessible');
+            expect(remoteEntry).toBeDefined();
+            expect(remoteEntry?.port).toBe(0);
+            expect(remoteEntry?.host).toBe('remote.cloud.internal');
+        });
+
+        it('preserves remote project with live port during refreshProjects', async () => {
+            const remotePath = '/remote/live/path';
+            await registry.upsert({
+                name: 'Remote Live',
+                path: remotePath,
+                port: 5000,
+                host: 'remote.cloud.internal',
+            });
+
+            // Port 5000 is live
+            setPortProbeForTests(async (port, host) => {
+                if (host === 'remote.cloud.internal' && port === 5000) {
+                    return 'in-use';
+                }
+                return 'available';
+            });
+
+            const result = await registry.refreshProjects();
+            expect(result.removed).toHaveLength(0);
+            expect(result.resetPorts).toHaveLength(0);
+
+            const projects = await registry.list();
+            const remoteEntry = projects.find((p) => p.name === 'Remote Live');
+            expect(remoteEntry).toBeDefined();
+            expect(remoteEntry?.port).toBe(5000);
+            expect(remoteEntry?.host).toBe('remote.cloud.internal');
+        });
     });
 });

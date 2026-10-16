@@ -792,4 +792,74 @@ describe('spur projects CLI command', () => {
         expect(env.data?.purgedCount).toBe(1);
         expect(env.data?.purgedProjects[0]?.name).toBe('GhostEnv');
     });
+
+    it('should add a remote project with --host without requiring local directory to exist', async () => {
+        const mockAdd = createMockOutput();
+        const exit = await main(
+            [
+                'projects',
+                'add',
+                '/var/remote/project',
+                '--host',
+                'remote.dev.internal',
+                '--name',
+                'Cloud App',
+                '--json',
+            ],
+            {
+                cwd: tempDir,
+                output: mockAdd.output,
+            },
+        );
+        expect(exit).toBe(0);
+        const addJson = JSON.parse(mockAdd.getText()) as {
+            ok: boolean;
+            project: { name: string; path: string; host: string; port: number };
+        };
+        expect(addJson.ok).toBe(true);
+        expect(addJson.project.name).toBe('Cloud App');
+        expect(addJson.project.host).toBe('remote.dev.internal');
+        expect(addJson.project.path).toBe('/var/remote/project');
+
+        const registry = new ProjectRegistry(projectsFile);
+        const entries = await registry.list();
+        const entry = entries.find((p) => p.name === 'Cloud App');
+        expect(entry).toBeDefined();
+        expect(entry?.host).toBe('remote.dev.internal');
+    });
+
+    it('should report resetPorts on projects clean when closed ports are reset to 0', async () => {
+        const registry = new ProjectRegistry(projectsFile);
+        await registry.upsert({ name: 'LiveLocal', path: projectPath, port: 3888, host: 'localhost' });
+        await registry.upsert({
+            name: 'RemoteDead',
+            path: '/remote/path',
+            port: 4567,
+            host: 'cloud.internal',
+        });
+
+        // Ports 3888 and 4567 are closed (available for bind / not in-use)
+        setPortProbeForTests(async () => 'available');
+
+        const mockJson = createMockOutput();
+        const exit = await main(['projects', 'clean', '--json'], {
+            cwd: tempDir,
+            output: mockJson.output,
+        });
+        expect(exit).toBe(0);
+        const data = JSON.parse(mockJson.getText()) as {
+            ok: boolean;
+            purgedCount: number;
+            resetPorts: Array<{ name: string; host: string; port: number }>;
+        };
+        expect(data.ok).toBe(true);
+        expect(data.purgedCount).toBe(0);
+        expect(data.resetPorts).toHaveLength(2);
+        expect(data.resetPorts.some((p) => p.name === 'LiveLocal')).toBe(true);
+        expect(data.resetPorts.some((p) => p.name === 'RemoteDead')).toBe(true);
+
+        const updated = await registry.list();
+        expect(updated.find((p) => p.name === 'LiveLocal')?.port).toBe(0);
+        expect(updated.find((p) => p.name === 'RemoteDead')?.port).toBe(0);
+    });
 });

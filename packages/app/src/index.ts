@@ -576,6 +576,7 @@ export { ProcessInventoryService } from './services/process-inventory-service';
 export {
     classifyPortBindError,
     findListeningPid,
+    isLocalHost,
     isPortAvailable,
     isPortLive,
     normalizeProjectPath,

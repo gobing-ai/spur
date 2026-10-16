@@ -3,6 +3,7 @@ import type { Command } from '@commander-js/extra-typings';
 import {
     FleetService,
     type FleetServiceContext,
+    isLocalHost,
     isPortLive,
     type OrchestratorBinding,
     ProjectRegistry,
@@ -24,26 +25,33 @@ export function registerProjectsCommand(program: Command, context: CliContext): 
     projectsCmd
         .command('add')
         .argument('<path>', 'Project root directory path')
+        .option('--host <host>', 'Host for local or remote project (default: "localhost")')
         .option(...SHARED_OPTIONS.nameProjectDisplay)
         .option(...SHARED_OPTIONS.jsonProjectsResponse)
         .option(...SHARED_OPTIONS.jsonEnvelope)
         .action(async (pathArg, options) => {
             try {
-                const absolutePath = resolve(context.cwd, pathArg);
+                const host = options.host ?? 'localhost';
+                const isLocal = isLocalHost(host);
+                let absolutePath = pathArg;
 
-                if (!(await context.fs.exists(absolutePath))) {
-                    throw new Error(`Directory does not exist: ${absolutePath}`);
+                if (isLocal) {
+                    absolutePath = resolve(context.cwd, pathArg);
+                    if (!(await context.fs.exists(absolutePath))) {
+                        throw new Error(`Directory does not exist: ${absolutePath}`);
+                    }
                 }
                 const name = options.name ?? basename(absolutePath);
                 const registry = new ProjectRegistry();
-                const entry = await registry.upsert({ path: absolutePath, name, port: 0 });
+                const entry = await registry.upsert({ path: absolutePath, name, host, port: 0 });
 
                 if (options.json) {
                     context.output.write(
                         toEnvelopeJson({ ok: true, project: entry }, { enveloped: options.jsonEnvelope }),
                     );
                 } else {
-                    context.output.write(`Registered project "${entry.name}" at ${entry.path}`);
+                    const hostLabel = !isLocalHost(entry.host) ? ` on host ${entry.host}` : '';
+                    context.output.write(`Registered project "${entry.name}" at ${entry.path}${hostLabel}`);
                 }
             } catch (err) {
                 const message = err instanceof Error ? err.message : String(err);
@@ -119,21 +127,36 @@ export function registerProjectsCommand(program: Command, context: CliContext): 
                                 purgedCount: result.purgedProjects.length,
                                 purgedProjects: result.purgedProjects,
                                 terminatedProcesses: result.terminatedProcesses,
+                                ...(result.resetPorts && result.resetPorts.length > 0
+                                    ? { resetPorts: result.resetPorts }
+                                    : {}),
                             },
                             { enveloped: options.jsonEnvelope },
                         ),
                     );
-                } else if (result.purgedProjects.length === 0) {
+                } else if (
+                    result.purgedProjects.length === 0 &&
+                    (!result.resetPorts || result.resetPorts.length === 0)
+                ) {
                     context.output.write('Registry is clean. No stale project entries found.');
                 } else {
-                    context.output.write(`Purged ${result.purgedProjects.length} stale project(s):`);
-                    for (const project of result.purgedProjects) {
-                        context.output.write(`- ${project.name} (${project.path})`);
+                    if (result.purgedProjects.length > 0) {
+                        context.output.write(`Purged ${result.purgedProjects.length} stale project(s):`);
+                        for (const project of result.purgedProjects) {
+                            context.output.write(`- ${project.name} (${project.path})`);
+                        }
                     }
                     if (result.terminatedProcesses.length > 0) {
                         context.output.write(`Terminated ${result.terminatedProcesses.length} lingering process(es):`);
                         for (const proc of result.terminatedProcesses) {
                             context.output.write(`- PID ${proc.pid} on port ${proc.port} (${proc.signal})`);
+                        }
+                    }
+                    if (result.resetPorts && result.resetPorts.length > 0) {
+                        context.output.write(`Reset ${result.resetPorts.length} closed port(s):`);
+                        for (const project of result.resetPorts) {
+                            const hostLabel = !isLocalHost(project.host) ? `${project.host}:` : '';
+                            context.output.write(`- ${project.name} (${hostLabel}${project.port} -> 0)`);
                         }
                     }
                 }
@@ -169,7 +192,7 @@ export function registerProjectsCommand(program: Command, context: CliContext): 
                 const projects = await Promise.all(
                     rawProjects.map(async (p) => ({
                         ...p,
-                        running: p.port > 0 ? await isPortLive(p.port) : false,
+                        running: p.port > 0 ? await isPortLive(p.port, undefined, p.host) : false,
                     })),
                 );
 
@@ -274,8 +297,9 @@ export function registerProjectsCommand(program: Command, context: CliContext): 
                     }
                     context.output.write('Registered Projects:\n');
                     for (const [i, p] of projects.entries()) {
+                        const hostLabel = !isLocalHost(p.host) ? ` (${p.host})` : '';
                         const status = p.running ? `[RUNNING: ${p.port}]` : '[STOPPED]';
-                        context.output.write(`- ${p.name} ${status} (${p.path})`);
+                        context.output.write(`- ${p.name}${hostLabel} ${status} (${p.path})`);
                         const f = fleets?.[i];
                         if (f === undefined) continue;
                         if (f.fleet === null) {

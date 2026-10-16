@@ -3,7 +3,7 @@ import { afterEach, describe, expect, it } from 'bun:test';
 import { homedir } from 'node:os';
 import { join } from 'node:path';
 import { getEnvVar, removeEnvVar, setEnvVar } from '../src/index';
-import { getProjectsFilePath, projectEntrySchema, projectsFileSchema } from '../src/projects';
+import { getProjectsFilePath, projectEntrySchema, projectsFileSchema, resolveProjectHost } from '../src/projects';
 
 describe('packages/config projects schemas and path resolution', () => {
     const originalEnv = getEnvVar('SPUR_PROJECTS_FILE');
@@ -26,14 +26,38 @@ describe('packages/config projects schemas and path resolution', () => {
             expect(entry.name).toBe('Test App');
             expect(entry.path).toBe('/path/to/app');
             expect(entry.port).toBe(3000);
+            expect(resolveProjectHost(entry)).toBe('localhost');
         });
 
-        it('defaults port to 0 when omitted', () => {
+        it('defaults port to 0 when omitted and leaves host optional', () => {
             const entry = projectEntrySchema.parse({
                 name: 'Test App',
                 path: '/path/to/app',
             });
             expect(entry.port).toBe(0);
+            expect(entry.host).toBeUndefined();
+            expect(resolveProjectHost(entry)).toBe('localhost');
+        });
+
+        it('resolves empty or whitespace host as localhost via resolveProjectHost', () => {
+            const entry = projectEntrySchema.parse({
+                name: 'Test App',
+                path: '/path/to/app',
+                host: '   ',
+            });
+            expect(resolveProjectHost(entry)).toBe('localhost');
+        });
+
+        it('preserves custom remote host and resolves it', () => {
+            const entry = projectEntrySchema.parse({
+                name: 'Test App',
+                path: '/path/to/app',
+                host: 'remote.server.internal',
+                port: 3000,
+            });
+            expect(entry.host).toBe('remote.server.internal');
+            expect(resolveProjectHost(entry)).toBe('remote.server.internal');
+            expect(entry.port).toBe(3000);
         });
 
         it('rejects empty name or path', () => {

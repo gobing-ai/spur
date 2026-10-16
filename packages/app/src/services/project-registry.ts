@@ -3,6 +3,7 @@ import { dirname, join } from 'node:path';
 import { getProjectsFilePath, type ProjectEntry, type ProjectsFile, projectsFileSchema } from '@gobing-ai/spur-config';
 import { NodeProcessExecutor, type ProcessExecutor } from '@gobing-ai/ts-runtime';
 import {
+    isLocalHost,
     isPortAvailable,
     isPortLive,
     normalizeProjectPath,
@@ -22,6 +23,8 @@ export interface RefreshProjectsResult {
     purgedProjects: ProjectEntry[];
     /** Alias for terminated. */
     terminatedProcesses: TerminatedProcessInfo[];
+    /** Project entries whose closed ports were reset to 0 during sweeping. */
+    resetPorts: ProjectEntry[];
 }
 
 /** Options for refreshing project entries. */
@@ -196,10 +199,12 @@ export class ProjectRegistry {
             const data = this.readRaw();
             let changed = false;
             for (const project of data.projects) {
-                const normalized = normalizeProjectPath(project.path);
-                if (normalized !== project.path) {
-                    project.path = normalized;
-                    changed = true;
+                if (isLocalHost(project.host)) {
+                    const normalized = normalizeProjectPath(project.path);
+                    if (normalized !== project.path) {
+                        project.path = normalized;
+                        changed = true;
+                    }
                 }
             }
             if (changed) {
@@ -212,7 +217,6 @@ export class ProjectRegistry {
     async list(): Promise<ProjectEntry[]> {
         await this.healTildePaths();
         await this.refreshProjects();
-        await this.healStale();
         return this.readRaw().projects;
     }
 
@@ -220,7 +224,12 @@ export class ProjectRegistry {
     async getByPath(pathInput: string): Promise<ProjectEntry | undefined> {
         const normalized = normalizeProjectPath(pathInput);
         const projects = await this.list();
-        return projects.find((p) => normalizeProjectPath(p.path) === normalized);
+        return projects.find((p) => {
+            if (isLocalHost(p.host)) {
+                return normalizeProjectPath(p.path) === normalized;
+            }
+            return p.path === pathInput || p.path === normalized;
+        });
     }
 
     /** Get a project entry by exact or case-insensitive display name. */
@@ -233,16 +242,25 @@ export class ProjectRegistry {
         );
     }
 
-    /** Upsert a project entry by path. */
-    async upsert(entry: { name: string; path: string; port?: number }): Promise<ProjectEntry> {
+    /** Upsert a project entry by path and optional host. */
+    async upsert(entry: { name: string; path: string; port?: number; host?: string }): Promise<ProjectEntry> {
         return this.withLock(async () => {
             const currentData = this.readRaw();
-            const normalizedPath = normalizeProjectPath(entry.path);
-            const index = currentData.projects.findIndex((p) => normalizeProjectPath(p.path) === normalizedPath);
+            const host = entry.host && entry.host.trim() !== '' ? entry.host.trim() : 'localhost';
+            const isLocal = isLocalHost(host);
+            const normalizedPath = isLocal ? normalizeProjectPath(entry.path) : entry.path;
+            const index = currentData.projects.findIndex((p) => {
+                const pHost = p.host && p.host.trim() !== '' ? p.host.trim() : 'localhost';
+                if (isLocal) {
+                    return isLocalHost(pHost) && normalizeProjectPath(p.path) === normalizedPath;
+                }
+                return pHost.toLowerCase() === host.toLowerCase() && p.path === normalizedPath;
+            });
 
             const newEntry: ProjectEntry = {
                 name: entry.name,
                 path: normalizedPath,
+                host,
                 port: entry.port ?? 0,
             };
 
@@ -251,6 +269,7 @@ export class ProjectRegistry {
                 currentData.projects[index] = {
                     ...existing,
                     name: entry.name,
+                    host: entry.host ?? existing.host ?? 'localhost',
                     port: entry.port ?? existing.port,
                 };
             } else {
@@ -258,7 +277,13 @@ export class ProjectRegistry {
             }
 
             this.writeRaw(currentData);
-            const res = currentData.projects.find((p) => normalizeProjectPath(p.path) === normalizedPath);
+            const res = currentData.projects.find((p) => {
+                const pHost = p.host && p.host.trim() !== '' ? p.host.trim() : 'localhost';
+                if (isLocal) {
+                    return isLocalHost(pHost) && normalizeProjectPath(p.path) === normalizedPath;
+                }
+                return pHost.toLowerCase() === host.toLowerCase() && p.path === normalizedPath;
+            });
             if (!res) {
                 throw new Error(`Failed to upsert project: ${normalizedPath}`);
             }
@@ -274,9 +299,10 @@ export class ProjectRegistry {
             const initialLen = currentData.projects.length;
 
             currentData.projects = currentData.projects.filter((p) => {
-                const pNorm = normalizeProjectPath(p.path);
+                const pNorm = isLocalHost(p.host) ? normalizeProjectPath(p.path) : p.path;
+                const pathMatch = pNorm === normalized || p.path === nameOrPath;
                 const nameMatch = p.name.toLowerCase() === nameOrPath.trim().toLowerCase();
-                return pNorm !== normalized && !nameMatch;
+                return !pathMatch && !nameMatch;
             });
 
             if (currentData.projects.length !== initialLen) {
@@ -292,7 +318,10 @@ export class ProjectRegistry {
         return this.withLock(async () => {
             const currentData = this.readRaw();
             const normalized = normalizeProjectPath(pathInput);
-            const project = currentData.projects.find((p) => normalizeProjectPath(p.path) === normalized);
+            const project = currentData.projects.find((p) => {
+                const pNorm = isLocalHost(p.host) ? normalizeProjectPath(p.path) : p.path;
+                return pNorm === normalized || p.path === pathInput;
+            });
 
             if (project) {
                 project.port = port;
@@ -343,16 +372,22 @@ export class ProjectRegistry {
         throw new Error('No available ports in range 3000–3999');
     }
 
-    /** Stale-heal: check any project with port > 0; if port is not live, reset to 0. */
-    async healStale(): Promise<void> {
+    /**
+     * Stale-heal: check any project with port > 0 (local or remote);
+     * if the port is closed / not accessible, reset to 0. Returns entries whose port was reset.
+     */
+    async healStale(): Promise<ProjectEntry[]> {
         return this.withLock(async () => {
             const data = this.readRaw();
             let changed = false;
+            const resetProjects: ProjectEntry[] = [];
 
             for (const project of data.projects) {
                 if (project.port > 0) {
-                    const live = await isPortLive(project.port);
+                    const host = project.host ?? 'localhost';
+                    const live = await isPortLive(project.port, 200, host);
                     if (!live) {
+                        resetProjects.push({ ...project });
                         project.port = 0;
                         changed = true;
                     }
@@ -362,15 +397,18 @@ export class ProjectRegistry {
             if (changed) {
                 this.writeRaw(data);
             }
+            return resetProjects;
         });
     }
 
     /**
      * Verify all registered project folders exist on disk; purge missing ones.
-     * For purged entries with port > 0 and a live port, route the listener through
+     * Skips folder existence check for remote projects.
+     * For purged local entries with port > 0 and a live port, route the listener through
      * the shared ownership-verified stop (1156): only a proven Spur server serving
      * this exact project path is signaled, and a terminated record is reported
      * only after the original listener is observed gone.
+     * Closed/inaccessible ports on remaining local and remote projects are reset to 0.
      *
      * Lock scope (1167): the registry lock covers only the purge decision and the
      * write. HTTP identity probes (up to 4×requestTimeoutMs) and kill waits
@@ -389,9 +427,20 @@ export class ProjectRegistry {
 
         const removed = await this.withLock(async () => {
             const data = this.readRaw();
-            const purged = data.projects.filter((p) => !existsSync(normalizeProjectPath(p.path)));
+            const purged = data.projects.filter((p) => {
+                if (isLocalHost(p.host)) {
+                    return !existsSync(normalizeProjectPath(p.path));
+                }
+                // Remote project: skip folder existence checking
+                return false;
+            });
             if (purged.length > 0) {
-                data.projects = data.projects.filter((p) => existsSync(normalizeProjectPath(p.path)));
+                const purgedPaths = new Set(
+                    purged.map((p) => `${p.host ?? 'localhost'}:${normalizeProjectPath(p.path)}`),
+                );
+                data.projects = data.projects.filter(
+                    (p) => !purgedPaths.has(`${p.host ?? 'localhost'}:${normalizeProjectPath(p.path)}`),
+                );
                 this.writeRaw(data);
             }
             return purged;
@@ -400,7 +449,7 @@ export class ProjectRegistry {
         const terminated: TerminatedProcessInfo[] = [];
         if (terminate) {
             for (const project of removed) {
-                if (project.port > 0) {
+                if (project.port > 0 && isLocalHost(project.host)) {
                     const stop = await stopRegisteredProject(project, {
                         processExecutor: executor,
                         killTimeoutMs,
@@ -414,11 +463,15 @@ export class ProjectRegistry {
             }
         }
 
+        // Port sweep: reset closed / inaccessible ports to 0 for remaining local and remote projects
+        const resetPorts = await this.healStale();
+
         return {
             removed,
             terminated,
             purgedProjects: removed,
             terminatedProcesses: terminated,
+            resetPorts,
         };
     }
 }
