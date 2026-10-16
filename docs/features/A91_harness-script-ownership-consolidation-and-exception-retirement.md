@@ -2,11 +2,11 @@
 schema_version: 1
 id: "A91"
 name: "Harness script ownership consolidation and exception retirement"
-status: done
+status: active
 priority: P2
 tags: []
 created_at: "2026-10-12T03:30:19.795Z"
-updated_at: "2026-10-15T23:03:06.162Z"
+updated_at: "2026-10-16T01:39:18.787Z"
 ---
 
 # A91: Harness script ownership consolidation and exception retirement
@@ -89,6 +89,8 @@ Feature: Harness script ownership consolidation
 | 1211 | Script-absorption and hook-boundary handoff: finish PR-6..PR-9, retire Pi guard-extension, merge stack, comprehensive review | done |
 | 1212 | Complete PR-9 release and workflow-cost CLI absorption | done |
 | 1213 | Retire obsolete script infrastructure and finalize the sp CLI prerequisite | done |
+| 1214 | Preserve destructive git guards with global options across hook hosts | todo |
+| 1215 | Bind builder PR operations to the caller execution context | todo |
 <!-- END AUTO-GENERATED -->
 
 ## Notes
@@ -98,4 +100,5 @@ Feature: Harness script ownership consolidation
 - 2026-10-13T02:15:40.475Z backlog → active (system)
 - 2026-10-15T23:02:30.469Z active → verifying (system)
 - 2026-10-15T23:03:06.162Z verifying → done (system)
+- 2026-10-16T01:39:18.787Z done → active (system)
 
