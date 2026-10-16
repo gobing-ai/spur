@@ -9,13 +9,24 @@
 
 import { afterEach, beforeEach, describe, expect, test } from 'bun:test';
 import { spawnSync } from 'node:child_process';
-import { appendFileSync, existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import {
+    appendFileSync,
+    chmodSync,
+    existsSync,
+    mkdirSync,
+    mkdtempSync,
+    readFileSync,
+    realpathSync,
+    rmSync,
+    writeFileSync,
+} from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { getEnvVar, setEnvVar } from '@gobing-ai/ts-utils';
-import type { CmdResult, CommandRunner } from '../../../src/services/pr-review';
+import { getEnvVar, getEnvVars, setEnvVar } from '@gobing-ai/ts-utils';
+import type { CmdResult, CommandRunner, PrReviewContext } from '../../../src/services/pr-review';
 import {
     buildRequestBody,
+    createSpawnRunner,
     extractSeverity,
     hasCodeReviewRules,
     hasCurrentCleanReview,
@@ -1195,5 +1206,165 @@ describe('wait revalidates the PR identity and head throughout polling (1161)', 
         const pending = runScript(waitArgs(['--timeout', '0']));
         expect(pending.code).toBe(3);
         expect(JSON.parse(pending.stdout).verdict).toBe('TIMEOUT');
+    });
+});
+
+// ─── 1215: builder PR operations honor one invocation-bound execution context ────────────
+//
+// The CLI selects repository B while the process runs inside the checkout; every git/gh call
+// must run in B with the caller env, and relative status files must land beneath B. `git` is
+// real (two throwaway repositories); only `gh` is faked, so the root, branch and environment
+// assertions prove the child carried the caller context rather than the process one.
+
+describe('invocation execution context (1215)', () => {
+    let root = '';
+    let binDir = '';
+    let repoA = '';
+    let repoB = '';
+    let nonGit = '';
+    let origPath = '';
+
+    const makeRepo = (name: string, branch: string): string => {
+        const dir = realpathSync(mkdtempSync(join(root, name)));
+        const git = (args: string[]) => spawnSync('git', ['-C', dir, ...args], { encoding: 'utf8' });
+        git(['init', '-q']);
+        git(['checkout', '-q', '-b', branch]);
+        writeFileSync(join(dir, 'file.txt'), `${name}\n`);
+        git(['add', 'file.txt']);
+        git([
+            '-c',
+            'commit.gpgsign=false',
+            '-c',
+            'user.email=ctx@example.com',
+            '-c',
+            'user.name=Ctx',
+            'commit',
+            '-q',
+            '-m',
+            'init',
+        ]);
+        return dir;
+    };
+
+    /** Fake gh for the fixture PATH; the env marker proves the caller env reached the child. */
+    const fakeGh = [
+        '#!/bin/sh',
+        'if [ "$1" = "auth" ] && [ "$2" = "status" ]; then exit 0; fi',
+        'if [ "$1" = "repo" ] && [ "$2" = "view" ]; then',
+        `  printf '{"nameWithOwner":"octo/%s","defaultBranchRef":{"name":"main"}}\\n' "\${PR_REVIEW_FIXTURE_ENV:-none}"`,
+        '  exit 0',
+        'fi',
+        'exit 1',
+        '',
+    ].join('\n');
+
+    /** Caller context env: the fixture PATH plus a marker only the context carries. */
+    const contextEnv = (marker: string): Record<string, string | undefined> => ({
+        ...getEnvVars(),
+        PATH: `${binDir}:${origPath}`,
+        PR_REVIEW_FIXTURE_ENV: marker,
+    });
+
+    const runCtx = (argv: string[], context: PrReviewContext): { code: number; stdout: string; stderr: string } => {
+        logs = [];
+        errs = [];
+        const code = main(argv, { out: (line) => logs.push(line), err: (line) => errs.push(line) }, context);
+        return { code, stdout: logs.join('\n'), stderr: errs.join('\n') };
+    };
+
+    beforeEach(() => {
+        root = realpathSync(mkdtempSync(join(tmpdir(), 'pr-ctx-')));
+        binDir = join(root, 'bin');
+        mkdirSync(binDir);
+        writeFileSync(join(binDir, 'gh'), fakeGh);
+        chmodSync(join(binDir, 'gh'), 0o755);
+        repoA = makeRepo('repo-a', 'feat/a');
+        repoB = makeRepo('repo-b', 'feat/b');
+        nonGit = mkdtempSync(join(tmpdir(), 'pr-nongit-'));
+        setCommandRunner(); // real, context-bound default runner
+        origPath = getEnvVar('PATH') ?? '';
+        // Keep the *process* PATH on the fake gh too, so a context-less runner cannot reach the
+        // network — the regression still fails because it resolves the process checkout's root.
+        setEnvVar('PATH', `${binDir}:${origPath}`);
+    });
+
+    afterEach(() => {
+        setCommandRunner();
+        setEnvVar('PATH', origPath);
+        rmSync(root, { recursive: true, force: true });
+        rmSync(nonGit, { recursive: true, force: true });
+    });
+
+    test('preflight runs git/gh in the context cwd with the caller env, writing a relative status file there', () => {
+        const res = runCtx(['preflight', '--json', '--status-file', 'pr.status'], {
+            cwd: repoB,
+            env: contextEnv('marker-b'),
+        });
+        expect(res.code).toBe(0);
+        const payload = JSON.parse(res.stdout) as { repoRoot: string; branch: string; nameWithOwner: string };
+        expect(payload.repoRoot).toBe(repoB);
+        expect(payload.repoRoot).not.toBe(repoA);
+        expect(payload.branch).toBe('feat/b');
+        expect(payload.nameWithOwner).toBe('octo/marker-b'); // env came from the context, not process
+        expect(readFileSync(join(repoB, 'pr.status'), 'utf8').trim()).toBe('PASS');
+        expect(existsSync(join(repoA, 'pr.status'))).toBe(false);
+    });
+
+    test('an absolute --status-file path stays absolute', () => {
+        const abs = join(root, 'abs.status');
+        const res = runCtx(['preflight', '--json', '--status-file', abs], { cwd: repoB, env: contextEnv('marker-b') });
+        expect(res.code).toBe(0);
+        expect(readFileSync(abs, 'utf8').trim()).toBe('PASS');
+        expect(existsSync(join(repoB, 'abs.status'))).toBe(false);
+    });
+
+    test('consecutive invocations in A and B do not share execution context', () => {
+        const a = runCtx(['preflight', '--json'], { cwd: repoA, env: contextEnv('marker-a') });
+        const b = runCtx(['preflight', '--json'], { cwd: repoB, env: contextEnv('marker-b') });
+        expect(JSON.parse(a.stdout)).toMatchObject({
+            repoRoot: repoA,
+            branch: 'feat/a',
+            nameWithOwner: 'octo/marker-a',
+        });
+        expect(JSON.parse(b.stdout)).toMatchObject({
+            repoRoot: repoB,
+            branch: 'feat/b',
+            nameWithOwner: 'octo/marker-b',
+        });
+    });
+
+    test('an explicitly selected non-git directory refuses instead of inspecting the checkout', () => {
+        const checkoutRoot = spawnSync('git', ['rev-parse', '--show-toplevel'], {
+            encoding: 'utf8',
+            cwd: process.cwd(),
+        }).stdout.trim();
+        expect(checkoutRoot).not.toBe(''); // the app tests run inside a git checkout
+        const res = runCtx(['preflight', '--json'], { cwd: nonGit, env: contextEnv('marker-b') });
+        expect(res.code).toBe(2);
+        expect(res.stderr).toContain('not a git repository');
+        expect(res.stdout).not.toContain(checkoutRoot);
+    });
+
+    test('process cwd and env are unchanged after success and refusal', () => {
+        const cwdBefore = process.cwd();
+        const pathBefore = getEnvVars().PATH;
+        const markerBefore = getEnvVars().PR_REVIEW_FIXTURE_ENV;
+        runCtx(['preflight', '--json'], { cwd: repoB, env: contextEnv('marker-b') });
+        runCtx(['preflight', '--json'], { cwd: nonGit, env: contextEnv('marker-b') });
+        expect(process.cwd()).toBe(cwdBefore);
+        expect(getEnvVars().PATH).toBe(pathBefore);
+        expect(getEnvVars().PR_REVIEW_FIXTURE_ENV).toBe(markerBefore);
+    });
+
+    test('the default runner keeps process cwd/env when the context is omitted', () => {
+        const runner = createSpawnRunner();
+        expect(runner(['/bin/sh', '-c', 'pwd']).stdout.trim()).toBe(realpathSync(process.cwd()));
+        expect(runner(['/bin/sh', '-c', 'printf %s "$PR_REVIEW_FIXTURE_ENV"']).stdout).toBe('');
+    });
+
+    test('createSpawnRunner binds cwd and env for a context-bearing caller', () => {
+        const runner = createSpawnRunner({ cwd: repoB, env: { PATH: origPath, PR_REVIEW_FIXTURE_ENV: 'bound' } });
+        expect(runner(['/bin/sh', '-c', 'pwd']).stdout.trim()).toBe(repoB);
+        expect(runner(['/bin/sh', '-c', 'printf %s "$PR_REVIEW_FIXTURE_ENV"']).stdout).toBe('bound');
     });
 });

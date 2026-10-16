@@ -48,6 +48,22 @@ const MATRIX: Array<{ command: string; expected: Expected; divergedOnPi?: true }
     // Cache *name* as a path prefix is not a cache directory.
     { command: 'rm -rf /important/build-backup', expected: 'ask', divergedOnPi: true },
 
+    // ── destructive behind supported git global options (task 1214 R1/R2) ─
+    // `git` global options sit between the executable and the subcommand; without a
+    // lexical strip the subcommand patterns never see the destructive verb. The forms
+    // below mirror git's own grammar: `-C <path>` / `-c <name>=<value>` separated, and
+    // `--git-dir[=<path>]` / `--work-tree[=<path>]`.
+    { command: 'git -C . push --force', expected: 'ask' },
+    { command: 'git -c core.hooksPath=/tmp/hooks push -f', expected: 'ask' },
+    { command: 'git --git-dir=/tmp/repo push --force', expected: 'ask' },
+    { command: 'git --work-tree=. push --force', expected: 'ask' },
+    { command: 'git -C "my repo" push --force', expected: 'ask' },
+    { command: 'git -C /some/repo reset --hard HEAD~1', expected: 'ask' },
+    { command: 'git -c core.hooksPath=/tmp/hooks restore .', expected: 'ask' },
+    { command: 'git --git-dir /tmp/repo clean -fd', expected: 'ask' },
+    { command: 'git -C . checkout .', expected: 'ask' },
+    { command: 'git -C . push origin +main', expected: 'ask' },
+
     // ── recursive deletes that leave the project ─────────────────────────
     // A cache *basename* outside the project is not a project cache.
     { command: 'rm -rf /Users/me/dist', expected: 'ask' },
@@ -80,6 +96,12 @@ const MATRIX: Array<{ command: string; expected: Expected; divergedOnPi?: true }
     { command: 'ls -la && echo done', expected: 'allow' },
     { command: 'git push --force-with-lease', expected: 'allow', divergedOnPi: true },
     { command: 'rm -f config.json', expected: 'allow', divergedOnPi: true },
+
+    // ── safe controls: global options must not turn routine git into a prompt ─
+    { command: 'git -C . push origin main', expected: 'allow' },
+    { command: 'git -C . status', expected: 'allow' },
+    { command: 'git -c core.hooksPath=/tmp/hooks push --force-with-lease', expected: 'allow' },
+    { command: 'git --git-dir=/tmp/repo status --short', expected: 'allow' },
 ];
 
 describe('destructive-policy — classification', () => {

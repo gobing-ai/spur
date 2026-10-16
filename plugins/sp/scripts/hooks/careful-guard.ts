@@ -9,6 +9,11 @@
  * `git restore .`, `kubectl delete`, `docker system prune`. The operator can confirm to
  * proceed. Pure pattern-match + decision, no domain logic (mirrors `task-write-guard`).
  *
+ * Git global options between the executable and the subcommand (`-C <path>`, `-c <name>=<value>`,
+ * `--git-dir[=<path>]`, `--work-tree[=<path>]`) are recognized, so `git -C . push --force` is
+ * classified exactly like `git push --force`; the lexical pass only removes that option span and
+ * never executes git or expands a substitution.
+ *
  * **Safe exceptions:** `rm -rf` of well-known build/dependency caches (`node_modules`, `dist`,
  * `.next`, `coverage`, `build`, `.turbo`, `.cache`) passes without a warning — deleting a rebuildable
  * cache is routine, not dangerous.

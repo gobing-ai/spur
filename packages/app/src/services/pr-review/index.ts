@@ -11,7 +11,7 @@
 
 import { spawnSync } from 'node:child_process';
 import { existsSync, readFileSync, writeFileSync } from 'node:fs';
-import { join } from 'node:path';
+import { join, resolve } from 'node:path';
 import { getEnvVars } from '@gobing-ai/spur-config';
 
 // ─── Types ──────────────────────────────────────────────────────────────────
@@ -106,34 +106,80 @@ interface ParsedArgs {
 /** How an external command is executed. The only seam between this script and git/gh. */
 export type CommandRunner = (cmd: readonly string[]) => CmdResult;
 
-/** Real execution: resolve the binary from PATH and capture its output. The default runner. */
-export const spawnRunner: CommandRunner = (cmd) => {
-    // Pass env explicitly so both Node and Bun resolve git/gh against the caller's PATH.
-    const proc = spawnSync(cmd[0] ?? '', [...cmd.slice(1)], { encoding: 'utf8', env: getEnvVars() });
-    return {
-        code: proc.status ?? 1,
-        stdout: proc.stdout ?? '',
-        stderr: proc.stderr ?? '',
-        error: proc.error?.message,
-    };
-};
+/**
+ * Optional caller execution context for one spine invocation (1215). The CLI adapter passes its
+ * command context so git/gh run in the caller's cwd with the caller's env and relative status
+ * paths resolve beneath that cwd. Omitted → process cwd/env defaults (direct callers).
+ */
+export interface PrReviewContext {
+    /** Directory external commands run in and relative status paths resolve against. */
+    cwd?: string;
+    /** Environment for external commands; defaults to the process environment. */
+    env?: Record<string, string | undefined>;
+}
 
-let runner: CommandRunner = spawnRunner;
+/**
+ * Real execution bound to one caller context: resolve the binary from PATH and run it in cwd.
+ * `cwd`/`env` fall back to the process values when the context omits them, so a bare
+ * `createSpawnRunner()` (and {@link spawnRunner}) keeps the direct-call defaults.
+ */
+export function createSpawnRunner(context: PrReviewContext = {}): CommandRunner {
+    return (cmd) => {
+        // Pass cwd and env explicitly so both Node and Bun resolve git/gh in the caller's
+        // directory against the caller's PATH — never the process's on a context-bearing call.
+        const proc = spawnSync(cmd[0] ?? '', [...cmd.slice(1)], {
+            encoding: 'utf8',
+            cwd: context.cwd,
+            env: context.env ?? getEnvVars(),
+        });
+        return {
+            code: proc.status ?? 1,
+            stdout: proc.stdout ?? '',
+            stderr: proc.stderr ?? '',
+            error: proc.error?.message,
+        };
+    };
+}
+
+/** Real execution against the process defaults. The default runner. */
+export const spawnRunner: CommandRunner = createSpawnRunner();
+
+/** Test-injected runner; `null` means every invocation binds the context-bound default. */
+let injectedRunner: CommandRunner | null = null;
 
 /**
  * Swap the git/gh runner. Tests inject an in-process stub so a suite of CLI cases costs no
  * subprocess spawns; call with no argument to restore real execution.
  */
 export function setCommandRunner(next?: CommandRunner): void {
-    runner = next ?? spawnRunner;
+    injectedRunner = next ?? null;
 }
 
-function run(cmd: readonly string[]): CmdResult {
-    return runner(cmd);
+/**
+ * Per-invocation execution seams: the command runner plus status writes rooted at the context.
+ * Built once per {@link main} call so consecutive invocations never share cwd/env state.
+ */
+interface SpineRuntime {
+    run: CommandRunner;
+    writeStatus(file: string, content: string): void;
 }
 
-function runOk(cmd: readonly string[], what: string): string {
-    const res = run(cmd);
+/** Bind the runner and status writer for one invocation; process cwd/env are never mutated. */
+function createRuntime(context: PrReviewContext): SpineRuntime {
+    const baseDir = context.cwd ?? process.cwd();
+    return {
+        run: injectedRunner ?? createSpawnRunner(context),
+        // `resolve` keeps absolute paths absolute and roots relative paths at the invocation cwd.
+        writeStatus: (file, content) => writeFileSync(resolve(baseDir, file), content),
+    };
+}
+
+function run(rt: SpineRuntime, cmd: readonly string[]): CmdResult {
+    return rt.run(cmd);
+}
+
+function runOk(rt: SpineRuntime, cmd: readonly string[], what: string): string {
+    const res = run(rt, cmd);
     if (res.code !== 0) {
         throw new Error(`${what} failed: ${res.stderr.trim() || res.stdout.trim() || res.error || `exit ${res.code}`}`);
     }
@@ -213,17 +259,17 @@ function fail(args: ParsedArgs | null, message: string, code: number): never {
     throw new ScriptExit(message, code, args?.booleans.has('--json') ?? false);
 }
 
-function writeStatus(args: ParsedArgs, verdict: string): void {
+function writeStatus(rt: SpineRuntime, args: ParsedArgs, verdict: string): void {
     const file = args.flags.get('--status-file');
-    if (file) writeFileSync(file, `${verdict}\n`);
+    if (file) rt.writeStatus(file, `${verdict}\n`);
 }
 
 /** Record FAIL for an uncaught hard failure when a status artifact was requested. */
-function writeFailureStatus(args: ParsedArgs | null): void {
+function writeFailureStatus(rt: SpineRuntime, args: ParsedArgs | null): void {
     const file = args?.flags.get('--status-file');
     if (!file) return;
     try {
-        writeFileSync(file, 'FAIL\n');
+        rt.writeStatus(file, 'FAIL\n');
     } catch {
         // Keep the original command error; a missing/unwritable status path is secondary.
     }
@@ -439,17 +485,17 @@ export function renderFindings(findings: readonly Finding[]): string {
 
 // ─── git/gh primitives ──────────────────────────────────────────────────────
 
-function preflightContext(): PreflightContext {
-    const repoRoot = runOk(['git', 'rev-parse', '--show-toplevel'], 'git rev-parse --show-toplevel');
-    const branch = runOk(['git', 'branch', '--show-current'], 'git branch --show-current');
+function preflightContext(rt: SpineRuntime): PreflightContext {
+    const repoRoot = runOk(rt, ['git', 'rev-parse', '--show-toplevel'], 'git rev-parse --show-toplevel');
+    const branch = runOk(rt, ['git', 'branch', '--show-current'], 'git branch --show-current');
     if (branch === '') throw new Error('HEAD is detached — check out a branch before requesting a PR review');
-    const head = runOk(['git', 'rev-parse', 'HEAD'], 'git rev-parse HEAD');
-    const auth = run(['gh', 'auth', 'status']);
+    const head = runOk(rt, ['git', 'rev-parse', 'HEAD'], 'git rev-parse HEAD');
+    const auth = run(rt, ['gh', 'auth', 'status']);
     if (auth.code !== 0) {
         throw new Error('gh CLI missing or unauthenticated — install gh and run `gh auth login` (no browser fallback)');
     }
     const repo = parseJson<{ nameWithOwner: string; defaultBranchRef: { name: string } }>(
-        runOk(['gh', 'repo', 'view', '--json', 'nameWithOwner,defaultBranchRef'], 'gh repo view'),
+        runOk(rt, ['gh', 'repo', 'view', '--json', 'nameWithOwner,defaultBranchRef'], 'gh repo view'),
         'gh repo view',
     );
     return {
@@ -463,8 +509,8 @@ function preflightContext(): PreflightContext {
 }
 
 /** Upstream divergence, non-fatal: a missing upstream is a normal state, not an error. */
-function resolveUpstream(): Upstream | null {
-    const refRes = run(['git', 'rev-parse', '--abbrev-ref', '--symbolic-full-name', '@{u}']);
+function resolveUpstream(rt: SpineRuntime): Upstream | null {
+    const refRes = run(rt, ['git', 'rev-parse', '--abbrev-ref', '--symbolic-full-name', '@{u}']);
     if (refRes.code !== 0) return null;
     const ref = refRes.stdout.trim();
     const count = (res: CmdResult): number => {
@@ -473,13 +519,13 @@ function resolveUpstream(): Upstream | null {
     };
     return {
         ref,
-        ahead: count(run(['git', 'rev-list', '--count', '@{u}..HEAD'])),
-        behind: count(run(['git', 'rev-list', '--count', 'HEAD..@{u}'])),
+        ahead: count(run(rt, ['git', 'rev-list', '--count', '@{u}..HEAD'])),
+        behind: count(run(rt, ['git', 'rev-list', '--count', 'HEAD..@{u}'])),
     };
 }
 
-function viewPr(): GhPr | null {
-    const res = run([
+function viewPr(rt: SpineRuntime): GhPr | null {
+    const res = run(rt, [
         'gh',
         'pr',
         'view',
@@ -496,21 +542,29 @@ function viewPr(): GhPr | null {
     return parseJson<GhPr>(res.stdout, 'gh pr view');
 }
 
-function fetchReviews(ctx: PreflightContext, pr: number): GhReview[] {
-    return fetchPaginated<GhReview>(`repos/${ctx.nameWithOwner}/pulls/${pr}/reviews`, 'gh api reviews');
+function fetchReviews(rt: SpineRuntime, ctx: PreflightContext, pr: number): GhReview[] {
+    return fetchPaginated<GhReview>(rt, `repos/${ctx.nameWithOwner}/pulls/${pr}/reviews`, 'gh api reviews');
 }
 
-function fetchInlineComments(ctx: PreflightContext, pr: number): GhReviewComment[] {
-    return fetchPaginated<GhReviewComment>(`repos/${ctx.nameWithOwner}/pulls/${pr}/comments`, 'gh api review comments');
+function fetchInlineComments(rt: SpineRuntime, ctx: PreflightContext, pr: number): GhReviewComment[] {
+    return fetchPaginated<GhReviewComment>(
+        rt,
+        `repos/${ctx.nameWithOwner}/pulls/${pr}/comments`,
+        'gh api review comments',
+    );
 }
 
-function fetchIssueComments(ctx: PreflightContext, pr: number): GhIssueComment[] {
-    return fetchPaginated<GhIssueComment>(`repos/${ctx.nameWithOwner}/issues/${pr}/comments`, 'gh api issue comments');
+function fetchIssueComments(rt: SpineRuntime, ctx: PreflightContext, pr: number): GhIssueComment[] {
+    return fetchPaginated<GhIssueComment>(
+        rt,
+        `repos/${ctx.nameWithOwner}/issues/${pr}/comments`,
+        'gh api issue comments',
+    );
 }
 
-function fetchPaginated<T>(endpoint: string, what: string): T[] {
+function fetchPaginated<T>(rt: SpineRuntime, endpoint: string, what: string): T[] {
     const pages = parseJson<T[][]>(
-        runOk(['gh', 'api', '--method', 'GET', endpoint, '--paginate', '--slurp'], what),
+        runOk(rt, ['gh', 'api', '--method', 'GET', endpoint, '--paginate', '--slurp'], what),
         what,
     );
     return pages.flat();
@@ -523,16 +577,16 @@ function hasPendingRequest(comments: readonly GhIssueComment[], head: string, lo
     return comments.some((comment) => comment.user?.login === login && (comment.body ?? '').includes(marker));
 }
 
-function requireExpectedHead(args: ParsedArgs, pr: GhPr): void {
+function requireExpectedHead(rt: SpineRuntime, args: ParsedArgs, pr: GhPr): void {
     // 0771: head pinning only protects when the flag actually carries a SHA — an empty or
     // missing --head must fail loud instead of silently reviewing whatever HEAD is current.
     const expected = args.flags.get('--head');
     if (!expected) {
-        writeStatus(args, 'FAIL');
+        writeStatus(rt, args, 'FAIL');
         fail(args, '--head <sha> is required and must match the reviewed request HEAD', 2);
     }
     if (expected !== pr.headRefOid) {
-        writeStatus(args, 'FAIL');
+        writeStatus(rt, args, 'FAIL');
         fail(
             args,
             `PR HEAD moved from ${expected.slice(0, 7)} to ${pr.headRefOid.slice(0, 7)} — request a new review`,
@@ -543,14 +597,14 @@ function requireExpectedHead(args: ParsedArgs, pr: GhPr): void {
 
 // ─── Subcommands ────────────────────────────────────────────────────────────
 
-function cmdPreflight(args: ParsedArgs): void {
-    const ctx = preflightContext();
-    const dirty = run(['git', 'status', '--porcelain']);
+function cmdPreflight(rt: SpineRuntime, args: ParsedArgs): void {
+    const ctx = preflightContext(rt);
+    const dirty = run(rt, ['git', 'status', '--porcelain']);
     if (dirty.code !== 0)
         fail(args, `git status failed: ${dirty.stderr.trim() || dirty.error || `exit ${dirty.code}`}`, 2);
     const dirtyFiles = dirty.stdout.split('\n').filter((l) => l.trim() !== '');
     if (dirtyFiles.length > 0) {
-        writeStatus(args, 'FAIL');
+        writeStatus(rt, args, 'FAIL');
         fail(
             args,
             `working tree is dirty (${dirtyFiles.length} entries) — a PR only reviews pushed commits; ` +
@@ -559,9 +613,9 @@ function cmdPreflight(args: ParsedArgs): void {
         );
     }
     const base = (args.flags.get('--base') ?? '').trim() || ctx.defaultBranch;
-    const upstream = resolveUpstream();
+    const upstream = resolveUpstream(rt);
     if (ctx.branch === base) {
-        writeStatus(args, 'FAIL');
+        writeStatus(rt, args, 'FAIL');
         fail(
             args,
             `current branch is the base branch (${base}) — a PR reviews a feature branch against it; ` +
@@ -569,7 +623,7 @@ function cmdPreflight(args: ParsedArgs): void {
             2,
         );
     }
-    writeStatus(args, 'PASS');
+    writeStatus(rt, args, 'PASS');
     emit(
         args,
         { ok: true, ...ctx, upstream },
@@ -584,31 +638,31 @@ function cmdPreflight(args: ParsedArgs): void {
     );
 }
 
-function cmdPush(args: ParsedArgs): void {
-    const ctx = preflightContext();
-    const upstream = run(['git', 'rev-parse', '--abbrev-ref', '--symbolic-full-name', '@{u}']);
+function cmdPush(rt: SpineRuntime, args: ParsedArgs): void {
+    const ctx = preflightContext(rt);
+    const upstream = run(rt, ['git', 'rev-parse', '--abbrev-ref', '--symbolic-full-name', '@{u}']);
     if (upstream.code !== 0) {
-        runOk(['git', 'push', '-u', 'origin', 'HEAD'], 'git push -u origin HEAD');
-        writeStatus(args, 'PUSHED');
+        runOk(rt, ['git', 'push', '-u', 'origin', 'HEAD'], 'git push -u origin HEAD');
+        writeStatus(rt, args, 'PUSHED');
         emit(args, { ok: true, pushed: true, head: ctx.head }, `Pushed ${ctx.branch} and set upstream to origin/HEAD.`);
         return;
     }
-    const remoteHead = runOk(['git', 'rev-parse', '@{u}'], 'git rev-parse @{u}');
+    const remoteHead = runOk(rt, ['git', 'rev-parse', '@{u}'], 'git rev-parse @{u}');
     if (remoteHead === ctx.head) {
-        writeStatus(args, 'UP_TO_DATE');
+        writeStatus(rt, args, 'UP_TO_DATE');
         emit(args, { ok: true, pushed: false, head: ctx.head }, `Remote already at ${ctx.shortHead}.`);
         return;
     }
-    runOk(['git', 'push'], 'git push (fast-forward only — never force)');
-    writeStatus(args, 'PUSHED');
+    runOk(rt, ['git', 'push'], 'git push (fast-forward only — never force)');
+    writeStatus(rt, args, 'PUSHED');
     emit(args, { ok: true, pushed: true, head: ctx.head }, `Pushed ${ctx.branch} -> ${ctx.shortHead}.`);
 }
 
-function cmdEnsurePr(args: ParsedArgs): void {
-    const ctx = preflightContext();
-    const existing = viewPr();
+function cmdEnsurePr(rt: SpineRuntime, args: ParsedArgs): void {
+    const ctx = preflightContext(rt);
+    const existing = viewPr(rt);
     if (existing) {
-        writeStatus(args, 'FOUND');
+        writeStatus(rt, args, 'FOUND');
         emit(
             args,
             { ok: true, created: false, pr: existing },
@@ -618,44 +672,44 @@ function cmdEnsurePr(args: ParsedArgs): void {
     }
     const base = (args.flags.get('--base') ?? '').trim() || ctx.defaultBranch;
     if (ctx.branch === base) {
-        writeStatus(args, 'FAIL');
+        writeStatus(rt, args, 'FAIL');
         fail(args, `current branch is the base branch (${base}) — nothing to review`, 2);
     }
-    const commits = run(['git', 'log', '--oneline', `${base}..HEAD`]);
+    const commits = run(rt, ['git', 'log', '--oneline', `${base}..HEAD`]);
     if (commits.code !== 0)
         fail(args, `git log failed: ${commits.stderr.trim() || commits.error || `exit ${commits.code}`}`, 2);
     if (commits.stdout.trim() === '') {
-        writeStatus(args, 'FAIL');
+        writeStatus(rt, args, 'FAIL');
         fail(args, `no commits on ${ctx.branch} beyond ${base} — nothing to review`, 2);
     }
-    runOk(['gh', 'pr', 'create', '--fill', '--base', base], 'gh pr create');
-    const pr = viewPr();
+    runOk(rt, ['gh', 'pr', 'create', '--fill', '--base', base], 'gh pr create');
+    const pr = viewPr(rt);
     if (!pr) {
-        writeStatus(args, 'FAIL');
+        writeStatus(rt, args, 'FAIL');
         fail(args, 'gh pr create reported success but the PR is not visible', 2);
     }
-    writeStatus(args, 'CREATED');
+    writeStatus(rt, args, 'CREATED');
     emit(args, { ok: true, created: true, pr }, `Created PR #${pr.number} ${pr.url}\nBase: ${pr.baseRefName}`);
 }
 
-function cmdHygiene(args: ParsedArgs): void {
-    const ctx = preflightContext();
-    const pr = viewPr();
+function cmdHygiene(rt: SpineRuntime, args: ParsedArgs): void {
+    const ctx = preflightContext(rt);
+    const pr = viewPr(rt);
     const base = (args.flags.get('--base') ?? '').trim() || pr?.baseRefName || ctx.defaultBranch;
-    const filesRaw = run(['git', 'diff', '--name-only', '--diff-filter=AMCR', `${base}...HEAD`]);
+    const filesRaw = run(rt, ['git', 'diff', '--name-only', '--diff-filter=AMCR', `${base}...HEAD`]);
     if (filesRaw.code !== 0) {
-        writeStatus(args, 'FAIL');
+        writeStatus(rt, args, 'FAIL');
         fail(args, `git diff --name-only failed (exit ${filesRaw.code})`, 2);
     }
     const changedFiles = filesRaw.stdout.split('\n').filter((l) => l.trim() !== '');
-    const diffRaw = run(['git', 'diff', `${base}...HEAD`]);
+    const diffRaw = run(rt, ['git', 'diff', `${base}...HEAD`]);
     if (diffRaw.code !== 0) {
-        writeStatus(args, 'FAIL');
+        writeStatus(rt, args, 'FAIL');
         fail(args, `git diff failed (exit ${diffRaw.code})`, 2);
     }
     const diff = diffRaw.stdout;
     const result = scanHygiene(diff, changedFiles);
-    writeStatus(args, result.verdict);
+    writeStatus(rt, args, result.verdict);
     const human = [
         `Hygiene (${base}...HEAD): ${result.verdict}`,
         ...result.blockers.map((b) => `  BLOCK ${b}`),
@@ -665,17 +719,17 @@ function cmdHygiene(args: ParsedArgs): void {
     if (result.verdict === 'BLOCK') throw new ScriptExit('', 2, args.booleans.has('--json'));
 }
 
-function cmdRequest(args: ParsedArgs): void {
-    const ctx = preflightContext();
-    const pr = viewPr();
+function cmdRequest(rt: SpineRuntime, args: ParsedArgs): void {
+    const ctx = preflightContext(rt);
+    const pr = viewPr(rt);
     if (!pr) {
-        writeStatus(args, 'FAIL');
+        writeStatus(rt, args, 'FAIL');
         fail(args, 'no PR for the current branch — run ensure-pr first', 2);
     }
     const force = args.booleans.has('--force');
-    const reviews = fetchReviews(ctx, pr.number);
+    const reviews = fetchReviews(rt, ctx, pr.number);
     if (!force && isHeadReviewed(reviews, pr.headRefOid)) {
-        writeStatus(args, 'ALREADY_REVIEWED');
+        writeStatus(rt, args, 'ALREADY_REVIEWED');
         emit(
             args,
             { ok: true, requested: false, alreadyReviewed: true, pr: pr.number, url: pr.url, head: pr.headRefOid },
@@ -684,9 +738,9 @@ function cmdRequest(args: ParsedArgs): void {
         return;
     }
     if (!force) {
-        const login = runOk(['gh', 'api', 'user', '--jq', '.login'], 'gh api user');
-        if (hasPendingRequest(fetchIssueComments(ctx, pr.number), pr.headRefOid, login)) {
-            writeStatus(args, 'ALREADY_REQUESTED');
+        const login = runOk(rt, ['gh', 'api', 'user', '--jq', '.login'], 'gh api user');
+        if (hasPendingRequest(fetchIssueComments(rt, ctx, pr.number), pr.headRefOid, login)) {
+            writeStatus(rt, args, 'ALREADY_REQUESTED');
             emit(
                 args,
                 { ok: true, requested: false, pending: true, pr: pr.number, url: pr.url, head: pr.headRefOid },
@@ -697,8 +751,8 @@ function cmdRequest(args: ParsedArgs): void {
     }
     const body = `${buildRequestBody(hasCodeReviewRules(ctx.repoRoot), args.flags.get('--focus') ?? '')}\n\n${requestMarker(pr.headRefOid)}`;
     const requestedAt = new Date().toISOString();
-    runOk(['gh', 'pr', 'comment', String(pr.number), '--body', body], 'gh pr comment (@codex review)');
-    writeStatus(args, 'REQUESTED');
+    runOk(rt, ['gh', 'pr', 'comment', String(pr.number), '--body', body], 'gh pr comment (@codex review)');
+    writeStatus(rt, args, 'REQUESTED');
     emit(
         args,
         { ok: true, requested: true, pr: pr.number, url: pr.url, head: pr.headRefOid, requestedAt, body },
@@ -712,54 +766,54 @@ function cmdRequest(args: ParsedArgs): void {
  * captured once at wait start lets a later push return CLEAN for an old commit. A vanished PR, a
  * different PR on the branch, or a moved head is FAIL/exit2 through the existing error channel.
  */
-function revalidateWaitTarget(args: ParsedArgs, number: number): GhPr {
-    const fresh = viewPr();
+function revalidateWaitTarget(rt: SpineRuntime, args: ParsedArgs, number: number): GhPr {
+    const fresh = viewPr(rt);
     if (!fresh || fresh.number !== number) {
-        writeStatus(args, 'FAIL');
+        writeStatus(rt, args, 'FAIL');
         fail(
             args,
             `PR #${number} is no longer the branch's PR (view reports ${fresh ? `#${fresh.number}` : 'none'}) — request a fresh review`,
             2,
         );
     }
-    requireExpectedHead(args, fresh);
+    requireExpectedHead(rt, args, fresh);
     return fresh;
 }
 
-function cmdWait(args: ParsedArgs): void {
+function cmdWait(rt: SpineRuntime, args: ParsedArgs): void {
     const since = args.flags.get('--since') ?? new Date().toISOString();
     const timeoutSec = Number(args.flags.get('--timeout') ?? '600');
     const intervalSec = Number(args.flags.get('--interval') ?? '30');
     if (!Number.isFinite(timeoutSec) || timeoutSec < 0) fail(args, '--timeout must be a non-negative number', 1);
     if (!Number.isFinite(intervalSec) || intervalSec <= 0) fail(args, '--interval must be a positive number', 1);
-    const ctx = preflightContext();
-    const pr = viewPr();
+    const ctx = preflightContext(rt);
+    const pr = viewPr(rt);
     if (!pr) {
-        writeStatus(args, 'FAIL');
+        writeStatus(rt, args, 'FAIL');
         fail(args, 'no PR for the current branch', 2);
     }
     const number = pr.number; // 1161 R1: pinned — a switched PR number is a failure, not a retarget.
-    requireExpectedHead(args, pr);
+    requireExpectedHead(rt, args, pr);
     const deadline = Date.now() + timeoutSec * 1000; // fixed once; validation never resets it
     for (;;) {
-        const observed = revalidateWaitTarget(args, number);
-        const reviews = fetchReviews(ctx, number);
+        const observed = revalidateWaitTarget(rt, args, number);
+        const reviews = fetchReviews(rt, ctx, number);
         const findings = normalizeFindings(
             reviews,
-            fetchInlineComments(ctx, number),
-            fetchIssueComments(ctx, number),
+            fetchInlineComments(rt, ctx, number),
+            fetchIssueComments(rt, ctx, number),
             since,
             observed.headRefOid,
         );
         if (findings.length > 0) {
-            revalidateWaitTarget(args, number); // pre-return recheck: never FOUND for a moved head
-            writeStatus(args, 'FOUND');
+            revalidateWaitTarget(rt, args, number); // pre-return recheck: never FOUND for a moved head
+            writeStatus(rt, args, 'FOUND');
             emit(args, { ok: true, verdict: 'FOUND', findings }, renderFindings(findings));
             return;
         }
         if (hasCurrentCleanReview(reviews, since, observed.headRefOid)) {
-            const fresh = revalidateWaitTarget(args, number); // pre-return recheck: never CLEAN for a moved head
-            writeStatus(args, 'CLEAN');
+            const fresh = revalidateWaitTarget(rt, args, number); // pre-return recheck: never CLEAN for a moved head
+            writeStatus(rt, args, 'CLEAN');
             emit(
                 args,
                 { ok: true, verdict: 'CLEAN', pr: fresh.number, url: fresh.url, head: fresh.headRefOid, findings: [] },
@@ -768,8 +822,8 @@ function cmdWait(args: ParsedArgs): void {
             return;
         }
         if (Date.now() >= deadline) {
-            revalidateWaitTarget(args, number); // a head moved while pending is a failure, not a timeout
-            writeStatus(args, 'TIMEOUT');
+            revalidateWaitTarget(rt, args, number); // a head moved while pending is a failure, not a timeout
+            writeStatus(rt, args, 'TIMEOUT');
             emit(
                 args,
                 { ok: true, verdict: 'TIMEOUT', pr: number, url: pr.url },
@@ -782,25 +836,25 @@ function cmdWait(args: ParsedArgs): void {
     }
 }
 
-function cmdCollect(args: ParsedArgs): void {
-    const ctx = preflightContext();
-    const pr = viewPr();
+function cmdCollect(rt: SpineRuntime, args: ParsedArgs): void {
+    const ctx = preflightContext(rt);
+    const pr = viewPr(rt);
     if (!pr) {
         fail(args, 'no PR for the current branch', 2);
     }
-    requireExpectedHead(args, pr);
+    requireExpectedHead(rt, args, pr);
     const since = args.flags.get('--since') ?? '';
-    const reviews = fetchReviews(ctx, pr.number);
+    const reviews = fetchReviews(rt, ctx, pr.number);
     const findings = normalizeFindings(
         reviews,
-        fetchInlineComments(ctx, pr.number),
-        fetchIssueComments(ctx, pr.number),
+        fetchInlineComments(rt, ctx, pr.number),
+        fetchIssueComments(rt, ctx, pr.number),
         since,
         pr.headRefOid,
     );
     const verdict =
         findings.length > 0 ? 'FINDINGS' : hasCurrentCleanReview(reviews, since, pr.headRefOid) ? 'CLEAN' : 'PENDING';
-    writeStatus(args, verdict);
+    writeStatus(rt, args, verdict);
     const header = `PR #${pr.number} ${pr.url}\nHEAD ${pr.headRefOid.slice(0, 7)} — Codex: ${verdict === 'FINDINGS' ? 'findings' : verdict.toLowerCase()}`;
     const summary =
         verdict === 'PENDING' ? 'No current-HEAD Codex review result yet — still pending.' : renderFindings(findings);
@@ -811,11 +865,11 @@ function cmdCollect(args: ParsedArgs): void {
     );
 }
 
-function cmdStatus(args: ParsedArgs): void {
-    const ctx = preflightContext();
-    const pr = viewPr();
-    if (pr) requireExpectedHead(args, pr);
-    const dirtyResult = run(['git', 'status', '--porcelain']);
+function cmdStatus(rt: SpineRuntime, args: ParsedArgs): void {
+    const ctx = preflightContext(rt);
+    const pr = viewPr(rt);
+    if (pr) requireExpectedHead(rt, args, pr);
+    const dirtyResult = run(rt, ['git', 'status', '--porcelain']);
     if (dirtyResult.code !== 0) {
         fail(
             args,
@@ -828,17 +882,17 @@ function cmdStatus(args: ParsedArgs): void {
     let codex = 'not requested';
     const since = args.flags.get('--since') ?? '';
     if (pr) {
-        const checks = run(['gh', 'pr', 'checks', String(pr.number), '--json', 'bucket']);
+        const checks = run(rt, ['gh', 'pr', 'checks', String(pr.number), '--json', 'bucket']);
         if ([0, 1, 8].includes(checks.code) && checks.stdout.trim() !== '') {
             const buckets = parseJson<GhCheck[]>(checks.stdout, 'gh pr checks').map((check) => check.bucket ?? '');
             if (buckets.some((bucket) => bucket === 'fail' || bucket === 'cancel')) ci = 'failing';
             else if (buckets.some((bucket) => bucket === 'pending')) ci = 'pending';
             else if (buckets.length > 0 && buckets.every((bucket) => bucket === 'pass')) ci = 'passing';
         }
-        const reviews = fetchReviews(ctx, pr.number);
+        const reviews = fetchReviews(rt, ctx, pr.number);
         const codexReviews = reviews.filter((r) => isCodexAuthor(r.user?.login, r.user?.type));
         if (codexReviews.length > 0) {
-            const inline = fetchInlineComments(ctx, pr.number);
+            const inline = fetchInlineComments(rt, ctx, pr.number);
             const findings = normalizeFindings(reviews, inline, [], since, pr.headRefOid);
             if (findings.length > 0) codex = 'findings';
             else if (hasCurrentCleanReview(reviews, since, pr.headRefOid)) codex = 'clean';
@@ -897,47 +951,48 @@ Exit codes: 0 ok · 1 usage · 2 hard failure · 3 wait timeout`;
 
 /**
  * Run one spine op. Every line goes to `sink`; the CLI passes its command output so
- * `spur builder pr` writes through the shared output seam.
+ * `spur builder pr` writes through the shared output seam. The optional `context` binds external
+ * commands and status writes to the caller's cwd/env for this invocation only.
  */
-export function main(argv: readonly string[], sink: PrReviewIo): number {
+export function main(argv: readonly string[], sink: PrReviewIo, context: PrReviewContext = {}): number {
     const previous = io;
     io = sink;
     try {
-        return runSpine(argv);
+        return runSpine(argv, createRuntime(context));
     } finally {
         io = previous;
     }
 }
 
-function runSpine(argv: readonly string[]): number {
+function runSpine(argv: readonly string[], rt: SpineRuntime): number {
     let args: ParsedArgs | null = null;
     try {
         args = parseArgs(argv);
         switch (args.subcommand) {
             case 'preflight':
-                cmdPreflight(args);
+                cmdPreflight(rt, args);
                 return 0;
             case 'push':
-                cmdPush(args);
+                cmdPush(rt, args);
                 return 0;
             case 'ensure':
             case 'ensure-pr':
-                cmdEnsurePr(args);
+                cmdEnsurePr(rt, args);
                 return 0;
             case 'hygiene':
-                cmdHygiene(args);
+                cmdHygiene(rt, args);
                 return 0;
             case 'request':
-                cmdRequest(args);
+                cmdRequest(rt, args);
                 return 0;
             case 'wait':
-                cmdWait(args);
+                cmdWait(rt, args);
                 return 0;
             case 'collect':
-                cmdCollect(args);
+                cmdCollect(rt, args);
                 return 0;
             case 'status':
-                cmdStatus(args);
+                cmdStatus(rt, args);
                 return 0;
             case '':
             case '--help':
@@ -949,7 +1004,7 @@ function runSpine(argv: readonly string[]): number {
         }
     } catch (error) {
         if (error instanceof ScriptExit) {
-            if (error.code === 2 && error.message !== '') writeFailureStatus(args);
+            if (error.code === 2 && error.message !== '') writeFailureStatus(rt, args);
             if (error.message !== '') {
                 if (error.json) io?.out(JSON.stringify({ ok: false, error: error.message }));
                 io?.err(`error: ${error.message}`);
@@ -957,7 +1012,7 @@ function runSpine(argv: readonly string[]): number {
             return error.code;
         }
         const message = error instanceof Error ? error.message : String(error);
-        writeFailureStatus(args);
+        writeFailureStatus(rt, args);
         if (args?.booleans.has('--json')) io?.out(JSON.stringify({ ok: false, error: message }));
         io?.err(`error: ${message}`);
         return 2;

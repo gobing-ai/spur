@@ -21,10 +21,16 @@ export function registerBuilderPrCommand(builder: Command, context: CliContext):
         .argument('[argv...]', 'subcommand and flags (see description)')
         .action((argv: string[]) => {
             context.setExitCode(
-                runPrReview(argv, {
-                    out: (line) => context.output.write(line),
-                    err: (line) => context.output.error(line),
-                }),
+                runPrReview(
+                    argv,
+                    {
+                        out: (line) => context.output.write(line),
+                        err: (line) => context.output.error(line),
+                    },
+                    // 1215: run the spine's git/gh and relative status writes in the invocation cwd
+                    // with the caller env — never the process-global cwd/env.
+                    { cwd: context.cwd, env: context.env },
+                ),
             );
         });
 }

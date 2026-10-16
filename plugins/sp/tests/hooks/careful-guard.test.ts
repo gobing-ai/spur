@@ -77,6 +77,12 @@ describe('careful-guard — destructive-command pattern matrix', () => {
         // A `+` refspec force-pushes without any --force flag.
         'git push origin +main',
         'git push origin +refs/heads/main',
+        // Global options between `git` and the destructive subcommand (task 1214).
+        'git -C . push --force',
+        'git -c core.hooksPath=/tmp/hooks push -f',
+        'git --git-dir=/tmp/repo push --force',
+        'git --work-tree=. restore .',
+        'git -C "my repo" reset --hard',
     ])('asks before destructive command: %j', async (cmd) => {
         const d = await runGuard(bash(cmd));
         expect(d.permissionDecision).toBe('ask');
@@ -98,6 +104,11 @@ describe('careful-guard — destructive-command pattern matrix', () => {
         // A bare `+` in a message must not read as a refspec.
         'git commit -m "a + b"',
         'git push origin main',
+        // Global options must not turn routine git into a prompt.
+        'git -C . push origin main',
+        'git -C . status',
+        'git -C . push --force-with-lease',
+        'git -c core.hooksPath=/tmp/hooks push --force-with-lease',
     ])('allows safe/benign command: %j', async (cmd) => {
         const d = await runGuard(bash(cmd));
         expect(d.permissionDecision).toBe('allow');

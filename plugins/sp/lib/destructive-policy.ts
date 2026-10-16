@@ -123,6 +123,42 @@ const DESTRUCTIVE: Array<{ label: string; re: RegExp }> = [
     { label: 'a docker prune (docker system prune)', re: /\bdocker\s+system\s+prune\b/i },
 ];
 
+/**
+ * A single shell word usable as a git global-option value. Quoted forms are kept
+ * whole — `-C "my repo"` must read as one argument — while an unquoted word stops at
+ * whitespace and the shell separators `; & |`, so the pass can never swallow a
+ * following command.
+ */
+const GIT_OPTION_VALUE = String.raw`(?:"[^"]*"|'[^']*'|[^\s;&|]+)`;
+
+/**
+ * One supported `git` global option, including the whitespace before its value. Git
+ * (unlike GNU getopt) rejects glued short forms: `-C <path>` and `-c <name>=<value>`
+ * are separated only, while `--git-dir` / `--work-tree` accept `=<path>` or a separate
+ * value. Matching exactly that grammar keeps the pass bounded and expansion-free.
+ */
+const GIT_GLOBAL_OPTION = String.raw`(?:-(?:C|c)[ \t]+${GIT_OPTION_VALUE}|--(?:git-dir|work-tree)(?:=${GIT_OPTION_VALUE}|[ \t]+${GIT_OPTION_VALUE}))`;
+
+/**
+ * `git` followed by any run of supported global options directly before the subcommand.
+ * Replacing the whole span with `git` lets the destructive subcommand patterns fire on
+ * option-prefixed invocations without teaching every pattern git's option grammar.
+ */
+const GIT_WITH_GLOBAL_OPTIONS = new RegExp(String.raw`\bgit\b(?:[ \t]+${GIT_GLOBAL_OPTION})*`, 'g');
+
+/**
+ * Remove supported git global options between the `git` executable and its subcommand.
+ *
+ * `git -C . push --force` and `git -c core.hooksPath=/tmp/hooks push -f` used to classify
+ * as safe because the subcommand patterns require `git` immediately before the verb. The
+ * replacement edits only the matched option span: every other byte — newlines, command
+ * separators, quotes — is preserved, so the patterns cannot begin matching across a
+ * command boundary, and no shell expansion or `git` process is involved.
+ */
+export function stripGitGlobalOptions(command: string): string {
+    return command.replace(GIT_WITH_GLOBAL_OPTIONS, 'git');
+}
+
 /** Return a human label for the destructive command, or null when the command is safe. */
 export function classifyCommand(command: string): string | null {
     for (const rmMatch of command.matchAll(/\brm\b([^\n&|;]*)/g)) {
@@ -139,8 +175,9 @@ export function classifyCommand(command: string): string | null {
             return 'a recursive force remove (rm -rf)';
         }
     }
+    const normalized = stripGitGlobalOptions(command);
     for (const { label, re } of DESTRUCTIVE) {
-        if (re.test(command)) return label;
+        if (re.test(normalized)) return label;
     }
     return null;
 }
