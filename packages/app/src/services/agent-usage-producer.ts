@@ -5,7 +5,8 @@
  *
  * One invocation: capture provider usage → classify with the fixed exhaustion
  * rule → map providers to configured executors (`agent.executors[].agent`,
- * or the model's `<provider>/` prefix) → record `owner: quota` observations
+ * through the {@link PROVIDER_ALIASES} bridge, or the model's `<provider>/`
+ * prefix) → record `owner: quota` observations
  * into `agent_executor_updates` (the task-0799/0890 delivery table) → drain
  * them through {@link drainPendingAgentQuotaUpdates} — the single availability
  * write path. The producer emits observations; it never edits YAML itself.
@@ -120,10 +121,29 @@ export function classifyProviderUsage(usage: NonNullable<CodexbarEntry['usage']>
 }
 
 /**
+ * Harness agent names that differ from the codexbar provider slug they draw on
+ * (2026-10-16). The executor's `agent` names the spawnable CLI —
+ * `antigravity-cli` — while codexbar reports that plan as `antigravity`, so
+ * without the alias such an executor maps to no provider and never receives a
+ * quota observation. Explicit and one-way on purpose: a heuristic such as
+ * stripping a `-cli` suffix would silently re-point unrelated agents.
+ */
+const PROVIDER_ALIASES: Record<string, string> = {
+    'antigravity-cli': 'antigravity',
+};
+
+/** Resolve a configured `agent` name to the codexbar provider slug it reports under. */
+function agentProviderSlug(agent: string | undefined): string {
+    const lower = (agent ?? '').toLowerCase();
+    return PROVIDER_ALIASES[lower] ?? lower;
+}
+
+/**
  * Map provider slugs to executor names (0892 R1): an executor serves a
- * provider when its `agent` field equals the provider (case-insensitive) or
- * its `model` is prefixed `<provider>/`. Deterministic and conservative —
- * providers with no match are listed as unmapped, never guessed.
+ * provider when its `agent` field resolves to the provider (case-insensitive,
+ * through {@link PROVIDER_ALIASES}) or its `model` is prefixed `<provider>/`.
+ * Deterministic and conservative — providers with no match are listed as
+ * unmapped, never guessed.
  */
 export function mapProvidersToExecutors(
     providers: readonly string[],
@@ -135,7 +155,7 @@ export function mapProvidersToExecutors(
         const names = executors
             .filter(
                 (e) =>
-                    (e.agent ?? '').toLowerCase() === lower ||
+                    agentProviderSlug(e.agent) === lower ||
                     (typeof e.model === 'string' && e.model.split('/')[0]?.toLowerCase() === lower),
             )
             .map((e) => e.name);

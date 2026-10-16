@@ -17,6 +17,7 @@ import { createDbAdapter, type DbAdapter } from '@gobing-ai/ts-db';
 import { parse as parseYaml } from 'yaml';
 import {
     type AgentUsageProducerContext,
+    mapProvidersToExecutors,
     type RunAgentUsageOptions,
     runAgentUsageProducer,
 } from '../../src/services/agent-usage-producer';
@@ -340,6 +341,37 @@ describe('runAgentUsageProducer', () => {
         const row = await dao.getUpdate(root, 'alpha');
         expect(row?.applied_observation_id).toBeNull();
         expect(row?.last_error).toContain('effective agent config unavailable');
+    });
+});
+
+// 2026-10-16: `agy-*` executors name the spawnable CLI (`antigravity-cli`) while
+// codexbar reports the plan as `antigravity`; the raw string comparison left them
+// unmapped, so they could never be disabled on quota. The alias is explicit and
+// one-way — an unrelated `*-cli` agent must NOT be re-pointed by a suffix rule.
+describe('mapProvidersToExecutors', () => {
+    const executor = (name: string, agent: string, model?: string) => ({ name, agent, model, disabled: false });
+
+    test('maps an executor whose harness agent name differs from the provider slug', () => {
+        const mapping = mapProvidersToExecutors(
+            ['antigravity'],
+            [executor('agy-gemini', 'antigravity-cli'), executor('agy-opus-5.5', 'Antigravity-CLI')],
+        );
+        expect(mapping.get('antigravity')).toEqual(['agy-gemini', 'agy-opus-5.5']);
+    });
+
+    test('still maps by agent name and model prefix, and leaves a suffix look-alike unmapped', () => {
+        const mapping = mapProvidersToExecutors(
+            ['zai', 'minimax', 'claude'],
+            [
+                executor('pi-zai', 'pi', 'zai/glm-5.3-flash'),
+                executor('minimax', 'minimax'),
+                executor('not-antigravity', 'someother-cli'),
+            ],
+        );
+        expect(mapping.get('zai')).toEqual(['pi-zai']);
+        expect(mapping.get('minimax')).toEqual(['minimax']);
+        expect(mapping.get('claude')).toBeUndefined();
+        expect([...mapping.values()].flat()).not.toContain('not-antigravity');
     });
 });
 
