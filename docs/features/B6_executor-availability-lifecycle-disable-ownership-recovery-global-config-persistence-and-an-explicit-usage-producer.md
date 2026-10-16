@@ -6,7 +6,7 @@ status: verifying
 priority: P2
 tags: []
 created_at: "2026-09-17T23:02:01.980Z"
-updated_at: "2026-10-10T00:28:09.531Z"
+updated_at: "2026-10-16T23:15:57.655Z"
 ---
 
 # B6: Executor availability lifecycle: disable ownership, recovery, global-config persistence, and an explicit usage producer
@@ -21,7 +21,7 @@ An executor disabled by quota comes back on its own, an executor the operator di
   - **Disable ownership.** Every `disabled` executor entry carries an owner (`quota` | `operator` | `probe`), a timestamp and a reason. A bare `disabled: true` with no owner is operator-owned.
   - **Recovery consumer.** `agent.quota.recovered` events (already emitted upstream, dropped by B5) and a usage snapshot showing headroom re-enable **quota-owned** disables only.
   - **Global-config persistence.** The YAML updater can target `~/.config/spur/config.yaml` for executors declared only there (today the project updater cannot persist them).
-  - **Explicit run-once usage producer.** A command that captures `codexbar usage --format json --provider all` into a snapshot file, maps providers to executors, and applies quota-owned disable/enable through the same updater. Run-once by contract; scheduling is external (cron/launchd, like `spur history daily`). Verb/flag shape decided at design with ADR-051 consent.
+  - **Explicit run-once usage producer.** A command that captures `codexbar usage --format json` (the operator-enabled provider set; `--provider all` was dropped 2026-10-16, see `docs/design/session-pinned-dispatch.md` §3.4) into a snapshot file, maps providers to executors, and applies quota-owned disable/enable through the same updater. Run-once by contract; scheduling is external (cron/launchd, like `spur history daily`). Verb/flag shape decided at design with ADR-051 consent.
   - **Reactive fallback.** When codexbar is absent or fails, the producer reports the cause and changes nothing; the B5 event path keeps working unchanged.
   - **Doctor rendering.** `spur agent doctor` shows the availability owner, reason and age; a stale snapshot is rendered stale, never as usable.
 - Out:
