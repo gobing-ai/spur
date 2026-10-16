@@ -76,10 +76,9 @@ delete env.TYPESAFE_BASE_URL;
 
 // 1199 R4: a timeout-shaped failure on a contended host reads as a regression unless the run
 // names the host load. Advisory only — one stderr line, printed before bun is spawned; it never
-// touches the forwarded argv or this process's exit code. NOTE: dropping --parallel is NOT a
-// viable mitigation — the suite drifted parallel-only after d6189d3ab (serial run: 7 shared-
-// state failures + cross-file happy-dom fetch pollution). The root test script caps workers at two
-// to bound subprocess fan-out while retaining isolation; external contention can still require a quieter window.
+// touches the forwarded argv or this process's exit code. The root test script caps workers at two
+// to bound subprocess fan-out; external contention can still require a quieter window.
+// `bun run test:full` is the canonical coverage recovery; DOM tests must restore their globals.
 const [load1 = 0, load5 = 0, load15 = 0] = loadavg();
 const cores = availableParallelism();
 if (Math.max(load1, load5, load15) > cores) {

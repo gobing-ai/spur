@@ -1,7 +1,7 @@
-import { afterEach, beforeAll, describe, expect, test } from 'bun:test';
+import { afterAll, afterEach, beforeAll, describe, expect, test } from 'bun:test';
 import { act, cleanup, renderHook } from '@testing-library/react';
 import { useFeatureActionProgress } from '../../../src/modules/features/useFeatureActionProgress';
-import { registerHappyDom } from '../../happy-dom';
+import { registerHappyDom, teardownHappyDom } from '../../happy-dom';
 
 class FakeEventSource {
     static instances: FakeEventSource[] = [];
@@ -23,6 +23,8 @@ beforeAll(() => {
     registerHappyDom();
     originalEventSource = globalThis.EventSource;
 });
+
+afterAll(teardownHappyDom);
 
 afterEach(() => {
     cleanup();

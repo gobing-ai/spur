@@ -434,6 +434,7 @@ describe('registerWorkflowInlineCommand defaults', () => {
                     exitCode = code;
                 },
             });
+            exitCode = 0;
             await bare.parseAsync(
                 ['workflow', 'inline', 'decide', '--run-id', 'r2', '--node', 'n', '--options-json', 'missing.json'],
                 {
