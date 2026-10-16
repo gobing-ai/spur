@@ -1,5 +1,110 @@
 # Changelog
 
+## [0.4.8] - 2026-10-15
+
+### Added
+- absorb history-anatomy, session-timeline, daily-summary, run-summary and step-profile into spur history|workflow verbs (PR-6) (305506463)
+  <!-- src: apps/cli/src/commands/history/anatomy.ts, apps/cli/src/commands/workflow/summary.ts · HIGH -->
+- absorb pr-reviewing and dogfood-testing scripts into spur builder pr | agent dogfood (PR-7) (cfe0e46b0)
+  <!-- src: apps/cli/src/commands/builder/pr.ts, apps/cli/src/commands/agent/dogfood.ts · HIGH -->
+- absorb wrapup, preflight, batch-plan, feature-verification and idea-handoff scripts into spur task|feature verbs (e303c4825)
+  <!-- src: apps/cli/src/commands/task/wrapup.ts, apps/cli/src/commands/task/preflight.ts, apps/cli/src/commands/feature/verify.ts, apps/cli/src/commands/feature/handoff.ts · HIGH -->
+- add spur workflow inline and workflow commit-guard transports (f6ce13757)
+  <!-- src: apps/cli/src/commands/workflow/inline.ts, apps/cli/src/commands/workflow/commit-guard.ts · HIGH -->
+- absorb quality-gate, residual-scan, task-diffstat into spur task gate|residual|diffstat (6e3bc90f3)
+  <!-- src: apps/cli/src/commands/task/gate.ts, apps/cli/src/commands/task/residual.ts, apps/cli/src/commands/task/diffstat.ts · HIGH -->
+
+### Fixed
+- require strict completion for shipping readiness (e0eef87c9)
+  <!-- src: plugins/sp/skills/code-verification/SKILL.md:448 · HIGH -->
+- expand multi-part spurBin launch in history-anatomy (21d89c1aa)
+  <!-- src: config/workflows/history-anatomy.yaml:259 · HIGH -->
+- keep migration checks free of database boot writes (1212) (cfa2d9719)
+  <!-- src: apps/cli/src/index.ts:101 · HIGH -->
+- reject bump-ver --check with --push/--all instead of silently ignoring (1212) (a2f815913)
+  <!-- src: apps/cli/src/commands/builder.ts:44 · HIGH -->
+- route absorbed PR-9 surfaces through domain DB facade and .spur runtime paths (ae5a4158d)
+  <!-- src: packages/app/src/workflow/run-cost.ts:309 (openExistingDb replaces createDbAdapter), packages/domain/src/index.ts:22 (facade export), docs/00_ADR.md:108 (ADR-011), apps/cli/src/commands/workflow/cost.ts:55 · HIGH -->
+- align hook contracts and confine canonical temp storage (1211) (0c988257a)
+  <!-- src: packages/app/src/services/run-storage.ts:87 · HIGH -->
+- harden absorbed command boundaries and preserve launch argv (1211) (e0b444842)
+  <!-- src: apps/cli/src/artifact-id.ts, packages/app/src/workflow/step-profile-cli.ts · HIGH -->
+- conform plugin hooks to superskill's generic hook contract (6f232547b)
+  <!-- src: node_modules/@gobing-ai/superskill/plugins/cc/skills/cc-hooks/SKILL.md:35,91 (canonical hooks.json + portable `superskill hook run` command form, installed 0.3.39), plugins/sp/hooks/hooks.json, plugins/sp/scripts/hooks/ · HIGH -->
+- scope workflow fs-io exemptions and document new app exports (b33b66cf0)
+  <!-- src: config/rules/strict/runtime-boundaries.yaml, packages/app/src/workflow/commit-guard.ts · HIGH -->
+
+### Changed
+- complete CLI script absorption and retire script infrastructure (1212,1213) (#26) (4c7808e62)
+  <!-- src: apps/cli/src/release-ops.ts, scripts/commands/script-contract-check.ts · HIGH -->
+- retire script-root/spur-bin script machinery, hook-only script contract (1213) (d34670206)
+  <!-- src: plugins/sp/scripts/script-root.ts, plugins/sp/lib/spur-bin.ts — both removed in this commit · HIGH -->
+- integrate script absorption programme (1211) (#28) (bfdb9d6e6)
+  <!-- src: apps/cli/src/commands/feature/handoff.ts, apps/cli/src/commands/task/batch-plan.ts · HIGH -->
+- sort the workflow-transport imports in the CLI entry (bc508a7ae)
+  <!-- src: apps/cli/src/index.ts · HIGH -->
+- route inline-driver callers to spur workflow inline and commit-guard (b2ea04d24)
+  <!-- src: plugins/sp/skills/spur-dev/references/inline-pipeline-driver.md, apps/cli/src/commands/workflow/inline.ts · HIGH -->
+
+### Other
+- assert script-contract-check output and silence it in tests (8d14c07ce)
+  <!-- src: scripts/commands/script-contract-check.test.ts · HIGH -->
+- assert workflow inline verdicts instead of leaking them to stdout (2abb6c16b)
+  <!-- src: apps/cli/tests/commands/workflow/inline.test.ts · HIGH -->
+- record 1211 acceptance and the alignment verification (c535d2822)
+- align sp plugin surfaces with the absorbed CLI (06e5b7047)
+  <!-- src: plugins/sp/skills/spur-cli/references/builder.md · HIGH -->
+- record ADR-065 manifest retirement and reconcile script-check references (8391d165d)
+- update docs/help/how_to_customize_project_modules.md (024dd28ae)
+- record hook infrastructure verification (1213) (f6fa5c15e)
+- record forced verification and acceptance (1212) (b36709a5c)
+- merge sp/runall-1212-1213-9fdf (1212,1213) — absorb PR-9 builder/workflow/self surfaces; retire script infrastructure (hook-only) (f570bb662)
+- 1213 record/done evidence + A91 feature sync (71937d73b)
+- task-pipeline R2 asserts the hook-only contract after 1213 retirement (e6f0df8f7)
+  <!-- src: packages/domain/tests/planning/lifecycle-drift.test.ts · MEDIUM -->
+- 1212 record/done + 1213 wip evidence (2be8492b2)
+- reconcile placement/installation docs with the hook-only scripts layout (1213) (1d4096295)
+  <!-- src: docs/design/harness-surface-governance.md · HIGH -->
+- align Superskill pins to the documented 0.3.39 runtime floor (1213) (7f8386c98)
+  <!-- src: plugins/sp/README.md:558 (documented floor), package.json:44, bun.lock:226, node_modules/@gobing-ai/superskill/package.json:3 (installed 0.3.39) · HIGH -->
+- workflow cost cohort source is .spur/workflows, not config/workflows (1212) (42ced0f68)
+  <!-- src: apps/cli/src/commands/workflow/cost.ts:55 · HIGH -->
+- 1212 wip transition (e9a53fc3c)
+- merge feat/builder-publish-cost-migrate-absorb (1212) — absorb workflow cost, builder publish + bump-ver --check, self migrate --check into the CLI (3b01cf777)
+- updat tasks after refinment (604afe094)
+- preserve temp identity in isolated CLI parity probes (1211) (ca8f41915)
+  <!-- src: apps/cli/tests/workflow-inline/golden-runner.ts · MEDIUM -->
+- merge remaining absorption plan into integration (1211) (720ec828a)
+- decompose remaining script absorption work (1211) (993a7d805)
+- merge hook conformance PR 23 into integration (1211) (dbd6c6d08)
+- reconcile integrated CLI matrix counts (1211) (6be5e7e5d)
+- merge builder PR 24 into integration (1211) (df8426934)
+- merge history workflow PR 25 into integration (1211) (7648c8bd6)
+- merge task feature PR 22 into integration (1211) (896729a0a)
+- merge workflow commands PR 21 into integration (1211) (31f526f78)
+- merge task commands PR 20 into integration (1211) (b9ac6cdd2)
+- merge script absorption PR 15 into integration (1211) (6813390f6)
+- integrate task 1211 handoff (fffe637e3)
+- add task 1211 script-absorption and hook-boundary handoff (1284bbfa2)
+- WIP fix publish-range test typing (handoff, see task 1211) (05963c3ff)
+  <!-- src: apps/cli/tests/release-ops-publish.test.ts · HIGH -->
+- WIP absorb publish, real-run-cost, pipeline-budgets, importer-schema-check, check-marketplace-version into spur builder|workflow|self (handoff, see task 1211) (5ad929fa9)
+  <!-- src: apps/cli/src/release-ops.ts, apps/cli/src/commands/workflow/cost.ts · HIGH -->
+- merge feat/task-gate-residual-diffstat-v2 (PR-3) into PR-6 stack base (f6bcda129)
+- retire the plugin-owned Pi guard-extension (6b823fcc8)
+  <!-- src: plugins/sp/plugin.json · HIGH -->
+- merge feat/workflow-inline-absorb-v2 (PR-4) into PR-6 stack base (85d20265b)
+- document the hook entry location and output contract (e88006e31)
+  <!-- src: plugins/sp/README.md · HIGH -->
+- record the 2026-10-15 boundary revision — hooks stay plugin-owned, PR-2a/2b/L and S-1 withdrawn (377838a14)
+- capture golden outputs of the PR-5 plugin scripts before absorption (39b84ea6f)
+  <!-- src: apps/cli/tests/fixtures/script-absorption-pr5-golden.json · HIGH -->
+- freeze golden outputs of the inline-run and commit-guard plugin scripts (20a5f782b)
+  <!-- src: apps/cli/tests/fixtures/workflow-inline-golden.json · HIGH -->
+- record owner decisions — hooks under `spur self hook`, PR-review ops under `builder pr` (11f9169ac)
+- retire one-off E71/E91 tools and move the test spur shim to tests/shims (5c405f63c)
+  <!-- src: tests/shims/spur · HIGH -->
+
 ## [0.4.7] - 2026-10-14
 
 ### Fixed
