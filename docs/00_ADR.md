@@ -1924,6 +1924,13 @@ launched with `ackLowConfidence=true`); the feature boundary now carries the sam
   ADR-108 (no corpus-wide backfill), ADR-118 (a contract violation routes to a named outcome).
 - **Detail:** [workflow execution economy](design/workflow-execution-economy.md) § Feature verification
   receipt — v1 service contract (fields, derivation, and the nine ordered rejection reasons).
+- **Correction (2026-10-16, session review):** the sentence above describing the TASK boundary is
+  stale. F511 (task 1207, 2026-10-14) retired the task pipeline's asserted `Confidence:` line, its
+  `confidence` check row and its `ackLowConfidence` escape hatch, so the task boundary no longer
+  carries a confidence value and no longer refuses LOW or absent — it gates on proof digests and
+  findings dispositioning instead. The DERIVED feature-receipt family this amendment defines is
+  unaffected and is now the only confidence a completion boundary reads. Do not re-add the asserted
+  line on the strength of the sentence above.
 
 ## ADR-120: Environment Variables Are a Restricted External Surface Behind the ts-utils Gateway
 

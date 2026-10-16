@@ -652,6 +652,12 @@ boundary, and a delegate left to re-derive them re-derives them against its own 
    when a plugin script was touched, and the paired-script parity test when `package.json` changed —
    so an env-var-hygiene violation, a stale generated twin, or a half-updated paired chain is
    named by the stage rather than discovered by the pipeline `test` hop.
+   **That pre-check is returned evidence, not a background step:** the stage reports its output (or
+   `precheck: not-run` with the reason), and a stage that returns neither the output nor the
+   not-run line is recorded `done` with a `precheck-missing` marker beside the `probe-missing` one.
+   Measured cost of skipping it (2026-10-16, task 1215): one full quality-gate run plus a
+   `test-fix` → `test-recheck` cycle on a `process.env` in a new test that the pre-check preset
+   flags in seconds.
    **A stage that returns neither probe evidence nor the not-applicable line is not silently
    complete (task 1135 R2): the driver records the stage `done` with a `probe-missing` marker in
    the run log and carries the same marker into that task's batch-report row.**

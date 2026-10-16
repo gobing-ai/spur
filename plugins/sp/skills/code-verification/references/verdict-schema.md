@@ -170,6 +170,14 @@ before the proof capture (task 1109), but it qualifies **unique** basenames only
 basename (two tracked files share it) is reported and left untouched, and line drift and
 `L4.anchor-subject-mismatch` are never repaired by that pass — those remain the author's rows.
 
+A **workspace-relative** path fails the same way, and is the easier mistake to make because the
+command it came from is real. `(cd apps/cli && bun test tests/commands/builder/pr.test.ts)` is the
+right way to run the suite, but `tests/commands/builder/pr.test.ts` does not resolve from the repo
+root, so the AC-coverage guard reports `missing: <AC> — <path>` and refuses `done` (observed
+2026-10-16, task 1215 — the repair was a fresh verify pass over the whole answer). Cite both halves:
+the workspace-rooted command you ran, then the repo-root-relative anchor of the file it names
+(`apps/cli/tests/commands/builder/pr.test.ts`). One anchor per cited file per cell is enough.
+
 ## Source citations for external claims (task 1070)
 
 A Requirement/AC evidence cell that asserts an external API/library claim must carry a verifiable
