@@ -119,6 +119,7 @@ dist/
 dist/
 # Database files
 data/
+/.zvec-grep/
 
 # Legacy bundle layout (pre package-root config/); may still appear from old builds
 /spur-cli
