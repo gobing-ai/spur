@@ -4,7 +4,7 @@
  * branch is asserted without a database; `workflow-inline-parity.test.ts` replays the real
  * runners end to end against the retired scripts' golden output.
  */
-import { describe, expect, test } from 'bun:test';
+import { describe, expect, spyOn, test } from 'bun:test';
 import { existsSync, mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -414,6 +414,7 @@ describe('registerWorkflowInlineCommand defaults', () => {
         const cwd = mkdtempSync(join(tmpdir(), 'spur-wf-inline-defaults-'));
         const previous = process.cwd();
         process.chdir(cwd);
+        const stdout = spyOn(process.stdout, 'write').mockImplementation(() => true);
         try {
             // A real decide with no options file and no run row: the app fails closed (exit 1).
             await program.parseAsync(
@@ -422,7 +423,6 @@ describe('registerWorkflowInlineCommand defaults', () => {
                     from: 'user',
                 },
             );
-            // (The app runner prints its own JSON verdict on process.stdout.)
             expect(exitCode).toBe(1);
             // Without any config on the context the default loader yields an empty config.
             const bare = new Command().exitOverride();
@@ -441,7 +441,16 @@ describe('registerWorkflowInlineCommand defaults', () => {
                 },
             );
             expect(exitCode).toBe(1);
+            const verdicts = stdout.mock.calls.map(([chunk]) => JSON.parse(String(chunk)));
+            expect(verdicts).toEqual(
+                ['r1', 'r2'].map((runId) => ({
+                    ok: false,
+                    runId,
+                    error: expect.stringContaining('decide: unreadable options file missing.json:'),
+                })),
+            );
         } finally {
+            stdout.mockRestore();
             process.chdir(previous);
             rmSync(cwd, { recursive: true, force: true });
         }
