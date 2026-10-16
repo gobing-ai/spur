@@ -1,10 +1,10 @@
 ---
 schema_version: 1
 name: Residuals from 1214
-status: backlog
+status: cancelled
 template: standard
 created_at: 2026-10-16T03:36:32.921Z
-updated_at: "2026-10-16T03:36:33.025Z"
+updated_at: "2026-10-16T05:22:23.172Z"
 
 ---
 
@@ -29,6 +29,16 @@ Source task: 1214 (feature A91) — deferred residuals filed by residual-scan se
 <!-- CLOSED decisions from refinement: what was chosen and why, what was deferred and on what
      condition. Not a parking lot for open questions — an unanswered question here means the task
      is not ready to hand off. Keep empty if none. -->
+
+#### Contained — no deferral remains
+
+Contained in commit `9b1291a1c` (fix(destructive-policy): strip any git global option run before the subcommand).
+
+- **Gap fixed.** The strip matched a four-form whitelist; it now strips a whole option run: value-less flags (`--no-pager`, `-p`, `--paginate`, `--bare`, `--no-replace-objects`, `--literal-pathspecs`, `--glob-pathspecs`, `--icase-pathspecs`, `--no-optional-locks`), glued `--name=value`, and the long options that really consume a separated value (`--git-dir`, `--work-tree`, `--namespace`, `--config-env`, `--attr-source`). `-C`/`-c` keep consuming their next word.
+- **Arity grounded, not assumed** (git 2.55.0): glued short forms (`-C.`, `-cfoo=bar`) and a bare `--` are usage errors; `--exec-path` is optional-value, so bare or separated it prints the exec path and exits and is deliberately **not** in the value-taking set — listing it would swallow the subcommand and hide a destructive verb. The glued `--exec-path=<path>` form does reach the subcommand.
+- **Regression coverage.** 17 destructive option-prefixed rows and 7 safe controls added to the `plugins/sp/tests/hooks/destructive-policy.test.ts` matrix, which also drives the Claude adapter parity block end-to-end, plus the spawned-hook ask/allow lists in `plugins/sp/tests/hooks/careful-guard.test.ts`. Plugin hooks suite: 399 pass / 0 fail (was 338).
+- **Verification.** `bun run lint` (biome + all workspace typechecks) clean; `bun run plugin-smoke` PASS; `bun run script-contract-check` PASS; full `bun run spur-check`: 11223 pass / 0 fail, 2 post-check rules clean, `plugins/sp/lib/destructive-policy.ts` at 100 % funcs / 100 % lines.
+- **Class confirmed live while working:** the glued optional-value form `git --exec-path=/tmp/p reset --hard` executed a hard reset; the pre-fix classifier returned null for it.
 
 ### Design
 
@@ -55,3 +65,6 @@ Source task: 1214 (feature A91) — deferred residuals filed by residual-scan se
 <!-- Links to features, docs, ADRs, related tasks, or external references. -->
 
 ### History
+
+- 2026-10-16T05:22:23.172Z backlog → cancelled (system)
+

@@ -1,10 +1,10 @@
 ---
 schema_version: 1
 name: Residuals from 1215
-status: backlog
+status: cancelled
 template: standard
 created_at: 2026-10-16T04:04:32.313Z
-updated_at: "2026-10-16T04:04:32.403Z"
+updated_at: "2026-10-16T05:22:23.520Z"
 
 ---
 
@@ -29,6 +29,15 @@ Source task: 1215 (feature A91) — deferred residuals filed by residual-scan se
 <!-- CLOSED decisions from refinement: what was chosen and why, what was deferred and on what
      condition. Not a parking lot for open questions — an unanswered question here means the task
      is not ready to hand off. Keep empty if none. -->
+
+#### Contained — no deferral remains
+
+Contained in commit `0b15e74ba` (test(builder-pr): cover a mutation-capable operation under the caller context).
+
+- **Both** two-repository suites now exercise a mutation-capable operation (`push`), not only the read-only `preflight`. Each fixture repo owns a real bare remote created in `makeRepo` (`apps/cli/tests/commands/builder/pr.test.ts`, `packages/app/tests/services/pr-review/pr-review.test.ts`); the push is real and only `gh` is faked.
+- **Assertions.** The mutation lands in the context repository's remote (`refs/heads/feat/b` on the fixture remote equals the reported pushed head), the sibling repository's remote stays empty, the `PUSHED` status file is written beneath the context cwd, and nothing is written into the sibling repo.
+- **Failure sensitivity verified.** Driving the same operation through the spine with no caller context leaves the context repo's remote empty, writes the status file into the process cwd instead of the context repo, and resolves the process checkout's own repository — so the added cases fail without the context seam rather than passing vacuously.
+- **Verification.** Focused suites green (`packages/app` 73 pass, `apps/cli` 7 pass); full `bun run spur-check`: 11223 pass / 0 fail.
 
 ### Design
 
@@ -55,3 +64,6 @@ Source task: 1215 (feature A91) — deferred residuals filed by residual-scan se
 <!-- Links to features, docs, ADRs, related tasks, or external references. -->
 
 ### History
+
+- 2026-10-16T05:22:23.520Z backlog → cancelled (system)
+
