@@ -45,7 +45,8 @@ spur <noun> [<verb>] [positionals] [--flags]
 - Every multi-verb noun follows `spur <noun> <verb> …`. The verb is the second positional token.
 - **`builder`** is the noun hosting the release plumbing — `spur builder bump-ver|drop-tags`
   (task 0617, ADR-051). Promoted verbatim from the internal `spur-dev release` script; frozen at
-  these verbs plus `pr` and `publish` (2026-10-15 amendments; see `docs/design/harness-surface-governance.md` §3).
+  these verbs plus `pr`, `publish` (2026-10-15 amendments) and `show-branches` (2026-10-16,
+  feature L1; see `docs/design/harness-surface-governance.md` §3).
 - **`self`** is the noun hosting the self-management verbs — `spur self init|maintain|migrate|serve|status`.
   Each verb mounts the same command builder as its legacy top-level noun, so behavior, flags,
   output, and exit codes are identical on both paths.
@@ -162,9 +163,10 @@ project. Re-running fills missing assets and preserves existing configuration/cu
 release verbs formerly hidden behind the internal `bun run scripts/spur-dev.ts release` command.
 The repo-local forwarder `scripts/commands/release.ts` and its `spur-dev` dispatcher cases were
 retired in task 1173 — `bun run bump-ver` / `bun run drop-tags` route here directly. The noun is
-**frozen at exactly these verbs plus `pr`** (the PR-review spine ops) **and `publish`** (CI npm publish;
-`bump-ver --check` is the read-only pre-publish drift guard) — the 2026-10-15 script-absorption
-amendments — no further spur-dev verb may be promoted onto it, and any
+**frozen at exactly these verbs plus `pr`** (the PR-review spine ops), **`publish`** (CI npm publish;
+`bump-ver --check` is the read-only pre-publish drift guard) and **`show-branches`** (the read-only
+branch topology report) — the 2026-10-15 script-absorption and 2026-10-16 feature-L1 amendments —
+no further spur-dev verb may be promoted onto it, and any
 future spur-dev → public-noun promotion needs its own consent-gate entry
 (`docs/design/harness-surface-governance.md` §3).
 
@@ -252,6 +254,43 @@ before any mutation. The release flow itself never needs structural edits for a 
 (`.spur/spur.db*`, `.spur/logs/`), which dirties a pristine repo before dispatch; the clean-tree
 gate ignores exactly those untracked paths (`status --porcelain -uall`) and still blocks on
 anything else.
+
+<a id="spur-builder-show-branches---format-markdownjsontext---base-ref---localremote---pr---limit-n---max-commits-n---hide-contained---theme-name"></a>
+
+#### `spur builder show-branches [--format <markdown|json|text>] [--base <ref>] [--local|--remote] [--pr] [--limit <n>] [--max-commits <n>] [--hide-contained] [--theme <name>]`
+
+**Read-only branch topology report (task 1218, feature L1).** The fifth `builder` verb and the only
+read-only one: it enumerates refs through the shared `CommandRunner` seam and writes no ref, config
+entry, index entry or worktree. Everything it reports lands in `packages/app`
+(`src/services/branch-topology/`); `apps/cli/src/commands/builder/show-branches.ts` owns only the
+flags, validation and exit codes (ADR-021).
+
+- One row per branch — local, remote-only (named `<remote>/<branch>`), or the detached HEAD named
+  by its short sha — carrying the fork point (`git merge-base` against the base), commits
+  ahead/behind (`git rev-list --left-right --count`), the contained flag (`ahead == 0`), the last
+  commit date/subject, the worktree path holding it, and, with `--pr`, the open pull-request
+  number/state/review decision.
+- Base resolution: `--base <ref>`, else the `origin/HEAD` symbolic target, else `main`. A remote ref
+  whose local twin points at the same commit folds into one row. `--local` / `--remote` restrict the
+  ref namespace (mutually exclusive, exit 1 together) and `--limit <n>` (default 30) caps rows by
+  most recent last-commit with the omitted count reported.
+- `--format markdown` (default) prints the summary table plus one condensed mermaid `gitGraph`;
+  `--format json` prints the raw `BranchTopology` object `{ base, generatedAt, branches[], omitted,
+  warnings[] }` (`--json` is its alias, and both formats expose the same row model as `text`).
+  The graph keeps the base line, one branch per open ref, at most `--max-commits` (default 3) commit
+  nodes per branch with a `+N earlier` summary node, `HIGHLIGHT` tips, `REVERSE` reverts, the tag
+  names of the commits it shows, a join back for contained branches (unless `--hide-contained`) and
+  an optional `--theme <name>` mermaid init directive.
+- `--pr` is the only network path: one `gh pr list` call. A missing or unauthenticated `gh` leaves
+  every PR field `null` and adds one warning naming the reason; it never fails the report.
+  (`gh@2.102.0` HIGH, anchored at `https://cli.github.com/manual/gh_pr_list` read 2026-10-16: it
+  accepts exactly the four requested JSON fields, reports `headRefName` without a remote prefix and
+  returns `""` for an undecided review, which the report normalizes to `null` — measured this session
+  against this repo's own pull requests.)
+- The graph statements above are `mermaid@11.15.0` HIGH, anchored at `apps/web/package.json:28` and
+  asserted by `apps/web/tests/branch-topology-graph.heavy.test.ts:155`.
+- Exit codes: `0` ok, `1` usage (unknown `--format`, non-positive `--limit`/`--max-commits`, unknown
+  base ref, `--local` with `--remote`), `2` git failure (not a repository, `git` missing).
 
 <a id="spur-decision-list---layer---json--spur-decision-show-id---json--spur-decision-run-id---param---evidence---maker---model---json--spur-decision-status---json"></a>
 

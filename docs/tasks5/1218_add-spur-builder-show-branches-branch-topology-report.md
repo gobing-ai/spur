@@ -1,10 +1,10 @@
 ---
 schema_version: 1
 name: Add spur builder show-branches branch topology report
-status: todo
+status: wip
 template: feature-impl
 created_at: 2026-10-16T18:16:16.605Z
-updated_at: "2026-10-16T18:25:24.793Z"
+updated_at: "2026-10-16T21:07:15.538Z"
 feature_id: L1
 priority: P2
 tags:
@@ -101,7 +101,73 @@ Feature L1 (child of the `spur builder` umbrella L). Satellite: `docs/design/bui
 
 ### Review
 
-<!-- Filled during review: P1-P4 findings, residual risk, and final disposition. -->
+#### Review Report — 1218 (feature L1)
+
+**Scope:** uncommitted working-tree change set (21 paths: 6 new, 15 modified), built from
+`git status --porcelain` + `git diff` + untracked paths, reviewed against task 1218 R1–R7 /
+AC1–AC7, `docs/design/builder-branches-and-pr-review.md` §3.1, and feature-L1 R1–R6/R13/R14.
+**Dimensions:** functional, security, efficiency, correctness, usability, architecture
+**Verdict:** PARTIAL
+
+##### Findings (ranked)
+
+| # | Priority | Dimension | Finding | Location | Disposition |
+|---|----------|-----------|---------|----------|-------------|
+| 1 | P2 (major) | correctness | Base-line fork commits are appended after the base's newest window, so a branch forked deeper than `--max-commits` renders its fork point to the right of the base tip. `renderGitGraph` emits the base row's window first (`render.ts:136-142`) and each row's fork point afterwards (`render.ts:151-161`); mermaid places commits in statement order, so a fork point older than the base window reads as newer than the base tip. Verified by rendering the exact CLI output of a repo (`main` = c1..c6, `feat` forked at c2): base line renders `c4→c5→c6→c2`, with `ba3cf0e` (=c2 fork, x=160) right of `e8ca7b0` (=c6 tip, x=110) and `feat` branching off c2 — under mermaid@11.15.0 (`apps/web/package.json:28`). The markdown/text tables have no fork-point column (`render.ts:27`), so the graph is the only place a fork point is shown, and §3.1 asks for branches "in fork-point order". | `packages/app/src/services/branch-topology/render.ts:136-161` | OPEN |
+| 2 | P4 (advisory) | usability | A zero-commit repository (unborn HEAD — `git init` then run) exits 1 with `unknown base ref 'main' (no --base given; tried origin/HEAD, then main)` instead of rendering a base-only report. R14's gherkin scopes "empty" to "no branches besides the base" (single-branch, which passes) and the Design maps an unknown base to exit 1, so this is a wording ambiguity rather than a broken AC. | `packages/app/src/services/branch-topology/index.ts:155-182` | ACCEPTED |
+| 3 | P4 (advisory) | architecture | `BranchRow` carries `commits: BranchCommit[]`, an additive field beyond the task's Frozen-names `BranchRow`; required so the renderers stay pure and git-free (the collector owns the commit window). Documented at the field. | `packages/app/src/services/branch-topology/index.ts:60-68` | ACCEPTED |
+| 4 | P4 (advisory) | scope | The diff also fixes unrelated `projects add --host` drift in `docs/help/cmd_projects.md` and `docs/help2/projects.md` — outside 1218's R7 doc set but required by the help-docs-parity gate (task 1020). The live CLI does expose `--host`, so the doc is correct. | `docs/help/cmd_projects.md:31` | ACCEPTED |
+| 5 | P4 (advisory) | documentation | The task's `### Solution` and `### Testing` sections are still empty placeholders and no R/AC checkbox is checked, so traceability rests on code + `.spur/run/1218-show-branches.md` rather than the task body; the verify/wrap stages own the Testing fill. | `docs/tasks5/1218_add-spur-builder-show-branches-branch-topology-report.md` | ACCEPTED |
+| 6 | P4 (advisory) | usability | When the base is `origin/main` and the local `main` diverged, the `main` row is drawn by `checkout main` on mermaid's implicit branch (which starts at the graph root), so the row reads as forking from the beginning rather than from its fork point. Documented workaround (mermaid rejects re-creating `main`); the fork commit is still emitted on the base line. | `packages/app/src/services/branch-topology/render.ts:162-165` | ACCEPTED |
+
+##### Functional Traceability
+
+| Req | Status | Evidence |
+|-----|--------|----------|
+| R1 | MET | `index.ts:120` collect, `:155` base chain (--base→origin/HEAD→main), `:184` refs + remote-twin folding, `:216` per-ref merge-base/rev-list/log-1, `:282` worktrees; E2E `apps/cli/tests/commands/builder/show-branches.test.ts` asserts name/forkPoint/ahead/behind/contained/date/worktree, the `--base` override, `--local`/`--remote`, and that refs + worktrees are unchanged after a run |
+| R2 | MET | `show-branches.ts:39-48` flags, `:108-118` format resolution; execution: `--format yaml` → exit 1 naming `markdown | json | text`; default output == `--format markdown` |
+| R3 | PARTIAL | Allowed-statement allow-list + mermaid parse proof pass (`apps/web/tests/branch-topology-graph.heavy.test.ts`, 8 pass); base-line fork placement is wrong for forks deeper than `--max-commits` — Finding 1 (`render.ts:136-161`) |
+| R4 | MET | `render.ts:32-60`; execution: json `{base,generatedAt,branches,omitted,warnings}` with the same rows, text aligned table without mermaid; `--json` byte-identical to `--format json` |
+| R5 | MET | `index.ts:368-411` (one `gh pr list` call), `:413-421` head-ref mapping, empty `reviewDecision`→`null`; execution: `gh` absent → one warning + exit 0; E2E covers the unauthenticated case |
+| R6 | MET | `index.ts:257-265` detached row, `:120-134` `--limit` + omitted count; execution: detached row named by short sha, `--limit 2` → `omitted: 2` + footer, single-branch → base-only graph |
+| R7 | MET | Governance §3 amendment `docs/design/harness-surface-governance.md:182`; `plugins/sp/skills/spur-cli/references/builder.md:3,18,29,74-110` (five verbs + show-branches); `SKILL.md:47`; `docs/04_DESIGN.md:87` indexes the satellite |
+
+##### Acceptance Criteria
+
+| AC | Status | Evidence |
+|----|--------|----------|
+| AC1 | MET | R1 row |
+| AC2 | MET | R2 row — default markdown, one fenced block whose first line is `gitGraph` |
+| AC3 | MET | `apps/web/tests/branch-topology-graph.heavy.test.ts` — mermaid 11.15.0 parses the CLI-rendered graph (8 pass) |
+| AC4 | MET | R4 row |
+| AC5 | MET | R5 row |
+| AC6 | MET | R7 row |
+| AC7 | PARTIAL | Detached + single-branch verified by execution; a zero-commit "empty" repo exits 1 (Finding 2, advisory); "large" (>50 branches) is not exercised E2E, but `--limit`/omitted arithmetic is unit-tested (`packages/app/tests/services/branch-topology/index.test.ts`) |
+
+##### Verification performed
+
+By execution — throwaway `git init` repos under `$TMPDIR`, real CLI at
+`bun <tree>/apps/cli/src/index.ts builder show-branches` (tree `git status --porcelain` unchanged
+afterwards): default/markdown/json/text formats; `--json` alias; `--base` override + unknown base
+(exit 1); `--format yaml` (exit 1); `--local`+`--remote` (exit 1); detached HEAD row; single-branch
+base-only graph; remote twin folding + `origin/HEAD` base; `--limit 2` omitted arithmetic;
+`--max-commits`/`--theme`/`--hide-contained` graph shaping; `--pr` with `gh` off `PATH` (one warning,
+exit 0); non-repository cwd (exit 2); and a mermaid render of the exact CLI graph (Finding 1).
+Focused suites re-run: `apps/cli/tests/commands/builder/show-branches.test.ts` **34 pass / 0 fail**,
+`packages/app/tests/services/branch-topology/` **39 pass / 0 fail**,
+`apps/web/tests/branch-topology-graph.heavy.test.ts` **8 pass / 0 fail**.
+
+By reading: ADR-021 thin transport (no git in `apps/cli`; the single `createSpawnRunner` seam is
+reused rather than a second git-exec helper; `packages/app/package.json:29` adds only the export
+subpath — no new runtime dependency); the read-only git verb set; annotated-vs-lightweight tag peel
+(`index.ts:321-338`); date-offset-aware sort determinism (`index.ts:267-279`); help-docs parity docs.
+
+**Not verified:** a real `gh`-authenticated `--pr` enrichment against live PRs (only shimmed/stubbed),
+and a >50-branch repository (covered by `--limit` unit tests, not an E2E).
+
+**Next:** fix Finding 1 — build the base line in commit order (interleave the fork-point commits with
+the base window, or emit them in fork-point order) so a fork deeper than `--max-commits` draws at its
+true position; the markdown/text tables convey no fork point, so the graph is the only correction site.
 
 ### References
 
@@ -110,4 +176,5 @@ Feature L1 (child of the `spur builder` umbrella L). Satellite: `docs/design/bui
 ### History
 
 - 2026-10-16T18:23:10.575Z feature_id Q → L1 (system)
+- 2026-10-16T20:34:34.537Z todo → wip (system)
 

@@ -26,6 +26,7 @@
         "./step-profile-cli": "./src/workflow/step-profile-cli.ts",
         "./dogfood": "./src/services/dogfood/index.ts",
         "./pr-review": "./src/services/pr-review/index.ts",
+        "./branch-topology": "./src/services/branch-topology/index.ts",
         "./run-cost": "./src/workflow/run-cost.ts"
     },
     "scripts": {

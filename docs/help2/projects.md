@@ -25,8 +25,9 @@ spur projects remove other-repo
 spur projects clean [--no-terminate-processes]
 ```
 
-`add` registers a project root directory; `--name` sets a display name. `remove` and `start` /
-`stop` accept either the registered path or the project name as `<target>`. `list --fleet` also
+`add` registers a project root directory; `--name` sets a display name and `--host <host>` records
+where the project runs (default `localhost`). `remove` and `start` / `stop` accept either the
+registered path or the project name as `<target>`. `list --fleet` also
 resolves each project's `agent.fleet` declaration and orchestrator binding. `clean` drops registry
 entries whose directory is gone and terminates processes lingering on occupied ports
 (`--no-terminate-processes` skips the termination).

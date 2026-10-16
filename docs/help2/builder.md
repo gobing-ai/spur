@@ -1,6 +1,6 @@
 # spur builder
 
-Release plumbing: version bumps, release tags, npm publish, and the PR-review spine ops.
+Release plumbing: version bumps, release tags, npm publish, PR-review spine ops, and read-only branch topology.
 
 ## Subcommands
 
@@ -9,6 +9,7 @@ Release plumbing: version bumps, release tags, npm publish, and the PR-review sp
 | `bump-ver [target] [version]` | Bump a package version, commit, tag, optionally push |
 | `drop-tags [target] [version]` | Delete release tags locally and optionally on origin |
 | `publish <dir> [--otp code]` | Resolve workspace/catalog ranges, build, and `npm publish` a package (CI) |
+| `show-branches [flags]` | Read-only branch topology report against a base |
 | `pr <op> [flags]` | PR-review spine ops for `/sp:dev-pr-review` |
 
 ## spur builder bump-ver
@@ -50,6 +51,29 @@ ranges in `<dir>/package.json`, runs `bun run build:bundle`, `npm publish --acce
 restores the manifest on every exit path. `bump-ver --check` is the read-only pre-publish guard
 (`prepublishOnly`): exit `1` when `.claude-plugin/marketplace.json` or a listed `plugin.json`
 drifted from the package version.
+
+## spur builder show-branches
+
+```bash
+spur builder show-branches [--format markdown|json|text] [--base <ref>] [--local|--remote] [--pr] [--limit <n>] [--max-commits <n>] [--hide-contained] [--theme <name>] [--json]
+```
+
+Read-only branch topology against a base (`--base`, else the `origin/HEAD` target, else `main`):
+one row per branch with its fork point, commits ahead/behind, whether it is fully contained in the
+base, its last commit, and the worktree holding it.
+
+`--format markdown` (the default) prints a summary table plus one condensed mermaid `gitGraph`;
+`--format json` prints the raw report (`--json` is its alias) and `--format text` the aligned
+table. `--local` / `--remote` restrict the ref namespace, `--limit <n>` (default 30) caps the rows
+by most recent commit, and `--max-commits <n>` (default 3) caps the commit nodes per branch line in
+the graph; `--hide-contained` drops contained branches from the graph and `--theme <name>` selects
+the mermaid theme.
+
+> `--pr` adds open pull-request state from a single `gh pr list` call; a missing or unauthenticated
+> `gh` leaves those fields empty with one warning instead of failing the report.
+
+Exit codes: `0` ok, `1` usage (bad `--format`/`--limit`/`--max-commits`, unknown base ref, `--local`
+with `--remote`), `2` git failure.
 
 ## spur builder pr
 

@@ -179,6 +179,19 @@ not a repo script), and for the read-only `--check` flag on `bump-ver` (the reti
 `check-marketplace-version` pre-publish guard). `builder` is now frozen at `bump-ver`, `drop-tags`,
 `publish`, `pr`.
 
+**Amendment (2026-10-16, feature L1).** The operator's feature-L1 ask ("add one more CLI
+`spur builder show-branches`") is the consent-gate entry for a fifth `builder` verb, read-only
+branch topology (audience: the operator's daily branch triage and the `/sp:dev-pr-review status`
+mode; surface: a new public verb — base-relative per-branch fork point, commits ahead/behind, the
+contained flag (`ahead == 0`), last commit, worktree binding, and optional `gh pr list`
+pull-request state, rendered as `markdown` (default; summary table plus one condensed mermaid
+`gitGraph`), `json` (the raw `BranchTopology` object) or `text`; justification: nothing in Spur
+reported branch relationships — 26 of 31 `origin/*` branches had 0 commits ahead of `main` on
+2026-10-16 — so the report replaces ad-hoc `git log --graph` reads, and it never writes a ref,
+a config entry, the index or a worktree). Rejected shapes recorded at the gate: a bare `branches`
+noun, a full-history gitGraph, and a `--prune` flag. `builder` is now frozen at `bump-ver`,
+`drop-tags`, `publish`, `show-branches`, `pr`.
+
 ## 4. Subsequent consent applications
 
 | Date | Task | Public change | Granted scope and reason |

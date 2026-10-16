@@ -3,9 +3,10 @@
 > Release plumbing for the package workspace: bump one package (or the `workspace:`-pinned
 > release set), commit, tag, and optionally push. Promoted from the internal `spur-dev release`
 > script (task 0617, ADR-051); `scripts/commands/release.ts` is now a thin forwarder to the same
-> implementation. The noun is **frozen at these four verbs** (`bump-ver`, `drop-tags`, `pr`, and
-> `publish`, added by the
-> 2026-10-15 script-absorption consent entry) — future promotions land only with their own
+> implementation. The noun is **frozen at these five verbs** (`bump-ver`, `drop-tags`, `publish`,
+> `show-branches`, and `pr`, added by the
+> 2026-10-15 script-absorption consent entry; `show-branches` added by the 2026-10-16 feature-L1
+> consent, task 1218) — future promotions land only with their own
 > justification (`docs/design/harness-surface-governance.md` §3).
 
 ## Subcommands
@@ -18,6 +19,7 @@
 | `drop-tags --all <version>` | Delete all local per-package + aggregate release tags |
 | `pr <op> [flags]` | Deterministic PR-review spine ops for `/sp:dev-pr-review` (`preflight`, `push`, `ensure`, `hygiene`, `request`, `wait`, `collect`, `status`) |
 | `publish <dir> [--otp code]` | Resolve workspace/catalog ranges, build, and `npm publish` a package (CI) |
+| `show-branches [flags]` | Read-only branch topology report against a base (`markdown` | `json` | `text`) |
 
 ## spur builder bump-ver
 
@@ -106,3 +108,30 @@ the `pr-review` workflow). Absorbed from the retired `plugins/sp/scripts/pr-revi
 
 Global flags: `--json` (single JSON object), `--status-file <path>` (one-word verdict).
 Exit codes: `0` ok, `1` usage, `2` hard failure, `3` wait timeout.
+
+## spur builder show-branches
+
+```
+spur builder show-branches [options]
+```
+
+| Option | Description |
+|---|---|
+| `--format <format>` | Output format: `markdown` (default) | `json` | `text` |
+| `--json` | Alias of `--format json`; prints the raw `BranchTopology` object |
+| `--base <ref>` | Base ref to measure every branch against (default: the `origin/HEAD` target, else `main`) |
+| `--local` | Only local branches |
+| `--remote` | Only remote branches (mutually exclusive with `--local`) |
+| `--pr` | Enrich rows with open pull-request state (one `gh pr list` call; degrades with a warning) |
+| `--limit <n>` | Maximum branch rows, most recent last-commit first (default 30) |
+| `--max-commits <n>` | Maximum commit nodes per branch line in the graph (default 3) |
+| `--hide-contained` | Drop contained branches from the graph instead of drawing their join |
+| `--theme <name>` | Mermaid theme name for the graph init directive |
+
+Read-only report: per branch it prints the fork point, commits ahead/behind the base, the
+contained flag (`ahead == 0`), the last commit, the worktree binding, and (with `--pr`) the open
+pull-request number, state and review decision. `markdown` is the default and adds one condensed
+mermaid `gitGraph`; `json` prints the `{ base, generatedAt, branches[], omitted, warnings[] }`
+object; `text` prints the aligned table only.
+Exit codes: `0` ok, `1` usage (bad `--format`/`--limit`/`--max-commits`, unknown base ref,
+`--local` with `--remote`), `2` git failure (not a repository, `git` missing).
