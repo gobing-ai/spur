@@ -4,9 +4,18 @@
  */
 import { afterEach, beforeEach, describe, expect, test } from 'bun:test';
 import { spawnSync } from 'node:child_process';
-import { chmodSync, mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync, writeFileSync } from 'node:fs';
+import {
+    chmodSync,
+    existsSync,
+    mkdirSync,
+    mkdtempSync,
+    readFileSync,
+    realpathSync,
+    rmSync,
+    writeFileSync,
+} from 'node:fs';
 import { tmpdir } from 'node:os';
-import { join } from 'node:path';
+import { basename, join } from 'node:path';
 import { getEnvVars } from '@gobing-ai/spur-config';
 import { main } from '../../../src/index';
 import { createCapturedOutput } from '../../helpers';
@@ -52,6 +61,9 @@ describe('spur builder pr execution context (1215)', () => {
     let nonGit = '';
     let origPath = '';
 
+    /** Bare remote belonging to a fixture repo (created by {@link makeRepo}). */
+    const remoteOf = (repo: string): string => join(root, `${basename(repo)}-remote.git`);
+
     const makeRepo = (name: string, branch: string): string => {
         const dir = realpathSync(mkdtempSync(join(root, name)));
         const git = (args: string[]) => spawnSync('git', ['-C', dir, ...args], { encoding: 'utf8' });
@@ -71,6 +83,10 @@ describe('spur builder pr execution context (1215)', () => {
             '-m',
             'init',
         ]);
+        // A real bare remote beside the repo, so a mutation-capable operation can push for
+        // real — the mutation itself is not faked, only `gh` is.
+        spawnSync('git', ['init', '-q', '--bare', remoteOf(dir)], { encoding: 'utf8' });
+        git(['remote', 'add', 'origin', remoteOf(dir)]);
         return dir;
     };
 
@@ -166,5 +182,29 @@ describe('spur builder pr execution context (1215)', () => {
         expect(r.exitCode).toBe(2);
         expect(r.stderr).toContain('not a git repository');
         expect(r.stdout).not.toContain(checkoutRoot);
+    });
+
+    test('a mutation-capable operation (push) mutates the context repository, not the process checkout', async () => {
+        const r = await runWithContext(
+            ['builder', 'pr', 'push', '--json', '--status-file', 'push.status'],
+            repoB,
+            contextEnv('marker-b'),
+        );
+        expect(r.exitCode).toBe(0);
+        const payload = JSON.parse(jsonLine(r.stdout)) as { pushed: boolean; head: string };
+        expect(payload.pushed).toBe(true);
+        // The remote mutation landed in B's remote …
+        const pushed = spawnSync('git', ['-C', remoteOf(repoB), 'rev-parse', 'refs/heads/feat/b'], {
+            encoding: 'utf8',
+        });
+        expect(pushed.status).toBe(0);
+        expect(pushed.stdout.trim()).toBe(payload.head);
+        // … not in A's, and the status file landed beneath the context cwd.
+        const untouched = spawnSync('git', ['-C', remoteOf(repoA), 'rev-parse', '--verify', 'refs/heads/feat/b'], {
+            encoding: 'utf8',
+        });
+        expect(untouched.status).not.toBe(0);
+        expect(readFileSync(join(repoB, 'push.status'), 'utf8').trim()).toBe('PUSHED');
+        expect(existsSync(join(repoA, 'push.status'))).toBe(false);
     });
 });

@@ -21,7 +21,7 @@ import {
     writeFileSync,
 } from 'node:fs';
 import { tmpdir } from 'node:os';
-import { join } from 'node:path';
+import { basename, join } from 'node:path';
 import { getEnvVar, getEnvVars, setEnvVar } from '@gobing-ai/ts-utils';
 import type { CmdResult, CommandRunner, PrReviewContext } from '../../../src/services/pr-review';
 import {
@@ -1224,6 +1224,9 @@ describe('invocation execution context (1215)', () => {
     let nonGit = '';
     let origPath = '';
 
+    /** Bare remote belonging to a fixture repo (created by {@link makeRepo}). */
+    const remoteOf = (repo: string): string => join(root, `${basename(repo)}-remote.git`);
+
     const makeRepo = (name: string, branch: string): string => {
         const dir = realpathSync(mkdtempSync(join(root, name)));
         const git = (args: string[]) => spawnSync('git', ['-C', dir, ...args], { encoding: 'utf8' });
@@ -1243,6 +1246,10 @@ describe('invocation execution context (1215)', () => {
             '-m',
             'init',
         ]);
+        // A real bare remote beside the repo: a mutation-capable operation can push for
+        // real, with no network and no fake standing in for the mutation itself.
+        spawnSync('git', ['init', '-q', '--bare', remoteOf(dir)], { encoding: 'utf8' });
+        git(['remote', 'add', 'origin', remoteOf(dir)]);
         return dir;
     };
 
@@ -1354,6 +1361,29 @@ describe('invocation execution context (1215)', () => {
         expect(process.cwd()).toBe(cwdBefore);
         expect(getEnvVars().PATH).toBe(pathBefore);
         expect(getEnvVars().PR_REVIEW_FIXTURE_ENV).toBe(markerBefore);
+    });
+
+    test('a mutation-capable operation (push) mutates the context repo and writes its status there', () => {
+        const res = runCtx(['push', '--json', '--status-file', 'push.status'], {
+            cwd: repoB,
+            env: contextEnv('marker-b'),
+        });
+        expect(res.code).toBe(0);
+        const payload = JSON.parse(res.stdout) as { pushed: boolean; head: string };
+        expect(payload.pushed).toBe(true);
+        // The remote mutation landed in the CONTEXT repository …
+        const pushed = spawnSync('git', ['-C', remoteOf(repoB), 'rev-parse', 'refs/heads/feat/b'], {
+            encoding: 'utf8',
+        });
+        expect(pushed.status).toBe(0);
+        expect(pushed.stdout.trim()).toBe(payload.head);
+        // … and not in A's remote.
+        const untouched = spawnSync('git', ['-C', remoteOf(repoA), 'rev-parse', '--verify', 'refs/heads/feat/b'], {
+            encoding: 'utf8',
+        });
+        expect(untouched.status).not.toBe(0);
+        expect(readFileSync(join(repoB, 'push.status'), 'utf8').trim()).toBe('PUSHED');
+        expect(existsSync(join(repoA, 'push.status'))).toBe(false);
     });
 
     test('the default runner keeps process cwd/env when the context is omitted', () => {
