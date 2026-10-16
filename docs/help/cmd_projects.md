@@ -28,6 +28,7 @@ spur projects add [options] <path>
 | Flag | Description |
 |---|---|
 | `--name <name>` | Display name for the project |
+| `--host <host>` | Host for a local or remote project (default: `localhost`) |
 | `--json` | Output JSON response |
 
 ## spur projects remove
