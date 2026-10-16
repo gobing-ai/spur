@@ -1,5 +1,32 @@
 # Changelog
 
+## [0.4.9] - 2026-10-15
+
+### Added
+- flag HIGH-confidence docs claims that carry no source anchor (c57c17e7b)
+  <!-- src: config/rules/docs/sourced-api-claims.yaml:117 (`cited-high-confidence`, severity info, absent from every preset) · HIGH -->
+
+### Fixed
+- run builder PR git/gh and relative status writes in the caller CLI context (1215) (a7f2d895a)
+  <!-- src: apps/cli/src/commands/builder/pr.ts:30 (context.cwd/context.env), packages/app/src/services/pr-review/index.ts:126 (`createSpawnRunner`), :171 (injected runner else context-bound default) · HIGH -->
+- strip any git global option run before the subcommand in the destructive guard (9b1291a1c)
+  <!-- src: plugins/sp/lib/destructive-policy.ts:163 (`GIT_GLOBAL_OPTION`), :179 (`GIT_WITH_GLOBAL_OPTIONS`), plugins/sp/scripts/hooks/careful-guard.ts · HIGH -->
+- redact malformed URLs instead of echoing a truncated prefix (4fe37719a)
+  <!-- src: packages/app/src/workflow/actions/http-request.ts:75 (`redactUrl` catch returns `<redacted>`) · HIGH -->
+
+### Other
+- record the 1214/1215 session-review corrections (872135c86)
+- add the 0.4.8 change log section (9f69fcb29)
+- restore DOM teardown and tighten the workflow inline assertions (158d1469c)
+  <!-- src: apps/cli/tests/commands/workflow/inline.test.ts:437 (reset the leaked exit code), apps/web/tests/modules/features/useFeatureActionProgress.test.ts, scripts/commands/run-tests.ts:80 (worker cap comment) · HIGH -->
+- cover a mutation-capable builder PR operation under the caller context (0b15e74ba)
+  <!-- src: apps/cli/tests/commands/builder/pr.test.ts, packages/app/tests/services/pr-review/pr-review.test.ts · HIGH -->
+- cancel the 1214/1215 residuals after containing both inline (f0b43a05e)
+- record the 1214/1215 worktree teardown (1ea71d6bf)
+- update the indexed-context learnings (eba858dc8)
+- write the dev-runall 1214/1215 close-out docs (7b2b730d8)
+- reopen A91 and file tasks 1214 and 1215 (5b8de3478)
+
 ## [0.4.8] - 2026-10-15
 
 ### Added
