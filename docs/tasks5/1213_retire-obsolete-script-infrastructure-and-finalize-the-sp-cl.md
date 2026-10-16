@@ -4,7 +4,7 @@ name: Retire obsolete script infrastructure and finalize the sp CLI prerequisite
 status: done
 template: standard
 created_at: 2026-10-15T17:50:40.227Z
-updated_at: "2026-10-15T22:50:40.363Z"
+updated_at: "2026-10-16T06:11:21.154Z"
 ac_altitude: task-local
 ac_numbering: task-local
 parent_wbs: "1211"
@@ -282,18 +282,18 @@ Each entry cites the first changed line per file (`file:line`).
 
 | Requirement | Status | Evidence |
 |-------------|--------|----------|
-| R1 | MET | Frozen deletion/retention assertion passed: retired resolver/manifests/twins absent, exactly seven hooks and eight hook-only libraries remain; package.json:69 omits the retired build step; @verify `.spur/run/verifyall-1212-1213/layout-receipt.json` line 1. |
-| R2 | MET | scripts/commands/script-contract-check.ts:243 validates hook-only layout; :465 rejects missing/shadow hooks; :517 retains placement checks without baseline waivers. Fresh checker/packaging22 tests and the real-tree checker command passed. |
-| R3 | MET | config/workflows/task-pipeline.yaml:240 preserves base-sha/evidence capture after the script-root probe removal. The exact residual resilience case passed at the repository20s limit; actual isolated installation proves the surviving hook layout. Unrelated live shim remains in config/transition-shims.json:5. |
-| R4 | MET | Fresh feature query reports I3 verifying; its inventory tool/test and current reason remain at docs/plans/2026-10-14-spur-script-absorption.md:33. Only completed infrastructure was deleted. |
-| R6 | MET | docs/plans/2026-10-14-spur-script-absorption.md:33 records the final hook-only disposition and :34 closes obsolete PR10 while deferring runtime version enforcement. Existing prerequisite declarations and dated history remain. |
-| R7 | MET | Actual isolated install and seven identity checks plus real deadline/deny behavior now pass; @verify `.spur/run/verifyall-1212-1213/codex-install-receipt.json` lines 1-50. Fresh full required gate passed; @verify `.spur/run/verifyall-1212-1213/full-gate-fixed.log` lines 38-595. All changed measured executable files meet 90% functions/lines. Existing coverage scope excludes scripts; focused checker/packaging tests prove those paths without altering bunfig. Root reviewer accepts the integrated result. |
-| R8 | MET | package.json:44, bun.lock:503 and .github/workflows/publish.yml:48 select the same supported Superskill release. Frozen installation corrected stale local package state; actual pinned runtime and staged behavior are recorded at @verify `.spur/run/verifyall-1212-1213/codex-install-receipt.json` lines 2-9. |
+| R1 | MET | Forced re-verify on HEAD c57c17e7b. Absent this run: plugins/sp/scripts/script-root.{ts,mjs}, plugins/sp/lib/spur-bin.ts, config/plugin-scripts.json, config/script-placement-baseline.json, build:scripts/build:plugin-lib package scripts, no *.generated.*/.mjs under plugins/sp. Present: seven hooks under plugins/sp/scripts/hooks and eight libs under plugins/sp/lib (find/ls this run); README layout `plugins/sp/README.md:281`. |
+| R2 | MET | bun scripts/commands/script-contract-check.ts → "hook-only script layout over plugins/sp — 0 violation(s) — PASS" (this run); checker suites (cd scripts && bun test commands/script-contract-check.test.ts commands/verify-pack.test.ts commands/bundle-plugins.test.ts) 22 pass / 0 fail @run `.spur/run/verifyall-1211-1215/t1213a.log` line 4. |
+| R3 | MET | Pipeline run-start has no script-root probe: `plugins/sp/tests/task-pipeline-resilience.test.ts:135-142`; (cd plugins/sp && bun test tests/task-pipeline-resilience.test.ts) 30 pass / 0 fail @run `.spur/run/verifyall-1211-1215/t1213b.log` line 4; plugin-smoke PASS @run `.spur/run/verifyall-1211-1215/smoke.log` line 2. |
+| R4 | MET | I3 status `verifying` (spur feature show I3 --json, this run) → scripts/commands/surface-drift-inventory.ts retained; reason recorded `docs/plans/2026-10-14-spur-script-absorption.md:33`. |
+| R6 | MET | Plan dispositions `docs/plans/2026-10-14-spur-script-absorption.md:33-34`; prerequisites `plugins/sp/README.md:558-565` (Superskill 0.3.39, Spur 0.5.0). |
+| R7 | MET | bunfig.toml unchanged since 2026-10-11 (git log). Fresh focused suites above; isolated Codex install with staged hooks resolving careful-guard @run `.spur/run/verifyall-1211-1215/codex-careful-guard-receipt.json` line 1; gate @run `.spur/run/verifyall-1211-1215/gate.log` line 681 (sandboxed spur-check on HEAD c57c17e7b: 51/51 rules, 11146 pass / 6 fail; all 6 are sandbox-environment failures outside this scope — git template-hook copy denied, Chromium launch, WT-4 scratch trees; last unsandboxed gate 0 fail @run `.spur/run/1215-test-gate.log` line 1). |
+| R8 | MET | Single exact pin 0.3.39: catalog `package.json:44`, bun.lock superskill@0.3.39, `.github/workflows/publish.yml:48`. Repo-pinned runtime reports 0.3.39 (node_modules package.json, this run). |
 
 | Acceptance Criteria | Status | Evidence Type | Evidence |
 |---------------------|--------|---------------|----------|
-| AC1 — PR-8 retires the script infrastructure (req: R1, R2, R3, R4, R6, R7) | MET | command | Hook-only layout/checker and surviving safeguards passed fresh checks; full gate/coverage passed; @verify `.spur/run/verifyall-1212-1213/full-gate-fixed.log` lines 38-595. |
-| AC3 — Distribution uses the supported hook runtime (req: R6, R7, R8) | MET | command | Actual pinned-runtime Codex install passed with all seven identities, real 4500/9500/14500ms budgets and inert force-push exit2; @verify `.spur/run/verifyall-1212-1213/codex-install-receipt.json` lines 1-50. |
+| AC1 — PR-8 retires the script infrastructure (req: R1, R2, R3, R4, R6, R7) | MET | test | Absence/presence checks this run; contract checker 0 violations; 22/0 @run `.spur/run/verifyall-1211-1215/t1213a.log` line 4; 30/0 @run `.spur/run/verifyall-1211-1215/t1213b.log` line 4; `plugins/sp/tests/task-pipeline-resilience.test.ts:135-142`; I3 verifying; `docs/plans/2026-10-14-spur-script-absorption.md:33`; gate @run `.spur/run/verifyall-1211-1215/gate.log` line 681 (sandboxed spur-check on HEAD c57c17e7b: 51/51 rules, 11146 pass / 6 fail; all 6 are sandbox-environment failures outside this scope — git template-hook copy denied, Chromium launch, WT-4 scratch trees; last unsandboxed gate 0 fail @run `.spur/run/1215-test-gate.log` line 1). |
+| AC3 — Distribution uses the supported hook runtime (req: R6, R7, R8) | MET | command | Pins `package.json:44`, `.github/workflows/publish.yml:48`. Fresh isolated Codex install (repo-pinned 0.3.39): install exit 0, inert force-push → exit 2 with reason, git status silent @run `.spur/run/verifyall-1211-1215/codex-careful-guard-receipt.json` line 1. Seven-identity resolution and 500 ms deadline margins carried from @acceptance `.spur/run/1211-acceptance/codex-install-receipt.json` lines 1-50 (not re-probed this run). Prereqs `plugins/sp/README.md:558-565`; PR-10 deferral `docs/plans/2026-10-14-spur-script-absorption.md:34`. |
 - Coverage: N/A (verdict-based; verify pipeline does not measure code coverage)
 
 ### Review
