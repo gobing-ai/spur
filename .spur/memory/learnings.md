@@ -6357,3 +6357,49 @@ Dates: commits and document `updated_at` values are America/Los_Angeles (PDT, UT
   (`plugins/sp/tests/help-docs-parity.test.ts`), so their hand-written status prose can go stale
   silently and no gate will say so — a gap worth a future rule, not a wrap-stage edit.
 
+**Verification added.** 10 claims checked: 9 HIGH, 1 MEDIUM (`--bare` — option accepted by git but push semantics not replayed). All API claims now carry a primary-source citation: the installed git 2.55.0 binary (replayed, not assumed), in-repo source lines, root `package.json`, and the constitution. No LOW-confidence claims remain; nothing rested on memory alone. Updated artifact at `.spur/run/04f7df7c-b682-4c89-8cb1-47ff98da79b5-wrapup-learnings.md`.
+
+# Wrap-up learnings — batch 1214, 1215
+
+## 2026-10-16
+
+### 1214 — Preserve destructive git guards with global options across hook hosts
+
+- Root-cause pattern: a policy classifier anchored on `git` immediately followed by the subcommand silently misses every invocation with global options (`git -C . push --force` classified safe). When a guard anchors on executable+verb adjacency, replay option-prefixed forms before trusting it.
+- Fix at the shared seam, once: one bounded lexical strip inside the single shared `classifyCommand` fixed every hook host at once. Per-host regexes were explicitly rejected and would have re-fragmented the policy.
+- Match the real tool's grammar, verified against the installed binary: git treats glued short forms (`-C.`, `-cfoo=bar`) as usage errors, so the whitelist covers only separated `-C <path>` / `-c <name>=<value>` and `--git-dir[=<path>]` / `--work-tree[=<path>]` (git 2.55.0 confirmed).
+- Span-local replacement (rewrite only the matched option span back to `git`, leave every other byte intact) preserves command boundaries and quoted values; classification must never expand shell substitutions or spawn git.
+- Comment-only edits to a registered hook entry keep host-visible output byte-identical — a cheap, checkable proof of "no adapter behavior change" (`git diff -U0` non-comment added lines = 0).
+- Adapter-parity test pattern: spawn the real hook entry for every row of the policy matrix so host conformance is driven from one table instead of per-host test copies.
+- Gotcha (residual, filed as 1216): the option whitelist covers only the four enumerated forms; other valid git global options (`--no-pager`, `-p`, `--bare`, `--namespace=…`) still bypass the prompt. Line-continuation invocations (`git push \` + newline + `--force`) are unseen by all git patterns, pre-existing.
+
+### 1215 — Bind builder PR operations to the caller execution context
+
+- Root-cause pattern: the CLI adapter forwarded only argv and the output sink; the application `spawnRunner` used process-global cwd/env, so git/gh resolved the process repository instead of the CLI-selected one. When absorbing a script spine behind a CLI noun, thread the caller execution context — forwarding argv alone is not absorption.
+- Fix pattern: one narrow optional context `{ cwd?, env? }` threaded through the spine; the default runner binds cwd/env per invocation via closure (`createSpawnRunner(context)`), never `process.chdir` or `process.env` rewrites. Relative `--status-file` paths resolve against the same context cwd with `path.resolve`; absolute paths stay absolute.
+- Keep the test seam compatible: `injectedRunner: CommandRunner | null` with `null` meaning "bind the context-bound default" kept every existing argv-only test stub working without rewrites.
+- A git-only `-C` patch is insufficient when the spine also shells `gh` and writes files — bind at the runner seam so every external command and file write inherits the context.
+- Test pattern worth reusing: two real throwaway git repos plus a fake `gh` binary on PATH; assert correct root/branch/env, relative-vs-absolute status placement, refusal for an explicitly selected non-git directory, and process cwd/env unchanged after both success and failure.
+
+### Cross-task conventions and gotchas
+
+- Bug fixes restoring an existing contract need no ADR (constitution §6.1); a satellite detail edit with an unchanged index pointer is synchronized (§5) — the wrap doc audit for this batch correctly produced zero edits.
+- Gate evidence discipline: record `.spur/run/<wbs>-check-receipt.json` and a test-gate log so later verify/review steps cite the receipt on the same tree digest instead of re-running the full gate.
+- Coverage bar: ≥90% line and function per measured changed file; both tasks landed the changed files at 100/100.
+- `bun run plugin-smoke` (standalone plugin surface + superskill install dry-run) is not part of `bun run spur-check` — run it explicitly when touching `plugins/sp` hook/lib surfaces.
+- Deferred residuals get their own task files (1216/1217 were filed from the 1214/1215 reviews) rather than silently expanding scope mid-pipeline.
+
+## Claim verification (2026-10-15, this session)
+
+| # | Claim | Source citation | Confidence |
+|---|-------|-----------------|------------|
+| 1 | Git glued short forms are usage errors; `-C <path>` and `-c <name>=<value>` are separated-only | Installed binary, git 2.55.0: `git -C. status` → `unknown option: -C.`; `git -ccore.hooksPath=/tmp/x status` → `unknown option:`; usage line prints `[-C <path>] [-c <name>=<value>]`. Reference: git.git `Documentation/git.txt` (global options) | HIGH |
+| 2 | `--git-dir` / `--work-tree` accept both `=<path>` and a separated value | git 2.55.0: `git --git-dir=/tmp/x rev-parse …` and `git --git-dir /tmp/x rev-parse …` both proceed past option parsing to repository lookup | HIGH |
+| 3 | Option grammar + span-local strip (`GIT_OPTION_VALUE`, `GIT_GLOBAL_OPTION`, `GIT_WITH_GLOBAL_OPTIONS`, `stripGitGlobalOptions`) | `plugins/sp/lib/destructive-policy.ts:132,140,147,158-160` | HIGH |
+| 4 | Destructive subcommand patterns stop at `[^\n]` → line-continuation invocations stay unseen (pre-existing residual) | `plugins/sp/lib/destructive-policy.ts:104,108,110,120` | HIGH |
+| 5 | Residual bypass: non-whitelisted global options still classify safe | Replayed this session: `classifyCommand("git --no-pager push --force")`, `"git -p push -f"`, `"git --namespace=x reset --hard"` → `null`; `git --no-pager`/`-p`/`--namespace=x rev-parse` all accepted by git 2.55.0; the `-C` control → destructive label | HIGH |
+| 6 | `--bare` is also accepted by git but outside the whitelist | Option accepted (failure occurs at repository resolution, not option parsing); push semantics not replayed | MEDIUM |
+| 7 | Runner binds cwd/env per invocation: `spawnSync(..., { cwd: context.cwd, env: context.env ?? getEnvVars() })` | `packages/app/src/services/pr-review/index.ts:130-133` | HIGH |
+| 8 | `path.resolve(cwd, p)` roots relative paths at cwd and leaves absolute paths absolute | Replayed: `path.resolve('/a','rel.txt')` → `/a/rel.txt`; `path.resolve('/a','/abs.txt')` → `/abs.txt`. Reference: Node.js `path` API docs | HIGH |
+| 9 | `bun run plugin-smoke` is not part of `bun run spur-check` | root `package.json` scripts: `spur-check` = `bun run lint && bun run spur-check:tests`; `plugin-smoke` is a separate script | HIGH |
+| 10 | Contract-restoring bug fixes need no ADR | `docs/99_PROJECT_CONSTITUTION.md` §6.1 (project authority) | HIGH |
