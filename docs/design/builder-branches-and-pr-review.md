@@ -153,8 +153,8 @@ Retired modes print one notice and run their replacement: `full`→`review --cod
   and for `pr-status`, `pr-check`, `pr-open`, `pr-review` (task 1219), plus a deprecation note for
   `pr`. After the alias release, `builder`'s frozen set becomes `bump-ver`, `drop-tags`,
   `publish`, `show-branches`, `pr-status`, `pr-check`, `pr-open`, `pr-review`.
-- Docs: `sp:spur-cli` `references/builder.md` verb map + `show-branches` section; this satellite
-  indexed in `docs/04_DESIGN.md`.
+- Docs: `sp:spur-cli` `references/builder.md` verb map + `show-branches` and `pr-<verb>`
+  sections; this satellite indexed in `docs/04_DESIGN.md`.
 
 ## 5. Tradeoffs and open questions
 
