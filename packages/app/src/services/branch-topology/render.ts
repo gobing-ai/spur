@@ -131,7 +131,6 @@ export function renderGitGraph(topology: BranchTopology, graph: GraphOptions): s
     if (baseId !== MERMAID_DEFAULT_BRANCH) lines.push(`${INDENT}branch ${base}`);
 
     const tagsBySha = collectTags(topology.branches);
-    const emittedShas = new Set<string>();
     const usedIds = new Set<string>();
     const usedTags = new Set<string>();
 
@@ -153,7 +152,6 @@ export function renderGitGraph(topology: BranchTopology, graph: GraphOptions): s
             `${INDENT}${commitStatement(
                 { sha, subject: '', tags: tagsBySha.get(sha) ?? [] },
                 usedIds,
-                emittedShas,
                 usedTags,
                 undefined,
             )}`,
@@ -161,9 +159,7 @@ export function renderGitGraph(topology: BranchTopology, graph: GraphOptions): s
     }
     for (const [index, commit] of window.slice().reverse().entries()) {
         const isTip = index === window.length - 1;
-        lines.push(
-            `${INDENT}${commitStatement(commit, usedIds, emittedShas, usedTags, isTip ? 'HIGHLIGHT' : commitType(commit))}`,
-        );
+        lines.push(`${INDENT}${commitStatement(commit, usedIds, usedTags, isTip ? 'HIGHLIGHT' : commitType(commit))}`);
     }
 
     for (const row of topology.branches) {
@@ -186,7 +182,6 @@ export function renderGitGraph(topology: BranchTopology, graph: GraphOptions): s
                 `${INDENT}${commitStatement(
                     { sha: row.tip, subject: '', tags: tagsBySha.get(row.tip) ?? [] },
                     usedIds,
-                    emittedShas,
                     usedTags,
                     undefined,
                 )}`,
@@ -200,13 +195,16 @@ export function renderGitGraph(topology: BranchTopology, graph: GraphOptions): s
         const shown = row.commits.slice(0, Math.max(Math.min(graph.maxCommits, row.ahead), 0)).reverse();
         const hidden = Math.max(row.ahead - shown.length, 0);
         if (hidden > 0) {
-            // A literal summary label, not a git token: outside the sanitized ref/naming charset on purpose.
-            lines.push(`${INDENT}commit id:"+${hidden} earlier"`);
+            // A literal summary label, not a git token: outside the sanitized ref/naming charset on
+            // purpose. It still goes through id de-duplication, because mermaid collapses equal ids
+            // into ONE node: two branches hiding the same count would share one summary and a lane
+            // would lose its `+N earlier` node.
+            lines.push(`${INDENT}commit id:"${uniqueId(`+${hidden} earlier`, usedIds)}"`);
         }
         for (const [index, commit] of shown.entries()) {
             const isTip = index === shown.length - 1;
             lines.push(
-                `${INDENT}${commitStatement(commit, usedIds, emittedShas, usedTags, isTip ? 'HIGHLIGHT' : commitType(commit))}`,
+                `${INDENT}${commitStatement(commit, usedIds, usedTags, isTip ? 'HIGHLIGHT' : commitType(commit))}`,
             );
         }
     }
@@ -218,13 +216,11 @@ export function renderGitGraph(topology: BranchTopology, graph: GraphOptions): s
 function commitStatement(
     commit: BranchCommit,
     usedIds: Set<string>,
-    emittedShas: Set<string>,
     usedTags: Set<string>,
     type: 'HIGHLIGHT' | 'REVERSE' | undefined,
 ): string {
     const sha = short(commit.sha);
     const id = uniqueId(sanitizeId(sha), usedIds);
-    emittedShas.add(sha);
     // One statement carries one tag; the first tag name in refname order keeps output deterministic.
     const tag = claimTag(commit.tags[0], usedTags);
     let line = `commit id:"${id}"`;

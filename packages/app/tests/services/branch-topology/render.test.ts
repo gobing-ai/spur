@@ -524,6 +524,40 @@ describe('renderGitGraph', () => {
         expect(graph).not.toContain('handof\n');
     });
 
+    test('two branches hiding the same count each get their own summary id', () => {
+        const topology = fixture({
+            branches: [
+                row({
+                    name: 'one',
+                    ahead: 4,
+                    commits: [
+                        { sha: TIP, subject: 'feat: one', tags: [] },
+                        { sha: MID, subject: 'feat: mid', tags: [] },
+                        { sha: REVERT, subject: 'feat: low', tags: [] },
+                    ],
+                }),
+                row({
+                    name: 'two',
+                    ahead: 4,
+                    commits: [
+                        { sha: C4, subject: 'feat: two', tags: [] },
+                        { sha: C5, subject: 'feat: two mid', tags: [] },
+                        { sha: C6, subject: 'feat: two low', tags: [] },
+                    ],
+                }),
+                row({ name: 'main', tip: BASE, forkPoint: BASE, ahead: 0, contained: true, commits: [] }),
+            ],
+        });
+        const lines = renderGitGraph(topology, GRAPH).split('\n');
+
+        // One summary node per branch: equal ids would collapse into one node in mermaid, robbing a
+        // lane of its `+N earlier` and landing it on the other branch.
+        expect(lines.filter((line) => line.includes('earlier'))).toEqual([
+            '    commit id:"+1 earlier"',
+            '    commit id:"+1 earlier-2"',
+        ]);
+    });
+
     test('never emits the same tag value twice in one diagram', () => {
         // Two rows whose tips are the same tagged commit: only the first statement may name the tag.
         const graph = renderGitGraph(

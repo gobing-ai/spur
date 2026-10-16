@@ -153,6 +153,23 @@ function mkDeepForkRepo(): string {
 }
 
 /**
+ * A fifth fixture for the shared hidden count: two branches four commits ahead of the base, so each
+ * hides exactly one commit at the default `--max-commits 3` and each must keep its own `+1 earlier`.
+ */
+function mkSameHiddenRepo(): string {
+    const repo = mkdtempSync(join(tmpdir(), 'spur-graph-hidden-'));
+    roots.push(repo);
+    git(repo, ['init', '-q', '-b', 'main', '.']);
+    commit(repo, 'a.txt', 'c1');
+    for (const branch of ['a', 'b']) {
+        git(repo, ['checkout', '-q', '-b', branch]);
+        for (const step of ['1', '2', '3', '4']) commit(repo, `${branch}${step}.txt`, `${branch}: ${step}`);
+        git(repo, ['checkout', '-q', 'main']);
+    }
+    return repo;
+}
+
+/**
  * A second fixture for the case the artifact run hit: a remote exists, origin/HEAD points at
  * `origin/main`, and the local `main` has diverged from it. The base line is then `origin/main`
  * while a row named `main` is drawn through mermaid's implicit branch.
@@ -336,6 +353,32 @@ describe('branch-topology gitGraph against the pinned mermaid', () => {
                 expect(typeof positions[sha]).toBe('number');
                 expect(forkX).toBeLessThan(positions[sha] ?? Number.NEGATIVE_INFINITY);
             }
+        },
+        TIMEOUT_MS,
+    );
+
+    test(
+        'two branches hiding the same count keep one summary node each',
+        async () => {
+            const repo = mkSameHiddenRepo();
+            const report = JSON.parse(runReport(repo, ['--format', 'json'])) as {
+                branches: Array<{ name: string; ahead: number }>;
+            };
+            const hidden = report.branches.filter((row) => row.name === 'a' || row.name === 'b');
+            expect(hidden.map((row) => row.ahead)).toEqual([4, 4]);
+
+            const graphText = renderGraph(repo);
+            const summaries = [...graphText.matchAll(/commit id:"([^"]*earlier[^"]*)"/g)].map(
+                (match) => match[1] ?? '',
+            );
+            // Each branch's hidden count is drawn: identical ids would collapse into one node and rob a
+            // lane of its summary.
+            const labels = (await renderedLabels(mermaid, graphText, 'probe-same-hidden')).filter((label) =>
+                label.includes('earlier'),
+            );
+            expect(labels).toHaveLength(2);
+            expect(summaries).toHaveLength(2);
+            expect(new Set(summaries).size).toBe(2);
         },
         TIMEOUT_MS,
     );

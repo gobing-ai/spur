@@ -90,11 +90,11 @@ Rendering:
   commits in statement order — first one `commit` per fork point that sits deeper than the shown
   window, deepest first (`behind >= --max-commits`, deduplicated across branches sharing it), then
   the window's newest `--max-commits` (default 3) base commits oldest to newest with the tip last; a
-  fork point the window already draws is one of its own commits, so it is never repeated. Then, for
-  each non-contained branch: `checkout <base>` → one base `commit` at the fork point when the window
-  did not show it → `branch <name>` → up to `--max-commits` `commit` nodes for the newest commits,
-  preceded by one `commit id:"+N earlier"` when more are hidden → tip as `type: HIGHLIGHT`. Commits
-  whose subject starts with `Revert "` render `type: REVERSE`.
+  fork point the window already draws is one of its own commits, so it is never repeated, and every
+  fork point is therefore on the base line — no per-branch fork statement exists. Then, for each
+  non-contained branch: `checkout <base>` → `branch <name>` → up to `--max-commits` `commit` nodes for
+  the newest commits, preceded by one `commit id:"+N earlier"` when more are hidden → tip as
+  `type: HIGHLIGHT`. Commits whose subject starts with `Revert "` render `type: REVERSE`.
   Contained branches render as a short branch joined back with `merge <name>` so they read as
   integrated rather than as open lines (`--hide-contained` drops them). Base tags at shown commits
   become `tag:"…"`. Names/labels are sanitized: characters outside `[A-Za-z0-9._/-]` → `-`,
