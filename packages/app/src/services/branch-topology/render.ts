@@ -99,10 +99,12 @@ function markdownCell(value: string): string {
 // ─── Mermaid ────────────────────────────────────────────────────────────────
 
 /**
- * One condensed gitGraph: the base line (its newest commit nodes plus one node per distinct fork
- * point), then one branch statement per non-contained row with up to `maxCommits` commit nodes, and
- * a merge-back line per contained row. Ids and labels are sanitized and de-duplicated because a
- * branch name may carry quotes, dots or slashes and mermaid node ids must stay unique.
+ * One condensed gitGraph: the base line, then one branch statement per non-contained row with up to
+ * `maxCommits` commit nodes, and a merge-back line per contained row. The base line is strictly
+ * increasing in age — fork points older than the shown window first (deepest first), then the window
+ * oldest to newest — because mermaid draws commits in statement order. Ids and labels are sanitized
+ * and de-duplicated because a branch name may carry quotes, dots or slashes and node ids must stay
+ * unique.
  *
  * Mermaid-side constraints the emitted text must satisfy (proved by the heavy parse proof): every
  * branch needs a commit of its own before it can merge back (a merge whose heads are equal is
@@ -133,9 +135,32 @@ export function renderGitGraph(topology: BranchTopology, graph: GraphOptions): s
     const usedIds = new Set<string>();
     const usedTags = new Set<string>();
 
-    const baseCommits = (baseRow?.commits ?? []).slice(0, Math.max(graph.maxCommits, 0)).reverse();
-    for (const [index, commit] of baseCommits.entries()) {
-        const isTip = index === baseCommits.length - 1;
+    // The base line reads left to right in age, because mermaid places commit statements in
+    // statement order: a fork point deeper than the window is emitted before it, deepest first, so no
+    // base-line commit is ever drawn to the right of a newer one (a fork point inside the window is
+    // one of its commits and is de-duplicated below).
+    //
+    // Claim confidence (sp:source-driven-development, all HIGH = measured this session):
+    // - statement-order layout is `mermaid@11.15.0` behaviour, pinned at `apps/web/package.json:28`
+    //   and asserted by `apps/web/tests/branch-topology-graph.heavy.test.ts:298` (x increasing in
+    //   statement order, and a deep fork drawn left of every window commit).
+    // - `behind` is the left count of `git rev-list --left-right --count <base>...<ref>`, which the
+    //   installed `git rev-list` 2.55.0 documents as "commits from the left side are prefixed with <";
+    //   the mapping is exercised by `packages/app/tests/services/branch-topology/index.test.ts:139`.
+    const window = (baseRow?.commits ?? []).slice(0, Math.max(graph.maxCommits, 0));
+    for (const { sha } of deepForkPoints(topology, baseRow, window.length, graph.hideContained)) {
+        lines.push(
+            `${INDENT}${commitStatement(
+                { sha, subject: '', tags: tagsBySha.get(sha) ?? [] },
+                usedIds,
+                emittedShas,
+                usedTags,
+                undefined,
+            )}`,
+        );
+    }
+    for (const [index, commit] of window.slice().reverse().entries()) {
+        const isTip = index === window.length - 1;
         lines.push(
             `${INDENT}${commitStatement(commit, usedIds, emittedShas, usedTags, isTip ? 'HIGHLIGHT' : commitType(commit))}`,
         );
@@ -146,19 +171,9 @@ export function renderGitGraph(topology: BranchTopology, graph: GraphOptions): s
         if (row.contained && graph.hideContained) continue;
 
         lines.push(`${INDENT}checkout ${base}`);
-        // No fork node when the branch sits exactly on its own fork point: the branch node below is
-        // that same commit, and drawing both would repeat the label under a de-duplicated id.
-        if (row.forkPoint.length > 0 && row.forkPoint !== row.tip && !emittedShas.has(short(row.forkPoint))) {
-            lines.push(
-                `${INDENT}${commitStatement(
-                    { sha: row.forkPoint, subject: '', tags: tagsBySha.get(row.forkPoint) ?? [] },
-                    usedIds,
-                    emittedShas,
-                    usedTags,
-                    undefined,
-                )}`,
-            );
-        }
+        // No fork node here: every fork point is already on the base line above — hoisted when it is
+        // older than the window, drawn by the window itself when it is inside it — so a branch never
+        // introduces a base-line commit after the base tip.
         const branch = refToken(row.name, usedRefs);
         // mermaid creates `main` itself; re-creating it is an error, so a row named `main` (possible
         // when the base is `origin/main`) is drawn by checking that branch out instead.
@@ -225,6 +240,31 @@ function claimTag(name: string | undefined, usedTags: Set<string>): string | und
     if (usedTags.has(sanitized)) return undefined;
     usedTags.add(sanitized);
     return sanitized;
+}
+
+/**
+ * Fork points strictly older than the emitted base window, deepest (oldest) first. `behind` counts the
+ * base's own commits after the fork point, so `behind >= windowLength` places the fork before every
+ * commit the base line draws; rows sharing one fork point contribute it once. (Claim confidence and
+ * anchors for both halves sit on the base-line call site in `renderGitGraph`.)
+ */
+function deepForkPoints(
+    topology: BranchTopology,
+    baseRow: BranchRow | null,
+    windowLength: number,
+    hideContained: boolean,
+): Array<{ sha: string; behind: number }> {
+    const behindBySha = new Map<string, number>();
+    for (const row of topology.branches) {
+        if (row === baseRow) continue;
+        if (row.contained && hideContained) continue;
+        if (row.forkPoint.length === 0 || row.forkPoint === row.tip) continue;
+        if (row.behind < windowLength) continue;
+        if (!behindBySha.has(row.forkPoint)) behindBySha.set(row.forkPoint, row.behind);
+    }
+    return [...behindBySha]
+        .map(([sha, behind]) => ({ sha, behind }))
+        .sort((a, b) => b.behind - a.behind || (a.sha < b.sha ? -1 : 1));
 }
 
 /** A tip is HIGHLIGHT by contract; anywhere else a revert subject is the one special type. */

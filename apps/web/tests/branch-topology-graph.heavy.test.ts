@@ -133,6 +133,26 @@ function mkRepo(): string {
 }
 
 /**
+ * A third fixture for the deep-fork case: `main` has five commits and `deep` forked at its second
+ * (behind 3), so with the default `--max-commits 3` the fork point sits strictly outside the window
+ * the base line draws — the shape whose fork node used to be drawn right of the base tip.
+ */
+function mkDeepForkRepo(): string {
+    const repo = mkdtempSync(join(tmpdir(), 'spur-graph-deep-'));
+    roots.push(repo);
+    git(repo, ['init', '-q', '-b', 'main', '.']);
+    commit(repo, 'a.txt', 'c1');
+    commit(repo, 'b.txt', 'c2');
+    git(repo, ['checkout', '-q', '-b', 'deep']);
+    commit(repo, 'd.txt', 'deep: one');
+    git(repo, ['checkout', '-q', 'main']);
+    commit(repo, 'c.txt', 'c3');
+    commit(repo, 'e.txt', 'c4');
+    commit(repo, 'f.txt', 'c5');
+    return repo;
+}
+
+/**
  * A second fixture for the case the artifact run hit: a remote exists, origin/HEAD points at
  * `origin/main`, and the local `main` has diverged from it. The base line is then `origin/main`
  * while a row named `main` is drawn through mermaid's implicit branch.
@@ -151,16 +171,21 @@ function mkDivergedRepo(): string {
     return repo;
 }
 
-/** Run the verb in `repo` and return the body of its single fenced mermaid block. */
-function renderGraph(repo: string): string {
-    const run = spawnSync(process.execPath, [CLI_ENTRY, 'builder', 'show-branches', '--no-logo'], {
+/** Run the verb in `repo` and return stdout (the proof only reads reports, never writes). */
+function runReport(repo: string, args: string[] = []): string {
+    const run = spawnSync(process.execPath, [CLI_ENTRY, 'builder', 'show-branches', '--no-logo', ...args], {
         cwd: repo,
         encoding: 'utf8',
     });
     if (run.status !== 0) {
         throw new Error(`builder show-branches failed (exit ${run.status}): ${(run.stderr ?? '').trim()}`);
     }
-    const lines = (run.stdout ?? '').split('\n');
+    return run.stdout ?? '';
+}
+
+/** The body of the report's single fenced mermaid block. */
+function renderGraph(repo: string): string {
+    const lines = runReport(repo).split('\n');
     const start = lines.indexOf('```mermaid');
     expect(start).toBeGreaterThan(-1);
     return lines.slice(start + 1, lines.indexOf('```', start + 1)).join('\n');
@@ -192,8 +217,8 @@ async function expectParsed(mermaid: Mermaid, text: string): Promise<void> {
     expect(result.status).toBe('ok');
 }
 
-/** The `<text>` labels of a rendered diagram — what a reader actually sees. */
-async function renderedLabels(mermaid: Mermaid, text: string, id: string): Promise<string[]> {
+/** Render a diagram to SVG (a DOM-only failure is the environment, never a graph verdict). */
+async function renderedSvg(mermaid: Mermaid, text: string, id: string): Promise<string> {
     const result = await attempt(async () => (await mermaid.render(id, text)).svg);
     if (result.status === 'dom-unavailable') {
         throw new Error(`environment limitation: mermaid.render could not run — ${result.message}.`);
@@ -201,7 +226,30 @@ async function renderedLabels(mermaid: Mermaid, text: string, id: string): Promi
     if (result.status === 'error' || result.value === undefined) {
         throw new Error(`mermaid could not render the graph: ${result.message}`);
     }
-    return [...result.value.matchAll(/<text[^>]*>([^<]*)<\/text>/g)].map((match) => match[1] ?? '');
+    return result.value;
+}
+
+/** The `<text>` labels of a rendered diagram — what a reader actually sees. */
+async function renderedLabels(mermaid: Mermaid, text: string, id: string): Promise<string[]> {
+    return [...(await renderedSvg(mermaid, text, id)).matchAll(/<text[^>]*>([^<]*)<\/text>/g)].map(
+        (match) => match[1] ?? '',
+    );
+}
+
+/**
+ * label → x of a rendered diagram. mermaid@11.15.0 (`apps/web/package.json:28`, HIGH — measured this
+ * session) lays commit statements out left to right in statement order, which is the premise the
+ * base-line ordering in `renderGitGraph` relies on; the deep-fork test below asserts it in-tree.
+ */
+async function renderedX(mermaid: Mermaid, text: string, id: string): Promise<Record<string, number>> {
+    const positions: Record<string, number> = {};
+    for (const match of (await renderedSvg(mermaid, text, id)).matchAll(
+        /<text[^>]*x="([\d.]+)"[^>]*>([^<]*)<\/text>/g,
+    )) {
+        const label = (match[2] ?? '').trim();
+        if (label.length > 0) positions[label] = Number(match[1]);
+    }
+    return positions;
 }
 
 describe('branch-topology gitGraph against the pinned mermaid', () => {
@@ -246,6 +294,48 @@ describe('branch-topology gitGraph against the pinned mermaid', () => {
             expect(diverged).toContain('    branch origin/main');
             expect(diverged).toContain('    checkout main\n');
             await expectParsed(mermaid, diverged);
+        },
+        TIMEOUT_MS,
+    );
+
+    test(
+        'a fork deeper than the shown window is drawn left of every base-window commit',
+        async () => {
+            const repo = mkDeepForkRepo();
+            const report = JSON.parse(runReport(repo, ['--format', 'json'])) as {
+                branches: Array<{
+                    name: string;
+                    behind: number;
+                    forkPoint: string;
+                    commits: Array<{ sha: string }>;
+                }>;
+            };
+            const base = report.branches.find((row) => row.name === 'main');
+            const deep = report.branches.find((row) => row.name === 'deep');
+            expect(base?.commits).toHaveLength(5);
+            expect(deep?.behind).toBe(3);
+            // The window the graph draws: maxCommits 3 of the base row.
+            const window = (base?.commits ?? []).slice(0, 3).map((commit) => commit.sha.slice(0, 7));
+            expect(window).toHaveLength(3);
+            expect(window).not.toContain(deep?.forkPoint.slice(0, 7) ?? '');
+
+            const graphText = renderGraph(repo);
+            const positions = await renderedX(mermaid, graphText, 'probe-deep-fork');
+            const forkX = positions[deep?.forkPoint.slice(0, 7) ?? ''];
+
+            // The premise the base-line order depends on: declaring commits in age order draws them in
+            // age order, because mermaid advances the diagram in statement order.
+            const declared = [...graphText.matchAll(/commit id:"([^"]+)"/g)].map((match) => match[1] ?? '');
+            const xs = declared.map((label) => positions[label] ?? Number.NaN);
+            expect(declared).toHaveLength(5);
+            expect(xs.every((x) => Number.isFinite(x))).toBe(true);
+            expect(xs).toEqual([...xs].sort((a, b) => a - b));
+
+            expect(typeof forkX).toBe('number');
+            for (const sha of window) {
+                expect(typeof positions[sha]).toBe('number');
+                expect(forkX).toBeLessThan(positions[sha] ?? Number.NEGATIVE_INFINITY);
+            }
         },
         TIMEOUT_MS,
     );

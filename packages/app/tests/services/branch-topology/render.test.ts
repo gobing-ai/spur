@@ -14,6 +14,17 @@ const TIP = '2222222222222222222222222222222222222222';
 const MID = '3333333333333333333333333333333333333333';
 const REVERT = '4444444444444444444444444444444444444444';
 const STALE = '5555555555555555555555555555555555555555';
+// Distinct 7-character prefixes for the deep-fork fixture: C1 is the oldest base commit, C6 the tip.
+const C1 = 'aaaaaaa1111111111111111111111111111111111';
+const C2 = 'bbbbbbb2222222222222222222222222222222222';
+const C3 = 'ccccccc3333333333333333333333333333333333';
+const C4 = 'ddddddd4444444444444444444444444444444444';
+const C5 = 'eeeeeee5555555555555555555555555555555555';
+const C6 = 'fffffff6666666666666666666666666666666666';
+const D1 = '1111111d11111111111111111111111111111111';
+const D2 = '2222222d22222222222222222222222222222222';
+const O1 = '3333333o33333333333333333333333333333333';
+const S1 = '4444444s44444444444444444444444444444444';
 
 const GRAPH: GraphOptions = { maxCommits: 3, hideContained: false };
 
@@ -267,19 +278,87 @@ describe('renderGitGraph', () => {
         expect(graph).toContain('    merge "1.x"');
     });
 
-    test('emits one de-duplicated base node per distinct fork point', () => {
+    test('emits one de-duplicated base node per distinct fork point inside the window', () => {
+        // Both rows fork at MID, which the base window already draws one commit behind the tip.
         const topology = fixture({
             branches: [
-                row({ name: 'one', ahead: 1, forkPoint: MID, commits: [{ sha: TIP, subject: 'feat: one', tags: [] }] }),
-                row({ name: 'two', ahead: 1, forkPoint: MID, commits: [{ sha: TIP, subject: 'feat: two', tags: [] }] }),
-                row({ name: 'main', tip: BASE, forkPoint: BASE, ahead: 0, contained: true, commits: [] }),
+                row({
+                    name: 'one',
+                    ahead: 1,
+                    behind: 1,
+                    forkPoint: MID,
+                    commits: [{ sha: TIP, subject: 'feat: one', tags: [] }],
+                }),
+                row({
+                    name: 'two',
+                    ahead: 1,
+                    behind: 1,
+                    forkPoint: MID,
+                    commits: [{ sha: TIP, subject: 'feat: two', tags: [] }],
+                }),
+                row({
+                    name: 'main',
+                    tip: BASE,
+                    forkPoint: BASE,
+                    ahead: 0,
+                    contained: true,
+                    commits: [
+                        { sha: BASE, subject: 'init', tags: [] },
+                        { sha: MID, subject: 'earlier', tags: [] },
+                    ],
+                }),
                 row({ name: 'stale', tip: BASE, forkPoint: BASE, ahead: 0, contained: true }),
             ],
         });
         const graph = renderGitGraph(topology, GRAPH);
 
         expect(graph.match(/commit id:"3333333"/g)).toHaveLength(1);
-        expect(graph).toContain('    checkout main\n    commit id:"3333333"');
+        // A fork point the window draws is never repeated as a separate statement.
+        expect(graph).not.toContain('checkout main\n    commit id:"3333333"');
+    });
+
+    test('a fork deeper than the base window is drawn before it, deepest first', () => {
+        // main = C1..C6 (window with maxCommits 3 = C4, C5, C6, tip last); `older` forked at C1
+        // (behind 5), `deep` at C2 (behind 4) and `shallow` at C5 (behind 1, inside the window).
+        const commits = (shas: string[]) => shas.map((sha) => ({ sha, subject: sha.slice(0, 7), tags: [] }));
+        const topology: BranchTopology = {
+            base: 'main',
+            generatedAt: '2026-10-16T16:00:00.000Z',
+            omitted: 0,
+            warnings: [],
+            branches: [
+                // Listed newest-commit-first, so the hoist order can only come from the comparator.
+                row({ name: 'deep', tip: D2, forkPoint: C2, ahead: 2, behind: 4, commits: commits([D2, D1]) }),
+                row({ name: 'older', tip: O1, forkPoint: C1, ahead: 1, behind: 5, commits: commits([O1]) }),
+                row({ name: 'shallow', tip: S1, forkPoint: C5, ahead: 1, behind: 1, commits: commits([S1]) }),
+                row({
+                    name: 'main',
+                    tip: C6,
+                    forkPoint: C6,
+                    ahead: 0,
+                    contained: true,
+                    commits: commits([C6, C5, C4, C3, C2, C1]),
+                }),
+                row({ name: 'stale', tip: C6, forkPoint: C6, ahead: 0, contained: true }),
+            ],
+        };
+        const lines = renderGitGraph(topology, GRAPH).split('\n');
+        const firstCheckout = lines.findIndex((line) => line.startsWith('    checkout'));
+        // Graph ids are 7-character abbreviations of the commit shas.
+        const id = (sha: string): string => sha.slice(0, 7);
+        const baseLineIds = lines
+            .slice(0, firstCheckout)
+            .filter((line) => line.startsWith('    commit'))
+            .map((line) => line.match(/id:"([^"]+)"/)?.[1] ?? '');
+
+        // Strictly increasing in age, deepest fork first, base tip last — mermaid draws in this order.
+        expect(baseLineIds).toEqual([C1, C2, C4, C5, C6].map(id));
+        expect(lines.filter((line) => line.includes(`id:"${id(C5)}"`))).toHaveLength(1);
+        expect(lines.find((line) => line.includes(`id:"${id(C6)}"`))).toContain('type: HIGHLIGHT');
+        // Every base-line commit is declared before the deep fork's branch statement.
+        const forkIndex = lines.findIndex((line) => line.includes(`id:"${id(C1)}"`));
+        const deepBranchIndex = lines.indexOf('    branch deep');
+        expect(forkIndex).toBeLessThan(deepBranchIndex);
     });
 
     test('a single-branch repository renders the base line only', () => {
