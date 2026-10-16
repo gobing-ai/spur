@@ -571,7 +571,7 @@ as `owner: quota` events through the single availability writer. `--dry-run` pri
 executor changes and writes nothing. A missing/failing capture exits non-zero and changes nothing;
 the capture is bounded by a finite deadline (300000 ms default in `CodexbarUsageSource` via
 `@gobing-ai/ts-runtime` `NodeProcessExecutor.run({ timeout })`, overridable with
-`SPUR_AGENT_USAGE_TIMEOUT_MS`), and an interrupted run
+`bootstrap.options.agentUsageCaptureTimeoutMs`), and an interrupted run
 (timeout/cancel/signal/error) is unusable even when partial stdout parses — it surfaces as
 `UsageSourceError` naming the deadline, never an installation hint, before any write.
 Per-provider error entries are skipped and reported; partial-provider application holds only for

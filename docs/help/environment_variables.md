@@ -39,8 +39,9 @@
 ## Execution policy (config-first per ADR-112)
 
 Canonical values live in `bootstrap.options` (`schedulerCustomTimeoutMs`, `schedulerKillGraceMs`,
-`historyRefreshTimeoutMs`, `asyncRegisterTimeoutMs`). The legacy env chain remains a fallback;
-the per-job contract is still env.
+`historyRefreshTimeoutMs`, `asyncRegisterTimeoutMs`, `agentUsageCaptureTimeoutMs`). The legacy env chain
+remains a fallback for the older keys; `agentUsageCaptureTimeoutMs` has no env form (ADR-120). The
+per-job contract is still env.
 
 | Variable | Read by | Purpose |
 | --- | --- | --- |

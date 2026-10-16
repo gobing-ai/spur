@@ -7,7 +7,7 @@
 import { homedir } from 'node:os';
 import { join } from 'node:path';
 import { type UsageCapture, type UsageSource, UsageSourceError } from '@gobing-ai/spur-app';
-import { getEnvVars } from '@gobing-ai/spur-config';
+import { getAppOptions, getEnvVars, type SpurConfig } from '@gobing-ai/spur-config';
 import { NodeProcessExecutor, type ProcessExecutor } from '@gobing-ai/ts-runtime';
 
 /**
@@ -31,42 +31,50 @@ const CODEXBAR_ARGV = ['codexbar', 'usage', '--format', 'json'];
  * min 15 s / p50 51 s / p95 142 s / max 191 s, and 4 runs crossed 180 s and
  * failed closed. The original limit was headroom over a single ~113 s sample
  * (I31/0904), not a percentile, so it sat below p99. Operators trade latency
- * against a hang with {@link CAPTURE_TIMEOUT_ENV} instead of a rebuild.
+ * against a hang with {@link CAPTURE_TIMEOUT_OPTION} instead of a rebuild.
  */
 export const DEFAULT_CAPTURE_TIMEOUT_MS = 300_000;
 
-/** Operator override for the capture deadline, in milliseconds (0908 R1 keeps this out of the CLI surface). */
-export const CAPTURE_TIMEOUT_ENV = 'SPUR_AGENT_USAGE_TIMEOUT_MS';
+/**
+ * `bootstrap.options` key overriding the capture deadline, in milliseconds. A
+ * config option, not an env var: deadlines are config policy (ADR-112/ADR-120),
+ * and 0908 R1 keeps the knob off the CLI surface.
+ */
+export const CAPTURE_TIMEOUT_OPTION = 'agentUsageCaptureTimeoutMs';
+
+/** Upper bound of a Node/Bun timer; a larger value would fire immediately. */
+const MAX_TIMER_MS = 2_147_483_647;
 
 /**
- * Resolve the capture deadline from an injected env: a positive whole number of
- * milliseconds is honored, anything else (missing, empty, non-numeric, zero,
- * negative, fractional, or beyond the timer range) falls back to the default so
- * a bad override cannot disable the deadline or crash the spawn.
+ * Resolve the capture deadline from `bootstrap.options`. Absent → default. A
+ * malformed value throws rather than falling back, so a typo in the operator's
+ * config surfaces instead of silently running on the default (the
+ * `asyncRegisterTimeoutMs` precedent, task 0902).
  */
-export function resolveCaptureTimeoutMs(env: Record<string, string | undefined> = getEnvVars()): number {
-    const raw = env[CAPTURE_TIMEOUT_ENV];
-    if (raw === undefined || raw.trim() === '') return DEFAULT_CAPTURE_TIMEOUT_MS;
-    const parsed = Number(raw);
-    const usable = Number.isInteger(parsed) && parsed > 0 && parsed <= 2_147_483_647;
-    return usable ? parsed : DEFAULT_CAPTURE_TIMEOUT_MS;
+export function resolveCaptureTimeoutMs(spurConfig: Pick<SpurConfig, 'bootstrap'> | null | undefined): number {
+    const raw = getAppOptions(spurConfig, CAPTURE_TIMEOUT_OPTION, undefined);
+    if (raw === undefined) return DEFAULT_CAPTURE_TIMEOUT_MS;
+    if (typeof raw === 'number' && Number.isInteger(raw) && raw > 0 && raw <= MAX_TIMER_MS) return raw;
+    throw new UsageSourceError(
+        `bootstrap.options.${CAPTURE_TIMEOUT_OPTION} must be a positive integer number of milliseconds (at most ${MAX_TIMER_MS}); received ${JSON.stringify(raw)}`,
+    );
 }
 
 /**
  * Codexbar `UsageSource` implementation (B6 0892 R5): runs
  * `codexbar usage --format json` and returns the raw capture. `command` is
  * injectable so tests can exercise the missing-binary path without mocking
- * process internals; `timeoutMs` defaults to the env-resolved deadline
- * ({@link resolveCaptureTimeoutMs}) and is a test-only override of the same
- * boundary — invalid values (0/NaN/negative/Infinity) fall back to the default
- * so a test cannot accidentally disable the deadline (0908 R1).
+ * process internals; `timeoutMs` is the config-resolved deadline
+ * ({@link resolveCaptureTimeoutMs}, supplied by the command) — invalid values
+ * (0/NaN/negative/Infinity) fall back to the default so a caller cannot
+ * accidentally disable the deadline (0908 R1).
  */
 export class CodexbarUsageSource implements UsageSource {
     readonly name = 'codexbar';
 
     constructor(
         private readonly command: readonly string[] = CODEXBAR_ARGV,
-        private readonly timeoutMs: number = resolveCaptureTimeoutMs(),
+        private readonly timeoutMs: number = DEFAULT_CAPTURE_TIMEOUT_MS,
         // Seam for hermetic tests (2026-10-14: the real-spawn success case load-flaked at
         // 20s twice and 60s once on contended hosts; the deadline/non-zero cases below keep
         // the real-spawn integration coverage).
@@ -102,7 +110,7 @@ export class CodexbarUsageSource implements UsageSource {
         if (outcome === 'timeout' || outcome === 'cancelled') {
             throw new UsageSourceError(
                 `\`${this.command.join(' ')}\` capture exceeded the ${this.timeoutMs} ms deadline and was terminated — ` +
-                    `result is unusable (fail-closed); retry, raise ${CAPTURE_TIMEOUT_ENV}, or investigate the codexbar hang`,
+                    `result is unusable (fail-closed); retry, raise bootstrap.options.${CAPTURE_TIMEOUT_OPTION}, or investigate the codexbar hang`,
             );
         }
         if (outcome === 'signal' || outcome === 'error') {

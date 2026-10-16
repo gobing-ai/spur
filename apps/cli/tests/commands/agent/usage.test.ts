@@ -358,6 +358,28 @@ describe('spur agent usage — flag and output surfaces', () => {
         }
     });
 
+    test('a malformed bootstrap.options capture deadline fails closed (exit 1) before codexbar is spawned', async () => {
+        const { cwd, home, out, cleanup } = await makeProjectCtx();
+        try {
+            const configPath = join(cwd, '.spur', 'config.yaml');
+            const config = await readFile(configPath, 'utf8');
+            await writeFile(
+                configPath,
+                config.replace('bootstrap:\n', 'bootstrap:\n  options:\n    agentUsageCaptureTimeoutMs: "300000"\n'),
+            );
+            // Only the snapshot path is stubbed: the default source must be built from config,
+            // and the bad value must stop the run before any spawn or write.
+            setAgentUsageSourceForTesting({ snapshotPath: join(home, 'agent-usage.json') });
+            expect(await main(['agent', 'usage', '--dry-run'], { cwd, output: out, dbUrl: ':memory:' })).toBe(1);
+            expect(out.errors.join('\n')).toContain(
+                'bootstrap.options.agentUsageCaptureTimeoutMs must be a positive integer number of milliseconds',
+            );
+        } finally {
+            resetAgentUsageSourceForTesting();
+            await cleanup();
+        }
+    });
+
     test('a non-usage error from the source propagates instead of being reported as a capture failure', async () => {
         const { cwd, home, out, cleanup } = await makeProjectCtx();
         try {

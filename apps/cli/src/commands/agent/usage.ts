@@ -9,7 +9,11 @@ import {
 } from '@gobing-ai/spur-app';
 import type { CliContext } from '../../context';
 import { toEnvelopeJson } from '../../output';
-import { CodexbarUsageSource, defaultAgentUsageSnapshotPath } from '../../services/agent-usage-source';
+import {
+    CodexbarUsageSource,
+    defaultAgentUsageSnapshotPath,
+    resolveCaptureTimeoutMs,
+} from '../../services/agent-usage-source';
 import { SHARED_OPTIONS } from '../shared-options';
 
 /** Injectable seams for `runAgentUsage` tests (source stub, snapshot override). */
@@ -63,16 +67,19 @@ export async function runAgentUsage(
         }
         return 2;
     }
-    const options: RunAgentUsageOptions = {
-        // Spawn-capable source + HOME-derived snapshot default live in this (CLI) layer.
-        source: deps?.source ?? _testUsageDeps?.source ?? new CodexbarUsageSource(),
-        snapshotPath: deps?.snapshotPath ?? _testUsageDeps?.snapshotPath ?? defaultAgentUsageSnapshotPath(),
-        // 0892 R2: the CLI flag must reach the producer or --dry-run silently
-        // degrades to a full run (snapshot write + drain).
-        dryRun: flags.dryRun === true,
-    };
     let result: AgentUsageRunResult;
     try {
+        const options: RunAgentUsageOptions = {
+            // Spawn-capable source + HOME-derived snapshot default live in this (CLI) layer.
+            source:
+                deps?.source ??
+                _testUsageDeps?.source ??
+                new CodexbarUsageSource(undefined, resolveCaptureTimeoutMs(context.spurConfig)),
+            snapshotPath: deps?.snapshotPath ?? _testUsageDeps?.snapshotPath ?? defaultAgentUsageSnapshotPath(),
+            // 0892 R2: the CLI flag must reach the producer or --dry-run silently
+            // degrades to a full run (snapshot write + drain).
+            dryRun: flags.dryRun === true,
+        };
         result = await runAgentUsageProducer(
             {
                 getDb: () => context.getDb(),

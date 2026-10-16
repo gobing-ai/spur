@@ -5,7 +5,7 @@ import { join } from 'node:path';
 import { UsageSourceError } from '@gobing-ai/spur-app';
 import type { ProcessOptions, ProcessResult } from '@gobing-ai/ts-runtime';
 import {
-    CAPTURE_TIMEOUT_ENV,
+    CAPTURE_TIMEOUT_OPTION,
     CodexbarUsageSource,
     DEFAULT_CAPTURE_TIMEOUT_MS,
     defaultAgentUsageSnapshotPath,
@@ -27,10 +27,11 @@ describe('CodexbarUsageSource', () => {
     });
 });
 
-// 2026-10-15 regression: the default argv asked for `--provider all` (106
+// 2026-10-16 regression: the default argv asked for `--provider all` (106
 // providers, 89 uncredentialed) and its wall time failed the job closed on 4 of
 // 140 scheduled runs. The default capture now scopes to the operator-enabled
-// set, and the deadline is env-overridable above the observed p99.
+// set, and the deadline sits above the observed p99, overridable from
+// `bootstrap.options` (config policy, never an env var — ADR-120).
 describe('CodexbarUsageSource capture scope + deadline', () => {
     const recordingExecutor = (
         seen: ProcessOptions[],
@@ -59,23 +60,34 @@ describe('CodexbarUsageSource capture scope + deadline', () => {
         expect(seen[0]?.args).not.toContain('all');
     });
 
-    test('the deadline defaults above the observed p99 and honors the env override', () => {
+    const withOption = (value: unknown) => ({ bootstrap: { options: { [CAPTURE_TIMEOUT_OPTION]: value } } });
+
+    test('the deadline defaults above the observed p99 and honors the config override', () => {
         expect(DEFAULT_CAPTURE_TIMEOUT_MS).toBe(300_000);
-        expect(resolveCaptureTimeoutMs({})).toBe(300_000);
-        expect(resolveCaptureTimeoutMs({ [CAPTURE_TIMEOUT_ENV]: '600000' })).toBe(600_000);
+        expect(resolveCaptureTimeoutMs(undefined)).toBe(300_000);
+        expect(resolveCaptureTimeoutMs({ bootstrap: {} })).toBe(300_000);
+        expect(resolveCaptureTimeoutMs(withOption(600_000))).toBe(600_000);
+        // An empty YAML value (null) reads as unset, like every bootstrap.options key.
+        expect(resolveCaptureTimeoutMs(withOption(null))).toBe(300_000);
     });
 
-    test('an unusable override falls back to the default rather than disabling the deadline', () => {
-        for (const value of ['', '   ', 'nope', '0', '-1', '1.5', 'Infinity', '99999999999']) {
-            expect(resolveCaptureTimeoutMs({ [CAPTURE_TIMEOUT_ENV]: value })).toBe(DEFAULT_CAPTURE_TIMEOUT_MS);
+    test('a malformed override fails closed with the option named, never disabling the deadline', () => {
+        for (const value of ['600000', 0, -1, 1.5, Number.POSITIVE_INFINITY, 2_147_483_648]) {
+            expect(() => resolveCaptureTimeoutMs(withOption(value))).toThrow(
+                new RegExp(`bootstrap\\.options\\.${CAPTURE_TIMEOUT_OPTION} must be a positive integer`),
+            );
         }
     });
 
-    test('the capture passes the resolved deadline to the runtime', async () => {
+    test('the capture passes the given deadline to the runtime', async () => {
         const seen: ProcessOptions[] = [];
-        const source = new CodexbarUsageSource(undefined, undefined, recordingExecutor(seen));
+        const source = new CodexbarUsageSource(
+            undefined,
+            resolveCaptureTimeoutMs(withOption(42_000)),
+            recordingExecutor(seen),
+        );
         await source.capture();
-        expect(seen[0]?.timeout).toBe(resolveCaptureTimeoutMs());
+        expect(seen[0]?.timeout).toBe(42_000);
     });
 });
 
