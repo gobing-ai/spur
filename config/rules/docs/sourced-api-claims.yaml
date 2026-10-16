@@ -24,17 +24,16 @@
 # version-pinned package claims that genuinely lack a same-line anchor, and they
 # stay visible rather than suppressed.
 #
-# The semantic contract — every external API/library claim carries a source
-# citation (URL or path:line) AND a confidence level (HIGH/MEDIUM/LOW) — is
-# owned by the sp-source-driven-development skill and verified in SECUA review
+# Semantic contract — every external API/library claim carries a source
+# citation (URL or path:line) AND a confidence level (HIGH/MEDIUM/LOW) — owned
+# by the sp-source-driven-development skill and verified in SECUA review
 # (code-verification secu-review checklist). These rules are its deterministic
-# backstop: the three `cited-*` rules cover the citation half, and
-# `cited-api-claims-confidence` covers the level half.
-# `cited-high-confidence` covers the HONESTY half — the level is a claim like
-# any other, so the one level that asserts "verified this session" must show the
-# source it was verified against. MEDIUM (recalled, plausibly stale) and LOW
-# (memory only) require no anchor by contract and are deliberately not flagged.
-# All are severity `info`,
+# backstop: the `cited-*` rules cover the citation half, the `*-confidence` pair
+# covers the level half, and `cited-high-confidence` covers the HONESTY half —
+# the level is a claim like any other, so the one level that asserts "verified
+# this session" must show the source it was verified against. MEDIUM (recalled,
+# plausibly stale) and LOW (memory only) require no anchor by contract and are
+# deliberately not flagged. All are severity `info`,
 # and the category is deliberately NOT in `recommended-pre-check` — it surfaces
 # findings for review without reddening gates. The 2026-10-12 audit below settled
 # the promotion question: the residual findings stay a review-surface concern
@@ -45,6 +44,77 @@
 # fires on a matching line inside a fence. The earlier note claiming fenced lines
 # were "out of regex reach" was wrong; fence noise is one more reason these stay
 # `info` and ad hoc rather than gated.
+#
+# Coverage widening (2026-10-16) — the contract above says "every external
+# API/library claim", but the vocabulary covered only five time-anchored verbs,
+# so declaration-style claims were never scanned. Candidate verbs were measured
+# against this include set before any was added (one probe rule per candidate, the
+# same anchor lookahead the real rules use; counts are uncited lines):
+#
+#   requires 350 · no longer 150 · defaults to 70 · supports 55 · replaced by 21 ·
+#   since|as of|from <x.y> 18 · removed in|since 7 · renamed to|in 1 ·
+#   [the five existing verbs: 8]
+#
+# Sampling the hits settled it: `requires`/`supports`/`defaults to`/`no longer`
+# fire on prose about THIS repo's own behaviour ("safety requires closure without
+# manufacturing fast-path evidence", "Task frontmatter supports
+# `feature_link_declined`", "`--from` defaults to `operator`") and on historical
+# amendment records ("`.spur/agents/*` are no longer generated"). None is the
+# external claim the contract means, and adding them would restore the 593-finding
+# shape that got this category pulled. So only claims whose SHAPE vouches for a
+# version were added:
+#
+#   `(?:since|as of) <version>` — the number is pinned to a full semver or a
+#   `v`-prefixed pair, so a bare two-component form cannot match a quantity (the
+#   loose probe matched "up from 32.6 to 205.4", and `from` as a verb was dropped
+#   outright for it).
+#   `removed (?:in|since) <version>` — the loose form's 7 hits were all task ids or
+#   substitution records ("removed in task 0452", "`X` was removed in favour of
+#   `Y`"); requiring a version silences those, and currently matches nothing.
+#
+# Dropped on the same evidence: `renamed (?:to|in)` (its one hit was an internal
+# refactor note, and the shape carries no version to vouch for it) and `replaced by`
+# (21 hits, all internal refactor records). Re-measure before widening again — the
+# zero-false-positive verbs here are the ones the shape itself vouches for.
+#
+# Measured effect of the widening (2026-10-16): `cited-api-claims` /
+# `cited-api-claims-confidence` went 8/8 → 10/10 findings before the excludes
+# below. Two lines are new and both are real version claims —
+# `plugins/sp/skills/spur-cli/references/rules/validation-and-extension.md:52`
+# ("fixers (since 0.3.4)", in the final run) and
+# `docs/plans/2026-06-10-rd3-migration-feature-list.md:193` ("run persistence since
+# 0.3.16", dropped by the historical excludes below rather than by the pattern);
+# the rest were already baseline-vocabulary hits. `cited-high-confidence` gained
+# the same verbs and still reports 0.
+#
+# Level half for version lines (2026-10-16) — `cited-version-strings` checked the
+# anchor half of a version claim but never the level half, so the family had no
+# `cited-version-strings-confidence` counterpart. The new rule closes it, matching
+# its `cited-api-claims`/`cited-api-claims-confidence` siblings: the halves are
+# independent, and each missing half reports once, deliberately, because each is
+# its own defect. Measured overlap over one run — 128 lines miss both halves, 1
+# misses only the anchor (it states a level), 3 miss only the level (they carry an
+# anchor) — so the split is load-bearing for four lines, not bookkeeping.
+#
+# Historical-record excludes (2026-10-16) — the level rule's population is
+# dominated by version PINS (dependency tables, `pkg@version` in inline code) that
+# cannot carry a level token by construction, and most of them sit in dated working
+# records (batch reports, dogfood logs, session plans, analyses) where a version
+# measures a past run rather than asserting an authorable claim. Those four folders
+# now carry the exclusion the task archives already had. Measured effect, same
+# include set and one `spur rule run --file … --json` per column:
+#
+#   rule                                no historical excludes   with them
+#   cited-version-strings                                 294        129
+#   cited-version-strings-confidence                      309        131
+#   cited-api-claims / -confidence                      10 / 10      7 / 7
+#   total                                                 623        274
+#
+# 274 is a review surface a reader can act on; 623 is a second 593. Retro-levelling
+# a past run's measured versions is the make-work the `docs/tasks*/**` exclude
+# already rejects, so extend that reasoning rather than the gate. The globs carry
+# the load-bearing trailing `/**` described above; a bare `docs/report*/` excludes
+# nothing.
 include:
   - "docs/**/*.md"
   - "plugins/sp/skills/**/references/**/*.md"
@@ -57,6 +127,11 @@ exclude:
   # fallback strips the `*` down to `docs/tasks/` — which is why that form
   # silently excluded nothing (measured 2026-10-12).
   - "docs/tasks*/**"
+  # Dated working records — see the "Historical-record excludes" note above.
+  - "docs/report*/**"
+  - "docs/dogfood/**"
+  - "docs/plans/**"
+  - "docs/analysis/**"
   - "drizzle/**"
   - "**/node_modules/**"
 rules:
@@ -66,7 +141,8 @@ rules:
       anchor on the same line — http(s) URL or repo path reference like
       packages/app/src/foo.ts:123 — is unverifyable. Add the anchor, or drop
       the version if it is not load-bearing. Confidence level (HIGH/MEDIUM/LOW)
-      is part of the claim contract; see sp-source-driven-development.
+      is part of the claim contract; `cited-version-strings-confidence` covers
+      that half and sp-source-driven-development owns it.
     severity: info
     evaluator:
       type: regex
@@ -83,23 +159,45 @@ rules:
         # on the token itself, not on the line, so a line carrying both a section
         # reference and a real version still fires on the version.
         pattern: "^(?!.*(?:https?://|(?:[\\w.-]+/)+[\\w.-]+:\\d+))(?!\\s*#{1,6}\\s+\\d+\\.\\d+\\.\\d+)(?!\\s*[\\w-]+:\\s*\\d+\\.\\d+\\.\\d+\\s*$).*(?<![\\d.§])\\d+\\.\\d+\\.\\d+(?!\\.\\d)"
-  - id: cited-api-claims
+  - id: cited-version-strings-confidence
     description: >
-      A markdown line making a time- or version-anchored external API claim
-      ("deprecated since 1.2", "introduced in v3", "available since 0.9") must
-      carry a citation anchor on the same line — URL or repo path:line. Add the
-      source (URL or path:line) and the confidence level (HIGH/MEDIUM/LOW);
-      contract in sp-source-driven-development.
+      A markdown line asserting a version string (x.y.z) must also state its
+      confidence level — HIGH, MEDIUM or LOW — so a reader can tell a version
+      checked against the pinned source this session from one recalled from
+      memory; contract in sp-source-driven-development. Pairs with
+      `cited-version-strings`, which covers the citation half: a line missing
+      both halves reports once per rule, deliberately, because each missing half
+      is its own defect. Populated largely by version pins and dependency
+      tables — advisory, never gated (see the exclude and preset notes above).
     severity: info
     evaluator:
       type: regex
       config:
         mode: forbid
-        pattern: "^(?!.*(?:https?://|(?:[\\w.-]+/)+[\\w.-]+:\\d+)).*\\b(?:deprecated (?:since|in|as of)|introduced in|added in|available since|stable since)\\b"
+        # The version shape is byte-identical to `cited-version-strings` (same
+        # lookarounds, same `§` guard) and the level guard is byte-identical to
+        # `cited-api-claims-confidence`, so no line can read as in scope for one
+        # half and out of scope for the other. Deliberately NO anchor lookahead:
+        # the halves are independent, so an anchored-but-unlevelled line is this
+        # rule's finding, not an exemption from it.
+        pattern: "^(?!.*\\b(?:HIGH|MEDIUM|LOW)\\b)(?!\\s*#{1,6}\\s+\\d+\\.\\d+\\.\\d+)(?!\\s*[\\w-]+:\\s*\\d+\\.\\d+\\.\\d+\\s*$).*(?<![\\d.§])\\d+\\.\\d+\\.\\d+(?!\\.\\d)"
+  - id: cited-api-claims
+    description: >
+      A markdown line making a time- or version-anchored external API claim
+      ("deprecated since 1.2", "introduced in v3", "removed in 0.9") must carry
+      a citation anchor on the same line — URL or repo path:line. Add the source
+      (URL or path:line) and the confidence level (HIGH/MEDIUM/LOW); contract in
+      sp-source-driven-development.
+    severity: info
+    evaluator:
+      type: regex
+      config:
+        mode: forbid
+        pattern: "^(?!.*(?:https?://|(?:[\\w.-]+/)+[\\w.-]+:\\d+)).*\\b(?:deprecated (?:since|in|as of)|introduced in|added in|available since|stable since|removed (?:in|since) [vV]?\\d|(?:since|as of) (?:[vV]\\d+\\.\\d+(?:\\.\\d+)?|\\d+\\.\\d+\\.\\d+))\\b"
   - id: cited-api-claims-confidence
     description: >
       A markdown line making a time- or version-anchored external API claim
-      ("deprecated since 1.2", "introduced in v3", "available since 0.9") must
+      ("deprecated since 1.2", "introduced in v3", "removed in 0.9") must
       also state its confidence level — HIGH, MEDIUM or LOW — so a reader can
       tell a checked fact from model memory; contract in
       sp-source-driven-development. Pairs with `cited-api-claims`, which covers
@@ -113,7 +211,7 @@ rules:
         # Fires on a claim line carrying no uppercase level token. The verbs match
         # `cited-api-claims` exactly, so the two rules never disagree about which
         # lines are claims.
-        pattern: "^(?!.*\\b(?:HIGH|MEDIUM|LOW)\\b).*\\b(?:deprecated (?:since|in|as of)|introduced in|added in|available since|stable since)\\b"
+        pattern: "^(?!.*\\b(?:HIGH|MEDIUM|LOW)\\b).*\\b(?:deprecated (?:since|in|as of)|introduced in|added in|available since|stable since|removed (?:in|since) [vV]?\\d|(?:since|as of) (?:[vV]\\d+\\.\\d+(?:\\.\\d+)?|\\d+\\.\\d+\\.\\d+))\\b"
   - id: cited-high-confidence
     description: >
       A line stating HIGH confidence about an external API/library claim must
@@ -139,4 +237,4 @@ rules:
         # line cannot read as cited for one rule and uncited for another. The level
         # is asserted with a lookahead so either prose order matches — `(HIGH)` after
         # the claim (the usual form) and `HIGH — <claim>` both count.
-        pattern: "^(?!.*(?:https?://|(?:[\\w.-]+/)+[\\w.-]+:\\d+))(?=.*\\bHIGH\\b).*\\b(?:deprecated (?:since|in|as of)|introduced in|added in|available since|stable since)\\b"
+        pattern: "^(?!.*(?:https?://|(?:[\\w.-]+/)+[\\w.-]+:\\d+))(?=.*\\bHIGH\\b).*\\b(?:deprecated (?:since|in|as of)|introduced in|added in|available since|stable since|removed (?:in|since) [vV]?\\d|(?:since|as of) (?:[vV]\\d+\\.\\d+(?:\\.\\d+)?|\\d+\\.\\d+\\.\\d+))\\b"

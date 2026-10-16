@@ -93,7 +93,8 @@ Before declaring a task `done`, run this lightweight checklist. It catches the m
 - [ ] API/library claims in changed docs carry a source citation (URL or `path:line`) and an honest
       confidence level (HIGH/MEDIUM/LOW) per source-driven-development — a HIGH claim must show the
       source it was verified against on the same line (MEDIUM/LOW need no anchor); the deterministic advisory backstop is
-      the `cited-version-strings` / `cited-api-claims` / `cited-api-claims-confidence` / `cited-high-confidence` rules
+      the `cited-version-strings` / `cited-version-strings-confidence` / `cited-api-claims` /
+      `cited-api-claims-confidence` / `cited-high-confidence` rules
       (`.spur/rules/docs/sourced-api-claims.yaml`, run ad hoc — not wired into a preset).
 - [ ] Review section has P1–P4 findings table (even if all rows are empty — the table itself proves review happened).
 

@@ -101,16 +101,19 @@ line: `Verification: HIGH|MEDIUM|LOW — <first failing check and deviation, or 
 - **Honest confidence** — the stated HIGH/MEDIUM/LOW matches the evidence: HIGH requires a check against the pinned source this session; MEDIUM/LOW items are labeled, and LOW is never presented as fact.
 - **HIGH** — all three checks pass. **MEDIUM** — coverage intact but some citations are off-version (latest docs for a pinned dependency) or secondary-source only. **LOW** — an API/library claim lacks any citation, or a LOW-confidence claim was asserted as fact.
 
-Deterministic backstop: the `cited-version-strings`, `cited-api-claims`,
-`cited-api-claims-confidence` and `cited-high-confidence` rules
-(`.spur/rules/docs/sourced-api-claims.yaml`) flag markdown lines that assert a version string or a
-time-anchored API claim with no citation anchor on the same line, claim lines that carry no
-HIGH/MEDIUM/LOW level, and claim lines that claim HIGH with no anchor — the one level that asserts
-"verified this session", so its source must be on the line; MEDIUM (recalled) and LOW (memory only)
-need no anchor by contract and are not flagged. They are an info-severity advisory backstop for
-this contract and are deliberately NOT wired into `recommended-pre-check` — run them ad hoc with
-`spur rule run --file .spur/rules/docs/sourced-api-claims.yaml`. The checks above and the SECUA
-checklist remain the enforcement points.
+Deterministic backstop: the `cited-version-strings`,
+`cited-version-strings-confidence`, `cited-api-claims`, `cited-api-claims-confidence` and
+`cited-high-confidence` rules (`.spur/rules/docs/sourced-api-claims.yaml`) flag markdown lines that
+assert a version string or a time- or version-anchored API claim (`deprecated since`, `removed in
+0.9`, `fixers (since 0.3.4)`) with no citation anchor on the same line, version and claim lines that
+carry no HIGH/MEDIUM/LOW level, and claim lines that claim HIGH with no anchor — the one level that
+asserts "verified this session", so its source must be on the line; MEDIUM (recalled) and LOW
+(memory only) need no anchor by contract and are not flagged. They are an info-severity advisory
+backstop for this contract and are deliberately NOT wired into `recommended-pre-check` — run them ad
+hoc with `spur rule run --file .spur/rules/docs/sourced-api-claims.yaml`. Dated working records
+(`docs/report*`, `docs/dogfood`, `docs/plans`, `docs/analysis`) are excluded, as are the task
+archives: a version measured by a past run is not an authorable claim. The checks above and the
+SECUA checklist remain the enforcement points.
 
 ## Common Rationalizations
 
