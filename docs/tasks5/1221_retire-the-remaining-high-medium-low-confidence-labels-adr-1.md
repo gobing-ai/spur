@@ -1,11 +1,13 @@
 ---
 schema_version: 1
 name: Retire the remaining HIGH/MEDIUM/LOW confidence labels (ADR-138 completion)
-status: wip
+status: done
 template: standard
 created_at: 2026-10-16T22:01:08.349Z
-updated_at: "2026-10-16T22:22:24.047Z"
+updated_at: "2026-10-16T22:45:05.748Z"
 
+done_forced: "false"
+done_reason: unforced close; PASS artifact at .spur/memory/evidence/1221-verdict.json
 ---
 
 ## 1221. Retire the remaining HIGH/MEDIUM/LOW confidence labels (ADR-138 completion)
@@ -36,7 +38,7 @@ Operator decision (2026-10-16): confidence-level grading imported from `cc:anti-
 
 ### Design
 
-<!-- Chosen approach, key tradeoffs, invariants, and impacted surfaces. Keep snippets short. -->
+Delete rather than deprecate: legacy artifacts stay readable by ignoring retired keys, so no migration is needed. The decision engine's numeric routing threshold is out of scope (an engine input, not a graded label).
 
 ### Plan
 
@@ -44,18 +46,41 @@ Operator decision (2026-10-16): confidence-level grading imported from `cc:anti-
 
 ### Solution
 
-<!-- Filled during implementation: file:line change map and concise rationale. -->
+Removed every HIGH/MEDIUM/LOW label surface in one pass (commit c1c708e3b):
+
+- Feature receipt: dropped `confidence`/`confidenceBasis`/`confidenceAcknowledged`, the derivation, the `--confidence`/`--ack-low-confidence` flags, the workflow vars and `L4.feature-receipt-confidence`; legacy keys are ignored on parse (`packages/app/src/workflow/feature-verification-receipt.ts:314`).
+- Docs rule `config/rules/docs/sourced-api-claims.yaml` reduced to the two citation rules.
+- Deleted the never-wired `response.validate` action and its registration.
+- History-anatomy finding contract down to 11 fields (`packages/app/src/services/history-anatomy.ts:102`).
+- Skill/agent/command prose: confidence tokens replaced by citation/evidence wording.
+- ADR-138 amended with a binding invariant; ADR-024 and ADR-119/1196 marked (`docs/00_ADR.md:2392`).
 
 ### Testing
 
-- Focused suites green: packages/app 299, server transition-gate 8, cli feature verify 3, PR-5 parity 44, PR-6 parity 34, history-anatomy 100, proof-chain 33, plugins/sp 107.
-- `tsc --noEmit` clean in packages/app, apps/cli, apps/server, plugins/sp; Biome clean; `build:bundle` exit 0.
-- `bun run spur-check`: 11126 pass / 6 fail. Failures not caused by this task: 2× sandbox `git init` hooks copy (EPERM), 2× Chromium DevTools port (sandbox), 2× help-docs parity for `projects add --host` (pre-existing from a3da77807).
-- `bun run corpus-check`: exit 1 with pre-existing corpus-wide findings only (scenario-unverified, dogfood-missing, F821 BDD); none reference confidence or `cited-*` rules.
+**Pipeline verify results**
+
+- Verdict: PASS (from verdict artifact)
+
+| Requirement | Status | Evidence |
+|-------------|--------|----------|
+| R1 | MET | `config/rules/docs/sourced-api-claims.yaml:12` citation-only header, level rules deleted; pinned by `plugins/sp/tests/skill-structure.test.ts:1555` (plugins/sp 107 pass / 0 fail) |
+| R2 | MET | `packages/app/src/workflow/feature-verification-receipt.ts:314` ignores legacy keys; `packages/app/tests/workflow/feature-verification-receipt.test.ts:608` legacy receipt parses (app 190 pass / 0 fail); CLI verify + PR-5/PR-6 parity 81 pass / 0 fail; server transition-gate 8 pass / 0 fail |
+| R3 | MET | action file deleted (ls: no such file); registration gone from builtins; recorded at `docs/00_ADR.md:201` |
+| R4 | MET | `plugins/sp/skills/source-driven-development/SKILL.md:71` forbids a confidence label; rg over plugins/sp skills/agents/commands finds only absence notes |
+| R5 | MET | `packages/app/src/services/history-anatomy.ts:102` FINDING_FIELDS has 11 entries; `plugins/sp/tests/skill-structure.test.ts:1170` asserts no confidence field; `packages/app/tests/services/history-anatomy.test.ts:608` legacy bullet tolerated |
+| R6 | MET | `packages/app/tests/workflow/task-pipeline-proof-chain.test.ts:688` table head without confidence; stale pipeline comment fixed at `config/workflows/task-pipeline.yaml:61` (workflow validate valid, cli workflow tests 111 pass / 0 fail) |
+| R7 | MET | `docs/00_ADR.md:2392` ADR-138 amendment and `docs/00_ADR.md:2402` binding invariant; superseded note at `docs/00_ADR.md:1898` |
+- Coverage: N/A (verdict-based; verify pipeline does not measure code coverage)
 
 ### Review
 
-<!-- Filled during review: P1-P4 findings, residual risk, and final disposition. -->
+<!-- spur:record-review -->
+
+**SECU findings** (pipeline verify step — verdict: PASS)
+
+| Priority | Dimension | Location | Finding |
+|----------|-----------|----------|----------|
+| P4 | — | — | No findings (verify verdict PASS) |
 
 ### References
 
@@ -65,4 +90,6 @@ Operator decision (2026-10-16): confidence-level grading imported from `cc:anti-
 
 - 2026-10-16T22:22:23.815Z backlog → todo (system)
 - 2026-10-16T22:22:24.047Z todo → wip (system)
+- 2026-10-16T22:44:56.317Z wip → testing (system)
+- 2026-10-16T22:45:05.643Z testing → done (system)
 

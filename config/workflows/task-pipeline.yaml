@@ -58,8 +58,8 @@ name: task-pipeline
 # verifier's and reviewer's self-graded levels (re-imported from the cc anti-hallucination skill
 # by task 1068) are no longer written, checked, or gated on; spur certifies on deterministic
 # evidence (rows MET, proof digests, findings dispositioned). The `confidence` check row, the
-# `ackLowConfidence` var, and the guards' LOW/absent clauses are gone; the derived
-# feature-receipt confidence (ADR-131/1196) is a different family and stays.
+# `ackLowConfidence` var, and the guards' LOW/absent clauses are gone. The derived
+# feature-receipt confidence (1196) followed in task 1221 (ADR-138 amendment).
 version: "7"
 description: "Standard task pipeline: precheck → implement → quality-gate (test/fix/recheck) → review → approve → verify → record → done"
 # Task entity lifecycle (owned by task-lifecycle.yaml):
