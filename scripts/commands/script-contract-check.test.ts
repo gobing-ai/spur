@@ -1,4 +1,4 @@
-import { expect, test } from 'bun:test';
+import { expect, spyOn, test } from 'bun:test';
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -290,16 +290,38 @@ test('placement scan reports a double-registered hook identity once per registra
 // ---- real tree: the shipped plugin is clean end to end (1213) ----
 
 test('run() passes over the real tree in both modes', () => {
-    expect(run([])).toBe(0);
-    expect(run(['--placement-only'])).toBe(0);
+    const log = spyOn(console, 'log').mockImplementation(() => {});
+    const error = spyOn(console, 'error').mockImplementation(() => {});
+    try {
+        expect(run([])).toBe(0);
+        expect(run(['--placement-only'])).toBe(0);
+        expect(log.mock.calls).toEqual([
+            ['script-contract-check: hook-only script layout over plugins/sp — 0 violation(s) — PASS'],
+            ['script-contract-check: placement scan over plugins/sp scripts+hooks — 0 finding(s) — PASS'],
+        ]);
+        expect(error).not.toHaveBeenCalled();
+    } finally {
+        log.mockRestore();
+        error.mockRestore();
+    }
 });
 
 test('run() fails with violations under a fixture root', () => {
     const env = createTempEnv();
+    const log = spyOn(console, 'log').mockImplementation(() => {});
+    const error = spyOn(console, 'error').mockImplementation(() => {});
     try {
         writeFileSync(join(env.scriptsDir, 'db.ts'), "import { Database } from 'bun:sqlite';\n");
         expect(run(['--repo-root', env.root, '--placement-only'])).toBe(1);
+        expect(log.mock.calls).toEqual([
+            ['script-contract-check: placement scan over plugins/sp scripts+hooks — 1 finding(s) — FAIL'],
+        ]);
+        expect(error.mock.calls).toEqual([
+            ['script-contract-check: FAIL (db-import) - plugins/sp/scripts/db.ts: value-import of bun:sqlite'],
+        ]);
     } finally {
+        log.mockRestore();
+        error.mockRestore();
         env.cleanup();
     }
 });
