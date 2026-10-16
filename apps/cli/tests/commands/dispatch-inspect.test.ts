@@ -221,6 +221,12 @@ describe('startup banner policy (A31/0719)', () => {
         }
     });
 
+    test('shouldRenderBanner is off for JSON-only `history timeline` so its stdout parses', () => {
+        expect(shouldRenderBanner(['history', 'timeline'])).toBe(false);
+        expect(shouldRenderBanner(['history', 'timeline', '--group', '1-2'])).toBe(false);
+        expect(shouldRenderBanner(['history', 'summary'])).toBe(true);
+    });
+
     test('root help lists --no-logo exactly once, and the option is accepted before and after the command path (R1)', async () => {
         const cwd = await createTempProject();
         const output = createCapturedOutput();

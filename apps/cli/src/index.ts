@@ -318,6 +318,8 @@ export function bannerText(): string {
 export function shouldRenderBanner(argv: readonly string[]): boolean {
     // The inline driver parses these transports' stdout (JSON verdicts, fingerprints).
     if (isWorkflowTransportInvocation(argv)) return false;
+    // JSON-only output with no --json flag; sp:session-review pipes it to jq.
+    if (argv[0] === 'history' && argv[1] === 'timeline') return false;
     return !argv.some((arg) => arg === '--no-logo' || arg === '--json' || arg === '--quiet' || arg === '--silent');
 }
 
