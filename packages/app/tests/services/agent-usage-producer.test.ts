@@ -186,7 +186,7 @@ describe('runAgentUsageProducer', () => {
                     capture: () =>
                         Promise.reject(
                             new UsageSourceError(
-                                '`codexbar usage --format json --provider all` capture exceeded the 180000 ms deadline',
+                                '`codexbar usage --format json` capture exceeded the 300000 ms deadline',
                             ),
                         ),
                 } satisfies UsageSource,

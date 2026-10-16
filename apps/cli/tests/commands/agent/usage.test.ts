@@ -258,7 +258,7 @@ describe('spur agent usage (0892)', () => {
                     name: 'codexbar',
                     capture: async () => {
                         throw new UsageSourceError(
-                            'failed to launch `codexbar usage --format json --provider all`: ENOENT — install codexbar or fix PATH',
+                            'failed to launch `codexbar usage --format json`: ENOENT — install codexbar or fix PATH',
                         );
                     },
                 },

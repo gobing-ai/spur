@@ -341,7 +341,9 @@ spur agent usage --dry-run  # print would-be changes; write nothing
 spur agent usage --json
 ```
 
-Runs `codexbar usage --format json --provider all` once, writes the snapshot to
+Runs `codexbar usage --format json` once — the operator-enabled provider set, deliberately not an
+all-provider sweep (`--provider all` covers every provider configured in CodexBar, most of them
+uncredentialed, and its wall time is the slowest of all of them) — writes the snapshot to
 `~/.config/spur/agent-usage.json` (`captured_at`, `source`, `providers[]`, `raw`), maps providers
 to executors via `agent.executors[].agent` (or the model's `<provider>/` prefix), and records
 `owner: quota` availability observations that the standard drain applies — the single availability
