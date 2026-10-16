@@ -197,7 +197,7 @@ describe('DatabaseView column visibility and persistence', () => {
             expect(modal).not.toBeNull();
             expect(getAllByText('coordination_runs').length).toBe(2);
             expect(getByText('187')).not.toBeNull();
-            expect(getByText('run_id')).not.toBeNull();
+            expect(getAllByText('run_id').length).toBe(2);
             expect(getByText('agent_kind')).not.toBeNull();
             expect(getByText('generation')).not.toBeNull();
             expect(getByText('PK')).not.toBeNull();
