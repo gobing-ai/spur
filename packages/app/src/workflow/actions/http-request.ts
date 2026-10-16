@@ -71,8 +71,8 @@ function redactUrl(raw: string): string {
         const query = parsed.search ? '?<redacted>' : '';
         return `${parsed.protocol}//${parsed.host}${parsed.pathname}${query}`;
     } catch {
-        // Unparseable: keep only the scheme prefix, which cannot hold credentials.
-        return `${raw.split(/[?#]/)[0]?.slice(0, 60) ?? ''}…`;
+        // Malformed input can contain credentials anywhere; echo none of it.
+        return '<redacted>';
     }
 }
 

@@ -143,6 +143,21 @@ describe('HttpRequestActionRunner', () => {
         expect(result.error).toContain('invalid URL');
     });
 
+    test('malformed URLs never echo credentials or arbitrary secret input', async () => {
+        const { runner, fake } = newRunner();
+        for (const url of [
+            'https://alice:fixture-secret@[invalid',
+            '//alice:fixture-secret@[invalid',
+            'fixture-secret',
+        ]) {
+            const result = await runner.execute({ url }, makeContext());
+            expect(result.ok).toBe(false);
+            expect(result.error).toContain('invalid URL');
+            expect(result.error).not.toContain('fixture-secret');
+        }
+        expect(fake.calls).toHaveLength(0);
+    });
+
     // --- Allowlist ---
 
     test('empty allowlist fails all requests', async () => {
