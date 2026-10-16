@@ -689,7 +689,7 @@ fi
 write_marker () {   # read-modify-write (F1): preserve WT-3 fields already on the marker
   mkdir -p "$(dirname "${o.marker}")"
   if [ -f "${o.marker}" ]; then
-    TMP_MARKER="$(mktemp)"
+    TMP_MARKER="$(mktemp "${o.marker}.XXXXXX")"
     jq --arg s "$STATUS" --arg m "$BATCH_TIP" '.status = $s | .mergeCommit = $m' "${o.marker}" > "$TMP_MARKER" || { echo "WT-4 halt: cannot rewrite marker ${o.marker}" >&2; rm -f "$TMP_MARKER"; exit 1; }
     mv "$TMP_MARKER" "${o.marker}"
   else

@@ -89,7 +89,7 @@ git merge-base --is-ancestor "$BATCH_TIP" "$LANDED_BASE_TIP" \
 write_marker () {   # $1 = merged | retained; read-modify-write: preserve WT-3 fields (id, command, selector, createdAt, adopted, adoptedAt); jq already assumed by WT-3/task-resolution flows
   mkdir -p "$(dirname "$MARKER")"
   if [ -f "$MARKER" ]; then
-    TMP_MARKER="$(mktemp)"
+    TMP_MARKER="$(mktemp "$MARKER.XXXXXX")"   # sibling: atomic same-dir mv, no system temp dir
     jq --arg s "$1" --arg m "$BATCH_TIP" '.status = $s | .mergeCommit = $m' "$MARKER" > "$TMP_MARKER" \
       || { echo "WT-4 halt: cannot rewrite marker $MARKER" >&2; rm -f "$TMP_MARKER"; exit 1; }
     mv "$TMP_MARKER" "$MARKER"
@@ -233,7 +233,7 @@ WT_PATH="<resolved-worktree-path>"   # reuse mode: the adopted tree's physical p
 write_marker () {   # $1 = merged | retained; read-modify-write: preserve WT-3 fields (id, command, selector, createdAt, adopted, adoptedAt); jq already assumed by WT-3/task-resolution flows
   mkdir -p "$(dirname "$MARKER")"
   if [ -f "$MARKER" ]; then
-    TMP_MARKER="$(mktemp)"
+    TMP_MARKER="$(mktemp "$MARKER.XXXXXX")"   # sibling: atomic same-dir mv, no system temp dir
     jq --arg s "$1" --arg m "$BATCH_TIP" '.status = $s | .mergeCommit = $m' "$MARKER" > "$TMP_MARKER" \
       || { echo "WT-4 halt: cannot rewrite marker $MARKER" >&2; rm -f "$TMP_MARKER"; exit 1; }
     mv "$TMP_MARKER" "$MARKER"
