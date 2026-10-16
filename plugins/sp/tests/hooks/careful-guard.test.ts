@@ -83,6 +83,14 @@ describe('careful-guard — destructive-command pattern matrix', () => {
         'git --git-dir=/tmp/repo push --force',
         'git --work-tree=. restore .',
         'git -C "my repo" reset --hard',
+        // 1216: value-less global options, and a glued optional-value form.
+        'git --no-pager push --force',
+        'git -p push -f',
+        'git --bare push --force',
+        'git --no-replace-objects push --force',
+        'git --literal-pathspecs clean -fd',
+        'git --namespace main reset --hard',
+        'git --exec-path=/tmp/p reset --hard',
     ])('asks before destructive command: %j', async (cmd) => {
         const d = await runGuard(bash(cmd));
         expect(d.permissionDecision).toBe('ask');
@@ -109,6 +117,11 @@ describe('careful-guard — destructive-command pattern matrix', () => {
         'git -C . status',
         'git -C . push --force-with-lease',
         'git -c core.hooksPath=/tmp/hooks push --force-with-lease',
+        // 1216: the newly covered option forms stay quiet on routine git.
+        'git --no-pager status',
+        'git -p push origin main',
+        'git --no-pager push --force-with-lease',
+        'git --exec-path /tmp/p reset --hard', // separated optional-value: git prints and exits
     ])('allows safe/benign command: %j', async (cmd) => {
         const d = await runGuard(bash(cmd));
         expect(d.permissionDecision).toBe('allow');

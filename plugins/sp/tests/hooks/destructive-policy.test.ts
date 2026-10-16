@@ -48,11 +48,13 @@ const MATRIX: Array<{ command: string; expected: Expected; divergedOnPi?: true }
     // Cache *name* as a path prefix is not a cache directory.
     { command: 'rm -rf /important/build-backup', expected: 'ask', divergedOnPi: true },
 
-    // ── destructive behind supported git global options (task 1214 R1/R2) ─
+    // ── destructive behind git global options (task 1214 R1/R2; widened by 1216) ─
     // `git` global options sit between the executable and the subcommand; without a
-    // lexical strip the subcommand patterns never see the destructive verb. The forms
-    // below mirror git's own grammar: `-C <path>` / `-c <name>=<value>` separated, and
-    // `--git-dir[=<path>]` / `--work-tree[=<path>]`.
+    // lexical strip the subcommand patterns never see the destructive verb. The pass
+    // strips a whole option RUN, not a four-form whitelist: value-less flags of any
+    // spelling, glued long values, and value-taking options in separated form. Each
+    // value-taking form below was verified against git 2.55.0 (it consumes the next
+    // word, so `git --git-dir rev-parse …` reports `unknown option:` on the leftover).
     { command: 'git -C . push --force', expected: 'ask' },
     { command: 'git -c core.hooksPath=/tmp/hooks push -f', expected: 'ask' },
     { command: 'git --git-dir=/tmp/repo push --force', expected: 'ask' },
@@ -63,6 +65,27 @@ const MATRIX: Array<{ command: string; expected: Expected; divergedOnPi?: true }
     { command: 'git --git-dir /tmp/repo clean -fd', expected: 'ask' },
     { command: 'git -C . checkout .', expected: 'ask' },
     { command: 'git -C . push origin +main', expected: 'ask' },
+    // 1216: value-less global options — the sibling forms of the same defect class.
+    { command: 'git --no-pager push --force', expected: 'ask' },
+    { command: 'git -p push -f', expected: 'ask' },
+    { command: 'git --bare push --force', expected: 'ask' },
+    { command: 'git --no-replace-objects push --force', expected: 'ask' },
+    { command: 'git --paginate reset --hard', expected: 'ask' },
+    { command: 'git --literal-pathspecs clean -fd', expected: 'ask' },
+    { command: 'git --glob-pathspecs checkout .', expected: 'ask' },
+    { command: 'git --no-optional-locks restore .', expected: 'ask' },
+    { command: 'git --icase-pathspecs push origin +main', expected: 'ask' },
+    // 1216: value-taking long options in separated form consume their value.
+    { command: 'git --namespace=x reset --hard', expected: 'ask' },
+    { command: 'git --namespace main push --force', expected: 'ask' },
+    { command: 'git --config-env a=b push -f', expected: 'ask' },
+    { command: 'git --attr-source HEAD clean -fd', expected: 'ask' },
+    // Glued optional-value form: observed executing the reset on git 2.55.0.
+    { command: 'git --exec-path=/tmp/p reset --hard', expected: 'ask' },
+    // 1216: several options, and an option run that must not cross a boundary.
+    { command: 'git --no-pager -C . -c core.pager=cat push --force', expected: 'ask' },
+    { command: 'echo done && git --no-pager push --force', expected: 'ask' },
+    { command: 'git status; git -p push -f', expected: 'ask' },
 
     // ── recursive deletes that leave the project ─────────────────────────
     // A cache *basename* outside the project is not a project cache.
@@ -102,6 +125,17 @@ const MATRIX: Array<{ command: string; expected: Expected; divergedOnPi?: true }
     { command: 'git -C . status', expected: 'allow' },
     { command: 'git -c core.hooksPath=/tmp/hooks push --force-with-lease', expected: 'allow' },
     { command: 'git --git-dir=/tmp/repo status --short', expected: 'allow' },
+    // 1216: the same controls behind the newly covered option forms.
+    { command: 'git --no-pager status', expected: 'allow' },
+    { command: 'git -p push origin main', expected: 'allow' },
+    { command: 'git --bare diff --stat', expected: 'allow' },
+    { command: 'git --no-pager push --force-with-lease', expected: 'allow' },
+    { command: 'git --no-optional-locks log --oneline -3', expected: 'allow' },
+    { command: 'git -C . --no-pager push origin main', expected: 'allow' },
+    { command: 'gt push --force', expected: 'allow' }, // not the git executable
+    // `--exec-path` is optional-value: bare/separated it prints and exits, so git never
+    // reaches the subcommand (verified on 2.55.0 — exit 0, exec path printed).
+    { command: 'git --exec-path /tmp/p reset --hard', expected: 'allow' },
 ];
 
 describe('destructive-policy — classification', () => {

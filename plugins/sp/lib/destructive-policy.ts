@@ -132,25 +132,52 @@ const DESTRUCTIVE: Array<{ label: string; re: RegExp }> = [
 const GIT_OPTION_VALUE = String.raw`(?:"[^"]*"|'[^']*'|[^\s;&|]+)`;
 
 /**
- * One supported `git` global option, including the whitespace before its value. Git
- * (unlike GNU getopt) rejects glued short forms: `-C <path>` and `-c <name>=<value>`
- * are separated only, while `--git-dir` / `--work-tree` accept `=<path>` or a separate
- * value. Matching exactly that grammar keeps the pass bounded and expansion-free.
+ * Git global options that consume a following word in their separated form — the word
+ * after them is a value, never the subcommand. Verified against git 2.55.0: each of
+ * these takes the next word (`git --git-dir rev-parse …` → `unknown option:
+ * --is-inside-work-tree`, i.e. git had already consumed `rev-parse` as the value).
+ * The value-less long options (`--no-pager`, `--bare`, `--no-replace-objects`, …) need
+ * no list: missing one only makes the pass stop earlier, it can never misread a value
+ * as a subcommand. Do NOT add an option here unless it really consumes the next word —
+ * `--exec-path` is optional-value, so listing it would swallow the subcommand and hide
+ * a destructive verb (git 2.55.0: `git --exec-path /tmp/p reset --hard` prints the exec
+ * path and exits; the `=`-glued form does consume the value).
  */
-const GIT_GLOBAL_OPTION = String.raw`(?:-(?:C|c)[ \t]+${GIT_OPTION_VALUE}|--(?:git-dir|work-tree)(?:=${GIT_OPTION_VALUE}|[ \t]+${GIT_OPTION_VALUE}))`;
+const GIT_VALUE_TAKING_OPTION = '--(?:git-dir|work-tree|namespace|config-env|attr-source)';
 
 /**
- * `git` followed by any run of supported global options directly before the subcommand.
- * Replacing the whole span with `git` lets the destructive subcommand patterns fire on
+ * One `git` global option unit, including the whitespace before its value.
+ *
+ * - `--name=value` — any long option in glued form.
+ * - `KNOWN --name value` — the value-taking long options above, separated form.
+ * - `-C value` / `-c value` — the value-taking short options; git rejects glued short
+ *   forms (`git -C. status` → `unknown option: -C.`, verified on 2.55.0), so their
+ *   value is always the next word.
+ * - `--name` / `-xy` — any value-less flag (`--no-pager`, `--bare`, `-p`, …).
+ *
+ * An option run is a sequence of these units; it ends at the first token that is not an
+ * option — the subcommand. Matching the whole grammar rather than a four-form whitelist
+ * keeps sibling options of the same defect class from hiding a destructive verb without
+ * teaching every destructive pattern git's option table.
+ */
+const GIT_GLOBAL_OPTION = String.raw`(?:--[A-Za-z][A-Za-z0-9-]*=${GIT_OPTION_VALUE}|${GIT_VALUE_TAKING_OPTION}[ \t]+${GIT_OPTION_VALUE}|-(?:[A-Za-z]*[Cc])[ \t]+${GIT_OPTION_VALUE}|--[A-Za-z][A-Za-z0-9-]*|-[A-Za-z]+)`;
+
+/**
+ * `git` followed by any run of global options directly before the subcommand. Replacing
+ * the whole span with `git` lets the destructive subcommand patterns fire on
  * option-prefixed invocations without teaching every pattern git's option grammar.
+ *
+ * The run cannot cross a command boundary: units match `[ \t]` only (never a newline)
+ * and an unquoted value stops at `; & |`.
  */
 const GIT_WITH_GLOBAL_OPTIONS = new RegExp(String.raw`\bgit\b(?:[ \t]+${GIT_GLOBAL_OPTION})*`, 'g');
 
 /**
  * Remove supported git global options between the `git` executable and its subcommand.
  *
- * `git -C . push --force` and `git -c core.hooksPath=/tmp/hooks push -f` used to classify
- * as safe because the subcommand patterns require `git` immediately before the verb. The
+ * `git -C . push --force`, `git --no-pager push --force` and
+ * `git -c core.hooksPath=/tmp/hooks push -f` used to classify as safe because the
+ * subcommand patterns require `git` immediately before the verb. The
  * replacement edits only the matched option span: every other byte — newlines, command
  * separators, quotes — is preserved, so the patterns cannot begin matching across a
  * command boundary, and no shell expansion or `git` process is involved.
