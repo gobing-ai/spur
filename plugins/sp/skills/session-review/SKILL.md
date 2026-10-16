@@ -149,39 +149,23 @@ step 4 excludes. Use `n/a` for any value not supported by the measurement.
 
 ### Resolved issues
 
-| Issue | Root cause | Resolution | Evidence | Confidence |
-| --- | --- | --- | --- | --- |
+| Issue | Root cause | Resolution | Evidence |
+| --- | --- | --- | --- |
 
 Evidence names the tool result, verification command, or concrete repository state visible in the
 session. Do not list ordinary implementation steps as issues.
 
-**Confidence** is `HIGH`, `MEDIUM`, or `LOW` for that row's claim. The level is **derived from the
-check that produced the claim, never assessed from how the row reads**, and the cell carries that
-verifier (e.g. `HIGH — gate exit 0, /tmp/g0.log re-run this session`). Add the row's **falsifier**
-when the level is not `HIGH`: what would have made it fail, or what moves it up. The same ladder
-grades this report's Open-issues table.
-
-| Level | Verifies when | Not this |
-| --- | --- | --- |
-| `HIGH` | An executed check in this session produced the result and its raw output is reachable (command + exit code, test counts, query row, gate log). Re-runnable now. | The code or change "looks correct"; a claim asserted only in prose. |
-| `MEDIUM` | The claim is inferred from observed facts, rests on prior-session or delegated evidence, or names state that moved after the check (stale by construction). Name which of the three. | Presenting an inference as an observation. |
-| `LOW` | No executable check was run. Name the missing evidence **and** the command that would ground it. | Dropping the row instead of marking it. |
-
-Two guards against level inflation:
-
-- Evidence that cannot be re-run, or that is only the agent's own summary, **caps the row at
-  `MEDIUM`** — a re-run is what promotes it.
-- An all-`HIGH` multi-finding review is a signal the ladder was not applied, not a clean session.
-  Where every row genuinely is `HIGH`, the cells show distinct check results rather than repeated
-  phrasing.
-
-Any API/library statement in a row cites the installed source as `path:line` or a URL, and a claim
-the session could not ground is written `LOW` with the missing evidence named.
+**Evidence is the check, not a grade** (ADR-138). A row resolved by an executed check this session
+names the command and its result (e.g. `gate exit 0, /tmp/g0.log`). A row resting on inference,
+prior-session or delegated evidence says so. A row with no check run names the missing evidence
+**and** the command that would ground it — never drop the row instead. No HIGH/MEDIUM/LOW label:
+a self-assigned level is as easy to write as the claim. Any API/library statement in a row cites
+the installed source as `path:line` or a URL.
 
 ### Open issues and risks
 
-| Issue or risk | State | Evidence or confirmation needed | Confidence |
-| --- | --- | --- | --- |
+| Issue or risk | State | Evidence or confirmation needed |
+| --- | --- | --- |
 
 ### Process and environment improvements
 

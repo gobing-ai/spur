@@ -215,10 +215,9 @@ function runInlineSmoke(
                     // Only `verify` carries the verdict under test; every other stage answers PASS,
                     // because the review routing reads `Verdict: PASS` from the reviewer's own
                     // answer (session finding after 1088) and a non-PASS review would divert the
-                    // run before verify ever runs. `Confidence: HIGH` mirrors the answer contract
-                    // (task 1068) that the completion guards read.
+                    // run before verify ever runs.
                     const stageVerdict = state.id === 'verify' ? (options.verdict ?? 'PASS') : 'PASS';
-                    writeFileSync(answerPath, `Verdict: ${stageVerdict}\nConfidence: HIGH\n`);
+                    writeFileSync(answerPath, `Verdict: ${stageVerdict}\n`);
                 }
                 appendFileSync(logPath, `${isoStamp()}stage ${state.id} executed inline in session ${sessionId}\n`);
                 continue;

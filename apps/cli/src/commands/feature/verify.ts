@@ -22,17 +22,12 @@ export function registerFeatureVerifyCommand(feature: Command, context: CliConte
                 'Runs the selected feature-verification definition’s command once (or --cmd) and writes the',
                 'run-scoped + feature-latest receipts and .spur/run/<runId>-feature-verification.status.',
                 'Exit: 0 after a completed pass (PASS or FAIL); 1 when the pass could not run.',
-                'Flags fall back to the workflow env names: featureId, __runId, verificationCmd, confidence, ackLowConfidence.',
+                'Flags fall back to the workflow env names: featureId, __runId, verificationCmd.',
             ].join('\n'),
         )
         .argument('[id]', 'Feature ID (env: featureId)')
         .option('--run-id <id>', 'workflow run id the receipt binds to (env: __runId)')
         .option('--cmd <command>', 'verification command override (env: verificationCmd)')
-        .option('--confidence <level>', 'declared confidence HIGH | MEDIUM | LOW (env: confidence)')
-        .option(
-            '--ack-low-confidence',
-            'acknowledge a LOW confidence level on the receipt (env: ackLowConfidence=true)',
-        )
         .action(async (id, options) => {
             const { runFeatureVerification } = await import('@gobing-ai/spur-app');
             const env = context.env;
@@ -43,11 +38,6 @@ export function registerFeatureVerifyCommand(feature: Command, context: CliConte
                     featureId,
                     runId: options.runId || env.__runId || '',
                     cmdOverride: options.cmd || env.verificationCmd || '',
-                    // Operator-declared level (empty = derive from the pass) and the acknowledgement of
-                    // a LOW level. Both ride the receipt, so the completion boundary reads them from the
-                    // evidence rather than from whatever flags a later transition passes.
-                    confidenceOverride: options.confidence || env.confidence || '',
-                    ackLowConfidence: options.ackLowConfidence === true || env.ackLowConfidence === 'true',
                 });
                 context.output.write(`feature verify: ${featureId} ${result.message}`);
             } catch (err) {

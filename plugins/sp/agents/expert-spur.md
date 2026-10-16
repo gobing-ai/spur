@@ -98,7 +98,6 @@ their runbook here.
 **Noun(s):** task | feature | rule | workflow | agent spec
 **Method:** corpus campaign | compose/tune (`sp:spur-composer`) | evaluate/reflect (`sp:spur-doctor`)
 **Scope:** <resolved ids/files>
-**Confidence:** HIGH | MEDIUM | LOW
 
 ### Changes
 | Target | Operation | Result |

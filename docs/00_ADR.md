@@ -2,9 +2,9 @@
 doc: 00_ADR
 owns: WHY — lasting architectural choices, context and tradeoffs
 authority: authoritative
-version: 1.70.0
+version: 1.71.0
 owner: Robin Min
-updated_at: 2026-10-13
+updated_at: 2026-10-16
 read_before: any structural change; before diverging from a decision
 edit_rules: 99 §6.1
 sync: [T1, T2]
@@ -198,6 +198,9 @@ Keep every issued ADR number and decision history; older misplaced entries are n
 - **Decision:** Superskill owns anti-hallucination behavior; Spur provides `AgentService.runCapture` and the DI-backed `response.validate` workflow primitive. The former in-repo skill is removed.
 - **Why:** Answer verification is an agent capability; Spur owns only harness plumbing.
 - **Detail:** `packages/app/src/workflow/builtins.ts`.
+- **Amendment (2026-10-16 · task 1221):** the DI-only `response.validate` primitive is removed — no
+  composition root ever injected an engine, so it was dead registry surface. Spur keeps
+  `AgentService.runCapture`; answer validation stays agent-side (ADR-138).
 
 ## ADR-025: Board Interaction Libraries
 
@@ -1892,7 +1895,11 @@ descriptions above record earlier stages, not supported configuration.
 - **Detail:** [workflow execution economy](design/workflow-execution-economy.md) §4.
 
 **Amendment (2026-10-13 · task 1196) — a feature PASS carries a derived confidence level, and the
-completion boundary reads it.** The feature-scoped pass recorded a bound PASS/FAIL receipt and
+completion boundary reads it.** *Superseded 2026-10-16 by the ADR-138 amendment (task 1221): the
+receipt `confidence`/`confidenceBasis`/`confidenceAcknowledged` triple, the `confidence` and
+`ackLowConfidence` vars, the `--confidence`/`--ack-low-confidence` flags and the
+`unacknowledged-low-confidence` rejection are removed; legacy receipts parse with those keys ignored.
+Kept below as history only.* The feature-scoped pass recorded a bound PASS/FAIL receipt and
 nothing about how much that PASS can be trusted, so `verifying → done` treated a run of the selected
 definition's own check set exactly like a run of a caller `--cmd` override that checked something
 else. Task-pipeline has refused that silent equivalence since 1068 (a verify answer carries
@@ -2376,7 +2383,30 @@ owner split this entry established.
   a reader can re-check them. Contract docs restate the boundary (code-verification SKILL Step 11,
   `verdict-schema.md`, `dev-review.md`, `super-reviewer.md`, execution-workflow/inline-pipeline-driver
   references, dev-review); pinning tests assert the machinery's absence.
-- **Retains:** the DERIVED confidence family is a different thing and stays — feature-verification
-  receipts (1196, ADR-131 amendment) with their `ackLowConfidence` var and `feature-verification.yaml`
-  contract, the decision subsystem's numeric confidence, history-anatomy report reading, the
-  `sourced-api-claims` citation rule, and the changelog "no confidence ratings" invariant.
+- **Retains:** the decision subsystem's numeric maker `confidence`/`minConfidence` routing threshold
+  (an engine input, not a graded label), the citation-only `sourced-api-claims` rules
+  (`cited-version-strings`, `cited-api-claims`), and the changelog "no confidence ratings" invariant.
+  (As first accepted this clause also kept the derived feature-receipt level and the history-anatomy
+  per-finding confidence; the 2026-10-16 amendment retires both.)
+
+**Amendment (2026-10-16 · task 1221) — every HIGH/MEDIUM/LOW label is retired, not only the asserted
+one.** The "derived" family kept above still graded a self-claim one hop removed, and it re-imported
+the same ceremony: a receipt level plus `--confidence`/`--ack-low-confidence` operator flags, a
+level half on the docs rule, required `Confidence:` tokens in skill/agent prose, a per-finding
+confidence field in history-anatomy reports, and the never-wired `response.validate` primitive.
+All are removed: the receipt drops `confidence`/`confidenceBasis`/`confidenceAcknowledged` and the
+`unacknowledged-low-confidence` rejection (ADR-119's 1196 amendment is superseded; legacy receipts
+parse with the keys ignored), the docs rule is citation-only, the history-anatomy finding contract
+has 11 fields, skill/agent output contracts carry no level, and `response.validate` is gone (ADR-024).
+
+- **Invariant (binding):** no spur gate, rule, artifact field, CLI flag, workflow var, report
+  contract or skill/agent output contract may require, record, derive or grade a
+  `HIGH|MEDIUM|LOW` (or equivalent ordinal) confidence label. Gates read only deterministic,
+  re-checkable evidence — proof digests, exit statuses, input digests, the `Verdict:` grep,
+  findings disposition, AC identity, citations. Evidence gaps are named in the report body, not
+  scored. The sole exception is the decision engine's numeric routing threshold above.
+- **Re-introduction requires a superseding ADR** that names what the label measures that existing
+  evidence does not; "advisory", "telemetry" or "derived" framing is not an exemption — each was the
+  path by which the label returned (1088 → 1068, ADR-138 → 1196).
+- **Enforcement:** `plugins/sp/tests/skill-structure.test.ts` pins the docs rule as citation-only and
+  the history-anatomy field set; `task-pipeline-proof-chain.test.ts` pins the pipeline's absence.

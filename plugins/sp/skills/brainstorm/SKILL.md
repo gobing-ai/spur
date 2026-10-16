@@ -1,6 +1,6 @@
 ---
 name: brainstorm
-description: "Structured ideation: generate solution options with trade-offs and confidence scoring, then delegate to research/task-creation skills. Triggers: \"brainstorm ideas\", \"explore solutions\", \"consider options\", \"research approaches\", \"what are my options\", \"how should I approach X\"."
+description: "Structured ideation: generate solution options with trade-offs and source citations, then delegate to research/task-creation skills. Triggers: \"brainstorm ideas\", \"explore solutions\", \"consider options\", \"research approaches\", \"what are my options\", \"how should I approach X\"."
 license: Apache-2.0
 version: 1.0.0
 created_at: 2026-03-25
@@ -30,7 +30,7 @@ see_also:
 
 # sp:brainstorm — Structured Ideation Workflow
 
-Generate solution options with trade-offs, recommendations, and confidence scoring. Delegates research to specialized skills.
+Generate solution options with trade-offs, recommendations, and source citations. Delegates research to specialized skills.
 
 **Key distinction:**
 - **`sp:brainstorm`** = Ideation: generate approaches with trade-offs
@@ -40,7 +40,7 @@ Generate solution options with trade-offs, recommendations, and confidence scori
 
 ## Overview
 
-The `sp:brainstorm` skill generates multiple solution approaches with explicit trade-offs, confidence scoring, and source citations. It follows a structured 3-phase workflow: Input parsing, Ideation with research delegation, and structured Output. Unlike pure research or bare task creation, brainstorm focuses on ideation—generating and comparing options before committing to a solution path.
+The `sp:brainstorm` skill generates multiple solution approaches with explicit trade-offs and source citations. It follows a structured 3-phase workflow: Input parsing, Ideation with research delegation, and structured Output. Unlike pure research or bare task creation, brainstorm focuses on ideation—generating and comparing options before committing to a solution path.
 
 ## Quick Start
 
@@ -101,14 +101,15 @@ See the [inline-default contract](../spur-dev/references/cross-cutting.md#inline
 
 ### 3. Generate 2-3 Approaches
 
-Always generate multiple options, each with description, trade-offs, confidence, and sources — full
+Always generate multiple options, each with description, trade-offs, and sources — full
 per-approach template: [references/workflows.md](references/workflows.md#approach-generation).
 
-### 4. Confidence Scoring
+### 4. Source Citations
 
-Every approach and every external claim carries a HIGH/MEDIUM/LOW confidence score plus a dated
-source citation — table, thresholds, and citation format:
-[references/workflows.md](references/workflows.md#confidence-scoring).
+Every external claim carries a dated source citation — format:
+[references/workflows.md](references/workflows.md#source-citation-format). No HIGH/MEDIUM/LOW
+confidence score (ADR-138): a self-assigned score is as easy to write as the claim; the citation and
+the trade-offs are what the operator compares.
 
 ### 5. Task Delegation
 
@@ -224,13 +225,13 @@ still pauses unless the operator has encoded prior approval in the workflow vars
 | "I understand the request — skip clarifying." | Ideating on a misread wastes the whole session. Validate input clarity and the two input modes before generating options. |
 | "More options are always better." | Beyond ~3, options dilute focus and stall the decision. Cap at three and delegate deeper research instead. |
 | "I'll design the architecture while I brainstorm." | Brainstorm generates and scores approaches; it does not lock the design. Route a chosen approach through the Design Approval Gate. |
-| "Confidence scores are subjective — skip them." | An unscored option hides its risk. Cite sources and assign confidence so the operator compares on evidence, not vibes. |
+| "Sources are obvious — skip them." | An uncited option hides its risk. Cite sources and name the trade-offs so the operator compares on evidence, not vibes. |
 
 ## Red Flags
 
 - Presenting a single approach with no alternatives or trade-offs.
 - Starting ideation before the input is clarified.
-- More than three approaches, or approaches with no confidence score / source.
+- More than three approaches, or approaches with no source.
 - Skipping the task-delegation offer after the operator confirms a direction.
 - Treating a brainstorm output as an approved design (bypassing the approval gate).
 
@@ -293,7 +294,7 @@ codebase-first rule, stop conditions, depth question budgets, smart positional d
 The skill uses this tree to:
 1. **Constrain the option space** — each approach must be compatible with resolved decisions
 2. **Generate decision-trace annotations** — each approach lists which decisions it depends on
-3. **Calibrate confidence** — decisions resolved from codebase evidence get higher confidence
+3. **Cite the evidence** — decisions resolved from codebase evidence cite the `path:line` they rest on
 
 When `--skip-discovery` is used (no `--context`), the operation falls back to the standard
 3-phase workflow with its own lightweight clarification step.

@@ -201,7 +201,6 @@ Audit categories:
 | Analysis Date | YYYY-MM-DD |
 | Target | `path` |
 | Mode / Focus / Format | `briefing` / `[focus]` / `markdown` |
-| Confidence | High / Medium / Low |
 
 ## Purpose Hypothesis
 
@@ -209,8 +208,8 @@ Audit categories:
 
 ## Tech Stack
 
-| Layer | Technology | Evidence | Confidence |
-|---|---|---|---|
+| Layer | Technology | Evidence |
+|---|---|---|
 
 ## Entry Points
 
@@ -282,7 +281,6 @@ Use this shape for `--format json` or `--format both`. Omit fields only when the
   "analysisDate": "YYYY-MM-DD",
   "mode": "architecture",
   "focus": "all",
-  "confidence": "high|medium|low",
   "stack": [],
   "entryPoints": [],
   "components": [],
@@ -301,7 +299,7 @@ Use this shape for `--format json` or `--format both`. Omit fields only when the
 - Cite `file/path:line` for claims derived from source files.
 - Cite manifest paths for stack and package manager claims.
 - Cite multiple files for architectural boundary claims when possible.
-- Mark inferred claims with `Confidence: Medium` or `Confidence: Low`.
+- Mark inferred claims `Inferred:` and name the evidence that would confirm them; no confidence label (ADR-138).
 - Never invent services, databases, tables, endpoints, actors, diagrams, or business flows that are not supported by evidence.
 - If line numbers are unavailable from a tool, cite the file path and state that line numbers were not available.
 
@@ -339,7 +337,7 @@ The indexed-context layer is optional and opportunistic.
 |---|---|
 | Empty/minimal codebase | Return `briefing` with "insufficient evidence", list missing artifacts, suggest next files needed. |
 | Monorepo | Identify packages/apps; ask for scope unless `--auto` or requested mode can safely summarize all packages. |
-| No clear entry point | List candidates with confidence and evidence; do not choose one as definitive. |
+| No clear entry point | List candidates with their evidence; do not choose one as definitive. |
 | Binary-heavy repo | Focus on manifests, scripts, config, docs, and visible source. |
 | Generated/vendor-heavy repo | Exclude generated/vendor paths from architecture conclusions unless directly relevant. |
 | Framework convention over configuration | State inferred convention and cite framework-specific file patterns. |

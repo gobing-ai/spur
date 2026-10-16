@@ -309,8 +309,6 @@ spur feature verify [options] [id]
 |---|---|
 | `--run-id <id>` | Workflow run id the receipt binds to (env: `__runId`) |
 | `--cmd <command>` | Verification command override (env: `verificationCmd`) |
-| `--confidence <level>` | Declared confidence `HIGH` \| `MEDIUM` \| `LOW` (env: `confidence`) |
-| `--ack-low-confidence` | Acknowledge a `LOW` confidence level on the receipt (env: `ackLowConfidence=true`) |
 
 The `feature-verification.yaml` pass (D63 task 0915; script-absorption PR-5 replaced the plugin
 script `feature-verification-steps`): runs the selected definition's command once (or `--cmd`)

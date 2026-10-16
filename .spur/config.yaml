@@ -65,6 +65,21 @@ bootstrap:
         cron: "0 4 * * 0"
         command: bun apps/cli/src/index.ts --no-logo self maintain --vacuum
 
+      # 20261012, every 30 min from 04:00: refresh quota-owned executor availability, because a
+      # spent balance is invisible until a run needs the executor. `spur agent usage` is run-once BY
+      # DESIGN ("Schedule it externally (cron/launchd); spur serve never runs it"), so nothing else
+      # keeps the ladder honest — and on 2026-10-12 the elected coder/reviewer/planner executor
+      # (grok-4.7) answered 402 mid-run, which ended the safety gate and the run with it. The capture
+      # demotes an exhausted executor to `disabled(quota)` and every role re-elects from the ladder,
+      # so the 04:30 daily job starts against measured availability. The 04:00 tick is deliberate: it
+      # lands after the roster settles and before kk-daily-ai-voice reads it. CodexBar credentials and
+      # the provider endpoints are the operator's; a provider that errors is skipped, never treated as
+      # recovery (the command's own contract), and the job is read-only against the project.
+      - name: agent-usage-refresh
+        cron: "0,30 4-23 * * *"
+        timeoutMs: 600000
+        command: spur --no-logo agent usage
+
 rules:
   paths:
     - .spur/rules/**/*.yaml

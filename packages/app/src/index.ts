@@ -986,11 +986,6 @@ export { FileReadActionRunner } from './workflow/actions/file-read';
 export { FileReadIntoVarActionRunner } from './workflow/actions/file-read-into-var';
 export { HitlConfirmActionRunner } from './workflow/actions/hitl-confirm';
 export { HitlInputActionRunner } from './workflow/actions/hitl-input';
-export {
-    ResponseValidateActionRunner,
-    type ResponseValidateEngine,
-    type ResponseValidateResult,
-} from './workflow/actions/response-validate';
 export { RuleCheckActionRunner } from './workflow/actions/rule-check';
 export { RunArtifactActionRunner, type RunArtifactOptions } from './workflow/actions/run-artifact';
 export {
@@ -1060,7 +1055,6 @@ export {
     captureFeatureReceiptDigest,
     completeFeatureVerificationReceipt,
     DEFAULT_FEATURE_VERIFICATION_CMD,
-    FEATURE_RECEIPT_CONFIDENCE_LEVELS,
     FEATURE_RECEIPT_SCHEMA_VERSION,
     featureReceiptPaths,
     isProofCaptureError,
@@ -1069,7 +1063,6 @@ export {
 } from './workflow/feature-verification-receipt';
 export {
     createFeatureLookup,
-    deriveFeatureConfidence,
     type FeatureSpec,
     type FeatureSpecLookup,
     type FeatureVerificationRunInput,

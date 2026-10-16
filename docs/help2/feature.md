@@ -129,7 +129,7 @@ spur feature sync --all --json
 ## spur feature verify
 
 ```bash
-spur feature verify <id> --run-id <id> [--cmd <command>] [--confidence <level>] [--ack-low-confidence]
+spur feature verify <id> --run-id <id> [--cmd <command>]
 ```
 
 The `feature-verification` workflow pass: runs the feature's verification command once and

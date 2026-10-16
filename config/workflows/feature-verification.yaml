@@ -52,14 +52,6 @@ vars:
   featureId: "X"
   spurBin: "spur"
   verificationCmd: "bun run spur-check-feature"
-  # Operator-declared confidence level; empty derives it from the pass (HIGH when the selected
-  # definition's own command exited 0 with an unchanged proof-input digest, MEDIUM under a caller
-  # `--cmd` override, LOW otherwise). The completion boundary refuses a PASS carrying no level or
-  # LOW unless the receipt records the acknowledgement below.
-  confidence: ""
-  # Operator acknowledgement of a LOW level. It rides the receipt, so the transition reads it from
-  # the evidence rather than from whatever flags a later command happens to pass.
-  ackLowConfidence: "false"
   __runId: ""
 
 states:
@@ -73,7 +65,7 @@ states:
       - kind: shell
         options:
           command: >-
-            mkdir -p .spur/run; ACK=""; [ "$ackLowConfidence" = "true" ] && ACK="--ack-low-confidence"; $spurBin feature verify "$featureId" --run-id "$__runId" --confidence "$confidence" $ACK --no-logo || printf 'FAIL feature-verification failed closed — spur feature verify exited nonzero\n' > ".spur/run/$__runId-feature-verification.status"; exit 0
+            mkdir -p .spur/run; $spurBin feature verify "$featureId" --run-id "$__runId" --no-logo || printf 'FAIL feature-verification failed closed — spur feature verify exited nonzero\n' > ".spur/run/$__runId-feature-verification.status"; exit 0
 
   - id: done
     description: Terminal — repo-wide checks passed and the receipt is bound.

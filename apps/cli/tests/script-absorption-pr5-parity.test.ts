@@ -57,7 +57,24 @@ function expected(group: string, id: string): CaseOutcome {
         const step = out.steps[Number(index)];
         if (step) Object.assign(step, patch);
     }
+    if (group === 'featureVerify') retireReceiptConfidence(out);
     return out;
+}
+
+/**
+ * The feature-receipt confidence level was retired after the capture (task 1221, ADR-138): the
+ * pass message no longer names a level and receipts no longer carry the `confidence*` keys.
+ */
+function retireReceiptConfidence(out: CaseOutcome): void {
+    for (const step of out.steps) step.stdout = step.stdout.replace(/, confidence [A-Z]+/g, '');
+    for (const [path, content] of Object.entries(out.files)) {
+        if (!path.endsWith('-feature-verification.json')) continue;
+        const receipt = JSON.parse(content) as Record<string, unknown>;
+        delete receipt.confidence;
+        delete receipt.confidenceBasis;
+        delete receipt.confidenceAcknowledged;
+        out.files[path] = `${JSON.stringify(receipt, null, 4)}\n`;
+    }
 }
 
 describe('script-absorption PR-5 golden parity', () => {

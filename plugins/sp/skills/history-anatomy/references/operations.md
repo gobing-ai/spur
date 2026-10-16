@@ -31,10 +31,9 @@ Given the current and baseline artifacts, author the model half of the report. A
    calendar day; ad-hoc → immediately preceding equal-duration window. If baseline coverage is
    insufficient or materially different, emit `not comparable` and **no** trend/delta/percentage.
 3. **Findings** — each with the full per-finding field set (key, category, impact, trend,
-   observation, inference, confidence, contradictions, evidenceAnchor, severity, reproCommand,
+   observation, inference, contradictions, evidenceAnchor, severity, reproCommand,
    ownerSurface). Categories from the closed vocabulary; stable keys of the form
-   `<category>:<owner-surface>:<signal>`. Severity is the closed P1/P2/P3 vocabulary and is
-   orthogonal to confidence; reproCommand reproduces the observation verbatim; ownerSurface names
+   `<category>:<owner-surface>:<signal>`. Severity is the closed P1/P2/P3 vocabulary; reproCommand reproduces the observation verbatim; ownerSurface names
    the concrete owning surface (file/package/command), consistent with the key's middle segment.
 4. **Recurrence ledger** — classify every finding against the baseline on the **stable key**.
 5. **Telemetry gaps** — every dimension the artifact cannot support, rendered `not available`.
@@ -58,7 +57,7 @@ Given a candidate report and the artifacts, independently verify:
 - **Twelve-section completeness and order** — all twelve section names present in the frozen
   order; none renamed/omitted.
 - **Per-finding fields** — every finding (problem and positive) carries key, category, impact,
-  trend, observation, inference, confidence, contradictions, evidenceAnchor, severity (P1/P2/P3),
+  trend, observation, inference, contradictions, evidenceAnchor, severity (P1/P2/P3),
   reproCommand, ownerSurface; category in the closed vocabulary; stable-key grammar. A finding
   missing any triage field FAILs (the deterministic gate enforces the same set).
 - **Remediation handoff** — each accepted-proposal handoff carries a `spur task create`

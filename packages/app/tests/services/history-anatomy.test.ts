@@ -558,7 +558,7 @@ describe('checkReportStructure triage fields + advisory section (0680)', () => {
         const fields =
             '- `key`: `coverage:analytics:pairs`\n- `category`: `coverage`\n' +
             '- `impact`: i\n- `trend`: `new`\n' +
-            '- `observation`: o\n- `inference`: inf\n- `confidence`: high\n' +
+            '- `observation`: o\n- `inference`: inf\n' +
             '- `contradictions`: none\n- `evidenceAnchor`: `a.md`\n' +
             '- `severity`: `P2`\n- `reproCommand`: `bun run x`\n- `ownerSurface`: `packages/domain/src/analytics/pairings.ts`';
         expect(checkReportStructure(findingBlock(fields)).ok).toBe(true);
@@ -570,7 +570,6 @@ describe('checkReportStructure triage fields + advisory section (0680)', () => {
             '- `category`: `coverage`',
             '- `observation`: o',
             '- `inference`: inf',
-            '- `confidence`: high',
             '- `contradictions`: none',
             '- `evidenceAnchor`: `a.md`',
             '- `severity`: `P2`',
@@ -593,7 +592,6 @@ describe('checkReportStructure triage fields + advisory section (0680)', () => {
                     '- `category`: `coverage`',
                     '- `observation`: o',
                     '- `inference`: inf',
-                    '- `confidence`: high',
                     '- `contradictions`: none',
                     '- `evidenceAnchor`: `a.md`',
                     '- `severity`: `critical`',
@@ -605,33 +603,24 @@ describe('checkReportStructure triage fields + advisory section (0680)', () => {
         expect(r.problems).toContain('finding-invalid-severity');
     });
 
-    // The confidence vocabulary is also closed (report contract): per-finding high/medium/low,
-    // case-insensitive so HIGH/MEDIUM/LOW pass. An out-of-vocabulary level fails by name.
-    test('an out-of-vocabulary confidence fails the gate; high/medium/low pass in any case', () => {
-        const conf = (value: string) =>
-            [
-                '- `key`: `coverage:analytics:pairs`',
-                '- `category`: `coverage`',
-                '- `impact`: i',
-                '- `trend`: `new`',
-                '- `observation`: o',
-                '- `inference`: inf',
-                `- \`confidence\`: ${value}`,
-                '- `contradictions`: none',
-                '- `evidenceAnchor`: `a.md`',
-                '- `severity`: `P2`',
-                '- `reproCommand`: `bun run x`',
-                '- `ownerSurface`: `packages/domain/src/analytics/pairings.ts`',
-            ].join('\n');
-        for (const level of ['high', 'medium', 'low', 'HIGH', 'Medium', '`low`']) {
-            expect(
-                checkReportStructure(findingBlock(conf(level))).problems.filter((p) =>
-                    p.startsWith('finding-invalid-confidence'),
-                ),
-            ).toEqual([]);
-        }
-        const r = checkReportStructure(findingBlock(conf('`certain`')));
-        expect(r.problems).toContain('finding-invalid-confidence:certain');
+    // ADR-138 (task 1221): the per-finding confidence label is retired. A legacy report that still
+    // carries a `confidence` bullet passes — the value is neither required nor graded.
+    test('a legacy confidence bullet is neither required nor graded', () => {
+        const legacy = [
+            '- `key`: `coverage:analytics:pairs`',
+            '- `category`: `coverage`',
+            '- `impact`: i',
+            '- `trend`: `new`',
+            '- `observation`: o',
+            '- `inference`: inf',
+            '- `confidence`: `certain`',
+            '- `contradictions`: none',
+            '- `evidenceAnchor`: `a.md`',
+            '- `severity`: `P2`',
+            '- `reproCommand`: `bun run x`',
+            '- `ownerSurface`: `packages/domain/src/analytics/pairings.ts`',
+        ].join('\n');
+        expect(checkReportStructure(findingBlock(legacy)).problems.filter((p) => p.startsWith('finding-'))).toEqual([]);
     });
 
     test('non-finding blocks under Findings are not policed (positive-patterns style prose)', () => {
@@ -676,7 +665,6 @@ describe('checkReportStructure closed category vocabulary (0686/I9)', () => {
             '- `trend`: `new`',
             '- `observation`: o',
             '- `inference`: inf',
-            '- `confidence`: high',
             '- `contradictions`: none',
             '- `evidenceAnchor`: `a.md`',
             '- `severity`: `P2`',
@@ -739,7 +727,7 @@ describe('checkReportStructure closed category vocabulary (0686/I9)', () => {
             .slice(0, i + 1)
             .map((s) => `## ${s}\n\nbody`)
             .join('\n\n');
-        const withRow = `${body}\n\n| workflow:category:key impact trend observation inference confidence contradictions evidenceAnchor severity reproCommand ownerSurface |\n\n${sections
+        const withRow = `${body}\n\n| workflow:category:key impact trend observation inference contradictions evidenceAnchor severity reproCommand ownerSurface |\n\n${sections
             .slice(i + 1)
             .map((s) => `## ${s}\n\nbody`)
             .join('\n\n')}`;

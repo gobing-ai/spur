@@ -62,10 +62,9 @@ Every finding — problem and positive alike — carries the full field set:
 | `trend` | `new` / `recurring` / `regressed` / `improved` / `resolved` / `not-comparable` (see recurrence). |
 | `observation` | What the artifacts show — evidence, not interpretation. |
 | `inference` | What the observation is reasoned to mean; names its supporting observations. |
-| `confidence` | Per-finding: `high` / `medium` / `low`. Never one blanket report-level score. |
 | `contradictions` | Any contradicting signal shown beside the finding, not silently reconciled. |
 | `evidenceAnchor` | At least one anchor to the forensics artifact or cited `file:line`. An entry with no anchor is invalid. |
-| `severity` | Closed vocabulary `P1` / `P2` / `P3` — how much the finding matters. Orthogonal to `confidence`: severity orders work, confidence says how sure we are (0680 R1). The structure gate fails a finding without one. |
+| `severity` | Closed vocabulary `P1` / `P2` / `P3` — how much the finding matters. Severity orders work (0680 R1); how well a finding is supported lives in its `observation`, `inference`, `contradictions` and `evidenceAnchor`, never a confidence label (ADR-138). The structure gate fails a finding without one. |
 | `reproCommand` | The invocation that reproduces the observation — one command a reader can run verbatim (0680 R2). Gate-enforced. |
 | `ownerSurface` | The concrete surface that owns the fix (a file path, package, or command), consistent with the key's `<owner-surface>` segment but named as a target rather than a slug (0680 R3). Gate-enforced. |
 
@@ -114,7 +113,7 @@ reclassify a recurring finding as new.
 ## Positive patterns
 
 Positive entries are held to the **same evidence standard as problems**: they carry observation,
-inference, confidence, and at least one evidence anchor. An entry without an anchor is invalid. The
+inference, and at least one evidence anchor. An entry without an anchor is invalid. The
 section renders successful workflows, resolved past issues that stay resolved, and healthy,
 repeating behavior worth keeping.
 

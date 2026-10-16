@@ -74,7 +74,7 @@ describe('semanticArtifactDigest CLI parity (0669 R2, spur history anatomy)', ()
         ];
         const finding =
             '- `key`: `workflow:agents-md:navigation`\n- `category`: `<cat>`\n- `impact`: i\n- `trend`: `new`\n' +
-            '- `observation`: o\n- `inference`: inf\n- `confidence`: high\n- `contradictions`: none\n' +
+            '- `observation`: o\n- `inference`: inf\n- `contradictions`: none\n' +
             '- `evidenceAnchor`: `a.md`\n- `severity`: `P2`\n- `reproCommand`: `bun run x`\n- `ownerSurface`: `s.ts`';
         const report = (cat: string) =>
             sections
@@ -90,49 +90,6 @@ describe('semanticArtifactDigest CLI parity (0669 R2, spur history anatomy)', ()
             const proc = cli(['check', badPath]);
             expect(proc.exitCode).toBe(1);
             expect(proc.stdout.toString()).toContain('finding-invalid-category:navigation');
-        } finally {
-            rmSync(dir, { recursive: true, force: true });
-        }
-    });
-
-    // Confidence-vocabulary gate must also hold under bare node: the production helper runs the
-    // generated twin, so a level outside high/medium/low must fail there by name too.
-    test('the CLI check fails an out-of-vocabulary confidence', () => {
-        const dir = mkdtempSync(join(tmpdir(), 'ha-twin-conf-'));
-        const sections = [
-            'Scope and provenance',
-            'Executive summary',
-            'Baseline comparison',
-            'Findings',
-            'Recurrence ledger',
-            'Telemetry gaps',
-            'Remediation options',
-            'Performance analysis',
-            'Workflow and process improvements',
-            'Report-only advisories',
-            'Positive patterns',
-            'Evidence ledger',
-        ];
-        const finding = (conf: string) =>
-            '- `key`: `coverage:analytics:pairs`\n- `category`: `coverage`\n- `impact`: i\n- `trend`: `new`\n' +
-            '- `observation`: o\n- `inference`: inf\n' +
-            `- \`confidence\`: ${conf}\n` +
-            '- `contradictions`: none\n- `evidenceAnchor`: `a.md`\n- `severity`: `P2`\n' +
-            '- `reproCommand`: `bun run x`\n- `ownerSurface`: `s.ts`';
-        const report = (conf: string) =>
-            sections
-                .map((s) => `## ${s}\n\nbody`)
-                .join('\n\n')
-                .replace('## Findings\n\nbody', `## Findings\n\n### f\n\n${finding(conf)}\n`);
-        const goodPath = join(dir, 'good.md');
-        const badPath = join(dir, 'bad.md');
-        writeFileSync(goodPath, report('high'));
-        writeFileSync(badPath, report('`certain`'));
-        try {
-            expect(cli(['check', goodPath]).exitCode).toBe(0);
-            const proc = cli(['check', badPath]);
-            expect(proc.exitCode).toBe(1);
-            expect(proc.stdout.toString()).toContain('finding-invalid-confidence:certain');
         } finally {
             rmSync(dir, { recursive: true, force: true });
         }

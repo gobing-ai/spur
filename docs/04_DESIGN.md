@@ -367,9 +367,9 @@ See [contract detail](design/planning-workflow-contracts.md#agent-capability-att
 
 See [contract detail](design/planning-workflow-contracts.md#76-task-dtos-orpc-contract).
 
-### 7.7 Workflow action primitives for anti-hallucination (ADR-024)
+### 7.7 Agent answer capture primitives (ADR-024)
 
-See [contract detail](design/planning-workflow-contracts.md#77-workflow-action-primitives-for-anti-hallucination-adr-024).
+See [contract detail](design/planning-workflow-contracts.md#77-agent-answer-capture-primitives-adr-024).
 
 ### 7.8 `sp:dev-*` command operations
 

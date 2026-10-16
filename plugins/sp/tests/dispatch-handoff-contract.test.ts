@@ -104,7 +104,6 @@ const TASK_CONTENT = `## 0818. Handoff fixture task
 function answer(reqStatus: string, acEvidenceType: string): string {
     return [
         'Verdict: PASS',
-        'Confidence: HIGH',
         '',
         '### Per-Requirement Traceability',
         '| Req | Status | Evidence |',

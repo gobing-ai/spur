@@ -46,27 +46,22 @@ describe('spur feature verify', () => {
         expect(r.err).toBe('feature verify: Error: refusing unsafe feature id: ../x');
     });
 
-    test('ids, command and confidence fall back to the workflow env names', async () => {
+    test('ids and command fall back to the workflow env names', async () => {
         const unknown = await run(['feature', 'verify'], {
             featureId: 'D9',
             __runId: 'v2',
             verificationCmd: 'true',
-            confidence: 'LOW',
-            ackLowConfidence: 'true',
         });
         expect(unknown.exitCode).toBe(1);
         expect(unknown.err).toBe('feature verify: Error: feature D9 not found in the configured features directory');
-        const noRun = await run([
-            'feature',
-            'verify',
-            'D9',
-            '--cmd',
-            'true',
-            '--confidence',
-            'HIGH',
-            '--ack-low-confidence',
-        ]);
+        const noRun = await run(['feature', 'verify', 'D9', '--cmd', 'true']);
         expect(noRun.exitCode).toBe(1);
         expect(noRun.err).toBe('feature verify: Error: refusing unsafe run id: ');
+    });
+
+    test('the retired confidence flags are gone (ADR-138, task 1221)', async () => {
+        const r = await run(['feature', 'verify', 'D9', '--run-id', 'v3', '--ack-low-confidence']);
+        expect(r.exitCode).not.toBe(0);
+        expect(r.err).toContain("unknown option '--ack-low-confidence'");
     });
 });

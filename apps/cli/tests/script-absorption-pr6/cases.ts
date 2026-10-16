@@ -55,7 +55,6 @@ export const PR6_CASES: readonly Pr6Case[] = [
     pair('anatomy digest', HA, ANATOMY, ['digest', F('ha-artifact.json')]),
     pair('anatomy check pass', HA, ANATOMY, ['check', F('ha-report-good.md')]),
     pair('anatomy check bad category', HA, ANATOMY, ['check', F('ha-report-bad-category.md')]),
-    pair('anatomy check bad confidence', HA, ANATOMY, ['check', F('ha-report-bad-confidence.md')]),
     pair('anatomy check missing sections', HA, ANATOMY, ['check', F('ha-report-missing.md')]),
     pair('anatomy check usage', HA, ANATOMY, ['check']),
     pair('anatomy unknown op', HA, ANATOMY, ['bogus']),

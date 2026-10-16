@@ -551,21 +551,18 @@ wire shape. Domain types stay in `@gobing-ai/spur-domain`; transport DTOs belong
 | `taskActionInputSchema` | `wbs, action, channel?, skipDeps?`                                                  | `action` ∈ `refine\|plan\|run\|verify\|decompose\|evaluate`. `channel` ∈ `claude\|codex\|gemini\|pi\|opencode\|antigravity\|openclaw`; `skipDeps` is persisted in the queued job metadata for dependency-bypass-aware runners (R9).                     |
 | `taskFolderSchema`      | `path, label?`                                                                      | Folder entry from `docs/.tasks/config.jsonc` (R6).                                                                                                                                                                                                      |
 
-<a id="77-workflow-action-primitives-for-anti-hallucination-adr-024"></a>
+<a id="77-agent-answer-capture-primitives-adr-024"></a>
 
-### 7.7 Workflow action primitives for anti-hallucination (ADR-024)
+### 7.7 Agent answer capture primitives (ADR-024)
 
-Two primitives back the anti-hallucination migration (superskill task 0041):
+Answer capture is harness plumbing; answer *validation* (anti-hallucination) is agent-side and lives in `cc:anti-hallucination` (ADR-024, ADR-138):
 
 | Primitive                  | Surface                                                  | Description                                                                                                                                                                                                                                                                                               |
 | -------------------------- | -------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `AgentService.runCapture`  | `packages/app/src/services/agent-service.ts`             | Opt-in capture path: returns `{ exitCode, answer }` without streaming or diagnostics. Uses buffered output mode.                                                                                                                                                                                          |
 | Workflow `agent.run`       | `packages/app/src/workflow/actions/agent-run.ts`         | Always dispatches through `AgentService.runTraced`: buffered output, non-interactive stdin, and a sanitized resolved invocation persisted in `ActionResult.data`. `capture: true` only surfaces buffered stdout as `data.answer`. Direct `spur agent run` keeps its TTY-aware `run` / `runCapture` paths. |
-| `response.validate` action | `packages/app/src/workflow/actions/response-validate.ts` | Reads `text` from options, calls injected `ResponseValidateEngine.validate()`, maps `{ ok, reason, issues }` to `ActionResult`. Engine injected via `SpurWorkflowBuiltinsOptions.responseValidateEngine` in `builtins.ts`.                                                                                |
 
-**Engine seam:** `ResponseValidateEngine` interface (`{ validate(text: string): { ok, reason, issues? } }`) is the contract. The concrete engine is owned by superskill 0041 and provided by the externally-installed `cc:anti-hallucination` skill; the caller wires a thin adapter over its surface. The in-repo copy (`plugins/sp/skills/anti-hallucination/`) was removed once the migration completed (ADR-024 amendment, 2026-06-20); the seam itself is DI-only and unchanged.
-
-**Retry/deny pattern:** transition-flow spike (`packages/app/tests/fixtures/anti-hallucination-spike.yaml`) confirms `validate → ok:done | fail:generate(bounded) | exhausted:denied` is expressible. `iterationBound` caps retries; a proper retry-count guard (checking `vars.__retryCount`) is future work (R3.1).
+The DI-only `response.validate` action was removed (task 1221): no composition root ever injected an engine, so it never registered.
 
 <a id="78-spdev--command-operations"></a>
 

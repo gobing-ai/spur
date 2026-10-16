@@ -116,7 +116,7 @@ export function parseExecutorPin(raw: unknown): ExecutorPin | undefined {
  * - `continue` (boolean): explicit continue flag. When unset, the session latch
  *   (`vars.__agentSession`) auto-determines continue-on/open-new.
  * - `capture` (boolean): when true, the agent's stdout is also returned in
- *   `data.answer` for downstream steps (e.g. `response.validate`). Capture is
+ *   `data.answer` for downstream steps. Capture is
  *   available because the non-interactive path captures stdout regardless —
  *   `capture` here only controls whether `answer` is surfaced in `data`.
  * - `answerFile` (string): persist the captured stdout to a file (implies capture).

@@ -157,8 +157,6 @@ async function recordServerReceipt(
     await completeFeatureVerificationReceipt(fs, ctx.runDir, running, {
         status: 'PASS',
         inputDigest,
-        confidence: 'HIGH',
-        confidenceBasis: ['verification command exited 0', 'proof-input digest unchanged across the pass'],
     });
     // Run-store mirror: the wired run port refuses a receipt whose run row is
     // absent or not terminal, so the fixture records what the engine would.

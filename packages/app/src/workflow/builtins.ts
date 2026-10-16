@@ -23,7 +23,6 @@ import { HitlInputActionRunner } from './actions/hitl-input';
 import { HitlSelectActionRunner } from './actions/hitl-select';
 import { type HostAllowlist, HttpRequestActionRunner, type HttpRequester } from './actions/http-request';
 import { ProofFingerprintActionRunner } from './actions/proof-fingerprint';
-import { ResponseValidateActionRunner, type ResponseValidateEngine } from './actions/response-validate';
 import { RuleCheckActionRunner } from './actions/rule-check';
 import { RunArtifactActionRunner } from './actions/run-artifact';
 import { StreamingShellActionRunner } from './actions/shell';
@@ -41,7 +40,6 @@ export interface SpurWorkflowBuiltinsOptions {
     fileSystem?: FileSystem;
     httpRequester?: HttpRequester;
     hostAllowlist?: HostAllowlist;
-    responseValidateEngine?: ResponseValidateEngine;
     observabilityBus?: WorkflowObservabilityBus;
     /** Decision-log sink (task 1100): built by the composition root from its own config. */
     decisionLog?: DecisionLogSink;
@@ -152,8 +150,5 @@ export function registerSpurBuiltins(host: WorkflowEngineHost, options: SpurWork
             new HttpRequestActionRunner(options.httpRequester, options.hostAllowlist ?? new Set()),
             'builtin',
         );
-    }
-    if (options.responseValidateEngine) {
-        host.registerAction(new ResponseValidateActionRunner(options.responseValidateEngine), 'builtin');
     }
 }

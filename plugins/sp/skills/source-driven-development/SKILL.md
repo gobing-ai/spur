@@ -55,27 +55,28 @@ Do **not** use this skill for:
 
 - **Your own code's correctness** — that is `sp:code-verification` (requirements/AC) and `sp:code-review`.
 - **Stress-testing a design decision** — that is `sp:doubt-driven-development` (artifact vs contract).
-- **Well-known, version-stable stdlib** you can state with HIGH confidence — verification has a cost;
+- **Well-known, version-stable stdlib** you have already checked — verification has a cost;
   spend it where being wrong is likely and expensive.
 
 ## The process
 
-### Step 1 — Classify your confidence before you write
+### Step 1 — Know where each fact came from before you write
 
-| Level | Meaning | Action |
-|---|---|---|
-| **HIGH** | Verified against the pinned version's docs/source **this session** | Generate; cite the source inline |
-| **MEDIUM** | Recalled from a prior session; plausibly stale | Verify before relying on it |
-| **LOW** | Memory only, no source in hand | Stop — verify first; never present as fact |
+| Source in hand | Action |
+|---|---|
+| Checked against the pinned version's docs/source **this session** | Generate; cite the source inline |
+| Recalled from a prior session; plausibly stale | Verify before relying on it |
+| Memory only, no source in hand | Stop — verify first; never present as fact |
 
-If you cannot honestly claim HIGH for a version-specific behavior, you are at MEDIUM or LOW — verify.
+Do not grade the claim with a confidence label (ADR-138): a label is as easy to write as the claim.
+The citation is the evidence.
 
 ### Step 2 — Go to the primary source, in priority order
 
 1. The **type signature / source** in the installed, pinned dependency (the ground truth for *this* build).
 2. The **official docs for the pinned version** (not the latest — the version in the lockfile).
 3. Authoritative references when docs are thin.
-4. Memory — **LOW only**, and never as the final authority.
+4. Memory — never the final authority; verify before relying on it.
 
 State the **version** inline whenever behavior is version-specific.
 
@@ -91,24 +92,17 @@ Generate the code and **cite the source** (doc URL + date, or `pkg@version` + th
 point of use or in the task's notes. A claim about external behavior without a citation is
 unverified — flag it as such rather than presenting it as fact.
 
-### Step 5 — Close with a verification verdict
-
-Before finishing, verify the citations for the API/library claims you emitted and close with one
-line: `Verification: HIGH|MEDIUM|LOW — <first failing check and deviation, or 'all checks passed'>`.
+### Step 5 — Check the citations before finishing
 
 - **Citation coverage** — every API/library claim in the output carries a source citation (doc URL + date, or `pkg@version` + file/symbol); no uncited claim is asserted as fact.
 - **Source authority** — each citation points at the pinned version's primary source (installed signature/source, or official docs for the lockfile version), not the latest docs or memory.
-- **Honest confidence** — the stated HIGH/MEDIUM/LOW matches the evidence: HIGH requires a check against the pinned source this session; MEDIUM/LOW items are labeled, and LOW is never presented as fact.
-- **HIGH** — all three checks pass. **MEDIUM** — coverage intact but some citations are off-version (latest docs for a pinned dependency) or secondary-source only. **LOW** — an API/library claim lacks any citation, or a LOW-confidence claim was asserted as fact.
 
-Deterministic backstop: the `cited-version-strings`,
-`cited-version-strings-confidence`, `cited-api-claims`, `cited-api-claims-confidence` and
-`cited-high-confidence` rules (`.spur/rules/docs/sourced-api-claims.yaml`) flag markdown lines that
-assert a version string or a time- or version-anchored API claim (`deprecated since`, `removed in
-0.9`, `fixers (since 0.3.4)`) with no citation anchor on the same line, version and claim lines that
-carry no HIGH/MEDIUM/LOW level, and claim lines that claim HIGH with no anchor — the one level that
-asserts "verified this session", so its source must be on the line; MEDIUM (recalled) and LOW
-(memory only) need no anchor by contract and are not flagged. They are an info-severity advisory
+Report the first failing check and its deviation, if any. Do not append a confidence verdict.
+
+Deterministic backstop: the `cited-version-strings` and `cited-api-claims` rules
+(`.spur/rules/docs/sourced-api-claims.yaml`) flag markdown lines that assert a version string or a
+time- or version-anchored API claim (`deprecated since`, `removed in 0.9`, `fixers (since 0.3.4)`)
+with no citation anchor on the same line. They are an info-severity advisory
 backstop for this contract and are deliberately NOT wired into `recommended-pre-check` — run them ad
 hoc with `spur rule run --file .spur/rules/docs/sourced-api-claims.yaml`. Dated working records
 (`docs/report*`, `docs/dogfood`, `docs/plans`, `docs/analysis`) are excluded, as are the task
@@ -119,15 +113,15 @@ SECUA checklist remain the enforcement points.
 
 | Rationalization | Reality |
 |---|---|
-| "I've used this API a hundred times — I know the signature." | APIs change across versions and your memory is a silent cache. Verify against the *pinned* version; recall is MEDIUM at best. |
+| "I've used this API a hundred times — I know the signature." | APIs change across versions and your memory is a silent cache. Verify against the *pinned* version; recall is not a source. |
 | "It compiled, so I used it right." | Compiling proves existence and types, not contract. Ordering, preconditions, and error modes are not checked by the compiler. |
 | "The latest docs say so." | You ship against the *pinned* version, not latest. Read the docs for the version in the lockfile. |
 | "Close enough — I'll fix it if it breaks." | Guessing at an external contract moves the cost to runtime/production. Verify before generating; it is cheaper here. |
-| "Verifying every call is too slow." | Verify what you are *not sure of*, at the confidence level you honestly hold. HIGH needs no re-check; LOW always does. |
+| "Verifying every call is too slow." | Verify what you have no source for. A fact checked this session needs no re-check; memory always does. |
 
 ## Red Flags
 
-- Generating version-specific code you would rate MEDIUM or LOW confidence, without opening a source.
+- Generating version-specific code from memory, without opening a source.
 - Presenting an API claim as fact with no citation (doc + date, or `pkg@version` + symbol).
 - Treating "it exists" as proof it is used correctly (the two questions collapsed into one).
 - Reading the *latest* docs for a dependency pinned to an older version.
@@ -139,8 +133,7 @@ SECUA checklist remain the enforcement points.
 - [ ] Every version-specific external behavior relied on was checked against the pinned version's source/docs **this session**.
 - [ ] Both questions answered — the API exists **and** is called within its contract.
 - [ ] Claims about external behavior carry a citation (source + date, or `pkg@version` + symbol); unverifiable ones are flagged, not asserted.
-- [ ] Confidence is stated honestly (HIGH/MEDIUM/LOW); nothing at LOW was presented as fact.
-- [ ] Run closes with the Step 5 verdict line: `Verification: HIGH|MEDIUM|LOW — <first failing check and deviation, or 'all checks passed'>`.
+- [ ] Nothing recalled from memory alone was presented as fact.
 
 ## See also
 

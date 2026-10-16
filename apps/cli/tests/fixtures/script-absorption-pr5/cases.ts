@@ -468,16 +468,13 @@ export const FEATURE_VERIFY_CASES: GoldenCase[] = [
         steps: [verify(['--run-id', 'v1', '--cmd', 'true'], 'D9'), verify(['--run-id', 'v2', '--cmd', 'false'], 'D9')],
     },
     {
-        id: 'verify-env-fallback-and-confidence',
+        id: 'verify-env-fallback',
         git: true,
         gitignore: '.spur/\n',
         seedRuns: ['v3', 'v4'],
         files: { 'docs/features/D9_demo.md': FEATURE },
         env: { featureId: 'D9', __runId: 'v3', verificationCmd: 'true' },
-        steps: [
-            verify(['--confidence', 'LOW', '--ack-low-confidence'], null),
-            { ...verify([], null), env: { __runId: 'v4', confidence: 'MEDIUM' } },
-        ],
+        steps: [verify([], null), { ...verify([], null), env: { __runId: 'v4' } }],
     },
     {
         id: 'verify-refusals',

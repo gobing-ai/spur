@@ -685,10 +685,7 @@ describe('task-pipeline review-failure routing (session finding after 1088)', ()
 // cycle (record would terminally fail it after a full verify + record). Same classifier, same
 // deferrals, resolved like the record step's scanner, fail-closed into review-fail-triage.
 describe('task-pipeline review PASS-edge review-gate (task 1122)', () => {
-    // A well-formed review now states its confidence level (the 2026-10-12 contract, machine-checked
-    // by the same gate): every fixture below carries it, so these tests exercise the finding rules.
-    const TABLE_HEAD =
-        '### Review\n\n**Confidence:** HIGH\n\n| Priority | Finding | Location | Disposition |\n| --- | --- | --- | --- |\n';
+    const TABLE_HEAD = '### Review\n\n| Priority | Finding | Location | Disposition |\n| --- | --- | --- | --- |\n';
     const runSh = (script: string, cwd: string, spurBin: string, wbs: string): number =>
         Bun.spawnSync(['sh', '-c', script], {
             cwd,
@@ -720,7 +717,7 @@ describe('task-pipeline review PASS-edge review-gate (task 1122)', () => {
         try {
             mkdirSync(join(dir, '.spur', 'run'), { recursive: true });
             const runId = 'run-t-1122';
-            writeFileSync(join(dir, '.spur', 'run', `${runId}-review-answer.txt`), 'Verdict: PASS\nConfidence: HIGH\n');
+            writeFileSync(join(dir, '.spur', 'run', `${runId}-review-answer.txt`), 'Verdict: PASS\n');
             const wbs = seedTask(dir);
             const verifyGuard = cmdOf('review', 'verify').replaceAll('$profile', 'auto').replaceAll('$__runId', runId);
             const approveGuard = cmdOf('review', 'approve').replaceAll('$__runId', runId);

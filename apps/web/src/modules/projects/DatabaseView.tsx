@@ -9,7 +9,7 @@ import type {
 } from '@gobing-ai/spur-contracts';
 import { type ReactNode, useEffect, useMemo, useRef, useState } from 'react';
 import { useSearchParams } from 'react-router';
-import { Badge, Button, Card, CardBody, Input, Loading, Modal, Select, Tooltip } from '@/ui';
+import { Badge, Button, Card, CardBody, Checkbox, Input, Loading, Modal, Select, Tooltip } from '@/ui';
 import { fetchWithTimeout, resolveApiUrl } from '../../lib/rpc-client';
 
 /**
@@ -304,46 +304,234 @@ function FullCell({ cell }: { cell: DatabaseCell }) {
     );
 }
 
-// ─── Schema strip ─────────────────────────────────────────────────────────────
+// ─── Column visibility & client storage persistence ──────────────────────────
 
-function SchemaStrip({ schema }: { schema: DatabaseTableResponse }) {
-    const [open, setOpen] = useState(true);
+/** Maximum columns shown by default on tables with many fields. */
+export const DEFAULT_MAX_VISIBLE_COLUMNS = 7;
+
+/** LocalStorage key prefix for per-table column preferences. */
+export const DATABASE_COLUMNS_STORAGE_PREFIX = 'spur:database:columns:v1:';
+
+export function getTableStorageKey(tableName: string): string {
+    return `${DATABASE_COLUMNS_STORAGE_PREFIX}${tableName}`;
+}
+
+/**
+ * Compute the default visible columns for a table.
+ * If total columns <= maxDefault, all are shown.
+ * Otherwise, ensures PK columns are included first, filled up to maxDefault in schema order.
+ */
+export function getDefaultVisibleColumns(
+    columns: DatabaseColumn[],
+    maxDefault = DEFAULT_MAX_VISIBLE_COLUMNS,
+): string[] {
+    if (columns.length <= maxDefault) {
+        return columns.map((c) => c.name);
+    }
+    const pks = columns.filter((c) => c.pk).map((c) => c.name);
+    const nonPks = columns.filter((c) => !c.pk).map((c) => c.name);
+    const selected = new Set<string>(pks);
+    for (const name of nonPks) {
+        if (selected.size >= maxDefault) break;
+        selected.add(name);
+    }
+    return columns.filter((c) => selected.has(c.name)).map((c) => c.name);
+}
+
+/**
+ * Load user-selected columns for a table from localStorage.
+ * Filters out any stale columns that are not in availableColumns.
+ */
+export function loadStoredColumns(tableName: string, availableColumns: string[], storage?: Storage): string[] | null {
+    try {
+        const store = storage ?? (typeof window !== 'undefined' ? window.localStorage : undefined);
+        if (!store) return null;
+        const raw = store.getItem(getTableStorageKey(tableName));
+        if (!raw) return null;
+        const parsed = JSON.parse(raw);
+        if (!Array.isArray(parsed) || parsed.length === 0) return null;
+        const availableSet = new Set(availableColumns);
+        const valid = parsed.filter((c): c is string => typeof c === 'string' && availableSet.has(c));
+        return valid.length > 0 ? valid : null;
+    } catch {
+        return null;
+    }
+}
+
+/** Save user-selected columns for a table to localStorage. */
+export function saveStoredColumns(tableName: string, columns: string[], storage?: Storage): void {
+    try {
+        const store = storage ?? (typeof window !== 'undefined' ? window.localStorage : undefined);
+        if (!store) return;
+        store.setItem(getTableStorageKey(tableName), JSON.stringify(columns));
+    } catch {
+        // Storage errors ignored silently
+    }
+}
+
+/** Clear stored column preferences for a table. */
+export function clearStoredColumns(tableName: string, storage?: Storage): void {
+    try {
+        const store = storage ?? (typeof window !== 'undefined' ? window.localStorage : undefined);
+        if (!store) return;
+        store.removeItem(getTableStorageKey(tableName));
+    } catch {
+        // Storage errors ignored silently
+    }
+}
+
+// ─── Table Metadata Modal ─────────────────────────────────────────────────────
+
+export interface TableMetadataModalProps {
+    open: boolean;
+    onClose: () => void;
+    schema: DatabaseTableResponse | null;
+}
+
+export function TableMetadataModal({ open, onClose, schema }: TableMetadataModalProps) {
+    if (!schema) return null;
     return (
-        <section className="border-b border-base-content/10 px-3 py-2 bg-base-200/20" data-database-schema-strip>
-            <button
-                type="button"
-                aria-expanded={open}
-                onClick={() => setOpen((v) => !v)}
-                className="flex w-full items-center gap-2 text-left text-xs font-semibold text-base-content/70 hover:text-base-content cursor-pointer"
-                data-database-schema-toggle
-            >
-                <span aria-hidden="true">{open ? '▾' : '▸'}</span>
-                <span>
-                    <span className="font-mono">{schema.name}</span> · {schema.columns.length} columns ·{' '}
-                    {formatCount(schema.rowCount)} rows
-                </span>
-            </button>
-            {open && (
-                <ul className="mt-2 flex flex-wrap gap-x-4 gap-y-1" data-database-columns>
-                    {schema.columns.map((column: DatabaseColumn) => (
-                        <li key={column.name} className="flex items-center gap-1 text-[11px]">
-                            <span className="font-mono font-semibold">{column.name}</span>
-                            <span className="text-base-content/50">{column.type === '' ? '—' : column.type}</span>
-                            {column.notNull && (
-                                <Badge variant="ghost" size="xs" className="opacity-60">
-                                    NOT NULL
-                                </Badge>
-                            )}
-                            {column.pk && (
-                                <Badge variant="primary" size="xs">
-                                    PK
-                                </Badge>
-                            )}
-                        </li>
-                    ))}
-                </ul>
-            )}
-        </section>
+        <Modal
+            open={open}
+            onClose={onClose}
+            className="max-w-3xl w-full p-0 overflow-hidden bg-base-100 border border-base-content/15 shadow-2xl flex flex-col max-h-[85vh]"
+            data-database-metadata-modal
+            aria-label="Table metadata"
+        >
+            {/* Modal Header */}
+            <div className="px-5 py-3.5 border-b border-base-content/10 bg-base-200/50 flex items-center justify-between shrink-0">
+                <div className="flex items-center gap-2.5 min-w-0">
+                    <span className="flex items-center justify-center w-6 h-6 rounded bg-primary/15 text-primary font-bold text-xs shrink-0">
+                        ℹ
+                    </span>
+                    <div className="min-w-0">
+                        <h3 className="text-sm font-semibold text-base-content leading-tight">Table Metadata</h3>
+                        <p className="text-xs text-base-content/60 truncate mt-0.5 font-mono">{schema.name}</p>
+                    </div>
+                </div>
+                <Button
+                    variant="ghost"
+                    size="xs"
+                    className="text-base-content/60 hover:text-base-content h-6 w-6 p-0 text-xs flex items-center justify-center cursor-pointer"
+                    onClick={onClose}
+                    aria-label="Close metadata"
+                    title="Close metadata"
+                >
+                    ✕
+                </Button>
+            </div>
+
+            {/* Modal Body */}
+            <div className="flex-1 overflow-y-auto p-5 space-y-4 min-h-0">
+                {/* Stats Grid */}
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 text-xs">
+                    <div className="p-2.5 rounded-lg bg-base-200/40 border border-base-content/10">
+                        <span className="text-[10px] uppercase font-semibold text-base-content/60 block">Table</span>
+                        <span
+                            className="font-mono text-xs font-semibold text-base-content truncate block"
+                            title={schema.name}
+                        >
+                            {schema.name}
+                        </span>
+                    </div>
+                    <div className="p-2.5 rounded-lg bg-base-200/40 border border-base-content/10">
+                        <span className="text-[10px] uppercase font-semibold text-base-content/60 block">
+                            Total Rows
+                        </span>
+                        <span className="font-mono text-xs text-base-content font-semibold">
+                            {formatCount(schema.rowCount)}
+                        </span>
+                    </div>
+                    <div className="p-2.5 rounded-lg bg-base-200/40 border border-base-content/10">
+                        <span className="text-[10px] uppercase font-semibold text-base-content/60 block">Columns</span>
+                        <span className="font-mono text-xs text-base-content font-semibold">
+                            {schema.columns.length}
+                        </span>
+                    </div>
+                    <div className="p-2.5 rounded-lg bg-base-200/40 border border-base-content/10">
+                        <span className="text-[10px] uppercase font-semibold text-base-content/60 block">
+                            Primary Key
+                        </span>
+                        <span className="font-mono text-xs text-base-content truncate block">
+                            {schema.columns
+                                .filter((c) => c.pk)
+                                .map((c) => c.name)
+                                .join(', ') || 'none'}
+                        </span>
+                    </div>
+                </div>
+
+                {/* Schema Table */}
+                <div>
+                    <div className="flex items-center justify-between mb-2">
+                        <span className="text-xs font-semibold text-base-content/70 uppercase tracking-wide">
+                            Fields ({schema.columns.length})
+                        </span>
+                    </div>
+                    <div className="rounded-lg border border-base-content/10 overflow-hidden bg-base-100">
+                        <table className="table table-xs w-full" data-database-columns>
+                            <thead className="bg-base-200/80 text-base-content/70">
+                                <tr>
+                                    <th className="w-12 text-center font-mono text-[11px]">#</th>
+                                    <th className="font-mono text-[11px]">Field Name</th>
+                                    <th className="font-mono text-[11px]">Data Type</th>
+                                    <th className="text-[11px]">Constraint</th>
+                                    <th className="text-[11px] text-center w-16">Key</th>
+                                </tr>
+                            </thead>
+                            <tbody className="divide-y divide-base-content/10">
+                                {schema.columns.map((column, idx) => (
+                                    <tr key={column.name} className="hover:bg-base-200/40">
+                                        <td className="text-center font-mono text-xs text-base-content/40">
+                                            {idx + 1}
+                                        </td>
+                                        <td className="font-mono text-xs font-semibold text-base-content">
+                                            {column.name}
+                                        </td>
+                                        <td className="font-mono text-xs text-base-content/70">
+                                            {column.type === '' ? (
+                                                <span className="text-base-content/40 italic">—</span>
+                                            ) : (
+                                                column.type
+                                            )}
+                                        </td>
+                                        <td>
+                                            {column.notNull ? (
+                                                <Badge
+                                                    variant="ghost"
+                                                    size="xs"
+                                                    className="opacity-75 font-mono text-[10px]"
+                                                >
+                                                    NOT NULL
+                                                </Badge>
+                                            ) : (
+                                                <span className="text-xs text-base-content/40 font-mono">NULL</span>
+                                            )}
+                                        </td>
+                                        <td className="text-center">
+                                            {column.pk ? (
+                                                <Badge variant="primary" size="xs">
+                                                    PK
+                                                </Badge>
+                                            ) : (
+                                                <span className="text-base-content/20 text-xs">—</span>
+                                            )}
+                                        </td>
+                                    </tr>
+                                ))}
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+
+            {/* Modal Footer */}
+            <div className="px-5 py-3 border-t border-base-content/10 bg-base-200/40 flex items-center justify-end shrink-0">
+                <Button variant="ghost" size="xs" onClick={onClose} aria-label="Close metadata">
+                    Close
+                </Button>
+            </div>
+        </Modal>
     );
 }
 
@@ -396,6 +584,11 @@ export default function DatabaseView() {
     const [detailOffset, setDetailOffset] = useState<number | null>(null);
     const [tableDropdownOpen, setTableDropdownOpen] = useState(false);
     const tableDropdownRef = useRef<HTMLDivElement>(null);
+    const [showMetadataModal, setShowMetadataModal] = useState(false);
+    const [columnsDropdownOpen, setColumnsDropdownOpen] = useState(false);
+    const columnsDropdownRef = useRef<HTMLDivElement>(null);
+    const [columnSearch, setColumnSearch] = useState('');
+    const [visibleColumns, setVisibleColumns] = useState<string[]>([]);
 
     // The input stays bound to the URL value so typing is immediate; the read waits for the
     // value to settle. Debouncing the request rather than the URL write keeps `?f=` accurate
@@ -425,6 +618,26 @@ export default function DatabaseView() {
             document.removeEventListener('keydown', handleKeyDown);
         };
     }, [tableDropdownOpen]);
+
+    useEffect(() => {
+        if (!columnsDropdownOpen) return;
+        const handleClickOutside = (e: MouseEvent) => {
+            if (columnsDropdownRef.current && !columnsDropdownRef.current.contains(e.target as Node)) {
+                setColumnsDropdownOpen(false);
+            }
+        };
+        const handleKeyDown = (e: KeyboardEvent) => {
+            if (e.key === 'Escape') {
+                setColumnsDropdownOpen(false);
+            }
+        };
+        document.addEventListener('mousedown', handleClickOutside);
+        document.addEventListener('keydown', handleKeyDown);
+        return () => {
+            document.removeEventListener('mousedown', handleClickOutside);
+            document.removeEventListener('keydown', handleKeyDown);
+        };
+    }, [columnsDropdownOpen]);
 
     const query = useMemo<RowQuery | null>(() => {
         if (selectedTable === null) return null;
@@ -478,6 +691,9 @@ export default function DatabaseView() {
     };
 
     const selectTable = (name: string) => {
+        setColumnsDropdownOpen(false);
+        setColumnSearch('');
+        setShowMetadataModal(false);
         updateParams((next) => {
             next.set(URL_KEYS.table, name);
             next.delete(URL_KEYS.page);
@@ -552,6 +768,72 @@ export default function DatabaseView() {
     const total = rows.data?.total ?? 0;
     const lastPage = totalPages(total, DATABASE_PAGE_SIZE);
     const columns = rows.data?.columns ?? schema.data?.columns.map((c) => c.name) ?? [];
+
+    // Sync user column choices with localStorage or fall back to defaults
+    useEffect(() => {
+        if (!selectedTable || !schema.data) {
+            setVisibleColumns([]);
+            return;
+        }
+        const allCols = schema.data.columns;
+        const allColNames = allCols.map((c) => c.name);
+        const stored = loadStoredColumns(selectedTable, allColNames);
+        if (stored !== null && stored.length > 0) {
+            setVisibleColumns(stored);
+        } else {
+            setVisibleColumns(getDefaultVisibleColumns(allCols, DEFAULT_MAX_VISIBLE_COLUMNS));
+        }
+    }, [selectedTable, schema.data]);
+
+    const effectiveVisibleColumns = useMemo(() => {
+        if (visibleColumns.length > 0) {
+            const availableSet = new Set(columns);
+            const filtered = visibleColumns.filter((c) => availableSet.has(c));
+            if (filtered.length > 0) return filtered;
+        }
+        return columns;
+    }, [visibleColumns, columns]);
+
+    const visibleColumnIndices = useMemo(() => {
+        return effectiveVisibleColumns.map((name) => columns.indexOf(name)).filter((i) => i !== -1);
+    }, [effectiveVisibleColumns, columns]);
+
+    const visibleSet = useMemo(() => new Set(effectiveVisibleColumns), [effectiveVisibleColumns]);
+
+    const filteredColumnsForPicker = useMemo(() => {
+        const list = schema.data?.columns ?? [];
+        const needle = columnSearch.trim().toLowerCase();
+        return needle === '' ? list : list.filter((c) => c.name.toLowerCase().includes(needle));
+    }, [schema.data?.columns, columnSearch]);
+
+    const handleToggleColumn = (colName: string) => {
+        if (!selectedTable || !schema.data) return;
+        const allCols = schema.data.columns.map((c) => c.name);
+        const currentSet = new Set(effectiveVisibleColumns);
+        if (currentSet.has(colName)) {
+            if (currentSet.size <= 1) return;
+            currentSet.delete(colName);
+        } else {
+            currentSet.add(colName);
+        }
+        const nextCols = allCols.filter((name) => currentSet.has(name));
+        setVisibleColumns(nextCols);
+        saveStoredColumns(selectedTable, nextCols);
+    };
+
+    const handleSelectAllColumns = () => {
+        if (!selectedTable || !schema.data) return;
+        const allCols = schema.data.columns.map((c) => c.name);
+        setVisibleColumns(allCols);
+        saveStoredColumns(selectedTable, allCols);
+    };
+
+    const handleResetColumns = () => {
+        if (!selectedTable || !schema.data) return;
+        const defaultCols = getDefaultVisibleColumns(schema.data.columns, DEFAULT_MAX_VISIBLE_COLUMNS);
+        setVisibleColumns(defaultCols);
+        clearStoredColumns(selectedTable);
+    };
 
     return (
         <div className="flex flex-col h-full min-h-0" data-database-view>
@@ -735,6 +1017,174 @@ export default function DatabaseView() {
                                 </>
                             )}
                         </div>
+
+                        {/* Right action controls */}
+                        {selectedTable !== null && schemaReady && schema.data !== null && (
+                            <div className="flex items-center gap-2 ml-auto">
+                                <span className="text-xs text-base-content/50 font-mono hidden md:inline">
+                                    {formatCount(schema.data.rowCount)} rows · {schema.data.columns.length} columns
+                                </span>
+                                <div className="h-4 w-px bg-base-content/15 hidden md:block" />
+
+                                <Button
+                                    size="xs"
+                                    variant="outline"
+                                    onClick={() => setShowMetadataModal(true)}
+                                    className="flex items-center gap-1.5 font-medium cursor-pointer"
+                                    aria-label="Table metadata"
+                                    title="View table metadata"
+                                    data-database-metadata-btn
+                                >
+                                    <svg
+                                        className="w-3.5 h-3.5 text-base-content/70 shrink-0"
+                                        viewBox="0 0 16 16"
+                                        fill="none"
+                                        stroke="currentColor"
+                                        strokeWidth="1.5"
+                                        strokeLinecap="round"
+                                        strokeLinejoin="round"
+                                        aria-hidden="true"
+                                    >
+                                        <circle cx="8" cy="8" r="6" />
+                                        <path d="M8 7v4M8 5h.01" />
+                                    </svg>
+                                    <span>Metadata</span>
+                                </Button>
+
+                                <div ref={columnsDropdownRef} className="relative">
+                                    <Button
+                                        size="xs"
+                                        variant="outline"
+                                        onClick={() => {
+                                            setColumnsDropdownOpen((v) => !v);
+                                            setColumnSearch('');
+                                        }}
+                                        className="flex items-center gap-1.5 font-medium cursor-pointer"
+                                        aria-haspopup="dialog"
+                                        aria-expanded={columnsDropdownOpen}
+                                        aria-label="Customize visible columns"
+                                        title="Customize visible columns"
+                                        data-database-columns-btn
+                                    >
+                                        <svg
+                                            className="w-3.5 h-3.5 text-base-content/70 shrink-0"
+                                            viewBox="0 0 16 16"
+                                            fill="none"
+                                            stroke="currentColor"
+                                            strokeWidth="1.5"
+                                            strokeLinecap="round"
+                                            strokeLinejoin="round"
+                                            aria-hidden="true"
+                                        >
+                                            <rect x="2" y="2" width="12" height="12" rx="1.5" />
+                                            <path d="M6.5 2v12M10.5 2v12" />
+                                        </svg>
+                                        <span>Columns</span>
+                                        <span className="font-mono text-[10px] px-1 py-0.2 rounded bg-base-200 text-base-content/70">
+                                            {effectiveVisibleColumns.length}/{schema.data.columns.length}
+                                        </span>
+                                    </Button>
+
+                                    {columnsDropdownOpen && (
+                                        <div
+                                            role="dialog"
+                                            aria-label="Customize columns"
+                                            data-database-columns-dropdown
+                                            className="absolute right-0 top-full mt-1.5 z-50 w-72 rounded-lg border border-base-content/15 bg-base-100 shadow-xl p-3 flex flex-col gap-2.5"
+                                        >
+                                            <div className="flex items-center justify-between pb-2 border-b border-base-content/10">
+                                                <span className="text-xs font-bold uppercase tracking-wide text-base-content/70">
+                                                    Visible Fields ({effectiveVisibleColumns.length}/
+                                                    {schema.data.columns.length})
+                                                </span>
+                                                <div className="flex items-center gap-2">
+                                                    <button
+                                                        type="button"
+                                                        onClick={handleSelectAllColumns}
+                                                        className="text-[11px] text-primary hover:underline cursor-pointer"
+                                                    >
+                                                        All
+                                                    </button>
+                                                    <span className="text-base-content/30 text-xs">·</span>
+                                                    <button
+                                                        type="button"
+                                                        onClick={handleResetColumns}
+                                                        className="text-[11px] text-base-content/60 hover:text-base-content hover:underline cursor-pointer"
+                                                    >
+                                                        Default
+                                                    </button>
+                                                </div>
+                                            </div>
+
+                                            {schema.data.columns.length > 8 && (
+                                                <div className="relative">
+                                                    <Input
+                                                        size="xs"
+                                                        placeholder="Search fields…"
+                                                        aria-label="Search fields"
+                                                        value={columnSearch}
+                                                        onChange={(e) => setColumnSearch(e.target.value)}
+                                                        autoFocus
+                                                    />
+                                                    {columnSearch && (
+                                                        <button
+                                                            type="button"
+                                                            onClick={() => setColumnSearch('')}
+                                                            className="absolute right-2 top-1/2 -translate-y-1/2 text-xs text-base-content/40 hover:text-base-content cursor-pointer"
+                                                            aria-label="Clear search"
+                                                        >
+                                                            ×
+                                                        </button>
+                                                    )}
+                                                </div>
+                                            )}
+
+                                            <div className="max-h-64 overflow-y-auto flex flex-col gap-1 pr-1">
+                                                {filteredColumnsForPicker.map((col) => {
+                                                    const checked = visibleSet.has(col.name);
+                                                    const isOnlyOne = checked && visibleSet.size === 1;
+                                                    const inputId = `database-col-${col.name}`;
+                                                    return (
+                                                        <label
+                                                            key={col.name}
+                                                            htmlFor={inputId}
+                                                            className={`flex items-center justify-between px-2 py-1 rounded text-xs transition-colors ${
+                                                                isOnlyOne
+                                                                    ? 'opacity-60 cursor-not-allowed'
+                                                                    : 'hover:bg-base-200 cursor-pointer text-base-content'
+                                                            }`}
+                                                        >
+                                                            <span className="flex items-center gap-2 min-w-0">
+                                                                <Checkbox
+                                                                    id={inputId}
+                                                                    size="xs"
+                                                                    variant="primary"
+                                                                    checked={checked}
+                                                                    disabled={isOnlyOne}
+                                                                    onChange={() => handleToggleColumn(col.name)}
+                                                                    aria-label={col.name}
+                                                                />
+                                                                <span className="font-mono truncate">{col.name}</span>
+                                                            </span>
+                                                            <span className="flex items-center gap-1 shrink-0 ml-2">
+                                                                {col.pk && (
+                                                                    <Badge variant="primary" size="xs">
+                                                                        PK
+                                                                    </Badge>
+                                                                )}
+                                                                <span className="text-[10px] text-base-content/40 font-mono">
+                                                                    {col.type || 'ANY'}
+                                                                </span>
+                                                            </span>
+                                                        </label>
+                                                    );
+                                                })}
+                                            </div>
+                                        </div>
+                                    )}
+                                </div>
+                            </div>
+                        )}
                     </div>
 
                     {selectedTable === null && (
@@ -764,8 +1214,6 @@ export default function DatabaseView() {
 
                     {selectedTable !== null && blockedState === null && schemaReady && schema.data !== null && (
                         <>
-                            <SchemaStrip schema={schema.data} />
-
                             {rows.state === 'loading' && (
                                 <div className="flex flex-1 items-center justify-center p-8">
                                     <Loading size="md" />
@@ -786,7 +1234,7 @@ export default function DatabaseView() {
                                         <table className="table table-sm" data-testid="database-table">
                                             <thead className="sticky top-0 z-10 bg-base-200">
                                                 <tr className="text-xs text-base-content/60">
-                                                    {columns.map((column) => {
+                                                    {effectiveVisibleColumns.map((column) => {
                                                         const sorted = sort === column;
                                                         const ariaSort = sorted
                                                             ? dir === 'desc'
@@ -836,12 +1284,14 @@ export default function DatabaseView() {
                                                                 }
                                                             }}
                                                         >
-                                                            {row.map((cell, cellIndex) => (
+                                                            {visibleColumnIndices.map((colIndex) => (
                                                                 <td
-                                                                    key={columns[cellIndex] ?? cellIndex}
+                                                                    key={columns[colIndex] ?? colIndex}
                                                                     className="align-middle max-w-[28rem]"
                                                                 >
-                                                                    <GridCell cell={cell} />
+                                                                    {row[colIndex] ? (
+                                                                        <GridCell cell={row[colIndex]} />
+                                                                    ) : null}
                                                                 </td>
                                                             ))}
                                                         </tr>
@@ -945,6 +1395,13 @@ export default function DatabaseView() {
                     </Button>
                 </div>
             </Modal>
+
+            {/* Table metadata modal */}
+            <TableMetadataModal
+                open={showMetadataModal}
+                onClose={() => setShowMetadataModal(false)}
+                schema={schema.data}
+            />
         </div>
     );
 }

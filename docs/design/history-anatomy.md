@@ -181,8 +181,7 @@ equal-duration window.
 | `trend` | from the recurrence ledger |
 | `observation` | directly present in an artifact field or a cited repository authority |
 | `inference` | names the observations supporting it |
-| `confidence` | `high` · `medium` · `low`, **per finding** — never one blanket report score |
-| `contradictions` | shown beside the finding, lowering confidence; never silently reconciled |
+| `contradictions` | shown beside the finding; never silently reconciled |
 | `evidence` | ≥1 anchor: artifact field + selector, or repo-relative `file:line` |
 
 ### Evidence rules

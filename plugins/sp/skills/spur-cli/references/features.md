@@ -30,7 +30,7 @@ what* or *how to write a scenario*, this skill.
 | `refresh` | Rebuild INDEX + each feature `## Tasks` table from task edges (**docs only**; no status change) | `--feature <id>` `--all` `--folder` `--json` |
 | `check [id]` | Validate one feature / the tree; the 4-layer gate; `--fix` repairs structural findings in place | `--strict` `--fix` `--as <status>` `--folder` `--json` |
 | `sync [id]` | Align feature **lifecycle status** with linked task states (real transitions + guards) | `--all` `--dry-run` `--force` `--folder` `--json` |
-| `verify [id]` | The `feature-verification` pass: run the check set once and record the bound PASS/FAIL receipt — workflow-internal (`feature-lifecycle` runs it) | `--run-id <id>` `--cmd <command>` `--confidence <level>` `--ack-low-confidence` |
+| `verify [id]` | The `feature-verification` pass: run the check set once and record the bound PASS/FAIL receipt — workflow-internal (`feature-lifecycle` runs it) | `--run-id <id>` `--cmd <command>` |
 | `handoff [id]` | The `idea-pipeline` finalization: task ordering, roster refresh, handoff report — workflow-internal | `--run-id <id>` `--spur-bin <cmd>` |
 
 **`refresh` vs `sync` (do not conflate):**

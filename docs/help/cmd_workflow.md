@@ -612,7 +612,6 @@ conflict markers.
 | `file.exists` / `file.read` / `file.read-into-var` | Filesystem helpers |
 | `http.request` | HTTP call helper |
 | `rule.check` | Invoke constraint-rule evaluation |
-| `response.validate` | Structured response validation |
 
 **Guard kinds** (used in `transitions[].guard`):
 

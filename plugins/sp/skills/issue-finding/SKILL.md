@@ -411,7 +411,7 @@ Thin wrapper: `Skill(skill="sp:issue-finding", args="$ARGUMENTS")`.
 - Wholesale raw JSONL parsing when the source has a typed mapper.
 - Accepting `--use-history` or `--no-task` silently instead of naming their replacements.
 - GENERATE recipes inventing a title flag, dotted template forms, or quoted dotted section flags.
-- Claiming multi-agent forensics without stating source confidence (High/Medium/Low).
+- Claiming multi-agent forensics without citing the session source each finding came from.
 - Skipping batch section writes + single `spur task check` (when generating).
 - Emitting empty findings without inventorying sessions first.
 

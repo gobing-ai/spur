@@ -810,8 +810,6 @@ Feature: Disposal
             await completeFeatureVerificationReceipt(fs, runDir, running, {
                 status: 'PASS',
                 inputDigest: digest,
-                confidence: 'HIGH',
-                confidenceBasis: ['verification command exited 0', 'proof-input digest unchanged across the pass'],
             });
             const checker = new FeatureCheckService(fs);
             const check = () =>

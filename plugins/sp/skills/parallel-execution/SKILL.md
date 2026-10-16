@@ -61,7 +61,7 @@ Parallel subagent outputs must be **synthesized**, not concatenated. The synthes
 
 1. **Dedup** — merge findings with the same `file:line` anchor; keep the highest-severity version.
 2. **Resolve conflicts** — when two subagents disagree on the same claim, surface the disagreement explicitly; don't silently pick one.
-3. **Rank by confidence** — sort synthesized results by confidence (HIGH → MEDIUM → LOW); unresolved conflicts go last.
+3. **Rank by evidence** — verified findings (executed check or cited source) first, unverified next, unresolved conflicts last; severity within each tier.
 4. **Unified format** — emit one coherent output, not N raw dumps.
 
 Full synthesis methodology: [result-synthesis.md](references/result-synthesis.md).

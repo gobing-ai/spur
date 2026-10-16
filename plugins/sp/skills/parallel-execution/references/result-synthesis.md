@@ -41,13 +41,12 @@ Synthesis:  ⚠ CONFLICT — Redis migration safety
 
 **Rule:** conflicts are findings, not failures. Surface them with both positions stated; let the operator resolve.
 
-### 3. Rank by confidence
+### 3. Rank by evidence
 
-Sort synthesized results:
-1. HIGH confidence (empirically verified, source-cited)
-2. MEDIUM confidence (reasoned, but not empirically verified)
-3. LOW confidence (heuristic, pattern-match, or uncertain)
-4. Unresolved conflicts (both sides stated)
+Sort synthesized results by what backs them, not a self-assigned confidence label (ADR-138):
+1. Verified (an executed check or a cited `path:line` / URL)
+2. Unverified (reasoned or pattern-matched; name the check that would ground it)
+3. Unresolved conflicts (both sides stated)
 
 Within each tier, sort by severity (P1 → P2 → P3 → P4).
 
@@ -58,11 +57,11 @@ Emit one coherent output. The unified report has:
 ```
 ## Synthesized Results
 
-### HIGH Confidence
-| # | Finding | Source | Severity | File:Line |
-|---|---------|--------|----------|-----------|
+### Verified
+| # | Finding | Source | Severity | File:Line | Evidence |
+|---|---------|--------|----------|-----------|----------|
 
-### MEDIUM Confidence
+### Unverified
 ...
 
 ### Conflicts (unresolved)

@@ -1,8 +1,8 @@
 # How to Use Spur for Daily Software Development
 
 > **Captured against spur `0.3.41` on Bun `1.3.14`; command surface re-checked on 2026-10-13 against
-> spur `0.4.3` on Bun `1.4.3` (Confidence: HIGH for resolution — all documented `spur <noun> <verb>`
-> pairs resolve; behaviour was not re-exercised).** Every command and flag below was captured from
+> spur `0.4.3` on Bun `1.4.3` (all documented `spur <noun> <verb>` pairs resolve; behaviour was
+> not re-exercised).** Every command and flag below was captured from
 > the live `--help` output and exercised on the real project corpus.
 > For the **slash-command layer** (the `sp` plugin) layered on top of these CLI verbs —
 > `/sp:dev-plan`, `/sp:dev-run`, `/sp:dev-verify`, `/sp:dev-wrap`, the batch family

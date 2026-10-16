@@ -17,7 +17,7 @@ install or to ts-libs.
 | `surface` | `surface/` | CLI surface consistency (registerXxxCommand wiring, --json serialization) |
 | `migration` | `migration/` | Transitional helpers for the regex → `rg` evaluator move (`rg-dialect`) |
 | `ui` | `ui/` | Web UI seam boundaries (import seam, daisyUI class leak) |
-| `docs` | `docs/` | Sourced API/library claims in markdown — citation anchor + HIGH/MEDIUM/LOW level. Advisory (`info`), and deliberately **not** in a preset: see the file header for its calibration audit and the one-line promotion step. |
+| `docs` | `docs/` | Sourced API/library claims in markdown — same-line citation anchor (no confidence level, ADR-138). Advisory (`info`), and deliberately **not** in a preset: see the file header for its calibration audit. |
 
 ## Presets
 

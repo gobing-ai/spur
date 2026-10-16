@@ -741,7 +741,7 @@
             },
             "stubArgv": []
         },
-        "verify-env-fallback-and-confidence": {
+        "verify-env-fallback": {
             "steps": [
                 {
                     "exitCode": 0,

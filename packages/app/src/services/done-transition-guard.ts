@@ -42,9 +42,6 @@ export type { VerdictAggregate };
 /** Row-level status (matches `VerdictRequirement.status` / AC `status`). */
 export type VerdictRowStatus = 'MET' | 'PARTIAL' | 'UNMET';
 
-/** Verifier confidence levels (derived feature-receipt contract; leaf isolation). */
-export type VerdictConfidence = 'HIGH' | 'MEDIUM' | 'LOW';
-
 /** Minimal shape this module reads from durable evidence or legacy scratch. */
 export interface VerdictArtifact {
     wbs?: string;
@@ -65,8 +62,6 @@ export interface VerdictArtifact {
         evidence?: string;
     }[];
     source?: string;
-    /** Derived feature-receipt confidence (1196); task-answer asserted levels were retired (F511). */
-    confidence?: VerdictConfidence;
 }
 
 /** What the guard decided. */
@@ -166,9 +161,7 @@ async function readVerdictFrom(fs: FileSystem, path: string, wbs: string): Promi
             };
         }
     }
-    // 1068 R3 retired (F511): task-answer asserted confidence is no longer read or
-    // normalized; a legacy `confidence` key in an old artifact parses as an unknown
-    // field and is ignored.
+    // A legacy `confidence` key (retired by ADR-138) parses as an unknown field and is ignored.
     return { artifact: parsed as VerdictArtifact, path, missing: false };
 }
 

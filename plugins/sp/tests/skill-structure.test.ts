@@ -1166,7 +1166,9 @@ describe('sp plugin structure — functional split invariants (task 0161 / ADR-0
         }
         // 0680 R1-R3: severity, reproCommand, ownerSurface join the finding field set.
         const fields = extractStringArray('FINDING_FIELDS');
-        expect(fields.length).toBe(12);
+        // ADR-138 (task 1221): the per-finding `confidence` field was retired.
+        expect(fields).not.toContain('confidence');
+        expect(fields.length).toBe(11);
         for (const f of fields) {
             expect(text, `report contract must name finding field: ${f}`).toContain(f);
         }
@@ -1550,122 +1552,46 @@ describe('sp plugin structure — functional split invariants (task 0161 / ADR-0
         }
     });
 
-    test('the HIGH/MEDIUM/LOW claim contract the docs rules delegate is pinned in its owning skill', () => {
-        // `cited-version-strings` advertises "Confidence level (HIGH/MEDIUM/LOW) is part of the claim
-        // contract" and delegates the semantic half to this skill, so the vocabulary must not drift
-        // out from under that pointer — nothing else reads the skill's close-out line.
-        const source = readFileSync(join(SKILLS_DIR, 'source-driven-development', 'SKILL.md'), 'utf8');
+    test('the docs rule family is citation-only — no HIGH/MEDIUM/LOW level half (ADR-138, task 1221)', () => {
+        // The level rules (`cited-version-strings-confidence`, `cited-api-claims-confidence`,
+        // `cited-high-confidence`) were retired: a model can write HIGH as easily as the claim, so
+        // the level verified nothing. The anchor is the evidence. Patterns are read from the rule
+        // file (the SSOT an author edits) rather than restated, so this test cannot drift from it.
         const rule = readFileSync(join(REPO_ROOT, 'config', 'rules', 'docs', 'sourced-api-claims.yaml'), 'utf8');
-
-        // The close-out line the contract promises, verbatim.
-        expect(source).toContain('Verification: HIGH|MEDIUM|LOW');
-
-        // Exactly three levels at both definition sites: a fourth level would appear as another
-        // bold level label here rather than silently widening the vocabulary the rule points at.
-        const honest = source.split('\n').find((line) => line.includes('**Honest confidence**')) ?? '';
-        expect(honest).toContain('HIGH/MEDIUM/LOW');
-        const definitions = source.split('\n').find((line) => line.includes('all three checks pass')) ?? '';
-        const levelLabels = [...definitions.matchAll(/\*\*([A-Z]+)\*\*/g)].map((match) => match[1]).sort();
-        expect(levelLabels).toEqual(['HIGH', 'LOW', 'MEDIUM']);
-
-        // The checklist item the operator is held to.
-        expect(source).toContain('Confidence is stated honestly (HIGH/MEDIUM/LOW)');
-
-        // The advertising rule still names its owner, and the owner still claims the job.
-        expect(rule).toContain('Confidence level (HIGH/MEDIUM/LOW)');
+        const ids = [...rule.matchAll(/^\s+- id: (\S+)$/gm)].map((match) => match[1]);
+        expect(ids).toEqual(['cited-version-strings', 'cited-api-claims']);
+        expect(rule).not.toContain('(?:HIGH|MEDIUM|LOW)');
+        expect(rule).not.toContain('\\\\bHIGH');
         expect(rule).toContain('sp-source-driven-development');
-        expect(source).toContain('single sp owner');
-    });
 
-    test('the docs rule family verifies HIGH-confidence honesty — a claim cannot claim HIGH without its source', () => {
-        // `cited-api-claims-confidence` only checks that a level TOKEN exists, so an uncited HIGH — the
-        // one level the contract defines as "verified against the pinned source this session" — was
-        // unfalsifiable. `cited-high-confidence` is that honesty half. The patterns are read from the
-        // rule file (the SSOT an author edits) instead of being restated here, so this test cannot drift
-        // from the rule; the JS regex engine is a faithful proxy for the line shapes the rg evaluator
-        // matched when the rule was calibrated (measured 2026-10-16).
-        const rule = readFileSync(join(REPO_ROOT, 'config', 'rules', 'docs', 'sourced-api-claims.yaml'), 'utf8');
-        const patternOf = (id: string): RegExp => {
-            const block = rule.slice(rule.indexOf(`- id: ${id}`));
-            const raw = /pattern: "((?:[^"\\]|\\.)*)"/.exec(block)?.[1];
-            expect(raw, `${id} must declare a pattern`).toBeTruthy();
-            // This file's YAML double-quoted escapes are JSON-compatible (`\\` backslash, `\"` quote).
-            return new RegExp(JSON.parse(`"${raw ?? ''}"`) as string);
-        };
-        const honesty = patternOf('cited-high-confidence');
-        const presence = patternOf('cited-api-claims-confidence');
-
-        // Fires: a claim line that claims HIGH with no anchor on the same line.
-        expect(honesty.test('The endpoint was deprecated since 1.2 (HIGH).')).toBe(true);
-        expect(honesty.test('The option was added in 2.0 (HIGH).')).toBe(true);
-
-        // Silent: the same claim carrying the anchor the level promises.
-        expect(honesty.test('Deprecated since 1.2 (HIGH) — see https://example.com/docs')).toBe(false);
-        expect(honesty.test('Added in 2.0 (HIGH) — see packages/app/src/index.ts:42')).toBe(false);
-
-        // Silent: no claim verb, so not a claim line — a decision record's own `Confidence:` grade
-        // (the brainstorm family) and ordinary prose must never be dragged into this rule.
-        expect(honesty.test('**Confidence:** HIGH')).toBe(false);
-        expect(honesty.test('The risk is HIGH and the coupling is tight.')).toBe(false);
-
-        // Silent: MEDIUM and LOW need no anchor by contract.
-        expect(honesty.test('Deprecated since 1.2 (MEDIUM).')).toBe(false);
-        expect(honesty.test('Deprecated since 1.2 (LOW).')).toBe(false);
-
-        // Division of labour: a claim line with no level at all is the presence rule's finding, not this
-        // one's — the two must never both fire on the same line, and neither may miss it.
-        expect(honesty.test('The endpoint was deprecated since 1.2.')).toBe(false);
-        expect(presence.test('The endpoint was deprecated since 1.2.')).toBe(true);
-        expect(presence.test('The endpoint was deprecated since 1.2 (HIGH).')).toBe(false);
-
-        // Family policy: advisory only. Both halves stay info-severity and out of every preset — the
-        // category was pulled from `recommended-pre-check` for noise and must not creep back in. The
-        // preset's comments DO name the doc rules (explaining why they are excluded), so assert the
-        // invariant that matters: no active `- docs` entry, and this rule unmentioned as a gate.
-        expect(rule.slice(rule.indexOf('- id: cited-high-confidence'))).toContain('severity: info');
-        const preCheck = readFileSync(join(REPO_ROOT, 'config', 'rules', 'recommended-pre-check.yaml'), 'utf8');
-        expect(preCheck).not.toMatch(/^\s*-\s*docs\b/m);
-        expect(preCheck).toContain('DO NOT ENABLE THIS LINE');
-        expect(preCheck).not.toContain('cited-high-confidence');
-    });
-
-    test('the docs rule family widened its claim verbs only to version-anchored shapes', () => {
-        // The vocabulary was five time-anchored verbs, so declaration-style claims were never
-        // scanned. Candidates were measured before any was added (2026-10-16): generic declarations
-        // (`requires` 350 uncited hits, `no longer` 150, `defaults to` 70, `supports` 55,
-        // `replaced by` 21) fire on prose about this repo's own behaviour and on historical
-        // amendment records — not the external claim the contract means. This test pins both halves
-        // of that decision: one verb list across the three claim rules, and the rejected verbs
-        // silent. Patterns are read from the rule file rather than restated, so the test cannot
-        // drift from the SSOT an author edits.
-        const rule = readFileSync(join(REPO_ROOT, 'config', 'rules', 'docs', 'sourced-api-claims.yaml'), 'utf8');
         const rawOf = (id: string): string => {
             const block = rule.slice(rule.indexOf(`- id: ${id}`));
             const raw = /pattern: "((?:[^"\\]|\\.)*)"/.exec(block)?.[1];
             expect(raw, `${id} must declare a pattern`).toBeTruthy();
+            // This file's YAML double-quoted escapes are JSON-compatible (`\\` backslash, `\"` quote).
             return JSON.parse(`"${raw ?? ''}"`) as string;
         };
+        const versions = new RegExp(rawOf('cited-version-strings'));
         const claims = new RegExp(rawOf('cited-api-claims'));
-        const presence = new RegExp(rawOf('cited-api-claims-confidence'));
-        const honesty = new RegExp(rawOf('cited-high-confidence'));
 
-        // One vocabulary, three rules — the same bytes, not a paraphrased equivalent: each rule's
-        // comment promises the family never disagrees about which lines are claims.
-        const verbsOf = (pattern: string): string => pattern.slice(pattern.indexOf('\\b(?:deprecated'));
-        const verbs = verbsOf(rawOf('cited-api-claims'));
-        expect(verbs).toContain('(?:deprecated');
-        expect(verbsOf(rawOf('cited-api-claims-confidence'))).toBe(verbs);
-        expect(verbsOf(rawOf('cited-high-confidence'))).toBe(verbs);
+        // Anchor half: an uncited claim fires, a URL or path:line anchor silences it. A level token
+        // is not an anchor.
+        expect(versions.test('Depends on `@scope/pkg@1.4.2`.')).toBe(true);
+        expect(versions.test('Depends on `@scope/pkg@1.4.2` (HIGH).')).toBe(true);
+        expect(versions.test('Depends on `@scope/pkg@1.4.2` — packages/app/src/index.ts:42')).toBe(false);
+        expect(claims.test('The endpoint was deprecated since 1.2.')).toBe(true);
+        expect(claims.test('The option was removed in 2.0 (HIGH).')).toBe(true);
+        expect(claims.test('The option was removed in 2.0 — see https://example.com/docs')).toBe(false);
 
-        // Added: the version is what vouches for the claim, so all three halves widened together.
-        expect(claims.test('The option was removed in 2.0.')).toBe(true);
+        // Version-anchored widening (measured 2026-10-16) fires; a document's own version, a heading
+        // section number and a `§` cross-reference (2026-10-12 audit) do not.
         expect(claims.test('Fixers landed since 0.3.4.')).toBe(true);
         expect(claims.test('The flag is stable since v1.2.')).toBe(true);
-        expect(presence.test('The option was removed in 2.0.')).toBe(true);
-        expect(honesty.test('The option was removed in 2.0 (HIGH).')).toBe(true);
+        expect(versions.test('version: 1.69.0')).toBe(false);
+        expect(versions.test('### 1.0.1 Shared option registry')).toBe(false);
+        expect(versions.test('See §1.2.1 for the split.')).toBe(false);
 
-        // Rejected by measurement: a plain declaration is not an external claim, and `renamed to`
-        // plus `replaced by` carry no version for the shape to vouch for.
+        // Rejected by measurement: plain declarations about this repo are not external claims.
         for (const line of [
             'The runner requires Bun.',
             'The schema supports `pause`.',
@@ -1673,66 +1599,17 @@ describe('sp plugin structure — functional split invariants (task 0161 / ADR-0
             'Those files are no longer generated.',
             'The legacy key was replaced by a value table.',
             'The finding key was renamed to `phase`.',
-            // `removed in|since` must not fire on a task id or a substitution record…
             'The verb was removed in task 0452.',
             '`X` was removed in favour of `Y`.',
-            // …and `since|as of` must not fire on a quantity or a bare two-component number.
             'Usage rose from 32.6 to 205.4.',
             'Reads are up 3.2 points since 89.6.',
         ]) {
             expect(claims.test(line), line).toBe(false);
-            expect(presence.test(line), line).toBe(false);
         }
 
-        // Baseline behaviour is untouched: the anchor half exempts an anchored line, and the level
-        // half reports it — the two halves stay independent. A level is not an anchor, so a levelled
-        // but uncited line still reports the anchor half.
-        expect(claims.test('The option was removed in 2.0 — see https://example.com/docs')).toBe(false);
-        expect(presence.test('The option was removed in 2.0 — see https://example.com/docs')).toBe(true);
-        expect(presence.test('The option was removed in 2.0 (HIGH).')).toBe(false);
-        expect(claims.test('The option was removed in 2.0 (HIGH).')).toBe(true);
-        expect(honesty.test('The option was removed in 2.0 (HIGH) — see https://example.com/docs')).toBe(false);
-    });
-
-    test('the docs rule family carries the level half of a version claim', () => {
-        // `cited-version-strings` checked the anchor half of a version claim but never the level
-        // half. `cited-version-strings-confidence` closes it, matching the api-claims pair. The
-        // halves are independent (measured over one run: 128 lines miss both, 1 only the anchor, 3
-        // only the level), so the shapes must stay identical while the guards stay separate.
-        const rule = readFileSync(join(REPO_ROOT, 'config', 'rules', 'docs', 'sourced-api-claims.yaml'), 'utf8');
-        const rawOf = (id: string): string => {
-            const block = rule.slice(rule.indexOf(`- id: ${id}`));
-            const raw = /pattern: "((?:[^"\\]|\\.)*)"/.exec(block)?.[1];
-            expect(raw, `${id} must declare a pattern`).toBeTruthy();
-            return JSON.parse(`"${raw ?? ''}"`) as string;
-        };
-        const anchor = new RegExp(rawOf('cited-version-strings'));
-        const level = new RegExp(rawOf('cited-version-strings-confidence'));
-
-        // Both halves missing, then each half alone — provenance of the split, not bookkeeping. The
-        // anchor rule has no level guard, so a levelled-but-uncited line is still its finding.
-        expect(level.test('Depends on `@scope/pkg@1.4.2`.')).toBe(true);
-        expect(anchor.test('Depends on `@scope/pkg@1.4.2`.')).toBe(true);
-        expect(level.test('Depends on `@scope/pkg@1.4.2` (LOW).')).toBe(false);
-        expect(anchor.test('Depends on `@scope/pkg@1.4.2` (LOW).')).toBe(true);
-        expect(level.test('Depends on `@scope/pkg@1.4.2` — packages/app/src/index.ts:42')).toBe(true);
-        expect(anchor.test('Depends on `@scope/pkg@1.4.2` — packages/app/src/index.ts:42')).toBe(false);
-
-        // The document's own version, a heading's section number and a `§` cross-reference are not
-        // claims — the exclusions its sibling earned in the 2026-10-12 audit carry over intact.
-        expect(level.test('version: 1.69.0')).toBe(false);
-        expect(level.test('### 1.0.1 Shared option registry')).toBe(false);
-        expect(level.test('See §1.2.1 for the split.')).toBe(false);
-
-        // Same half of the claim, so the same version shape: the level rule adds a leading level
-        // guard and deliberately NO anchor guard, and nothing else may differ.
-        const shapeOf = (pattern: string): string => pattern.slice(pattern.indexOf('(?!\\s*#{1,6}'));
-        expect(shapeOf(rawOf('cited-version-strings-confidence'))).toBe(shapeOf(rawOf('cited-version-strings')));
-        expect(shapeOf(rawOf('cited-version-strings-confidence'))).not.toContain('https?://');
-
-        // Family policy: advisory only, and the historical-record excludes carry the trailing `/**`
-        // that `docs/tasks*/` silently lacked (measured 2026-10-12 — a bare `dir*/` excludes
-        // nothing). 623 → 274 findings is what keeps this a review surface instead of a second 593.
+        // Family policy: advisory only, out of every preset, and the historical-record excludes keep
+        // their load-bearing trailing `/**` (a bare `dir*/` excludes nothing — measured 2026-10-12).
+        for (const id of ids) expect(rule.slice(rule.indexOf(`- id: ${id}`))).toContain('severity: info');
         for (const glob of [
             'docs/tasks*/**',
             'docs/report*/**',
@@ -1746,14 +1623,9 @@ describe('sp plugin structure — functional split invariants (task 0161 / ADR-0
         for (const match of excludes.matchAll(/^\s+- "(.*)"$/gm)) {
             expect(match[1]?.endsWith('/**'), `${match[1]} must end with /**`).toBe(true);
         }
-        const levelBlock = rule.slice(
-            rule.indexOf('- id: cited-version-strings-confidence'),
-            rule.indexOf('- id: cited-api-claims\n'),
-        );
-        expect(levelBlock).toContain('severity: info');
         const preCheck = readFileSync(join(REPO_ROOT, 'config', 'rules', 'recommended-pre-check.yaml'), 'utf8');
         expect(preCheck).not.toMatch(/^\s*-\s*docs\b/m);
-        expect(preCheck).not.toContain('cited-version-strings-confidence');
+        expect(preCheck).toContain('DO NOT ENABLE THIS LINE');
     });
 
     test('R49 — Wave 3 enrichment landed (0214 R7/R8/R9)', () => {

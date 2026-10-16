@@ -9,14 +9,13 @@ import {
     type ConfidenceLevel,
     confidenceLevel,
 } from '../../src/decision/confidence-level';
-import { FEATURE_RECEIPT_CONFIDENCE_LEVELS } from '../../src/workflow/feature-verification-receipt';
 
 /**
  * Verification for the derived confidence level (design §3.5, task 1100): the closed
  * HIGH/MEDIUM/LOW vocabulary, its boundaries, its fail-conservative behaviour on a
- * broken maker value, the catalog bar it is anchored to, and the FOUR declarations of
- * that vocabulary which must stay identical — this module's derivation, the answer
- * lint, the feature-verification receipt, and the transport enum.
+ * broken maker value, the catalog bar it is anchored to, and the two declarations of
+ * that vocabulary which must stay identical — this module's derivation and the
+ * transport enum.
  *
  * Every case that can silently mislead an operator is enumerated rather than sampled:
  * a value one step either side of each threshold, every invalid shape a maker can
@@ -64,15 +63,10 @@ describe('confidenceLevel', () => {
         expect([...levels].sort()).toEqual(['HIGH', 'LOW', 'MEDIUM']);
     });
 
-    test('every declaration of the vocabulary agrees — derivation, receipt, transport', () => {
-        // The closed vocabulary is written down three times: this module's type,
-        // `FEATURE_RECEIPT_CONFIDENCE_LEVELS`, and the transport enum. (The fourth former
-        // declaration, the verify answer's asserted `Confidence:` line, was retired by F511,
-        // task 1207 — it asserted a self-claim rather than deriving one.) The closure test
-        // above pins only the derivation's own outputs against literals, so a consumer could
-        // gain or lose a value unnoticed — exactly the "consumer's enum diverging" drift the
-        // file header claims to cover. Each consumer is probed through its real entry point
-        // rather than through a re-exported list, so the assertion cannot pass on a stale copy.
+    test('every declaration of the vocabulary agrees — derivation and transport', () => {
+        // The decision subsystem is the only remaining HIGH/MEDIUM/LOW family (ADR-138: the asserted
+        // verify-answer line and the feature-receipt level were both retired). Probe the transport
+        // through its real schema so a consumer cannot drift from the derivation unnoticed.
         const derived = [
             ...new Set(
                 [0, 0.1, 0.49, 0.5, 0.6, 0.79, 0.8, 0.9, 1, null, Number.NaN, -1, 2].map((value) =>
@@ -80,10 +74,9 @@ describe('confidenceLevel', () => {
                 ),
             ),
         ].sort();
-        expect(derived).toEqual([...FEATURE_RECEIPT_CONFIDENCE_LEVELS].sort());
         expect(derived).toEqual(['HIGH', 'LOW', 'MEDIUM']);
 
-        for (const level of FEATURE_RECEIPT_CONFIDENCE_LEVELS) {
+        for (const level of derived) {
             expect(decisionLogRowSchema.shape.confidenceLevel.safeParse(level).success).toBe(true);
         }
         // The transport refuses a value outside the vocabulary, so it is not merely a superset.

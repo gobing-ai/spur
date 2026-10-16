@@ -805,8 +805,6 @@ async function fixturePassReceipt(featureId: string, featureContent: string): Pr
     await completeFeatureVerificationReceipt(fs, runDir, running, {
         status: 'PASS',
         inputDigest,
-        confidence: 'HIGH',
-        confidenceBasis: ['verification command exited 0', 'proof-input digest unchanged across the pass'],
     });
 
     const db = await createMigratedDbAdapter(cwd);

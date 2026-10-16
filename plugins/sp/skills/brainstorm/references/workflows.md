@@ -85,7 +85,7 @@ DO NOT implement research directly. Delegate to specialized skills:
 
 2. Delegate research + synthesis inline by default
    - Run in the current session; escalate to `spur agent run` only on a subprocess trigger
-   - Request confidence scoring
+   - Request source citations
 ```
 
 ### Approach Generation
@@ -108,7 +108,6 @@ DO NOT implement research directly. Delegate to specialized skills:
 - Key technical considerations
 - Dependencies or prerequisites
 
-**Confidence:** HIGH/MEDIUM/LOW
 **Sources:** [Citations with dates]
 ```
 
@@ -119,14 +118,6 @@ DO NOT implement research directly. Delegate to specialized skills:
 - [Title](URL) | **Verified**: YYYY-MM-DD
 - [Title](URL) | **Verified**: YYYY-MM-DD
 ```
-
-### Confidence Scoring
-
-| Level | Range | Criteria |
-|-------|-------|----------|
-| **HIGH** | >90% | Direct quote from official docs (2025+) |
-| **MEDIUM** | 70-90% | Synthesized from multiple sources |
-| **LOW** | <70% | Uncertain, flag for review |
 
 ---
 
@@ -144,7 +135,7 @@ DO NOT implement research directly. Delegate to specialized skills:
 2. **Approaches** (200-300 words each)
    - 2-3 options with trade-offs
    - Implementation considerations
-   - Confidence levels
+   - Sources
 
 3. **Recommendations** (100-150 words)
    - Recommended approach with reasoning
@@ -197,7 +188,6 @@ run_id: <run id, omit when none>
 **Implementation Notes:**
 - [Technical considerations]
 
-**Confidence:** HIGH/MEDIUM/LOW
 **Sources:** [Citations]
 
 ### Approach 2: [Name]
@@ -255,7 +245,7 @@ Bash: spur task batch-create --file decomposition.json   # bare JSON array (see 
 | File not found | Provide clear error with path |
 | Invalid YAML | Report parsing error |
 | Missing fields | List missing fields, ask if incomplete |
-| Research unavailable | Continue, note reduced confidence |
+| Research unavailable | Continue, mark the uncited claims |
 | Save fails | Display output, suggest manual save |
 
 ---
@@ -265,6 +255,6 @@ Bash: spur task batch-create --file decomposition.json   # bare JSON array (see 
 When tools unavailable:
 
 1. **Continue** with available tools
-2. **Note** reduced confidence
+2. **Mark** claims left uncited
 3. **Suggest** manual fallback
 4. **Save** intermediate state

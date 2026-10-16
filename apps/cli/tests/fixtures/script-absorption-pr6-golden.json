@@ -16,11 +16,6 @@
             "stdout": "FAIL\n- finding-invalid-category:navigation\n",
             "stderr": ""
         },
-        "anatomy check bad confidence": {
-            "exitCode": 1,
-            "stdout": "FAIL\n- finding-invalid-confidence:certain\n",
-            "stderr": ""
-        },
         "anatomy check missing sections": {
             "exitCode": 1,
             "stdout": "FAIL\n- section-missing-or-out-of-order:Scope and provenance\n- section-missing-or-out-of-order:Executive summary\n- section-missing-or-out-of-order:Baseline comparison\n- section-missing-or-out-of-order:Recurrence ledger\n- section-missing-or-out-of-order:Telemetry gaps\n- section-missing-or-out-of-order:Remediation options\n- section-missing-or-out-of-order:Performance analysis\n- section-missing-or-out-of-order:Workflow and process improvements\n- section-missing-or-out-of-order:Report-only advisories\n- section-missing-or-out-of-order:Positive patterns\n- section-missing-or-out-of-order:Evidence ledger\n",

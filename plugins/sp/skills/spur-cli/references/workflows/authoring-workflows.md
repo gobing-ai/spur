@@ -138,7 +138,7 @@ Spur's host additionally registers (`registerSpurBuiltins`, `packages/app/src/wo
 
 | Kind | Capability |
 | ---- | ---------- |
-| Action | `agent.run` (model call via `spur agent run`; `executor: 'fleet'` dispatches into the agent fleet), `decide` (inline `id`/`method`/`question`/`choices`/`default`/`evidence` → outcome written to `resultFile`; catalog-id references are pending task 1094 — use `spur decision run` for catalog decisions), `command.gate`, `rule.check`, `doctor.probe`, `response.validate`, `proof.fingerprint`, `run.artifact`, `file.exists`, `file.read`, `file.read.into-var`, `http.request`, `hitl.confirm`, `hitl.select`, `hitl.input`, `shell` (streaming) |
+| Action | `agent.run` (model call via `spur agent run`; `executor: 'fleet'` dispatches into the agent fleet), `decide` (inline `id`/`method`/`question`/`choices`/`default`/`evidence` → outcome written to `resultFile`; catalog-id references are pending task 1094 — use `spur decision run` for catalog decisions), `command.gate`, `rule.check`, `doctor.probe`, `proof.fingerprint`, `run.artifact`, `file.exists`, `file.read`, `file.read.into-var`, `http.request`, `hitl.confirm`, `hitl.select`, `hitl.input`, `shell` (streaming) |
 | Guard | `shell` (env-aware), `contract-violation` |
 
 Order matters for both guards and conditions: **the first that passes wins.** Put the discriminating
