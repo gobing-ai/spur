@@ -403,6 +403,43 @@ describe('builder edge paths', () => {
         expect(pluginJson.version).toBe('0.2.0');
     });
 
+    test('refreshes a previously staged plugin copy in the shipping package', async () => {
+        const { repo } = mkRepo();
+        // Canonical root trees at the old version…
+        mkdirSync(join(repo, 'plugins', 'sp'), { recursive: true });
+        mkdirSync(join(repo, '.claude-plugin'), { recursive: true });
+        writeFileSync(
+            join(repo, '.claude-plugin', 'marketplace.json'),
+            `${JSON.stringify({ name: 'demo', plugins: [{ name: 'sp', version: '0.1.0', source: 'plugins/sp' }] }, null, 4)}\n`,
+        );
+        writeFileSync(
+            join(repo, 'plugins', 'sp', 'plugin.json'),
+            `${JSON.stringify({ name: 'sp', version: '0.1.0' }, null, 4)}\n`,
+        );
+        // …and a stale staged copy in the released package (what a bun-linked global resolves).
+        mkdirSync(join(repo, 'pkgs', 'lib', 'plugins', 'sp'), { recursive: true });
+        mkdirSync(join(repo, 'pkgs', 'lib', '.claude-plugin'), { recursive: true });
+        writeFileSync(
+            join(repo, 'pkgs', 'lib', '.claude-plugin', 'marketplace.json'),
+            `${JSON.stringify({ name: 'demo', plugins: [{ name: 'sp', version: '0.0.0', source: 'plugins/sp' }] }, null, 4)}\n`,
+        );
+        writeFileSync(
+            join(repo, 'pkgs', 'lib', 'plugins', 'sp', 'plugin.json'),
+            `${JSON.stringify({ name: 'sp', version: '0.0.0' }, null, 4)}\n`,
+        );
+        sh(repo, ['git', 'add', '.']);
+        sh(repo, ['git', 'commit', '-m', 'add staged copy']);
+
+        await bumpVer(['lib', '0.2.0'], repo);
+
+        const stagedMarketplace = await Bun.file(
+            join(repo, 'pkgs', 'lib', '.claude-plugin', 'marketplace.json'),
+        ).json();
+        expect(stagedMarketplace.plugins[0].version).toBe('0.2.0');
+        const stagedPluginJson = await Bun.file(join(repo, 'pkgs', 'lib', 'plugins', 'sp', 'plugin.json')).json();
+        expect(stagedPluginJson.version).toBe('0.2.0');
+    });
+
     test('drop-tags tolerates absent local and remote tags', async () => {
         const { repo } = mkRepo();
         // Neither @demo/lib-v0.2.0 nor @demo/root-v0.2.0 exist anywhere.

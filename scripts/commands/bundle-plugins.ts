@@ -47,15 +47,17 @@ export const EXCLUDE = /(^|\/)(\.DS_Store|tests|evals)($|\/)|\.test\.ts$/;
 export async function bundlePlugins(
     pluginTarget: string = PLUGIN_TARGET,
     marketplaceTarget: string = MARKETPLACE_TARGET,
+    pluginSource: string = PLUGIN_SOURCE,
+    marketplaceSource: string = MARKETPLACE_SOURCE,
 ): Promise<{ pluginTarget: string; marketplaceTarget: string }> {
     await rm(pluginTarget, { recursive: true, force: true });
     await rm(marketplaceTarget, { recursive: true, force: true });
 
-    await cp(PLUGIN_SOURCE, pluginTarget, {
+    await cp(pluginSource, pluginTarget, {
         recursive: true,
-        filter: (src) => !EXCLUDE.test(src.slice(PLUGIN_SOURCE.length)),
+        filter: (src) => !EXCLUDE.test(src.slice(pluginSource.length)),
     });
-    await cp(MARKETPLACE_SOURCE, marketplaceTarget, { recursive: true });
+    await cp(marketplaceSource, marketplaceTarget, { recursive: true });
 
     return { pluginTarget, marketplaceTarget };
 }
