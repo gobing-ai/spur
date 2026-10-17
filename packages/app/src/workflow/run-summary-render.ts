@@ -6,7 +6,7 @@
  * PR-6 moved the rest (batch roll-up, receipt read) when `spur workflow summary` absorbed the
  * `run-summary` script. Measurement is `./run-summary.ts`; transcript IO is `./transcript.ts`.
  */
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, readdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { getEnvVars } from '@gobing-ai/spur-config';
 import type { WorkflowProgressProjection } from './progress-projection';
@@ -175,6 +175,9 @@ export function writeCloseSummary(
             skippedLines,
         });
         if (summary.rows.length === 0) return na('no timed attempts');
+        // D65 1237 R1: the close summary is what an operator reads, so it resolves the gate time
+        // here too — not only in the `spur workflow summary` CLI path.
+        summary.gate = gateFromReceipt(cwd, run.runId);
         mkdirSync(runDir, { recursive: true });
         writeFileSync(abs, `${renderSummaryMarkdown(summary)}\n`);
         writeFileSync(
@@ -192,20 +195,51 @@ export function writeCloseSummary(
 }
 
 /**
- * 1146 R4: gate time comes only from THIS run's check receipt (`receipt.runId === runId`); a
- * receipt belonging to another run is a cross-run scratch read (ADR-131) and renders n/a.
+ * 1146 R4 + D65 1237 R1: gate time comes only from THIS run's check receipt
+ * (`receipt.runId === runId`); a receipt belonging to another run is a cross-run scratch read
+ * (ADR-131) and renders n/a.
+ *
+ * The gate names its receipt by the task WBS (`.spur/run/<wbs>-check-receipt.json`) and records the
+ * run identity INSIDE it, so a run-id-only path lookup found nothing and every summary rendered a
+ * null gate time. The identity in the file is the authority: try the run-id path first, then take
+ * the first receipt in the run dir whose recorded `runId` is this run. Never read a foreign one.
  */
 export function gateFromReceipt(cwd: string, runId: string): GateTime {
-    const path = join(cwd, '.spur', 'run', `${runId}-check-receipt.json`);
-    if (!existsSync(path)) return { ms: null, reason: 'no matching check receipt' };
+    const dir = join(cwd, '.spur', 'run');
+    const direct = join(dir, `${runId}-check-receipt.json`);
+    const candidates = [direct, ...siblingReceipts(dir, direct)];
+    let sawReceipt = false;
+    let sawUnreadable = false;
+    for (const path of candidates) {
+        if (!existsSync(path)) continue;
+        sawReceipt = true;
+        try {
+            const parsed = JSON.parse(readFileSync(path, 'utf8')) as { runId?: unknown; gateRuntimeMs?: unknown };
+            if (parsed.runId !== runId) continue;
+            const ms = parsed.gateRuntimeMs;
+            if (typeof ms !== 'number' || !Number.isFinite(ms))
+                return { ms: null, reason: 'check receipt has no gate time' };
+            return { ms };
+        } catch {
+            sawUnreadable = true;
+        }
+    }
+    if (sawReceipt && sawUnreadable && runId !== '') return { ms: null, reason: 'check receipt is unreadable' };
+    return {
+        ms: null,
+        reason: sawReceipt ? 'check receipt belongs to another run' : 'no matching check receipt',
+    };
+}
+
+/** Every other `*-check-receipt.json` in the run dir (the gate's WBS-named receipts). */
+function siblingReceipts(dir: string, exclude: string): string[] {
+    if (!existsSync(dir)) return [];
     try {
-        const parsed = JSON.parse(readFileSync(path, 'utf8')) as { runId?: unknown; gateRuntimeMs?: unknown };
-        if (parsed.runId !== runId) return { ms: null, reason: 'check receipt belongs to another run' };
-        const ms = parsed.gateRuntimeMs;
-        if (typeof ms !== 'number' || !Number.isFinite(ms))
-            return { ms: null, reason: 'check receipt has no gate time' };
-        return { ms };
+        return readdirSync(dir)
+            .filter((name) => name.endsWith('-check-receipt.json'))
+            .map((name) => join(dir, name))
+            .filter((path) => path !== exclude);
     } catch {
-        return { ms: null, reason: 'check receipt is unreadable' };
+        return [];
     }
 }

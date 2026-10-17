@@ -18,12 +18,14 @@ function main(
     env: Record<string, string | undefined> = {},
     write: (s: string) => void = (s) => process.stdout.write(s),
     projectsRoot?: string,
+    cwd?: string,
 ): number {
     return runRunSummaryCli(argv, {
         env,
         write,
         writeErr: (s) => process.stderr.write(s),
         ...(projectsRoot !== undefined ? { projectsRoot } : {}),
+        ...(cwd !== undefined ? { cwd } : {}),
     });
 }
 
@@ -274,6 +276,26 @@ describe('1146 — gate receipt and batch roll-up', () => {
         }
     });
 
+    test('D65 1237 R1: a WBS-named gate receipt resolves by the identity it records', () => {
+        const dir = mkdtempSync(join(tmpdir(), 'run-summary-gate-wbs-'));
+        try {
+            mkdirSync(join(dir, '.spur', 'run'), { recursive: true });
+            // The gate writes `<wbs>-check-receipt.json` and records the run identity inside it.
+            writeFileSync(
+                join(dir, '.spur', 'run', '1237-check-receipt.json'),
+                JSON.stringify({ runId: 'run_1237', gateRuntimeMs: 31_500 }),
+            );
+            expect(gateFromReceipt(dir, 'run_1237')).toEqual({ ms: 31_500 });
+            // A sibling receipt for a different run is never read as this run's gate time.
+            expect(gateFromReceipt(dir, 'run_other')).toEqual({
+                ms: null,
+                reason: 'check receipt belongs to another run',
+            });
+        } finally {
+            rmSync(dir, { recursive: true, force: true });
+        }
+    });
+
     test('F23/AC5: --rollup sums per-run Totals and states the wall span when windows overlap', () => {
         const mk = (runId: string, startedAt: string, completedAt: string, workSec: number) => ({
             runId,
@@ -436,7 +458,7 @@ describe('1146 — writeCloseSummary (R1/AC1/AC2)', () => {
 
 /** 1146 R3/AC5 — the CLI surface of `--rollup`, plus the usage guards main() owns. */
 describe('1146 — run-summary CLI', () => {
-    const capture = (argv: string[]): { code: number; out: string; err: string } => {
+    const capture = (argv: string[], cwd?: string): { code: number; out: string; err: string } => {
         const out: string[] = [];
         const err: string[] = [];
         const o = process.stdout.write;
@@ -450,7 +472,11 @@ describe('1146 — run-summary CLI', () => {
             return true;
         }) as typeof process.stderr.write;
         try {
-            return { code: main(argv, {}, (s) => out.push(s), '/nope'), out: out.join(''), err: err.join('') };
+            return {
+                code: main(argv, {}, (s) => out.push(s), '/nope', cwd),
+                out: out.join(''),
+                err: err.join(''),
+            };
         } finally {
             process.stdout.write = o;
             process.stderr.write = e;
@@ -576,14 +602,15 @@ describe('1146 — run-summary CLI', () => {
                 join(dir, '.spur', 'run', 'run_cli-check-receipt.json'),
                 JSON.stringify({ runId: 'run_cli', gateRuntimeMs: 1500 }),
             );
-            const r = capture(['--progress', progress, '--transcript', transcript, '--markdown']);
+            // D65 1237 R1: the CLI resolves the receipt from the cwd it is given, so the summary
+            // reports this run's own gate time instead of rendering n/a.
+            const r = capture(['--progress', progress, '--transcript', transcript, '--markdown'], dir);
             expect(r.code).toBe(0);
             expect(r.out).toContain('| implement | passed | 4:50 |');
             expect(r.out).toContain('Actor');
             expect(r.out).toContain('idle / unattributed');
-            // The receipt lives in the temp dir; the CLI reads this run's receipt from its cwd and
-            // must say so rather than fabricate a 0 (F22 pins the match case directly).
-            expect(r.out).toContain('of which gate (informational) | n/a (no matching check receipt)');
+            expect(r.out).toContain('of which gate (informational) | 0:02 |');
+            expect(r.out).not.toContain('of which gate (informational) | n/a');
             expect(r.out).toContain('Compactions: 0 · Subagent errors: 0');
         } finally {
             rmSync(dir, { recursive: true, force: true });

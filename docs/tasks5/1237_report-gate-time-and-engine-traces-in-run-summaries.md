@@ -1,10 +1,10 @@
 ---
 schema_version: 1
 name: Report gate time and engine traces in run summaries
-status: todo
+status: done
 template: feature-impl
 created_at: 2026-10-17T15:59:56.819Z
-updated_at: "2026-10-17T16:13:27.932Z"
+updated_at: "2026-10-17T19:16:40.900Z"
 feature_id: D65
 priority: P2
 tags:
@@ -12,6 +12,8 @@ tags:
   - workflow
 estimate_hours: 2
 
+done_forced: "false"
+done_reason: unforced close; PASS artifact at .spur/memory/evidence/1237-verdict.json
 ---
 
 ## 1237. Report gate time and engine traces in run summaries
@@ -25,12 +27,12 @@ Feature D65 F7. gateFromReceipt looks for `.spur/run/${runId}-check-receipt.json
 
 ### Requirements
 
-- [ ] R1. Run summaries resolve the gate receipt by the run's wbs (and the gate builtin's receipt path when present) and report gate ms.
-- [ ] R2. Engine-executed runs report stage times from action_runs without inline trace verbs.
+- [x] R1. Run summaries resolve the gate receipt by the run's wbs (and the gate builtin's receipt path when present) and report gate ms.
+- [x] R2. Engine-executed runs report stage times from action_runs without inline trace verbs.
 
 ### Acceptance Criteria
 
-- [ ] AC1 — Run summaries report gate time and engine-emitted traces (req: R1, R2)
+- [x] AC1 — R7 — Run summaries report gate time and engine-emitted traces (req: R1, R2)
 
 ### Q&A
 
@@ -44,20 +46,55 @@ Root-cause fix in the shared lookup both callers use; no new artifact. Regressio
 
 ### Plan
 
-- [ ] Fix lookup + remove hard-coded null
-- [ ] Verify against an existing .spur/run receipt
+- [x] Fix the lookup (resolve by the identity recorded inside the receipt) + wire the close path's gate
+- [x] Verify against a real `.spur/run/<wbs>-check-receipt.json` written by this batch's gate
 
 ### Solution
 
-<!-- Filled during implementation: file:line change map and concise rationale. -->
+Change-map (auto-generated — implement step did not record a Solution).
+Each entry cites the first changed line per file (`file:line`).
+
+| Change (`file:line`) |
+|----------------------|
+| `packages/app/src/workflow/run-summary-render.ts:178` |
+| `packages/app/src/workflow/run-summary-render.ts:198` |
+| `packages/app/src/workflow/run-summary-render.ts:208` |
+| `packages/app/src/workflow/run-summary-render.ts:238` |
+| `packages/app/src/workflow/run-summary-render.ts:243` |
+| `packages/app/src/workflow/run-summary-render.ts:9` |
+| `packages/app/tests/workflow/run-summary-cli.test.ts:21` |
+| `packages/app/tests/workflow/run-summary-cli.test.ts:279` |
+| `packages/app/tests/workflow/run-summary-cli.test.ts:28` |
+| `packages/app/tests/workflow/run-summary-cli.test.ts:461` |
+| `packages/app/tests/workflow/run-summary-cli.test.ts:475` |
+| `packages/app/tests/workflow/run-summary-cli.test.ts:605` |
+| `packages/app/tests/workflow/run-summary-cli.test.ts:612` |
 
 ### Testing
 
-<!-- Filled during verification: commands run, outcomes, coverage claim or N/A. -->
+**Pipeline verify results**
+
+- Verdict: PASS (from verdict artifact)
+
+| Requirement | Status | Evidence |
+|-------------|--------|----------|
+| R1 | MET | Root cause was a path/identity mismatch: the gate writes `.spur/run/<wbs>-check-receipt.json` with the run identity recorded INSIDE it, while the summary looked only for `<runId>-check-receipt.json`, so every summary rendered a null gate. `gateFromReceipt` (`packages/app/src/workflow/run-summary-render.ts:209`) now tries the run-id path first, then takes the first receipt in the run dir whose recorded `runId` is this run, and never reads a foreign one. Both callers resolve it: the `spur workflow summary` CLI (`packages/app/src/workflow/run-summary-cli.ts:96`) and the close writer (`packages/app/src/workflow/run-summary-render.ts:174`), which previously left the built summary's placeholder untouched. Proven on this repo's own receipt: `.spur/run/1237-check-receipt.json` carries `runId 1237c-…` and `gateRuntimeMs`, and the renderer emits `of which gate (informational) |
+| R2 | MET | Stage windows come from `action_runs` rows through `ActionRunDao` (`packages/app/src/workflow/progress-projection.ts:250`) and the summary windows over `progress.states[].actions[].attempts[]` timestamps — no inline trace verb and no inline-run artifact is read. The engine's own runs therefore report stage times with no driver bookkeeping; nothing needed changing here |
+
+| Acceptance Criteria | Status | Evidence Type | Evidence |
+|---------------------|--------|---------------|----------|
+| AC1 — R7 — Run summaries report gate time and engine-emitted traces (req: R1, R2) | MET | command | `packages/app/tests/workflow/run-summary-cli.test.ts` (25 pass, run inside the app workspace) covers the run-id receipt, the WBS-named receipt resolved by its recorded identity, a foreign receipt still refused, an unreadable receipt, and the CLI end-to-end rendering the resolved gate time from a cwd that holds this run's receipt. `spur task gate 1237 run` → `quality gate PASS` (log `.spur/run/1237-test-gate.log`) |
+- Coverage: N/A (verdict-based; verify pipeline does not measure code coverage)
 
 ### Review
 
-<!-- Filled during review: P1-P4 findings, residual risk, and final disposition. -->
+<!-- spur:record-review -->
+
+**SECU findings** (pipeline verify step — verdict: PASS)
+
+| Priority | Dimension | Location | Finding |
+|----------|-----------|----------|----------|
+| P4 | — | — | No findings (verify verdict PASS) |
 
 ### References
 
@@ -65,3 +102,8 @@ Root-cause fix in the shared lookup both callers use; no new artifact. Regressio
 - Feature D65; ADR-140; ADR-051 amendment 2026-10-17.
 
 ### History
+
+- 2026-10-17T19:16:36.324Z todo → wip (system)
+- 2026-10-17T19:16:36.819Z wip → testing (system)
+- 2026-10-17T19:16:40.894Z testing → done (system)
+
