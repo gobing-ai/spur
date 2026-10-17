@@ -76,6 +76,15 @@ vars:
   agent: "auto"
   planningAgent: ""
   stepTimeoutMs: "1800000"
+  # Executor for every agent.run stage (D65 R1): "host" pauses the run with a work item
+  # (`spur workflow run|continue --json`), "fleet" dispatches through ADR-126, and empty
+  # resolves the subprocess surface through the existing tier ladder.
+  executor: ""
+  # Accepted/deferred status each operator gate's decision binding writes (1236 R2).
+  ideaEvalStatus: ""
+  featureCheckStatus: ""
+  designApprovalStatus: ""
+  batchCreateStatus: ""
 
 states:
   - id: start
@@ -138,6 +147,11 @@ states:
           # explicitly so the definition is self-documenting.
           session: fresh
           expectFile: .spur/run/${vars.__runId}-idea-eval-report.md
+          # The signal is this stage's own output; the plural form declares it to the
+          # work item (host/fleet) while the singular expectFile stays the subprocess
+          # post-exit guard, so a missing signal still falls back to the catalog decision.
+          expectFiles:
+            - .spur/run/${vars.__runId}-idea-needs-design.json
           timeoutMs: ${vars.stepTimeoutMs}
       # Derive the eval recommendation ONCE (0769 pattern): the first non-blank line under
       # `## Recommendation` → proceed | reshape | drop | unknown. The --auto guards out of
@@ -183,14 +197,30 @@ states:
       pros/cons, and a recommendation. The operator reviews and approves or
       rejects. Routed around only when profile=auto AND vars.idea_approved=true
       (CLI --auto) AND the report's recommendation is proceed/reshape; a drop
-      recommendation cancels, a missing one still pauses here.
-    pause: true
+      recommendation cancels, a missing one asks the gate, whose evidence binding then
+      answers under profile=auto (1236/1241).
     onEnter:
       - kind: hitl.confirm
         options:
           prompt: "Review the idea evaluation report (.spur/run/${vars.__runId}-idea-eval-report.md). Approve to create a feature, or reject to cancel? (Reject creates no feature.)"
+          # Interactive always prompts the operator; profile=auto answers from the discovery
+          # stage's recorded evidence, deferring when it cannot decide (1236 R1/R2).
           decision:
-            mode: never
+            mode: evidence
+            statusVar: ideaEvalStatus
+            evidenceNodes:
+              - discovery
+      # A deferred/absent answer is the denial today's headless responder gave, so the
+      # guards keep routing on yes | no | cancel with no new edge.
+      - kind: shell
+        options:
+          command: >-
+            mkdir -p .spur/run; a="$__hitlAnswer"; [ -n "$a" ] || a=no;
+            printf '%s\n' "$a" > ".spur/run/$__runId-idea-eval-answer.txt"
+      - kind: file.read.into-var
+        options:
+          path: .spur/run/${vars.__runId}-idea-eval-answer.txt
+          var: __hitlAnswer
 
   - id: feature-create
     display:
@@ -218,6 +248,11 @@ states:
           # B7 R6 (0894): declared fresh policy (planner default).
           session: fresh
           expectFile: .spur/run/${vars.__runId}-idea-feature-id.txt
+          # Intent artifacts this stage writes; the shell below fails closed when either is
+          # missing, so declaring them adds the work-item contract, not a new precondition.
+          expectFiles:
+            - .spur/run/${vars.__runId}-idea-goal.md
+            - .spur/run/${vars.__runId}-idea-scope.md
           timeoutMs: ${vars.stepTimeoutMs}
       - kind: file.read.into-var
         options:
@@ -335,13 +370,29 @@ states:
       Requirement coverage (1004 R2) folds into the recorded `idea-ac-check` result via the
       gate's `--inventory` flag: a FAIL there can mean some inventory items have no covering
       scenario — answer no to route back to ac-generate for revision if needed.
-    pause: true
     onEnter:
       - kind: hitl.confirm
         options:
           prompt: "Feature check for ${vars.featureId}. Review the AC and confirm to proceed? Recorded check status: $(cat .spur/run/${vars.__runId}-idea-ac-check.status 2>/dev/null || echo unknown) (.spur/run/${vars.__runId}-idea-ac-check.status — includes inventory-coverage findings, 1004 R2). (Failures route back to ac-generate for revision, capped at 3 retries.)"
+          # Interactive always prompts the operator; profile=auto answers from the AC
+          # authoring stage's recorded evidence (1236 R1/R2). No `pause: true` — an
+          # evidence binding cannot live in a paused state (0911 D2), and the responder
+          # is what asks the operator now.
           decision:
-            mode: never
+            mode: evidence
+            statusVar: featureCheckStatus
+            evidenceNodes:
+              - ac-generate
+      # A deferred/absent answer is the denial today's headless responder gave.
+      - kind: shell
+        options:
+          command: >-
+            mkdir -p .spur/run; a="$__hitlAnswer"; [ -n "$a" ] || a=no;
+            printf '%s\n' "$a" > ".spur/run/$__runId-idea-feature-check-answer.txt"
+      - kind: file.read.into-var
+        options:
+          path: .spur/run/${vars.__runId}-idea-feature-check-answer.txt
+          var: __hitlAnswer
       # 1007 R2: the former post-confirm route-writer duplicate is deleted — ac-generate's
       # writer is the single writer (0945 R2 pin updated); its inputs (design var, needs-design
       # JSON, recorded ac-check status) cannot change across hitl.confirm.
@@ -420,7 +471,6 @@ states:
       records the concrete issue(s) in the run-scoped design-review artifact
       (.spur/run/${vars.__runId}-idea-design-review.md) under `## Operator feedback` —
       the revision pass reads it to reconcile invalidated AC before re-approval.
-    pause: true
     onEnter:
       - kind: shell
         options:
@@ -428,8 +478,23 @@ states:
       - kind: hitl.confirm
         options:
           prompt: "Review the system design for feature ${vars.featureId}. Approve to proceed to decomposition? To reject, first record your feedback in .spur/run/${vars.__runId}-idea-design-review.md under the `## Operator feedback` heading, then answer no."
+          # Interactive always prompts the operator; profile=auto answers from the
+          # system-design stage's recorded evidence (1236 R1/R2).
           decision:
-            mode: never
+            mode: evidence
+            statusVar: designApprovalStatus
+            evidenceNodes:
+              - system-design
+      # A deferred/absent answer is the denial today's headless responder gave.
+      - kind: shell
+        options:
+          command: >-
+            mkdir -p .spur/run; a="$__hitlAnswer"; [ -n "$a" ] || a=no;
+            printf '%s\n' "$a" > ".spur/run/$__runId-idea-design-approval-answer.txt"
+      - kind: file.read.into-var
+        options:
+          path: .spur/run/${vars.__runId}-idea-design-approval-answer.txt
+          var: __hitlAnswer
 
   - id: decompose
     display:
@@ -491,13 +556,27 @@ states:
       from decompose to the appropriate next state, so this state is only
       entered in interactive mode. On failure, the retry cap routes back to
       decompose (≤3 retries) or escalates to failed.
-    pause: true
     onEnter:
       - kind: hitl.confirm
         options:
           prompt: "Batch-create for feature ${vars.featureId}. Review the task batch and confirm to proceed? (Failures route back to decompose for revision, capped at 3 retries.)"
+          # Interactive always prompts the operator; profile=auto answers from the
+          # decompose stage's recorded evidence (1236 R1/R2).
           decision:
-            mode: never
+            mode: evidence
+            statusVar: batchCreateStatus
+            evidenceNodes:
+              - decompose
+      # A deferred/absent answer is the denial today's headless responder gave.
+      - kind: shell
+        options:
+          command: >-
+            mkdir -p .spur/run; a="$__hitlAnswer"; [ -n "$a" ] || a=no;
+            printf '%s\n' "$a" > ".spur/run/$__runId-idea-batch-create-answer.txt"
+      - kind: file.read.into-var
+        options:
+          path: .spur/run/${vars.__runId}-idea-batch-create-answer.txt
+          var: __hitlAnswer
 
   - id: batch-create-run
     display:
@@ -650,11 +729,12 @@ transitions:
 
   # ── discovery: auto-accept the eval recommendation (profile=auto + idea_approved) OR enter idea-eval ──
   # Declaration order: auto edges FIRST (same pattern as system-design → design-approval).
-  # Without them, discovery always enters idea-eval (pause: true), rendering the prompt
-  # and persisting an avoidable pause before the in-state auto-skip guard can fire (0366 R4/R5).
+  # Without them, discovery always enters the idea-eval gate, rendering the prompt and
+  # persisting an avoidable operator question before the gate's own auto answer can fire (0366 R4/R5).
   # --auto accepts the recommendation derived at the end of discovery (-idea-recommendation.txt):
   # drop → cancelled, proceed/reshape → feature-create; unknown/missing falls through to the
-  # idea-eval pause (fail-safe: never auto-create a feature without an explicit proceed).
+  # idea-eval gate, whose evidence binding then answers (fail-safe: never auto-create a feature
+  # without an explicit proceed).
   - from: discovery
     to: cancelled
     terminalReason: cancelled

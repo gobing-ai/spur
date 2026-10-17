@@ -43,9 +43,14 @@ function edgeIndex(from: string, to: string): number {
 }
 
 describe('idea-pipeline definition — pre-approval bypass ordering (R4/R5 of 0366)', () => {
-    test('idea taste gate is a pausing state, so the bypass is what avoids the pause', () => {
-        expect(DEF.states.find((s) => s.id === 'idea-eval')?.pause).toBe(true);
-        expect(DEF.states.find((s) => s.id === 'design-approval')?.pause).toBe(true);
+    // D65 1241: gates are decision points, not pause declarations — an evidence binding cannot
+    // live in a paused state (0911 D2), so the bypass is what spares the operator the question.
+    test('idea taste gates are decision points, so the bypass is what avoids the question', () => {
+        for (const id of ['idea-eval', 'design-approval']) {
+            const state = DEF.states.find((s) => s.id === id);
+            expect(state?.pause).toBeUndefined();
+            expect((state?.onEnter ?? []).some((action) => action.kind === 'hitl.confirm')).toBe(true);
+        }
     });
 
     test('discovery bypass to feature-create is declared before the always edge to idea-eval', () => {

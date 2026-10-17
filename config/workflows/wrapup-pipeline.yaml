@@ -131,6 +131,8 @@ vars:
   # featureGateCmd). Never interpolate untrusted input into it.
   docTripwireCmd: 'if $spurBin self exec --list --json 2>/dev/null | jq -e ''.[] | select(.name == "test-repo-wide" and .source != "unbound")'' >/dev/null 2>&1; then $spurBin self exec test-repo-wide; fi'
   __hitlAnswer: ""
+  # Accepted/deferred status the branch-cleanup gate's decision binding writes (1236 R2).
+  branchCleanupStatus: ""
 
 states:
   - id: start
@@ -265,6 +267,12 @@ states:
           role: coder
           answerFile: .spur/run/${vars.__runId}-wrapup-learnings.md
           expectFile: .spur/run/${vars.__runId}-wrapup-learnings.md
+          # The task-resolve state writes this list through `spur task wrapup resolve`,
+          # so the path never appears in a YAML shell and the static scan cannot see the
+          # production — declare it as the stage's input instead (1233 R2).
+          inputs:
+            - path: .spur/run/${vars.__runId}-wrapup-tasks.json
+              kind: artifact
           timeoutMs: ${vars.stepTimeoutMs}
       # (1147 R1) post-doc-sync write-scope guard: the script diffs the working listing
       # against the entry snapshot and writes PASS or `scope-violation: <paths>` — the
@@ -454,16 +462,19 @@ states:
       Irreversible-operation HITL gate, consent-only (0770). If vars.merge=true,
       branch cleanup (merge or delete) is a candidate — but this gate records
       the operator decision and performs NO git operation itself; an operator
-      or a separate approved surface executes any actual merge/delete. This
-      gate ALWAYS pauses — even under --auto — because branch operations are
-      irreversible (Auto-Decision Principle #6).
-    pause: true
+      or a separate approved surface executes any actual merge/delete. Interactive
+      runs always ask the operator; profile=auto answers from the doc-sync stage's
+      recorded evidence and still records the decision (1236 R1/R2). Nothing is
+      auto-executed: both answers route to `done` (Auto-Decision Principle #6).
     onEnter:
       - kind: hitl.confirm
         options:
           prompt: "Branch cleanup for the validated task list (.spur/run/${vars.__runId}-wrapup-tasks.json). This is IRREVERSIBLE (merge or delete). Confirm to proceed?"
           decision:
-            mode: never
+            mode: evidence
+            statusVar: branchCleanupStatus
+            evidenceNodes:
+              - doc-sync
 
   - id: done
     description: >

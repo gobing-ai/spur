@@ -609,21 +609,12 @@ export function collectSelfContainedStageViolations(def: WorkflowDef): string[] 
  * exact normalized paths it covers, so a stage or path added later still fails; every entry names
  * the task that removes it. This is an exception list an editor reviews, not a stored snapshot of
  * findings: nothing here is generated, and an entry dies with its migration (ADR-108).
+ *
+ * Empty since 1241: idea-pipeline's discovery/feature-create stages declare their signal and intent
+ * artifacts as expected files, and wrapup-pipeline's doc-sync declares the task list the resolve
+ * verb writes. A new unnameable path fails validation instead of joining a list.
  */
-const SELF_CONTAINED_STAGE_ALLOWANCES: Record<string, { paths: readonly string[]; reason: string }> = {
-    'idea-pipeline::discovery': {
-        paths: ['.spur/run/{__runId}-idea-needs-design.json'],
-        reason: 'the stage writes this signal itself but declares only the eval report as its completion; declaring it is 1241 migration work',
-    },
-    'idea-pipeline::feature-create': {
-        paths: ['.spur/run/{__runId}-idea-goal.md', '.spur/run/{__runId}-idea-scope.md'],
-        reason: 'the stage writes both intent artifacts itself and a later action in the same state feeds them to `feature update --from-file`; declaring them is 1241 migration work',
-    },
-    'wrapup-pipeline::doc-sync': {
-        paths: ['.spur/run/{__runId}-wrapup-tasks.json'],
-        reason: 'the predecessor `task-resolve` writes it through `spur task wrapup resolve`, so the path text never appears in the YAML and the static scan cannot see the production; 1241 migration declares it as an input',
-    },
-};
+const SELF_CONTAINED_STAGE_ALLOWANCES: Record<string, { paths: readonly string[]; reason: string }> = {};
 
 /**
  * Post-schema check (0674 R5): a shell action/guard referencing `$var` where `var` is neither

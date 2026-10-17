@@ -45,15 +45,14 @@ const MATRIX: Record<string, StateMatrixRow> = {
     // transform (1232), which is applied at the app seam and never declared here.
     'task-pipeline': { resumeRerunStates: [], pauseGates: [], entryClass: 'repeatable' },
     'feature-verification': { resumeRerunStates: [], pauseGates: [], entryClass: 'repeatable' },
-    'idea-pipeline': {
-        resumeRerunStates: [],
-        pauseGates: ['idea-eval', 'feature-check', 'design-approval', 'batch-create'],
-        entryClass: 'repeatable',
-    },
+    // D65 1241: the four operator gates are evidence-bound decision points, so no state pauses.
+    'idea-pipeline': { resumeRerunStates: [], pauseGates: [], entryClass: 'repeatable' },
     'pr-review': { resumeRerunStates: [], pauseGates: [], entryClass: 'identity-deduplicated' },
     'history-anatomy': { resumeRerunStates: [], pauseGates: [], entryClass: 'repeatable' },
-    'wrapup-pipeline': { resumeRerunStates: [], pauseGates: ['branch-cleanup'], entryClass: 'repeatable' },
-    'wayfinder-resolution': { resumeRerunStates: [], pauseGates: ['approve'], entryClass: 'repeatable' },
+    // D65 1241: branch-cleanup is an evidence-bound decision point (consent-only), no pause.
+    'wrapup-pipeline': { resumeRerunStates: [], pauseGates: [], entryClass: 'repeatable' },
+    // D65 1241: the approve gate is an evidence-bound decision point; `approval=auto` routes around it.
+    'wayfinder-resolution': { resumeRerunStates: [], pauseGates: [], entryClass: 'repeatable' },
 };
 
 interface CanonicalDoc {

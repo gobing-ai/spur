@@ -1,6 +1,10 @@
 import { describe, expect, test } from 'bun:test';
-import type { WorkflowDef } from '@gobing-ai/ts-dual-workflow-engine';
+import { readdirSync } from 'node:fs';
+import { join, resolve } from 'node:path';
+import { loadWorkflowDef, type WorkflowDef } from '@gobing-ai/ts-dual-workflow-engine';
 import { collectSelfContainedStageViolations } from '../../src/workflow/composition-lint';
+
+const WORKFLOWS_DIR = resolve(__dirname, '../../../..', 'config', 'workflows');
 
 // D65 1233 (design workflow-execution-foundation §4.4): a stage that is not self-contained
 // cannot run under a subprocess or fleet executor, so validate rejects it before any run.
@@ -241,90 +245,55 @@ describe('collectSelfContainedStageViolations R2 — prompt paths', () => {
     });
 });
 
-describe('collectSelfContainedStageViolations allowances (R3)', () => {
-    test('covers only the reviewed workflow, state and path — never a wildcard', () => {
-        const discovery = sm(
-            [
-                {
-                    id: 'discovery',
-                    onEnter: [
-                        {
-                            kind: 'agent.run',
-                            options: {
-                                role: 'planner',
-                                ...DECLARED_OUTPUT,
-                                input: `Emit .spur/run/${VAR}-idea-needs-design.json`,
-                            },
-                        },
-                    ],
-                },
-                {
-                    id: 'feature-create',
-                    onEnter: [
-                        {
-                            kind: 'agent.run',
-                            options: {
-                                role: 'planner',
-                                ...DECLARED_OUTPUT,
-                                input: `Emit .spur/run/${VAR}-idea-needs-design.json`,
-                            },
-                        },
-                    ],
-                },
-            ],
-            [],
-            'idea-pipeline',
-        );
-        const v = collectSelfContainedStageViolations(discovery);
-        expect(v.length).toBe(1);
-        expect(v[0]).toContain('feature-create/agent.run[0]');
+describe('shipped workflows are self-contained (1241)', () => {
+    const load = async (file: string): Promise<WorkflowDef> =>
+        await loadWorkflowDef(join(WORKFLOWS_DIR, file), { validateSchema: false });
+
+    /** The first agent.run options object of a state — where the declaration lives. */
+    const agentRunOptions = (def: WorkflowDef, stateId: string): Record<string, unknown> => {
+        const state = (
+            def as unknown as { states: Array<{ id: string; onEnter?: Array<{ kind: string; options?: object }> }> }
+        ).states.find((entry) => entry.id === stateId);
+        const action = (state?.onEnter ?? []).find((entry) => entry.kind === 'agent.run');
+        if (action?.options === undefined) throw new Error(`${stateId} declares no agent.run`);
+        return action.options as Record<string, unknown>;
+    };
+
+    test('every shipped workflow passes with no allowance', async () => {
+        const files = readdirSync(WORKFLOWS_DIR).filter((f) => f.endsWith('.yaml') && !f.endsWith('.test.yaml'));
+        expect(files.length).toBeGreaterThan(5);
+        for (const file of files) {
+            const def = await load(file);
+            expect({ file, violations: collectSelfContainedStageViolations(def) }).toEqual({ file, violations: [] });
+        }
     });
 
-    test('does not cover the same state in another workflow', () => {
-        const def = sm(
-            [
-                {
-                    id: 'discovery',
-                    onEnter: [
-                        {
-                            kind: 'agent.run',
-                            options: {
-                                role: 'planner',
-                                ...DECLARED_OUTPUT,
-                                input: `Emit .spur/run/${VAR}-idea-needs-design.json`,
-                            },
-                        },
-                    ],
-                },
-            ],
-            [],
-            'another-pipeline',
-        );
-        expect(collectSelfContainedStageViolations(def).length).toBe(1);
-    });
-
-    test('does not cover a path added to an allowed state later', () => {
-        const def = sm(
-            [
-                {
-                    id: 'discovery',
-                    onEnter: [
-                        {
-                            kind: 'agent.run',
-                            options: {
-                                role: 'planner',
-                                ...DECLARED_OUTPUT,
-                                input: `Emit .spur/run/${VAR}-idea-needs-design.json and .spur/run/${VAR}-new.md`,
-                            },
-                        },
-                    ],
-                },
-            ],
-            [],
-            'idea-pipeline',
-        );
+    // The three states the 1233 allowance list named fail again once their declaration is
+    // removed — declaring them is what deleted the list (1241), not a widened scan.
+    test('idea-pipeline discovery fails without its declared signal output', async () => {
+        const def = await load('idea-pipeline.yaml');
+        delete agentRunOptions(def, 'discovery').expectFiles;
         const v = collectSelfContainedStageViolations(def);
         expect(v.length).toBe(1);
-        expect(v[0]).toContain(`.spur/run/${VAR}-new.md`);
+        expect(v[0]).toContain('discovery/agent.run[0]');
+        expect(v[0]).toContain(`.spur/run/${VAR}-idea-needs-design.json`);
+    });
+
+    test('idea-pipeline feature-create fails without its declared intent artifacts', async () => {
+        const def = await load('idea-pipeline.yaml');
+        delete agentRunOptions(def, 'feature-create').expectFiles;
+        const v = collectSelfContainedStageViolations(def);
+        expect(v.length).toBe(2);
+        expect(v.join('\n')).toContain('-idea-goal.md');
+        expect(v.join('\n')).toContain('-idea-scope.md');
+    });
+
+    test('wrapup-pipeline doc-sync fails without its declared task-list input', async () => {
+        const def = await load('wrapup-pipeline.yaml');
+        delete agentRunOptions(def, 'doc-sync').inputs;
+        const v = collectSelfContainedStageViolations(def);
+        expect(v.length).toBe(1);
+        expect(v[0]).toContain('doc-sync/agent.run[1]');
+        expect(v[0]).toContain(`.spur/run/${VAR}-wrapup-tasks.json`);
     });
 });

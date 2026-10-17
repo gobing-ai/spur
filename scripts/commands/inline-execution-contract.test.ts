@@ -123,14 +123,21 @@ describe('task 0406 / H82 — unified --agent execution-surface contract', () =>
         }
     });
 
-    test('0718 R1/R4 — idea and plan stay inline by default and use cancellable async workers when explicit', () => {
+    // D65 1241 R4 re-keyed this pin: idea/plan no longer hand the graph to a host-side inline
+    // interpreter (ADR-140 deleted that surface). They describe the engine's three moves, with the
+    // host session as the executor by default and a cancellable child process when one is named.
+    test('1241 R4 — idea and plan describe the run -> work -> continue loop, not an inline interpreter', () => {
         for (const command of ['dev-idea', 'dev-plan']) {
             const raw = readFileSync(join(COMMANDS_DIR, `${command}.md`), 'utf8');
-            expect(raw).toContain('[inline pipeline driver]');
-            expect(raw).toContain('zero external agent/workflow processes');
-            expect(raw).toContain('spur workflow run idea-pipeline.yaml --async');
-            expect(raw).toContain('workflow trace --follow');
-            expect(raw).toContain('killed: true');
+            expect(raw, `${command}: must not hand the graph to the deleted inline interpreter`).not.toContain(
+                '[inline pipeline driver]',
+            );
+            expect(raw, `${command}: must state the engine owns every guard and transition`).toContain(
+                'spur workflow continue',
+            );
+            expect(raw, `${command}: must name the host executor var`).toContain('executor":"host');
+            expect(raw, `${command}: explicit executor stays a cancellable child process`).toContain('--async');
+            expect(raw, `${command}: cancellation is only stopped on a killed receipt`).toContain('killed: true');
         }
     });
 

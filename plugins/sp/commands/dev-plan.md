@@ -16,7 +16,7 @@ Wraps the **sp:spur-dev** skill.
 | `"<description>"` | Feature description to plan. | required |
 | `--feature` `<id>` | Attach to an existing feature. | omitted |
 | `--parent` `<feature-id>` | Create under a parent feature. | omitted |
-| `--agent` `<inline\|auto\|name>` | Who runs the model-bearing planning. Omission and `inline` drive `idea-pipeline.yaml` in this session with zero external agent/workflow processes; `auto` tier-resolves an executor and a name pins one, both through the async workflow worker. | inline |
+| `--agent` `<inline\|auto\|name>` | Who runs the model-bearing planning. Omission and `inline` run `idea-pipeline.yaml` on the engine with `executor=host`, so each stage pauses with a work item this session performs; `auto` tier-resolves an executor and a name pins one, both dispatched as child processes. | inline |
 | `--skip-design` | Omit the system-design hop. | off |
 | `--auto` | Accept the pipeline's recommendation at every operator gate (same gate table as `/sp:dev-idea`). | off |
 
@@ -45,10 +45,21 @@ contract as `/sp:dev-idea`). If passed, ignore them with a one-line notice.
   reading any reference — is `spur workflow show idea-pipeline.yaml --no-logo --format todo --json`
   (the CLI resolves the project→registered→shared layer); then publish every `.plan` row's `text`
   verbatim as the host todo list (the `steps[]` inventory when `.plan` is `null`) before the
-  pipeline's first stage — [inline pipeline driver](../skills/spur-dev/references/inline-pipeline-driver.md)
-  run setup step 5.
-- Apply the [inline-default execution-surface contract](../skills/spur-dev/references/cross-cutting.md#inline-default-execution-surface).
-- Omitted/`inline`: drive `idea-pipeline.yaml` through the [inline pipeline driver](../skills/spur-dev/references/inline-pipeline-driver.md). Do not launch `spur workflow run`, `spur agent run`, or a native subagent unless the operator explicitly requests delegation.
-- `auto`/name: launch `spur workflow run idea-pipeline.yaml --async`, observe with one `workflow trace --follow`, and only report cancellation as stopped when `workflow cancel --json` returns `killed: true`.
+  pipeline's first stage.
+- **The loop is three moves** (D65 / ADR-140, design `workflow-execution-foundation` §3):
+  `spur workflow run` → perform the returned work item → `spur workflow continue`. The engine owns
+  every guard, transition and deterministic action; this session never re-executes them.
+- Omitted/`inline` — the run dispatches to this host session:
+  `spur workflow run idea-pipeline.yaml --vars '{"executor":"host",...}' --json` (plus `idea`, or
+  `--from-file`; `--feature`/`--parent` as the flag table says, `--skip-design` → `design=skip`,
+  `--auto` → `profile=auto` + `idea_approved=true` + `design_approved=true`).
+  A host stage returns `{status: "paused", pause: {workItem: {runId, state, skill, prompt, inputs,
+  expectFiles, ownedSections}}}`. Perform that work item natively (or through a native subagent), write
+  its receipt, and advance with `spur workflow continue <run-id> --answer-text <receipt> --json`;
+  repeating the same receipt is refused as not-paused, so the resume is idempotent. Repeat until the
+  run is terminal.
+- `auto`/name — same definition, no `executor` var: the subprocess executor runs each work item.
+  Launch `spur workflow run idea-pipeline.yaml --async`, observe with one `workflow trace --follow`,
+  and only report cancellation as stopped when `workflow cancel --json` returns `killed: true`.
 - `Skill(skill="sp:spur-dev", args="plan $ARGUMENTS")`
 - Full Design package + batch `design` field contract: `plugins/sp/skills/spur-dev/references/dev-operations.md` § plan and `planning-workflow.md` Step 5.5.

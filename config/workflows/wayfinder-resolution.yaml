@@ -37,6 +37,8 @@ vars:
   agent: "auto"
   stepTimeoutMs: "1800000"
   approval: "required"
+  # Accepted/deferred status the approve gate's decision binding writes (1236 R2).
+  approvalStatus: ""
   resolutionMode: "research"
   evidencePolicy: "spur-cli-first"
   __hitlAnswer: ""
@@ -157,14 +159,29 @@ states:
           timeoutMs: ${vars.stepTimeoutMs}
 
   - id: approve
-    description: "Human review gate unless the caller explicitly selects auto approval."
-    pause: true
+    description: "Human review gate unless the caller explicitly selects auto approval (vars.approval=auto)."
     onEnter:
       - kind: hitl.confirm
         options:
           prompt: "Approve research resolution for task ${vars.wbs}?"
+          # Interactive always prompts the operator; profile=auto answers from the
+          # verifier's recorded evidence (1236 R1/R2). No `pause: true` — an evidence
+          # binding cannot live in a paused state (0911 D2).
           decision:
-            mode: never
+            mode: evidence
+            statusVar: approvalStatus
+            evidenceNodes:
+              - verify
+      # A deferred/absent answer is the denial today's headless responder gave.
+      - kind: shell
+        options:
+          command: >-
+            mkdir -p .spur/run; a="$__hitlAnswer"; [ -n "$a" ] || a=no;
+            printf '%s\n' "$a" > ".spur/run/$__runId-wayfinder-approve-answer.txt"
+      - kind: file.read.into-var
+        options:
+          path: .spur/run/${vars.__runId}-wayfinder-approve-answer.txt
+          var: __hitlAnswer
 
   - id: record
     description: >

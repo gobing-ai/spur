@@ -14,7 +14,10 @@ import { parse as parseYaml } from 'yaml';
  * JSON) after the derivation — each calls a catalog decision only on output the deterministic
  * parse could not classify (design §4 / §5 S5).
  */
-const IDEA_ACTION_BUDGET = 33;
+// 41 at D65 1241: each of the four operator gates gained the two-action answer normalization
+// (shell fold + file.read.into-var) that keeps today's headless `no` routing once the gate
+// answers as a decision point instead of pausing. Raising a budget here IS the change record.
+const IDEA_ACTION_BUDGET = 41;
 // 50 at the session finding after 1088: the completion gate needs its own confidence action
 // (the proof-binding stamp must stay the state's last action and under the 800-char shell cap),
 // and `review-fail-triage` adds one decide action — the review-side twin of 0943's failure-class
