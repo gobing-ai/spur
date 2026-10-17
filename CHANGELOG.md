@@ -1,5 +1,47 @@
 # Changelog
 
+## [0.4.10] - 2026-10-16
+
+### Added
+- register and probe projects by host (a3da77807)
+  <!-- src: apps/cli/src/commands/projects.ts:28 (`--host <host>` on `projects add`) -->
+- enforce the `packages/domain` DB boundary over `scripts/commands` (eb360d4c2)
+  <!-- src: scripts/commands/script-contract-check.ts:348 (`SCRIPT_DB_MODULE`: `bun:sqlite`/`drizzle-orm`/`@gobing-ai/ts-db`) -->
+- widen the version-claim scan to version-shaped `since`/`as of`/`removed in` claims (6416b08d4)
+  <!-- src: config/rules/docs/sourced-api-claims.yaml:69 (`cited-api-claims` pattern) -->
+
+### Fixed
+- scope the codexbar capture to the operator-enabled provider set and raise the capture deadline (a66ea7131)
+  <!-- src: apps/cli/src/services/agent-usage-source.ts:15 (default argv deliberately omits `--provider all`) -->
+- move the usage-capture deadline override from an env var to `bootstrap.options.agentUsageCaptureTimeoutMs` (5fef7fc1f)
+  <!-- src: apps/cli/src/services/agent-usage-source.ts:43 (`CAPTURE_TIMEOUT_OPTION`) -->
+- bridge harness agent names to their codexbar provider slug (5136c881d)
+  <!-- src: packages/app/src/services/agent-usage-producer.ts:131 (`PROVIDER_ALIASES`) -->
+- refresh the staged plugin copy on publish (405c650e8)
+  <!-- src: apps/cli/src/release-ops.ts:461 -->
+
+### Changed
+- retire every HIGH/MEDIUM/LOW confidence label — breaking: `spur feature verify` no longer accepts `--confidence`/`--ack-low-confidence` (c1c708e3b)
+  <!-- src: docs/00_ADR.md:2411 (ADR-138 amendment, task 1221) -->
+- route eval-pipeline and workflow-promotion DB access through `packages/domain` (c174c9ed0)
+  <!-- src: packages/domain/src/analytics/workflow-measurements.ts:305 (`readHistoryCostInWindow`) -->
+
+### Other
+- consolidate ADR-130 as the single script-placement authority (152b72bfe)
+  <!-- src: docs/00_ADR.md:748 (ADR-065 marked superseded by ADR-130) -->
+- drop the stale `--provider all` argv from the B6 feature scope (482d675c8)
+  <!-- src: docs/features/B6_executor-availability-lifecycle-disable-ownership-recovery-global-config-persistence-and-an-explicit-usage-producer.md:24 -->
+- document `spur projects add --host` in both help trees (b14ae87c8)
+  <!-- src: docs/help/cmd_projects.md:31 -->
+- fix the multiple-match assertion for `run_id` in the database view test (dc990cb3c)
+  <!-- src: apps/web/tests/modules/projects/database-view.test.ts:172 -->
+- ignore the local `.zvec-grep` directory (72aefe4fb)
+  <!-- src: .gitignore:122 -->
+- retire stale references to the absorbed plugin scripts and lib bundles (c7ed590d5)
+- add the pr-`<verb>` reference sections to the L1 design bullet (2242dbdb9)
+- plan feature L1 for branch topology and PR review (7010c8d61)
+- verify and close task 1221 (d1b0c3cfc)
+
 ## [0.4.9] - 2026-10-15
 
 ### Added
