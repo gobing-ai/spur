@@ -508,6 +508,21 @@ separate limits public commitments while allowing repository tooling to evolve.
 package-script compositions, and portable plugin scripts (ADR-065). *Current reading: portable
 plugin scripts are retired; the fourth owner is plugin hook glue (ADR-130).*
 
+**Amendment (2026-10-17) — every public command is exactly `spur <noun> <verb>`.** A verb is a
+leaf: no command group below a verb (`spur <noun> <group> <verb>`), and no first operand that
+selects among sub-operations with different argument grammars — that is a nested group in
+disguise. A closed mode operand that shares one grammar is allowed (`spur task gate <wbs> <mode>`);
+so are flags. A new action that does not fit an existing verb is a new verb under the owning noun
+(hyphenated when needed, e.g. `migrate-anchors`), and its consent request names that shape.
+Existing violators are grandfathered until migrated; none may gain sub-verbs meanwhile:
+`spur workflow inline <begin|fingerprint|action|actions|node-enter|close|decide|persist-out|persist-check|attribution|dispatch-failure>`
+(deleted rather than migrated by ADR-140), `spur workflow commit-guard <start|check|stage>`,
+`spur agent dogfood <gate|validate-report|contract>`, and `spur history anatomy <op> [argv]`
+(`digest|check|paths|assert-clean|probe|stamp|refresh|publish`). Why: two-level commands keep the
+surface discoverable from `spur <noun> --help`, keep the `sp:spur-cli` parity inventory flat, and
+stop internal plumbing from growing into public sub-trees — `workflow inline` gained eleven
+sub-verbs before anyone reviewed it as a public surface.
+
 **Consent provenance:** the 2026-08-20 A3 batch, 2026-08-21 feature-refresh breadth,
 2026-08-26 doctor options, and 2026-08-27 workflow-show options are recorded in the
 [surface governance contract](design/harness-surface-governance.md) and their linked tasks.
@@ -846,6 +861,10 @@ evidence writes; `write` or `may-write` invalidates prior proof, and PASS is val
 quality, review, and observe-only verification evidence names one unchanged final-state digest.
 
 **Why.** A verdict cannot prove tree state that was allowed to change after the verdict was produced.
+
+**Current reading (2026-10-17).** ADR-140 (Proposed) supersedes the proof-digest mechanism on
+acceptance: the invariant stays — evidence names the unchanged final tree — but it is carried by a
+tree-hash gate receipt, not by per-action effect declarations and digest tripwires.
 
 **Detail:** `03 §20.3`; `docs/design/workflow-composition-contract.md` §Verification proof state.
 
@@ -1855,6 +1874,10 @@ descriptions above record earlier stages, not supported configuration.
   intent, and no consumer reads `system_events` for the inline surface today. Revisit only when a
   consumer exists.
 
+- **Current reading (2026-10-17):** ADR-140 (Proposed) keeps the obligation but leaves one
+  executing surface — the engine — so the inline driver's emission duty and its `workflow inline`
+  bookkeeping verbs retire as workflows migrate.
+
 ## ADR-118: A Violated Stage Contract Is a Distinct Outcome From an Executor Failure
 
 - **Status:** Accepted · **Date:** 2026-09-16 · **Feature:** D62
@@ -2449,3 +2472,67 @@ has 11 fields, skill/agent output contracts carry no level, and `response.valida
   moves from `bun run <script>` to `spur self exec <action>`.
 - **Retains:** ADR-130 placement rules (applied, not rewritten), ADR-119 feature-scoped repo-wide gate.
 - **Detail:** [SDLC actions](design/sdlc-actions.md).
+
+## ADR-140: One Workflow Interpreter; `agent.run` Dispatches a Work Item to Any Executor
+
+- **Status:** Proposed · **Date:** 2026-10-17 · **Amends:** ADR-047, ADR-087, ADR-117, ADR-126,
+  ADR-134 · **Supersedes:** ADR-071 (on acceptance) · **Sequenced after:** feature A92 (ADR-139)
+- **Decision:**
+  1. **One interpreter.** The engine (`spur workflow run` / `spur workflow continue`) evaluates
+     every guard, transition and deterministic action for every surface. A host session never
+     re-interprets workflow YAML; the inline driver reduces to a loop: run → do the returned work
+     item → continue.
+  2. **One dispatch contract.** `agent.run` emits a work item (stage, skill, prompt, declared
+     inputs, `expectFiles`, owned task sections) to a resolved executor and completes on a durable
+     receipt. Executors: **host** (the run pauses and returns the work item; the host session
+     performs it, natively or through its native subagent per the ADR-047 0508 amendment, then
+     continues), **subprocess** (`spur agent run`) and **fleet** (the ADR-126 inbox message plus
+     `coordination_runs` receipt). The ADR-126 A4 receipt rules bind all three: a wait timeout is
+     outcome-unknown, and only a definite failed/not-started receipt re-dispatches. Workflow YAML
+     never names a surface; `--agent` / role resolution picks it (ADR-087 selector unchanged).
+  3. **Self-contained stages.** A work item is executable by a fresh session: its prompt plus
+     declared inputs carry everything; no stage relies on host conversation memory.
+     `spur workflow validate` lints it.
+  4. **Typed builtins.** Gate, decision, commit-guard and corpus-transition steps are engine
+     builtins, not shell actions; project commands run through `spur self exec <action>` (ADR-139).
+  5. **Judgment is a decision.** Routing and operator gates (approve, escalate, idea-eval, design
+     approval) are `spur decision` catalog points (ADR-134). Interactive runs route the gate to
+     the operator responder; under `--auto` the configured maker answers it, with the catalog's
+     declared fallback on degrade. The `--auto` gate table in each command is that mapping.
+  6. **Engine-owned leases.** One host-wide full-gate lock (the task 1127 scope: the measured
+     contention was 43 of 64 gates overlapping across sessions and worktrees on one host), the
+     per-task worktree (ADR-127) and fleet occupancy are acquired and released by the engine, not
+     by driver prose.
+  7. **Evidence is a tree-hash gate receipt plus the review verdict.** A PASS gate receipt keyed by
+     the git tree hash is reused while the tree hash is unchanged and invalidated when it moves; the
+     proof-digest chain (`proofDigest`/fingerprint, receipt preconditions, `verifiedOutcome`,
+     proof-window tripwires) is retired.
+- **Why:** measured 2026-10-16/17 over 32 run summaries (2550 min), driver overhead was 815 min
+  (32%) and the test-fix loop (~450 min) exceeded implement (356 min). The slow runs spent their
+  time in a host session re-executing engine mechanics — polling backgrounded gates, hand-rolled
+  gate/proof scripts, ~230k input tokens per driver turn — and ADR-117 made that second
+  interpreter also report every boundary through eleven `workflow inline` bookkeeping verbs plus a
+  parity checker. One interpreter removes the duplicate rather than auditing it. The proof chain
+  reached `verifiedOutcome` on 4 of 274 tasks in 30 days (195 `proofAbsent`) because operators
+  skip it; a tree hash certifies the same "unchanged since the gate" fact ADR-071 wanted with no
+  stage-level bookkeeping. Fleet support becomes structural: an executor is one dispatch target,
+  not a parallel workflow catalogue (rejected by ADR-126).
+- **Consequence:** ADR-117's obligation collapses onto the engine — the only surface that executes
+  actions — so `spur workflow inline *`, `scripts/commands/inline-pipeline-parity-check.ts` and
+  `inline-execution-contract.test.ts` are deleted once every shipped workflow is migrated; until
+  then, migrated and unmigrated workflows coexist and the inline driver serves only the latter.
+  Gate time and receipts are reported from engine traces (the run-summary receipt lookup keyed by
+  run id instead of WBS is fixed with it). Host-executor runs hold a paused run between work items,
+  so `spur workflow continue` must accept the work-item receipt idempotently. Rollout: pilot on
+  `feature-verification.yaml` plus one E2E executor matrix on a fixture workflow (host ×
+  subprocess × fleet, identical trace and receipt shape), then `task-pipeline.yaml`, then
+  `idea-pipeline.yaml` — the only other inline-driven workflow. wrapup, pr-review,
+  history-anatomy and wayfinder-resolution already run on the engine; they gain fleet dispatch
+  through item 2 and must pass the item-3 lint.
+  `task-lifecycle.yaml` and `feature-lifecycle.yaml` are out of scope.
+- **Alternatives rejected:** keep two interpreters and harden parity (the measured overhead is the
+  parity); run every stage as a subprocess (loses the host session's context and the operator's
+  native subagent); a fleet-only workflow catalogue (ADR-126).
+- **Retains:** ADR-047 selector table and host-owned operator interaction, ADR-087 inline default
+  and substitution, ADR-121 session-pinned subprocess dispatch, ADR-126 opt-in fleet and receipt
+  semantics, ADR-127 worktree isolation, ADR-138 invariant (gates read only deterministic evidence).
