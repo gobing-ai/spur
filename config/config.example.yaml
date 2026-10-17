@@ -230,6 +230,28 @@ redaction:
 #     releaseCommitType: chore
 #     releaseCommitScope: release
 #     ghRunListLimit: 5
+#   # Stack preset for the SDLC action vocabulary (ADR-139): the commands Spur's gates run.
+#   #   bun  (default) — every reserved action resolves to the legacy bun scripts below, so a
+#   #                    bun project needs no binding at all.
+#   #   none           — only the stack-neutral `spur rule run` presets are bound; declare the
+#   #                    rest in `actions` (see below) or they stay unbound.
+#   preset: bun
+#   # action name -> one shell command, or a list of action names (composite, run in order,
+#   # fail-fast). A declared entry replaces the preset binding whole. Reserved names: build, dev,
+#   # clean, format, autofix, lint, typecheck, test, test-full, test-heavy, rules-pre, rules-post,
+#   # check, check-full, check-feature, lint-changed, typecheck-changed, test-changed. Any other
+#   # name is a custom action (exec-only). {files}/{paths}/{workspace} are allowed only in the
+#   # three *-changed actions; each substituted item is shell-quoted.
+#   actions:
+#     build: make build
+#     lint: ruff check .
+#     typecheck: mypy src
+#     test: pytest -q
+#     test-full: pytest --cov
+#     lint-changed: ruff check {files}
+#     test-changed: cd {workspace} && pytest {paths}
+#     check: [lint, test, rules-post]
+#     release: ./scripts/release.sh
 
 # ── Planning (design §2.1 / §9) ──
 tasks:

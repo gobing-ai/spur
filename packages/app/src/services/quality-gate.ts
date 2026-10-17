@@ -55,6 +55,7 @@ import { join, resolve } from 'node:path';
 import { getEnvVars } from '@gobing-ai/ts-utils';
 import { canonicalJsonStringify } from '../workflow/composition-baseline';
 import { extractFeatureProofData, extractTaskProofData } from '../workflow/proof-input-fingerprint';
+import { shQuote } from './shell-quote';
 
 /** Hard cap on lock-retry attempts before `run` gives up (the old shell `for i in 1..5`). */
 export const MAX_GATE_ATTEMPTS = 5;
@@ -511,15 +512,6 @@ export function lightScope(changedFiles: string[], exists: (p: string) => boolea
 
 /** Task 1142: alias for lightScope. */
 export const scopeFromFiles = lightScope;
-
-/**
- * Quote one argument for `sh -c`. Changed-file names come from the working tree (untracked files
- * included), so an unquoted `x$(cmd).ts` would run `cmd` and a space would split the argument.
- * Plain paths pass through unchanged to keep receipts readable.
- */
-export function shQuote(arg: string): string {
-    return /^[\w./@+-]+$/.test(arg) ? arg : `'${arg.replace(/'/g, `'\\''`)}'`;
-}
 
 /** One planned light check: a stable id plus the shell command to run. */
 export interface LightCheckPlan {

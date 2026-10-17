@@ -15,8 +15,8 @@ import {
     runLightGate,
     runQualityGate,
     runShellCommand,
-    shQuote,
 } from '../../src/services/quality-gate';
+import { shQuote } from '../../src/services/shell-quote';
 
 /** Injected `exists` predicate over a fixed path set — keeps the scope helpers pure. */
 function existsFrom(paths: Iterable<string>): (p: string) => boolean {

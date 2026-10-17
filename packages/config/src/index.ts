@@ -913,10 +913,153 @@ export const BuilderBumpVerConfigSchema = z.object({
     versionCarriers: z.array(VersionCarrierEntrySchema).default([]),
 });
 
-/** Schema for the `builder` section. */
-export const BuilderConfigSchema = z.object({
-    'bump-ver': BuilderBumpVerConfigSchema.optional(),
-});
+/**
+ * The closed SDLC action vocabulary (A92, ADR-139): kebab-case intents a project binds to
+ * stack-specific commands via `builder.actions` / `builder.preset`. Closed in code — the
+ * resolver (`apps` layer, `services/sdlc-actions.ts`) and the light gate share this list,
+ * so adding a reserved action is a schema change with a consumer.
+ */
+export const SDLC_ACTIONS = [
+    'build',
+    'dev',
+    'clean',
+    'format',
+    'autofix',
+    'lint',
+    'typecheck',
+    'test',
+    'test-full',
+    'test-heavy',
+    'rules-pre',
+    'rules-post',
+    'check',
+    'check-full',
+    'check-feature',
+    'lint-changed',
+    'typecheck-changed',
+    'test-changed',
+] as const;
+
+/** One reserved SDLC action name. */
+export type SdlcAction = (typeof SDLC_ACTIONS)[number];
+
+/**
+ * Stack presets. `bun` (default) binds every reserved action to the legacy bun scripts, so a
+ * project with no `builder` block keeps working; `none` binds only the stack-neutral rule
+ * presets and leaves every other undeclared reserved action unbound.
+ */
+export const SDLC_PRESETS = ['bun', 'none'] as const;
+
+/** One stack preset name. */
+export type SdlcPreset = (typeof SDLC_PRESETS)[number];
+
+/** Actions each preset resolves with no declaration in `builder.actions`. */
+export const SDLC_PRESET_ACTIONS: Readonly<Record<SdlcPreset, readonly SdlcAction[]>> = {
+    bun: SDLC_ACTIONS,
+    none: ['rules-pre', 'rules-post'],
+};
+
+/** `builder.actions` key grammar: kebab-case, no `cmd-` prefix (the map already scopes names). */
+export const SDLC_ACTION_NAME_PATTERN = /^[a-z][a-z0-9-]*$/;
+
+/** Actions whose command may carry a `{files}` / `{paths}` / `{workspace}` placeholder. */
+export const SDLC_SCOPED_ACTIONS: readonly SdlcAction[] = ['lint-changed', 'typecheck-changed', 'test-changed'];
+
+/** The placeholder scan used by both the schema (misplacement) and `renderScoped`. */
+const SDLC_PLACEHOLDER_PATTERN = /\{(?:files|paths|workspace)\}/;
+
+/** One `builder.actions` value: a shell command, or a composite of action names run in order. */
+const BuilderActionValueSchema = z.union([z.string(), z.array(z.string())]);
+
+/**
+ * Load-time validation of the `builder.actions` binding (R2). Every failure names the key path
+ * `builder.actions.<name>`: name grammar, empty values, misplaced placeholders, composite steps
+ * that resolve to no action, and composite cycles rendered as `a → b → a`.
+ */
+function refineBuilderActions(
+    value: { preset: SdlcPreset; actions: Record<string, string | string[]> },
+    ctx: z.RefinementCtx,
+): void {
+    const declared = new Set(Object.keys(value.actions));
+    const resolvable = new Set<string>([...SDLC_PRESET_ACTIONS[value.preset], ...declared]);
+    const issue = (name: string, message: string): void => {
+        ctx.addIssue({
+            code: z.ZodIssueCode.custom,
+            path: ['actions', name],
+            message: `builder.actions.${name} ${message}`,
+        });
+    };
+
+    for (const [name, entry] of Object.entries(value.actions)) {
+        if (!SDLC_ACTION_NAME_PATTERN.test(name)) {
+            issue(name, `is not a valid action name — expected ${SDLC_ACTION_NAME_PATTERN.source}`);
+        }
+        if (typeof entry === 'string') {
+            if (entry.trim().length === 0) {
+                issue(name, 'must not be empty');
+                continue;
+            }
+            const placeholder = SDLC_PLACEHOLDER_PATTERN.exec(entry);
+            if (placeholder !== null && !SDLC_SCOPED_ACTIONS.includes(name as SdlcAction)) {
+                issue(
+                    name,
+                    `uses placeholder ${placeholder[0]} — placeholders are only allowed in ${SDLC_SCOPED_ACTIONS.join(', ')}`,
+                );
+            }
+            continue;
+        }
+        if (entry.length === 0) {
+            issue(name, 'must not be an empty list');
+            continue;
+        }
+        for (const step of entry) {
+            if (!resolvable.has(step)) {
+                issue(
+                    name,
+                    `lists step "${step}", which resolves to no action — declare it in builder.actions or drop it`,
+                );
+            }
+        }
+    }
+
+    // Cycle detection over the composite graph; each cycle is reported once, by its first member.
+    const reported = new Set<string>();
+    const walk = (name: string, path: string[]): void => {
+        const entry = value.actions[name];
+        if (!Array.isArray(entry)) return;
+        const at = path.indexOf(name);
+        if (at >= 0) {
+            const cycle = [...path.slice(at), name];
+            if (!cycle.some((member) => reported.has(member))) {
+                for (const member of cycle) reported.add(member);
+                issue(name, `forms a cycle: ${cycle.join(' → ')}`);
+            }
+            return;
+        }
+        for (const step of entry) walk(step, [...path, name]);
+    };
+    for (const name of declared) walk(name, []);
+}
+
+/**
+ * Schema for the `builder` section: release plumbing knobs plus the SDLC action binding.
+ *
+ * `preset` defaults to `bun`, so an existing project resolves every reserved action to today's
+ * command with no config edit (ADR-139). A declared `actions` entry replaces the preset entry
+ * whole — preset and declared composites are never merged.
+ */
+export const BuilderConfigSchema = z
+    .object({
+        'bump-ver': BuilderBumpVerConfigSchema.optional(),
+        /** Stack preset supplying undeclared actions. `bun` = legacy bun scripts (default). */
+        preset: z.enum(SDLC_PRESETS).default('bun'),
+        /** `action name → shell command | composite step list` (see {@link SDLC_ACTIONS}). */
+        actions: z.record(z.string(), BuilderActionValueSchema).default({}),
+    })
+    .superRefine(refineBuilderActions);
+
+/** Effective `builder` configuration after schema defaults apply. */
+export type BuilderConfig = z.infer<typeof BuilderConfigSchema>;
 
 /** Effective `builder.bump-ver` configuration after schema defaults apply. */
 export type BuilderBumpVerConfig = z.infer<typeof BuilderBumpVerConfigSchema>;

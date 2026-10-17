@@ -343,8 +343,26 @@
         },
         "builder": {
             "type": "object",
-            "description": "Builder noun configuration. Currently hosts the release plumbing knobs for `spur builder bump-ver` / `drop-tags`; every field defaults to the built-in release convention, so an absent builder section keeps default behavior.",
+            "description": "Builder noun configuration. Hosts the release plumbing knobs for `spur builder bump-ver` / `drop-tags` and the SDLC action binding (`preset` + `actions`, ADR-139) that binds the reserved action vocabulary to this project's commands. Every field defaults to the built-in behavior, so an absent builder section keeps default behavior.",
             "properties": {
+                "preset": {
+                    "type": "string",
+                    "enum": ["bun", "none"],
+                    "default": "bun",
+                    "description": "Stack preset for the SDLC action vocabulary. `bun` (default) binds every reserved action to the legacy bun scripts, so a bun project needs no config change; `none` binds only the stack-neutral `spur rule run` presets (rules-pre, rules-post) and leaves every other undeclared action unbound."
+                },
+                "actions": {
+                    "type": "object",
+                    "default": {},
+                    "propertyNames": { "pattern": "^[a-z][a-z0-9-]*$" },
+                    "additionalProperties": {
+                        "oneOf": [
+                            { "type": "string", "minLength": 1 },
+                            { "type": "array", "minItems": 1, "items": { "type": "string", "minLength": 1 } }
+                        ]
+                    },
+                    "description": "Action name -> one shell command, or a list of action names (composite, executed in order, fail-fast). A declared entry replaces the preset binding whole. Reserved names (closed in packages/config): build, dev, clean, format, autofix, lint, typecheck, test, test-full, test-heavy, rules-pre, rules-post, check, check-full, check-feature, lint-changed, typecheck-changed, test-changed; other names are custom (exec-only). {files}/{paths}/{workspace} placeholders are allowed only in lint-changed/typecheck-changed/test-changed, and each substituted item is shell-quoted."
+                },
                 "bump-ver": {
                     "type": "object",
                     "description": "Release knobs for bump-ver/drop-tags. Defaults: -v separator, publish.yml workflow, chore(release) commit, gh run list limit 5.",
