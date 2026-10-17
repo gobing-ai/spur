@@ -953,10 +953,23 @@ export const SDLC_PRESETS = ['bun', 'none'] as const;
 /** One stack preset name. */
 export type SdlcPreset = (typeof SDLC_PRESETS)[number];
 
+/**
+ * Stack-neutral defaults: the reserved actions that resolve under `preset: none`, and the only
+ * commands a preset supplies without a project declaration. Spur's own rule presets, so no project
+ * script name is involved. Single source for both the schema's resolvable set
+ * ({@link SDLC_PRESET_ACTIONS}) and the app-layer resolver — keeping one copy here is what stops a
+ * stack-neutral default added in `packages/app` from being rejected at load time as
+ * "resolves to no action".
+ */
+export const SDLC_STACK_NEUTRAL_ACTIONS: Readonly<Partial<Record<SdlcAction, string>>> = {
+    'rules-pre': 'spur rule run --preset recommended-pre-check --fail-on warning --no-logo',
+    'rules-post': 'spur rule run --preset recommended-post-check --fail-on warning --no-logo',
+};
+
 /** Actions each preset resolves with no declaration in `builder.actions`. */
 export const SDLC_PRESET_ACTIONS: Readonly<Record<SdlcPreset, readonly SdlcAction[]>> = {
     bun: SDLC_ACTIONS,
-    none: ['rules-pre', 'rules-post'],
+    none: Object.keys(SDLC_STACK_NEUTRAL_ACTIONS) as SdlcAction[],
 };
 
 /** `builder.actions` key grammar: kebab-case, no `cmd-` prefix (the map already scopes names). */
