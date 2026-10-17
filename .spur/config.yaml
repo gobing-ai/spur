@@ -96,6 +96,17 @@ redaction:
 # defaults; adjust here instead of patching release code when conventions
 # change (schema: packages/config/src/index.ts BuilderBumpVerConfigSchema).
 builder:
+  # A92 / docs/design/sdlc-actions.md §3.5: `bun` binds the reserved action
+  # vocabulary to this repo's bun scripts (the default, declared so the dogfood
+  # exercises the map); the custom actions below are this repo's own names, each
+  # bound to a script that already exists in package.json and runnable only via
+  # `spur self exec <name>`.
+  preset: bun
+  actions:
+    test-repo-wide: bun run test-repo-wide
+    plugin-smoke: bun run plugin-smoke
+    corpus-check: bun run corpus-check
+    eval: bun run eval
   bump-ver:
     # The published package whose own tag triggers publish.yml. Not needed here — the root
     # manifest is `@gobing-ai/spur`, which the built-in root-name discovery already matches.
