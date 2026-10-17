@@ -19,6 +19,13 @@ the interpreter and trace instructions must match. Never hand-edit the installed
 
 **Retirement criterion (0755 R5, D8 decision D7):** the per-task interpreter retires once the engine covers per-task execution for `/sp:dev-runall` with real terminal runs **and** the parity check (this doc's documented action/guard set ≡ the resolved action/guard set of every `.spur/workflows/*.yaml`) is green. Recording the criterion is part of this task; acting on it is not — that is a separate A3-gate decision.
 
+**Migration target (D65/ADR-140):**
+[workflow execution foundation](../../../../../docs/design/workflow-execution-foundation.md) owns the
+replacement contract — the work item, executor-agnostic dispatch (`vars.executor: host`), the single
+receipt shape, engine builtins and engine-owned leases. While a workflow is unmigrated this driver
+is its interpreter; once it migrates, the engine interprets it and the host session only runs the
+returned work item and continues. Do not add new mechanics here — extend the foundation.
+
 ## Driver state checklist (re-read this after a compaction)
 
 - **Run id** — the run row `spur workflow inline begin` persisted (`.spur/run/<run-id>-inline-setup.json`

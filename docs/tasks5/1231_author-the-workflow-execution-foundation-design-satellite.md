@@ -1,10 +1,10 @@
 ---
 schema_version: 1
 name: Author the workflow execution foundation design satellite
-status: todo
+status: done
 template: feature-impl
 created_at: 2026-10-17T15:59:56.814Z
-updated_at: "2026-10-17T16:13:21.820Z"
+updated_at: "2026-10-17T16:54:33.604Z"
 feature_id: D65
 priority: P1
 tags:
@@ -13,6 +13,8 @@ tags:
   - design
 estimate_hours: 3
 
+done_forced: "false"
+done_reason: unforced close; PASS artifact at .spur/memory/evidence/1231-verdict.json
 ---
 
 ## 1231. Author the workflow execution foundation design satellite
@@ -30,17 +32,17 @@ Feature D65, ADR-140 (Proposed) and the ADR-051 2026-10-17 noun-verb amendment w
 
 ### Requirements
 
-- [ ] R1. Create docs/design/workflow-execution-foundation.md from plugins/sp/skills/spur-dev/templates/design.md, citing ADR-140 and ADR-051 (amendment 2026-10-17).
-- [ ] R2. Specify the work-item payload {runId, state, skill, prompt, inputs, expectFiles, ownedSections}, the single receipt shape for host/subprocess/fleet, and the ADR-126 A4 receipt rules (timeout = outcome-unknown; re-dispatch only on a definite failed/not-started receipt).
-- [ ] R3. Specify host resolution by `vars.executor: host` (sibling of the `fleet` branch, agent-run.ts:687), the input-kind pause carrying the work item, and resume via `spur workflow continue <run-id> --answer-text <receipt-path>` with CAS idempotency.
-- [ ] R4. Specify deterministic steps as `command.gate` invocations of existing verbs (`spur task gate`, `spur workflow commit-guard`, `spur task update`, `spur self exec`), the self-contained-stage lint rules, gate decision modes per profile, and leases (host-wide full-gate lock, worktree, fleet occupancy) with holder/stale rules.
-- [ ] R5. List every CLI surface change; each is an existing verb or a flat `spur <noun> <verb>` flagged for operator consent.
-- [ ] R6. Add the satellite row to docs/04_DESIGN.md and point the sp:spur-dev inline-pipeline-driver reference at it as the migration target.
+- [x] R1. Create docs/design/workflow-execution-foundation.md from plugins/sp/skills/spur-dev/templates/design.md, citing ADR-140 and ADR-051 (amendment 2026-10-17).
+- [x] R2. Specify the work-item payload {runId, state, skill, prompt, inputs, expectFiles, ownedSections}, the single receipt shape for host/subprocess/fleet, and the ADR-126 A4 receipt rules (timeout = outcome-unknown; re-dispatch only on a definite failed/not-started receipt).
+- [x] R3. Specify host resolution by `vars.executor: host` (sibling of the `fleet` branch, agent-run.ts:687), the input-kind pause carrying the work item, and resume via `spur workflow continue <run-id> --answer-text <receipt-path>` with CAS idempotency.
+- [x] R4. Specify deterministic steps as `command.gate` invocations of existing verbs (`spur task gate`, `spur workflow commit-guard`, `spur task update`, `spur self exec`), the self-contained-stage lint rules, gate decision modes per profile, and leases (host-wide full-gate lock, worktree, fleet occupancy) with holder/stale rules.
+- [x] R5. List every CLI surface change; each is an existing verb or a flat `spur <noun> <verb>` flagged for operator consent.
+- [x] R6. Add the satellite row to docs/04_DESIGN.md and point the sp:spur-dev inline-pipeline-driver reference at it as the migration target.
 
 ### Acceptance Criteria
 
-- [ ] AC1 — The design satellite documents the foundation (req: R1)
-- [ ] AC2 — New commands keep the noun verb shape (req: R5)
+- [x] AC1 — R14 — The design satellite documents the foundation (req: R1)
+- [x] AC2 — R15 — New commands keep the noun verb shape (req: R5)
 
 ### Q&A
 
@@ -60,21 +62,53 @@ Docs-only task; it freezes the contracts before code so tasks 1232–1242 cite o
 
 ### Plan
 
-- [ ] Draft satellite from the design template with the corrected decisions
-- [ ] Add 04 index row and inline-pipeline-driver pointer
-- [ ] Run link-check and rule presets on touched docs
+- [x] Draft satellite from the design template with the corrected decisions
+- [x] Add 04 index row and inline-pipeline-driver pointer
+- [x] Run link-check and rule presets on touched docs
 
 ### Solution
 
-<!-- Filled during implementation: file:line change map and concise rationale. -->
+Change-map (auto-generated — implement step did not record a Solution).
+Each entry cites the first changed line per file (`file:line`).
+
+| Change (`file:line`) |
+|----------------------|
+| `docs/04_DESIGN.md:5` |
+| `docs/04_DESIGN.md:50` |
+| `docs/04_DESIGN.md:8` |
+| `plugins/sp/skills/spur-dev/references/inline-pipeline-driver.md:22` |
+| `docs/design/workflow-execution-foundation.md:1` |
 
 ### Testing
 
-<!-- Filled during verification: commands run, outcomes, coverage claim or N/A. -->
+**Pipeline verify results**
+
+- Verdict: PASS (from verdict artifact)
+
+| Requirement | Status | Evidence |
+|-------------|--------|----------|
+| R1 | MET | `plugins/sp/skills/spur-dev/templates/design.md:2` is the design template the satellite was created from (frontmatter + §1–§5 sections); `docs/design/workflow-execution-foundation.md:19` names ADR-140 as the decision of record and the ADR-051 2026-10-17 amendment |
+| R2 | MET | `docs/design/workflow-execution-foundation.md:171` §4.1 work item `{runId, state, skill, prompt, inputs, expectFiles, ownedSections}`; the receipt shape for host/subprocess/fleet and the ADR-126 A4 timeout = outcome-unknown / definite-receipt re-dispatch rules follow in §4.2 |
+| R3 | MET | `docs/design/workflow-execution-foundation.md:96` §3.1 executor table resolves `vars.executor: host` beside the `fleet` branch cited as `packages/app/src/workflow/actions/agent-run.ts:687`; §4.3 defines the input-kind pause payload and `spur workflow continue <run-id> --answer-text <receipt-path>` CAS idempotency |
+| R4 | MET | `docs/design/workflow-execution-foundation.md:119` lists the `command.gate` builtin over `spur task gate`, `spur task update`, `spur self exec` and `spur workflow commit-guard`; `:226` covers the self-contained-stage lint rules and `:248` the host-wide full-gate lock, worktree and fleet-occupancy lease holder/stale rules |
+| R5 | MET | `docs/design/workflow-execution-foundation.md:255` is the CLI surface table: every row is an existing verb, `spur workflow inline *` removal is flagged as the ADR-140 consequence, and any new verb is marked as a consent request |
+| R6 | MET | `docs/04_DESIGN.md:50` adds the satellite row to the design index; `plugins/sp/skills/spur-dev/references/inline-pipeline-driver.md:22` is the migration-target block pointing the reference at the foundation |
+
+| Acceptance Criteria | Status | Evidence Type | Evidence |
+|---------------------|--------|---------------|----------|
+| R14 — The design satellite documents the foundation | MET | command | `bun run lint` exit 0 (biome 1565 files + every workspace typecheck); `spur task gate 1231 run` → `quality gate PASS` (log `.spur/run/1231-test-gate.log`); markdown link resolution over `docs/design/workflow-execution-foundation.md:23` and the two edited files resolves every target |
+| R15 — New commands keep the noun verb shape | MET | command | `git status --porcelain` lists only `docs/04_DESIGN.md:50`, `plugins/sp/skills/spur-dev/references/inline-pipeline-driver.md:22` and the new satellite — no `apps/cli/src/commands` change, so no new command group exists; `docs/design/workflow-execution-foundation.md:255` records the closed grandfathered list |
+- Coverage: N/A (verdict-based; verify pipeline does not measure code coverage)
 
 ### Review
 
-<!-- Filled during review: P1-P4 findings, residual risk, and final disposition. -->
+<!-- spur:record-review -->
+
+**SECU findings** (pipeline verify step — verdict: PASS)
+
+| Priority | Dimension | Location | Finding |
+|----------|-----------|----------|----------|
+| P4 | — | — | No findings (verify verdict PASS) |
 
 ### References
 
@@ -82,3 +116,8 @@ Docs-only task; it freezes the contracts before code so tasks 1232–1242 cite o
 - Feature D65; ADR-140; ADR-051 amendment 2026-10-17.
 
 ### History
+
+- 2026-10-17T16:53:37.684Z todo → wip (system)
+- 2026-10-17T16:53:38.281Z wip → testing (system)
+- 2026-10-17T16:54:33.595Z testing → done (system)
+

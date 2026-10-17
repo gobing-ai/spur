@@ -2,10 +2,10 @@
 doc: 04_DESIGN
 owns: SURFACE — index of non-UI CLI, API, config, schema and boundary contracts
 authority: derived
-version: 1.93.0
+version: 1.94.0
 derived_from: [03_ARCHITECTURE, codebase]
 owner: Robin Min
-updated_at: 2026-10-16
+updated_at: 2026-10-17
 read_before: changing a command, flag, env var, or schema
 edit_rules: 99 §6.5
 sync: [T3, T9]
@@ -47,6 +47,7 @@ Root [DESIGN.md](../DESIGN.md) owns visual and interaction design;
 | Server-Side Adjustment — Finalized Feature List | [server-side-adjustment-feature-finalized.md](design/server-side-adjustment-feature-finalized.md) |
 | Workflow run observability | [workflow-observability.md](design/workflow-observability.md) |
 | Workflow composition contract | [workflow-composition-contract.md](design/workflow-composition-contract.md) |
+| Workflow execution foundation — one interpreter, executor-agnostic `agent.run` dispatch, work item + receipt, builtins, decision gates, leases (feature D65) | [workflow-execution-foundation.md](design/workflow-execution-foundation.md) |
 | Workflow reading surface — server workflows endpoint + settings workflows tab (2026-09-22) | [workflows-reading-surface.md](design/workflows-reading-surface.md) |
 | Spur artifact composition and evolution: workflow layers, spur-composer, spur-doctor (feature I21) | [spur-artifact-evolution.md](design/spur-artifact-evolution.md) |
 | Workflow shell ownership surface (feature D6, task 0608; amended by 0625) | [workflow-shell-ownership.md](design/workflow-shell-ownership.md) |
