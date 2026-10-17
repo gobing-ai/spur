@@ -4,13 +4,13 @@ import { mkdtemp, readFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { resolveWorkflowFile } from '@gobing-ai/spur-app';
-import { getEnvVars } from '@gobing-ai/spur-config';
-import { bundledConfigRoot } from '@gobing-ai/spur-config/loader';
+import { type BuilderConfig, getEnvVars, spurConfigSchema } from '@gobing-ai/spur-config';
+import { bundledConfigRoot, parseConfigYaml } from '@gobing-ai/spur-config/loader';
 import { TASK_VARIANTS } from '@gobing-ai/spur-domain';
 import { SCAFFOLD_MANIFEST } from '../../src/config/scaffold-manifest';
 import { main } from '../../src/index';
 import type { CommandOutput } from '../../src/output';
-import { createTempProject } from '../helpers';
+import { createTempProject, createTempProjectStackNeutral, runCli } from '../helpers';
 
 function nullOutput(): CommandOutput {
     return { write: () => {}, error: () => {} };
@@ -21,6 +21,22 @@ async function isolatedOptions(cwd: string) {
     const globalDir = await mkdtemp(join(tmpdir(), 'spur-glob-'));
     const env = { ...getEnvVars(), SPUR_GLOBAL_RULES_DIR: globalDir };
     return { options: { cwd, env, output: nullOutput(), dbUrl: ':memory:' as const }, globalDir };
+}
+
+/**
+ * Run the real CLI's `init` against a fixture with an isolated global config root, then
+ * parse the generated config through the load-time schema (1225 R5 — the file it writes
+ * must load, not just look right).
+ */
+async function initAndParse(cwd: string, args: string[] = []): Promise<{ text: string; builder: BuilderConfig }> {
+    const globalDir = await mkdtemp(join(tmpdir(), 'spur-glob-'));
+    const result = await runCli(['init', '--minimal', ...args], cwd, { SPUR_GLOBAL_RULES_DIR: globalDir });
+    expect(result.stderr).toBe('');
+    expect(result.code).toBe(0);
+    const text = await readFile(join(cwd, '.spur', 'config.yaml'), 'utf8');
+    const builder = spurConfigSchema.parse(parseConfigYaml(text)).builder;
+    // `builder` always parses (schema default) — the cast only narrows the optional.
+    return { text, builder: builder as BuilderConfig };
 }
 
 describe('init command', () => {
@@ -355,5 +371,83 @@ describe('init command', () => {
         // means the scaffold is internally inconsistent.
         expect(await main(['task', 'create', '--skip-ready', 'probe-task', '--json'], options)).toBe(0);
         expect(existsSync(join(cwd, '.spur', 'tasks'))).toBe(true);
+    });
+
+    test('seeds builder preset bun from a bun lockfile (1225 R1)', async () => {
+        for (const lock of ['bun.lock', 'bun.lockb']) {
+            const cwd = await createTempProject();
+            await Bun.write(join(cwd, lock), '');
+
+            const { text, builder } = await initAndParse(cwd);
+
+            expect(text).toContain('builder:\n  preset: bun');
+            expect(builder).toEqual({ preset: 'bun', actions: {} });
+        }
+    });
+
+    test('binds reserved Makefile targets as make actions (1225 R2)', async () => {
+        const cwd = await createTempProject();
+        await Bun.write(
+            join(cwd, 'Makefile'),
+            [
+                'CC := cc',
+                'build:',
+                '\t@echo build',
+                'test:',
+                '\t@echo test',
+                'lint-changed:',
+                '\t@echo lint',
+                'deploy: build',
+                '\t@echo deploy',
+                '',
+            ].join('\n'),
+        );
+
+        const { text, builder } = await initAndParse(cwd);
+
+        // Only reserved names that are targets, in reserved-vocabulary order — `CC := cc` is an
+        // assignment and `deploy` is not a reserved action, so neither appears.
+        expect(builder.preset).toBe('none');
+        expect(builder.actions).toEqual({
+            build: 'make build',
+            test: 'make test',
+            'lint-changed': 'make lint-changed',
+        });
+        expect(text).toContain('    build: make build');
+        expect(text).not.toContain('deploy');
+    });
+
+    test('writes a commented actions skeleton when no stack is detected (1225 R3)', async () => {
+        const cwd = await createTempProjectStackNeutral();
+        await Bun.write(join(cwd, 'pyproject.toml'), '[project]\nname = "fixture"\n');
+
+        const { text, builder } = await initAndParse(cwd);
+
+        expect(builder).toEqual({ preset: 'none', actions: {} });
+        expect(text).toContain('  # actions:');
+        expect(text).toContain('  #   build: <command>');
+        expect(text).toContain('  #   test-changed: <command>');
+        // Commented out — nothing is bound.
+        expect(text).not.toMatch(/^ {2}actions:/m);
+    });
+
+    test('re-init without --force keeps the config; --force re-detects the stack (1225 R4)', async () => {
+        const cwd = await createTempProjectStackNeutral();
+        await Bun.write(join(cwd, 'pyproject.toml'), '[project]\nname = "fixture"\n');
+        const configPath = join(cwd, '.spur', 'config.yaml');
+
+        const first = await initAndParse(cwd);
+        expect(first.builder.preset).toBe('none');
+
+        // A bun lockfile appears; a plain re-init converges and rewrites nothing.
+        await Bun.write(join(cwd, 'bun.lock'), '');
+        const globalDir = await mkdtemp(join(tmpdir(), 'spur-glob-'));
+        expect((await runCli(['init', '--minimal'], cwd, { SPUR_GLOBAL_RULES_DIR: globalDir })).code).toBe(0);
+        expect(await readFile(configPath, 'utf8')).toBe(first.text);
+
+        // --force regenerates it with the fresh detection.
+        const forced = await initAndParse(cwd, ['--force']);
+        expect(forced.text).toContain('builder:\n  preset: bun');
+        expect(forced.builder.preset).toBe('bun');
     });
 });
