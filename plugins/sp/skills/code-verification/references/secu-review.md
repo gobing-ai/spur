@@ -90,9 +90,13 @@ Before declaring a task `done`, run this lightweight checklist. It catches the m
 - [ ] No `console.log` / `console.error` in production code (use the project logger).
 - [ ] No `--no-verify`, `--force`, or new suppression comments added to bypass gates.
 - [ ] Solution section contains `file:line` citations for every changed file.
-- [ ] API/library claims in changed docs carry a source citation (URL or `path:line`) per
-      source-driven-development; no confidence label is required (ADR-138). The deterministic
-      advisory backstop is the `cited-version-strings` / `cited-api-claims` rules
+- [ ] Every API/library claim in changed docs carries BOTH a source citation (URL or `path:line`) and
+      an EARNED level `HIGH|MEDIUM|LOW` — `HIGH` cites (a URL, `path:line`, or a path with a
+      code/doc extension), `MEDIUM`/`LOW` cite or name what is unverified. That is the
+      `| Claim | Source | Local verification | Confidence |` contract of
+      `.spur/rules/structure/api-library-claim-citation.yaml`; ADR-138 still forbids a confidence
+      label on the VERDICT or verify answer. The deterministic advisory backstop for the citation
+      half is the `cited-version-strings` / `cited-api-claims` rules
       (`.spur/rules/docs/sourced-api-claims.yaml`, run ad hoc — not wired into a preset).
 - [ ] Review section has P1–P4 findings table (even if all rows are empty — the table itself proves review happened).
 

@@ -68,8 +68,11 @@ Do **not** use this skill for:
 | Recalled from a prior session; plausibly stale | Verify before relying on it |
 | Memory only, no source in hand | Stop — verify first; never present as fact |
 
-Do not grade the claim with a confidence label (ADR-138): a label is as easy to write as the claim.
-The citation is the evidence.
+Every claim carries its citation **and an earned confidence level** — `HIGH|MEDIUM|LOW`: `HIGH`
+cites (`path:line`, a URL, or a path with a code/doc extension), `MEDIUM`/`LOW` cite or name what is
+unverified. That grade is evidence, not self-assessment, so it can only be as strong as what is cited
+beside it. ADR-138 still forbids a confidence label on a verdict or verify answer, where the citation
+alone is the evidence.
 
 ### Step 2 — Go to the primary source, in priority order
 
@@ -89,20 +92,25 @@ State the **version** inline whenever behavior is version-specific.
 ### Step 4 — Cite, then generate
 
 Generate the code and **cite the source** (doc URL + date, or `pkg@version` + the file/symbol) at the
-point of use or in the task's notes. A claim about external behavior without a citation is
-unverified — flag it as such rather than presenting it as fact.
+point of use or in the task's notes, with the claim's earned `HIGH|MEDIUM|LOW` level beside it. A claim
+about external behavior without a citation is unverified — flag it as such rather than presenting it as
+fact.
 
 ### Step 5 — Check the citations before finishing
 
 - **Citation coverage** — every API/library claim in the output carries a source citation (doc URL + date, or `pkg@version` + file/symbol); no uncited claim is asserted as fact.
 - **Source authority** — each citation points at the pinned version's primary source (installed signature/source, or official docs for the lockfile version), not the latest docs or memory.
+- **Claim confidence** — every API/library claim carries an earned level inside `HIGH|MEDIUM|LOW`: `HIGH` cites evidence, `MEDIUM`/`LOW` cite or name what is unverified. A level outside the enum, or one nothing cited earns, is a defect.
 
-Report the first failing check and its deviation, if any. Do not append a confidence verdict.
+Report the first failing check and its deviation, if any. This grade lives on the claim: do not append
+a confidence verdict or a `Confidence:` line to the answer (ADR-138).
 
 Deterministic backstop: the `cited-version-strings` and `cited-api-claims` rules
 (`.spur/rules/docs/sourced-api-claims.yaml`) flag markdown lines that assert a version string or a
 time- or version-anchored API claim (`deprecated since`, `removed in 0.9`, `fixers (since 0.3.4)`)
-with no citation anchor on the same line. They are an info-severity advisory
+with no citation anchor on the same line. Where a project runs the claim-table companion
+(`structure/api-library-claim-citation`), the rows of an `API/library claim sources and confidence`
+block are checked the same way — citation present, level earned. They are an info-severity advisory
 backstop for this contract and are deliberately NOT wired into `recommended-pre-check` — run them ad
 hoc with `spur rule run --file .spur/rules/docs/sourced-api-claims.yaml`. Dated working records
 (`docs/report*`, `docs/dogfood`, `docs/plans`, `docs/analysis`) are excluded, as are the task
