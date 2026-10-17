@@ -1,36 +1,43 @@
 # Task execution pipeline — one run per execution attempt of a task (design §6).
 #
-# Orchestration is configuration (ADR-022 / §3.2): this is YAML over the existing
-# dual-workflow engine — zero new engine code. The pipeline NEVER touches files
-# directly — `record` writes via `spur task update --section`, and status moves go
-# through the normal `spur task update <wbs> <status>` verb so the lifecycle guards
-# (0055) apply identically. Run linkage is written to `task_run_links` (kind=pipeline).
+# Orchestration is configuration (ADR-022 / §3.2): this is YAML over the engine — zero new
+# engine code. The pipeline NEVER touches files directly: task-file writes go through
+# `spur task update --section` / `spur task record`, and status moves go through the normal
+# `spur task update <wbs> <status>` verb so the lifecycle guards (0055) apply identically.
+# Run linkage is written to `task_run_links` (kind=pipeline).
 #
-# Shape: precheck → implement[→escalate] → test[→test-fix↔test-recheck] → review → approve(HITL)
-#        → verify → record → done
-#        (precheck failure short-circuits to `failed`; approve routes to `failed` on
-#        operator rejection or `cancelled` on operator cancel — R1, bug-750).
-#        `test` is the project quality gate (shell + bounded /sp:dev-fixall), not
-#        /sp:dev-unit (coverage gap-fill; router C3/C5).
+# Shape (D65 1239, ADR-140): precheck → implement[⇄ escalate] → gate[⇄ remediate] → review
+#        → done | failed.
+#        Six working states — `precheck`, `implement`, `escalate`, `gate`, `remediate`,
+#        `review` — and two terminals. There is no `test`/`test-recheck` pair (`gate` owns
+#        the quality gate, its mode chosen per visit), no `triage`/`test-fail-triage`/
+#        `review-fail-triage` states (the same catalog decisions run inside the state that
+#        produced the failure and their rows drive the transitions), no `approve` state (the
+#        operator approval is a decision point at the end of `review`, 1236 R1/R2), no
+#        `verify` state (`review` certifies: `spur task verdict --from-answer` derives the
+#        verdict from the reviewer's own requirement traceability), and no `record` state
+#        (`done`'s onEnter performs the deterministic close).
 #
-# F96 residual sweep (0950, reordered 0983): precheck captures the resume-safe base
-# commit; record scans and folds residuals AFTER `task record` flips the verdict-proven
-# boxes (a post-record blocking leftover downgrades PASS → PARTIAL, fails the record →
-# done guard closed, and re-records Testing before the failed edge); done settles
-# deferrals; failed renders the recovery report. No new state, edge, or model query.
+# Evidence model (D65 R3/R11): the run's evidence is the tree-hash gate receipt
+# (`.spur/run/<wbs>-check-receipt.json`, keyed by the git tree the gate captures itself),
+# the review verdict artifact written by `spur task verdict`, and the gate/review status
+# tokens the transitions read. The former proof chain — `proofDigest`, `proof.fingerprint`
+# captures and compares, digest-bound receipt preconditions, `run.artifact` verdict
+# registration and the `verifiedOutcome` it fed — is gone; a PASS receipt is reused while
+# the tree hash holds and invalidated when the tree moves. `done` closes on the verb's own
+# target-aware `task check` plus the residual sweep, not on a re-asserted digest.
 #
-# Review-failure routing (session finding after 1088): `review` had no outgoing edge for a
-# FAIL verdict, so a failing review could only be remediated by driving the graph by hand
-# (re-entering `test` and hand-emitting rows). The review stage now derives
-# `.spur/run/<wbs>-review.status` from its own answer file (fail-closed to FAIL), and a FAIL
-# routes through `review-fail-triage` — the review-side twin of `test-fail-triage` (0943) —
-# into the SAME bounded fix budget, so remediation stays on-graph and bounded.
+# No operator pause lives in this file (D65 R10): the only pause is the host executor's
+# `agent.run` transform (1232). `escalate` asks its question through the responder and the
+# approval gate answers through the decision-point responder, so an interactive run is
+# answered in-session and a headless run without `--auto` answers with the responder default
+# (deny / empty) instead of pausing for a later `spur workflow continue`.
 #
 # Vars (passed as a JSON object via `--vars`):
 #   wbs                       — task WBS (required)
-#   profile                   — "auto" skips HITL approve (R4)
+#   profile                   — "auto" answers the approval gate from its declared binding (R4)
 #   agent / spurBin           — executor + spur binary (CLI overrides spurBin)
-#   stepTimeoutMs             — agent.run budget for review/verify/test-fix (ms)
+#   stepTimeoutMs             — agent.run budget for review/remediate (ms)
 #   implementTimeoutMs        — implement agent.run budget (ms)
 #   qualityGateCmd            — project gate (default: ${spurBin:-spur} self exec check)
 #   qualityGateMaxFixAttempts — max /sp:dev-fixall hops after a red gate (default: 2)
@@ -41,34 +48,29 @@
 "$schema": "@gobing-ai/spur/schemas/state-machine-workflow.schema.json"
 kind: state-machine
 name: task-pipeline
-# 0772 R2: explicit identity tag. Set only after the proof failure-path tests
-# passed; the engine treats unversioned external definitions as supported.
-# v4 (session finding after 1088): the graph routes a non-PASS review into bounded remediation —
-# a contract change, so the identity moves with it (the confidence half of v4 was retired at v7).
+# 0772 R2: explicit identity tag. Set only after the failure-path tests passed; the engine
+# treats unversioned external definitions as supported.
+# v4 (session finding after 1088): the graph routes a non-PASS review into bounded remediation.
 # v5 (task 1077's inline run, 2026-10-06): the verify verdict action is explicitly `onError:
-# continue`. `task verdict` exits non-zero on any non-PASS verdict BY DESIGN (1003 R2) — that is
-# data for the verify guards, not a state failure. Under the engine's default 'fail' policy
-# (`resolveOnErrorPolicy: action ?? workflowDefault ?? runOption ?? 'fail'`) the state sequence
-# halted on that exit code and `lifecycle.fail('verify')` finalized the run before any transition
-# guard was evaluated, which made the declared `verify → test-fix` "repairable non-PASS" lane
-# UNREACHABLE: a non-PASS verify could only end the run failed. `test-fix` also gained the
-# review-lane evidence projection (see its onEnter) so the repair hop is not fed an empty findings
-# list when the failing hop was `review-fail-triage` rather than the quality gate.
-# v7 (task 1207, F511): the asserted `Confidence: HIGH|MEDIUM|LOW` machinery is retired — the
-# verifier's and reviewer's self-graded levels (re-imported from the cc anti-hallucination skill
-# by task 1068) are no longer written, checked, or gated on; spur certifies on deterministic
-# evidence (rows MET, proof digests, findings dispositioned). The `confidence` check row, the
-# `ackLowConfidence` var, and the guards' LOW/absent clauses are gone. The derived
-# feature-receipt confidence (1196) followed in task 1221 (ADR-138 amendment).
-version: "8"
-description: "Standard task pipeline: precheck → implement → quality-gate (test/fix/recheck) → review → approve → verify → record → done"
+# continue` — a non-PASS verdict is data for the guards, not a state failure.
+# v7 (task 1207, F511): the asserted `Confidence: HIGH|MEDIUM|LOW` machinery is retired.
+# v9 (task 1239, D65 R10): the seven-state rewrite. `test`/`test-recheck` collapse into `gate`
+# (one typed `command.gate` over `spur task gate`, mode by visit, tree-hash receipt reuse under
+# the host-wide full-gate lock); `verify` merges into `review`, which certifies through
+# `spur task verdict --from-answer` over the reviewer's requirement/AC traceability; the three
+# routing states become catalog decision calls inside `gate` and `review`; `approve` becomes the
+# review's operator decision point; `record` becomes `done`'s deterministic close; and the whole
+# proof chain (proofDigest, `proof.fingerprint`, receipt preconditions, `run.artifact` verdict
+# registration) is removed with the ADR-071 machinery (ADR-140 item 7). A contract change.
+version: "9"
+description: "Standard task pipeline: precheck → implement → gate (typed quality gate, tree-hash receipt) → review (verdict + R/AC traceability + operator decision) → done | failed"
 # Task entity lifecycle (owned by task-lifecycle.yaml):
 #   normal: backlog → todo → wip → testing → done
 #   blocked is bidirectional with todo/wip/testing; done may reopen to wip.
 #   any non-terminal state may transition to cancelled.
 # Guards:
 #   wip → testing:  spur task check <wbs>
-#   testing → done: spur task check <wbs> --as done, then PASS-verdict provenance
+#   testing → done: spur task check <wbs> --as done
 # Invalid: todo → testing, todo → done, and wip → done.
 # Pipeline states below are orchestration states, not task statuses.
 iterationBound: 20
@@ -76,16 +78,13 @@ initialState: precheck
 terminalStates:
     - done
     - failed
-    - cancelled
 failureStates:
     - failed
-    - cancelled
 vars:
     wbs: "0000"
     profile: "standard"
     mode: ""
     __runId: ""
-    __definitionDigest: ""
     # PATH-independent spur invocation for shell guards/actions. The CLI overrides this
     # at run start (resolveSpurBin); the literal default is a safe fallback so direct/dry
     # runs and `workflow validate` resolve the template. (See AGENTS.md / ADR-026.)
@@ -106,8 +105,8 @@ vars:
     # Remediation can mutate code only when BOTH this cap and the task's declared
     # mutationPolicy permit code. none/tests require scoped manual repair, not fixall.
     mutationPolicy: "code"
-    # Step-level timeout for agentic hops (review / verify / test-fix) in ms.
-    # Soft quality-gate shells are unbounded by this var (host shell only).
+    # Step-level timeout for agentic hops (review / remediate) in ms. The quality gate is a
+    # typed command.gate (its own budget, unbounded like the former shell).
     # Raised 600s → 1800s (task 0398 R4 / H6 dogfood). Override:
     # `--vars '{"stepTimeoutMs":"120000"}'`. 30 min is headroom, not a licence to
     # run unbounded — if a hop still hits this wall, STOP and record it.
@@ -115,71 +114,36 @@ vars:
     # Timeout for the `implement` step specifically (R2a). Implementation is the
     # heaviest agent.run step (full read/write/test-probe loop); the old 600s default
     # failed five consecutive dogfood runs (bugs 742/744/746/748). Default is 45 min
-    # (task 1108): it governs subprocess surfaces (`spur workflow run`, parallel,
-    # headless); inline hosts receive it only when their dispatch tool accepts a
-    # timeout (inline-pipeline-driver.md § Timeout boundary). 45 min is a reasoned
-    # default, not a proven bound — in P1 one implement still hit 45 min and resumed
-    # (docs/reports/i31/1107-runall-p1-pilot.md § Timeout attribution).
+    # (task 1108); inline hosts receive it only when their dispatch tool accepts a
+    # timeout (inline-pipeline-driver.md § Timeout boundary).
     # Override per run: `--vars '{"implementTimeoutMs":"3600000"}'`.
     implementTimeoutMs: "2700000"
-    # Answer captured by the approve gate's hitl.confirm (R1): "yes" | "no" | "cancel".
-    # Empty by default; only meaningful once the approve state has been entered.
+    # Answer captured by the review's approval decision point: "yes" | "no" | "cancel"
+    # (the responder vocabulary) or "" when the declared binding deferred (no maker, or
+    # `profile=auto` with the decision maker disabled). Only meaningful once `review` ran.
     __hitlAnswer: ""
+    # Set beside it by the same gate when `decision.mode` is `evidence`: "accepted" when the
+    # evidence answered, "deferred" when it could not (1236). Read by the review → done guard.
+    approvalStatus: ""
     # Operator answer captured by the escalate hop's hitl.input (0933). Empty by
-    # default; set by `spur workflow continue --answer-text` after the pause and read
-    # by the escalate→implement / escalate→failed guards. Non-empty = answered.
+    # default; read by the escalate→implement / escalate→failed guards. Non-empty = answered.
     __hitlInput: ""
-    # Proof-state bracket (task 0612, ADR-071; restructured by task 0703; review joins by task 1135).
-    # `proofDigest` is the canonical capture taken at quality-gate ENTRY — immediately before the
-    # evidence-producing final chain (quality → review → verify) — and re-captured at `test-recheck`
-    # when bounded remediation mutated the tree, so every evidence stage names one fresh digest
-    # (R2/R4). `proofDigestNow` is the live re-capture compared against `proofDigest` at review,
-    # verify and record entry; a mismatch means a proof input changed after evidence was established,
-    # so the run routes to `failed` instead of spending a review dispatch or crossing the completion
-    # boundary (R5). Task 1135 adds the review-entry compare and the gate-entry tree snapshot
-    # (`.spur/run/<run-id>-gate-paths.txt`, same exclusions as the git-tree half) so a mismatch also
-    # names the drifted paths.
-    # `taskSpecPath` carries the task file path because `docs/tasks*` is excluded from the digest's
-    # git-tree half — spec content is folded in explicitly or a task-file edit would go undetected.
-    # The fingerprint scopes task content to the proof-input sections only (Background, Requirements,
-    # Acceptance Criteria, Design, Plan), so record-time Solution/Testing/Review evidence writes do
-    # not retroactively invalidate the certified input set (R6).
-    proofDigest: ""
-    proofDigestNow: ""
-    taskSpecPath: ""
-    # 0785 R2: linked feature spec path, resolved at `test` entry from the task frontmatter.
-    # Empty (orphan task) means the feature spec is legitimately omitted from the digest inputs
-    # (empty-string compatibility); a declared feature whose path fails to resolve fails closed.
-    featureSpecPath: ""
-    # 0710 R4: task priority tier (P0..P4) extracted from the task frontmatter at the
-    # quality-gate stage. P0/P1 make the review/verify distinct-executor policy apply;
-    # unknown/empty priority means fresh-context-only (executor reuse allowed).
-    taskPriority: ""
-    # Project quality gate for the `test` hop (probe + fixall + recheck). Override per project
-    # with the same package-manager surface (this monorepo is Bun-only):
-    # `--vars '{"qualityGateCmd":"bun run lint && bun run test"}'`. Soft probe, hard recheck,
-    # and the fixall slash input all use this same var so the command stays single-sourced.
+    # Project quality gate for the `gate` hop, overridable per project:
+    # `--vars '{"qualityGateCmd":"bun run lint && bun run test"}'`.
     # INVARIANT (ADR-124, clarified 2026-10-07 by task 1111 R5): only the FULL tier writes PASS.
     # Under the opt-in `deferQualityGate` policy the per-task token is DEFERRED (light tier) and
     # the "review runs only after a green full gate" invariant moves to BATCH scope — nothing is
-    # reported PASS without the integrated full gate on the base ref. Default "false" = per-task
-    # full gate, unchanged.
-    # TRUSTED CONFIG ONLY — this string is executed via `sh -c` (see test/test-recheck). Never
+    # reported PASS without the integrated full gate on the base ref.
+    # TRUSTED CONFIG ONLY — `spur task gate` passes this to the project's gate command. Never
     # interpolate untrusted operator/LLM input into qualityGateCmd (task 0436 SECUA residual).
-    # NO `format` PREFIX: `implement` already ran `$formatCmd` on its way out, and `test`
-    # captures `proofDigest` (onEnter[3]) BEFORE this command runs (onEnter[4]) — a formatter
-    # inside the gate rewrites the very tree the digest just fingerprinted (ADR-071 proof
-    # window). It was a no-op only because the implement-stage format got there first; that is
-    # an accident, not an invariant. The gate observes, it does not mutate.
+    # The gate observes, it does not mutate: `implement` already ran `$formatCmd` on its way out,
+    # and a formatter inside the gate would rewrite the tree the receipt is keyed by.
     qualityGateCmd: "${spurBin:-spur} self exec check"
-    # Cheap red-detector run before the full gate on **recheck only**; empty ⇒ no probe
-    # (full gate every recheck — the pre-0587 behavior). A project overriding qualityGateCmd
-    # should override this too. TRUSTED CONFIG ONLY — executed via `sh -c` (same surface as
-    # qualityGateCmd). Invariant: `review` is only ever entered through a full green
-    # qualityGateCmd — only the full gate writes PASS to <wbs>-test-gate.status.
+    # Cheap red-detector run before the full gate on **recheck visits only**; empty ⇒ no probe.
+    # A project overriding qualityGateCmd should override this too. TRUSTED CONFIG ONLY.
     gateProbeCmd: "${spurBin:-spur} self exec lint"
-    # Max /sp:dev-fixall attempts after a red quality-gate probe/recheck (bounded; no thrash).
-    # Attempt counter: .spur/run/<wbs>-test-fix-attempt. Default 2 = two fixall hops before failed.
+    # Max /sp:dev-fixall attempts for one run (bounded; no thrash). Counter:
+    # .spur/run/<wbs>-test-fix-attempt. Default 2 = two fixall hops before failed.
     qualityGateMaxFixAttempts: "2"
     # Max operator-question pauses (0933) before the implement chain routes to failed.
     # Escalation counter: .spur/run/<wbs>-escalation-count. Default 2 = two answered
@@ -193,31 +157,45 @@ vars:
     # project can point it at its own formatter; invoked best-effort (a missing or
     # failing formatter must never abort a run — the quality gate is the real gate).
     formatCmd: "${spurBin:-spur} self exec format"
-    # Bounded `file:line` anchors extracted from the failing quality-gate log by the
-    # `test` / `test-recheck` hops (deduped, max 20, space-separated on one line).
-    # `test-fix` reads `.spur/run/<wbs>-test-gate.findings` into this var and names the
+    # Bounded `file:line` anchors extracted from the failing quality-gate log by
+    # `spur task gate` (deduped, max 20, space-separated on one line).
+    # `remediate` reads .spur/run/<wbs>-test-gate.findings into this var and names the
     # anchors directly in the /sp:dev-fixall input, so the fix agent starts AT the failing
     # file:line instead of re-deriving it from a fresh gate run (0482 R3).
     gateFindings: ""
+    # The quality-gate mode this visit runs — `run` on the first gate visit of the run,
+    # `recheck` after a remediation hop, `deferred` under the opt-in batch policy. Written by
+    # the gate's own shell and projected into this var (args cannot branch) — D65 1239 R2.
+    gateMode: ""
+    # Review depth resolved from the lane decision (0943 R1/R2): `functional` for the fast
+    # lane (requirement/AC traceability only — the reviewer's R → file:line table is what
+    # certifies, so the fast lane never drops the evidence), `all` for every other lane.
+    reviewFocus: ""
+    # Task spec path resolved at `gate` entry (also the decide evidence for the review-lane
+    # routing). `docs/tasks*` is a versioned input, not a run artifact.
+    taskSpecPath: ""
+    # 0710 R4: task priority tier (P0..P4) extracted from the task frontmatter at `gate`
+    # entry. P0/P1 make the review distinct-executor policy apply; unknown/empty priority
+    # means fresh-context-only (executor reuse allowed).
+    taskPriority: ""
     # Diff-scope guard on the implement hop (R1, task 0487). When the target task
     # body backticks at least one path, non-corpus changes outside those paths
     # fail the step by name. New files beside a declared file are allowed. Empty
     # (default) = on; set to "off" to bypass:
     # `--vars '{"implementScopeGuard":"off"}'`.
     implementScopeGuard: ""
-    # 1111 R1: opt-in parallel-batch gate policy. When "true", `test` / `test-recheck` run the
-    # LIGHT tier for per-task early feedback and write `DEFERRED` (light PASS) or `FAIL` to
+    # 1111 R1: opt-in parallel-batch gate policy. When "true", `gate` runs the LIGHT tier for
+    # per-task early feedback and writes `DEFERRED` (light PASS) or `FAIL` to
     # `.spur/run/<wbs>-test-gate.status` — never `PASS`, because that token means the full
     # project gate ran green on this tree. The batch orchestrator owes ONE integrated full gate
     # on the base ref over the merged slices (1111 R3). Default "false" = unchanged behavior,
-    # and a stray `DEFERRED` file fails the guards. Sequential/inline runs never set it:
-    # `--defer-gate` requires `--mode parallel`.
+    # and a stray `DEFERRED` file fails the guards.
     deferQualityGate: "false"
     # 0931 R5: parallel batches defer the per-task feature sync so a task branch never
-    # touches feature files or docs/features/INDEX.md. When "true", the record step's
-    # post-record shell appends a deferral note and skips the sync; the parallel batch
-    # orchestrator runs the sync + `spur feature refresh` once per touched feature on the
-    # base ref after integration. Sequential/inline keep the default "false" (unchanged).
+    # touches feature files or docs/features/INDEX.md. When "true", the close's post-record
+    # shell appends a deferral note and skips the sync; the parallel batch orchestrator runs
+    # the sync + `spur feature refresh` once per touched feature on the base ref after
+    # integration. Sequential/inline keep the default "false" (unchanged).
     deferFeatureSync: "false"
 
 states:
@@ -275,7 +253,7 @@ states:
           fails or times out, so a halted implement never leaves the task at `wip` with an
           empty Solution (the F3 half-state). The `--no-lifecycle` flag is correct here: the
           pipeline owns this transition; the FSM guard would otherwise re-run `spur task
-          check`, which is precheck's job.
+          check`, which precheck's job.
           NOTE: this step must NOT call /sp:dev-run in full mode (the default) —
           that command DRIVES this pipeline, so calling it here recurses.
           --mode implement is the single-step implement entry.
@@ -298,16 +276,14 @@ states:
             options:
                 agent: ${vars.implementAgent}
                 # Pure slash command only (ADR-043). Anti-recursion / implement discipline
-                # The worker's brief is OWNED BY the skill, not restated here (task 1110 R3):
-                # see `plugins/sp/skills/code-implementation/SKILL.md` (targeted-probe scope
-                # § Implement scope, dependency-aware § Changed-path targeted checks, Solution
-                # anchor form in § Red Flags). The YAML only names the entry command.
+                # The worker's brief is OWNED BY THE SKILL, not restated here (task 1110 R3):
+                # see `plugins/sp/skills/code-implementation/SKILL.md`. The YAML only names the
+                # entry command.
                 # Declared Layer-1 role (0538 R2/0710 R7): routing reason; no executor pin — role routing feeds the distinctness gate.
                 role: coder
-                # B7 R3/R6 (0894): coder stages reuse the role session — the test-fix hop
+                # B7 R3/R6 (0894): coder stages reuse the role session — the remediation hop
                 # resumes the implement session instead of re-reading the task cold.
                 session: reuse
-                # lives in /sp:dev-run --mode implement → sp:code-implementation, not YAML prose.
                 # 0933 R28: --escalation-file names the Q/A transcript the implement
                 # agent appends to when pausing and reads back on re-dispatch; absent
                 # on a first attempt means "no prior escalations".
@@ -316,7 +292,7 @@ states:
                 # R3 (task 0424): empty-implement no-op guard — the agent.run action
                 # fails the step when exit 0 produced zero non-corpus file changes, so
                 # a silent no-op routes the run to `failed` here instead of drifting
-                # into test/review and being caught a full pass later.
+                # into gate/review and being caught a full pass later.
                 requireDiff: true
                 # Verification-only re-run admission (task 0976): when requireDiff
                 # sees zero non-corpus changes because the implementation already
@@ -328,15 +304,12 @@ states:
                 # 0933 R26: escalation contract — the agent.run option names the QUESTION
                 # file (the pause signal, deleted pre-dispatch for freshness); a paused
                 # attempt (agent wrote its question there and exited 0) succeeds with
-                # data.escalated=true and skips requireDiff for THAT attempt only. The
-                # Q/A transcript (.spur/run/<wbs>-escalation.md) is separate: it reaches
-                # the agent via --escalation-file in the input below.
+                # data.escalated=true and skips requireDiff for THAT attempt only.
                 escalationFile: .spur/run/${vars.wbs}-question.md
                 # 0706 R6: this stage mutates the working tree unattended under the
                 # auto profile, so it declares minimum execution-capability
                 # requirements. Dispatch fails closed (before spawn) when the
-                # resolved executor's attestation cannot satisfy them — attest the
-                # executor in agent config.
+                # resolved executor's attestation cannot satisfy them.
                 requiresCapabilities:
                     fsWrite: available
                     processSpawn: available
@@ -355,39 +328,35 @@ states:
                 timeoutMs: 120000
           # Post-implement cleanup: auto-format any unformatted output the agent produced.
           # The agent may leave files that don't pass `biome check`, which then fails
-          # `bun run lint` downstream. Running format here is cheap (< 1 s) and prevents
-          # the test stage from tripping on a purely mechanical formatting defect (dogfood
-          # bug-733 — omp left agent-run.test.ts unformatted, causing a spurious lint gate
-          # failure that the ## Testing section mis-attributed to "pre-existing gaps").
+          # `bun run lint` downstream (dogfood bug-733).
           # Best-effort: `; exit 0` (not `&&`) so a missing/failing formatter in a seeded
-          # non-Bun project cannot abort a run mid-implement. Formatting is a convenience;
-          # `${vars.qualityGateCmd}` at `test` is the gate that actually decides.
+          # non-Bun project cannot abort a run mid-implement. `${vars.qualityGateCmd}` at
+          # `gate` is the gate that actually decides.
           - kind: shell
             options:
                 command: 'sh -c "$formatCmd" ; exit 0'
           # 1109 R3: qualify this task's unique basename anchors to repo-relative paths.
           # Placement is load-bearing: it runs AFTER implement's mutations (and the format
-          # above) but BEFORE the `test` stage's `proof.fingerprint` capture, so a rewrite in
-          # a digest section cannot invalidate the proof. `--wbs` scopes the pass to this
-          # task's resolved file — the unscoped form rewrites ~119 unrelated task files.
-          # Non-fatal (`; exit 0`): the done gate still reports anything left, and this step
-          # deliberately does NOT address line drift or `L4.anchor-subject-mismatch`
-          # (those need the implementer to re-anchor). Scope contract: task 1109 R5.
+          # above) and BEFORE the gate reads the tree, so the receipt is keyed to the final
+          # tree. `--wbs` scopes the pass to this task's resolved file.
+          # Non-fatal (`; exit 0`): the done gate still reports anything left. Scope
+          # contract: task 1109 R5.
           - kind: shell
             options:
                 command: "$spurBin task migrate-anchors --wbs $wbs --json ; exit 0"
 
     # ── escalate hop (operator-question pause, 0933) ──────────────────────────
     # The implement agent paused on an operator question: it wrote
-    # .spur/run/<wbs>-question.md and exited 0 (agent.run reported
-    # data.escalated=true, skipping requireDiff for that attempt). This hop bounds
-    # the asks (counter), surfaces the question verbatim through the HITL responder
-    # (the run pauses here), and — after `spur workflow continue --answer-text <a>`
-    # delivers __hitlInput — resumes implement with the Q/A transcript
-    # (.spur/run/<wbs>-escalation.md) named in the implement input via
-    # --escalation-file. The transcript append + question-file consumption happen in
-    # the escalate→implement guard so a stale question can never re-trigger the hop
-    # after the answered attempt.
+    # .spur/run/<wbs>-question.md and exited 0 (agent.run reported data.escalated=true,
+    # skipping requireDiff for that attempt). This hop bounds the asks (counter), surfaces
+    # the question verbatim through the HITL responder, and — once the answer lands in
+    # __hitlInput — resumes implement with the Q/A transcript
+    # (.spur/run/<wbs>-escalation.md) named in the implement input via --escalation-file.
+    # The transcript append + question-file consumption happen in implement's onEnter so a
+    # stale question can never re-trigger the hop after the answered attempt.
+    # D65 1239: the ask is answered by the responder in-session (no `pause: true` remains in
+    # this file); a headless run without an answer routes to failed(cancelled) with the
+    # question preserved, exactly as an empty answer always did.
     - id: escalate
       display:
           phase: implement
@@ -398,135 +367,201 @@ states:
           Operator-question pause (0933): the implement agent asked a question
           headlessly; surface it to the operator and resume implement with the answer.
       onEnter:
-          # Bounded asks: increment the per-task escalation counter before pausing.
+          # Bounded asks: increment the per-task escalation counter before asking.
           - kind: shell
             options:
                 command: >-
                     mkdir -p .spur/run; n="$(cat .spur/run/$wbs-escalation-count 2>/dev/null || echo 0)"; echo $((n + 1)) > .spur/run/$wbs-escalation-count; exit 0
-          # The agent's question, verbatim, becomes the pause prompt.
+          # The agent's question, verbatim, becomes the prompt.
           - kind: file.read.into-var
             options:
                 file: .spur/run/${vars.wbs}-question.md
                 var: escalationQuestion
-          # Pause for the operator (responder pause:true stops the run after this
-          # onEnter; `spur workflow continue --answer-text <answer>` writes
-          # __hitlInput and re-evaluates the escalate guards).
+          # Ask the operator (no pause declaration: the responder answers, and the answer is
+          # written to __hitlInput for the escalate guards).
           - kind: hitl.input
             options:
                 prompt: "${vars.escalationQuestion}"
 
-    # ── test hop (quality gate + bounded auto-fix) ─────────────────────────────
+    # ── gate hop (typed quality gate, one state for run/recheck visits) ───────────
     # NOT /sp:dev-unit. That command (sp:code-testing) *extends/generates* tests toward
     # a coverage target; it is not the project quality gate. Coverage gap-fill remains
     # available via router C3/C5 (`/sp:dev-unit`) or inside implement — not this hop.
     #
-    # Shape (engine has no per-action "run next only if previous failed" without
-    # `onError`, and Spur's action schema does not expose `onError`):
-    #   test         — soft probe: qualityGateCmd → PASS|FAIL status; always exit 0
-    #                  (green path: one gate run → review; no fixall/recheck tax)
-    #   test-fix     — increment attempt + pure slash /sp:dev-fixall (≤ max attempts)
-    #   test-recheck — soft recheck → review | test-fix | failed (never silent lifecycle abort)
-    - id: test
+    # D65 1239 R2: `test` and `test-recheck` are one state. `spur task gate` owns the tier,
+    # the probe, the receipt and the host-wide lock; the typed `command.gate` owns the exit
+    # code (PASS/FAIL/BLOCKED) so a blocked gate routes to `failed` instead of reading as
+    # red. The mode is chosen per visit: `run` on the first visit of this run (it resets the
+    # attempt counter and consults the tree-hash receipt), `recheck` after a remediation hop
+    # (probe-then-full), `deferred` under the opt-in batch policy.
+    #
+    # The three former routing states are decision CALLS here and in `review` (D65 1239 R1):
+    # the lane decision (0943 R1/R2, catalog `task-triage`) picks the review depth, and the
+    # gate's own failure class (catalog `failure-class`) drives the red-gate transitions.
+    # Both run unconditionally — the engine has no onEnter conditionals — and both degrade to
+    # their catalog fallback with no model call while `workflows.decideDecisionMaker` is off.
+    - id: gate
       display:
           phase: test
           phaseTitle: Test
           title: Run quality gate
       description: >
-          Proof-chain entry + soft quality-gate probe (single logical gate on the green path; bounded retries only
-          for SQLite lock contention). Capture of the canonical proof-input digest happens HERE — before any
-          evidence-producing final check (task 0703, ADR-071) — so the gate, review, and verification evidence
-          all name one digest. Then runs
-          `${vars.qualityGateCmd}`, records PASS|FAIL under
-          `.spur/run/<wbs>-test-gate.status`, resets the fix attempt counter, always exit 0.
+          Typed quality gate: resolve the task path/priority, produce the diffstat lane
+          evidence, consult `task-triage` for the review depth (deterministic safety floor
+          first), run `${vars.qualityGateCmd}` through `spur task gate <wbs> <mode>` under the
+          host-wide lock (tree-hash receipt reuse on the same tree), then classify a red gate
+          through `failure-class`. Writes the typed outcome to
+          `.spur/run/<runId>-gate.status` and the gate's own token to
+          `.spur/run/<wbs>-test-gate.status`; always a recorded outcome, never a state failure.
       onEnter:
-          # R6/R2 (0703): resolve the task-spec path BEFORE the digest capture. `docs/tasks*` is excluded
-          # from the digest's git-tree half, so the spec is folded in explicitly via `taskSpecPath`.
-          # (e) task path + priority resolution; fail-closed on an unresolvable spec (0751 R2, 0710 R4).
+          # (e) task path + priority resolution; fail-closed on an unresolvable spec (0751 R2,
+          # 0710 R4). The path is the decide evidence for the review lane and the priority is
+          # the review/executor distinctness input (0710 R4) — both are consumed downstream, so
+          # an unresolved path fails here instead of degrading the run silently.
           - kind: shell
             options:
-                # 0710 R4: resolve the spec path, then extract `priority:` from the TASK FILE itself (not the
-                # path listing); normalize to upper so requiresDistinctExecutor's exact 'P0'/'P1' match hits.
-                # 0751 R2: the task path is NOT optional - an unresolved lookup fails
-                # the step (no `|| true`, no forced `exit 0`, no stderr suppression)
-                # instead of degrading the proof to whole-tree-only. The priority read
-                # stays tolerant: a missing line is genuinely optional.
-                command: 'mkdir -p .spur/run; $spurBin task path $wbs --json | jq -r ".path // .filePath // empty" > ".spur/run/$wbs-taskpath.txt"; task_path="$(cat ".spur/run/$wbs-taskpath.txt")"; if [ -z "$task_path" ]; then echo "fail-closed proof chain (0751 R2): task path for $wbs did not resolve - the task spec cannot be folded into the proof digest" >&2; exit 1; fi; sed -n "s/^priority:[[:space:]]*//p" "$task_path" | head -1 | tr -d "[:space:]" | tr "[:lower:]" "[:upper:]" > ".spur/run/$wbs-priority.txt"'
+                command: 'mkdir -p .spur/run; $spurBin task path $wbs --json | jq -r ".path // .filePath // empty" > ".spur/run/$wbs-taskpath.txt"; task_path="$(cat ".spur/run/$wbs-taskpath.txt")"; if [ -z "$task_path" ]; then echo "gate: task path for $wbs did not resolve - the review evidence has no task spec" >&2; exit 1; fi; sed -n "s/^priority:[[:space:]]*//p" "$task_path" | head -1 | tr -d "[:space:]" | tr "[:lower:]" "[:upper:]" > ".spur/run/$wbs-priority.txt"'
           - kind: file.read.into-var
             options:
                 path: .spur/run/${vars.wbs}-taskpath.txt
                 var: taskSpecPath
-          # 0710 R4: carry the task's priority tier into the review/verify risk policy.
+          # 0710 R4: carry the task's priority tier into the review's distinctness policy.
           - kind: file.read.into-var
             options:
                 path: .spur/run/${vars.wbs}-priority.txt
                 var: taskPriority
-          # 0785 R2: resolve the task's linked feature spec path so the digest covers it too. An
-          # orphan task (no feature_id) resolves to empty — legitimately omitted via empty-string
-          # compatibility; a declared feature whose spec path does not resolve fails closed instead
-          # of silently folding a stale spec into the proof.
-          # (e) linked feature-spec path resolution; fail-closed when a declared feature does not resolve (0785 R2).
+          # (a) diffstat producer: `spur task diffstat` owns git reading and sensitive-path
+          # classification; shell only fails closed on a non-zero exit (writes sensitive:true,
+          # which the pre-guard below maps to the safety lane).
           - kind: shell
             options:
-                command: 'mkdir -p .spur/run; FID=$($spurBin task show $wbs --json 2>/dev/null | jq -r ".feature_id // .frontmatter.feature_id // empty" 2>/dev/null); FPATH_OUT=""; if [ -n "$FID" ]; then FPATH_OUT=$($spurBin feature show "$FID" --json | jq -r ".filePath // .path // empty"); if [ -z "$FPATH_OUT" ]; then echo "fail-closed proof chain (0785 R2): feature $FID linked to task $wbs but its spec path did not resolve" >&2; exit 1; fi; fi; printf "%s" "$FPATH_OUT" > ".spur/run/$wbs-featurepath.txt"'
+                command: >-
+                    $spurBin task diffstat "$wbs" --no-logo || { echo "task-diffstat failed closed — spur task diffstat exited $?" >&2; printf '{"files":0,"insertions":0,"deletions":0,"paths":[],"sensitive":true}\n' > ".spur/run/$wbs-diffstat.json"; }; exit 0
+          # (b)+(c) lane pre-guard BEFORE the decide: a caller-set mode is projected verbatim
+          # (R2b); a sensitive path or >400 changed lines pins safety (R2c) and the decide
+          # result is never consulted. A missing/malformed diffstat row pins safety HERE: an
+          # empty mode file would let the low decide row project the fast lane downstream, so
+          # the "never to fast" fail-safe is enforced at the guard, not by the projection.
+          - kind: shell
+            options:
+                command: >-
+                    mkdir -p .spur/run; if [ -n "$mode" ]; then printf '%s\n' "$mode" > ".spur/run/$wbs-mode.txt"; exit 0; fi; DF=".spur/run/$wbs-diffstat.json"; if ! jq -e 'type == "object"' "$DF" >/dev/null 2>&1; then printf 'safety\n' > ".spur/run/$wbs-mode.txt"; exit 0; fi; jq -r 'if .sensitive == true or ((.insertions // 0) + (.deletions // 0)) > 400 then "safety" else empty end' "$DF" 2>/dev/null > ".spur/run/$wbs-mode.txt"; exit 0
+          # (d) lane decision — degrades to the standard default whenever
+          # workflows.decideDecisionMaker is off, so with the flag off the pipeline makes no
+          # model call (1114/1116: the bundled catalog owns question, choices and fallback).
+          - kind: decide
+            options:
+                id: task-triage
+                decision: task-triage
+                params:
+                    wbs: ${vars.wbs}
+                evidence:
+                    - .spur/run/${vars.wbs}-diffstat.json
+                    - ${vars.taskSpecPath}
+                resultFile: .spur/run/${vars.wbs}-triage.decision
+          # (d) project the decision and append the triage route reason (1007 R3: the
+          # non-empty mode file is never overridden; the append keeps the failure signal of the
+          # original pair). low → fast lane; anything else (standard/high, degraded default,
+          # missing row) stays empty → the standard review path.
+          - kind: shell
+            options:
+                command: >-
+                    MF=".spur/run/$wbs-mode.txt"; [ -s "$MF" ] || jq -r 'if .value == "low" then "fast" else empty end' ".spur/run/$wbs-triage.decision" 2>/dev/null > "$MF"; m="$(cat "$MF")"; RUN_ID="$__runId"; [ -n "$RUN_ID" ] || RUN_ID="pipeline-$wbs"; mkdir -p .spur/memory; printf '%s %s %s\n' "$RUN_ID" "$wbs" "$(jq -rn --arg m "$m" --arg c "$mode" 'if $c != "" then ($c + ":caller-set") else {"fast":"fast:triage low lane","safety":"safety:triage deterministic-high","":"safety:triage standard lane"}[$m] // "safety:triage unrecognized mode" end')" >> .spur/memory/task-pipeline-routes.log
+          # (d) review depth from the resolved lane (D65 1239 R2): the fast lane reviews the
+          # requirement/AC traceability only — that table is the certification input, so the
+          # cheap lane never drops the evidence, it drops the SECUA/architecture passes.
+          - kind: shell
+            options:
+                command: >-
+                    m="$(cat ".spur/run/$wbs-mode.txt" 2>/dev/null)"; if [ "$m" = fast ]; then printf 'functional\n' > ".spur/run/$wbs-review-focus.txt"; else printf 'all\n' > ".spur/run/$wbs-review-focus.txt"; fi; exit 0
+          # (d) the resolved lane becomes the `mode` var for the review-depth projection.
           - kind: file.read.into-var
             options:
-                path: .spur/run/${vars.wbs}-featurepath.txt
-                var: featureSpecPath
-          # R2 (0703, ADR-071): THE canonical proof capture. Placement is load-bearing: immediately before
-          # the final evidence chain, after every implement mutation (including the post-implement format).
-          # Capture-only here; `record` compares. A remediation pass re-captures at `test-recheck` (R4).
-          # 1135 R5: snapshot the non-corpus tree state FIRST, so a later proof mismatch names the
-          # drifted paths (not only the D1/D2 pair). Same exclusions as the digest's git-tree half.
+                path: .spur/run/${vars.wbs}-mode.txt
+                var: mode
+          - kind: file.read.into-var
+            options:
+                path: .spur/run/${vars.wbs}-review-focus.txt
+                var: reviewFocus
+          # D65 1239 R2 (mode by visit): the first gate visit of this run runs `run` — which
+          # resets the fix-attempt counter and consults the tree-hash receipt, so a tree that
+          # already passed is not re-gated (R11) — and every later visit after a remediation
+          # hop runs `recheck` (probe-then-full, same host-wide lock). The visit counter is
+          # run-scoped, so a stale attempt counter from an earlier run cannot start in recheck.
+          # Two shells: bump the visit counter, then select the mode from the bumped value
+          # (one concern each, ADR-115).
           - kind: shell
             options:
                 command: >-
-                    mkdir -p .spur/run; { git status --porcelain=v1 -uall -- . ':(exclude)docs/tasks*' ':(exclude)docs/features*'; git diff --name-only HEAD -- . ':(exclude)docs/tasks*' ':(exclude)docs/features*'; } > ".spur/run/$__runId-gate-paths.txt" 2>/dev/null; exit 0
-          - kind: proof.fingerprint
-            options:
-                var: proofDigest
-                taskFile: ${vars.taskSpecPath}
-                featureFile: ${vars.featureSpecPath}
-          # (d) `spur task gate` owns the gate; shell only picks the mode and fails closed
-          # (a non-0/1 exit — spur missing, usage error, crash — writes FAIL).
+                    mkdir -p .spur/run; V=".spur/run/$__runId-gate-visits"; n="$(cat "$V" 2>/dev/null || echo 0)"; printf '%s\n' "$n" > ".spur/run/$wbs-gate-visit.txt"; echo $((n + 1)) > "$V"; exit 0
           - kind: shell
             options:
                 command: >-
-                    M=run; [ "$deferQualityGate" = "true" ] && M=deferred; $spurBin task gate "$wbs" "$M" --no-logo; rc=$?; if [ "$rc" -gt 1 ]; then echo "quality gate failed closed — spur task gate exited $rc" >&2; printf 'FAIL\n' > ".spur/run/$wbs-test-gate.status"; fi; exit 0
+                    n="$(cat ".spur/run/$wbs-gate-visit.txt" 2>/dev/null)"; M=run; [ "$n" = 0 ] || M=recheck; [ "$deferQualityGate" = "true" ] && M=deferred; printf '%s\n' "$M" > ".spur/run/$wbs-gate-mode.txt"; exit 0
+          - kind: file.read.into-var
+            options:
+                path: .spur/run/${vars.wbs}-gate-mode.txt
+                var: gateMode
+          # (d) `spur task gate` owns the gate (tier, probe, host-wide lock, tree-hash
+          # receipt); the typed outcome owns the routing. `softFail` keeps a red or blocked
+          # gate a RECORDED outcome — the run never dies mid-gate, and guards read
+          # `.spur/run/<runId>-gate.status` (PASS | FAIL | BLOCKED). Exit 2 (usage, lock
+          # timeout) is BLOCKED, never a red gate. The receipt reuse short-circuit inside
+          # `run` is what makes a second visit on an unchanged tree free (R11).
+          - kind: command.gate
+            options:
+                id: quality-gate
+                executable: "${vars.spurBin}"
+                args: ["task", "gate", "${vars.wbs}", "${vars.gateMode}", "--no-logo"]
+                resultFile: .spur/run/${vars.__runId}-gate.status
+                softFail: true
+          # (d) failure class of the gate this visit produced (0943 R3): stop → failed
+          # before the cap can mislabel it, fix → the bounded remediation hop. A missing or
+          # corrupt row fails closed to failed-check. Runs unconditionally (no onEnter
+          # conditionals) and degrades to the catalog `fix` fallback with no model call while
+          # the decision switch is off — the green path ignores it.
+          - kind: decide
+            options:
+                id: failure-class
+                decision: failure-class
+                params:
+                    wbs: ${vars.wbs}
+                evidence:
+                    - .spur/run/${vars.wbs}-test-gate.findings
+                resultFile: .spur/run/${vars.wbs}-failure-class.decision
 
-    - id: test-fix
+    # ── remediate hop (bounded repair; former `test-fix`) ─────────────────────
+    - id: remediate
       display:
           phase: test
           phaseTitle: Test
           title: Fix failures
           show: on-entry
       description: >
-          Bounded auto-fix hop when the quality gate is red OR final verification returned a
-          repairable non-PASS (task 0703 R4: remediation never happens inside verify — it loops
-          through here, then re-enters quality → review → verify on a fresh digest). Increments
-          `.spur/run/<wbs>-test-fix-attempt` (the shared bound with the quality path), projects the
-          verify verdict into the gate log when one exists so the repair hop sees it, then pure
-          slash (ADR-043) `/sp:dev-fixall` against `${vars.qualityGateCmd}`.
+          Bounded auto-fix hop when the quality gate is red OR the review returned a repairable
+          non-PASS: increments `.spur/run/<wbs>-test-fix-attempt` (the shared bound, so a review
+          FAIL cannot buy extra attempts), projects the review verdict into the gate log when one
+          exists so the repair hop sees it, then pure slash (ADR-043) `/sp:dev-fixall` against
+          `${vars.qualityGateCmd}`. The next state is `gate`, whose visit-counter mode is
+          `recheck`, so the chain reruns gate → review on the remediated tree.
       onEnter:
           - kind: shell
             options:
                 command: >-
-                    TASK_POLICY=$($spurBin task show "$wbs" --json | jq -er '.frontmatter.mutationPolicy // ([.content | scan("(?m)^mutationPolicy:[ \t]*([^ \r\n]+)[ \t]*$") | .[0]] | if length == 0 then "code" elif length == 1 then .[0] else "ambiguous" end)') || exit 1; [ "$mutationPolicy:$TASK_POLICY" = "code:code" ] || { echo "test-fix: mutation policy forbids automatic code repair (run=$mutationPolicy, task=$TASK_POLICY) — gate failure preserved, no agent dispatched" >&2; exit 1; }
-          # (e) fixall attempt counter, verdict hand-off and residual artifact in one log
-          # append shell (1007 R3: the two appends merged — original commands in order, exit 0).
+                    TASK_POLICY=$($spurBin task show "$wbs" --json | jq -er '.frontmatter.mutationPolicy // ([.content | scan("(?m)^mutationPolicy:[ \t]*([^ \r\n]+)[ \t]*$") | .[0]] | if length == 0 then "code" elif length == 1 then .[0] else "ambiguous" end)') || exit 1; [ "$mutationPolicy:$TASK_POLICY" = "code:code" ] || { echo "remediate: mutation policy forbids automatic code repair (run=$mutationPolicy, task=$TASK_POLICY) — gate failure preserved, no agent dispatched" >&2; exit 1; }
+          # (e) attempt counter + residual artifact projection in one log append
+          # (1007 R3: the two appends merged — original commands in order, exit 0).
           # (d) F96 R3 (0950): dev-fixall treats residual items as fix targets and may defer
-          # P3/markers to residual-deferrals.json (see dev-fixall.md); fold already merged the
-          # anchors into <wbs>-test-gate.findings, this carries the structured artifact too.
+          # P3/markers to residual-deferrals.json; this carries the structured artifact too.
           - kind: shell
             options:
                 command: >-
-                    printf '%s\n' "$(( $(cat ".spur/run/$wbs-test-fix-attempt" 2>/dev/null || echo 0) + 1 ))" > ".spur/run/$wbs-test-fix-attempt"; [ -f ".spur/run/$wbs-verdict.json" ] && echo '--- verify verdict (remediation input, task 0703 R4) ---' >> ".spur/run/$wbs-test-gate.log" && cat ".spur/run/$wbs-verdict.json" >> ".spur/run/$wbs-test-gate.log"; [ -f ".spur/run/$wbs-residuals.json" ] && echo '--- residual artifact (F96 fix targets; deferrals go to residual-deferrals.json, P3/markers only) ---' >> ".spur/run/$wbs-test-gate.log" && cat ".spur/run/$wbs-residuals.json" >> ".spur/run/$wbs-test-gate.log"; exit 0
-          # Review-lane input (v5, task 1077 run): `review-fail-triage` routes a non-PASS review
-          # into this same bounded repair hop, but it stages no review evidence — the fixer then
-          # received a GREEN gate log and an empty findings list, so the review finding it exists
-          # to repair was invisible to it. Project the reviewer's answer into the same log the
-          # other lanes use, and only on the review lane (the decision file exists only after
-          # `review-fail-triage`). Own action, not an append to the one above: ADR-115's 800-char
-          # shell cap is already 602 chars there.
+                    printf '%s\n' "$(( $(cat ".spur/run/$wbs-test-fix-attempt" 2>/dev/null || echo 0) + 1 ))" > ".spur/run/$wbs-test-fix-attempt"; [ -f ".spur/run/$wbs-residuals.json" ] && echo '--- residual artifact (F96 fix targets; deferrals go to residual-deferrals.json, P3/markers only) ---' >> ".spur/run/$wbs-test-gate.log" && cat ".spur/run/$wbs-residuals.json" >> ".spur/run/$wbs-test-gate.log"; exit 0
+          # Review-lane input: the review failure class routes a non-PASS review into this same
+          # bounded repair hop, but it stages no gate evidence — the fixer would receive a GREEN
+          # gate log and an empty findings list. Project the reviewer's answer into the same log
+          # the other lane uses, and only on the review lane (the decision file exists only
+          # after a review FAIL). Own action, not an append to the one above (ADR-115 cap).
           - kind: shell
             options:
                 command: >-
@@ -542,17 +577,16 @@ states:
             options:
                 agent: ${vars.agent}
                 # R3 (0482): `--findings` names the failing anchors inline; `--gate-log` remains
+                # the full-context escape hatch.
                 # Declared Layer-1 role (0538 R2/0710 R7): routing reason; no executor pin — role routing feeds the distinctness gate.
                 role: coder
                 # B7 R3/R6 (0894): coder stages reuse the role session — the fix hop
                 # continues the implement session it is repairing.
                 session: reuse
-                # the full-context escape hatch when the digest is not enough.
                 input: /sp:dev-fixall "${vars.qualityGateCmd}" --gate-log .spur/run/${vars.wbs}-test-gate.log --findings "${vars.gateFindings}"
                 timeoutMs: ${vars.stepTimeoutMs}
                 # The captured remediation answer is the run's dispatch evidence (0823 R1):
-                # expectFile fails the step when no answer was captured. Quality stays with
-                # the review proof digest and the verify verdict.
+                # expectFile fails the step when no answer was captured.
                 answerFile: .spur/run/${vars.__runId}-test-fix-answer.txt
                 expectFile: .spur/run/${vars.__runId}-test-fix-answer.txt
                 # 0706 R6: bounded remediation hop — unattended and tree-mutating,
@@ -561,162 +595,30 @@ states:
                     fsWrite: available
                     processSpawn: available
 
-    - id: test-recheck
-      display:
-          phase: test
-          phaseTitle: Test
-          title: Re-run quality gate
-          show: on-entry
-      description: >
-          Soft recheck after fixall with bounded SQLite-lock retry. Writes PASS|FAIL (always exit 0). Transitions
-          branch to `triage` (PASS — the 0943 lane router), `test-fail-triage` (FAIL — the 0943
-          failure-class router), or the pipeline `failed` state (corrupt status) — never a
-          raw lifecycle abort that skips the terminal `failed` state.
-      onEnter:
-          # R4 (0703, ADR-071): bounded remediation mutated the tree by design, so the fresh evidence
-          # chain (recheck gate → review → verify) must start from a NEWLY captured digest. Capture-only;
-          # the guards and `record` compare against this value.
-          # 1135 R5: re-snapshot the tree state after the remediation, so the refresh does not compare
-          # against a pre-remediation snapshot (a legitimate test-fix edit must not read as drift).
-          - kind: shell
-            options:
-                command: >-
-                    mkdir -p .spur/run; { git status --porcelain=v1 -uall -- . ':(exclude)docs/tasks*' ':(exclude)docs/features*'; git diff --name-only HEAD -- . ':(exclude)docs/tasks*' ':(exclude)docs/features*'; } > ".spur/run/$__runId-gate-paths.txt" 2>/dev/null; exit 0
-          - kind: proof.fingerprint
-            options:
-                var: proofDigest
-                taskFile: ${vars.taskSpecPath}
-                featureFile: ${vars.featureSpecPath}
-          # 0587 R3: probe-then-full recheck. A red gateProbeCmd records FAIL and skips the full
-          # gate (the measured waste is re-running a 110–140s gate to learn the tree is still red);
-          # a green probe (or empty gateProbeCmd) falls through to the full-gate loop unchanged.
-          # Only the full gate writes PASS, so the `test-recheck → review` guard (reads PASS)
-          # still means a full green qualityGateCmd ran — invariant preserved by construction.
-          # (d) `spur task gate` owns the recheck; shell only picks the mode and fails closed
-          # (0587 R3 probe-then-full: a red gateProbeCmd is the recheck verdict, the full gate is skipped).
-          - kind: shell
-            options:
-                command: >-
-                    M=recheck; [ "$deferQualityGate" = "true" ] && M=deferred; $spurBin task gate "$wbs" "$M" --no-logo; rc=$?; if [ "$rc" -gt 1 ]; then echo "quality gate failed closed — spur task gate exited $rc" >&2; printf 'FAIL\n' > ".spur/run/$wbs-test-gate.status"; fi; exit 0
-
-    - id: triage
-      display:
-          phase: review
-          phaseTitle: Review
-          title: Choose review depth
-      description: >-
-          Deterministic lane router between a green gate and the review/verify fork (0943 R1).
-          Writes the diffstat evidence file, honors a caller-set `mode` (never overridden), pins
-          the safety lane on sensitive paths or >400 changed lines without a model call (R2c),
-          otherwise consults `decide task-triage` (low → fast lane; anything else stays empty →
-          standard review path), and appends the triage route reason to
-          .spur/memory/task-pipeline-routes.log (R5). The `decide` action itself runs
-          unconditionally (the engine has no onEnter conditionals); its result is consulted only
-          when neither a caller mode nor the deterministic guard resolved the lane. The resolved
-          lane lands in the `mode` var for the triage → verify/review guards.
-      onEnter:
-          # (a) diffstat producer: `spur task diffstat` owns git reading and sensitive-path
-          # classification; shell only fails closed on a non-zero exit (writes sensitive:true,
-          # which the pre-guard below maps to the safety lane).
-          - kind: shell
-            options:
-                command: >-
-                    $spurBin task diffstat "$wbs" --no-logo || { echo "task-diffstat failed closed — spur task diffstat exited $?" >&2; printf '{"files":0,"insertions":0,"deletions":0,"paths":[],"sensitive":true}\n' > ".spur/run/$wbs-diffstat.json"; }; exit 0
-          # (b)+(c) lane pre-guard BEFORE decide: a caller-set mode is projected verbatim (R2b);
-          # a sensitive path or >400 changed lines pins safety (R2c) and the decide result below
-          # is never consulted. A missing/malformed diffstat row (producer crashed or never ran,
-          # disk error) pins safety HERE: an empty mode file would let the low decide row project
-          # the fast lane downstream, so the "never to fast" fail-safe is enforced at the guard,
-          # not by the projection (the full-suite gate run exposed this fail-open path).
-          - kind: shell
-            options:
-                command: >-
-                    mkdir -p .spur/run; if [ -n "$mode" ]; then printf '%s\n' "$mode" > ".spur/run/$wbs-mode.txt"; exit 0; fi; DF=".spur/run/$wbs-diffstat.json"; if ! jq -e 'type == "object"' "$DF" >/dev/null 2>&1; then printf 'safety\n' > ".spur/run/$wbs-mode.txt"; exit 0; fi; jq -r 'if .sensitive == true or ((.insertions // 0) + (.deletions // 0)) > 400 then "safety" else empty end' "$DF" 2>/dev/null > ".spur/run/$wbs-mode.txt"; exit 0
-          # (d) lane decision — degrades to the standard default whenever workflows.decideDecisionMaker
-          # is off (R4), so with the flag off this state is pure shell: no model call is made.
-          # 1114: the inline decide moved to the bundled catalog (`config/decisions/task-pipeline.yaml`
-          # → `task-triage`), whose R0 samples measured this exact prompt before the migration.
-          # Routing contract is unchanged: same evidence, same resultFile, same guards, same
-          # `standard` fallback when the switch is off (field-identical to this form's default).
-          - kind: decide
-            options:
-                id: task-triage
-                decision: task-triage
-                params:
-                    wbs: ${vars.wbs}
-                evidence:
-                    - .spur/run/${vars.wbs}-diffstat.json
-                    - ${vars.taskSpecPath}
-                resultFile: .spur/run/${vars.wbs}-triage.decision
-          # (d) project the decision, then append the triage route reason (1007 R3: the
-          # mode-fallback shell merged into the memory-append shell — original commands in
-          # order, the non-empty mode file is still never overridden; the append keeps the
-          # failure signal of the original pair). low → fast lane; anything else (standard/high,
-          # degraded default, missing row) leaves the mode empty → standard review path.
-          - kind: shell
-            options:
-                command: >-
-                    MF=".spur/run/$wbs-mode.txt"; [ -s "$MF" ] || jq -r 'if .value == "low" then "fast" else empty end' ".spur/run/$wbs-triage.decision" 2>/dev/null > "$MF"; m="$(cat "$MF")"; RUN_ID="$__runId"; [ -n "$RUN_ID" ] || RUN_ID="pipeline-$wbs"; mkdir -p .spur/memory; printf '%s %s %s\n' "$RUN_ID" "$wbs" "$(jq -rn --arg m "$m" --arg c "$mode" 'if $c != "" then ($c + ":caller-set") else {"fast":"fast:triage low lane","safety":"safety:triage deterministic-high","":"safety:triage standard lane"}[$m] // "safety:triage unrecognized mode" end')" >> .spur/memory/task-pipeline-routes.log
-          # (d) the resolved lane becomes the `mode` var for the triage → verify/review guards.
-          - kind: file.read.into-var
-            options:
-                path: .spur/run/${vars.wbs}-mode.txt
-                var: mode
-
-    - id: test-fail-triage
-      display:
-          phase: test
-          phaseTitle: Test
-          title: Triage test failure
-          show: on-entry
-      description: >-
-          Deterministic failure-class router on a red gate (0943 R3). The engine has no onEnter
-          conditionals, so the FAIL branch from `test`/`test-recheck` lands here as its own
-          deterministic state (the sanctioned alternative), while the green branch goes to
-          `triage`. `decide failure-class` reads the bounded gate findings and routes: fix →
-          test-fix (the bounded repair hop; its default, recorded as `source: default` when no
-          backend decides — 0976 R2), stop → failed with terminalReason failed-check. A
-          missing/corrupt decision fails closed to failed-check. (0976 R2 collapsed the former
-          `retryable` lane: the declared default made it unreachable on the inline path.)
-      onEnter:
-          # 1115: catalog-reference decide (task 1094 form) — question/choices/fallback live in
-          # the bundled catalog (`config/decisions/task-pipeline.yaml` → `failure-class`), whose
-          # R0 samples measured this exact prompt before the migration. Routing contract is
-          # unchanged: same resultFile, same guards, same `fix` fallback when the switch is off.
-          - kind: decide
-            options:
-                id: failure-class
-                decision: failure-class
-                params:
-                    wbs: ${vars.wbs}
-                evidence:
-                    - .spur/run/${vars.wbs}-test-gate.findings
-                resultFile: .spur/run/${vars.wbs}-failure-class.decision
-
+    # ── review hop (certification: verdict + R/AC traceability + approval decision) ──
+    # D65 1239 R2: `verify` merged into `review`. The reviewer's answer must carry the
+    # requirement/AC traceability table (`| Req | Status | Evidence |`, evidence = `file:line`
+    # or a named test/command) — sp:functional-review produces it and the answer contract owns
+    # the shape. `spur task verdict --from-answer` lints that answer, derives PASS/PARTIAL/FAIL
+    # from the rows and writes the canonical `.spur/run/<wbs>-verdict.json` that `spur task
+    # record` consumes for box flips and `## Testing`; a review whose rows do not resolve (an
+    # UNMET requirement, a missing row, a bad AC identity) cannot derive PASS. The review-gate
+    # residual check (1122) still blocks an open P1-P3 finding. Everything is folded into one
+    # status token the transitions read, so a non-PASS review routes into the bounded repair
+    # hop BEFORE `done` spends the close.
     - id: review
       display:
           phase: review
           phaseTitle: Review
           title: Review changes
       description: >-
-          Three-dimensional code review via /sp:dev-review (functional requirements traceability +
-          SECUA framework (Security, Efficiency, Correctness, Usability, Architecture) +
-          architecture depth), findings written to `## Review`. Cost at this decision point (1122):
-          open P1-P3 review findings block `done` — the PASS edges below also run the review-gate
-          residual check, and a PASS carrying an open P1-P3 row routes to review-fail-triage
-          before verify. Fixing a finding invalidates the certified digest and re-runs
-          quality → review → verify on a fresh digest; only P4 rows and DEFER-ed P3 rows are wrap
-          residuals.
+          Three-dimensional code review via /sp:dev-review (functional requirements traceability
+          + SECUA framework + architecture depth), findings written to `## Review`, then
+          deterministic certification: `spur task verdict --from-answer` over the reviewer's
+          own traceability table, the review-gate residual check, and the operator/maker
+          approval decision point. Cost at this decision point (1122): open P1-P3 review
+          findings block `done`; only P4 rows and DEFER-ed P3 rows are wrap residuals.
       onEnter:
-          # 1135 R4: review joins the proof bracket. A pre-review compare refuses to spend a review
-          # dispatch on a state that has drifted from the certified digest; the mismatch routes
-          # through the existing tripwire to `failed` (no new re-certify path).
-          - kind: proof.fingerprint
-            options:
-                var: proofDigestNow
-                taskFile: ${vars.taskSpecPath}
-                featureFile: ${vars.featureSpecPath}
-                expect: ${vars.proofDigest}
           - kind: agent.run
             options:
                 # 0710 R2: review always runs on a fresh session — no implementation-session
@@ -726,10 +628,11 @@ states:
                 # through the executor registry, and the runner enforces (pre-dispatch,
                 # fail-closed) that a P0/P1 task's review resolves a DIFFERENT executor
                 # spec than the implement stage recorded in __agentRouting_implement.
-                input: /sp:dev-review --tasks ${vars.wbs} --auto
-                # The captured review answer is the run's dispatch evidence (0823 R1):
-                # expectFile fails the step when no answer was captured. Quality stays with
-                # the review proof digest and the verify verdict.
+                # 0943 R1/R2: `--focus` carries the resolved lane depth — `functional` for the
+                # fast lane (traceability, which is the certification input), `all` otherwise.
+                input: /sp:dev-review --tasks ${vars.wbs} --auto --focus ${vars.reviewFocus}
+                # The captured review answer is the run's certification input (and the
+                # `task verdict` input below): expectFile fails the step when no answer landed.
                 answerFile: .spur/run/${vars.__runId}-review-answer.txt
                 expectFile: .spur/run/${vars.__runId}-review-answer.txt
                 # Declared Layer-1 role (0538 R2/0710 R7): routing reason; no executor pin — role routing feeds the distinctness gate.
@@ -742,45 +645,33 @@ states:
                 priority: ${vars.taskPriority}
                 compareExecutorWith: implement
                 timeoutMs: ${vars.stepTimeoutMs}
-          # 0785 R4: the reviewer's completion evidence for THIS run — the current proof digest is
-          # written to a run-scoped marker by the review stage itself, not caller-stamped. The
-          # verify stamp marks review `completed` only when this marker equals the current digest;
-          # otherwise `skipped` (an honest downgrade, never a fake completed), and the bound
-          # `record` registration refuses a skipped review.
-          # Session finding after 1088: the review VERDICT is read straight out of the reviewer's
-          # own answer file by the review → * guards below, so this stage needs no extra artifact
-          # and no extra action (ADR-115 legibility cap).
+          # (d) `spur task verdict` owns the answer lint and the verdict derivation (task 1003
+          # R2): one complete requirement row per declared requirement, AC identities resolved,
+          # status/evidence vocabularies accepted, hedged or uncited evidence rejected. It
+          # writes `.spur/run/<wbs>-verdict.json` — the review verdict artifact `spur task
+          # record` consumes — and exits 1 on a non-PASS verdict BY DESIGN, which `softFail`
+          # records as the typed outcome the guards route. A lint failure (exit 1) is a failed
+          # certification, never a warning, and there is no grep fallback.
+          - kind: command.gate
+            options:
+                id: review-verdict
+                executable: "${vars.spurBin}"
+                args: ["task", "verdict", "${vars.wbs}", "--from-answer", ".spur/run/${vars.__runId}-review-answer.txt"]
+                resultFile: .spur/run/${vars.__runId}-review-verdict.status
+                softFail: true
+          # (e) one fold, one token: PASS requires the typed verdict PASS, the artifact's own
+          # PASS, and a clean review gate (open P1-P3 finding or an uncited claim blocks it).
+          # Fail-closed: any missing/corrupt input leaves FAIL, so the transitions can route a
+          # non-PASS review into remediation instead of dead-ending the run.
           - kind: shell
             options:
-                command: 'mkdir -p .spur/run; printf "%s" "$proofDigest" > ".spur/run/$__runId-review-proof.digest"; exit 0'
-
-    # ── review-fail-triage (session finding after 1088) ────────────────────────
-    # A review that reports FAIL used to have no outgoing edge: the graph could not see the
-    # verdict and nothing consumed it, so remediating a failing review meant driving the
-    # states by hand. This state is the review-side twin of `test-fail-triage` (0943 R3):
-    # the deterministic classifier routes the failure into the SAME bounded fix budget
-    # (`.spur/run/<wbs>-test-fix-attempt` against `qualityGateMaxFixAttempts`), and the fix
-    # re-enters quality → review → verify on a freshly captured digest. The `decide` action
-    # itself always runs (the engine has no onEnter conditionals); with
-    # `workflows.decideDecisionMaker` off it degrades to its declared default.
-    - id: review-fail-triage
-      display:
-          phase: review
-          phaseTitle: Review
-          title: Triage review findings
-          show: on-entry
-      description: >-
-          Deterministic router for a review that did NOT certify PASS (session finding after 1088).
-          `decide review-failure-class` reads the reviewer's answer and the task spec and routes:
-          fix → the shared test-fix hop, stop → failed with terminalReason failed-check. A
-          missing/corrupt decision fails closed to failed-check. Cost either way (1122): open
-          P1-P3 review findings block `done`; the fix lane re-enters quality → review → verify on a
-          fresh digest; only P4 rows and DEFER-ed P3 rows are wrap residuals.
-      onEnter:
-          # 1116: the inline decide moved to the bundled catalog (`config/decisions/task-pipeline.yaml`
-          # → `review-failure-class`), whose R0 samples measured this exact prompt before the
-          # migration. Routing contract is unchanged: same evidence, same resultFile, same guards,
-          # same `fix` fallback when the switch is off.
+                command: >-
+                    mkdir -p .spur/run; S=FAIL; if [ "$(cat ".spur/run/$__runId-review-verdict.status" 2>/dev/null)" = PASS ] && [ "$(jq -r '.verdict // empty' ".spur/run/$wbs-verdict.json" 2>/dev/null)" = PASS ] && $spurBin task residual "$wbs" review-gate --no-logo >&2; then S=PASS; fi; printf '%s\n' "$S" > ".spur/run/$wbs-review.status"; exit 0
+          # (d) review failure class (session finding after 1088): stop → failed before the cap
+          # can mislabel it, fix → the SAME bounded repair hop the red gate uses, so the
+          # iteration bound stays finite across both lanes. Degrades to the catalog `fix`
+          # fallback with no model call while the decision switch is off; a missing/corrupt row
+          # fails closed to failed-check.
           - kind: decide
             options:
                 id: review-failure-class
@@ -791,170 +682,68 @@ states:
                     - .spur/run/${vars.__runId}-review-answer.txt
                     - ${vars.taskSpecPath}
                 resultFile: .spur/run/${vars.wbs}-review-failure-class.decision
-
-    - id: approve
-      display:
-          phase: review
-          phaseTitle: Review
-          title: Operator approval
-          show: on-entry
-      description: >
-          Human-in-the-loop approval gate. Under `profile=auto` this state is never entered
-          (review routes around it straight to verify). In interactive mode this state pauses
-          the run for `spur workflow continue` (E3), making approval an explicit operator action.
-          The operator's answer is routed (R1, bug-750): yes -> verify; no -> failed (rejection
-          recorded, not silently approved); cancel -> cancelled (a distinct terminal state).
-      pause: true
-      onEnter:
+          # (d) Operator approval as a DECISION POINT, not a state (D65 1239 R1/R5, ADR-140
+          # item 5): interactively the operator responder answers; under `profile=auto` the
+          # declared binding answers (evidence status var, catalog fallback when the maker
+          # degrades), so `--auto` never prompts a human and can still deny. A `no`/`cancel`
+          # (or an unanswered interactive gate) routes to failed with terminalReason
+          # `cancelled` — a recorded denial, distinct from a gate or review failure. The trace
+          # records the answering source (operator / maker / catalog-fallback, 1236).
           - kind: hitl.confirm
             options:
-                prompt: "Approve task ${vars.wbs} to proceed to verification?"
+                prompt: "Approve task ${vars.wbs} to proceed to completion?"
                 decision:
-                    mode: never
-
-    - id: verify
-      display:
-          phase: verify
-          phaseTitle: "Verify & record"
-          title: Verify requirements and AC
-      description: >
-          Observe-only functional verification (BDD + traceability) via /sp:dev-verify --fix none
-          (task 0703 R1, ADR-071): the verifier certifies the state, it never repairs its own subject.
-          The answer-shape contract this stage enforces is OWNED BY the skill, not restated here
-          (task 1110 R3): see `plugins/sp/skills/code-verification/SKILL.md` § Answer-File Schema
-          Contract (`:340-375`), with the row-id/evidence vocabularies in
-          `plugins/sp/skills/code-verification/references/verdict-schema.md`. The YAML only names
-          the lint that consumes it (`task verdict --from-answer`).
-          A live digest compare BEFORE the agent refuses to certify a state that drifted after the
-          quality/review evidence was produced (R2). The agent's
-          captured answer is written to `.spur/run/<wbs>-verify-answer.txt` and MUST follow
-          the answer-file schema contract (explicit `Verdict: PASS|PARTIAL|FAIL` line plus
-          `| Req | Status | Evidence |` and `| AC | Status | Evidence Type | Evidence |` tables);
-          a deterministic shell step then derives the verdict and writes the gate artifact
-          `.spur/run/<wbs>-verdict.json` (so the completion gate reads a real verdict, not
-          agent discretion — R9) with a proof block naming the digest and the per-stage results (R3).
-          Repairable non-PASS routes once through the bounded remediation hop (verify → test-fix,
-          R4); the chain reruns on a fresh digest.
-      onEnter:
-          # R2 (0703): midpoint bracket compare — refuse to spend verification on a state that no
-          # longer matches the digest the quality/review evidence names. Reuses `proofDigestNow`:
-          # set here and re-set by the bound `run.artifact` registration at `record` entry (0785 R3).
-          - kind: proof.fingerprint
-            options:
-                var: proofDigestNow
-                taskFile: ${vars.taskSpecPath}
-                featureFile: ${vars.featureSpecPath}
-                expect: ${vars.proofDigest}
-          - kind: agent.run
-            options:
-                # 0710 R2: verify is a separate fresh-session execution — never the review
-                # session, never the implement session (R6).
-                # 0710 R4/R5: role-routed like review; P0/P1 demands a distinct executor.
-                # R1 (0703, ADR-071): `--fix none` — final verification is observe-only. Remediation
-                # belongs to the bounded test-fix hop, never to the certifying pass.
-                input: /sp:dev-verify ${vars.wbs} --auto --fix none --focus all
-                # Declared Layer-1 role (0538 R2/0710 R7): routing reason; no executor pin — role routing feeds the distinctness gate.
-                role: reviewer
-                # B7 R3/R6 (0894): declared fresh policy (reviewer default).
-                # `freshSession: true` kept as the action-level hard guarantee (0710 R2).
-                freshSession: true
-                session: fresh
-                priority: ${vars.taskPriority}
-                compareExecutorWith: implement
-                timeoutMs: ${vars.stepTimeoutMs}
-                expectFile: .spur/run/${vars.wbs}-verify-answer.txt
-          # (d) `spur task verdict` owns the answer lint (task 1003 R2) — the shell below
-          # fails closed when the verifier's answer is malformed, before any verdict artifact.
-          - kind: shell
-            # `task verdict` exits 1 on a non-PASS verdict by design (1003 R2). The `continue`
-            # policy keeps that exit code as recorded evidence (the action row is still `failed`)
-            # while letting the state finish its remaining actions and reach the guards below;
-            # without it the default 'fail' policy halts the run here and `verify → test-fix`
-            # (the declared bounded remediation lane) can never fire (v5, task 1077 run).
-            onError: continue
-            options:
-                command: "$spurBin task verdict $wbs --from-answer .spur/run/$wbs-verify-answer.txt"
-          # (e) one jq mutation binds the verdict to the proof digest (0703 R3; runId 0730 §B.2 /
-          # 0757 R4; definitionDigest 0759 R5; honest review stamp 0785 R4; soft action + hard guard).
+                    mode: evidence
+                    statusVar: approvalStatus
+                    evidenceNodes:
+                        - review
+          # (e) The denial is EVIDENCE, not just a variable: fold the answer into one recorded
+          # approval token the transitions read. `profile=auto` proceeds unless the maker said
+          # `no` (a deferred answer is not a denial — no maker means no objection under auto);
+          # interactively only an explicit `yes` approves. Fail-closed to DENIED.
           - kind: shell
             options:
                 command: >-
-                    V=".spur/run/$wbs-verdict.json"; [ -f "$V" ] && [ -n "$proofDigest" ] || exit 0; jq --arg d "$proofDigest" --arg r "$__runId" --arg dd "$__definitionDigest" --arg rp "$(cat .spur/run/$__runId-review-proof.digest 2>/dev/null)" --arg g "$(cat .spur/run/$wbs-test-gate.status 2>/dev/null || echo UNKNOWN)" '. + {proof: {digest: $d, runId: $r, definitionDigest: $dd, capturePoint: "quality-gate-entry", stages: {qualityGate: {status: $g, digest: $d}, review: {status: (if $rp == $d then "completed" else "skipped" end), digest: $d}, verification: {status: .verdict, digest: $d}}}} | .checks += [{name: "proof-input-digest", status: "pass", evidence: $d}]' "$V" > "$V.tmp" && mv "$V.tmp" "$V"; exit 0
+                    mkdir -p .spur/run; A=APPROVED; if [ "$profile" = auto ]; then [ "$__hitlAnswer" = no ] && A=DENIED; else [ "$__hitlAnswer" = yes ] || A=DENIED; fi; printf '%s\n' "$A" > ".spur/run/$wbs-approval.status"; exit 0
 
-    - id: record
-      display:
-          phase: verify
-          phaseTitle: "Verify & record"
-          title: Record evidence
+    - id: done
       description: >
-          Record pipeline results into the task file via `spur task record` —
-          Testing/Review from the verdict, Solution backfilled from git diff as a
-          safety net, optional transition to testing. Entry is gated by the bound
-          `run.artifact` registration (0785 R3): the verify verdict is ledger-registered
-          against a freshly captured proof digest — including review-completion marker
-          evidence (0785 R4) — before any task record or status mutation. Post-record step
-          conditionally syncs feature status via `spur feature sync`
-          (task 0411 retry-suppression) if `feature_id` is present, or appends an orphan
-          link proposal to the run report if absent (task 0328 / ADR-0322). The post-record
-          residual sweep (0983) re-scans the task file after the verdict-proven box flips and
-          folds blocking leftovers into the verdict before `record → done`; a downgrade
-          re-records Testing from the final artifact so a failed task never keeps a stale
-          PASS narrative.
+          Terminal — the task is closed deterministically. onEnter performs the close the
+          former `record` state owned: `spur task record` writes Testing/Review from the review
+          verdict and flips the requirement/AC boxes it proves, the residual sweep folds any
+          leftover, and `spur task update <wbs> done --no-lifecycle` runs the verb's own
+          target-aware `task check` as the completion gate — a task whose boxes or evidence do
+          not certify cannot reach the stored `done` status.
       onEnter:
-          # 0785 R3: BOUND verify-verdict registration — FIRST action, before any task record or
-          # status mutation, replacing the redundant proof.fingerprint compare (the action itself
-          # freshly re-captures the proof inputs via its processExecutor seam). The action refuses
-          # — before the ledger write AND before `task record` — unless: the run's declared digest
-          # equals a fresh capture over the canonical task spec (+ linked feature when linked);
-          # the verdict artifact is canonical-valid PASS for this wbs; its raw proof block names
-          # the fresh digest, the certifying run id, and the run row's resume/definition digest;
-          # qualityGate and verification stages are PASS with that digest; review is completed and
-          # independently evidenced by the run-scoped marker `<runId>-review-proof.digest`
-          # (0785 R4). Task-spec evidence writes (Testing/Review/Solution, R6) happen only in the
-          # actions AFTER this registration, and the fingerprint scopes task content to the
-          # proof-input sections, so they cannot invalidate the certified input set.
-          - kind: run.artifact
-            options:
-                path: .spur/run/${vars.wbs}-verdict.json
-                artifactKind: verify-verdict
-                proofBinding: current
-                taskFile: ${vars.taskSpecPath}
-                featureFile: ${vars.featureSpecPath}
-          # (c) command.gate owns the record write with classified transient retry.
+          # (c) command.gate owns the record write with classified transient retry. 0980:
+          # --no-lifecycle mirrors the wip/done hops — the pipeline run is already the lifecycle
+          # record, so a record-stage transition must not spawn a nested task-lifecycle run.
           - kind: command.gate
             options:
-                id: task-record-transition
+                id: task-record-close
                 executable: "${vars.spurBin}"
-                # 0980: --no-lifecycle mirrors the wip/done hops — the pipeline run is
-                # already the lifecycle record, so a record-stage transition must not
-                # spawn a nested task-lifecycle run that outlives the pipeline as a
-                # `running` orphan. The target-aware check gate still runs (inline).
                 args: ["task", "record", "${vars.wbs}", "--solution-from-diff", "--transition", "testing", "--no-lifecycle"]
                 retry:
                     maxAttempts: 2
                     delayMs: 2000
                     on: ["sqlite-busy", "ENOENT", "EBUSY", "ENOTEMPTY"]
-                resultFile: .spur/run/${vars.__runId}-record-transition.status
+                resultFile: .spur/run/${vars.__runId}-record.status
                 softFail: false
                 timeoutMs: 120000
-          # (d) Best-effort `exit 0` — feature status sync is a follow-up, not a completion gate;
-          # `record → done` runs `spur task check`. 0931 R5: with deferFeatureSync "true" (parallel
-          # mode) the deferral note lands in the task report and the sync is skipped entirely, so
-          # task branches never touch feature corpus files; the batch orchestrator performs the
-          # deferred sync on the base ref. 1004 R4: the sync is a bare `feature sync` — repeated-
-          # BLOCKED suppression (0411) now lives in the feature sync service itself, so the shell
-          # resolves feature_id via jq and delegates without a helper script.
+          # (d) Best-effort `exit 0` — feature status sync is a follow-up, not a completion gate.
+          # 0931 R5: with deferFeatureSync "true" (parallel mode) the deferral note lands in the
+          # task report and the sync is skipped entirely, so task branches never touch feature
+          # corpus files. 1004 R4: the sync is a bare `feature sync` — repeated-BLOCKED
+          # suppression (0411) lives in the feature sync service itself.
           - kind: shell
             options:
                 command: >-
                     if [ "$deferFeatureSync" = "true" ]; then echo "feature sync deferred to batch integration" >> ".spur/run/$wbs-report.txt"; else FID="$($spurBin task show $wbs --json 2>/dev/null | jq -r '(.feature_id // .frontmatter.feature_id) // empty' 2>/dev/null)"; if [ -n "$FID" ]; then $spurBin feature sync "$FID" --json || echo "feature sync failed — re-run: $spurBin feature sync $FID" >> ".spur/run/$wbs-report.txt"; else echo "Orphan task $wbs — no feature_id linked — proposal: consider linking to a parent feature." >> ".spur/run/$wbs-report.txt"; fi; fi; exit 0
           # (d) F96 (0983): `spur task residual` owns the sweep; shell only sequences it. The
-          # scan moved here from verify: it must read the task file AFTER `task record`
-          # flipped the verdict-proven Requirement/AC boxes (0692), or a proven-but-unticked
-          # box folds every good run to PARTIAL and the done guard is unreachable (0967).
-          # Classification unchanged: any box still unchecked post-record (unproven R/AC,
-          # unfinished Plan) stays blocking and fails the record → done guard closed.
-          # ONE hard action (scan+fold): a scanner crash fails record closed.
+          # scan runs AFTER `task record` flipped the verdict-proven boxes, or a proven-but-
+          # unticked box folds every good run to PARTIAL and the done gate is unreachable
+          # (0967). Any box still unchecked post-record stays blocking.
+          # ONE hard action (scan+fold): a scanner crash fails the close closed.
           - kind: shell
             options:
                 command: >-
@@ -962,22 +751,19 @@ states:
           # (e) F96 R5 (0983): a sweep downgrade must reach the task record — re-record from
           # the FINAL (post-fold) artifact so Testing carries the downgraded verdict; a failed
           # task must not retain a stale PASS Testing narrative. Soft (exit 0): the downgrade
-          # itself already fails the record → done guard; a re-record failure prints its
-          # re-run command and the failed state renders the recovery report.
-          # 0980: --no-lifecycle for the same orphan reason as the main record command —
-          # inert today (the task is already at testing, so this is a same-status no-op),
-          # but it keeps the no-nested-lifecycle invariant if the flow shifts.
+          # itself fails the re-assert below.
+          # 0980: --no-lifecycle for the same orphan reason as the main record command.
           - kind: shell
             options:
                 command: >-
                     verdict="$(jq -r .verdict .spur/run/$wbs-verdict.json 2>/dev/null)"; if [ -n "$verdict" ] && [ "$verdict" != PASS ]; then $spurBin task record $wbs --solution-from-diff --transition testing --no-lifecycle || echo "post-downgrade re-record failed — re-run: $spurBin task record $wbs" >&2; fi; exit 0
-
-    - id: done
-      description: >
-          Terminal — task executed, verified, and recorded. The `record → done`
-          guard runs `spur task check` before certifying; a genuinely non-compliant
-          task routes to `failed` instead of a silent bad `done`.
-      onEnter:
+          # (e) The completion contract, re-asserted after the sweep: a post-record residual
+          # downgrade must block the close (hard action, no `; exit 0`). The verdict artifact is
+          # the review's own evidence, not a re-captured digest — the old proof re-assertion is
+          # gone, the fail-closed check on the verdict it certifies is not.
+          - kind: shell
+            options:
+                command: 'jq -e ".verdict == \"PASS\"" .spur/run/$wbs-verdict.json >/dev/null'
           # (d) F96 R4 (0950): `spur task residual` owns the settle.
           # Soft best-effort (exit 0) — runs after certification and must never change
           # the outcome; failure prints the re-run command.
@@ -985,7 +771,9 @@ states:
             options:
                 command: >-
                     $spurBin task residual "$wbs" settle --no-logo || echo "residual-settle failed — re-run: spur task residual $wbs settle" >&2; exit 0
-          # (c) command.gate owns the done transition with classified transient retry.
+          # (c) command.gate owns the done transition with classified transient retry. The verb
+          # runs its own target-aware `task check --as done` (the completion gate) before the
+          # status write, so a task that does not certify a `done` target never stores `done`.
           - kind: command.gate
             options:
                 id: task-done-transition
@@ -999,18 +787,19 @@ states:
                 softFail: false
                 timeoutMs: 120000
           # (e) advisory terminal checkpoint, one printf (0711 R1–R3; binding corrected 0784 R4).
-          # 1007 R3: the former done note ("Pipeline complete ...") is dropped — the checkpoint
-          # below is the terminal record.
+          # The `digest` field now carries the gate receipt's tree hash — the run's evidence
+          # identity since D65 1239 — instead of the retired proof digest (empty when no receipt
+          # bound a tree, which the contract treats as "not reported").
           - kind: shell
             options:
                 command: >-
-                    mkdir -p .spur/memory/sessions; CP_TS="$(date -u +%Y-%m-%dT%H:%M:%SZ)"; CP_COMMIT="$(git rev-parse HEAD 2>/dev/null || echo unknown)"; printf '%s\n' '---' 'schema_version: 1' "session_id: $(date -u +%Y-%m-%d)-$wbs" 'workflow: task-pipeline' "run_id: $__runId" "task_wbs: $wbs" 'feature_id: ""' 'phase: done' 'status: done' 'last_gate: record' "source_commit: $CP_COMMIT" "digest: $proofDigest" "generated_at: $CP_TS" "updated_at: $CP_TS" "next_action: none - task $wbs complete (terminal; advisory only)" 'artifacts:' "  - .spur/run/$wbs-verdict.json" "  - .spur/run/$wbs-test-gate.log" '---' '' '## Session Notes' '' "Terminal checkpoint for task $wbs (task-pipeline done)." 'Advisory only; the task file is authoritative.' > .spur/memory/sessions/$wbs-checkpoint.md; exit 0
+                    mkdir -p .spur/memory/sessions; CP_TS="$(date -u +%Y-%m-%dT%H:%M:%SZ)"; CP_COMMIT="$(git rev-parse HEAD 2>/dev/null || echo unknown)"; CP_TREE="$(jq -r .inputDigest ".spur/run/$wbs-check-receipt.json" 2>/dev/null)"; printf '%s\n' '---' 'schema_version: 1' "session_id: $(date -u +%Y-%m-%d)-$wbs" 'workflow: task-pipeline' "run_id: $__runId" "task_wbs: $wbs" 'feature_id: ""' 'phase: done' 'status: done' 'last_gate: gate' "source_commit: $CP_COMMIT" "digest: $CP_TREE" "generated_at: $CP_TS" "updated_at: $CP_TS" "next_action: none - task $wbs complete" 'artifacts:' "  - .spur/run/$wbs-verdict.json" "  - .spur/run/$wbs-check-receipt.json" '---' '' '## Session Notes' '' "Terminal checkpoint for task $wbs (task-pipeline done)." 'Advisory only.' > .spur/memory/sessions/$wbs-checkpoint.md; exit 0
 
     - id: failed
       description: >
-          Terminal — precheck, quality-gate exhaustion, verify non-PASS, record check
-          failure, or operator rejection; reported, not advanced. Also receives an
-          escalation-bound pause or an operator give-up (0933).
+          Terminal — precheck, quality-gate exhaustion, a review that did not certify, a
+          completion check failure, operator rejection/cancel at the approval decision point,
+          or an escalation give-up; reported, not advanced.
       onEnter:
           # 0933 R30 (guard-lines compression): the escalation-bound report note lives
           # here as a conditional — no-op unless the run reached failed with a pending
@@ -1031,9 +820,6 @@ states:
             options:
                 command: >-
                     $spurBin task residual "$wbs" report --no-logo || echo "residual-report failed — re-run: spur task residual $wbs report" >&2; exit 0
-
-    - id: cancelled
-      description: Terminal — pipeline cancelled by operator at the approval gate (R1).
 
 transitions:
     # ── precheck: task check --precheck (size + evidence + four-layer, 1002 R4) → implement; ──
@@ -1062,7 +848,7 @@ transitions:
     # attempt that already exhausted its maxEscalations asks routes to failed (with a
     # report note appended in the same guard) instead of asking forever; then the
     # question-presence hop; then the normal always edge. The bound guard requires a
-    # fresh question file so a COMPLETED implement after max asks still routes to test.
+    # fresh question file so a COMPLETED implement after max asks still routes to gate.
     - from: implement
       to: failed
       terminalReason: retry-exhausted
@@ -1077,15 +863,15 @@ transitions:
                   test "$n" -ge "$maxEscalations" -a -s .spur/run/$wbs-question.md
     - from: implement
       to: escalate
-      description: Implement agent paused on an operator question (non-empty question file) — pause for an answer.
+      description: Implement agent paused on an operator question (non-empty question file) — ask for an answer.
       guard:
           kind: shell
           options:
               command: 'test -s .spur/run/$wbs-question.md'
     # ── linear body ──
     - from: implement
-      to: test
-      description: Implementation done — quality-gate probe.
+      to: gate
+      description: Implementation done — run the typed quality gate.
       guard:
           kind: always
     # escalate branching (0933 R27): an answered pause resumes implement — the transcript
@@ -1107,91 +893,46 @@ transitions:
           kind: shell
           options:
               command: 'test -z "$__hitlInput"'
-    # Soft probe branching (declaration order: PASS → triage, FAIL → test-fail-triage, defense).
-    # 0943 R1/R3: the four former gate-PASS edges (test/test-recheck → verify/review, split on
-    # `$mode`) are replaced by the deterministic `triage` lane producer; a red gate lands in
-    # `test-fail-triage` where `decide failure-class` routes the failure instead of a static fixall.
-    - from: test
-      to: triage
-      description: Quality gate green — route the lane deterministically (triage, 0943 R1).
+
+    # ── gate routing (0943 R1/R3 collapsed into one state, D65 1239 R2) ──
+    # Declaration order is the routing contract. PASS first (the green path), then a BLOCKED
+    # typed outcome (the gate could not decide — never read as red), then the failure class:
+    # stop before the cap (never mislabeled), the shared attempt cap, the fix lane, and the
+    # fail-closed defense so a missing/corrupt status or decision always terminates.
+    - from: gate
+      to: review
+      description: Quality gate green — the typed outcome is PASS and the gate wrote its own full-tier PASS token.
+      guard:
+          kind: shell
+          options:
+              # Two predicates over two result files (ADR-115): the typed `command.gate` outcome
+              # says the step ran and succeeded, and the gate's own token says the FULL tier wrote
+              # PASS (only the full tier writes PASS, ADR-124). A stale status file cannot ride a
+              # blocked or crashed visit into review because the typed outcome must be PASS too.
+              command: >-
+                  test "$(cat ".spur/run/$__runId-gate.status" 2>/dev/null)" = PASS &&
+                  test "$(cat ".spur/run/$wbs-test-gate.status" 2>/dev/null)" = PASS
+    - from: gate
+      to: review
+      description: Opt-in batch policy — the typed outcome is PASS and the gate wrote the DEFERRED (light-tier) token.
       guard:
           kind: shell
           options:
               # 1111 R2: `DEFERRED` is accepted ONLY when the opt-in var is "true" — with the
               # default "false" a stray DEFERRED file fails the guard exactly like a corrupt one.
               command: >-
-                  gate_status="$(cat .spur/run/$wbs-test-gate.status 2>/dev/null)";
-                  test "$gate_status" = PASS || { test "$gate_status" = DEFERRED && test "$deferQualityGate" = "true"; }
-    - from: test
-      to: test-fail-triage
-      description: Quality gate red — classify the failure before the repair hop (0943 R3).
-      guard:
-          kind: shell
-          options:
-              command: 'test "$(cat .spur/run/$wbs-test-gate.status 2>/dev/null)" = FAIL'
-    # 0943 review P3#2: the former `test → test-fix` FAIL edge is removed — it was dead (the
-    # identical guard on test → test-fail-triage fires first) and a silent spec-bypass trap:
-    # restoring it would skip failure-class on every red gate. The always-defense below keeps
-    # pre-0943 corrupt-status behavior (fixall then recheck).
-    - from: test
-      to: test-fix
-      description: Probe status missing/corrupt — attempt fixall then recheck.
-      guard:
-          kind: always
-    - from: test-fix
-      to: test-recheck
-      description: Fixall finished — soft recheck the same quality gate.
-      guard:
-          kind: always
-    # Recheck branching (PASS → triage; red → test-fail-triage; defense). The two former
-    # static FAIL edges (under-max → test-fix, exhausted → failed retry-exhausted) moved into
-    # test-fail-triage's decision routing (0943 R3).
-    - from: test-recheck
-      to: triage
-      description: Quality gate green after fixall — route the lane deterministically (triage, 0943 R1).
-      guard:
-          kind: shell
-          options:
-              # 1111 R2: same var-gated acceptance of the deferred token as `test → triage`.
-              command: >-
-                  gate_status="$(cat .spur/run/$wbs-test-gate.status 2>/dev/null)";
-                  test "$gate_status" = PASS || { test "$gate_status" = DEFERRED && test "$deferQualityGate" = "true"; }
-    - from: test-recheck
-      to: test-fail-triage
-      description: Still red after fixall — classify the failure (0943 R3).
-      guard:
-          kind: shell
-          options:
-              command: >-
-                  gate_status="$(cat .spur/run/$wbs-test-gate.status 2>/dev/null)";
-                  test "$gate_status" = FAIL
-    # Defense: corrupt recheck status — failed, not review.
-    - from: test-recheck
+                  test "$deferQualityGate" = "true" &&
+                  test "$(cat ".spur/run/$__runId-gate.status" 2>/dev/null)" = PASS &&
+                  test "$(cat ".spur/run/$wbs-test-gate.status" 2>/dev/null)" = DEFERRED
+    - from: gate
       to: failed
       terminalReason: failed-check
-      description: Recheck status missing/corrupt — stop at failed.
-      guard:
-          kind: always
-    # ── triage routing (0943 R1/R2): the lane producer replaced the four gate-PASS edges.
-    # mode=fast → verify; anything else (standard/high, deterministic-high, degraded default,
-    # caller-set non-fast) → review. Together the two guards are exhaustive, so triage never hangs.
-    - from: triage
-      to: verify
-      description: Triage resolved the fast lane (caller-set fast or task-triage low) — skip review.
+      description: The gate could not decide (BLOCKED — usage error, lock timeout, killed process) — stop instead of reading it as red.
       guard:
           kind: shell
           options:
-              command: 'test "$mode" = fast'
-    - from: triage
-      to: review
-      description: Triage resolved a review lane (standard/high, deterministic-high, or caller-set) — review.
-      guard:
-          kind: shell
-          options:
-              command: 'test "$mode" != fast'
-    # ── failure-class routing (0943 R3): stop first (never mislabeled by the cap), then the
-    # attempt cap, then the fix lane, then the fail-closed defense. Declaration order matters.
-    - from: test-fail-triage
+              command: 'test "$(cat ".spur/run/$__runId-gate.status" 2>/dev/null)" = BLOCKED'
+    - from: gate
       to: failed
       terminalReason: failed-check
       description: Failure class stop — the run terminates at failed, never bypassed.
@@ -1200,37 +941,62 @@ transitions:
           options:
               command: >-
                   jq -e '.value == "stop"' ".spur/run/$wbs-failure-class.decision" >/dev/null 2>&1
-    - from: test-fail-triage
+    - from: gate
       to: failed
       terminalReason: retry-exhausted
-      description: Attempt cap reached — qualityGateMaxFixAttempts bounds the fix lane.
-      # (warn) 5 commands: named fix attempts (legibility, 0874).
+      description: Attempt cap reached — qualityGateMaxFixAttempts bounds the remediation lane.
       guard:
           kind: shell
           options:
               command: >-
                   fix_attempts="$(cat .spur/run/$wbs-test-fix-attempt 2>/dev/null || echo 0)";
                   test "$fix_attempts" -ge "$qualityGateMaxFixAttempts"
-    - from: test-fail-triage
-      to: test-fix
-      description: Failure class fix and under the cap — the bounded repair hop, as before.
+    - from: gate
+      to: remediate
+      description: Failure class fix and under the cap — the bounded repair hop, then a recheck visit of this same gate.
       guard:
           kind: shell
           options:
               command: >-
                   jq -e '.value == "fix"' ".spur/run/$wbs-failure-class.decision" >/dev/null 2>&1
-    # Defense: missing/corrupt failure-class decision — fail closed instead of silently repairing.
-    - from: test-fail-triage
+    # Defense: missing/corrupt gate status or failure-class decision — fail closed.
+    - from: gate
       to: failed
       terminalReason: failed-check
-      description: Failure-class decision missing/corrupt — stop at failed.
+      description: Gate status or failure-class decision missing/corrupt — stop at failed.
       guard:
           kind: always
-    # ── review-failure routing (session finding after 1088): the review-side twin of the
-    # failure-class router above — stop first, then the shared attempt cap, then the fix lane,
-    # then the fail-closed defense. The counter is the SAME one the quality-gate loop uses, so a
-    # review FAIL cannot buy extra attempts and the iteration bound stays finite.
-    - from: review-fail-triage
+    - from: remediate
+      to: gate
+      description: Repair finished — re-enter the gate, whose visit counter selects the recheck mode.
+      guard:
+          kind: always
+
+    # ── review routing (D65 1239 R2/R3): certification, approval, bounded repair ──
+    # Declaration order is the contract. `done` demands the certified review status AND the
+    # approval answer: under `profile=auto` a recorded maker denial (`__hitlAnswer = no`) blocks
+    # it, while a deferred answer (no maker configured) is not a denial — `--auto` runs do not
+    # gain a human gate they never had. Interactively only an explicit yes certifies.
+    - from: review
+      to: done
+      description: Review certified PASS (verdict + traceability + clean review gate) and the approval decision point approved — close the task.
+      guard:
+          kind: shell
+          options:
+              # Two recorded tokens, two predicates (ADR-115): the certification status and the
+              # approval status the decision point folded. Nothing is inferred from variables.
+              command: >-
+                  test "$(cat ".spur/run/$wbs-review.status" 2>/dev/null)" = PASS &&
+                  test "$(cat ".spur/run/$wbs-approval.status" 2>/dev/null)" = APPROVED
+    - from: review
+      to: failed
+      terminalReason: cancelled
+      description: The approval decision point denied (no/cancel interactively, a maker denial under auto, or no operator answer) — a recorded denial, not a check failure.
+      guard:
+          kind: shell
+          options:
+              command: 'test "$(cat ".spur/run/$wbs-approval.status" 2>/dev/null)" = DENIED'
+    - from: review
       to: failed
       terminalReason: failed-check
       description: Review failure class stop — the run terminates at failed, never bypassed.
@@ -1239,183 +1005,29 @@ transitions:
           options:
               command: >-
                   jq -e '.value == "stop"' ".spur/run/$wbs-review-failure-class.decision" >/dev/null 2>&1
-    - from: review-fail-triage
+    - from: review
       to: failed
       terminalReason: retry-exhausted
-      description: Attempt cap reached — qualityGateMaxFixAttempts bounds the review repair lane.
+      description: Attempt cap reached — the shared counter bounds the review repair lane too.
       guard:
           kind: shell
           options:
               command: >-
                   fix_attempts="$(cat .spur/run/$wbs-test-fix-attempt 2>/dev/null || echo 0)";
                   test "$fix_attempts" -ge "$qualityGateMaxFixAttempts"
-    - from: review-fail-triage
-      to: test-fix
-      description: Review failure class fix and under the cap — the shared bounded repair hop.
+    - from: review
+      to: remediate
+      description: Review failure class fix and under the cap — the shared bounded repair hop, then gate → review on the remediated tree.
       guard:
           kind: shell
           options:
               command: >-
                   jq -e '.value == "fix"' ".spur/run/$wbs-review-failure-class.decision" >/dev/null 2>&1
-    # Defense: missing/corrupt review-failure decision — fail closed instead of silently repairing.
-    - from: review-fail-triage
+    # Defense: a review that did not certify and no clearer route — fail closed instead of
+    # dead-ending the run (a FAIL, PARTIAL, missing or unparseable certification lands here).
+    - from: review
       to: failed
       terminalReason: failed-check
-      description: Review-failure decision missing/corrupt — stop at failed.
-      guard:
-          kind: always
-    # ── review routing: FAIL → bounded remediation; PASS → approve or the auto-skip (R4) ──
-    # Declaration order matters and is FAIL-CLOSED: the two PASS edges each demand the reviewer's
-    # own `Verdict: PASS` line AND a passing review-gate residual check (1122 R3) — the SAME
-    # parse/classify/deferrals the record sweep enforces, resolved through the same source-repo /
-    # installed scanner pair as the record step; a missing scanner fails closed into the catch-all.
-    # EVERYTHING ELSE — FAIL, a missing or unparseable answer, or a PASS carrying an open P1-P3
-    # review finding (record would terminally fail it after a full verify + record) — enters
-    # `review-fail-triage` and its bounded repair hop BEFORE verify spends the cycle, then
-    # re-enters quality → review → verify on a fresh digest. Before 1088 a FAIL review had no
-    # outgoing edge at all; before 1122 a PASS-with-findings cost a full re-certification cycle per
-    # attempt (knowledge-kit 0210/0213). The reviewer writes `Verdict: PASS|FAIL` in its answer;
-    # both plain and bold forms are accepted. (F511: the v4-era PASS confidence grading — the
-    # reviewer's self-stated HIGH/MEDIUM/LOW level and its `ackLowConfidence` escape hatch — was
-    # retired; a PASS with no open P1-P3 finding is what the gate reads.) Review stays advisory:
-    # verify certifies.
-    # Under `profile=auto` the approve gate is skipped, so the PASS+auto edge is tried first and the
-    # interactive PASS edge second.
-    - from: review
-      to: verify
-      description: profile=auto, the review certified a PASS with no open P1-P3 finding — skip the human approval gate.
-      guard:
-          kind: shell
-          options:
-              command: >-
-                  test "$profile" = auto &&
-                  grep -qiE '^[[:space:]]*\**Verdict:\** *PASS' ".spur/run/$__runId-review-answer.txt" &&
-                  $spurBin task residual "$wbs" review-gate --no-logo >&2
-    - from: review
-      to: approve
-      description: Review certified a PASS with no open P1-P3 finding — gate on human approval before verification.
-      guard:
-          kind: shell
-          options:
-              command: >-
-                  grep -qiE '^[[:space:]]*\**Verdict:\** *PASS' ".spur/run/$__runId-review-answer.txt" &&
-                  $spurBin task residual "$wbs" review-gate --no-logo >&2
-    - from: review
-      to: review-fail-triage
-      description: >-
-          No certified PASS without an open P1-P3 finding (FAIL, PARTIAL, missing, unparseable, or
-          a PASS whose review-gate check found an open P1-P3 row; fail closed) —
-          classify the failure and route it into the bounded repair hop instead of dead-ending the run.
-      guard:
-          kind: always
-
-    # ── approve: HITL gate (reached only when profile != auto). Routed by the
-    # operator's captured answer (R1, bug-750) — three ordered guards, declaration
-    # order matters (yes first, then no, then cancel), mirroring idea-pipeline's
-    # design-approval gate (.spur/workflows/idea-pipeline.yaml:352-366). No
-    # `always` edge remains out of `approve`. ──
-    - from: approve
-      to: verify
-      description: Approved — proceed to verification.
-      guard:
-          kind: shell
-          options:
-              command: 'test "$__hitlAnswer" = yes'
-    - from: approve
-      to: failed
-      terminalReason: cancelled
-      description: Operator rejected at the approval gate — report and stop.
-      guard:
-          kind: shell
-          options:
-              command: 'test "$__hitlAnswer" = no'
-    - from: approve
-      to: cancelled
-      terminalReason: cancelled
-      description: Operator cancelled at the approval gate.
-      guard:
-          kind: shell
-          options:
-              command: 'test "$__hitlAnswer" = cancel'
-
-    # ── completion gate (the YAML-native replacement for rd3's default-on --postflight-verify) ──
-    # The verify step emits .spur/run/<wbs>-verdict.json with a required proof block (task 0703 R3/R5).
-    # Only `verdict: PASS` PLUS a proof block whose digest — top level and every named stage — equals
-    # the captured `proofDigest` clears the gate to `record`; any non-PASS, a missing file, malformed
-    # JSON, or missing/mismatched proof evidence does not. (F511: the v4-era LOW/absent-confidence
-    # clause and its `ackLowConfidence` escape hatch were retired.) Declaration order: PASS+proof
-    # guard FIRST, then the bounded remediation route (R4), then the always catch-all so a PASS
-    # verdict with a missing/malformed proof block still terminates at `failed` instead of hanging
-    # the state.
-    - from: verify
-      to: record
-      description: Verification verdict is PASS and its proof block names the captured digest on every stage — record results and proceed to done.
-      guard:
-          # (one jq -e predicate) PASS verdict; proof, quality-gate, review and verification digests
-          # equal to proofDigest; review completed; matching run id and definition digest (0703 R5, 0785 R4).
-          kind: shell
-          options:
-              command: >-
-                  jq -e --arg d "$proofDigest" --arg r "$__runId" --arg dd "$__definitionDigest" '
-                  .verdict == "PASS"
-                  and (.proof.digest // "") == $d
-                  and (.proof.stages.qualityGate.digest // "") == $d
-                  and (.proof.stages.review.digest // "") == $d
-                  and (.proof.stages.review.status // "") == "completed"
-                  and (.proof.stages.verification.digest // "") == $d
-                  and (.proof.runId // "") == $r
-                  and (.proof.definitionDigest // "") == $dd
-                  ' ".spur/run/$wbs-verdict.json" >/dev/null 2>&1
-    - from: verify
-      to: test-fix
-      description: >-
-          Verification returned a repairable non-PASS and the shared fix budget is not exhausted —
-          bounded remediation hop (task 0703 R4); the chain re-enters quality → review → verify on a
-          freshly captured digest. Never reached on PASS: remediation cannot follow certification.
-      guard:
-          # (e) remediation route: verdict not PASS and fix attempts below qualityGateMaxFixAttempts (0703 R4).
-          kind: shell
-          options:
-              command: >-
-                  verdict="$(jq -r .verdict .spur/run/$wbs-verdict.json 2>/dev/null)";
-                  test -n "$verdict" && test "$verdict" != PASS &&
-                  test "$(cat .spur/run/$wbs-test-fix-attempt 2>/dev/null || echo 0)" -lt "$qualityGateMaxFixAttempts"
-    - from: verify
-      to: failed
-      terminalReason: retry-exhausted
-      description: >-
-          Non-PASS with the fix budget exhausted, or a PASS/missing/malformed verdict whose proof
-          block is absent or mismatched (task 0703 R5) — block before done; defense catch-all so the
-          state always has a viable outgoing edge.
-      guard:
-          kind: always
-    # ── done gate: record → done/failed gated on `spur task check` (ADR-026 amendment 2026-06-23)
-    # PLUS the proof-block re-assertion (task 0703 R5): the verdict artifact must still be PASS and
-    # still name the captured digest — a forged or mutated completion artifact fails closed here.
-    # Declaration order: pass guard first.
-    - from: record
-      to: done
-      description: Task check passed and the verdict proof block still names the captured digest — certify done.
-      guard:
-          kind: shell
-          options:
-              # 0804 R6: `--as done` projects the check onto the done target so open
-              # Plan/AC checkboxes fail HERE — before the done action runs — mirroring
-              # the CLI's own target-aware `--no-lifecycle` backstop (F92 R3). No `#`
-              # comments inside the folded scalar: `>-` joins same-indent lines into
-              # one shell line.
-              # Two logical commands, deliberately (ADR-115): the `task check` projection plus
-              # ONE jq predicate re-asserting the whole completion contract — PASS verdict and the
-              # captured proof digest.
-              command: >-
-                  $spurBin task check $wbs --as done &&
-                  jq -e --arg p "$proofDigest" '
-                  .verdict == "PASS"
-                  and ((.proof.digest // "") == $p)
-                  ' ".spur/run/$wbs-verdict.json" >/dev/null 2>&1
-    - from: record
-      to: failed
-      terminalReason: failed-check
-      description: Task check failed, a post-record residual downgrade, or proof evidence missing/malformed/mismatched — block before done.
+      description: Review did not certify and no route classified it — stop at failed.
       guard:
           kind: always

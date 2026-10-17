@@ -3,10 +3,11 @@ import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { parse as parseYaml } from 'yaml';
 
-// 0940 R4: the comprehensive check runs once at the quality boundary. `precheck` is structural
-// only and `verify`/`record` are observe-only readers of gate artifacts — none of them may
+// 0940 R4: the comprehensive check runs once at the quality boundary. D65 1239 collapsed
+// `test`/`test-recheck` into the single `gate` state; `precheck` is structural only and the
+// review/close states are observe-only readers of the gate's artifacts — none of them may
 // execute the quality gate. Positive assertions keep this test honest: if someone deletes the
-// real gate from `test`/`test-recheck` (or adds one to the other states), it fails here.
+// real gate from `gate` (or adds one to another state), it fails here.
 
 interface Action {
     kind: string;
@@ -20,20 +21,25 @@ interface WorkflowDef {
 const WORKFLOWS_DIR = join(import.meta.dir, '../../../../config', 'workflows');
 const DEF = parseYaml(readFileSync(join(WORKFLOWS_DIR, 'task-pipeline.yaml'), 'utf8')) as WorkflowDef;
 
-const onEnterCommands = (id: string): string => JSON.stringify(DEF.states.find((s) => s.id === id)?.onEnter ?? []);
+const onEnterOf = (id: string): Action[] => DEF.states.find((s) => s.id === id)?.onEnter ?? [];
 
-describe('task-pipeline check dedup (0940 R4)', () => {
-    test('precheck, verify and record execute no quality-gate command', () => {
-        for (const id of ['precheck', 'verify', 'record']) {
-            const commands = onEnterCommands(id);
-            expect(commands).not.toContain('qualityGateCmd');
-            expect(commands).not.toContain('task gate');
+describe('task-pipeline check dedup (0940 R4, D65 1239)', () => {
+    test('precheck, review and done execute no quality-gate command', () => {
+        for (const id of ['precheck', 'review', 'done']) {
+            const commands = JSON.stringify(onEnterOf(id));
+            expect(commands, id).not.toContain('gateMode');
+            expect(commands, id).not.toContain('qualityGateCmd');
+            expect(commands, id).not.toContain('task", "gate"');
         }
     });
 
-    test('test and test-recheck still own the quality gate', () => {
-        for (const id of ['test', 'test-recheck']) {
-            expect(onEnterCommands(id)).toContain('$spurBin task gate \\"$wbs\\" \\"$M\\"');
-        }
+    test('the gate state still owns the quality gate as a typed command.gate', () => {
+        const gate = onEnterOf('gate').find(
+            (a) => a.kind === 'command.gate' && (a.options?.args as unknown[] | undefined)?.[1] === 'gate',
+        );
+        expect(gate).toBeDefined();
+        // biome-ignore lint/suspicious/noTemplateCurlyInString: asserting the literal YAML template, not interpolating
+        expect(gate?.options?.args).toEqual(['task', 'gate', '${vars.wbs}', '${vars.gateMode}', '--no-logo']);
+        expect(gate?.options?.softFail).toBe(true);
     });
 });

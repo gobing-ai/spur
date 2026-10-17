@@ -90,12 +90,12 @@ describe('0503 task-pipeline resilience', () => {
                 'spur',
                 'printf \'%s\\n\' \'{"content":"mutationPolicy: none\\n","frontmatter":{}}\'',
             );
-            const action = commandFor('test-fix');
+            const action = commandFor('remediate');
             const result = runShell(action, dir, { spurBin, wbs: '0773', mutationPolicy: 'code' });
             expect(result.exitCode).not.toBe(0);
             expect(result.output).toContain('mutation policy');
             expect(readFileSync(join(dir, 'source.ts'), 'utf8')).toBe('unchanged');
-            expect(PIPELINE.states.find((state) => state.id === 'test-fix')?.onEnter?.[0]?.kind).toBe('shell');
+            expect(PIPELINE.states.find((state) => state.id === 'remediate')?.onEnter?.[0]?.kind).toBe('shell');
             const allowed = executable(
                 dir,
                 'code-task',
@@ -191,19 +191,25 @@ esac`,
         }
     });
 
-    // 0823 (c): the implement/record/done transitions are `command.gate` actions — the
+    // 0823 (c): the implement and close transitions are `command.gate` actions — the
     // classified transient retry (once, 2s delay, ENOENT/EBUSY/ENOTEMPTY + lock forms) lives
     // in the gate; retry behavior is covered by plugins/sp/tests/command-gate.test.ts.
+    // D65 1239: the `record` state's transitions moved into `done`'s onEnter, so the verb
+    // shapes are asserted there under their new ids.
     test('lifecycle transitions are command.gate actions with the classified transient retry (0823 c)', () => {
-        const gateOf = (stateId: string): Record<string, unknown> => {
-            const action = PIPELINE.states
-                .find((state) => state.id === stateId)
-                ?.onEnter?.find((a) => a.kind === 'command.gate');
+        const gateOf = (stateId: string, id?: string): Record<string, unknown> => {
+            const gates = (PIPELINE.states.find((state) => state.id === stateId)?.onEnter ?? []).filter(
+                (a) => a.kind === 'command.gate',
+            );
+            const action = id === undefined ? gates[0] : gates.find((a) => (a.options as { id?: string })?.id === id);
             expect(action).toBeDefined();
             return (action?.options ?? {}) as Record<string, unknown>;
         };
-        for (const stateId of ['implement', 'record', 'done']) {
-            const options = gateOf(stateId);
+        for (const options of [
+            gateOf('implement'),
+            gateOf('done', 'task-record-close'),
+            gateOf('done', 'task-done-transition'),
+        ]) {
             expect(options.executable).toBe(`\${vars.spurBin}`); // escaped template: literal YAML text, not interpolation
             expect(options.softFail).toBe(false);
             const retry = options.retry as Record<string, unknown>;
@@ -215,77 +221,82 @@ esac`,
             expect(String(options.resultFile)).toContain(`.spur/run/\${vars.__runId}-`);
             expect(String(options.resultFile).endsWith('.status')).toBe(true);
         }
-        const argsOf = (stateId: string): string => JSON.stringify(gateOf(stateId).args);
-        expect(argsOf('implement')).toContain('--no-lifecycle');
-        expect(argsOf('record')).toContain('--solution-from-diff');
-        expect(argsOf('record')).toContain('testing');
+        const argsOf = (stateId: string, id: string): string => JSON.stringify(gateOf(stateId, id).args);
+        expect(argsOf('implement', 'task-implement-transition')).toContain('--no-lifecycle');
+        const recordArgs = argsOf('done', 'task-record-close');
+        expect(recordArgs).toContain('--solution-from-diff');
+        expect(recordArgs).toContain('testing');
         // 0980: the record stage's transition must not spawn a nested task-lifecycle run.
-        expect(argsOf('record')).toContain('--no-lifecycle');
-        expect(argsOf('done')).toContain('--no-lifecycle');
+        expect(recordArgs).toContain('--no-lifecycle');
+        expect(argsOf('done', 'task-done-transition')).toContain('--no-lifecycle');
     });
 
-    // 0823 (d): the gate shells are thin dispatchers — the gate core (`spur task gate`, script-absorption
-    // PR-3) owns the retry loop, findings cap, bounded summary and status artifact (behavioral
-    // coverage lives in packages/app/tests/services/quality-gate*.test.ts). Here: dispatch and
-    // fail-closed shape.
-    test('gate shells dispatch `spur task gate` and fail closed (0823 d, PR-3)', () => {
-        // 1135 R5 inserted the gate-paths snapshot shell ahead of the digest capture in both
-        // states, so the gate dispatcher's index moved with it.
-        const gateShellIndex = (stateId: 'test' | 'test-recheck'): number => {
-            const shells = (PIPELINE.states.find((s) => s.id === stateId)?.onEnter ?? [])
-                .filter((action) => action.kind === 'shell')
-                .map((action) => action.options?.command ?? '');
-            const matches = shells
-                .map((command, index) => ({ command, index }))
-                .filter(({ command }) => command.includes('task gate'));
-            const only = matches[0]?.index;
-            if (only === undefined || matches.length !== 1) {
-                throw new Error(`expected exactly one task-gate shell in ${stateId}, found ${matches.length}`);
-            }
-            return only;
-        };
-        for (const [stateId, mode] of [
-            ['test', 'run'],
-            ['test-recheck', 'recheck'],
-        ] as const) {
-            const command = commandFor(stateId, gateShellIndex(stateId));
-            // 1111: the mode is selected through `M` so `--defer-gate` can swap the tier without
-            // a second dispatch line.
-            expect(command).toContain(`M=${mode};`);
-            expect(command).toContain('$spurBin task gate "$wbs" "$M" --no-logo');
-            expect(command).not.toContain('script-root.json');
-            expect(command).not.toContain('superskill script path');
-            // Fail closed: a gate that cannot run (exit > 1) writes FAIL (never PASS) and stays soft.
-            expect(command).toContain('failed closed');
-            expect(command).toContain(`printf 'FAIL\\n' > ".spur/run/$wbs-test-gate.status"`);
-            expect(command.trim().endsWith('exit 0')).toBe(true);
-            // The retired loop is gone: no inline classifier or gate command remains.
-            expect(command).not.toContain('qualityGateCmd');
-            expect(command).not.toContain('grep -Eq');
+    // 0823 (d) → D65 1239 R2: the gate is ONE state and ONE typed `command.gate` over
+    // `spur task gate`, which owns the tier, probe, findings cap, host-wide lock and the
+    // tree-keyed receipt (behavioral coverage lives in
+    // packages/app/tests/services/quality-gate*.test.ts and
+    // packages/app/tests/workflow/actions/command-gate.test.ts). Here: the dispatch, the
+    // mode-by-visit contract, and the fail-closed routing.
+    test('the gate dispatches `spur task gate` as a typed command.gate and fails closed', () => {
+        const gate = PIPELINE.states.find((state) => state.id === 'gate');
+        const dispatches = (gate?.onEnter ?? []).filter((action) => action.kind === 'command.gate');
+        expect(dispatches).toHaveLength(1);
+        const options = (dispatches[0]?.options ?? {}) as Record<string, unknown>;
+        expect(JSON.stringify(options.args)).toContain('"task","gate"');
+        // 1111: the mode is selected per visit and projected into gateMode, so the opt-in
+        // deferred tier needs no second dispatch line.
+        expect(JSON.stringify(options.args)).toContain(['$' + '{vars.', 'gateMode', '}'].join(''));
+        expect(PIPELINE.vars?.gateMode).toBe('');
+        const shells = shellCommands('gate').join('\n');
+        expect(shells).toContain('M=run');
+        expect(shells).toContain('M=recheck');
+        expect(shells).not.toContain('script-root.json');
+        expect(shells).not.toContain('superskill script path');
+        // Fail closed on a gate that could not decide: the typed outcome is BLOCKED (exit 2,
+        // usage/lock) and only the typed PASS plus the verb's own full-tier token reaches
+        // review — a blocked or crashed visit can never read as green.
+        expect(options.softFail).toBe(true);
+        expect(String(options.resultFile)).toContain('-gate.status');
+        const toReview = (PIPELINE.transitions ?? []).filter((t) => t.from === 'gate' && t.to === 'review');
+        for (const transition of toReview) {
+            expect(transition.guard?.options?.command).toContain('-gate.status');
+            expect(transition.guard?.options?.command).toContain('-test-gate.status');
         }
+        const blocked = (PIPELINE.transitions ?? []).find((t) => t.from === 'gate' && t.to === 'failed');
+        expect(blocked?.guard?.options?.command).toContain('= BLOCKED');
+        // No shell may write the verb's own status token — the gate owns it (a shell-side
+        // FAIL/PASS write would be a second opinion the transitions could read).
+        expect(shells).not.toContain('test-gate.status');
+        // The retired dispatch loop is gone: no inline classifier or gate command remains.
+        expect(shells).not.toContain('qualityGateCmd');
+        expect(shells).not.toContain('grep -Eq');
     });
 
-    test('gate shell writes FAIL when spur cannot run the gate, and leaves a real verdict alone', () => {
-        const dir = mkdtempSync(join(tmpdir(), 'spur-pr3-gate-'));
-        try {
-            mkdirSync(join(dir, '.spur', 'run'), { recursive: true });
-            const command =
-                (PIPELINE.states.find((st) => st.id === 'test')?.onEnter ?? [])
-                    .filter((action) => action.kind === 'shell')
-                    .map((action) => action.options?.command ?? '')
-                    .find((c) => c.includes('task gate')) ?? '';
-            const status = join(dir, '.spur', 'run', '0823-test-gate.status');
-            // Missing binary (127) → fail closed.
-            expect(runShell(command, dir, { wbs: '0823', spurBin: 'spur-missing-binary-pr3' }).exitCode).toBe(0);
-            expect(readFileSync(status, 'utf8')).toBe('FAIL\n');
-            // A gate verdict (exit 1 = FAIL written by the gate itself) is not overwritten.
-            writeFileSync(status, 'GATE-WROTE\n');
-            const failing = executable(dir, 'spur-gate-fail', 'exit 1');
-            expect(runShell(command, dir, { wbs: '0823', spurBin: failing }).exitCode).toBe(0);
-            expect(readFileSync(status, 'utf8')).toBe('GATE-WROTE\n');
-        } finally {
-            rmSync(dir, { recursive: true, force: true });
-        }
+    test('a gate that cannot run is a BLOCKED typed outcome, never a green review', () => {
+        // The old shell wrote `FAIL` when spur could not launch the gate. That job is now split:
+        // `command.gate` classifies the exit (0 → PASS, 1 → FAIL, anything else → BLOCKED) and
+        // the graph routes BLOCKED to `failed`. Assert the routing the run actually takes, and
+        // that neither artefact the PASS edge reads can be written without the gate running.
+        const toReview = (PIPELINE.transitions ?? []).find(
+            (t) => t.from === 'gate' && t.to === 'review' && t.guard?.options?.command?.includes('= PASS') === true,
+        );
+        expect(toReview).toBeDefined();
+        // The BLOCKED edge is declared BEFORE the failure-class/cap edges, so an undecidable
+        // gate can never be mislabeled as a red gate and sent into remediation.
+        const transitions = PIPELINE.transitions ?? [];
+        const idx = (predicate: (t: PipelineTransition) => boolean): number => transitions.findIndex(predicate);
+        const blockedIdx = idx(
+            (t) => t.from === 'gate' && t.to === 'failed' && t.guard?.options?.command?.includes('= BLOCKED') === true,
+        );
+        const failClassIdx = idx((t) => t.from === 'gate' && t.to === 'remediate');
+        expect(blockedIdx).toBeGreaterThan(-1);
+        expect(blockedIdx).toBeLessThan(failClassIdx);
+        // The verb still writes the token the transitions read (`PASS|FAIL|DEFERRED`), so a gate
+        // that never ran leaves no token at all — the last gate edge is the fail-closed defence.
+        const gateEdges = transitions.filter((t) => t.from === 'gate');
+        const defense = gateEdges[gateEdges.length - 1];
+        expect(defense?.guard?.kind).toBe('always');
+        expect(defense?.to).toBe('failed');
     });
     test('precheck dirty-tree action names task-corpus dirt without the non-corpus warning', () => {
         const dir = mkdtempSync(join(tmpdir(), 'spur-0511-corpus-dirty-'));
@@ -336,35 +347,62 @@ esac`,
 
     // 0983: the sweep left verify — a pre-record scan folds unticked-but-verdict-proven
     // boxes (flipped only later by `task record`) and makes the done guard unreachable
-    // (0967). Verify binds the verdict straight to the proof digest; record sweeps.
-    test('verify no longer sweeps; the verdict binds straight to the proof digest (0983 R1)', () => {
-        const cmds = shellCommands('verify');
-        const verdictIdx = cmds.findIndex((c) => c.includes('task verdict'));
-        const bindIdx = cmds.findIndex((c) => c.includes('+ {proof:'));
-        expect(verdictIdx).toBeGreaterThanOrEqual(0);
-        expect(bindIdx).toBeGreaterThan(verdictIdx);
-        expect(cmds.find((c) => c.includes('task residual'))).toBeUndefined();
+    // (0967). D65 1239: `verify` merged into `review`, which derives its verdict from the
+    // reviewer's own traceability and sweeps nothing; the deterministic close (record →
+    // sweep) lives in `done`'s onEnter.
+    test('review no longer sweeps; the verdict is derived from the reviewer answer (0983 R1)', () => {
+        const cmds = shellCommands('review');
+        const verdictGate = (PIPELINE.states.find((s) => s.id === 'review')?.onEnter ?? []).find(
+            (a) => a.kind === 'command.gate' && (a.options as { id?: string })?.id === 'review-verdict',
+        );
+        const verdictArgs = JSON.stringify((verdictGate?.options as { args?: string[] })?.args ?? []);
+        expect(verdictArgs).toContain('"verdict"');
+        expect(verdictArgs).toContain('--from-answer');
+        // The answer file the agent.run captured is the verdict input — the certification is
+        // the reviewer's own evidence, not a re-captured digest.
+        const dispatch = (PIPELINE.states.find((s) => s.id === 'review')?.onEnter ?? []).find(
+            (a) => a.kind === 'agent.run',
+        );
+        const answerFile = String((dispatch?.options as { answerFile?: string })?.answerFile ?? '');
+        expect(answerFile).toContain('-review-answer.txt');
+        expect(verdictArgs).toContain(answerFile);
+        // The 1122 review-gate residual CHECK is not the sweep: no scan/fold may run here (a
+        // pre-record sweep folds unticked-but-proven boxes and makes the close unreachable).
+        expect(cmds.find((c) => c.includes('task residual') && / (scan|fold)\b/.test(c))).toBeUndefined();
+        expect(cmds.find((c) => c.includes('+ {proof:'))).toBeUndefined();
     });
 
-    test('record sweeps after the box flips and before the done guard (0983 R1/R3)', () => {
-        const cmds = shellCommands('record');
+    test('the close sweeps after the box flips and before the done transition (0983 R1/R3)', () => {
+        const cmds = shellCommands('done');
+        const actions = PIPELINE.states.find((s) => s.id === 'done')?.onEnter ?? [];
+        const recordIdx = actions.findIndex(
+            (a) => a.kind === 'command.gate' && (a.options as { id?: string })?.id === 'task-record-close',
+        );
+        expect(recordIdx).toBeGreaterThanOrEqual(0);
         const foldIdx = cmds.findIndex((c) => c.includes('task residual') && c.includes('fold'));
-        expect(foldIdx).toBeGreaterThan(0); // after the feature-sync soft step (index 0)
-        expect(foldIdx).toBe(cmds.length - 2); // followed only by the R5 re-record step
-        // Hard action: no exit-0 blanket — a scanner crash must fail record closed.
+        expect(foldIdx).toBeGreaterThanOrEqual(0);
+        // The record write runs first (it flips the verdict-proven boxes), then the sweep.
+        const syncIdx = cmds.findIndex((c) => c.includes('feature sync'));
+        expect(syncIdx).toBe(0);
+        expect(foldIdx).toBe(syncIdx + 1); // the sweep follows the sync, before the re-record
+        // Hard action: no exit-0 blanket — a scanner crash must fail the close closed.
         expect(cmds[foldIdx]?.trim().endsWith('exit 0')).toBe(false);
-        // Scan then fold through `spur task residual` (PR-3); a non-zero exit fails record closed.
+        // Scan then fold through `spur task residual` (PR-3); a non-zero exit fails the close.
         expect(cmds[foldIdx]).toContain(
             '$spurBin task residual "$wbs" scan --no-logo && $spurBin task residual "$wbs" fold',
         );
         expect(cmds[foldIdx]).not.toContain('script-root.json');
-        // Fail-closed completion gate: the done guard still re-asserts PASS + proof digest,
-        // so a fold-downgraded PARTIAL verdict can never certify done (0983 R3).
-        const doneGuard = PIPELINE.transitions?.find((t) => t.from === 'record' && t.to === 'done')?.guard?.options
-            ?.command;
-        expect(doneGuard).toContain('task check');
-        expect(doneGuard).toContain('.verdict');
-        expect(doneGuard).toContain('.proof.digest');
+        // The re-assert after the sweep is the verdict artifact (the review's own evidence): a
+        // fold-downgraded PARTIAL verdict can never certify done (0983 R3).
+        const reassertIdx = cmds.findIndex((c) => c.includes('jq -e') && c.includes('-verdict.json'));
+        expect(reassertIdx).toBeGreaterThan(foldIdx);
+        expect(cmds[reassertIdx]).toContain('PASS');
+        // ...and the done transition still runs AFTER it, so the stored status reflects the
+        // certified state.
+        const doneTransitionIdx = actions.findIndex(
+            (a) => a.kind === 'command.gate' && (a.options as { id?: string })?.id === 'task-done-transition',
+        );
+        expect(doneTransitionIdx).toBe(actions.length - 2); // followed only by the checkpoint
     });
 
     test('post-record sweep passes a flipped task and downgrades an open box (0983 R1/R2)', () => {
@@ -391,7 +429,7 @@ esac`,
                 writeFileSync(join(dir, 'plan.md'), plan);
                 spurIn(['task', 'update', wbs, '--section', 'Plan', '--from-file', join(dir, 'plan.md')]);
             };
-            const fold = shellCommands('record').find((c) => c.includes('task residual') && c.includes('fold'));
+            const fold = shellCommands('done').find((c) => c.includes('task residual') && c.includes('fold'));
             if (fold === undefined) throw new Error('record sweep command missing');
             const verdict = { wbs, verdict: 'PASS', requirements: [], checks: [] };
             const spurBin = spurCli.join(' ');
@@ -428,9 +466,7 @@ esac`,
         const dir = mkdtempSync(join(tmpdir(), 'spur-0983-rerecord-'));
         try {
             mkdirSync(join(dir, '.spur', 'run'), { recursive: true });
-            const rerun = shellCommands('record').find(
-                (c) => c.includes('jq -r .verdict') && c.includes('task record'),
-            );
+            const rerun = shellCommands('done').find((c) => c.includes('jq -r .verdict') && c.includes('task record'));
             if (rerun === undefined) throw new Error('post-downgrade re-record step missing');
             // Soft: the step always exits 0 — only the record → done guard decides.
             expect(rerun.trim().endsWith('exit 0')).toBe(true);
@@ -449,16 +485,20 @@ esac`,
         }
     });
 
-    test('test-fix appends the residual artifact to the gate log (F96 R3)', () => {
-        const cmd = shellCommands('test-fix').find((c) => c.includes('-residuals.json'));
+    test('the repair hop appends the residual artifact to the gate log (F96 R3)', () => {
+        const cmd = shellCommands('remediate').find((c) => c.includes('-residuals.json'));
         expect(cmd).toBeDefined();
         expect(cmd).toContain('-test-gate.log');
     });
 
-    test('done settles residuals as a soft action after the transition (F96 R4)', () => {
+    test('done settles residuals as a soft action after certification (F96 R4)', () => {
         const cmds = shellCommands('done');
         const settleIdx = cmds.findIndex((c) => c.includes('task residual') && c.includes('settle'));
-        expect(settleIdx).toBe(0);
+        // D65 1239: the close is `done`'s onEnter, so settle now follows the sweep + the
+        // post-sweep verdict re-assert instead of following a record→done transition guard.
+        const reassertIdx = cmds.findIndex((c) => c.includes('jq -e') && c.includes('-verdict.json'));
+        expect(reassertIdx).toBeGreaterThan(-1);
+        expect(settleIdx).toBeGreaterThan(reassertIdx);
         expect(cmds[settleIdx]?.trim().endsWith('exit 0')).toBe(true);
     });
 
@@ -477,7 +517,7 @@ esac`,
     test('deferFeatureSync "true" skips the record-step feature sync and notes the deferral (0931 R5)', () => {
         expect(PIPELINE.vars?.deferFeatureSync).toBe('false');
 
-        const sync = commandFor('record', 0);
+        const sync = shellCommands('done').find((c) => c.includes('feature sync')) ?? '';
         expect(sync).toContain('[ "$deferFeatureSync" = "true" ]');
         expect(sync).toContain('feature sync deferred to batch integration');
         expect(sync).toContain('$spurBin feature sync "$FID" --json');
@@ -514,7 +554,10 @@ esac`,
                 'spur-bin-empty',
                 'if [ "$1" = "task" ]; then echo \'{"feature_id":"F1"}\'; else echo "SYNC $*"; fi',
             );
-            const result = runShell(commandFor('record', 0), dir, { wbs: '0931', spurBin });
+            const result = runShell(shellCommands('done').find((c) => c.includes('feature sync')) ?? '', dir, {
+                wbs: '0931',
+                spurBin,
+            });
 
             expect(result.exitCode).toBe(0);
             expect(result.output).not.toContain('deferred');
@@ -538,13 +581,14 @@ esac`,
                 'spur-bin-linked',
                 'if [ "$1" = "task" ]; then echo \'{"frontmatter":{"feature_id":"F9"}}\'; else echo "SYNC $*"; fi',
             );
-            const linkedRun = runShell(commandFor('record', 0), dir, { wbs: '1004', spurBin: linked });
+            const sync = shellCommands('done').find((c) => c.includes('feature sync')) ?? '';
+            const linkedRun = runShell(sync, dir, { wbs: '1004', spurBin: linked });
             expect(linkedRun.exitCode).toBe(0);
             expect(linkedRun.output).toContain('SYNC feature sync F9 --json');
 
             // No feature_id anywhere -> orphan proposal note, best-effort exit 0.
             const orphan = executable(dir, 'spur-bin-orphan', "echo '{}'");
-            const orphanRun = runShell(commandFor('record', 0), dir, { wbs: '1004', spurBin: orphan });
+            const orphanRun = runShell(sync, dir, { wbs: '1004', spurBin: orphan });
             expect(orphanRun.exitCode).toBe(0);
             const report = readFileSync(join(dir, '.spur', 'run', '1004-report.txt'), 'utf8');
             expect(report).toContain('Orphan task 1004 — no feature_id linked');
@@ -581,7 +625,7 @@ describe('0933 operator-question escalation', () => {
         expect(pause?.options?.prompt).toBe(tpl('escalationQuestion'));
     });
 
-    test('escalation edges are declared before the implement→test always edge (bound first, then question)', () => {
+    test('escalation edges are declared before the implement→gate always edge (bound first, then question)', () => {
         const transitions = PIPELINE.transitions ?? [];
         const idx = (from: string, to: string): number => {
             const i = transitions.findIndex((t) => t.from === from && t.to === to);
@@ -590,7 +634,7 @@ describe('0933 operator-question escalation', () => {
         };
         const bound = idx('implement', 'failed');
         const ask = idx('implement', 'escalate');
-        const body = idx('implement', 'test');
+        const body = idx('implement', 'gate');
         expect(bound).toBeLessThan(ask);
         expect(ask).toBeLessThan(body);
         // Bound guard requires the escalation count AND a fresh question file; the report

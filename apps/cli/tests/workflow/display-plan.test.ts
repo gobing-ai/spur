@@ -47,7 +47,7 @@ describe('display annotations on the bundled pipelines (1104 AC1)', () => {
 });
 
 describe('todo projection carries the phased plan (1104 AC2)', () => {
-    test('task-pipeline plan: prepare rows, four phase rows, show-plan digits only', async () => {
+    test('task-pipeline plan: prepare rows, three phase rows, show-plan digits only', async () => {
         const { code, json } = await runWorkflowJson([
             'show',
             join('config', 'workflows', 'task-pipeline.yaml'),
@@ -71,12 +71,12 @@ describe('todo projection carries the phased plan (1104 AC2)', () => {
             'A2 Prepare Git',
             'A3 Publish plan',
         ]);
-        // Phase rows B..E follow in first-appearance order.
+        // Phase rows B..D follow in first-appearance order. D65 1239 merged verify into review,
+        // so the former four-phase table lost its independent verify phase.
         expect(rows.filter((i) => i.id.startsWith('phase.')).map((i) => i.text)).toEqual([
             'B Implement',
             'C Test',
             'D Review',
-            'E Verify & record',
         ]);
         // Only show: plan states appear as digits — on-entry and terminal states never do.
         const ids = rows.map((i) => i.id);
@@ -89,25 +89,11 @@ describe('todo projection carries the phased plan (1104 AC2)', () => {
             'precheck',
             'implement',
             'phase.test',
-            'test',
+            'gate',
             'phase.review',
-            'triage',
             'review',
-            'phase.verify',
-            'verify',
-            'record',
         ]);
-        for (const hidden of [
-            'escalate',
-            'test-fix',
-            'test-recheck',
-            'test-fail-triage',
-            'review-fail-triage',
-            'approve',
-            'done',
-            'failed',
-            'cancelled',
-        ]) {
+        for (const hidden of ['escalate', 'remediate', 'done', 'failed']) {
             expect(ids).not.toContain(hidden);
         }
         // The flat declared-step projection is unchanged by the annotation (additive R4).
@@ -115,19 +101,11 @@ describe('todo projection carries the phased plan (1104 AC2)', () => {
             'precheck',
             'implement',
             'escalate',
-            'test',
-            'test-fix',
-            'test-recheck',
-            'triage',
-            'test-fail-triage',
+            'gate',
+            'remediate',
             'review',
-            'review-fail-triage',
-            'approve',
-            'verify',
-            'record',
             'done',
             'failed',
-            'cancelled',
         ]);
     });
 });

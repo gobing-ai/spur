@@ -6,8 +6,17 @@ import { join } from 'node:path';
 import { getEnvVars } from '@gobing-ai/spur-config';
 import { loadWorkflowDefFromText } from '@gobing-ai/ts-dual-workflow-engine';
 
+// Task 0759 (proportional routing) as re-keyed by D65 1239: the lane decision, its deterministic
+// safety floor and the run-attributed route claim survive the seven-state rewrite; the four
+// gate-PASS edges and the `triage`/`test-recheck` states do not. Routing is now:
+//   gate (lane decide + typed gate) → review (focus from the lane) → done | failed
+//   gate (red) → remediate → gate (recheck)  — one gate state, mode by visit.
+
 const REPO_ROOT = join(import.meta.dir, '../../../../');
 const PIPELINE_PATH = join(REPO_ROOT, 'config', 'workflows', 'task-pipeline.yaml');
+
+/** The literal YAML var template (`${vars.x}`) the definition carries — asserted, never interpolated. */
+const VAR = (name: string): string => ['$', '{vars.', name, '}'].join('');
 
 interface StateDef {
     id: string;
@@ -18,6 +27,7 @@ interface TransitionDef {
     from: string;
     to: string;
     description?: string;
+    terminalReason?: string;
     guard?: { kind: string; options?: Record<string, unknown> };
 }
 
@@ -29,7 +39,7 @@ interface WorkflowYaml {
     transitions: TransitionDef[];
 }
 
-describe('task-pipeline proportional routing (task 0759, S5)', () => {
+describe('task-pipeline proportional routing (task 0759, S5; re-keyed by D65 1239)', () => {
     const raw = readFileSync(PIPELINE_PATH, 'utf8');
     const def = loadWorkflowDefFromText(raw, PIPELINE_PATH) as unknown as WorkflowYaml;
 
@@ -37,28 +47,6 @@ describe('task-pipeline proportional routing (task 0759, S5)', () => {
         expect(def.vars).toBeDefined();
         expect(def.vars?.mode).toBe('');
         expect(def.vars?.__runId).toBe('');
-    });
-
-    test('R5: declares __definitionDigest and binds the verdict proof to the run and its definition', () => {
-        // 0759 R5's second half: the record is bound to the certifying run AND its definition
-        // digest. The pipeline declares the var, stamps it into the proof block, and the
-        // verify → record guard fails closed unless the proof carries the injected values.
-        expect(def.vars?.__definitionDigest).toBe('');
-
-        const verify = def.states.find((s) => s.id === 'verify');
-        const writer = verify?.onEnter?.find(
-            (a) => a.kind === 'shell' && String(a.options?.command ?? '').includes('proof: {digest'),
-        );
-        const writerCmd = String(writer?.options?.command ?? '');
-        expect(writerCmd).toContain('__definitionDigest');
-        expect(writerCmd).toContain('definitionDigest: $dd');
-
-        const toRecord = def.transitions.find((t) => t.from === 'verify' && t.to === 'record');
-        const recordCmd = String(toRecord?.guard?.options?.command ?? '');
-        expect(recordCmd).toContain('.proof.runId // ""');
-        expect(recordCmd).toContain('.proof.definitionDigest // ""');
-        expect(recordCmd).toContain('$__runId');
-        expect(recordCmd).toContain('$__definitionDigest');
     });
 
     test('R1/R4: precheck evaluates closed route table and writes bounded reason', () => {
@@ -76,98 +64,110 @@ describe('task-pipeline proportional routing (task 0759, S5)', () => {
         expect(cmd).toContain('task-pipeline-routes.log');
     });
 
-    test('R1/R2: test state branches proportionally while keeping safety floor', () => {
-        const fromTest = def.transitions.filter((t) => t.from === 'test');
-        // 0943 review P3#2: exactly three edges — green→triage, red→test-fail-triage,
-        // corrupt-status defense→test-fix. The dead duplicate red edge was removed.
-        expect(fromTest.length).toBe(3);
-
-        // 0943 R1: on a green gate the proportional decision moved into the deterministic
-        // `triage` state — test routes there instead of picking the lane itself.
-        const passEdge = fromTest.find((t) => t.to === 'triage');
-        expect(passEdge).toBeDefined();
-        const passCmd = String(passEdge?.guard?.options?.command ?? '');
-        expect(passCmd).toContain('$wbs-test-gate.status');
-        expect(passCmd).toContain('= PASS');
-
-        // 0943 R3: a red gate lands in the failure-class router before the repair hop.
-        const failEdge = fromTest.find((t) => t.to === 'test-fail-triage');
-        expect(failEdge).toBeDefined();
-        expect(String(failEdge?.guard?.options?.command ?? '')).toContain('= FAIL');
-
-        // 0943 review P3#2: no direct red edge may exist — failure-class owns every red gate,
-        // and a restored `test → test-fix` FAIL edge would bypass it (dead today, live tomorrow).
-        const bypass = fromTest.find(
-            (t) => t.to === 'test-fix' && String(t.guard?.options?.command ?? '').includes('FAIL'),
+    test('R1/R2: the lane decision lives in the gate state, not a routing state', () => {
+        // 1239 R1: triage/test-fail-triage/review-fail-triage are gone; the catalog decisions run
+        // inside the state that produced the evidence.
+        for (const retired of ['triage', 'test-fail-triage', 'review-fail-triage']) {
+            expect(
+                def.states.find((s) => s.id === retired),
+                retired,
+            ).toBeUndefined();
+        }
+        const gate = def.states.find((s) => s.id === 'gate');
+        const decide = gate?.onEnter?.find((a) => a.kind === 'decide' && a.options?.id === 'task-triage');
+        expect(decide).toBeDefined();
+        expect(decide?.options?.decision).toBe('task-triage');
+        // The deterministic safety floor runs BEFORE the decide: a caller-set mode wins, and a
+        // sensitive path or >400 lines pins safety without a model call.
+        const kinds = (gate?.onEnter ?? []).map((a) => a.kind);
+        const preGuard = (gate?.onEnter ?? []).findIndex(
+            (a) => a.kind === 'shell' && String(a.options?.command ?? '').includes('sensitive == true'),
         );
-        expect(bypass).toBeUndefined();
-        // The repair hop is reached through the fix decision lane only.
-        const fixEdge = def.transitions.find((t) => t.from === 'test-fail-triage' && t.to === 'test-fix');
-        expect(fixEdge).toBeDefined();
+        const decideIndex = (gate?.onEnter ?? []).findIndex((a) => a.kind === 'decide');
+        expect(preGuard).toBeGreaterThanOrEqual(0);
+        expect(preGuard).toBeLessThan(decideIndex);
+        expect(kinds.length).toBeGreaterThan(decideIndex);
     });
 
-    test('R1/R2: triage forks proportionally — mode=fast bypasses review, anything else reviews', () => {
-        // 0943 R1/R2: the fork guards read the projected mode var and are exhaustive.
-        const fastEdge = def.transitions.find((t) => t.from === 'triage' && t.to === 'verify');
-        expect(fastEdge).toBeDefined();
-        expect(String(fastEdge?.guard?.options?.command ?? '')).toContain('$mode" = fast');
-
-        const safetyEdge = def.transitions.find((t) => t.from === 'triage' && t.to === 'review');
-        expect(safetyEdge).toBeDefined();
-        expect(String(safetyEdge?.guard?.options?.command ?? '')).toContain('$mode" != fast');
+    test('R1/R2: the resolved lane sets the review depth and never skips certification', () => {
+        // 1239 R2: verify merged into review, so there is no lane that bypasses it. The fast lane
+        // narrows the review to the traceability pass, which is the certification input.
+        const review = def.states.find((s) => s.id === 'review');
+        const agentRun = review?.onEnter?.find((a) => a.kind === 'agent.run');
+        expect(String(agentRun?.options?.input)).toContain(`--focus ${VAR('reviewFocus')}`);
+        expect(def.vars?.reviewFocus).toBe('');
+        // The projection is a gate-state shell (where the lane resolves): fast → functional,
+        // everything else → all. A missing projection is an empty var, never a skipped review.
+        const focusShell = (def.states.find((s) => s.id === 'gate')?.onEnter ?? []).find(
+            (a) => a.kind === 'shell' && String(a.options?.command ?? '').includes('-review-focus.txt'),
+        );
+        const focusCmd = String(focusShell?.options?.command ?? '');
+        expect(focusCmd).toContain("'functional");
+        expect(focusCmd).toContain("'all");
+        // And the depth var is read back into the workflow vars the agent.run template uses.
+        expect(
+            (def.states.find((s) => s.id === 'gate')?.onEnter ?? []).some(
+                (a) => a.kind === 'file.read.into-var' && a.options?.var === 'reviewFocus',
+            ),
+        ).toBe(true);
     });
 
-    test('R1/R2: test-recheck state branches proportionally after fixall loop', () => {
-        const fromRecheck = def.transitions.filter((t) => t.from === 'test-recheck');
-
-        // 0943 R1: green after fixall routes into triage, same as the first gate pass.
-        const passEdge = fromRecheck.find((t) => t.to === 'triage');
-        expect(passEdge).toBeDefined();
-        expect(String(passEdge?.guard?.options?.command ?? '')).toContain('= PASS');
-
-        // 0943 R3: still red routes into the failure-class router.
-        const failEdge = fromRecheck.find((t) => t.to === 'test-fail-triage');
-        expect(failEdge).toBeDefined();
-        expect(String(failEdge?.guard?.options?.command ?? '')).toContain('= FAIL');
+    test('R1/R2: the gate forks on its typed outcome, then on the failure class', () => {
+        const fromGate = def.transitions.filter((t) => t.from === 'gate');
+        expect(fromGate.map((t) => t.to)).toEqual([
+            'review',
+            'review',
+            'failed',
+            'failed',
+            'failed',
+            'remediate',
+            'failed',
+        ]);
+        // Green: the typed PASS + the gate's own full-tier token.
+        const passCmd = String(fromGate[0]?.guard?.options?.command ?? '');
+        expect(passCmd).toContain('-gate.status');
+        expect(passCmd).toContain('= PASS');
+        expect(passCmd).toContain('-test-gate.status');
+        // Opt-in batch policy: DEFERRED rides its own edge, gated on the var.
+        expect(String(fromGate[1]?.guard?.options?.command ?? '')).toContain('$deferQualityGate');
+        // BLOCKED is never read as red.
+        expect(String(fromGate[2]?.guard?.options?.command ?? '')).toContain('= BLOCKED');
+        // Red: stop → cap → fix → fail-closed defense, in that declaration order.
+        expect(fromGate[3]?.terminalReason).toBe('failed-check');
+        expect(fromGate[4]?.terminalReason).toBe('retry-exhausted');
+        expect(String(fromGate[5]?.guard?.options?.command ?? '')).toContain('.value == "fix"');
+        expect(fromGate[6]?.guard?.kind).toBe('always');
+        // 0943 review P3#2: no red gate reaches remediation except through the failure class.
+        expect(
+            fromGate.find((t) => t.to === 'remediate' && String(t.guard?.options?.command ?? '').includes('FAIL')),
+        ).toBeUndefined();
     });
 
-    test('R2: safety floor holds — proof bracket and verify are never bypassed', () => {
-        // verify state exists and has observe-only agent.run
-        const verify = def.states.find((s) => s.id === 'verify');
-        expect(verify).toBeDefined();
-        const agentRun = verify?.onEnter?.find((a) => a.kind === 'agent.run');
-        expect(String(agentRun?.options?.input ?? '')).toContain('--fix none');
+    test('R1/R2: remediation re-enters the same gate (mode by visit), never a second gate state', () => {
+        expect(def.transitions.filter((t) => t.from === 'remediate').map((t) => t.to)).toEqual(['gate']);
+        // The old test-recheck fork is gone; the one gate state owns both visits.
+        expect(def.states.find((s) => s.id === 'test-recheck')).toBeUndefined();
+        const modeShells = (def.states.find((s) => s.id === 'gate')?.onEnter ?? []).filter(
+            (a) => a.kind === 'shell' && String(a.options?.command ?? '').includes('-gate-mode.txt'),
+        );
+        expect(modeShells).toHaveLength(1);
+    });
 
-        // verify -> record requires PASS verdict and valid proof
-        const verifyTransitions = def.transitions.filter((t) => t.from === 'verify');
-        const toRecord = verifyTransitions.find((t) => t.to === 'record');
-        expect(toRecord).toBeDefined();
-        const recordCmd = String(toRecord?.guard?.options?.command ?? '');
-        // 0823: the guard is one jq -e predicate — a strict superset of the former "= PASS"
-        // marker: PASS verdict AND a proof block whose top-level and per-stage digests all
-        // equal the captured proofDigest, with review honestly completed (0703 R3/R5, 0785 R4).
-        expect(recordCmd).toContain('.verdict');
-        expect(recordCmd).toContain('.verdict == "PASS"');
-        expect(recordCmd).toContain('(.proof.digest // "") == $d');
-        expect(recordCmd).toContain('(.proof.stages.verification.digest // "") == $d');
-        expect(recordCmd).toContain('(.proof.stages.review.status // "") == "completed"');
-
-        // done-bound registration: the verify verdict is ledger-registered against a freshly
-        // captured proof digest at record ENTRY — before any task record or status mutation
-        // (0785 R3; moved out of done, where it ran after the status write).
-        const record = def.states.find((s) => s.id === 'record');
-        const firstRecordAction = record?.onEnter?.[0];
-        expect(firstRecordAction?.kind).toBe('run.artifact');
-        expect((firstRecordAction?.options as Record<string, unknown> | undefined)?.proofBinding).toBe('current');
+    test('R2: the safety floor holds — certification is never bypassed on any lane', () => {
+        // Every terminal path out of the working graph passes review except failed ones.
+        const toDone = def.transitions.filter((t) => t.to === 'done');
+        expect(toDone.map((t) => t.from)).toEqual(['review']);
+        const review = def.states.find((s) => s.id === 'review');
+        const verdictGate = review?.onEnter?.find((a) => a.kind === 'command.gate');
+        expect(String(JSON.stringify(verdictGate?.options))).toContain('task","verdict');
+        expect(String(JSON.stringify(verdictGate?.options))).toContain('--from-answer');
     });
 
     test('R6: iterative bounds are unchanged (no unmeasured tuning)', () => {
-        // iterationBound remains 20 per 0731 §3 (unmeasured bounds left alone)
         expect(def.iterationBound).toBe(20);
     });
 
     test('R7: migration is revertable as a per-workflow option without touching pilots', () => {
-        // task-pipeline is self-contained; mode="" defaults to safety path (identical to pre-migration)
         expect(def.vars?.mode).toBe('');
     });
 });
@@ -175,9 +175,9 @@ describe('task-pipeline proportional routing (task 0759, S5)', () => {
 /**
  * 0759 R1/R5 executable check. `__runId` was declared in `vars` and referenced nowhere, and the
  * route reason was written to `.spur/run/$wbs-route-reason.txt` — a task-scoped path a second run
- * of the same wbs silently overwrote, so no route could be attributed to the run that took it.
- * The R1 assertion above only checks that `__runId` is *declared*, which is exactly what a dead
- * variable passes; this runs the writer the engine executes and checks the artifact it leaves.
+ * of the same wbs silently overwrote. The R1 assertion above only checks that `__runId` is
+ * *declared*, which is exactly what a dead variable passes; this runs the writer the engine
+ * executes and checks the artifact it leaves.
  */
 describe('precheck route writer is run-attributed (0759 R1/R5)', () => {
     const raw = readFileSync(PIPELINE_PATH, 'utf8');

@@ -4,7 +4,7 @@ name: Measure the rewritten task-pipeline against the 32-run baseline
 status: todo
 template: feature-impl
 created_at: 2026-10-17T15:59:56.820Z
-updated_at: "2026-10-17T16:13:30.194Z"
+updated_at: "2026-10-17T22:06:42.722Z"
 feature_id: D65
 priority: P2
 tags:
@@ -67,3 +67,7 @@ Measurement only; reuses run summaries (now with gate time) and `spur history an
 - Feature D65; ADR-140; ADR-051 amendment 2026-10-17.
 
 ### History
+
+- 2026-10-17T22:06:23.202Z todo → wip (system)
+- 2026-10-17T22:06:42.722Z wip → todo (system)
+

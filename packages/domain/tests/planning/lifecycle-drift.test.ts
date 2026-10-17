@@ -174,16 +174,42 @@ interface PipelineDef {
     transitions: { from: string; to: string; guard?: { kind: string; options?: Record<string, unknown> } }[];
 }
 
+/** Workflow template syntax, not a JS template literal — assembled so Biome's noTemplateCurlyInString stays quiet. */
+const tpl = (name: string): string => ['$' + '{vars.', name, '}'].join('');
+
 describe('task-pipeline.yaml structure (task 0062)', () => {
     const yaml = loadLifecycleYaml('config', 'workflows', 'task-pipeline.yaml') as unknown as PipelineDef;
     const stateIds = yaml.states.map((s) => s.id);
 
     test('R1: the design §6 pipeline states are present, vars.wbs declared', () => {
-        for (const s of ['precheck', 'implement', 'test', 'review', 'approve', 'verify', 'record', 'done']) {
+        // D65 1239 / ADR-140: six working states + two terminals. The former
+        // test/test-recheck pair is one `gate`, `verify` merged into `review`, `approve`
+        // became a decision point inside `review`, and `record` became `done`'s onEnter.
+        for (const s of ['precheck', 'implement', 'escalate', 'gate', 'remediate', 'review', 'done', 'failed']) {
             expect(stateIds).toContain(s);
         }
+        // The four retired states stay retired: a re-introduced one would re-open the
+        // shape the rewrite contracted away.
+        for (const gone of ['test', 'test-recheck', 'verify', 'record', 'approve']) {
+            expect(stateIds).not.toContain(gone);
+        }
+        // The intents the retired states carried are still in the graph, relocated:
+        // a quality gate step, operator approval, certification, and the deterministic close.
+        expect(yaml.states.find((s) => s.id === 'gate')?.onEnter?.some((a) => a.kind === 'command.gate')).toBe(true);
+        expect(yaml.states.find((s) => s.id === 'review')?.onEnter?.some((a) => a.kind === 'hitl.confirm')).toBe(true);
+        expect(
+            (yaml.states.find((s) => s.id === 'review')?.onEnter ?? []).some((a) =>
+                String((a.options?.args as unknown[] | undefined)?.join(' ') ?? '').includes('verdict'),
+            ),
+        ).toBe(true);
+        expect(
+            (yaml.states.find((s) => s.id === 'done')?.onEnter ?? []).some((a) =>
+                String((a.options?.args as unknown[] | undefined)?.join(' ') ?? '').includes('record'),
+            ),
+        ).toBe(true);
         expect(yaml.vars).toHaveProperty('wbs');
         expect(yaml.initialState).toBe('precheck');
+        expect(yaml.terminalStates).toEqual(['done', 'failed']);
     });
 
     test('R1: precheck→implement is guarded by `task check --precheck`, with fail-closed fall-through', () => {
@@ -206,31 +232,23 @@ describe('task-pipeline.yaml structure (task 0062)', () => {
     });
 
     test('R2: record writes via `spur task record` + post-record feature sync (task 0328)', () => {
-        const record = yaml.states.find((s) => s.id === 'record');
-        const cmds = (record?.onEnter ?? []).map((a) => String(a.options?.command ?? ''));
-        // Proof certification + record step + post-record feature sync (task 0328 / ADR-0322,
-        // task 0612 / ADR-071; 0785 R3 replaced the bare fingerprint compare with the bound
-        // run.artifact registration, which re-captures the proof inputs itself). 0931 R5 added
-        // the deferFeatureSync guard to the shell; certification stays FIRST. 1004 R4 inlined
-        // the sync (service-level suppression). 0983 appended the post-record residual sweep
-        // (+ the R5 Testing re-record) AFTER the sync, so the sweep reads the post-record
-        // task file and folds before the done guard.
-        expect(record?.onEnter ?? []).toHaveLength(5);
-        // Certification must be FIRST: it refuses unless the verdict artifact's proof block
-        // certifies a fresh capture over the canonical task spec (+ linked feature) — so it has
-        // to run before any record write. Ordering is the guarantee here — a certification
-        // placed after `spur task record` would validate a tree the step just mutated.
-        expect(record?.onEnter?.[0]?.kind).toBe('run.artifact');
-        // The registration binds the live verdict artifact to a fresh capture over the canonical
-        // inputs: proofBinding:current pins the digest to the run's captured proof, and the task
-        // spec (+ linked feature, 0785 R2) scope the fresh capture.
-        const registration = record?.onEnter?.[0]?.options ?? {};
-        expect(String(registration.proofBinding ?? '')).toBe('current');
-        expect(String(registration.taskFile ?? '')).toContain('taskSpecPath');
-        expect(String(registration.featureFile ?? '')).toContain('featureSpecPath');
+        // D65 1239 / ADR-140 item 7: the `record` state is gone; its deterministic close is
+        // `done`'s onEnter. The behaviour this test owns is unchanged — record from the diff,
+        // sync feature status, and never record a tree the review did not certify.
+        expect(stateIds).not.toContain('record');
+        const doneSteps = yaml.states.find((s) => s.id === 'done')?.onEnter ?? [];
+        const cmds = doneSteps.filter((a) => a.kind === 'shell').map((a) => String(a.options?.command ?? ''));
+        // Certification is still FIRST in the run, now structurally: `review` derives and
+        // writes `.spur/run/<wbs>-verdict.json` (`spur task verdict --from-answer`) and its
+        // done-guard demands the certified review status. Record therefore only ever reads a
+        // verdict the review produced over the tree it reviewed.
+        const reviewArgs = JSON.stringify(yaml.states.find((s) => s.id === 'review')?.onEnter ?? []);
+        expect(reviewArgs).toContain('"verdict"');
+        expect(reviewArgs).toContain('--from-answer');
+        expect(reviewArgs).toContain('-verdict.json');
         // 0823: the record write is a `command.gate` action (classified transient retry);
         // assert the verb shape on the gate's args.
-        const recordGate = (record?.onEnter ?? []).find((a) => a.kind === 'command.gate');
+        const recordGate = doneSteps.find((a) => a.kind === 'command.gate');
         const gateArgs = JSON.stringify(recordGate?.options ?? {});
         expect(gateArgs).toContain('"task"');
         expect(gateArgs).toContain('"record"');
@@ -241,6 +259,14 @@ describe('task-pipeline.yaml structure (task 0062)', () => {
         // retry suppression moved into the feature sync service (1004 R3/R4), so the shell is a
         // bare `feature sync`. Assert the intent (a feature-sync hop exists), not one spelling.
         expect(cmds.some((c) => c.includes('feature sync'))).toBe(true);
+        // ...and it still runs AFTER the record write: the sync reads the post-record task
+        // file, so a reordering would sync a stale feature state.
+        const recordIdx = doneSteps.findIndex((a) => a.kind === 'command.gate');
+        const syncIdx = doneSteps.findIndex((a) => String(a.options?.command ?? '').includes('feature sync'));
+        expect(syncIdx).toBeGreaterThan(recordIdx);
+        // The completion contract is re-asserted after the residual sweep, on the verdict
+        // artifact (the review's own evidence) instead of the retired proof digest.
+        expect(cmds.some((c) => c.includes('jq -e') && c.includes('-verdict.json') && c.includes('PASS'))).toBe(true);
     });
 
     test('R3: status transitions go through the normal verb (`spur task update <wbs> <status>`)', () => {
@@ -280,8 +306,30 @@ describe('task-pipeline.yaml structure (task 0062)', () => {
     });
 
     test('R4: approve is a HITL gate (hitl.confirm)', () => {
-        const approve = yaml.states.find((s) => s.id === 'approve');
-        expect((approve?.onEnter ?? []).some((a) => a.kind === 'hitl.confirm')).toBe(true);
+        // D65 1239 R1/R5 (ADR-140 item 5): the standalone `approve` state became a decision
+        // point at the END of `review`, after certification. Same confirmation, same three
+        // outcomes (accept / deny / cancel) routed by the review guards.
+        expect(stateIds).not.toContain('approve');
+        const reviewSteps = yaml.states.find((s) => s.id === 'review')?.onEnter ?? [];
+        const hitl = reviewSteps.find((a) => a.kind === 'hitl.confirm');
+        expect(hitl).toBeDefined();
+        // It runs AFTER the certification fold: asking before the verdict/residual check would
+        // approve a task the review had not yet certified. The only action that follows it is
+        // the answer's fold into the approval token (it reads what the decision point captured).
+        const hitlIdx = reviewSteps.indexOf(hitl as { kind: string });
+        const certifyIdx = reviewSteps.findIndex((a) => String(a.options?.command ?? '').includes('-review.status'));
+        expect(certifyIdx).toBeGreaterThanOrEqual(0);
+        expect(hitlIdx).toBeGreaterThan(certifyIdx);
+        expect(reviewSteps.slice(hitlIdx + 1).map((a) => a.kind)).toEqual(['shell']);
+        expect(String(hitl?.options?.prompt ?? '')).toContain(tpl('wbs'));
+        // 1236: answered through the decision-point responder, not a `pause: true` state.
+        expect(String(JSON.stringify(hitl?.options?.decision ?? {}))).toContain('"mode":"evidence"');
+        // The three outcomes still exist as recorded routes out of review.
+        const outs = yaml.transitions.filter((t) => t.from === 'review').map((t) => t.to);
+        expect(outs).toContain('done');
+        expect(outs).toContain('failed');
+        const cancelled = yaml.transitions.find((t) => t.from === 'review' && t.to === 'failed');
+        expect(String(cancelled?.guard?.options?.command ?? '')).toContain('DENIED');
     });
 
     test('uses the resolvable @gobing-ai/spur schema ref (not the dead engine ref)', () => {
@@ -334,32 +382,36 @@ describe('task-pipeline.yaml structure (task 0062)', () => {
                 .filter((a) => a.kind === 'shell')
                 .map((a) => String(a.options?.command ?? ''));
 
-        // 1. Both gate hops extract anchors into the digest file. 0823 (d): the extraction moved
-        // into the gate; 1006 R1 moved the gate core into the app service and script-absorption
-        // PR-3 made `spur task gate` its entry — assert the wrappers delegate to the verb and the
-        // app core owns the log and findings artifacts with the bounded cap (MAX_FINDINGS = 20).
+        // 1. The ONE gate hop extracts anchors into the digest file. 0823 (d): the extraction
+        // moved into the gate; 1006 R1 moved the gate core into the app service and
+        // script-absorption PR-3 made `spur task gate` its entry; D65 1239 R2 merged the two
+        // gate states, so the mode is chosen per visit (run first, recheck after a remediation)
+        // instead of by state. Assert the mode selection, the verb delegation and the app-owned
+        // artifacts with the bounded cap (MAX_FINDINGS = 20).
         const gateCore = readFileSync(
             join(REPO_ROOT, 'packages', 'app', 'src', 'services', 'quality-gate.ts'),
             'utf-8',
         );
-        for (const gateState of ['test', 'test-recheck']) {
-            const cmds = shellCmds(gateState).join('\n');
-            const verb = gateState === 'test' ? 'run' : 'recheck';
-            // 1111: the mode rides the `M` var (run|recheck|deferred) so the opt-in deferred
-            // policy swaps the tier without a second dispatch line.
-            expect(cmds, `${gateState}: gate hop must pick the mode`).toContain(`M=${verb};`);
-            expect(cmds, `${gateState}: gate hop must delegate to spur task gate`).toContain(
-                '$spurBin task gate "$wbs" "$M"',
-            );
-        }
+        const gateCmds = shellCmds('gate').join('\n');
+        expect(gateCmds, 'gate hop must pick the mode per visit').toContain('M=run');
+        expect(gateCmds, 'a later visit must recheck').toContain('M=recheck');
+        expect(gateCmds, 'the gate hop must write the mode it selected').toContain('-gate-mode.txt');
+        const gateArgs = JSON.stringify(
+            (yaml.states.find((s) => s.id === 'gate')?.onEnter ?? []).find((a) => a.kind === 'command.gate')?.options
+                ?.args ?? [],
+        );
+        expect(gateArgs, 'the gate hop must delegate to spur task gate').toContain('"task","gate"');
+        expect(gateArgs, 'the selected mode rides the args').toContain(tpl('gateMode'));
+        expect(yaml.vars, 'the mode var must be declared or the template throws at runtime').toHaveProperty('gateMode');
         expect(gateCore).toContain('-test-gate.log');
         expect(gateCore).toContain('-test-gate.findings');
         expect(gateCore).toContain('MAX_FINDINGS = 20');
 
-        // 2. test-fix projects the digest into a var (a vars template cannot shell out).
-        const fixSteps = yaml.states.find((s) => s.id === 'test-fix')?.onEnter ?? [];
+        // 2. The repair hop projects the digest into a var (a vars template cannot shell out).
+        // D65 1239: `test-fix` is `remediate`, serving both the red gate and a repairable review.
+        const fixSteps = yaml.states.find((s) => s.id === 'remediate')?.onEnter ?? [];
         const readIdx = fixSteps.findIndex((a) => a.kind === 'file.read.into-var');
-        expect(readIdx, 'test-fix must read the findings digest into a var').toBeGreaterThanOrEqual(0);
+        expect(readIdx, 'remediate must read the findings digest into a var').toBeGreaterThanOrEqual(0);
         const readStep = fixSteps[readIdx];
         expect(String(readStep?.options?.path ?? '')).toContain('-test-gate.findings');
         const varName = String(readStep?.options?.var ?? '');

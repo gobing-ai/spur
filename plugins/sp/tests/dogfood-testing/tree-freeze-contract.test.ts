@@ -12,6 +12,11 @@ describe('implement-probe and post-gate freeze contract (task 1135)', () => {
     const pipeline = readFileSync(join(ROOT, 'config', 'workflows', 'task-pipeline.yaml'), 'utf8');
     const parsed = parse(pipeline) as {
         states: Array<{ id: string; onEnter?: Array<{ kind: string; options?: Record<string, unknown> }> }>;
+        transitions: Array<{
+            from: string;
+            to: string;
+            guard?: { kind: string; options?: Record<string, unknown> };
+        }>;
         vars?: Record<string, string>;
     };
 
@@ -45,35 +50,61 @@ describe('implement-probe and post-gate freeze contract (task 1135)', () => {
         expect(driver).toContain('test-fix → test-recheck`,\n   which re-captures the digest');
     });
 
-    test('R4: review joins the proof bracket in the YAML, and the header comment says so', () => {
-        const review = fingerprints('review');
-        expect(review).toHaveLength(1);
-        expect(review[0]?.options?.var).toBe('proofDigestNow');
-        // The literal is the YAML template string; build it so the linter does not read it as one.
-        expect(review[0]?.options?.expect).toBe(`$${'{\u0076ars.proofDigest}'}`);
-        // The compare must precede the review dispatch.
+    test('R4: review joins the evidence bracket in the YAML, and the header comment says so', () => {
+        // D65 1239 / ADR-140: the `proof.fingerprint` bracket is deleted. The bracket's INTENT —
+        // review never certifies a tree the quality gate did not measure — survives as two
+        // graph-level guarantees plus a tree-keyed receipt, and those are what this asserts.
+        expect(fingerprints('review')).toHaveLength(0);
+        // (1) review is only reachable from a green gate: the transition carries BOTH the typed
+        // command.gate outcome and the gate's own full-tier PASS token, so a stale review can
+        // never ride a blocked/red gate into certification.
+        const intoReview = parsed.transitions.filter((t) => t.to === 'review');
+        expect(intoReview.length).toBeGreaterThan(0);
+        for (const t of intoReview) {
+            expect(t.from).toBe('gate');
+            const cmd = String((t.guard?.options as Record<string, unknown> | undefined)?.command ?? '');
+            expect(cmd).toContain('-gate.status');
+            expect(cmd).toContain('-test-gate.status');
+        }
+        // (2) nothing runs between gate and review that could move the tree: the reviewer
+        // dispatches first, so the tree it reads is the tree the receipt is keyed to.
         const onEnter = stateOf('review').onEnter ?? [];
-        expect(onEnter[0]?.kind).toBe('proof.fingerprint');
-        expect(onEnter[1]?.kind).toBe('agent.run');
-        expect(pipeline).toContain('review joins by task 1135');
-        expect(pipeline).toContain('compared against `proofDigest` at review,');
+        expect(onEnter[0]?.kind).toBe('agent.run');
+        // (3) the evidence identity the run reports is the receipt's tree hash (the retired
+        // proof actions are gone from the graph, not merely renamed).
+        expect(pipeline).toContain('-check-receipt.json');
+        expect(pipeline).toContain('inputDigest');
+        const retiredKinds = parsed.states.flatMap((s) => (s.onEnter ?? []).map((a) => a.kind));
+        expect(retiredKinds).not.toContain('proof.fingerprint');
+        expect(retiredKinds).not.toContain('run.artifact');
+        // (4) the header comment names the evidence model it now implements.
+        expect(pipeline).toContain('the tree-hash gate receipt');
+        expect(pipeline).toContain('keyed by the git tree the gate captures itself');
     });
 
-    test('R5: gate entry snapshots the non-corpus tree state; test and test-recheck both do it before the capture', () => {
-        for (const id of ['test', 'test-recheck']) {
-            const onEnter = stateOf(id).onEnter ?? [];
-            const snapshotIndex = onEnter.findIndex(
-                (a) => a.kind === 'shell' && String(a.options?.command ?? '').includes('-gate-paths.txt'),
-            );
-            const captureIndex = onEnter.findIndex((a) => a.kind === 'proof.fingerprint');
-            expect(snapshotIndex, `${id} must snapshot the tree state`).toBeGreaterThanOrEqual(0);
-            expect(snapshotIndex).toBeLessThan(captureIndex);
-            expect(String(onEnter[snapshotIndex]?.options?.command)).toContain('git status --porcelain=v1 -uall');
-            expect(String(onEnter[snapshotIndex]?.options?.command)).toContain("':(exclude)docs/tasks*'");
-        }
-        expect(shells('test').length).toBeGreaterThan(0);
-        expect(driver).toContain('drifted paths');
-        expect(driver).toContain('proof-compare-failed');
+    test('R5: the gate keys its receipt to the tree it captures, and one gate state serves run and recheck', () => {
+        // D65 1239 R2/R11: the -gate-paths.txt snapshot and the fingerprint compare that
+        // reported "drifted paths" are gone. The freeze is enforced by identity instead: the
+        // ONE gate state delegates to `spur task gate`, which captures the git tree itself,
+        // keys `<wbs>-check-receipt.json` by it, and reuses or invalidates on that hash.
+        expect(parsed.states.filter((s) => s.id === 'gate' || s.id === 'test' || s.id === 'test-recheck')).toHaveLength(
+            1,
+        );
+        const gate = stateOf('gate');
+        const onEnter = gate.onEnter ?? [];
+        expect(onEnter.findIndex((a) => a.kind === 'command.gate')).toBeGreaterThanOrEqual(0);
+        const gateVerb = JSON.stringify(onEnter.find((a) => a.kind === 'command.gate')?.options?.args ?? []);
+        expect(gateVerb).toContain('"task","gate"');
+        // The mode is per visit (run on the first, recheck after remediation) so the same state
+        // cannot hold two capture points that disagree about the certified tree.
+        const gateShells = shells('gate').map((a) => String(a.options?.command ?? ''));
+        expect(gateShells.join('\n')).toContain('M=run');
+        expect(gateShells.join('\n')).toContain('M=recheck');
+        // The capture + reuse lives in the app core the verb calls.
+        const gateCore = readFileSync(join(ROOT, 'packages/app/src/services/quality-gate.ts'), 'utf8');
+        expect(gateCore).toContain('-check-receipt.json');
+        expect(gateCore).toContain('inputDigest: tree.tree');
+        expect(gateCore).toContain('resolveReceiptReuse');
     });
 
     test('R5: the untracked-file behaviour is documented beside the exclusion globs', () => {

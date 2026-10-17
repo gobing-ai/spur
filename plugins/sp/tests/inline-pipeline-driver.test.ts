@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'bun:test';
-import { appendFileSync, chmodSync, mkdirSync, mkdtempSync, readFileSync, writeFileSync } from 'node:fs';
+import { appendFileSync, chmodSync, existsSync, mkdirSync, mkdtempSync, readFileSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { getEnvVars } from '@gobing-ai/ts-utils';
@@ -8,6 +8,7 @@ import { parse } from 'yaml';
 interface ActionOptions {
     id?: string;
     args?: string[];
+    executable?: string;
     command?: string;
     input?: string;
     answerFile?: string;
@@ -16,9 +17,9 @@ interface ActionOptions {
     var?: string;
     message?: string;
     requireDiff?: boolean;
+    softFail?: boolean;
     // Keys of the engine-internal action kinds this smoke harness simulates:
-    // proof.fingerprint (0937), decide (0943/0941), doctor.probe (0608).
-    expect?: string;
+    // decide (0943/0941), doctor.probe (0608), command.gate (1234).
     resultFile?: string;
     default?: string;
     // Catalog-reference decide (1115).
@@ -65,9 +66,10 @@ const PIPELINE = parse(
 test('inline record guidance suppresses nested task lifecycle runs like the workflow', () => {
     const driver = readFileSync(join(ROOT, 'plugins/sp/skills/spur-dev/references/inline-pipeline-driver.md'), 'utf8');
     expect(driver).toContain('spur task record <wbs> --solution-from-diff --transition testing --no-lifecycle');
-    const record = PIPELINE.states.find((state) => state.id === 'record');
-    const transition = record?.onEnter?.find(
-        (action) => action.kind === 'command.gate' && action.options?.id === 'task-record-transition',
+    // D65 1239: the record write lives in `done`'s onEnter (the `record` state is gone).
+    const done = PIPELINE.states.find((state) => state.id === 'done');
+    const transition = done?.onEnter?.find(
+        (action) => action.kind === 'command.gate' && action.options?.id === 'task-record-close',
     );
     expect(transition?.options?.args).toContain('--no-lifecycle');
 });
@@ -109,14 +111,17 @@ case "$1:$2" in
     if [ -n "$FAIL_CHECK_AT" ] && [ "$n" -ge "$FAIL_CHECK_AT" ]; then exit 1; fi ;;
   task:verdict)
     mkdir -p .spur/run
-    printf '{"wbs":"%s","verdict":"%s","confidence":"%s","requirements":[],"checks":[]}\n' "$3" "\${VERDICT:-PASS}" "\${CONFIDENCE:-HIGH}" > ".spur/run/$3-verdict.json" ;;
+    printf '{"wbs":"%s","verdict":"%s","confidence":"%s","requirements":[],"checks":[]}\n' "$3" "\${VERDICT:-PASS}" "\${CONFIDENCE:-HIGH}" > ".spur/run/$3-verdict.json"
+    [ "\${VERDICT:-PASS}" = PASS ] || exit 1 ;;
   task:show)
     printf '%s\n' '{"content":"ordinary implementation task","frontmatter":{"feature_id":null}}' ;;
   task:path)
     # 0751 R2: the fail-closed task lookup needs a resolvable spec. FIXTURE_TASK_SPEC
     # is seeded by runInlineSmoke; unset -> empty path -> the pipeline step must fail.
     printf '{"path":"%s"}\n' "$FIXTURE_TASK_SPEC" ;;
-  task:update|task:record)
+  task:update)
+    [ "$4" = done ] && [ -n "$FAIL_DONE_TRANSITION" ] && exit 1; exit 0 ;;
+  task:record)
     exit 0 ;;
 esac
 exit 0
@@ -140,14 +145,18 @@ function resolveSessionId(cwd: string): string {
 // ISO-8601 UTC stamp prefix — bare local-clock forms are prohibited.
 const isoStamp = (): string => `${new Date().toISOString()} `;
 
-// 0785 R2/R3: the smoke runs the real graph but not the real fingerprint built-in. Simulate a
-// stable capture token (the smoke tree never mutates between captures) in BOTH vars and env —
-// downstream shell actions and guards read env, later actions read vars — so the review-marker
-// write, the verify stamp merge, and the verify→record guard see a consistent non-empty digest.
-const FIXTURE_PROOF_DIGEST = 'fixture-0503-proof-digest';
+// 0785 R2/R3 → D65 1239: the smoke runs the real graph without the engine's built-ins. The
+// proof digest it used to simulate is retired (ADR-140); the evidence the graph now reads is the
+// gate's typed outcome (`.spur/run/<runId>-gate.status`) and the review verdict artifact
+// (`.spur/run/<wbs>-verdict.json`), both produced by the stubs below.
 
 function runInlineSmoke(
-    options: { verdict?: 'PASS' | 'FAIL'; failCheckAt?: number; unresolvableTask?: boolean } = {},
+    options: {
+        verdict?: 'PASS' | 'FAIL';
+        failCheckAt?: number;
+        unresolvableTask?: boolean;
+        failDoneTransition?: boolean;
+    } = {},
 ): SmokeResult {
     const cwd = mkdtempSync(join(tmpdir(), 'spur-0503-inline-'));
     mkdirSync(join(cwd, '.spur/context'), { recursive: true });
@@ -180,6 +189,7 @@ function runInlineSmoke(
         CHECK_COUNTER: join(cwd, 'check-counter'),
         VERDICT: options.verdict ?? 'PASS',
         FAIL_CHECK_AT: options.failCheckAt === undefined ? '' : String(options.failCheckAt),
+        FAIL_DONE_TRANSITION: options.failDoneTransition === true ? '1' : '',
         FIXTURE_TASK_SPEC: options.unresolvableTask === true ? '' : taskSpecPath,
     };
     // The driver doc (task 0927) appends host provenance lines to the run-record markdown.
@@ -196,6 +206,7 @@ function runInlineSmoke(
 
     let current = PIPELINE.initialState;
     const hostStages: string[] = [];
+    let hardFailure = false;
     for (let iteration = 0; iteration < PIPELINE.iterationBound; iteration += 1) {
         const state = PIPELINE.states.find((candidate) => candidate.id === current);
         if (state === undefined) throw new Error(`unknown state ${current}`);
@@ -233,17 +244,15 @@ function runInlineSmoke(
                     vars[key] = readFileSync(join(cwd, expand(path, vars)), 'utf8');
                 continue;
             }
-            if (action.kind === 'proof.fingerprint') {
-                const key = action.options?.var;
-                if (key !== undefined) {
-                    vars[key] = FIXTURE_PROOF_DIGEST;
-                    env[key] = FIXTURE_PROOF_DIGEST;
-                }
-                const expectDigest = action.options?.expect;
-                if (expectDigest !== undefined) expect(expand(expectDigest, vars)).toBe(FIXTURE_PROOF_DIGEST);
+            if (action.kind === 'hitl.confirm') {
+                // 1236 / D65 1239 R10: a decision point, not a pause. Under `profile=auto` the
+                // declared binding answers: with no maker configured the answer is `deferred` and
+                // `__hitlAnswer` stays empty, which the review's approval fold reads as "no
+                // objection". Nothing blocks, and no operator prompt is emitted.
+                vars.approvalStatus = 'deferred';
+                env.approvalStatus = 'deferred';
                 continue;
             }
-            if (action.kind === 'hitl.confirm') throw new Error('auto profile must route around HITL');
             if (action.kind === 'doctor.probe') {
                 // doctor.probe built-in (task 0608 / D6): the smoke harness simulates the
                 // probe outcome instead of importing the app runner — the fake spur's
@@ -268,30 +277,61 @@ function runInlineSmoke(
                 );
                 continue;
             }
+            if (action.kind === 'command.gate') {
+                // 1234: the typed gate step. The real runner executes `executable` with `args` and
+                // writes PASS | FAIL | BLOCKED to resultFile from the exit code alone; a
+                // `softFail: false` step aborts the run on a non-zero exit. The two pipeline
+                // gate ids wrap real verbs, so the smoke simulates each verb's contract instead
+                // of spawning it (quality-gate.ts owns the gate; packages/app/tests own verdict).
+                const resultFile = expand(action.options?.resultFile ?? '', vars);
+                const executable = expand(action.options?.executable ?? '', vars);
+                const args = (action.options?.args ?? []).map((arg) => expand(arg, vars));
+                mkdirSync(dirname(join(cwd, resultFile)), { recursive: true });
+                let exitCode: number;
+                if (action.options?.id === 'quality-gate') {
+                    // `spur task gate <wbs> <mode>`: a `run` visit resets the attempt counter and
+                    // executes qualityGateCmd; a `recheck` visit probes first. Both always leave
+                    // the gate's own status/findings/log for the transitions to read.
+                    const mode = args[3] ?? '';
+                    const finish =
+                        'printf "%s\\n" "$s" > ".spur/run/$wbs-test-gate.status"; ' +
+                        ': > ".spur/run/$wbs-test-gate.findings"; ' +
+                        'printf "gate: %s\\n" "$s" > ".spur/run/$wbs-test-gate.log"';
+                    const reset = mode === 'run' ? 'echo 0 > ".spur/run/$wbs-test-fix-attempt"; ' : '';
+                    const body =
+                        mode === 'recheck'
+                            ? `${reset}if $gateProbeCmd; then s=PASS; else s=FAIL; fi; if [ "$s" = PASS ]; then if $qualityGateCmd; then s=PASS; else s=FAIL; fi; fi; ${finish}`
+                            : `${reset}if $qualityGateCmd; then s=PASS; else s=FAIL; fi; ${finish}`;
+                    expect(runShell(body, cwd, env), `quality-gate ${mode}`).toBe(0);
+                    // The typed outcome must agree with the gate's own token so the PASS edge's
+                    // two predicates never disagree in the smoke.
+                    const gateToken = readFileSync(join(cwd, `.spur/run/${vars.wbs}-test-gate.status`), 'utf8').trim();
+                    exitCode = gateToken === 'PASS' ? 0 : 1;
+                } else {
+                    exitCode = runShell(`"${executable}" ${args.join(' ')}`, cwd, env);
+                }
+                if (exitCode === 0) {
+                    writeFileSync(join(cwd, resultFile), 'PASS\n');
+                    continue;
+                }
+                writeFileSync(join(cwd, resultFile), exitCode === 1 ? 'FAIL\n' : 'BLOCKED\n');
+                if (action.options?.softFail !== true) {
+                    hardFailure = true;
+                    break;
+                }
+                continue;
+            }
             if (action.kind === 'shell') {
                 let command = expand(action.options?.command ?? '', vars);
                 // 1002 R4: the precheck→implement guard is `$spurBin task check $wbs --precheck`;
                 // the fake spur handles `task check` (exit 0), so no status-file simulation remains.
                 // 1132 R4: the guard first runs a repair pass (`task check $wbs --fix`), also
                 // handled by the fake — it therefore consumes one CHECK_COUNTER slot.
-                // 1003 R2: the verify-stage lint gate is `spur task verdict` itself — the fake
-                // spur already handles `task verdict`, no separate lint step remains to simulate.
-                // 0823 / PR-3: the quality gate is `spur task gate <wbs> run|recheck`, so the smoke
-                // simulates its verdict contract (packages/app/tests/services/quality-gate*.test.ts
-                // own the gate): run resets
-                // the attempt counter and executes qualityGateCmd; recheck runs gateProbeCmd
-                // first (`spur self exec lint` is red in this sandbox, so the probe IS the recheck
-                // verdict, gate skipped). Both always leave status/findings/log for the guards.
-                // 1111: the gate shell selects the mode through `M` (run|recheck|deferred), so the
-                // stub keys on the assignment + the `"$M"` invocation instead of a literal mode.
-                if (command.includes('M=run;') && command.includes('$spurBin task gate "$wbs" "$M"')) {
-                    command =
-                        'mkdir -p .spur/run; : > ".spur/run/$wbs-test-gate.log"; echo 0 > ".spur/run/$wbs-test-fix-attempt"; if $qualityGateCmd; then s=PASS; else s=FAIL; fi; printf "%s\\n" "$s" > ".spur/run/$wbs-test-gate.status"; : > ".spur/run/$wbs-test-gate.findings"; printf "proof-digest: %s\\n" "$proofDigest" >> ".spur/run/$wbs-test-gate.log"';
-                }
-                if (command.includes('M=recheck;') && command.includes('$spurBin task gate "$wbs" "$M"')) {
-                    command =
-                        'mkdir -p .spur/run; : > ".spur/run/$wbs-test-gate.log"; if $gateProbeCmd; then s=PASS; else s=FAIL; fi; if [ "$s" = PASS ]; then if $qualityGateCmd; then s=PASS; else s=FAIL; fi; fi; printf "%s\\n" "$s" > ".spur/run/$wbs-test-gate.status"; : > ".spur/run/$wbs-test-gate.findings"; printf "proof-digest: %s\\n" "$proofDigest" >> ".spur/run/$wbs-test-gate.log"';
-                }
+                // D65 1239: the quality gate is no longer a shell — it is the `command.gate`
+                // action simulated above, so no gate stub lives here anymore.
+                // F96 (0950) / PR-3: the residual sweep is `spur task residual` like the gate — the
+                // smoke simulates its clean-tree contract (empty residual list, soft terminal
+                // actions); residual-scan-run.test.ts owns the sweep itself.
                 // F96 (0950) / PR-3: the residual sweep is `spur task residual` like the gate — the
                 // smoke simulates its clean-tree contract (empty residual list, soft terminal
                 // actions); residual-scan-run.test.ts owns the sweep itself.
@@ -308,6 +348,7 @@ function runInlineSmoke(
                 expect(runShell(command, cwd, env), `${state.id}: ${command}`).toBe(0);
             }
         }
+        if (hardFailure) break;
 
         if (PIPELINE.terminalStates.includes(current)) break;
         const outgoing = PIPELINE.transitions.filter((transition) => transition.from === current);
@@ -325,17 +366,20 @@ function runInlineSmoke(
         current = next;
     }
 
-    const log = readFileSync(logPath, 'utf8');
+    // A run that never dispatched a stage (precheck routed to `failed`) writes no run log.
+    const log = existsSync(logPath) ? readFileSync(logPath, 'utf8') : '';
     // 0727 R3: every appended line is ISO-8601 UTC-stamped; zero bare local-clock forms.
     const logLines = log.split('\n').filter((line) => line.length > 0);
-    expect(logLines.length).toBeGreaterThan(0);
+    if (hostStages.length > 0) expect(logLines.length).toBeGreaterThan(0);
     for (const line of logLines) {
         expect(line).toMatch(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d+)?Z /);
     }
     expect(logLines.filter((line) => /^\[[a-z-]+ [0-9]{1,2}:[0-9]{2}\]/.test(line))).toEqual([]);
 
     return {
-        terminal: current,
+        // A hard-failing action (`softFail: false`) aborts the engine run, so an exit inside a
+        // state's onEnter is a failed run, not a reached terminal state.
+        terminal: hardFailure ? 'failed' : current,
         hostStages,
         log,
         runLink: readFileSync(join(cwd, '.spur/run/fixture-0503-run-link.json'), 'utf8'),
@@ -347,49 +391,60 @@ describe('0503 interactive inline pipeline driver smoke', () => {
         const result = runInlineSmoke();
 
         expect(result.terminal).toBe('done');
-        expect(result.hostStages).toEqual(['implement', 'review', 'verify']);
+        // D65 1239: `verify` folded into `review`, so the graph has two model stages.
+        expect(result.hostStages).toEqual(['implement', 'review']);
         expect(result.log).toContain('stage implement executed inline in session codex-fixture-session');
         expect(result.log).toContain('stage review executed inline in session codex-fixture-session');
-        expect(result.log).toContain('stage verify executed inline in session codex-fixture-session');
         expect(result.log).not.toContain('spur agent run');
         expect(JSON.parse(result.runLink)).toEqual({ source: 'inline-full', runId: 'inline-smoke-run' });
     });
 
-    test('a non-PASS verdict follows the YAML guard to failed before record', () => {
+    test('a non-PASS verdict follows the YAML guard into bounded remediation before done', () => {
         const result = runInlineSmoke({ verdict: 'FAIL' });
 
         expect(result.terminal).toBe('failed');
-        // 0703 R4: a non-PASS verify verdict routes through the bounded verify→test-fix
-        // edge. In this sandbox the recheck probe (`spur self exec lint`) is red, so each
-        // test-fix hop re-enters a probe-skipped recheck (0587 R3) that fails again until
-        // attempts exhaust `qualityGateMaxFixAttempts` — the catch-all then terminates at
-        // `failed` without reaching `record`.
-        expect(result.hostStages).toEqual(['implement', 'review', 'verify', 'test-fix', 'test-fix']);
+        // D65 1239: the certification is `review`'s own verdict, so a non-PASS review routes
+        // through the shared bounded repair hop (review-failure-class → remediate) and back
+        // through `gate` (recheck visit) rather than through a `verify` → `test-fix` pair. The
+        // shared attempt cap then terminates the run at `failed` without ever reaching `done`.
+        expect(result.hostStages).toEqual(['implement', 'review', 'remediate', 'review', 'remediate', 'review']);
         expect(result.log).not.toContain('Pipeline complete');
     });
 
-    test('0751 R2 fail-closed: an unresolved task path fails the test-state lookup step', () => {
+    test('0751 R2 fail-closed: an unresolved task path fails the gate-state lookup step', () => {
         const cwd = mkdtempSync(join(tmpdir(), 'spur-0503-inline-failclosed-'));
         mkdirSync(join(cwd, '.spur/run'), { recursive: true });
         const spurBin = makeFakeSpur(cwd);
-        const lookup = PIPELINE.states.find((state) => state.id === 'test')?.onEnter?.[0];
+        // D65 1239: the fail-closed lookup entered with the gate state (the former `test`).
+        const lookup = PIPELINE.states.find((state) => state.id === 'gate')?.onEnter?.[0];
         expect(lookup?.kind).toBe('shell');
         const command = expand(lookup?.options?.command ?? '', { ...PIPELINE.vars, wbs: 'fixture-0503', spurBin });
         // No fixture task seeded (FIXTURE_TASK_SPEC empty) -> the lookup must fail the
-        // step instead of degrading the proof to whole-tree-only.
+        // step instead of degrading the evidence to whole-tree-only.
         expect(runShell(command, cwd, { wbs: 'fixture-0503', spurBin, FIXTURE_TASK_SPEC: '' })).not.toBe(0);
         // The priority var is never materialized from a failed lookup.
         expect(Bun.file(join(cwd, '.spur/run/fixture-0503-priority.txt')).exists()).resolves.toBe(false);
     });
 
-    test('the record-to-done task-check guard blocks a failed structural check', () => {
-        // 1132 R4 added the auto-fix-first repair check to the precheck guard, so the
-        // pipeline now issues check #1 (`--fix`) and #2 (`--precheck`) before the
-        // record→done gate at #3 — the positional failure moved with it.
-        const result = runInlineSmoke({ failCheckAt: 3 });
+    test('a red structural check at precheck stops the run before implement', () => {
+        // The graph-level structural check is the precheck guard (check #1 is the 1132 R4
+        // repair pass, #2 is `--precheck`); a non-zero check follows the fail-closed edge.
+        const result = runInlineSmoke({ failCheckAt: 2 });
 
         expect(result.terminal).toBe('failed');
-        expect(result.hostStages).toEqual(['implement', 'review', 'verify']);
+        expect(result.hostStages).toEqual([]);
+    });
+
+    test('the completion verb rejecting the done target blocks the close', () => {
+        // 1132 R4 added the auto-fix-first repair check to the precheck guard, so the
+        // pipeline now issues check #1 (`--fix`) and #2 (`--precheck`) before `done`.
+        // D65 1239: the completion gate is the `spur task update <wbs> done` verb's own
+        // target-aware `task check --as done`, so the graph's observable is the hard
+        // `command.gate` around it: a non-zero exit aborts the run instead of storing `done`.
+        const result = runInlineSmoke({ failDoneTransition: true });
+
+        expect(result.terminal).toBe('failed');
+        expect(result.hostStages).toEqual(['implement', 'review']);
         expect(result.log).not.toContain('Pipeline complete');
     });
 });

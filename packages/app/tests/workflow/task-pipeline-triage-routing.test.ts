@@ -1,28 +1,22 @@
 /**
- * 0943: task-pipeline triage lanes — routing contract for the new `triage` and
- * `test-fail-triage` states.
+ * 0943 lanes, re-keyed by D65 1239: the triage lane decision and the failure-class routing are
+ * decision CALLS inside the one `gate` state, and the former routing states are gone.
  *
  * The engine takes the first passing edge in declaration order, so routing is proven by
  * EXECUTING the live definition's own onEnter shell commands and transition guards against
- * staged file/variable state (same harness discipline as idea-pipeline-routing 0945): no
- * engine run, no model call — the `decide` actions are simulated by pre-writing the decision
- * rows the real decide runner would produce (including a degraded default row for R4).
+ * staged file/variable state (same harness discipline as 0945): no engine run, no model call —
+ * the `decide` actions are simulated by pre-writing the decision rows the real decide runner
+ * would produce (including a degraded default row).
  *
- * Covered (spec R1–R5 + Q&A):
- * - triage lane production: low → fast; standard/high → review (empty mode), caller-set mode
- *   is never overridden (R2b), sensitive paths or >400 changed lines pin safety with the
- *   decide result ignored (R2c), a degraded decide default degrades to the standard lane (R4),
- *   and a fail-closed diffstat (missing run base, or a producer that wrote no row at all)
- *   degrades to safety — never to fast.
- * - R5: every triage run appends `<runId> <wbs> <reason>` to .spur/memory/task-pipeline-routes.log
- *   with the reason naming the lane origin (caller-set / triage low / deterministic-high / standard).
- * - failure-class routing: stop → failed(failed-check) BEFORE the cap (never mislabeled),
- *   the qualityGateMaxFixAttempts cap bounds the fix lane, fix → test-fix, missing/corrupt
- *   decision → failed(failed-check) defense (fail closed, never silently repair). 0976 R2
- *   collapsed the unreachable `retryable` lane: a `retryable` row is now out of vocabulary and
- *   fails closed like any corrupt decision.
- * - Frozen names: decide ids `task-triage`/`failure-class`, the four gate-PASS edges are gone,
- *   and the triage fork guards are exhaustive (`= fast` / `!= fast`) so triage never hangs.
+ * Covered:
+ * - lane production (0943 R1/R2): low → fast (functional-only review depth); standard/high →
+ *   review; a caller-set mode is never overridden (R2b); sensitive paths or >400 changed lines
+ *   pin safety with the decide result ignored (R2c); a missing/corrupt diffstat row pins safety
+ *   — never fast; and every lane appends `<runId> <wbs> <reason>` to the routes log (R5).
+ * - failure-class routing (0943 R3): the typed gate outcome gates first (BLOCKED is never read
+ *   as red), then stop → failed(failed-check) BEFORE the cap, the cap → failed(retry-exhausted),
+ *   fix → remediate, and a missing/corrupt decision fails closed.
+ * - gate visit mode (D65 R2): the first visit runs `run`, a visit after remediation `recheck`.
  */
 
 import { describe, expect, test } from 'bun:test';
@@ -34,7 +28,7 @@ import { getEnvVars } from '@gobing-ai/spur-config';
 import { parse as parseYaml } from 'yaml';
 
 const WORKFLOWS_DIR = join(import.meta.dir, '../../../../config', 'workflows');
-// Script-absorption PR-3: the triage onEnter calls `$spurBin task diffstat` — run the REAL CLI from
+// Script-absorption PR-3: the lane onEnter calls `$spurBin task diffstat` — run the REAL CLI from
 // source so the shell exercises the shipped verb (no plugin script staging).
 const SPUR_BIN = `${process.execPath} ${join(import.meta.dir, '../../../../apps/cli/src/index.ts')}`;
 const WBS = '0943';
@@ -46,11 +40,6 @@ interface ActionDef {
     options?: {
         command?: string;
         id?: string;
-        method?: string;
-        question?: string;
-        choices?: string[];
-        default?: string;
-        // Catalog-reference decide (1115).
         decision?: string;
         params?: Record<string, string>;
         evidence?: string[];
@@ -90,13 +79,20 @@ function edgesFrom(from: string): TransitionDef[] {
     return DEF.transitions.filter((t) => t.from === from);
 }
 
-/** Runs the state's real onEnter shell commands (in YAML order) inside the staged dir. */
-function runOnEnterShells(stateId: string, cwd: string, vars: Record<string, string>): void {
-    for (const [i, command] of shellCommands(stateId).entries()) {
+/**
+ * Run the state's onEnter shells whose command mentions one of `needles`, in YAML order. The
+ * gate's task-path resolver is excluded by every lane scenario: it reads the real task corpus,
+ * which this harness does not stage (its fail-closed behavior is pinned in the evidence suite).
+ */
+function runShellsMatching(stateId: string, needles: string[], cwd: string, vars: Record<string, string>): void {
+    const selected = shellCommands(stateId).filter((command) => needles.some((n) => command.includes(n)));
+    for (const [i, command] of selected.entries()) {
         const run = spawnSync('/bin/sh', ['-c', command], { cwd, env: { ...getEnvVars(), ...vars }, encoding: 'utf8' });
-        if (run.status !== 0) throw new Error(`${stateId} onEnter shell #${i} exited ${run.status}: ${run.stderr}`);
+        if (run.status !== 0) throw new Error(`${stateId} shell #${i} exited ${run.status}: ${run.stderr}`);
     }
 }
+
+const LANE_SHELLS = ['-diffstat.json', 'sensitive == true', 'task-pipeline-routes.log', '-review-focus.txt'];
 
 /** First passing edge in declaration order — the engine's routing decision. */
 function firstPassingEdge(from: string, cwd: string, vars: Record<string, string>): TransitionDef {
@@ -119,10 +115,10 @@ interface Staged {
 }
 
 /**
- * Stage one scenario: a real git repo whose diff is shaped by `files` (tracked rewrites keyed
- * by path → new content) plus `untracked` paths, the precheck-anchored run base, and optional
- * pre-existing run artifacts (decision rows, gate status, attempt counter, caller mode).
- * The decide simulation writes exactly the row the decide runner would (resultFile contract).
+ * Stage one scenario: a real git repo whose diff is shaped by `files` plus `untracked` paths, the
+ * precheck-anchored run base, and optional pre-existing run artifacts (decision rows, gate tokens,
+ * attempt counter, caller mode). The decide simulation writes exactly the row the decide runner
+ * would (resultFile contract).
  */
 function stage(options: {
     files?: Record<string, string>;
@@ -134,7 +130,7 @@ function stage(options: {
     callerMode?: string;
     anchorBase?: boolean;
 }): Staged {
-    const cwd = mkdtempSync(join(tmpdir(), 'task-triage-'));
+    const cwd = mkdtempSync(join(tmpdir(), 'task-lane-'));
     const git = (args: string[]): void => {
         const run = spawnSync('git', args, { cwd, encoding: 'utf8' });
         if (run.status !== 0) throw new Error(`git ${args.join(' ')} failed: ${run.stderr}`);
@@ -142,6 +138,7 @@ function stage(options: {
     git(['init', '-q']);
     git(['config', 'user.email', 'test@example.com']);
     git(['config', 'user.name', 'test']);
+    writeFileSync(join(cwd, '.gitignore'), '.spur/\n');
     mkdirSync(join(cwd, 'apps/cli/src'), { recursive: true });
     writeFileSync(join(cwd, 'apps/cli/src/index.ts'), 'export const start = 1;\n');
     git(['add', '.']);
@@ -167,7 +164,11 @@ function stage(options: {
     if (options.failureDecision !== undefined && options.failureDecision !== null) {
         writeFileSync(join(runDir, `${WBS}-failure-class.decision`), `${JSON.stringify(options.failureDecision)}\n`);
     }
-    if (options.gateStatus !== undefined) writeFileSync(join(runDir, `${WBS}-test-gate.status`), options.gateStatus);
+    if (options.gateStatus !== undefined) {
+        // The gate writes both tokens: its own status file and the typed command.gate outcome.
+        writeFileSync(join(runDir, `${WBS}-test-gate.status`), options.gateStatus);
+        writeFileSync(join(runDir, `${RUN_ID}-gate.status`), options.gateStatus);
+    }
     if (options.attempts !== undefined) writeFileSync(join(runDir, `${WBS}-test-fix-attempt`), options.attempts);
     return {
         cwd,
@@ -176,21 +177,17 @@ function stage(options: {
             __runId: RUN_ID,
             mode: options.callerMode ?? '',
             qualityGateMaxFixAttempts: MAX_ATTEMPTS,
+            deferQualityGate: 'false',
             spurBin: SPUR_BIN,
         },
     };
 }
 
-/**
- * Vars at triage-edge evaluation time: the fork guards read the `mode` VAR, which the trailing
- * file.read.into-var action set from the projected mode file — not the caller's env value.
- */
-function edgeVars(staged: Staged): Record<string, string> {
-    return { ...staged.vars, mode: readMode(staged) };
-}
-
 function readMode(staged: Staged): string {
     return readFileSync(join(staged.cwd, '.spur/run', `${WBS}-mode.txt`), 'utf8').trim();
+}
+function readFocus(staged: Staged): string {
+    return readFileSync(join(staged.cwd, '.spur/run', `${WBS}-review-focus.txt`), 'utf8').trim();
 }
 function lastRouteLine(staged: Staged): string {
     const log = readFileSync(join(staged.cwd, '.spur/memory/task-pipeline-routes.log'), 'utf8').trim();
@@ -201,49 +198,51 @@ function readAttempts(staged: Staged): string {
     return readFileSync(join(staged.cwd, '.spur/run', `${WBS}-test-fix-attempt`), 'utf8').trim();
 }
 
-describe('task-pipeline 0943 — triage state routing (R1/R2)', () => {
-    test('frozen contract: task-triage decide row + lane projection + exhaustive triage fork', () => {
-        const triage = decideAction('triage', 'task-triage');
+describe('task-pipeline 1239 — the lane is a decision call in the gate state (0943 R1/R2)', () => {
+    test('frozen contract: both catalog decides live in `gate`; no routing states remain', () => {
+        for (const retired of ['triage', 'test-fail-triage', 'test-recheck']) {
+            expect(
+                DEF.states.find((s) => s.id === retired),
+                retired,
+            ).toBeUndefined();
+        }
+        const triage = decideAction('gate', 'task-triage');
         expect(triage.options?.decision).toBe('task-triage');
-        expect((triage.options?.params as Record<string, string> | undefined)?.wbs).toBe(
-            // biome-ignore lint/suspicious/noTemplateCurlyInString: asserting the literal YAML template, not interpolating
-            '${vars.wbs}',
-        );
+        // biome-ignore lint/suspicious/noTemplateCurlyInString: asserting the literal YAML template, not interpolating
+        expect(triage.options?.params).toEqual({ wbs: '${vars.wbs}' });
         expect(triage.options?.resultFile).toBe(`.spur/run/\${vars.wbs}-triage.decision`);
         expect(triage.options?.evidence).toContain(`.spur/run/\${vars.wbs}-diffstat.json`);
-        // (d) the resolved lane lands in the mode var for the fork guards.
-        const read = onEnter('triage').find((a) => a.kind === 'file.read.into-var');
-        expect(read?.options?.var).toBe('mode');
-        expect(read?.options?.path).toBe(`.spur/run/\${vars.wbs}-mode.txt`);
-        // The four gate-PASS edges are gone; the triage fork guards are exhaustive.
-        expect(DEF.transitions.find((t) => t.from === 'test' && t.to === 'verify')).toBeUndefined();
-        expect(DEF.transitions.find((t) => t.from === 'test' && t.to === 'review')).toBeUndefined();
-        expect(DEF.transitions.find((t) => t.from === 'test-recheck' && t.to === 'verify')).toBeUndefined();
-        expect(DEF.transitions.find((t) => t.from === 'test-recheck' && t.to === 'review')).toBeUndefined();
-        const fork = edgesFrom('triage').map((t) => t.to);
-        expect(fork).toEqual(['verify', 'review']);
+        const failure = decideAction('gate', 'failure-class');
+        expect(failure.options?.decision).toBe('failure-class');
+        expect(failure.options?.resultFile).toBe(`.spur/run/\${vars.wbs}-failure-class.decision`);
+        expect(failure.options?.evidence).toEqual([`.spur/run/\${vars.wbs}-test-gate.findings`]);
+        // The lane depth lands in the mode/focus vars the review template reads.
+        expect(onEnter('gate').some((a) => a.kind === 'file.read.into-var' && a.options?.var === 'mode')).toBe(true);
+        expect(onEnter('gate').some((a) => a.kind === 'file.read.into-var' && a.options?.var === 'reviewFocus')).toBe(
+            true,
+        );
     });
 
-    test('R1: task-triage low on a small clean diff routes the fast lane (triage → verify)', () => {
+    test('R1: task-triage low on a small clean diff resolves the fast lane (functional review depth)', () => {
         const staged = stage({
             files: { 'apps/cli/src/index.ts': 'export const start = 2;\n' },
             triageDecision: { value: 'low' },
         });
-        runOnEnterShells('triage', staged.cwd, staged.vars);
+        runShellsMatching('gate', LANE_SHELLS, staged.cwd, staged.vars);
         expect(readMode(staged)).toBe('fast');
-        expect(firstPassingEdge('triage', staged.cwd, edgeVars(staged)).to).toBe('verify');
+        expect(readFocus(staged)).toBe('functional');
         expect(lastRouteLine(staged)).toBe(`${RUN_ID} ${WBS} fast:triage low lane`);
         rmSync(staged.cwd, { recursive: true, force: true });
     });
 
-    test('R1: task-triage standard stays on the review lane', () => {
+    test('R1: task-triage standard stays on the review lane with the full review depth', () => {
         const staged = stage({
             files: { 'apps/cli/src/index.ts': 'export const start = 2;\n' },
             triageDecision: { value: 'standard' },
         });
-        runOnEnterShells('triage', staged.cwd, staged.vars);
+        runShellsMatching('gate', LANE_SHELLS, staged.cwd, staged.vars);
         expect(readMode(staged)).toBe('');
-        expect(firstPassingEdge('triage', staged.cwd, edgeVars(staged)).to).toBe('review');
+        expect(readFocus(staged)).toBe('all');
         expect(lastRouteLine(staged)).toBe(`${RUN_ID} ${WBS} safety:triage standard lane`);
         rmSync(staged.cwd, { recursive: true, force: true });
     });
@@ -254,9 +253,8 @@ describe('task-pipeline 0943 — triage state routing (R1/R2)', () => {
             triageDecision: { value: 'standard' },
             callerMode: 'fast',
         });
-        runOnEnterShells('triage', staged.cwd, staged.vars);
+        runShellsMatching('gate', LANE_SHELLS, staged.cwd, staged.vars);
         expect(readMode(staged)).toBe('fast');
-        expect(firstPassingEdge('triage', staged.cwd, edgeVars(staged)).to).toBe('verify');
         expect(lastRouteLine(staged)).toBe(`${RUN_ID} ${WBS} fast:caller-set`);
         rmSync(staged.cwd, { recursive: true, force: true });
     });
@@ -264,12 +262,12 @@ describe('task-pipeline 0943 — triage state routing (R1/R2)', () => {
     test('R2c: a sensitive path pins safety even when the decide result says low', () => {
         const staged = stage({
             files: { 'apps/cli/src/index.ts': 'export const start = 2;\n' },
-            untracked: ['drizzle/0050_triage-lanes.sql'],
+            untracked: ['drizzle/0050_lane.sql'],
             triageDecision: { value: 'low' },
         });
-        runOnEnterShells('triage', staged.cwd, staged.vars);
+        runShellsMatching('gate', LANE_SHELLS, staged.cwd, staged.vars);
         expect(readMode(staged)).toBe('safety');
-        expect(firstPassingEdge('triage', staged.cwd, edgeVars(staged)).to).toBe('review');
+        expect(readFocus(staged)).toBe('all');
         expect(lastRouteLine(staged)).toBe(`${RUN_ID} ${WBS} safety:triage deterministic-high`);
         rmSync(staged.cwd, { recursive: true, force: true });
     });
@@ -277,48 +275,32 @@ describe('task-pipeline 0943 — triage state routing (R1/R2)', () => {
     test('R2c: >400 changed lines pin safety without a model answer', () => {
         const big = Array.from({ length: 450 }, (_, i) => `export const v${i} = ${i};\n`).join('');
         const staged = stage({ files: { 'apps/cli/src/index.ts': big }, triageDecision: { value: 'low' } });
-        runOnEnterShells('triage', staged.cwd, staged.vars);
+        runShellsMatching('gate', LANE_SHELLS, staged.cwd, staged.vars);
         expect(readMode(staged)).toBe('safety');
         expect(lastRouteLine(staged)).toBe(`${RUN_ID} ${WBS} safety:triage deterministic-high`);
         rmSync(staged.cwd, { recursive: true, force: true });
     });
 
-    test('R4: a degraded decide default (decision-maker off) degrades to the standard lane', () => {
-        const staged = stage({
-            files: { 'apps/cli/src/index.ts': 'export const start = 2;\n' },
-            triageDecision: { value: 'standard', degraded: true, reason: 'decision-maker disabled' },
-        });
-        runOnEnterShells('triage', staged.cwd, staged.vars);
-        expect(readMode(staged)).toBe('');
-        expect(firstPassingEdge('triage', staged.cwd, edgeVars(staged)).to).toBe('review');
-        rmSync(staged.cwd, { recursive: true, force: true });
-    });
-
     test('fail-safe: a missing run base (fail-closed diffstat) degrades to safety, never fast', () => {
         const staged = stage({ anchorBase: false, triageDecision: { value: 'low' } });
-        runOnEnterShells('triage', staged.cwd, staged.vars);
+        runShellsMatching('gate', LANE_SHELLS, staged.cwd, staged.vars);
         expect(readMode(staged)).toBe('safety');
-        expect(firstPassingEdge('triage', staged.cwd, edgeVars(staged)).to).toBe('review');
+        expect(readFocus(staged)).toBe('all');
         rmSync(staged.cwd, { recursive: true, force: true });
     });
 
     test('fail-safe: a producer that wrote no diffstat row pins safety, never fast', () => {
-        // A crashed/unstartable task-diffstat writes nothing and its shell still exits 0, so the
-        // ABSENT row must resolve the lane. An empty mode file would then let the `low` decide
-        // row project `fast` downstream (the fail-open path a loaded full-suite run exposed).
         const staged = stage({ triageDecision: { value: 'low' } });
-        // A producer that exits 0 without writing (`true` as the spur binary).
-        runOnEnterShells('triage', staged.cwd, { ...staged.vars, spurBin: 'true' });
+        runShellsMatching('gate', LANE_SHELLS, staged.cwd, { ...staged.vars, spurBin: 'true' });
         expect(existsSync(join(staged.cwd, '.spur/run', `${WBS}-diffstat.json`))).toBe(false);
         expect(readMode(staged)).toBe('safety');
-        expect(firstPassingEdge('triage', staged.cwd, edgeVars(staged)).to).toBe('review');
         expect(lastRouteLine(staged)).toBe(`${RUN_ID} ${WBS} safety:triage deterministic-high`);
         rmSync(staged.cwd, { recursive: true, force: true });
     });
 
     test('fail-closed: a spur that cannot run `task diffstat` writes the sensitive row (safety)', () => {
         const staged = stage({ triageDecision: { value: 'low' } });
-        runOnEnterShells('triage', staged.cwd, { ...staged.vars, spurBin: 'false' });
+        runShellsMatching('gate', LANE_SHELLS, staged.cwd, { ...staged.vars, spurBin: 'false' });
         const row = JSON.parse(readFileSync(join(staged.cwd, '.spur/run', `${WBS}-diffstat.json`), 'utf8'));
         expect(row).toEqual({ files: 0, insertions: 0, deletions: 0, paths: [], sensitive: true });
         expect(readMode(staged)).toBe('safety');
@@ -326,59 +308,62 @@ describe('task-pipeline 0943 — triage state routing (R1/R2)', () => {
     });
 });
 
-describe('task-pipeline 0943 — failure-class routing (R3)', () => {
-    test('frozen contract: failure-class catalog decide + declaration order (stop, cap, fix, defense)', () => {
-        const decide = decideAction('test-fail-triage', 'failure-class');
-        // 1115: catalog-reference form — choices `fix/stop` and fallback `fix` live in the
-        // bundled catalog (config/decisions/task-pipeline.yaml → failure-class); the step pins
-        // the decision id, params, evidence and resultFile only.
-        expect(decide.options?.decision).toBe('failure-class');
-        expect(decide.options?.params).toEqual({ wbs: `\${vars.wbs}` });
-        expect(decide.options?.resultFile).toBe(`.spur/run/\${vars.wbs}-failure-class.decision`);
-        expect(decide.options?.evidence).toEqual([`.spur/run/\${vars.wbs}-test-gate.findings`]);
-        expect(edgesFrom('test-fail-triage').map((t) => [t.to, t.terminalReason ?? '-'])).toEqual([
+describe('task-pipeline 1239 — failure-class routing inside the gate state (0943 R3)', () => {
+    test('frozen contract: declaration order is green, blocked, stop, cap, fix, defense', () => {
+        expect(edgesFrom('gate').map((t) => [t.to, t.terminalReason ?? '-'])).toEqual([
+            ['review', '-'],
+            ['review', '-'],
+            ['failed', 'failed-check'],
             ['failed', 'failed-check'],
             ['failed', 'retry-exhausted'],
-            ['test-fix', '-'],
+            ['remediate', '-'],
             ['failed', 'failed-check'],
         ]);
+        const cap = edgesFrom('gate').find((t) => t.terminalReason === 'retry-exhausted');
+        expect(String(cap?.guard?.options?.command)).toContain('$wbs-test-fix-attempt');
+        expect(String(cap?.guard?.options?.command)).toContain('qualityGateMaxFixAttempts');
+        expect(edgesFrom('gate').at(-1)?.guard?.kind).toBe('always');
     });
 
-    test('0976 R2: a stale `retryable` row is out of vocabulary — fails closed, no lane, no attempt counted', () => {
-        const staged = stage({ gateStatus: 'FAIL\n', attempts: '0\n', failureDecision: { value: 'retryable' } });
-        runOnEnterShells('test-fail-triage', staged.cwd, staged.vars);
-        expect(readAttempts(staged)).toBe('0');
-        const edge = firstPassingEdge('test-fail-triage', staged.cwd, staged.vars);
+    test('a BLOCKED gate is never read as red — it terminates before any failure-class edge', () => {
+        const staged = stage({ gateStatus: 'BLOCKED\n', attempts: '0\n', failureDecision: { value: 'fix' } });
+        const edge = firstPassingEdge('gate', staged.cwd, staged.vars);
         expect(edge.to).toBe('failed');
         expect(edge.terminalReason).toBe('failed-check');
         rmSync(staged.cwd, { recursive: true, force: true });
     });
 
-    test('fix routes test-fail-triage → test-fix without touching the attempt counter', () => {
+    test('0976 R2: a stale `retryable` row is out of vocabulary — fails closed, no lane, no attempt counted', () => {
+        const staged = stage({ gateStatus: 'FAIL\n', attempts: '0\n', failureDecision: { value: 'retryable' } });
+        expect(readAttempts(staged)).toBe('0');
+        const edge = firstPassingEdge('gate', staged.cwd, staged.vars);
+        expect(edge.to).toBe('failed');
+        expect(edge.terminalReason).toBe('failed-check');
+        rmSync(staged.cwd, { recursive: true, force: true });
+    });
+
+    test('fix routes gate → remediate without touching the attempt counter', () => {
         const staged = stage({ gateStatus: 'FAIL\n', attempts: '1\n', failureDecision: { value: 'fix' } });
-        runOnEnterShells('test-fail-triage', staged.cwd, staged.vars);
         expect(readAttempts(staged)).toBe('1');
-        expect(firstPassingEdge('test-fail-triage', staged.cwd, staged.vars).to).toBe('test-fix');
+        expect(firstPassingEdge('gate', staged.cwd, staged.vars).to).toBe('remediate');
         rmSync(staged.cwd, { recursive: true, force: true });
     });
 
     test('stop routes failed(failed-check) FIRST — even past the cap it is never mislabeled retry-exhausted', () => {
         const staged = stage({ gateStatus: 'FAIL\n', attempts: '3\n', failureDecision: { value: 'stop' } });
-        runOnEnterShells('test-fail-triage', staged.cwd, staged.vars);
-        const edge = firstPassingEdge('test-fail-triage', staged.cwd, staged.vars);
+        const edge = firstPassingEdge('gate', staged.cwd, staged.vars);
         expect(edge.to).toBe('failed');
         expect(edge.terminalReason).toBe('failed-check');
         rmSync(staged.cwd, { recursive: true, force: true });
     });
 
-    test('the cap bounds the fix lane: fix at max attempts routes failed(retry-exhausted)', () => {
+    test('the cap bounds the remediation lane: fix at max attempts routes failed(retry-exhausted)', () => {
         const staged = stage({
             gateStatus: 'FAIL\n',
             attempts: `${MAX_ATTEMPTS}\n`,
             failureDecision: { value: 'fix' },
         });
-        runOnEnterShells('test-fail-triage', staged.cwd, staged.vars);
-        const edge = firstPassingEdge('test-fail-triage', staged.cwd, staged.vars);
+        const edge = firstPassingEdge('gate', staged.cwd, staged.vars);
         expect(edge.to).toBe('failed');
         expect(edge.terminalReason).toBe('retry-exhausted');
         rmSync(staged.cwd, { recursive: true, force: true });
@@ -386,15 +371,11 @@ describe('task-pipeline 0943 — failure-class routing (R3)', () => {
 
     test('fail closed: a missing or corrupt failure-class decision routes failed(failed-check)', () => {
         for (const failureDecision of [undefined, null]) {
-            const staged = stage({
-                gateStatus: 'FAIL\n',
-                attempts: '0\n',
-                failureDecision,
-            });
-            if (failureDecision === null)
+            const staged = stage({ gateStatus: 'FAIL\n', attempts: '0\n', failureDecision });
+            if (failureDecision === null) {
                 writeFileSync(join(staged.cwd, '.spur/run', `${WBS}-failure-class.decision`), 'not-json\n');
-            runOnEnterShells('test-fail-triage', staged.cwd, staged.vars);
-            const edge = firstPassingEdge('test-fail-triage', staged.cwd, staged.vars);
+            }
+            const edge = firstPassingEdge('gate', staged.cwd, staged.vars);
             expect(edge.to).toBe('failed');
             expect(edge.terminalReason).toBe('failed-check');
             rmSync(staged.cwd, { recursive: true, force: true });

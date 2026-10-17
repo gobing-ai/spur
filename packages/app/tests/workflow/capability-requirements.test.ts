@@ -5,9 +5,10 @@ import { loadWorkflowDef } from '@gobing-ai/ts-dual-workflow-engine';
 
 // Task 0706 R6: unattended high-risk built-in stages must declare their
 // capability requirements. The selected stages are task-pipeline's `implement`
-// and `test-fix` — the two unattended, tree-mutating agent.run hops under the
-// auto profile. `review`/`verify` are observe-only roles and stay undeclared;
-// this test pins the selection so future stages must opt in explicitly.
+// and `remediate` (the former `test-fix`) — the two unattended, tree-mutating
+// agent.run hops under the auto profile. `review` is the observe-only role and
+// stays undeclared (D65 1239 merged the former `verify` into it); this test pins
+// the selection so future stages must opt in explicitly.
 
 const PROJECT_ROOT = resolve(__dirname, '../../../..');
 const PIPELINE = resolve(PROJECT_ROOT, 'config', 'workflows', 'task-pipeline.yaml');
@@ -26,8 +27,8 @@ async function agentRunOptions(stateId: string): Promise<Record<string, unknown>
 }
 
 describe('task-pipeline capability requirement declarations (0706 R6)', () => {
-    test('implement and test-fix declare fsWrite+processSpawn availability', async () => {
-        for (const stateId of ['implement', 'test-fix']) {
+    test('implement and remediate declare fsWrite+processSpawn availability', async () => {
+        for (const stateId of ['implement', 'remediate']) {
             const options = await agentRunOptions(stateId);
             const parsed = RequiresCapabilitiesSchema.safeParse(options.requiresCapabilities);
             expect(parsed.success).toBe(true);
@@ -35,8 +36,8 @@ describe('task-pipeline capability requirement declarations (0706 R6)', () => {
         }
     });
 
-    test('observe-only stages (review, verify) declare no requirements', async () => {
-        for (const stateId of ['review', 'verify']) {
+    test('the observe-only stage (review) declares no requirements', async () => {
+        for (const stateId of ['review']) {
             const options = await agentRunOptions(stateId);
             expect(options.requiresCapabilities).toBeUndefined();
         }

@@ -118,6 +118,29 @@ describe('deriveVerifiedOutcome (app derivation smoke)', () => {
         db.close();
     });
 
+    test('D65 1239: a verdict with no proof block is counted as proofAbsent, never a failure', async () => {
+        // The rewritten task pipeline writes the review's own verdict (verdict + requirement
+        // rows) and no proof chain at all. History must keep folding: the task lands in the
+        // denominator, earns no verified result, and the reason is recorded rather than thrown.
+        const { db, cwd } = await makeEnv();
+        writeFileSync(
+            join(cwd, '.spur', 'run', '0701-verdict.json'),
+            JSON.stringify({ wbs: '0701', verdict: 'PASS', requirements: PASS_REQUIREMENTS }),
+        );
+        const proofLessFs = {
+            readFile: async (p: string) =>
+                p.endsWith('.md')
+                    ? TASK_BODY
+                    : JSON.stringify({ wbs: '0701', verdict: 'PASS', requirements: PASS_REQUIREMENTS }),
+        } as unknown as FileSystem;
+        const stat = await deriveVerifiedOutcome({ db, cwd, locator: stubLocator(cwd), fs: proofLessFs }, {});
+        expect(stat).not.toBeNull();
+        expect(stat?.taskDenominator).toBe(1);
+        expect(stat?.verifiedResults).toBe(0);
+        expect(stat?.excludedReasons.proofAbsent).toBe(1);
+        db.close();
+    });
+
     test('returns null (block absent) when task_run_links does not exist yet', async () => {
         const db = await createDbAdapter({ driver: 'bun-sqlite', url: ':memory:' });
         const stat = await deriveVerifiedOutcome({ db, cwd: tmpdir(), fs: stubFs() }, {});

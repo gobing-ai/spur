@@ -40,7 +40,10 @@ interface StateMatrixRow {
 const MATRIX: Record<string, StateMatrixRow> = {
     'task-lifecycle': { resumeRerunStates: [], pauseGates: [], entryClass: 'repeatable' },
     'feature-lifecycle': { resumeRerunStates: [], pauseGates: [], entryClass: 'repeatable' },
-    'task-pipeline': { resumeRerunStates: [], pauseGates: ['approve'], entryClass: 'repeatable' },
+    // D65 1239: the approval became a decision point inside `review` and the escalation ask is
+    // answered by the responder, so no state pauses; the only pause is the host executor
+    // transform (1232), which is applied at the app seam and never declared here.
+    'task-pipeline': { resumeRerunStates: [], pauseGates: [], entryClass: 'repeatable' },
     'feature-verification': { resumeRerunStates: [], pauseGates: [], entryClass: 'repeatable' },
     'idea-pipeline': {
         resumeRerunStates: [],

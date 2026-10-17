@@ -39,8 +39,11 @@ describe('Workflow composition digest', () => {
 
     test('extractResolvedWorkflowFacts extracts terminal states, model-bearing states, and actions', async () => {
         const facts = extractResolvedWorkflowFacts(await loadDef('task-pipeline.yaml'));
-        expect(facts.terminalStates).toEqual(['done', 'failed', 'cancelled']);
-        expect(facts.modelQueries).toEqual(['implement', 'test-fix', 'review', 'verify']);
+        // D65 1239: `cancelled` folded into `failed` (operator denial → terminalReason
+        // cancelled), and the model-bearing stages are implement, remediate and review —
+        // verify's certification moved into review.
+        expect(facts.terminalStates).toEqual(['done', 'failed']);
+        expect(facts.modelQueries).toEqual(['implement', 'remediate', 'review']);
         expect(facts.actions['implement:onEnter:1']?.kind).toBe('agent.run');
     });
 

@@ -1,17 +1,25 @@
+/**
+ * task-pipeline evidence chain (D65 1239, ADR-140).
+ *
+ * RE-KEYED, not replaced: this suite used to pin the ADR-071 proof chain (one canonical
+ * `proofDigest`, `proof.fingerprint` captures at quality-gate/review/verify entry, digest-bound
+ * receipt preconditions, the `run.artifact` verdict registration). Task 1239 removed that chain
+ * and this file now pins the evidence model that replaced it, on the same structural discipline:
+ *
+ * - the run's evidence is the tree-hash gate receipt (`spur task gate` writes
+ *   `.spur/run/<wbs>-check-receipt.json` keyed by the git tree it captures itself, D65 R11), the
+ *   review verdict artifact (`spur task verdict --from-answer` over the reviewer's requirement
+ *   traceability, D65 R2), and the status tokens the transitions read;
+ * - nothing reads a proof digest; the retired names must not come back silently;
+ * - every guard is EXECUTED against staged artifacts (the 0943/0874 discipline), so a guard whose
+ *   boolean silently changes fails here.
+ */
 import { describe, expect, test } from 'bun:test';
 import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { getEnvVars } from '@gobing-ai/spur-config';
 import { parse as parseYaml } from 'yaml';
-import { extractResolvedWorkflowFacts } from '../../src/workflow/composition-baseline';
-
-// Task 0703 (ADR-071): the task-pipeline proof chain must form ONE immutable bracket around the
-// evidence-producing final chain. Capture happens once at quality-gate entry (before any evidence
-// stage), bounded remediation re-captures, the certifying verify is observe-only, and the
-// completion guards refuse missing/malformed/mismatched proof evidence. These invariants are
-// structural: any composition change that breaks them must fail here (0775: the
-// composition-baseline gate retired; this suite is the structural guard).
 
 interface Action {
     kind: string;
@@ -25,26 +33,78 @@ interface Transition {
     from: string;
     to: string;
     terminalReason?: string;
+    description?: string;
     guard?: Guard;
 }
+interface StateDef {
+    id: string;
+    description?: string;
+    pause?: boolean;
+    onEnter?: Action[];
+}
 interface WorkflowDef {
-    states: { id: string; description?: string; onEnter?: Action[] }[];
+    name: string;
+    version: string;
+    iterationBound?: number;
+    initialState?: string;
+    terminalStates?: string[];
+    failureStates?: string[];
+    vars?: Record<string, string>;
+    states: StateDef[];
     transitions: Transition[];
 }
 
-// 'config' segment split to comply with the sp-runtime-path rule (config/{workflows|...} literal ban).
+// The 'config' segment is split to comply with the sp-runtime-path rule (config/{workflows|...} literal ban).
 const WORKFLOWS_DIR = join(import.meta.dir, '../../../../config', 'workflows');
 const DEF = parseYaml(readFileSync(join(WORKFLOWS_DIR, 'task-pipeline.yaml'), 'utf8')) as WorkflowDef;
 
-const cmdOf = (from: string, to: string): string =>
-    DEF.transitions.find((t) => t.from === from && t.to === to)?.guard?.options?.command?.replace(/\n/g, ' ') ?? '';
-
-// The repo's scanner sources — behavioral guard tests resolve the review-gate through the same
-// source-repo pair the record step uses (task 1122).
-// Script-absorption PR-3: the review PASS edges call `$spurBin task residual <wbs> review-gate`,
-// which reads the task in-process — the behavioral cases seed a REAL task through the source CLI.
 const SPUR_CLI = [process.execPath, join(import.meta.dir, '../../../../apps/cli/src/index.ts')];
 const SPUR_BIN = SPUR_CLI.join(' ');
+
+/** The literal YAML var template (`${vars.x}`) the definition carries — asserted, never interpolated. */
+const VAR = (name: string): string => ['$', '{vars.', name, '}'].join('');
+
+const stateOf = (id: string): StateDef | undefined => DEF.states.find((s) => s.id === id);
+const actionsOf = (id: string): Action[] => stateOf(id)?.onEnter ?? [];
+const kindsOf = (id: string): string[] => actionsOf(id).map((a) => a.kind);
+const actionOf = (id: string, kind: string, needle?: string): Action | undefined =>
+    actionsOf(id).find(
+        (a) => a.kind === kind && (needle === undefined || JSON.stringify(a.options ?? {}).includes(needle)),
+    );
+const cmdOf = (id: string, needle: string): string => {
+    const action = actionOf(id, 'shell', needle);
+    if (action === undefined) throw new Error(`no shell in ${id} mentioning ${needle}`);
+    return String(action.options?.command ?? '');
+};
+const guardOf = (from: string, to: string, index = 0): string => {
+    const edges = DEF.transitions.filter((t) => t.from === from && t.to === to);
+    return edges[index]?.guard?.options?.command ?? '';
+};
+
+/** Run a shell in `dir` with the workflow vars exported as the engine exports them. */
+function runSh(
+    script: string,
+    cwd: string,
+    vars: Record<string, string> = {},
+): { code: number; stdout: string; stderr: string } {
+    const run = Bun.spawnSync(['sh', '-c', script], {
+        cwd,
+        env: { ...getEnvVars(), ...vars },
+        stdout: 'pipe',
+        stderr: 'pipe',
+    });
+    return { code: run.exitCode ?? -1, stdout: run.stdout.toString(), stderr: run.stderr.toString() };
+}
+
+/** First passing edge in declaration order — the engine's routing decision. */
+function firstPassingEdge(from: string, cwd: string, vars: Record<string, string>): string {
+    for (const edge of DEF.transitions.filter((t) => t.from === from)) {
+        if (edge.guard?.kind === 'always') return edge.to;
+        if (edge.guard?.kind !== 'shell') continue;
+        if (runSh(edge.guard.options?.command ?? '', cwd, vars).code === 0) return edge.to;
+    }
+    throw new Error(`no passing edge out of ${from} — the run would hang`);
+}
 
 /** Run the source CLI in `dir`; throws on a non-zero exit. */
 function spurIn(dir: string, args: string[]): string {
@@ -58,717 +118,613 @@ function spurIn(dir: string, args: string[]): string {
     return run.stdout.toString();
 }
 
-/** Create a backlog task in `dir` and return its wbs. */
-function seedTask(dir: string): string {
-    mkdirSync(join(dir, 'docs', 'tasks'), { recursive: true });
-    const created = JSON.parse(spurIn(dir, ['task', 'create', '--skip-ready', 'Review fixture', '--json'])) as {
+/** A staged project: a real git repo with one tracked file and a created task. */
+function stage(): { dir: string; wbs: string; cleanup: () => void } {
+    const dir = mkdtempSync(join(tmpdir(), 'tp-evidence-'));
+    const git = (args: string[]): void => {
+        const run = Bun.spawnSync(['git', ...args], { cwd: dir, stdout: 'pipe', stderr: 'pipe' });
+        if (run.exitCode !== 0) throw new Error(`git ${args.join(' ')}: ${run.stderr.toString()}`);
+    };
+    git(['init', '-q']);
+    git(['config', 'user.email', 'test@example.com']);
+    git(['config', 'user.name', 'test']);
+    // The gate's receipt is keyed by the tracked tree, and the real project gitignores `.spur/`
+    // (run artifacts must not move the tree hash) — mirror that here.
+    writeFileSync(join(dir, '.gitignore'), '.spur/\n');
+    mkdirSync(join(dir, 'src'), { recursive: true });
+    writeFileSync(join(dir, 'src/index.ts'), 'export const start = 1;\n');
+    git(['add', '.']);
+    git(['commit', '-qm', 'base']);
+    const created = JSON.parse(spurIn(dir, ['task', 'create', '--skip-ready', 'Evidence fixture', '--json'])) as {
         wbs: string;
     };
-    return created.wbs;
+    return { dir, wbs: created.wbs, cleanup: () => rmSync(dir, { recursive: true, force: true }) };
 }
 
-/** Replace the task's Review section body (`review` may carry its `### Review` heading). */
-function setReview(dir: string, wbs: string, review: string): void {
-    const body = join(dir, 'review-body.md');
-    writeFileSync(body, review.replace(/^### Review\n\n/, ''));
-    spurIn(dir, ['task', 'update', wbs, '--section', 'Review', '--from-file', body]);
+/** Replace one task section body through the CLI (the reviewer's write path). */
+function setSection(dir: string, wbs: string, section: string, body: string): void {
+    const path = join(dir, `${section}-body.md`);
+    writeFileSync(path, body);
+    spurIn(dir, ['task', 'update', wbs, '--section', section, '--from-file', path]);
 }
 
-describe('task-pipeline proof chain (task 0703, ADR-071)', () => {
-    test('verify certifies observe-only: --fix none, never --fix all (R1)', () => {
-        const verify = DEF.states.find((s) => s.id === 'verify');
-        const agentRun = verify?.onEnter?.find((a) => a.kind === 'agent.run');
-        expect(agentRun).toBeDefined();
-        const input = String(agentRun?.options?.input ?? '');
-        expect(input).toContain('--fix none');
-        expect(input).not.toContain('--fix all');
+const REVIEW_HEAD = '| Priority | Finding | Location | Disposition |\n| --- | --- | --- | --- |\n';
+
+/** Write the reviewer's answer and return its path (the pipeline's answerFile). */
+function writeReviewAnswer(dir: string, runId: string, body: string): string {
+    mkdirSync(join(dir, '.spur', 'run'), { recursive: true });
+    const path = join(dir, '.spur/run', `${runId}-review-answer.txt`);
+    writeFileSync(path, body);
+    return path;
+}
+
+/**
+ * Execute a typed `command.gate` exactly as the engine does: run the argv, then write the typed
+ * token (PASS|FAIL|BLOCKED from the exit code) to the result file (1234 §3.3).
+ */
+function runTypedGate(
+    dir: string,
+    resultFile: string,
+    args: string[],
+    vars: Record<string, string> = {},
+): 'PASS' | 'FAIL' | 'BLOCKED' {
+    const run = Bun.spawnSync([...SPUR_CLI, ...args, '--no-logo'], {
+        cwd: dir,
+        env: { ...getEnvVars(), ...vars },
+        stdout: 'pipe',
+        stderr: 'pipe',
+    });
+    const code = run.exitCode ?? -1;
+    const token = code === 0 ? 'PASS' : code === 1 ? 'FAIL' : 'BLOCKED';
+    mkdirSync(join(dir, '.spur/run'), { recursive: true });
+    writeFileSync(join(dir, resultFile), `${token}\n`);
+    return token;
+}
+
+describe('task-pipeline evidence chain — the proof chain is retired (D65 1239 R3)', () => {
+    test('the graph is the six working states plus the two terminals', () => {
+        expect(DEF.states.map((s) => s.id)).toEqual([
+            'precheck',
+            'implement',
+            'escalate',
+            'gate',
+            'remediate',
+            'review',
+            'done',
+            'failed',
+        ]);
+        expect(DEF.terminalStates).toEqual(['done', 'failed']);
+        expect(DEF.failureStates).toEqual(['failed']);
+        expect(DEF.initialState).toBe('precheck');
+        expect(DEF.version).toBe('9');
     });
 
-    test('canonical digest capture precedes the first evidence stage; remediation re-captures (R2/R4)', () => {
-        const test = DEF.states.find((s) => s.id === 'test');
-        const recheck = DEF.states.find((s) => s.id === 'test-recheck');
-        const verify = DEF.states.find((s) => s.id === 'verify');
-        const captures = (test?.onEnter ?? []).filter((a) => a.kind === 'proof.fingerprint');
-        expect(captures).toHaveLength(1);
-        expect(captures[0]?.options?.var).toBe('proofDigest');
-        // Capture precedes the gate shell (the first evidence stage). The leading
-        // taskpath-resolve shell/file.read actions FEED the capture, not evidence.
-        const kinds = (test?.onEnter ?? []).map((a) => a.kind);
-        expect(kinds.lastIndexOf('proof.fingerprint')).toBeLessThan(kinds.lastIndexOf('shell'));
-        const recheckCaptures = (recheck?.onEnter ?? []).filter((a) => a.kind === 'proof.fingerprint');
-        expect(recheckCaptures).toHaveLength(1);
-        expect(recheckCaptures[0]?.options?.var).toBe('proofDigest');
-        // biome-ignore lint/suspicious/noTemplateCurlyInString: asserting the literal YAML template, not interpolating
-        expect(recheckCaptures[0]?.options?.taskFile).toBe('${vars.taskSpecPath}');
-        // Midpoint compare at verify entry reuses proofDigestNow against the canonical capture.
-        const mid = verify?.onEnter?.[0];
-        expect(mid?.kind).toBe('proof.fingerprint');
-        expect(mid?.options?.var).toBe('proofDigestNow');
-        // biome-ignore lint/suspicious/noTemplateCurlyInString: asserting the literal YAML template, not interpolating
-        expect(mid?.options?.expect).toBe('${vars.proofDigest}');
-    });
-
-    test('verdict artifact carries the proof block: one digest, three named stages (R3)', () => {
-        const verify = DEF.states.find((s) => s.id === 'verify');
-        const stamp = verify?.onEnter?.at(-1);
-        expect(stamp?.kind).toBe('shell');
-        const cmd = String(stamp?.options?.command ?? '');
-        expect(cmd).toContain('capturePoint');
-        for (const stage of ['qualityGate', 'review', 'verification']) {
-            expect(cmd).toContain(`${stage}: {status`);
-            expect(cmd).toContain(`digest: $d`);
+    test('no working state keeps the retired id it replaced', () => {
+        for (const retired of [
+            'test',
+            'test-recheck',
+            'test-fix',
+            'triage',
+            'test-fail-triage',
+            'review-fail-triage',
+            'approve',
+            'verify',
+            'record',
+            'cancelled',
+        ]) {
+            expect(stateOf(retired), `${retired} must be gone`).toBeUndefined();
         }
-        expect(cmd).toContain('proof-input-digest');
     });
 
-    test('completion guards refuse non-PASS and missing/malformed/mismatched proof evidence (R5)', () => {
-        const toRecord = cmdOf('verify', 'record');
-        expect(toRecord).toContain('.verdict');
-        expect(toRecord).toContain('PASS');
-        expect(toRecord).toContain('.proof.digest');
-        for (const stage of ['qualityGate', 'review', 'verification']) {
-            expect(toRecord).toContain(`.proof.stages.${stage}.digest`);
+    test('no proof-chain action, option or variable survives anywhere in the definition', () => {
+        for (const state of DEF.states) {
+            for (const action of state.onEnter ?? []) {
+                expect(action.kind, state.id).not.toBe('proof.fingerprint');
+                expect(action.kind, state.id).not.toBe('run.artifact');
+                const serialized = JSON.stringify(action.options ?? {});
+                for (const retired of ['proofDigest', 'proofDigestNow', 'verifiedOutcome', 'taskSpecPathNow']) {
+                    expect(serialized.includes(retired), `${state.id}: ${retired}`).toBe(false);
+                }
+            }
         }
-        expect(toRecord).toContain('$proofDigest');
-        const toDone = cmdOf('record', 'done');
-        expect(toDone).toContain('task check');
-        expect(toDone).toContain('.verdict');
-        expect(toDone).toContain('.proof.digest');
-        expect(toDone).toContain('$proofDigest');
+        for (const retired of ['proofDigest', 'proofDigestNow', 'featureSpecPath', '__definitionDigest']) {
+            expect(DEF.vars?.[retired], `${retired} var`).toBeUndefined();
+        }
+        // The one surviving declaration is the task spec path the decide evidence names.
+        expect(DEF.vars?.taskSpecPath).toBe('');
     });
 
-    test('verify non-PASS routes to bounded remediation; catch-alls guarantee termination (R4)', () => {
-        const toFix = DEF.transitions.find((t) => t.from === 'verify' && t.to === 'test-fix');
-        expect(toFix).toBeDefined();
-        const fixCmd = toFix?.guard?.options?.command?.replace(/\n/g, ' ') ?? '';
-        expect(fixCmd).toContain('!= PASS');
-        expect(fixCmd).toContain('qualityGateMaxFixAttempts');
-        expect(DEF.transitions.find((t) => t.from === 'verify' && t.to === 'failed')?.guard?.kind).toBe('always');
-        expect(DEF.transitions.find((t) => t.from === 'record' && t.to === 'failed')?.guard?.kind).toBe('always');
+    test('no transition and no guard carries the proof vocabulary or a receipt precondition', () => {
+        for (const edge of DEF.transitions) {
+            const serialized = JSON.stringify(edge);
+            for (const retired of ['proof', 'proofDigest', 'verifiedOutcome']) {
+                expect(serialized.toLowerCase().includes(retired.toLowerCase()), `${edge.from}→${edge.to}`).toBe(false);
+            }
+        }
     });
 
-    test('verify pins the observe-only invocation (R7)', () => {
-        // 0775: facts are extracted from the live definition; the snapshot is gone.
-        const facts = extractResolvedWorkflowFacts(
-            DEF as unknown as Parameters<typeof extractResolvedWorkflowFacts>[0],
-        );
-        const verifyAgent = Object.values(facts.actions).find(
-            (a) => a.invocation?.startsWith('/sp:dev-verify') === true,
-        );
-        expect(verifyAgent?.invocation).toContain('--fix none');
-        expect(verifyAgent?.invocation).not.toContain('--fix all');
+    test('no state pauses: the only pause in a run is the host executor transform (1232)', () => {
+        expect(DEF.states.filter((s) => s.pause === true).map((s) => s.id)).toEqual([]);
     });
 });
 
-describe('task-pipeline review independence (task 0710)', () => {
-    // P2 remediation: the live YAML itself must declare the independence policy. Composition
-    // facts record kind/invocation only, so without this check a re-pinned executor or a
-    // dropped freshSession would pass CI silently (review finding 0710-P2).
-    const agentRunOf = (state: string): Record<string, unknown> | undefined => {
-        const agentRun = DEF.states.find((s) => s.id === state)?.onEnter?.find((a) => a.kind === 'agent.run');
-        return agentRun?.options as Record<string, unknown> | undefined;
-    };
-
-    test('review and verify run fresh, reviewer-role, unpinned, and compare against implement (R2/R4/R7)', () => {
-        for (const state of ['review', 'verify']) {
-            const opts = agentRunOf(state);
-            expect(opts, `state ${state} must declare an agent.run`).toBeDefined();
-            expect(opts?.freshSession).toBe(true);
-            expect(opts?.role).toBe('reviewer');
-            expect(opts, `state ${state} must not pin an executor`).not.toHaveProperty('agent');
-            expect(opts?.compareExecutorWith).toBe('implement');
-            expect(opts?.priority).toBe('$' + '{vars.taskPriority}');
+describe('task-pipeline evidence chain — the gate state owns the quality gate (D65 R2)', () => {
+    test('one typed command.gate over `spur task gate`, mode by visit, soft outcome', () => {
+        const gates = DEF.states.flatMap((s) => (s.onEnter ?? []).map((a) => ({ state: s.id, action: a })));
+        const qualityGate = gates.filter(({ action }) => {
+            const args = action.options?.args;
+            return Array.isArray(args) && args[0] === 'task' && args[1] === 'gate';
+        });
+        expect(qualityGate.map((g) => g.state)).toEqual(['gate']);
+        const options = qualityGate[0]?.action.options as Record<string, unknown> | undefined;
+        expect(options?.id).toBe('quality-gate');
+        expect(options?.executable).toBe(VAR('spurBin'));
+        expect(options?.args).toEqual(['task', 'gate', VAR('wbs'), VAR('gateMode'), '--no-logo']);
+        expect(options?.resultFile).toBe(`.spur/run/${VAR('__runId')}-gate.status`);
+        expect(options?.softFail).toBe(true);
+        // Nothing else in the graph shells out to the gate.
+        for (const state of DEF.states) {
+            for (const action of state.onEnter ?? []) {
+                if (state.id === 'gate') continue;
+                expect(JSON.stringify(action.options ?? {}).includes('task gate'), state.id).toBe(false);
+            }
         }
     });
 
-    // P1 remediation: the shipped extraction command must sed the TASK FILE (resolved via
-    // taskpath.txt), not the path listing itself, and normalize the tier to upper case so
-    // requiresDistinctExecutor's exact 'P0'/'P1' match engages (review finding 0710-P1).
-    test('priority extraction reads the task file and normalizes to upper (R4)', () => {
-        const { execSync } = require('node:child_process') as typeof import('node:child_process');
-        const { mkdtempSync, rmSync, writeFileSync, chmodSync } = require('node:fs') as typeof import('node:fs');
-        const { tmpdir } = require('node:os') as typeof import('node:os');
-        const joinPath = require('node:path') as typeof import('node:path');
-
-        const qualityGate = DEF.states.find((s) => s.id === 'test');
-        const shell = qualityGate?.onEnter?.find(
-            (a) => a.kind === 'shell' && String(a.options?.command ?? '').includes('-priority.txt'),
-        );
-        expect(shell).toBeDefined();
-        const command = String(shell?.options?.command ?? '');
-        expect(command).toContain('cat ".spur/run/$wbs-taskpath.txt"');
-
-        const dir = mkdtempSync(joinPath.join(tmpdir(), 't0710-priority-'));
+    test('behavioral: the visit counter selects run, then recheck, then honours the deferred policy', () => {
+        const dir = mkdtempSync(join(tmpdir(), 'tp-gate-mode-'));
         try {
-            const runDir = joinPath.join(dir, '.spur', 'run');
-            mkdirRecursive(runDir);
-            const spec = joinPath.join(dir, 'spec.md');
-            writeFileSync(spec, '---\nwbs: t9001\npriority: p1\n---\nbody\n');
-            // $spurBin renders to an emitter that ignores argv and prints the same JSON shape
-            // `spur task path --json` does, so the jq segment writes the path like production.
-            const emit = joinPath.join(dir, 'emit.sh');
-            writeFileSync(emit, `#!/bin/sh\nprintf '{"filePath":"%s"}' "${spec}"\n`);
-            chmodSync(emit, 0o755);
-            const rendered = command.replaceAll('$spurBin', emit).replaceAll('$wbs', 't9001');
-            execSync(rendered, { cwd: dir, stdio: 'pipe' });
-            expect(readFileSync(joinPath.join(runDir, 't9001-priority.txt'), 'utf8').trim()).toBe('P1');
+            const vars = { wbs: '1239', __runId: 'run-mode', deferQualityGate: 'false' };
+            const bump = cmdOf('gate', 'gate-visit.txt');
+            const select = cmdOf('gate', '-gate-mode.txt');
+            const modeNow = (): string => readFileSync(join(dir, '.spur/run', '1239-gate-mode.txt'), 'utf8').trim();
+            expect(runSh(bump, dir, vars).code).toBe(0);
+            expect(runSh(select, dir, vars).code).toBe(0);
+            expect(modeNow()).toBe('run');
+            for (const expected of ['recheck', 'recheck']) {
+                expect(runSh(bump, dir, vars).code).toBe(0);
+                expect(runSh(select, dir, vars).code).toBe(0);
+                expect(modeNow()).toBe(expected);
+            }
+            // The opt-in batch policy outranks the visit: the light tier writes the DEFERRED token.
+            expect(runSh(bump, dir, { ...vars, deferQualityGate: 'true' }).code).toBe(0);
+            expect(runSh(select, dir, { ...vars, deferQualityGate: 'true' }).code).toBe(0);
+            expect(modeNow()).toBe('deferred');
+        } finally {
+            rmSync(dir, { recursive: true, force: true });
+        }
+    });
+
+    test('a green visit requires BOTH the typed PASS and the gate own full-tier PASS token', () => {
+        const dir = mkdtempSync(join(tmpdir(), 'tp-gate-pass-'));
+        try {
+            const vars = { wbs: '1239', __runId: 'run-pass', deferQualityGate: 'false' };
+            const guard = guardOf('gate', 'review', 0);
+            const write = (typed: string, token: string): void => {
+                mkdirSync(join(dir, '.spur/run'), { recursive: true });
+                writeFileSync(join(dir, '.spur/run', 'run-pass-gate.status'), typed);
+                writeFileSync(join(dir, '.spur/run', '1239-test-gate.status'), token);
+            };
+            write('PASS\n', 'PASS\n');
+            expect(runSh(guard, dir, vars).code).toBe(0);
+            // A red gate, a blocked visit, and a stale PASS without the typed PASS all refuse review.
+            write('PASS\n', 'FAIL\n');
+            expect(runSh(guard, dir, vars).code).not.toBe(0);
+            write('FAIL\n', 'PASS\n');
+            expect(runSh(guard, dir, vars).code).not.toBe(0);
+            write('BLOCKED\n', 'PASS\n');
+            expect(runSh(guard, dir, vars).code).not.toBe(0);
+            // 1111 R2: DEFERRED rides only under the opt-in policy, on its own edge.
+            const deferredGuard = guardOf('gate', 'review', 1);
+            write('PASS\n', 'DEFERRED\n');
+            expect(runSh(deferredGuard, dir, vars).code).not.toBe(0);
+            expect(runSh(deferredGuard, dir, { ...vars, deferQualityGate: 'true' }).code).toBe(0);
+            expect(runSh(guard, dir, { ...vars, deferQualityGate: 'true' }).code).not.toBe(0);
+        } finally {
+            rmSync(dir, { recursive: true, force: true });
+        }
+    });
+
+    test('a BLOCKED visit routes to failed before any failure-class edge can claim it', () => {
+        const edges = DEF.transitions.filter((t) => t.from === 'gate').map((t) => t.to);
+        // PASS (×2) first, then the blocked edge, then stop/cap/fix/defense.
+        expect(edges).toEqual(['review', 'review', 'failed', 'failed', 'failed', 'remediate', 'failed']);
+        const dir = mkdtempSync(join(tmpdir(), 'tp-gate-blocked-'));
+        try {
+            mkdirSync(join(dir, '.spur/run'), { recursive: true });
+            writeFileSync(join(dir, '.spur/run', 'run-b-gate.status'), 'BLOCKED\n');
+            const vars = { wbs: '1239', __runId: 'run-b', qualityGateMaxFixAttempts: '2' };
+            expect(firstPassingEdge('gate', dir, vars)).toBe('failed');
+        } finally {
+            rmSync(dir, { recursive: true, force: true });
+        }
+    });
+
+    test('behavioral: a failed gate routes to remediate, which bumps the counter and re-gates in recheck', () => {
+        const dir = mkdtempSync(join(tmpdir(), 'tp-gate-loop-'));
+        try {
+            mkdirSync(join(dir, '.spur/run'), { recursive: true });
+            const vars = {
+                wbs: '1239',
+                __runId: 'run-loop',
+                qualityGateMaxFixAttempts: '2',
+                deferQualityGate: 'false',
+                mutationPolicy: 'code',
+                spurBin: SPUR_BIN,
+            };
+            // Visit 1: run, red.
+            runSh(cmdOf('gate', 'gate-visit.txt'), dir, vars);
+            runSh(cmdOf('gate', '-gate-mode.txt'), dir, vars);
+            expect(readFileSync(join(dir, '.spur/run', '1239-gate-mode.txt'), 'utf8').trim()).toBe('run');
+            writeFileSync(join(dir, '.spur/run', 'run-loop-gate.status'), 'FAIL\n');
+            writeFileSync(join(dir, '.spur/run', '1239-test-gate.status'), 'FAIL\n');
+            writeFileSync(join(dir, '.spur/run', '1239-test-fix-attempt'), '0\n');
+            writeFileSync(join(dir, '.spur/run', '1239-failure-class.decision'), '{"value":"fix"}\n');
+            expect(firstPassingEdge('gate', dir, vars)).toBe('remediate');
+            // The remediation hop counts its attempt (its own onEnter shell, spur-free actions).
+            runSh(cmdOf('remediate', 'test-fix-attempt'), dir, vars);
+            expect(readFileSync(join(dir, '.spur/run', '1239-test-fix-attempt'), 'utf8').trim()).toBe('1');
+            // Re-entry re-gates: the visit counter now selects the recheck mode.
+            runSh(cmdOf('gate', 'gate-visit.txt'), dir, vars);
+            runSh(cmdOf('gate', '-gate-mode.txt'), dir, vars);
+            expect(readFileSync(join(dir, '.spur/run', '1239-gate-mode.txt'), 'utf8').trim()).toBe('recheck');
+            // And a still-red gate cannot reach review.
+            writeFileSync(join(dir, '.spur/run', 'run-loop-gate.status'), 'FAIL\n');
+            expect(firstPassingEdge('gate', dir, vars)).toBe('remediate');
+        } finally {
+            rmSync(dir, { recursive: true, force: true });
+        }
+    });
+
+    test('R11 behavioral: a PASS receipt keyed by the unchanged tree is reused, and a code edit invalidates it', () => {
+        const staged = stage();
+        try {
+            const vars = { qualityGateCmd: 'true', gateProbeCmd: '' };
+            const gateRun = (): { token: string; stdout: string } => {
+                const run = Bun.spawnSync(
+                    [...SPUR_CLI, 'task', 'gate', staged.wbs, 'run', '--cmd', 'true', '--probe-cmd', '', '--no-logo'],
+                    {
+                        cwd: staged.dir,
+                        env: {
+                            ...getEnvVars(),
+                            qualityGateCmd: vars.qualityGateCmd,
+                            gateProbeCmd: vars.gateProbeCmd,
+                            SPUR_GATE_LOCK_DIR: join(staged.dir, '.lock'),
+                        },
+                        stdout: 'pipe',
+                        stderr: 'pipe',
+                    },
+                );
+                return { token: run.exitCode === 0 ? 'PASS' : 'FAIL', stdout: run.stdout.toString() };
+            };
+            // First visit: the gate runs and binds a receipt to the tree it captured.
+            expect(gateRun().token).toBe('PASS');
+            const receipt = JSON.parse(
+                readFileSync(join(staged.dir, '.spur/run', `${staged.wbs}-check-receipt.json`), 'utf8'),
+            ) as { status: string; inputDigest?: string; tier?: string; wbs?: string };
+            expect(receipt.status).toBe('PASS');
+            expect(receipt.tier).toBe('full');
+            expect(receipt.wbs).toBe(staged.wbs);
+            expect(receipt.inputDigest?.length ?? 0).toBeGreaterThan(0);
+
+            // Second visit on the same tree: the receipt is reused, the check does not run.
+            const reused = gateRun();
+            expect(reused.token).toBe('PASS');
+            expect(reused.stdout).toContain('check.reused');
+            expect(readFileSync(join(staged.dir, '.spur/run', `${staged.wbs}-test-gate.log`), 'utf8')).toContain(
+                'check.reused',
+            );
+
+            // A tracked code edit moves the tree, so the receipt is no longer this tree's evidence.
+            writeFileSync(join(staged.dir, 'src/index.ts'), 'export const start = 2;\n');
+            const rerun = gateRun();
+            expect(rerun.token).toBe('PASS');
+            expect(rerun.stdout).not.toContain('check.reused');
+        } finally {
+            staged.cleanup();
+        }
+    }, 30000);
+});
+
+describe('task-pipeline evidence chain — review certifies (D65 R2)', () => {
+    test('the certification order is pinned: review → verdict → status → failure class → approval', () => {
+        expect(kindsOf('review')).toEqual(['agent.run', 'command.gate', 'shell', 'decide', 'hitl.confirm', 'shell']);
+        const options = actionOf('review', 'agent.run')?.options as Record<string, unknown> | undefined;
+        expect(String(options?.input)).toContain(`/sp:dev-review --tasks ${VAR('wbs')} --auto`);
+        // 0943 R1/R2: the resolved lane sets the review depth (fast  functional-only).
+        expect(String(options?.input)).toContain(`--focus ${VAR('reviewFocus')}`);
+        expect(options?.freshSession).toBe(true);
+        expect(options?.role).toBe('reviewer');
+        expect(options?.compareExecutorWith).toBe('implement');
+        const verdict = actionOf('review', 'command.gate')?.options as Record<string, unknown> | undefined;
+        expect(verdict?.args).toEqual([
+            'task',
+            'verdict',
+            VAR('wbs'),
+            '--from-answer',
+            `.spur/run/${VAR('__runId')}-review-answer.txt`,
+        ]);
+        expect(verdict?.softFail).toBe(true);
+    });
+
+    test('behavioral: MET rows certify PASS; an UNMET requirement cannot certify, so done is unreachable', () => {
+        const staged = stage();
+        try {
+            setSection(staged.dir, staged.wbs, 'Requirements', '- [ ] R1. Do the thing.\n- [ ] R2. Do both.\n');
+            setSection(
+                staged.dir,
+                staged.wbs,
+                'Review',
+                `${REVIEW_HEAD}| P4 (advisory) | Note | src/index.ts:1 | ACCEPTED |\n`,
+            );
+            const vars = { wbs: staged.wbs, __runId: 'run-cert', spurBin: SPUR_BIN, profile: 'auto' };
+            const fold = cmdOf('review', '-review.status');
+            const statusNow = (): string =>
+                readFileSync(join(staged.dir, '.spur/run', `${staged.wbs}-review.status`), 'utf8').trim();
+
+            // A review that finds R2 UNMET derives FAIL, folds FAIL, and never reaches the close.
+            writeReviewAnswer(
+                staged.dir,
+                'run-cert',
+                'Verdict: PASS\n\n| Req | Status | Evidence |\n| --- | --- | --- |\n' +
+                    '| R1 | MET | `src/index.ts:1` does the thing |\n' +
+                    '| R2 | UNMET | nothing implements the second half |\n',
+            );
+            const unmet = runTypedGate(
+                staged.dir,
+                '.spur/run/run-cert-review-verdict.status',
+                ['task', 'verdict', staged.wbs, '--from-answer', `.spur/run/run-cert-review-answer.txt`],
+                vars,
+            );
+            expect(unmet).toBe('FAIL');
+            expect(
+                JSON.parse(readFileSync(join(staged.dir, '.spur/run', `${staged.wbs}-verdict.json`), 'utf8')).verdict,
+            ).toBe('FAIL');
+            expect(runSh(fold, staged.dir, vars).code).toBe(0);
+            expect(statusNow()).toBe('FAIL');
+            writeFileSync(join(staged.dir, '.spur/run', `${staged.wbs}-approval.status`), 'APPROVED\n');
+            expect(firstPassingEdge('review', staged.dir, vars)).not.toBe('done');
+
+            // The same reviewer, every requirement MET, certifies and the close is reachable.
+            writeReviewAnswer(
+                staged.dir,
+                'run-cert',
+                'Verdict: PASS\n\n| Req | Status | Evidence |\n| --- | --- | --- |\n' +
+                    '| R1 | MET | `src/index.ts:1` does the thing |\n' +
+                    '| R2 | MET | `src/index.ts:2` does both |\n',
+            );
+            expect(
+                runTypedGate(
+                    staged.dir,
+                    '.spur/run/run-cert-review-verdict.status',
+                    ['task', 'verdict', staged.wbs, '--from-answer', `.spur/run/run-cert-review-answer.txt`],
+                    vars,
+                ),
+            ).toBe('PASS');
+            expect(runSh(fold, staged.dir, vars).code).toBe(0);
+            expect(statusNow()).toBe('PASS');
+            expect(firstPassingEdge('review', staged.dir, vars)).toBe('done');
+
+            // 1122: the same fold refuses a PASS whose review still carries an open P1-P3 finding.
+            setSection(
+                staged.dir,
+                staged.wbs,
+                'Review',
+                `${REVIEW_HEAD}| P2 (major) | Missing validation | src/index.ts:8 | OPEN |\n`,
+            );
+            expect(runSh(fold, staged.dir, vars).code).toBe(0);
+            expect(statusNow()).toBe('FAIL');
+        } finally {
+            staged.cleanup();
+        }
+    }, 60000);
+
+    test('behavioral: the close re-asserts the certified verdict after the residual fold', () => {
+        const dir = mkdtempSync(join(tmpdir(), 'tp-close-verdict-'));
+        try {
+            mkdirSync(join(dir, '.spur/run'), { recursive: true });
+            const reassert = cmdOf('done', 'jq -e');
+            const write = (verdict: string): void =>
+                writeFileSync(join(dir, '.spur/run', '1239-verdict.json'), `${JSON.stringify({ verdict })}\n`);
+            write('PASS');
+            expect(runSh(reassert, dir, { wbs: '1239' }).code).toBe(0);
+            // A residual downgrade rewrites the artifact PARTIAL/FAIL — the close blocks.
+            for (const downgraded of ['PARTIAL', 'FAIL']) {
+                write(downgraded);
+                expect(runSh(reassert, dir, { wbs: '1239' }).code, downgraded).not.toBe(0);
+            }
+            // A missing artifact is not a certification either.
+            rmSync(join(dir, '.spur/run', '1239-verdict.json'));
+            expect(runSh(reassert, dir, { wbs: '1239' }).code).not.toBe(0);
+        } finally {
+            rmSync(dir, { recursive: true, force: true });
+        }
+    });
+
+    test('the close owns the former record stage in declaration order (D65 R3)', () => {
+        // record → feature sync → residual scan+fold → re-record → verdict re-assert → settle →
+        // update done → checkpoint.
+        expect(kindsOf('done')).toEqual([
+            'command.gate',
+            'shell',
+            'shell',
+            'shell',
+            'shell',
+            'shell',
+            'command.gate',
+            'shell',
+        ]);
+        const args = (kind: string): string => JSON.stringify(actionOf('done', kind)?.options ?? {});
+        const gates = actionsOf('done').filter((a) => a.kind === 'command.gate');
+        expect(JSON.stringify(gates[0]?.options)).toContain('"record"');
+        expect(JSON.stringify(gates[0]?.options)).toContain('--solution-from-diff');
+        expect(JSON.stringify(gates[0]?.options)).toContain('"testing"');
+        expect(JSON.stringify(gates[1]?.options)).toContain('"done"');
+        expect(args('command.gate')).toContain('--no-lifecycle');
+        // The record gate keeps the classified transient retry; the done transition does too.
+        for (const gate of gates) {
+            const retry = gate.options?.retry as Record<string, unknown> | undefined;
+            expect(retry?.maxAttempts).toBe(2);
+            for (const cls of ['sqlite-busy', 'ENOENT', 'EBUSY', 'ENOTEMPTY']) expect(retry?.on).toContain(cls);
+            expect(gate.options?.softFail).toBe(false);
+        }
+        // The checkpoint names the gate receipt's tree, not a retired proof digest.
+        const checkpoint = cmdOf('done', 'checkpoint.md');
+        expect(checkpoint).toContain('check-receipt.json');
+        expect(checkpoint).not.toContain('proofDigest');
+    });
+});
+
+describe('task-pipeline evidence chain — the approval is a decision point (1236, D65 R5)', () => {
+    test('the review tail declares an evidence binding, never `mode: never` or a pause', () => {
+        const confirm = actionOf('review', 'hitl.confirm')?.options as Record<string, unknown> | undefined;
+        expect(confirm?.decision).toEqual({ mode: 'evidence', statusVar: 'approvalStatus', evidenceNodes: ['review'] });
+        expect(DEF.vars?.approvalStatus).toBe('');
+        expect(DEF.vars?.__hitlAnswer).toBe('');
+        for (const state of DEF.states) {
+            expect(state.pause, state.id).not.toBe(true);
+        }
+    });
+
+    test('behavioral: `--auto` proceeds unless the maker denied; interactively only an explicit yes approves', () => {
+        const dir = mkdtempSync(join(tmpdir(), 'tp-approval-'));
+        try {
+            const fold = cmdOf('review', '-approval.status');
+            const approvalNow = (): string =>
+                readFileSync(join(dir, '.spur/run', '1239-approval.status'), 'utf8').trim();
+            const cases: Array<[string, string, string]> = [
+                ['auto', '', 'APPROVED'], // deferred maker answer is not a denial
+                ['auto', 'yes', 'APPROVED'],
+                ['auto', 'no', 'DENIED'], // the maker can deny
+                ['auto', 'cancel', 'APPROVED'], // the confirm vocabulary has no cancel; only `no` denies
+                ['standard', 'yes', 'APPROVED'],
+                ['standard', '', 'DENIED'],
+                ['standard', 'no', 'DENIED'],
+                ['standard', 'cancel', 'DENIED'],
+                ['', 'yes', 'APPROVED'],
+                ['', '', 'DENIED'],
+            ];
+            for (const [profile, answer, expected] of cases) {
+                const vars = { wbs: '1239', profile, __hitlAnswer: answer };
+                expect(runSh(fold, dir, vars).code, `${profile}/${answer}`).toBe(0);
+                expect(approvalNow(), `${profile}/${answer}`).toBe(expected);
+            }
+            // The done edge reads both the certification and the approval token.
+            mkdirSync(join(dir, '.spur/run'), { recursive: true });
+            writeFileSync(join(dir, '.spur/run', '1239-review.status'), 'PASS\n');
+            writeFileSync(join(dir, '.spur/run', '1239-approval.status'), 'APPROVED\n');
+            expect(runSh(guardOf('review', 'done'), dir, { wbs: '1239', profile: 'standard' }).code).toBe(0);
+            writeFileSync(join(dir, '.spur/run', '1239-approval.status'), 'DENIED\n');
+            expect(runSh(guardOf('review', 'done'), dir, { wbs: '1239', profile: 'standard' }).code).not.toBe(0);
+            // The denial routes to failed(cancelled) — a recorded denial, not a check failure.
+            const denied = DEF.transitions.find((t) => t.from === 'review' && t.to === 'failed');
+            expect(denied?.terminalReason).toBe('cancelled');
+            expect(runSh(guardOf('review', 'failed', 0), dir, { wbs: '1239', profile: 'auto' }).code).toBe(0);
+            writeFileSync(join(dir, '.spur/run', '1239-approval.status'), 'APPROVED\n');
+            expect(runSh(guardOf('review', 'failed', 0), dir, { wbs: '1239', profile: 'auto' }).code).not.toBe(0);
         } finally {
             rmSync(dir, { recursive: true, force: true });
         }
     });
 });
 
-describe('task-path lookup fails closed (task 0751 R2)', () => {
-    const resolveShell = (): { shell?: { options?: { command?: string } }; command: string } => {
-        const test = DEF.states.find((st) => st.id === 'test');
-        const shell = test?.onEnter?.find(
-            (a) => a.kind === 'shell' && String(a.options?.command ?? '').includes('-taskpath.txt'),
-        );
-        return { shell, command: String(shell?.options?.command ?? '') };
-    };
+describe('task-pipeline evidence chain — escalation still resumes implement (0933)', () => {
+    test('the escalation hop asks through the responder and resumes on a non-empty answer', () => {
+        expect(kindsOf('escalate')).toEqual(['shell', 'file.read.into-var', 'hitl.input']);
+        const dir = mkdtempSync(join(tmpdir(), 'tp-escalate-'));
+        try {
+            mkdirSync(join(dir, '.spur/run'), { recursive: true });
+            writeFileSync(join(dir, '.spur/run', '1239-question.md'), 'Which store should the cache use?\n');
+            const vars = { wbs: '1239' };
+            expect(firstPassingEdge('escalate', dir, { ...vars, __hitlInput: 'redis' })).toBe('implement');
+            expect(firstPassingEdge('escalate', dir, { ...vars, __hitlInput: '' })).toBe('failed');
+            // implement's onEnter records the Q/A pair and consumes the question file, so the
+            // answered attempt can never re-trigger the hop.
+            expect(runSh(cmdOf('implement', 'escalation.md'), dir, { ...vars, __hitlInput: 'redis' }).code).toBe(0);
+            const transcript = readFileSync(join(dir, '.spur/run', '1239-escalation.md'), 'utf8');
+            expect(transcript).toContain('## Q0');
+            expect(transcript).toContain('Which store should the cache use?');
+            expect(transcript).toContain('## A0');
+            expect(transcript).toContain('redis');
+            expect(() => readFileSync(join(dir, '.spur/run', '1239-question.md'), 'utf8')).toThrow();
+            expect(firstPassingEdge('implement', dir, { ...vars, __hitlInput: 'redis' })).toBe('gate');
+        } finally {
+            rmSync(dir, { recursive: true, force: true });
+        }
+    });
+});
 
-    test('the lookup is not suppressed: no `|| true`, no forced `exit 0`, no stderr suppression', () => {
-        const { command } = resolveShell();
+describe('task-pipeline evidence chain — kept invariants (0710/0751/0804)', () => {
+    test('a priority tier is resolved at gate entry and feeds the review distinctness policy', () => {
+        const dir = mkdtempSync(join(tmpdir(), 'tp-priority-'));
+        try {
+            const spec = join(dir, 'spec.md');
+            writeFileSync(spec, '---\nwbs: t9001\npriority: p1\n---\nbody\n');
+            mkdirSync(join(dir, '.spur/run'), { recursive: true });
+            const emit = join(dir, 'emit.sh');
+            writeFileSync(emit, `#!/bin/sh\nprintf '{"filePath":"%s"}' "${spec}"\n`);
+            Bun.spawnSync(['chmod', '+x', emit]);
+            const rendered = cmdOf('gate', '-taskpath.txt').replaceAll('$spurBin', emit).replaceAll('$wbs', 't9001');
+            expect(runSh(rendered, dir).code).toBe(0);
+            expect(readFileSync(join(dir, '.spur/run', 't9001-priority.txt'), 'utf8').trim()).toBe('P1');
+            const review = actionOf('review', 'agent.run')?.options as Record<string, unknown> | undefined;
+            expect(review?.priority).toBe(VAR('taskPriority'));
+        } finally {
+            rmSync(dir, { recursive: true, force: true });
+        }
+    });
+
+    test('the task-path lookup stays fail-closed in the gate state', () => {
+        const command = cmdOf('gate', '-taskpath.txt');
         expect(command).toContain('task path $wbs --json');
         expect(command).not.toContain('--json 2>/dev/null');
         expect(command).not.toContain('|| true');
         expect(command).not.toContain('; exit 0');
-        expect(command).not.toContain(';exit 0');
-    });
-
-    test('an empty resolved task path exits non-zero with a message naming the failure', () => {
-        const { command } = resolveShell();
         expect(command).toContain('-z "$task_path"');
-        expect(command).toContain('exit 1');
         expect(command).toContain('did not resolve');
     });
 
-    // 0785 R3: the bound registration moved from done into record — FIRST action there, before
-    // any task record or status mutation — and now demands the spec inputs it re-captures over.
-    // Done keeps no artifact registration: an unbound done would be a decorative echo.
-    test('the record-entry verdict registration declares the enforced proof binding (0751 R4 + 0785 R3)', () => {
-        const record = DEF.states.find((st) => st.id === 'record');
-        const first = record?.onEnter?.[0];
-        expect(first?.kind).toBe('run.artifact');
-        const options = first?.options as Record<string, unknown> | undefined;
-        expect(options?.proofBinding).toBe('current');
-        expect(options?.artifactKind).toBe('verify-verdict');
-        // biome-ignore lint/suspicious/noTemplateCurlyInString: asserting the literal YAML template, not interpolating
-        expect(options?.taskFile).toBe('${vars.taskSpecPath}');
-        // biome-ignore lint/suspicious/noTemplateCurlyInString: asserting the literal YAML template, not interpolating
-        expect(options?.featureFile).toBe('${vars.featureSpecPath}');
-        const recordShells = (record?.onEnter ?? []).filter((a) => a.kind === 'shell');
-        expect(recordShells.length).toBeGreaterThanOrEqual(1);
-        // 0823: the record write itself is a `command.gate` action (classified transient retry,
-        // governance §1.1 (c)); assert the verb survived the owner move.
-        const recordGate = (record?.onEnter ?? []).find((a) => a.kind === 'command.gate');
-        expect(recordGate).toBeDefined();
-        const gateArgs = JSON.stringify(recordGate?.options ?? {});
-        expect(gateArgs).toContain('task');
-        expect(gateArgs).toContain('record');
-        expect(gateArgs).toContain('--solution-from-diff');
-        expect(gateArgs).toContain('--transition');
-        expect(gateArgs).toContain('testing');
-        const done = DEF.states.find((st) => st.id === 'done');
-        expect(done?.onEnter?.find((a) => a.kind === 'run.artifact')).toBeUndefined();
-    });
-
     test('behavioral: an unresolved task path fails the rendered command', () => {
-        const { execSync } = require('node:child_process') as typeof import('node:child_process');
-        const { mkdtempSync, rmSync, writeFileSync, chmodSync } = require('node:fs') as typeof import('node:fs');
-        const { tmpdir } = require('node:os') as typeof import('node:os');
-        const joinPath = require('node:path') as typeof import('node:path');
-
-        const { command } = resolveShell();
-        const dir = mkdtempSync(joinPath.join(tmpdir(), 't0751-taskpath-'));
+        const dir = mkdtempSync(join(tmpdir(), 'tp-taskpath-'));
         try {
-            mkdirRecursive(joinPath.join(dir, '.spur', 'run'));
-            // Emit the same JSON shape `spur task path --json` does when the task
-            // cannot be resolved: no path field, so jq drains to `empty`.
-            const emit = joinPath.join(dir, 'emit.sh');
+            mkdirSync(join(dir, '.spur/run'), { recursive: true });
+            const emit = join(dir, 'emit.sh');
             writeFileSync(emit, "#!/bin/sh\nprintf '{}'\n");
-            chmodSync(emit, 0o755);
-            const rendered = command.replaceAll('$spurBin', emit).replaceAll('$wbs', 't9001');
-            expect(() => execSync(rendered, { cwd: dir, stdio: 'pipe' })).toThrow();
+            Bun.spawnSync(['chmod', '+x', emit]);
+            const rendered = cmdOf('gate', '-taskpath.txt').replaceAll('$spurBin', emit).replaceAll('$wbs', 't9001');
+            expect(runSh(rendered, dir).code).not.toBe(0);
         } finally {
             rmSync(dir, { recursive: true, force: true });
         }
     });
-});
 
-function mkdirRecursive(path: string): void {
-    const { mkdirSync } = require('node:fs') as typeof import('node:fs');
-    mkdirSync(path, { recursive: true });
-}
-
-// Task 0785: physical path confinement + spec-complete proof inputs + honest review evidence.
-// These are the structural pins for the three shipped seams: the linked feature spec joins the
-// digest inputs everywhere the task spec does, review completion is evidenced by a run-scoped
-// marker (never caller-claimed), and the bound ledger registration happens before record.
-describe('task-pipeline proof-input completeness and honest review evidence (task 0785)', () => {
-    const shellCommandsOf = (state: string): string[] =>
-        (DEF.states.find((s) => s.id === state)?.onEnter ?? [])
-            .filter((a) => a.kind === 'shell')
-            .map((a) => String((a.options as Record<string, unknown> | undefined)?.command ?? ''))
-            .map((c) => c.replace(/\n/g, ' '));
-
-    test('the workflow identity carries the current contract version (v7: the asserted confidence machinery is retired, F511)', () => {
-        expect((DEF as unknown as { version: string }).version).toBe('8');
-    });
-
-    test('a featureSpecPath var exists and defaults to empty (orphan tasks stay compatible)', () => {
-        const vars = (DEF as unknown as { vars: Record<string, unknown> }).vars;
-        expect(vars.featureSpecPath).toBe('');
-    });
-
-    test('the test state resolves the linked feature spec path before the canonical capture (R2)', () => {
-        const commands = shellCommandsOf('test');
-        const resolver = commands.find((c) => c.includes('feature show') && c.includes('-featurepath.txt'));
-        expect(resolver).toBeDefined();
-        expect(resolver).toContain('.feature_id // .frontmatter.feature_id // empty');
-        // Fail closed when a declared feature's path does not resolve; empty stays legitimate.
-        expect(resolver).toContain('did not resolve');
-        expect(resolver).toContain('exit 1');
-        const test = DEF.states.find((s) => s.id === 'test');
-        const kinds = (test?.onEnter ?? []).map((a) => a.kind);
-        const reads = (test?.onEnter ?? []).filter((a) => a.kind === 'file.read.into-var');
-        const featureRead = reads.find(
-            (a) => (a.options as Record<string, unknown> | undefined)?.var === 'featureSpecPath',
-        );
-        expect(featureRead).toBeDefined();
-        // Resolution precedes the capture.
-        expect(kinds.lastIndexOf('file.read.into-var')).toBeLessThan(kinds.lastIndexOf('proof.fingerprint'));
-    });
-
-    test('every proof capture folds the feature spec alongside the task spec (R2)', () => {
-        for (const state of ['test', 'test-recheck', 'verify']) {
-            const captures = (DEF.states.find((s) => s.id === state)?.onEnter ?? []).filter(
-                (a) => a.kind === 'proof.fingerprint',
-            );
-            expect(captures.length, state).toBe(1);
-            const options = captures[0]?.options as Record<string, unknown> | undefined;
-            // biome-ignore lint/suspicious/noTemplateCurlyInString: asserting the literal YAML template, not interpolating
-            expect(options?.taskFile, state).toBe('${vars.taskSpecPath}');
-            // biome-ignore lint/suspicious/noTemplateCurlyInString: asserting the literal YAML template, not interpolating
-            expect(options?.featureFile, state).toBe('${vars.featureSpecPath}');
-        }
-        // The record-entry fingerprint compare is GONE — replaced by the bound run.artifact.
-        const recordCaptures = (DEF.states.find((s) => s.id === 'record')?.onEnter ?? []).filter(
-            (a) => a.kind === 'proof.fingerprint',
-        );
-        expect(recordCaptures).toHaveLength(0);
-    });
-
-    test('the review stage writes a run-scoped completion marker after its agent (R4)', () => {
-        const review = DEF.states.find((s) => s.id === 'review');
-        const kinds = (review?.onEnter ?? []).map((a) => a.kind);
-        // 1135 R4: the review-entry digest compare precedes the dispatch, then the agent, then
-        // the completion marker — the marker still follows the agent it certifies.
-        expect(kinds).toEqual(['proof.fingerprint', 'agent.run', 'shell']);
-        const marker = shellCommandsOf('review').find((c) => c.includes('-review-proof.digest'));
-        expect(marker).toBeDefined();
-        expect(marker).toContain('$__runId-review-proof.digest');
-        expect(marker).toContain('$proofDigest');
-    });
-
-    test('the verify stamp marks review completed only on a matching marker (R4)', () => {
-        // Located by `capturePoint`: only the stamp shell writes the proof block, and — since F511
-        // retired the confidence-row shell — it is the verify state's LAST action.
-        const stamp = shellCommandsOf('verify').find((c) => c.includes('capturePoint'));
-        expect(stamp).toBeDefined();
-        // Default is skipped — an unexecuted review is never reported completed. 0823 moved the
-        // marker compare into the jq program itself (`--arg rp` + inline if), same semantics.
-        expect(stamp).toContain('$__runId-review-proof.digest');
-        expect(stamp).toContain('--arg rp "$(cat .spur/run/$__runId-review-proof.digest');
-        expect(stamp).toContain('review: {status: (if $rp == $d then "completed" else "skipped" end)');
-        expect(stamp).not.toContain('review: {status: "completed"');
-    });
-
-    test('the verify→record guard demands completed review evidence (R4/R5)', () => {
-        const guard = cmdOf('verify', 'record');
-        // 0823: one `jq -e` predicate over the verdict file (same proof fields as the former
-        // 9-command test chain).
-        expect(guard).toContain('jq -e');
-        expect(guard).toContain('(.proof.stages.review.status // "") == "completed"');
-        // The rest of the proof-block pinning stays intact.
-        expect(guard).toContain('.proof.stages.review.digest');
-        expect(guard).toContain('.proof.definitionDigest');
-        expect(guard).toContain('.proof.runId');
-    });
-});
-
-describe('task-pipeline busy-retry classifiers, done guard projection, route-id safety (task 0804 R3/R6/R8)', () => {
-    const runSh = (script: string, cwd: string, env?: Record<string, string>): { code: number; stderr: string } => {
-        const proc = Bun.spawnSync(['sh', '-c', script], {
-            cwd,
-            env: env === undefined ? { ...getEnvVars() } : { ...getEnvVars(), ...env },
-            stdout: 'pipe',
-            stderr: 'pipe',
-        });
-        return { code: proc.exitCode, stderr: proc.stderr.toString() };
-    };
-
-    function makeTmpDir(): { dir: string; cleanup: () => void } {
-        const dir = mkdtempSync(join(tmpdir(), 'spur-0804-yaml-'));
-        mkdirSync(join(dir, '.spur', 'run'), { recursive: true });
-        mkdirSync(join(dir, '.spur', 'memory'), { recursive: true });
-        return { dir, cleanup: () => rmSync(dir, { recursive: true, force: true }) };
-    }
-
-    // ── R3 (0823): the three lifecycle transitions and the quality-gate loop moved to owners
-    // (governance §1.1 (c)/(d)). The classified transient retry lives in the command.gate retry
-    // options; the gate lock-classifier behavior is behavioral-tested in
-    // packages/app/tests/services/quality-gate*.test.ts (the core behind `spur task gate`).
-
-    test('the three lifecycle transitions are command.gate actions with classified transient retry (R3)', () => {
-        const gates = DEF.states
-            .flatMap((s) => (s.onEnter ?? []).map((a) => ({ state: s.id, action: a })))
-            .filter(({ action }) => action.kind === 'command.gate');
-        expect(gates.map((g) => g.state).sort()).toEqual(['done', 'implement', 'record']);
-        for (const { action } of gates) {
-            const options = action.options as Record<string, unknown>;
-            const retry = options.retry as Record<string, unknown>;
-            expect(retry.maxAttempts).toBe(2);
-            expect(retry.delayMs).toBe(2000);
-            for (const cls of ['sqlite-busy', 'ENOENT', 'EBUSY', 'ENOTEMPTY']) {
-                expect(retry.on).toContain(cls);
-            }
-            expect(options.softFail).toBe(false);
-            expect(String(options.resultFile)).toMatch(/^\.spur\/run\/\$\{vars\.__runId\}-.*\.status$/);
-        }
-        // Verb shapes preserved: wip update, record with transition, done update.
-        const argsOf = (state: string): string =>
-            JSON.stringify(
-                DEF.states.find((s) => s.id === state)?.onEnter?.find((a) => a.kind === 'command.gate')?.options ?? {},
-            );
-        expect(argsOf('implement')).toContain('--no-lifecycle');
-        expect(argsOf('implement')).toContain('"wip"');
-        expect(argsOf('record')).toContain('--solution-from-diff');
-        expect(argsOf('record')).toContain('"testing"');
-        // 0980: the record stage's transition must not spawn a nested task-lifecycle
-        // run — the pipeline run is the lifecycle record; a nested run outlives the
-        // pipeline as a `running` orphan (task_run_links empty, zero child rows).
-        expect(argsOf('record')).toContain('--no-lifecycle');
-        expect(argsOf('done')).toContain('--no-lifecycle');
-    });
-
-    // ── R6: the record→done guard projects the structural check onto the done target.
-
-    test('the record→done guard checks the done target with --as done and keeps verdict/proof backstops (R6)', () => {
-        const guard = cmdOf('record', 'done');
-        expect(guard).toContain('task check $wbs --as done');
-        // The backstops stay: PASS verdict + digest match on the proof block (the F511 confidence
-        // rule is retired). 0874's named reads became ONE `jq -e` predicate, which is also what the
-        // ADR-115 guard budget asks for — same semantics, fewer logical commands.
-        expect(guard).toContain('jq -e --arg p "$proofDigest"');
-        expect(guard).toContain('.verdict == "PASS"');
-        expect(guard).toContain('((.proof.digest // "") == $p)');
-        // No unprojected plain check remains.
-        expect(guard.includes('task check $wbs &&')).toBe(false);
-    });
-
-    // ── R8: the route-reason action validates the run id before creating its artifact.
-
-    test('behavioral: empty falls back, valid ids write, unsafe ids fail without a reason artifact (R8)', () => {
-        // 0759 R5: the route claim is a precheck-state shell action.
-        const routeCmd = (DEF.states.find((s) => s.id === 'precheck')?.onEnter ?? [])
-            .filter((a) => a.kind === 'shell')
-            .map((a) => String(a.options?.command ?? ''))
-            .find((c) => c.includes('REASON_FILE='));
-        expect(routeCmd).toBeDefined();
-        if (routeCmd === undefined) return;
-        const { dir, cleanup } = makeTmpDir();
+    test('behavioral: the route-reason artifact is run-attributed and unsafe ids are refused (0804 R8)', () => {
+        const dir = mkdtempSync(join(tmpdir(), 'tp-route-'));
         try {
-            const runRoute = (runId: string): { code: number; stderr: string } =>
-                runSh(routeCmd, dir, { __runId: runId, wbs: 't0804', mode: 'fast' });
-            const reasonExists = (id: string): boolean => {
-                try {
-                    readFileSync(join(dir, '.spur', 'run', `${id}-route-reason.txt`), 'utf8');
-                    return true;
-                } catch {
-                    return false;
-                }
-            };
-
-            // Empty id → pipeline-$wbs fallback artifact.
-            expect(runRoute('').code).toBe(0);
-            expect(readFileSync(join(dir, '.spur', 'run', 'pipeline-t0804-route-reason.txt'), 'utf8')).toContain(
+            const route = cmdOf('precheck', 'REASON_FILE=');
+            expect(runSh(route, dir, { __runId: 'run_alpha', wbs: '1239', mode: 'fast' }).code).toBe(0);
+            expect(readFileSync(join(dir, '.spur/run', 'run_alpha-route-reason.txt'), 'utf8').trim()).toBe(
                 'fast:evidence complete+consistent',
             );
-
-            // Valid UUID form → its own artifact.
-            expect(runRoute('0d90b4e7-1c2d-4e5f-a6b7-8c9d0e1f2a3b').code).toBe(0);
-            expect(reasonExists('0d90b4e7-1c2d-4e5f-a6b7-8c9d0e1f2a3b')).toBe(true);
-
-            // Unsafe ids → nonzero, refusal diagnostic, no artifact for that id.
-            for (const unsafe of ['$spurBin', 'a{b}', '../evil', 'a/b', 'vars.wbs']) {
-                const res = runRoute(unsafe);
+            for (const unsafe of ['$spurBin', '../evil', 'a/b', 'vars.wbs']) {
+                const res = runSh(route, dir, { __runId: unsafe, wbs: '1239', mode: 'fast' });
                 expect(res.code).not.toBe(0);
                 expect(res.stderr).toContain('refusing unsafe run id');
-                expect(reasonExists(unsafe)).toBe(false);
             }
-
-            // The routes log records only the successful runs.
-            const log = readFileSync(join(dir, '.spur', 'memory', 'task-pipeline-routes.log'), 'utf8');
-            expect(log).toContain('pipeline-t0804');
-            expect(log).toContain('0d90b4e7-1c2d-4e5f-a6b7-8c9d0e1f2a3b');
-            expect(log.includes('$spurBin')).toBe(false);
         } finally {
-            cleanup();
+            rmSync(dir, { recursive: true, force: true });
         }
     });
-});
 
-// F511 (task 1207): the asserted `Confidence: HIGH|MEDIUM|LOW` machinery was retired. A model
-// that can write PASS can write HIGH, so a self-graded level is not verification — anti-
-// hallucination lives in the cc skill family; spur certifies on deterministic evidence (PASS
-// verdict + proof digest at both completion boundaries). These pins keep the 1068-era gate from
-// being re-imported.
-describe('task-pipeline confidence retirement (F511, task 1207)', () => {
-    const runSh = (script: string, cwd: string): { code: number } => {
-        const proc = Bun.spawnSync(['sh', '-c', script], {
-            cwd,
-            env: { ...getEnvVars() },
-            stdout: 'pipe',
-            stderr: 'pipe',
+    test('the lifecycle transitions keep their classified transient retry and verb shapes', () => {
+        const gates = DEF.states.flatMap((s) => (s.onEnter ?? []).map((a) => ({ state: s.id, action: a })));
+        const lifecycle = gates.filter(({ action }) => {
+            const args = action.options?.args;
+            return action.kind === 'command.gate' && Array.isArray(args) && args[0] === 'task' && args[1] === 'update';
         });
-        return { code: proc.exitCode };
-    };
-
-    test('no completion guard reads the confidence level or the ack var', () => {
-        for (const [from, to] of [
-            ['verify', 'record'],
-            ['record', 'done'],
-        ] as const) {
-            const guard = cmdOf(from, to);
-            expect(guard, `${from}→${to}`).not.toContain('confidence');
-            expect(guard, `${from}→${to}`).not.toContain('ackLowConfidence');
-        }
-    });
-
-    test('the ackLowConfidence var and the verify confidence-row action are gone; the stamp stays last', () => {
-        expect((DEF as unknown as { vars: Record<string, unknown> }).vars.ackLowConfidence).toBeUndefined();
-        const actions = DEF.states.find((s) => s.id === 'verify')?.onEnter ?? [];
-        expect(actions.some((a) => String(a.options?.command ?? '').includes('"confidence"'))).toBe(false);
-        const stampIndex = actions.findIndex((a) => String(a.options?.command ?? '').includes('capturePoint'));
-        expect(stampIndex).toBe(actions.length - 1);
-    });
-
-    test('behavioral: a PASS artifact without any confidence field clears verify → record', () => {
-        const dir = mkdtempSync(join(tmpdir(), 'spur-conf-retired-'));
-        try {
-            mkdirSync(join(dir, '.spur', 'run'), { recursive: true });
-            const digest = 'sha256:test-digest';
-            const artifact = {
-                wbs: 't9002',
-                verdict: 'PASS',
-                requirements: [{ id: 'R1', status: 'MET', evidence: 'test: covered' }],
-                acceptanceCriteria: [{ id: 'AC1', status: 'MET', evidenceType: 'test', evidence: 'test: covered' }],
-                checks: [],
-                proof: {
-                    digest,
-                    runId: 'run-t-retired',
-                    definitionDigest: 'sha256:def-digest',
-                    capturePoint: 'quality-gate-entry',
-                    stages: {
-                        qualityGate: { status: 'PASS', digest },
-                        review: { status: 'completed', digest },
-                        verification: { status: 'PASS', digest },
-                    },
-                },
-            };
-            writeFileSync(join(dir, '.spur', 'run', 't9002-verdict.json'), JSON.stringify(artifact));
-            const guard = cmdOf('verify', 'record')
-                .replaceAll('$proofDigest', 'sha256:test-digest')
-                .replaceAll('$__runId', 'run-t-retired')
-                .replaceAll('$__definitionDigest', 'sha256:def-digest')
-                .replaceAll('$wbs', 't9002')
-                .replaceAll('../..', dir);
-            expect(runSh(guard, dir).code).toBe(0);
-        } finally {
-            rmSync(dir, { recursive: true, force: true });
-        }
-    });
-});
-
-// Session finding after 1088: a FAIL review had no outgoing edge at all, so remediating one meant
-// driving the graph by hand. The router below is the review-side twin of 0943's failure-class router.
-describe('task-pipeline review-failure routing (session finding after 1088)', () => {
-    const runSh = (script: string, cwd: string): { code: number } => {
-        const proc = Bun.spawnSync(['sh', '-c', script], { cwd, stdout: 'pipe', stderr: 'pipe' });
-        return { code: proc.exitCode };
-    };
-
-    test('the router state classifies the failure like the quality-gate twin', () => {
-        const state = DEF.states.find((s) => s.id === 'review-fail-triage');
-        expect(state).toBeDefined();
-        const decide = state?.onEnter?.find((a) => a.kind === 'decide');
-        const options = decide?.options as Record<string, unknown> | undefined;
-        expect(options?.id).toBe('review-failure-class');
-        expect(options?.decision).toBe('review-failure-class');
-        // biome-ignore lint/suspicious/noTemplateCurlyInString: asserting the literal YAML template, not interpolating
-        expect((options?.params as Record<string, string> | undefined)?.wbs).toBe('${vars.wbs}');
-        // Bounded by the SAME counter the quality-gate loop uses: no extra attempts.
-        // biome-ignore lint/suspicious/noTemplateCurlyInString: asserting the literal YAML template, not interpolating
-        expect(String(options?.resultFile)).toBe('.spur/run/${vars.wbs}-review-failure-class.decision');
-    });
-
-    test('the router is bounded and fail-closed: stop, cap, fix, then a catch-all', () => {
-        const edges = DEF.transitions.filter((t) => t.from === 'review-fail-triage');
-        expect(edges.map((e) => `${e.to}:${e.terminalReason ?? e.guard?.kind}`)).toEqual([
-            'failed:failed-check',
-            'failed:retry-exhausted',
-            'test-fix:shell',
-            'failed:failed-check',
-        ]);
-        const cap = edges.find((e) => e.terminalReason === 'retry-exhausted');
-        expect(String(cap?.guard?.options?.command)).toContain('$wbs-test-fix-attempt');
-        expect(String(cap?.guard?.options?.command)).toContain('qualityGateMaxFixAttempts');
-        // The last edge is `always` — a missing/corrupt decision can never fall through to a fix.
-        expect(edges.at(-1)?.guard?.kind).toBe('always');
-    });
-
-    test('a FAIL or missing review answer cannot reach verify (fail-closed PASS edges)', () => {
-        const autoSkip = cmdOf('review', 'verify');
-        const interactive = cmdOf('review', 'approve');
-        for (const guard of [autoSkip, interactive]) {
-            expect(guard).toContain('Verdict:');
-            expect(guard).toContain('PASS');
-        }
-        expect(autoSkip).toContain('test "$profile" = auto');
-        // The PASS edges are declared before the catch-all, so a PASS still takes them.
-        const order = DEF.transitions.filter((t) => t.from === 'review').map((t) => t.to);
-        expect(order).toEqual(['verify', 'approve', 'review-fail-triage']);
-    });
-
-    test('behavioral: the PASS edge accepts PASS (plain or bold) and refuses FAIL/absent', () => {
-        const dir = mkdtempSync(join(tmpdir(), 'spur-review-gate-'));
-        try {
-            mkdirSync(join(dir, '.spur', 'run'), { recursive: true });
-            // Since 1122 the PASS edge continues into the review-gate residual check, so a passing
-            // case must satisfy the whole chain: seed a real task whose review is clean (P4-only row).
-            const wbs = seedTask(dir);
-            setReview(
-                dir,
-                wbs,
-                '| Priority | Finding | Location | Disposition |\n| --- | --- | --- | --- |\n| P4 (advisory) | Note | src/d.ts:1 | ACCEPTED |\n',
-            );
-            const answer = join(dir, '.spur', 'run', 'run-t-review-review-answer.txt');
-            const guard = cmdOf('review', 'verify')
-                .replaceAll('$profile', 'auto')
-                .replaceAll('$__runId', 'run-t-review')
-                .replaceAll('../..', dir)
-                .replaceAll('$spurBin', SPUR_BIN)
-                .replaceAll('$wbs', wbs);
-            for (const [body, expected] of [
-                ['Verdict: PASS\n', 0],
-                ['**Verdict: PASS**\n', 0],
-                ['Verdict: FAIL\n', 1],
-                ['PASS without the token\n', 1],
-            ] as const) {
-                writeFileSync(answer, body);
-                expect(runSh(guard, dir).code, body).toBe(expected);
-            }
-            const missing = cmdOf('review', 'verify')
-                .replaceAll('$profile', 'auto')
-                .replaceAll('$__runId', 'run-t-absent')
-                .replaceAll('../..', dir);
-            expect(runSh(missing, dir).code).not.toBe(0);
-        } finally {
-            rmSync(dir, { recursive: true, force: true });
-        }
-    });
-});
-
-// Task 1122: the record sweep's "no open P1-P3 review finding" rule moved forward to the review
-// PASS edges — a PASS with an open finding enters the bounded repair lane BEFORE verify spends the
-// cycle (record would terminally fail it after a full verify + record). Same classifier, same
-// deferrals, resolved like the record step's scanner, fail-closed into review-fail-triage.
-describe('task-pipeline review PASS-edge review-gate (task 1122)', () => {
-    const TABLE_HEAD = '### Review\n\n| Priority | Finding | Location | Disposition |\n| --- | --- | --- | --- |\n';
-    const runSh = (script: string, cwd: string, spurBin: string, wbs: string): number =>
-        Bun.spawnSync(['sh', '-c', script], {
-            cwd,
-            env: { ...getEnvVars(), wbs, spurBin },
-            stdout: 'pipe',
-            stderr: 'pipe',
-        }).exitCode ?? -1;
-
-    test('both PASS edges chain review-gate into the Verdict check (R3, AC2/AC3)', () => {
-        for (const guard of [cmdOf('review', 'verify'), cmdOf('review', 'approve')]) {
-            expect(guard).toContain('$spurBin task residual "$wbs" review-gate');
-            expect(guard).not.toContain('script-root.json');
-            // One AND-list: the gate runs only after the Verdict grep, so an unavailable spur or an
-            // open P1-P3 finding fails the edge closed into the review-fail-triage catch-all. The
-            // grade rides the scanner; since F511 no answer file is handed over and no ack exists.
-            expect(guard).not.toContain('--review-answer');
-            expect(guard).not.toContain('$ackLowConfidence');
-            expect(guard).not.toContain(';');
-        }
-        // The test-fix hop's existing hand-off appends exactly the artifact review-gate writes.
-        const fixShells = (DEF.states.find((s) => s.id === 'test-fix')?.onEnter ?? [])
-            .filter((a) => a.kind === 'shell')
-            .map((a) => String(a.options?.command ?? ''));
-        expect(fixShells.some((c) => c.includes('cat ".spur/run/$wbs-residuals.json"'))).toBe(true);
-    });
-
-    test('behavioral: PASS with an open P2 falls through to triage; clean PASS advances; unavailable spur fails closed', () => {
-        const dir = mkdtempSync(join(tmpdir(), 'spur-1122-gate-'));
-        try {
-            mkdirSync(join(dir, '.spur', 'run'), { recursive: true });
-            const runId = 'run-t-1122';
-            writeFileSync(join(dir, '.spur', 'run', `${runId}-review-answer.txt`), 'Verdict: PASS\n');
-            const wbs = seedTask(dir);
-            const verifyGuard = cmdOf('review', 'verify').replaceAll('$profile', 'auto').replaceAll('$__runId', runId);
-            const approveGuard = cmdOf('review', 'approve').replaceAll('$__runId', runId);
-
-            // AC2: PASS + open P2 → neither PASS edge passes → review-fail-triage; the artifact
-            // the fix hop consumes is staged with the blocking finding.
-            setReview(dir, wbs, `${TABLE_HEAD}| P2 (major) | Missing validation | src/c.ts:8 | OPEN |\n`);
-            expect(runSh(verifyGuard, dir, SPUR_BIN, wbs)).not.toBe(0);
-            expect(runSh(approveGuard, dir, SPUR_BIN, wbs)).not.toBe(0);
-            const artifact = JSON.parse(readFileSync(join(dir, '.spur', 'run', `${wbs}-residuals.json`), 'utf8')) as {
-                items: Array<{ category: string; class: string; location: string }>;
-            };
-            expect(artifact.items.map((i) => i.category)).toEqual(['review-finding']);
-            expect(artifact.items.some((i) => i.class === 'blocking' && i.location === 'src/c.ts:8')).toBe(true);
-
-            // AC3: clean PASS (P4 + RESOLVED rows only) still advances, auto and interactive.
-            setReview(
-                dir,
-                wbs,
-                `${TABLE_HEAD}| P4 (advisory) | Note | src/d.ts:1 | ACCEPTED |\n| P3 (minor) | Fixed | src/e.ts:2 | RESOLVED — in pass |\n`,
-            );
-            expect(runSh(verifyGuard, dir, SPUR_BIN, wbs)).toBe(0);
-            expect(runSh(approveGuard, dir, SPUR_BIN, wbs)).toBe(0);
-
-            // A spur that cannot run the review-gate fails closed into the catch-all, never verify.
-            expect(runSh(verifyGuard, dir, 'false', wbs)).not.toBe(0);
-            expect(runSh(approveGuard, dir, 'false', wbs)).not.toBe(0);
-        } finally {
-            rmSync(dir, { recursive: true, force: true });
-        }
-    }, 30000);
-
-    test('the cost is stated where the driver decides (R4, AC4)', () => {
-        const reviewDesc = String(DEF.states.find((s) => s.id === 'review')?.description ?? '');
-        const triageDesc = String(DEF.states.find((s) => s.id === 'review-fail-triage')?.description ?? '');
-        for (const desc of [reviewDesc, triageDesc]) {
-            expect(desc).toContain('P1-P3');
-            expect(desc).toContain('DEFER');
-            expect(desc).toContain('quality → review → verify');
-            expect(desc).toContain('wrap residual');
-        }
-    });
-    // F511 (task 1207): the graded-PASS contract (1204) was retired with the asserted confidence
-    // machinery — the edges keep delegating the residual check to review-gate, but no longer hand
-    // it the answer file or consult any operator ack.
-    test('the PASS edges delegate to review-gate without an answer grade or ack (F511)', () => {
-        for (const to of ['verify', 'approve'] as const) {
-            const guard = cmdOf('review', to);
-            expect(guard, `review→${to}`).toContain('review-gate');
-            expect(guard, `review→${to}`).not.toContain('--review-answer');
-            expect(guard, `review→${to}`).not.toContain('ackLowConfidence');
-        }
+        expect(lifecycle.map((g) => g.state)).toEqual(['implement', 'done']);
+        expect(JSON.stringify(lifecycle[0]?.action.options)).toContain('"wip"');
+        expect(JSON.stringify(lifecycle[1]?.action.options)).toContain('"done"');
+        for (const { action } of lifecycle) expect(action.options?.softFail).toBe(false);
     });
 });

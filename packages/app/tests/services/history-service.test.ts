@@ -215,6 +215,17 @@ describe('HistoryService', () => {
             expect(artifact.warnings).toEqual([]);
         });
 
+        test('D65 1239: the verified-outcome block stays absent when there is no task locator', async () => {
+            // The rewritten task pipeline writes no proof chain, so every new run lands in the
+            // derivation's proofAbsent bucket. History keeps rendering historical runs because
+            // the block is OPTIONAL: without a locator the fold is skipped and the artifact is
+            // emitted without it — absence reads as "not reported", never as a failure.
+            const svc = new HistoryService(makeCtx());
+            const artifact = await svc.analyze(ALL);
+            expect('verifiedOutcome' in artifact).toBe(false);
+            expect(artifact.schemaVersion).toBe(1);
+        });
+
         test('analyze materializes all 11 rollup tables once and stamps the matching history version', async () => {
             const ctx = makeCtx();
             await seed(ctx);

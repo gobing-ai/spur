@@ -519,7 +519,7 @@ describe('sp plugin structure — functional split invariants (task 0161 / ADR-0
         statSync(join(d, 'references', 'worktree-patterns.md'));
     });
 
-    test('R28 — bundled workflows all carry the Spur schema ref and task-pipeline pauses for HITL', () => {
+    test('R28 — bundled workflows all carry the Spur schema ref and task-pipeline answers HITL in-session', () => {
         for (const file of readdirSync(WORKFLOWS_DIR).filter((name) => name.endsWith('.yaml'))) {
             const text = readFileSync(join(WORKFLOWS_DIR, file), 'utf8');
             expect(text, `${file} should use the package schema ref`).toContain(
@@ -527,9 +527,15 @@ describe('sp plugin structure — functional split invariants (task 0161 / ADR-0
             );
         }
 
+        // D65 1239 R10 / ADR-140: the pipeline carries NO `pause: true` state. Its human
+        // decision points answer through the decision-point responder instead, so an
+        // interactive run is answered in-session and a headless one takes the responder
+        // default rather than parking for `spur workflow continue`. HITL itself is unchanged:
+        // the approval and the operator question are still in the graph.
         const taskPipeline = readFileSync(join(WORKFLOWS_DIR, 'task-pipeline.yaml'), 'utf8');
-        expect(taskPipeline).toContain('  - id: approve\n');
-        expect(taskPipeline).toContain('    pause: true\n');
+        expect(taskPipeline).not.toContain('    pause: true\n');
+        expect(taskPipeline).toContain('kind: hitl.confirm');
+        expect(taskPipeline).toContain('kind: hitl.input');
         expect(taskPipeline).not.toContain('deferred until the globally-installed');
     });
 
@@ -712,51 +718,50 @@ describe('sp plugin structure — functional split invariants (task 0161 / ADR-0
         );
     });
 
-    test('R41 — task-pipeline approve gate routes three HITL outcomes with no always fallback (0182 R1)', () => {
+    test('R41 — task-pipeline approval routes three HITL outcomes with no always fallback (0182 R1)', () => {
         const taskPipeline = readFileSync(join(WORKFLOWS_DIR, 'task-pipeline.yaml'), 'utf8');
 
-        // cancelled must be a declared terminal state, and the approve state's own
-        // description must document all three outcomes (not just the happy path).
-        expect(taskPipeline).toContain('  - cancelled\n');
-        expect(taskPipeline).toContain('  - id: cancelled\n');
+        // D65 1239 R1/R5: `approve` is a decision point at the end of `review`, not a state,
+        // and the cancel outcome is a recorded `terminalReason` on the denial edge rather than
+        // a dedicated terminal state. The three outcomes still have to be distinguishable.
+        expect(taskPipeline).toContain('  - id: review\n');
+        expect(taskPipeline).toContain('          - kind: hitl.confirm\n');
+        expect(taskPipeline).toContain('                    mode: evidence\n');
 
         // __hitlAnswer must be declared in vars: (R36's undeclared-var crash guard) and
-        // default to empty until the approve state's hitl.confirm sets it.
+        // default to empty until the approval decision point sets it.
         expect(taskPipeline).toContain('__hitlAnswer: ""');
 
         const transitionBlocks = taskPipeline.split('\ntransitions:\n')[1] ?? '';
-        const approveBlock =
-            transitionBlocks.split('# ── approve:')[1]?.split('# ── completion gate')[0] ?? transitionBlocks;
+        const reviewEdges = transitionBlocks.split(/^ +- from: /m).filter((block) => block.startsWith('review\n'));
 
-        // Guards reference vars by name so the value reaches the shell as env rather than as
-        // command text (task 0435). The routing invariants asserted below are unchanged.
-        const hitlAnswer = '$__hitlAnswer';
-        expect(approveBlock).toContain(`test "${hitlAnswer}" = yes`);
-        expect(approveBlock).toContain(`test "${hitlAnswer}" = no`);
-        expect(approveBlock).toContain(`test "${hitlAnswer}" = cancel`);
+        // The approval answer is folded into one recorded token (`-approval.status`,
+        // APPROVED | DENIED) and every exit from review reads it — the yes / no / cancel
+        // routing lives in that fold, so assert the fold and the routes, not the old
+        // per-outcome guards inside a deleted state.
+        const foldBlock =
+            taskPipeline.split(
+                '          - kind: shell\n            options:\n                command: >-\n                    mkdir -p .spur/run; A=APPROVED;',
+            )[1] ?? '';
+        expect(foldBlock).toContain('[ "$__hitlAnswer" = no ] && A=DENIED');
+        expect(foldBlock).toContain('[ "$__hitlAnswer" = yes ] || A=DENIED');
+        expect(foldBlock, 'the fold must record the token the guards read').toContain('-approval.status');
 
-        // Declaration order matters (yes checked before no before cancel) — assert the
-        // three guard commands appear in that order, not just that all three exist.
-        const yesIdx = approveBlock.indexOf(`test "${hitlAnswer}" = yes`);
-        const noIdx =
-            approveBlock.indexOf(`test "${hitlAnswer}" = no"`) !== -1
-                ? approveBlock.indexOf(`test "${hitlAnswer}" = no"`)
-                : approveBlock.indexOf(`test "${hitlAnswer}" = no'`);
-        const cancelIdx = approveBlock.indexOf(`test "${hitlAnswer}" = cancel`);
-        expect(yesIdx).toBeGreaterThan(-1);
-        expect(noIdx).toBeGreaterThan(-1);
-        expect(cancelIdx).toBeGreaterThan(-1);
-        expect(yesIdx).toBeLessThan(noIdx);
-        expect(noIdx).toBeLessThan(cancelIdx);
+        const approveEdge = reviewEdges.find((block) => block.includes('-approval.status" 2>/dev/null)" = APPROVED'));
+        const denyEdge = reviewEdges.find((block) => block.includes('-approval.status" 2>/dev/null)" = DENIED'));
+        expect(approveEdge, 'an approved review must have a done edge').toContain('to: done');
+        expect(denyEdge, 'a denied review must route to failed').toContain('to: failed');
+        // Cancel is a recorded outcome, distinct from a check failure (bug-750's concern: a
+        // denial must never be silently read as an approval).
+        expect(denyEdge).toContain('terminalReason: cancelled');
 
-        // No bare `always` transition may originate from approve — every exit must be
-        // gated on the captured answer (bug-750: an always edge silently approves).
-        const approveFromBlocks = transitionBlocks
-            .split(/^ +- from: /m)
-            .filter((block) => block.startsWith('approve\n'));
-        expect(approveFromBlocks.length).toBe(3);
-        for (const block of approveFromBlocks) {
-            expect(block).not.toContain('kind: always');
+        // No bare `always` transition may approve: the only `always` out of review is the
+        // fail-closed defense, and it never reaches `done`.
+        const alwaysFromReview = reviewEdges.filter((block) => block.includes('kind: always'));
+        expect(alwaysFromReview.length).toBe(1);
+        expect(alwaysFromReview[0]).toContain('to: failed');
+        for (const block of reviewEdges) {
+            if (block.includes('to: done')) expect(block).not.toContain('kind: always');
         }
 
         // R2a — implement step uses its own (longer) timeout budget, not the shared
@@ -764,14 +769,14 @@ describe('sp plugin structure — functional split invariants (task 0161 / ADR-0
         // Raised 30 → 45 min by task 1108 (runall-P1 pilot: two 30 min kills mid-gate;
         // the same default landed independently on main in 32c529a4a).
         expect(taskPipeline).toContain('implementTimeoutMs: "2700000"');
-        const implementBlock = taskPipeline.split('  - id: implement\n')[1]?.split('  - id: test\n')[0] ?? '';
+        const implementBlock = taskPipeline.split('  - id: implement\n')[1]?.split('  - id: escalate\n')[0] ?? '';
         const varsImplementTimeout = `$${'{vars.implementTimeoutMs}'}`;
         expect(implementBlock).toContain(`timeoutMs: ${varsImplementTimeout}`);
         expect(implementBlock).not.toContain(`timeoutMs: \${vars.stepTimeoutMs}`);
 
         // 1109 R3 — the scoped anchor repair runs in the implement stage, after the format
-        // step and before the `test` state, so it can never invalidate the proof digest the
-        // test stage captures. Scoped and non-fatal by construction.
+        // step and before the gate reads the tree, so the receipt is keyed to the final tree.
+        // Scoped and non-fatal by construction.
         const anchorRepair = 'task migrate-anchors --wbs $wbs --json ; exit 0';
         expect(implementBlock).toContain(anchorRepair);
         expect(implementBlock.indexOf(anchorRepair)).toBeGreaterThan(
@@ -782,14 +787,19 @@ describe('sp plugin structure — functional split invariants (task 0161 / ADR-0
         // to "false" (no behavior change), the deferred mode is reachable only through the var,
         // and the triage guards accept DEFERRED only while the var is "true".
         expect(taskPipeline).toContain('deferQualityGate: "false"');
-        const gateTestBlock = taskPipeline.split('  - id: test\n')[1]?.split('  - id: test-fix\n')[0] ?? '';
-        expect(gateTestBlock).toContain('M=run; [ "$deferQualityGate" = "true" ] && M=deferred');
-        const recheckBlock = taskPipeline.split('  - id: test-recheck\n')[1]?.split('  - id: triage\n')[0] ?? '';
-        expect(recheckBlock).toContain('M=recheck; [ "$deferQualityGate" = "true" ] && M=deferred');
-        const deferredGuard = 'test "$gate_status" = DEFERRED && test "$deferQualityGate" = "true"';
-        // Both triage edges (test and test-recheck) carry the var-gated acceptance.
-        const guardOccurrences = taskPipeline.split(deferredGuard).length - 1;
-        expect(guardOccurrences).toBe(2);
+        const gateBlock = taskPipeline.split('  - id: gate\n')[1]?.split('  - id: remediate\n')[0] ?? '';
+        expect(gateBlock).toContain('M=run;');
+        expect(gateBlock).toContain('M=recheck;');
+        expect(gateBlock, 'the deferred mode is reachable only through the var').toContain(
+            '[ "$deferQualityGate" = "true" ] && M=deferred',
+        );
+        // The DEFERRED token is accepted on ONE edge (the opt-in lane) and only while the var
+        // is "true"; the assertions live on the same gate result pair the PASS edge reads.
+        const gateEdges = transitionBlocks.split(/^ +- from: /m).filter((block) => block.startsWith('gate\n'));
+        const deferredEdges = gateEdges.filter((block) => block.includes('= DEFERRED'));
+        expect(deferredEdges.length).toBe(1);
+        expect(deferredEdges[0]).toContain('deferQualityGate" = "true"');
+        expect(deferredEdges[0]).toContain('to: review');
         // The full tier is still the only PASS writer: the deferred mode never writes PASS
         // (asserted in plugins/sp/tests/quality-gate-receipt.test.ts).
 
@@ -818,23 +828,27 @@ describe('sp plugin structure — functional split invariants (task 0161 / ADR-0
         expect(devRunCmd).toContain('NEVER invoke');
         expect(devRunCmd).toContain('--mode implement');
 
-        // Quality-gate hop family (not /sp:dev-unit): soft probe + fixall + soft recheck.
-        expect(taskPipeline).toContain('  - id: test-fix\n');
-        expect(taskPipeline).toContain('  - id: test-recheck\n');
+        // Quality-gate hop family (not /sp:dev-unit): one typed gate + the bounded repair hop.
+        // D65 1239 R2: `test`/`test-recheck` merged into `gate`, `test-fix` is `remediate`.
+        expect(taskPipeline).toContain('  - id: gate\n');
+        expect(taskPipeline).toContain('  - id: remediate\n');
+        expect(taskPipeline).not.toContain('  - id: test\n');
+        expect(taskPipeline).not.toContain('  - id: test-recheck\n');
+        expect(taskPipeline).not.toContain('  - id: test-fix\n');
         expect(taskPipeline).toContain('qualityGateCmd:');
         expect(taskPipeline).toContain('qualityGateMaxFixAttempts:');
-        const testBlock = taskPipeline.split('  - id: test\n')[1]?.split('  - id: test-fix\n')[0] ?? '';
-        expect(testBlock).not.toContain('/sp:dev-unit');
-        const testFixBlock = taskPipeline.split('  - id: test-fix\n')[1]?.split('  - id: test-recheck\n')[0] ?? '';
+        expect(gateBlock).not.toContain('/sp:dev-unit');
+        const remediateBlock = taskPipeline.split('  - id: remediate\n')[1]?.split('  - id: review\n')[0] ?? '';
         // Pure slash fixall form (literal ${vars.qualityGateCmd} in YAML).
         const pureFixall = `input: /sp:dev-fixall "$${'{vars.qualityGateCmd}'}"`;
-        expect(testFixBlock).toContain(pureFixall);
-        // Green path: PASS probe → review without forcing a second full gate. 0943 R1 moved
-        // the lane split into the deterministic `triage` state (test → triage → review/verify),
-        // so the direct test → review edge no longer exists.
-        expect(taskPipeline).toMatch(/from: test\n +to: triage\n/);
-        // Exhausted fix attempts land on the failed terminal state.
-        expect(taskPipeline).toMatch(/from: test-recheck\n +to: failed\n/);
+        expect(remediateBlock).toContain(pureFixall);
+        // Green path: PASS gate → review with no extra hop (the lane decision is a decide
+        // call inside the gate now, not a `triage` state).
+        expect(taskPipeline).toMatch(/from: gate\n +to: review\n/);
+        // Exhausted fix attempts land on the failed terminal state — from the gate and from
+        // the review lane, which shares one counter.
+        expect(taskPipeline).toMatch(/from: gate\n +to: failed\n +terminalReason: retry-exhausted\n/);
+        expect(taskPipeline).toMatch(/from: review\n +to: failed\n +terminalReason: retry-exhausted\n/);
     });
 
     test('R42 — skill description budgets stay within the 0187 aggregate/per-skill caps', () => {
