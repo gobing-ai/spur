@@ -6403,3 +6403,116 @@ Dates: commits and document `updated_at` values are America/Los_Angeles (PDT, UT
 | 8 | `path.resolve(cwd, p)` roots relative paths at cwd and leaves absolute paths absolute | Replayed: `path.resolve('/a','rel.txt')` → `/a/rel.txt`; `path.resolve('/a','/abs.txt')` → `/abs.txt`. Reference: Node.js `path` API docs | HIGH |
 | 9 | `bun run plugin-smoke` is not part of `bun run spur-check` | root `package.json` scripts: `spur-check` = `bun run lint && bun run spur-check:tests`; `plugin-smoke` is a separate script | HIGH |
 | 10 | Contract-restoring bug fixes need no ADR | `docs/99_PROJECT_CONSTITUTION.md` §6.1 (project authority) | HIGH |
+# Wrap-up learnings — L1 batch (branch topology + PR review)
+
+Date: 2026-10-16 · Branch: sp/runall-l1-05cd · Tasks: 1218, 1219, 1220 (all done, verify PASS)
+
+## 2026-10-16 — 1218 (`spur builder show-branches`)
+
+- **Public-surface consent is a same-commit obligation.** A new `spur builder` verb requires a
+  governance §3 amendment recording audience + surface + justification (`docs/design/harness-surface-governance.md`),
+  the `sp:spur-cli` `references/builder.md` verb map, both help trees (`docs/help/cmd_builder.md`,
+  `docs/help2/builder.md`) and `docs/help/spur-cli-matrix.md`. `plugins/sp/tests/help-docs-parity.test.ts`
+  enforces the parity, so a verb added without all of these leaves the baseline gate red.
+- **Reuse the existing `CommandRunner` seam.** git collection lives in `packages/app/src/services/branch-topology/`
+  (`collectBranchTopology` + pure `render*.ts`) behind `createSpawnRunner`/`setCommandRunner`; the CLI
+  (`apps/cli/src/commands/builder/show-branches.ts`) owns only flags, validation and exit codes (ADR-021).
+  Do not add a second git-exec helper for a new read-only report.
+- **mermaid `gitGraph` places commits in statement order — the base line must be age-ordered.** Emitting
+  the window oldest→newest with the tip last, and every fork point deeper than the window *first* (deepest
+  first), is the fix (`f8cef56c0`); otherwise a base commit can render right of a newer one. The layout
+  claim is `mermaid@11.15.0` behaviour, pinned at `apps/web/package.json:28`.
+- **Every `commit id:` must be globally unique or mermaid collapses two lanes into one node.** The `+N
+  earlier` summary node collided across equal branches until it ran through the same id de-duplication
+  helper as the rest (`1a68a4c59`); id sanitization is `[A-Za-z0-9._/-]` keep, else `-`, quotes stripped,
+  truncate to 40 chars, then de-duplicate. Adversarial theme input (`"'; alert(1); //"`) renders inert.
+- **A "per-branch fork node" was a phantom.** A fork point the window already draws is one of its own
+  commits, so no per-branch fork statement exists — the design §3.1 wording was corrected (round 2 P3),
+  and round 3's `emittedShas` state was dead and removed with no test asserting it.
+- **Coverage-visibility trap for CLI modules whose only E2E driver spawns a child process.** `show-branches`
+  is exercised end-to-end by `apps/web/tests/branch-topology-graph.heavy.test.ts`, which spawns the CLI as a
+  subprocess and parses/renders the emitted graph with the pinned `mermaid@11.15.0` (happy-dom + DOMPurify
+  shims); because the driver is out-of-process, the CLI module's own in-process coverage stays invisible to
+  the normal suite — the heavy run is the real proof (`bun test --config=bunfig.heavy.toml
+  apps/web/tests/branch-topology-graph.heavy.test.ts`).
+- **Getter complexity is measured, not guessed.** Collection is ~144 git calls for 36 refs (3 per-ref
+  commands before `--limit` truncates), so the flagged deepening is sort-then-collect, not a new flag.
+- **Advisory edges that are literally true but surprising:** `--max-commits` is silently capped at
+  `GRAPH_COMMIT_WINDOW` (10); `--limit` can truncate the base row itself; a dangling `refs/remotes/origin/HEAD`
+  ends the base chain one link early; an unborn HEAD exits 1 with the derived-base message. Recorded, all
+  non-blocking.
+
+## 2026-10-16 — 1219 (flat `builder pr-<verb>` verbs + four-state `pr-review.yaml`)
+
+- **A pass-through `pr [argv...]` with `allowUnknownOption(true)` is not a verb surface.** Replacing it with
+  four flat verbs (`pr-status`, `pr-check`, `pr-open`, `pr-review`) gives per-verb `--help` and Commander
+  flag validation; the hidden one-release alias prints one stderr deprecation line and runs the unchanged
+  pass-through.
+- **Compose ops in-code, don't shell out again.** `runPrVerb(verb, opts, sink, ctx)` sequences the existing
+  `cmd*` operations and embeds each op's `--json` record in one object per verb; `pr-review.yaml` shrinks to
+  check → precheck → open → review because the request record stays in-process (no `prSince`/`prHead`
+  file-var plumbing).
+- **Two independent flag substitutions, never concatenated.** `mode`/`noWait` must expand to separate
+  `$(…)` words separated by a space so `submit`/`noWait=true` both emit `--no-wait` and `--no-wait --force`
+  never becomes `--no-wait--force` (which Commander rejects → no status file → `FAIL` fallback → `failed`).
+  All six `mode`/`noWait` combinations are pinned.
+- **Exit-code truth lives at the verb, not in the task table.** `pr-check` exits 2 on `BLOCK` (matching the
+  retired `hygiene` op and the design), while the workflow's `check` guard accepts only `PASS|WARN` — so
+  `BLOCK` routes to `failed` under either reading. The task-file cell that said "0 on … BLOCK" was the
+  outlier and could not be edited by the change.
+- **`--status-file` is not free of environment assumptions.** `writeStatus` uses `writeFileSync` without
+  `mkdir`, so a fresh relative path exits 2 (`ENOENT`); the workflow always runs `mkdir -p .spur/run` first.
+  `pr-status --status-file` is accepted for symmetry but writes nothing (read-only).
+- **Artifact-shape change is a compatibility risk.** `.spur/run/<runId>-pr-findings.json` moved from the
+  collect record to the composed `{ ok, verdict, request, findings }`; no tracked consumer reads the removed
+  fields, but an *installed* plugin copy or external script parsing `.pr`/`.url`/`.head` would break.
+- **The composition reaches ops through string/IO, not a typed seam** (`runVerbOp` swaps the module-global
+  `io`, then `parseArgs` re-parses built argv) — sound for a single-caller CLI process; the deepening is to
+  carry a sink + pre-parsed `ParsedArgs` on `SpineRuntime`.
+
+## 2026-10-16 — 1220 (local-first `/sp:dev-pr-review` status/review/fix)
+
+- **Never claim a prerequisite the tool does not honour.** The round-1 P3 was a false "the local paths need
+  only `git`" claim: `pr-check --scan-only` still resolves the repository through `gh`
+  (`cmdHygiene` → `preflightContext`), so step 1 of the local route cannot run gh-less even though the review
+  body itself needs no `gh`. The fixed prose names every gh-gated path and what genuinely needs only `git`.
+- **A hard failure is not a `BLOCK` — give it its own stop branch.** Step 1 of `review` has three outcomes:
+  `PASS`/`WARN` continue, `BLOCK` stops, and a hard failure (exit 2, e.g. `gh CLI missing or
+  unauthenticated`) stops with the tool's message plus a one-line remedy, explicitly "not a `BLOCK`". Collapsing
+  failure into BLOCK hides a fixable environment error behind a security-style gate.
+- **Frozen surface: three modes, one replacement map.** `status` (default, read-only), `review` (local by
+  default; `--codex` opts into the GitHub spine), `fix`. Retired modes print one notice then the replacement
+  (`full`→`review --codex`, `submit`→`review --codex --no-wait`, `rerun`→`review --codex --force`,
+  `collect`→`status`; `rules` drops with a `sp:cc-magents` pointer); `pipeline_steps` updated to match.
+- **Local-first fix discipline:** collect findings before editing, validate/classify each and list rejections,
+  make the smallest coherent fix, verify, one focused defect-named commit, normal push only — never force.
+  `pr-review --codex` keeps `pr-review.yaml` as the single SSOT with the YAML-wins rule.
+- **Mode mapping is lossy by contract.** `--force` and `--no-wait` both collapse onto the single `mode` var,
+  so `review --codex --force --no-wait` drops one flag; the implementation is faithful to the frozen design,
+  so this is a known contract gap, not a deviation, and no gate covers it.
+- **The command stays a thin wrapper.** One `Skill(skill="sp:pr-reviewing")` delegation, no re-implemented
+  review dimensions, no new `spur` verb; `superskill command evaluate`/`skill evaluate`, `plugin-smoke` and the
+  plugin suite are the gates.
+- **Not installed = not live.** The implementer did not run `superskill install sp`, so the operator's installed
+  adapter kept the v1.0 seven-mode surface until the next install; generated adapters are gitignored build
+  outputs and are never hand-edited.
+
+## Cross-cutting conventions and corpus-lint forms (2026-10-16, tasks 1218/1219/1220)
+
+- **Verification citations the corpus lints:** an AC row's `id` must carry the full scenario title
+  (`"AC1 — <scenario title>"`), not just `AC1`; test/command citations must be **repo-root-relative** paths
+  (`apps/cli/tests/...`, `packages/app/tests/...`) with `path:line` (or `path:symbol`) anchors.
+- **Behavior-bearing AC rows need executable evidence** or an explicit non-behavioral marker; the
+  evidence-rule check fails the row otherwise.
+- **Feature acceptance criteria are Gherkin scenarios** (feature-L1 R1–R14 with `# covers:` interfaces) that
+  the task ACs mirror; `docs/features/**` and `docs/tasks/**` are corpus, written only through their tools.
+- **Doc-ownership drift probe** flags any changed path matching a doc-owned surface (contracts, CLI commands,
+  config, workflow YAML, plugin commands/skills/hooks, `docs/00_ADR.md`/`03`/`04`, `docs/design/**`), so a code
+  change that touches a documented verb always routes wrap-up to the full doc-sync path.
+- **Design satellites follow detail-then-index:** update `docs/design/<slug>.md` first (flip `status:` from
+  `proposed` to `implemented` when the batch ships), then the `docs/04_DESIGN.md` index annotation — never a
+  second status ledger, and never re-add a deliberately delinked row (`repo-wide-tests/adr-supersession.test.ts`
+  pins that `docs/04_DESIGN.md` stays free of `spur-team-mode-design.md`).
+- **Tabular data with `|`-joined values must escape the pipe** (`PASS\|WARN\|BLOCK\|FAIL`) inside GFM table
+  cells, or the row silently splits into extra columns.
+
