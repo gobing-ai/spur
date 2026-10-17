@@ -1703,7 +1703,9 @@ describe('sp plugin structure — functional split invariants (task 0161 / ADR-0
         const pkg = JSON.parse(readFileSync(join(REPO_ROOT, 'package.json'), 'utf8')) as {
             scripts: Record<string, string>;
         };
-        expect(pkg.scripts.eval, 'package.json must expose a separate `eval` entry point').toContain('skill-eval');
+        expect(pkg.scripts.eval, 'package.json must expose a separate `eval` entry point').toBe(
+            'bun scripts/spur-dev.ts skill-eval',
+        );
         // The live/paid tier runner is a standalone script, NOT a test file — so the default suite
         // never picks it up (D4: behavioral evals do not entangle the always-on structural suite).
         expect(pkg.scripts.eval).not.toContain('.test.ts');
