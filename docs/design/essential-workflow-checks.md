@@ -57,8 +57,7 @@ JSON stdout remains one document; an unavailable optional comparison does not hi
 - Exit 1: essential integrity error or failed required check; preserve CLI usage-error behavior.
 - No suppression: all findings remain visible; no accept-all regeneration.
 - Remove routine iteration, batch wrap and ordinary corpus-touch commit sweep callers.
-- `spur-check-new` remains the same code-quality chain as `spur-check`; the audit is invoked
-  deliberately with `corpus-check`, never appended to either routine chain.
+- The audit is invoked deliberately with `corpus-check`, never appended to a routine gate chain.
 - Constitution T10 keeps one audit for checker-policy changes; T11 becomes affected-input ordinary
   commit validation. Newly introduced essential failures must be reconciled without accepting debt.
 

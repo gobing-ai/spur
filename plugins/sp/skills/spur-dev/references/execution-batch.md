@@ -606,7 +606,7 @@ command doc so it does not read as a bug.
 
 The cheap rule gates fail fast when run first — the full-gate run is dominated by the ~65 s test
 suite, so a gate run that dies at `test-post-check` or `corpus-check` wastes most of its wall time.
-Before launching a full `spur-check-new`:
+Before launching a full `spur-check:full`:
 
 1. **Run the static checks first** — `bun run lint` (biome over the whole tree plus every workspace
    typecheck). They fail in ~20 s and are the two defects that most often kill a full launch: a

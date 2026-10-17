@@ -1,7 +1,7 @@
 # Coverage gate — per-file line coverage meets threshold from Bun's lcov output.
 #
-# PROVENANCE (task 1203): since task 1203 the repository post-check scripts
-# (`test-post-check`, `test-post-check:full`) validate canonical coverage
+# PROVENANCE (task 1203): since task 1203 the repository post-check script
+# (`test-post-check`) validates canonical coverage
 # certification BEFORE this rule evaluates: only a completed successful canonical
 # full-suite run (`bun run test`, `test:coverage`, `test:full`) certifies
 # .coverage/lcov.info (marker: .coverage/coverage-certification.json, written by

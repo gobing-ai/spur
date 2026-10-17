@@ -69,7 +69,7 @@ evidence, like a `pipeline-budgets` raise.
 ### 1.3 Posture (ADR-115 amends ADR-069)
 
 1. Warn-level findings never change a `workflow validate` exit status, never block a run and are
-   not in `spur-check` / `spur-check-new`.
+   not in `spur-check`.
 2. An error-level finding makes `workflow validate` exit 1 and fails the `spur-check`
    shared-workflow composition gate over `config/workflows/*.yaml`. The composition ladder's
    validate gate therefore stops promotion (`spur-artifact-evolution.md` §7).

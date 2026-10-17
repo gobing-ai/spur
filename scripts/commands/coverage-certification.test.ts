@@ -472,8 +472,7 @@ test('entrypoint wiring pins the canonical route and post-check provenance first
     for (const nonCanonical of ['test:heavy', 'test-repo-wide']) {
         expect(pkg.scripts[nonCanonical]).not.toContain('--publish-coverage');
     }
-    for (const postCheck of ['test-post-check', 'test-post-check:full']) {
-        expect(pkg.scripts[postCheck].startsWith('bun scripts/commands/coverage-provenance-check.ts &&')).toBe(true);
-        expect(pkg.scripts[postCheck]).toContain('rule run');
-    }
+    const postCheck = pkg.scripts['test-post-check'];
+    expect(postCheck.startsWith('bun scripts/spur-dev.ts coverage-provenance-check &&')).toBe(true);
+    expect(postCheck).toContain('rule run');
 });

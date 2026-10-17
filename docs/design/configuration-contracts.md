@@ -288,7 +288,7 @@ a grep target and a review signal — it never changes runtime behavior.
 Every field is required (R1): `id`, `wbs` (owning task), `file` (where the marker lives),
 `keepsWorking` (what the shim keeps working), `removalCondition` (when it can be deleted).
 
-**Gate.** `bun run transition-shim-check` (wired inside `spur-check` and `spur-check-new`) is
+**Gate.** `bun run transition-shim-check` (wired inside `spur-check-feature`) is
 two-sided by design: a marker with no manifest entry fails as a **new unregistered shim**
 naming the id and the file; a manifest entry whose marker no longer appears in source fails
 as a **stale entry** — the two are reported distinctly. (The corpus-baseline gate that inspired

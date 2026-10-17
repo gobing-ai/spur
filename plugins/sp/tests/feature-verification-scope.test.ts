@@ -51,8 +51,6 @@ describe('feature-verification scope split (task 0872)', () => {
         }
         expect(taskGate).not.toContain('test-repo-wide');
         expect(taskGate).not.toContain('spur-check-feature');
-        // spur-check-new stays the identical task-local chain (its own census).
-        expect(scripts['spur-check-new']).toBe(taskGate);
     });
 
     test('R3: the feature pass (spur-check-feature) owns every repo-wide check', () => {

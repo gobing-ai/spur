@@ -255,7 +255,7 @@ suppression snapshot, so every finding is reported — none are suppressed.
 
 **Advisory-only posture (binding):** findings never justify blocking a run, failing a gate, or
 editing a pipeline that is currently executing. The advisory never changes `validate`'s exit status,
-never blocks `workflow run`, and is not part of `spur-check` / `spur-check-new`. Treat a finding as
+never blocks `workflow run`, and is not part of `spur-check`. Treat a finding as
 a to-be-enhanced note for the workflow's owner — surface it in your report, apply the fix only when
 the operator accepts it, and never hot-edit a running workflow's shell in place.
 

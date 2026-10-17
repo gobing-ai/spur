@@ -51,10 +51,10 @@ bodies:
 | `test`, `test:full` | ✓ | ✓ | ✓ |
 | `test-pre-check`, `test-post-check` (+ `:full`) | ✓ | ✓ | ✓ |
 | `spur-check`, `spur-check:full`, `gate` | ✓ | ✓ | ✓ |
-| `check`, `check:full` | ✓ | ✓ | ✓ |
+| `check` | ✓ | ✓ (also `check:full`) | ✓ (also `check:full`) |
 | `spur-check-feature` | ✓ | ✓ (`= spur-check`) | — (workflow uses `spur-check`) |
 | `bump-ver`, `drop-tags` | ✓ | ✓ | ✓ |
-| `test:heavy`, `spur-check-new`, `corpus-check`, contract checks | ✓ | partial | — |
+| `test:heavy`, `corpus-check`, contract checks | ✓ | partial | — |
 
 **Common script layers.** Every file in the three trees falls into one of five layers:
 
@@ -178,27 +178,85 @@ the implementing task's design review.
 
 ### 3.5 This repository: `package.json` and `scripts/`
 
-`.spur/config.yaml` keeps `preset: bun` and declares the custom actions it needs
-(`test-repo-wide`, `plugin-smoke`, `corpus-check`, `eval`) so the dogfood exercises the map.
+Landed by task 1226. `.spur/config.yaml` declares `builder.preset: bun` and the custom actions the
+dogfood needs (`test-repo-wide`, `plugin-smoke`, `corpus-check`, `eval`), each bound to a script that
+already exists, so `spur self exec --list` reads one vocabulary over both layers.
 
 `package.json` review rules — every entry is exactly one of: (1) a **binding** of a reserved action
 under its preset name, (2) a **composition** of other scripts with no inline logic, or (3) a
-**repo tool** listed in the satellite table below. Remove exact duplicates with no caller:
-`spur-check-new` and `spur-check-new:full` (= `spur-check` / `spur-check:full`), `check:full`
-(= `check`), and fold `test-pre-check:full` / `test-post-check:full` into `--verbose` passthrough
-(`spur self exec rules-pre -- --verbose`). References to removed names (AGENTS.md, plugin prose,
-workflows) move in the same change.
+**repo tool**. The table below classifies all 47 root scripts; a new script picks a class
+and lands here in the same change.
+
+| Script | Class | Binding / composition / tool |
+| --- | --- | --- |
+| `prepare` | repo tool | installs the git hooks (lefthook) |
+| `tree` | repo tool | tree with the generated dirs pruned |
+| `dev` | binding | bun preset `dev` |
+| `desktop:dev` | repo tool | workspace filter → `spur-desktop` `dev` |
+| `desktop:start` | repo tool | workspace filter → `spur-desktop` `start` |
+| `desktop:smoke` | repo tool | workspace filter → `spur-desktop` `smoke` |
+| `desktop:stage` | repo tool | workspace filter → `spur-desktop` `stage` |
+| `clean` | binding | bun preset `clean` |
+| `build` | binding | bun preset `build` |
+| `typecheck` | binding | bun preset `typecheck` |
+| `lint` | binding | bun preset `lint` |
+| `format` | binding | bun preset `format` |
+| `autofix` | binding | bun preset `autofix` |
+| `gate` | repo tool | inline biome write + `typecheck` + `spur-check:tests` |
+| `bump-ver` | repo tool | `spur builder bump-ver` |
+| `drop-tags` | repo tool | `spur builder drop-tags` |
+| `bundle:config` | repo tool | `spur-dev.ts bundle-config` (L1) |
+| `refresh-plugin` | repo tool | reinstall the sp plugin into the local marketplace |
+| `task-pipeline` | repo tool | `spur workflow run .spur/workflows/task-pipeline.yaml` |
+| `tasks` | repo tool | `task-pipeline` with `wbs`/`profile` vars |
+| `test-pre-check` | binding | bun preset `rules-pre` |
+| `test-post-check` | binding | bun preset `rules-post` |
+| `test-cf` | repo tool | workspace filter → `spur-server` `test-cf` |
+| `verify-gha-ci` | repo tool | `act` over `.github/workflows/ci.yml` |
+| `test` | binding | bun preset `test` |
+| `test:heavy` | binding | bun preset `test-heavy` |
+| `corpus-check` | repo tool | `spur task check --corpus` (custom action `corpus-check`) |
+| `plugin-smoke` | repo tool | `spur-dev.ts plugin-install-smoke` (L1; custom action `plugin-smoke`) |
+| `test:coverage` | repo tool | `bundle:config` + `spur-dev.ts run-tests --coverage` (L2) |
+| `check` | composition | bun run lint && bun run test:coverage && bun run test:heavy |
+| `spur-check:tests` | composition | bun run test-pre-check && bun run test && bun run test-post-check |
+| `spur-check` | binding | bun preset `check` |
+| `spur-check-feature` | binding | bun preset `check-feature` |
+| `test-repo-wide` | repo tool | `spur-dev.ts run-tests` over `repo-wide-tests` (L2; custom action `test-repo-wide`) |
+| `test:full` | binding | bun preset `test-full` |
+| `spur-check:full` | binding | bun preset `check-full` |
+| `eval` | repo tool | `spur-dev.ts skill-eval` (L4; custom action `eval`) |
+| `transition-shim-check` | repo tool | `spur-dev.ts transition-shim-check` (L3) |
+| `script-contract-check` | repo tool | `spur-dev.ts script-contract-check` (L3) |
+| `inline-pipeline-parity-check` | repo tool | `spur-dev.ts inline-pipeline-parity-check` (L3) |
+| `workflow-promotion-check` | repo tool | `spur-dev.ts promotion check` (L3) |
+| `validate-commands` | repo tool | `spur-dev.ts validate-commands` (L3) |
+| `link-check` | repo tool | `spur-dev.ts link-check` (L3) |
+| `fleet-e2e` | repo tool | `spur-dev.ts fleet-e2e` (L4) |
+| `dependency-drift-check` | repo tool | `spur-dev.ts dependency-drift-check` (L3) |
+| `importer-schema-check` | repo tool | `spur self migrate` + `--check` |
+| `load-history` | repo tool | `spur history import` + `analyze` |
+
+Duplicates and aliases: task 1226 removed the two exact duplicate aliases of `spur-check` /
+`spur-check:full` and of `check`, and folded the verbose rule aliases into `--verbose` passthrough
+on `test-pre-check` / `test-post-check` — `bun run test-pre-check --verbose` appends the flag to the
+script's last command, which is exactly what the removed aliases spelled out. The removed names
+survive only in dated reports/plans and task history; no live caller remains.
 
 `scripts/commands` gets one entry style: every command is reachable through
-`bun scripts/spur-dev.ts <command>`; `package.json` stops calling `bun scripts/commands/<x>.ts`
-directly (today 9 scripts do). Files with no runtime or package caller
-(`surface-drift-inventory.ts`, `validate-flag-contracts.ts` — prose-only references) are either
-registered with a caller or retired. Tests stay colocated (`*.test.ts` beside the module) — the
-spur-new convention; the other repos may adopt it on their own migration. No folder reshuffle: the
-L1–L4 layer is recorded in the `spur-dev.ts` header table, not encoded in paths.
+`bun scripts/spur-dev.ts <command>`, and no `package.json` entry calls `bun scripts/commands/<x>.ts`
+directly (task 1226 rerouted the last 14 lines). The dispatcher runs an L2–L4 module as a child
+process with `args` forwarded verbatim, because those modules parse their own argv and own their
+exit code. The two files that had no runtime caller but still back a live contract
+(`surface-drift-inventory.ts` — L3 drift inventory; `validate-flag-contracts.ts` — L3 flag parity,
+both cited by the plugin's contract references) are registered as dispatcher commands
+(`surface-drift-inventory`, `flag-contract-check`) instead of deleted, and the `spur-check-feature`
+composition is unchanged. Tests stay colocated (`*.test.ts` beside the module) — the spur-new
+convention; the other repos may adopt it on their own migration. No folder reshuffle: the L1–L4
+layer is recorded in the `spur-dev.ts` header table, not encoded in paths.
 
-`plugins/sp/scripts/hooks` + `plugins/sp/lib` already satisfy ADR-130 (A91); this feature only
-re-runs the placement rule plus a reachability scan and removes anything dead.
+`plugins/sp/scripts/hooks` + `plugins/sp/lib` already satisfy ADR-130 (A91); re-running the
+placement rule plus a reachability scan over the three folders reports zero findings (task 1226).
 
 ## 4. Contract and compatibility
 

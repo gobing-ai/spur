@@ -153,7 +153,7 @@ changed no public surface, report the single line
   `env-var-hygiene` rule, and its siblings);
 - `bun run script-contract-check` when a plugin script was touched (a stale generated `.mjs` twin);
 - the paired-script parity test when `package.json` changed (a half-updated `spur-check` /
-  `spur-check-new` chain).
+  `spur-check:full` chain).
 
 The single full project check stays the pipeline `test` hop's job (see the section above); these are
 changed-path checks, not that gate.
@@ -192,10 +192,10 @@ Neither step takes the full project gate. The full gate is named only for the pi
   `test` hop (`task-pipeline.yaml` `${vars.qualityGateCmd}`).
 - **Mirrored surfaces: an edit lands on all of them.** When the change is one instance of a repeated
   pattern — the same wiring rule on two runbooks, a signature in both a generator and its generated
-  `.d.mts`, a command chain in both `spur-check` and `spur-check-new` — grep for the siblings and
+  `.d.mts`, a command chain in both `spur-check` and `spur-check:full` — grep for the siblings and
   update each in this pass. Two H1-batch cycles (2026-10-08) were spent re-finding exactly this:
   task 1129 fixed the guard wiring on one runbook and left its sibling, and task 1127 changed
-  `spur-check` while `spur-check-new`'s chain-parity assertion still expected the old chain.
+  `spur-check` while its own chain-parity assertion still expected the old chain.
 
 ## Behavior
 

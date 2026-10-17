@@ -141,7 +141,6 @@ describe('spur task CLI', () => {
         expect(await readFile(join(root, '.lefthook.yml'), 'utf8')).not.toMatch(/corpus-check|check --corpus/);
         const { scripts } = JSON.parse(await readFile(join(root, 'package.json'), 'utf8'));
         expect(scripts['spur-check']).not.toMatch(/corpus-check|check --corpus/);
-        expect(scripts['spur-check-new']).toBe(scripts['spur-check']);
     });
     test('explicit corpus audit reports unsuppressed warnings without failing or reading a baseline', async () => {
         const root = await mkdtemp(join(tmpdir(), 'spur-explicit-audit-'));

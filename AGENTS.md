@@ -168,7 +168,7 @@ bun run build
 git status --short
 ```
 
-`spur-check-new` is the same task-local chain as `spur-check`. `spur-check-feature` is the
+`spur-check-feature` is the
 feature-scoped repo-wide pass run once per feature (task 0872); it is not part of the per-task
 pipeline. `bun run corpus-check` is the explicit unsuppressed
 audit for checker-policy changes (T10); ordinary corpus edits check affected inputs (T11).
