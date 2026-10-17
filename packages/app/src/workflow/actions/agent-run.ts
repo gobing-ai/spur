@@ -43,6 +43,7 @@ import {
     writeReceipt,
     writeWorkItem,
 } from '../receipt';
+import { splitLaunchCommand } from '../split-launch-command';
 import { parseSteeringPolicy, type WorkflowSteeringController } from '../steering';
 import { CAPABILITY_BLOCK_PREFIX, evaluateTripWires, type TripWireSignal } from '../tripwire';
 import { resolveDurableArtifactPath } from './run-path';
@@ -1925,10 +1926,18 @@ async function gitDiffStat(cwd: string): Promise<string> {
  */
 async function taskCheckClean(cwd: string, wbs: string, spurBin: string): Promise<{ ok: boolean; detail: string }> {
     if (wbs === '') return { ok: false, detail: 'vars.wbs is missing — cannot run task check' };
+    // D65 1240: `spurBin` legitimately resolves to a two-token launch string — under a JS runtime
+    // `resolveSpurBin()` returns `<runtime> <mainModule>` (apps/cli/src/workflow/resolve-spur-bin.ts)
+    // — so passing it straight into `command` asked the executor to spawn a program named
+    // "bun /path/index.ts", which fails and reads as a REJECTED admission. Every other spurBin
+    // consumer splits first; this one did not.
+    const split = splitLaunchCommand(spurBin, 'agent.run "spurBin"');
+    if ('error' in split)
+        return { ok: false, detail: `\`${spurBin} task check ${wbs}\` unusable launch: ${split.error}` };
     try {
         const result = await new NodeProcessExecutor().run({
-            command: spurBin,
-            args: ['task', 'check', wbs, '--json'],
+            command: split.command,
+            args: [...split.leadingArgs, 'task', 'check', wbs, '--json'],
             cwd,
             maxOutput: 1024 * 1024,
             forceBuffered: true,

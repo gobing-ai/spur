@@ -838,6 +838,30 @@ describe('AgentRunActionRunner empty-implement guard (requireDiff, task 0424)', 
         expect(result.ok).toBe(true);
     });
 
+    // D65 1240: `spurBin` is a TWO-token launch string whenever the CLI runs under a JS runtime
+    // (`<runtime> <mainModule>`), which is the normal dev and installed shape. Passing it straight
+    // into `command` asked the executor to spawn a program literally named "bun /path/index.ts",
+    // so a passing admission read as `exit null` and the implement step was rejected.
+    test('requireDiffAllowCleanCheck: a two-token spurBin launch string is split, not spawned whole', async () => {
+        dir = mkdtempSync(join(tmpdir(), 'agent-run-admit-split-'));
+        const script = join(dir, 'fake-spur.js');
+        writeFileSync(script, 'process.exit(0);\n');
+        const launch = `${process.execPath} ${script}`;
+        const svc = svcWithRunTraced({ exitCode: 0, stdout: '', invocation: invocation() });
+        const runner = new AgentRunActionRunner(svc);
+        const result = await runner.execute(
+            {
+                role: 'coder',
+                input: 'implement',
+                requireDiff: true,
+                requireDiffAllowCleanCheck: true,
+                cwd: dir,
+            },
+            makeCtx({ vars: { wbs: '0976', spurBin: launch } }),
+        );
+        expect(result.ok).toBe(true);
+    });
+
     test('requireDiffAllowCleanCheck: zero changes + task check FAIL → violation names the check', async () => {
         dir = mkdtempSync(join(tmpdir(), 'agent-run-admit-fail-'));
         const spur = join(dir, 'fake-spur');
