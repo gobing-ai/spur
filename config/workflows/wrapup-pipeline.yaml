@@ -98,7 +98,7 @@
 "$schema": "@gobing-ai/spur/schemas/state-machine-workflow.schema.json"
 kind: state-machine
 name: wrapup-pipeline
-version: "10"
+version: "11"
 description: "Post-execution wrap-up: doc-sync (doc drift + learning capture), metrics, feature-transition, branch-cleanup"
 iterationBound: 10
 initialState: start
@@ -123,13 +123,15 @@ vars:
   # TRUSTED CONFIG ONLY — this string is executed via `sh -c` (same surface as
   # task-pipeline's qualityGateCmd). Never interpolate untrusted input into it.
   featureGateCmd: '$spurBin feature check "$feature"'
-  # Repo-wide tripwire over the wrap diff (1037): runs `bun run test-repo-wide`
-  # only when package.json declares the script, so other projects no-op. Callers
+  # Repo-wide tripwire over the wrap diff (1037): runs `$spurBin self exec test-repo-wide`
+  # only when that action is bound (a project declares it as a custom action), so other
+  # projects no-op — loudly: the skip prints one stderr note naming the missing binding, so a
+  # silently-dead tripwire cannot masquerade as a green wrap (task 1229). Callers
   # can override it with --vars; an empty string disables the check (the hop
   # still writes PASS).
   # TRUSTED CONFIG ONLY — this string is executed via `sh -c` (same surface as
   # featureGateCmd). Never interpolate untrusted input into it.
-  docTripwireCmd: 'if $spurBin self exec --list --json 2>/dev/null | jq -e ''.[] | select(.name == "test-repo-wide" and .source != "unbound")'' >/dev/null 2>&1; then $spurBin self exec test-repo-wide; fi'
+  docTripwireCmd: 'if $spurBin self exec --list --json 2>/dev/null | jq -e ''.[] | select(.name == "test-repo-wide" and .source != "unbound")'' >/dev/null 2>&1; then $spurBin self exec test-repo-wide; else echo "wrapup: doc tripwire skipped — the test-repo-wide action is unbound; declare builder.actions.test-repo-wide to enable it" >&2; fi'
   __hitlAnswer: ""
 
 states:
