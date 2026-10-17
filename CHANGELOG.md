@@ -1,5 +1,28 @@
 # Changelog
 
+## [0.4.11] - 2026-10-16
+
+### Added
+- add `spur builder show-branches`, a read-only branch topology report with markdown/json/text output (9cf497759)
+  <!-- src: apps/cli/src/commands/builder/show-branches.ts:26 (`show-branches` verb: fork point, ahead/behind, contained, worktree binding, `--pr`), packages/app/src/services/branch-topology/index.ts:120 (`collectBranchTopology`) -->
+- replace the `builder pr` pass-through with the four flat `spur builder pr-status|pr-check|pr-open|pr-review` verbs (a12a91025)
+  <!-- src: apps/cli/src/commands/builder/pr.ts:59 (`pr-status`) and :168 (`pr` kept hidden as the deprecation alias), config/workflows/pr-review.yaml:59 (Codex spine reduced to check → precheck → open → review) -->
+- make `/sp:dev-pr-review` local-first: `status` is the default mode, `review` runs a local branch-diff review, and `--codex` opts into the GitHub Codex spine (dc78399d5)
+  <!-- src: plugins/sp/skills/pr-reviewing/SKILL.md:62 (`status`, read-only), :63 (`review` via `/sp:dev-review`), :64 (`review --codex`) -->
+
+### Fixed
+- order the `show-branches` gitGraph base line by age, hoisting fork points older than the window (f8cef56c0)
+  <!-- src: packages/app/src/services/branch-topology/render.ts:150 (`deepForkPoints` emitted before the window), :247 (definition) -->
+- de-duplicate the `+N earlier` gitGraph summary ids so two branches hiding the same count keep one node each (1a68a4c59)
+  <!-- src: packages/app/src/services/branch-topology/render.ts:202 (`uniqueId(`+${hidden} earlier`, usedIds)`) -->
+
+### Other
+- land the feature-L1 close-out docs: the four flat PR verbs in `cli-contracts`, the branch/PR design record and the feature status (4b3180acc)
+  <!-- src: docs/design/cli-contracts.md:298 (`pr-status · pr-check · pr-open · pr-review` contract), docs/04_DESIGN.md:87 (feature-L1 design record now "implemented") -->
+- record the L1 batch wrap learnings (c7b5b4caa)
+  <!-- src: .spur/memory/learnings.md -->
+- merge feature L1 — branch topology, pr verbs, dev-pr-review (458b79608)
+
 ## [0.4.10] - 2026-10-16
 
 ### Added
