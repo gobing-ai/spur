@@ -366,7 +366,9 @@ describe('spur builder show-branches — pull-request enrichment', () => {
 
         expect(run.code).toBe(0);
         expect(run.stdout).toContain('warning: --pr: gh pr list failed:');
-        expect(run.stdout).toContain('| feature/one | 2 | 0 | no | 2026-10-16 | - | - |');
+        // Fixture commits carry the wall-clock date; read it back rather than pinning the authoring day.
+        const day = git(repo, ['log', '-1', '--format=%cs', 'feature/one']).trim();
+        expect(run.stdout).toContain(`| feature/one | 2 | 0 | no | ${day} | - | - |`);
 
         const json = runCli(repo, ['--pr', '--format', 'json'], { PATH: pathWithoutGh(gitBin) });
         const parsed = JSON.parse(json.stdout) as { warnings: string[]; branches: Array<{ pr: unknown }> };
