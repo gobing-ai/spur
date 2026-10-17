@@ -1,17 +1,20 @@
 ---
 name: spur-cli-self
-description: "spur-cli noun reference for `spur self`: self-management verbs — SDLC action runner (`exec`), scaffold (`init`), database maintenance (`maintain`), schema migrations (`migrate`), local web server (`serve`), and status overview (`status`). Each verb mounts the same command builder as its legacy top-level noun, which remains a hidden alias over the identical command."
+description: "spur-cli noun reference for `spur self`: self-management verbs — SDLC action runner (`exec`), scaffold (`init`), database maintenance (`maintain`), schema migrations (`migrate`), local web server (`serve`), and status overview (`status`). The five legacy verbs (`init`, `maintain`, `migrate`, `serve`, `status`) each mount the same command builder as their legacy top-level noun, which remains a hidden alias; `exec` has no top-level alias."
 see_also:
   - spur-cli
 ---
 
 # spur self - self-management verbs
 
-`spur self` hosts the self-management verbs. Each verb is the canonical path for a command
+`spur self` hosts the self-management verbs. Five of them are the canonical path for a command
 that also remains registered as a legacy top-level **hidden alias** (`spur init`, `spur maintain`, `spur migrate`,
 `spur serve`, `spur status`) so existing scripts, workflow YAML, and habits keep working unchanged.
 Both paths share the same command builder: identical flags, output, and exit codes. The legacy
 top-level forms are omitted from `spur --help`, leaving `self` as the visible surface.
+
+`exec` is the exception: it exists only as `spur self exec` — there is no `spur exec` top-level
+alias (`spur exec <action>` is an unknown command), so nothing depends on a legacy path.
 
 ## Verb map
 
