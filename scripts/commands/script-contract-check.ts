@@ -344,6 +344,25 @@ function placementLineCount(content: string): number {
 // expression is not a real pattern. Widen only if a false negative is reported.
 const DB_IMPORT_RE = /import\s+(?!type\b)[^;]*?from\s+['"](bun:sqlite|drizzle-orm(?:\/[\w.-]+)?)['"]/;
 const DB_DYNAMIC_IMPORT_RE = /\bimport\(\s*['"](bun:sqlite|drizzle-orm(?:\/[\w.-]+)?)['"]\s*\)/;
+// scripts/commands also may not open its own adapter; `import type` stays legal.
+const SCRIPT_DB_MODULE = String.raw`(bun:sqlite|drizzle-orm(?:\/[\w.-]+)?|@gobing-ai\/ts-db)`;
+const SCRIPT_DB_STATIC_RE = new RegExp(String.raw`^import\s+(?!type\b)[^;]*?from\s+['"]${SCRIPT_DB_MODULE}['"]`, 'm');
+const SCRIPT_DB_DYNAMIC_RE = new RegExp(String.raw`\bimport\(\s*['"]${SCRIPT_DB_MODULE}['"]`);
+
+/** First raw DB driver a repo command imports, or null. */
+function scriptDbImport(content: string): string | null {
+    const staticHit = SCRIPT_DB_STATIC_RE.exec(content);
+    if (staticHit) return staticHit[1] ?? null;
+    for (const line of content.split('\n')) {
+        const trimmed = line.trim();
+        if (trimmed.startsWith('//') || trimmed.startsWith('*')) continue;
+        const hit = SCRIPT_DB_DYNAMIC_RE.exec(line);
+        // ponytail: quote-parity before the match tells code from a string literal that merely
+        // names the import (build-cli patches one). Escaped quotes are not handled.
+        if (hit && (line.slice(0, hit.index).match(/['"`]/g)?.length ?? 0) % 2 === 0) return hit[1] ?? null;
+    }
+    return null;
+}
 
 function collectPlacementTsFiles(dir: string, out: string[] = []): string[] {
     if (!existsSync(dir)) return out;
@@ -458,8 +477,8 @@ function registeredHookIdentities(hooksJsonPath: string): { registered: Set<stri
  * Why `scripts/hooks` and not `hooks`: `superskill hook run sp <id>` resolves `hooks/<id>` before
  * `scripts/hooks/<id>` under every plugin root, but install stages only `scripts/` (and `lib/` as its
  * sibling) for Codex/OpenCode/Antigravity/Hermes. `scripts/hooks/<id>.ts` is therefore the single
- * location every target reaches. `plugins/sp/hooks` keeps the registry and the Pi extension only — an
- * entry there would shadow the staged one on native installs and never ship to staged targets.
+ * location every target reaches. `plugins/sp/hooks` keeps the registry only (the plugin Pi extension
+ * was retired 2026-10-15) — an entry there would shadow the staged one on native installs and never ship to staged targets.
  * Pure and side-effect free.
  */
 export function checkHookLayout(opts: { repoRoot: string }): PlacementFinding[] {
@@ -534,13 +553,15 @@ export function checkPlacement(opts: { repoRoot: string }): PlacementFinding[] {
     if (existsSync(repoCommandsDir)) {
         for (const name of readdirSync(repoCommandsDir)) {
             if (!name.endsWith('.ts') || name.endsWith('.test.ts')) continue;
+            const rel = join('scripts/commands', name);
             if (cliCommandNames.has(name)) {
-                record(
-                    join('scripts/commands', name),
-                    'noun-clash',
-                    `basename clashes with public CLI command apps/cli/src/commands/${name}`,
-                );
+                record(rel, 'noun-clash', `basename clashes with public CLI command apps/cli/src/commands/${name}`);
             }
+            // ADR-130 (2026-10-16): repo tooling reads the DB through packages/domain (`openExistingDb`
+            // + a domain query), never a raw driver — raw SQL here is a second query owner. Corpus
+            // reads stay legal: repo gates legitimately inspect docs.
+            const dbImport = scriptDbImport(readFileSync(join(repoCommandsDir, name), 'utf8'));
+            if (dbImport) record(rel, 'db-import', `${dbImport} outside packages/domain — use a domain query`);
         }
     }
 
@@ -579,7 +600,7 @@ export function run(argv: string[] = process.argv.slice(2)): number {
         const findings = checkPlacement({ repoRoot: resolve(cwd, repoRoot) });
         for (const f of findings) console.error(`script-contract-check: FAIL (${f.kind}) - ${f.file}: ${f.detail}`);
         console.log(
-            `script-contract-check: placement scan over plugins/sp scripts+hooks — ${findings.length} finding(s) — ${findings.length === 0 ? 'PASS' : 'FAIL'}`,
+            `script-contract-check: placement scan over plugins/sp + scripts/commands — ${findings.length} finding(s) — ${findings.length === 0 ? 'PASS' : 'FAIL'}`,
         );
         return findings.length === 0 ? 0 : 1;
     }

@@ -1,11 +1,11 @@
 # [boundary] ADR-130 script placement contract (task 1000). Runs the fast
 # --placement-only mode of the relocated script-contract-check on every
 # recommended-pre-check; SKIPs outside the Spur source repo (same pattern as
-# strict/rule-files-structural.yaml SKIP on missing yq). The full twin check
-# stays in spur-check-feature.
+# strict/rule-files-structural.yaml SKIP on missing yq). The full hook-only
+# layout check (`bun run script-contract-check`) stays in spur-check-feature.
 rules:
   - id: sp-script-placement
-    description: "Plugins/sp scripts must honor the ADR-130 placement contract (glue budget, no db imports, no corpus parsing, no noun clash, ADR-129 hook layout); any finding fails (task 1213 retired the baseline ledger)."
+    description: "plugins/sp and scripts/commands must honor the ADR-130 placement contract (hook entry budget, no DB driver or corpus parsing in plugin scripts/hooks/lib, no raw DB driver in scripts/commands, no noun clash, ADR-129 hook layout); any finding fails, no baseline."
     severity: error
     evaluator:
       type: exit-code

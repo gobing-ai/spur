@@ -262,6 +262,35 @@ test('placement scan reports line budget, db-import, corpus-parse and noun-clash
     }
 });
 
+test('placement scan holds scripts/commands to the domain DB boundary (ADR-130, 2026-10-16)', () => {
+    const root = mkdtempSync(join(tmpdir(), 'script-placement-test-'));
+    try {
+        const commands = join(root, 'scripts', 'commands');
+        mkdirSync(commands, { recursive: true });
+        writeFileSync(join(commands, 'raw-sqlite.ts'), "import { Database } from 'bun:sqlite';\n");
+        writeFileSync(join(commands, 'raw-adapter.ts'), "import { createDbAdapter } from '@gobing-ai/ts-db';\n");
+        writeFileSync(join(commands, 'drizzle.ts'), "const m = await import('drizzle-orm');\n");
+        // Legal: type-only adapter import, DB through the domain owner, corpus reads by repo gates,
+        // and test fixtures that build a SQLite file.
+        writeFileSync(join(commands, 'typed.ts'), "import type { DbAdapter } from '@gobing-ai/ts-db';\n");
+        writeFileSync(
+            join(commands, 'via-domain.ts'),
+            "import { openExistingDb } from '../../packages/domain/src/db';\nconst d = 'docs/tasks';\n",
+        );
+        writeFileSync(join(commands, 'fixture.test.ts'), "import { Database } from 'bun:sqlite';\n");
+        writeFileSync(join(commands, 'patcher.ts'), `const s = "await import('@gobing-ai/ts-db')";\n`);
+        const dbFindings = checkPlacement({ repoRoot: root }).filter((f) => f.kind === 'db-import');
+        expect(dbFindings.map((f) => f.file).sort()).toEqual([
+            'scripts/commands/drizzle.ts',
+            'scripts/commands/raw-adapter.ts',
+            'scripts/commands/raw-sqlite.ts',
+        ]);
+        expect(checkPlacement({ repoRoot: root }).some((f) => f.kind === 'corpus-parse')).toBe(false);
+    } finally {
+        rmSync(root, { recursive: true, force: true });
+    }
+});
+
 test('placement scan reports a double-registered hook identity once per registration', () => {
     const root = mkdtempSync(join(tmpdir(), 'script-placement-test-'));
     try {
@@ -297,7 +326,7 @@ test('run() passes over the real tree in both modes', () => {
         expect(run(['--placement-only'])).toBe(0);
         expect(log.mock.calls).toEqual([
             ['script-contract-check: hook-only script layout over plugins/sp — 0 violation(s) — PASS'],
-            ['script-contract-check: placement scan over plugins/sp scripts+hooks — 0 finding(s) — PASS'],
+            ['script-contract-check: placement scan over plugins/sp + scripts/commands — 0 finding(s) — PASS'],
         ]);
         expect(error).not.toHaveBeenCalled();
     } finally {
@@ -314,7 +343,7 @@ test('run() fails with violations under a fixture root', () => {
         writeFileSync(join(env.scriptsDir, 'db.ts'), "import { Database } from 'bun:sqlite';\n");
         expect(run(['--repo-root', env.root, '--placement-only'])).toBe(1);
         expect(log.mock.calls).toEqual([
-            ['script-contract-check: placement scan over plugins/sp scripts+hooks — 1 finding(s) — FAIL'],
+            ['script-contract-check: placement scan over plugins/sp + scripts/commands — 1 finding(s) — FAIL'],
         ]);
         expect(error.mock.calls).toEqual([
             ['script-contract-check: FAIL (db-import) - plugins/sp/scripts/db.ts: value-import of bun:sqlite'],
