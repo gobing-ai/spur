@@ -92,6 +92,7 @@ Root [DESIGN.md](../DESIGN.md) owns visual and interaction design;
 | Observability Board module — Frontend Enhancement & Tab Consolidation | [observability-frontend-enhancement.md](design/observability-frontend-enhancement.md) |
 | Observability Board Module Refactor: Summary Tab, 4h Default, Truthful Jobs Table, and Schedule Tracing | [observability-module-refactor.md](design/observability-module-refactor.md) |
 | Harness surface governance | [harness-surface-governance.md](design/harness-surface-governance.md) |
+| Stack-neutral SDLC actions — `builder.actions`, `spur self exec`, script-structure layers (A92; proposed) | [sdlc-actions.md](design/sdlc-actions.md) |
 | Features Board layout design | [features-board-layout-refactor.md](design/features-board-layout-refactor.md) |
 | Universal config loading | [universal-config-loading.md](design/universal-config-loading.md) |
 | Agent doctor as the routing inspection surface | [agent-doctor-inspection-surface.md](design/agent-doctor-inspection-surface.md) |

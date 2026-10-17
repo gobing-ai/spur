@@ -2429,3 +2429,23 @@ has 11 fields, skill/agent output contracts carry no level, and `response.valida
   path by which the label returned (1088 → 1068, ADR-138 → 1196).
 - **Enforcement:** `plugins/sp/tests/skill-structure.test.ts` pins the docs rule as citation-only and
   the history-anatomy field set; `task-pipeline-proof-chain.test.ts` pins the pipeline's absence.
+
+## ADR-139: SDLC Commands Resolve Through a Project-Bound Action Map
+
+- **Status:** Proposed · **Date:** 2026-10-16 · **Feature:** A92 · **Extends:** ADR-130, ADR-119
+- **Decision:** Spur owns a closed vocabulary of reserved SDLC actions (`build`, `lint`, `test`,
+  `check`, `check-feature`, `rules-pre`, scoped `*-changed`, …). A project binds them in
+  `.spur/config.yaml` `builder.actions` (string = shell command, list = fail-fast composite of
+  action names), over a `builder.preset` (`bun` default, `none`). `spur self exec <action>` is the
+  single executor. The quality gate, task-pipeline, feature-verification and wrapup workflows
+  resolve their commands through the map; no engine or shipped-workflow default names `bun`,
+  `bunx` or `biome`. Explicit `--vars` / `--cmd` overrides keep precedence. Alternatives rejected:
+  `<runner> run <script>` over `package.json` (keeps the npm assumption) and runtime stack
+  detection (unreliable in monorepos; allowed only as `spur self init` seeding).
+- **Why:** the gate's light tier hard-codes bun literals with no override, so non-bun projects
+  cannot run the task pipeline; three Spur repos re-derive the same script vocabulary by hand.
+- **Consequence:** the `bun` preset reproduces today's commands, so existing projects need no
+  config change; stack-neutral projects set `preset: none` and declare actions. Plugin prose
+  moves from `bun run <script>` to `spur self exec <action>`.
+- **Retains:** ADR-130 placement rules (applied, not rewritten), ADR-119 feature-scoped repo-wide gate.
+- **Detail:** [SDLC actions](design/sdlc-actions.md).
