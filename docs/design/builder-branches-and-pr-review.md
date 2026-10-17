@@ -1,7 +1,7 @@
 ---
 kind: design
 title: Branch topology report, flat builder pr verbs and the local-first /sp:dev-pr-review
-status: proposed
+status: implemented
 created_at: 2026-10-16
 updated_at: 2026-10-16
 related:

@@ -5,7 +5,7 @@ authority: derived
 version: 1.93.0
 derived_from: [03_ARCHITECTURE, codebase]
 owner: Robin Min
-updated_at: 2026-10-13
+updated_at: 2026-10-16
 read_before: changing a command, flag, env var, or schema
 edit_rules: 99 §6.5
 sync: [T3, T9]
@@ -84,7 +84,7 @@ Root [DESIGN.md](../DESIGN.md) owns visual and interaction design;
 | Historical spine cost/drift measurement — analysis only | [dev-spine-cost-and-drift.md](design/dev-spine-cost-and-drift.md) |
 | Event tracking — System Event 5W1H SSOT | [event-tracking.md](design/event-tracking.md) |
 | E7 run-record contract — implemented (two-file pair, terminal state projection, inline driver setup); Feature E72 Trace tab + run progress route — implemented (2026-10-04) | [run-record-contract.md](design/run-record-contract.md) |
-| Branch topology report (`spur builder show-branches`), flat `builder pr-<verb>` verbs and local-first `/sp:dev-pr-review` (feature L1; proposed) | [builder-branches-and-pr-review.md](design/builder-branches-and-pr-review.md) |
+| Branch topology report (`spur builder show-branches`), flat `builder pr-<verb>` verbs and local-first `/sp:dev-pr-review` (feature L1; implemented) | [builder-branches-and-pr-review.md](design/builder-branches-and-pr-review.md) |
 | E71 disposable run storage and durable evidence (ADR-131; implemented) | [disposable-run-storage.md](design/disposable-run-storage.md) |
 | Board module-boundary recommendations — **superseded by ADR-116** (the Workspace/Inbox/Teams split is retired; current boundary in [project-switcher.md](design/project-switcher.md)) | [board-module-boundaries.md](design/board-module-boundaries.md) |
 | History Board module — Conversation Analytics & Agent Forensic Plane | [history-board-module.md](design/history-board-module.md) |
