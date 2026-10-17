@@ -140,6 +140,7 @@ describe('spur task CLI', () => {
         const answer = (tag: string) =>
             [
                 'Verdict: PASS',
+                'Confidence: MEDIUM',
                 '',
                 '| Req | Status | Evidence |',
                 '|-----|--------|----------|',
@@ -404,7 +405,7 @@ describe('spur task CLI — verdict scenario-key gate (0958)', () => {
 // ── parent-status link guard under raw --json (task 1132 R2, review residual v) ──
 // `task create` already emitted the structured `ok:false` payload; `task update --feature` wrote
 // prose to stderr with empty stdout, which automation reading stdout cannot parse.
-describe('spur task CLI — verdict answer lint gate (hedge refusal, no confidence field; F511)', () => {
+describe('spur task CLI — verdict answer lint gate (hedge refusal; ADR-141 confidence cross-check)', () => {
     // End-to-end cover for the surviving lint contract, exercised through the real command
     // rather than the pure lint: the uncertainty phrases in a MET row's evidence refuse the
     // answer unwritten (`evidence-hedged`), and no confidence value exists anywhere — a legacy
@@ -448,11 +449,11 @@ describe('spur task CLI — verdict answer lint gate (hedge refusal, no confiden
         return isoCwd;
     }
 
-    /** One verify answer: `status`/`evidence` for the only row; optional legacy confidence line. */
-    function answer(status: string, evidence: string, legacyConfidence?: string): string {
+    /** One verify answer: `status`/`evidence` for the only row; the level defaults to what the rows derive. */
+    function answer(status: string, evidence: string, confidence?: string): string {
         return [
             `Verdict: ${status === 'MET' ? 'PASS' : 'PARTIAL'}`,
-            ...(legacyConfidence ? [`Confidence: ${legacyConfidence}`] : []),
+            `Confidence: ${confidence ?? (status === 'MET' ? 'HIGH' : 'LOW')}`,
             '',
             '| Req | Status | Evidence |',
             '| --- | --- | --- |',
@@ -490,32 +491,46 @@ describe('spur task CLI — verdict answer lint gate (hedge refusal, no confiden
         return { exitCode, lintRules: (parsed.lintFindings ?? []).map((f) => f.rule), artifact };
     }
 
-    test('the matrix: a clean answer certifies without any confidence value, legacy lines are ignored (F511)', async () => {
+    // ADR-141 supersedes the F511 retirement for the ANSWER only: the line is required and the lint
+    // cross-checks it against the rows. The verdict artifact still carries no `confidence` field —
+    // the answer stays the record of truth, so nothing downstream grades a level.
+    test('the matrix: the line is required, cross-checked, and never lands in the artifact', async () => {
         const isoCwd = await seedCwd();
         try {
-            // F511 (task 1207): no Confidence line exists; the artifact carries no confidence.
             const clean = await runVerdict(isoCwd, 'clean', answer('MET', CLEAN_EVIDENCE));
             expect({ exit: clean.exitCode, rules: clean.lintRules }).toEqual({ exit: 0, rules: [] });
             expect(clean.artifact?.verdict).toBe('PASS');
             expect('confidence' in (clean.artifact ?? {})).toBe(false);
 
-            // Read-compat: a legacy answer still carrying a level parses with the value ignored.
-            const legacy = await runVerdict(isoCwd, 'legacy-high', answer('MET', CLEAN_EVIDENCE, 'HIGH'));
-            expect({ exit: legacy.exitCode, rules: legacy.lintRules }).toEqual({ exit: 0, rules: [] });
-            expect('confidence' in (legacy.artifact ?? {})).toBe(false);
+            // Absent: rejected, and the message names the level the rows derive.
+            const missing = await runVerdict(isoCwd, 'missing', answer('MET', CLEAN_EVIDENCE, undefined));
+            const absentBody = (await readFile(join(isoCwd, 'missing-verify-answer.txt'), 'utf-8')).replace(
+                /^Confidence:.*\n?/m,
+                '',
+            );
+            const noLine = await runVerdict(isoCwd, 'no-line', absentBody);
+            expect(noLine.exitCode).toBe(1);
+            expect(noLine.lintRules).toContain('confidence-missing');
 
-            // Read-compat: even an out-of-vocabulary legacy value is ignored, not an error.
-            const legacyOdd = await runVerdict(isoCwd, 'legacy-odd', answer('MET', CLEAN_EVIDENCE, 'SURE'));
-            expect({ exit: legacyOdd.exitCode, rules: legacyOdd.lintRules }).toEqual({ exit: 0, rules: [] });
+            // Overstated: HIGH on rows that only carry a citation is a mismatch, not a pass.
+            const overstated = await runVerdict(
+                isoCwd,
+                'overstated',
+                answer('MET', `\`docs/tasks/${WBS}_confidence-gate-fixture.md:1\` records it`, 'HIGH').replace(
+                    '| MET | test |',
+                    '| MET | static-ref |',
+                ),
+            );
+            expect(overstated.exitCode).toBe(1);
+            expect(overstated.lintRules).toContain('confidence-mismatch');
 
-            // A PARTIAL row still yields a PARTIAL verdict; the CLI exits 1 on a non-PASS
-            // verdict by design, which is why the artifact — not the exit code — carries it.
+            // A PARTIAL row still yields PARTIAL, and LOW is the level it derives.
             const partial = await runVerdict(isoCwd, 'partial', answer('PARTIAL', CLEAN_EVIDENCE));
-            expect({ conf: 'absent', verdict: partial.artifact?.verdict, rules: partial.lintRules }).toEqual({
-                conf: 'absent',
+            expect({ verdict: partial.artifact?.verdict, rules: partial.lintRules }).toEqual({
                 verdict: 'PARTIAL',
                 rules: [],
             });
+            void missing;
         } finally {
             rmSync(artifactPath(), { force: true });
             rmSync(isoCwd, { recursive: true, force: true });

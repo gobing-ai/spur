@@ -102,8 +102,12 @@ const TASK_CONTENT = `## 0818. Handoff fixture task
 `;
 
 function answer(reqStatus: string, acEvidenceType: string): string {
+    // ADR-141: the answer states the level its own rows derive (MET + test/command -> HIGH).
+    const executable = acEvidenceType.includes('test') || acEvidenceType.includes('command');
+    const confidence = reqStatus === 'MET' && executable ? 'HIGH' : reqStatus === 'MET' ? 'MEDIUM' : 'LOW';
     return [
         'Verdict: PASS',
+        `Confidence: ${confidence}`,
         '',
         '### Per-Requirement Traceability',
         '| Req | Status | Evidence |',

@@ -40,16 +40,29 @@ interface VerifyVerdict {
 }
 ```
 
-## No asserted confidence (F511, task 1207)
+## Answer confidence is derived and cross-checked (ADR-141, superseding F511 for answers)
 
-Verdict artifacts carry no `confidence` field and verify answers no `Confidence:` line. The
-1068/1133 machinery that required, linted and coherence-checked a model-asserted
-`HIGH | MEDIUM | LOW` was retired: a verifier that can write a PASS can write `HIGH`, so the grade
-verifies nothing. What the level compressed belongs in the evidence cells — cite fresh executable
-evidence and name residual gaps explicitly. The done gate no longer denies a confidence-less PASS:
-it checks the proof digests, which are the part a hand-edited artifact cannot fake. The DERIVED
-confidence family is a different thing and stays: feature-verification receipts (ADR-131, 1196),
-the decision subsystem threshold, history-anatomy reading.
+A verify answer carries exactly one top-level `Confidence: HIGH|MEDIUM|LOW` line — conventionally
+right after `Verdict:`, and legal anywhere at top level. The label is **not** a self-assessment: the
+lint recomputes it from the answer's own rows and rejects a disagreement.
+
+| Derived | When the answer's rows say so |
+| --- | --- |
+| `LOW` | the verdict is not PASS, or any requirement/AC row is PARTIAL/UNMET |
+| `HIGH` | PASS, and every AC row is MET on executable evidence (`test`/`command`; compounds allowed) |
+| `MEDIUM` | PASS with every AC MET, but at least one row rests on `static-ref`, `manual-review`, `llm-judge` or `N/A` |
+
+Rejections (`spur task verdict --from-answer`, exit 1, no artifact): `confidence-missing`,
+`confidence-duplicate`, `confidence-mismatch` — the last names both the stated and the derived level
+plus the clause the rows turn on. Derivation lives once, in
+`packages/app/src/services/answer-confidence.ts`; the review lane uses the same module for its own
+dispositions.
+
+Still retired and not revived by this: **verdict artifacts** carry no `confidence` field (the answer
+stays the record of truth, and a test pins the field's absence), feature-verification receipts keep
+no level (ADR-131, 1196), no operator `ackLowConfidence`-style var exists, and history-anatomy
+findings carry no per-finding grade. A verifier that can write a PASS can still write a wrong
+`HIGH` — which is exactly why the gate derives the level instead of trusting it.
 
 ## Compatibility alias: `scenario` row key
 

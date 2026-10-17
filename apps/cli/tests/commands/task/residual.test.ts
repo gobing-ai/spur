@@ -27,7 +27,8 @@ beforeAll(async () => {
     const review = join(cwd, 'tmp', 'review.md');
     writeFileSync(
         review,
-        '| Priority | Finding | Location | Disposition |\n| --- | --- | --- | --- |\n| P3 | Soft spot | src/a.ts:1 | DEFER(post-merge) |\n',
+        // ADR-141: a DEFER-ed P3 derives MEDIUM, so the section states it.
+        'Verdict: PASS\nConfidence: MEDIUM\n\n| Priority | Finding | Location | Disposition |\n| --- | --- | --- | --- |\n| P3 | Soft spot | src/a.ts:1 | DEFER(post-merge) |\n',
     );
     const args = ['task', 'update', wbs, '--section', 'Review', '--from-file', review];
     expect(await main(args, { cwd, output: createCapturedOutput(), env })).toBe(0);

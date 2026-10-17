@@ -18,13 +18,16 @@ describe('super-reviewer Output Format contract (task 1122 R4)', () => {
     });
 });
 
-// F511 (task 1207): the asserted confidence line is retired — no review report states one and
-// no gate reads one. The pin asserts both the paragraph's presence and the template line's absence.
-describe('super-reviewer confidence contract (F511 retirement pin)', () => {
-    test('the Output Format states the no-confidence boundary instead of a Confidence line', () => {
-        expect(REVIEWER).toContain('No confidence line (F511');
-        expect(REVIEWER).not.toContain('**Confidence:**');
+// ADR-141 supersedes the F511 retirement for the review ANSWER only: the report states a level, the
+// gate derives it from the dispositions, and every other confidence carrier stays retired.
+describe('super-reviewer confidence contract (ADR-141)', () => {
+    test('the contract requires the derived level and states the derivation instead of a self-grade', () => {
+        expect(REVIEWER).toContain('Confidence: HIGH | MEDIUM | LOW');
+        expect(REVIEWER).toContain('ADR-141');
+        expect(REVIEWER).toContain('answer-confidence.ts');
         expect(REVIEWER).not.toContain('turns an otherwise usable');
+        // The retirement stays true for every other carrier the paragraph used to list.
+        expect(REVIEWER).toContain('ADR-138 stands for every other carrier');
     });
 });
 

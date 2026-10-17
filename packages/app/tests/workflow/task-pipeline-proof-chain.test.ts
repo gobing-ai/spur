@@ -651,7 +651,7 @@ describe('task-pipeline review-failure routing (session finding after 1088)', ()
             setReview(
                 dir,
                 wbs,
-                '| Priority | Finding | Location | Disposition |\n| --- | --- | --- | --- |\n| P4 (advisory) | Note | src/d.ts:1 | ACCEPTED |\n',
+                'Verdict: PASS\nConfidence: MEDIUM\n\n| Priority | Finding | Location | Disposition |\n| --- | --- | --- | --- |\n| P4 (advisory) | Note | src/d.ts:1 | ACCEPTED |\n',
             );
             const answer = join(dir, '.spur', 'run', 'run-t-review-review-answer.txt');
             const guard = cmdOf('review', 'verify')
@@ -685,7 +685,9 @@ describe('task-pipeline review-failure routing (session finding after 1088)', ()
 // cycle (record would terminally fail it after a full verify + record). Same classifier, same
 // deferrals, resolved like the record step's scanner, fail-closed into review-fail-triage.
 describe('task-pipeline review PASS-edge review-gate (task 1122)', () => {
-    const TABLE_HEAD = '### Review\n\n| Priority | Finding | Location | Disposition |\n| --- | --- | --- | --- |\n';
+    // ADR-141: a review section states the level its dispositions derive; each case overrides it.
+    const tableWith = (confidence: string, rows: string): string =>
+        `### Review\n\nVerdict: PASS\nConfidence: ${confidence}\n\n| Priority | Finding | Location | Disposition |\n| --- | --- | --- | --- |\n${rows}`;
     const runSh = (script: string, cwd: string, spurBin: string, wbs: string): number =>
         Bun.spawnSync(['sh', '-c', script], {
             cwd,
@@ -724,7 +726,7 @@ describe('task-pipeline review PASS-edge review-gate (task 1122)', () => {
 
             // AC2: PASS + open P2 → neither PASS edge passes → review-fail-triage; the artifact
             // the fix hop consumes is staged with the blocking finding.
-            setReview(dir, wbs, `${TABLE_HEAD}| P2 (major) | Missing validation | src/c.ts:8 | OPEN |\n`);
+            setReview(dir, wbs, `${tableWith('LOW', '| P2 (major) | Missing validation | src/c.ts:8 | OPEN |\n')}`);
             expect(runSh(verifyGuard, dir, SPUR_BIN, wbs)).not.toBe(0);
             expect(runSh(approveGuard, dir, SPUR_BIN, wbs)).not.toBe(0);
             const artifact = JSON.parse(readFileSync(join(dir, '.spur', 'run', `${wbs}-residuals.json`), 'utf8')) as {
@@ -737,7 +739,7 @@ describe('task-pipeline review PASS-edge review-gate (task 1122)', () => {
             setReview(
                 dir,
                 wbs,
-                `${TABLE_HEAD}| P4 (advisory) | Note | src/d.ts:1 | ACCEPTED |\n| P3 (minor) | Fixed | src/e.ts:2 | RESOLVED — in pass |\n`,
+                `${tableWith('MEDIUM', '| P4 (advisory) | Note | src/d.ts:1 | ACCEPTED |\n| P3 (minor) | Fixed | src/e.ts:2 | RESOLVED — in pass |\n')}`,
             );
             expect(runSh(verifyGuard, dir, SPUR_BIN, wbs)).toBe(0);
             expect(runSh(approveGuard, dir, SPUR_BIN, wbs)).toBe(0);
