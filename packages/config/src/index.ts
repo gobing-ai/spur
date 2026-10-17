@@ -978,8 +978,18 @@ export const SDLC_ACTION_NAME_PATTERN = /^[a-z][a-z0-9-]*$/;
 /** Actions whose command may carry a `{files}` / `{paths}` / `{workspace}` placeholder. */
 export const SDLC_SCOPED_ACTIONS: readonly SdlcAction[] = ['lint-changed', 'typecheck-changed', 'test-changed'];
 
-/** The placeholder scan used by both the schema (misplacement) and `renderScoped`. */
-const SDLC_PLACEHOLDER_PATTERN = /\{(?:files|paths|workspace)\}/;
+/**
+ * Placeholders each scoped action may carry — exactly the values the light-gate planner supplies
+ * for it (`quality-gate.ts` `planLightChecks`); any other one would throw in `renderScoped`.
+ */
+const SDLC_SCOPED_PLACEHOLDERS: Readonly<Record<string, readonly string[]>> = {
+    'lint-changed': ['{files}'],
+    'typecheck-changed': ['{workspace}'],
+    'test-changed': ['{workspace}', '{paths}'],
+};
+
+/** The placeholder scan used by the schema (misplacement); `renderScoped` substitutes the same set. */
+const SDLC_PLACEHOLDER_PATTERN = /\{(?:files|paths|workspace)\}/g;
 
 /** One `builder.actions` value: a shell command, or a composite of action names run in order. */
 const BuilderActionValueSchema = z.union([z.string(), z.array(z.string())]);
@@ -1012,11 +1022,14 @@ function refineBuilderActions(
                 issue(name, 'must not be empty');
                 continue;
             }
-            const placeholder = SDLC_PLACEHOLDER_PATTERN.exec(entry);
-            if (placeholder !== null && !SDLC_SCOPED_ACTIONS.includes(name as SdlcAction)) {
+            const allowed = SDLC_SCOPED_PLACEHOLDERS[name];
+            const misplaced = entry.match(SDLC_PLACEHOLDER_PATTERN)?.find((found) => !allowed?.includes(found));
+            if (misplaced !== undefined) {
                 issue(
                     name,
-                    `uses placeholder ${placeholder[0]} — placeholders are only allowed in ${SDLC_SCOPED_ACTIONS.join(', ')}`,
+                    allowed === undefined
+                        ? `uses placeholder ${misplaced} — placeholders are only allowed in ${SDLC_SCOPED_ACTIONS.join(', ')}`
+                        : `uses placeholder ${misplaced} — ${name} accepts only ${allowed.join(', ')}`,
                 );
             }
             continue;
@@ -1036,7 +1049,9 @@ function refineBuilderActions(
     }
 
     // Cycle detection over the composite graph; each cycle is reported once, by its first member.
+    // `finished` memoizes fully explored nodes, so a dense composite DAG is walked once, not per path.
     const reported = new Set<string>();
+    const finished = new Set<string>();
     const walk = (name: string, path: string[]): void => {
         const entry = value.actions[name];
         if (!Array.isArray(entry)) return;
@@ -1049,7 +1064,9 @@ function refineBuilderActions(
             }
             return;
         }
+        if (finished.has(name)) return;
         for (const step of entry) walk(step, [...path, name]);
+        finished.add(name);
     };
     for (const name of declared) walk(name, []);
 }

@@ -136,8 +136,9 @@ actions; each substituted item is shell-quoted with the existing `shQuote`
 (`quality-gate.ts:520`).
 
 Load-time validation (Zod, `packages/config`): names match `^[a-z][a-z0-9-]*$`; composites
-reference only resolvable actions; composite cycles are rejected with the cycle path; placeholders
-outside `*-changed` are rejected. Errors name the key path.
+reference only resolvable actions; composite cycles are rejected with the cycle path; a placeholder is accepted only on the
+`*-changed` action the light-gate planner supplies it for (`lint-changed` `{files}`, `typecheck-changed`
+`{workspace}`, `test-changed` `{workspace}` `{paths}`), so a load-valid binding never throws at render time. Errors name the key path.
 
 ### 3.3 Executor: `spur self exec`
 
