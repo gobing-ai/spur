@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'bun:test';
-import { type BuilderConfig, BuilderConfigSchema } from '@gobing-ai/spur-config';
+import { type BuilderConfig, BuilderConfigSchema, SDLC_PRESET_ACTIONS } from '@gobing-ai/spur-config';
 import { planLightChecks } from '../../src/services/quality-gate';
 import {
     BUN_PRESET,
@@ -104,6 +104,18 @@ describe('preset none (task 1222 R5)', () => {
             expect(resolveAction(none, name)).toEqual({ name, reserved: true, source: 'unbound', kind: 'unbound' });
         }
     });
+
+    // Task 1228 (from the 1222 review): the schema's resolvable set and the resolver's defaults are
+    // one fact. This pins the two against each other, so a stack-neutral default added in only one
+    // layer fails here instead of surfacing as a spurious "resolves to no action" load error.
+    test('the schema resolvable set and the resolver defaults agree for every reserved action', () => {
+        const none = builder({ preset: 'none' });
+        const resolvable = new Set<string>(SDLC_PRESET_ACTIONS.none);
+        for (const name of RESERVED_ACTIONS) {
+            const resolved = resolveAction(none, name);
+            expect(resolved.source === 'unbound').toBe(!resolvable.has(name));
+        }
+    });
 });
 
 describe('builder.actions binding', () => {
@@ -172,5 +184,15 @@ describe('renderScoped (task 1222 R3)', () => {
     test('a missing value throws instead of widening the command', () => {
         expect(() => renderScoped('bunx biome check {files}', {})).toThrow('{files}');
         expect(() => renderScoped('cd {workspace} && bun run typecheck', {})).toThrow('{workspace}');
+    });
+
+    // Task 1228 (from the 1222 review): an empty list is the same widening hazard as a missing one —
+    // `bunx biome check ` with no paths checks the whole repo, `cd ws && bun test` the whole workspace.
+    test('an empty list throws instead of widening the command', () => {
+        expect(() => renderScoped('bunx biome check {files}', { files: [] })).toThrow('empty list');
+        expect(() => renderScoped('cd {workspace} && bun test {paths}', { workspace: 'ws', paths: [] })).toThrow(
+            'empty list',
+        );
+        expect(() => renderScoped('cd {workspace} && bun run typecheck', { workspace: '' })).toThrow('empty');
     });
 });

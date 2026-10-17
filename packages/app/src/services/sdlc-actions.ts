@@ -6,7 +6,7 @@
  * action `a`: `builder.actions[a]` → active-preset entry → stack-neutral default → unbound.
  * A declared entry replaces a preset entry whole — never merged.
  */
-import { type BuilderConfig, SDLC_ACTIONS, type SdlcAction } from '@gobing-ai/spur-config';
+import { type BuilderConfig, SDLC_ACTIONS, SDLC_STACK_NEUTRAL_ACTIONS, type SdlcAction } from '@gobing-ai/spur-config';
 import { shQuote } from './shell-quote';
 
 /** The closed reserved action vocabulary, in frozen order (SSOT: `packages/config`). */
@@ -41,13 +41,11 @@ export const BUN_PRESET: Readonly<Record<ReservedAction, string>> = {
 };
 
 /**
- * Stack-neutral defaults under `preset: none` (R5): Spur's own rule presets, no project
- * script names involved. Every other undeclared reserved action is unbound there.
+ * Stack-neutral defaults under `preset: none` (R5). Defined in `packages/config` because the schema's
+ * resolvable set is derived from the same map — one copy, so a default added here cannot be rejected
+ * at load time as "resolves to no action". Every other undeclared reserved action is unbound there.
  */
-const STACK_NEUTRAL_DEFAULTS: Readonly<Partial<Record<ReservedAction, string>>> = {
-    'rules-pre': 'spur rule run --preset recommended-pre-check --fail-on warning --no-logo',
-    'rules-post': 'spur rule run --preset recommended-post-check --fail-on warning --no-logo',
-};
+const STACK_NEUTRAL_DEFAULTS: Readonly<Partial<Record<ReservedAction, string>>> = SDLC_STACK_NEUTRAL_ACTIONS;
 
 /** Where a resolution came from. */
 export type ActionSource = 'config' | 'preset' | 'default' | 'unbound';
@@ -99,8 +97,8 @@ export interface ScopedValues {
 
 /**
  * Substitute the scoped placeholders in a `*-changed` command, quoting each item with
- * {@link shQuote}. A placeholder whose value is missing throws: an empty substitution would
- * silently widen the command (`biome check` with no paths checks the whole repo).
+ * {@link shQuote}. A placeholder whose value is missing or empty throws: an empty substitution
+ * would silently widen the command (`biome check` with no paths checks the whole repo).
  */
 export function renderScoped(command: string, values: ScopedValues): string {
     let rendered = command;
@@ -110,11 +108,13 @@ export function renderScoped(command: string, values: ScopedValues): string {
     ] as const) {
         if (!rendered.includes(placeholder)) continue;
         if (items === undefined) throw new Error(`renderScoped: ${placeholder} has no value`);
+        if (items.length === 0) throw new Error(`renderScoped: ${placeholder} has an empty list`);
         rendered = rendered.replaceAll(placeholder, () => items.map(shQuote).join(' '));
     }
     if (rendered.includes('{workspace}')) {
-        if (values.workspace === undefined) throw new Error('renderScoped: {workspace} has no value');
         const workspace = values.workspace;
+        if (workspace === undefined) throw new Error('renderScoped: {workspace} has no value');
+        if (workspace.length === 0) throw new Error('renderScoped: {workspace} is empty');
         rendered = rendered.replaceAll('{workspace}', () => shQuote(workspace));
     }
     return rendered;
