@@ -1,5 +1,6 @@
 import { isAbsolute, join } from 'node:path';
 import { normalizePersistedWorkflowLayer, RunDao, type RunDefinitionSource } from '@gobing-ai/spur-domain';
+import { DbWorkflowPersistenceAdapter } from '@gobing-ai/ts-dual-workflow-engine';
 import { createNodeFileSystem, NodeProcessExecutor } from '@gobing-ai/ts-runtime';
 import { ValidationError } from '@gobing-ai/ts-utils';
 import {
@@ -8,7 +9,15 @@ import {
     parseCheckpointMetadata,
 } from '../workflow/checkpoint-contract';
 import { gateSitesForState, hitlAnswerVar } from '../workflow/composition-lint';
+import { attachHostPause, hostExecutorPersisted, withHostExecutorPause } from '../workflow/host-executor';
 import { projectWorkflowProgress } from '../workflow/progress-projection';
+import {
+    readReceipt,
+    readWorkItem,
+    validateWorkItemReceipt,
+    type WorkItemReceipt,
+    writeReceipt,
+} from '../workflow/receipt';
 import {
     type ResolvedWorkflowDefinition,
     registeredWorkflowPaths,
@@ -138,6 +147,11 @@ export class WorkflowResumeOps {
         // change). The engine re-checks defensively inside resumeRun's ownership
         // claim window, closing the inspect-vs-resume race.
         const resumeVars: Record<string, string> = await this.resolveResumeAnswerVars(runId, opts);
+        // D65 1232: a host-executor pause resumes on a work-item receipt, validated HERE —
+        // before the drift-consent and stale-consent metadata writes below — so a refused
+        // receipt mutates nothing. `hostExecutor` also keeps the pause transform on for the
+        // rest of the host chain.
+        const hostPause = await this.resolveHostPauseReceipt(runId, launchWorkdir, opts?.answerText);
         if (persistedDigest !== null && persistedDigest !== resolved.digest) {
             if (opts?.allowDigestMismatch !== true && opts?.force !== true) {
                 const prompt = `Workflow definition drift detected for run "${runId}": launched with ${persistedDigest}, currently ${resolved.digest}. Continue with modified definition?`;
@@ -183,12 +197,17 @@ export class WorkflowResumeOps {
             extensions: { workflow: resolved.workflow, file: resolved.path },
             ...(opts?.recordSelfPid === true ? { recordSelfPid: true } : {}),
         });
-        const workflow = resolved.workflow;
+        const workflow = hostPause.hostExecutor ? withHostExecutorPause(resolved.workflow) : resolved.workflow;
         // 0784 R2: on consented drift the executed digest overrides the proof
         // binding var (__definitionDigest) for this resume only. (Answer vars were
         // resolved and validated above, before any metadata mutation.)
         if (persistedDigest !== null && persistedDigest !== resolved.digest && 'resumeDefinitionDigest' in rawMeta) {
             resumeVars.__definitionDigest = resolved.digest;
+        }
+        // D65 1232: the run's durable evidence is the canonical receipt, not the path the
+        // operator passed — persisted once the resume is known to proceed.
+        if (hostPause.receipt !== undefined) {
+            await writeReceipt(createNodeFileSystem(launchWorkdir), launchWorkdir, hostPause.receipt);
         }
         const result = await svc.resumeRun(workflow, runId, {
             // 0784 R1/R3: resume inside the recorded launch workdir (legacy: the
@@ -215,9 +234,48 @@ export class WorkflowResumeOps {
         // pre-0768 rows (unknown legacy identity).
         runResult.definitionDigest = persistedDigest;
         if (persistedVersion !== undefined) runResult.version = persistedVersion;
+        // D65 1232: the next host stage's work item is the resume's pause payload (§4.3).
+        await attachHostPause(createNodeFileSystem(launchWorkdir), launchWorkdir, runResult);
         // 0784 R2: surface degraded/consented-drift resume diagnostics.
         if (warnings.length > 0) (runResult as Record<string, unknown>).warnings = warnings;
         return runResult;
+    }
+
+    /**
+     * D65 1232: validate the receipt a host-executor pause resumes on, and report whether
+     * this run is on the host chain (so the definition keeps its pause transform).
+     *
+     * A run launched with `executor: host` may pause on a definition-declared gate
+     * (no work item) — that resume is untouched. A pause on an `agent.run` stage wrote
+     * the run's work item; its `--answer-text` is then the executor's receipt path, and
+     * the receipt must be a definite `done` for THIS run and THIS state whose expected
+     * files and owned sections are written (design §4.3, ADR-126 A4). Refusals throw
+     * before any resume claim, so a refused continue changes nothing.
+     */
+    private async resolveHostPauseReceipt(
+        runId: string,
+        workdir: string,
+        answerText: string | undefined,
+    ): Promise<{ hostExecutor: boolean; receipt?: WorkItemReceipt }> {
+        const db = await this.ctx.getDb();
+        if (!(await hostExecutorPersisted(db, runId))) return { hostExecutor: false };
+        const fs = createNodeFileSystem(workdir);
+        const workItem = await readWorkItem(fs, workdir, runId);
+        if (workItem === null) return { hostExecutor: true };
+        const currentState = await new DbWorkflowPersistenceAdapter(db).loadCurrentState(runId);
+        if (currentState !== workItem.state) return { hostExecutor: true };
+        if (answerText === undefined) {
+            throw new ValidationError(
+                `Cannot resume run "${runId}": state '${workItem.state}' paused on a host work item, so --answer-text must name its receipt path.`,
+            );
+        }
+        const receipt = await readReceipt(fs, workdir, answerText);
+        const check = await validateWorkItemReceipt(fs, workdir, workItem, receipt);
+        if (receipt === null || !check.ok) {
+            const reason = check.ok ? 'work-item receipt could not be read' : check.error;
+            throw new ValidationError(`Cannot resume run "${runId}": ${reason}. Resume refused.`);
+        }
+        return { hostExecutor: true, receipt };
     }
 
     /** Implementation of {@link WorkflowAppService.pendingGate} (see its doc comment for the contract). */

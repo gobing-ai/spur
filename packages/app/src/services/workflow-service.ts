@@ -14,6 +14,7 @@ import type { ProcessExecutor } from '@gobing-ai/ts-runtime';
 import type { HostAllowlist, HttpRequester } from '../workflow/actions/http-request';
 import type { CompositionAdvisory } from '../workflow/composition-lint';
 import type { WorkflowObservabilityBus } from '../workflow/observability';
+import type { WorkItem } from '../workflow/receipt';
 import type {
     CheckpointReclamationResult,
     RunLogReclamationResult,
@@ -54,6 +55,12 @@ export type WorkflowRunResult = EngineWorkflowRunResult & {
     definitionDigest?: string | null;
     /** Workflow version literal recorded at creation; absent for pre-0768 rows. */
     version?: string | null;
+    /**
+     * D65 1232: present when the run paused on a host-executor `agent.run` stage — the
+     * work item the host session performs before `spur workflow continue <run-id>
+     * --answer-text <receipt-path>`. Additive: the engine's own result fields are unchanged.
+     */
+    pause?: { kind: 'input'; workItem: WorkItem };
     readonly [key: string]: unknown;
 };
 

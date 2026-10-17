@@ -1,6 +1,8 @@
 import { createId, RunDao, TaskRunLinkDao } from '@gobing-ai/spur-domain';
 import { type WorkflowRunResult as EngineWorkflowRunResult, loadWorkflowDef } from '@gobing-ai/ts-dual-workflow-engine';
+import { createNodeFileSystem } from '@gobing-ai/ts-runtime';
 import { computeDefinitionDigest } from '../workflow/composition-baseline';
+import { attachHostPause, selectsHostExecutor, withHostExecutorPause } from '../workflow/host-executor';
 import { assertStartStateStartable, readContinuedFrom, StartStateRefusedError } from '../workflow/start-state';
 import { registeredWorkflowPaths, resolveWorkflowDefinition, resolveWorkflowFile } from '../workflow/workflow-resolver';
 import { bridgeEventBus, dropRetiredActionBoundaryAliases, withWorkflowIdentity } from './event-bridge';
@@ -133,7 +135,12 @@ export class WorkflowRunOps {
         // `loadWorkflowDef(path)` with no options, falling back to node resolution.
         // Explicit `validateSchema: true` matches `validate()` so the two verbs cannot
         // diverge on whether schema validation is on (task 0431 R4/R5).
-        const result = await svc.run(workflow, {
+        // D65 1232: a host-executor run pauses at its agent.run stages, so the definition
+        // handed to the engine carries the engine's own pause declaration. The identity
+        // above is computed from the UNTRANSFORMED definition, so the transform never
+        // changes what the run records as its definition.
+        const engineWorkflow = selectsHostExecutor(runVars) ? withHostExecutorPause(workflow) : workflow;
+        const result = await svc.run(engineWorkflow, {
             workdir: this.ctx.cwd,
             runId,
             vars: runVars,
@@ -174,6 +181,8 @@ export class WorkflowRunOps {
         // the task. Idempotent: a re-run with the same runId does not duplicate.
         await this.maybeLinkPipelineRun(file, runId, opts);
         const runResult = result as WorkflowRunResult;
+        // D65 1232: surface the work item of the stage the run paused on (§4.3).
+        await attachHostPause(createNodeFileSystem(this.ctx.cwd), this.ctx.cwd, runResult);
         // 0768 R1: surface the run's identity on the result. A fresh run is always
         // identity-stamped, so version is the literal or null (known-unversioned) —
         // never absent; absence is reserved for pre-0768 rows.

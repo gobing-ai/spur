@@ -31,7 +31,18 @@ import {
 import { ensureDurablePlaneIgnored, runArtifactsDir, runSessionsDir } from '../../services/run-storage';
 import { TaskLocator } from '../../services/task-locator';
 import { dispatchToFleet, type FleetDispatchDeps, fleetUnavailableOutcome } from '../fleet-dispatch';
+import { selectsHostExecutor } from '../host-executor';
 import type { WorkflowAgentBudgetEvent, WorkflowObservabilityBus, WorkflowTripwireFiredEvent } from '../observability';
+import {
+    declaredInputs,
+    declaredStrings,
+    type ReceiptExecutor,
+    type ReceiptOutcome,
+    type WorkItem,
+    type WorkItemReceipt,
+    writeReceipt,
+    writeWorkItem,
+} from '../receipt';
 import { parseSteeringPolicy, type WorkflowSteeringController } from '../steering';
 import { CAPABILITY_BLOCK_PREFIX, evaluateTripWires, type TripWireSignal } from '../tripwire';
 import { resolveDurableArtifactPath } from './run-path';
@@ -169,6 +180,16 @@ export function parseExecutorPin(raw: unknown): ExecutorPin | undefined {
  *   a cap that cannot be evaluated because usage is unavailable fails closed as
  *   `budget-unverifiable`. Actions without either option dispatch unchanged.
  *   `timeoutMs` remains the only duration control.
+ * - `skill` / `inputs` / `expectFiles` / `ownedSections` (optional; D65 1232): the
+ *   self-contained work item the stage hands its executor (design §4.1). `expectFile`
+ *   folds into `expectFiles`; `skill` is the skill the stage asks for (null when
+ *   absent). No executor requires them — a stage that declares none still runs.
+ *
+ * Executor selection (D65 1232): an `agent.run` dispatches to the executor the run
+ * var `vars.executor` selects — `host` (pause with a work item), `fleet` (ADR-126),
+ * or absent (this subprocess surface, resolved through the existing tier ladder).
+ * Every surface that completes leaves the same durable receipt (design §4.2) under
+ * `.spur/run/<runId>/receipts/<state>.json`.
  *
  * On any failed run (non-zero/null exit, signal, or dispatch error), a
  * partial-work handoff artifact is written to
@@ -435,7 +456,122 @@ export class AgentRunActionRunner implements ActionRunner {
         };
     }
 
+    /**
+     * Host executor surface (D65 1232, design §3.1/§3.2) — taken ONLY when the run
+     * var selects it. Nothing is dispatched: the work item is written and the engine's
+     * existing pause (declared on the stage by `withHostExecutorPause`) suspends the
+     * run, so `spur workflow run|continue --json` carries the work item to the host
+     * session. The host performs the work, writes the receipt, and
+     * `spur workflow continue --answer-text <receipt-path>` completes the stage.
+     */
+    private async executeHostSurface(
+        options: Record<string, unknown>,
+        context: ActionRunContext,
+        input: string | undefined,
+        cwd: string,
+    ): Promise<ActionResult> {
+        if (input === undefined || input.trim() === '') {
+            return {
+                ok: false,
+                error: 'agent.run: host dispatch requires an input prompt (continue/resume is not a host surface)',
+            };
+        }
+        const expectFiles = declaredExpectFiles(options);
+        // Freshness (0751 R3), the same rule the subprocess and fleet surfaces apply: a
+        // file left by a PRIOR run must not satisfy this work item's receipt.
+        const fs = createNodeFileSystem(cwd);
+        for (const path of expectFiles) {
+            const target = isAbsolute(path) ? path : join(cwd, path);
+            if (!(await fs.exists(target))) continue;
+            try {
+                await fs.deleteFile(target);
+            } catch (error) {
+                return {
+                    ok: false,
+                    error: `agent.run: expectFile ${path} exists from a previous run and could not be removed before the host work item: ${(error as Error).message}`,
+                };
+            }
+        }
+        const workItem: WorkItem = {
+            runId: context.runId,
+            state: context.stateOrNodeId,
+            skill: asOptionalString(options.skill) ?? null,
+            prompt: input,
+            inputs: declaredInputs(options.inputs),
+            expectFiles,
+            ownedSections: declaredStrings(options.ownedSections),
+        };
+        try {
+            await writeWorkItem(fs, cwd, workItem);
+        } catch (error) {
+            return {
+                ok: false,
+                error: `agent.run: work item for '${context.stateOrNodeId}' could not be written: ${(error as Error).message}`,
+            };
+        }
+        return { ok: true, data: { surface: 'host', workItem, reason: 'host-work-item' } };
+    }
+
     async execute(options: Record<string, unknown>, context: ActionRunContext): Promise<ActionResult> {
+        const startedAt = new Date().toISOString();
+        const result = await this.dispatch(options, context);
+        return await this.recordReceipt(options, context, startedAt, result);
+    }
+
+    /**
+     * Write the stage's durable receipt (design §4.2) — one shape for the subprocess and
+     * fleet surfaces. A host pause writes nothing here: the HOST owns that receipt, and
+     * `spur workflow continue` validates and persists it. Evidence is the receipt, so a
+     * receipt that cannot be written fails the stage rather than reporting a completion
+     * whose proof is missing (ADR-126 A4).
+     */
+    private async recordReceipt(
+        options: Record<string, unknown>,
+        context: ActionRunContext,
+        startedAt: string,
+        result: ActionResult,
+    ): Promise<ActionResult> {
+        const surface = asOptionalString(result.data?.surface);
+        // A host pause writes no receipt here: the HOST owns it and `continue` validates it.
+        // A declared fleet fallback that re-dispatched leaves THIS stage's receipt as the
+        // subprocess one — its not-started evidence is the result's `fallbackReason`, and
+        // ADR-126 A4 permits that re-dispatch.
+        if (surface === 'host') return result;
+        const executor: ReceiptExecutor = surface === 'fleet' ? 'fleet' : 'subprocess';
+        const cwd = asOptionalString(options.cwd) ?? context.workdir ?? '.';
+        const fs = createNodeFileSystem(cwd);
+        const outcome = receiptOutcomeOf(result);
+        const files: string[] = [];
+        for (const path of declaredExpectFiles(options)) {
+            if (await fs.exists(isAbsolute(path) ? path : join(cwd, path))) files.push(path);
+        }
+        const receipt: WorkItemReceipt = {
+            runId: context.runId,
+            state: context.stateOrNodeId,
+            executor,
+            outcome: outcome.outcome,
+            startedAt,
+            finishedAt: new Date().toISOString(),
+            files,
+            reason: result.ok ? null : (result.error ?? null),
+            ...(outcome.contract !== undefined ? { contract: outcome.contract } : {}),
+        };
+        try {
+            await writeReceipt(fs, cwd, receipt);
+        } catch (error) {
+            // Never mask the dispatch's own failure with a plumbing failure; a completion
+            // whose evidence is missing is the one case that must not be reported as done.
+            if (!result.ok) return result;
+            return {
+                ok: false,
+                data: result.data,
+                error: `agent.run: durable receipt for '${context.stateOrNodeId}' could not be written (${executor}): ${(error as Error).message}`,
+            };
+        }
+        return result;
+    }
+
+    async dispatch(options: Record<string, unknown>, context: ActionRunContext): Promise<ActionResult> {
         // Per-invocation reset: a prior execute()'s fallback reason must never leak
         // onto a default-path row.
         this.fleetFallbackReason = undefined;
@@ -688,6 +824,13 @@ export class AgentRunActionRunner implements ActionRunner {
             const fleet = await this.executeFleetSurface(options, context, input, role, cwd);
             if (fleet.result !== undefined) return fleet.result;
             this.fleetFallbackReason = fleet.fallbackReason;
+        }
+
+        // D65 1232: the host executor surface, beside the fleet branch and selected the
+        // same way — by the run var, never by a flag. The work item is written and the
+        // run pauses on the stage's `pause: true` (declared by `withHostExecutorPause`).
+        if (selectsHostExecutor(context.vars)) {
+            return await this.executeHostSurface(options, context, input, cwd);
         }
 
         const flags: Record<string, string | boolean> = {};
@@ -1503,6 +1646,40 @@ function buildResultData(
 function asOptionalString(value: unknown): string | undefined {
     if (value === undefined || value === null) return undefined;
     return String(value);
+}
+
+/** The stage's declared completion artifacts: `expectFile` folds into `expectFiles` (D65 1232). */
+function declaredExpectFiles(options: Record<string, unknown>): string[] {
+    const single = asOptionalString(options.expectFile);
+    return [
+        ...new Set([
+            ...(single !== undefined && single !== '' ? [single] : []),
+            ...declaredStrings(options.expectFiles),
+        ]),
+    ];
+}
+
+/**
+ * Map a finished dispatch onto the receipt outcome (design §4.2, ADR-126 A4): a
+ * `contract-violation` is its own outcome, a clean exit is `done`, and a dispatch that
+ * stopped without a definite terminal word — a timeout or a signal — is
+ * `outcome-unknown`, never `failed`. The wording is the 0937 classifier's.
+ */
+function receiptOutcomeOf(result: ActionResult): { outcome: ReceiptOutcome; contract?: string } {
+    const data = result.data ?? {};
+    const contract = asOptionalString(data.contract);
+    if (data.outcome === 'contract-violation') {
+        return { outcome: 'contract-violation', ...(contract !== undefined ? { contract } : {}) };
+    }
+    if (result.ok) return { outcome: 'done' };
+    const error = result.error ?? '';
+    // The 0937 classifier's wording: a definite non-start, a wait that stopped without a
+    // definite receipt (outcome-unknown / timeout / signal), and a plain failure.
+    if (/not[-_ ]?started/i.test(error)) return { outcome: 'not-started' };
+    if (/outcome[-_ ]?unknown/i.test(error) || /timeout|terminated by signal|cancelled by signal/i.test(error)) {
+        return { outcome: 'outcome-unknown' };
+    }
+    return { outcome: 'failed' };
 }
 
 function asOptionalBoolean(value: unknown): boolean | undefined {
