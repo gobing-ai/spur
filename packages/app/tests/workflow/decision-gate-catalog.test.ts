@@ -269,7 +269,8 @@ describe('gate-evidence through the real bundled catalog (no backend)', () => {
         }
         expect(result.kind).toBe('deferred');
         expect(result.provenance.mode).toBe('evidence');
-        expect(result.provenance.outcome).toBe('deferred');
+        // 1236 R2: a degrading maker leaves the catalog default recorded as a fallback, not a defer.
+        expect(result.provenance.outcome).toBe('fallback');
         expect(result.provenance.reason).toBe('no-backend');
         expect(events.map((event) => event.name)).toEqual(['decision.start', 'decision.failure', 'decision.end']);
         const start = events[0]?.payload as Record<string, unknown>;

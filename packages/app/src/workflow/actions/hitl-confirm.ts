@@ -43,6 +43,8 @@ export class HitlConfirmActionRunner implements ActionRunner {
             this.evaluator,
             { kind: 'confirm', prompt, runId: context.runId, node: context.stateOrNodeId },
             parsed.config,
+            // 1236: only an explicit profile=auto lets the declared binding answer.
+            context.vars.profile,
         );
         const { answer } = resolved;
         context.events?.emit('workflow.hitl.response', {

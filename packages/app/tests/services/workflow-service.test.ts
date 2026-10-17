@@ -325,7 +325,11 @@ terminalStates: [done]
                 if (enabled) setEnvVar('TYPESAFE_API_KEY', undefined);
                 let result: Awaited<ReturnType<typeof service.run>>;
                 try {
-                    result = await service.run(file, { runId: `decision-${enabled}` });
+                    // 1236 R1: the evidence binding answers only under profile=auto.
+                    result = await service.run(file, {
+                        runId: `decision-${enabled}`,
+                        vars: { profile: 'auto' },
+                    });
                 } finally {
                     if (enabled) setEnvVar('TYPESAFE_API_KEY', savedKey);
                 }
@@ -341,7 +345,7 @@ terminalStates: [done]
                     // earlier evidence failure defers with a different reason and never decides.
                     expect(answer.data.decision).toMatchObject({
                         mode: 'evidence',
-                        outcome: 'deferred',
+                        outcome: 'fallback',
                         reason: 'no-backend',
                     });
                 } else {
@@ -385,7 +389,7 @@ terminalStates: [done]
             try {
                 const ctx = makeCtx(dir);
                 const svc = new WorkflowAppService(ctx);
-                const first = await svc.run(EXAMPLE_WORKFLOW, { runId: 'example-defer' });
+                const first = await svc.run(EXAMPLE_WORKFLOW, { runId: 'example-defer', vars: { profile: 'auto' } });
 
                 expect(first.status).toBe('paused');
                 expect(first.finalState).toBe('humanGate');
@@ -410,7 +414,7 @@ terminalStates: [done]
             try {
                 const ctx = makeCtx(dir, spurConfigSchema.parse({ workflows: { hitlDecisionMaker: true } }));
                 const svc = new WorkflowAppService({ ...ctx, decisionMaker: acceptingDecisionMaker });
-                const result = await svc.run(EXAMPLE_WORKFLOW, { runId: 'example-accept' });
+                const result = await svc.run(EXAMPLE_WORKFLOW, { runId: 'example-accept', vars: { profile: 'auto' } });
 
                 // Accepted retry runs exactly one attempt, then escalates to the pause gate.
                 expect(result.status).toBe('paused');
@@ -430,6 +434,43 @@ terminalStates: [done]
                 expect(event?.kind === 'action' ? event.decision?.outcome : undefined).toBe('accepted');
                 expect(event?.kind === 'action' ? event.decision?.mode : undefined).toBe('evidence');
                 expect(event?.kind === 'action' ? event.decision?.evidenceActionIds.length : 0).toBe(1);
+            } finally {
+                await rm(dir, { recursive: true, force: true });
+            }
+        });
+
+        test('interactively the operator answers the evidence gate and the trace records the operator source (1236 R1)', async () => {
+            const dir = await mkdtemp(join(tmpdir(), 'spur-wf-example-interactive-'));
+            try {
+                const base = makeCtx(dir, spurConfigSchema.parse({ workflows: { hitlDecisionMaker: true } }));
+                // The operator says `stop`; the accepting maker would have said `retry`.
+                const svc = new WorkflowAppService({
+                    ...base,
+                    hitlResponder: () => ({ respond: async () => ({ value: 'stop' }) }),
+                    decisionMaker: acceptingDecisionMaker,
+                });
+                const result = await svc.run(EXAMPLE_WORKFLOW, { runId: 'example-interactive' });
+
+                expect(result.status).toBe('done');
+                expect(result.finalState).toBe('stop');
+
+                const rows = await new ActionRunDao(await base.getDb()).actionRowsByRunId('example-interactive');
+                const persisted = JSON.parse(rows.find((row) => row.kind === 'hitl.select')?.result_json ?? '{}');
+                expect(persisted.data?.answer).toBe('stop');
+                // No status var: the operator answered the gate itself, so no evidence binding ran.
+                expect(persisted.setVars).toEqual({ recoveryChoice: 'stop' });
+                expect(persisted.data?.decision).toMatchObject({
+                    mode: 'evidence',
+                    outcome: 'fallback',
+                    reason: 'operator',
+                });
+
+                const timeline = await svc.trace('example-interactive');
+                const event = timeline.events.find(
+                    (candidate) => candidate.kind === 'action' && candidate.actionKind === 'hitl.select',
+                );
+                expect(event?.kind === 'action' ? event.decision?.reason : undefined).toBe('operator');
+                expect(event?.kind === 'action' ? event.decision?.outcome : undefined).toBe('fallback');
             } finally {
                 await rm(dir, { recursive: true, force: true });
             }
@@ -476,7 +517,7 @@ terminalStates: [done]
                 const ctx = makeCtx(dir, spurConfigSchema.parse({ workflows: { hitlDecisionMaker: true } }));
                 const svc = new WorkflowAppService({ ...ctx, decisionMaker: acceptingDecisionMaker });
 
-                const result = await svc.run(path, { runId: 'legacy-pause-1' });
+                const result = await svc.run(path, { runId: 'legacy-pause-1', vars: { profile: 'auto' } });
                 expect(result.status).toBe('paused');
                 expect(result.finalState).toBe('gate');
                 const rows = await new ActionRunDao(await ctx.getDb()).actionRowsByRunId('legacy-pause-1');

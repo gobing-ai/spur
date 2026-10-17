@@ -20,10 +20,11 @@ export type DecisionMode = 'legacy' | 'never' | 'evidence';
 /** Stable provenance outcomes (D5): what actually happened. */
 export type DecisionOutcome = 'accepted' | 'deferred' | 'fallback' | 'disabled';
 
-/** Provenance reason vocabulary: closed D5 reasons plus hub-served reasons (no-backend, low-confidence, timeout, error) on the catalog path. */
+/** Provenance reason vocabulary: closed D5 reasons plus hub-served reasons (no-backend, low-confidence, timeout, error) on the catalog path, and `operator` for the interactive answer (1236). */
 export type DecisionReason =
     | 'accepted'
     | 'disabled'
+    | 'operator'
     | 'policy-never'
     | 'unsupported-input'
     | 'missing-key'
@@ -114,19 +115,37 @@ export interface ResolvedHitl {
 }
 
 /**
- * Shared resolution used by every HITL action: legacy delegates through the evaluator, never falls
- * back to the original responder, and evidence produces an accepted choice or an explicit defer
- * (answer cleared, status var written). The acceptance/status algorithm lives here, not per-runner.
+ * Shared resolution used by every HITL action: the operator answers under every profile except
+ * `auto`, legacy delegates through the evaluator, never falls back to the original responder, and
+ * evidence produces an accepted choice or an explicit defer (answer cleared, status var written).
+ * The acceptance/status algorithm lives here, not per-runner.
+ *
+ * `profile` is the run's `vars.profile` (task 1236 R1/R2): only `auto` lets the declared binding
+ * answer. Unset, `standard`, and any other value are interactive — a gate never auto-answers
+ * without an explicit `profile=auto`.
  */
 export async function resolveDecision(
     responder: HitlResponder,
     evaluator: DecisionEvaluator | undefined,
     request: HitlRequest,
     config: DecisionConfig,
+    profile?: string,
 ): Promise<ResolvedHitl> {
     if (evaluator === undefined) {
         // No evaluator injected: plain responder (backward-compatible direct construction).
         return { answer: await responder.respond(request) };
+    }
+    if (profile !== 'auto') {
+        // 1236 R1: interactively the gate is the operator's whatever mode it declares, so the
+        // evaluator never runs. `never` keeps its D5 reason; every other mode records `operator`
+        // (the declared mode is still the mode, it just did not answer).
+        const provenance = baseProvenance(
+            config.mode,
+            'fallback',
+            config.mode === 'never' ? 'policy-never' : 'operator',
+            0,
+        );
+        return { answer: await responder.respond(request), provenance };
     }
     const result = await evaluator.evaluate(request, config);
     if (result.kind === 'delegate') {
@@ -514,8 +533,9 @@ async function evaluateEvidence(
             // Only an accepted model answer from the fixed yes/no vocabulary proceeds; a served
             // fallback never does (task 1099 invariant). Both the `defer` choice and the `defer`
             // fallback defer to the operator (task 1099 Q&A): an explicit model defer keeps the
-            // D5 `explicit-defer` vocabulary of the legacy path, while a fallback carries the
-            // served hub reason (low-confidence / no-backend / timeout / error).
+            // D5 `explicit-defer` vocabulary of the legacy path, while a degrading maker records
+            // the catalog default as `fallback` with the served hub reason — under `profile=auto`
+            // that default is the answer, and the trace must not read as a maker decision (1236 R2).
             if (served.source === 'model' && (served.value === 'yes' || served.value === 'no')) {
                 const digest = evidencePayloadDigest({ actions: selected.rows, summary });
                 return {
@@ -533,7 +553,12 @@ async function evaluateEvidence(
             const reason: string = served.source === 'model' ? 'explicit-defer' : served.reason;
             return {
                 kind: 'deferred',
-                provenance: baseProvenance('evidence', 'deferred', reason, Date.now() - started),
+                provenance: baseProvenance(
+                    'evidence',
+                    served.source === 'model' ? 'deferred' : 'fallback',
+                    reason,
+                    Date.now() - started,
+                ),
             };
         }
 

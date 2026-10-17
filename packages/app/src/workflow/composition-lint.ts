@@ -372,6 +372,15 @@ export function collectHitlDecisionViolations(def: WorkflowDef): string[] {
             violations.push(`Invalid decision at ${location}: ${parsed.error}`);
             continue;
         }
+        if (kindName !== 'input' && parsed.config.mode === 'legacy') {
+            // 1236 R3: an unbound gate has no declared answer for `profile=auto`, so it would only
+            // ever be the operator's. `never` IS a binding (always prompt) and stays valid while a
+            // workflow is unmigrated; migration drops it for an evidence/catalog binding (1239/1241).
+            violations.push(
+                `Operator gate at ${location} declares no decision binding: add 'decision: {mode: never}' to always prompt, or 'decision: {mode: evidence, statusVar, evidenceNodes}' so every profile resolves it as a decision point (1236 R3)`,
+            );
+            continue;
+        }
         if (parsed.config.mode !== 'evidence') continue;
 
         if (site.paused) {

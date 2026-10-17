@@ -338,11 +338,14 @@ describe('evaluateDecision policy branches', () => {
             evaluate: (request: HitlRequest, config: DecisionConfig) =>
                 evaluateDecision(request, config, { enabled: true, evidence: async () => [] }),
         } satisfies DecisionEvaluator;
-        const resolved = await resolveDecision(responder, evaluator, CONFIRM, {
-            mode: 'evidence',
-            statusVar: 'decisionStatus',
-            evidenceNodes: ['test'],
-        });
+        const resolved = await resolveDecision(
+            responder,
+            evaluator,
+            CONFIRM,
+            { mode: 'evidence', statusVar: 'decisionStatus', evidenceNodes: ['test'] },
+            // 1236 R1: an evidence binding answers only under profile=auto.
+            'auto',
+        );
         expect(resolved.answer).toEqual({ value: '' });
         expect(resolved.statusVar).toBe('decisionStatus');
         expect(resolved.statusValue).toBe('deferred');
@@ -354,7 +357,7 @@ describe('collectHitlDecisionViolations', () => {
     const def = (states: unknown[]): WorkflowDef =>
         ({ kind: 'state-machine', name: 't', version: '1', states }) as unknown as WorkflowDef;
 
-    test('accepts legacy and never actions without violations', () => {
+    test('accepts never actions and rejects an unbound gate', () => {
         const violations = collectHitlDecisionViolations(
             def([
                 {
@@ -365,7 +368,9 @@ describe('collectHitlDecisionViolations', () => {
                 { id: 'other', onEnter: [{ kind: 'hitl.confirm', options: { prompt: 'p?' } }] },
             ]),
         );
-        expect(violations).toEqual([]);
+        // 1236 R3: a gate must declare its binding; `never` stays valid while unmigrated.
+        expect(violations).toHaveLength(1);
+        expect(violations[0]).toContain('other/hitl.confirm[0]');
     });
 
     test('rejects decision on hitl.input and unknown decision shapes', () => {
