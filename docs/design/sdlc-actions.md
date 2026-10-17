@@ -49,7 +49,7 @@ bodies:
 | --- | --- | --- | --- |
 | `build`, `dev`, `format`, `autofix`, `lint`, `typecheck` | ✓ | ✓ | ✓ |
 | `test`, `test:full` | ✓ | ✓ | ✓ |
-| `test-pre-check`, `test-post-check` (+ `:full`) | ✓ | ✓ | ✓ |
+| `test-pre-check`, `test-post-check` | ✓ | ✓ (also `:full`) | ✓ (also `:full`) |
 | `spur-check`, `spur-check:full`, `gate` | ✓ | ✓ | ✓ |
 | `check` | ✓ | ✓ (also `check:full`) | ✓ (also `check:full`) |
 | `spur-check-feature` | ✓ | ✓ (`= spur-check`) | — (workflow uses `spur-check`) |
