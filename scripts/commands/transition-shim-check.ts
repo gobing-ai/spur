@@ -28,7 +28,7 @@
  * no workspace imports.
  *
  * Usage:
- *   bun scripts/commands/transition-shim-check.ts
+ *   bun scripts/spur-dev.ts transition-shim-check
  *     [--manifest <path>]           default: config/transition-shims.json
  *     [--roots <a,b,c>]             default: apps,packages,plugins,config,scripts,tooling
  *

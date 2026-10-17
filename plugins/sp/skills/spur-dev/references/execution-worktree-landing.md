@@ -408,7 +408,7 @@ conflicts itself. Other halt causes (task failure, HITL pause) keep the hint as 
 #     (a test, a hook, a tool invocation) discards MERGE_HEAD silently. The failure is invisible
 #     until the history is read — it produced a single-parent commit in run ada5a36c (task 1090),
 #     which then needed an extra empty ancestry merge to repair. A cheap probe could not
-#     reproduce it (MERGE_HEAD survived `spur self exec lint`, the rule preset and a test-file subset),
+#     reproduce it (MERGE_HEAD survived `spur self exec lint` (recorded then as the raw lint script), the rule preset and a test-file subset),
 #     so the cross-command dependency is removed rather than diagnosed.
 git checkout <base-ref> && git merge --no-ff -m "<prepared message>" <branch>
 

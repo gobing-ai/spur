@@ -47,7 +47,7 @@ Pick the noun, read its reference. Each Tier A and Tier B reference owns that no
 | **Tier A** | **builder** | Release/PR plumbing: `bump-ver` (including read-only `--check`), `drop-tags`, `publish`, the four flat PR verbs (`pr-status`, `pr-check`, `pr-open`, `pr-review`), and the read-only `show-branches` topology report | [references/builder.md](references/builder.md) |
 | **Tier B** | **agent** | Coding-agent execution surface: run prompts via detected/named agents, list agent specs (incl. `agent.fleet` members), start/stop supervised processes, fleet `report`/`join`/`leave`/`wait`/`trace`, readiness check | [references/agent.md](references/agent.md) |
 | **Tier B** | **message** | Durable inter-agent messaging: send, inbox, reply, watch | [references/message.md](references/message.md) |
-| **Tier B** | **self** | Self-management verbs: scaffold (`init`), database maintenance (`maintain`), schema migrations (`migrate`), local web server (`serve`), status overview (`status`); `self init` runs post-scaffold validation probes & layout classification | [references/self.md](references/self.md) |
+| **Tier B** | **self** | Self-management verbs: scaffold (`init`), project SDLC actions (`exec`), database maintenance (`maintain`), schema migrations (`migrate`), local web server (`serve`), status overview (`status`); `self init` runs post-scaffold validation probes & layout classification | [references/self.md](references/self.md) |
 | **Tier B** | **history** | Import agent histories, aggregate forensic artifacts, render reports, and run the checkpoint-resumed daily pipeline | [references/history.md](references/history.md) |
 | **Tier B** | **projects** | Manage the local multi-project registry and start/stop project servers | [references/projects.md](references/projects.md) |
 | **Tier B** | **decision** | Decision-catalog transport: list visible decisions, show a served contract, run a decision to a served outcome, audit catalog health | [references/decision.md](references/decision.md) |
@@ -145,7 +145,7 @@ and spreading it; full contract in `docs/04_DESIGN.md` §1.0.1.
   `inbox`, `reply`, `watch`).
 - **[references/decision.md](references/decision.md)** - decision catalog (`list`, `show`, `run`,
   `status`); offline by default via the built-in `typesafe` maker.
-- **[references/self.md](references/self.md)** - `spur self init|maintain|migrate|serve|status` CLI verbs
+- **[references/self.md](references/self.md)** - `spur self init|exec|maintain|migrate|serve|status` CLI verbs
   (the five legacy top-level nouns remain hidden aliases). `self init` runs post-scaffold init
   validation (Phase 1.5/1.6 probes).
 - **[references/history.md](references/history.md)** - history import, forensic artifact analysis,

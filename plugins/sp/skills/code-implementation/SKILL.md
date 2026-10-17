@@ -117,7 +117,7 @@ only burns wall clock and context budget.
   against a different tree. Same rule for the working directory: each shell call starts fresh, so
   re-select the execution tree inside the call (`cd -- "$TREE"` plus the identity check) instead of
   relying on a `cd` a previous call left behind.
-- **NEVER run** `spur self exec test`, `spur self exec check`, or any other full-suite /
+- **NEVER run** `spur self exec test`, `spur self exec check`, `bun run check`, or any other full-suite /
   project-gate command from inside implement. These belong to the pipeline's `test` hop.
 - **Full-suite budget: at most 2 per task** (task 0436 R2) — counted across the whole task run
   (implement probes + the pipeline `test` hop + verify/recheck), not per step. When a check fails,

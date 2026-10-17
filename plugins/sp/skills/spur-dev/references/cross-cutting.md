@@ -495,7 +495,7 @@ them; they live here because they cross every phase boundary.
    skill, no `/sp:prd-*` commands, no `sp:super-pm` agent — unless a later task proves a stable,
    distinct routing value (ADR-022).
 7. **NEVER claim completion without fresh verification evidence.** "Tests pass" must be backed by
-   the actual `bun run test` tail pasted into the record. "Lint clean" must be backed by
+   the actual `spur self exec test` tail pasted into the record. "Lint clean" must be backed by
    `spur self exec lint` output. Stale evidence from a prior run is not evidence — re-run the gate and
    paste the current output.
 

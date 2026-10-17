@@ -43,7 +43,7 @@ once rather than repeated per command: `--help` prints any command's usage, and
 
 | Command         | Purpose                                                           |
 | --------------- | ----------------------------------------------------------------- |
-| `spur self`     | Self-management verbs: `init` / `maintain` / `migrate` / `serve` / `status` (the legacy top-level nouns remain hidden aliases) |
+| `spur self`     | Self-management verbs: `init` / `exec` / `maintain` / `migrate` / `serve` / `status` (the legacy top-level nouns remain hidden aliases) |
 | `spur builder`  | Release plumbing: `bump-ver` / `drop-tags` (promoted from `spur-dev`) |
 | `spur agent`    | Run and inspect coding agents, agent specs, supervised processes  |
 | `spur rule`     | Manage constraint rules and presets                               |

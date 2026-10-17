@@ -18,12 +18,12 @@
  *    probes, or `superskill script path`.
  *
  * Usage:
- *   bun scripts/commands/script-contract-check.ts
+ *   bun scripts/spur-dev.ts script-contract-check
  *     [--scripts-dir <path>]  default: plugins/sp/scripts
  *     [--plugin-dir <path>]   default: plugins/sp
  *
  * Placement scan (ADR-130) — plugins/sp script placement contract only:
- *   bun scripts/commands/script-contract-check.ts --placement-only
+ *   bun scripts/spur-dev.ts script-contract-check --placement-only
  *     [--repo-root <dir>]     default: . (fixture tests point this at a temp tree)
  *
  * Exit code: 0 on success, 1 on any violation.

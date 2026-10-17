@@ -55,10 +55,12 @@ first non-zero exit.
 | ---- | ---- |
 | child's code | the action (or the failing composite step) exited non-zero |
 | `2` | action unbound, composite given arguments, or no action and no `--list` |
+| `1` | unknown option (commander usage error, before the verb runs) |
 
-`--list --json` rows are `{ name, reserved, source: config|preset|default|unbound, command | steps }`;
+`--list --json` rows are `{ name, reserved, source: config|preset|default|unbound, command | steps }`; an
+`unbound` row carries neither `command` nor `steps`, so branch on `source`;
 `--dry-run --json` prints `[{ name, command }]`, one object per resolved step, and runs nothing.
-`--json` without `--list` prints a final `{ action, steps: [{ name, exitCode, durationMs }], exitCode }`
+`--json` without `--list` or `--dry-run` prints a final `{ action, steps: [{ name, exitCode, durationMs }], exitCode }`
 after the streaming output. Full surface: `docs/design/sdlc-actions.md` §3.3.
 
 ## `self init` - scaffold a Spur project

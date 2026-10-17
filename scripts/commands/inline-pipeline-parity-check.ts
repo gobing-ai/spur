@@ -21,7 +21,7 @@
  * otherwise be silently unbound).
  *
  * Usage:
- *   bun scripts/commands/inline-pipeline-parity-check.ts
+ *   bun scripts/spur-dev.ts inline-pipeline-parity-check
  *     [--root <path>]               default: repo root
  *
  * Exit code: 0 when the sets agree; 1 on any divergence. Violations are printed

@@ -613,8 +613,8 @@ Before launching a full `spur-check:full`:
    formatting miss in a touched test file, or a generated declaration surface that no longer lists a
    new export. Measured 2026-10-12: two consecutive `spur-check` launches died here and each spent
    its whole wall time before reaching the suite.
-2. **Then the two rule gates** — `bun run test-pre-check` (43 rules: `no-console-output`,
-   `no-direct-process-spawn`, `cli-*`, `require-corresponding-test`) and `bun run test-post-check`
+2. **Then the two rule gates** — `spur self exec rules-pre` (43 rules: `no-console-output`,
+   `no-direct-process-spawn`, `cli-*`, `require-corresponding-test`) and `spur self exec rules-post`
    (`every-export-has-tsdoc`, `coverage-gate`). They catch boundary/TSDoc violations in seconds.
    Two `coverage-gate` facts change how you call post-check: it **fails closed when
    `.coverage/lcov.info` is absent**, which is the normal state of a fresh worktree, so run it after
