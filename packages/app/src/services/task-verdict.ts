@@ -144,11 +144,17 @@ function extractRequirements(text: string): VerdictRequirement[] {
         // Detect header row: first cell must be id-like
         if (!inTable && cells.length >= 2) {
             const h0 = (cells[0] ?? '').toLowerCase().trim();
-            const h0IsId = h0.includes('req') || h0 === 'requirement' || h0 === 'r#' || h0 === 'r' || /^r\d+$/.test(h0);
+            const h0IsId =
+                h0.includes('req') ||
+                h0 === 'requirement' ||
+                h0 === 'r#' ||
+                h0 === 'r' ||
+                h0 === 'item' ||
+                /^r\d+$/.test(h0);
             if (h0IsId) {
                 const statusIdx = cells.findIndex((c) => {
                     const x = c.toLowerCase().trim();
-                    return x.includes('status') || x === 'verdict';
+                    return x.includes('status') || x === 'state' || x === 'verdict';
                 });
                 if (statusIdx >= 0) {
                     const evidenceIdx = cells.findIndex((c) => c.toLowerCase().includes('evidence'));

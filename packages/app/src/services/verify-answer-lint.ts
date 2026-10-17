@@ -353,8 +353,16 @@ function parseAnswer(text: string): AnswerTables {
 
         // Requirement header: `| Req | Status | Evidence |` (id-like first cell + status column).
         if (!reqTable && !acTable && cells.length >= 2) {
-            const idLike = h0.includes('req') || h0 === 'requirement' || h0 === 'r#' || h0 === 'r' || /^r\d+$/.test(h0);
-            if (idLike && (h1.includes('status') || h1 === 'verdict')) {
+            // `Item | State |` is the review report's own spelling of the same table (D65 1240:
+            // a reviewer's traceability table must be verifiable, not rejected on its header).
+            const idLike =
+                h0.includes('req') ||
+                h0 === 'requirement' ||
+                h0 === 'r#' ||
+                h0 === 'r' ||
+                h0 === 'item' ||
+                /^r\d+$/.test(h0);
+            if (idLike && (h1.includes('status') || h1 === 'state' || h1 === 'verdict')) {
                 reqTable = true;
                 continue;
             }

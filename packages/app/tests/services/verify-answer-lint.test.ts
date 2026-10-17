@@ -65,6 +65,22 @@ describe('lintVerifyAnswer (task 1003 R1)', () => {
         expect(lintVerifyAnswer(answer(CLEAN_REQS, CLEAN_ACS), TASK, null)).toEqual([]);
     });
 
+    // D65 1240: the review report spells the same table `| Item | State | Evidence |`. The lint used
+    // to reject that header outright, so every review hop folded to FAIL and the pipeline looped
+    // review -> remediate: an answer with real, cited rows was unverifiable by its header alone.
+    test('an `Item | State | Evidence` table is the same table, not a malformed one', () => {
+        const reply = [
+            'Verdict: PASS',
+            '',
+            '| Item | State | Evidence |',
+            '| --- | --- | --- |',
+            '| R1 | MET | `src/guard.ts:42` |',
+            '| R2 | MET | `src/log.ts:7` |',
+            '',
+        ].join('\n');
+        expect(lintVerifyAnswer(reply, TASK, null)).toEqual([]);
+    });
+
     test('missing `Verdict:` line is rejected', () => {
         const findings = lintVerifyAnswer(answer(CLEAN_REQS, CLEAN_ACS, 'no verdict line'), TASK, null);
         expect(findings.length).toBe(1);
