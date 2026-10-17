@@ -49,6 +49,7 @@
  * `check-marketplace-version` → `spur builder bump-ver --check`, `real-run-cost` /
  * `check-pipeline-budgets` → `spur workflow cost [--budget]`.
  */
+import { existsSync } from 'node:fs';
 import { join } from 'node:path';
 import { buildBinaries } from './commands/build-binaries';
 import { buildCli } from './commands/build-cli';
@@ -90,7 +91,11 @@ function usage(message?: string): never {
 }
 
 function delegate(module: string, args: string[]): never {
-    const child = Bun.spawnSync(['bun', join(import.meta.dir, 'commands', module), ...args], {
+    const target = join(import.meta.dir, 'commands', module);
+    // A renamed module must fail loudly here, not as an opaque bun "module not found".
+    if (!existsSync(target)) usage(`delegated module missing: scripts/commands/${module}`);
+    // process.execPath pins the running bun; a bare 'bun' could resolve a different PATH install.
+    const child = Bun.spawnSync([process.execPath, target, ...args], {
         stdio: ['inherit', 'inherit', 'inherit'],
     });
     process.exit(child.exitCode ?? 1);
