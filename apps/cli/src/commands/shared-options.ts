@@ -104,6 +104,7 @@ export const SHARED_OPTIONS = {
     dryRunRuleFix: ['--dry-run', 'Preview fixes without writing (use with --fix-mode auto)'] as const,
     dryRunTaskReport: ['--dry-run', 'Produce the full report without writing files'] as const,
     dryRunWorkflowValidate: ['--dry-run', 'Validate and walk transitions without executing actions'] as const,
+    execDryRun: ['--dry-run', 'Print the resolved command(s) and run nothing'] as const,
     dryRunWorkflowClean: ['--dry-run', 'List what would be cleaned without writing (applies to both scopes)'] as const,
     featureTrace: ['--feature <id>', 'Feature ID for traceability and Goal→Background derivation'] as const,
     featureFrontmatter: ['--feature <id>', 'Set the feature_id frontmatter field (traceability edge)'] as const,

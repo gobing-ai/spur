@@ -145,9 +145,11 @@ outside `*-changed` are rejected. Errors name the key path.
 spur self exec <action> [-- <args...>]   run the action; exit code propagated
 spur self exec --list [--json]           every reserved + declared action, resolved command, source
 spur self exec <action> --dry-run        print the resolved command(s), run nothing
+spur self exec <action> --dry-run --json print [{ name, command }] per resolved step, run nothing
 ```
 
-- Runs in the project root with inherited stdio; sets `SPUR_ACTION=<name>` for the child.
+- Runs in the project root with stdout/stderr inherited (the shared process seam never forwards
+  stdin); sets `SPUR_ACTION=<name>` for the child.
 - `-- <args>` are shell-quoted and appended to a string action; refused for composites.
 - `--list --json` rows: `{ name, reserved, command | steps, source: config|preset|default|unbound }`.
 - Unbound action → exit 2 with `action "<a>" is not bound; add builder.actions.<a> to .spur/config.yaml` (actionable error, no stack guess).
@@ -155,7 +157,9 @@ spur self exec <action> --dry-run        print the resolved command(s), run noth
   `{ action, steps: [{ name, exitCode, durationMs }], exitCode }`.
 
 Placement: `self` owns project-local operations (`init`, `status`, `migrate`, `serve`,
-`maintain`); `exec` lands as `apps/cli/src/commands/exec.ts` beside them, with resolution in
+`maintain`); `exec` lives in the `commands/self/` folder noun as
+`apps/cli/src/commands/self/exec.ts`, registered through `registerSelfCommand`
+(`apps/cli/src/commands/self/index.ts`) from the `selfCommand` block, with resolution in
 `packages/app` (`services/sdlc-actions.ts`) so the quality gate and the CLI share one resolver.
 Public-surface consent: the operator named `spur self exec <action>` in the A92 ask; the flags
 above (`--list`, `--dry-run`, `--json`, `--`) are recorded here and need operator confirmation at

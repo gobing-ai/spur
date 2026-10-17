@@ -1,6 +1,6 @@
 ---
 name: spur-cli-self
-description: "spur-cli noun reference for `spur self`: self-management verbs — scaffold (`init`), database maintenance (`maintain`), schema migrations (`migrate`), local web server (`serve`), and status overview (`status`). Each verb mounts the same command builder as its legacy top-level noun, which remains a hidden alias over the identical command."
+description: "spur-cli noun reference for `spur self`: self-management verbs — SDLC action runner (`exec`), scaffold (`init`), database maintenance (`maintain`), schema migrations (`migrate`), local web server (`serve`), and status overview (`status`). Each verb mounts the same command builder as its legacy top-level noun, which remains a hidden alias over the identical command."
 see_also:
   - spur-cli
 ---
@@ -17,6 +17,7 @@ top-level forms are omitted from `spur --help`, leaving `self` as the visible su
 
 | Verb | Purpose | Key flags |
 | ---- | ------- | --------- |
+| `exec` | Run (or list) a project SDLC action bound in `builder.actions` / `builder.preset` | `--list` `--dry-run` `--json` |
 | `init` | Scaffold a new Spur project in the current directory | `--name <name>` `--force` `--minimal` `--adopt-global-config` `--json` |
 | `maintain` | Run database maintenance: PRAGMA optimize, WAL truncation, optional VACUUM | `--vacuum` `--json` |
 | `migrate` | Apply CLI-owned schema migrations (or `--check` the importer schema) | `--check` `--json` |
@@ -27,6 +28,35 @@ top-level forms are omitted from `spur --help`, leaving `self` as the visible su
 `status` verbs (scaffold semantics + the Phase 1.5 / 1.6 post-scaffold validation probes),
 **[serve.md](serve.md)** owns the `serve` verb (server flags and dry-probe semantics). `migrate`
 has no reference of its own and is documented inline below.
+
+## `self exec` - run a project SDLC action
+
+```bash
+spur self exec build                   # run the resolved command in the project root
+spur self exec lint -- --fix           # extra args: shell-quoted and appended to a string action
+spur self exec --list                  # every reserved + declared action, its source and command
+spur self exec --list --json           # machine-readable action inventory
+spur self exec test --dry-run          # print the resolved command(s), run nothing
+spur self exec check -- --fail-on error  # trailing args reach the command (composites refuse them: exit 2)
+```
+
+Runs one action resolved from the project's `builder` config in `.spur/config.yaml`:
+`builder.actions.<action>` first, then the active `builder.preset` (`bun` or `none`), then the
+stack-neutral default. The command runs through `sh -c` **in the project root** with
+stdout/stderr inherited (stdin is not forwarded) and `SPUR_ACTION=<action>` exported to the child;
+spur exits with the child's exit code.
+A composite action runs its steps in order, echoes `▶ <step>` per step on stderr, and stops at the
+first non-zero exit.
+
+| Exit | When |
+| ---- | ---- |
+| child's code | the action (or the failing composite step) exited non-zero |
+| `2` | action unbound, composite given arguments, or no action and no `--list` |
+
+`--list --json` rows are `{ name, reserved, source: config|preset|default|unbound, command | steps }`;
+`--dry-run --json` prints `[{ name, command }]`, one object per resolved step, and runs nothing.
+`--json` without `--list` prints a final `{ action, steps: [{ name, exitCode, durationMs }], exitCode }`
+after the streaming output. Full surface: `docs/design/sdlc-actions.md` §3.3.
 
 ## `self init` - scaffold a Spur project
 

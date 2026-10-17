@@ -61,6 +61,28 @@ spur self status --json           # machine-readable envelope (see shape below)
 }
 ```
 
+## Related: run project SDLC actions
+
+`spur self exec` runs one action resolved from the project's `builder` config
+(`.spur/config.yaml`) — `builder.actions.<action>`, else the active `builder.preset`, else the
+stack-neutral default — in the project root, and exits with the command's own exit code. It is the
+stack-neutral replacement for "run the project's build/lint/test script" aliases.
+
+```bash
+spur self exec build            # run the resolved build command
+spur self exec --list           # every reserved + declared action, its source and command
+spur self exec --list --json    # machine-readable action inventory
+spur self exec test --dry-run   # print the resolved command(s), run nothing
+```
+
+Flags: `--list` prints the action table (`NAME`, `SOURCE`, resolved command); `--dry-run` prints
+the resolved command(s) and runs nothing; `--json` switches either output to machine-readable JSON
+(with `--list` the action rows; alone a final `{ action, steps, exitCode }` summary).
+
+Exit codes: the action's own code; `2` when the action is unbound (`action "<name>" is not bound;
+add builder.actions.<name> to .spur/config.yaml`), when a composite is given arguments, or when no
+action and no `--list` was supplied. Full surface: `docs/design/sdlc-actions.md` §3.3.
+
 ## See Also
 
 - [Command index](./index.md)

@@ -48,9 +48,11 @@ spur <noun> [<verb>] [positionals] [--flags]
   `pr-status`, `pr-check`, `pr-open`, `pr-review` (the 2026-10-15/16 amendments, feature L1). The
   former `pr <op>` pass-through stays a hidden, one-release deprecated alias. Frozen at those eight
   verbs (see `docs/design/harness-surface-governance.md` §3).
-- **`self`** is the noun hosting the self-management verbs — `spur self init|maintain|migrate|serve|status`.
-  Each verb mounts the same command builder as its legacy top-level noun, so behavior, flags,
-  output, and exit codes are identical on both paths.
+- **`self`** is the noun hosting the self-management verbs — `spur self exec|init|maintain|migrate|serve|status`.
+  Each of the five legacy verbs mounts the same command builder as its legacy top-level noun, so
+  behavior, flags, output, and exit codes are identical on both paths. `exec` (feature A92) is the
+  one self verb with no legacy alias: it runs the project's `builder.actions` / `builder.preset`
+  binding (see `docs/design/sdlc-actions.md` §3.3).
 - The legacy **hidden aliases** (`spur init`, `spur maintain`, `spur migrate`, `spur serve`, `spur status`) stay
   registered at the top level for back-compat with existing scripts and workflow YAML. They are
   verb-less commands that accept flags and optional positionals directly, but they are omitted from
@@ -96,6 +98,30 @@ Adding a shared option: add the entry, spread it at every site — never re-decl
 <a id="11-committed-product-commands"></a>
 
 ### 1.1 Committed product commands
+
+<a id="spur-self-exec-action----args---list---dry-run---json"></a>
+
+#### `spur self exec <action> [-- <args...>] [--list] [--dry-run] [--json]`
+
+Run one SDLC action resolved from the project's `builder` config (`.spur/config.yaml`), or list the
+resolved action inventory. Resolution order: `builder.actions.<action>` → active `builder.preset`
+(`bun` | `none`) → stack-neutral default; an undeclared reserved action under `preset: none` is
+unbound. The resolver is shared with the quality gate (feature A92, ADR-139,
+`docs/design/sdlc-actions.md` §3.1–3.3), so `spur self exec` and the gate never disagree about a
+project's commands.
+
+The resolved command runs through `sh -c` **in the project root** with stdout/stderr inherited
+(the shared process seam never forwards stdin) and `SPUR_ACTION=<action>` exported to the child;
+spur exits with the child's exit code. Trailing
+`-- <args>` are shell-quoted and appended to a string action; a composite action runs its steps in
+order, echoes `▶ <step>` per step on stderr, stops at the first non-zero exit, and refuses extra
+arguments. `--dry-run` prints the resolved command (one line per composite step) and runs nothing;
+`--dry-run --json` emits one `{ name, command }` object per step instead of text.
+`--list` prints the action table; `--list --json` emits
+`{ name, reserved, source: config|preset|default|unbound, command | steps }` rows. `--json` without
+`--list` prints a final `{ action, steps: [{ name, exitCode, durationMs }], exitCode }` after the
+streamed output. Exit codes: the child's code, or `2` for an unbound action, a composite given
+arguments, and a missing action without `--list`.
 
 <a id="spur-init---name-name---force---minimal---json"></a>
 

@@ -30,6 +30,7 @@ import { registerMessageCommand } from './commands/message';
 import { registerMigrateCommand } from './commands/migrate';
 import { registerProjectsCommand } from './commands/projects';
 import { registerRuleCommand } from './commands/rule';
+import { registerSelfCommand } from './commands/self';
 
 import { registerServeCommand } from './commands/serve';
 import { registerStatusCommand } from './commands/status';
@@ -262,11 +263,7 @@ export function buildProgram(context: ReturnType<typeof createCliContext>, outpu
     // top-level nouns stay registered over the same builders as hidden aliases
     // so existing scripts, workflow YAML, and habits keep working unchanged.
     const selfCommand = program.command('self').summary('inspect and manage the Spur installation itself');
-    registerInitCommand(selfCommand, context);
-    registerMaintainCommand(selfCommand, context);
-    registerMigrateCommand(selfCommand, context);
-    registerServeCommand(selfCommand, context);
-    registerStatusCommand(selfCommand, context);
+    registerSelfCommand(selfCommand, context);
 
     registerInitCommand(program, context, { hidden: true });
     registerMaintainCommand(program, context, { hidden: true });

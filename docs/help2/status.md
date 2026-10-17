@@ -36,6 +36,25 @@ spur self status --json      # { ok, git: {root, branch, dirty}, agentSpecs, ...
 - Before starting a work session: it surfaces a dirty tree, missing config, or agent-spec
   surprises before they hit a longer command.
 
+## Related: run project SDLC actions
+
+`spur self exec` is the sibling operation that acts on what `status` reports: it runs one action
+resolved from the project's `builder` config (`builder.actions.<action>`, else `builder.preset`,
+else the stack-neutral default) in the project root and exits with the command's own code.
+
+```bash
+spur self exec build            # run the resolved build command
+spur self exec --list           # every reserved + declared action, its source and command
+spur self exec --list --json    # machine-readable action inventory
+spur self exec test --dry-run   # print the resolved command(s), run nothing
+```
+
+`--list` prints the action table and `--dry-run` prints the resolved command(s) without running
+them; `--json` makes both emit machine-readable JSON (`--list`: the action rows; `--dry-run`: one
+`{ name, command }` object per step; alone: a final `{ action, steps, exitCode }` summary). See
+`docs/design/sdlc-actions.md` for the exact shapes. Exit code `2` means the action is
+unbound, a composite was given arguments, or neither an action nor `--list` was supplied.
+
 ## See also
 
 - [init](./init.md) — what status validates was created correctly
