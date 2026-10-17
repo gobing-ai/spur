@@ -2,11 +2,11 @@
 schema_version: 1
 id: "A92"
 name: "Stack-neutral SDLC actions: builder.actions, spur self exec, and script-structure consolidation"
-status: verifying
+status: done
 priority: P2
 tags: []
 created_at: "2026-10-17T03:57:44.144Z"
-updated_at: "2026-10-17T15:58:36.176Z"
+updated_at: "2026-10-17T16:16:31.457Z"
 ---
 
 # A92: Stack-neutral SDLC actions: builder.actions, spur self exec, and script-structure consolidation
@@ -138,4 +138,5 @@ Feature: Stack-neutral SDLC actions and script-structure consolidation
 
 - 2026-10-17T04:39:10.675Z backlog → active (system)
 - 2026-10-17T15:58:36.176Z active → verifying (system)
+- 2026-10-17T16:16:31.457Z verifying → done (system)
 
