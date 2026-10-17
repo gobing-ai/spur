@@ -768,13 +768,16 @@ gate command". That paraphrase is not cosmetic — it sent a worker into a full 
 targeted iteration checks. The pipeline's next `test` (recheck)
 stage delivers the deciding verdict.
 
-**A narrow test run must pass `--coverage=false`.** A repo whose `bunfig.toml` sets `coverage = true`
-(spur-new does) writes `.coverage/lcov.info` on every `bun test`, including a single-file run. That
+**A narrow test run must start in its workspace, never at the repo root.** A repo whose root
+`bunfig.toml` sets `coverage = true` (spur-new does) writes `.coverage/lcov.info` on every root-level
+`bun test`, including a single-file run. That
 overwrite is a non-canonical producer: the light gate's `rules:post` then fails
 `coverage-artifact: lcov-mismatch` — "bytes changed after certification" — and only the full gate
 republishes certification. Observed three times in one batch (2026-10-17, A92: tasks 1225, 1227 and
 their rechecks), each time caused by a review/verify delegate running a targeted suite. The rule is
-`bun test <files> --coverage=false`, and it applies to every narrow run a stage makes.
+`(cd <workspace> && bun test <files>)`, and it applies to every narrow run a stage makes. Bun 1.4.3
+rejects `--coverage=false` ("does not take a value"), and a root run with `--coverage-dir` still
+rewrites the root tracefile; a workspace run leaves it byte-identical.
 
 **Null or timed-out dispatch (task 1134 R9).** The dispatch bound stays the existing YAML
 `timeoutMs` (`implementTimeoutMs` / `stepTimeoutMs`), passed to the host dispatch as today — R9 adds
