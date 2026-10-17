@@ -424,7 +424,7 @@ Action semantics come from the YAML and the workflow action contract:
   environment variables. A non-zero result follows the action's existing failure policy.
   **Long commands must not hold the host call (session finding 2026-10-09).** A `shell` action whose
   command can outlive the host's per-call limit — the full quality gate, a repo-wide suite, any
-  `bun run spur-check`-class gate — is started **detached and polled**, never held in one foreground
+  `spur self exec check`-class gate — is started **detached and polled**, never held in one foreground
   call: redirect to a run-scoped file and disown it
   (`nohup <cmd> > .spur/run/<wbs>-gate.out 2>&1 < /dev/null & disown`), then observe it in bounded
   calls (`pgrep`, the declared `.status` file, the log tail). A call killed at the cap leaves the
@@ -918,7 +918,7 @@ verdict artifact exists (tasks 0617, 0619 — the clobbering spiral).
 
 ## Running the full gate (task 0872 / 1127 R7)
 
-The full gate legitimately runs minutes, not seconds — measured 1.8-3.1 min for `bun run spur-check`
+The full gate legitimately runs minutes, not seconds — measured 1.8-3.1 min for `spur self exec check`
 on an idle 10-core host (2026-10-13), and far longer when other agents' suites run concurrently.
 Five rules keep it from becoming a hazard (the first two
 were both violated once on 2026-10-10, aborting the run's own verification):
@@ -928,7 +928,7 @@ were both violated once on 2026-10-10, aborting the run's own verification):
 - **Run it detached and poll the log**, so losing the foreground call cannot lose the run:
 
   ```bash
-  nohup bash -c 'bun run spur-check > /tmp/gate.log 2>&1; echo "EXIT=$?" >> /tmp/gate.log' &
+  nohup bash -c 'spur self exec check > /tmp/gate.log 2>&1; echo "EXIT=$?" >> /tmp/gate.log' &
   ```
 
 - **Preserve a signal-induced receipt.** A cap-killed attempt leaves a red receipt that the next
@@ -951,7 +951,7 @@ were both violated once on 2026-10-10, aborting the run's own verification):
   no live gate is already running in your tree before starting one: two suites in one tree contend
   for CPU and for the shared fixtures, and the second one's result is uninterpretable. Measured
   2026-10-13: a duplicate gate launched into a tree already running another session's
-  `bun run spur-check` burned 40 min at the host cap and left an orphaned worker behind.
+  `spur self exec check` burned 40 min at the host cap and left an orphaned worker behind.
 
 > Historical (task 1127, removed in task 1173): these rules were once stated in terms of a host-wide
 > `full-gate.lock`. The lock mechanism was deleted (`refactor(gate): remove gate-lock mechanism and

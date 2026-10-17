@@ -45,7 +45,8 @@ run-id) or you walked it manually (name the gate you checked).
 Threshold is by **change type**, not priority: a task is high-stakes if it touches code, tests, or
 shared infrastructure. Priority (P1/P2) is advisory - it does not by itself force raw paste on a
 pure doc/markdown edit. For high-stakes tasks, paste the **raw tail output** of every verification
-gate that applies - not a one-line "green" summary. Include:
+gate that applies - not a one-line "green" summary. Include the tails of spur-new's own gate
+scripts (any other project: the same actions through `spur self exec lint` / `test`):
 
 - `bun run lint` tail (last 20 lines minimum)
 - `bun run test` tail (last 20 lines minimum)
@@ -92,8 +93,8 @@ spur workflow trace <run-id>           # confirm the terminal state
 has verified the tree. You must:
 
 ```bash
-bun run lint
-bun run test
+spur self exec lint
+spur self exec test
 ```
 
 Both must pass before you go further. Establish the environmental baseline first if you are in a

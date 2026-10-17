@@ -83,7 +83,7 @@ verdict artifact so quality failures are not lost behind a requirements-only PAS
 Before declaring a task `done`, run this lightweight checklist. It catches the most common oversights that survive the formal pipeline gates:
 
 - [ ] Check receipt `.spur/run/<wbs>-check-receipt.json` reports `reuse: true` for the current
-      digest via `spur task gate <wbs> status`; run `bun run spur-check` only when it reports stale or
+      digest via `spur task gate <wbs> status`; run `spur self exec check` only when it reports stale or
       missing (0940).
 - [ ] No `TODO` or `FIXME` without a linked task WBS.
 - [ ] `git status` shows only intentional changes (no debug artifacts, no temp files).

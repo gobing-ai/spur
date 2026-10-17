@@ -2,9 +2,9 @@
  * Feature-scoped verification split (task 0872, ADR-119, feature D62).
  *
  * Contract regression for the scope split the task introduces:
- *   R2 — the per-task gate (`bun run spur-check`, task-pipeline `qualityGateCmd`)
+ *   R2 — the per-task gate (`spur self exec check`, task-pipeline `qualityGateCmd`)
  *        no longer runs any repo-wide check;
- *   R3 — the repo-wide set lives in `bun run spur-check-feature`, owned by the
+ *   R3 — the repo-wide set lives in `spur self exec check-feature`, owned by the
  *        `feature-verification` workflow (shell-only, no `agent.run`);
  *   R4 — `feature-lifecycle`'s verifying→done guard refuses to complete a
  *        feature until the pass records PASS;

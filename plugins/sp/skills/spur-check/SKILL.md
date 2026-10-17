@@ -1,6 +1,6 @@
 ---
 name: spur-check
-description: 'Two-tier check primitive for the sp pipeline: light (changed-scope biome, per-workspace typecheck, related tests) during development; full (bun run spur-check) once at the quality boundary. Reads/writes fingerprint-bound check receipts (.spur/run/<wbs>-check-receipt.json) and reuses a PASS full receipt only at the same proof digest.'
+description: 'Two-tier check primitive for the sp pipeline: light (changed-scope biome, per-workspace typecheck, related tests) during development; full (`spur self exec check`) once at the quality boundary. Reads/writes fingerprint-bound check receipts (.spur/run/<wbs>-check-receipt.json) and reuses a PASS full receipt only at the same proof digest.'
 license: Apache-2.0
 version: 1.0.0
 metadata:
@@ -34,7 +34,7 @@ gate writes a fingerprint-bound receipt that downstream stages read instead of r
 | Tier | Mode | When | Scope |
 | --- | --- | --- | --- |
 | `light` | `spur task gate <wbs> light` | after each implement/fix edit | `bunx biome check` on the changed files (`git diff --name-only HEAD` + untracked), `bun run typecheck` per touched workspace, and related tests (`<ws>/src/**/x.ts` → `<ws>/tests/**/x.test.ts` filename mapping) run via `cd <ws> && bun test …` — never from the repo root, whose bunfig preload does not apply inside the workspace |
-| `full` | `spur task gate <wbs> run` | once at the task quality boundary (`test`) | today's chain: `bun run lint` + `bun run test-pre-check` + `bun run test` + `bun run test-post-check` (=`bun run spur-check`), with bounded findings, SQLite-busy retry, and the `recheck` probe |
+| `full` | `spur task gate <wbs> run` | once at the task quality boundary (`test`) | today's chain: `spur self exec lint` + `spur self exec rules-pre` + `spur self exec test` + `spur self exec rules-post` (=`spur self exec check`), with bounded findings, SQLite-busy retry, and the `recheck` probe |
 
 Exit contract: `run` and `recheck` return 0 on PASS and 1 on FAIL; `deferred` returns 0 on
 DEFERRED and 1 on FAIL. `light` and `status` return 0; invalid usage returns 2. The pipeline

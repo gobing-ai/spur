@@ -496,7 +496,7 @@ them; they live here because they cross every phase boundary.
    distinct routing value (ADR-022).
 7. **NEVER claim completion without fresh verification evidence.** "Tests pass" must be backed by
    the actual `bun run test` tail pasted into the record. "Lint clean" must be backed by
-   `bun run lint` output. Stale evidence from a prior run is not evidence — re-run the gate and
+   `spur self exec lint` output. Stale evidence from a prior run is not evidence — re-run the gate and
    paste the current output.
 
 ## Verification Before Completion
@@ -594,7 +594,7 @@ principles determine which gates route around HITL and which still pause.
    pausing. The schema is the contract; schema-valid means structurally sound.
 2. **Gate-passed → auto-continue.** If `spur task check`, `spur feature check`, or
    `spur workflow validate` exits 0, the run continues to the next state without surfacing.
-3. **Tests-green → auto-continue.** If `bun run lint` and `bun run test` exit 0, the verify step
+3. **Tests-green → auto-continue.** If `spur self exec lint` and `spur self exec test` exit 0, the verify step
    continues. A red test suite is a hard stop, not an auto-retry.
 4. **Verdict-PASS → auto-continue.** If the verify step produces a PASS verdict, the run advances
    to `record` and `done`. PARTIAL or FAIL verdicts surface to the operator regardless of `--auto`.

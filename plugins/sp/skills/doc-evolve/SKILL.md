@@ -77,7 +77,7 @@ project's actual stack and scope. Invoked by `sp:spur-init` after scaffolding.
    routing Need keys — see `apps/cli/tests/fixtures/agents-md-portable-contract.ts`).
 
 **Done when:** no residual `{project-name}` / `{project-description}` in AGENTS.md; stack/build
-stubs filled or deliberately documented; `bun run lint` passes where applicable.
+stubs filled or deliberately documented; `spur self exec lint` passes where applicable.
 
 ## drift-audit (§7)
 

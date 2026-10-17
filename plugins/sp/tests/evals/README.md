@@ -14,7 +14,7 @@ one scenario) to prove the harness before scaling the scenario corpus.
 
 ## Why it is a separate entry point
 
-The costly live tier is **not** wired into `bun run spur-check` or the default `bun run test`: a paid,
+The costly live tier is **not** wired into `spur self exec check` or the default `bun run test`: a paid,
 non-deterministic behavioral eval must never gate the always-on structural suite (D4). The runner
 (`scripts/commands/skill-eval.ts`) is a standalone script, not a `*.test.ts`, so `bun test` never picks it up. Only the
 fast, deterministic judge unit test (`judge.test.ts`) runs in the default suite.

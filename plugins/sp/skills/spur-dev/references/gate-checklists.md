@@ -17,7 +17,7 @@ catch it (the CLI catches schema violations, not intent errors).
 Run each checklist as an actual command sequence, not a mental confirmation:
 
 1. Read the checklist for the gate you are about to enter.
-2. Run each verification command (grep, `spur task check`, `bun run lint`, etc.).
+2. Run each verification command (grep, `spur task check`, `spur self exec lint`, etc.).
 3. If any checkbox fails: stop, fix, re-run. Do not enter the gate.
 4. Only when every checkbox passes: enter the gate (run the CLI verb or trigger the workflow state).
 
@@ -89,7 +89,7 @@ Entered before `task-pipeline.yaml` `review` state dispatches `sp:code-verificat
 - [ ] The implementation matches the task's `## Plan` checklist (every checked item maps to a code/test/doc change).
 - [ ] `git status` shows only changes traceable to this task's Plan (no drive-by edits).
 - [ ] Check receipt current: `spur task gate <wbs> status` reports `reuse: true` for
-      `.spur/run/<wbs>-check-receipt.json` at the current digest; run `bun run spur-check` only
+      `.spur/run/<wbs>-check-receipt.json` at the current digest; run `spur self exec check` only
       when it reports stale or missing (0940 — never re-run the full chain on a reusable receipt).
 - [ ] New `biome-ignore` / `eslint-disable` suppressions: none, or each is justified inline.
 - [ ] No new `console.*` in scripts (use a project logger if one exists).
@@ -178,7 +178,7 @@ transition to `done`.
 >
 > **Transition-shim discipline (`transition-shim-check`, task 0541 / ADR-058).** Wired as an early step of `spur-check-feature` (second, after `link-check` and before `lint`) so a shim violation fails in ~0.3 s rather than after the test run. Two-sided against `config/transition-shims.json`: an `@transition-shim(<id>)` marker with no manifest entry fails as a **new unregistered shim**, **and** a listed entry whose marker is gone from source fails as a **stale entry**. Emptying the manifest is the definition of the agent-role transition being complete. A removal condition must be objectively checkable against the repository. Shapes: `docs/04_DESIGN.md` §2.5.
 
-> **Sandbox test baseline (`bun run test` / `spur-check`).** In the restricted Bash sandbox
+> **Sandbox test baseline (`bun run test` / `spur-check`).** In spur-new's restricted Bash sandbox
 > `bun run spur-check` exits **1 regardless of code health**: ~24 tests bind real ports and the
 > sandbox denies `listen`, so they fail environmentally. They cluster in seven suites — `spur
 > projects CLI`, `startServer`, `createServerContext`, `healthModule`, `rpc client`,

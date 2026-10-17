@@ -18,6 +18,9 @@
  *   R23  — repository ignore rules do not hide plugin skill entrypoints.
  *   R43  — README index tables list every shipped command/skill/agent exactly once (task 0514 R1).
  *   R3   — no exact duplicate structured catalog across shipped surfaces (task 0514 R3 / ADR-054).
+ *   R1   — gate guidance names the stack-neutral `spur self exec check|lint|check-feature|autofix`
+ *          action; the surviving `bun run` literals are named, justified spur-new-specific
+ *          files (task 1227).
  */
 
 import { describe, expect, test } from 'bun:test';
@@ -2108,7 +2111,7 @@ describe('task 0510 — batch-run hardening (feature preflight, changed-path mat
         expect(codeImpl).toContain('flag-contract-parity.test.ts');
         expect(codeImpl).toContain('when the shared flag surface changes');
         // Never a full project check inside implement.
-        expect(codeImpl).toContain('never authorizes `bun run spur-check`');
+        expect(codeImpl).toContain('never authorizes `spur self exec check`');
         // The matrix is linked from the targeted-test-first guidance.
         expect(crossCutting).toContain('changed-path matrix');
     });
@@ -2490,6 +2493,51 @@ describe('0934 — legacy H1 scenario contracts', () => {
         for (const ref of ['code-implementation', 'code-testing']) {
             const raw = readFileSync(join(SKILLS_DIR, ref, 'SKILL.md'), 'utf8');
             expect(raw, `${ref} must reference sp:test-driven-development`).toContain('sp:test-driven-development');
+        }
+    });
+});
+
+// 1227 — plugin gate guidance points at `spur self exec` (docs/design/sdlc-actions.md 3.4).
+// R1: every instruction that told an agent to run one of the three `bun run` gate scripts now names the
+// stack-neutral action (`check`, `lint`, `check-feature`, `autofix`), so the same prose works in a
+// non-bun project. R2: the literal survives only where the line is about spur-new's OWN development
+// setup — a file-level exception, named here with its reason. Deliberately not a glob: a new
+// candidate needs its own justified entry, and the entry must still hold (two-sided, like
+// config/transition-shims.json) or it gets deleted.
+const SPUR_NEW_BUN_GATE_ALLOWLIST: Record<string, string> = {
+    'plugins/sp/skills/spur-dev/references/gate-checklists.md':
+        'spur-new sandbox baseline — the LOCAL script exit code is the subject (port-binding denials), so an action name would hide which command misbehaves here',
+    'plugins/sp/skills/spur-dev/references/done-housekeeping.md':
+        'spur-new evidence capture — raw tails of its own gate scripts (lint/test/test-cf/build)',
+};
+
+describe('1227 — gate guidance uses `spur self exec`', () => {
+    const BUN_GATE_LITERAL = /bun run (spur-check|lint|gate)\b/;
+    const hits = (rel: string) =>
+        readFileSync(join(REPO_ROOT, rel), 'utf8')
+            .split('\n')
+            .map((line, index) => ({ line, at: index + 1 }))
+            .filter(({ line }) => BUN_GATE_LITERAL.test(line));
+
+    test('R1 — no `bun run` gate literal outside the allowlist', () => {
+        const offenders = allMarkdown
+            .map((file) => relative(REPO_ROOT, file).split(sep).join('/'))
+            .filter((rel) => !(rel in SPUR_NEW_BUN_GATE_ALLOWLIST))
+            .flatMap((rel) => hits(rel).map(({ line, at }) => `${rel}:${at}: ${line.trim()}`));
+        expect(
+            offenders,
+            'name the action instead (`spur self exec check|lint|check-feature|autofix`); an R2 exception is a named, justified SPUR_NEW_BUN_GATE_ALLOWLIST entry',
+        ).toEqual([]);
+    });
+
+    test('R2 — each exception says spur-new where it applies, and is still needed', () => {
+        for (const [rel, why] of Object.entries(SPUR_NEW_BUN_GATE_ALLOWLIST)) {
+            const text = readFileSync(join(REPO_ROOT, rel), 'utf8');
+            expect(text, `${rel} is exempt because ${why} — so the prose must name spur-new`).toContain('spur-new');
+            expect(
+                hits(rel).length,
+                `${rel} no longer carries a bun literal; delete its allowlist entry`,
+            ).toBeGreaterThan(0);
         }
     });
 });

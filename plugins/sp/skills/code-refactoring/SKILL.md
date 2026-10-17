@@ -42,7 +42,7 @@ contracts, §11 invariants).
 | `--scope <path>` | Path bound; no edit may land outside it. | working tree (recent changes) |
 | `--focus <api\|architect\|tests\|ui\|auto>` | Lens set; comma list allowed. | `auto` |
 | `--fix <none\|blockers-first\|all>` | Apply policy. | `none` |
-| `--check <cmd>` | Baseline and per-fix verification command. | project gate (`bun run spur-check` when present) |
+| `--check <cmd>` | Baseline and per-fix verification command. | project gate (`spur self exec check` when bound) |
 | `--auto` | Skips **objective** gates only. | off |
 | free-text description | Steering for the lenses (e.g. "pagination consistency"). | — |
 

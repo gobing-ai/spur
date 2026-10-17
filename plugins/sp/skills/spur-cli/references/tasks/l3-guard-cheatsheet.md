@@ -81,7 +81,7 @@ Prose-only reviews and rows containing only empty/placeholder cells do not pass.
     }
   ],
   "checks": [
-    { "name": "lint-clean", "status": "pass", "evidence": "bun run lint: exit 0" }
+    { "name": "lint-clean", "status": "pass", "evidence": "spur self exec lint: exit 0" }
   ],
   "source": "spur-task-verdict"
 }

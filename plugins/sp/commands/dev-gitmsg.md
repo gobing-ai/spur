@@ -17,7 +17,7 @@ Implements an inline procedure — see [dev-operations.md](../skills/spur-dev/re
 | `--squash` | Collapse every concern into one message and one commit; implies `--commit`. | off |
 | `--all` | Widen the change set past the index to every change in the tree — unstaged **and untracked**. | off |
 | `--scope` `<path>` | Path filter on the change set; always wins over change-set auto-discovery. | the whole change set |
-| `--check` `<cmd>` | Run `<cmd>` (e.g. `"bun run gate"`) once before committing; non-zero → commit nothing. | off |
+| `--check` `<cmd>` | Run `<cmd>` (e.g. `"spur self exec check"`) once before committing; non-zero → commit nothing. | off |
 
 For shared semantics, see the [flag glossary](../skills/spur-dev/references/flag-glossary.md).
 
@@ -36,6 +36,6 @@ commit per concern, split automatically, so the operator is never asked to re-st
 `--squash` → one commit for everything. An empty index widens to the whole tree only on a
 message-only run, and says so; a committing run stops there and prints the exact `--all` re-run line
 instead of guessing.
-No quality gate (`bun run gate`, lint, typecheck, tests, `spur-check`) runs unless `--check <cmd>`
+No quality gate (`spur self exec autofix|check|lint`, typecheck, tests) runs unless `--check <cmd>`
 names one — then it runs once, before any commit, and a failure commits nothing. Gate → auto-fix →
 commit is `/sp:dev-gtd --no-push`.

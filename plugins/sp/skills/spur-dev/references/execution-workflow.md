@@ -46,7 +46,7 @@ one thing and yields, so the **pipeline (not the agent) owns the loop**.
 | Stage | Operation | Defined in |
 | ------- | ----------- | ------------ |
 | `implement` | `/sp:dev-run --mode implement <wbs>` — write the code that satisfies the task; author `## Solution`. | [dev-operations.md §4 run](dev-operations.md) → `sp:code-implementation` |
-| `test` → (`test-fix` ↔ `test-recheck`) → `review` \| `failed` | **Project quality gate** (not `/sp:dev-unit`). Soft shell probe of `${vars.qualityGateCmd}` (default `bun run spur-check`) — green path pays **one** full gate run. On FAIL: bounded `/sp:dev-fixall` loop (`qualityGateMaxFixAttempts`, default 2) with soft recheck; exhausted attempts route to pipeline `failed`. `/sp:dev-unit` remains **coverage gap-fill** (router C3/C5 / standalone). | [dev-operations.md §10 fixall](dev-operations.md); unit op still §1 |
+| `test` → (`test-fix` ↔ `test-recheck`) → `review` \| `failed` | **Project quality gate** (not `/sp:dev-unit`). Soft shell probe of `${vars.qualityGateCmd}` (default `spur self exec check`) — green path pays **one** full gate run. On FAIL: bounded `/sp:dev-fixall` loop (`qualityGateMaxFixAttempts`, default 2) with soft recheck; exhausted attempts route to pipeline `failed`. `/sp:dev-unit` remains **coverage gap-fill** (router C3/C5 / standalone). | [dev-operations.md §10 fixall](dev-operations.md); unit op still §1 |
 | `review` | `/sp:dev-review --tasks <wbs>` — SECUA-framework review of the diff. | [dev-operations.md §2 review](dev-operations.md) |
 | `verify` | `sp:code-verification` — requirements traceability + verdict. | [dev-operations.md §3 verify](dev-operations.md) |
 
@@ -325,8 +325,8 @@ the partial work still in the working tree. The failure output names the partial
 1. **Recognise.** `.spur/memory/runs/<runId>/artifacts/<runId>-implement-partial.md` exists, the run reported `exited
    with code 3`, the task is at `todo`. The artifact's `git diff --stat` section is the partial
    work inventory.
-2. **Establish green from the partial files.** `bun run format` then `bun run lint` + `bun
-   test` (or the affected packages). Fix mechanical formatting/type fallout first; the partial
+2. **Establish green from the partial files.** `spur self exec format` then `spur self exec lint` + `spur
+   self exec test` (or the affected packages). Fix mechanical formatting/type fallout first; the partial
    tree is the baseline, not a code review target.
 3. **Resume the remaining requirements against that tree.** Re-run the implement step with the
    partial diff as explicit context — hand the continuation agent `git diff` (the partial

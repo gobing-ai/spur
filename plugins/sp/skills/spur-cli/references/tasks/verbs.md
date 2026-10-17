@@ -356,7 +356,7 @@ column to distinguish AC rows from requirement rows:
 | AC | Status | Evidence Type | Evidence |
 |----|--------|---------------|----------|
 | AC-1 | MET | test    | `tests/foo.test.ts:12` |
-| AC-2 | MET | command | `bun run lint` exit 0 |
+| AC-2 | MET | command | `spur self exec lint` exit 0 |
 | AC-3 | N/A | n/a     | non-behavioral — doc-only |
 ```
 

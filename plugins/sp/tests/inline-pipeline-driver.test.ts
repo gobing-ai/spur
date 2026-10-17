@@ -280,7 +280,7 @@ function runInlineSmoke(
                 // simulates its verdict contract (packages/app/tests/services/quality-gate*.test.ts
                 // own the gate): run resets
                 // the attempt counter and executes qualityGateCmd; recheck runs gateProbeCmd
-                // first (bun run lint is red in this sandbox, so the probe IS the recheck
+                // first (`spur self exec lint` is red in this sandbox, so the probe IS the recheck
                 // verdict, gate skipped). Both always leave status/findings/log for the guards.
                 // 1111: the gate shell selects the mode through `M` (run|recheck|deferred), so the
                 // stub keys on the assignment + the `"$M"` invocation instead of a literal mode.
@@ -360,7 +360,7 @@ describe('0503 interactive inline pipeline driver smoke', () => {
 
         expect(result.terminal).toBe('failed');
         // 0703 R4: a non-PASS verify verdict routes through the bounded verify→test-fix
-        // edge. In this sandbox the recheck probe (`bun run lint`) is red, so each
+        // edge. In this sandbox the recheck probe (`spur self exec lint`) is red, so each
         // test-fix hop re-enters a probe-skipped recheck (0587 R3) that fails again until
         // attempts exhaust `qualityGateMaxFixAttempts` — the catch-all then terminates at
         // `failed` without reaching `record`.

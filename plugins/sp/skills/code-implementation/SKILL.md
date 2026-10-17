@@ -104,7 +104,7 @@ surfaces is what keeps that gate quiet.
 ## Implement scope: do not run the project quality gate
 
 During implement, the pipeline's `test` hop runs `${vars.qualityGateCmd}` (the full project gate:
-`bun run spur-check`) immediately after this step and is the gate that actually
+`spur self exec check`) immediately after this step and is the gate that actually
 decides pass/fail. Running it inside implement is pure redundancy — it cannot change the outcome and
 only burns wall clock and context budget.
 
@@ -117,7 +117,7 @@ only burns wall clock and context budget.
   against a different tree. Same rule for the working directory: each shell call starts fresh, so
   re-select the execution tree inside the call (`cd -- "$TREE"` plus the identity check) instead of
   relying on a `cd` a previous call left behind.
-- **NEVER run** `bun run test`, `bun run spur-check`, `bun run check`, or any other full-suite /
+- **NEVER run** `spur self exec test`, `spur self exec check`, or any other full-suite /
   project-gate command from inside implement. These belong to the pipeline's `test` hop.
 - **Full-suite budget: at most 2 per task** (task 0436 R2) — counted across the whole task run
   (implement probes + the pipeline `test` hop + verify/recheck), not per step. When a check fails,
@@ -163,8 +163,8 @@ changed-path checks, not that gate.
 "Run the narrow test first" needs a second half: *which* narrow tests, when a change to a shared
 surface can break a downstream consumer. The matrix below is dependency-aware — domain → app →
 CLI — so a shared change verifies its consumers without recreating the full project check inside
-implement. **It augments narrow behavior tests; it never authorizes `bun run spur-check`,
-`bun run test`, or another full project check inside implement** — the pipeline's `test` hop owns
+implement. **It augments narrow behavior tests; it never authorizes `spur self exec check`,
+`spur self exec test`, or another full project check inside implement** — the pipeline's `test` hop owns
 that single full gate.
 
 **Worker iteration check order (task 1142 R3):**
