@@ -1,10 +1,10 @@
 ---
 schema_version: 1
 name: Residuals from 1222
-status: backlog
+status: cancelled
 template: standard
 created_at: 2026-10-17T04:39:50.922Z
-updated_at: "2026-10-17T04:39:51.007Z"
+updated_at: "2026-10-17T16:51:37.174Z"
 
 ---
 
@@ -56,3 +56,6 @@ Source task: 1222 (feature A92) — deferred residuals filed by residual-scan se
 <!-- Links to features, docs, ADRs, related tasks, or external references. -->
 
 ### History
+
+- 2026-10-17T16:51:37.174Z backlog → cancelled (system)
+
