@@ -13,6 +13,12 @@ import { join } from 'node:path';
  */
 
 import { createHash } from 'node:crypto';
+import {
+    type ConfidenceLine,
+    confidenceMismatchMessage,
+    deriveReviewConfidence,
+    parseConfidenceLines,
+} from './answer-confidence';
 import { hasCitationForm, hasClaimMarker } from './verify-answer-lint';
 
 /** Residual-scan item categories: review-table rows, TODO markers, unchecked boxes, staging residue. */
@@ -332,7 +338,10 @@ export function blockingReviewFindings(taskContent: string, deferrals: Deferral[
  * cells stay reviewer-enforced — see `verdict-schema.md` § Source citations for external claims
  * for why presence-only prose checks are kept narrow.
  */
-export function reviewContractViolations(taskContent: string): Array<{ location: string; text: string }> {
+export function reviewContractViolations(
+    taskContent: string,
+    deferrals: Deferral[] = [],
+): Array<{ location: string; text: string }> {
     const violations: Array<{ location: string; text: string }> = [];
     for (const row of parseReviewFindings(taskContent)) {
         if (hasClaimMarker(row.text) && !hasCitationForm(row.text)) {
@@ -345,7 +354,126 @@ export function reviewContractViolations(taskContent: string): Array<{ location:
             });
         }
     }
+    violations.push(...reviewConfidenceViolations(taskContent, deferrals));
     return violations;
+}
+
+/**
+ * ADR-141: a review answer states `Confidence: HIGH|MEDIUM|LOW` and that level is CROSS-CHECKED
+ * against the dispositions the report itself carries. Absent, duplicated and contradicted levels are
+ * blocking contract violations, exactly like the verify lane's `confidence-*` lint rules.
+ */
+function reviewConfidenceViolations(
+    taskContent: string,
+    deferrals: Deferral[],
+): Array<{ location: string; text: string }> {
+    const section = reviewBody(taskContent);
+    if (section === null) return [];
+
+    const violations: Array<{ location: string; text: string }> = [];
+    const stated = parseConfidenceLines(section);
+    const verdict = /\bVerdict\s*:\s*\**\s*(PASS|PARTIAL|FAIL)/i.exec(section)?.[1] ?? null;
+    const rows = reviewDispositionRows(section, deferrals);
+    const derived = deriveReviewConfidence({ verdict, findings: rows });
+
+    if (stated.length === 0) {
+        violations.push({
+            location: 'task-file:Review',
+            text:
+                `the review answer carries no \`Confidence:\` line — state \`Confidence: ${derived}\` ` +
+                '(ADR-141: the level is derived from the finding dispositions, so the gate can cross-check it)',
+        });
+    } else if (stated.length > 1) {
+        violations.push({
+            location: 'task-file:Review',
+            text: 'the review answer carries more than one `Confidence:` line — state exactly one',
+        });
+    } else {
+        const line = stated[0] as ConfidenceLine;
+        if (line.level !== derived) {
+            violations.push({
+                location: 'task-file:Review',
+                text: confidenceMismatchMessage(line.level, derived, reviewConfidenceBasis(rows, verdict)),
+            });
+        }
+    }
+    return violations;
+}
+
+/** Every Priority-table row in the review body, disposition included (closed rows included). */
+function reviewDispositionRows(
+    section: string,
+    deferrals: Deferral[] = [],
+): Array<{ priority: string; disposition: string }> {
+    const rows: Array<{ priority: string; disposition: string }> = [];
+    const deferredIds = new Set(deferrals.map((d) => d.id));
+    const lines = section.split('\n');
+    for (let i = 0; i < lines.length; i++) {
+        const line = lines[i];
+        if (line === undefined || !line.trimStart().startsWith('|')) continue;
+        const header = splitRow(line);
+        const priorityCol = header.findIndex((h) => h.trim() === 'Priority');
+        if (priorityCol === -1) {
+            while (i + 1 < lines.length && lines[i + 1]?.trimStart().startsWith('|')) i++;
+            continue;
+        }
+        const dispositionCol = header.findIndex((h) => DISPOSITION_HEADER.test(h.trim()));
+        const findingCol = header.findIndex((h) => h.trim() === 'Finding');
+        const locationCol = header.findIndex((h) => h.trim() === 'Location');
+        i++;
+        const sep = lines[i];
+        if (sep !== undefined && /^\s*\|[\s:|-]+\|\s*$/.test(sep)) i++;
+        while (i < lines.length) {
+            const row = lines[i];
+            if (row === undefined || !row.trimStart().startsWith('|')) break;
+            const cells = splitRow(row);
+            const priority = (cells[priorityCol] ?? '').trim();
+            const finding = findingCol === -1 ? 'x' : (cells[findingCol] ?? '').trim();
+            // A placeholder row (`| P3 | | none found | |`) is not a finding — same guard the
+            // blocking-finding parser applies, so the derivation and the counts agree.
+            if (
+                PRIORITY_PATTERN.test(priority) &&
+                !RANGE_PRIORITY.test(priority) &&
+                priority.length > 0 &&
+                finding.length > 0 &&
+                !NONE_FINDING.test(finding)
+            ) {
+                const disposition = dispositionCol === -1 ? '' : (cells[dispositionCol] ?? '').trim();
+                const location = locationOf(cells[locationCol] ?? '', finding);
+                // A deferral file reclassifies the row the gate would otherwise read as open.
+                rows.push({
+                    priority,
+                    disposition: deferredIds.has(makeItemId('review-finding', location, finding))
+                        ? `DEFER(file: ${disposition || 'open'})`
+                        : disposition,
+                });
+            }
+            i++;
+        }
+    }
+    return rows;
+}
+
+/** One clause naming why the rows derive the level they do. */
+function reviewConfidenceBasis(
+    rows: ReadonlyArray<{ priority: string; disposition: string }>,
+    verdict: string | null,
+): string {
+    const normalizedVerdict = (verdict ?? '').trim().toUpperCase();
+    if (normalizedVerdict !== 'PASS') return `verdict ${normalizedVerdict || 'missing'} is not PASS`;
+    const open = rows.filter((row) => {
+        const disposition = row.disposition.trim().toUpperCase();
+        const stillOpen = disposition.length === 0 || disposition === 'OPEN';
+        const blocking = /^P[1-3]/.test(row.priority.trim().toUpperCase());
+        return stillOpen && blocking;
+    });
+    if (open.length > 0) return `${open.length} P1-P3 row(s) still open`;
+    const carried = rows.filter((row) => {
+        const disposition = row.disposition.trim().toUpperCase();
+        return disposition.startsWith('DEFER') || disposition === 'ACCEPTED';
+    });
+    if (carried.length > 0) return `${carried.length} finding(s) carried as DEFER/ACCEPTED`;
+    return 'every finding is closed';
 }
 
 /**
@@ -360,7 +488,7 @@ export function buildReviewGateArtifact(
     taskContent: string,
     deferrals: Deferral[],
 ): { artifact: ResidualArtifact; note: string } {
-    const contractViolations = reviewContractViolations(taskContent);
+    const contractViolations = reviewContractViolations(taskContent, deferrals);
     const items = [
         ...blockingReviewFindings(taskContent, deferrals),
         ...contractViolations.map((v) => ({

@@ -8,6 +8,7 @@
  * apps/cli/tests/commands/task/verdict.test.ts and plugins/sp/tests/dispatch-handoff-contract.test.ts.
  */
 import { describe, expect, test } from 'bun:test';
+import { deriveVerifyConfidence } from '../../src/services/answer-confidence';
 import { ANSWER_LINT_MAX_FINDINGS, lintVerifyAnswer } from '../../src/services/verify-answer-lint';
 
 const TASK = `
@@ -37,7 +38,25 @@ Then the input is rejected
 `;
 
 /** Answer fixture. */
-function answer(reqs: string[], acs: string[], verdict = 'Verdict: PASS'): string {
+/**
+ * Derive the level the fixture's own rows imply (ADR-141), so each test asserts the rule it targets
+ * rather than tripping the confidence cross-check. The derivation itself is covered by
+ * `answer-confidence.test.ts`, and the mismatch rejection has its own cases below.
+ */
+function impliedConfidence(reqs: string[], acs: string[], verdict: string): string {
+    const cell = (row: string, i: number): string =>
+        row
+            .split('|')
+            .map((c) => c.trim())
+            .filter((c) => c.length > 0)[i] ?? '';
+    return `Confidence: ${deriveVerifyConfidence({
+        verdict: verdict.replace(/^Verdict:\s*/i, ''),
+        requirements: reqs.map((row) => ({ status: cell(row, 1) })),
+        acceptanceCriteria: acs.map((row) => ({ status: cell(row, 1), evidenceType: cell(row, 2) })),
+    })}`;
+}
+
+function answer(reqs: string[], acs: string[], verdict = 'Verdict: PASS', confidence?: string): string {
     return [
         verdict,
         '',
@@ -50,6 +69,10 @@ function answer(reqs: string[], acs: string[], verdict = 'Verdict: PASS'): strin
         '| AC | Status | Evidence Type | Evidence |',
         '| --- | --- | --- | --- |',
         ...acs,
+        '',
+        // The lint accepts the line at any top-level position; the fixture keeps it last so the
+        // per-row line numbers the other cases assert stay stable.
+        confidence ?? impliedConfidence(reqs, acs, verdict),
         '',
     ].join('\n');
 }
@@ -191,6 +214,7 @@ describe('lintVerifyAnswer (task 1003 R1)', () => {
     test('AC header row closes a requirement table without a heading between', () => {
         const body = [
             'Verdict: PASS',
+            impliedConfidence(CLEAN_REQS, CLEAN_ACS, 'Verdict: PASS'),
             '',
             '### Per-Requirement Traceability',
             '| Req | Status | Evidence |',
@@ -841,5 +865,45 @@ describe('AC identities containing colons (task 1118)', () => {
             null,
         );
         expect(findings).toEqual([]);
+    });
+});
+
+describe('confidence cross-check (ADR-141)', () => {
+    const HIGH_ACS = ['| AC1 | MET | test | `tests/f0.test.ts:1` |'];
+    const HIGH_REQS = ['| R1 | MET | `src/f0.ts:1` |', '| R2 | MET | `src/f1.ts:2` |'];
+
+    test('a missing line is rejected and names the level the rows derive', () => {
+        const noLine = answer(HIGH_REQS, HIGH_ACS).replace(/^Confidence:.*\n?/m, '');
+        const findings = lintVerifyAnswer(noLine, TASK, null);
+        expect(findings.map((f) => f.rule)).toContain('confidence-missing');
+        expect(findings.find((f) => f.rule === 'confidence-missing')?.message).toContain('Confidence: HIGH');
+    });
+
+    test('a stated level the rows do not support is rejected, naming stated and derived', () => {
+        const overstated = answer(
+            HIGH_REQS,
+            ['| AC1 | PARTIAL | manual-review | log reviewed |'],
+            undefined,
+            'Confidence: HIGH',
+        );
+        const mismatch = lintVerifyAnswer(overstated, TASK, null).find((f) => f.rule === 'confidence-mismatch');
+        expect(mismatch).toBeDefined();
+        expect(mismatch?.message).toContain('Confidence: HIGH');
+        expect(mismatch?.message).toContain('derive LOW');
+    });
+
+    test('a MEDIUM answer whose ACs rest on citations is accepted as stated', () => {
+        const medium = answer(
+            HIGH_REQS,
+            ['| AC1 | MET | static-ref | `src/f0.ts:1` |'],
+            undefined,
+            'Confidence: MEDIUM',
+        );
+        expect(lintVerifyAnswer(medium, TASK, null)).toEqual([]);
+    });
+
+    test('two lines are rejected as a duplicate', () => {
+        const twice = answer(HIGH_REQS, HIGH_ACS) + '\nConfidence: HIGH\n';
+        expect(lintVerifyAnswer(twice, TASK, null).map((f) => f.rule)).toContain('confidence-duplicate');
     });
 });
