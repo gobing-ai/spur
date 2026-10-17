@@ -80,3 +80,4 @@ git ls-files docs/dogfood | grep -Ev '(README|INDEX)\.md$'
 - `2026-10-11-P11-decision-status-readiness-dogfood.md`
 - `2026-10-14-f511-pipeline-v7-close-dogfood.md`
 - `2026-10-15-A91-inline-lifecycle-dogfood.md`
+- `2026-10-16-L1-pr-review-branch-topology-dogfood.md`
