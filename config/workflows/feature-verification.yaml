@@ -62,10 +62,19 @@ states:
       digest, run identity) and the coarse status file, always exit 0 so the
       transition guard routes missing/corrupt/FAIL to `failed`.
     onEnter:
-      - kind: shell
+      # D65 1238 R1: the pass runs as a typed gate builtin (1234), not a shell action — the same
+      # `spur feature verify` argv, whose configured `spur self exec check-feature` action is the
+      # verification command. `softFail` keeps a non-running pass a RECORDED outcome that the guards
+      # below route to `failed`, exactly as the always-exit-0 shell did. The pass still writes its
+      # own `.spur/run/<runId>-feature-verification.status` and evidence receipt; the gate's typed
+      # token lands beside them, so the pass's PASS/FAIL evidence is never overwritten.
+      - kind: command.gate
         options:
-          command: >-
-            mkdir -p .spur/run; $spurBin feature verify "$featureId" --run-id "$__runId" --no-logo || printf 'FAIL feature-verification failed closed — spur feature verify exited nonzero\n' > ".spur/run/$__runId-feature-verification.status"; exit 0
+          id: feature-verification
+          executable: "${vars.spurBin}"
+          args: ["feature", "verify", "${vars.featureId}", "--run-id", "${vars.__runId}", "--no-logo"]
+          resultFile: .spur/run/${vars.__runId}-feature-verification.gate.status
+          softFail: true
 
   - id: done
     description: Terminal — repo-wide checks passed and the receipt is bound.

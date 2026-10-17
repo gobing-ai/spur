@@ -58,7 +58,20 @@ function expected(group: string, id: string): CaseOutcome {
         if (step) Object.assign(step, patch);
     }
     if (group === 'featureVerify') retireReceiptConfidence(out);
+    if (group === 'featureVerify') recordCannotRunFailStatus(out, id);
     return out;
+}
+
+/**
+ * D65 1238 R1 moved the cannot-run `FAIL` write from the workflow's shell (`|| printf 'FAIL …'`)
+ * into the operation, so a refused `feature verify` now leaves the coarse status file the
+ * transition guards route on. Before the move only the workflow produced it, which is why the
+ * old-side capture has no such file. Same observable, new owner.
+ */
+function recordCannotRunFailStatus(out: CaseOutcome, id: string): void {
+    if (id !== 'verify-refusals') return;
+    // Only the first step carries a safe run id; the other two refuse before a path exists.
+    out.files['.spur/run/v1-feature-verification.status'] = 'FAIL\n';
 }
 
 /**

@@ -108,7 +108,7 @@ describe('feature-verification scope split (task 0872)', () => {
         expect(hasTopLevelAwait('a.ts', '// await in a comment\nconst s = "await x";')).toBe(false);
     });
 
-    test('R3: feature-verification is a shell-only pass with no agent.run nodes', () => {
+    test('R3: feature-verification is a gate-only pass with no agent.run nodes', () => {
         const wf = readWorkflow('feature-verification.yaml');
         expect(wf.name).toBe('feature-verification');
         expect(wf.vars).toMatchObject({ verificationCmd: 'spur self exec check-feature' });
@@ -117,9 +117,10 @@ describe('feature-verification scope split (task 0872)', () => {
         for (const state of (wf.states as Array<{ onEnter?: Array<{ kind: unknown }> }>) ?? []) {
             for (const action of state.onEnter ?? []) actionKinds.push(action.kind);
         }
-        // Script-absorption PR-5 dropped the 0960 run-start script-resolution action: the single
-        // shell is `spur feature verify`.
-        expect(actionKinds).toEqual(['shell']);
+        // Script-absorption PR-5 left one `shell` action running `spur feature verify`; D65 1238 R1
+        // moved it to the typed `command.gate` builtin (same argv, `softFail` instead of `exit 0`)
+        // so the step's outcome is a PASS/FAIL/BLOCKED record in the trace rather than an exit code.
+        expect(actionKinds).toEqual(['command.gate']);
         expect(actionKinds).not.toContain('agent.run');
 
         const guardKinds = new Set<unknown>();
@@ -129,24 +130,77 @@ describe('feature-verification scope split (task 0872)', () => {
         expect([...guardKinds].sort()).toEqual(['always', 'shell']);
     });
 
-    test('0960 R7 / PR-5: when `spur feature verify` cannot run, verify writes FAIL and exits 0', () => {
+    test('0960 R7 / 1238 R1: a pass that cannot run leaves FAIL and never aborts the graph', () => {
+        // The workflow's `${vars.x}` template reference, assembled so a plain string literal in this
+        // assertion is not mistaken for one.
+        const varRef = (name: string): string => ['$', '{vars.', name, '}'].join('');
         const wf = readWorkflow('feature-verification.yaml');
-        const verify = (wf.states as Array<{ id: string; onEnter?: Array<{ options?: { command?: string } }> }>).find(
-            (s) => s.id === 'verify',
-        );
-        const command = verify?.onEnter?.[0]?.options?.command ?? '';
-        expect(command).toContain('$spurBin feature verify "$featureId" --run-id "$__runId"');
+        const verify = (
+            wf.states as Array<{
+                id: string;
+                onEnter?: Array<{
+                    kind?: string;
+                    options?: { executable?: string; args?: string[]; resultFile?: string; softFail?: boolean };
+                }>;
+            }>
+        ).find((s) => s.id === 'verify');
+        const action = verify?.onEnter?.[0];
+        // The step is the typed gate builtin over the SAME argv the shell ran, so the pass — not a
+        // shell pipeline — owns the status file the guards read.
+        expect(action?.kind).toBe('command.gate');
+        expect(action?.options?.executable).toBe(varRef('spurBin'));
+        expect(action?.options?.args?.slice(0, 2)).toEqual(['feature', 'verify']);
+        expect(action?.options?.args).toContain('--run-id');
+        // The old `|| printf … ; exit 0` is now `softFail`: a non-running pass is a RECORDED
+        // outcome, so the run still reaches the guard below instead of aborting at the action.
+        expect(action?.options?.softFail).toBe(true);
+        // …and the typed token is written BESIDE the pass's own status file, never over it: the gate
+        // exits 0 for a completed FAIL pass, so sharing the path would overwrite the FAIL evidence.
+        expect(action?.options?.resultFile).not.toBe(`.spur/run/${varRef('__runId')}-feature-verification.status`);
+
         const dir = mkdtempSync(join(tmpdir(), 'spur-0960-fv-'));
         try {
-            // A spur that fails every call (no .spur/run yet): the guard must still see FAIL.
-            const result = Bun.spawnSync(['sh', '-c', command], {
-                cwd: dir,
-                env: { ...getEnvVars(), spurBin: 'false', __runId: 'r0960', featureId: 'F1' },
-            });
-            expect(result.exitCode).toBe(0);
+            // The pass cannot run (this project has no features directory at all): it must still
+            // leave the coarse FAIL the guards route on, and exit nonzero to the gate.
+            const result = Bun.spawnSync(
+                [
+                    process.execPath,
+                    join(REPO_ROOT, 'apps/cli/src/index.ts'),
+                    'feature',
+                    'verify',
+                    'F1',
+                    '--run-id',
+                    'r0960',
+                    '--no-logo',
+                ],
+                {
+                    cwd: dir,
+                    env: {
+                        ...getEnvVars(),
+                        // Never read or lock the operator's global registry from a test.
+                        SPUR_PROJECTS_FILE: join(dir, 'projects.json'),
+                        SPUR_SLASH_COMMANDS_FILE: join(dir, 'slash_commands.json'),
+                    },
+                },
+            );
+            expect(result.exitCode).toBe(1);
             const status = readFileSync(join(dir, '.spur/run/r0960-feature-verification.status'), 'utf8');
             expect(status).toStartWith('FAIL');
-            expect(status).toContain('spur feature verify exited nonzero');
+
+            // The fail-closed routing the status file drives: done requires PASS, so FAIL (or an
+            // absent file) can only reach `failed`.
+            const guard = (
+                wf.transitions as Array<{
+                    from: string;
+                    to: string;
+                    guard?: { kind?: string; options?: { command?: string } };
+                }>
+            ).find((t) => t.from === 'verify' && t.to === 'done');
+            const doneGuard = guard?.guard?.options?.command ?? '';
+            expect(doneGuard).toContain('-feature-verification.status');
+            expect(doneGuard).toContain('= PASS');
+            // With the FAIL the cannot-run pass just wrote, the done edge cannot match.
+            expect(Bun.spawnSync(['sh', '-c', doneGuard], { cwd: dir }).exitCode).not.toBe(0);
         } finally {
             rmSync(dir, { recursive: true, force: true });
         }

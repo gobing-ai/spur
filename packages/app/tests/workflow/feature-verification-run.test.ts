@@ -196,6 +196,12 @@ describe('runFeatureVerification — receipt lifecycle (task 1176 R2)', () => {
     test('an unresolved feature spec is a hard error, not a silent skip', async () => {
         const h = harness({ resolveFeatureSpec: async () => null });
         await expect(runFeatureVerification(h.input)).rejects.toThrow(/not found in the configured features/);
+        // D65 1238 R1: the workflow's verify step is a `command.gate` over this operation, so a pass
+        // that cannot RUN must still leave the coarse FAIL its transition guards route on — the old
+        // shell appended `|| printf 'FAIL …'` and that responsibility moved here.
+        expect(readFileSync(join(h.workdir, '.spur', 'run', 'run-h99-feature-verification.status'), 'utf8')).toBe(
+            'FAIL\n',
+        );
     });
 
     test('the app-owned lookup honours the configured features directory', async () => {

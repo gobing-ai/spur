@@ -3,6 +3,16 @@
  * (task 1077, feature G71 R8; plan `docs/plans/2026-10-04-agent-fleet-inbox-redesign.md` §1).
  *
  * Usage: bun scripts/spur-dev.ts fleet-e2e [--inject-failure <step>] [--guest-join-fixture] [--keep]
+ *        bun scripts/spur-dev.ts fleet-e2e --matrix
+ *
+ * `--matrix` runs the EXECUTOR MATRIX instead of the fleet E2E (task 1238 R2/R3, feature D65): the
+ * tracked fixture `packages/app/tests/fixtures/1238/executor-matrix-fixture.yaml` — one `agent.run`
+ * stage and one decision gate — under the host, subprocess and fleet executors, comparing the action
+ * sequence and the receipt shape each run leaves behind. It writes
+ * `docs/reports/executor-matrix-receipt.json`. The fleet column runs on the same scratch fleet this
+ * harness scaffolds for the E2E (declared `agent.fleet`, stub model on `PATH`, a real member loop);
+ * if that scaffolding fails the column is `blocked` and NAMES the precondition — a blocked column
+ * never counts as a pass, and the matrix exits 2 rather than 0.
  *
  * One scratch project under `$TMPDIR` is scaffolded, driven through the source-local CLI
  * (`bun run apps/cli/src/index.ts`), and torn down; the run writes
@@ -37,7 +47,7 @@ import {
     writeFileSync,
 } from 'node:fs';
 import { tmpdir } from 'node:os';
-import { join, resolve } from 'node:path';
+import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { getEnvVar, getEnvVars } from '@gobing-ai/spur-config';
 import { StrategyRuntime } from '../../packages/app/src/services/strategy-runtime';
@@ -79,6 +89,25 @@ type StepName = (typeof RECEIPT_STEPS)[number];
 /** The declared member's executor → agent type. The stub binary is named after the agent. */
 const EXECUTOR_NAME = 'fast-lane';
 const AGENT_TYPE = 'claude';
+/**
+ * The executor-matrix fixture (task 1238 R2/R3): a tracked definition, so the matrix proves the
+ * dispatch contract from the repository rather than from a workflow the harness wrote for itself.
+ */
+export const MATRIX_FIXTURE_PATH = join(REPO_ROOT, 'packages/app/tests/fixtures/1238/executor-matrix-fixture.yaml');
+/** Stable matrix receipt name — overwritten each run, like the fleet E2E receipt. */
+export const MATRIX_RECEIPT_PATH = join(REPO_ROOT, 'docs/reports/executor-matrix-receipt.json');
+/** The fixture's declared completion artifact (its `expectFile`). */
+const MATRIX_TARGET_FILE = '.spur/run/executor-matrix-result.txt';
+/** The marker the fixture's stage prompt carries, so the stub model knows it is a matrix turn. */
+const MATRIX_STUB_PROMPT = 'EXECUTOR-MATRIX';
+/**
+ * The matrix's whole PATH: the scratch `bin/` first, then the OS defaults only. Agent resolution
+ * therefore finds the stub model and NOT an agent installed on the operator's machine — the matrix
+ * proves the dispatch contract, never a real model turn.
+ */
+function matrixPath(binDir: string): string {
+    return [binDir, '/usr/bin', '/bin', '/usr/sbin', '/sbin'].join(':');
+}
 const PLANNER_LOCAL_ID = 'planner-1';
 const CODER_LOCAL_ID = 'coder-1';
 const TASK_TITLE = 'E2E inbox-only fleet task';
@@ -107,6 +136,58 @@ interface StepRow {
     status: 'passed' | 'failed' | 'skipped';
     assertion: string;
     evidence: string;
+}
+
+/** One executed action as the run's trace reported it — the unit the matrix compares. */
+export interface MatrixActionStep {
+    node: string;
+    actionKind: string;
+    status: string;
+}
+
+/** Which executor ran the fixture (design `workflow-execution-foundation` §3.1). */
+export type MatrixExecutor = 'host' | 'subprocess' | 'fleet';
+
+/**
+ * A column's verdict: `passed` (the run proved the contract), `failed` (it ran and broke it), or
+ * `blocked` (it could not run because scaffolding was missing — never a pass).
+ */
+export type MatrixColumnStatus = 'passed' | 'failed' | 'blocked';
+
+/** One executor's column in `docs/reports/executor-matrix-receipt.json`. */
+export interface MatrixColumn {
+    executor: MatrixExecutor;
+    status: MatrixColumnStatus;
+    runId: string | null;
+    finalState: string | null;
+    actions: MatrixActionStep[];
+    /** Sorted receipt key names: the SHAPE the three executors must share (values are volatile). */
+    receiptShape: string;
+    /** The failed scaffolding precondition — set only with status `blocked`. */
+    precondition: string | null;
+    evidence: string;
+}
+
+/** What the host column observed. */
+export interface MatrixHostProbe {
+    pause: { runId: string; state: string; expectFiles: string[] } | null;
+    /** Exit code of a `workflow continue` carrying a receipt for a DIFFERENT run. */
+    mismatchedReceiptExitCode: number | null;
+    finalState: string | null;
+}
+
+/** What a subprocess or fleet column observed. */
+export interface MatrixRunProbe {
+    finalState: string | null;
+    receiptExecutor: string | null;
+    /** Set when the column could not run at all — the scaffolding that failed. */
+    precondition?: string | null;
+}
+
+/** A decided verdict with the reason the receipt records. */
+export interface MatrixVerdict {
+    status: MatrixColumnStatus;
+    reason: string | null;
 }
 
 /** A gap the run could NOT close, recorded machine-readably instead of hidden in prose. */
@@ -166,7 +247,7 @@ function errorMessage(error: unknown): string {
 }
 
 /** Run the source-local CLI in the scratch project and capture its streams. */
-function cli(args: string[], cwd: string, options: { input?: string } = {}): CliResult {
+function cli(args: string[], cwd: string, options: { input?: string; env?: Record<string, string> } = {}): CliResult {
     return cliAs(CLI_ENTRY, 'spur', args, cwd, options);
 }
 
@@ -175,10 +256,19 @@ function cli(args: string[], cwd: string, options: { input?: string } = {}): Cli
  * The guest-join step's predicate and the `--guest-join-fixture` skip arm (R4) both go through here,
  * so one code path serves the source-local transport and the generated pre-1081 fixture alike.
  */
-function cliAs(entry: string, label: string, args: string[], cwd: string, options: { input?: string } = {}): CliResult {
-    const proc = Bun.spawnSync(['bun', 'run', entry, ...args], {
+function cliAs(
+    entry: string,
+    label: string,
+    args: string[],
+    cwd: string,
+    options: { input?: string; env?: Record<string, string> } = {},
+): CliResult {
+    // `process.execPath` (this bun), not the bare name: the matrix runs its children on a
+    // controlled PATH whose first entry is the scratch `bin/`, so resolving `bun` there would
+    // either find the shim we wrote or nothing at all.
+    const proc = Bun.spawnSync([process.execPath, 'run', entry, ...args], {
         cwd,
-        env: getEnvVars(),
+        env: { ...getEnvVars(), ...options.env },
         stdin: options.input === undefined ? 'ignore' : Buffer.from(options.input),
         stdout: 'pipe',
         stderr: 'pipe',
@@ -192,7 +282,7 @@ function cliAs(entry: string, label: string, args: string[], cwd: string, option
 }
 
 /** Same, but a non-zero exit is a harness failure (the step's assertion depends on it). */
-function cliOk(args: string[], cwd: string, options: { input?: string } = {}): CliResult {
+function cliOk(args: string[], cwd: string, options: { input?: string; env?: Record<string, string> } = {}): CliResult {
     return cliOkAs(CLI_ENTRY, 'spur', args, cwd, options);
 }
 
@@ -202,7 +292,7 @@ function cliOkAs(
     label: string,
     args: string[],
     cwd: string,
-    options: { input?: string } = {},
+    options: { input?: string; env?: Record<string, string> } = {},
 ): CliResult {
     const result = cliAs(entry, label, args, cwd, options);
     if (result.exitCode !== 0) {
@@ -218,11 +308,7 @@ function jsonOf<T>(result: CliResult): T {
     return JSON.parse(result.stdout.slice(start)) as T;
 }
 
-function jsonOk<T>(
-    args: string[],
-    cwd: string,
-    options: { env?: Record<string, string | undefined>; input?: string } = {},
-): T {
+function jsonOk<T>(args: string[], cwd: string, options: { env?: Record<string, string>; input?: string } = {}): T {
     return jsonOf<T>(cliOk(args, cwd, options));
 }
 
@@ -240,11 +326,17 @@ function sleep(ms: number): Promise<void> {
  * the loop's real spawn path resolves the stub. Output goes to two files under
  * `.spur/logs/` (one stream each, so neither truncates the other).
  */
-function spawnLoop(scratch: string, state: RunState, specId: string, suffix = ''): number {
+function spawnLoop(
+    scratch: string,
+    state: RunState,
+    specId: string,
+    suffix = '',
+    env: Record<string, string> = {},
+): number {
     const logDir = join(scratch, '.spur/logs');
     mkdirSync(logDir, { recursive: true });
     const child = Bun.spawn(
-        ['bun', 'run', CLI_ENTRY, 'agent', 'loop', '--spec', specId, '--poll', String(LOOP_POLL_MS)],
+        [process.execPath, 'run', CLI_ENTRY, 'agent', 'loop', '--spec', specId, '--poll', String(LOOP_POLL_MS)],
         {
             cwd: scratch,
             env: {
@@ -257,6 +349,7 @@ function spawnLoop(scratch: string, state: RunState, specId: string, suffix = ''
                 SPUR_E2E_CLI: CLI_ENTRY,
                 SPUR_E2E_PROJECT: scratch,
                 SPUR_E2E_STUB_LOG: state.stubLog,
+                ...env,
             },
             stdin: 'ignore',
             stdout: Bun.file(join(logDir, `loop-${specId}${suffix}.out.log`)),
@@ -314,7 +407,8 @@ function stubSource(): string {
     return `#!/usr/bin/env bun
 // Generated by scripts/commands/fleet-e2e.ts — the stubbed model of the fleet E2E.
 // It logs every received prompt and drives real task/message transitions through the CLI.
-import { appendFileSync } from 'node:fs';
+import { appendFileSync, mkdirSync, writeFileSync } from 'node:fs';
+import { dirname } from 'node:path';
 
 const argv = process.argv.slice(2);
 if (argv.includes('--version')) {
@@ -395,6 +489,17 @@ function readJson(text) {
 }
 
 const dispatch = /\\/sp:dev-run\\s+(\\d{4})/.exec(sources.join(' '));
+// The EXECUTOR MATRIX's stub model (task 1238): the fixture's stage is one short command-shaped
+// prompt, so this turn writes the stage's declared expectFile — the engine appends the absolute
+// target to the prompt — and stops. Nothing else about the turn is faked.
+if (sources.join(' ').includes(${JSON.stringify(MATRIX_STUB_PROMPT)})) {
+    const target = /absolute path: (\\S+)/.exec(sources.join(' '));
+    const path = target !== null ? target[1] : project + '/' + ${JSON.stringify(MATRIX_TARGET_FILE)};
+    mkdirSync(dirname(path), { recursive: true });
+    writeFileSync(path, 'executor-matrix stub result\\n');
+    process.stdout.write('stub: wrote ' + path + '\\n');
+    process.exit(0);
+}
 if (dispatch !== null) {
     const wbs = dispatch[1];
     const directive = directives.find((entry) => entry.includes(wbs)) ?? '';
@@ -601,12 +706,24 @@ function writeReceipt(state: RunState, scratch: string, path: string, guestJoinC
 }
 
 /** Parse `fleet-e2e` args. Unknown flags fail loudly rather than being ignored. */
-function parseArgs(args: string[]): { injectFailure: StepName | null; keep: boolean; guestJoinFixture: boolean } {
+function parseArgs(args: string[]): {
+    injectFailure: StepName | null;
+    keep: boolean;
+    guestJoinFixture: boolean;
+    matrix: boolean;
+} {
     let injectFailure: StepName | null = null;
     let keep = false;
     let guestJoinFixture = false;
+    let matrix = false;
     for (let index = 0; index < args.length; index++) {
         const arg = args[index];
+        if (arg === '--matrix') {
+            // Task 1238 R3: the executor matrix is a MODE of this harness, not a second script —
+            // it reuses the scratch project, the stub model and the fleet scaffolding below.
+            matrix = true;
+            continue;
+        }
         if (arg === '--guest-join-fixture') {
             // R4 skip arm: point the guest-join predicate at the generated pre-1081 fixture CLI.
             guestJoinFixture = true;
@@ -628,10 +745,10 @@ function parseArgs(args: string[]): { injectFailure: StepName | null; keep: bool
             continue;
         }
         throw new Error(
-            `unknown argument "${arg}" (usage: fleet-e2e [--inject-failure <step>] [--guest-join-fixture] [--keep])`,
+            `unknown argument "${arg}" (usage: fleet-e2e [--inject-failure <step>] [--guest-join-fixture] [--keep] | --matrix)`,
         );
     }
-    return { injectFailure, keep, guestJoinFixture };
+    return { injectFailure, keep, guestJoinFixture, matrix };
 }
 
 interface AgentCommandProbe {
@@ -670,6 +787,507 @@ export function agentCommandListed(scratch: string, verb: string): boolean {
     return probeAgentCommand(scratch, verb).listed;
 }
 
+// ── executor matrix (task 1238 R2/R3) ───────────────────────────────────────────────────────────
+//
+// The matrix runs the tracked fixture under the three executors and compares what each run LEFT
+// BEHIND — the action sequence in the trace and the receipt's key shape — instead of comparing what
+// each executor printed. Every verdict below is a pure function of observations, so the decision
+// contract is testable without a scratch fleet (fleet-e2e-matrix.test.ts pins the failure modes).
+
+/** The action sequence a run's trace reported — the thing all three executors must share. */
+export function matrixActionsOf(events: readonly Record<string, unknown>[]): MatrixActionStep[] {
+    return events
+        .filter((event) => event.kind === 'action')
+        .map((event) => ({
+            node: String(event.node ?? ''),
+            actionKind: String(event.actionKind ?? ''),
+            status: String(event.status ?? ''),
+        }));
+}
+
+/**
+ * The receipt's SHAPE: its sorted key names, joined. Values (run id, timestamps, executor) are
+ * volatile; only which fields exist is the contract. A string, not an array, so the written
+ * receipt stays one line per column and formats identically to the rest of `docs/reports/`.
+ */
+export function receiptShapeOf(receipt: Record<string, unknown>): string {
+    return Object.keys(receipt).sort().join(',');
+}
+
+/**
+ * The host column's verdict (design §3.2): the run must PAUSE at the stage with a work item, a
+ * receipt naming another run must be REFUSED, and the real receipt must resume it to done.
+ */
+export function hostColumnVerdict(probe: MatrixHostProbe): MatrixVerdict {
+    if (probe.pause === null) {
+        return { status: 'failed', reason: 'the host run never paused with a work item at the agent.run stage' };
+    }
+    if (probe.mismatchedReceiptExitCode === null || probe.mismatchedReceiptExitCode === 0) {
+        return {
+            status: 'failed',
+            reason: 'a receipt naming another run was not refused, so the resume is not bound to the paused run',
+        };
+    }
+    if (probe.finalState !== 'done') {
+        return {
+            status: 'failed',
+            reason: `the resumed run ended at '${probe.finalState ?? 'unknown'}', expected done`,
+        };
+    }
+    return { status: 'passed', reason: null };
+}
+
+/**
+ * A subprocess or fleet column's verdict: done plus a durable receipt naming THAT executor. A
+ * column that could not run at all is `blocked` and names the scaffolding precondition — never a
+ * pass, because a column that did not run proves nothing (task 1238 R3).
+ */
+export function runColumnVerdict(executor: MatrixExecutor, probe: MatrixRunProbe): MatrixVerdict {
+    if (probe.precondition !== undefined && probe.precondition !== null && probe.precondition !== '') {
+        return { status: 'blocked', reason: probe.precondition };
+    }
+    if (probe.finalState !== 'done') {
+        return {
+            status: 'failed',
+            reason: `the ${executor} run ended at '${probe.finalState ?? 'unknown'}', expected done`,
+        };
+    }
+    if (probe.receiptExecutor === null) {
+        return { status: 'failed', reason: `the ${executor} run reached done without a durable receipt` };
+    }
+    if (probe.receiptExecutor !== executor) {
+        return {
+            status: 'failed',
+            reason: `the ${executor} column's receipt names executor '${probe.receiptExecutor}'`,
+        };
+    }
+    return { status: 'passed', reason: null };
+}
+
+/**
+ * Compare the columns (1238 R2): every column that RAN must show the same action sequence and the
+ * same receipt shape as the first one that ran. A blocked column is excluded from the comparison —
+ * it has no run to compare — but a blocked column that does not name its precondition is itself a
+ * mismatch, because that is the one way a block could hide.
+ */
+export function compareMatrixColumns(columns: readonly MatrixColumn[]): string[] {
+    const mismatches: string[] = [];
+    for (const column of columns) {
+        if (column.status === 'blocked' && (column.precondition === null || column.precondition === '')) {
+            mismatches.push(`${column.executor}: blocked without a named precondition`);
+        }
+    }
+    const compared = columns.filter((column) => column.status !== 'blocked');
+    const reference = compared[0];
+    if (reference === undefined) return mismatches;
+    for (const column of compared.slice(1)) {
+        if (JSON.stringify(column.actions) !== JSON.stringify(reference.actions)) {
+            mismatches.push(
+                `${column.executor}: action sequence differs from ${reference.executor}'s ` +
+                    `(${JSON.stringify(column.actions)} vs ${JSON.stringify(reference.actions)})`,
+            );
+        }
+        if (column.receiptShape !== reference.receiptShape) {
+            mismatches.push(
+                `${column.executor}: receipt shape differs from ${reference.executor}'s ` +
+                    `(${column.receiptShape} vs ${reference.receiptShape})`,
+            );
+        }
+    }
+    return mismatches;
+}
+
+/** 0 = every column passed; 1 = a column ran and broke the contract; 2 = a column was blocked. */
+export function matrixExitCode(columns: readonly MatrixColumn[]): number {
+    if (columns.some((column) => column.status === 'failed')) return 1;
+    if (columns.some((column) => column.status === 'blocked')) return 2;
+    return 0;
+}
+
+/** The matrix receipt (task 1238 R3) — the feature's repeatable E2E artifact. */
+interface MatrixReceipt {
+    schemaVersion: number;
+    generatedAt: string;
+    fixture: string;
+    projectPath: string;
+    columns: MatrixColumn[];
+    comparison: {
+        identical: boolean;
+        /** How many columns actually ran — a two-column "identical" must never read as three. */
+        compared: number;
+        mismatches: string[];
+    };
+}
+
+/** A workflow run's `--json` result, narrowed to what the matrix reads. */
+interface MatrixRunResult {
+    runId: string;
+    status: string;
+    finalState: string;
+    reason?: string;
+    pause?: { kind?: string; workItem?: { runId?: string; state?: string; expectFiles?: string[] } };
+}
+
+/**
+ * Scaffold the matrix's own scratch project: a git repo, a project DB, the declared fleet (the
+ * fleet column runs on the SAME scaffolding the fleet E2E uses) and a `bin/` holding the stub
+ * model plus a `bun` shim, so the whole run resolves one fake agent and never touches an agent
+ * installed on the operator's machine.
+ */
+async function scaffoldMatrixProject(scratch: string, binDir: string, env: Record<string, string>): Promise<string> {
+    mkdirSync(binDir, { recursive: true });
+    Bun.spawnSync(['git', 'init', '-q', '.'], { cwd: scratch });
+    cliOk(['self', 'init', '--json'], scratch, { env });
+    writeFileSync(
+        join(scratch, '.spur/config.yaml'),
+        `${readFileSync(join(scratch, '.spur/config.yaml'), 'utf8')}${fleetConfigSection()}`,
+    );
+    writeFileSync(join(binDir, AGENT_TYPE), stubSource());
+    chmodSync(join(binDir, AGENT_TYPE), 0o755);
+    // The stub's shebang is `#!/usr/bin/env bun`: without a bun on this controlled PATH the agent
+    // is unspawnable and every column looks like a dispatch failure instead of a stub turn.
+    writeFileSync(join(binDir, 'bun'), `#!/bin/sh\nexec ${process.execPath} "$@"\n`);
+    chmodSync(join(binDir, 'bun'), 0o755);
+    return scratch;
+}
+
+/** One workflow run of the fixture under one executor, and the artifacts it left. */
+async function matrixColumn(
+    scratch: string,
+    executor: MatrixExecutor,
+    run: MatrixRunResult,
+    env: Record<string, string>,
+): Promise<MatrixColumn> {
+    const receiptFile = join(scratch, '.spur/run', run.runId, 'receipts', 'work.json');
+    const receiptExecutor = existsSync(receiptFile)
+        ? ((JSON.parse(readFileSync(receiptFile, 'utf8')) as { executor?: string }).executor ?? null)
+        : null;
+    const shape = existsSync(receiptFile)
+        ? receiptShapeOf(JSON.parse(readFileSync(receiptFile, 'utf8')) as Record<string, unknown>)
+        : '';
+    const trace = jsonOk<{ events: Record<string, unknown>[] }>(['workflow', 'trace', run.runId, '--json'], scratch, {
+        env,
+    });
+    const verdict = runColumnVerdict(executor, { finalState: run.finalState, receiptExecutor });
+    return {
+        executor,
+        status: verdict.status,
+        runId: run.runId,
+        finalState: run.finalState,
+        actions: matrixActionsOf(trace.events),
+        receiptShape: shape,
+        precondition: verdict.status === 'blocked' ? verdict.reason : null,
+        evidence:
+            verdict.reason ??
+            `${executor}: ${run.status} -> ${run.finalState}; receipt=${receiptExecutor ?? 'none'}; actions=${matrixActionsOf(trace.events).length}`,
+    };
+}
+
+/**
+ * The stable name of a fleet column's failed precondition. The dispatch reason carries volatile
+ * ids (the scratch member instance and the run), which would make the receipt differ on every
+ * run; the CLASS is what the operator acts on. Anything unrecognized passes through unchanged —
+ * an unnamed block is never silently generalized.
+ */
+export function matrixPrecondition(reason: string): string {
+    const invalid = /Invalid agent id "([^"]+)"/.exec(reason);
+    if (invalid !== null) {
+        return (
+            `fleet dispatch rejected the sender id '${(invalid[1] ?? '').replace(/[0-9a-f-]{36}/i, '<runId>')}' ` +
+            '(validateAgentId: 2-64 chars, lowercase alphanumeric, "_" or "-") — the fleet surface cannot post ' +
+            'a keyed message from a workflow run'
+        );
+    }
+    return reason;
+}
+
+/** Token-minimal receipt for a column that could not run: `blocked` NAMES the precondition. */
+function blockedColumn(executor: MatrixExecutor, precondition: string): MatrixColumn {
+    return {
+        executor,
+        status: 'blocked',
+        runId: null,
+        finalState: null,
+        actions: [],
+        receiptShape: '',
+        precondition,
+        evidence: `blocked: ${precondition}`,
+    };
+}
+
+export async function runExecutorMatrix(options: { keep?: boolean } = {}): Promise<number> {
+    const scratch = join(realpathSync(tmpdir()), `spur-executor-matrix-${Date.now()}`);
+    const binDir = join(scratch, 'bin');
+    // The registry files live in the scratch dir: the matrix must not contend for (or write) the
+    // operator's global project registry, which is what a sibling spur process's lock blocks.
+    const env = {
+        PATH: matrixPath(binDir),
+        SPUR_HITL_AUTO_APPROVE: '1',
+        SPUR_PROJECTS_FILE: join(scratch, 'projects.json'),
+        SPUR_SLASH_COMMANDS_FILE: join(scratch, 'slash_commands.json'),
+    };
+    const columns: MatrixColumn[] = [];
+    let db: Awaited<ReturnType<typeof createMigratedDb>> | undefined;
+    const loopPids: number[] = [];
+
+    try {
+        await scaffoldMatrixProject(scratch, binDir, env);
+
+        // ── host ────────────────────────────────────────────────────────────────
+        try {
+            // A host run PAUSES: `spur workflow run` exits 1 for any non-done status, so this reads
+            // the JSON rather than treating the pause as a harness error.
+            const run = jsonOf<MatrixRunResult>(
+                cli(['workflow', 'run', MATRIX_FIXTURE_PATH, '--vars', '{"executor":"host"}', '--json'], scratch, {
+                    env,
+                }),
+            );
+            const workItem = run.pause?.workItem;
+            const pause =
+                run.status === 'paused' && workItem?.state === 'work' && workItem.runId === run.runId
+                    ? { runId: run.runId, state: 'work', expectFiles: workItem.expectFiles ?? [] }
+                    : null;
+            // The mismatch probe: a receipt whose runId is NOT this run must be refused. It is
+            // written beside the real one so the refusal is never served from a stale path.
+            const mismatched = join(scratch, '.spur/run', run.runId, 'receipts', 'mismatched.json');
+            mkdirSync(dirname(mismatched), { recursive: true });
+            writeFileSync(
+                mismatched,
+                JSON.stringify(
+                    {
+                        runId: 'not-this-run',
+                        state: 'work',
+                        executor: 'host',
+                        outcome: 'done',
+                        startedAt: new Date().toISOString(),
+                        finishedAt: null,
+                        files: [],
+                        reason: null,
+                    },
+                    null,
+                    2,
+                ),
+            );
+            const refused = cli(
+                ['workflow', 'continue', run.runId, '--answer-text', mismatched, '--yes', '--json'],
+                scratch,
+                { env },
+            );
+            // The host's work: write the declared artifact, then its receipt (design §4.2).
+            mkdirSync(join(scratch, '.spur/run'), { recursive: true });
+            writeFileSync(join(scratch, MATRIX_TARGET_FILE), 'executor-matrix host result\n');
+            const receiptFile = join(scratch, '.spur/run', run.runId, 'receipts', 'work.json');
+            writeFileSync(
+                receiptFile,
+                JSON.stringify(
+                    {
+                        runId: run.runId,
+                        state: 'work',
+                        executor: 'host',
+                        outcome: 'done',
+                        startedAt: new Date().toISOString(),
+                        finishedAt: new Date().toISOString(),
+                        files: [MATRIX_TARGET_FILE],
+                        reason: null,
+                    },
+                    null,
+                    2,
+                ),
+            );
+            const resumed = jsonOk<MatrixRunResult>(
+                ['workflow', 'continue', run.runId, '--answer-text', receiptFile, '--yes', '--json'],
+                scratch,
+                { env },
+            );
+            const verdict = hostColumnVerdict({
+                pause,
+                mismatchedReceiptExitCode: refused.exitCode,
+                finalState: resumed.finalState,
+            });
+            const trace = jsonOk<{ events: Record<string, unknown>[] }>(
+                ['workflow', 'trace', run.runId, '--json'],
+                scratch,
+                { env },
+            );
+            columns.push({
+                executor: 'host',
+                status: verdict.status,
+                runId: run.runId,
+                finalState: resumed.finalState,
+                actions: matrixActionsOf(trace.events),
+                receiptShape: receiptShapeOf(JSON.parse(readFileSync(receiptFile, 'utf8')) as Record<string, unknown>),
+                precondition: null,
+                evidence:
+                    verdict.reason ??
+                    `paused at work with the work item; mismatched receipt refused (exit ${refused.exitCode}); resumed -> ${resumed.finalState}`,
+            });
+        } catch (error) {
+            columns.push({
+                executor: 'host',
+                status: 'failed',
+                runId: null,
+                finalState: null,
+                actions: [],
+                receiptShape: '',
+                precondition: null,
+                evidence: `error: ${errorMessage(error)}`,
+            });
+        }
+
+        // ── subprocess ──────────────────────────────────────────────────────────
+        try {
+            const run = jsonOk<MatrixRunResult>(['workflow', 'run', MATRIX_FIXTURE_PATH, '--json'], scratch, { env });
+            columns.push(await matrixColumn(scratch, 'subprocess', run, env));
+        } catch (error) {
+            columns.push({
+                executor: 'subprocess',
+                status: 'failed',
+                runId: null,
+                finalState: null,
+                actions: [],
+                receiptShape: '',
+                precondition: null,
+                evidence: `error: ${errorMessage(error)}`,
+            });
+        }
+
+        // ── fleet: the scratch fleet this harness scaffolds, or a named precondition ──
+        let precondition: string | null = null;
+        let coderId: string | null = null;
+        try {
+            const specs = jsonOk<{ specs: Array<{ id: string }> }>(['agent', 'list', '--specs', '--json'], scratch, {
+                env,
+            });
+            coderId = specs.specs.map((spec) => spec.id).find((id) => id.endsWith(`-${CODER_LOCAL_ID}`)) ?? null;
+            if (coderId === null) throw new Error(`the scratch fleet declared no ${CODER_LOCAL_ID} member`);
+            db = await createMigratedDb({ url: join(scratch, '.spur/spur.db') });
+            const openDb = db;
+            // The loop inherits the matrix's whole env: its PATH (stub + shim) and the scratch
+            // registry, so it neither resolves a real agent nor contends for the operator's
+            // global `projects.json` lock.
+            loopPids.push(spawnLoop(scratch, matrixRunState(scratch, binDir), coderId, '-matrix', env));
+            await pollUntil(
+                "the fleet coder's recorded member session",
+                async () => {
+                    const sessions = await readMemberSessions(openDb, [coderId ?? '']);
+                    return sessions.size > 0 ? sessions : undefined;
+                },
+                BOUNDS.loops,
+            );
+        } catch (error) {
+            precondition = `fleet scaffolding: ${errorMessage(error)}`;
+        }
+        if (precondition !== null) {
+            columns.push(blockedColumn('fleet', precondition));
+        } else {
+            try {
+                const result = cli(
+                    ['workflow', 'run', MATRIX_FIXTURE_PATH, '--vars', '{"executor":"fleet"}', '--json'],
+                    scratch,
+                    { env },
+                );
+                const run = jsonOf<MatrixRunResult>(result);
+                const column = await matrixColumn(scratch, 'fleet', run, env);
+                // A fleet surface that is unavailable BEFORE dispatch is the scaffolding
+                // precondition, not a contract failure: report it blocked and name it.
+                if (column.status === 'failed' && /fleet executor unavailable/i.test(run.reason ?? '')) {
+                    columns.push(
+                        blockedColumn('fleet', matrixPrecondition(run.reason ?? 'fleet executor unavailable')),
+                    );
+                } else {
+                    columns.push(column);
+                }
+            } catch (error) {
+                columns.push({
+                    executor: 'fleet',
+                    status: 'failed',
+                    runId: null,
+                    finalState: null,
+                    actions: [],
+                    receiptShape: '',
+                    precondition: null,
+                    evidence: `error: ${errorMessage(error)}`,
+                });
+            }
+        }
+    } finally {
+        for (const pid of loopPids) {
+            try {
+                process.kill(pid, 'SIGTERM');
+            } catch {
+                /* already gone */
+            }
+        }
+        if (db !== undefined) {
+            try {
+                db.close();
+            } catch {
+                /* the scratch db is removed with the dir */
+            }
+        }
+        const resolvedScratch = resolve(scratch);
+        const resolvedTmp = realpathSync(tmpdir());
+        // `--keep` keeps the scratch project for diagnosis (loop logs, DB rows, stub prompts);
+        // a removed scratch destroys the only evidence a blocked column had.
+        if (options.keep === true) {
+            console.log(`executor matrix: scratch kept at ${resolvedScratch} (--keep)`);
+        } else if (resolvedScratch.startsWith(`${resolvedTmp}/`)) {
+            try {
+                rmSync(resolvedScratch, { recursive: true, force: true });
+            } catch {
+                /* best effort: the receipt is already the evidence */
+            }
+        }
+    }
+
+    const mismatches = compareMatrixColumns(columns);
+    const receipt: MatrixReceipt = {
+        schemaVersion: 1,
+        generatedAt: nowLabel(),
+        fixture: 'packages/app/tests/fixtures/1238/executor-matrix-fixture.yaml',
+        projectPath: scratch,
+        columns,
+        comparison: {
+            identical: mismatches.length === 0,
+            compared: columns.filter((column) => column.status !== 'blocked').length,
+            mismatches,
+        },
+    };
+    mkdirSync(dirname(MATRIX_RECEIPT_PATH), { recursive: true });
+    writeFileSync(MATRIX_RECEIPT_PATH, `${JSON.stringify(receipt, null, 4)}\n`);
+
+    console.log(`executor matrix receipt: ${MATRIX_RECEIPT_PATH}`);
+    for (const column of columns) {
+        const word = column.status === 'passed' ? 'ok  ' : column.status === 'blocked' ? 'BLOCK' : 'FAIL';
+        console.log(`  ${word} ${column.executor}: ${trimmed(column.evidence, 160)}`);
+    }
+    for (const mismatch of mismatches) console.error(`executor matrix: ${mismatch}`);
+    return matrixExitCode(columns);
+}
+
+/** The loop-side state the matrix's fleet column needs (the stub binary and its prompt log). */
+function matrixRunState(scratch: string, binDir: string): RunState {
+    return {
+        scratch,
+        binDir,
+        stubPath: join(binDir, AGENT_TYPE),
+        stubLog: join(scratch, 'stub-prompts.jsonl'),
+        plannerId: '',
+        coderId: '',
+        featureId: null,
+        wbs: null,
+        dispatchMessageId: null,
+        dispatchRunId: null,
+        replyMessageId: null,
+        guestId: null,
+        guestJoinCliEntry: CLI_ENTRY,
+        guestJoinCliLabel: 'spur',
+        loopPids: [],
+        rows: new Map(),
+        ids: {},
+    };
+}
+
 /**
  * The E2E. Execution order is NOT the receipt's row order: the strategy wedge recorded under
  * `strategy-retry-unreachable` allows exactly ONE strategy dispatch per project, so the
@@ -677,7 +1295,8 @@ export function agentCommandListed(scratch: string, verb: string): boolean {
  * task closing. Rows are still reported in the design's order.
  */
 export async function runFleetE2e(args: string[]): Promise<number> {
-    const { injectFailure, keep, guestJoinFixture } = parseArgs(args);
+    const { injectFailure, keep, guestJoinFixture, matrix } = parseArgs(args);
+    if (matrix) return await runExecutorMatrix({ keep });
     // Canonical scratch root: on macOS `os.tmpdir()` is a symlinked path, and the fleet
     // normalizes project paths (`normalizeProjectPath`), so a raw `/var/...` path would never
     // match the claim/session rows the loops write under `/private/var/...`.

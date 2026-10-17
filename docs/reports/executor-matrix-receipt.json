@@ -1,0 +1,65 @@
+{
+    "schemaVersion": 1,
+    "generatedAt": "2026-10-17T19:39:07.057Z",
+    "fixture": "packages/app/tests/fixtures/1238/executor-matrix-fixture.yaml",
+    "projectPath": "/private/var/folders/2g/398pfv8j1tj_zt78g_ty2r740000gn/T/spur-executor-matrix-1792265943659",
+    "columns": [
+        {
+            "executor": "host",
+            "status": "passed",
+            "runId": "cf94e716-55a9-41b5-b711-e570e843b2cf",
+            "finalState": "done",
+            "actions": [
+                {
+                    "node": "work",
+                    "actionKind": "agent.run",
+                    "status": "done"
+                },
+                {
+                    "node": "decide",
+                    "actionKind": "hitl.confirm",
+                    "status": "done"
+                }
+            ],
+            "receiptShape": "executor,files,finishedAt,outcome,reason,runId,startedAt,state",
+            "precondition": null,
+            "evidence": "paused at work with the work item; mismatched receipt refused (exit 1); resumed -> done"
+        },
+        {
+            "executor": "subprocess",
+            "status": "passed",
+            "runId": "20aed5eb-8b25-4770-abf3-1abb712c8f47",
+            "finalState": "done",
+            "actions": [
+                {
+                    "node": "work",
+                    "actionKind": "agent.run",
+                    "status": "done"
+                },
+                {
+                    "node": "decide",
+                    "actionKind": "hitl.confirm",
+                    "status": "done"
+                }
+            ],
+            "receiptShape": "executor,files,finishedAt,outcome,reason,runId,startedAt,state",
+            "precondition": null,
+            "evidence": "subprocess: done -> done; receipt=subprocess; actions=2"
+        },
+        {
+            "executor": "fleet",
+            "status": "blocked",
+            "runId": null,
+            "finalState": null,
+            "actions": [],
+            "receiptShape": "",
+            "precondition": "fleet dispatch rejected the sender id 'workflow:<runId>' (validateAgentId: 2-64 chars, lowercase alphanumeric, \"_\" or \"-\") — the fleet surface cannot post a keyed message from a workflow run",
+            "evidence": "blocked: fleet dispatch rejected the sender id 'workflow:<runId>' (validateAgentId: 2-64 chars, lowercase alphanumeric, \"_\" or \"-\") — the fleet surface cannot post a keyed message from a workflow run"
+        }
+    ],
+    "comparison": {
+        "identical": true,
+        "compared": 2,
+        "mismatches": []
+    }
+}

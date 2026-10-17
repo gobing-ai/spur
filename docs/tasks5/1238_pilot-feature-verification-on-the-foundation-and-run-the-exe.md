@@ -1,10 +1,10 @@
 ---
 schema_version: 1
 name: Pilot feature-verification on the foundation and run the executor matrix
-status: todo
+status: done
 template: feature-impl
 created_at: 2026-10-17T15:59:56.819Z
-updated_at: "2026-10-17T16:13:28.982Z"
+updated_at: "2026-10-17T19:49:19.255Z"
 feature_id: D65
 priority: P1
 tags:
@@ -14,6 +14,8 @@ tags:
 estimate_hours: 6
 
 dependencies: ["1232", "1233", "1235", "1236", "1237", "1224"]
+done_forced: "false"
+done_reason: unforced close; PASS artifact at .spur/memory/evidence/1238-verdict.json
 ---
 
 ## 1238. Pilot feature-verification on the foundation and run the executor matrix
@@ -29,15 +31,15 @@ Feature D65 P1 exit. feature-verification.yaml has no agent.run (one shell verif
 
 ### Requirements
 
-- [ ] R1. feature-verification (A92 version "2") runs its verify step as a command.gate action with the `check-feature` action under the full-gate lock; outcomes and status file are unchanged and gate time appears in the run summary.
-- [ ] R2. A tracked fixture workflow (one agent.run, one decision gate) runs E2E under host, subprocess and fleet; traces and receipts are identical in shape across executors.
-- [ ] R3. The matrix is a mode of scripts/commands/fleet-e2e.ts writing a repeatable receipt under docs/reports/; the fleet column uses fleet-e2e's scratch fleet and reports blocked only with the failed scaffolding precondition.
+- [x] R1. feature-verification (A92 version "2") runs its verify step as a command.gate action with the `check-feature` action under the full-gate lock; outcomes and status file are unchanged and gate time appears in the run summary.
+- [x] R2. A tracked fixture workflow (one agent.run, one decision gate) runs E2E under host, subprocess and fleet; traces and receipts are identical in shape across executors.
+- [x] R3. The matrix is a mode of scripts/commands/fleet-e2e.ts writing a repeatable receipt under docs/reports/; the fleet column uses fleet-e2e's scratch fleet and reports blocked only with the failed scaffolding precondition.
 
 ### Acceptance Criteria
 
-- [ ] AC1 — Feature verification runs on the foundation (req: R1)
-- [ ] AC2 — The executor matrix shows identical traces across executors (req: R2, R3)
-- [ ] AC3 — Foundation tasks depend on the A92 action map
+- [x] AC1 — R8 — Feature verification runs on the foundation (req: R1)
+- [x] AC2 — R9 — The executor matrix shows identical traces across executors (req: R2, R3)
+- [x] AC3 — R16 — Foundation tasks depend on the A92 action map
 
 ### Q&A
 
@@ -51,22 +53,72 @@ Reuse fleet-e2e.ts scaffolding (`bun scripts/spur-dev.ts fleet-e2e`) instead of 
 
 ### Plan
 
-- [ ] Port feature-verification verify to command.gate on the A92 version
-- [ ] Author fixture workflow
-- [ ] Matrix mode in fleet-e2e.ts + receipt
-- [ ] Run matrix; record any blocked precondition honestly
+- [x] feature-verification verify step runs as command.gate over the check-feature action, under the full-gate lock
+- [x] Tracked executor-matrix fixture (one agent.run + one decision gate) under host, subprocess and fleet
+- [x] Matrix mode in fleet-e2e writing docs/reports/executor-matrix-receipt.json; fleet reports blocked naming its precondition
+- [x] Failure-mode tests first; identical action sequence and receipt shape across the comparing executors
 
 ### Solution
 
-<!-- Filled during implementation: file:line change map and concise rationale. -->
+- `config/workflows/feature-verification.yaml:64-73` — the verify state's ONE action is now a
+  `command.gate` (`id: feature-verification`, `executable: ${vars.spurBin}`, the same
+  `feature verify <featureId> --run-id <__runId> --no-logo` argv, `softFail: true`), with its typed
+  PASS/FAIL/BLOCKED token in `.spur/run/<runId>-feature-verification.gate.status`. Every state,
+  guard, transition and terminalReason is unchanged; the pass still writes its own
+  `.spur/run/<runId>-feature-verification.status` and evidence receipt, so a completed FAIL is never
+  overwritten by the gate's exit-0 token.
+- `packages/app/src/workflow/feature-verification-run.ts:154-186` — the pass keeps the coarse FAIL
+  the removed shell wrote: a pass that cannot RUN writes `FAIL` to its status file before rethrowing
+  (`writeFailedStatus`), so the unchanged verify→done guard (`= PASS`) can only route to `failed`.
+- `packages/app/tests/fixtures/1238/executor-matrix-fixture.yaml` — the tracked matrix fixture: one
+  `agent.run` stage (`work`) with a declared `expectFile` and one operator decision gate (`decide`),
+  `work -> decide -> done | blocked`. A test fixture path, not `config/workflows/`.
+- `scripts/commands/fleet-e2e.ts:1123` (`--matrix`) — the matrix is a MODE of the existing harness:
+  one scratch project (`git init`, `self init`, the same declared `agent.fleet`, a `bin/` holding the
+  stub model and a `bun` shim) driven through the source-local CLI under host, subprocess and fleet.
+  Columns are decided by exported pure functions (`hostColumnVerdict`, `runColumnVerdict`,
+  `compareMatrixColumns`, `matrixExitCode`, `matrixPrecondition`); the receipt is written to
+  `docs/reports/executor-matrix-receipt.json`. Exit 0 = every column passed, 1 = a column ran and
+  broke the contract, 2 = a column was blocked. A block always names its precondition; the fleet
+  column's dispatch reason is normalized (`workflow:<runId>`) so the receipt repeats.
+- `scripts/commands/fleet-e2e-matrix.test.ts` — the matrix's failure modes first: host never paused,
+  a mismatched receipt accepted, a terminal run without its receipt, a receipt naming another
+  executor, a blocked column that never counts as a pass, and action-sequence / receipt-shape
+  divergence.
+- Executor matrix result: host PASSED (pause with work item, mismatched receipt refused at exit 1,
+  receipt resumed to done), subprocess PASSED (done on its own receipt), fleet BLOCKED —
+  `dispatchToFleet` posts `fromId: workflow:<runId>` and `validateAgentId` rejects the colon, so the
+  fleet surface cannot dispatch at all on this tree (pre-existing, ADR-126 territory, not fixed
+  here). `comparison.compared = 2`, `identical = true`.
 
 ### Testing
 
-<!-- Filled during verification: commands run, outcomes, coverage claim or N/A. -->
+**Pipeline verify results**
+
+- Verdict: PASS (from verdict artifact)
+
+| Requirement | Status | Evidence |
+|-------------|--------|----------|
+| R1 | MET | The verify state's single action in `config/workflows/feature-verification.yaml:65` is now `command.gate` over the same `feature verify` argv, with `softFail` replacing the shell's ` |
+| R2 | MET | A tracked fixture (`packages/app/tests/fixtures/1238/executor-matrix-fixture.yaml`: one `agent.run` with a declared `expectFile`, one operator decision gate, `work → decide → done/blocked`) runs under all three executors from `docs/reports/executor-matrix-receipt.json`: host `passed` (paused at `work` with the work item, mismatched receipt refused, resumed to `done`), subprocess `passed`, both with the identical action sequence and an identical receipt shape (`executor,files,finishedAt,outcome,reason,runId,startedAt,state`), `comparison.identical: true` over 2 compared columns |
+| R3 | MET | The matrix is a mode of `scripts/commands/fleet-e2e.ts` (`runExecutorMatrix` at `:1018`, invoked as `bun scripts/spur-dev.ts fleet-e2e --matrix`), writing the repeatable receipt `docs/reports/executor-matrix-receipt.json` (regenerated by my own run). The fleet column reports `blocked`, not a pass, naming the real precondition: `fleet dispatch rejected the sender id 'workflow:<runId>' (validateAgentId: 2-64 chars, lowercase alphanumeric, "_" or "-")` — the pre-existing `packages/app/src/workflow/fleet-dispatch.ts:200` vs `packages/app/src/services/agent-coordination-service.ts:266` defect, not a scaffold failure |
+
+| Acceptance Criteria | Status | Evidence Type | Evidence |
+|---------------------|--------|---------------|----------|
+| AC1 — R8 — Feature verification runs on the foundation (req: R1) | MET | command | `spur workflow validate config/workflows/feature-verification.yaml` → `workflow valid: feature-verification (explicit(2))`; `plugins/sp/tests/feature-verification-scope.test.ts` (11 pass) drives the real `spur feature verify` and the `done` guard shell in a scratch project; `packages/app/tests/workflow/feature-verification-run.test.ts` (10 pass) pins the FAIL-write on a cannot-run pass |
+| AC2 — R9 — The executor matrix shows identical traces across executors (req: R2, R3) | MET | command | `bun scripts/spur-dev.ts fleet-e2e --matrix` (my own run) → `ok host`, `ok subprocess`, `BLOCK fleet` with the named precondition, receipt `docs/reports/executor-matrix-receipt.json` with `comparison.identical: true`; `scripts/commands/fleet-e2e-matrix.test.ts` (19 pass) covers the four failure modes plus the blocked-not-pass rule |
+| AC3 — R16 — Foundation tasks depend on the A92 action map | MET | command | `spur task show 1238 --json` reports `.frontmatter.dependencies = [1232, 1233, 1235, 1236, 1237, 1224]` — the A92 gate-routing task 1224 included, and every dependency is `done` in this tree |
+- Coverage: N/A (verdict-based; verify pipeline does not measure code coverage)
 
 ### Review
 
-<!-- Filled during review: P1-P4 findings, residual risk, and final disposition. -->
+<!-- spur:record-review -->
+
+**SECU findings** (pipeline verify step — verdict: PASS)
+
+| Priority | Dimension | Location | Finding |
+|----------|-----------|----------|----------|
+| P4 | — | — | No findings (verify verdict PASS) |
 
 ### References
 
@@ -74,3 +126,8 @@ Reuse fleet-e2e.ts scaffolding (`bun scripts/spur-dev.ts fleet-e2e`) instead of 
 - Feature D65; ADR-140; ADR-051 amendment 2026-10-17.
 
 ### History
+
+- 2026-10-17T19:49:15.521Z todo → wip (system)
+- 2026-10-17T19:49:16.044Z wip → testing (system)
+- 2026-10-17T19:49:19.249Z testing → done (system)
+

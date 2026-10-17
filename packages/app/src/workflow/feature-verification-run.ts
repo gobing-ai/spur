@@ -152,10 +152,41 @@ async function defaultReadLearnings(fileSystem: FileSystem, workdir: string): Pr
 /**
  * One full verification pass for one feature. Returns the status; it never decides the workflow's
  * transition — the status file and the completion-side receipt validation do (fail-closed).
+ *
+ * A pass that cannot RUN still leaves the coarse FAIL (task 1238 R1): the workflow's verify step is
+ * now a `command.gate` over this operation instead of the shell that used to append
+ * `|| printf 'FAIL …' > …status`, so this operation owns that write. Without it a cannot-run pass
+ * left NO status file, which the transition guards cannot tell from a pass still in flight.
  */
 export async function runFeatureVerification(
     input: FeatureVerificationRunInput,
 ): Promise<FeatureVerificationRunResult> {
+    try {
+        return await runFeatureVerificationPass(input);
+    } catch (error) {
+        await writeFailedStatus(input);
+        throw error;
+    }
+}
+
+/**
+ * Best-effort coarse FAIL for a pass that threw before it could complete. Never masks the original
+ * error: an unwritable status file (unsafe ids, a missing workdir) is swallowed here and the
+ * caller still sees the pass's own failure.
+ */
+async function writeFailedStatus(input: FeatureVerificationRunInput): Promise<void> {
+    try {
+        const paths = featureReceiptPaths(join(input.workdir, '.spur', 'run'), input.featureId, input.runId);
+        const fileSystem = input.fileSystem ?? createNodeFileSystem();
+        await fileSystem.ensureDir(join(input.workdir, '.spur', 'run'));
+        await fileSystem.writeFile(paths.status, 'FAIL\n');
+    } catch {
+        // The pass's own error is the report; a status file nobody asked to write cannot replace it.
+    }
+}
+
+/** The pass itself — {@link runFeatureVerification} owns the cannot-run status contract. */
+async function runFeatureVerificationPass(input: FeatureVerificationRunInput): Promise<FeatureVerificationRunResult> {
     assertSafeReceiptId('feature id', input.featureId);
     assertSafeReceiptId('run id', input.runId);
 

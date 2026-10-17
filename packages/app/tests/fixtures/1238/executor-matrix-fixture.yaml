@@ -1,0 +1,90 @@
+# D65 1238 — the executor-matrix fixture: one `agent.run` stage and one decision gate.
+#
+# Tracked on purpose (task 1238 R2/R3): `scripts/commands/fleet-e2e.ts --matrix` runs THIS file
+# end to end under the host, subprocess and fleet executors and compares the traces, so the
+# matrix is repeatable from the repository instead of from a scratch workflow the harness wrote
+# for itself. It is a test fixture, not a shipped definition — it stays out of the shipped
+# workflow directory (the boundary rule forbids naming that path literally from packages/).
+#
+# Why these two states: a stage that does work (`agent.run` with a declared `expectFile`, so a
+# stage that wrote nothing is a failed receipt) plus a gate that decides (an operator gate the
+# profile's responder answers). No deterministic shell step, no second agent.run — every extra
+# action would widen what the matrix proves about the DISPATCH contract.
+#
+# Shape: work -> decide -> done | blocked. `work` is where every executor differs (host pauses
+# with a work item, subprocess spawns an agent, fleet posts an inbox message); `decide` is the
+# same synchronous responder answer under all three.
+name: executor-matrix
+kind: state-machine
+description: "D65 1238 fixture: one agent.run stage and one decision gate, run by the executor matrix."
+version: "1"
+iterationBound: 2
+initialState: work
+terminalStates:
+  - done
+  - blocked
+failureStates:
+  - blocked
+vars:
+  __runId: ""
+  # The stage's declared completion artifact. Explicit in vars so the host work item, the
+  # subprocess post-condition and the fleet post-condition all name the SAME path.
+  targetFile: ".spur/run/executor-matrix-result.txt"
+  # Declared for the guard below (0674 R5); the gate action writes it.
+  matrixAnswer: ""
+states:
+  - id: work
+    description: >
+      One agent.run stage: the resolved executor writes `targetFile`. The prompt is short and
+      command-shaped because the matrix's stub model keys on it — a real model is never part of
+      this proof (harness rule: only the model is stubbed).
+    onEnter:
+      - kind: agent.run
+        options:
+          id: work
+          # A declared role is what the fleet surface resolves a member by; host and subprocess
+          # ignore it beyond resolution metadata, so one fixture serves all three executors.
+          role: coder
+          input: "EXECUTOR-MATRIX write the result file"
+          expectFile: "${vars.targetFile}"
+          timeoutMs: 300000
+
+  - id: decide
+    description: >
+      One decision gate. The operator gate is answered by the profile's responder (interactive
+      operator, or the headless default the matrix runs under), so the decision itself is
+      deterministic and executor-independent.
+    onEnter:
+      - kind: hitl.confirm
+        options:
+          id: accept
+          prompt: "Accept the stage output?"
+          var: matrixAnswer
+          decision:
+            mode: never
+
+  - id: done
+    description: Terminal — the stage produced its artifact and the gate accepted it.
+
+  - id: blocked
+    description: Terminal — the stage or the gate refused.
+
+transitions:
+  - from: work
+    to: decide
+    description: The stage's dispatch returned (every executor's completion evidence differs; the graph's does not).
+    guard:
+      kind: always
+  - from: decide
+    to: done
+    description: The gate accepted.
+    guard:
+      kind: shell
+      options:
+        command: 'test "$matrixAnswer" = yes'
+  - from: decide
+    to: blocked
+    terminalReason: failed-guard
+    description: The gate refused.
+    guard:
+      kind: always
