@@ -76,8 +76,8 @@ That a documented reading of the trace produced a wrong retirement list is the a
 
 ### 2.4 Inline run identity, closure and installed execution
 
-`plugins/sp/scripts/inline-run-setup.ts` creates-or-attaches the authoritative run row.
-Its existing `--action` and `--close` modes (0868/0879) record action outcomes and terminal
+`spur workflow inline` (formerly `plugins/sp/scripts/inline-run-setup.ts`, absorbed 2026-10-15) creates-or-attaches
+the authoritative run row. Its `--action` and `--close` modes (0868/0879) record action outcomes and terminal
 closure through the shared application writer. Action observation failure is best-effort;
 identity setup and terminal bookkeeping fail nonzero. The previous absence of closure described
 below is historical, not the current runtime contract.

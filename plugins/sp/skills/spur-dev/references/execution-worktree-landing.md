@@ -425,7 +425,7 @@ git checkout <base-ref> && git merge --no-ff -m "<prepared message>" <branch>
 #     git checkout <base-ref> && git merge --no-commit <branch>
 # 2. resolve source conflicts by hand; generated files are then regenerated with the project's
 #    generator, never hand-merged
-#    (this repo: bun run build:plugin-lib && bun run --filter @gobing-ai/spur build:bundle)
+#    (this repo: bun run --filter @gobing-ai/spur build:bundle)
 # 3. stage every resolved path and regenerated bundle through the guard — an unmerged or
 #    unstaged path makes step 5 abort, and a conflict-marked path exits 3 (resolve, then retry):
 #      spur workflow commit-guard stage --run "$RUN_ID" -- <resolved paths and regenerated bundles>

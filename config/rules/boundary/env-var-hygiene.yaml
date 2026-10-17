@@ -12,7 +12,6 @@
 #   gateway — because `superskill install` bundles them on targets with no
 #   node_modules, where any `@gobing-ai/*` import fails ("Bundle failed", task
 #   0669). It mirrors the upstream semantics and is the one exempt file.
-#   The `superskill script convert` `.mjs` twins remain self-contained by inlining.
 # - `apps/web` uses `import.meta.env` (Vite browser plane) — not process env, never matches.
 # - Which variables exist and who consumes them is documented in `.env.example`.
 #   (The former per-var lease table moved there; the rule now enforces the funnel,

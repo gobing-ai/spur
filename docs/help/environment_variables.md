@@ -126,5 +126,5 @@ Before adding an env var, it must clear **all** of:
 2. It is **not** a design-time/dev-time option (those are constants in source) and **not** a
    runtime option (those go in `.spur/config.yaml` `bootstrap.options` or the global config).
 3. The access goes through the `@gobing-ai/ts-utils` gateway; raw access only inside the two
-   sanctioned zones (`packages/config/src/**`, `plugins/sp/scripts/env.ts`).
+   sanctioned zones (`packages/config/src/**`, `plugins/sp/lib/env.ts`).
 4. The user-settable set is updated in `.env.example`, and this inventory gains a row.

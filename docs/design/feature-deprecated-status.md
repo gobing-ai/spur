@@ -40,6 +40,11 @@ attach new work to it or advance it. Leaving the state is explicit — un-deprec
 
 ### 3.1 Affected-surface review
 
+> **Current reading (2026-10-16):** rows citing `plugins/sp/scripts/*` record the 2026-10-13 audit. Those scripts
+> were absorbed into the CLI on 2026-10-15 (ADR-130): `batch-preflight` → `spur task preflight`, `wrapup-steps` →
+> `spur task wrapup` (`packages/app/src/workflow/wrapup/steps.ts`), `quality-gate` → `spur task gate`
+> (`packages/app/src/services/quality-gate.ts`). The audit verdicts still hold.
+
 | # | Surface | Location | Change |
 | --- | --- | --- | --- |
 | S1 | Domain vocabulary | `packages/domain/src/planning/schema.ts:23,50,182,215,357` | Append `deprecated` to `FEATURE_STATUSES`; add icon in `FEATURE_STATUS_ICONS`; add only the identity alias `deprecated: 'deprecated'` (`normalizeFeatureStatus` throws on keys missing from the alias map). |

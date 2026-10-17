@@ -558,7 +558,7 @@ started and failed). A `history.daily.failed` row ⇒ it ran and failed; **no** 
 window ⇒ it never started. Both are checkable without reading the artifact, which by definition does
 not exist in either case.
 
-**Report reachability (R7).** The daily-summary surface (`plugins/sp/scripts/daily-summary/`) resolves
+**Report reachability (R7).** The daily-summary surface (`spur history summary`; formerly `plugins/sp/scripts/daily-summary/`) resolves
 the `.spur/reports/history/latest.json` pointer and emits a `## History Report` section carrying the
 newest artifact path — so a completed nightly run reaches the operator through the summary they already
 open, with no new notification channel.

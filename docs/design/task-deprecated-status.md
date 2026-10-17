@@ -47,7 +47,7 @@ must not conflate them:
   Edges are authored at handoff time as `depends_on_names` in the ready-set payload and resolved to
   WBS by `packages/app/src/workflow/idea-handoff.ts:149,256`; the WBS values land in the task
   frontmatter key **`dependencies`** (what `spur task deps <wbs> set` writes, verified 2026-10-13 on
-  tasks 1190–1192), and `plugins/sp/scripts/batch-preflight.ts` consumes them for admission. The
+  tasks 1190–1192), and `spur task preflight` (formerly `plugins/sp/scripts/batch-preflight.ts`) consumes them for admission. The
   proof extractor accepts either `depends_on` or `dependencies`
   (`packages/app/src/workflow/proof-input-fingerprint.ts`). So the freeze attaches at two writers:
   the handoff resolver (S8) and `TaskService.mutateDependencies`
@@ -66,6 +66,11 @@ attaches to it, it never starts, and leaving the state is explicit — un-deprec
 `cancelled` once removed.
 
 ### 3.1 Affected-surface review
+
+> **Current reading (2026-10-16):** rows citing `plugins/sp/scripts/*` record the 2026-10-13 audit. Those scripts
+> were absorbed into the CLI on 2026-10-15 (ADR-130): `batch-preflight` → `spur task preflight`, `wrapup-steps` →
+> `spur task wrapup` (`packages/app/src/workflow/wrapup/steps.ts`), `quality-gate` → `spur task gate`
+> (`packages/app/src/services/quality-gate.ts`). The audit verdicts still hold.
 
 | # | Surface | Location | Change |
 | --- | --- | --- | --- |

@@ -1025,8 +1025,7 @@ export type BootstrapOptions = z.infer<typeof bootstrapOptionsSchema>;
  * access is banned everywhere in this repo — packages/config included — and every
  * surviving read (host contracts, deployment plane, invocation contracts — documented
  * in `.env.example`) stays greppable through this funnel. Signatures and contracts live in
- * ts-libs; portable plugin scripts bundle the same functions from ts-utils via
- * `superskill script convert`.
+ * ts-libs; the standalone plugin hooks use the vendored `plugins/sp/lib/env.ts` mirror instead.
  */
 export {
     getAppOptions,
