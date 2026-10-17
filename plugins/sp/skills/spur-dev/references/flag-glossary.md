@@ -209,8 +209,9 @@ wraps the one resolved ticket inside the worktree before the merge, and is skipp
 **Anchor:** `#flag-force`.
 
 Bypass a specific named guard that would otherwise stop the command (e.g. a shippable check on
-`dev-verify`/`dev-verifyall`). Named, not global: the command documentation states which guard is
-forced. Never bypasses lifecycle status transitions or irreversible HITL gates.
+`dev-verify`/`dev-verifyall`, or the per-HEAD review dedupe on `dev-pr-review`). Named, not global:
+the command documentation states which guard is forced. Never bypasses lifecycle status transitions
+or irreversible HITL gates.
 
 ### `--feature <id>` — scope the operation to a feature
 

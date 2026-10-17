@@ -1018,3 +1018,331 @@ function runSpine(argv: readonly string[], rt: SpineRuntime): number {
         return 2;
     }
 }
+
+// ─── Composed verbs (task 1219) ─────────────────────────────────────────────
+//
+// `spur builder pr-<verb>` replaces the `pr <op>` pass-through with four flat verbs. Sequencing
+// lives here, not in the CLI and not in `pr-review.yaml` shell: each verb runs the existing ops in
+// order inside ONE runtime, so a verb's stdout JSON, `--status-file` verdict and exit code equal
+// the composition of the former operations it replaces.
+//
+// The ops always run with `--json`: their JSON records are the only lossless interface for the
+// composition (the request record feeds wait/collect in-process, so the workflow no longer needs
+// the `prSince`/`prHead` file-var plumbing). Human mode renders the composed record instead of the
+// per-op text. Exit 2 is a hard failure and carries verdict FAIL; exit 3 is a wait timeout and
+// always carries verdict PENDING.
+
+/** The four flat composer verbs registered under `spur builder`. */
+export type PrVerb = 'status' | 'check' | 'open' | 'review';
+
+/** Flags of the composer verbs. `runPrVerb` owns the mapping onto the ops it composes. */
+export interface PrVerbOptions {
+    /** `pr-check`/`pr-open`: base branch for the diff and a newly created PR. */
+    base?: string;
+    /** `pr-status`: only count review output submitted at or after this time. */
+    since?: string;
+    /** `pr-status`: explicit commit pin; defaults to the current local HEAD. */
+    head?: string;
+    /** `pr-review`: extra focus appended to the `@codex review` request. */
+    focus?: string;
+    /** `pr-review`: re-request even when the head is already reviewed (`mode=rerun`). */
+    force?: boolean;
+    /** `pr-review`: post the request and return PENDING without polling (`mode=submit`). */
+    noWait?: boolean;
+    /** `pr-review`: wait budget in seconds (the op's own default applies when omitted). */
+    timeout?: string;
+    /** `pr-review`: poll interval in seconds (the op's own default applies when omitted). */
+    interval?: string;
+    /** `pr-check`: run hygiene only, skipping preflight (a dirty tree is expected). */
+    scanOnly?: boolean;
+    /** Emit the composed JSON object instead of the human summary. */
+    json?: boolean;
+    /** Verdict path for the composed result; `pr-status` is read-only and writes none. */
+    statusFile?: string;
+}
+
+/** One composed op run: its exit code and the JSON record it reported, if any. */
+interface VerbOpRun {
+    code: number;
+    payload: Record<string, unknown> | null;
+}
+
+/** The composed result: the verb's exit code plus the object it reports. */
+interface VerbResult {
+    code: number;
+    payload: Record<string, unknown>;
+}
+
+/** A composed payload field as an object; an absent or null field reads as empty. */
+function obj(value: unknown): Record<string, unknown> {
+    return typeof value === 'object' && value !== null ? (value as Record<string, unknown>) : {};
+}
+
+/** A composed payload field as text. */
+function text(value: unknown): string {
+    return typeof value === 'string' ? value : '';
+}
+
+/** A composed payload field as a list. */
+function list(value: unknown): unknown[] {
+    return Array.isArray(value) ? value : [];
+}
+
+/** The verdict word an op recorded, else `FAIL` — the op's own word, never a re-derived one. */
+function word(payload: Record<string, unknown> | null, fallback = 'FAIL'): string {
+    const verdict = payload?.verdict;
+    return typeof verdict === 'string' && verdict !== '' ? verdict : fallback;
+}
+
+/** An op's findings, typed for the spine's own renderer. */
+function findingsArg(value: unknown): Parameters<typeof renderFindings>[0] {
+    return list(value) as Parameters<typeof renderFindings>[0];
+}
+
+/**
+ * Run one spine op in-process: stdout is buffered so the composition can read the record, while
+ * stderr streams straight through. `true`-exit errors are already rendered by `runSpine`.
+ */
+function runVerbOp(argv: readonly string[], rt: SpineRuntime, sink: PrReviewIo): VerbOpRun {
+    const out: string[] = [];
+    const previous = io;
+    io = { out: (line) => out.push(line), err: (line) => sink.err(line) };
+    try {
+        const code = runSpine(argv, rt);
+        let payload: Record<string, unknown> | null = null;
+        for (let i = out.length - 1; i >= 0; i--) {
+            const line = (out[i] ?? '').trim();
+            if (!line.startsWith('{')) continue;
+            try {
+                payload = JSON.parse(line) as Record<string, unknown>;
+            } catch {
+                payload = null;
+            }
+            break;
+        }
+        return { code, payload };
+    } finally {
+        io = previous;
+    }
+}
+
+/** `--timeout`/`--interval` as the `wait` op reads them; a bad value is a usage error (exit 1). */
+function validPollBudget(opts: PrVerbOptions, sink: PrReviewIo): boolean {
+    if (opts.timeout !== undefined && !(Number.isFinite(Number(opts.timeout)) && Number(opts.timeout) >= 0)) {
+        sink.err('error: --timeout must be a non-negative number');
+        return false;
+    }
+    if (opts.interval !== undefined && !(Number.isFinite(Number(opts.interval)) && Number(opts.interval) > 0)) {
+        sink.err('error: --interval must be a positive number');
+        return false;
+    }
+    return true;
+}
+
+/** Write the composed verdict; `PENDING` overrides are the verb's contract, not the op's word. */
+function writeVerbStatus(rt: SpineRuntime, opts: PrVerbOptions, verdict: string): void {
+    if (opts.statusFile !== undefined) rt.writeStatus(opts.statusFile, `${verdict}\n`);
+}
+
+/**
+ * The commit `pr-status` reads when the caller pins no `--head`: the current local HEAD, so a bare
+ * read-only status answers for the branch the caller is on. A pin the caller does supply stays
+ * strict — the op compares it against the PR head and fails loud (exit 2) instead of attributing a
+ * review to a moved commit (0771).
+ */
+function currentHead(rt: SpineRuntime): string | undefined {
+    const res = run(rt, ['git', 'rev-parse', 'HEAD']);
+    const head = res.stdout.trim();
+    return res.code === 0 && head !== '' ? head : undefined;
+}
+
+/** `pr-status`: status + collect, with the collect record as `review` (read-only, no verdict). */
+function composeStatus(rt: SpineRuntime, opts: PrVerbOptions, sink: PrReviewIo): VerbResult {
+    const flags = ['--json'];
+    if (opts.since !== undefined) flags.push('--since', opts.since);
+    const head = opts.head ?? currentHead(rt);
+    if (head !== undefined) flags.push('--head', head);
+    const status = runVerbOp(['status', ...flags], rt, sink);
+    if (status.code !== 0) return { code: status.code, payload: { ...obj(status.payload), review: null } };
+    if (status.payload?.pr === null || status.payload?.pr === undefined) {
+        return { code: 0, payload: { ...obj(status.payload), review: null } };
+    }
+    const collect = runVerbOp(['collect', ...flags], rt, sink);
+    return { code: collect.code, payload: { ...obj(status.payload), review: collect.payload } };
+}
+
+/** `pr-check`: preflight then hygiene; a preflight FAIL stops the sequence (verdict FAIL). */
+function composeCheck(rt: SpineRuntime, opts: PrVerbOptions, sink: PrReviewIo): VerbResult {
+    const flags = ['--json'];
+    if (opts.statusFile !== undefined) flags.push('--status-file', opts.statusFile);
+    if (opts.base !== undefined) flags.push('--base', opts.base);
+    const preflight = opts.scanOnly === true ? null : runVerbOp(['preflight', ...flags], rt, sink);
+    if (preflight !== null && preflight.code !== 0) {
+        return {
+            code: preflight.code,
+            payload: { ok: false, verdict: 'FAIL', preflight: preflight.payload, hygiene: null },
+        };
+    }
+    const hygiene = runVerbOp(['hygiene', ...flags], rt, sink);
+    const opWord = word(hygiene.payload, 'PASS');
+    const verdict = hygiene.code === 0 ? opWord : opWord === 'BLOCK' ? 'BLOCK' : 'FAIL';
+    return {
+        code: hygiene.code,
+        payload: { ok: hygiene.code === 0, verdict, preflight: preflight?.payload ?? null, hygiene: hygiene.payload },
+    };
+}
+
+/** `pr-open`: push then ensure; a rejected push stops the sequence (verdict FAIL, never a force). */
+function composeOpen(rt: SpineRuntime, opts: PrVerbOptions, sink: PrReviewIo): VerbResult {
+    const flags = ['--json'];
+    if (opts.statusFile !== undefined) flags.push('--status-file', opts.statusFile);
+    const push = runVerbOp(['push', ...flags], rt, sink);
+    if (push.code !== 0) {
+        return { code: push.code, payload: { ok: false, verdict: 'FAIL', push: push.payload, pr: null } };
+    }
+    const ensureFlags = [...flags];
+    if (opts.base !== undefined) ensureFlags.push('--base', opts.base);
+    const ensure = runVerbOp(['ensure', ...ensureFlags], rt, sink);
+    const verdict = ensure.code === 0 ? (ensure.payload?.created === true ? 'CREATED' : 'FOUND') : 'FAIL';
+    return {
+        code: ensure.code,
+        payload: { ok: ensure.code === 0, verdict, push: push.payload, pr: ensure.payload?.pr ?? null },
+    };
+}
+
+/**
+ * `pr-review`: request, then route on its record — ALREADY_REVIEWED collects without a new request,
+ * ALREADY_REQUESTED and `--no-wait` report PENDING, REQUESTED waits and then collects. The request
+ * record stays in-process, so wait/collect correlate on it without the workflow's file-var plumbing.
+ */
+function composeReview(rt: SpineRuntime, opts: PrVerbOptions, sink: PrReviewIo): VerbResult {
+    const statusFlags = opts.statusFile !== undefined ? ['--status-file', opts.statusFile] : [];
+    // Reject a bad poll budget before the request posts anything: a usage error (exit 1) must not
+    // leave a half-run review behind, and it writes no status file.
+    if (!validPollBudget(opts, sink)) {
+        return { code: 1, payload: { ok: false, verdict: 'FAIL', request: null, findings: [] } };
+    }
+    const requestFlags = ['--json', ...statusFlags];
+    if (opts.force === true) requestFlags.push('--force');
+    if (opts.focus !== undefined) requestFlags.push('--focus', opts.focus);
+    const request = runVerbOp(['request', ...requestFlags], rt, sink);
+    if (request.code !== 0) {
+        return { code: request.code, payload: { ok: false, verdict: 'FAIL', request: request.payload, findings: [] } };
+    }
+    const record = obj(request.payload);
+    const correlation: string[] = [];
+    if (text(record.requestedAt) !== '') correlation.push('--since', text(record.requestedAt));
+    if (text(record.head) !== '') correlation.push('--head', text(record.head));
+
+    const collected = (): VerbResult => {
+        const collect = runVerbOp(['collect', ...correlation, '--json', ...statusFlags], rt, sink);
+        return {
+            code: collect.code,
+            payload: {
+                ok: collect.code === 0,
+                verdict: collect.code === 0 ? word(collect.payload) : 'FAIL',
+                request: request.payload,
+                findings: collect.code === 0 ? list(collect.payload?.findings) : [],
+            },
+        };
+    };
+    const pending = (code: number): VerbResult => {
+        writeVerbStatus(rt, opts, 'PENDING');
+        return { code, payload: { ok: true, verdict: 'PENDING', request: request.payload, findings: [] } };
+    };
+
+    if (record.alreadyReviewed === true) return collected();
+    if (record.pending === true || (record.requested === true && opts.noWait === true)) return pending(0);
+
+    const waitFlags = [...correlation, '--json', ...statusFlags];
+    if (opts.timeout !== undefined) waitFlags.push('--timeout', opts.timeout);
+    if (opts.interval !== undefined) waitFlags.push('--interval', opts.interval);
+    const waited = runVerbOp(['wait', ...waitFlags], rt, sink);
+    if (waited.code === 3) return pending(3); // pending, never failure
+    if (waited.code !== 0) {
+        return { code: waited.code, payload: { ok: false, verdict: 'FAIL', request: request.payload, findings: [] } };
+    }
+    return collected();
+}
+
+/** The human summary of a composed result; the ops' own text exists only in JSON-only runs. */
+function renderPrVerb(verb: PrVerb, payload: Record<string, unknown>): string[] {
+    if (verb === 'status') {
+        const pr = payload.pr === null || payload.pr === undefined ? null : obj(payload.pr);
+        const review = payload.review === null || payload.review === undefined ? null : obj(payload.review);
+        const lines = [
+            `Repository: ${text(payload.repo) || 'unknown'}`,
+            `PR:         ${pr === null ? 'none' : `#${String(pr.number ?? '')} ${text(pr.url)}`}`,
+            `Branch:     ${text(payload.branch)}`,
+            `HEAD:       ${text(payload.head)}`,
+            `Base:       ${text(payload.base)}`,
+            `Local:      ${text(payload.local)}`,
+            `CI:         ${text(payload.ci)}`,
+            `Codex:      ${text(payload.codex)}`,
+        ];
+        if (review === null) return [...lines, 'Review:     no PR — nothing collected'];
+        lines.push(`Review:     ${text(review.verdict) || 'unknown'}`);
+        const findings = findingsArg(review.findings);
+        if (findings.length > 0) lines.push('', renderFindings(findings));
+        return lines;
+    }
+    if (verb === 'check') {
+        const preflight = payload.preflight === null || payload.preflight === undefined ? null : obj(payload.preflight);
+        const hygiene = payload.hygiene === null || payload.hygiene === undefined ? null : obj(payload.hygiene);
+        const lines = [
+            preflight === null
+                ? 'Preflight:  skipped (--scan-only)'
+                : preflight.ok === true
+                  ? `Preflight:  ${text(preflight.nameWithOwner)} ${text(preflight.branch)} @ ${text(preflight.shortHead)}`
+                  : `Preflight:  FAIL — ${text(preflight.error) || 'probe failed'}`,
+        ];
+        if (hygiene === null) return lines;
+        lines.push(`Hygiene:    ${text(hygiene.verdict) || 'FAIL'}`);
+        for (const blocker of list(hygiene.blockers)) lines.push(`  BLOCK ${String(blocker)}`);
+        for (const warning of list(hygiene.warnings)) lines.push(`  WARN  ${String(warning)}`);
+        return lines;
+    }
+    if (verb === 'open') {
+        const push = obj(payload.push);
+        const pr = payload.pr === null || payload.pr === undefined ? null : obj(payload.pr);
+        return [
+            `Push:       ${push.pushed === true ? 'PUSHED' : 'UP_TO_DATE'} ${text(push.head).slice(0, 7)}`,
+            `PR:         ${pr === null ? 'none' : `#${String(pr.number ?? '')} ${text(pr.url)} (${text(payload.verdict)})`}`,
+        ];
+    }
+    const request = obj(payload.request);
+    const outcome =
+        request.requested === true
+            ? 'REQUESTED'
+            : request.alreadyReviewed === true
+              ? 'ALREADY_REVIEWED'
+              : request.pending === true
+                ? 'ALREADY_REQUESTED'
+                : 'FAIL';
+    const lines = [
+        `Request:    ${outcome} PR #${String(request.pr ?? '?')} ${text(request.url)}`,
+        `HEAD:       ${text(request.head).slice(0, 7)}`,
+        `Review:     ${text(payload.verdict) || 'unknown'}`,
+    ];
+    const findings = findingsArg(payload.findings);
+    if (findings.length > 0) lines.push('', renderFindings(findings));
+    return lines;
+}
+
+/** The four composers, one entry per verb — a new verb must add its own sequencer. */
+const PR_VERB_COMPOSERS: Readonly<
+    Record<PrVerb, (rt: SpineRuntime, opts: PrVerbOptions, sink: PrReviewIo) => VerbResult>
+> = { status: composeStatus, check: composeCheck, open: composeOpen, review: composeReview };
+
+/**
+ * Run one flat composer verb (task 1219). Every line goes to `sink`: the composed report
+ * (human summary, or one JSON object with `--json`). Exit codes: 0 ok · 1 usage · 2 hard failure
+ * (verdict FAIL) · 3 wait timeout (verdict PENDING — pending, never failure).
+ */
+export function runPrVerb(verb: PrVerb, opts: PrVerbOptions, sink: PrReviewIo, context: PrReviewContext = {}): number {
+    const rt = createRuntime(context);
+    const result = PR_VERB_COMPOSERS[verb](rt, opts, sink);
+    if (opts.json === true) sink.out(JSON.stringify(result.payload));
+    else for (const line of renderPrVerb(verb, result.payload)) sink.out(line);
+    return result.code;
+}

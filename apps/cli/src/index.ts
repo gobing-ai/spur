@@ -320,7 +320,15 @@ export function shouldRenderBanner(argv: readonly string[]): boolean {
     if (isWorkflowTransportInvocation(argv)) return false;
     // JSON-only output with no --json flag; sp:session-review pipes it to jq.
     if (argv[0] === 'history' && argv[1] === 'timeline') return false;
+    // 1218: `builder show-branches --format json` is the same JSON-only surface as `--json`.
+    if (argv[0] === 'builder' && argv[1] === 'show-branches' && requestsJsonFormat(argv)) return false;
     return !argv.some((arg) => arg === '--no-logo' || arg === '--json' || arg === '--quiet' || arg === '--silent');
+}
+
+/** `--format json` in either spelling; a machine consumer parses this verb's stdout. */
+function requestsJsonFormat(argv: readonly string[]): boolean {
+    const index = argv.indexOf('--format');
+    return argv.includes('--format=json') || (index !== -1 && argv[index + 1] === 'json');
 }
 
 /** CLI entry point extracted for test coverage. Does NOT call process.exit(). */

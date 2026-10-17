@@ -1,7 +1,7 @@
 ---
 kind: design
 title: Branch topology report, flat builder pr verbs and the local-first /sp:dev-pr-review
-status: proposed
+status: implemented
 created_at: 2026-10-16
 updated_at: 2026-10-16
 related:
@@ -86,15 +86,23 @@ Rendering:
 - **markdown (default)**: H2 title with base + generated time, the summary table
   (`branch | ahead | behind | contained | last commit | worktree | PR`), then one ```` ```mermaid ````
   block.
-- **Condensed gitGraph**: emit the base as the main line; for each non-contained branch in
-  fork-point order: `checkout <base>` → one base `commit` at the fork point (deduplicated across
-  branches sharing it) → `branch <name>` → up to `--max-commits` (default 3) `commit` nodes for the
-  newest commits, preceded by one `commit id:"+N earlier"` when more are hidden → tip as
+- **Condensed gitGraph**: emit the base as the main line **in age order**, because mermaid places
+  commits in statement order — first one `commit` per fork point that sits deeper than the shown
+  window, deepest first (`behind >= --max-commits`, deduplicated across branches sharing it), then
+  the window's newest `--max-commits` (default 3) base commits oldest to newest with the tip last; a
+  fork point the window already draws is one of its own commits, so it is never repeated, and every
+  fork point is therefore on the base line — no per-branch fork statement exists. Then, for each
+  non-contained branch: `checkout <base>` → `branch <name>` → up to `--max-commits` `commit` nodes for
+  the newest commits, preceded by one `commit id:"+N earlier"` when more are hidden → tip as
   `type: HIGHLIGHT`. Commits whose subject starts with `Revert "` render `type: REVERSE`.
   Contained branches render as a short branch joined back with `merge <name>` so they read as
   integrated rather than as open lines (`--hide-contained` drops them). Base tags at shown commits
   become `tag:"…"`. Names/labels are sanitized: characters outside `[A-Za-z0-9._/-]` → `-`,
-  quotes stripped, ids truncated to 40 chars and de-duplicated.
+  quotes stripped, ids truncated to 40 chars and de-duplicated. The layout claims behind the ordering
+  are `mermaid@11.15.0` behaviour (HIGH — `apps/web/package.json:28` pins it, and
+  `apps/web/tests/branch-topology-graph.heavy.test.ts:298` asserts it), and `behind` is git's left count
+  of a symmetric difference (HIGH — `git rev-list` documents the `<`/`>` sides; exercised against real
+  repositories by `apps/cli/tests/commands/builder/show-branches.test.ts`).
 - **json**: `{ base, generatedAt, branches: BranchRow[], omitted, warnings[] }` — the same rows the
   table renders.
 - **text**: aligned plain table, no mermaid.

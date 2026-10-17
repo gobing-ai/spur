@@ -30,6 +30,18 @@ function rewrite(stderr: string): string {
         .replace(LEGACY_VALIDATE_USAGE_HEAD, DOGFOOD_VALIDATE_USAGE.split('\n\n')[0] ?? '');
 }
 
+/**
+ * Task 1219 keeps `spur builder pr <op>` as a hidden alias that prints ONE stderr deprecation line
+ * naming the replacement verb before the unchanged pass-through. The legacy capture has no such
+ * line, so it is stripped before comparing — the one intended delta. The line itself (text and
+ * single occurrence) is asserted in `tests/commands/builder/pr.test.ts`.
+ */
+const ALIAS_DEPRECATION = /^spur builder pr(?: [^\n]+)? is deprecated; use spur builder [^\n]+\n/m;
+
+function stripAliasDeprecation(stderr: string): string {
+    return stderr.replace(ALIAS_DEPRECATION, '');
+}
+
 describe('spur agent dogfood | builder pr golden parity (script-absorption PR-7)', () => {
     test('the fixture covers every case exactly', () => {
         expect(Object.keys(GOLDEN.cases).sort()).toEqual(PR7_CASES.map((c) => c.name).sort());
@@ -43,7 +55,11 @@ describe('spur agent dogfood | builder pr golden parity (script-absorption PR-7)
             expect({ where, exitCode: got.exitCode }).toEqual({ where, exitCode: want.exitCode });
             const mode = c.compare ?? 'full';
             if (mode !== 'exit') expect({ where, stdout: got.stdout }).toEqual({ where, stdout: want.stdout });
-            if (mode === 'full') expect({ where, stderr: got.stderr }).toEqual({ where, stderr: rewrite(want.stderr) });
+            if (mode === 'full')
+                expect({ where, stderr: stripAliasDeprecation(got.stderr) }).toEqual({
+                    where,
+                    stderr: rewrite(want.stderr),
+                });
         }, 30_000);
     }
 });
