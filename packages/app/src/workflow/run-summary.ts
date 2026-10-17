@@ -196,6 +196,9 @@ export const newAcc = (ts: number): Acc => ({
 
 /** Fold one timestamped non-prompt record into a segment or window. */
 export function accumulate(acc: Acc, row: Row, ts: number): void {
+    // Claude Code writes a turn's `api-request` row before that turn's prompt row; as activity it
+    // would stretch the previous segment's work across the operator's idle gap.
+    if (row.type === 'api-request') return;
     acc.last = Math.max(acc.last, ts);
     if (row.type === 'message') {
         // pi (1130): mirrors the importer's field semantics (piRole / normalizeOmpToolCall /

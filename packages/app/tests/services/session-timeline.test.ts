@@ -61,6 +61,9 @@ function sourceText(dir: 'lib' | 'scripts'): string {
  *  F9 an AskUserQuestion gate blocks inside a segment → the operator's answer time counted as work.
  *  F10 cache reads dominate the total → a single "in" figure hides the non-cached spend; total must
  *      include cache read and non-cached must exclude it, both in compact units.
+ *  F11 the host writes the NEXT turn's `api-request` row (stamped at send time) before that turn's
+ *      prompt row → folded into the previous segment, it moves `last` to the next prompt and the
+ *      whole idle gap reads as work (observed: a 5:29:09 "work" segment with 6 tool calls).
  */
 
 const T0 = Date.parse('2026-10-04T03:00:00.000Z');
@@ -123,6 +126,21 @@ describe('buildTimeline', () => {
         expect(tl.segments[0]).toMatchObject({ workMs: 20_000, waitMs: 40_000, toolCalls: 1 });
         expect(tl.segments[1]).toMatchObject({ workMs: 30_000, waitMs: 0, toolCalls: 2 });
         expect(tl.totals).toMatchObject({ elapsedMs: 90_000, workMs: 50_000, waitMs: 40_000, toolCalls: 3 });
+    });
+
+    test("the next turn's api-request row written before its prompt stays out of work (F11)", () => {
+        const rows = [
+            { type: 'user', timestamp: at(0), message: { role: 'user', content: 'first' } },
+            { type: 'assistant', timestamp: at(20), message: { id: 'm1', content: [{ type: 'text' }] } },
+            { type: 'api-request-blob', message: { role: 'user' } },
+            { type: 'api-request', timestamp: at(600.2) },
+            { type: 'user', timestamp: at(600), message: { role: 'user', content: 'second' } },
+            { type: 'api-request', timestamp: at(601) },
+            { type: 'assistant', timestamp: at(610), message: { id: 'm2', content: [{ type: 'text' }] } },
+        ].map((r) => JSON.stringify(r));
+        const { segments } = buildTimeline(rows);
+        expect(segments[0]).toMatchObject({ workMs: 20_000, waitMs: 580_000 });
+        expect(segments[1]).toMatchObject({ workMs: 10_000 });
     });
 
     test('tokens are counted once per message id (F1)', () => {
