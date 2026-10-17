@@ -51,11 +51,14 @@ import { ProofCaptureError, ProofInputFingerprint } from './proof-input-fingerpr
 export const FEATURE_RECEIPT_SCHEMA_VERSION = 1;
 
 /**
- * Default verification command (ADR-119): the repo-wide, once-per-feature pass.
- * Trusted operator/config surface — same class as task-pipeline's
- * `qualityGateCmd`, never interpolated from untrusted input.
+ * Default verification command (ADR-119): the repo-wide, once-per-feature pass, reached through
+ * the SDLC action map (feature A92, task 1224 R5). Matches the shipped definition default and the
+ * run fallback verbatim — `verificationCmd` goes through the safe argv splitter with no shell,
+ * so the literal PATH `spur` is correct here and `$spurBin` cannot expand.
+ * Trusted operator/config surface — same class as task-pipeline's `qualityGateCmd`, never
+ * interpolated from untrusted input.
  */
-export const DEFAULT_FEATURE_VERIFICATION_CMD = 'bun run spur-check-feature';
+export const DEFAULT_FEATURE_VERIFICATION_CMD = 'spur self exec check-feature';
 
 /** Identity of the selected verifier definition, recorded inside the receipt. */
 export interface FeatureVerifierIdentity {

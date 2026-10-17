@@ -313,7 +313,7 @@ describe('task-pipeline proof-input completeness and honest review evidence (tas
             .map((c) => c.replace(/\n/g, ' '));
 
     test('the workflow identity carries the current contract version (v7: the asserted confidence machinery is retired, F511)', () => {
-        expect((DEF as unknown as { version: string }).version).toBe('7');
+        expect((DEF as unknown as { version: string }).version).toBe('8');
     });
 
     test('a featureSpecPath var exists and defaults to empty (orphan tasks stay compatible)', () => {

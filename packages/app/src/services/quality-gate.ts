@@ -20,7 +20,7 @@
  * Modes:
  * - `run`    full tier: the caller's `qualityGateCmd`, retried and bounded
  * - `recheck` same but skips the receipt preconditions (`receiptFailsAtDigest`)
- * - `light`  changed-scope tier (task 0939, ADR-124): biome on the changed files,
+ * - `light`  changed-scope tier (task 0939, ADR-124): the resolved lint action on the changed files,
  *            typecheck only when a workspace file changed (`planLightChecks` over
  *            `lightScope`); sub-check failures carry bounded findings
  * - `status` print `{reuse, reason}` for the task's receipt and exit 0
@@ -52,10 +52,11 @@ import {
 } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
+import type { BuilderConfig } from '@gobing-ai/spur-config';
 import { getEnvVars } from '@gobing-ai/ts-utils';
 import { canonicalJsonStringify } from '../workflow/composition-baseline';
 import { extractFeatureProofData, extractTaskProofData } from '../workflow/proof-input-fingerprint';
-import { shQuote } from './shell-quote';
+import { renderScoped, resolveAction, type ScopedValues } from './sdlc-actions';
 
 /** Hard cap on lock-retry attempts before `run` gives up (the old shell `for i in 1..5`). */
 export const MAX_GATE_ATTEMPTS = 5;
@@ -73,7 +74,7 @@ export const LOCKED_PATTERN = /SQLiteError: database is locked|SQLite database .
 export const FINDINGS_PATTERN = /[A-Za-z0-9_./-]+\.[A-Za-z]+:[0-9]+/g;
 
 /**
- * bun's coverage table row: `File | % Funcs | % Lines | Uncovered Line #s` (0862 R2).
+ * the runner's coverage table row: `File | % Funcs | % Lines | Uncovered Line #s` (0862 R2).
  * Group 4 (uncovered line numbers) may be empty — a fully covered file has no entry.
  */
 export const COVERAGE_ROW_PATTERN = /^\s*(\S+\.[A-Za-z]+)\s*\|\s*([\d.]+)\s*\|\s*([\d.]+)\s*\|\s*(\S*)/;
@@ -93,6 +94,8 @@ export interface QualityGateEnv {
 export interface QualityGateOptions {
     /** Base directory for `.spur/run`; defaults to the process cwd (CLI behavior). */
     cwd?: string;
+    /** Project action binding for the light tier (feature A92); absent means the default preset. */
+    builder?: BuilderConfig;
     /** Task 1136 R3: optional proof-input fingerprint recomputer override (e.g. for unit tests). */
     recomputeFingerprint?: (
         cwd: string,
@@ -430,7 +433,7 @@ export interface LightScope {
 }
 
 /**
- * The bun workspace a changed file belongs to: the shortest directory prefix below the repo root
+ * The workspace a changed file belongs to: the shortest directory prefix below the repo root
  * that holds a package.json (`apps/*`, `packages/*`). Null for root-level files, which no
  * workspace owns. Pure via the injected `exists` predicate.
  */
@@ -517,6 +520,8 @@ export const scopeFromFiles = lightScope;
 export interface LightCheckPlan {
     id: string;
     cmd: string;
+    /** Set when the action resolved unbound (R2): planned for visibility, never executed. */
+    skipped?: 'unbound';
 }
 
 /** Does the workspace package.json declare a `typecheck` script? (fs default; tests inject.) */
@@ -532,27 +537,39 @@ export function workspaceHasTypecheck(workspace: string): boolean {
 }
 
 /**
- * The light sub-checks for a scope, in run order: `format-lint:changed` (biome, repo root),
- * `typecheck:<ws>` per workspace declaring the script, `test:<ws>` per workspace with related
- * tests. Tests always run through `cd <ws> &&` — never from the repo root, whose bunfig preload
- * does not apply inside the workspace.
+ * The light sub-checks for a scope, in run order: `format-lint:changed` (repo root),
+ * `typecheck:<ws>` per admitted workspace, `test:<ws>` per workspace with related tests.
+ * Every command is resolved in-process from the project action map (feature A92, design
+ * `docs/design/sdlc-actions.md` §3.4); an action that resolves unbound is planned with
+ * `skipped: 'unbound'` and never falls back to a hard-coded command. Tests always run through
+ * `cd <ws> &&` in the preset binding — never from the repo root, whose preload config does not
+ * apply inside the workspace.
  */
 export function planLightChecks(
     scope: LightScope,
     hasTypecheck: (workspace: string) => boolean = workspaceHasTypecheck,
+    builder?: BuilderConfig,
 ): LightCheckPlan[] {
+    const plan = (id: string, action: string, values: ScopedValues): LightCheckPlan => {
+        const resolved = resolveAction(builder, action);
+        if (resolved.kind === 'unbound') return { id, cmd: '', skipped: 'unbound' };
+        const command = resolved.kind === 'command' ? resolved.command : resolved.steps.join(' && ');
+        return { id, cmd: renderScoped(command, values) };
+    };
     const plans: LightCheckPlan[] = [];
     if (scope.files.length > 0) {
-        plans.push({ id: 'format-lint:changed', cmd: `bunx biome check ${scope.files.map(shQuote).join(' ')}` });
+        plans.push(plan('format-lint:changed', 'lint-changed', { files: scope.files }));
         // Task 1142 R1: The light tier covers the cheap failure classes.
-        // Appends rules:pre and rules:post after the biome step whenever scope is non-empty.
-        plans.push({ id: 'rules:pre', cmd: 'bun run test-pre-check' });
-        plans.push({ id: 'rules:post', cmd: 'bun run test-post-check' });
+        // Appends rules:pre and rules:post after the lint step whenever scope is non-empty.
+        plans.push(plan('rules:pre', 'rules-pre', { files: scope.files }));
+        plans.push(plan('rules:post', 'rules-post', { files: scope.files }));
     }
+    const typecheck = resolveAction(builder, 'typecheck-changed');
     for (const workspace of scope.workspaces) {
-        if (hasTypecheck(workspace)) {
-            plans.push({ id: `typecheck:${workspace}`, cmd: `cd ${shQuote(workspace)} && bun run typecheck` });
-        }
+        // The preset binding is `<ws> typecheck`; a declared binding owns its own scope, so the
+        // package.json script check only gates the preset (R2).
+        if (typecheck.source === 'preset' && !hasTypecheck(workspace)) continue;
+        plans.push(plan(`typecheck:${workspace}`, 'typecheck-changed', { workspace }));
     }
     const testsByWorkspace = new Map<string, string[]>();
     for (const test of scope.tests) {
@@ -562,10 +579,7 @@ export function planLightChecks(
         testsByWorkspace.set(workspace, paths);
     }
     for (const [workspace, paths] of testsByWorkspace) {
-        plans.push({
-            id: `test:${workspace}`,
-            cmd: `cd ${shQuote(workspace)} && bun test ${paths.map(shQuote).join(' ')}`,
-        });
+        plans.push(plan(`test:${workspace}`, 'test-changed', { workspace, paths }));
     }
     return plans;
 }
@@ -650,7 +664,7 @@ export function runLightGate(env: QualityGateEnv, options: QualityGateOptions = 
     const digest = env.proofDigest ?? '';
     const scope = lightScope(gitChangedFiles(cwd), (p) => existsSync(abs(p)));
     // Bind the fs predicates to the gate cwd, not the process cwd (tests run gates in fixtures).
-    const plans = planLightChecks(scope, (workspace) => workspaceHasTypecheck(abs(workspace)));
+    const plans = planLightChecks(scope, (workspace) => workspaceHasTypecheck(abs(workspace)), options.builder);
 
     const reusable = new Map<string, CheckReceiptRow>();
     let preserveFullReceipt = false;
@@ -674,6 +688,12 @@ export function runLightGate(env: QualityGateEnv, options: QualityGateOptions = 
     const checks: CheckReceiptRow[] = [];
     let skipped = 0;
     for (const plan of plans) {
+        if (plan.skipped === 'unbound') {
+            const line = `--- light ${plan.id}: skipped:unbound — no action bound in builder config\n`;
+            process.stdout.write(line); // tee: stdout and the log
+            appendFileSync(abs(logFile), line);
+            continue;
+        }
         const priorRow = reusable.get(plan.id);
         if (priorRow !== undefined) {
             checks.push(priorRow);

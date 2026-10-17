@@ -36,6 +36,8 @@ export function registerTaskGateCommand(task: Command, context: CliContext): voi
                 ...(options.proofDigest !== undefined ? { proofDigest: options.proofDigest } : {}),
                 ...(options.runId !== undefined ? { runId: options.runId } : {}),
             };
-            context.setExitCode(qualityGateMain([mode], env, { cwd: context.cwd }));
+            context.setExitCode(
+                qualityGateMain([mode], env, { cwd: context.cwd, builder: context.spurConfig?.builder }),
+            );
         });
 }

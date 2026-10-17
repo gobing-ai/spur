@@ -32,7 +32,7 @@
 #   agent / spurBin           — executor + spur binary (CLI overrides spurBin)
 #   stepTimeoutMs             — agent.run budget for review/verify/test-fix (ms)
 #   implementTimeoutMs        — implement agent.run budget (ms)
-#   qualityGateCmd            — project gate (default: bun run spur-check)
+#   qualityGateCmd            — project gate (default: ${spurBin:-spur} self exec check)
 #   qualityGateMaxFixAttempts — max /sp:dev-fixall hops after a red gate (default: 2)
 #   maxEscalations            — max operator-question pauses per implement chain (default: 2)
 #
@@ -60,7 +60,7 @@ name: task-pipeline
 # evidence (rows MET, proof digests, findings dispositioned). The `confidence` check row, the
 # `ackLowConfidence` var, and the guards' LOW/absent clauses are gone. The derived
 # feature-receipt confidence (1196) followed in task 1221 (ADR-138 amendment).
-version: "7"
+version: "8"
 description: "Standard task pipeline: precheck → implement → quality-gate (test/fix/recheck) → review → approve → verify → record → done"
 # Task entity lifecycle (owned by task-lifecycle.yaml):
 #   normal: backlog → todo → wip → testing → done
@@ -171,13 +171,13 @@ vars:
     # inside the gate rewrites the very tree the digest just fingerprinted (ADR-071 proof
     # window). It was a no-op only because the implement-stage format got there first; that is
     # an accident, not an invariant. The gate observes, it does not mutate.
-    qualityGateCmd: "bun run spur-check"
+    qualityGateCmd: "${spurBin:-spur} self exec check"
     # Cheap red-detector run before the full gate on **recheck only**; empty ⇒ no probe
     # (full gate every recheck — the pre-0587 behavior). A project overriding qualityGateCmd
     # should override this too. TRUSTED CONFIG ONLY — executed via `sh -c` (same surface as
     # qualityGateCmd). Invariant: `review` is only ever entered through a full green
     # qualityGateCmd — only the full gate writes PASS to <wbs>-test-gate.status.
-    gateProbeCmd: "bun run lint"
+    gateProbeCmd: "${spurBin:-spur} self exec lint"
     # Max /sp:dev-fixall attempts after a red quality-gate probe/recheck (bounded; no thrash).
     # Attempt counter: .spur/run/<wbs>-test-fix-attempt. Default 2 = two fixall hops before failed.
     qualityGateMaxFixAttempts: "2"
@@ -192,7 +192,7 @@ vars:
     # Post-implement auto-format. Overridable like qualityGateCmd so a non-Bun seeded
     # project can point it at its own formatter; invoked best-effort (a missing or
     # failing formatter must never abort a run — the quality gate is the real gate).
-    formatCmd: "bun run format"
+    formatCmd: "${spurBin:-spur} self exec format"
     # Bounded `file:line` anchors extracted from the failing quality-gate log by the
     # `test` / `test-recheck` hops (deduped, max 20, space-separated on one line).
     # `test-fix` reads `.spur/run/<wbs>-test-gate.findings` into this var and names the
@@ -364,7 +364,7 @@ states:
           # `${vars.qualityGateCmd}` at `test` is the gate that actually decides.
           - kind: shell
             options:
-                command: "$formatCmd ; exit 0"
+                command: 'sh -c "$formatCmd" ; exit 0'
           # 1109 R3: qualify this task's unique basename anchors to repo-relative paths.
           # Placement is load-bearing: it runs AFTER implement's mutations (and the format
           # above) but BEFORE the `test` stage's `proof.fingerprint` capture, so a rewrite in

@@ -39,7 +39,7 @@
 "$schema": "@gobing-ai/spur/schemas/state-machine-workflow.schema.json"
 kind: state-machine
 name: feature-verification
-version: "1"
+version: "2"
 description: "Feature-scoped verification pass (ADR-119): runs the repo-wide check set once per feature and records a bound PASS/FAIL evidence receipt. Invoked by feature-lifecycle's verifying entry."
 iterationBound: 2
 initialState: verify
@@ -51,7 +51,7 @@ failureStates:
 vars:
   featureId: "X"
   spurBin: "spur"
-  verificationCmd: "bun run spur-check-feature"
+  verificationCmd: "spur self exec check-feature"
   __runId: ""
 
 states:

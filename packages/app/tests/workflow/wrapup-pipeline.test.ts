@@ -124,8 +124,9 @@ describe('wrapup-pipeline truthfulness (task 0770, feature R8; task 0783, R1-R5)
         // route-reason writer moved behind the wrapup-steps locator (composition caps).
         // 1147: doc-sync gained the entry snapshot + write-scope check + supersession-pin
         // re-run, with two named fail edges. v9 declares those fail edges before the
-        // contract-violation edge, so a compound miss fails the step.)
-        expect(def.version).toBe('9');
+        // contract-violation edge, so a compound miss fails the step. v10 (1224) routes the
+        // doc tripwire through the SDLC action map.)
+        expect(def.version).toBe('10');
     });
 
     test('default feature gate checks only the selected feature and permits explicit override', () => {
@@ -152,7 +153,8 @@ describe('wrapup-pipeline truthfulness (task 0770, feature R8; task 0783, R1-R5)
     test('0770 definitions are all explicitly versioned (identity tag, not absence)', () => {
         // Exact per-definition pins: a silent version bump fails here. wrapup-pipeline is '9'
         // since the doc-sync scope/supersession edges moved ahead of contract-violation
-        // ('8' since 1147 added those checks, '7' since 1037 added the
+        // ('10' since 1224 moved the doc-tripwire probe onto the action list, '9' since 1147's
+        // doc-sync edges, '7' since 1037 added the
         // doc-tripwire hop, '6' since 0986 added the learnings shape gate, '5' since 0944 added
         // the drift probe + mode projection and moved the route-reason writer behind the
         // wrapup-steps locator; '4' since 0871's repair edge). feature-lifecycle is '3' since
@@ -162,7 +164,7 @@ describe('wrapup-pipeline truthfulness (task 0770, feature R8; task 0783, R1-R5)
         const expectedVersions: Record<string, string> = {
             'task-lifecycle': '1',
             'feature-lifecycle': '3',
-            'wrapup-pipeline': '9',
+            'wrapup-pipeline': '10',
         };
         for (const [name, version] of Object.entries(expectedVersions)) {
             expect(loadDef(name).version).toBe(version);
@@ -957,9 +959,9 @@ describe('wrapup-pipeline truthfulness (task 0770, feature R8; task 0783, R1-R5)
             expect(fast[0]?.guard?.kind).toBe('shell');
         });
 
-        test('the default docTripwireCmd carries the package-script probe and the trusted-config contract', () => {
+        test('the default docTripwireCmd carries the action-list probe and the trusted-config contract', () => {
             expect(def.vars?.docTripwireCmd).toBe(
-                'if jq -e \'.scripts["test-repo-wide"]\' package.json >/dev/null 2>&1; then bun run test-repo-wide; fi',
+                'if $spurBin self exec --list --json 2>/dev/null | jq -e \'.[] | select(.name == "test-repo-wide" and .source != "unbound")\' >/dev/null 2>&1; then $spurBin self exec test-repo-wide; fi',
             );
             const raw = readFileSync(join(WORKFLOWS_DIR, 'wrapup-pipeline.yaml'), 'utf8');
             const at = raw.indexOf('docTripwireCmd:');
@@ -976,6 +978,8 @@ describe('wrapup-pipeline truthfulness (task 0770, feature R8; task 0783, R1-R5)
                         ...getEnvVars(),
                         __runId: 'trip',
                         docTripwireCmd: def.vars?.docTripwireCmd ?? '',
+                        spurBin: join(dir, 'fake-spur'),
+                        FAKE_ACTIONS: BOUND_ACTIONS,
                         ...extraEnv,
                     },
                 });
@@ -983,12 +987,23 @@ describe('wrapup-pipeline truthfulness (task 0770, feature R8; task 0783, R1-R5)
                 expect(r.status).toBe(0);
                 return readFileSync(join(dir, '.spur/run/trip-wrapup-doc-tripwire.status'), 'utf8');
             };
+            const BOUND_ACTIONS = '[{"name":"test-repo-wide","reserved":false,"source":"config"}]';
+            const UNBOUND_ACTIONS = '[{"name":"test-repo-wide","reserved":false,"source":"unbound"}]';
             const cwd = mkdtempSync(join(tmpdir(), 'wrapup-1037-tripwire-'));
             try {
-                // AC4: a project without a test-repo-wide script is a PASS no-op.
+                // The action map is the probe surface (1224 R6): a stub `spur` reports the
+                // binding for `--list --json` and maps `self exec test-repo-wide` to the script.
+                writeFileSync(
+                    join(cwd, 'fake-spur'),
+                    '#!/bin/sh\n[ "$1" = self ] && [ "$2" = exec ] || exit 1\nshift 2\n' +
+                        'if [ "$1" = --list ]; then printf \'%s\\n\' "$FAKE_ACTIONS"; exit 0; fi\n' +
+                        'if [ "$1" = test-repo-wide ]; then exec bun run test-repo-wide; fi\nexit 2\n',
+                );
+                chmodSync(join(cwd, 'fake-spur'), 0o755);
+                // AC4: a project whose action resolves unbound is a PASS no-op.
                 mkdirSync(join(cwd, '.spur/run'), { recursive: true });
                 writeFileSync(join(cwd, 'package.json'), '{"name":"plain","scripts":{}}');
-                expect(runHop(cwd)).toBe('PASS\n');
+                expect(runHop(cwd, { FAKE_ACTIONS: UNBOUND_ACTIONS })).toBe('PASS\n');
                 // Exercise the real ADR tripwire against a clean snapshot, then a historical decision edit.
                 mkdirSync(join(cwd, 'docs'));
                 mkdirSync(join(cwd, 'docs/design'));

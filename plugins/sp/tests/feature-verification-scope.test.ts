@@ -113,7 +113,7 @@ describe('feature-verification scope split (task 0872)', () => {
     test('R3: feature-verification is a shell-only pass with no agent.run nodes', () => {
         const wf = readWorkflow('feature-verification.yaml');
         expect(wf.name).toBe('feature-verification');
-        expect(wf.vars).toMatchObject({ verificationCmd: 'bun run spur-check-feature' });
+        expect(wf.vars).toMatchObject({ verificationCmd: 'spur self exec check-feature' });
 
         const actionKinds: unknown[] = [];
         for (const state of (wf.states as Array<{ onEnter?: Array<{ kind: unknown }> }>) ?? []) {

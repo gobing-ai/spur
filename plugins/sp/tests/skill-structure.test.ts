@@ -772,7 +772,7 @@ describe('sp plugin structure — functional split invariants (task 0161 / ADR-0
         const anchorRepair = 'task migrate-anchors --wbs $wbs --json ; exit 0';
         expect(implementBlock).toContain(anchorRepair);
         expect(implementBlock.indexOf(anchorRepair)).toBeGreaterThan(
-            implementBlock.indexOf('command: "$formatCmd ; exit 0"'),
+            implementBlock.indexOf('command: \'sh -c "$formatCmd" ; exit 0\''),
         );
 
         // 1111 R1/R2 — the opt-in deferred gate policy. Failure cases first: the var defaults

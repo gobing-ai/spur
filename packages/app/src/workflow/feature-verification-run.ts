@@ -184,7 +184,7 @@ export async function runFeatureVerification(
     const configuredCmd =
         typeof vars?.verificationCmd === 'string' && vars.verificationCmd.length > 0
             ? vars.verificationCmd
-            : 'bun run spur-check-feature';
+            : 'spur self exec check-feature';
     const effectiveCmd =
         input.cmdOverride !== undefined && input.cmdOverride !== '' ? input.cmdOverride : configuredCmd;
 
