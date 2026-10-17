@@ -17,7 +17,6 @@
  * Fixtures are cleaned up in a finally block (R4) — see
  * tests/fixtures/pipeline-eval/README.md for the documented lifecycle.
  */
-import { Database } from 'bun:sqlite';
 import { existsSync } from 'node:fs';
 import { mkdir, mkdtemp, readdir, readFile, rm, stat, symlink, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
@@ -28,6 +27,8 @@ import { parse } from 'yaml';
 // Deep relative import (0775): the root node_modules has no @gobing-ai/spur-app workspace
 // link for scripts/commands, so the §1.1 cross-workspace alias rule cannot resolve here.
 import { extractResolvedWorkflowFacts } from '../../packages/app/src/workflow/composition-baseline';
+import { readHistoryCostInWindow } from '../../packages/domain/src/analytics/workflow-measurements';
+import { openExistingDb } from '../../packages/domain/src/db';
 
 const REPO_ROOT = fileURLToPath(new URL('../../', import.meta.url));
 const FIXTURE_DIR = join(REPO_ROOT, 'tests/fixtures/pipeline-eval');
@@ -379,17 +380,10 @@ export function diffSnapshot(before: Record<string, number>, after: Record<strin
  * ("run window plus session id" per 0607 Design); a deliberate measurement run has
  * no concurrent activity, so the window is honest.
  */
-export function extractHistoryCost(dbPath: string, fromIso: string, toIso: string): number | null {
-    const db = new Database(dbPath, { readonly: true });
+export async function extractHistoryCost(dbPath: string, fromIso: string, toIso: string): Promise<number | null> {
+    const db = await openExistingDb(dbPath);
     try {
-        const row = db
-            .query(
-                `SELECT SUM(cost_usd) AS total, COUNT(*) AS n
-                 FROM history_message
-                 WHERE ts >= ? AND ts <= ? AND cost_usd IS NOT NULL`,
-            )
-            .get(fromIso, toIso) as { total: number | null; n: number } | undefined;
-        return row && row.n > 0 ? Math.round((row.total ?? 0) * 10000) / 10000 : null;
+        return await readHistoryCostInWindow(db, fromIso, toIso);
     } finally {
         db.close();
     }
@@ -549,7 +543,7 @@ async function runOnce(pipeline: string, fixtures: string[], args: Args): Promis
                 // so the window correlation is the honest anchor.
                 tokenCost: args.dry
                     ? null
-                    : extractHistoryCost(join(REPO_ROOT, '.spur/spur.db'), fromIso, new Date(t1).toISOString()),
+                    : await extractHistoryCost(join(REPO_ROOT, '.spur/spur.db'), fromIso, new Date(t1).toISOString()),
                 wallClockMs: t1 - t0,
                 exitCode,
             });

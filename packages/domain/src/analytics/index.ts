@@ -278,6 +278,7 @@ export {
 export {
     type AgentRunHistoryRow,
     readAgentRunHistoryRows,
+    readHistoryCostInWindow,
     readRealTerminalRunCounts,
     readWorkflowRuns,
     readWorkflowStateActionRows,

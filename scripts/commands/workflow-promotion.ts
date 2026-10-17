@@ -36,7 +36,7 @@ import { readdirSync, readFileSync, statSync } from 'node:fs';
 import { readFile, writeFile } from 'node:fs/promises';
 import { basename, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { createDbAdapter, type DbAdapter } from '@gobing-ai/ts-db';
+import type { DbAdapter } from '@gobing-ai/ts-db';
 import { parse } from 'yaml';
 // Deep relative import (0775): the root node_modules has no @gobing-ai/spur-app workspace link
 // for scripts/commands, so the §1.1 cross-workspace alias rule cannot resolve here.
@@ -45,6 +45,7 @@ import {
     readAgentRunHistoryRows,
     readRealTerminalRunCounts,
 } from '../../packages/domain/src/analytics/workflow-measurements';
+import { openExistingDb } from '../../packages/domain/src/db';
 
 const REPO_ROOT = fileURLToPath(new URL('../../', import.meta.url));
 const CANDIDATES_PATH = join(REPO_ROOT, 'config/workflow-candidates.json');
@@ -237,7 +238,7 @@ export async function readAgentRunHistory(
     workflow: string,
     runIds?: string[],
 ): Promise<AgentRunPerRun[]> {
-    const db = await createDbAdapter({ driver: 'bun-sqlite', url: dbPath });
+    const db = await openExistingDb(dbPath);
     try {
         return await readAgentRunHistoryRows(db, workflow, runIds);
     } finally {
@@ -582,7 +583,7 @@ export async function runWorkflowPromotion(argv: string[]): Promise<number> {
         const findings = checkWorkflowPromotion(config, args.workflowsDir, args.nowIso);
         // Retirement guard (0882): only when a project DB exists (fixture roots skip).
         if (statSync(args.dbPath, { throwIfNoEntry: false })) {
-            const db = await createDbAdapter({ driver: 'bun-sqlite', url: args.dbPath });
+            const db = await openExistingDb(args.dbPath);
             try {
                 findings.push(...(await checkRetirementGuard(db, config, args.workflowsDir)));
             } finally {

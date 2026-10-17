@@ -120,7 +120,10 @@ describe('extractHistoryCost', () => {
             // No cost row — never summed as zero.
             db.run("INSERT INTO history_message VALUES ('2026-08-20T00:00:03Z', NULL, 7, 7)");
 
-            expect(extractHistoryCost(dbPath, '2026-08-20T00:00:00Z', '2026-08-20T00:00:59Z')).toBeCloseTo(0.0163, 4);
+            expect(await extractHistoryCost(dbPath, '2026-08-20T00:00:00Z', '2026-08-20T00:00:59Z')).toBeCloseTo(
+                0.0163,
+                4,
+            );
         } finally {
             db.close();
             await rm(dir, { recursive: true, force: true });
@@ -134,7 +137,7 @@ describe('extractHistoryCost', () => {
         try {
             db.run('CREATE TABLE history_message (ts TEXT, cost_usd REAL)');
             db.run("INSERT INTO history_message VALUES ('2026-08-20T00:00:01Z', NULL)");
-            expect(extractHistoryCost(dbPath, '2026-08-20T00:00:00Z', '2026-08-20T00:00:02Z')).toBeNull();
+            expect(await extractHistoryCost(dbPath, '2026-08-20T00:00:00Z', '2026-08-20T00:00:02Z')).toBeNull();
         } finally {
             db.close();
             await rm(dir, { recursive: true, force: true });

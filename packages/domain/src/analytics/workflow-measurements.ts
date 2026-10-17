@@ -296,3 +296,19 @@ export async function readRealTerminalRunCounts(db: DbAdapter): Promise<Workflow
         .filter((r): r is { workflow_name: string; n: number } => r.workflow_name !== null && r.workflow_name !== '')
         .map((r) => ({ workflow: r.workflow_name, count: r.n }));
 }
+
+/**
+ * Summed `history_message.cost_usd` over an inclusive ISO `ts` window (0607 R1 eval cost anchor).
+ * `null` when no message in the window carries a cost — unmeasured is never reported as free.
+ * `ts` is ISO-8601 text, so the lexicographic compare matches the ISO bounds.
+ */
+export async function readHistoryCostInWindow(db: DbAdapter, fromIso: string, toIso: string): Promise<number | null> {
+    const row = await db.queryFirst<{ total: number | null; n: number }>(
+        `SELECT SUM(cost_usd) AS total, COUNT(*) AS n
+         FROM history_message
+         WHERE ts >= ? AND ts <= ? AND cost_usd IS NOT NULL`,
+        fromIso,
+        toIso,
+    );
+    return row && row.n > 0 ? Math.round((row.total ?? 0) * 10000) / 10000 : null;
+}
