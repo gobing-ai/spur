@@ -277,6 +277,25 @@ visit, the worktree lease one task run, the fleet occupancy one dispatch. Holder
 `{runId, pid, worktree}`. A stale holder (dead pid) is taken over with a trace line recording both
 ids; a live holder is waited on with a bound, then the waiter stops naming the holder.
 
+**Full-gate lock (landed, task 1235).** One claim per host, stored as a `mkdir` + `wx` marker under
+`$SPUR_GATE_LOCK_DIR` (default `~/.config/spur/run/full-gate.lock` — outside every tree, so sibling
+checkouts and worktrees share it). The marker holds `{pid, startedAt, wbs, runId, cwd}`.
+
+| Env | Meaning |
+| --- | --- |
+| `SPUR_GATE_LOCK=off` | disable the lock entirely |
+| `SPUR_GATE_LOCK_DIR` | claim directory; the test preload points every in-process run at a per-process dir |
+| `SPUR_GATE_LOCK_POLL_MS` | wait poll interval (default 5000); the waiter **sleeps** between polls — a hot loop starves the gate it waits for |
+| `SPUR_GATE_LOCK_TIMEOUT_MS` | bound on the wait (default 2 h, `0` = unbounded); expiry exits 2 (BLOCKED, never a gate verdict) naming the holder |
+| `SPUR_GATE_LOCK_TOKEN` | re-entry: accepted only when it equals the **current** holder's marker; a stale or foreign token waits like any stranger |
+
+Locked tiers: `run` and `recheck` — recheck re-executes the same full command, so leaving it
+outside re-admits the contention the lock exists to serialize (task 1127 R4, ADR-140 item 6).
+Lockless: `light`, `deferred`, `status`, and the short circuits (receipt reuse, no-progress skip,
+recheck probe). Release runs in a `finally`, so failure and throw release too; a cancelled process
+leaves a dead-pid claim the next gate reclaims. An unclaimed non-empty directory is reported, never
+destroyed.
+
 ### 4.7 CLI surface changes
 
 Every item is an existing verb, or a flat `spur <noun> <verb>` needing operator consent:

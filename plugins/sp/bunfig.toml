@@ -4,8 +4,8 @@
 # tests off the operator's real ~/.config/spur/ config, projects registry and slash-command catalog).
 # Coverage stays gated by the root bunfig (bun run test).
 #
-# Historical: this comment once justified the preload by a host-wide `full-gate.lock` wait. That lock
-# was deleted in `refactor(gate): remove gate-lock mechanism and simplify quality-gate`; the preload
-# is still required, for the reasons above (task 1173 R5).
+# The preload also carries the host-wide `full-gate.lock` isolation (tests/setup.ts gives every test
+# process its own SPUR_GATE_LOCK_DIR), so an in-process gate never queues behind a real one. The
+# preload stays required for the reasons above even without it (task 1173 R5; lock restored by 1235).
 [test]
 preload = ["../../tests/setup.ts"]
