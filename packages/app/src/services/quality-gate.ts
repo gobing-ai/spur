@@ -25,18 +25,22 @@
  *            `lightScope`); sub-check failures carry bounded findings
  * - `status` print `{reuse, reason}` for the task's receipt and exit 0
  *
- * Check receipts (task 0939, ADR-124): `run` and `recheck` write `.spur/run/<wbs>-check-receipt.json`
- * only when the env carries a `proofDigest` (0862 R3 proof P1). The receipt binds the run to the
- * proof-input digest (same fingerprint `inline-run-setup.ts --fingerprint` prints, 0862 R5), so a
- * later gate invocation with an unchanged digest can short-circuit to reuse instead of re-running
- * the full suite. `status` reports the verdict for the task result without running anything.
+ * Check receipts (task 0939, ADR-124; D65 1234): `run` and `recheck` write
+ * `.spur/run/<wbs>-check-receipt.json` keyed by the gate's OWN git tree hash —
+ * {@link captureGateGitTree}: `git read-tree HEAD`, `git add -A` minus `docs/tasks*` /
+ * `docs/features*` through a throwaway alternate index, `git write-tree`. A later invocation whose
+ * tree hash equals the receipt's reuses it instead of re-running the full suite, so a corpus-only
+ * edit (task/feature prose) keeps the PASS while any other tracked or untracked change drops it.
+ * The hash is computed here and never supplied by a caller: ADR-140 retires the `proofDigest`
+ * chain, so there is no `--proof-digest` flag and no env input. `status` reports the verdict for
+ * the task result without running anything.
  *
  * Merged log note: the gate command's stdout+stderr go to ONE file descriptor
  * (`sh -c "cmd" > log 2>&1`) because findings/tail extraction and the retry loop both depend on
  * stream order, which a captured-stdout+stderr seam cannot reproduce.
  */
 import { spawnSync } from 'node:child_process';
-import { createHash, randomUUID } from 'node:crypto';
+import { randomUUID } from 'node:crypto';
 import {
     appendFileSync,
     closeSync,
@@ -51,11 +55,10 @@ import {
     writeFileSync,
 } from 'node:fs';
 import { tmpdir } from 'node:os';
-import { join, resolve } from 'node:path';
+import { join } from 'node:path';
 import type { BuilderConfig } from '@gobing-ai/spur-config';
 import { getEnvVars } from '@gobing-ai/ts-utils';
-import { canonicalJsonStringify } from '../workflow/composition-baseline';
-import { extractFeatureProofData, extractTaskProofData } from '../workflow/proof-input-fingerprint';
+import { DEFAULT_EXCLUDE_GLOBS } from '../workflow/proof-input-fingerprint';
 import { renderScoped, resolveAction, type ScopedValues } from './sdlc-actions';
 
 /** Hard cap on lock-retry attempts before `run` gives up (the old shell `for i in 1..5`). */
@@ -79,29 +82,35 @@ export const FINDINGS_PATTERN = /[A-Za-z0-9_./-]+\.[A-Za-z]+:[0-9]+/g;
  */
 export const COVERAGE_ROW_PATTERN = /^\s*(\S+\.[A-Za-z]+)\s*\|\s*([\d.]+)\s*\|\s*([\d.]+)\s*\|\s*(\S*)/;
 
-/** Env/argv inputs the gate runs on: the wbs-scoped commands, probe, and proof digest. */
+/** Env/argv inputs the gate runs on: the wbs-scoped commands and probe. */
 export interface QualityGateEnv {
     wbs: string;
     qualityGateCmd?: string;
     gateProbeCmd?: string;
-    proofDigest?: string;
     /** Receipt run identity; `pipeline-<wbs>` when absent (task-pipeline convention). */
     runId?: string;
     [key: string]: string | undefined;
 }
 
-/** Optional gate knobs (cwd override for tests). */
+/** Optional gate knobs (cwd override and the tree-capture seam for tests). */
 export interface QualityGateOptions {
     /** Base directory for `.spur/run`; defaults to the process cwd (CLI behavior). */
     cwd?: string;
     /** Project action binding for the light tier (feature A92); absent means the default preset. */
     builder?: BuilderConfig;
-    /** Task 1136 R3: optional proof-input fingerprint recomputer override (e.g. for unit tests). */
-    recomputeFingerprint?: (
-        cwd: string,
-        env: QualityGateEnv,
-    ) => { ok: true; digest: string } | { ok: false; error: string };
+    /**
+     * Test seam for {@link captureGateGitTree} (the receipt identity). Only the capture is
+     * injectable — the reuse decision itself always compares against the captured tree, so a
+     * caller-supplied digest can never reach the receipt (1234 R2).
+     */
+    captureGitTree?: GitTreeCaptureFn;
 }
+
+/** The gate's own receipt identity: the git tree hash of the tracked tree. */
+export type GitTreeCapture = { ok: true; tree: string } | { ok: false; error: string };
+
+/** A tree capture (injectable for tests; {@link captureGateGitTree} is the real one). */
+export type GitTreeCaptureFn = (cwd: string) => GitTreeCapture;
 
 /** Where the gate wrote its run artifacts (log, findings, status, attempt, receipt). */
 export interface QualityGateResult {
@@ -111,7 +120,7 @@ export interface QualityGateResult {
     findingsFile: string;
     statusFile: string;
     attemptFile: string;
-    /** Written only by `run` with `proofDigest` set (0939 R2). */
+    /** Written only when the gate could bind the receipt to a tree (0939 R2, 1234). */
     receiptFile?: string;
 }
 
@@ -330,22 +339,19 @@ function readContendedRetryDigest(markerPath: string): string {
 }
 
 /**
- * Reuse verdict for `.spur/run/<wbs>-check-receipt.json` against the current proof-input digest.
- * Evaluated missing → failed → stale → light-only; reuse requires `PASS` + `tier: full` + digest
- * match, so light rows can never flip a receipt reusable (0939 invariant).
- *
- * Task 1136 R3: The gate owns its reuse identity and recomputes the proof-input fingerprint itself
- * before consulting this function. Callers must pass the fresh recomputed digest (never a
- * caller-copied digest from an untrusted or stale source). When recompute cannot run or differs
- * from the supplied digest, reuse is refused.
+ * Reuse verdict for `.spur/run/<wbs>-check-receipt.json` against the git tree hash the gate
+ * computed for this invocation. Evaluated missing → failed → stale (digest or owner) → light-only;
+ * reuse requires `PASS` + `tier: full` + the same tree + the same wbs, so light rows can never
+ * flip a receipt reusable (0939 invariant) and a receipt copied from another task never binds
+ * (1234).
  */
-export function readReceiptStatus(receiptPath: string, currentDigest: string): ReceiptReadStatus {
+export function readReceiptStatus(receiptPath: string, currentDigest: string, wbs: string): ReceiptReadStatus {
     const receipt = readReceipt(receiptPath);
     if (receipt === null || receipt.schemaVersion !== RECEIPT_SCHEMA_VERSION) {
         return { reuse: false, reason: 'missing' };
     }
     if (receipt.status !== 'PASS') return { reuse: false, reason: 'failed' };
-    if (currentDigest.length === 0 || receipt.inputDigest !== currentDigest) {
+    if (currentDigest.length === 0 || receipt.inputDigest !== currentDigest || receipt.wbs !== wbs) {
         return { reuse: false, reason: 'stale' };
     }
     if (receipt.tier !== 'full') return { reuse: false, reason: 'light-only' };
@@ -367,59 +373,47 @@ export function readReceiptStatus(receiptPath: string, currentDigest: string): R
 }
 
 /**
- * Task 1136 R3: the gate's own reuse decision. Recomputes the proof-input fingerprint before
- * `readReceiptStatus` is consulted, so a receipt is never reused on a caller-copied digest.
+ * The gate's own reuse decision (1234 R2), over the tree it captured itself.
  *
- * - no receipt file → `readReceiptStatus` alone (nothing to reuse; recompute is not paid).
- * - recompute cannot run (missing/unreadable task spec) → reuse refused (`refusal` names why).
- * - recomputed digest ≠ supplied `proofDigest` → reuse refused (`refusal` names both digests).
- * - otherwise → `readReceiptStatus` against the freshly recomputed digest.
+ * - no receipt file → `readReceiptStatus` alone (nothing to reuse, and no capture is paid).
+ * - capture cannot run (not a git repository, unborn HEAD) → reuse refused; `refusal` names why,
+ *   so the caller logs `check.reuse-refused` and runs the gate instead of trusting a receipt.
+ * - otherwise → `readReceiptStatus` against that tree and this wbs.
  */
 export interface ReceiptReuseDecision {
     readonly reuse: boolean;
     readonly receiptStatus: ReceiptReadStatus;
-    /** Present when reuse was refused by the recompute guard, never by the receipt itself. */
+    /** Present only when the capture could not bind a tree — never a digest disagreement. */
     readonly refusal?: string;
-    readonly recomputedDigest?: string;
 }
 
 /**
- * Decide whether a run may reuse its check receipt, recomputing the proof-input fingerprint first
- * (task 1136 R3) so a stale caller-supplied digest can never trigger reuse. Returns the receipt
- * verdict plus, when the recompute guard refused, the `refusal` detail the caller logs.
+ * Decide whether a run may reuse its check receipt. The tree is captured by the gate and passed in,
+ * so no caller-supplied digest can trigger reuse (ADR-140 retires `proofDigest`).
  */
-export function resolveReceiptReuse(
-    receiptPath: string,
-    env: QualityGateEnv,
-    cwd: string,
-    recomputeFn: (
-        cwd: string,
-        env: QualityGateEnv,
-    ) => { ok: true; digest: string } | { ok: false; error: string } = recomputeGateProofFingerprint,
-): ReceiptReuseDecision {
+export function resolveReceiptReuse(receiptPath: string, wbs: string, capture: GitTreeCapture): ReceiptReuseDecision {
     if (!existsSync(receiptPath)) {
-        return { reuse: false, receiptStatus: readReceiptStatus(receiptPath, env.proofDigest ?? '') };
+        return { reuse: false, receiptStatus: { reuse: false, reason: 'missing' } };
     }
-    const recomputed = recomputeFn(cwd, env);
-    if (!recomputed.ok) {
+    if (!capture.ok) {
         return {
             reuse: false,
             receiptStatus: { reuse: false, reason: 'stale' },
-            refusal: `recompute failed: ${recomputed.error}`,
+            refusal: `git tree capture failed: ${capture.error}`,
         };
     }
-    if ((env.proofDigest ?? '') !== recomputed.digest) {
+    const receipt = readReceipt(receiptPath);
+    if (receipt !== null && receipt.schemaVersion === RECEIPT_SCHEMA_VERSION && receipt.wbs !== wbs) {
+        // A receipt at this wbs's path that belongs to another task is not this task's evidence.
         return {
             reuse: false,
             receiptStatus: { reuse: false, reason: 'stale' },
-            refusal: `supplied ${env.proofDigest ?? ''} != current ${recomputed.digest}`,
-            recomputedDigest: recomputed.digest,
+            refusal: `receipt belongs to ${String(receipt.wbs)}, not ${wbs}`,
         };
     }
     return {
-        reuse: readReceiptStatus(receiptPath, recomputed.digest).reuse,
-        receiptStatus: readReceiptStatus(receiptPath, recomputed.digest),
-        recomputedDigest: recomputed.digest,
+        reuse: readReceiptStatus(receiptPath, capture.tree, wbs).reuse,
+        receiptStatus: readReceiptStatus(receiptPath, capture.tree, wbs),
     };
 }
 
@@ -661,7 +655,11 @@ export function runLightGate(env: QualityGateEnv, options: QualityGateOptions = 
     const receiptFile = join(runDir, `${env.wbs}-check-receipt.json`);
     writeFileSync(abs(logFile), '');
 
-    const digest = env.proofDigest ?? '';
+    const capture = (options.captureGitTree ?? captureGateGitTree)(cwd ?? process.cwd());
+    const digest = capture.ok ? capture.tree : '';
+    if (!capture.ok) {
+        appendFileSync(abs(logFile), `--- light receipt: no git tree identity — ${capture.error}\n`);
+    }
     const scope = lightScope(gitChangedFiles(cwd), (p) => existsSync(abs(p)));
     // Bind the fs predicates to the gate cwd, not the process cwd (tests run gates in fixtures).
     const plans = planLightChecks(scope, (workspace) => workspaceHasTypecheck(abs(workspace)), options.builder);
@@ -673,7 +671,7 @@ export function runLightGate(env: QualityGateEnv, options: QualityGateOptions = 
             const prior = JSON.parse(readFileSync(abs(receiptFile), 'utf8')) as CheckReceipt;
             if (prior?.schemaVersion === RECEIPT_SCHEMA_VERSION && prior.inputDigest === digest) {
                 if (prior.tier === 'full') {
-                    // A full-tier receipt at the same digest is boundary evidence read by status
+                    // A full-tier receipt at the same tree is boundary evidence read by status
                     // mode (0940/0943); light must never demote it to a tier-light receipt.
                     preserveFullReceipt = true;
                 } else {
@@ -700,7 +698,7 @@ export function runLightGate(env: QualityGateEnv, options: QualityGateOptions = 
             skipped++;
             // 0940 R3: accumulation reuse is observable in the gate log and on stdout (the
             // action result `data`); both surfaces run this same script.
-            const line = `--- light ${plan.id}: check.reused — skipped (PASS at the same input digest)\n`;
+            const line = `--- light ${plan.id}: check.reused — skipped (PASS at the same git tree)\n`;
             process.stdout.write(line); // tee: stdout and the log
             appendFileSync(abs(logFile), line);
             continue;
@@ -725,7 +723,7 @@ export function runLightGate(env: QualityGateEnv, options: QualityGateOptions = 
         // Light ran for its log; the file keeps the full-tier receipt untouched.
         appendFileSync(
             abs(logFile),
-            '--- light receipt: not written — the full-tier receipt at the same input digest is preserved\n',
+            '--- light receipt: not written — the full-tier receipt at the same git tree is preserved\n',
         );
         process.stdout.write(
             `light gate ${receipt.status} (${scope.files.length} changed files; checks: ${checks.length},` +
@@ -787,43 +785,22 @@ export function runShellCommand(
 }
 
 /**
- * Task 1136 R3: Recompute the proof-input fingerprint for quality-gate receipt reuse.
- * Uses taskSpecPath and optional featureSpecPath from env/options.
+ * Capture the gate's own receipt identity (D65 1234, design §4.8): the git tree hash of the
+ * working tree with the task/feature corpus carved out, computed through a throwaway index so the
+ * real index, HEAD and working tree are untouched.
+ *
+ * - `git read-tree HEAD` seeds the alternate index from the committed tree;
+ * - `git add -A -- . :(exclude)docs/tasks* :(exclude)docs/features*` folds in every tracked
+ *   change plus untracked files outside the carve-outs (a corpus edit therefore keeps the hash —
+ *   task/feature prose does not change what the gate certifies);
+ * - `git write-tree` prints the hash, which IS the receipt key: no hashing of a composed value,
+ *   no caller-supplied digest ({@link GitTreeCapture}).
+ *
+ * Fails closed — a directory that is not a repository, or an unborn HEAD, returns
+ * `{ ok: false }`; there is no empty-string sentinel and the caller writes no receipt.
  */
-export function recomputeGateProofFingerprint(
-    cwd: string,
-    env: QualityGateEnv,
-): { ok: true; digest: string } | { ok: false; error: string } {
-    const taskSpecPath = env.taskSpecPath ?? env.taskFile;
-    if (!taskSpecPath || taskSpecPath.trim() === '') {
-        return { ok: false, error: 'missing task path' };
-    }
-    const fullTaskPath = resolve(cwd, taskSpecPath);
-    if (!existsSync(fullTaskPath)) {
-        return { ok: false, error: `task file not found: ${taskSpecPath}` };
-    }
-    let taskContent: string;
-    try {
-        taskContent = readFileSync(fullTaskPath, 'utf8');
-    } catch (err) {
-        return { ok: false, error: `cannot read task file: ${err instanceof Error ? err.message : String(err)}` };
-    }
-
-    const featureSpecPath = env.featureSpecPath ?? env.featureFile;
-    let featureContent: string | undefined;
-    if (featureSpecPath && featureSpecPath.trim() !== '') {
-        const fullFeaturePath = resolve(cwd, featureSpecPath);
-        if (existsSync(fullFeaturePath)) {
-            try {
-                featureContent = readFileSync(fullFeaturePath, 'utf8');
-            } catch {
-                // optional
-            }
-        }
-    }
-
-    // Git tree capture using temporary index file
-    const indexFile = join(tmpdir(), `spur-proof-fingerprint-${randomUUID()}.index`);
+export function captureGateGitTree(cwd: string): GitTreeCapture {
+    const indexFile = join(tmpdir(), `spur-gate-tree-${randomUUID()}.index`);
     try {
         const processEnv = Object.fromEntries(
             Object.entries(getEnvVars()).filter((entry): entry is [string, string] => entry[1] !== undefined),
@@ -836,11 +813,8 @@ export function recomputeGateProofFingerprint(
             return { ok: false, error: `git read-tree HEAD failed: ${readRes.stderr?.toString() || readRes.status}` };
         }
 
-        const addRes = spawnSync(
-            'git',
-            ['add', '-A', '--', '.', ':(exclude)docs/tasks*', ':(exclude)docs/features*'],
-            opts,
-        );
+        const excludes = DEFAULT_EXCLUDE_GLOBS.map((glob) => `:(exclude)${glob}`);
+        const addRes = spawnSync('git', ['add', '-A', '--', '.', ...excludes], opts);
         if (addRes.status !== 0) {
             return { ok: false, error: `git add -A failed: ${addRes.stderr?.toString() || addRes.status}` };
         }
@@ -849,19 +823,7 @@ export function recomputeGateProofFingerprint(
         if (writeRes.status !== 0) {
             return { ok: false, error: `git write-tree failed: ${writeRes.stderr?.toString() || writeRes.status}` };
         }
-        const gitTree = writeRes.stdout.toString().trim();
-
-        const task = extractTaskProofData(taskContent);
-        const feature = featureContent !== undefined ? extractFeatureProofData(featureContent) : undefined;
-
-        const canonical = canonicalJsonStringify({
-            gitTree,
-            ...(task !== undefined ? { task } : {}),
-            ...(feature !== undefined ? { feature } : {}),
-        });
-
-        const hash = createHash('sha256').update(canonical, 'utf8').digest('hex');
-        return { ok: true, digest: `sha256:${hash}` };
+        return { ok: true, tree: writeRes.stdout.toString().trim() };
     } catch (err) {
         return {
             ok: false,
@@ -915,18 +877,22 @@ export function runQualityGate(
     if (!commandPresent)
         appendFileSync(abs(logFile), `quality-gate: mode ${mode} requires env \`qualityGateCmd\` to be non-empty\n`);
 
+    // 1234 R2 — the gate's receipt identity is the git tree it captures itself, once per run and
+    // before any artifact write (the writes are all under `.spur/`, which the capture excludes
+    // through `.gitignore`). A capture that cannot run leaves no identity: reuse is refused and no
+    // receipt is written, so an unverifiable tree can never inherit a PASS.
+    const tree: GitTreeCapture = commandPresent
+        ? (options.captureGitTree ?? captureGateGitTree)(abs('.'))
+        : { ok: false, error: 'gate command missing' };
+    const treeKey = tree.ok ? tree.tree : '';
+
     // 1016 R1 — PASS receipt reuse, next to the 0940 no-progress skip: a full-tier PASS receipt
-    // bound to the current proof-input digest means these exact inputs already passed the full
-    // gate, so re-entry (run or recheck) skips the probe and the gate command.
-    // Task 1136 R3: The gate never reuses a receipt on a caller-copied digest.
-    // Before readReceiptStatus is consulted, recompute the proof-input fingerprint itself.
-    // When the supplied proofDigest differs from the recomputed value, reuse is refused.
-    // The gate runs and logs `check.reuse-refused — supplied <D1> != current <D2>`.
-    // When the recompute cannot run (missing task path), reuse is refused, never assumed.
+    // bound to this tree means these exact inputs already passed the full gate, so re-entry (run
+    // or recheck) skips the probe and the gate command.
     const receiptPath = abs(rel('-check-receipt.json'));
     let reusePass = false;
     if (commandPresent) {
-        const decision = resolveReceiptReuse(receiptPath, env, abs('.'), options.recomputeFingerprint);
+        const decision = resolveReceiptReuse(receiptPath, env.wbs, tree);
         if (decision.refusal !== undefined) {
             const refuseLine = `check.reuse-refused — ${decision.refusal}\n`;
             process.stdout.write(refuseLine);
@@ -935,7 +901,7 @@ export function runQualityGate(
         reusePass = decision.reuse;
     }
     if (reusePass) {
-        const line = `check.reused — full-tier PASS receipt at input digest ${env.proofDigest ?? ''}; gate skipped\n`;
+        const line = `check.reused — full-tier PASS receipt at git tree ${treeKey}; gate skipped\n`;
         process.stdout.write(line); // tee: stdout and the log
         appendFileSync(abs(logFile), line);
         writeFileSync(abs(findingsFile), extractFindings(readFileSync(abs(logFile), 'utf8')));
@@ -944,7 +910,7 @@ export function runQualityGate(
     }
 
     // 0940 R2 — no-progress skip, before the probe: a full-tier FAIL receipt at the current
-    // proof-input digest means the fix pass changed nothing tracked, so the full chain can only
+    // git tree means the fix pass changed nothing tracked, so the full chain can only
     // reproduce the failure. The marker tees to stdout (the action result `data`) and the log,
     // then the shared FAIL path below writes findings/status/verdict exactly as a red gate does.
     // The attempt counter is pipeline-owned (only the test-fix hop increments it; `recheck` never
@@ -952,26 +918,26 @@ export function runQualityGate(
     const receiptFailsNow =
         commandPresent &&
         mode === 'recheck' &&
-        receiptFailsAtDigest(readReceipt(abs(rel('-check-receipt.json'))), env.proofDigest ?? '');
-    // 1198 R1/R2 — contended retry: a receipt FAIL at the current digest whose prior gate log is
+        receiptFailsAtDigest(readReceipt(abs(rel('-check-receipt.json'))), treeKey);
+    // 1198 R1/R2 — contended retry: a receipt FAIL at the current tree whose prior gate log is
     // timeout-shaped is host contention, not a deterministic defect, so the recheck re-runs the
-    // chain once per input digest instead of taking the sticky no-progress skip. The used digest is
-    // recorded in `.spur/run/<wbs>-contended-retry` (one line) so a second recheck at that digest
+    // chain once per tree instead of taking the sticky no-progress skip. The used tree is
+    // recorded in `.spur/run/<wbs>-contended-retry` (one line) so a second recheck at that tree
     // skips exactly as today. `gateRc` stays 0, so the normal probe → full path runs: a green chain
     // earns PASS through the existing path and a red one writes FAIL there — no verdict is minted.
     const retryContended =
         receiptFailsNow &&
         isTimeoutShapedLog(priorLog) &&
-        readContendedRetryDigest(abs(rel('-contended-retry'))) !== (env.proofDigest ?? '');
+        readContendedRetryDigest(abs(rel('-contended-retry'))) !== treeKey;
     const noProgressSkip = receiptFailsNow && !retryContended;
     if (retryContended) {
-        writeFileSync(abs(rel('-contended-retry')), `${env.proofDigest ?? ''}\n`);
+        writeFileSync(abs(rel('-contended-retry')), `${treeKey}\n`);
         const fails = countTimeoutShapedFailures(priorLog).fails;
-        const line = `check.retry-contended — ${fails} timeout-shaped failure(s) at input digest ${env.proofDigest ?? ''}; retry 1/1\n`;
+        const line = `check.retry-contended — ${fails} timeout-shaped failure(s) at git tree ${treeKey}; retry 1/1\n`;
         process.stdout.write(line); // tee: stdout and the log
         appendFileSync(abs(logFile), line);
     } else if (noProgressSkip) {
-        const line = `check.skipped-no-progress — full-tier FAIL receipt at input digest ${env.proofDigest ?? ''}; recheck skipped\n`;
+        const line = `check.skipped-no-progress — full-tier FAIL receipt at git tree ${treeKey}; recheck skipped\n`;
         process.stdout.write(line); // tee: stdout and the log
         appendFileSync(abs(logFile), line);
         gateRc = 1;
@@ -1037,23 +1003,23 @@ export function runQualityGate(
     writeFileSync(abs(findingsFile), extractFindings(readFileSync(abs(logFile), 'utf8')));
     const status: 'PASS' | 'FAIL' = gateRc === 0 ? 'PASS' : 'FAIL';
     writeFileSync(abs(statusFile), `${status}\n`);
-    appendFileSync(abs(logFile), `proof-digest: ${env.proofDigest ?? ''}\n`);
+    appendFileSync(abs(logFile), `git-tree: ${tree.ok ? tree.tree : 'unbound'}\n`);
 
-    // 0939 R2: the gate writes the full-tier receipt only with a digest to bind it to. 0976 R1:
-    // `recheck` persists the receipt it evaluated too, so a second recheck at the same digest can
+    // 0939 R2: the gate writes the full-tier receipt only with a tree to bind it to. 0976 R1:
+    // `recheck` persists the receipt it evaluated too, so a second recheck at the same git tree can
     // take the no-progress skip. A skip leaves the FAIL receipt it matched untouched — a skip never
     // rewrites a receipt, so it can never launder FAIL into PASS.
     let receiptFile: string | undefined;
     // 1038 R3: the vacuous-`qualityGateCmd` guard rejects before any gate execution — it records
     // no receipt. The log/status/findings carry the FAIL; a pre-existing receipt stays untouched.
     if (!noProgressSkip && commandPresent) {
-        if ((env.proofDigest ?? '').length > 0) {
+        if (tree.ok) {
             receiptFile = join(runDir, `${env.wbs}-check-receipt.json`);
             const receipt = buildReceipt({
                 wbs: env.wbs,
                 runId: receiptRunId(env),
                 tier: 'full',
-                inputDigest: env.proofDigest ?? '',
+                inputDigest: tree.tree,
                 checks: [
                     {
                         id: 'test',
@@ -1068,7 +1034,7 @@ export function runQualityGate(
             });
             writeFileSync(abs(receiptFile), `${JSON.stringify(receipt, null, 2)}\n`);
         } else {
-            appendFileSync(abs(logFile), 'check-receipt: not written — env `proofDigest` is not set\n');
+            appendFileSync(abs(logFile), `check-receipt: not written — git tree capture failed (${tree.error})\n`);
         }
     }
 
@@ -1085,7 +1051,7 @@ export type QualityGateMode = (typeof QUALITY_GATE_MODES)[number];
 
 /** Usage line for an unknown mode or a missing `wbs` (exit 2). */
 export const QUALITY_GATE_USAGE =
-    'usage: spur task gate <wbs> <run|recheck|light|deferred|status>  (env: qualityGateCmd, gateProbeCmd, proofDigest, runId)';
+    'usage: spur task gate <wbs> <run|recheck|light|deferred|status>  (env: qualityGateCmd, gateProbeCmd, runId)';
 
 /**
  * Dispatch one gate mode — the behavioral contract the retired `plugins/sp/scripts/quality-gate.ts`
@@ -1119,14 +1085,10 @@ export function qualityGateMain(
     }
     if (mode === 'status') {
         const runDir = join(options.cwd ?? '.', '.spur', 'run');
-        // Task 1136 R3: the gate owns its reuse identity — recompute the proof-input fingerprint
-        // before consulting the receipt, so a caller-copied digest can never trigger reuse.
-        const decision = resolveReceiptReuse(
-            join(runDir, `${env.wbs}-check-receipt.json`),
-            env,
-            options.cwd ?? process.cwd(),
-            options.recomputeFingerprint,
-        );
+        // 1234 R2: the gate owns its reuse identity — capture the git tree itself before
+        // consulting the receipt, so a caller-supplied digest can never trigger reuse.
+        const tree = (options.captureGitTree ?? captureGateGitTree)(options.cwd ?? process.cwd());
+        const decision = resolveReceiptReuse(join(runDir, `${env.wbs}-check-receipt.json`), env.wbs, tree);
         const verdict = decision.receiptStatus;
         if (decision.refusal !== undefined) {
             const line = `check.reuse-refused — ${decision.refusal}\n`;
@@ -1135,7 +1097,7 @@ export function qualityGateMain(
         } else if (verdict.reuse) {
             // 0940 R3: reuse is observable in the gate log and on stdout (the action result
             // `data`); the `{reuse, reason}` JSON stays the last stdout line for machine readers.
-            const line = `check.reused — full-tier receipt reused for input digest ${env.proofDigest ?? ''}\n`;
+            const line = `check.reused — full-tier receipt reused for git tree ${tree.ok ? tree.tree : 'unbound'}\n`;
             process.stdout.write(line); // tee: stdout and the log
             appendFileSync(join(runDir, `${env.wbs}-test-gate.log`), line);
         }

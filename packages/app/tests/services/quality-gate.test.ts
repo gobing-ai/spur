@@ -4,21 +4,22 @@ import { chmodSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, wr
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import {
+    captureGateGitTree,
     extractFindings,
+    type GitTreeCapture,
     isTransientLock,
     MAX_FINDINGS,
     parseCoverageThreshold,
     type QualityGateResult,
     RECEIPT_SCHEMA_VERSION,
     readReceiptStatus,
-    recomputeGateProofFingerprint,
     resolveReceiptReuse,
     runQualityGate,
     runShellCommand,
     scanCoverageShortfalls,
     tailLines,
 } from '../../src/services/quality-gate';
-import { computeProofInputFingerprint } from '../../src/workflow/proof-input-fingerprint';
+import { createGitAlternateTree } from '../../src/workflow/proof-input-fingerprint';
 
 // Task 1006 R1: behavioral suite ported from plugins/sp/tests/quality-gate.test.ts to follow
 // the gate core's new home (packages/app/src/services/quality-gate.ts); the plugin script keeps
@@ -36,11 +37,15 @@ function executable(dir: string, name: string, body: string): string {
     return path;
 }
 
+/** The tree these fixtures certify: the capture is stubbed, the identity decision is not. */
+const TREE = 'tree-1';
+
 function gate(
     mode: 'run' | 'recheck',
     dir: string,
     script: string,
     extra: Record<string, string> = {},
+    tree: GitTreeCapture = { ok: true, tree: TREE },
 ): QualityGateResult {
     // runQualityGate tees its retry/PASS/FAIL status lines to process.stdout; in-process
     // invocation would otherwise leak them into the bun test reporter stream.
@@ -50,10 +55,9 @@ function gate(
         return runQualityGate(
             mode,
             { wbs: '0823', qualityGateCmd: script, SPUR_QUALITY_GATE_RETRY_DELAY_MS: '0', ...extra },
-            // Task 1136 R3: these cases are about the receipt's own verdict, so the recompute guard
-            // is stubbed to agree with the supplied digest. The guard itself is pinned separately
-            // (app: `recomputeGateProofFingerprint` parity; plugin: `check.reuse-refused` cases).
-            { cwd: dir, recomputeFingerprint: (_c, e) => ({ ok: true, digest: e.proofDigest ?? '' }) },
+            // 1234: these cases are about the receipt's own verdict, so the git-tree capture is
+            // stubbed to a literal. The capture itself is pinned in quality-gate-tree-receipt.test.ts.
+            { cwd: dir, captureGitTree: () => tree },
         );
     } finally {
         process.stdout.write = originalWrite;
@@ -63,13 +67,13 @@ describe('quality-gate service (0823 d)', () => {
     test('a legacy PASS receipt from an empty command cannot be reused', () => {
         const { dir, cleanup } = scratch('spur-qg-empty-receipt-');
         try {
-            gate('run', dir, 'exit 0', { proofDigest: 'legacy-empty' });
+            gate('run', dir, 'exit 0');
             const path = join(dir, '.spur/run/0823-check-receipt.json');
             const receipt = JSON.parse(readFileSync(path, 'utf8'));
             receipt.checks[0].cmd = '';
             writeFileSync(path, JSON.stringify(receipt));
-            expect(readReceiptStatus(path, 'legacy-empty').reuse).toBe(false);
-            expect(gate('run', dir, 'exit 1', { proofDigest: 'legacy-empty' }).status).toBe('FAIL');
+            expect(readReceiptStatus(path, TREE, '0823').reuse).toBe(false);
+            expect(gate('run', dir, 'exit 1').status).toBe('FAIL');
         } finally {
             cleanup();
         }
@@ -80,8 +84,8 @@ describe('quality-gate service (0823 d)', () => {
         try {
             for (const mode of ['run', 'recheck'] as const) {
                 for (const command of ['', ' \t\n']) {
-                    gate('run', dir, 'exit 0', { proofDigest: 'empty-command-digest' });
-                    const result = gate(mode, dir, command, { proofDigest: 'empty-command-digest' });
+                    gate('run', dir, 'exit 0');
+                    const result = gate(mode, dir, command);
                     expect(result.status).toBe('FAIL');
                     expect(result.attempts).toBe(0);
                     const log = readFileSync(join(dir, '.spur/run/0823-test-gate.log'), 'utf8');
@@ -117,9 +121,9 @@ describe('quality-gate service (0823 d)', () => {
             const log = readFileSync(join(dir, '.spur/run/0823-test-gate.log'), 'utf8');
             expect(log).toContain('SQLiteError: database is locked');
             expect(log).toContain('retrying (1/5)');
-            // run mode resets the fix-attempt counter; the log carries the proof digest line.
+            // run mode resets the fix-attempt counter; the log names the git tree it certified.
             expect(readFileSync(join(dir, '.spur/run/0823-test-fix-attempt'), 'utf8')).toBe('0\n');
-            expect(log).toContain('proof-digest:');
+            expect(log).toContain(`git-tree: ${TREE}`);
         } finally {
             cleanup();
         }
@@ -355,11 +359,11 @@ describe('coverage shortfall findings (0862 R2)', () => {
 });
 
 describe('check-receipt write on run (0939 R2)', () => {
-    test('run with proofDigest writes a full-tier receipt bound to the digest', () => {
+    test('run writes a full-tier receipt bound to the git tree the gate computed', () => {
         const { dir, cleanup } = scratch('spur-qg-receipt-');
         try {
             const script = executable(dir, 'gate.sh', 'echo ok');
-            const result = gate('run', dir, script, { proofDigest: 'digest-1' });
+            const result = gate('run', dir, script);
             expect(result.status).toBe('PASS');
             expect(result.receiptFile).toBe('.spur/run/0823-check-receipt.json');
             const stored = JSON.parse(readFileSync(join(dir, '.spur/run/0823-check-receipt.json'), 'utf8')) as Record<
@@ -370,7 +374,7 @@ describe('check-receipt write on run (0939 R2)', () => {
             expect(stored.wbs).toBe('0823');
             expect(stored.runId).toBe('pipeline-0823');
             expect(stored.tier).toBe('full');
-            expect(stored.inputDigest).toBe('digest-1');
+            expect(stored.inputDigest).toBe(TREE);
             expect(stored.status).toBe('PASS');
             expect(Number.isNaN(Date.parse(stored.completedAt as string))).toBe(false);
             expect(stored.checks).toEqual([
@@ -391,7 +395,7 @@ describe('check-receipt write on run (0939 R2)', () => {
         const { dir, cleanup } = scratch('spur-qg-receipt-id-');
         try {
             const script = executable(dir, 'gate.sh', 'exit 1');
-            const result = gate('run', dir, script, { proofDigest: 'd', runId: 'run-42' });
+            const result = gate('run', dir, script, { runId: 'run-42' });
             expect(result.status).toBe('FAIL');
             const stored = JSON.parse(readFileSync(join(dir, '.spur/run/0823-check-receipt.json'), 'utf8')) as Record<
                 string,
@@ -404,18 +408,19 @@ describe('check-receipt write on run (0939 R2)', () => {
         }
     });
 
-    test('run without proofDigest writes no receipt and the log says why; a recheck with one writes it (0976 R1)', () => {
+    test('a run whose tree cannot be captured writes no receipt and the log says why; a captured tree writes it (0976 R1)', () => {
         const { dir, cleanup } = scratch('spur-qg-receipt-absent-');
         try {
             const script = executable(dir, 'gate.sh', 'echo ok');
-            gate('run', dir, script);
+            const noTree: GitTreeCapture = { ok: false, error: 'not a git repository' };
+            gate('run', dir, script, {}, noTree);
             expect(existsSync(join(dir, '.spur/run/0823-check-receipt.json'))).toBe(false);
             expect(readFileSync(join(dir, '.spur/run/0823-test-gate.log'), 'utf8')).toContain(
-                'check-receipt: not written — env `proofDigest` is not set',
+                'check-receipt: not written — git tree capture failed (not a git repository)',
             );
-            gate('recheck', dir, script);
+            gate('recheck', dir, script, {}, noTree);
             expect(existsSync(join(dir, '.spur/run/0823-check-receipt.json'))).toBe(false);
-            gate('recheck', dir, script, { proofDigest: 'digest-1' });
+            gate('recheck', dir, script);
             expect(existsSync(join(dir, '.spur/run/0823-check-receipt.json'))).toBe(true);
         } finally {
             cleanup();
@@ -424,7 +429,7 @@ describe('check-receipt write on run (0939 R2)', () => {
 });
 
 describe('PASS receipt reuse (1016 R1)', () => {
-    /** Full-tier PASS receipt builder; overrides replace top-level fields (tier/status/digest). */
+    /** Full-tier PASS receipt builder; overrides replace top-level fields (tier/status/tree). */
     function fullPassReceipt(overrides: Record<string, unknown> = {}): string {
         return `${JSON.stringify(
             {
@@ -432,7 +437,7 @@ describe('PASS receipt reuse (1016 R1)', () => {
                 wbs: '0823',
                 runId: 'pipeline-0823',
                 tier: 'full',
-                inputDigest: 'digest-1',
+                inputDigest: TREE,
                 checks: [
                     {
                         id: 'test',
@@ -459,7 +464,7 @@ describe('PASS receipt reuse (1016 R1)', () => {
     }
 
     test.each(['run', 'recheck'] as const)(
-        '%s: a full-tier PASS receipt at the current digest skips the probe and the gate',
+        '%s: a full-tier PASS receipt at the current tree skips the probe and the gate',
         (mode) => {
             const { dir, cleanup } = scratch('spur-qg-reuse-');
             try {
@@ -467,13 +472,13 @@ describe('PASS receipt reuse (1016 R1)', () => {
                 const receiptBefore = readFileSync(receiptPath, 'utf8');
                 const sentinel = join(dir, 'sentinel');
                 const script = executable(dir, 'gate.sh', `touch "${sentinel}"`);
-                const result = gate(mode, dir, script, { proofDigest: 'digest-1' });
+                const result = gate(mode, dir, script);
                 // The gate command never ran: the sentinel file it writes is absent.
                 expect(existsSync(sentinel)).toBe(false);
                 expect(result.status).toBe('PASS');
                 expect(readFileSync(join(dir, '.spur/run/0823-test-gate.status'), 'utf8')).toBe('PASS\n');
                 const log = readFileSync(join(dir, '.spur/run/0823-test-gate.log'), 'utf8');
-                expect(log).toContain('check.reused — full-tier PASS receipt at input digest digest-1; gate skipped');
+                expect(log).toContain(`check.reused — full-tier PASS receipt at git tree ${TREE}; gate skipped`);
                 // Reuse leaves the receipt untouched: the next re-entry can reuse it again.
                 expect(readFileSync(receiptPath, 'utf8')).toBe(receiptBefore);
             } finally {
@@ -486,29 +491,34 @@ describe('PASS receipt reuse (1016 R1)', () => {
         const scenarios: Array<{
             name: string;
             mode: 'run' | 'recheck';
-            proofDigest: string;
+            tree: GitTreeCapture;
             receipt?: string;
         }> = [
-            { name: 'missing receipt', mode: 'run', proofDigest: 'digest-1' },
+            { name: 'missing receipt', mode: 'run', tree: { ok: true, tree: TREE } },
             {
-                name: 'PASS receipt at a different digest',
+                name: 'PASS receipt at a different tree',
                 mode: 'recheck',
-                proofDigest: 'digest-2',
+                tree: { ok: true, tree: 'tree-2' },
                 receipt: fullPassReceipt(),
             },
             {
                 name: 'light-tier PASS receipt',
                 mode: 'recheck',
-                proofDigest: 'digest-1',
+                tree: { ok: true, tree: TREE },
                 receipt: fullPassReceipt({ tier: 'light' }),
             },
             {
                 name: 'FAIL receipt in run mode',
                 mode: 'run',
-                proofDigest: 'digest-1',
+                tree: { ok: true, tree: TREE },
                 receipt: fullPassReceipt({ status: 'FAIL' }),
             },
-            { name: 'empty proofDigest', mode: 'run', proofDigest: '', receipt: fullPassReceipt() },
+            {
+                name: 'a tree that cannot be captured',
+                mode: 'run',
+                tree: { ok: false, error: 'not a git repository' },
+                receipt: fullPassReceipt(),
+            },
         ];
         for (const scenario of scenarios) {
             const { dir, cleanup } = scratch('spur-qg-reuse-off-');
@@ -516,7 +526,7 @@ describe('PASS receipt reuse (1016 R1)', () => {
                 if (scenario.receipt) writeReceipt(dir, scenario.receipt);
                 const sentinel = join(dir, 'sentinel');
                 const script = executable(dir, 'gate.sh', `touch "${sentinel}"`);
-                gate(scenario.mode, dir, script, { proofDigest: scenario.proofDigest });
+                gate(scenario.mode, dir, script, {}, scenario.tree);
                 if (!existsSync(sentinel)) throw new Error(`scenario "${scenario.name}" did not run the gate command`);
             } finally {
                 cleanup();
@@ -525,71 +535,45 @@ describe('PASS receipt reuse (1016 R1)', () => {
     });
 });
 
-describe('gate receipt reuse identity (task 1136 R3)', () => {
-    /** Temp git repo with a task spec — the recompute needs a real tree and a readable task file. */
-    function repoWithTask(): { dir: string; task: string; cleanup: () => void } {
-        const { dir, cleanup } = scratch('spur-1136-recompute-');
+describe('gate receipt reuse identity (1234: the gate computes its tree)', () => {
+    /** Temp git repo with one tracked file — the capture needs a real repository. */
+    function repo(): { dir: string; cleanup: () => void } {
+        const { dir, cleanup } = scratch('spur-1234-repo-');
         writeFileSync(join(dir, '.gitignore'), '.spur/\n');
         writeFileSync(join(dir, 'README.md'), 'tracked\n');
-        const task = join(dir, 'task-0939.md');
-        writeFileSync(task, '# 0939 test task\n\n## Requirements\n\n- R1. do a thing\n');
         spawnSync('git', ['init', '-q'], { cwd: dir });
         spawnSync('git', ['config', 'user.email', 't@example.com'], { cwd: dir });
         spawnSync('git', ['config', 'user.name', 't'], { cwd: dir });
         spawnSync('git', ['add', '-A'], { cwd: dir });
         spawnSync('git', ['commit', '-qm', 'init'], { cwd: dir });
-        return { dir, task, cleanup };
+        return { dir, cleanup };
     }
 
-    test('recomputeGateProofFingerprint agrees with computeProofInputFingerprint on the same inputs', async () => {
-        const { dir, task, cleanup } = repoWithTask();
+    test('captureGateGitTree agrees with the proof-chain alternate-tree capture', async () => {
+        const { dir, cleanup } = repo();
         try {
-            const expected = await computeProofInputFingerprint({
-                cwd: dir,
-                taskContent: readFileSync(task, 'utf8'),
+            const expected = await createGitAlternateTree(dir);
+            expect(captureGateGitTree(dir)).toEqual({ ok: true, tree: expected });
+        } finally {
+            cleanup();
+        }
+    });
+
+    test('an absent receipt is not reusable and carries no refusal (nothing to bind)', () => {
+        const { dir, cleanup } = scratch('spur-1234-noreceipt-');
+        try {
+            const decision = resolveReceiptReuse(join(dir, '.spur/run/0823-check-receipt.json'), '0823', {
+                ok: true,
+                tree: TREE,
             });
-            const actual = recomputeGateProofFingerprint(dir, { wbs: '0939', taskSpecPath: task });
-            expect(actual).toEqual({ ok: true, digest: expected });
+            expect(decision).toEqual({ reuse: false, receiptStatus: { reuse: false, reason: 'missing' } });
         } finally {
             cleanup();
         }
     });
 
-    test('a missing task path refuses reuse and never reports it — no receipt is trusted', () => {
-        const { dir, cleanup } = scratch('spur-1136-nopath-');
-        try {
-            mkdirSync(join(dir, '.spur/run'), { recursive: true });
-            writeFileSync(join(dir, '.spur/run/0823-check-receipt.json'), '{}');
-            const decision = resolveReceiptReuse(join(dir, '.spur/run/0823-check-receipt.json'), { wbs: '0823' }, dir);
-            expect(decision.reuse).toBe(false);
-            expect(decision.refusal).toBe('recompute failed: missing task path');
-        } finally {
-            cleanup();
-        }
-    });
-
-    test('an absent receipt skips the recompute entirely (nothing to reuse)', () => {
-        const { dir, cleanup } = scratch('spur-1136-noreceipt-');
-        let recomputed = 0;
-        try {
-            const decision = resolveReceiptReuse(
-                join(dir, '.spur/run/0823-check-receipt.json'),
-                { wbs: '0823', proofDigest: 'digest-1' },
-                dir,
-                () => {
-                    recomputed++;
-                    return { ok: true, digest: 'digest-1' };
-                },
-            );
-            expect(decision.reuse).toBe(false);
-            expect(recomputed).toBe(0);
-        } finally {
-            cleanup();
-        }
-    });
-
-    test('run: a stale supplied digest refuses reuse, runs the gate, and logs both digests', () => {
-        const { dir, cleanup } = scratch('spur-1136-refuse-');
+    test('run: a receipt at an older tree refuses reuse, runs the gate, and rewrites the receipt', () => {
+        const { dir, cleanup } = scratch('spur-1234-stale-');
         try {
             mkdirSync(join(dir, '.spur/run'), { recursive: true });
             writeFileSync(
@@ -599,7 +583,7 @@ describe('gate receipt reuse identity (task 1136 R3)', () => {
                     wbs: '0823',
                     runId: 'pipeline-0823',
                     tier: 'full',
-                    inputDigest: 'digest-1',
+                    inputDigest: 'tree-old',
                     checks: [{ id: 't', cmd: 'x', status: 'PASS', durationMs: 1, logPath: 'p' }],
                     status: 'PASS',
                     completedAt: '2026-09-30T00:00:00.000Z',
@@ -612,21 +596,18 @@ describe('gate receipt reuse identity (task 1136 R3)', () => {
             try {
                 runQualityGate(
                     'recheck',
-                    {
-                        wbs: '0823',
-                        qualityGateCmd: script,
-                        proofDigest: 'digest-1',
-                        SPUR_QUALITY_GATE_RETRY_DELAY_MS: '0',
-                    },
-                    { cwd: dir, recomputeFingerprint: () => ({ ok: true, digest: 'digest-2' }) },
+                    { wbs: '0823', qualityGateCmd: script, SPUR_QUALITY_GATE_RETRY_DELAY_MS: '0' },
+                    { cwd: dir, captureGitTree: () => ({ ok: true, tree: TREE }) },
                 );
             } finally {
                 process.stdout.write = originalWrite;
             }
             expect(existsSync(sentinel)).toBe(true);
-            expect(readFileSync(join(dir, '.spur/run/0823-test-gate.log'), 'utf8')).toContain(
-                'check.reuse-refused — supplied digest-1 != current digest-2',
-            );
+            const stored = JSON.parse(readFileSync(join(dir, '.spur/run/0823-check-receipt.json'), 'utf8')) as Record<
+                string,
+                unknown
+            >;
+            expect(stored.inputDigest).toBe(TREE);
         } finally {
             cleanup();
         }

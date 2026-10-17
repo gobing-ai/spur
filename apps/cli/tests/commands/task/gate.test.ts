@@ -50,8 +50,18 @@ describe('spur task gate', () => {
 
     test('status reports the receipt verdict without running the gate', async () => {
         const opts = { cwd, output: createCapturedOutput(), env: {} };
-        expect(await main(['task', 'gate', '2003', 'status', '--proof-digest', 'd-1'], opts)).toBe(0);
+        expect(await main(['task', 'gate', '2003', 'status'], opts)).toBe(0);
         expect(existsSync(join(cwd, '.spur', 'run', '2003-test-gate.status'))).toBe(false);
+    });
+
+    // 1234: the receipt key is the gate's own git tree hash, so the caller-supplied digest flag is
+    // gone (ADR-140). The surface must reject it rather than silently ignore it.
+    test('the retired --proof-digest flag is rejected as an unknown option', async () => {
+        const output = createCapturedOutput();
+        expect(await main(['task', 'gate', '2003', 'status', '--proof-digest', 'd-1'], { cwd, output, env: {} })).toBe(
+            1,
+        );
+        expect(output.errors.join('\n')).toContain("unknown option '--proof-digest'");
     });
 
     test('an unknown mode is a usage error (2)', async () => {

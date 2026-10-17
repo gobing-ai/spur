@@ -256,7 +256,7 @@ planning to the test suite.
 ## spur task gate / residual / diffstat
 
 ```bash
-spur task gate <wbs> <mode> [--cmd <command>] [--probe-cmd <command>] [--proof-digest <digest>] [--run-id <id>]
+spur task gate <wbs> <mode> [--cmd <command>] [--probe-cmd <command>] [--run-id <id>]
 spur task residual <wbs> <scan|fold|settle|report|review-gate> [--root <dir>] [--tmp-dir <dir>] [--folder <path>]
 spur task diffstat <wbs>
 ```

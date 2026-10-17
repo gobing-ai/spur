@@ -465,7 +465,7 @@ spur task resolve  <file-path> [--strict] [--folder] [--json]
 spur task path     <wbs> [--folder] [--json]
 spur task run-link <wbs> [--source <src>] [--run-id <id>] [--json]
 spur task scaffold-tests <wbs> [--file <path>] [--folder] [--json]
-spur task gate     <wbs> <run|recheck|light|deferred|status> [--cmd <c>] [--probe-cmd <c>] [--proof-digest <d>] [--run-id <id>]
+spur task gate     <wbs> <run|recheck|light|deferred|status> [--cmd <c>] [--probe-cmd <c>] [--run-id <id>]
 spur task residual <wbs> <scan|review-gate|fold|settle|report> [--root <dir>] [--tmp-dir <dir>] [--folder]
 spur task diffstat <wbs>
 ```

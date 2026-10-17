@@ -13,6 +13,22 @@ import { resolveRunArtifactPath } from './run-path';
 const KIND = 'command.gate';
 
 /**
+ * The typed outcome of a gate step (1234 R3), derived from the exit code alone:
+ * `PASS` = 0 (the step ran and succeeded), `FAIL` = 1 (the step ran and failed),
+ * `BLOCKED` = anything else — a refusal/usage exit (2, e.g. `spur workflow commit-guard stage`
+ * refusing a foreign path or an unbound `spur self exec`) or a signal-killed / timed-out process.
+ * A blocked step could not decide; guards route it rather than reading it as a red gate.
+ */
+export type CommandGateOutcome = 'PASS' | 'FAIL' | 'BLOCKED';
+
+/** Classify a finished step's exit code (see {@link CommandGateOutcome}). */
+export function commandGateOutcome(exitCode: number): CommandGateOutcome {
+    if (exitCode === 0) return 'PASS';
+    if (exitCode === 1) return 'FAIL';
+    return 'BLOCKED';
+}
+
+/**
  * Retry policy options for command-gate action executions.
  */
 export interface CommandGateRetryOptions {
@@ -46,7 +62,8 @@ export interface CommandGateOptions {
      * The shipped action schema has no `onError`, so a hard-failing action aborts the run
      * before any transition guard can read the result file. Soft probes — the precheck and
      * quality-gate hops whose FAIL must route through the graph to a `failed` state rather
-     * than kill the run — set this to keep the engine going while still recording `FAIL`.
+     * than kill the run — set this to keep the engine going while still recording the typed
+     * outcome ({@link CommandGateOutcome}).
      */
     softFail?: boolean;
 }
@@ -196,23 +213,26 @@ export class CommandGateActionRunner implements ActionRunner {
             break;
         }
 
-        await this.fileSystem.writeFile(normalized, 'FAIL\n');
+        await this.fileSystem.writeFile(normalized, `${commandGateOutcome(lastExitCode)}\n`);
         const failureData = {
-            status: 'FAIL',
+            status: commandGateOutcome(lastExitCode),
             exitCode: lastExitCode,
             attempts: attemptsRun,
             stdout: lastStdout,
             stderr: lastStderr,
             resultFile: normalized,
         };
-        // Soft probes record FAIL and hand routing to the transition guards; the run only
+        // Soft probes record the outcome and hand routing to the transition guards; the run only
         // aborts here when the caller wants the gate to be fatal.
         if (softFail) {
             return { ok: true, data: failureData };
         }
         return {
             ok: false,
-            error: `command.gate failed (exit code ${lastExitCode}) after ${attemptsRun} attempt(s)`,
+            error:
+                failureData.status === 'BLOCKED'
+                    ? `command.gate blocked (exit code ${lastExitCode}) after ${attemptsRun} attempt(s)`
+                    : `command.gate failed (exit code ${lastExitCode}) after ${attemptsRun} attempt(s)`,
             data: failureData,
         };
     }

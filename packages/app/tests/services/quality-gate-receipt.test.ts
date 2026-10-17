@@ -6,9 +6,11 @@ import {
     buildReceipt,
     type CheckReceipt,
     type CheckReceiptRow,
+    captureGateGitTree,
     lightScope,
     qualityGateMain as main,
     planLightChecks,
+    type QualityGateOptions,
     RECEIPT_SCHEMA_VERSION,
     readReceiptStatus,
     runDeferredGate,
@@ -37,7 +39,7 @@ function receipt(rows: Partial<CheckReceipt> = {}): CheckReceipt {
         wbs: '0939',
         runId: 'pipeline-0939',
         tier: 'full',
-        inputDigest: 'digest-1',
+        inputDigest: 'tree-1',
         checks: [row],
         status: 'PASS',
         completedAt: '2026-09-25T00:00:00.000Z',
@@ -78,8 +80,25 @@ function captureStdout<T>(run: () => T): { out: string; value: T } {
     }
 }
 
-// ─── buildReceipt (0939 plan 1) ───
+/**
+ * Test seam: these fixtures are not git repositories, so the gate's tree capture is stubbed.
+ * The identity DECISION stays in the gate — only the capture is injected.
+ */
+function atTree(tree = 'tree-1'): QualityGateOptions {
+    return { captureGitTree: () => ({ ok: true, tree }) };
+}
 
+/** A capture that cannot run: the fail-closed branch (a receipt with no identity is untrusted). */
+const NO_TREE: QualityGateOptions = { captureGitTree: () => ({ ok: false, error: 'not a git repository' }) };
+
+/** The tree the gate computes for a real repo fixture — the receipt key assertions compare against. */
+function treeOf(dir: string): string {
+    const capture = captureGateGitTree(dir);
+    if (!capture.ok) throw new Error(`tree capture failed: ${capture.error}`);
+    return capture.tree;
+}
+
+// ─── buildReceipt (0939 plan 1) ───
 describe('buildReceipt', () => {
     test('stamps check-receipt/v1 and derives the overall status from the rows', () => {
         const pass = buildReceipt({
@@ -128,12 +147,15 @@ describe('readReceiptStatus', () => {
     test('missing: absent file, corrupt JSON, or foreign schema version', () => {
         const dir = mkdtempSync(join(tmpdir(), 'spur-receipt-missing-'));
         try {
-            expect(readReceiptStatus(join(dir, 'absent.json'), 'd1')).toEqual({ reuse: false, reason: 'missing' });
+            expect(readReceiptStatus(join(dir, 'absent.json'), 'd1', '0939')).toEqual({
+                reuse: false,
+                reason: 'missing',
+            });
             const corrupt = join(dir, 'corrupt.json');
             writeFileSync(corrupt, '{not json');
-            expect(readReceiptStatus(corrupt, 'd1')).toEqual({ reuse: false, reason: 'missing' });
+            expect(readReceiptStatus(corrupt, 'd1', '0939')).toEqual({ reuse: false, reason: 'missing' });
             const foreign = writeReceipt(dir, { ...receipt(), schemaVersion: 'check-receipt/v2' });
-            expect(readReceiptStatus(foreign, 'd1')).toEqual({ reuse: false, reason: 'missing' });
+            expect(readReceiptStatus(foreign, 'd1', '0939')).toEqual({ reuse: false, reason: 'missing' });
         } finally {
             rmSync(dir, { recursive: true, force: true });
         }
@@ -143,7 +165,7 @@ describe('readReceiptStatus', () => {
         const dir = mkdtempSync(join(tmpdir(), 'spur-receipt-failed-'));
         try {
             const path = writeReceipt(dir, receipt({ status: 'FAIL' }));
-            expect(readReceiptStatus(path, 'digest-1')).toEqual({ reuse: false, reason: 'failed' });
+            expect(readReceiptStatus(path, 'tree-1', '0939')).toEqual({ reuse: false, reason: 'failed' });
         } finally {
             rmSync(dir, { recursive: true, force: true });
         }
@@ -153,8 +175,8 @@ describe('readReceiptStatus', () => {
         const dir = mkdtempSync(join(tmpdir(), 'spur-receipt-stale-'));
         try {
             const path = writeReceipt(dir, receipt());
-            expect(readReceiptStatus(path, 'digest-2')).toEqual({ reuse: false, reason: 'stale' });
-            expect(readReceiptStatus(path, '')).toEqual({ reuse: false, reason: 'stale' });
+            expect(readReceiptStatus(path, 'tree-2', '0939')).toEqual({ reuse: false, reason: 'stale' });
+            expect(readReceiptStatus(path, '', '0939')).toEqual({ reuse: false, reason: 'stale' });
         } finally {
             rmSync(dir, { recursive: true, force: true });
         }
@@ -163,8 +185,8 @@ describe('readReceiptStatus', () => {
     test('light-only: a PASS light receipt at the same digest is never reusable', () => {
         const dir = mkdtempSync(join(tmpdir(), 'spur-receipt-light-'));
         try {
-            const path = writeReceipt(dir, receipt({ tier: 'light', inputDigest: 'digest-1' }));
-            expect(readReceiptStatus(path, 'digest-1')).toEqual({ reuse: false, reason: 'light-only' });
+            const path = writeReceipt(dir, receipt({ tier: 'light', inputDigest: 'tree-1' }));
+            expect(readReceiptStatus(path, 'tree-1', '0939')).toEqual({ reuse: false, reason: 'light-only' });
         } finally {
             rmSync(dir, { recursive: true, force: true });
         }
@@ -174,7 +196,7 @@ describe('readReceiptStatus', () => {
         const dir = mkdtempSync(join(tmpdir(), 'spur-receipt-reuse-'));
         try {
             const path = writeReceipt(dir, receipt());
-            expect(readReceiptStatus(path, 'digest-1')).toEqual({ reuse: true, reason: 'ok' });
+            expect(readReceiptStatus(path, 'tree-1', '0939')).toEqual({ reuse: true, reason: 'ok' });
         } finally {
             rmSync(dir, { recursive: true, force: true });
         }
@@ -348,9 +370,7 @@ describe('runDeferredGate (1111 R1/R2)', () => {
         const { dir, cleanup } = gitRepoFixture();
         try {
             const statusPath = join(dir, '.spur', 'run', '1111t-test-gate.status');
-            const passing = silenceStdout(() =>
-                runDeferredGate({ wbs: '1111t', proofDigest: 'digest-d' }, { cwd: dir }),
-            );
+            const passing = silenceStdout(() => runDeferredGate({ wbs: '1111t' }, { cwd: dir }));
             expect(passing.status).toBe('DEFERRED');
             // The whole point of the token: a light result must never certify the full gate.
             expect(readFileSync(statusPath, 'utf8').trim()).toBe('DEFERRED');
@@ -361,9 +381,7 @@ describe('runDeferredGate (1111 R1/R2)', () => {
                 join(dir, 'pkg-a/tests/m.test.ts'),
                 "import { expect, test } from 'bun:test';\ntest('one', () => {\n    expect(1).toBe(2);\n});\n",
             );
-            const failing = silenceStdout(() =>
-                runDeferredGate({ wbs: '1111t', proofDigest: 'digest-d2' }, { cwd: dir }),
-            );
+            const failing = silenceStdout(() => runDeferredGate({ wbs: '1111t' }, { cwd: dir }));
             expect(failing.status).toBe('FAIL');
             expect(readFileSync(statusPath, 'utf8').trim()).toBe('FAIL');
             expect(readFileSync(join(dir, '.spur', 'run', '1111t-light-gate.log'), 'utf8')).toContain('deferred');
@@ -417,9 +435,9 @@ describe('runLightGate (temp git repo)', () => {
         return { dir, cleanup: () => rmSync(dir, { recursive: true, force: true }) };
     }
 
-    function light(dir: string, digest: string, testBody: string) {
+    function light(dir: string, testBody: string) {
         writeFileSync(join(dir, 'pkg-a/tests/m.test.ts'), testBody);
-        return silenceStdout(() => runLightGate({ wbs: '0939t', proofDigest: digest }, { cwd: dir }));
+        return silenceStdout(() => runLightGate({ wbs: '0939t' }, { cwd: dir }));
     }
 
     const PASSING_TEST =
@@ -431,7 +449,7 @@ describe('runLightGate (temp git repo)', () => {
         try {
             // Resolve bunx biome against the repo's pinned binary; the fixture has no node_modules.
             runShellCommand(`ln -s ${process.cwd()}/node_modules ${dir}/node_modules`, undefined);
-            const result = light(dir, 'digest-A', PASSING_TEST);
+            const result = light(dir, PASSING_TEST);
             expect(result.status).toBe('PASS');
             expect(result.scope.files.sort()).toEqual(['pkg-a/src/extra.ts', 'pkg-a/src/m.ts']);
             expect(result.scope.workspaces).toEqual(['pkg-a']);
@@ -453,10 +471,10 @@ describe('runLightGate (temp git repo)', () => {
             ) as CheckReceipt;
             expect(stored.schemaVersion).toBe('check-receipt/v1');
             expect(stored.tier).toBe('light');
-            expect(stored.inputDigest).toBe('digest-A');
+            expect(stored.inputDigest).toBe(treeOf(dir));
             expect(stored.runId).toBe('pipeline-0939t');
             expect(stored.status).toBe('PASS');
-            expect(readReceiptStatus(join(dir, '.spur/run/0939t-check-receipt.json'), 'digest-A')).toEqual({
+            expect(readReceiptStatus(join(dir, '.spur/run/0939t-check-receipt.json'), treeOf(dir), '0939t')).toEqual({
                 reuse: false,
                 reason: 'light-only',
             });
@@ -469,22 +487,22 @@ describe('runLightGate (temp git repo)', () => {
         const { dir, cleanup } = gitRepoFixture();
         try {
             runShellCommand(`ln -s ${process.cwd()}/node_modules ${dir}/node_modules`, undefined);
-            const first = light(dir, 'digest-A', PASSING_TEST);
-            const second = light(dir, 'digest-A', PASSING_TEST);
+            const first = light(dir, PASSING_TEST);
+            const second = light(dir, PASSING_TEST);
             expect(second.checks).toEqual(first.checks); // prior rows reused verbatim (durations unchanged)
             const log = readFileSync(join(dir, '.spur/run/0939t-light-gate.log'), 'utf8');
-            expect(log).toContain('skipped (PASS at the same input digest)');
+            expect(log).toContain('skipped (PASS at the same git tree)');
         } finally {
             cleanup();
         }
     });
 
-    test('a digest change re-runs and can flip the receipt to FAIL; soft exit stays 0-shaped', () => {
+    test('a tree change re-runs and can flip the receipt to FAIL; soft exit stays 0-shaped', () => {
         const { dir, cleanup } = gitRepoFixture();
         try {
             runShellCommand(`ln -s ${process.cwd()}/node_modules ${dir}/node_modules`, undefined);
-            light(dir, 'digest-A', PASSING_TEST);
-            const rerun = light(dir, 'digest-B', FAILING_TEST);
+            light(dir, PASSING_TEST);
+            const rerun = light(dir, FAILING_TEST);
             expect(rerun.status).toBe('FAIL');
             const byId = new Map(rerun.checks.map((c) => [c.id, c]));
             expect(byId.get('test:pkg-a')?.status).toBe('FAIL');
@@ -501,7 +519,7 @@ describe('runLightGate (temp git repo)', () => {
             runShellCommand(`ln -s ${process.cwd()}/node_modules ${dir}/node_modules`, undefined);
             // Seed a biome diff (unformatted file with extra semicolons and irregular spacing)
             writeFileSync(join(dir, 'pkg-a/src/extra.ts'), 'export const  badFormat  =   "double-quotes";;;;\n');
-            const result = light(dir, 'digest-C', PASSING_TEST);
+            const result = light(dir, PASSING_TEST);
             expect(result.status).toBe('FAIL');
             const byId = new Map(result.checks.map((c) => [c.id, c]));
             expect(byId.get('format-lint:changed')?.status).toBe('FAIL');
@@ -510,7 +528,7 @@ describe('runLightGate (temp git repo)', () => {
         }
     });
 
-    test('preserves a full-tier receipt at the same digest — light never demotes boundary evidence (P3#1)', () => {
+    test('preserves a full-tier receipt at the same tree — light never demotes boundary evidence (P3#1)', () => {
         const { dir, cleanup } = gitRepoFixture();
         try {
             runShellCommand(`ln -s ${process.cwd()}/node_modules ${dir}/node_modules`, undefined);
@@ -519,7 +537,7 @@ describe('runLightGate (temp git repo)', () => {
                 wbs: '0939t',
                 runId: 'run-full',
                 tier: 'full',
-                inputDigest: 'digest-A',
+                inputDigest: treeOf(dir),
                 checks: [
                     {
                         id: 'test',
@@ -534,19 +552,19 @@ describe('runLightGate (temp git repo)', () => {
             };
             mkdirSync(join(dir, '.spur/run'), { recursive: true });
             writeFileSync(join(dir, '.spur/run/0939t-check-receipt.json'), `${JSON.stringify(full, null, 2)}\n`);
-            const result = light(dir, 'digest-A', PASSING_TEST);
+            const result = light(dir, PASSING_TEST);
             expect(result.status).toBe('PASS');
             const stored = JSON.parse(
                 readFileSync(join(dir, '.spur/run/0939t-check-receipt.json'), 'utf8'),
             ) as CheckReceipt;
             expect(stored).toEqual(full);
-            expect(readReceiptStatus(join(dir, '.spur/run/0939t-check-receipt.json'), 'digest-A')).toEqual({
+            expect(readReceiptStatus(join(dir, '.spur/run/0939t-check-receipt.json'), treeOf(dir), '0939t')).toEqual({
                 reuse: true,
                 reason: 'ok',
             });
             // Light still ran its rows into the log and recorded why no light receipt was written.
             const log = readFileSync(join(dir, '.spur/run/0939t-light-gate.log'), 'utf8');
-            expect(log).toContain('full-tier receipt at the same input digest is preserved');
+            expect(log).toContain('full-tier receipt at the same git tree is preserved');
             expect(log).toContain('--- light format-lint:changed:');
         } finally {
             cleanup();
@@ -557,12 +575,12 @@ describe('runLightGate (temp git repo)', () => {
         const { dir, cleanup } = gitRepoFixture();
         try {
             runShellCommand(`ln -s ${process.cwd()}/node_modules ${dir}/node_modules`, undefined);
-            light(dir, 'digest-A', PASSING_TEST);
-            const { out } = captureStdout(() => runLightGate({ wbs: '0939t', proofDigest: 'digest-A' }, { cwd: dir }));
+            light(dir, PASSING_TEST);
+            const { out } = captureStdout(() => runLightGate({ wbs: '0939t' }, { cwd: dir }));
             expect(out).toContain('check.reused');
             const log = readFileSync(join(dir, '.spur/run/0939t-light-gate.log'), 'utf8');
             expect(log).toContain('check.reused');
-            expect(log).toContain('skipped (PASS at the same input digest)');
+            expect(log).toContain('skipped (PASS at the same git tree)');
         } finally {
             cleanup();
         }
@@ -580,13 +598,8 @@ describe('recheck no-progress skip (0940 R2)', () => {
             const { out, value } = captureStdout(() =>
                 runQualityGate(
                     'recheck',
-                    {
-                        wbs: '0939',
-                        proofDigest: 'digest-1',
-                        gateProbeCmd: 'echo probe-ran',
-                        qualityGateCmd: 'echo full-ran',
-                    },
-                    { cwd: dir },
+                    { wbs: '0939', gateProbeCmd: 'echo probe-ran', qualityGateCmd: 'echo full-ran' },
+                    { cwd: dir, ...atTree() },
                 ),
             );
             // Same FAIL path a red full gate uses: status file written, verdict in the result.
@@ -613,13 +626,8 @@ describe('recheck no-progress skip (0940 R2)', () => {
             const { out, value } = captureStdout(() =>
                 runQualityGate(
                     'recheck',
-                    {
-                        wbs: '0939',
-                        proofDigest: 'digest-2',
-                        gateProbeCmd: 'echo probe-ran',
-                        qualityGateCmd: 'echo full-ran; exit 1',
-                    },
-                    { cwd: dir },
+                    { wbs: '0939', gateProbeCmd: 'echo probe-ran', qualityGateCmd: 'echo full-ran; exit 1' },
+                    { cwd: dir, ...atTree('tree-2') },
                 ),
             );
             expect(value.status).toBe('FAIL');
@@ -641,20 +649,16 @@ describe('recheck no-progress skip (0940 R2)', () => {
         const receiptPath = join(dir, '.spur/run/0939-check-receipt.json');
         const env = { wbs: '0939', gateProbeCmd: 'echo probe-ran', qualityGateCmd: 'echo full-ran; exit 1' };
         try {
-            silenceStdout(() => runQualityGate('run', { ...env, proofDigest: 'digest-x' }, { cwd: dir }));
-            const first = captureStdout(() =>
-                runQualityGate('recheck', { ...env, proofDigest: 'digest-y' }, { cwd: dir }),
-            );
+            silenceStdout(() => runQualityGate('run', env, { cwd: dir, ...atTree('tree-x') }));
+            const first = captureStdout(() => runQualityGate('recheck', env, { cwd: dir, ...atTree('tree-y') }));
             expect(first.value.attempts).toBe(1);
             expect(first.out).not.toContain('check.skipped-no-progress');
             const refreshed = JSON.parse(readFileSync(receiptPath, 'utf8')) as CheckReceipt;
-            expect(refreshed.inputDigest).toBe('digest-y');
+            expect(refreshed.inputDigest).toBe('tree-y');
             expect(refreshed.tier).toBe('full');
             expect(refreshed.status).toBe('FAIL');
 
-            const second = captureStdout(() =>
-                runQualityGate('recheck', { ...env, proofDigest: 'digest-y' }, { cwd: dir }),
-            );
+            const second = captureStdout(() => runQualityGate('recheck', env, { cwd: dir, ...atTree('tree-y') }));
             expect(second.out).toContain('check.skipped-no-progress');
             expect(second.value.status).toBe('FAIL');
             expect(second.value.attempts).toBe(0);
@@ -675,14 +679,14 @@ describe('recheck no-progress skip (0940 R2)', () => {
             silenceStdout(() =>
                 runQualityGate(
                     'recheck',
-                    { wbs: '0939', proofDigest: 'digest-2', gateProbeCmd: 'exit 0', qualityGateCmd: 'echo full-ran' },
-                    { cwd: dir },
+                    { wbs: '0939', gateProbeCmd: 'exit 0', qualityGateCmd: 'echo full-ran' },
+                    { cwd: dir, ...atTree('tree-2') },
                 ),
             );
             const stored = JSON.parse(
                 readFileSync(join(dir, '.spur/run/0939-check-receipt.json'), 'utf8'),
             ) as CheckReceipt;
-            expect(stored.inputDigest).toBe('digest-2');
+            expect(stored.inputDigest).toBe('tree-2');
             expect(stored.status).toBe('PASS');
             expect(readFileSync(join(dir, '.spur/run/0939-test-gate.log'), 'utf8')).toContain('full-ran');
         } finally {
@@ -701,14 +705,8 @@ describe('recheck no-progress skip (0940 R2)', () => {
             const { out, value } = captureStdout(() =>
                 runQualityGate(
                     'recheck',
-                    {
-                        wbs: '0939',
-                        proofDigest: 'digest-1',
-                        taskSpecPath: 'docs/tasks/0939.md',
-                        gateProbeCmd: 'exit 0',
-                        qualityGateCmd: 'echo full-ran; exit 0',
-                    },
-                    { cwd: dir, recomputeFingerprint: () => ({ ok: true, digest: 'digest-1' }) },
+                    { wbs: '0939', gateProbeCmd: 'exit 0', qualityGateCmd: 'echo full-ran; exit 0' },
+                    { cwd: dir, ...atTree() },
                 ),
             );
             expect(value.status).toBe('PASS');
@@ -731,13 +729,8 @@ describe('recheck no-progress skip (0940 R2)', () => {
             const { value } = captureStdout(() =>
                 runQualityGate(
                     'recheck',
-                    {
-                        wbs: '0939',
-                        proofDigest: 'digest-1',
-                        gateProbeCmd: 'exit 0',
-                        qualityGateCmd: 'echo full-ran; exit 1',
-                    },
-                    { cwd: dir },
+                    { wbs: '0939', gateProbeCmd: 'exit 0', qualityGateCmd: 'echo full-ran; exit 1' },
+                    { cwd: dir, ...atTree() },
                 ),
             );
             expect(value.status).toBe('FAIL');
@@ -770,13 +763,8 @@ describe('recheck no-progress skip (0940 R2)', () => {
             const { out, value } = captureStdout(() =>
                 runQualityGate(
                     'recheck',
-                    {
-                        wbs: '0939',
-                        proofDigest: 'digest-1',
-                        gateProbeCmd: 'echo probe-ran',
-                        qualityGateCmd: 'echo full-ran; exit 1',
-                    },
-                    { cwd: dir },
+                    { wbs: '0939', gateProbeCmd: 'echo probe-ran', qualityGateCmd: 'echo full-ran; exit 1' },
+                    { cwd: dir, ...atTree() },
                 ),
             );
             const log = readFileSync(join(dir, '.spur/run/0939-test-gate.log'), 'utf8');
@@ -807,28 +795,22 @@ describe('recheck no-progress skip (0940 R2)', () => {
                     'recheck',
                     {
                         wbs: '0939',
-                        proofDigest: 'digest-1',
                         gateProbeCmd: 'exit 0',
                         // A red retry that is timeout-shaped again, so the marker is the only stop.
                         qualityGateCmd: `printf '(fail) retry > still times out [60000ms]\\n^ this test timed out after 60000ms.\\n'; exit 1`,
                     },
-                    { cwd: dir },
+                    { cwd: dir, ...atTree() },
                 ),
             );
             expect(first.out).toContain('check.retry-contended');
             expect(first.value.status).toBe('FAIL');
-            expect(readFileSync(join(dir, '.spur/run/0939-contended-retry'), 'utf8').trim()).toBe('digest-1');
+            expect(readFileSync(join(dir, '.spur/run/0939-contended-retry'), 'utf8').trim()).toBe('tree-1');
 
             const second = captureStdout(() =>
                 runQualityGate(
                     'recheck',
-                    {
-                        wbs: '0939',
-                        proofDigest: 'digest-1',
-                        gateProbeCmd: 'echo probe-ran',
-                        qualityGateCmd: 'echo full-ran',
-                    },
-                    { cwd: dir },
+                    { wbs: '0939', gateProbeCmd: 'echo probe-ran', qualityGateCmd: 'echo full-ran' },
+                    { cwd: dir, ...atTree() },
                 ),
             );
             expect(second.out).toContain('check.skipped-no-progress');
@@ -839,7 +821,7 @@ describe('recheck no-progress skip (0940 R2)', () => {
             expect(log).not.toContain('probe-ran');
             expect(log).not.toContain('full-ran');
             // The marker now records the spent digest for this input.
-            expect(readFileSync(join(dir, '.spur/run/0939-contended-retry'), 'utf8').trim()).toBe('digest-1');
+            expect(readFileSync(join(dir, '.spur/run/0939-contended-retry'), 'utf8').trim()).toBe('tree-1');
         } finally {
             rmSync(dir, { recursive: true, force: true });
         }
@@ -858,13 +840,8 @@ describe('recheck no-progress skip (0940 R2)', () => {
             const { out, value } = captureStdout(() =>
                 runQualityGate(
                     'recheck',
-                    {
-                        wbs: '0939',
-                        proofDigest: 'digest-1',
-                        gateProbeCmd: 'echo probe-ran',
-                        qualityGateCmd: 'echo full-ran',
-                    },
-                    { cwd: dir },
+                    { wbs: '0939', gateProbeCmd: 'echo probe-ran', qualityGateCmd: 'echo full-ran' },
+                    { cwd: dir, ...atTree() },
                 ),
             );
             expect(value.status).toBe('PASS');
@@ -873,7 +850,7 @@ describe('recheck no-progress skip (0940 R2)', () => {
                 readFileSync(join(dir, '.spur/run/0939-check-receipt.json'), 'utf8'),
             ) as CheckReceipt;
             expect(receiptAfter.status).toBe('PASS');
-            expect(receiptAfter.inputDigest).toBe('digest-1');
+            expect(receiptAfter.inputDigest).toBe('tree-1');
             const log = readFileSync(join(dir, '.spur/run/0939-test-gate.log'), 'utf8');
             expect(log).toContain('check.retry-contended');
             expect(log).toContain('full-ran');
@@ -911,13 +888,8 @@ describe('recheck no-progress skip (0940 R2)', () => {
                 const { out, value } = captureStdout(() =>
                     runQualityGate(
                         'recheck',
-                        {
-                            wbs: '0939',
-                            proofDigest: 'digest-1',
-                            gateProbeCmd: 'echo probe-ran',
-                            qualityGateCmd: 'echo full-ran',
-                        },
-                        { cwd: dir },
+                        { wbs: '0939', gateProbeCmd: 'echo probe-ran', qualityGateCmd: 'echo full-ran' },
+                        { cwd: dir, ...atTree() },
                     ),
                 );
                 if (out.includes('check.retry-contended')) throw new Error(`case "${c.name}" unexpectedly retried`);
@@ -940,17 +912,7 @@ describe('status reuse marker (0940 R3)', () => {
         const dir = mkdtempSync(join(tmpdir(), 'spur-0940-status-reuse-'));
         try {
             writeReceipt(dir, receipt());
-            const { out } = captureStdout(() =>
-                main(
-                    ['status'],
-                    {
-                        wbs: '0939',
-                        proofDigest: 'digest-1',
-                        taskSpecPath: 'docs/tasks/0939.md',
-                    },
-                    { cwd: dir, recomputeFingerprint: () => ({ ok: true, digest: 'digest-1' }) },
-                ),
-            );
+            const { out } = captureStdout(() => main(['status'], { wbs: '0939' }, { cwd: dir, ...atTree() }));
             expect(out).toContain('check.reused');
             const lines = out.trimEnd().split('\n');
             expect(JSON.parse(lines[lines.length - 1] ?? '')).toEqual({ reuse: true, reason: 'ok' });
@@ -964,9 +926,7 @@ describe('status reuse marker (0940 R3)', () => {
     test('a non-reusable status verdict emits no marker and writes no gate log', () => {
         const dir = mkdtempSync(join(tmpdir(), 'spur-0940-status-miss-'));
         try {
-            const { out } = captureStdout(() =>
-                main(['status'], { wbs: '0939', proofDigest: 'digest-1' }, { cwd: dir }),
-            );
+            const { out } = captureStdout(() => main(['status'], { wbs: '0939' }, { cwd: dir, ...atTree() }));
             expect(out.trimEnd().endsWith('{"reuse":false,"reason":"missing"}')).toBe(true);
             expect(existsSync(join(dir, '.spur/run/0939-test-gate.log'))).toBe(false);
         } finally {
@@ -974,20 +934,14 @@ describe('status reuse marker (0940 R3)', () => {
         }
     });
 
-    // Task 1136 R3: the status mode is the gate's trust decision too, so it recomputes before
-    // consulting the receipt and refuses reuse when the recompute fails or disagrees.
-    test('status refuses reuse when the recompute fails, reporting reuse:false and the refusal', () => {
-        const dir = mkdtempSync(join(tmpdir(), 'spur-1136-status-refuse-'));
+    // 1234: the status mode is the gate's trust decision too, so it computes the tree itself
+    // before consulting the receipt and refuses reuse when the capture cannot run.
+    test('status refuses reuse when the tree capture cannot run, reporting reuse:false and the refusal', () => {
+        const dir = mkdtempSync(join(tmpdir(), 'spur-1234-status-refuse-'));
         try {
             writeReceipt(dir, receipt());
-            const { out } = captureStdout(() =>
-                main(
-                    ['status'],
-                    { wbs: '0939', proofDigest: 'digest-1', taskSpecPath: 'docs/tasks/0939.md' },
-                    { cwd: dir, recomputeFingerprint: () => ({ ok: false, error: 'missing task path' }) },
-                ),
-            );
-            expect(out).toContain('check.reuse-refused — recompute failed: missing task path');
+            const { out } = captureStdout(() => main(['status'], { wbs: '0939' }, { cwd: dir, ...NO_TREE }));
+            expect(out).toContain('check.reuse-refused — git tree capture failed: not a git repository');
             expect(out.trimEnd().split('\n').at(-1)).toBe('{"reuse":false,"reason":"stale"}');
             expect(readFileSync(join(dir, '.spur/run/0939-test-gate.log'), 'utf8')).toContain('check.reuse-refused');
         } finally {
@@ -995,18 +949,13 @@ describe('status reuse marker (0940 R3)', () => {
         }
     });
 
-    test('status refuses reuse when the supplied digest differs from the recomputed one', () => {
-        const dir = mkdtempSync(join(tmpdir(), 'spur-1136-status-stale-'));
+    test('status reports a receipt keyed to another tree as stale without a refusal line', () => {
+        const dir = mkdtempSync(join(tmpdir(), 'spur-1234-status-stale-'));
         try {
             writeReceipt(dir, receipt());
-            const { out } = captureStdout(() =>
-                main(
-                    ['status'],
-                    { wbs: '0939', proofDigest: 'digest-1', taskSpecPath: 'docs/tasks/0939.md' },
-                    { cwd: dir, recomputeFingerprint: () => ({ ok: true, digest: 'digest-2' }) },
-                ),
-            );
-            expect(out).toContain('check.reuse-refused — supplied digest-1 != current digest-2');
+            const { out } = captureStdout(() => main(['status'], { wbs: '0939' }, { cwd: dir, ...atTree('tree-2') }));
+            // Nothing was supplied to refuse: the receipt simply does not bind this tree.
+            expect(out).not.toContain('check.reuse-refused');
             expect(out.trimEnd().split('\n').at(-1)).toBe('{"reuse":false,"reason":"stale"}');
         } finally {
             rmSync(dir, { recursive: true, force: true });
@@ -1014,85 +963,67 @@ describe('status reuse marker (0940 R3)', () => {
     });
 });
 
-describe('stale supplied digest refusal (task 1136 R3/AC3)', () => {
-    test('AC3/R3: full-tier PASS receipt for D1 with recomputed D2 refuses reuse and logs supplied D1 != current D2', () => {
-        const dir = mkdtempSync(join(tmpdir(), 'spur-1136-stale-digest-'));
+describe('tree-keyed receipt identity (1234)', () => {
+    test('a PASS receipt at an older tree is stale: the gate runs and rewrites the receipt', () => {
+        const dir = mkdtempSync(join(tmpdir(), 'spur-1234-stale-tree-'));
         try {
-            writeReceipt(dir, receipt({ inputDigest: 'digest-1', status: 'PASS' }));
+            writeReceipt(dir, receipt({ inputDigest: 'tree-1', status: 'PASS' }));
             const { out, value } = captureStdout(() =>
                 runQualityGate(
                     'recheck',
-                    {
-                        wbs: '0939',
-                        proofDigest: 'digest-1',
-                        taskSpecPath: 'docs/tasks/0939.md',
-                        gateProbeCmd: 'exit 0',
-                        qualityGateCmd: 'echo full-ran; exit 0',
-                    },
-                    {
-                        cwd: dir,
-                        recomputeFingerprint: () => ({ ok: true, digest: 'digest-2' }),
-                    },
+                    { wbs: '0939', gateProbeCmd: 'exit 0', qualityGateCmd: 'echo full-ran; exit 0' },
+                    { cwd: dir, ...atTree('tree-2') },
                 ),
             );
             expect(value.status).toBe('PASS');
             const log = readFileSync(join(dir, '.spur/run/0939-test-gate.log'), 'utf8');
-            expect(log).toContain('check.reuse-refused — supplied digest-1 != current digest-2');
-            expect(out).toContain('check.reuse-refused — supplied digest-1 != current digest-2');
+            expect(log).not.toContain('check.reused');
+            expect(log).toContain('full-ran');
+            expect(out).not.toContain('check.reused');
+            const stored = JSON.parse(
+                readFileSync(join(dir, '.spur/run/0939-check-receipt.json'), 'utf8'),
+            ) as CheckReceipt;
+            expect(stored.inputDigest).toBe('tree-2');
+        } finally {
+            rmSync(dir, { recursive: true, force: true });
+        }
+    });
+
+    test('when the tree capture cannot run, reuse is refused, never assumed', () => {
+        const dir = mkdtempSync(join(tmpdir(), 'spur-1234-no-tree-'));
+        try {
+            writeReceipt(dir, receipt({ inputDigest: 'tree-1', status: 'PASS' }));
+            const { out, value } = captureStdout(() =>
+                runQualityGate(
+                    'recheck',
+                    { wbs: '0939', gateProbeCmd: 'exit 0', qualityGateCmd: 'echo full-ran; exit 0' },
+                    { cwd: dir, ...NO_TREE },
+                ),
+            );
+            expect(value.status).toBe('PASS');
+            const log = readFileSync(join(dir, '.spur/run/0939-test-gate.log'), 'utf8');
+            expect(log).toContain('check.reuse-refused — git tree capture failed: not a git repository');
+            expect(out).toContain('check.reuse-refused — git tree capture failed: not a git repository');
             expect(log).toContain('full-ran');
         } finally {
             rmSync(dir, { recursive: true, force: true });
         }
     });
 
-    test('AC3/R3: when proof recompute cannot run (missing task path), reuse is refused, never assumed', () => {
-        const dir = mkdtempSync(join(tmpdir(), 'spur-1136-missing-task-'));
-        try {
-            writeReceipt(dir, receipt({ inputDigest: 'digest-1', status: 'PASS' }));
-            const { out, value } = captureStdout(() =>
-                runQualityGate(
-                    'recheck',
-                    {
-                        wbs: '0939',
-                        proofDigest: 'digest-1',
-                        gateProbeCmd: 'exit 0',
-                        qualityGateCmd: 'echo full-ran; exit 0',
-                    },
-                    {
-                        cwd: dir,
-                        recomputeFingerprint: () => ({ ok: false, error: 'missing task path' }),
-                    },
-                ),
-            );
-            expect(value.status).toBe('PASS');
-            const log = readFileSync(join(dir, '.spur/run/0939-test-gate.log'), 'utf8');
-            expect(log).toContain('check.reuse-refused — recompute failed: missing task path');
-            expect(out).toContain('check.reuse-refused — recompute failed: missing task path');
-            expect(log).toContain('full-ran');
-        } finally {
-            rmSync(dir, { recursive: true, force: true });
-        }
-    });
-
-    test('failure inventory (c): fingerprint recompute receives execution tree cwd', () => {
-        const dir = mkdtempSync(join(tmpdir(), 'spur-1136-cwd-'));
+    test('failure inventory (c): the tree capture receives the execution tree cwd', () => {
+        const dir = mkdtempSync(join(tmpdir(), 'spur-1234-cwd-'));
         let capturedCwd = '';
         try {
-            writeReceipt(dir, receipt({ inputDigest: 'digest-1', status: 'PASS' }));
+            writeReceipt(dir, receipt({ inputDigest: 'tree-1', status: 'PASS' }));
             captureStdout(() =>
                 runQualityGate(
                     'recheck',
-                    {
-                        wbs: '0939',
-                        proofDigest: 'digest-1',
-                        gateProbeCmd: 'exit 0',
-                        qualityGateCmd: 'echo full-ran; exit 0',
-                    },
+                    { wbs: '0939', gateProbeCmd: 'exit 0', qualityGateCmd: 'echo full-ran; exit 0' },
                     {
                         cwd: dir,
-                        recomputeFingerprint: (c) => {
+                        captureGitTree: (c) => {
                             capturedCwd = c;
-                            return { ok: false, error: 'missing task path' };
+                            return { ok: false, error: 'not a git repository' };
                         },
                     },
                 ),

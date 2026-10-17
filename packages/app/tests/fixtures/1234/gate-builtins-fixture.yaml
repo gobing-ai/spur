@@ -1,0 +1,115 @@
+# D65 1234 — deterministic workflow steps as typed engine builtins.
+#
+# Shape contract (R1/R3): every deterministic step here is a `command.gate` action that runs an
+# existing spur verb with an explicit argv (no shell): `spur task gate`, `spur self exec <action>`,
+# `spur task update <wbs> <status>`, `spur workflow commit-guard`. `command.gate` records a typed
+# outcome (PASS / FAIL / BLOCKED) from the exit code plus the verb's own artifact, writes it to
+# `resultFile`, and exposes it in the `action_runs` trace. No shell action performs any of these.
+#
+# Routing (unchanged contract shape): a PASS on every gate of a state advances; any non-PASS token
+# routes to `failed`, so a refused corpus transition or an unbound project action is a recorded
+# outcome, not an engine abort.
+name: gate-builtins-fixture
+kind: state-machine
+description: "D65 1234 fixture: deterministic steps as command.gate builtins."
+iterationBound: 4
+initialState: gate
+terminalStates:
+  - done
+  - failed
+vars:
+  __runId: ""
+  wbs: "1999"
+  spurBin: ""
+  runStatus: wip
+states:
+  - id: gate
+    description: "Quality gate + project check, both typed builtins."
+    onEnter:
+      - kind: command.gate
+        options:
+          id: quality-gate
+          executable: "${vars.spurBin}"
+          args: ["task", "gate", "${vars.wbs}", "run", "--no-logo"]
+          resultFile: .spur/run/${vars.__runId}-gate-step.status
+          softFail: true
+          timeoutMs: 900000
+      - kind: command.gate
+        options:
+          id: project-check
+          executable: "${vars.spurBin}"
+          args: ["self", "exec", "check"]
+          resultFile: .spur/run/${vars.__runId}-project-check.status
+          softFail: true
+          timeoutMs: 900000
+  - id: transition
+    description: "Corpus transition through the lifecycle graph."
+    onEnter:
+      - kind: command.gate
+        options:
+          id: corpus-transition
+          executable: "${vars.spurBin}"
+          args: ["task", "update", "${vars.wbs}", "${vars.runStatus}", "--no-lifecycle"]
+          resultFile: .spur/run/${vars.__runId}-transition.status
+          softFail: true
+          timeoutMs: 120000
+  - id: commit-guard
+    description: "Run-scoped commit guard."
+    onEnter:
+      - kind: command.gate
+        options:
+          id: commit-guard
+          executable: "${vars.spurBin}"
+          args: ["workflow", "commit-guard", "check", "--run", "${vars.__runId}"]
+          resultFile: .spur/run/${vars.__runId}-commit-guard.status
+          softFail: true
+          timeoutMs: 120000
+  - id: done
+    description: "Terminal: every deterministic step passed."
+  - id: failed
+    description: "Terminal: a gate, transition or guard recorded a non-PASS outcome."
+transitions:
+  - from: gate
+    to: transition
+    description: "Both gate tokens PASS."
+    guard:
+      kind: shell
+      options:
+        command: >-
+          test "$(cat .spur/run/$__runId-gate-step.status 2>/dev/null)" = PASS &&
+          test "$(cat .spur/run/$__runId-project-check.status 2>/dev/null)" = PASS
+  - from: gate
+    to: failed
+    description: "Any non-PASS gate token."
+    guard:
+      kind: shell
+      options:
+        command: >-
+          test "$(cat .spur/run/$__runId-gate-step.status 2>/dev/null)" != PASS ||
+          test "$(cat .spur/run/$__runId-project-check.status 2>/dev/null)" != PASS
+  - from: transition
+    to: commit-guard
+    description: "The transition was accepted by the lifecycle graph."
+    guard:
+      kind: shell
+      options:
+        command: 'test "$(cat .spur/run/$__runId-transition.status 2>/dev/null)" = PASS'
+  - from: transition
+    to: failed
+    description: "The transition was refused."
+    guard:
+      kind: shell
+      options:
+        command: 'test "$(cat .spur/run/$__runId-transition.status 2>/dev/null)" != PASS'
+  - from: commit-guard
+    to: done
+    guard:
+      kind: shell
+      options:
+        command: 'test "$(cat .spur/run/$__runId-commit-guard.status 2>/dev/null)" = PASS'
+  - from: commit-guard
+    to: failed
+    guard:
+      kind: shell
+      options:
+        command: 'test "$(cat .spur/run/$__runId-commit-guard.status 2>/dev/null)" != PASS'

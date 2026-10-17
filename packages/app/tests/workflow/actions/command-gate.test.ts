@@ -364,10 +364,40 @@ describe('CommandGateActionRunner', () => {
         expect(calls).toHaveLength(1);
         expect(calls[0]?.timeout).toBe(50);
         expect(calls[0]?.timeoutMs).toBeUndefined();
-        // The hung gate never reaches PASS — it records FAIL and fails the action.
+        // 1234 R3: the hung gate never reaches PASS — a step that could not produce a verdict
+        // records BLOCKED (the typed third outcome) and fails the action.
         expect(res.ok).toBe(false);
         const failData = res.data as { status?: string } | undefined;
-        expect(failData?.status).toBe('FAIL');
-        expect((await fs.readFile(join(workdir, resultFile))).trim()).toBe('FAIL');
+        expect(failData?.status).toBe('BLOCKED');
+        expect((await fs.readFile(join(workdir, resultFile))).trim()).toBe('BLOCKED');
+    });
+
+    // 1234 R3: pass / fail / blocked is the exit-code taxonomy. 0 = PASS, 1 = the command
+    // ran and failed, anything else (2 usage/refusal, a signal kill) = BLOCKED — the step
+    // could not decide. `spur workflow commit-guard stage` and an unbound `spur self exec`
+    // both exit 2, so a workflow routes a refusal instead of reading it as a red gate.
+    test('exit 2 records BLOCKED, exit 1 records FAIL, exit 0 records PASS', async () => {
+        const workdir = join(tmpdir(), `test-gate-typed-${crypto.randomUUID()}`);
+        const fs = createNodeFileSystem(workdir);
+        await fs.ensureDir(join(workdir, '.spur', 'run'));
+
+        for (const [exitCode, expected] of [
+            [0, 'PASS'],
+            [1, 'FAIL'],
+            [2, 'BLOCKED'],
+            [3, 'BLOCKED'],
+        ] as const) {
+            const executor = {
+                run: async () => ({ command: 'stub', args: [], durationMs: 0, stdout: '', stderr: '', exitCode }),
+            };
+            const runner = new CommandGateActionRunner(executor as unknown as NodeProcessExecutor, fs);
+            const resultFile = `.spur/run/typed-${exitCode}.status`;
+            const res = await runner.execute(
+                { id: `typed-${exitCode}`, executable: 'stub', resultFile, softFail: true },
+                { runId: 'r1', stateOrNodeId: 's1', workdir, vars: {}, env: {} },
+            );
+            expect((res.data as { status: string }).status).toBe(expected);
+            expect((await fs.readFile(join(workdir, resultFile))).trim()).toBe(expected);
+        }
     });
 });

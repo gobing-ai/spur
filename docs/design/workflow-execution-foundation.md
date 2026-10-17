@@ -116,13 +116,27 @@ that call existing services rather than new verbs:
 
 | Builtin | Wraps | Replaces |
 | --- | --- | --- |
-| `command.gate` (current) | `spur task gate`, `spur task update`, `spur self exec <action>`, `spur workflow commit-guard` | ad-hoc shell steps for those verbs |
-| gate (`gate`) | the `spur task gate` service with visit/receipt state and tree-hash reuse (R11) | the proof-fingerprint chain (`proofDigest`, `verifiedOutcome`, receipt preconditions) |
-| decision (`decide`, current) | the `spur decision` catalog (ADR-134) | inline judge prompts on routing |
-| corpus transition | task/feature status through the lifecycle graph (ADR-135) | hand-written status shell steps |
+| `command.gate` | `spur task gate`, `spur task update`, `spur self exec <action>`, `spur workflow commit-guard` | ad-hoc shell steps for those verbs |
+| decision (`decide`) | the `spur decision` catalog (ADR-134) | inline judge prompts on routing |
 
-No new kinds are introduced by D65 unless `command.gate` proves insufficient; that would be an
-ADR-051 consent item (task 1234 is the decision point).
+**No new action kinds.** Task 1234 settled the open question in favour of reuse: `command.gate`
+already executes without a shell, types its outcome, retries, and writes a `resultFile`, so a
+separate `gate` kind would duplicate it and a separate `corpus.transition` kind would duplicate
+`spur task update`. Corpus transitions therefore run as `command.gate` over the lifecycle verb, and
+the graph still refuses an illegal hop through that verb's own exit code.
+
+**Typed outcomes.** `command.gate` maps exit status to `PASS` (0), `FAIL` (1) and `BLOCKED`
+(anything else — usage error, signal, timeout), writes the token to its `resultFile`, and puts
+`{status, exitCode, attempts, stdout, stderr, resultFile}` in `data`, which is persisted in
+`action_runs.result_json` so the outcome is visible in the trace.
+
+**Tree-hash receipt.** The gate keys a PASS receipt by the git tree it computes itself
+(`captureGateGitTree`: `git read-tree HEAD` → `git add -A` excluding the task/feature corpus →
+`git write-tree` on a throwaway index). Reuse requires PASS, full tier, the same tree and the same
+WBS; a caller-supplied digest no longer exists on either the action or the verb, so a corpus edit
+cannot silently invalidate a code PASS and a code edit cannot ride one.
+
+A further kind would be an ADR-051 consent item.
 
 ### 3.4 Operator gates as decision points
 

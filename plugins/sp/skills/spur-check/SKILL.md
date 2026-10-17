@@ -58,10 +58,10 @@ that soft shell wrapper does not change the standalone CLI contract.
 }
 ```
 
-- `inputDigest` is the shared `ProofInputFingerprint` (task markdown + git tree of tracked
-  sources). The plugin never computes it — the pipeline captures it with the `proof.fingerprint`
-  action into `env.proofDigest` (ADR-124: no second fingerprint, no `@gobing-ai/*` import);
-  standalone callers use `spur workflow inline fingerprint`.
+- `inputDigest` is the git tree the gate computes for itself (`captureGateGitTree`: `git read-tree
+  HEAD`, `git add -A` excluding `docs/tasks*` and `docs/features*`, `git write-tree` on a throwaway
+  index). The plugin never computes it and no caller supplies it — ADR-140 retired the
+  `proofDigest`/`--proof-digest` chain, so a corpus edit cannot invalidate a code PASS.
 - `run` and `recheck` write full-tier receipts; only a PASS at the current digest is reusable. Without a digest, `run` writes no receipt and says
   so in the gate log. The gate executes `qualityGateCmd` as one unit, so the full receipt carries a
   single `test` row for the whole chain; `lint`, `typecheck`, `test-pre-check`,
@@ -76,7 +76,7 @@ Check `status` mode before re-running a gate. The gate ships inside the CLI (no 
 resolve):
 
 ```bash
-spur task gate <wbs> status --proof-digest "$proofDigest" --no-logo   # final stdout line: {"reuse":…,"reason":…}
+spur task gate <wbs> status --no-logo   # final stdout line: {"reuse":…,"reason":…}
 ```
 
 `reuse: true` only when the receipt is `status: PASS`, `tier: full`, and `inputDigest` equals the
@@ -105,7 +105,8 @@ preserved by construction. `recheck` stays the no-progress probe path for fix lo
 ## Gotchas
 
 1. **Keep gate logic in the CLI/application owner** — plugin skills invoke `spur task gate`;
-   they do not restore a script or bundle. The digest arrives via `--proof-digest` or `env.proofDigest`.
+   they do not restore a script or bundle. The gate computes its own tree identity; there is no
+   `--proof-digest` flag and no `env.proofDigest` input to supply.
 2. **Never run light tests from the repo root** — the workspace `bunfig.toml` preload (coverage,
    thresholds) only applies inside the workspace; `cd <ws> && bun test …` is the contract.
 3. **Light is a filter, not a boundary** — unmapped files (root-level scripts, non-src layouts)

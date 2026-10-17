@@ -582,7 +582,6 @@ spur task gate [options] <wbs> <mode>
 |---|---|
 | `--cmd <command>` | Full-tier gate command (overrides env `qualityGateCmd`) |
 | `--probe-cmd <command>` | Gate probe command (overrides env `gateProbeCmd`) |
-| `--proof-digest <digest>` | Proof-input digest bound into the check receipt (overrides env `proofDigest`) |
 | `--run-id <id>` | Receipt run identity (overrides env `runId`; default `pipeline-<wbs>`) |
 
 The task-pipeline quality gate (the `test` / `test-recheck` states). Writes
