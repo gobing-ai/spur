@@ -626,6 +626,7 @@ terminalStates: [done]
                     '          input: hello',
                     '          agent: claude',
                     '          role: reviewer',
+                    '          expectFile: out.txt',
                     '  - id: done',
                     'transitions:',
                     '  - from: start',

@@ -69,6 +69,9 @@ terminalStates:
   - done
 `;
 
+// `ownedSections` keeps the fixture valid under the 1233 self-contained stage lint (an
+// agent.run needs a declared completion) without touching the agent-run-output warn, which
+// fires on a missing expectFile/requireDiff alone.
 const smAgentRun = (extraOptions = ''): string => `name: advisory-flow
 kind: state-machine
 initialState: start
@@ -80,6 +83,7 @@ states:
           input: "run the composition task"
           agent: omp
           role: coder
+          ownedSections: [Solution]
 ${extraOptions}
   - id: done
 transitions:
@@ -280,8 +284,10 @@ describe('workflow validate composition advisory (ADR-115 tiers)', () => {
 
     test('agent.run input: slash-led >1000 chars errors; non-slash 199/200/1000 warn by severity', async () => {
         await withTempDir(async (dir) => {
+            // ownedSections keeps the stage valid under the 1233 self-contained lint; the
+            // agent-run-output warn it leaves in place is asserted below.
             const ar = (input: string): string =>
-                `      - kind: agent.run\n        options:\n          input: ${JSON.stringify(input)}\n          agent: omp\n          role: coder\n`;
+                `      - kind: agent.run\n        options:\n          input: ${JSON.stringify(input)}\n          agent: omp\n          role: coder\n          ownedSections: [Solution]\n`;
             const smOf = (body: string): string => `name: advisory-flow
 kind: state-machine
 initialState: start

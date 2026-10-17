@@ -225,18 +225,29 @@ ADR-126 A4 rules bind all three executors:
 
 ### 4.4 Self-contained stage lint
 
-`spur workflow validate` gains a lint beside `collectHitlDecisionViolations`
+`spur workflow validate` runs `collectSelfContainedStageViolations` beside
+`collectHitlDecisionViolations`
 ([composition-lint.ts:345](../../packages/app/src/workflow/composition-lint.ts)):
 
-1. every `agent.run` declares `expectFile(s)` **or** `ownedSections` (a stage with neither has no
-   observable completion);
-2. every `.spur/run/`- or repo-relative path the stage prompt names is either produced by an earlier
-   state/builtin or declared in `inputs` — an undeclared artifact is a finding naming the stage and
-   the path;
+1. every `agent.run` declares `expectFile(s)` **or** `ownedSections` — or the `requireDiff` guard,
+   which is the same observable completion for a stage whose product is the diff (task 1233 landed
+   all three); a stage with none of them has no observable completion;
+2. every `.spur/run/` path the stage prompt names is either produced by an earlier state's action
+   (a static scan of predecessor shell / `command.gate` args and `expectFile(s)`) or declared in
+   the stage's own `inputs` — an undeclared artifact is a finding naming the stage and the path.
+   Templated paths (`${vars.x}`) normalize to one template and match only the same template, never
+   a wildcard. Repository-relative inputs are NOT scanned yet: a pure-over-definition collector
+   cannot tell an existing versioned file from a missing one, so those declarations land with the
+   task-pipeline and idea/wrapup migrations;
 3. no stage reads host conversation state: a prompt depending on "the previous stage said …" is a
    finding, because the work item is all a fresh session receives.
 
-Findings are errors under `--strict`, warnings otherwise.
+Findings are **validation errors**, not a `--strict`-only tier: the task contract requires a
+violating workflow to exit nonzero from plain `spur workflow validate`, and adding a severity flag
+would be a new public surface. A shipped workflow that legitimately cannot pass yet carries a
+reviewed allowance in `SELF_CONTAINED_STAGE_ALLOWANCES` — keyed `<workflow name>::<state id>` with
+its exact normalized paths and the task that removes it. The list is an editor-reviewed exception
+set, not a generated snapshot: adding a stage or a path still fails.
 
 ### 4.5 Gate decision modes
 

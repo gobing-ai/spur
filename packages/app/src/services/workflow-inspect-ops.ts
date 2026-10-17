@@ -17,6 +17,7 @@ import {
     collectDecideViolations,
     collectHitlDecisionViolations,
     collectInlineDecideWarnings,
+    collectSelfContainedStageViolations,
     collectShellCommands,
     collectTerminalReasonViolations,
     collectUndeclaredShellVarViolations,
@@ -135,6 +136,14 @@ export class WorkflowInspectOps {
             const roleErrors = collectAgentRunRoleViolations(workflow);
             if (roleErrors.length > 0) {
                 return { ok: false, valid: false, file, errors: roleErrors };
+            }
+
+            // Self-contained stage check (D65 1233, design §4.4): every agent.run declares its
+            // completion and names only artifacts an earlier state produced or `inputs:`
+            // declares. A stage that is not self-contained cannot run under a fresh session.
+            const selfContainedErrors = collectSelfContainedStageViolations(workflow);
+            if (selfContainedErrors.length > 0) {
+                return { ok: false, valid: false, file, errors: selfContainedErrors };
             }
 
             // Undeclared shell-var check (0674 R5): every `$var` a shell action/guard references

@@ -410,6 +410,213 @@ export function collectHitlDecisionViolations(def: WorkflowDef): string[] {
 }
 
 /**
+ * One `agent.run` site plus the actions declared before it in the SAME state (production order).
+ */
+interface AgentRunSite {
+    stateId: string;
+    index: number;
+    options: Record<string, unknown> | undefined;
+    earlierInState: ActionDef[];
+}
+
+/** One ordered action list per state/node, the walk the self-contained lint reads for production. */
+function orderedStateActions(def: WorkflowDef): Map<string, ActionDef[]> {
+    const actions = new Map<string, ActionDef[]>();
+    if (def.kind === 'transition-flow' || def.kind === undefined) {
+        for (const node of (def as TransitionFlowWorkflowDef).nodes ?? []) {
+            actions.set(node.id, node.action === undefined ? [] : [node.action]);
+        }
+        return actions;
+    }
+    for (const state of (def as StateMachineWorkflowDef).states ?? []) {
+        actions.set(state.id, [...(state.onEnter ?? []), ...(state.onExit ?? [])]);
+    }
+    return actions;
+}
+
+/** Directed state/node edges of either definition shape, used for predecessor reachability. */
+function stateEdges(def: WorkflowDef): Array<[string, string]> {
+    if (def.kind === 'transition-flow' || def.kind === undefined) {
+        return ((def as TransitionFlowWorkflowDef).edges ?? []).map((edge) => [edge.from, edge.to] as [string, string]);
+    }
+    return ((def as StateMachineWorkflowDef).transitions ?? []).map(
+        (transition) => [transition.from, transition.to] as [string, string],
+    );
+}
+
+/**
+ * States that can reach `target` through one or more transitions — the only states whose
+ * actions run before `target`. A sibling branch that merely shares an ancestor is NOT a
+ * predecessor: nothing it produces is guaranteed to exist when `target` runs. `target` is never
+ * its own predecessor, so a re-entry cycle does not license reading what an earlier visit wrote.
+ */
+function predecessorsOf(edges: ReadonlyArray<[string, string]>, target: string): Set<string> {
+    const found = new Set<string>();
+    let frontier = [target];
+    while (frontier.length > 0) {
+        const next: string[] = [];
+        for (const [from, to] of edges) {
+            if (!frontier.includes(to) || from === target || found.has(from)) continue;
+            found.add(from);
+            next.push(from);
+        }
+        frontier = next;
+    }
+    return found;
+}
+
+/**
+ * Normalize one run artifact path so a prompt template and the shell form that wrote the file
+ * compare equal: `${vars.__runId}`, `${__runId}` and `$__runId` all name one workflow var, and
+ * the engine interpolates them to the same string before sh or the agent sees the path.
+ * A templated path therefore matches only the SAME template — never a wildcard (1233 R2).
+ */
+function normalizeRunPath(path: string): string {
+    return path
+        .replace(/\$\{(?:vars\.)?([A-Za-z_][A-Za-z0-9_]*)\}/g, '{$1}')
+        .replace(/\$([A-Za-z_][A-Za-z0-9_]*)/g, '{$1}');
+}
+
+/** Every `.spur/run/` artifact path a text names, as written (quotes and trailing punctuation cut). */
+function runPathsIn(text: string): string[] {
+    return [...text.matchAll(/\.spur\/run\/[^\s"'`;,|)]*/g)].map((match) => {
+        const path = match[0];
+        const trailing = /[.,;:]+$/.exec(path);
+        return trailing === null ? path : path.slice(0, trailing.index);
+    });
+}
+
+/** Option values that name a stage's declared completion artifacts (`expectFile` folds in, 1232). */
+function declaredExpectPaths(options: Record<string, unknown> | undefined): string[] {
+    const single = options?.expectFile;
+    const list = options?.expectFiles;
+    return [
+        ...(typeof single === 'string' ? [single] : []),
+        ...(Array.isArray(list) ? list.filter((entry): entry is string => typeof entry === 'string') : []),
+    ].map(normalizeRunPath);
+}
+
+/**
+ * Artifact paths one action leaves behind, as far as a static scan can tell: a shell command
+ * writes them, a `command.gate` names them in args, and an `agent.run` declares them in
+ * expectFile(s).
+ *
+ * shortcut: any `.spur/run/` path a shell command mentions counts as produced, including a
+ * path it only reads (a read-position scan would be the upgrade path). Templates match by exact
+ * normalized template, so a producer that composes the name at runtime (a shell variable built
+ * from a literal) is invisible to this scan.
+ */
+function producedPaths(actions: readonly ActionDef[]): Set<string> {
+    const produced = new Set<string>();
+    const add = (text: string): void => {
+        for (const path of runPathsIn(text)) produced.add(normalizeRunPath(path));
+    };
+    for (const action of actions) {
+        if (action.kind === 'shell') {
+            const command = action.options?.command;
+            if (typeof command === 'string') add(command);
+        } else if (action.kind === 'command.gate') {
+            const args = action.options?.args;
+            if (typeof args === 'string') add(args);
+            else if (Array.isArray(args)) for (const arg of args) if (typeof arg === 'string') add(arg);
+        } else if (action.kind === 'agent.run') {
+            for (const path of declaredExpectPaths(action.options)) produced.add(path);
+        }
+    }
+    return produced;
+}
+
+/**
+ * Self-contained stage lint (D65 1233, design `workflow-execution-foundation` §4.4): an
+ * `agent.run` stage must be runnable by a fresh session under any executor, so the whole
+ * definition is checked for the two things that break that promise:
+ *
+ * 1. declared completion — `expectFiles`/`expectFile` or `ownedSections`, without which the
+ *    stage's completion is unobservable. `requireDiff: true` also qualifies: the 0424 R3
+ *    empty-implement guard fails the step on zero non-corpus changes, which is observable;
+ * 2. prompt artifacts — every `.spur/run/` path the prompt names must be produced by an
+ *    earlier state's action or declared in `inputs:` (the stage's own `expectFiles` count as
+ *    its outputs, not as undeclared reads). Repo-relative paths are not scanned: they are
+ *    versioned files a fresh session already has, while run artifacts are not.
+ *
+ * Findings are errors: `workflow validate` fails, so an unportable stage cannot start a run.
+ * A shipped workflow that cannot satisfy the rule yet is named in
+ * {@link SELF_CONTAINED_STAGE_ALLOWANCES} with its reason and migration task.
+ */
+export function collectSelfContainedStageViolations(def: WorkflowDef): string[] {
+    const actionsByState = orderedStateActions(def);
+    const edges = stateEdges(def);
+    const sites: AgentRunSite[] = [];
+
+    for (const [stateId, actions] of actionsByState) {
+        actions.forEach((action, index) => {
+            if (action.kind !== 'agent.run') return;
+            sites.push({ stateId, index, options: action.options, earlierInState: actions.slice(0, index) });
+        });
+    }
+
+    const violations: string[] = [];
+    for (const site of sites) {
+        const location = `${site.stateId}/agent.run[${site.index}]`;
+        const allowance = SELF_CONTAINED_STAGE_ALLOWANCES[`${def.name}::${site.stateId}`];
+
+        const expectPaths = declaredExpectPaths(site.options);
+        const ownedSections = Array.isArray(site.options?.ownedSections) ? site.options.ownedSections : [];
+        if (expectPaths.length === 0 && ownedSections.length === 0 && site.options?.requireDiff !== true) {
+            violations.push(
+                `agent.run step at ${location} declares neither expectFiles nor ownedSections — declare the artifact it produces or the task section it owns, or a fresh session has no observable completion (1233 R1)`,
+            );
+        }
+
+        const input = site.options?.input;
+        if (typeof input !== 'string' || input === '') continue;
+        const produced = producedPaths(site.earlierInState);
+        for (const predecessor of predecessorsOf(edges, site.stateId)) {
+            for (const path of producedPaths(actionsByState.get(predecessor) ?? [])) produced.add(path);
+        }
+        const declared = new Set(expectPaths);
+        const inputs = site.options?.inputs;
+        if (Array.isArray(inputs)) {
+            for (const entry of inputs) {
+                const path = (entry as { path?: unknown } | null)?.path;
+                if (typeof path === 'string') declared.add(normalizeRunPath(path));
+            }
+        }
+        for (const path of runPathsIn(input)) {
+            const normalized = normalizeRunPath(path);
+            if (produced.has(normalized) || declared.has(normalized)) continue;
+            if (allowance?.paths.includes(normalized) === true) continue;
+            violations.push(
+                `agent.run step at ${location} names ${path}, which no earlier state produces and \`inputs:\` does not declare — produce it earlier or add it to inputs (1233 R2)`,
+            );
+        }
+    }
+    return violations;
+}
+
+/**
+ * Reviewed allowances for shipped `agent.run` prompts that name a run artifact the static scan
+ * cannot see produced (1233 R3). Each entry is keyed `<workflow name>::<state id>` and lists the
+ * exact normalized paths it covers, so a stage or path added later still fails; every entry names
+ * the task that removes it. This is an exception list an editor reviews, not a stored snapshot of
+ * findings: nothing here is generated, and an entry dies with its migration (ADR-108).
+ */
+const SELF_CONTAINED_STAGE_ALLOWANCES: Record<string, { paths: readonly string[]; reason: string }> = {
+    'idea-pipeline::discovery': {
+        paths: ['.spur/run/{__runId}-idea-needs-design.json'],
+        reason: 'the stage writes this signal itself but declares only the eval report as its completion; declaring it is 1241 migration work',
+    },
+    'idea-pipeline::feature-create': {
+        paths: ['.spur/run/{__runId}-idea-goal.md', '.spur/run/{__runId}-idea-scope.md'],
+        reason: 'the stage writes both intent artifacts itself and a later action in the same state feeds them to `feature update --from-file`; declaring them is 1241 migration work',
+    },
+    'wrapup-pipeline::doc-sync': {
+        paths: ['.spur/run/{__runId}-wrapup-tasks.json'],
+        reason: 'the predecessor `task-resolve` writes it through `spur task wrapup resolve`, so the path text never appears in the YAML and the static scan cannot see the production; 1241 migration declares it as an input',
+    },
+};
+
+/**
  * Post-schema check (0674 R5): a shell action/guard referencing `$var` where `var` is neither
  * declared in the workflow's `vars:` block nor provided locally fails validation — the
  * undeclared-`$baselineSince` class of defect cannot silently recur.
