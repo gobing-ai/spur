@@ -4,7 +4,7 @@ name: Engine-owned leases for the gate, worktree and fleet occupancy
 status: done
 template: feature-impl
 created_at: 2026-10-17T15:59:56.818Z
-updated_at: "2026-10-18T02:20:43.683Z"
+updated_at: "2026-10-18T02:28:55.174Z"
 feature_id: D65
 priority: P1
 tags:
@@ -98,13 +98,13 @@ Output-isolation follow-up: packages/app/tests/services/quality-gate-lock.test.t
 
 | Requirement | Status | Evidence |
 |-------------|--------|----------|
-| R1 | MET | @run `.spur/run/d65-verifyall/app-tests.log` line 172 — (pass) gate lock (D65 1235) > run and recheck both take the lock; light and status never do [249.27ms]; fresh targeted run exited 0 |
-| R2 | MET | @run `.spur/run/d65-verifyall/app-tests.log` line 173 — (pass) gate lock (D65 1235) > a failing gate releases the claim, so the next gate takes it without waiting [5.23ms]; fresh targeted run exited 0 |
-| R3 | MET | packages/app/src/services/workflow-worktree-lease.ts:13 and packages/app/tests/services/workflow-worktree-lease.test.ts:10 — engine acquisition, host-pause retention, competing-run refusal, same-run continue, cancellation, terminal release and fenced abort pass; live fleet member ownership remains pinned through completion |
+| R1 | MET | @run `.spur/run/d65-verifyall/app-tests.log` line 172 — (pass) gate lock (D65 1235) > run and recheck both take the lock; light and status never do [249.27ms]; fresh targeted run exited 0; @run `.spur/run/output-leak-fix/final-tests.log` — full gate PASS, 11372 tests / 0 failures and no per-test output headings; `.spur/run/output-leak-fix/focused-output.log` — all 7 lock tests / 30 assertions pass with stdout captured |
+| R2 | MET | @run `.spur/run/d65-verifyall/app-tests.log` line 173 — (pass) gate lock (D65 1235) > a failing gate releases the claim, so the next gate takes it without waiting [5.23ms]; fresh targeted run exited 0; @run `.spur/run/output-leak-fix/final-tests.log` — full gate PASS, 11372 tests / 0 failures and no per-test output headings; `.spur/run/output-leak-fix/focused-output.log` — all 7 lock tests / 30 assertions pass with stdout captured |
+| R3 | MET | packages/app/src/services/workflow-worktree-lease.ts:13 and packages/app/tests/services/workflow-worktree-lease.test.ts:10 — engine acquisition, host-pause retention, competing-run refusal, same-run continue, cancellation, terminal release and fenced abort pass; live fleet member ownership remains pinned through completion; @run `.spur/run/output-leak-fix/final-tests.log` — full gate PASS, 11372 tests / 0 failures and no per-test output headings; `.spur/run/output-leak-fix/focused-output.log` — all 7 lock tests / 30 assertions pass with stdout captured |
 
 | Acceptance Criteria | Status | Evidence Type | Evidence |
 |---------------------|--------|---------------|----------|
-| R6 — Engine leases serialize full gates across sessions on one host | MET | test | @run `.spur/run/d65-verifyall/app-tests.log` line 172 — (pass) gate lock (D65 1235) > run and recheck both take the lock; light and status never do [249.27ms]; fresh targeted run exited 0; @run `.spur/run/d65-verifyall/app-tests.log` line 173 — (pass) gate lock (D65 1235) > a failing gate releases the claim, so the next gate takes it without waiting [5.23ms]; fresh targeted run exited 0; packages/app/src/services/workflow-worktree-lease.ts:13 and packages/app/tests/services/workflow-worktree-lease.test.ts:10 — engine acquisition, host-pause retention, competing-run refusal, same-run continue, cancellation, terminal release and fenced abort pass; live fleet member ownership remains pinned through completion |
+| R6 — Engine leases serialize full gates across sessions on one host | MET | test | @run `.spur/run/d65-verifyall/app-tests.log` line 172 — (pass) gate lock (D65 1235) > run and recheck both take the lock; light and status never do [249.27ms]; fresh targeted run exited 0; @run `.spur/run/d65-verifyall/app-tests.log` line 173 — (pass) gate lock (D65 1235) > a failing gate releases the claim, so the next gate takes it without waiting [5.23ms]; fresh targeted run exited 0; packages/app/src/services/workflow-worktree-lease.ts:13 and packages/app/tests/services/workflow-worktree-lease.test.ts:10 — engine acquisition, host-pause retention, competing-run refusal, same-run continue, cancellation, terminal release and fenced abort pass; live fleet member ownership remains pinned through completion; @run `.spur/run/output-leak-fix/final-tests.log` — full gate PASS, 11372 tests / 0 failures and no per-test output headings; `.spur/run/output-leak-fix/focused-output.log` — all 7 lock tests / 30 assertions pass with stdout captured |
 - Coverage: N/A (verdict-based; verify pipeline does not measure code coverage)
 
 ### Review
@@ -130,6 +130,8 @@ Confidence: HIGH
 | Priority | Dimension | Location | Finding | Disposition |
 | --- | --- | --- | --- | --- |
 | P4 | functional/SECUA/architecture | docs/design/workflow-execution-foundation.md:19 | Inline review completed; requirement and AC evidence is listed above; prior verification blockers are resolved | RESOLVED |
+
+Output-isolation follow-up reviewed: packages/app/tests/services/quality-gate-lock.test.ts:170 captures all four synchronous entrypoint calls until the existing finally restores stdout. Both light/status messages are asserted, all previous lock and release assertions remain, and the full suite has no stray output headings. The output-specific regression was red before the change and green afterward. Fresh full gate: .spur/run/output-leak-fix/final-tests.log — 11372 pass / 0 fail; coverage and pre/post rules pass. The earlier stale-tree certification refusal is retained in first-confirmation-tree-moved.log and was resolved by running against the stable externally committed tree.
 
 ### References
 
