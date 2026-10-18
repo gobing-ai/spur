@@ -44,7 +44,8 @@
         ├── [done] **D62**: Workflow execution economy: contract-first stages, inline traceability, and graph retirement ([D62_workflow-execution-economy-contract-first-stages-inline-traceability-and-graph-retirement.md](./D62_workflow-execution-economy-contract-first-stages-inline-traceability-and-graph-retirement.md))
         ├── [done] **D63**: Reliable and measured daily-workflow adoption ([D63_reliable-and-measured-daily-workflow-adoption.md](./D63_reliable-and-measured-daily-workflow-adoption.md))
         ├── [done] **D64**: Measured, decision-explicit, check-deduplicated workflow catalogue ([D64_measured-decision-explicit-check-deduplicated-workflow-catalogue.md](./D64_measured-decision-explicit-check-deduplicated-workflow-catalogue.md))
-        └── [done] **D65**: One workflow interpreter and executor-agnostic agent.run dispatch ([D65_one-workflow-interpreter-and-executor-agnostic-agent-run-dispatch.md](./D65_one-workflow-interpreter-and-executor-agnostic-agent-run-dispatch.md))
+        ├── [done] **D65**: One workflow interpreter and executor-agnostic agent.run dispatch ([D65_one-workflow-interpreter-and-executor-agnostic-agent-run-dispatch.md](./D65_one-workflow-interpreter-and-executor-agnostic-agent-run-dispatch.md))
+        └── [active] **D66**: Workflow consolidation: one owner per lifecycle, D65 primitives everywhere ([D66_workflow-consolidation-one-owner-per-lifecycle-d65-primitives-everywhere.md](./D66_workflow-consolidation-one-owner-per-lifecycle-d65-primitives-everywhere.md))
     ├── [done] **D7**: Workflow todo projection: show --format for deterministic plan rendering ([D7_workflow-todo-projection-show-format-for-deterministic-plan-rendering.md](./D7_workflow-todo-projection-show-format-for-deterministic-plan-rendering.md))
     ├── [done] **D8**: Proportional workflow upgrade strategy ([D8_proportional-workflow-upgrade-strategy.md](./D8_proportional-workflow-upgrade-strategy.md))
     └── [done] **D9**: Workflow seam stabilization and proportional gate rollout ([D9_workflow-seam-stabilization-and-proportional-gate-rollout.md](./D9_workflow-seam-stabilization-and-proportional-gate-rollout.md))
@@ -194,5 +195,4 @@
 [done] **P**: Decision catalogs and the spur decision noun ([P_decision-catalogs-and-the-spur-decision-noun.md](./P_decision-catalogs-and-the-spur-decision-noun.md))
     └── [active] **P1**: Spur decision production readiness: events and workflow adoption ([P1_workflow-decision-points-adopt-spur-decision-catalogs.md](./P1_workflow-decision-points-adopt-spur-decision-catalogs.md))
         └── [done] **P11**: Decision status readiness surface: maker registration, configuration and proof of work ([P11_decision-status-readiness-surface-maker-registration-configuration-and-proof-of-work.md](./P11_decision-status-readiness-surface-maker-registration-configuration-and-proof-of-work.md))
-[backlog] **Q**: Workflow consolidation: one owner per lifecycle, D65 primitives everywhere ([Q_workflow-consolidation-one-owner-per-lifecycle-d65-primitives-everywhere.md](./Q_workflow-consolidation-one-owner-per-lifecycle-d65-primitives-everywhere.md))
 <!-- END AUTO-GENERATED -->

@@ -790,7 +790,7 @@ Feature: Disposal
 `;
             const featurePath = join(features, 'T1_disposal.md');
             await fs.writeFile(featurePath, feature);
-            const definition = await resolveWorkflowDefinition(process.cwd(), 'feature-verification');
+            const definition = await resolveWorkflowDefinition(process.cwd(), 'feature-lifecycle');
             const learningsPath = join(process.cwd(), '.spur/context/learnings.md');
             const learnings = (await fs.exists(learningsPath)) ? await fs.readFile(learningsPath) : undefined;
             const digest = await captureFeatureReceiptDigest(process.cwd(), feature, learnings);
@@ -799,7 +799,7 @@ Feature: Disposal
                 runId: 'receipt-disposal',
                 workdir: root,
                 verifier: {
-                    name: 'feature-verification',
+                    name: 'feature-lifecycle',
                     sourcePath: definition.path,
                     layer: definition.layer,
                     definitionDigest: definition.digest,

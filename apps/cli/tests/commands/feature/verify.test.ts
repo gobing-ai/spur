@@ -55,8 +55,10 @@ describe('spur feature verify', () => {
         expect(unknown.exitCode).toBe(1);
         expect(unknown.err).toBe('feature verify: Error: feature D9 not found in the configured features directory');
         const noRun = await run(['feature', 'verify', 'D9', '--cmd', 'true']);
+        // 1246 R2: an empty run id is no longer refused — the pass opens its own feature-lifecycle
+        // run row (and finalizes it failed when the pass cannot run, as here for unknown D9).
         expect(noRun.exitCode).toBe(1);
-        expect(noRun.err).toBe('feature verify: Error: refusing unsafe run id: ');
+        expect(noRun.err).toBe('feature verify: Error: feature D9 not found in the configured features directory');
     });
 
     test('the retired confidence flags are gone (ADR-138, task 1221)', async () => {

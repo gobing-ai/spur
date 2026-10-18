@@ -30,9 +30,10 @@ status: verifying
 `;
 
 const VERIFIER = {
-    name: 'feature-verification',
+    // 1246 R3: the one verifier identity is the feature-lifecycle definition.
+    name: 'feature-lifecycle',
     // sp-runtime-path rule forbids literal config paths here — build the source path.
-    sourcePath: ['config', 'workflows', 'feature-verification.yaml'].join('/'),
+    sourcePath: ['config', 'workflows', 'feature-lifecycle.yaml'].join('/'),
     layer: 'project',
     definitionDigest: 'sha256:cafe',
 };
@@ -536,6 +537,26 @@ describe('feature verification receipt (0915, v1 contract)', () => {
         }
     });
 
+    test('a receipt recorded by the retired feature-verification wrapper is stale and names the remedy (1246 R4)', async () => {
+        const repo = makeTempGitRepo();
+        try {
+            const digest = await captureFeatureReceiptDigest(repo, FEATURE_MD);
+            // A pre-consolidation receipt: PASS, current digest, but the old verifier identity.
+            await recordPass(repo, digest, {
+                verifier: { ...VERIFIER, name: 'feature-verification' },
+            });
+            const result = await validate(repo);
+            expect(result.ok).toBe(false);
+            if (!result.ok) {
+                expect(result.reason).toBe('stale');
+                expect(result.detail).toContain('feature-verification');
+                expect(result.detail).toContain('spur feature verify T1');
+            }
+        } finally {
+            rmSync(repo, { recursive: true, force: true });
+        }
+    });
+
     test('verifier identity drift is a contract mismatch (definition changed after the pass)', async () => {
         const repo = makeTempGitRepo();
         try {
@@ -569,14 +590,14 @@ describe('feature verification receipt (0915, v1 contract)', () => {
             const result = await validate(repo, undefined, {
                 ...VERIFIER,
                 definitionDigest: 'sha256:different',
-                sourcePath: ['apps', 'cli', 'config', 'workflows', 'feature-verification.yaml'].join('/'),
+                sourcePath: ['apps', 'cli', 'config', 'workflows', 'feature-lifecycle.yaml'].join('/'),
             });
             expect(result.ok).toBe(false);
             if (!result.ok) {
                 expect(result.reason).toBe('contract-mismatch');
                 expect(result.detail).toContain(`receipt sourcePath=${VERIFIER.sourcePath}`);
                 expect(result.detail).toContain(
-                    `current sourcePath=${['apps', 'cli', 'config', 'workflows', 'feature-verification.yaml'].join('/')}`,
+                    `current sourcePath=${['apps', 'cli', 'config', 'workflows', 'feature-lifecycle.yaml'].join('/')}`,
                 );
                 expect(result.detail).toContain('a different spur install resolved a different definition');
                 expect(result.detail).toContain(
@@ -597,7 +618,7 @@ describe('feature verification receipt (0915, v1 contract)', () => {
             await recordPass(repo, digest);
             const result = await validate(repo, undefined, {
                 ...VERIFIER,
-                sourcePath: ['apps', 'cli', 'config', 'workflows', 'feature-verification.yaml'].join('/'),
+                sourcePath: ['apps', 'cli', 'config', 'workflows', 'feature-lifecycle.yaml'].join('/'),
             });
             expect(result.ok).toBe(true);
         } finally {

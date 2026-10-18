@@ -59,15 +59,16 @@ async function recordReceipt(
     const inputDigest = await captureFeatureReceiptDigest(root, raw);
     const runId = `run-${featureId.toLowerCase()}`;
     const runDir = join(root, '.spur', 'run');
-    // Mirror the production script: record the verifier exactly as the workflow
+    // Mirror the production pass: record the verifier exactly as the workflow
     // resolver selects it in this workdir, or the completion contract check fails.
-    const selected = await resolveWorkflowDefinition(root, 'feature-verification');
+    // 1246 R3: the verifier identity is the feature-lifecycle definition.
+    const selected = await resolveWorkflowDefinition(root, 'feature-lifecycle');
     const running = await startFeatureVerificationReceipt(fs, runDir, {
         featureId,
         runId,
         workdir: root,
         verifier: {
-            name: 'feature-verification',
+            name: 'feature-lifecycle',
             sourcePath: selected.path,
             layer: selected.layer,
             definitionDigest: selected.digest,
@@ -90,7 +91,7 @@ async function recordReceipt(
         'INSERT OR REPLACE INTO runs (id, workflow_name, mode, status, started_at, completed_at, metadata_json, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)',
         [
             runId,
-            'feature-verification',
+            'feature-lifecycle',
             'state-machine',
             'done',
             now,

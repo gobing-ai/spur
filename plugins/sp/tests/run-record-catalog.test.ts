@@ -87,10 +87,11 @@ describe('canonical workflow catalog run-record classification (0928)', () => {
         .sort();
 
     test('post-D63 catalog is present', () => {
-        expect(files.length).toBeGreaterThanOrEqual(9);
+        expect(files.length).toBeGreaterThanOrEqual(8);
         for (const required of [
             'idea-pipeline.yaml',
-            'feature-verification.yaml',
+            // 1246 R5: feature-verification.yaml is retired — the lifecycle's verifying entry
+            // runs `spur feature verify` directly.
             'feature-lifecycle.yaml',
             'task-lifecycle.yaml',
             'wrapup-pipeline.yaml',

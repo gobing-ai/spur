@@ -774,12 +774,8 @@ const receiptGate = {
  * `feature check` resolves them against at validation time.
  */
 async function fixturePassReceipt(featureId: string, featureContent: string): Promise<void> {
-    const selected = await resolveWorkflowDefinition(process.cwd(), 'feature-verification');
-    const vars = selected.workflow.vars as { verificationCmd?: unknown } | undefined;
-    const cmd =
-        typeof vars?.verificationCmd === 'string' && vars.verificationCmd.length > 0
-            ? vars.verificationCmd
-            : DEFAULT_FEATURE_VERIFICATION_CMD;
+    const selected = await resolveWorkflowDefinition(process.cwd(), 'feature-lifecycle');
+    const cmd = DEFAULT_FEATURE_VERIFICATION_CMD;
     // defaultVerdictRunDir(<cwd>/docs/tasks): the fixture uses the default docs/ layout.
     const runDir = join(cwd, '.spur', 'run');
     const fs = createNodeFileSystem();
@@ -794,7 +790,7 @@ async function fixturePassReceipt(featureId: string, featureContent: string): Pr
         runId,
         workdir: cwd,
         verifier: {
-            name: 'feature-verification',
+            name: 'feature-lifecycle',
             sourcePath: selected.path,
             layer: selected.layer,
             definitionDigest: selected.digest,
@@ -813,7 +809,7 @@ async function fixturePassReceipt(featureId: string, featureContent: string): Pr
             'INSERT INTO runs (id, status, workflow_name, mode, started_at, metadata_json) VALUES (?, ?, ?, ?, ?, ?)',
             runId,
             'done',
-            'feature-verification',
+            'feature-lifecycle',
             'inline',
             Date.now(),
             JSON.stringify({ definitionDigest: selected.digest }),

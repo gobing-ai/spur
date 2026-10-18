@@ -36,7 +36,7 @@ interface StateMatrixRow {
     entryClass: 'repeatable' | 'identity-deduplicated' | 'reconciliation-required';
 }
 
-/** Declared matrix — the classification of record for the ten canonical definitions (0916 R1). */
+/** Declared matrix — the classification of record for the nine canonical definitions (0916 R1; 1246 removed `feature-verification`). */
 const MATRIX: Record<string, StateMatrixRow> = {
     'task-lifecycle': { resumeRerunStates: [], pauseGates: [], entryClass: 'repeatable' },
     'feature-lifecycle': { resumeRerunStates: [], pauseGates: [], entryClass: 'repeatable' },
@@ -44,7 +44,6 @@ const MATRIX: Record<string, StateMatrixRow> = {
     // answered by the responder, so no state pauses; the only pause is the host executor
     // transform (1232), which is applied at the app seam and never declared here.
     'task-pipeline': { resumeRerunStates: [], pauseGates: [], entryClass: 'repeatable' },
-    'feature-verification': { resumeRerunStates: [], pauseGates: [], entryClass: 'repeatable' },
     // D65 1241: the four operator gates are evidence-bound decision points, so no state pauses.
     'idea-pipeline': { resumeRerunStates: [], pauseGates: [], entryClass: 'repeatable' },
     'pr-review': { resumeRerunStates: [], pauseGates: [], entryClass: 'identity-deduplicated' },

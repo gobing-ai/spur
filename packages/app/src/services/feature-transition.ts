@@ -15,8 +15,8 @@
  *      `resolveWorkflowFile` (never the permissive port; a missing graph is a
  *      loud refusal naming the profile and the searched roots — R4),
  *   2. refuses an edge the graph does not declare,
- *   3. refuses a target state with `onEnter` actions (today: `verifying`, which
- *      spawns the nested feature-verification workflow — a server/Worker
+ *   3. refuses a target state with `onEnter` actions (today: `verifying`, whose
+ *      onEnter shell runs `spur feature verify` — a server/Worker
  *      transport must not start it; ADR-021) with the CLI recovery message,
  *   4. runs the in-process `FeatureCheckService.check` for every edge whose YAML
  *      guard is `kind: shell`, mirroring the CLI shell guard exactly: the guard

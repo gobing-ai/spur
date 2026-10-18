@@ -4,15 +4,16 @@
  * Contract regression for the scope split the task introduces:
  *   R2 — the per-task gate (`spur self exec check`, task-pipeline `qualityGateCmd`)
  *        no longer runs any repo-wide check;
- *   R3 — the repo-wide set lives in `spur self exec check-feature`, owned by the
- *        `feature-verification` workflow (shell-only, no `agent.run`);
+ *   R3 — the repo-wide set lives in `spur self exec check-feature`. It was owned by the
+ *        `feature-verification` wrapper workflow until 1246 retired that file; today
+ *        `feature-lifecycle`'s verifying entry runs `spur feature verify` directly (1246 R1);
  *   R4 — `feature-lifecycle`'s verifying→done guard refuses to complete a
  *        feature until the pass records PASS;
  *   R5 — task-local checks (including the task-local `test` script) do not
  *        consult the feature pass or the relocated repo-wide test tree.
  */
 import { describe, expect, test } from 'bun:test';
-import { chmodSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdtempSync, readFileSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { getEnvVars } from '@gobing-ai/ts-utils';
@@ -107,19 +108,16 @@ describe('feature-verification scope split (task 0872)', () => {
         expect(hasTopLevelAwait('a.ts', '// await in a comment\nconst s = "await x";')).toBe(false);
     });
 
-    test('R3: feature-verification is a gate-only pass with no agent.run nodes', () => {
-        const wf = readWorkflow('feature-verification.yaml');
-        expect(wf.name).toBe('feature-verification');
-        expect(wf.vars).toMatchObject({ verificationCmd: 'spur self exec check-feature' });
+    test('R3: the feature-verification wrapper is retired; feature-lifecycle stays agent-free (1246)', () => {
+        // 1246 R5: the one-state wrapper workflow is deleted from the shipped catalog.
+        expect(existsSync(join(REPO_ROOT, 'config', 'workflows', 'feature-verification.yaml'))).toBe(false);
 
+        const wf = readWorkflow('feature-lifecycle.yaml');
+        expect(wf.name).toBe('feature-lifecycle');
         const actionKinds: unknown[] = [];
         for (const state of (wf.states as Array<{ onEnter?: Array<{ kind: unknown }> }>) ?? []) {
             for (const action of state.onEnter ?? []) actionKinds.push(action.kind);
         }
-        // Script-absorption PR-5 left one `shell` action running `spur feature verify`; D65 1238 R1
-        // moved it to the typed `command.gate` builtin (same argv, `softFail` instead of `exit 0`)
-        // so the step's outcome is a PASS/FAIL/BLOCKED record in the trace rather than an exit code.
-        expect(actionKinds).toEqual(['command.gate']);
         expect(actionKinds).not.toContain('agent.run');
 
         const guardKinds = new Set<unknown>();
@@ -129,38 +127,11 @@ describe('feature-verification scope split (task 0872)', () => {
         expect([...guardKinds].sort()).toEqual(['always', 'shell']);
     });
 
-    test('0960 R7 / 1238 R1: a pass that cannot run leaves FAIL and never aborts the graph', () => {
-        // The workflow's `${vars.x}` template reference, assembled so a plain string literal in this
-        // assertion is not mistaken for one.
-        const varRef = (name: string): string => ['$', '{vars.', name, '}'].join('');
-        const wf = readWorkflow('feature-verification.yaml');
-        const verify = (
-            wf.states as Array<{
-                id: string;
-                onEnter?: Array<{
-                    kind?: string;
-                    options?: { executable?: string; args?: string[]; resultFile?: string; softFail?: boolean };
-                }>;
-            }>
-        ).find((s) => s.id === 'verify');
-        const action = verify?.onEnter?.[0];
-        // The step is the typed gate builtin over the SAME argv the shell ran, so the pass — not a
-        // shell pipeline — owns the status file the guards read.
-        expect(action?.kind).toBe('command.gate');
-        expect(action?.options?.executable).toBe(varRef('spurBin'));
-        expect(action?.options?.args?.slice(0, 2)).toEqual(['feature', 'verify']);
-        expect(action?.options?.args).toContain('--run-id');
-        // The old `|| printf … ; exit 0` is now `softFail`: a non-running pass is a RECORDED
-        // outcome, so the run still reaches the guard below instead of aborting at the action.
-        expect(action?.options?.softFail).toBe(true);
-        // …and the typed token is written BESIDE the pass's own status file, never over it: the gate
-        // exits 0 for a completed FAIL pass, so sharing the path would overwrite the FAIL evidence.
-        expect(action?.options?.resultFile).not.toBe(`.spur/run/${varRef('__runId')}-feature-verification.status`);
-
+    test('0960 R7: a pass that cannot run leaves FAIL and exits nonzero', () => {
         const dir = mkdtempSync(join(tmpdir(), 'spur-0960-fv-'));
         try {
             // The pass cannot run (this project has no features directory at all): it must still
-            // leave the coarse FAIL the guards route on, and exit nonzero to the gate.
+            // leave the coarse FAIL the guards route on, and exit nonzero.
             const result = Bun.spawnSync(
                 [
                     process.execPath,
@@ -185,21 +156,6 @@ describe('feature-verification scope split (task 0872)', () => {
             expect(result.exitCode).toBe(1);
             const status = readFileSync(join(dir, '.spur/run/r0960-feature-verification.status'), 'utf8');
             expect(status).toStartWith('FAIL');
-
-            // The fail-closed routing the status file drives: done requires PASS, so FAIL (or an
-            // absent file) can only reach `failed`.
-            const guard = (
-                wf.transitions as Array<{
-                    from: string;
-                    to: string;
-                    guard?: { kind?: string; options?: { command?: string } };
-                }>
-            ).find((t) => t.from === 'verify' && t.to === 'done');
-            const doneGuard = guard?.guard?.options?.command ?? '';
-            expect(doneGuard).toContain('-feature-verification.status');
-            expect(doneGuard).toContain('= PASS');
-            // With the FAIL the cannot-run pass just wrote, the done edge cannot match.
-            expect(Bun.spawnSync(['sh', '-c', doneGuard], { cwd: dir }).exitCode).not.toBe(0);
         } finally {
             rmSync(dir, { recursive: true, force: true });
         }
@@ -218,56 +174,19 @@ describe('feature-verification scope split (task 0872)', () => {
         expect(edge?.guard?.options?.command ?? '').toContain('--as done');
     });
 
-    test('R5 (0880): feature-lifecycle verifying entry invokes the feature-verification workflow', () => {
+    test('R5 (0880) / 1246 R1: feature-lifecycle verifying entry runs the verb directly, no nested run', () => {
         const wf = readWorkflow('feature-lifecycle.yaml');
         const verifying = (
             wf.states as Array<{ id: string; onEnter?: Array<{ options?: { command?: string } }> }>
         ).find((s) => s.id === 'verifying');
         const commands = (verifying?.onEnter ?? []).map((a) => a.options?.command ?? '');
-        expect(commands.some((c) => c.includes('workflow run feature-verification.yaml'))).toBe(true);
-        const caller = commands.find((c) => c.includes('workflow run feature-verification.yaml')) ?? '';
-        expect(caller).toContain('featureId\\":\\"$featureId');
-        expect(caller).toContain('spurBin\\":\\"$spurBin');
-    });
-
-    test('1147 AC4: the nested caller clears the marker that refuses nested runs, so nested == standalone', () => {
-        const wf = readWorkflow('feature-lifecycle.yaml');
-        const verifying = (
-            wf.states as Array<{ id: string; onEnter?: Array<{ options?: { command?: string } }> }>
-        ).find((s) => s.id === 'verifying');
-        const caller =
-            (verifying?.onEnter ?? [])
-                .map((a) => a.options?.command ?? '')
-                .find((c) => c.includes('workflow run feature-verification.yaml')) ?? '';
-        // A workflow-spawned `spur workflow run` inherits the outer run's
-        // SPUR_WORKFLOW_RUN_ACTIVE marker, and the CLI's nested-run refusal (0610 R4) turns that
-        // into `exit 1` with nothing else on stderr — the pass that succeeds standalone failed
-        // under a wrapup. The shared invocation path clears the marker for this bounded child.
-        expect(caller).toContain('env -u SPUR_WORKFLOW_RUN_ACTIVE');
-
-        const dir = mkdtempSync(join(tmpdir(), 'spur-1147-nested-marker-'));
-        try {
-            const stub = join(dir, 'stub-spur');
-            writeFileSync(
-                stub,
-                `#!/bin/sh\nprintf "%s" "\${SPUR_WORKFLOW_RUN_ACTIVE-unset}" > "$PWD/spur-bin-env.txt"\nexit 0\n`,
-            );
-            chmodSync(stub, 0o755);
-            const result = Bun.spawnSync(['sh', '-c', caller], {
-                cwd: dir,
-                env: {
-                    ...getEnvVars(),
-                    SPUR_WORKFLOW_RUN_ACTIVE: '1',
-                    spurBin: stub,
-                    featureId: 'H1',
-                },
-            });
-            expect(result.exitCode).toBe(0);
-            // The child invocation the lifecycle hands the nested pass sees no marker.
-            expect(readFileSync(join(dir, 'spur-bin-env.txt'), 'utf8')).toBe('unset');
-        } finally {
-            rmSync(dir, { recursive: true, force: true });
-        }
+        // 1246 R1: one shell action calling the verb — no nested `workflow run`, and no
+        // recursion-marker clearing (the 1147 R4 workaround retired with the nested run).
+        expect(commands.some((c) => c.includes('workflow run'))).toBe(false);
+        expect(commands.some((c) => c.includes('SPUR_WORKFLOW_RUN_ACTIVE'))).toBe(false);
+        // `__runId` IS unset: it is the env fallback behind the verb's `--run-id`, so an outer
+        // workflow run's id would otherwise hijack the pass's own run row (1246 R2).
+        expect(commands).toContain('env -u __runId $spurBin feature verify $featureId --no-logo');
     });
 });
 

@@ -1015,6 +1015,7 @@ export {
     completeFeatureVerificationReceipt,
     DEFAULT_FEATURE_VERIFICATION_CMD,
     FEATURE_RECEIPT_SCHEMA_VERSION,
+    FEATURE_VERIFIER_DEFINITION,
     featureReceiptPaths,
     isProofCaptureError,
     startFeatureVerificationReceipt,

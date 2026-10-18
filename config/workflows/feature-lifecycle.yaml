@@ -40,24 +40,17 @@ states:
     onEnter:
       # Caller wiring (task 0880, ADR-119): entering verification RUNS the
       # feature-scoped pass instead of only passively reading its status file.
-      # 0948 R1: pass BOTH vars the inner workflow needs. `--vars` was documented as
-      # replace-not-merge and a partial override silently blanked `spurBin`; the engine
-      # merges declared defaults today (0948 R2), but the caller stays explicit so the
-      # nested run is self-sufficient under either semantic.
+      # 1246 R1: the pass is the verb itself — no nested `spur workflow run`, no
+      # recursion-marker clearing. Without `--run-id` the verb opens and finalizes
+      # its own run row bound to this definition (1246 R2), so the done gate's
+      # receipt-integrity rule (recording run terminal `done`) holds.
+      # `env -u __runId`: the verb's `--run-id` falls back to the `__runId` env name, and a hop
+      # driven from inside another workflow run (a pipeline step, the quality gate) inherits that
+      # run's id. Without the unset the pass silently binds its receipt to the OUTER run instead of
+      # opening its own — which is still `running` at verifying→done, so the done gate fails closed.
       - kind: shell
         options:
-          # Pass featureId and spurBin together. A partial --vars map used to be
-          # applied as a replacement, so the inner run lost spurBin and loadModule
-          # fell into source mode (0948 R1). The nested JSON is shell-expanded:
-          # $spurBin inside the double quotes keeps a multi-word invocation intact.
-          # 1147 R4: clear the inherited nested-run marker for this ONE child. The
-          # bounded, definition-pinned feature-verification pass (no agent.run, no
-          # further nested run) is a legitimate child, but the outer run's
-          # SPUR_WORKFLOW_RUN_ACTIVE marker rides every child env — so the CLI's
-          # nested-run refusal (0610 R4) rejected it and the same pass that passes
-          # standalone failed here with a bare exit 1. The recursion guard stays
-          # binding for every other nested invocation.
-          command: 'env -u SPUR_WORKFLOW_RUN_ACTIVE $spurBin workflow run feature-verification.yaml --vars "{\"featureId\":\"$featureId\",\"spurBin\":\"$spurBin\"}"'
+          command: 'env -u __runId $spurBin feature verify $featureId --no-logo'
   - id: blocked
     description: Impediment; work suspended.
   - id: done

@@ -1,7 +1,9 @@
 /**
  * Feature verification run — the single feature-receipt writer (task 1176 R2, ADR-130).
  *
- * The `feature-verification` workflow's one pass lives here: resolve the selected definition, capture
+ * The feature-scoped verification pass lives here (its `feature-verification` wrapper workflow was
+ * retired by task 1246; `feature-lifecycle`'s `verifying` entry calls the verb directly):
+ * resolve the selected definition, capture
  * the before proof digest, record the RUNNING receipt (both copies) and register the run-scoped
  * receipt as a run artifact, run the effective command through the safe argv splitter (never `sh -c`),
  * capture the after digest, then complete the receipt PASS/FAIL plus the coarse status file.
@@ -16,20 +18,24 @@
 
 import { spawnSync } from 'node:child_process';
 import { closeSync, mkdirSync, openSync } from 'node:fs';
-import { isAbsolute, join } from 'node:path';
-import { ArtifactDao } from '@gobing-ai/spur-domain';
+import { isAbsolute, join, resolve } from 'node:path';
+import { ArtifactDao, createId } from '@gobing-ai/spur-domain';
+import { DbWorkflowPersistenceAdapter } from '@gobing-ai/ts-dual-workflow-engine';
 import { createNodeFileSystem, type FileSystem } from '@gobing-ai/ts-runtime';
 import { resolvePlanningFolders } from '../config/planning-folders';
 import { openInlineRunProjectDb } from '../services/inline-run-attribution';
+import { withRunIdentityRecording, workflowVersionLiteral } from '../services/workflow-run-recording';
 import {
     captureFeatureReceiptDigest,
     completeFeatureVerificationReceipt,
+    DEFAULT_FEATURE_VERIFICATION_CMD,
+    FEATURE_VERIFIER_DEFINITION,
     type FeatureVerificationReceipt,
     featureReceiptPaths,
     startFeatureVerificationReceipt,
 } from './feature-verification-receipt';
 import { splitLaunchCommand } from './split-launch-command';
-import { resolveWorkflowDefinition } from './workflow-resolver';
+import { type ResolvedWorkflowDefinition, resolveWorkflowDefinition } from './workflow-resolver';
 
 /** Single safe filename component — the same class as the inline-run run-id guard. */
 export const SAFE_RECEIPT_ID_RE = /^[A-Za-z0-9][A-Za-z0-9._-]*$/;
@@ -94,6 +100,19 @@ export type LaunchLike = (
     options: { cwd: string; stdio: ['ignore', number, number]; timeout: number },
 ) => LaunchResultLike;
 
+/**
+ * The run row a pass opens for itself when the caller supplies no `--run-id` (task 1246 R2).
+ *
+ * Two calls rather than one scope-holding helper: the pass's command may run for hours, and the
+ * project DB handle must not be held across it.
+ */
+export interface FeatureVerificationPassRun {
+    /** Open a `running` row bound to the resolved definition; returns its run id. */
+    open: (selected: ResolvedWorkflowDefinition) => Promise<string>;
+    /** Close the row with a terminal status once the pass has completed (or failed to run). */
+    finalize: (runId: string, status: 'done' | 'failed') => Promise<void>;
+}
+
 /** The receipt writer seams the operation consumes (never a second implementation of them). */
 export interface FeatureReceiptSeams {
     start: typeof startFeatureVerificationReceipt;
@@ -105,9 +124,11 @@ export interface FeatureReceiptSeams {
 export interface FeatureVerificationRunInput {
     workdir: string;
     featureId: string;
+    /** Caller-owned run id; empty means the pass opens and finalizes its own row (1246 R2). */
     runId: string;
-    /** Explicit command override (`--cmd`); empty/absent uses the selected definition's command. */
+    /** Explicit command override (`--cmd`); empty/absent uses the configured command. */
     cmdOverride?: string;
+    passRun?: FeatureVerificationPassRun;
     fileSystem?: FileSystem;
     launch?: LaunchLike;
     openLog?: (path: string) => number;
@@ -144,6 +165,58 @@ async function defaultRegisterArtifact(
     }
 }
 
+/**
+ * The production run-row seam (1246 R2): the pass's own row goes through the same engine
+ * persistence adapter and identity stamp every other run uses, so `workflow trace`/`list` and the
+ * receipt's run-row integrity check see an ordinary `feature-lifecycle` row. No external key — the
+ * lifecycle's own `feature:<id>` run is a different row and must never be adopted here.
+ */
+function defaultPassRun(workdir: string): FeatureVerificationPassRun {
+    return {
+        open: async (selected) => {
+            const runId = createId('run');
+            const db = await openInlineRunProjectDb(workdir);
+            try {
+                const persistence = withRunIdentityRecording(
+                    new DbWorkflowPersistenceAdapter(db.adapter as never),
+                    db.adapter as never,
+                    {
+                        definitionDigest: selected.digest,
+                        workflowVersion: workflowVersionLiteral(selected.workflow),
+                        source: { path: selected.path, layer: selected.layer, workdir: resolve(workdir) },
+                    },
+                );
+                await persistence.createRun({
+                    id: runId,
+                    workflow_name: FEATURE_VERIFIER_DEFINITION,
+                    mode: 'state-machine',
+                    status: 'running',
+                    started_at: new Date().toISOString(),
+                    completed_at: null,
+                    metadata_json: '{}',
+                });
+            } finally {
+                db.close();
+            }
+            return runId;
+        },
+        finalize: async (runId, status) => {
+            const db = await openInlineRunProjectDb(workdir);
+            try {
+                await new DbWorkflowPersistenceAdapter(db.adapter as never).finalizeRun(
+                    runId,
+                    status,
+                    new Date().toISOString(),
+                    undefined,
+                    status,
+                );
+            } finally {
+                db.close();
+            }
+        },
+    };
+}
+
 async function defaultReadLearnings(fileSystem: FileSystem, workdir: string): Promise<string | undefined> {
     const path = join(workdir, '.spur', 'context', 'learnings.md');
     return (await fileSystem.exists(path)) ? fileSystem.readFile(path) : undefined;
@@ -161,10 +234,34 @@ async function defaultReadLearnings(fileSystem: FileSystem, workdir: string): Pr
 export async function runFeatureVerification(
     input: FeatureVerificationRunInput,
 ): Promise<FeatureVerificationRunResult> {
+    // The verifier definition is resolved once here: it is both the receipt's recorded identity
+    // and — when this pass owns its run id — the definition the run row is bound to.
+    const resolveDefinition = input.resolveDefinition ?? resolveWorkflowDefinition;
+    const selected = await resolveDefinition(input.workdir, FEATURE_VERIFIER_DEFINITION);
+
+    // 1246 R2: without an explicit `--run-id` the verb owns its run identity. An explicit id keeps
+    // today's behaviour — the caller's run owns the row and finalizes it.
+    if (input.runId !== '') {
+        try {
+            return await runFeatureVerificationPass(input, selected);
+        } catch (error) {
+            await writeFailedStatus(input);
+            throw error;
+        }
+    }
+
+    const passRun = input.passRun ?? defaultPassRun(input.workdir);
+    const runId = await passRun.open(selected);
+    const owned = { ...input, runId };
     try {
-        return await runFeatureVerificationPass(input);
+        const result = await runFeatureVerificationPass(owned, selected);
+        // A completed pass closes its row `done` whether it recorded PASS or FAIL: the verdict is
+        // the receipt's, not the run's. Only a pass that could not run leaves a `failed` row.
+        await passRun.finalize(runId, 'done');
+        return result;
     } catch (error) {
-        await writeFailedStatus(input);
+        await writeFailedStatus(owned);
+        await passRun.finalize(runId, 'failed');
         throw error;
     }
 }
@@ -185,8 +282,11 @@ async function writeFailedStatus(input: FeatureVerificationRunInput): Promise<vo
     }
 }
 
-/** The pass itself — {@link runFeatureVerification} owns the cannot-run status contract. */
-async function runFeatureVerificationPass(input: FeatureVerificationRunInput): Promise<FeatureVerificationRunResult> {
+/** The pass itself — {@link runFeatureVerification} owns the run row and cannot-run status. */
+async function runFeatureVerificationPass(
+    input: FeatureVerificationRunInput,
+    selected: ResolvedWorkflowDefinition,
+): Promise<FeatureVerificationRunResult> {
     assertSafeReceiptId('feature id', input.featureId);
     assertSafeReceiptId('run id', input.runId);
 
@@ -194,7 +294,6 @@ async function runFeatureVerificationPass(input: FeatureVerificationRunInput): P
     const launch: LaunchLike = input.launch ?? ((command, args, options) => spawnSync(command, args, options));
     const openLog = input.openLog ?? ((path: string): number => openSync(path, 'a'));
     const closeLog = input.closeLog ?? ((fd: number): void => closeSync(fd));
-    const resolveDefinition = input.resolveDefinition ?? resolveWorkflowDefinition;
     const split = input.splitCommand ?? splitLaunchCommand;
     const receipts: FeatureReceiptSeams = input.receipts ?? {
         start: startFeatureVerificationReceipt,
@@ -208,16 +307,13 @@ async function runFeatureVerificationPass(input: FeatureVerificationRunInput): P
     const runDir = join(input.workdir, '.spur', 'run');
     mkdirSync(runDir, { recursive: true });
 
-    // 1. Selected verifier definition (project override wins); its configured command is the
-    // completion contract — an override records but cannot complete.
-    const selected = await resolveDefinition(input.workdir, 'feature-verification');
-    const vars = selected.workflow.vars as { verificationCmd?: unknown } | undefined;
-    const configuredCmd =
-        typeof vars?.verificationCmd === 'string' && vars.verificationCmd.length > 0
-            ? vars.verificationCmd
-            : 'spur self exec check-feature';
+    // 1. The configured command is the completion contract — an override records but cannot
+    // complete. 1246 R5: the retired wrapper's `verificationCmd` var is gone, so record-time and
+    // completion-time both read the one default constant and cannot drift.
     const effectiveCmd =
-        input.cmdOverride !== undefined && input.cmdOverride !== '' ? input.cmdOverride : configuredCmd;
+        input.cmdOverride !== undefined && input.cmdOverride !== ''
+            ? input.cmdOverride
+            : DEFAULT_FEATURE_VERIFICATION_CMD;
 
     const spec = await lookup(input.featureId);
     if (spec === null) {
@@ -232,7 +328,7 @@ async function runFeatureVerificationPass(input: FeatureVerificationRunInput): P
         runId: input.runId,
         workdir: input.workdir,
         verifier: {
-            name: 'feature-verification',
+            name: FEATURE_VERIFIER_DEFINITION,
             sourcePath: selected.path,
             layer: selected.layer,
             definitionDigest: selected.digest,
@@ -247,7 +343,7 @@ async function runFeatureVerificationPass(input: FeatureVerificationRunInput): P
     const base = { featureId: input.featureId, runId: input.runId, effectiveCmd, logPath, receiptPath: runScoped };
 
     // 3. Run the effective command via the safe splitter (no `sh -c` interpolation).
-    const launchSplit = split(effectiveCmd, 'feature-verification verificationCmd');
+    const launchSplit = split(effectiveCmd, 'feature verification command');
     if ('error' in launchSplit) {
         await receipts.complete(fileSystem, runDir, receipt, {
             status: 'FAIL',

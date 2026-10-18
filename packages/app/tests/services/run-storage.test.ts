@@ -84,8 +84,8 @@ function receipt(featureId: string, runId: string, workdir: string) {
         runId,
         workdir,
         verifier: {
-            name: 'feature-verification',
-            sourcePath: ['config', 'workflows', 'feature-verification.yaml'].join('/'),
+            name: 'feature-lifecycle',
+            sourcePath: ['config', 'workflows', 'feature-lifecycle.yaml'].join('/'),
             layer: 'project',
             definitionDigest: `sha256:${'a'.repeat(64)}`,
         },

@@ -119,19 +119,15 @@ async function recordValidReceipt(
         learnings = undefined;
     }
     const inputDigest = await captureFeatureReceiptDigest(process.cwd(), raw, learnings);
-    const selected = await resolveWorkflowDefinition(process.cwd(), 'feature-verification');
-    const vars = selected.workflow.vars as { verificationCmd?: unknown } | undefined;
-    const verificationCmd =
-        typeof vars?.verificationCmd === 'string' && vars.verificationCmd.length > 0
-            ? vars.verificationCmd
-            : DEFAULT_FEATURE_VERIFICATION_CMD;
+    const selected = await resolveWorkflowDefinition(process.cwd(), 'feature-lifecycle');
+    const verificationCmd = DEFAULT_FEATURE_VERIFICATION_CMD;
     const runId = `run-${featureId.toLowerCase()}`;
     const running = await startFeatureVerificationReceipt(fs, runDir, {
         featureId,
         runId,
         workdir,
         verifier: {
-            name: 'feature-verification',
+            name: 'feature-lifecycle',
             sourcePath: selected.path,
             layer: selected.layer,
             definitionDigest: selected.digest,

@@ -717,7 +717,7 @@ describe('wrapup-pipeline truthfulness (task 0770, feature R8; task 0783, R1-R5)
             const others = [
                 'task-lifecycle',
                 'feature-lifecycle',
-                'feature-verification',
+                // 1246 R5: feature-verification is retired.
                 'idea-pipeline',
                 'task-pipeline',
                 'pr-review',

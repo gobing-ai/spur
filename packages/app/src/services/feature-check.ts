@@ -23,6 +23,7 @@ import type { FileSystem } from '@gobing-ai/ts-runtime';
 import {
     captureFeatureReceiptDigest,
     DEFAULT_FEATURE_VERIFICATION_CMD,
+    FEATURE_VERIFIER_DEFINITION,
     type FeatureReceiptRejection,
     type FeatureReceiptRunPort,
     type FeatureVerifierIdentity,
@@ -533,8 +534,8 @@ export class FeatureCheckService extends PlanningCheckService {
 
     /**
      * Completion-boundary receipt validation (D63 task 0915, R2). Resolves the
-     * currently selected `feature-verification` definition (project override
-     * wins) to obtain the expected verifier identity and configured command,
+     * currently selected `feature-lifecycle` definition (project override wins;
+     * 1246 R3) to obtain the expected verifier identity and configured command,
      * captures the current checked-input digest — including gitignored
      * `.spur/context/learnings.md`, which the digest chain must see — via the
      * shared proof-input engine, and validates the feature's receipt against
@@ -558,25 +559,23 @@ export class FeatureCheckService extends PlanningCheckService {
         let verifier: FeatureVerifierIdentity;
         let configuredCmd: string;
         try {
-            const selected = await resolveWorkflowDefinition(this.projectRoot, 'feature-verification');
+            const selected = await resolveWorkflowDefinition(this.projectRoot, FEATURE_VERIFIER_DEFINITION);
             verifier = {
-                name: 'feature-verification',
+                name: FEATURE_VERIFIER_DEFINITION,
                 sourcePath: selected.path,
                 layer: selected.layer,
                 definitionDigest: selected.digest,
             };
-            const vars = selected.workflow.vars as { verificationCmd?: unknown } | undefined;
-            configuredCmd =
-                typeof vars?.verificationCmd === 'string' && vars.verificationCmd.length > 0
-                    ? vars.verificationCmd
-                    : DEFAULT_FEATURE_VERIFICATION_CMD;
+            // 1246 R5: the retired wrapper's `verificationCmd` var is gone — record-time and
+            // completion-time read the same constant, so the two contracts cannot drift.
+            configuredCmd = DEFAULT_FEATURE_VERIFICATION_CMD;
         } catch (err) {
             findings.push({
                 layer: 'L4',
                 code: FINDING_CODES.L4_FEATURE_RECEIPT_CONTRACT,
                 severity: 'error',
                 section: '',
-                message: `Feature "${featureId}" completion evidence could not be evaluated against the selected feature-verification definition (fail-closed): ${String(err)}`,
+                message: `Feature "${featureId}" completion evidence could not be evaluated against the selected ${FEATURE_VERIFIER_DEFINITION} definition (fail-closed): ${String(err)}`,
             });
             return;
         }

@@ -46,6 +46,13 @@ const STEP_DIVERGENCES: Record<string, Record<number, { stderr: string }>> = {
             stderr: 'task preflight: cannot read task 0101 — Error: Task 0101 not found in any registered task folder\n',
         },
     },
+    // 1246 R2: an empty --run-id is no longer refused — the pass opens its own run row and fails
+    // on the unknown feature instead.
+    'featureVerify/verify-refusals': {
+        2: {
+            stderr: 'feature verify: Error: feature D9 not found in the configured features directory\n',
+        },
+    },
 };
 
 function expected(group: string, id: string): CaseOutcome {
@@ -58,6 +65,7 @@ function expected(group: string, id: string): CaseOutcome {
         if (step) Object.assign(step, patch);
     }
     if (group === 'featureVerify') retireReceiptConfidence(out);
+    if (group === 'featureVerify') rebindVerifierIdentity(out);
     if (group === 'featureVerify') recordCannotRunFailStatus(out, id);
     return out;
 }
@@ -72,6 +80,9 @@ function recordCannotRunFailStatus(out: CaseOutcome, id: string): void {
     if (id !== 'verify-refusals') return;
     // Only the first step carries a safe run id; the other two refuse before a path exists.
     out.files['.spur/run/v1-feature-verification.status'] = 'FAIL\n';
+    // 1246 R2: the third step has no --run-id, so its FAIL lands under the pass's own run id
+    // (the harness normalizes that random id to <RUNID>).
+    out.files['.spur/run/<RUNID>-feature-verification.status'] = 'FAIL\n';
 }
 
 /**
@@ -86,6 +97,26 @@ function retireReceiptConfidence(out: CaseOutcome): void {
         delete receipt.confidence;
         delete receipt.confidenceBasis;
         delete receipt.confidenceAcknowledged;
+        out.files[path] = `${JSON.stringify(receipt, null, 4)}\n`;
+    }
+}
+
+/**
+ * 1246 R3 retired the `feature-verification` wrapper workflow: the pass resolves and records the
+ * `feature-lifecycle` definition instead, so the golden capture's old verifier identity is rebound
+ * before comparison (same observable, new owner).
+ */
+function rebindVerifierIdentity(out: CaseOutcome): void {
+    for (const [path, content] of Object.entries(out.files)) {
+        if (!path.endsWith('-feature-verification.json')) continue;
+        const receipt = JSON.parse(content) as { verifier?: { name?: string; sourcePath?: string } };
+        if (receipt.verifier) {
+            receipt.verifier.name = 'feature-lifecycle';
+            receipt.verifier.sourcePath = receipt.verifier.sourcePath?.replace(
+                'feature-verification.yaml',
+                'feature-lifecycle.yaml',
+            );
+        }
         out.files[path] = `${JSON.stringify(receipt, null, 4)}\n`;
     }
 }

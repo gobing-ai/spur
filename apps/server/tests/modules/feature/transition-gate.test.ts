@@ -134,19 +134,15 @@ async function recordServerReceipt(
         learnings = undefined;
     }
     const inputDigest = await captureFeatureReceiptDigest(process.cwd(), raw, learnings);
-    const selected = await resolveWorkflowDefinition(process.cwd(), 'feature-verification');
-    const vars = selected.workflow.vars as { verificationCmd?: unknown } | undefined;
-    const verificationCmd =
-        typeof vars?.verificationCmd === 'string' && vars.verificationCmd.length > 0
-            ? vars.verificationCmd
-            : DEFAULT_FEATURE_VERIFICATION_CMD;
+    const selected = await resolveWorkflowDefinition(process.cwd(), 'feature-lifecycle');
+    const verificationCmd = DEFAULT_FEATURE_VERIFICATION_CMD;
     const runId = `run-${featureId.toLowerCase()}`;
     const running = await startFeatureVerificationReceipt(fs, ctx.runDir, {
         featureId,
         runId,
         workdir: root,
         verifier: {
-            name: 'feature-verification',
+            name: 'feature-lifecycle',
             sourcePath: selected.path,
             layer: selected.layer,
             definitionDigest: selected.digest,
@@ -166,7 +162,7 @@ async function recordServerReceipt(
         'INSERT OR REPLACE INTO runs (id, workflow_name, mode, status, started_at, completed_at, metadata_json, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)',
         [
             runId,
-            'feature-verification',
+            'feature-lifecycle',
             'state-machine',
             'done',
             now,

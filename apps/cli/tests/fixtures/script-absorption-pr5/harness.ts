@@ -186,7 +186,12 @@ export function runCase(c: GoldenCase, side: 'old' | 'new', baseEnv: Record<stri
         }
         const files: Record<string, string> = {};
         for (const rel of [...listFiles(cwd, '.spur/run'), ...listFiles(cwd, '.spur/memory')]) {
-            files[rel] = normalize(readFileSync(join(cwd, rel), 'utf8'), cwd);
+            // 1246 R2: a pass without --run-id opens its own run row, whose random id lands in the
+            // status/log filename — normalize the key (contents still compare byte for byte).
+            files[rel.replace(/run_[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}/, '<RUNID>')] = normalize(
+                readFileSync(join(cwd, rel), 'utf8'),
+                cwd,
+            );
         }
         const argvLog = join(cwd, 'stub', 'argv.log');
         const stubArgv = existsSync(argvLog)

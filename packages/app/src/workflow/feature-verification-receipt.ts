@@ -60,6 +60,16 @@ export const FEATURE_RECEIPT_SCHEMA_VERSION = 1;
  */
 export const DEFAULT_FEATURE_VERIFICATION_CMD = 'spur self exec check-feature';
 
+/**
+ * The one definition name every feature receipt is bound to (task 1246 R3, ADR-142). The pass used
+ * to resolve a `feature-verification` wrapper workflow; that one-state file is gone and
+ * `feature-lifecycle` — the definition whose `verifying` entry runs the pass — is both the recorded
+ * verifier identity and the workflow name of the run row the pass opens for itself. Record-time
+ * (`feature-verification-run.ts`) and completion-time (`feature-check.ts`) resolution read this
+ * single constant so the two contracts cannot drift apart.
+ */
+export const FEATURE_VERIFIER_DEFINITION = 'feature-lifecycle';
+
 /** Identity of the selected verifier definition, recorded inside the receipt. */
 export interface FeatureVerifierIdentity {
     /** Definition name as resolved (the workflow key, e.g. `feature-verification`). */
@@ -399,6 +409,18 @@ export async function validateFeatureVerificationReceipt(
             ok: false,
             reason: 'run',
             detail: `verification pass is still RUNNING (started ${latest.startedAt}); no completion evidence exists`,
+        };
+    }
+
+    // Stale verifier identity (task 1246 R4): a receipt recorded by the retired
+    // `feature-verification` wrapper predates the consolidation and can never be revalidated —
+    // its recording run and definition are both gone. Checked BEFORE run-row integrity so the
+    // message is deterministic (an old run row may have been swept) and names the one remedy.
+    if (latest.verifier.name !== FEATURE_VERIFIER_DEFINITION) {
+        return {
+            ok: false,
+            reason: 'stale',
+            detail: `receipt was recorded by verifier "${latest.verifier.name}", which ${FEATURE_VERIFIER_DEFINITION} replaced — re-run \`spur feature verify ${options.featureId}\` to record current evidence`,
         };
     }
 

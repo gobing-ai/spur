@@ -518,9 +518,9 @@ terminalStates:
             // (`bareName = basename === fileOrName && !/\.ya?ml$/`). A name that already carries the
             // extension goes straight to resolveWorkflowFile's project → shared probe order, so a
             // copy living only in a registered folder is NOT found. This is why the lifecycle
-            // adapter threads `registered` (it protects a bare-name nested invocation) and why the
-            // shipped `feature-lifecycle.yaml`, which invokes `workflow run feature-verification.yaml`,
-            // cannot reach a registered-only override in the first place.
+            // adapter threads `registered` (it protects a bare-name nested invocation). The shipped
+            // `feature-lifecycle.yaml` no longer nests a workflow run (1246 R1: its `verifying`
+            // onEnter calls `feature verify` directly), so this boundary has no shipped caller.
             const bareOnly = join(registeredDir, 'registered-only.yaml');
             await writeFile(bareOnly, MINIMAL('registered-only'));
             expect(

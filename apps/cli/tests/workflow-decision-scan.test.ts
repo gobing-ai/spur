@@ -21,7 +21,7 @@ const DETERMINISTIC_STATUS_WORKFLOWS = [
     'pr-review.yaml',
     'wayfinder-resolution.yaml',
     'wrapup-pipeline.yaml',
-    'feature-verification.yaml',
+    // 1246 R5: feature-verification.yaml is retired.
     'history-anatomy.yaml',
 ] as const;
 

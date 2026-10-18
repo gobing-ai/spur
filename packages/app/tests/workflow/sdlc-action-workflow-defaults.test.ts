@@ -36,10 +36,17 @@ describe('shipped workflow defaults use the action map (1224 R3–R5)', () => {
     });
 
     test('R5 — feature verification defaults to the argv-split action call', () => {
-        expect(workflowVars('feature-verification.yaml').verificationCmd).toBe('spur self exec check-feature');
-        const runSource = readFileSync(join(import.meta.dir, '../../src/workflow/feature-verification-run.ts'), 'utf8');
-        expect(runSource).toContain(": 'spur self exec check-feature';");
-        expect(runSource).not.toContain('spur-check-feature');
+        // 1246 R1/R5: the wrapper workflow is gone; feature-lifecycle's `verifying` onEnter calls
+        // the verb directly, and the default command lives in one exported constant.
+        expect(existsSync(join(WORKFLOWS_DIR, 'feature-verification.yaml'))).toBe(false);
+        const lifecycle = readFileSync(join(WORKFLOWS_DIR, 'feature-lifecycle.yaml'), 'utf8');
+        expect(lifecycle).toContain('$spurBin feature verify $featureId --no-logo');
+        const receiptSource = readFileSync(
+            join(import.meta.dir, '../../src/workflow/feature-verification-receipt.ts'),
+            'utf8',
+        );
+        expect(receiptSource).toContain("DEFAULT_FEATURE_VERIFICATION_CMD = 'spur self exec check-feature'");
+        expect(receiptSource).not.toContain('spur-check-feature');
     });
 });
 

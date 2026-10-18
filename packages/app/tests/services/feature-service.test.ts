@@ -51,12 +51,8 @@ const receiptFs = createNodeFileSystem();
 async function recordPassReceipt(featureId: string): Promise<void> {
     const feature = await svc.show(featureId);
     if (!feature) throw new Error(`feature ${featureId} not found`);
-    const selected = await resolveWorkflowDefinition(process.cwd(), 'feature-verification');
-    const vars = selected.workflow.vars as { verificationCmd?: unknown } | undefined;
-    const cmd =
-        typeof vars?.verificationCmd === 'string' && vars.verificationCmd.length > 0
-            ? vars.verificationCmd
-            : DEFAULT_FEATURE_VERIFICATION_CMD;
+    const selected = await resolveWorkflowDefinition(process.cwd(), 'feature-lifecycle');
+    const cmd = DEFAULT_FEATURE_VERIFICATION_CMD;
     const runDir = defaultVerdictRunDir(tasksDir);
     // Fold learnings exactly as validation does (feature-check.ts) — the repo root carries
     // `.spur/context/learnings.md`, so omitting it made the receipt stale from the root.
@@ -68,7 +64,7 @@ async function recordPassReceipt(featureId: string): Promise<void> {
         runId: `receipt-${featureId.toLowerCase()}`,
         workdir: root,
         verifier: {
-            name: 'feature-verification',
+            name: 'feature-lifecycle',
             sourcePath: selected.path,
             layer: selected.layer,
             definitionDigest: selected.digest,

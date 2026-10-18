@@ -55,9 +55,11 @@ function harness(over: Partial<FeatureVerificationRunInput> = {}, status: number
         resolveFeatureSpec: async () => ({ path: featureFile, content: readFileSync(featureFile, 'utf8') }),
         resolveDefinition: async () =>
             ({
-                path: join(workdir, 'feature-verification.yaml'),
+                path: join(workdir, 'feature-lifecycle.yaml'),
                 layer: 'shared' as never,
                 digest: 'sha256:definition',
+                // 1246 R5: definition `vars` are no longer consulted — the effective command is
+                // the DEFAULT_FEATURE_VERIFICATION_CMD constant unless `--cmd` overrides it.
                 workflow: { vars: { verificationCmd: 'bun run spur-check-feature' } },
             }) as never,
         launch: (_command, args) => {
@@ -106,9 +108,10 @@ describe('runFeatureVerification — receipt lifecycle (task 1176 R2)', () => {
         expect(receipt.status).toBe('PASS');
         expect(receipt.featureId).toBe('H99');
         expect(receipt.runId).toBe('run-h99');
-        // The selected definition is recorded, not re-derived at completion time.
+        // The resolved definition is recorded, not re-derived at completion time; the effective
+        // command is the default constant now that the wrapper's verificationCmd var is gone (1246 R5).
         expect(receipt.verifier.definitionDigest).toBe('sha256:definition');
-        expect(receipt.verificationCmd).toBe('bun run spur-check-feature');
+        expect(receipt.verificationCmd).toBe('spur self exec check-feature');
     });
 
     test('the run-scoped receipt is registered as an artifact (in-memory backing)', async () => {
@@ -173,6 +176,47 @@ describe('runFeatureVerification — receipt lifecycle (task 1176 R2)', () => {
         const paths = featureReceiptPaths(join(h.workdir, '.spur', 'run'), 'H99', h.input.runId);
         expect(readFileSync(paths.log, 'utf8')).toContain('verified');
         expect(readFileSync(paths.status, 'utf8').trim()).toBe('PASS');
+    });
+
+    test("an empty run id opens and finalizes the pass's own run row (1246 R2)", async () => {
+        const opened: string[] = [];
+        const finalized: Array<{ runId: string; status: string }> = [];
+        const h = harness({
+            runId: '',
+            passRun: {
+                open: async () => {
+                    const id = 'run-owned';
+                    opened.push(id);
+                    return id;
+                },
+                finalize: async (runId, status) => {
+                    finalized.push({ runId, status });
+                },
+            },
+        });
+        const result = await runFeatureVerification(h.input);
+        expect(result.status).toBe('PASS');
+        expect(opened).toEqual(['run-owned']);
+        // A completed pass closes its row done whether the verdict is PASS or FAIL.
+        expect(finalized).toEqual([{ runId: 'run-owned', status: 'done' }]);
+        const paths = featureReceiptPaths(join(h.workdir, '.spur', 'run'), 'H99', 'run-owned');
+        expect((JSON.parse(readFileSync(paths.runScoped, 'utf8')) as { runId: string }).runId).toBe('run-owned');
+    });
+
+    test('an empty run id finalizes the row failed when the pass cannot run (1246 R2)', async () => {
+        const finalized: Array<{ runId: string; status: string }> = [];
+        const h = harness({
+            runId: '',
+            resolveFeatureSpec: async () => null,
+            passRun: {
+                open: async () => 'run-owned',
+                finalize: async (runId, status) => {
+                    finalized.push({ runId, status });
+                },
+            },
+        });
+        await expect(runFeatureVerification(h.input)).rejects.toThrow(/not found in the configured features/);
+        expect(finalized).toEqual([{ runId: 'run-owned', status: 'failed' }]);
     });
 
     test('an explicit command override is recorded as the effective command', async () => {
