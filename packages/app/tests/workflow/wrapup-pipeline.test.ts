@@ -125,8 +125,9 @@ describe('wrapup-pipeline truthfulness (task 0770, feature R8; task 0783, R1-R5)
         // 1147: doc-sync gained the entry snapshot + write-scope check + supersession-pin
         // re-run, with two named fail edges. v9 declares those fail edges before the
         // contract-violation edge, so a compound miss fails the step. v10 (1224) routes the
-        // doc tripwire through the SDLC action map.)
-        expect(def.version).toBe('10');
+        // doc tripwire through the SDLC action map. v11 (1229) makes the unbound skip print a
+        // stderr note instead of passing silently.)
+        expect(def.version).toBe('11');
     });
 
     test('default feature gate checks only the selected feature and permits explicit override', () => {
@@ -164,7 +165,7 @@ describe('wrapup-pipeline truthfulness (task 0770, feature R8; task 0783, R1-R5)
         const expectedVersions: Record<string, string> = {
             'task-lifecycle': '1',
             'feature-lifecycle': '3',
-            'wrapup-pipeline': '10',
+            'wrapup-pipeline': '11',
         };
         for (const [name, version] of Object.entries(expectedVersions)) {
             expect(loadDef(name).version).toBe(version);
@@ -961,11 +962,34 @@ describe('wrapup-pipeline truthfulness (task 0770, feature R8; task 0783, R1-R5)
 
         test('the default docTripwireCmd carries the action-list probe and the trusted-config contract', () => {
             expect(def.vars?.docTripwireCmd).toBe(
-                'if $spurBin self exec --list --json 2>/dev/null | jq -e \'.[] | select(.name == "test-repo-wide" and .source != "unbound")\' >/dev/null 2>&1; then $spurBin self exec test-repo-wide; fi',
+                'if $spurBin self exec --list --json 2>/dev/null | jq -e \'.[] | select(.name == "test-repo-wide" and .source != "unbound")\' >/dev/null 2>&1; then $spurBin self exec test-repo-wide; else echo "wrapup: doc tripwire skipped — the test-repo-wide action is unbound; declare builder.actions.test-repo-wide to enable it" >&2; fi',
             );
             const raw = readFileSync(join(WORKFLOWS_DIR, 'wrapup-pipeline.yaml'), 'utf8');
             const at = raw.indexOf('docTripwireCmd:');
             expect(raw.slice(at - 300, at)).toContain('TRUSTED CONFIG ONLY');
+        });
+
+        test('1229: an unbound tripwire action announces the skip instead of passing silently', () => {
+            const cmd = def.vars?.docTripwireCmd ?? '';
+            const cwd = mkdtempSync(join(tmpdir(), 'wrapup-1229-note-'));
+            try {
+                writeFileSync(
+                    join(cwd, 'fake-spur'),
+                    '#!/bin/sh\n[ "$1" = self ] && [ "$2" = exec ] || exit 1\nshift 2\n' +
+                        'if [ "$1" = --list ]; then printf \'%s\\n\' \'[{"name":"test-repo-wide","reserved":false,"source":"unbound"}]\'; exit 0; fi\nexit 2\n',
+                );
+                chmodSync(join(cwd, 'fake-spur'), 0o755);
+                const r = spawnSync('sh', ['-c', cmd], {
+                    cwd,
+                    encoding: 'utf8',
+                    env: { ...getEnvVars(), spurBin: join(cwd, 'fake-spur') },
+                });
+                expect(r.status).toBe(0);
+                expect(r.stderr).toContain('doc tripwire skipped');
+                expect(r.stderr).toContain('builder.actions.test-repo-wide');
+            } finally {
+                cleanup(cwd);
+            }
         });
 
         test('behavior: no script is a PASS no-op, a failing script records FAIL, empty cmd still PASS (AC1/AC4, R2)', () => {

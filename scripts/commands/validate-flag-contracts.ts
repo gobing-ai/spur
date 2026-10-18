@@ -808,7 +808,7 @@ export function renderHelp(): string {
     return [
         'validate-flag-contracts — cross-surface flag parity gate for the sp contract surfaces',
         '',
-        'Usage: bun scripts/commands/validate-flag-contracts.ts [--json]',
+        'Usage: bun scripts/spur-dev.ts flag-contract-check [--json]',
         '',
         'Options:',
         '  --json    Output JSON (default: human-readable)',

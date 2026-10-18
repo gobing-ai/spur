@@ -10,7 +10,7 @@ export function registerTaskGateCommand(task: Command, context: CliContext): voi
             'Run one quality-gate mode for <wbs>, writing .spur/run/<wbs>-test-gate.{log,findings,status,attempt}:\n' +
                 '  run       full tier: qualityGateCmd, retried and bounded; writes a check receipt keyed by the git tree it captures\n' +
                 '  recheck   full tier, skipping the receipt preconditions\n' +
-                '  light     changed-scope tier (biome on changed files, typecheck when a workspace file changed)\n' +
+                '  light     changed-scope tier (lint-changed on changed files, typecheck-changed and test-changed per touched workspace)\n' +
                 '  deferred  light tier with a DEFERRED/FAIL status token (feature-level gate pending)\n' +
                 '  status    print the {reuse, reason} receipt verdict and exit 0\n\n' +
                 'Inputs come from the env (qualityGateCmd, gateProbeCmd, runId); the flags override them.\n' +

@@ -689,8 +689,10 @@ export function runLightGate(env: QualityGateEnv, options: QualityGateOptions = 
 
     const checks: CheckReceiptRow[] = [];
     let skipped = 0;
+    let unbound = 0;
     for (const plan of plans) {
         if (plan.skipped === 'unbound') {
+            unbound++;
             const line = `--- light ${plan.id}: skipped:unbound — no action bound in builder config\n`;
             process.stdout.write(line); // tee: stdout and the log
             appendFileSync(abs(logFile), line);
@@ -731,13 +733,13 @@ export function runLightGate(env: QualityGateEnv, options: QualityGateOptions = 
         );
         process.stdout.write(
             `light gate ${receipt.status} (${scope.files.length} changed files; checks: ${checks.length},` +
-                ` skipped: ${skipped}; receipt: ${receiptFile} preserved (full tier); log: ${logFile})\n`,
+                ` skipped: ${skipped}, unbound: ${unbound}; receipt: ${receiptFile} preserved (full tier); log: ${logFile})\n`,
         );
     } else {
         writeFileSync(abs(receiptFile), `${JSON.stringify(receipt, null, 2)}\n`);
         process.stdout.write(
             `light gate ${receipt.status} (${scope.files.length} changed files; checks: ${checks.length},` +
-                ` skipped: ${skipped}; receipt: ${receiptFile}; log: ${logFile})\n`,
+                ` skipped: ${skipped}, unbound: ${unbound}; receipt: ${receiptFile}; log: ${logFile})\n`,
         );
     }
     return { status: receipt.status, scope, checks, logFile, receiptFile };

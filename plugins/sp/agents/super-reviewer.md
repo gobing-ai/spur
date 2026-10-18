@@ -225,14 +225,23 @@ FAIL, PARTIAL, a missing line, a line split across two lines — routes the run 
 `review-fail-triage` and its bounded repair hop. Keep it on one line, in that shape, in every
 review answer; never restate it as prose only.
 
-**No confidence line (F511, task 1207).** Review reports do not state, and no gate reads, an
-asserted `Confidence: HIGH | MEDIUM | LOW`. A model that can write a PASS can write `HIGH`, so the
-gate grades what is checkable instead: the recorded section's presence and vocabulary, and the
-findings disposition — an open P1–P3 row blocks the edge exactly as before. What a reviewer would
-formerly have compressed into a level belongs in the report body: name the evidence gaps and the
-assumptions explicitly, so a reader can re-check them. (The derived confidence family is
-untouched: feature-verification receipts under ADR-131, the decision subsystem threshold, and
-history-anatomy reading.)
+**State `Confidence: HIGH | MEDIUM | LOW` — the gate derives it from your dispositions (ADR-141).**
+The review report carries exactly one top-level `Confidence:` line, and it is **cross-checked**: a
+stated level that disagrees with the table is a blocking `review-contract` violation, so a PASS
+carrying citation-free or untested claims cannot launder itself as `HIGH`.
+
+| Derived | When the table says so |
+| --- | --- |
+| `LOW` | the verdict is not PASS, or an open (or undispositioned) P1–P3 row survives |
+| `HIGH` | PASS with every finding closed (`RESOLVED` / `FIXED` / `DONE`) and no carried residual |
+| `MEDIUM` | PASS with carried residuals only — `DEFER(...)`, `ACCEPTED`, or an open P4 |
+
+Derivation: `packages/app/src/services/answer-confidence.ts` (shared with the verify answer). This
+does not revive the retired self-grade: the level records **evidence composition** — what a reader
+would otherwise have to re-derive from the rows — and the gate recomputes it rather than trusting it.
+No verdict-artifact field, no receipt level, no per-finding grade, and no operator ack var exists
+(ADR-138 stands for every other carrier). Evidence gaps still belong in the report body: name them,
+then let the dispositions decide the level.
 
 **Source citations for external claims (one claim contract, 2026-10-12).** A Finding cell or a
 Functional Traceability `Evidence` cell that asserts an external API/library claim carries a

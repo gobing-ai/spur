@@ -17,13 +17,20 @@
  *   - empty evidence
  *   - evidence asserting an external API/library claim with no same-cell citation (1070)
  *   - hedged uncertainty phrases ("likely", "probably", …) in MET evidence
+ *   - a `Confidence:` line that is absent, duplicated, or disagrees with the level the rows derive
+ *     (ADR-141 — the label is cross-checked, never asserted)
  *
  * Compound evidence types (`test + command`) stay valid — normalization mirrors
  * `packages/app/src/services/task-verdict.ts` exactly, so anything this lint accepts
  * is also accepted by `spur task verdict --from-answer` (and vice versa).
  */
 
-// ─── Public surface ──────────────────────────────────────────────────────────
+import {
+    type ConfidenceLine,
+    confidenceMismatchMessage,
+    deriveVerifyConfidence,
+    parseConfidenceLines,
+} from './answer-confidence';
 
 /** Bounded diagnostics: lint collection stops at this many findings (0726 R3). */
 export const ANSWER_LINT_MAX_FINDINGS = 10;
@@ -160,7 +167,59 @@ export function lintVerifyAnswer(
         }
     }
 
+    // Confidence (ADR-141): the answer states a level and the lint CROSS-CHECKS it against what the
+    // rows actually show. Absent, malformed and mismatched are three distinct rejections; the label
+    // can never be asserted past the gate. This is not the retired self-grade — the derivation reads
+    // evidence composition, which no artifact recorded before.
+    const confidenceLines = parseConfidenceLines(answerText);
+    const derived = deriveVerifyConfidence({
+        verdict: tables.verdict?.value,
+        requirements: tables.reqs.map((row) => ({ status: row.status })),
+        acceptanceCriteria: tables.acs.map((row) => ({ status: row.status, evidenceType: row.evidenceType })),
+    });
+    if (confidenceLines.length === 0) {
+        add(
+            0,
+            'confidence-missing',
+            `no \`Confidence:\` line — state \`Confidence: ${derived}\` (derived from the rows: verdict, row statuses, executable AC evidence)`,
+        );
+    } else if (confidenceLines.length > 1) {
+        add(
+            confidenceLines[1]?.line ?? 0,
+            'confidence-duplicate',
+            'more than one `Confidence:` line — state exactly one',
+        );
+    } else {
+        const stated = confidenceLines[0] as ConfidenceLine;
+        if (stated.level !== derived) {
+            add(
+                stated.line,
+                'confidence-mismatch',
+                confidenceMismatchMessage(stated.level, derived, verifyConfidenceBasis(tables)),
+            );
+        }
+    }
+
     return findings;
+}
+
+/** Why the rows derive the level they do — one clause, so the mismatch message is actionable. */
+function verifyConfidenceBasis(tables: AnswerTables): string {
+    const verdict = (tables.verdict?.value ?? '').trim().toUpperCase();
+    if (verdict !== 'PASS') return `verdict ${verdict || 'missing'} is not PASS`;
+    const weak = [...tables.reqs, ...tables.acs].filter((row) => {
+        const status = row.status.trim().toUpperCase();
+        return status === 'PARTIAL' || status === 'UNMET';
+    });
+    if (weak.length > 0) return `${weak.length} row(s) PARTIAL/UNMET`;
+    const nonExecutable = tables.acs.filter((row) => {
+        const types = (row.evidenceType ?? '').split('+').map((t) => t.trim().toLowerCase());
+        return !types.some((t) => t === 'test' || t === 'command');
+    });
+    if (nonExecutable.length > 0) {
+        return `${nonExecutable.length} AC row(s) carry no executable evidence (static-ref/manual-review/llm-judge/n/a)`;
+    }
+    return 'every AC row is MET on executable evidence';
 }
 
 // ─── Answer parsing — mirrors packages/app/src/services/task-verdict.ts ──────

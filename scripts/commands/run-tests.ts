@@ -18,7 +18,7 @@
  * `cd apps/cli && bun test` does not come through here, and the same-process reads
  * still need them.
  *
- * Usage: `bun scripts/commands/run-tests.ts <bun test args>` — everything after the
+ * Usage: `bun scripts/spur-dev.ts run-tests <bun test args>` — everything after the
  * script path is forwarded verbatim, so `--config=…` must precede `test` exactly as it
  * would on a bare `bun … test` line. The child's exit code is this process's exit code.
  *

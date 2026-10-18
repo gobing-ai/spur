@@ -690,8 +690,11 @@ describe('blockingReviewFindings (task 1122 R1)', () => {
  * only review-finding items so the test-fix hop's existing hand-off feeds /sp:dev-fixall.
  */
 describe('review-gate mode (task 1122 R2/AC1)', () => {
-    const REVIEW_TABLE_HEAD =
-        '### Review\n\n| Priority | Finding | Location | Disposition |\n| --- | --- | --- | --- |\n';
+    // ADR-141: a review section states a level the gate derives from its own dispositions, so the
+    // fixtures carry one per shape — the cross-check is covered by residual-scan.test.ts.
+    const reviewTable = (confidence: string): string =>
+        `### Review\n\nVerdict: PASS\nConfidence: ${confidence}\n\n| Priority | Finding | Location | Disposition |\n| --- | --- | --- | --- |\n`;
+    const REVIEW_TABLE_HEAD = reviewTable('MEDIUM');
     const stubSpurShow = (_dir: string, content: string): ResidualTaskPort => fakeTasks({ content });
     const capture = () => {
         const lines: string[] = [];
@@ -699,32 +702,37 @@ describe('review-gate mode (task 1122 R2/AC1)', () => {
     };
 
     test.each([
-        ['P4-only rows pass', `${REVIEW_TABLE_HEAD}| P4 (advisory) | Fuzzy name | src/a.ts:20 | ACCEPTED |\n`, 0, ''],
+        [
+            'P4-only rows pass',
+            `${reviewTable('MEDIUM')}| P4 (advisory) | Fuzzy name | src/a.ts:20 | ACCEPTED |\n`,
+            0,
+            '',
+        ],
         [
             'DEFER-ed P3 passes',
-            `${REVIEW_TABLE_HEAD}| P3 | Magic number | src/a.ts:12 | DEFER(post-merge regen) |\n`,
+            `${reviewTable('MEDIUM')}| P3 | Magic number | src/a.ts:12 | DEFER(post-merge regen) |\n`,
             0,
             '',
         ],
         [
             'RESOLVED P2 passes',
-            `${REVIEW_TABLE_HEAD}| P2 | Missing validation | src/c.ts:8 | RESOLVED — fixed in pass |\n`,
+            `${reviewTable('HIGH')}| P2 | Missing validation | src/c.ts:8 | RESOLVED — fixed in pass |\n`,
             0,
             '',
         ],
         [
             'unchecked boxes with P4-only rows pass',
-            `## Requirements\n\n- [ ] R1. proven at record\n\n${REVIEW_TABLE_HEAD}| P4 (advisory) | Note | src/d.ts:1 | ACCEPTED |\n`,
+            `## Requirements\n\n- [ ] R1. proven at record\n\n${reviewTable('MEDIUM')}| P4 (advisory) | Note | src/d.ts:1 | ACCEPTED |\n`,
             0,
             '',
         ],
         [
             'OPEN P2 fails with its anchor',
-            `${REVIEW_TABLE_HEAD}| P2 (major) | Missing validation | src/c.ts:8 | OPEN |\n`,
+            `${reviewTable('LOW')}| P2 (major) | Missing validation | src/c.ts:8 | OPEN |\n`,
             1,
             'src/c.ts:8',
         ],
-        ['OPEN P1 fails', `${REVIEW_TABLE_HEAD}| P1 (blocker) | Off by one | src/b.ts:3 | OPEN |\n`, 1, 'src/b.ts:3'],
+        ['OPEN P1 fails', `${reviewTable('LOW')}| P1 (blocker) | Off by one | src/b.ts:3 | OPEN |\n`, 1, 'src/b.ts:3'],
     ] as const)('review-gate: %s', async (_name, content, expected, anchor) => {
         const { dir, cleanup } = scratch('rs-gate-');
         try {

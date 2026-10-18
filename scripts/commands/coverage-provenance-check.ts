@@ -3,7 +3,7 @@
  * Coverage provenance precondition (task 1203 R2) — the repository post-check runs
  * this before rule evaluation:
  *
- *     bun scripts/commands/coverage-provenance-check.ts && bun run apps/cli/src/index.ts rule run …
+ *     bun scripts/spur-dev.ts coverage-provenance-check && bun run apps/cli/src/index.ts rule run …
  *
  * Refuses closed with a distinct `coverage-artifact:` diagnostic when
  * `.coverage/coverage-certification.json` does not certify the CURRENT

@@ -3,6 +3,7 @@ import * as fsp from 'node:fs';
 import { mkdirSync, mkdtempSync, rmSync, utimesSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import { deriveReviewConfidence } from '../../src/services/answer-confidence';
 import {
     blockingAnchors,
     blockingReviewFindings,
@@ -319,11 +320,45 @@ describe('review-finding parser hardening (task 1065 R4)', () => {
     });
 });
 
+/**
+ * The `Confidence:` line a review section owes under ADR-141, derived from the fixture's own rows so
+ * these cases keep targeting their rule instead of tripping the cross-check.
+ */
+const confidenceFor = (rows: string[]): string => {
+    const cell = (row: string, i: number): string =>
+        row
+            .split('|')
+            .map((c) => c.trim())
+            .filter((c) => c.length > 0)[i] ?? '';
+    const findings = rows
+        .map((raw) => ({
+            raw,
+            priority: cell(raw, 0),
+            // Disposition is the last column in every fixture table shape.
+            disposition:
+                raw
+                    .split('|')
+                    .map((c) => c.trim())
+                    .filter((c) => c.length > 0)
+                    .pop() ?? '',
+        }))
+        // Only real findings: an empty Finding cell or a `none found` marker is not a row.
+        .filter((row) => /^P\d/i.test(row.priority) && cell(row.raw, 1).length > 0 && !/^none/i.test(cell(row.raw, 1)));
+    return `Confidence: ${deriveReviewConfidence({ verdict: 'PASS', findings })}`;
+};
+
 /** Shared Review-section table head for the task 1122 review-gate tests. */
 const gateTable = (rows: string[]): string =>
-    ['### Review', '', '| Priority | Finding | Location | Disposition |', '| --- | --- | --- | --- |', ...rows].join(
-        '\n',
-    );
+    [
+        '### Review',
+        '',
+        'Verdict: PASS',
+        confidenceFor(rows),
+        '',
+        '| Priority | Finding | Location | Disposition |',
+        '| --- | --- | --- | --- |',
+        ...rows,
+    ].join('\n');
 
 /** The plugin script's fail-closed exit decision for the review-gate mode (task 1122 R2). */
 const gateExit = (counts: { blocking: number }): 0 | 1 => (counts.blocking > 0 ? 1 : 0);
@@ -431,6 +466,9 @@ describe('review-report contract at the gate (task 1070 R1 on the review side)',
     const reviewWith = (rows: string[]): string =>
         [
             '### Review',
+            '',
+            'Verdict: PASS',
+            confidenceFor(rows),
             '',
             '| Priority | Finding | Location | Disposition |',
             '| --- | --- | --- | --- |',

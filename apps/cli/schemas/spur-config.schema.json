@@ -357,11 +357,11 @@
                     "propertyNames": { "pattern": "^[a-z][a-z0-9-]*$" },
                     "additionalProperties": {
                         "oneOf": [
-                            { "type": "string", "minLength": 1 },
+                            { "type": "string", "minLength": 1, "pattern": "\\S" },
                             { "type": "array", "minItems": 1, "items": { "type": "string", "minLength": 1 } }
                         ]
                     },
-                    "description": "Action name -> one shell command, or a list of action names (composite, executed in order, fail-fast). A declared entry replaces the preset binding whole. Reserved names (closed in packages/config): build, dev, clean, format, autofix, lint, typecheck, test, test-full, test-heavy, rules-pre, rules-post, check, check-full, check-feature, lint-changed, typecheck-changed, test-changed; other names are custom (exec-only). {files}/{paths}/{workspace} placeholders are allowed only in lint-changed/typecheck-changed/test-changed, and each substituted item is shell-quoted."
+                    "description": "Action name -> one shell command, or a list of action names (composite, executed in order, fail-fast). A declared entry replaces the preset binding whole. Reserved names (closed in packages/config): build, dev, clean, format, autofix, lint, typecheck, test, test-full, test-heavy, rules-pre, rules-post, check, check-full, check-feature, lint-changed, typecheck-changed, test-changed; other names are custom (exec-only). Placeholders are allowed only in the scoped actions, each with its own set: lint-changed {files}, typecheck-changed {workspace}, test-changed {workspace} {paths}; and each substituted item is shell-quoted."
                 },
                 "bump-ver": {
                     "type": "object",

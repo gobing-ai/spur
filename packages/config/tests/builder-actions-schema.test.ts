@@ -86,6 +86,27 @@ describe('BuilderConfigSchema — load-time rejection names the key path (task 1
         expect(found[0]).toContain('builder.actions.lint uses placeholder {files}');
     });
 
+    test('a scoped action rejects a placeholder the gate planner never supplies for it', () => {
+        // The light gate renders test-changed with {workspace}/{paths} only; {files} would throw at gate time.
+        const found = issues({ actions: { 'test-changed': 'pytest {files}' } });
+        expect(found).toHaveLength(1);
+        expect(found[0]).toContain('builder.actions.test-changed uses placeholder {files}');
+        expect(issues({ actions: { 'lint-changed': 'ruff check {workspace}' } })).toHaveLength(1);
+        expect(issues({ actions: { 'typecheck-changed': 'mypy {paths}' } })).toHaveLength(1);
+        expect(
+            BuilderConfigSchema.safeParse({ actions: { 'test-changed': 'cd {workspace} && pytest {paths}' } }).success,
+        ).toBe(true);
+    });
+
+    test('cycle detection stays linear on a dense composite DAG', () => {
+        // 32 two-edge composites: an un-memoized path walk is ~Fibonacci(32) visits (~1.5 s measured).
+        const actions: Record<string, string[] | string> = { s0: 'true', s1: 'true' };
+        for (let i = 2; i < 34; i += 1) actions[`s${i}`] = [`s${i - 1}`, `s${i - 2}`];
+        const started = performance.now();
+        expect(BuilderConfigSchema.safeParse({ preset: 'none', actions }).success).toBe(true);
+        expect(performance.now() - started).toBeLessThan(500);
+    });
+
     test('empty string and empty list', () => {
         expect(issues({ actions: { build: '  ' } })[0]).toContain('builder.actions.build must not be empty');
         expect(issues({ actions: { ci: [] } })[0]).toContain('builder.actions.ci must not be an empty list');

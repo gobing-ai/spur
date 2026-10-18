@@ -2452,6 +2452,9 @@ has 11 fields, skill/agent output contracts carry no level, and `response.valida
   path by which the label returned (1088 → 1068, ADR-138 → 1196).
 - **Enforcement:** `plugins/sp/tests/skill-structure.test.ts` pins the docs rule as citation-only and
   the history-anatomy field set; `task-pipeline-proof-chain.test.ts` pins the pipeline's absence.
+- **Amended 2026-10-17 (ADR-141):** the invariant now carves out one surface — a verify or review
+  answer states a level that the gate **derives from that answer's own rows and cross-checks**. Every
+  other carrier listed above stays retired, including verdict-artifact fields and receipts.
 
 ## ADR-139: SDLC Commands Resolve Through a Project-Bound Action Map
 
@@ -2536,3 +2539,37 @@ has 11 fields, skill/agent output contracts carry no level, and `response.valida
 - **Retains:** ADR-047 selector table and host-owned operator interaction, ADR-087 inline default
   and substitution, ADR-121 session-pinned subprocess dispatch, ADR-126 opt-in fleet and receipt
   semantics, ADR-127 worktree isolation, ADR-138 invariant (gates read only deterministic evidence).
+
+## ADR-141: Answer Confidence Is Derived From the Answer and Cross-Checked
+
+- **Status:** Accepted · **Date:** 2026-10-17 · **Supersedes:** the ADR-138 amendment's blanket
+  "no HIGH|MEDIUM|LOW label anywhere" invariant, **for the two answer artifacts only**
+- **Decision:** a verify answer and a review answer each carry one top-level
+  `Confidence: HIGH|MEDIUM|LOW` line, and the gate **recomputes** that level from the answer's own
+  rows and rejects a disagreement:
+  - verify — `LOW` when the verdict is not PASS or any row is PARTIAL/UNMET; `HIGH` when every AC row
+    is MET on executable evidence (`test`/`command`); `MEDIUM` otherwise (citation, manual review, LLM
+    judge or `N/A` carrying a MET row).
+  - review — `LOW` when the verdict is not PASS or an open P1–P3 row survives; `HIGH` when every
+    finding is closed; `MEDIUM` when only carried residuals remain (`DEFER(...)`, `ACCEPTED`, open P4).
+
+  Rejections are first-class and named: `confidence-missing`, `confidence-duplicate`,
+  `confidence-mismatch` for verify (`verify-answer-lint`), the same three as blocking
+  `review-contract` violations for review (`residual-scan.reviewContractViolations`). One shared
+  derivation module (`packages/app/src/services/answer-confidence.ts`) serves both lanes.
+- **Why:** the ADR-138 amendment required a superseding ADR to name what the label measures that
+  existing evidence did not. This one does: **evidence composition**. Nothing recorded whether a PASS
+  rested on re-runnable checks or on prose a reader must trust, so a reviewer had to re-derive it from
+  the rows every time, and a batch could not tell a PASS built on `static-ref` from one built on
+  `test`. The label is now a *function of the rows*, and the cross-check is what makes it
+  verification rather than a self-grade: a model that writes `HIGH` over citation-only rows is
+  rejected by the gate (the exact failure ADR-138 was written to prevent).
+- **Retains:** everything else in ADR-138's invariant. No verdict-artifact `confidence` field (the
+  answer remains the record of truth — a test pins its absence), no feature-receipt level, no
+  `ackLowConfidence`-style operator var, no per-finding history-anatomy confidence, no
+  decision-engine grading, and no requirement in any skill/agent prose to *self-assess*.
+- **Consequence:** an answer that omits the line no longer certifies, so a legacy answer (and any
+  workflow fixture) must state the derived level. A `LOW` answer is legal and asserts nothing extra:
+  the verdict it carries is already PARTIAL/FAIL, and the gate reads the rows, not the label.
+- **Detail:** [verdict schema](../plugins/sp/skills/code-verification/references/verdict-schema.md);
+  [super-reviewer output contract](../plugins/sp/agents/super-reviewer.md).

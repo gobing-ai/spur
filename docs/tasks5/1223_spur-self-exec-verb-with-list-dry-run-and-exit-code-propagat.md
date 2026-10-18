@@ -4,7 +4,7 @@ name: spur self exec verb with list, dry-run and exit-code propagation
 status: done
 template: feature-impl
 created_at: 2026-10-17T04:04:39.231Z
-updated_at: "2026-10-17T05:58:20.931Z"
+updated_at: "2026-10-17T23:00:38.730Z"
 feature_id: A92
 priority: P1
 tags:
@@ -149,7 +149,7 @@ carry the R8 documentation.
 | R5 | MET | List renderings at `apps/cli/src/commands/self/exec.ts:49-52`, row shape at `:135-140`, table at `:143-169`. Tests `apps/cli/tests/commands/self/exec.test.ts:70-91` assert 25 rows (18 reserved + 7 declared), `{ name, reserved, source }` on every row, `source` values `default`/`config`/`unbound`, and composite `steps`; `apps/cli/tests/commands/self/exec.test.ts:93-99` asserts the NAME/SOURCE/COMMAND table. Live `--list --json`: 25 rows, every row carries name/reserved/source, `rules-pre` → `default`, `exit-3` → `config` with its command, `fail-mid` → its step list. |
 | R6 | MET | Missing action refused at `apps/cli/src/commands/self/exec.ts:55-58`; unbound action at `:60-63` with the exact message at `:125-127`; both route through `fail` → `setExitCode(2)` at `:44-47`. Tests `apps/cli/tests/commands/self/exec.test.ts:166-176`. Live: `spur self exec check` → exit 2, `action "check" is not bound; add builder.actions.check to .spur/config.yaml`; `spur self exec` → exit 2, `usage: spur self exec <action> ...`. |
 | R7 | MET | `apps/cli/src/commands/self/exec.ts:119` writes `{ action, steps: [{ name, exitCode, durationMs }], exitCode }` after the streaming loop, then `:120` sets that exit code. Test `apps/cli/tests/commands/self/exec.test.ts:148-163` asserts the shape, per-step name/exitCode/durationMs, summary exitCode 3, and process exit 3. Live `spur self exec exit-3 --json`: identical JSON with `exitCode: 3`, exit 3. |
-| R8 | MET | Both required surfaces document the verb and every flag: `docs/design/sdlc-actions.md:142-166` (surface block plus run/args/list/unbound/composite bullets, stdin policy, placement) and `plugins/sp/skills/spur-cli/references/self.md:20-62` (verb-map row, run/args/list/dry-run examples, exit table, stdin policy, `--json` shapes). Supporting surfaces: `docs/design/cli-contracts.md:104-124`, `docs/help/cmd_status.md:66-83`, `docs/help2/status.md:41-56`, `docs/help/spur-cli-matrix.md:42`. Fresh parity runs: `apps/cli/tests/help-doc-parity.test.ts` → 2 pass / 0 fail; `plugins/sp/tests/help-docs-parity.test.ts` + `plugins/sp/tests/cli-surface-parity.test.ts` → 25 pass / 0 fail, so the documented surface equals the registered CLI. |
+| R8 | MET | Both required surfaces document the verb and every flag: `docs/design/sdlc-actions.md:143-167` (surface block plus run/args/list/unbound/composite bullets, stdin policy, placement) and `plugins/sp/skills/spur-cli/references/self.md:20-64` (verb-map row, run/args/list/dry-run examples, exit table, stdin policy, `--json` shapes). Supporting surfaces: `docs/design/cli-contracts.md:104-124`, `docs/help/cmd_status.md:66-83`, `docs/help2/status.md:41-56`, `docs/help/spur-cli-matrix.md:42`. Fresh parity runs: `apps/cli/tests/help-doc-parity.test.ts` → 2 pass / 0 fail; `plugins/sp/tests/help-docs-parity.test.ts` + `plugins/sp/tests/cli-surface-parity.test.ts` → 25 pass / 0 fail, so the documented surface equals the registered CLI. |
 
 | Acceptance Criteria | Status | Evidence Type | Evidence |
 |---------------------|--------|---------------|----------|

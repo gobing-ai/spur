@@ -17,7 +17,7 @@ Implements an inline procedure — see [dev-operations.md](../skills/spur-dev/re
 | `--squash` | Collapse every concern into one message and one commit; implies `--commit`. | off |
 | `--all` | Widen the change set past the index to every change in the tree — unstaged **and untracked**. | off |
 | `--scope` `<path>` | Path filter on the change set; always wins over change-set auto-discovery. | the whole change set |
-| `--check` `<cmd>` | Run `<cmd>` (e.g. `"spur self exec check"`) once before committing; non-zero → commit nothing. | off |
+| `--check` `<cmd>` | Run `<cmd>` (e.g. `"spur self exec check"`) once before committing; non-zero → commit nothing. The example is `check`, not the `autofix` + `check` that `gate` maps to: a pre-commit check must not rewrite the tree. | off |
 
 For shared semantics, see the [flag glossary](../skills/spur-dev/references/flag-glossary.md).
 
