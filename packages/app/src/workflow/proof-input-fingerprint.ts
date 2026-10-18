@@ -276,6 +276,17 @@ export async function createGitAlternateTree(
         if (read.exitCode !== 0)
             throw new ProofCaptureError(`git read-tree HEAD failed with exit code ${read.exitCode}`, read.stderr);
 
+        // Excluded tracked files remain in the HEAD seed unless removed from the temporary index.
+        if (excludeGlobs.length > 0) {
+            const remove = await executor.run({
+                command: 'git',
+                args: ['rm', '-r', '--cached', '--ignore-unmatch', '--', ...excludeGlobs],
+                ...common,
+            });
+            if (remove.exitCode !== 0)
+                throw new ProofCaptureError(`git rm --cached failed with exit code ${remove.exitCode}`, remove.stderr);
+        }
+
         const excludes = excludeGlobs.map((glob) => `:(exclude)${glob}`);
         const add = await executor.run({ command: 'git', args: ['add', '-A', '--', '.', ...excludes], ...common });
         if (add.exitCode !== 0)

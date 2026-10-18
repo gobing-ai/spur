@@ -290,6 +290,29 @@ describe('canonical certification producer (task 1203)', () => {
         expect(await refuseReason(fixture)).toBe('pending');
     }, 30000);
 
+    test('a corpus-only commit during the run does not invalidate coverage certification', async () => {
+        const fixture = initFixtureRepo(PASSING);
+        mkdirSync(join(fixture, 'docs/tasks5'), { recursive: true });
+        const task = join(fixture, 'docs/tasks5/task.md');
+        const commitCorpus = () => {
+            for (const args of [
+                ['add', 'docs'],
+                ['-c', 'user.email=f@f', '-c', 'user.name=f', 'commit', '-qm', 'update corpus evidence'],
+            ]) {
+                const result = Bun.spawnSync(['git', ...args], { cwd: fixture, stdout: 'pipe', stderr: 'pipe' });
+                expect(result.exitCode, result.stderr.toString()).toBe(0);
+            }
+        };
+        writeFileSync(task, 'Testing: pending\n');
+        commitCorpus();
+        const start = await startCanonicalRun(fixture);
+        writeRunLcov(start, FIXTURE_LCOV);
+        writeFileSync(task, 'Testing: passed\n');
+        commitCorpus();
+        expect(await certifyCanonicalRun(fixture, start)).toEqual({ ok: true });
+        expect((await validateCoverageCertification(fixture)).ok).toBe(true);
+    });
+
     test('a later canonical start supersedes the earlier run; the earlier publish is refused (AC4)', async () => {
         const fixture = initFixtureRepo(PASSING);
         const first = await startCanonicalRun(fixture);

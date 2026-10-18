@@ -229,6 +229,49 @@ describe('git-tree component is live, not silently empty', () => {
         }
         expect(await ProofInputFingerprint.compute({ cwd: fixture })).toBe(before);
     });
+
+    test('committed corpus changes are excluded without losing ignored source files or changing the real index', async () => {
+        const dir = await mkdtemp(join(tmpdir(), 'proof-corpus-'));
+        const git = (...args: string[]): string => {
+            const result = Bun.spawnSync(['git', ...args], { cwd: dir, stdout: 'pipe', stderr: 'pipe' });
+            expect(result.exitCode, result.stderr.toString()).toBe(0);
+            return result.stdout.toString();
+        };
+        try {
+            mkdirSync(join(dir, 'docs/tasks5'), { recursive: true });
+            mkdirSync(join(dir, 'docs/features'), { recursive: true });
+            await writeFile(join(dir, '.gitignore'), 'ignored.ts\n');
+            await writeFile(join(dir, 'tracked.ts'), 'export const a = 1;\n');
+            await writeFile(join(dir, 'ignored.ts'), 'export const ignored = 1;\n');
+            await writeFile(join(dir, 'docs/tasks5/task.md'), 'Testing: pending\n');
+            await writeFile(join(dir, 'docs/features/F1.md'), 'Status: active\n');
+            git('init', '-q');
+            git('config', 'user.email', 't@example.com');
+            git('config', 'user.name', 't');
+            git('add', '-A');
+            git('add', '-f', 'ignored.ts');
+            git('commit', '-qm', 'init');
+            const before = await createGitAlternateTree(dir);
+            await writeFile(join(dir, 'docs/tasks5/task.md'), 'Testing: passed\n');
+            await writeFile(join(dir, 'docs/features/F1.md'), 'Status: done\n');
+            git('add', 'docs');
+            git('commit', '-qm', 'update corpus evidence');
+            expect(await createGitAlternateTree(dir)).toBe(before);
+            expect(git('ls-tree', '-r', '--name-only', before).trim().split('\n')).toEqual([
+                '.gitignore',
+                'ignored.ts',
+                'tracked.ts',
+            ]);
+            expect(await createGitAlternateTree(dir, [])).not.toBe(before);
+            await writeFile(join(dir, 'ignored.ts'), 'export const ignored = 2;\n');
+            git('add', '-u');
+            const staged = git('diff', '--cached', '--binary');
+            expect(await createGitAlternateTree(dir)).not.toBe(before);
+            expect(git('diff', '--cached', '--binary')).toBe(staged);
+        } finally {
+            await rm(dir, { recursive: true, force: true });
+        }
+    });
 });
 
 // Task 0751 R1: the git-tree capture used to answer `''` on every failure path (read-tree, add,
@@ -281,6 +324,12 @@ describe('git-tree capture fails closed (task 0751 R1)', () => {
         const err = await createGitAlternateTree(process.cwd(), undefined, failingExecutor('add')).catch((e) => e);
         expect(err).toBeInstanceOf(ProofCaptureError);
         expect((err as ProofCaptureError).message).toContain('git add');
+        expect((err as ProofCaptureError).stderr).toContain('simulated git failure');
+    });
+
+    test('corpus exclusion failure rejects capture instead of hashing a partially filtered index', async () => {
+        const err = await createGitAlternateTree(process.cwd(), undefined, failingExecutor('rm')).catch((e) => e);
+        expect(err).toBeInstanceOf(ProofCaptureError);
         expect((err as ProofCaptureError).stderr).toContain('simulated git failure');
     });
 
