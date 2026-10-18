@@ -2573,3 +2573,20 @@ has 11 fields, skill/agent output contracts carry no level, and `response.valida
   the verdict it carries is already PARTIAL/FAIL, and the gate reads the rows, not the label.
 - **Detail:** [verdict schema](../plugins/sp/skills/code-verification/references/verdict-schema.md);
   [super-reviewer output contract](../plugins/sp/agents/super-reviewer.md).
+
+## ADR-142: feature-lifecycle Owns Feature State and Feature Verification
+
+- **Status:** Proposed · **Date:** 2026-10-17 · **Feature:** D66 · **Amends:** ADR-119's consequence (the
+  feature-scoped pass runs as its own workflow)
+- **Decision:** feature state has one workflow owner, `feature-lifecycle`. Entering `verifying` runs
+  `spur feature verify` as a `command.gate`, and the verification receipt's verifier identity is the
+  resolved `feature-lifecycle` definition. `feature-verification.yaml` is deleted, and
+  `wrapup-pipeline` no longer requests feature transitions.
+- **Why:** the separate workflow wrapped one verb and needed a nested-run workaround (1147 R4) to run
+  from the lifecycle. Three writers of feature state (lifecycle, wrapup, idea handoff) made
+  `feature-transition→failed` a wrap-up failure mode rather than a lifecycle one.
+- **Retains:** ADR-119's rule that a feature is not done until the repo-wide pass records PASS; the
+  strict `verifying→done` guard; the receipt files and digest chain.
+- **Consequence:** receipts recorded under the old verifier name are stale after upgrade and need one
+  `spur feature verify <id>`. Project overrides of the deleted workflow stop applying.
+- **Detail:** [workflow consolidation](design/workflow-consolidation.md).

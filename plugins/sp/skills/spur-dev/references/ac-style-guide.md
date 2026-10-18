@@ -127,7 +127,8 @@ scenario, it matches by title. Rules:
 - **No synonyms in cross-references.** The title in the feature file and the title in the
   task's AC reference must be byte-identical.
 - **Avoid gate vocabulary in titles.** `spur task check` (L4.gate-language) rejects task sections
-  containing `HITL`, `merge event`, `content-gate`, `GATED`, or `capstone` as standalone words;
+  containing `HITL`, `merge event`, `content-gate`, `GATED`, or `capstone` as standalone words in any
+  case (dotted action kinds such as `hitl.confirm` are fine);
   ambiguous words (`approval`, `approved`, `merged`) warn only when the same sentence also carries
   a gating cue (`until`, `after`, `once`, `before`, `pending`, `blocked`, `wait for`, `requires`)
   — plain composition prose like "the stages merged back into one step" stays silent. Task AC
