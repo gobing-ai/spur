@@ -931,7 +931,10 @@ describe('sp plugin structure — functional split invariants (task 0161 / ADR-0
             // baseline; the +41 B left here is the pointer inside the concrete-anchors line plus a
             // net -59 B trim of the variants note. Split, not grown.
             'code-verification': 35_509,
-            wayfinder: 26_264,
+            // 1251 R3: +444 B absorbed, not grown — `references/pipeline-resolution.md` was the
+            // retired wayfinder-resolution workflow's hop contract, so its resolution boundary and
+            // evidence-anchor rules moved into the body (condensed) and the references/ dir is gone.
+            wayfinder: 26_708,
             // 0622 R9: +921B of live-matrix reconciliation (section table, SPUR_BIN
             // refusal, artifact-size discipline). Not permanent — split into references.
             'issue-finding': 27_060,

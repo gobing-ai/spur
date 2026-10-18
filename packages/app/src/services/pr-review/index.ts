@@ -1,9 +1,10 @@
 /**
- * pr-review — deterministic spine for the sp:pr-reviewing skill (`spur builder pr`).
+ * pr-review — deterministic spine for the sp:pr-reviewing skill (`spur builder pr-<verb>`).
  *
  * Absorbed from plugins/sp/scripts/pr-reviewing.ts (script-absorption PR-7). Owns every
  * git/gh interaction of the GitHub Codex PR-review loop. Model-bearing work stays in the
- * skill; this module is the testable core that `.spur/workflows/pr-review.yaml` shells out to.
+ * skill; this module is the testable core the skill's verb sequence calls (task 1251 retired
+ * the workflow spine that used to shell out to it).
  *
  * Subcommands: preflight | push | ensure | hygiene | request | wait | collect | status
  * (ensure-pr is accepted as an alias of ensure).
@@ -1022,7 +1023,7 @@ function runSpine(argv: readonly string[], rt: SpineRuntime): number {
 // ─── Composed verbs (task 1219) ─────────────────────────────────────────────
 //
 // `spur builder pr-<verb>` replaces the `pr <op>` pass-through with four flat verbs. Sequencing
-// lives here, not in the CLI and not in `pr-review.yaml` shell: each verb runs the existing ops in
+// lives here, not in the CLI and not in workflow shell (1251): each verb runs the existing ops in
 // order inside ONE runtime, so a verb's stdout JSON, `--status-file` verdict and exit code equal
 // the composition of the former operations it replaces.
 //

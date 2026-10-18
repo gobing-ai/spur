@@ -39,19 +39,19 @@ invoking coding agent is the local orchestrator and implementer.
       ▼
 sp:pr-reviewing (this skill — mode routing, local-review dispatch, triage, fix)
       │  local route:  pr-check --scan-only → git diff --name-only → /sp:dev-review
-      │  Codex route:  pr-review.yaml  (check → precheck → open → review)
+      │  Codex route:  pr-check → pr-open → pr-review → pr-status
       ▼
 `spur builder pr-<verb>` + `spur builder show-branches`  ← tested git/gh core
 ```
 
-- **State order and guards** for the Codex route are defined once, in `pr-review.yaml`. Do not
-  re-derive them in prose; when the YAML and this file disagree, the YAML wins and this file gets
-  fixed.
 - **Deterministic work** (every git/gh call) goes through the four flat `spur builder pr-<verb>`
   commands and `spur builder show-branches` — never hand-rolled `gh` invocations that drift from
   the tested core.
+- **Sequencing inside a verb** (preflight→hygiene, push→ensure, request→wait→collect) lives in
+  `runPrVerb`, not in this file. This skill orders the *verbs*; each verb owns its own ops, its
+  one-word verdict and its exit code.
 - **Model-bearing work** (the local review dispatch, finding triage, `fix` edits) is this skill's
-  job and never enters the workflow machine.
+  job and never enters a deterministic verb.
 
 ## Modes and routing
 
@@ -61,7 +61,7 @@ Parse the first positional argument as the mode; default `status`.
 | --- | --- | --- |
 | `status` | direct CLI | `spur builder show-branches --base <b> --pr --format markdown`, with the report filtered to the current branch and its base, plus `spur builder pr-status --json` (PR number, CI, local changes, latest current-head review in `.review`). Read-only. |
 | `review` | local stack | `spur builder pr-check --base <b> --scan-only --json`; `BLOCK` stops, `WARN` is reported. Then `git diff --name-only <b>...HEAD` → `/sp:dev-review --scope <comma-joined paths> --focus <focus>`. An empty diff ends with "nothing to review". Posts nothing to GitHub. |
-| `review --codex` | `pr-review.yaml` | Run the spine with `mode=full`; `--force` → `mode=rerun`; `--no-wait` → `mode=submit`; `focus`/`baseBranch` passed as vars. States: check → precheck → open → review. `pending` is reported as pending, never failure. |
+| `review --codex` | direct verb sequence | `spur builder pr-check --base <b> --json` → `pr-open --base <b> --json` → `pr-review --focus <focus> [--force] [--no-wait] --json` → `pr-status --json`. Each verb's verdict gates the next; `PENDING` is reported as pending, never failure. |
 | `fix` | direct verb + model work | Findings from the latest local review verdict, or from `spur builder pr-status --json` `.review` when the last review was Codex. Validate each finding against the code before editing; rejected findings are listed with a reason. Fix the legitimate ones, run the project gate, make one focused commit and push without force (`spur builder pr-open` handles a first push). |
 
 Retired modes print one notice line and run their replacement: `full` → `review --codex`;
@@ -125,17 +125,37 @@ Codex:         clean | findings | pending | not requested | unavailable
 
 ## Review mode (--codex)
 
-Run `pr-review.yaml` as the single source of truth for the Codex spine — check → precheck → open →
-review. Never call `spur builder pr-review` in a way that bypasses the workflow's state order and
-guards.
+Four verbs in order. Each one's `--status-file` verdict gates the next — stop at the first red
+verdict and report it with the stage's JSON record; never run a later verb to "retry" an earlier
+one, and never force-push around a rejected push.
 
 ```sh
-spur workflow run pr-review.yaml --vars '{"mode":"full","baseBranch":"<base>","focus":"<focus>"}'
+spur builder pr-check  --base "$base" --json --status-file .spur/run/pr-check.status
+# PASS|WARN → continue (a WARN rides into the report).  BLOCK|FAIL → stop.
+# BLOCK = secrets/.env/conflict markers/private keys. FAIL = preflight (detached HEAD, dirty
+# tree, gh unauthenticated, no GitHub remote, or the current branch *is* the base).
+
+# Optional project fast check before spending a review request. Run it only when the project
+# defines one; a red check stops here rather than reviewing code that fails its own gate.
+
+spur builder pr-open   --base "$base" --json --status-file .spur/run/pr-open.status
+# FOUND|CREATED → continue.  FAIL → stop (push rejected, no reviewable delta, PR create failed).
+
+spur builder pr-review --focus "$focus" [--force] [--no-wait] \
+    --timeout 600 --interval 30 --json --status-file .spur/run/pr-review.status
+# CLEAN|FINDINGS → collected.  PENDING → pending, not failed.  FAIL → stop.
+
+spur builder pr-status --json   # composite PR/CI/Codex report; read-only, never gates
 ```
 
-- `mode=full` by default; `--force` → `mode=rerun`; `--no-wait` → `mode=submit`.
-- The workflow's `pending` terminal state is **pending, not failed**: report the requested or
-  in-flight state and collect later with `status`.
+- **Flags from the invocation:** `--force` requests a fresh review of an already-reviewed HEAD;
+  `--no-wait` posts the request and returns `PENDING` without polling. Both are optional and
+  independent — pass each as its own argument. The default is request → wait → collect, with
+  per-HEAD dedupe.
+- **`PENDING` is pending, not failed** (a wait timeout included): report the requested or in-flight
+  state and collect later with `status`.
+- **`pr-review` owns request → wait → collect in one runtime** (`runPrVerb`), so there is no
+  separate request record to thread between steps.
 - When `--codex` is passed, the external review goes through the GitHub PR and an `@codex review`
   request only — never a local Codex CLI review. If GitHub Codex Code Review is unavailable, stop
   and report the setup/access problem; never silently fall back to a local review.
@@ -219,20 +239,18 @@ and nothing else.
 
 ## Platform notes
 
-- The skill, command and workflow YAML are platform-neutral; per-platform emission is owned by
-  superskill. On platforms without a Skill tool, read this file and follow the protocol manually.
+- The skill and command are platform-neutral; per-platform emission is owned by superskill. On
+  platforms without a Skill tool, read this file and follow the protocol manually.
 - Prerequisites: `git` for every path. `gh` authenticated with a GitHub remote wherever PR state is
   touched: `status` (its `pr-status` half — the `show-branches` topology runs on `git` alone, and
   its `--pr` enrichment only degrades with a warning), `review` (step 1's `pr-check --scan-only`),
-  `review --codex` (the workflow's check/open/review states), and `fix` when it reads a Codex
+  `review --codex` (its `pr-check`/`pr-open`/`pr-review` verbs), and `fix` when it reads a Codex
   verdict or pushes through `pr-open`. The `git diff --name-only` scope, `/sp:dev-review`, and
   `fix`'s local-verdict edit/commit path need only `git`. The `--codex` path additionally needs
   GitHub Codex Code Review enabled for the repository.
 
 ## Additional Resources
 
-- **Workflow SSOT (Codex path):** `pr-review.yaml` (seeded by `spur init`; tune per project — wait
-  budget, `preReviewCmd`, dedupe policy)
 - **Command source:** the four flat verbs `pr-status` / `pr-check` / `pr-open` / `pr-review` plus the
   read-only `show-branches` report — see `sp:spur-cli` `references/builder.md`
 - **Local review:** `/sp:dev-review` — its dimensions live in `sp:code-verification` and

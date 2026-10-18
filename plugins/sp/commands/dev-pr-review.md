@@ -17,9 +17,9 @@ and commits the verified ones. The invoking agent orchestrates.
 | Flag | Description | Default |
 | --- | --- | --- |
 | `<mode>` | `status\|review\|fix` — status: read-only branch + PR state; review: local branch-diff review (or the GitHub Codex spine with `--codex`); fix: validate, fix and commit findings from either reviewer. | status |
-| `--codex` | `review` only — route through the GitHub Codex spine (`pr-review.yaml`) instead of the local `/sp:dev-review`. | off |
-| `--force` | `review --codex` only — request a fresh review of the current HEAD even when it was already reviewed (`mode=rerun`). | off |
-| `--no-wait` | `review --codex` only — post the request and return `pending` without polling (`mode=submit`). | off |
+| `--codex` | `review` only — route through the GitHub Codex spine (`spur builder pr-check` → `pr-open` → `pr-review`) instead of the local `/sp:dev-review`. | off |
+| `--force` | `review --codex` only — request a fresh review of the current HEAD even when it was already reviewed (`pr-review --force`). | off |
+| `--no-wait` | `review --codex` only — post the request and return `pending` without polling (`pr-review --no-wait`). | off |
 | `--base <branch>` | Base branch for the branch report, the `pr-check` diff and a newly created PR. | existing PR base, else repo default |
 | `--agent <inline\|auto\|name>` | Who performs the model-bearing triage/fix. Omit uses the current agent, `inline` forbids dispatch, `auto` resolves the declared role, and a name pins that executor. This does not change the deterministic route. | omit |
 | `<focus>` | Remaining free text — extra review focus for the local review or the Codex request (e.g. `security boundaries and transaction idempotency`). | none |
@@ -36,9 +36,9 @@ For shared semantics, see the [flag glossary](../skills/spur-dev/references/flag
 
 - Apply the [inline-default execution-surface contract](../skills/spur-dev/references/cross-cutting.md#inline-default-execution-surface).
 - Delegate everything: `Skill(skill="sp:pr-reviewing", args="$ARGUMENTS")`. The skill owns mode
-  routing, the local `/sp:dev-review` dispatch, the Codex spine and finding triage/fix. On the
-  Codex path `pr-review.yaml` is the SSOT for state order and guards, and the four flat
-  `spur builder pr-<verb>` verbs are the deterministic git/gh core every spine step shells out to.
+  routing, the local `/sp:dev-review` dispatch, the Codex spine and finding triage/fix. The Codex
+  path is a direct sequence of the four flat `spur builder pr-<verb>` verbs — `pr-check` →
+  `pr-open` → `pr-review` → `pr-status` — each verb's verdict gating the next.
 - Retired modes print one notice line and run their replacement: `full` → `review --codex`;
   `submit` → `review --codex --no-wait`; `rerun` → `review --codex --force`; `collect` → `status`.
   `rules` prints that `AGENTS.md` review-rule authoring belongs to `cc:cc-magents` (the `cc` plugin)

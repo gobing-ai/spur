@@ -458,7 +458,7 @@ describe('findParallelDefinitions (0873 R4)', () => {
     test('does not flag a numeric name with no canonical base', async () => {
         const dir = await mkdtemp(join(tmpdir(), 'parallel-'));
         try {
-            await writeFile(join(dir, 'wayfinder-resolution.yaml'), 'placeholder');
+            await writeFile(join(dir, 'history-anatomy.yaml'), 'placeholder');
             await writeFile(join(dir, 'probe2.yaml'), 'placeholder');
             expect(findParallelDefinitions(dir)).toEqual([]);
         } finally {

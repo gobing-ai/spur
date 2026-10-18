@@ -13,7 +13,8 @@ import { parseDecisionConfig } from '../../src/workflow/decision-hitl-responder'
 // deferred answer that no guard routes.
 
 const WORKFLOWS_DIR = resolve(__dirname, '../../../..', 'config', 'workflows');
-const MIGRATED = ['idea-pipeline.yaml', 'wrapup-pipeline.yaml', 'wayfinder-resolution.yaml'];
+// 1251 R1: wayfinder-resolution.yaml is retired; its approve gate left with it.
+const MIGRATED = ['idea-pipeline.yaml', 'wrapup-pipeline.yaml'];
 
 const GATE_KINDS = new Set(['hitl.confirm', 'hitl.select']);
 

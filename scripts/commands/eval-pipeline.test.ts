@@ -155,7 +155,7 @@ describe('workflow facts (0607 R1/R4; SSOT moved to live definitions by 0775)', 
 
     test('workflowKeyForPipeline maps a definition path to its workflow name', () => {
         expect(workflowKeyForPipeline('config/workflows/task-pipeline.yaml')).toBe('task-pipeline');
-        expect(workflowKeyForPipeline('config/workflows/pr-review.yaml')).toBe('pr-review');
+        expect(workflowKeyForPipeline('config/workflows/history-anatomy.yaml')).toBe('history-anatomy');
     });
 
     test('describeBreakdown counts model hops, deterministic actions, and gate states', async () => {

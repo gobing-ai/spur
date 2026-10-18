@@ -80,7 +80,7 @@ spur builder pr-review --force --json                  # force a fresh review of
 ```
 
 Four flat verbs over the ops absorbed from `plugins/sp/scripts/pr-reviewing.ts` (script-absorption
-PR-7); driven by the `pr-review` workflow. Each composes existing ops and embeds their records in
+PR-7); sequenced directly by `sp:pr-reviewing`. Each composes existing ops and embeds their records in
 one JSON object per verb: `pr-status` → the status object plus `review` (collect, or `null` with no
 PR); `pr-check` → `{ ok, verdict, preflight, hygiene }`; `pr-open` → `{ ok, verdict, push, pr }`;
 `pr-review` → `{ ok, verdict, request, findings }`.
@@ -94,7 +94,7 @@ PR); `pr-check` → `{ ok, verdict, preflight, hygiene }`; `pr-open` → `{ ok, 
   explicit pin that no longer matches the PR head fails loud instead of reporting a moved commit.
 - **Deduping:** `pr-review` collects without a new request when the exact HEAD is already reviewed,
   and returns `PENDING` when a marked request is still in flight; `--force` requests a fresh review
-  (`mode=rerun`). Never force-pushes.
+  of the current HEAD regardless. Never force-pushes.
 
 ```bash
 # deprecated alias, one release: maps the old op names to the verbs above

@@ -700,8 +700,7 @@ describe('wrapup-pipeline truthfulness (task 0770, feature R8; task 0783, R1-R5)
                 // 1246 R5: feature-verification is retired.
                 'idea-pipeline',
                 'task-pipeline',
-                'pr-review',
-                'wayfinder-resolution',
+                // 1251 R1: pr-review and wayfinder-resolution are retired.
                 'history-anatomy',
             ];
             for (const name of others) {

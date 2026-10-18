@@ -30,13 +30,14 @@ interface StateMatrixRow {
     /**
      * Why interrupted-entry replay at the initial state is safe today:
      * - repeatable: entry actions are read-only/idempotent (FSM guards re-evaluate, mkdir, clean-tree checks).
-     * - identity-deduplicated: the mutating entry step dedupes on its own identity (pr-review per-HEAD).
+     * - identity-deduplicated: the mutating entry step dedupes on its own identity (none today;
+     *   1251 retired pr-review, the per-HEAD dedupe case — the verbs keep the dedupe themselves).
      * - reconciliation-required: entry must not auto-replay (none today — refusal is the engine default).
      */
     entryClass: 'repeatable' | 'identity-deduplicated' | 'reconciliation-required';
 }
 
-/** Declared matrix — the classification of record for the nine canonical definitions (0916 R1; 1246 removed `feature-verification`). */
+/** Declared matrix — the classification of record for the canonical definitions (0916 R1; 1246 removed `feature-verification`, 1251 removed `pr-review` and `wayfinder-resolution`). */
 const MATRIX: Record<string, StateMatrixRow> = {
     'task-lifecycle': { resumeRerunStates: [], pauseGates: [], entryClass: 'repeatable' },
     'feature-lifecycle': { resumeRerunStates: [], pauseGates: [], entryClass: 'repeatable' },
@@ -46,12 +47,9 @@ const MATRIX: Record<string, StateMatrixRow> = {
     'task-pipeline': { resumeRerunStates: [], pauseGates: [], entryClass: 'repeatable' },
     // D65 1241: the four operator gates are evidence-bound decision points, so no state pauses.
     'idea-pipeline': { resumeRerunStates: [], pauseGates: [], entryClass: 'repeatable' },
-    'pr-review': { resumeRerunStates: [], pauseGates: [], entryClass: 'identity-deduplicated' },
     'history-anatomy': { resumeRerunStates: [], pauseGates: [], entryClass: 'repeatable' },
     // D65 1241: branch-cleanup is an evidence-bound decision point (consent-only), no pause.
     'wrapup-pipeline': { resumeRerunStates: [], pauseGates: [], entryClass: 'repeatable' },
-    // D65 1241: the approve gate is an evidence-bound decision point; `approval=auto` routes around it.
-    'wayfinder-resolution': { resumeRerunStates: [], pauseGates: [], entryClass: 'repeatable' },
 };
 
 interface CanonicalDoc {

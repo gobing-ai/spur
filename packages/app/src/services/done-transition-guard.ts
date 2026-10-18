@@ -3,8 +3,8 @@
  *
  * The lifecycle FSM's `* → done` transition was verdict-blind: a task could
  * reach `done` regardless of what the verify leg produced, and `--no-lifecycle`
- * (used by `task-pipeline.yaml:182` and, until task 0866 retired it,
- * `docs-pipeline.yaml:70`; historically also by `wayfinder-resolution.yaml`)
+ * (used by `task-pipeline.yaml:182`, and by two definitions since retired —
+ * `docs-pipeline.yaml` in 0866 and the wayfinder resolution spine in 1251)
  * bypassed even the section-status guard. This module backs the CLI-layer gate
  * that consults the verdict artifact before any `done` transition is allowed
  * through.

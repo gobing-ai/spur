@@ -87,7 +87,7 @@ describe('canonical workflow catalog run-record classification (0928)', () => {
         .sort();
 
     test('post-D63 catalog is present', () => {
-        expect(files.length).toBeGreaterThanOrEqual(8);
+        expect(files.length).toBeGreaterThanOrEqual(6);
         for (const required of [
             'idea-pipeline.yaml',
             // 1246 R5: feature-verification.yaml is retired — the lifecycle's verifying entry
@@ -96,8 +96,9 @@ describe('canonical workflow catalog run-record classification (0928)', () => {
             'task-lifecycle.yaml',
             'wrapup-pipeline.yaml',
             'history-anatomy.yaml',
-            'pr-review.yaml',
-            'wayfinder-resolution.yaml',
+            // 1251 R1: pr-review.yaml and wayfinder-resolution.yaml are retired — the PR
+            // sequencing lives in the `spur builder pr-<verb>` verbs and the wayfinder
+            // investigate hop is a skill procedure.
         ]) {
             expect(files).toContain(required);
         }

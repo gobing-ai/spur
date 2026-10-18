@@ -18,10 +18,9 @@ const REPO_ROOT = join(import.meta.dir, '..', '..', '..');
 
 /** Workflows whose status checks are deterministic by design (R4 list). */
 const DETERMINISTIC_STATUS_WORKFLOWS = [
-    'pr-review.yaml',
-    'wayfinder-resolution.yaml',
     'wrapup-pipeline.yaml',
-    // 1246 R5: feature-verification.yaml is retired.
+    // 1246 R5: feature-verification.yaml is retired; 1251 R1 retired pr-review.yaml and
+    // wayfinder-resolution.yaml.
     'history-anatomy.yaml',
 ] as const;
 

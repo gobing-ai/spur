@@ -128,7 +128,7 @@ Invoked when the operator has a loose idea and the destination itself is foggy. 
 
 ### Work Through the Map
 
-Invoked when a map already exists (operator provides the feature ID). A ticket is **optional** — without one, pick the next frontier ticket, not the operator's preference. Pipeline runs: `references/pipeline-resolution.md`.
+Invoked when a map already exists (operator provides the feature ID). A ticket is **optional** — without one, pick the next frontier ticket, not the operator's preference.
 
 0. **Worktree first.** Same rule as charting (`sp/wayfind-<wbs>-<short-id>`): steps 6 and 7 remove fog from the map, and the gate that checks the removal measures the branch, not the commit. The `wip` claim lands only in the worktree until the merge, so `/sp:dev-find-way` excludes tickets held by other active `dev-find-way` worktree markers when picking the frontier.
 1. **Load the map** — the feature description (the low-res view), not every task body. Read the destination and Decisions-so-far to orient.
@@ -145,6 +145,16 @@ Invoked when a map already exists (operator provides the feature ID). A ticket i
    An open question from the map is **not** resolved this way. It is settled with the operator in
    conversation (`AskUserQuestion` where available) and recorded straight into **## Decisions so far**
    — no task is claimed, and it does not consume the session's one ticket.
+
+   **Boundary.** A resolution authors research/specification sections — it never implements, so
+   never invoke `/sp:dev-run` or `/sp:dev-runall` from one. Work from local reads and the `spur`
+   CLI; no network search, no MCP tools. Write Solution/Testing/Review with
+   `spur task update <wbs> --section <name> --from-file <path>`, keeping the existing Requirements
+   and AC.
+
+   **Evidence anchors.** Resolve every cited line for real — `grep -n "^## <wbs> " <evidence-file>`
+   — and never copy a line number from another ticket's example. Re-read each cited line before
+   finishing and confirm it names the requirement's subject.
 
 5. **Record the resolution.** Post the answer in the task body, then `spur task update <wbs> done`. Append one line to the map's **## Decisions so far**: `- [<WBS> <title>](path) — <one-line gist of the answer>`.
 6. **Graduate fog into new tickets.** Any fog the answer has made specifiable becomes fresh child tasks (create-then-wire). Clear each graduated patch from **### Not yet specified** so it lives only as its new ticket. Doing half of this — deleting the fog without creating the ticket — destroys the only record the work was ever identified; the `corpus.ungraduated-fog` sweep retired in 0775 — enforcement is review-time discipline.

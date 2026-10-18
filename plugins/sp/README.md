@@ -348,7 +348,7 @@ surface or run one workflow. All skills target the same five core platforms: `cl
 | `conflict-finding`          | 1.0   | Authority-aware semantic audit — four-pillar (source/task/feature/authority) conflict discovery, claim-specific authority resolution, reproducible evidence, confirmed owner-routed remediation; backs `/sp:dev-find-conflict`             |
 | `fleet-join`                | 1.0   | Guest fleet occupancy — join as a live guest occupant, loop `spur agent wait --inbox` to pull work, reply through `spur message reply`, then leave; G73 (task 1081)                                                                          |
 | `next-feature`              | 1.0   | Prompt-first feature frontier prioritizer — sync-first precondition, B3 actionability gate (cited, never restated), tiered rubric over measured signals, D1–D4 defect proposals conforming to the restructure map schema; backs `/sp:dev-find-next` |
-| `pr-reviewing`              | 1.0   | GitHub Codex PR review — PR prepare/reuse, `@codex review` request with per-HEAD dedupe, bounded polling, findings normalization, validated fix + re-review; spine SSOT `pr-review.yaml` + `spur builder pr`; backs `/sp:dev-pr-review`     |
+| `pr-reviewing`              | 1.0   | GitHub Codex PR review — PR prepare/reuse, `@codex review` request with per-HEAD dedupe, bounded polling, findings normalization, validated fix + re-review; direct `spur builder pr-status`/`pr-check`/`pr-open`/`pr-review` sequence; backs `/sp:dev-pr-review`     |
 | `indexed-context`           | 1.0   | Cross-agent project context — anatomy/learnings/pitfalls/buglog/memory in `.spur/context/`; hook-tracked token-ledger; graceful degradation on agents without hooks                                                                        |
 | `history-anatomy`           | 1.0   | Diagnostic interpretation owner over already-imported history — daily/ad-hoc mode contract, closed finding taxonomy, twelve-section report contract, `enrich`/`validate` rubrics; no workflow launch, no JSONL fallback, no corpus mutation                                                                   |
 | `session-review`            | 1.1   | Inline review of the active coding-agent session — compact outcomes, evidence-backed resolved/open issue classification, proposal-only improvements, and next actions; no workflow, import, delegation, or mutation                                                                                           |
@@ -695,7 +695,10 @@ pipeline owns one lifecycle phase:
 | `task-pipeline.yaml`        | Single-task execution             | `/sp:dev-run`                     |
 | `idea-pipeline.yaml`        | Idea/planning → feature + tasks   | `/sp:dev-idea`, `/sp:dev-plan`    |
 | `wrapup-pipeline.yaml`      | Post-execution wrap-up            | `/sp:dev-wrap`, `/sp:dev-wrapall` |
-| `wayfinder-resolution.yaml` | Wayfinder ticket resolution loop  | `spur workflow run` (free-form)   |
+
+> 1251 (D66): the `pr-review` and `wayfinder-resolution` spines were retired — the PR sequencing
+> lives in the `spur builder pr-status | pr-check | pr-open | pr-review` verbs, and the wayfinder
+> investigate hop is a skill procedure in `sp:wayfinder`.
 
 > 0946 (D64): the `decision-routing-example.yaml` authoring sample was retired from the catalogue
 > (zero runs, example-only — `docs/design/workflow-catalogue-refactor.md` §10); the pattern lives on
