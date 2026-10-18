@@ -76,6 +76,9 @@ evidence in §2):
    executor|null, attribution, recorded?, applied?, observationId?, observedAt}`. The driver reads
    this file instead of judging prose, so the branch is reproducible from the artifact.
 
+**Retired (D65, task 1242):** the inline driver that wrote both artifacts is deleted, so no
+writer remains; `spur agent doctor` no longer reports `inlineFailFast.unattributedStages`.
+
 Both are bounded, recomputable scratch: they carry a bounded failure record and a classification,
 not a transcript, and the classification itself is the upstream `classifyQuotaErrorRecord` result.
 They follow `disposable-run-storage.md` reclamation like other `.spur/run` scratch, and the durable

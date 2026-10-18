@@ -300,8 +300,8 @@ provider seam at all — and never re-enables an `operator`-owned disable; the d
 precedence refuses that and records the classified no-op. A disable without a usable `since`
 cannot be shown to have expired and stays. Its last-run summary lands at
 `.spur/memory/observation-refresh.json`, and `spur agent doctor --json` reports it as
-`inlineFailFast.refreshJob` beside `inlineFailFast.unattributedStages` (R6) so the operator can see
-whether fail-fast is actually able to fire.
+`inlineFailFast.refreshJob` (R6) so the operator can see whether fail-fast is actually able to fire.
+(`inlineFailFast.unattributedStages` was dropped with its only writer, the inline driver, in D65.)
 
 **Boundary.** A timer that probes a provider or writes configuration is still out of scope: a probe
 spends the quota it protects, and a successful probe does not disprove an account-level weekly cap

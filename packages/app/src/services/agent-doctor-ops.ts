@@ -29,7 +29,6 @@ import {
     executorDisabled,
     getExecutorTier,
 } from './executor-tier';
-import { countUnattributedInlineStages } from './inline-run-attribution';
 
 /**
  * `spur agent doctor` for {@link AgentService}: detection + health probing, usage/capability
@@ -343,12 +342,9 @@ export class AgentDoctorOps {
                         cache: cacheField,
                         usage: usage ?? null,
                         // 1134 R6: can fail-fast actually fire? The scheduled observation-refresh
-                        // job's last run (null when it never ran) plus the count of inline stages
-                        // that ran without executor attribution — an unattributed stage cannot be
-                        // disabled later, so a non-zero count means the trigger is blind.
+                        // job's last run (null when it never ran).
                         inlineFailFast: {
                             refreshJob: readObservationRefreshStatus(this.ctx.cwd),
-                            unattributedStages: countUnattributedInlineStages(this.ctx.cwd),
                         },
                     },
                     { enveloped },

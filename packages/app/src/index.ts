@@ -441,11 +441,7 @@ export {
     runHistoryReport,
     UnsafeHistoryImporterError,
 } from './services/history-service';
-export {
-    countUnattributedInlineStages,
-    type InlineRunProjectDb,
-    openInlineRunProjectDb,
-} from './services/inline-run-attribution';
+export { type InlineRunProjectDb, openInlineRunProjectDb } from './services/inline-run-attribution';
 export {
     acquireExclusiveJob,
     getExclusiveJobOwner,
