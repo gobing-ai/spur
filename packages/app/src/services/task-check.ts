@@ -445,7 +445,8 @@ function hasAdjacentFileLineColumns(body: string): boolean {
 
 /** L4.gate-language predicate — shared by `task check` and the write-time warning in TaskService. */
 export const GATE_LANGUAGE_SECTIONS = ['Background', 'Requirements', 'Design', 'Acceptance Criteria', 'Plan'] as const;
-const GATE_TOKENS = /(?<![\w-])(HITL|human[- ]in[- ]the-loop|merge event|content-gate|GATED|capstone)(?![\w-])/i;
+// A dotted neighbour (`hitl.confirm`, `kind: hitl.select`) is a workflow action kind, not a gate.
+const GATE_TOKENS = /(?<![\w.-])(HITL|human[- ]in[- ]the-loop|merge event|content-gate|GATED|capstone)(?![\w-]|\.\w)/i;
 const AMBIGUOUS_GATE_TOKENS = /(?<![\w-])(approval|approved|merged)(?![\w-])/i;
 // Composition prose ("the stages merged back into one step", "the approved design") uses these
 // words with no gate in play, so the ambiguous tokens only warn when the same sentence also

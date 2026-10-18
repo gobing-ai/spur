@@ -4416,6 +4416,20 @@ test('1112 R2: cue-bearing gate prose still warns', async () => {
     expect(findings.length).toBeGreaterThanOrEqual(1);
 });
 
+// Workflow tasks cite engine action kinds (`hitl.confirm`, `hitl.select`); a dotted identifier
+// names an action, not a gate, and must not warn (feature D66 tasks 1248/1250 tripped this).
+test('gate-language: dotted workflow action kinds stay silent', async () => {
+    const findings = await gateLanguageFindingsForBody(
+        'The `hitl.confirm` action received an empty answer. Replace kind: hitl.select with decide.',
+    );
+    expect(findings).toHaveLength(0);
+});
+
+test('gate-language: a bare HITL gate still warns', async () => {
+    const findings = await gateLanguageFindingsForBody('Stop at the HITL step. Then a hitl. Then HITL.confirm later.');
+    expect(findings.length).toBeGreaterThanOrEqual(1);
+});
+
 // ── 0700 R2: stale non-passing Review beside PASS Testing on a closed task ──
 
 const closedTaskWith = async (reviewBody: string, status = 'done') => {
