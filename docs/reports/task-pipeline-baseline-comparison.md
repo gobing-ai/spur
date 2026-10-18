@@ -4,16 +4,35 @@ Measurement record for feature D65 P2 exit. Read with
 [workflow-execution-foundation](../../docs/design/workflow-execution-foundation.md) §1 (the issue
 this measures) and ADR-140 (the rewrite whose benefit is being checked).
 
-- **Status: partial.** The baseline is complete and reproducible. The rewritten pipeline produced
-  **one** run that got as far as `review` — implement, two gate visits (FAIL, then PASS after
-  remediation) and the review hop are measured; it was still in `remediate` visit 2 at the final
-  observation (2026-10-17T22:34:30Z), so it never reached `done`. Runs 2 and 3 were not started; their
-  exact commands are in §5.
-- **Cutoff:** 2026-10-17T22:34:30Z — the final observation. Stage figures captured earlier (the baseline
-  roll-up at 22:08Z, attempt D's parent gate at 22:23Z) are labelled with their own instants in §4.
+- **Status: partial — 0 of 3 runs completed.** The baseline is complete and reproducible. Three more
+  rewritten-pipeline runs were launched in this session (M1–M3, §4.8–§4.10) against `7b0298dda`, the commit
+  that was supposed to unblock certification. **None reached `done`, and the two blockers are not the two
+  that were fixed:**
+  1. **The review answer contract is still unmatched (§4.8, finding 13).** `7b0298dda` widened the accepted
+     *table header* vocabulary, but the live `/sp:dev-review --auto` answer carries neither a bare
+     `Verdict: PASS` line (it writes `**Verdict: PASS** — 0 P1, 0 P2, …`) nor a per-requirement table (it
+     writes a run-level `| WBS | Verdict | P1 | P2 |` table). `spur task verdict --from-answer` on the
+     captured answer exits 1 with `verdict-missing` plus `req-missing` for R1/R2/R3 and writes no
+     `1243-verdict.json`. This is measured on the engine's own captured answer this time, not on a
+     reconstruction.
+  2. **The `claude` account hit its session limit mid-session (§4.9, §4.10).** M1's second repair hop died
+     with exit code 3 (`You've hit your session limit · resets 8pm (America/Los_Angeles)`), and M2 and M3 —
+     fresh probes, one launch each — died the same way inside `implement` after 4.6 s and 5.8 s. No further
+     agent work was possible in this session with the approved executor.
+- **What is missing:** runs that reach `done` (§5), and with them any per-stage mean for the rewrite. What
+  the data does support: gate cost and receipt reuse (seven gate visits across the sessions, five of them
+  full runs, one of those a full re-run after a repair hop), the repair hop's real cost, and the fact that
+  the review certification blocks `done` for a second, differently-shaped reason than the one that was
+  fixed.
+- **Cutoff:** 2026-10-17T23:37:04.738Z — M3's `implement` failure (the last agent dispatch this session
+  could make). Every figure carries its own instant in §4.
 - **Trees:** `/tmp/d65-measure-a7c2` (attempts A–C) and `/tmp/d65-measure-c3f1` (attempt D), both
   `git clone --local` of the D65 worktree at commit `60faec03e`
-  (`refactor(workflow)!: rewrite task-pipeline as seven states without the proof chain (1239)`).
+  (`refactor(workflow)!: rewrite task-pipeline as seven states without the proof chain (1239)`);
+  `/tmp/d65-m2` (run R1), a `git clone --local` at `2fb9fd960`
+  (`fix(app): split a multi-token spurBin before spawning the admission check (1240)`); and `/tmp/d65-m3`
+  (runs M1–M3), a `git clone --local` at `7b0298dda` (`fix(verdict): accept the review report's
+  Item/State/Evidence table (1240)`).
   Nothing in this report was produced inside the D65 worktree's own corpus.
 
 Every figure below names how it was produced. A figure that could not be obtained is `n/a` with the
@@ -69,7 +88,8 @@ sufficient for cross-agent *aggregates*, not for per-stage attribution).
 
 ### 1.3 Rewritten pipeline runs
 
-Scratch clone, real subprocess executor, engine trace as the timing source:
+Scratch clone, real subprocess executor: the run's own action attempts are the timing source (not
+`--trace-file`, which the diff-scope guard rejects — finding 5):
 
 ```bash
 git clone --local /Users/robin/xprojects/spur-new-runall-d65-73c2 /tmp/d65-measure-a7c2
@@ -79,8 +99,10 @@ cd /tmp/d65-measure-a7c2
 /Users/robin/.bun/bin/bun run apps/cli/src/index.ts workflow run \
   config/workflows/task-pipeline.yaml \
   --vars '{"wbs":"1243","agent":"claude","profile":"auto"}' \
-  --async --trace-file --json
+  --async --json
 ```
+
+Run R1 (§4.6) used the same sequence against `2fb9fd960` in `/tmp/d65-m2`.
 
 Per-stage time comes from the engine's own projection, which is the measurement ADR-140 item 1
 claims:
@@ -89,17 +111,39 @@ claims:
 spur workflow progress <runId> --json     # states[].actions[].attempts[].{startedAt,completedAt,durationMs}
 ```
 
+Read the **attempts**, not the state rows: the state row repeats the sum over every visit (§6.10).
+
 That is engine-measured action time — no host transcript, no driver bookkeeping. The host-session
 `spur workflow summary --progress <file> --markdown` render (which since 1237 also prints gate time)
 needs a `spur workflow progress <runId> --json` file as input; for a subprocess-executor run there is
 no host transcript whose overhead row could be computed, so the **driver-overhead row is `n/a` by
 construction for these runs** and engine action time is the comparable quantity.
 
-Probe task: `1243` — "D65 measurement probe: one-line architecture doc note", created inside the
-clone only (`spur task create … --skip-ready`, then Requirements/AC via
+Probe task for attempts B–D: `1243` — "D65 measurement probe: one-line architecture doc note", created
+inside the clone only (`spur task create … --skip-ready`, then Requirements/AC via
 `spur task update 1243 --section`, then `spur task update 1243 todo`). Two requirements, one AC, one
-file (`docs/03_ARCHITECTURE.md`), chosen so the implement hop is short and the gate is the dominant
-cost. It exists only in `/tmp/d65-measure-a7c2/docs/tasks5/1243_*.md`; the D65 corpus is untouched.
+file (`docs/03_ARCHITECTURE.md`). It exists only in the scratch clones' `docs/tasks5/`; the D65 corpus is
+touched only by this report.
+
+Probe task for run R1 (§4.6): `1243` again, recreated in `/tmp/d65-m2` as a **code** edit — one exported
+helper `nonEmptyLines` in `packages/app/src/workflow/utils.ts` (+7) with its test
+(`packages/app/tests/workflow/utils.test.ts`, +16/−1). A docs-only probe (the earlier session's) exercises
+the empty-implement admission, not the implement path; this one does not. Tasks `1244` and `1245` of the
+same shape are pending in that clone for runs 2 and 3.
+
+This session (runs M1–M3) used a **fresh** clone at `7b0298dda` — `/tmp/d65-m3`, `git clone --local`,
+`bun install --frozen-lockfile --ignore-scripts` (2354 packages, 1.6 s) and `bun run bundle:config` (exit 0)
+— and three **code** probes, each created inside that clone only, one launch per probe, sequential:
+
+| Probe | WBS | Edit | Test |
+| --- | --- | --- | --- |
+| M1 | `1243` | `nonEmptyLines` exported from `packages/app/src/workflow/utils.ts` (+7) | `packages/app/tests/workflow/utils.test.ts` (+16/−1) |
+| M2 | `1244` | `isRfc3339DateOnly` exported from `packages/config/src/rfc3339.ts` | `packages/config/tests/rfc3339-date-only.test.ts` (new) |
+| M3 | `1245` | `pluralizeCount` in a new `packages/app/src/workflow/pluralize.ts` | `packages/app/tests/workflow/pluralize.test.ts` (new) |
+
+Each was created with `spur task create … --skip-ready`, given Requirements/AC/Design/Plan through
+`spur task update <wbs> --section`, and moved to `todo` with `spur task update <wbs> todo --no-lifecycle`.
+They exist only in `/tmp/d65-m3/docs/tasks5/`. No `--trace-file` was passed to any launch (finding 5).
 
 ## 2. Baseline per-stage totals (33 run summaries)
 
@@ -171,9 +215,13 @@ their wall-time columns are unusable and are not read as evidence of speed.
 
 ## 4. Rewritten-pipeline runs
 
-Four launches were made against the same probe task `1243`; three were stopped by the engine's own
-guards before producing a usable run, and those failures are findings in their own right (§6). The
-fourth produced the implement, gate and review timings in §4.4.
+Eight launches were made across three sessions. Four (A–D) are the first session's, recorded in §4.1–§4.5
+because findings 5–7 depend on them. The fifth (R1, §4.6) is the second session's, run against the fixed
+tree `2fb9fd960` and the only one there measured far enough to compare a revisited gate. The last three
+(M1–M3, §4.8–§4.10) are this session's, run against `7b0298dda` — the commit meant to unblock certification —
+with a real code probe each and no `--trace-file`. **None reached `done`,** and the two reasons are not the
+two the fixes addressed: the review answer contract is still unmatched, in a different way (§4.8, finding
+13), and the `claude` account ran out of session quota (§4.9–§4.10).
 
 ### 4.1 Attempt A — `agent: codex` (discarded, no timing)
 
@@ -239,7 +287,7 @@ Run log: `agent.run 'implement' (claude) exited 0 but produced zero non-corpus f
 verification-only admission failed — \`/Users/robin/.bun/bin/bun /private/tmp/d65-measure-a7c2/apps/cli/src/index.ts
 task check 1243\` exit null: (no output)`.
 
-Two causes stack here, and **neither is "`docs/**` is corpus"** — checked against the code:
+Two causes stacked here, and **neither is "`docs/**` is corpus"** — checked against the code:
 
 1. **The change count is hop-scoped, not tree-scoped.** The empty-implement guard diffs against a
    working-tree snapshot taken **at hop entry**
@@ -250,56 +298,40 @@ Two causes stack here, and **neither is "`docs/**` is corpus"** — checked agai
    features dir only ([workflow-engine-factory.ts:85-89](../../packages/app/src/services/workflow-engine-factory.ts#L85)) —
    `docs/03_ARCHITECTURE.md` is a non-corpus file, which is exactly why attempt B's scope guard approved it
    and why attempt C's precheck warned about it.
-2. **The verification-only admission cannot spawn its own check.** It would have let the empty hop
-   through (a task whose corpus is already clean may legitimately certify instead of implement), but
-   `taskCheckClean` ([agent-run.ts:1909](../../packages/app/src/workflow/actions/agent-run.ts#L1909)) passes
-   `vars.spurBin` as a process `command`, and in this project `spurBin` resolves to a two-word command
-   (`/Users/robin/.bun/bin/bun <abs path>/apps/cli/src/index.ts`). A `NodeProcessExecutor` spawn of a
-   multi-word command string yields `exit null` with no stdout — the recorded detail — so the admission
-   read as a failure. The same `task check 1243 --json` run by hand in that clone exits **0** with
-   `"pass": true` (two warnings: empty Design, missing feature_id). So the admission's evidence is the
-   defect, not the task's state.
+2. **The verification-only admission could not spawn its own check** — the defect fixed in `2fb9fd960`
+   (finding 7). `taskCheckClean` passed `vars.spurBin` as a process `command`, and a multi-word
+   `spurBin` (`bun <abs>/apps/cli/src/index.ts`) spawned as `exit null`. The same `task check 1243 --json`
+   run by hand in that clone exits **0** with `"pass": true`.
 
-Measurement consequences: a re-run needs a clean tree (the fresh clone in §4.4), and the empty-implement
-admission is unusable wherever the CLI is invoked as `bun <script>` rather than a linked `spur` binary.
+### 4.4 Attempt D — `agent: claude`, fresh clone, clean tree (previous session)
 
-### 4.4 Attempt D — `agent: claude`, fresh clone, clean tree (the comparable run)
-
-A second scratch clone (`/tmp/d65-measure-c3f1`, same commit, same install/bundle sequence, probe task
-`1243` recreated) guarantees a clean tree without any reset in the first clone. Run
-`492a9ea5-656c-40cd-8a58-68794ee5b97b`.
+A second scratch clone (`/tmp/d65-measure-c3f1`, same commit, probe 1243 recreated) guaranteed a clean
+tree without any reset in the first clone. Run `492a9ea5-656c-40cd-8a58-68794ee5b97b`.
 
 | Stage | Engine-measured time | Outcome |
 | --- | --- | --- |
 | precheck (visit 1) | 311 ms window, 59 ms of executed actions | passed |
 | implement (visit 1) | **129 477 ms** (22:17:03.841Z → 22:19:13.319Z) — real `claude` subprocess hop | passed |
-| gate (visit 1) | **252 494 ms** (receipt `durationMs`; `gateRuntimeMs` 252 289, `queueWaitMs` 0), completed 22:23:29.389Z | **FAIL** (`.spur/run/<runId>-gate.status` = `FAIL`) |
-| remediate (both visits) | **88 015 ms summed over the two visits** by the projection; the per-visit split is not recoverable (§6.10). Visit 1 sat between gate visit 1 (22:23:29Z) and gate visit 2 (PASS at 22:28:46Z) — real `claude` fix hops | passed (both) |
-| gate (visit 2) | **226 477 ms** (receipt `durationMs`; `gateRuntimeMs` 208 471, `queueWaitMs` 0), completed 22:28:45.971Z | **PASS** |
-| review (visit 1) | **189 603 ms** (22:28:46.242Z → 22:31:55.850Z) — real `claude` review hop | passed, routed back into `remediate` |
-| remediate (visit 2) | running at the final observation | — |
+| gate (visit 1) | **252 494 ms** (receipt `durationMs`; `gateRuntimeMs` 252 289, `queueWaitMs` 0) | **FAIL** (`.spur/run/1243-gate.status` = `FAIL`) |
+| remediate (both visits) | **88 015 ms summed over the two visits** by the projection; the per-visit split is not recoverable from the state rows (§4.7) | passed (both) |
+| gate (visit 2) | **226 477 ms** (receipt `durationMs`; `gateRuntimeMs` 208 471, `queueWaitMs` 0) | **PASS** |
+| review (visit 1) | **189 603 ms** — real `claude` review hop | passed as a hop, routed into `remediate` |
 | done | `n/a` — not reached | — |
-| run wall clock at final observation | 17.6 min, still `running` | — |
+| run wall clock at final observation (22:34:30Z) | 17.6 min, still `running` in `remediate` visit 2 | — |
 
-The gate failure is **not** the probe's change: the project gate ran 11 510 tests in 231.55 s with
+The gate failure was not the probe's change: the project gate ran 11 510 tests in 231.55 s with
 `1 fail` — `(fail) invocation execution context (1215) > the default runner keeps process cwd/env
 when the context is omitted` (`.spur/run/1243-test-gate.log:49`). That test is environment-sensitive
-(cwd/env of the runner) and this clone runs from `/tmp`; attribution to the clone environment is an
-**inference**, not a measurement — the exact reason it fails there is not established here. The gate
-time itself is unaffected by that attribution: 252 s for the full project gate on this tree, then 226 s
-for the recheck after remediation.
+(cwd/env of the runner) and this clone ran from `/tmp`; attribution to the clone environment is an
+**inference**, not a measurement. Finding: the same test **passes** in this session's clone when the
+engine runs from the physical path (§4.6), which is why R1's first gate visit was green.
 
 The `failure-class` decision that routed the FAIL into `remediate` recorded `value: "fix"`,
-`confidence: 0.02`, `confidenceLevel: "LOW"`, `degraded: true`, `reason: "low-confidence"`,
-`source: "default"` (`.spur/run/1243-failure-class.decision`) — i.e. the deterministic classifier
-degraded to its default and the pipeline spent a full 88 s fix hop on a test the probe could not have
-broken. That is a routing observation, not a timing one.
+`confidence: 0.02`, `confidenceLevel: "LOW"`, `degraded: true`, `source: "default"` — the
+deterministic classifier degraded to its default and the pipeline spent a full fix hop on a test the
+probe could not have broken.
 
-**Run state at this report's final observation is stated in §4.5; anything not listed there is `n/a`.**
-
-### 4.5 Final observation (2026-10-17T22:34:30Z)
-
-Run `492a9ea5-656c-40cd-8a58-68794ee5b97b` — `running`, current state `remediate` (visit 2).
+### 4.5 Attempt D — final observation (2026-10-17T22:34:30Z)
 
 | Stage | Time |
 | --- | --- |
@@ -310,36 +342,291 @@ Run `492a9ea5-656c-40cd-8a58-68794ee5b97b` — `running`, current state `remedia
 | gate visit 2 (PASS) | 226.5 s |
 | review visit 1 | 189.6 s |
 
-Sum of the completed stages above: 886 s ≈ **14.8 min** of engine/agent work inside a 17.6 min run wall
-clock at the cutoff; the difference is the idle gap between gate visit 1's end and the next action
-start plus the unstarted visit-2 tail. **The run did not reach `done` inside this session's budget**,
-so it is not a completed pipeline run; `spur workflow progress 492a9ea5-656c-40cd-8a58-68794ee5b97b --json`
-in `/tmp/d65-measure-c3f1` is the authority if the reader needs the settled numbers.
+Sum of the completed stages: 886 s ≈ **14.8 min** of engine/agent work inside a 17.6 min run wall
+clock at the cutoff; the remainder is idle gap plus the unstarted tail. The run was still `running`
+when the earlier session ended.
 
-
-## 5. Unfinished: runs 2 and 3
-
-Same scratch clone, same method; pick two more tasks from the clone's corpus (the D65 feature's own
-`todo` tasks 1241/1242 are available there and are the honest cross-size sample; a synthetic probe
-like 1243 is the cheap one):
+### 4.6 Run R1 — `agent: claude`, fresh clone at `2fb9fd960` (second session)
 
 ```bash
-cd /tmp/d65-measure-c3f1            # clean clone; see §4.4
-S="/Users/robin/.bun/bin/bun run apps/cli/src/index.ts"
-
-$S workflow run config/workflows/task-pipeline.yaml \
-  --vars '{"wbs":"1241","agent":"claude","profile":"auto"}' --async --json
-$S workflow progress <runId2> --json > /tmp/d65-run2-progress.json   # stage table
-$S workflow summary --progress /tmp/d65-run2-progress.json --markdown  # host-transcript render; n/a rows for a subprocess run
-
-$S workflow run config/workflows/task-pipeline.yaml \
-  --vars '{"wbs":"1242","agent":"claude","profile":"auto"}' --async --json
-$S workflow progress <runId3> --json > /tmp/d65-run3-progress.json
+git clone --local /Users/robin/xprojects/spur-new-runall-d65-73c2 /tmp/d65-m2       # HEAD 2fb9fd960
+cd /tmp/d65-m2                                                                       # physical /private/tmp path
+/Users/robin/.bun/bin/bun install --frozen-lockfile --ignore-scripts                # 2354 packages, 1.7 s
+/Users/robin/.bun/bin/bun run bundle:config                                         # exit 0
+/Users/robin/.bun/bin/bun run apps/cli/src/index.ts workflow run \
+  config/workflows/task-pipeline.yaml \
+  --vars '{"wbs":"1243","agent":"claude","profile":"auto"}' --async --json          # no --trace-file
 ```
 
-Finish criterion for the task: three completed runs. Feed each run's `workflow progress --json`
-through §1.3's per-state summation and add its row to §4's table beside §2's baseline. Keep the
-cutoff/`n/a` discipline: a run that has not reached `gate` reports `n/a` for gate time.
+Run `8bf24b93-9c78-4673-9ba5-078706d5f849`, definition v9, digest `sha256:21ccf260…540618`, executor
+`claude` as a real subprocess. Probe: **code** edit, not a docs note —
+`packages/app/src/workflow/utils.ts` +7 (one exported helper `nonEmptyLines`) and
+`packages/app/tests/workflow/utils.test.ts` +16/−1 (its test). That is the smallest real-change probe
+that exercises the `implement` path; the earlier session's docs-only probe exercised the
+empty-implement admission instead.
+
+| Stage (visit) | Engine-measured action ms | Window (UTC) | Outcome |
+| --- | --- | --- | --- |
+| precheck (1) | 204 ms | 22:53:40.960 → 22:53:42.051 | passed |
+| implement (1) | **159 069 ms** | 22:53:42.952 → 22:56:22.024 | passed (agent exit 0, 2 files) |
+| gate (1) | **236 305 ms** | 22:56:24.746 → 23:00:21.051 | **PASS** — receipt `tier: full`, `gateRuntimeMs` 235 868, `queueWaitMs` 0, check 236 065 ms, 11 514 tests / 724 files in 215.81 s |
+| review (1) | **116 758 ms** (hop 110 163 + verdict 348 + decide 6 245 + fold 2) | 23:00:21.321 → 23:02:18.092 | hop passed; **certification FAIL** (`1243-review.status` = `FAIL`) |
+| remediate (1) | **53 160 ms** | 23:02:18.628 → 23:03:11.789 | passed |
+| gate (2) | **516 ms** | 23:03:12.883 → 23:03:13.399 | **PASS by receipt reuse** — tree hash unchanged, no second gate run |
+| review (2) | **105 129 ms** (hop 99 283 + verdict 244 + decide 5 602 + fold 0) | 23:03:13.509 → 23:04:58.651 | hop passed; **certification FAIL** again |
+| remediate (2) | **115 441 ms** | 23:04:59.048 → 23:06:54.490 | passed |
+| gate (3) | **1 959 ms** | 23:06:56.888 → 23:06:58.847 | **PASS by receipt reuse** |
+| review (3) | started 23:06:58.961, killed at 23:07:44 | — | `n/a` (operator cancel) |
+| done | `n/a` — never reached | — | — |
+| driver overhead | `n/a` — subprocess executor, no host transcript (§6.3) | — | — |
+| run wall clock | **844 s = 14.1 min**, terminal status `failed` (cancelled, `killed: true`) | 22:53:40 → 23:07:44 | never reached `done` |
+
+Sum of measured actions across the whole run: 204 + 159 069 + 238 780 + 221 887 + 168 600 =
+**788 540 ms ≈ 13.1 min** inside a 14.1 min wall clock; the ~0.9 min remainder is transition/idle gap.
+
+Three observations worth keeping, each with its producer:
+
+1. **The gate receipt is reused when the tree hash holds.** Gate visit 2 cost 516 ms and visit 3 cost
+   1 959 ms against 236 305 ms for visit 1 — no re-run happened (`.spur/run/1243-gate-visits` = 3,
+   receipt unchanged at `completedAt` 23:00:21.035Z, `inputDigest` `93d27fa…`). This is ADR-140 item
+   R11 working, and it is the one place where the rewrite is unambiguous rather than inferred: the
+   baseline charged every recheck as a full re-run.
+2. **The run cost more than the implementation it measured.** implement 159 s against three gate
+   visits + two remediate hops; but the second and third gate visits were free, so the extra cost is
+   the review→remediate loop (finding 12), not the gate.
+3. **The review hop and its certification are separate outcomes, and only the hop passed.** Both
+   review visits produced a `Verdict: PASS` review with no P1–P3 findings
+   (`.spur/run/1243-review-section.md`) and still folded to `FAIL` at
+   `.spur/run/1243-review.status`, because `spur task verdict --from-answer` exited 1
+   (`.spur/run/<runId>-review-verdict.status` = `FAIL`) and wrote no `1243-verdict.json`.
+
+The run was cancelled at 14.1 min: with the review verdict failing deterministically, the graph could
+only cycle `review → remediate → gate → review` (bounded by `iterationBound: 20` and the fix-attempt
+counter) and every cycle costs ~6 min. Runs 2 and 3 were not launched — the same wall, at the same
+cost, with 15 min of session budget left. Their probe tasks (`1244` `isRfc3339DateOnly` in
+`packages/config/src/rfc3339.ts`, `1245` `pluralizeCount` in a new `packages/app/src/workflow/pluralize.ts`)
+exist in `/tmp/d65-m2` and are `todo`, ready for the next session.
+
+### 4.7 Why R1's per-visit numbers are honest and attempt D's were not
+
+`spur workflow progress <runId> --json` reports one row per state with a `visit` field, but that row's
+`s.visit` does not index the attempts: the state row repeats **the sum over every visit** and the
+first visit's start. The per-visit truth is in `states[].actions[].attempts[]`, where each attempt
+carries its own `startedAt`/`completedAt`/`durationMs`. For R1 the gate state row reads 238 780 ms
+(236 305 + 516 + 1 959) and the review row 221 887 ms across three visits; summing the state rows
+without de-duplicating would triple-count them. The table in §4.6 is built from the attempts, which is
+why it can split gate visit 1 from visits 2 and 3 at all. The earlier session's §4.5 could not, because
+it read the state rows.
+
+### 4.8 Run M1 — `agent: claude`, fresh clone at `7b0298dda` (probe 1243, code)
+
+```bash
+git clone --local /Users/robin/xprojects/spur-new-runall-d65-73c2 /tmp/d65-m3   # HEAD 7b0298dda
+cd /tmp/d65-m3
+/Users/robin/.bun/bin/bun install --frozen-lockfile --ignore-scripts           # 2354 packages, 1.63 s
+/Users/robin/.bun/bin/bun run bundle:config                                    # exit 0
+/Users/robin/.bun/bin/bun run apps/cli/src/index.ts workflow run \
+  config/workflows/task-pipeline.yaml \
+  --vars '{"wbs":"1243","agent":"claude","profile":"auto"}' --async --json     # no --trace-file
+```
+
+Run `82008861-9f35-4b58-8673-637430fe7e1f`, definition v9, digest `sha256:21ccf260…540618`, executor
+`claude` as a real subprocess. Probe: the `nonEmptyLines` code edit (§1.3).
+
+| Stage (visit) | Engine-measured action ms | Window (UTC) | Outcome |
+| --- | --- | --- | --- |
+| precheck (1) | 223 | 23:19:03.434 → 23:19:04.486 | passed |
+| implement (1) | **123 597** (projection; 126 720 from the trace — §4.8.4) | 23:19:05.578 → 23:21:09.176 | passed (agent exit 0, 2 files) |
+| gate (1) | **243 820** | 23:21:14.057 → 23:25:17.877 | **FAIL** — receipt `tier: full`, `gateRuntimeMs` 243 210, `queueWaitMs` 2, check `test` FAIL 243 468 ms, `inputDigest` `bfa00693…` |
+| remediate (1) | **99 587** (agent hop 99 586) | 23:25:18.460 → 23:26:58.046 | passed; edited `packages/app/tests/services/pr-review/pr-review.test.ts` (7 lines) |
+| gate (2) | **249 315** | 23:26:59.128 → 23:31:08.443 | **PASS** — receipt `gateRuntimeMs` 233 877, `queueWaitMs` 0, check `test` PASS 249 076 ms, `inputDigest` `a94e8e67…`, 11 520 pass / 0 fail |
+| review (1) | **212 549** (hop 206 059 + verdict gate 416 + decide 6 057 + 17) | 23:31:08.692 → 23:34:41.246 | hop passed; **certification FAIL** (`1243-review.status` = `FAIL`) |
+| remediate (2) | **11 099** (agent hop 11 098) | 23:34:41.581 → 23:34:52.680 | **failed** — agent exit code 3, `You've hit your session limit · resets 8pm (America/Los_Angeles)` |
+| done | `n/a` — never reached | — | — |
+| driver overhead | `n/a` — subprocess executor, no host transcript (§6.3) | — | — |
+| run wall clock | **949.2 s = 15.8 min**, terminal status `failed` | 23:19:03.434 → 23:34:52.683 | never reached `done` |
+
+Summed action time **940 190 ms ≈ 15.7 min** inside that 15.8 min wall clock: 223 + 123 597 + 243 820 +
+249 315 + 99 587 + 212 549 + 11 099. Every stage figure is `states[].actions[].attempts[].durationMs` from
+`workflow progress <runId> --json`; the gate receipts (and their `gateRuntimeMs`, `queueWaitMs`, `tier`)
+come from `.spur/run/1243-check-receipt.json`. The run was wall-to-wall hops — no idle gap worth splitting
+out.
+
+#### 4.8.1 Gate visit 1 failed on the same environment-sensitive test as attempt D
+
+The failing test name is recoverable from the repair hop, not the log: `.spur/run/1243-test-gate.log` is one
+path shared by every visit and visit 2 overwrote it (65 765 bytes, ending `11 520 pass / 0 fail`), so the
+FAIL detail is gone. The hop that followed changed exactly this:
+
+```diff
+     test('the default runner keeps process cwd/env when the context is omitted', () => {
+         const runner = createSpawnRunner();
+-        expect(runner(['/bin/sh', '-c', 'pwd']).stdout.trim()).toBe(realpathSync(process.cwd()));
++        expect(runner(['/bin/sh', '-c', 'pwd -P']).stdout.trim()).toBe(realpathSync(process.cwd()));
+```
+
+That is `invocation execution context (1215) > the default runner keeps process cwd/env when the context is
+omitted` — the test that failed attempt D's gate (§4.4) in a different `/tmp` clone. Two of two gates run
+from a `/tmp` clone have failed on it: the `/tmp → /private/tmp` symlink makes the shell builtin `pwd` echo
+the logical `$PWD` while the assertion compares a `realpath`. **Attribution to the clone environment remains
+an inference**, but it is now reproducible, and it costs a full 4 min gate re-run plus a ~100 s repair hop
+on every `/tmp`-hosted run.
+
+Two consequences worth naming:
+
+- **The repair hop edited a pre-existing project test, not the probe.** The probe's own files were green;
+  the hop's only change is the `pwd -P` pair above, outside probe 1243's declared surfaces (`utils.ts`,
+  `utils.test.ts`). The review flagged exactly that as a P3 ("R3 deviation undocumented"). A measurement
+  run cannot assume the repair hop is free of collateral edits.
+- **A changed tree costs a full gate.** Visit 2 ran 249 315 ms against visit 1's 243 820 ms — no receipt
+  reuse, because the hop changed `inputDigest` from `bfa00693…` to `a94e8e67…`. Receipt reuse (§4.6) holds
+  only while the tree hash does.
+
+#### 4.8.2 The review certification still fails — measured on the engine's own captured answer
+
+Unlike the second session's run (§4.6, whose `-review-answer.txt` was gone), this run's answer was still on
+disk. `.spur/run/82008861-9f35-4b58-8673-637430fe7e1f-review-answer.txt` begins:
+
+```text
+**Verdict: PASS** — 0 P1, 0 P2, 2 P3, 3 P4.
+
+| WBS | Verdict | P1 | P2 |
+| --- | --- | --- | --- |
+| 1243 | PASS | 0 | 0 |
+```
+
+`spur task verdict 1243 --from-answer` on that file, run by hand after the fact on the same tree:
+
+```json
+{
+  "wbs": "1243",
+  "lintFindings": [
+    { "line": 0, "rule": "verdict-missing", "message": "no `Verdict:` line (expected exactly one `Verdict: PASS|PARTIAL|FAIL` line)" },
+    { "line": 0, "rule": "req-missing", "message": "missing requirement row for \"R1\"" },
+    { "line": 0, "rule": "req-missing", "message": "missing requirement row for \"R2\"" },
+    { "line": 0, "rule": "req-missing", "message": "missing requirement row for \"R3\"" }
+  ]
+}
+```
+
+exit **1**, no `.spur/run/1243-verdict.json` written. Two distinct mismatches, both visible in the captured
+answer:
+
+1. **`verdict-missing`** — the parser matches exactly `/^\s*Verdict:\s*(\S+)\s*$/gim`
+   ([verify-answer-lint.ts:405](../../packages/app/src/services/verify-answer-lint.ts#L405)). The reviewer
+   writes the verdict **bolded and with a trailing summary** (`**Verdict: PASS** — 0 P1, 0 P2, 2 P3,
+   3 P4.`), which satisfies neither the anchors nor the leading `**`.
+2. **`req-missing` R1/R2/R3** — its table is a run-level `| WBS | Verdict | P1 | P2 |` table, not a
+   per-requirement traceability table. `7b0298dda` taught the parser that `Item | State` is a spelling of
+   `Req | Status`, but `wbs` is not an id-like first cell and the table has no per-requirement row and no
+   `Evidence` column, so no header vocabulary rescues it: **the answer the `--auto` review hop produces
+   contains no requirement rows to certify.** Widening the header vocabulary (`7b0298dda`) fixed the shape
+   the second session saw; it does not cover the shape a `--auto` review writes.
+
+#### 4.8.3 What the run measured, per stage
+
+| Quantity | Value | Producer |
+| --- | --- | --- |
+| full gate, visit 1 (FAIL) | 243.8 s action / 243.2 s `gateRuntimeMs` | `workflow progress` attempts + the FAIL `1243-check-receipt.json` (read before visit 2 overwrote it) |
+| full gate, visit 2 (PASS) | 249.3 s action / 233.9 s `gateRuntimeMs` / 249.1 s check | same, final receipt |
+| repair hop, visit 1 | 99.6 s | `workflow progress` attempts |
+| review hop | 206.1 s | `workflow progress` attempts |
+| review certification | 0.4 s — the lint itself is cheap; its FAIL is what costs the loop | `workflow progress` attempts |
+| implement | 123.6 s (projection) / 126.7 s (trace) | `workflow progress` attempts / `workflow trace` |
+| loop cost for a 2-file probe | 2 gate visits + 1 repair hop + 1 review visit = **805 s** | summed from the rows above |
+
+#### 4.8.4 One projection gap, stated with its evidence
+
+`workflow progress --json` records **three** `implement` attempts (4 ms + 123 227 ms + 366 ms = 123 597 ms);
+`workflow trace` records **five** `implement` actions, the last two `done 2739ms` and `done 384ms`. In the
+projection those two actions are `status: ambiguous` with `attempts: []` (the same shape `precheck` shows
+for its two unrecorded shells), so the projection under-reports `implement` by 3 123 ms (2.5 %). Read as:
+attempts are authoritative for what they contain, not exhaustive. Stage sums here name their producer for
+that reason.
+
+### 4.9 Run M2 — `agent: claude`, probe 1244 (failed at `implement`, agent quota)
+
+Run `8d0ac3ff-7aab-4d5c-b420-9b64ad073238`, launched 23:36:30.130Z on probe `1244` (`isRfc3339DateOnly` in
+`packages/config/src/rfc3339.ts` plus a new test).
+
+| Stage (visit) | Engine-measured action ms | Window (UTC) | Outcome |
+| --- | --- | --- | --- |
+| precheck (1) | 71 | 23:36:30.130 → 23:36:31.196 | passed |
+| implement (1) | 4 567 | 23:36:32.192 → 23:36:36.759 | **failed** — agent exit code 3 after 4 239 ms (`.spur/run/8d0ac3ff-…-implement-partial.md`) |
+| gate / review / done | `n/a` — never entered | — | — |
+| run wall clock | **6.6 s**, terminal status `failed` | 23:36:30.130 → 23:36:36.759 | — |
+
+Terminal reason, verbatim from the partial-work handoff:
+
+```text
+You've hit your session limit · resets 8pm (America/Los_Angeles)
+```
+
+The executor's stderr also reports `Ignoring 53 permissions.allow entries from .claude/settings.local.json:
+this workspace has not been trusted.` — a warning that did not decide the outcome (exit 3 is the quota path)
+and is recorded only so it is not mistaken for a pipeline defect.
+
+### 4.10 Run M3 — `agent: claude`, probe 1245 (failed at `implement`, agent quota)
+
+Run `b252fc11-86ae-4ebc-8dd7-2e55c6b48be8`, launched 23:36:58.970Z on probe `1245` (`pluralizeCount` in a
+new `packages/app/src/workflow/pluralize.ts` plus a new test).
+
+| Stage (visit) | Engine-measured action ms | Window (UTC) | Outcome |
+| --- | --- | --- | --- |
+| precheck (1) | 112 | 23:36:58.970 → 23:36:59.801 | passed |
+| implement (1) | 4 005 | 23:37:00.732 → 23:37:04.738 | **failed** — agent exit code 3 after 3 846 ms |
+| gate / review / done | `n/a` — never entered | — | — |
+| run wall clock | **5.8 s**, terminal status `failed` | 23:36:58.970 → 23:37:04.738 | — |
+
+Same terminal text as M2. M2 and M3 are therefore **not time measurements of the pipeline** — one dispatch
+each, measuring `precheck` (71 ms, 112 ms) plus the engine's own failure handling. They were launched because
+the instruction was one launch per probe and a quota failure is indistinguishable from a workflow failure
+until it is dispatched; M3 was the last launch, since two identical exit-3 dispatches establish an account
+limit rather than a task-specific cause.
+
+## 5. The rewrite beside the baseline, and what still blocks three completed runs
+
+The comparison the task asks for — three completed runs beside the 33-run baseline — **cannot be
+stated**: zero runs reached `done` in any of the three sessions. What is measurable is stated below with its
+producer; everything else is `n/a` with the reason.
+
+| Quantity | Baseline (33 summaries, §2) | Rewrite, attempt D + R1 (earlier sessions) | Rewrite, M1 (this session, `7b0298dda`) |
+| --- | --- | --- | --- |
+| runs that reached `done` | 29 of 33 summaries carry a `done` row | 0 | 0 (stopped at `review` certification, then agent quota) |
+| precheck | 0.4 min mean | 59 ms / 204 ms | 223 ms |
+| implement | 10.1 min mean (404 min over 40 visits) | 129.5 s / 159.1 s | 123.6 s (projection) / 126.7 s (trace) |
+| test / test-recheck (removed) | 37 min / 310 min | `n/a` — states do not exist | `n/a` — states do not exist |
+| gate visits | `n/a` — the baseline's gates are `test` + `test-recheck` runs, no visit dimension | 1 FAIL 252.5 s + 1 PASS 226.5 s (D); 1 PASS 236.3 s + 2 receipt reuses 0.5 s / 2.0 s (R1) | 1 FAIL 243.8 s + 1 PASS 249.3 s (both full runs; no reuse — the tree changed between them) |
+| remediate | `n/a` — baseline "remediation" is `test-fix` 147 min + `test-recheck` 310 min = 457 min | 88.0 s summed (D); 53.2 s + 115.4 s (R1) | 99.6 s (repair hop that turned the gate green) + an 11.1 s hop killed by the agent quota |
+| review | 216 min total, 5.3 min mean (41 visits) | 189.6 s (D); 116.8 s + 105.1 s (R1, both certification FAIL) | 206.1 s hop + 6.5 s certification apparatus, certification **FAIL** |
+| verify / triage / record / approve | 106 + 16 + 10 + 1 min | `n/a` — states removed, `review`/`done` own them | `n/a` — same |
+| done | 2 min / 29 runs | `n/a` — not reached | `n/a` — not reached |
+| driver overhead | 692 min (27.1 %) | `n/a` — subprocess executor, no host transcript (§6.3) | `n/a` — same reason |
+| run wall clock | 77.3 min mean | 17.6 min (D, incomplete) / 14.1 min (R1, cancelled) | 15.8 min, failed |
+
+M2 (probe `1244`) and M3 (probe `1245`) contribute no row: each spent 71 ms and 112 ms in `precheck` and
+died in `implement` after 4.6 s and 5.8 s on the account quota (§4.9, §4.10).
+
+Three things are genuinely comparable, and each is a single receipt or a single number:
+
+- **Full-gate time.** Two independent PASS receipts on this tree: 233.9 s `gateRuntimeMs` (M1 visit 2,
+  249.1 s of checks, 11 520 pass / 0 fail) and 235.9 s `gateRuntimeMs` (R1, 236 065 ms of checks,
+  11 514 tests). The baseline has no like-for-like figure: its `test` rows measured the inline driver's own
+  gate invocation, not `spur task gate`.
+- **Receipt reuse — and its limit.** Where the tree hash holds, a revisit costs 516 ms / 1 959 ms (R1) and
+  the gate is not re-run; where a repair hop changes the tree, the revisit costs a **full** 249.3 s (M1).
+  The baseline charged every `test-recheck` (310 min over 30 runs) as a fresh run.
+- **The repair loop is not free.** M1 spent 243.8 s (failed gate) + 99.6 s (repair hop) + 249.3 s (second
+  gate) + 206.1 s (review) = 799 s of pipeline work around a 123.6 s two-file implementation. The repair
+  loop, not the gate's first run, is where the run's time went.
+
+What would have produced the three completed runs is one fix outside this task's editable scope: the review
+answer the `--auto` review hop writes must be the answer `spur task verdict --from-answer` lints (finding
+13). No run in any session reached `done`, and the one that got furthest stopped at that single
+certification step; until it passes, no task can complete, so the time comparison this report exists to
+make cannot be finished. Recorded honestly: **the two commits this session was sent to verify did not
+produce a completed run** — `2fb9fd960` removed one failure mode that no later run re-entered (the
+admission's `exit null`), and `7b0298dda` widened a header vocabulary the live answer does not use.
 
 ## 6. Findings
 
@@ -380,53 +667,162 @@ cutoff/`n/a` discipline: a run that has not reached `gate` reports `n/a` for gat
    ([workflow-engine-factory.ts:85-89](../../packages/app/src/services/workflow-engine-factory.ts#L85)),
    so a docs-only task's edit *is* a counted non-corpus change — `docs/03_ARCHITECTURE.md` got attempt
    B past the same guard.
-7. **The verification-only admission cannot spawn its own `task check`.** `taskCheckClean`
-   ([agent-run.ts:1909](../../packages/app/src/workflow/actions/agent-run.ts#L1909)) calls
-   `NodeProcessExecutor.run({ command: spurBin, args: ['task','check',wbs,'--json'] })`, and where
-   `vars.spurBin` is a two-word command (`/Users/robin/.bun/bin/bun <abs>/apps/cli/src/index.ts`) the
-   spawn produces `exit null` with no stdout — the recorded detail. The same command run by hand in
-   that clone exits **0** with `"pass": true`. So an unlinked CLI invocation silently turns a passing
-   admission into a rejection, and the rejection text ("produced zero non-corpus file changes") names
-   the wrong cause.
-8. **No regression can be asserted from stage time yet.** No run reached `done` inside the observation
-   window; `implement` alone measured 129.5 s (D) / 138.5 s (B) / 104 s (C) on a one-sentence doc
-   probe, against a baseline implement mean of 10.1 min per run that includes multi-file code tasks —
-   not comparable, and not compared here. The one comparable quantity is gate time: 252.5 s (FAIL) +
-   226.5 s (PASS after remediation) on this tree, from the check receipts.
+7. **The verification-only admission cannot spawn its own `task check` — fixed at `2fb9fd960`, verified
+   by R1.** `taskCheckClean` ([agent-run.ts:1909](../../packages/app/src/workflow/actions/agent-run.ts#L1909))
+   used to call `NodeProcessExecutor.run({ command: spurBin, args: [...] })`, and where `vars.spurBin` is
+   a two-word command (`/Users/robin/.bun/bin/bun <abs>/apps/cli/src/index.ts`) the spawn produced
+   `exit null` with no stdout, turning a passing admission into a rejection whose text ("produced zero
+   non-corpus file changes") named the wrong cause. `2fb9fd960` splits `spurBin` through
+   `splitLaunchCommand` before the spawn. Run R1 was launched from the unlinked source CLI
+   (`bun <abs>/apps/cli/src/index.ts`) in a tree where that admission would have been reachable, and
+   never produced the `exit null` detail: its implement hop passed on its own diff. The regression is
+   therefore exercised, not merely avoided — but the *failure* path (an empty implement that needs the
+   admission) was not re-run, so the fix is verified only to the extent that the hop ran without it.
+8. **No regression can be asserted from stage time yet.** No run reached `done`. `implement` measured
+   159.1 s (R1, one-file code probe) and 129.5 s (D) / 138.5 s (B) / 104 s (C) on the docs probe, against
+   a baseline implement mean of 10.1 min per run that includes multi-file code tasks — not comparable, and
+   not compared. Two quantities are comparable and are stated in §5: full-gate time (236.3 s, from the
+   check receipt) and receipt reuse (516 ms and 1 959 ms for gate visits 2 and 3).
 9. **The rewrite's structural claim is visible, its time claim is not.** The definition is v9 with 8
-   states (`config/workflows/task-pipeline.yaml:25-33`); no `test`/`test-recheck`/`triage`/
-   `verify`/`record` rows exist to charge. Whether that converts into less wall time needs completed
-   runs (§5) — and the one run observed here spent ~7 min in `gate` (two visits) against 3.2 min in
-   `review` and 2.2 min in `implement`, so the gate, not the agent hops, dominated this probe.
-10. **`workflow progress` per-visit windows are not per-visit.** For a revisited state the projection
-    reports one window keyed by the *first* visit's start: `remediate` visit 1 and visit 2 print the
-    same `22:23:30.019Z → 22:31:56.168Z` window, and `gate` visit 1/2 both print the visit-1 start with
-    the summed action ms of both visits (479 480 ms = 252 768 + 226 712). Per-state summed action ms
-    and the check receipts are reliable; the window columns are not, so any stage table built from
-    them will mis-split a revisited stage. An observability defect in the measurement surface the
-    rewrite is supposed to provide.
-11. **The run needed a second remediation hop after a passed review.** `review` → `remediate` is a
-    legitimate route, but on a one-sentence docs task it means the certify-then-fix loop the baseline
-    charged as `test-fix`/`test-recheck` (457 min) still exists: it has moved into
-    `gate`/`remediate`, and each hop carries a full gate re-run (226 s). Not proof of a regression in
-    total work, and not claimed as one — but the rewrite renames the loop rather than removing it.
+   states (`config/workflows/task-pipeline.yaml:25-33`); no `test`/`test-recheck`/`triage`/`verify`/
+   `record` rows exist to charge. R1 spent 236.3 s in gate visit 1, 159.1 s in implement, 221.9 s in two
+   review visits and 168.6 s in two remediate hops — the gate dominated only until its receipt was reused,
+   after which visits 2 and 3 cost 2.5 s combined. Whether the loop those remediate hops belong to can be
+   removed is finding 12, not a timing question.
+10. **`workflow progress` state rows are not per-visit — the attempts are.** Each `states[]` row carries a
+    `visit` field that does not index anything: the row repeats the **sum over every visit** of that state
+    and the *first* visit's window. In R1 the `gate` row reads 238 780 ms (= 236 305 + 516 + 1 959) and the
+    `review` row 221 887 ms across three visits, while `states[].actions[].attempts[]` holds one attempt per
+    visit with its own `startedAt`/`completedAt`/`durationMs` (gate: `23:12.883→23:03:13.399`, 516 ms). The
+    earlier session's §4.5 read the state rows and consequently could not split attempt D's two gate visits;
+    §4.6 reads the attempts. Any stage table built from the state rows will triple-count a revisited state —
+    an observability defect in the measurement surface the rewrite is supposed to provide.
+11. **Review → remediate is a real edge, and it looped.** In R1 two review visits each produced a
+    `Verdict: PASS` review with no P1–P3 findings and still folded to `FAIL`, spending 53.2 s and 115.4 s
+    in remediate hops. The baseline charged the same certify-then-fix loop as `test-fix`/`test-recheck`
+    (457 min). The rewrite renames the loop; it does not remove it — and here it could not terminate
+    (finding 12).
+12. **The review answer the review hop produces cannot pass the review certification. This is what blocks
+    `done`.**
+    - **Observed, three times.** R1's `.spur/run/1243-review.status` = `FAIL` after review visits 1 and 2,
+      with `.spur/run/<runId>-review-verdict.status` = `FAIL` and **no** `.spur/run/1243-verdict.json`
+      written. Attempt D routed `review → remediate` the same way (§4.4). The review section the hop wrote
+      (`.spur/run/1243-review-section.md`) says `Verdict: PASS — no P1–P3 findings`, and the review-gate
+      residual check is clean (`spur task residual 1243 review-gate` → `blocking=0`, exit 0, run by hand
+      after the fact).
+    - **Mechanism, from the code.** The fold that writes the token
+      (`config/workflows/task-pipeline.yaml:662-670`) requires the typed verdict token PASS, the
+      verdict artifact's own `verdict: PASS`, and a clean residual gate. The verdict comes from
+      `spur task verdict --from-answer`, which lints the reviewer's answer
+      ([verify-answer-lint.ts](../../packages/app/src/services/verify-answer-lint.ts)). Its requirement
+      table is recognized only when the header is `| Req | Status | Evidence |` — "id-like first cell +
+      status column" ([verify-answer-lint.ts:354](../../packages/app/src/services/verify-answer-lint.ts#L354)) —
+      and its `Verdict:` line must be exactly one `Verdict: PASS|PARTIAL|FAIL` line
+      ([:56](../../packages/app/src/services/verify-answer-lint.ts#L56)). The reviewer emits
+      `| Item | State | Evidence |` rows (`| R1 — exported … | MET | packages/app/src/…:5-10 |`), which the
+      parser does not read as requirement rows. Re-running the lint by hand on the answer **reconstructed
+      from the recorded review section** reproduces exactly that, as four findings: no `Verdict:` line and
+      `missing requirement row for "R1" / "R2" / "R3"`, exit 1, no artifact.
+    - **Labelled honestly.** The engine's own lint output for the live answer is not recoverable — R1's
+      `-review-answer.txt` is gone from `.spur/run/` after the hop (the review receipt lists it as a written
+      file at 23:04:52Z). The header-shape mismatch is a reproduction on a reconstruction, not a capture of
+      the original; the bold `**Verdict: PASS**` in the recorded section is a second candidate for the
+      `verdict-missing` finding. Both point at the same defect: the review answer contract that
+      `/sp:dev-review` writes and the one `spur task verdict --from-answer` lints are not the same contract.
+    - **Consequence.** Every pipeline run on every task must pass `review` to reach `done`. Until the two
+      contracts agree — one edit in either `/sp:dev-review`'s answer shape or the lint's accepted tables —
+      the rewrite cannot complete a task, and no amount of pipeline measurement produces a run that
+      reaches `done`. This is the blocker for R1's "three completed runs"; it is outside this task's
+      editable scope (`config/workflows/**`, `plugins/sp/**`) and is reported, not fixed.
+      **Correction (this session, §4.8.2):** `7b0298dda` did land and does accept an `Item | State`
+      per-requirement table, but the live `--auto` review answer carries neither a bare `Verdict:` line nor
+      per-requirement rows, so this finding — and the block it describes — stands. See finding 13 for what
+      the answer actually contains and where the remaining edit belongs.
+
+13. **The review answer contract is still unmatched after `7b0298dda`, for two reasons the fix does not
+    reach.** Measured on the engine's own captured answer this time
+    (`.spur/run/82008861-…-review-answer.txt`, §4.8.2), not on a reconstruction: `spur task verdict 1243
+    --from-answer` exits **1** with `verdict-missing` plus `req-missing` for R1, R2 and R3, and writes no
+    `1243-verdict.json`, so `.spur/run/1243-review.status` folds to `FAIL` and `gate → remediate → gate →
+    review` repeats.
+    - **The verdict line is formatted, not bare.** `7b0298dda` left the parser's verdict matcher as
+      `/^\s*Verdict:\s*(\S+)\s*$/gim`
+      ([verify-answer-lint.ts:405](../../packages/app/src/services/verify-answer-lint.ts#L405)). The reviewer
+      writes `**Verdict: PASS** — 0 P1, 0 P2, 2 P3, 3 P4.` — bolded, with a trailing summary — which the
+      anchors reject. Widening the header table vocabulary could not help a line the parser never reaches.
+    - **The table is run-level, not requirement-level.** The answer's table is
+      `| WBS | Verdict | P1 | P2 |`. Its second cell `Verdict` *would* satisfy the header's status column
+      (`h1 === 'verdict'` is accepted, [verify-answer-lint.ts:358](../../packages/app/src/services/verify-answer-lint.ts#L358)),
+      but the first cell `wbs` fails the `idLike` test — it must be `req`/`requirement`/`r#`/`r`/`item` or
+      `r<digits>`. And even a header the parser accepted would yield no usable rows: each row's `cells[2]`
+      (`P1`) would be read as its evidence, and the row ids (`1243`) match no declared requirement. This is
+      therefore not a header-vocabulary problem at all, and the `Item | State` acceptance cannot fix it.
+    - **Where the fix belongs.** Either the `--auto` review answer must be written in the contract the lint
+      reads (a bare `Verdict: PASS` line plus a per-requirement `| Req | Status | Evidence |` table), which
+      is a `plugins/sp/**` change, or the lint must derive a verdict from the run-level table it actually
+      receives, which is a `packages/app/**` change. Both are outside the reach of a measurement run, and
+      both are one edit — but they are *different* edits than `7b0298dda`, which fixed a third shape (a
+      per-requirement table spelled `Item | State`).
+    - **The 2fb9fd960 fix was not re-exercised.** M1's `implement` hop passed on its own diff (2 files), so
+      the verification-only admission that `2fb9fd960` repaired was never entered — the same situation as
+      R1 (finding 7). It remains verified as "the hop runs without the defect", not as "the failure path is
+      fixed".
+14. **`workflow progress` under-reports a state whose actions ran.** In M1 the projection lists three
+    `implement` attempts (123 597 ms) while `workflow trace` lists five actions for the same state, the last
+    two `done 2739ms` and `done 384ms`; the projection shows those two as `status: ambiguous,
+    attempts: []` (as it does for two `precheck` shells). Any stage sum read from the projection alone is a
+    floor, not a total — 2.5 % low on M1's `implement`. This is the same observability class as finding 10
+    (state rows repeat the sum over visits) and compounds it: the projection is neither per-visit at the
+    state level nor complete at the attempt level.
+15. **A `/tmp` clone makes the project gate fail on an environment-sensitive test, and the repair hop edits
+    the test.** M1's gate visit 1 FAILed on `invocation execution context (1215) > the default runner keeps
+    process cwd/env when the context is omitted` — the same test that failed attempt D (§4.4) — and the
+    repair hop made it green by changing the test's `pwd` to `pwd -P`
+    (`packages/app/tests/services/pr-review/pr-review.test.ts`, §4.8.1), i.e. by editing a pre-existing
+    project test outside the probe's declared surfaces. Two implications for any future measurement:
+    scratch clones under `/tmp` (a symlink to `/private/tmp` on macOS) charge a failed 4 min gate plus a
+    ~100 s repair hop that writes code no task asked for; and the FAIL detail is lost because every gate
+    visit writes the same `.spur/run/<wbs>-test-gate.log` path, so a second visit overwrites the first
+    visit's failure. A clone created under the physical path (or a `realpath`-stable cwd) avoids the first
+    problem; nothing currently preserves a per-visit gate log.
 
 ## 7. Evidence gaps (named, not scored)
 
 - Rewritten-pipeline runs completed: **0**. Attempt A died on executor attestation (168 ms), B on the
-  diff-scope guard after a real 138.5 s implement, C on the empty-implement admission after 104 s, D
-  completed `precheck` + `implement` + two gates + `review` and was inside `remediate` visit 2 at the
-  final observation. The required three completed runs are **not** delivered.
-- Gate time: **measured** for attempt D only (252.5 s FAIL, 226.5 s PASS, from the check receipts) —
-  the one baseline-comparable figure this session produced; `n/a` for every other attempt.
-- Review time: **measured once** (189.6 s, attempt D).
+  diff-scope guard after a real 138.5 s implement, C on the empty-implement admission after 104 s, D ran
+  `precheck` + `implement` + two gates + `review` and was inside `remediate` visit 2 at its session's
+  cutoff, R1 ran `precheck` + `implement` + three gate visits + two review visits + two remediate hops
+  before it was cancelled inside the same loop (14.1 min), and this session's M1 ran `precheck` +
+  `implement` + two **full** gates + `review` + one repair hop before its second repair hop died on the
+  agent account's session limit (15.8 min, §4.8). M2 and M3 died in `implement` on the same limit after
+  4.6 s and 5.8 s (§4.9, §4.10). The required three completed runs are **not** delivered; the causes are
+  findings 13 (contract) and 15/§4.9 (environment + quota), not budget alone.
+- Gate time: **measured** four times — 252.5 s FAIL + 226.5 s PASS (attempt D), 236.3 s PASS (R1), and
+  243.8 s FAIL + 249.3 s PASS (M1, §4.8), all from `.spur/run/<wbs>-check-receipt.json`; plus two
+  receipt-reuse visits at 516 ms and 1 959 ms (R1) and two **full** revisit runs spaced by a repair hop
+  (M1, no reuse). `n/a` for A, B, C, M2, M3.
+- Gate failure detail: **not recoverable** for M1's visit 1 — every visit writes the same
+  `.spur/run/<wbs>-test-gate.log`, and visit 2 overwrote it; the failing test is identified from the repair
+  hop's diff instead (finding 15), which is weaker evidence than a log line.
+- Review time: **measured** three times — 189.6 s (D), 116.8 s / 105.1 s (R1), 206.1 s hop + 6.5 s
+  apparatus (M1).
+- Review certification: **FAIL on all four observed review visits**, artifact absent in every case. The
+  second session's lint text was a reconstruction (finding 12); this session's is a live capture of the
+  engine's own answer file (§4.8.2, finding 13). Numbers beyond that (which agent turns produced the
+  answer) are `n/a` — no per-hop transcript was harvested.
 - Driver overhead: **n/a** for every run — a subprocess-executor run has no host transcript (§6.3).
 - Baseline reconciliation for implement/driver overhead: **unobtainable** — the baseline's run list
   was not published (§2.1).
 - Per-stage cross-agent attribution: **unobtainable from `spur history`** — no stage dimension (§3).
-- Runs 2 and 3, and thus any per-stage mean for the rewrite: **not started** (§5).
+- Per-stage means for the rewrite: **n/a** — no completed run exists to average.
+- Probes 2 and 3 as time measurements: **not obtained**. M2 and M3 each spent one agent dispatch and were
+  killed by the account quota (`You've hit your session limit · resets 8pm (America/Los_Angeles)`), so they
+  measured `precheck` (71 ms, 112 ms) and the engine's failure handling — nothing about `implement`,
+  `gate`, or `review`. A rerun after the quota resets is the only way to obtain those rows.
 
-## 7.1 Timeline of what this session actually did
+## 7.1 Timeline of what the sessions actually did
+
+Earlier session (attempts A–D):
 
 | Instant (UTC) | Event |
 | --- | --- |
@@ -441,6 +837,43 @@ cutoff/`n/a` discipline: a run that has not reached `gate` reports `n/a` for gat
 | 22:17:02 | attempt D started on a clean tree |
 | 22:19:13 | attempt D `implement` passed (129.5 s) |
 | 22:19:16 | attempt D `gate` entered |
+
+Second session (run R1, at `2fb9fd960`):
+
+| Instant (UTC) | Event |
+| --- | --- |
+| 22:52:5x | `git clone --local` → `/tmp/d65-m2` at `2fb9fd960`; `bun install` 1.7 s; `bundle:config` |
+| 22:53:33 | code probe task 1243 created, sections written, moved to `todo`; 1244/1245 created as spares |
+| 22:53:40 | R1 started (`claude`, `--async`, no `--trace-file`) |
+| 22:55:15 | light gate receipt written FAIL (`rules:post` → `coverage-provenance-check`, transient: 1244/1245 landed mid-run) |
+| 22:56:22 | `implement` passed (159.1 s, 2 files) |
+| 23:00:21 | `gate` visit 1 PASS (236.3 s; 11 514 tests, 215.81 s) |
+| 23:02:18 | `review` visit 1 hop passed, certification FAIL → `remediate` |
+| 23:03:13 | `gate` visit 2 PASS by receipt reuse (516 ms) |
+| 23:04:58 | `review` visit 2 certification FAIL again |
+| 23:06:58 | `gate` visit 3 PASS by receipt reuse (1 959 ms) |
+| 23:07:44 | run cancelled (`spur workflow cancel`), terminal status `failed`, 14.1 min wall |
+
+Third session (runs M1–M3, at `7b0298dda`):
+
+| Instant (UTC) | Event |
+| --- | --- |
+| 23:18:35 | `git clone --local` → `/tmp/d65-m3` at `7b0298dda` |
+| 23:18:38 | `bun install --frozen-lockfile --ignore-scripts` 1.63 s; `bundle:config` exit 0 |
+| 23:19:00 | code probe task 1243 created via the CLI (sections written, moved to `todo`) |
+| 23:19:03 | M1 started (`claude`, `--async`, no `--trace-file`) |
+| 23:21:09 | `implement` passed (123.6 s, 2 files) |
+| 23:25:17 | `gate` visit 1 **FAIL** (243.8 s; `invocation execution context (1215)` — finding 15) |
+| 23:26:58 | repair hop 1 passed (99.6 s) — edited `pr-review.test.ts` `pwd` → `pwd -P` |
+| 23:31:08 | `gate` visit 2 **PASS** (249.3 s, full re-run; 11 520 pass / 0 fail) |
+| 23:34:41 | `review` hop passed (206.1 s); certification **FAIL** (verdict lint: `verdict-missing`, `req-missing` ×3) |
+| 23:34:52 | repair hop 2 failed — agent exit 3, `You've hit your session limit · resets 8pm (America/Los_Angeles)`; run terminal `failed`, 15.8 min wall |
+| 23:36:26 | code probe task 1244 created, sections written, moved to `todo` |
+| 23:36:30 | M2 started |
+| 23:36:36 | M2 failed in `implement` (4.6 s, agent exit 3, same quota text) |
+| 23:36:56 | code probe task 1245 created, sections written, moved to `todo` |
+| 23:36:58 | M3 started |
+| 23:37:04 | M3 failed in `implement` (5.8 s, agent exit 3, same quota text) — last dispatch of the session |
 
 ## 8. Reproduce
 
@@ -479,10 +912,33 @@ for (const { j, wallMs: w } of runs) {
 
 - Baseline summaries: `/Users/robin/xprojects/spur-new/.spur/run/*-summary.json` (44 files, main
   checkout, gitignored — not in this worktree, `.spur/run/` here holds verdicts only).
-- Run 1 progress: `/tmp/d65-run1-progress.json` (captured at the §4 cutoff).
+- Attempt D progress: `/tmp/d65-run1-progress.json` (captured at that session's cutoff).
+- Run R1 progress: `/tmp/d65-r1-progress.json` (during the run) and
+  `/tmp/d65-r1-progress-final.json` (state before the cancel) — the latter is the source of every R1
+  number in §4.6, read through `/tmp/d65-harvest.ts`, which sums `states[].actions[].attempts[].durationMs`
+  rather than the state rows (§6.10).
+- R1 launch output: `/tmp/d65-r1-launch.json`. R1 gate receipts: `.spur/run/1243-check-receipt.json`
+  (full, PASS, `inputDigest` `93d27fa…`), `.spur/run/1243-test-gate.log`, `.spur/run/1243-gate-visits` (= 3),
+  `.spur/run/1243-review-section.md`, `.spur/run/1243-review.status`, `.spur/run/8bf24b93-…-review-verdict.status`
+  and `.spur/run/8bf24b93-9c78-4673-9ba5-078706d5f849/receipts/review.json`.
 - History artifact: `/tmp/d65-analyze.json`.
-- Launch output: `/tmp/d65-run1-launch.json`, `/tmp/d65-run2-launch.json`, `/tmp/d65-run4-launch.json`,
-  `/tmp/d65-install{2}.log`, `/tmp/d65-bundle{2}.log`.
-- Two scratch clones at cutoff: `/tmp/d65-measure-a7c2` (attempts A–C; dirty tree, two failed runs,
-  one discarded `codex` run) and `/tmp/d65-measure-c3f1` (attempt D; clean tree, `gate` in flight).
-  Both are throwaway, so a later session may reuse or re-clone.
+- Launch output (earlier session): `/tmp/d65-run1-launch.json`, `/tmp/d65-run2-launch.json`,
+  `/tmp/d65-run4-launch.json`, `/tmp/d65-install{2}.log`, `/tmp/d65-bundle{2}.log`.
+- Four scratch clones: `/tmp/d65-measure-a7c2` (attempts A–C; dirty tree), `/tmp/d65-measure-c3f1`
+  (attempt D; left mid-run), `/tmp/d65-m2` (run R1 at `2fb9fd960`; probe tasks 1243–1245) and
+  `/tmp/d65-m3` (runs M1–M3 at `7b0298dda`; probe tasks 1243–1245, dirty tree carrying M1's two probe
+  files plus the repair hop's `pr-review.test.ts` edit). All are throwaway.
+- M1 progress: `/tmp/d65-m3-r1-progress.json` (mid-run) and `/tmp/d65-m3-r1-progress-final.json` (terminal) —
+  the source of every M1 figure in §4.8, read from `states[].actions[].attempts[].durationMs`. Trace text:
+  `/tmp/d65-m3-r1-trace.txt` (captured mid-run at 23:29Z, so it stops inside gate visit 2).
+- M2 / M3 progress: `/tmp/d65-m3-r2-progress.json`, `/tmp/d65-m3-r3-progress.json`.
+- M1 answer and lint: `.spur/run/82008861-9f35-4b58-8673-637430fe7e1f-review-answer.txt`,
+  `.spur/run/82008861-…-review-verdict.status` (= `FAIL`), `.spur/run/1243-review.status` (= `FAIL`),
+  `/tmp/d65-m3-verdict-lint.json` (the by-hand `spur task verdict 1243 --from-answer` run, exit 1).
+- M1 gate receipts: `.spur/run/1243-check-receipt.json` (final: PASS, `tier: full`, `inputDigest`
+  `a94e8e67…`). The FAIL receipt (`bfa00693…`, 23:25:17.870Z) was captured into this report's §4.8 table
+  before visit 2 overwrote the file; `.spur/run/1243-test-gate.log` now holds visit 2's `11 520 pass /
+  0 fail` plus the reviewer's appended section.
+- M1 / M2 / M3 failure handoffs: `.spur/run/82008861-…-remediate-partial.md`,
+  `.spur/run/8d0ac3ff-…-implement-partial.md`, `.spur/run/b252fc11-…-implement-partial.md` — each carries
+  the verbatim terminal text and the resolved invocation.

@@ -4,7 +4,7 @@ name: Measure the rewritten task-pipeline against the 32-run baseline
 status: testing
 template: feature-impl
 created_at: 2026-10-17T15:59:56.820Z
-updated_at: "2026-10-17T22:36:37.664Z"
+updated_at: "2026-10-18T00:09:06.571Z"
 feature_id: D65
 priority: P2
 tags:
@@ -65,7 +65,7 @@ R3 findings recorded there, each with the code path: the baseline's aggregates a
 
 | Requirement | Status | Evidence |
 |-------------|--------|----------|
-| R1 | UNMET | Zero of the required three runs reached `done`. The baseline half is complete and reproducible (33 qualifying close-written summaries, 2551 min vs the recorded 2550, driver-overhead rows 692 min / 27.1%), and one run of the rewritten pipeline was measured through `review` in a scratch clone at `60faec03e` (precheck 59 ms, implement 129.5 s, gate FAIL 252.5 s, remediate ~88 s, gate PASS 226.5 s, review 189.6 s) — it was still in `remediate` visit 2 at the cutoff and never completed. Runs 2 and 3 have exact reproduce commands in the report's §5 but were not started. The blockers are recorded defects, not time: a two-word `vars.spurBin` cannot be spawned as one command (`packages/app/src/workflow/actions/agent-run.ts:1926` passes it straight into `command`, so a passing admission returns `exit null`), and the empty-implement guard is hop-scoped (`agent-run.ts:1346`) so a surviving non-corpus edit from the previous hop reads as a no-op |
+| R1 | UNMET | Live measurement was attempted three times; **zero runs reached `done`**. Run 1 got furthest: precheck 223 ms, implement 123 597 ms, gate v1 FAIL (receipt `gateRuntimeMs` 243 210, `queueWaitMs` 2, `tier full`), repair 99 587 ms, gate v2 PASS (`gateRuntimeMs` 233 877, 11 520 tests), review 212 549 ms — then the repair hop died on the agent's own quota (`exit 3`, "You've hit your session limit · resets 8pm") and probes 2–3 failed in 4–5 s for the same reason. Two code defects found by the runs are fixed on this branch: `taskCheckClean` spawned a two-token `vars.spurBin` as one command (admission reported `exit null` for a passing check), and the review hop's live answer ends with a markdown-wrapped `**Verdict: PASS**` line plus a ` |
 | R2 | MET | `docs/reports/task-pipeline-baseline-comparison.md` exists with the method, per-stage baseline table, the rewritten pipeline's measured stages, gate time from the check receipts, a cross-agent table (`spur history analyze`), four attempt records, 11 findings and a reproduce section. Driver overhead is `n/a` for the measured runs with the reason stated (a subprocess-executor run has no host transcript) |
 | R3 | MET | The baseline is untuned and the report names every regression as a finding, including its own inference limits: the codex capability attestation (0706 R5), the `--trace-file` diff-scope collision (0487), the hop-scoped empty-implement guard, the `spurBin` spawn defect, and that `workflow progress` per-visit windows share the first visit's start so only receipts and summed action ms are reliable |
 
