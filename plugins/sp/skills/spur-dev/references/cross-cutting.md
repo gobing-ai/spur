@@ -239,13 +239,13 @@ Inline avoids process startup and preserves the host session's context and tools
 subprocess dispatch it provides **no isolated workspace**, **no per-stage subprocess action
 record**, **no independent timeout or abort boundary**, and **no tier-selected executor**: the
 executor is the current coding agent. Interactive pipelines retain a run log and session provenance
-through the inline driver; task pipelines additionally record a task run-link. If process isolation or an independently killable
+through the host executor; task pipelines additionally record a task run-link. If process isolation or an independently killable
 stage is required, select the subprocess path (`--agent auto` or `--agent <name>`).
 
 ## Shared startup contract (task 0814 R1/R3/R4/R6/R7/R8)
 
 The workflow-backed dev commands (`dev-run`, `dev-runall`, `dev-refineall`, `dev-verifyall`) share one
-startup order. The order is load-bearing and applies on both the inline driver and the subprocess
+startup order. The order is load-bearing and applies on both the host executor and the subprocess
 path. Runs that resolve a workflow definition publish the generated plan as their first action
 (1105 R1); skill-only operations (refine/verify batches with no nested workflow) display their owned
 procedure and do not fabricate a workflow YAML.
@@ -571,7 +571,7 @@ does not earn another full-gate run:
    final gate.
 3. **Red alone**, or a failure that is not a timeout → it is a real failure. Fix it.
 4. Give the test an explicit per-test timeout and a WHY comment (see
-   `plugins/sp/tests/inline-run-close-reason.test.ts:100-102`) as soon as EITHER (a) the same test
+   `plugins/sp/tests/helpers/cli-surface.test.ts:81`) as soon as EITHER (a) the same test
    load-flakes in two separate runs, OR (b) it times out once **outside the change scope** and then
    passes green alone on three consecutive isolated reruns. **Prefer making the test cheap or
    hermetic first** — a test that hashes the live checkout transitively, or writes a probe file into

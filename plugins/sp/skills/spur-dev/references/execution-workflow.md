@@ -101,7 +101,7 @@ cache-conservation discipline (`plugins/sp/skills/dogfood-testing/references/mon
 
 **`--worktree [<name>]` wraps Step 2, on either surface.** When `/sp:dev-run --mode full` carries
 [`--worktree`](flag-glossary.md#flag-worktree), create or adopt the worktree *before* launching the
-pipeline, `cd` into it (`spur workflow run` and the inline driver both resolve cwd from the process),
+pipeline, `cd` into it (`spur workflow run` and `spur workflow continue` both resolve cwd from the process),
 and merge-or-retain after the run reports. The lifecycle is
 [execution-batch.md § Worktree isolation](execution-batch.md#worktree-isolation---worktree-name)
 applied to a batch of one. Rejected with `--mode implement`.

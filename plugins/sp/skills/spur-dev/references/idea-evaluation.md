@@ -21,7 +21,7 @@ re-author the report.
 
 **Sidecar rule:** The enhanced idea does **not** overwrite `vars.idea`. Feature-create reads both
 the original idea and this report. The operator's verbatim ask of record is the run's
-`.spur/run/<run-id>-idea-input.md` (persisted by the pipeline `start` state / the inline driver
+`.spur/run/<run-id>-idea-input.md` (persisted by the pipeline `start` state on every executor surface
 before any processing); the `## Requirement inventory` items trace back to it.
 
 ## Template
