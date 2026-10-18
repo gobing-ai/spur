@@ -7,36 +7,48 @@ import { delimiter, dirname, join } from 'node:path';
 import { parse as parseYaml } from 'yaml';
 
 /**
- * 1097 R2–R4 E2E — the discovery onEnter rescue steps of the tracked idea-pipeline
+ * 1097 R2–R4 + 1250 R3 E2E — the discovery onEnter shells of the tracked idea-pipeline
  * workflow YAML are driven for real: the exact shell commands run via `sh -c` in a
  * temp project with the source CLI as $spurBin and the offline built-in `typesafe`
- * maker, then derived files and the recorded decision lifecycle (system_events)
- * are asserted. Rescue-only contract: a parse that succeeds must not call the
- * catalog at all (R4); a rescue failure leaves today's routing in place (file
- * stays `unknown` / `needs_design: true`).
+ * maker, then the derived files are asserted. Rescue-only contract: the awk derivation
+ * runs FIRST and a parse that succeeds is never overridden (R4); an unclassifiable
+ * report stays `unknown` and a corrupt needs_design JSON stays `{"needs_design": true}`.
+ *
+ * 1250 R3 moved the rescue itself from `spur decision run` shells to `kind: decide`
+ * actions, so the shell layer no longer records the decision lifecycle. This file keeps
+ * the real-shell coverage of the derivation→projection chain over the tracked YAML and
+ * asserts the rescue is typed; the action's row/event contract is owned by
+ * packages/app/tests/workflow/actions/decide*.test.ts and decision-gate-persistence.test.ts,
+ * and the projection matrix by packages/app/tests/workflow/idea-pipeline-routing.test.ts.
  */
 
 const REPO_ROOT = join(import.meta.dir, '..', '..', '..', '..');
 const WORKFLOW = join(REPO_ROOT, 'config', 'workflows', 'idea-pipeline.yaml');
 const CLI_ENTRY = join(import.meta.dir, '..', '..', 'src', 'index.ts');
 
-interface ShellAction {
+interface ActionDef {
     kind: string;
-    options: { command: string };
+    options?: Record<string, unknown>;
 }
 interface WorkflowDef {
-    states: { id: string; onEnter?: ShellAction[] }[];
+    states: { id: string; onEnter?: ActionDef[] }[];
 }
 
 const def = parseYaml(readFileSync(WORKFLOW, 'utf8')) as WorkflowDef;
-const shellCommands = (def.states.find((s) => s.id === 'discovery')?.onEnter ?? [])
+const discoveryOnEnter = def.states.find((s) => s.id === 'discovery')?.onEnter ?? [];
+const shellCommands = discoveryOnEnter
     .filter((a) => a.kind === 'shell')
-    .map((a) => a.options.command.trim());
-// [0] awk recommendation derivation (0769), [1] recommendation rescue (1097 R2),
-// [2] needs-design rescue (1097 R3).
-const REC_RESCUE = shellCommands[1];
-if (shellCommands.length !== 3 || REC_RESCUE === undefined) {
-    throw new Error('expected 3 discovery onEnter shell actions with the 1097 rescue steps');
+    .map((a) => String(a.options?.command ?? '').trim());
+// [0] awk recommendation derivation (0769), [1] recommendation projection (1250 R3),
+// [2] needs-design projection (1250 R3). The rescue itself is the `decide` action between them.
+const REC_PROJECTION = shellCommands[1];
+if (shellCommands.length !== 3 || REC_PROJECTION === undefined) {
+    throw new Error('expected 3 discovery onEnter shell actions (derivation + two projections)');
+}
+
+/** 1250 R3: the catalog decides that replaced the two `spur decision run` rescue shells. */
+function discoveryDecideIds(): string[] {
+    return discoveryOnEnter.filter((a) => a.kind === 'decide').map((a) => String(a.options?.decision ?? ''));
 }
 
 const dirs: string[] = [];
@@ -127,59 +139,43 @@ describe('idea-pipeline discovery rescue steps (task 1097)', () => {
         expect(decisionRows(t.dir)).toHaveLength(0);
     });
 
-    test('R2: prose report keeps unknown and records one no-backend fallback lifecycle', () => {
+    test('R2: prose report keeps unknown, and the typed decide owns the rescue (1250 R3)', () => {
         const t = tempProject();
         resetDb(t.dir);
         writeFileSync(t.report, '## Recommendation\n\nThe evaluation leans positive but stops short of a verdict.\n');
-        writeFileSync(t.nd, '{"needs_design": true}'); // valid boolean: the R2 lifecycle is recommendation-only
+        writeFileSync(t.nd, '{"needs_design": true}'); // valid boolean: the R2 rescue is recommendation-only
         runDiscoveryShells(t.dir);
         expect(readFileSync(t.rec, 'utf8')).toBe('unknown\n');
-        const rows = decisionRows(t.dir);
-        expect(rows.map((r) => r.event)).toEqual(['decision.start', 'decision.failure', 'decision.end']);
-        const invocationIds = new Set(rows.map((r) => r.data.invocationId));
-        expect(invocationIds.size).toBe(1);
-        for (const row of rows) {
-            expect(row.data.decisionId).toBe('idea-recommendation');
-            // 1113 R4: the hermetic env sets __runId, so the rescue adopts the run.
-            expect(row.data.caller).toBe('workflow');
-            expect(row.data.correlation).toEqual({ runId: 'r' });
-        }
-        const failure = rows.find((r) => r.event === 'decision.failure');
-        expect(failure?.data.reason).toBe('no-backend');
-        expect(failure?.data.fallbackValue).toBe('unknown');
-        const end = rows.find((r) => r.event === 'decision.end');
-        expect(end?.data.source).toBe('default');
+        // 1250 R3: the rescue is a `kind: decide` action now, so the shell layer records no
+        // decision lifecycle. The action's start→failure→end persistence and row shape are owned
+        // by packages/app/tests/workflow/actions/decide*.test.ts and decision-gate-persistence.test.ts.
+        expect(decisionRows(t.dir)).toHaveLength(0);
+        expect(discoveryDecideIds()).toEqual(['idea-recommendation', 'needs-design']);
+        // The migration is real: no discovery shell invokes the CLI rescue any more; the shells
+        // only derive and project, and the decide action reads the catalog.
+        expect(shellCommands.filter((command) => command.includes('decision run'))).toEqual([]);
     });
 
-    test('R2: recommendation rescue short-circuits when the derived file is not unknown', () => {
+    test('R2: the recommendation projection short-circuits when the derived file is not unknown', () => {
         const t = tempProject();
         resetDb(t.dir);
         writeFileSync(t.report, '## Recommendation\n\nThe evaluation leans positive but stops short of a verdict.\n');
         writeFileSync(t.rec, 'proceed\n');
-        runShell(t.dir, REC_RESCUE);
+        runShell(t.dir, REC_PROJECTION);
         expect(readFileSync(t.rec, 'utf8')).toBe('proceed\n');
         expect(decisionRows(t.dir)).toHaveLength(0);
     });
 
-    test('R3: corrupt needs-design JSON falls back to {"needs_design": true} via the catalog decision', () => {
+    test('R3: corrupt needs-design JSON falls back to {"needs_design": true} (the design default)', () => {
         const t = tempProject();
         resetDb(t.dir);
         writeFileSync(t.report, '## Recommendation\n\nproceed - the idea is worth building.\n');
         writeFileSync(t.nd, 'not-json');
         runDiscoveryShells(t.dir);
+        // The projection's non-model/absent-row fallback is `design` (needs_design true), which is
+        // the catalog entry's `fallback: design` — no default path may auto-skip the design pass.
         expect(readFileSync(t.nd, 'utf8')).toBe('{"needs_design": true}\n');
-        const rows = decisionRows(t.dir);
-        expect(rows.length).toBe(3);
-        const invocationIds = new Set(rows.map((r) => r.data.invocationId));
-        expect(invocationIds.size).toBe(1);
-        for (const row of rows) {
-            expect(row.data.decisionId).toBe('needs-design');
-            expect(row.data.caller).toBe('workflow');
-            expect(row.data.correlation).toEqual({ runId: 'r' });
-        }
-        const failure = rows.find((r) => r.event === 'decision.failure');
-        expect(failure?.data.fallbackValue).toBe('design');
-        const end = rows.find((r) => r.event === 'decision.end');
-        expect(end?.data.source).toBe('default');
+        expect(decisionRows(t.dir)).toHaveLength(0);
+        expect(discoveryDecideIds()).toEqual(['idea-recommendation', 'needs-design']);
     });
 });

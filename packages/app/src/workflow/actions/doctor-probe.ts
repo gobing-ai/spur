@@ -8,6 +8,7 @@ import {
     type ProcessExecutor,
 } from '@gobing-ai/ts-runtime';
 import type { AgentService } from '../../services/agent-service';
+import type { FleetDispatchDeps } from '../fleet-dispatch';
 import { bounded, type WorkflowActionOutputEvent, type WorkflowObservabilityBus } from '../observability';
 import { splitLaunchCommand } from '../split-launch-command';
 
@@ -50,6 +51,11 @@ function parseDoctorJson(stdout: string): { usable: boolean; resolvedAgent: stri
  * an agent-owned credential store, so authentication never decided an outcome), writes
  * PASS/FAIL to a status file beneath `.spur/run/`, and always returns success — it is a soft
  * probe whose transition guards route on the status token, never a raw lifecycle abort.
+ *
+ * D66 1250 R1: the check is EXECUTOR-TYPED. `vars.executor=host` means the host session is the
+ * executor — there is no subprocess to probe, so the check writes PASS and probes nothing.
+ * `vars.executor=fleet` means readiness is the wired fleet dispatch (ADR-126): PASS when this
+ * host composed it, otherwise FAIL naming `executor fleet`. Any other value keeps the probe.
  */
 export class DoctorProbeActionRunner implements ActionRunner {
     readonly kind = KIND;
@@ -61,6 +67,9 @@ export class DoctorProbeActionRunner implements ActionRunner {
         // B7 R1 (task 0894): injected so role-map mode can resolve pins in-process
         // through the SAME resolveRole walk dispatch uses.
         private readonly agentService?: AgentService,
+        // D66 1250 R1: the fleet readiness signal. Absent = this host wired no fleet
+        // dispatch, so a fleet-selected run fails its entry check instead of probing.
+        private readonly fleetDispatchDeps?: FleetDispatchDeps,
     ) {}
 
     async execute(options: Record<string, unknown>, context: ActionRunContext): Promise<ActionResult> {
@@ -122,6 +131,30 @@ export class DoctorProbeActionRunner implements ActionRunner {
         };
 
         await this.fileSystem.ensureDir(allowedDir);
+
+        // D66 1250 R1: the executor decides readiness, so no subprocess probe runs when the
+        // run already knows its executor. A host run's executor is this session; a fleet run's
+        // readiness is the wired fleet dispatch. Both write one status file with a named
+        // reason, and the transition guards route on that token alone.
+        const executor = typeof context.vars?.executor === 'string' ? context.vars.executor : '';
+        if (executor === 'host' || executor === 'fleet') {
+            const wired = executor === 'host' || this.fleetDispatchDeps !== undefined;
+            const reason =
+                executor === 'host'
+                    ? 'precheck: executor=host — subprocess doctor skipped'
+                    : wired
+                      ? 'precheck: executor=fleet — fleet dispatch wired'
+                      : 'precheck: FAIL - executor fleet is selected but this host wired no fleet dispatch (ADR-126)';
+            emit(reason);
+            await this.fileSystem.writeFile(
+                normalized,
+                wired ? 'PASS\n' : 'FAIL: executor fleet is not wired (ADR-126)\n',
+            );
+            return {
+                ok: true,
+                data: { status: wired ? 'PASS' : 'FAIL', resultFile: normalized, output: [reason] },
+            };
+        }
 
         // B7 R1 (task 0894): role-map mode resolves every declared role ONCE and
         // writes `__executor.<role>` pins; the per-stage path then dispatches

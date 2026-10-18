@@ -1,6 +1,6 @@
 ---
 name: planning-workflow
-description: "Extracted section: the planning half — intake → feature create → AC generation → feature check gate → decomposition → batch-create gate → refine. The full step-by-step procedure for turning a vague description into a validated, decomposed feature."
+description: "Extracted section: the planning half — intake → feature create → AC generation → decomposition → batch-create → refine. The full step-by-step procedure for turning a vague description into a validated, decomposed feature."
 see_also:
   - spur-dev
   - decomposition
@@ -13,18 +13,19 @@ see_also:
 vague description
   → intake (clarify scope, constraints — prompt work)
   → spur feature create … ; AC authored/generated (spur agent run, bdd templates)
-  → GATE: spur feature check   (BDD validator; loop until clean)
+  → ac-generate runs `spur feature check`   (BDD validator; loop until clean)
   → decomposition (prompt work) → task-batch JSON
-  → GATE: task-batch.schema.json + spur task batch-create (atomic: all-or-nothing)
+  → batch-create-run runs `task-batch.schema.json` + `spur task batch-create` (atomic: all-or-nothing)
   → design doc (conditional: seam heuristic under default; skip with --skip-design) → docs/design/<slug>.md + 04 index
 ```
 
 
 The planning half transforms a description into a validated feature file with acceptance
-criteria, then decomposes it into a batch of tasks. Two CLI gates make LLM regressions
-unable to corrupt the corpus: `spur feature check` validates the AC, and
+criteria, then decomposes it into a batch of tasks. Two deterministic validation steps make LLM
+regressions unable to corrupt the corpus: `spur feature check` validates the AC, and
 `task-batch.schema.json` validates the decomposition shape before `spur task batch-create`
-writes anything.
+writes anything. Both run inside the pipeline (`ac-generate`, `batch-create-run`) and route on
+their recorded result — neither is an operator gate.
 
 ## Step 1: Intake
 

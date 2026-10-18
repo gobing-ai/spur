@@ -327,7 +327,9 @@ describe('idea-pipeline definition — design-review feedback contract (0515 R2)
     test('both design exits route through the recorded design check before decomposition', () => {
         const auto = DEF.transitions[edgeIndex('system-design', 'decompose')]?.guard?.options?.command ?? '';
         const interactive = DEF.transitions[edgeIndex('design-approval', 'decompose')]?.guard?.options?.command ?? '';
-        const rejected = DEF.transitions[edgeIndex('design-approval', 'feature-check')]?.guard?.options?.command ?? '';
+        // D66 1250 R2: the former design-approval→feature-check hop is retargeted to ac-generate —
+        // feature-check is deleted, and the AC revision loop is what a failed check needs.
+        const rejected = DEF.transitions[edgeIndex('design-approval', 'ac-generate')]?.guard?.options?.command ?? '';
 
         // 0769: every sibling exit consumes the same recorded idea-design-check status.
         const passCheck = 'test "$(cat .spur/run/$__runId-idea-design-check.status 2>/dev/null)" = PASS';
@@ -395,12 +397,13 @@ describe('idea-pipeline definition — design-review feedback contract (0515 R2)
     });
 
     test('approve with a failing design check routes back through the AC gate, not a dead end', () => {
-        const guard = DEF.transitions[edgeIndex('design-approval', 'feature-check')]?.guard?.options?.command ?? '';
+        const guard = DEF.transitions[edgeIndex('design-approval', 'ac-generate')]?.guard?.options?.command ?? '';
 
         // P3-1 (0515): `yes && check` failing previously matched no edge → engine
         // fail('no-passing-transition'). 0769: the negation consumes the recorded
-        // idea-design-check status — a rejected-by-AC design loops into feature-check, which
-        // routes to ac-generate under the capped retry loop instead of killing the run.
+        // idea-design-check status. D66 1250 R2: the loop target is ac-generate directly (the
+        // feature-check hop is deleted), so a rejected-by-AC design still loops under the cap
+        // instead of killing the run.
         expect(guard).toContain('$__hitlAnswer');
         expect(guard).toContain('!= PASS');
     });
@@ -719,9 +722,21 @@ describe('idea-pipeline definition — 0887 robustness contract', () => {
         }
     });
 
-    test('R4: interactive feature-check surfaces the recorded check status in its prompt', () => {
-        const confirm = stateActions('feature-check').find((a) => a.kind === 'hitl.confirm');
-        expect(String(confirm?.options?.prompt ?? '')).toContain('-idea-ac-check.status');
+    test('R4: the objective check states are deleted, so no profile pauses on them (1250 R2)', () => {
+        // The former interactive feature-check/batch-create gates are gone: their recorded results
+        // are deterministic, so no operator answer could change the route. Only the two taste gates
+        // remain decision points.
+        const stateIds = DEF.states.map((s) => s.id);
+        expect(stateIds).not.toContain('feature-check');
+        expect(stateIds).not.toContain('batch-create');
+        const gateStates = DEF.states
+            .filter((s) => (s.onEnter ?? []).some((a) => a.kind === 'hitl.confirm'))
+            .map((s) => s.id);
+        expect(gateStates.sort()).toEqual(['design-approval', 'idea-eval']);
+        // No transition may target a deleted state.
+        const targets = new Set(DEF.transitions.map((t) => t.to));
+        expect(targets.has('feature-check')).toBe(false);
+        expect(targets.has('batch-create')).toBe(false);
     });
 
     test('R5: ac-generate prompt carries both task-check rules (verbatim titles, gate language)', () => {

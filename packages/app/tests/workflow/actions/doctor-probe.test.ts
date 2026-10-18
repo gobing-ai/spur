@@ -3,6 +3,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { createNodeFileSystem, type ProcessExecutor, type ProcessResult } from '@gobing-ai/ts-runtime';
 import { DoctorProbeActionRunner } from '../../../src/workflow/actions/doctor-probe';
+import type { FleetDispatchDeps } from '../../../src/workflow/fleet-dispatch';
 
 function stubExecutor(handler: (opts: { command: string; args: string[] }) => Partial<ProcessResult>): {
     executor: ProcessExecutor;
@@ -210,6 +211,98 @@ describe('DoctorProbeActionRunner', () => {
         );
         expect(res.ok).toBe(false);
         expect(res.error).toContain('shell metacharacters');
+    });
+
+    // D66 1250 R1: the entry check is executor-typed — a known executor decides readiness and
+    // no subprocess doctor runs. The `roles` map is present because idea-pipeline's start state
+    // declares it; the executor branch must short-circuit before the role-pin walk.
+    const executorOptions = {
+        resultFile: '.spur/run/precheck-doctor.status',
+        spurBin: 'spur',
+        agent: 'auto',
+        role: 'planner',
+        resolvedAgentVar: 'planningAgent',
+        roles: { planner: 'auto' },
+    };
+
+    test('executor=host writes PASS without probing', async () => {
+        const workdir = join(tmpdir(), `doctor-${crypto.randomUUID()}`);
+        const fs = createNodeFileSystem(workdir);
+        const { executor, calls } = stubExecutor(() => ({ stdout: okRow('claude') }));
+        const runner = new DoctorProbeActionRunner(executor, fs);
+        const res = await runner.execute(executorOptions, {
+            runId: 'r1',
+            stateOrNodeId: 'start',
+            workdir,
+            vars: { executor: 'host' },
+            env: {},
+        });
+        expect(res.ok).toBe(true);
+        expect(calls).toHaveLength(0);
+        expect((res.data as { status: string }).status).toBe('PASS');
+        expect((res.data as { output: string[] }).output.join('\n')).toContain(
+            'precheck: executor=host — subprocess doctor skipped',
+        );
+        expect((await fs.readFile(join(workdir, '.spur/run/precheck-doctor.status'))).trim()).toBe('PASS');
+    });
+
+    test('executor=fleet writes PASS without probing when fleet dispatch is wired', async () => {
+        const workdir = join(tmpdir(), `doctor-${crypto.randomUUID()}`);
+        const fs = createNodeFileSystem(workdir);
+        const { executor, calls } = stubExecutor(() => ({ stdout: okRow('claude') }));
+        // Only wiring presence is read here, so a structural stand-in is the whole dependency.
+        const fleetDeps = { fleet: {}, dispatcher: {}, now: () => 0 } as unknown as FleetDispatchDeps;
+        const runner = new DoctorProbeActionRunner(executor, fs, undefined, undefined, fleetDeps);
+        const res = await runner.execute(executorOptions, {
+            runId: 'r1',
+            stateOrNodeId: 'start',
+            workdir,
+            vars: { executor: 'fleet' },
+            env: {},
+        });
+        expect(res.ok).toBe(true);
+        expect(calls).toHaveLength(0);
+        expect((res.data as { status: string }).status).toBe('PASS');
+        expect((await fs.readFile(join(workdir, '.spur/run/precheck-doctor.status'))).trim()).toBe('PASS');
+    });
+
+    test('executor=fleet writes FAIL naming the executor when no fleet dispatch is wired', async () => {
+        const workdir = join(tmpdir(), `doctor-${crypto.randomUUID()}`);
+        const fs = createNodeFileSystem(workdir);
+        const { executor, calls } = stubExecutor(() => ({ stdout: okRow('claude') }));
+        const runner = new DoctorProbeActionRunner(executor, fs);
+        const res = await runner.execute(executorOptions, {
+            runId: 'r1',
+            stateOrNodeId: 'start',
+            workdir,
+            vars: { executor: 'fleet' },
+            env: {},
+        });
+        expect(res.ok).toBe(true); // soft probe: the guard routes on the token
+        expect(calls).toHaveLength(0);
+        expect((res.data as { status: string }).status).toBe('FAIL');
+        expect((res.data as { output: string[] }).output.join('\n')).toContain('executor fleet');
+        expect(await fs.readFile(join(workdir, '.spur/run/precheck-doctor.status'))).toContain('executor fleet');
+    });
+
+    test('an empty executor still probes (the tier ladder resolves the subprocess)', async () => {
+        const workdir = join(tmpdir(), `doctor-${crypto.randomUUID()}`);
+        const fs = createNodeFileSystem(workdir);
+        const { executor, calls } = stubExecutor(() => ({ stdout: okRow('claude') }));
+        const runner = new DoctorProbeActionRunner(executor, fs);
+        // Single-probe path (no `roles`): the pin walk resolves in-process through agentService,
+        // so the subprocess doctor this case is about only shows up here.
+        const { roles: _roles, ...singleProbe } = executorOptions;
+        const res = await runner.execute(singleProbe, {
+            runId: 'r1',
+            stateOrNodeId: 'start',
+            workdir,
+            vars: { executor: '' },
+            env: {},
+        });
+        expect(res.ok).toBe(true);
+        expect(calls).toHaveLength(1);
+        expect(calls[0]?.args).toEqual(['agent', 'doctor', 'planner', '--json']);
     });
 
     test('unparseable doctor output defaults usable=true and does not fail the run (soft probe)', async () => {

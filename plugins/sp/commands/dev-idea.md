@@ -1,5 +1,5 @@
 ---
-description: Turn a vague idea into a feature with AC and a decomposed task batch — discovery, idea-eval, feature-create, AC, feature-check, system-design, decompose, batch-create (Design by default), handoff
+description: Turn a vague idea into a feature with AC and a decomposed task batch — discovery, idea-eval, feature-create, AC, system-design, decompose, batch-create (Design by default), handoff
 role: planner
 argument-hint: "\"<idea>\" | --from-file <path> [--skip-design] [--agent <inline|auto|name>] [--auto]"
 allowed-tools: ["Bash", "Read", "Skill", "AskUserQuestion"]
@@ -45,9 +45,12 @@ trace records the answering source. `--auto` takes the recommended option at eac
 | Gate | Pauses when | Recommendation comes from | `--auto` takes |
 | --- | --- | --- | --- |
 | idea-eval | after discovery | eval report `## Recommendation` (`proceed` / `reshape` / `drop`) | `proceed`/`reshape` → continue; `drop` → cancel; missing → still asks |
-| feature-check | after AC | recorded AC check + requirement coverage | PASS → continue; FAIL → revise AC (cap 3) |
 | design-approval | after system-design (skipped by `--skip-design`) | recorded design check | PASS → approve; FAIL → still asks |
-| batch-create | after decompose | batch schema + task-order sidecar validation | create the batch |
+
+The AC check and the batch create are deterministic pipeline steps, not gates: `ac-generate`
+runs `spur feature check` and routes on the recorded result (a FAIL retries the AC loop, cap 3),
+and `batch-create-run` runs `spur task batch-create` and routes on its own recorded result.
+Neither ever pauses, under any profile.
 
 Flag → vars: `--auto` sets `profile=auto`, `idea_approved=true`, `design_approved=true`;
 `--skip-design` sets `design=skip`.
@@ -78,5 +81,6 @@ Flag → vars: `--auto` sets `profile=auto`, `idea_approved=true`, `design_appro
 - The `start` state persists the operator's idea argument (or the `--from-file` contents)
   **unmodified** to `.spur/run/<run-id>-idea-input.md` (0887 R1); every model-bearing stage prompt
   treats that file as the authoritative ask, and the precheck fails the run when it is empty or missing.
-- Stage contract (discovery → idea-eval → feature-create → AC → feature-check → system-design →
-  decompose → batch-create → ready-prepare → handoff): `plugins/sp/skills/spur-dev/references/dev-operations.md` § idea.
+- Stage contract (discovery → idea-eval → feature-create → ac-generate → system-design
+  (conditional) → design-approval → decompose → batch-create-run → ready-prepare →
+  handoff-finalize → handoff): `plugins/sp/skills/spur-dev/references/dev-operations.md` § idea.

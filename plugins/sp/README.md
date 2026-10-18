@@ -95,8 +95,8 @@ list this README is checked against.
 
 | Command          | What it does                                                                                                                                                                    |
 | ---------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `dev-idea`       | Turn a vague idea into a feature with AC and a decomposed task batch — discovery, idea-eval, feature-create, AC, feature-check, system-design, decompose, batch-create, handoff |
-| `dev-plan`       | Plan a feature from a written description — intake → feature create → AC generation → feature check gate → decomposition → batch-create                                         |
+| `dev-idea`       | Turn a vague idea into a feature with AC and a decomposed task batch — discovery, idea-eval, feature-create, AC, system-design, decompose, batch-create, handoff |
+| `dev-plan`       | Plan a feature from a written description — intake → feature create → AC generation → decomposition → batch-create                                                              |
 | `dev-brainstorm` | Interactive solution design — heuristic discovery interview followed by structured ideation with trade-offs and confidence scoring                                              |
 | `dev-find-way`   | Wayfinder — chart a multi-session investigation map, or resolve one map ticket; always in an isolated git worktree + branch (`--worktree`, `--wrap`)                             |
 | `dev-refine`     | Refine task requirements via structured Q&A — clarify scope, elicit missing details, tighten acceptance criteria; `--depth ready` audits and corrects existing claims, freezes the spec, promotes to todo |

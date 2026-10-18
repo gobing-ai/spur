@@ -366,13 +366,13 @@ check receipt (`receipt.runId === runId`), otherwise `n/a (<reason>)`. Any value
 
 ### 6. plan
 
-- **Purpose:** Plan a feature from a description — intake → feature create → AC generation → feature check gate → decomposition → batch-create (with **Design by default**).
+- **Purpose:** Plan a feature from a description — intake → feature create → AC generation → decomposition → batch-create (with **Design by default**).
 - **Inputs:** `"<description>"` (required). `--feature <id>` links to an existing feature. `--parent <feature-id>` nests under a parent. Omitted/`inline` drives `idea-pipeline.yaml` in the host session; `auto` or a name launches the async workflow worker. **Design package flags (unified with `/sp:dev-idea`):**
   - **Default:** author task `design` on every batch item + feature satellite when the seam heuristic fires (**ties lean design**). There is **no** `--design` force flag.
   - `--skip-design` — skip feature satellite **and** omit task `design` fields (scaffold only; refine fills later). Sole design opt-out.
   - `--auto` — accept the recommendation at every operator gate, taste gates included (same contract as § 16 idea).
 - **Backing:** `sp:spur-dev` skill, `plan` operation. Stage floor: the `planner` role per [`roles.md`](../../../references/roles.md) — this file names roles, never tiers (0538 R4).
-- **Behavior:** Clarify scope → `spur feature create` → author BDD AC → `spur feature check` gate → decompose into task-batch JSON **including `design` (unless `--skip-design`)** → `spur task batch-create` gate. Design package details: [planning-workflow.md](planning-workflow.md) Step 5.5.
+- **Behavior:** Clarify scope → `spur feature create` → author BDD AC → decompose into task-batch JSON **including `design` (unless `--skip-design`)**. The pipeline then runs `spur feature check` on the recorded AC (`ac-generate`) and `spur task batch-create` (`batch-create-run`) as deterministic steps that route on their recorded result — neither is an operator gate. Design package details: [planning-workflow.md](planning-workflow.md) Step 5.5.
 - **Delegation:** `Skill(skill="sp:spur-dev", args="plan $ARGUMENTS")`
 
 ### 7. docs
@@ -538,7 +538,7 @@ gate commands, pending questions and approval requirements.>
   fails the run when that file is empty or missing, and every model-bearing stage prompt treats
   it as the authoritative ask (R2).
 - **Backing:** `idea-pipeline.yaml` on the host executor (`vars.executor: host`, advanced by `spur workflow continue`) for omitted/`inline`, or `spur workflow run idea-pipeline.yaml --async` for `auto`/name.
-- **Behavior:** Builds vars from the table above and drives the idea pipeline. Flow: discovery → **idea-eval** (taste; reject → cancelled) → feature-create → ac-generate → feature-check → system-design (conditional) → design-approval (taste) → decompose → batch-create (`--skip-ready`) → ready-prepare (ready checklist per created task + ready-evidence sidecar, 0788) → handoff. STOPS at handoff — no task execution, no pipeline nesting. Headless runs use one `trace --follow`; cancellation is reported stopped only when `workflow cancel --json` returns `killed: true`.
+- **Behavior:** Builds vars from the table above and drives the idea pipeline. Flow: discovery → **idea-eval** (taste; reject → cancelled) → feature-create → ac-generate → system-design (conditional) → design-approval (taste) → decompose → batch-create-run (`--skip-ready`) → ready-prepare (ready checklist per created task + ready-evidence sidecar, 0788) → handoff-finalize → handoff. STOPS at handoff — no task execution, no pipeline nesting. Headless runs use one `trace --follow`; cancellation is reported stopped only when `workflow cancel --json` returns `killed: true`.
 - **Delegation:** Host executor (this session answers each work item) by default; explicit executor selection uses the async workflow worker.
 - **Idea-evaluation gate:** After discovery, operator reviews `.spur/run/idea-eval-report.md` ([idea-evaluation.md](idea-evaluation.md)). Approve continues; reject/cancel → no feature. Under `--auto`, follows the report's recommendation (`drop` → cancelled; missing recommendation → pauses). Enhanced idea is a sidecar — `vars.idea` is not overwritten.
 - **Design package (`--skip-design` only):**

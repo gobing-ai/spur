@@ -17,7 +17,10 @@ import { parse as parseYaml } from 'yaml';
 // 41 at D65 1241: each of the four operator gates gained the two-action answer normalization
 // (shell fold + file.read.into-var) that keeps today's headless `no` routing once the gate
 // answers as a decision point instead of pausing. Raising a budget here IS the change record.
-const IDEA_ACTION_BUDGET = 41;
+// 36 at D66 1250: the two objective gates (feature-check, batch-create) and their four answer
+// actions are deleted (-6), and the two discovery rescues become typed `decide` actions plus their
+// projection shells (+2) — the ratchet drops with the definition.
+const IDEA_ACTION_BUDGET = 36;
 // 50 at the session finding after 1088: the completion gate needs its own confidence action
 // (the proof-binding stamp must stay the state's last action and under the 800-char shell cap),
 // and `review-fail-triage` adds one decide action — the review-side twin of 0943's failure-class

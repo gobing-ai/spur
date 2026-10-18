@@ -134,6 +134,9 @@ export function registerSpurBuiltins(host: WorkflowEngineHost, options: SpurWork
             fileSystem,
             options.observabilityBus,
             options.agentService,
+            // D66 1250 R1: a fleet-selected run's entry check reports readiness from the
+            // wired fleet dispatch instead of probing a subprocess.
+            options.fleetDispatchDeps,
         ),
         'builtin',
     );
