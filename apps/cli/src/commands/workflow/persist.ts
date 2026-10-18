@@ -47,7 +47,7 @@ export function registerWorkflowPersistCommand(workflow: Command, context: Persi
             if (from.trim() === '' || options.taskFile.some((taskFile) => taskFile.trim() === ''))
                 return usage(persistOut);
             try {
-                const result = await runPersistOut({ from, taskFiles: options.taskFile });
+                const result = await runPersistOut({ from, taskFiles: options.taskFile, to: context.cwd });
                 for (const line of result.stdout) context.output.write(line);
                 for (const line of result.stderr) context.output.error(line);
                 context.setExitCode(result.exitCode);

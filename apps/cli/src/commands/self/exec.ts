@@ -96,6 +96,16 @@ export function registerExecCommand(self: Command, context: CliContext, options:
                 return;
             }
 
+            // Scoped values come only from the light-gate planner; a literal `{files}` must never reach the shell.
+            for (const step of plan) {
+                const placeholder = /\{(?:files|paths|workspace)\}/.exec(step.command)?.[0];
+                if (placeholder === undefined) continue;
+                fail(
+                    `action "${step.name}" needs ${placeholder} from the light-gate planner; it cannot run via self exec`,
+                );
+                return;
+            }
+
             // `isTTY: true` pins stream-inherit even when spur's own stdout is piped, so a
             // `--json` consumer still sees the child's live output ahead of the summary.
             const executor = new NodeProcessExecutor({ output: { mode: 'stream', isTTY: true } });

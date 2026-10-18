@@ -214,6 +214,11 @@ builder:
     nested-mid:
       - ok-mid
       - ok-step
+    lint-changed: >-
+      touch scoped-ran.txt {files}
+    scoped-mid:
+      - ok-step
+      - lint-changed
     noop: >-
       :
 `;
@@ -353,6 +358,18 @@ describe('spur self exec — in-process transport branches', () => {
         expect(compositeArgs.stderr).toContain('composite action "fail-mid" does not accept arguments');
     });
 
+    test('a step carrying an unrendered scoped placeholder is refused, never run literally', async () => {
+        // `{files}` is supplied only by the light-gate planner; running the template would act on
+        // a literal `{files}` path (or, for a stripped placeholder, the whole repo).
+        for (const action of ['lint-changed', 'scoped-mid']) {
+            const refused = await run([action]);
+            expect(refused.code).toBe(2);
+            expect(refused.stderr).toContain('"lint-changed" needs {files} from the light-gate planner');
+        }
+        expect(existsSync(join(root, 'scoped-ran.txt'))).toBe(false);
+        expect((await run(['lint-changed', '--dry-run'])).stdout).toBe('touch scoped-ran.txt {files}');
+    });
+
     test('a composite step that resolves to nothing is refused (unvalidated config)', async () => {
         // Load-time validation rejects this shape, so the resolver's defensive branch is only
         // reachable with an injected config: a composite whose step names no binding.
@@ -379,6 +396,6 @@ describe('spur self exec — in-process transport branches', () => {
     });
 
     test('every in-process case drove the dispatcher', () => {
-        expect(runCount).toBeGreaterThanOrEqual(11);
+        expect(runCount).toBeGreaterThanOrEqual(14);
     });
 });

@@ -62,7 +62,7 @@ bodies:
 | --- | --- | --- | --- | --- |
 | L1 build / package / release | `scripts/commands/build-*`, `bundle-*`, `emit-board-types`, `verify-pack`, `plugin-install-smoke` | `scripts/builder.ts`, `build-plugin-zip.ts` | `scripts/bundle-plugins.ts`, `build-board.ts`, `publish*.ts`, `verify-sp-install.ts` | repo `scripts/`; release plumbing that any project needs moves to `spur builder` |
 | L2 test runner / coverage | `run-tests.ts`, `coverage-*` | — (inline in `package.json`) | — (inline) | repo `scripts/`, bound to `test*` actions |
-| L3 repo contract checks | `link-check`, `script-contract-check`, `transition-shim-check`, `inline-pipeline-parity-check`, `dependency-drift-check`, `workflow-promotion`, `validate-*`, `surface-drift-inventory` | — | `check-tool-freshness.ts`, `rule-falsification-suites.test.ts` | repo `scripts/`, composed by `check-feature` |
+| L3 repo contract checks | `link-check`, `script-contract-check`, `transition-shim-check`, `dependency-drift-check`, `workflow-promotion`, `validate-*`, `surface-drift-inventory` | — | `check-tool-freshness.ts`, `rule-falsification-suites.test.ts` | repo `scripts/`, composed by `check-feature` |
 | L4 dev runtime / eval | `dev-all`, `eval-pipeline`, `skill-eval`, `fleet-e2e` | — | — | repo `scripts/`, bound to `dev` / custom actions |
 | L5 plugin runtime | `plugins/sp/scripts/hooks/*` + `plugins/sp/lib/*` | `plugins/cc/scripts/anti-hallucination/*` (+ `lib/env.ts`) | `plugins/kk/scripts/*-stages.ts` | plugin tree; standalone imports only |
 
@@ -153,6 +153,8 @@ spur self exec <action> --dry-run --json print [{ name, command }] per resolved 
   stdin); sets `SPUR_ACTION=<name>` for the child.
 - `-- <args>` are shell-quoted and appended to a string action; refused for composites.
 - `--list --json` rows: `{ name, reserved, command | steps, source: config|preset|default|unbound }`.
+- A resolved step still carrying `{files}`/`{paths}`/`{workspace}` → exit 2 before anything runs;
+  only the light-gate planner supplies scoped values (`--dry-run` still prints the template).
 - Unbound action → exit 2 with `action "<a>" is not bound; add builder.actions.<a> to .spur/config.yaml` (actionable error, no stack guess).
 - Composite runs echo one `▶ <step>` line per step on stderr; `--json` (non-list) prints a final
   `{ action, steps: [{ name, exitCode, durationMs }], exitCode }`.
@@ -229,7 +231,6 @@ and lands here in the same change.
 | `eval` | repo tool | `spur-dev.ts skill-eval` (L4; custom action `eval`) |
 | `transition-shim-check` | repo tool | `spur-dev.ts transition-shim-check` (L3) |
 | `script-contract-check` | repo tool | `spur-dev.ts script-contract-check` (L3) |
-| `inline-pipeline-parity-check` | repo tool | `spur-dev.ts inline-pipeline-parity-check` (L3) |
 | `workflow-promotion-check` | repo tool | `spur-dev.ts promotion check` (L3) |
 | `validate-commands` | repo tool | `spur-dev.ts validate-commands` (L3) |
 | `link-check` | repo tool | `spur-dev.ts link-check` (L3) |
