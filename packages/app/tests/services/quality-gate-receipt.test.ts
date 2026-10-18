@@ -241,7 +241,7 @@ describe('lightScope', () => {
     test('AC2/R2: plugin prose and script changes map to their structure tests', () => {
         const pluginPaths = [
             'plugins/sp/tests/skill-structure.test.ts',
-            'plugins/sp/tests/flag-contract-parity.test.ts',
+            'scripts/commands/flag-contract-parity.test.ts',
             'plugins/sp/tests/z.test.ts',
         ];
         const scope = lightScope(
@@ -255,7 +255,7 @@ describe('lightScope', () => {
         );
         expect(scope.workspaces).toContain('plugins/sp');
         expect(scope.tests).toContain('plugins/sp/tests/skill-structure.test.ts');
-        expect(scope.tests).toContain('plugins/sp/tests/flag-contract-parity.test.ts');
+        expect(scope.tests).toContain('scripts/commands/flag-contract-parity.test.ts');
         expect(scope.tests).toContain('plugins/sp/tests/z.test.ts');
         expect(scope.tests).not.toContain('plugins/sp/tests/no-test.test.ts');
     });
@@ -287,6 +287,16 @@ describe('planLightChecks', () => {
         // Every test command cd's into its workspace; paths are workspace-relative.
         expect(plans[4]).toEqual({ id: 'test:apps/cli', cmd: 'cd apps/cli && bun test tests/a.test.ts' });
         expect(plans[5]).toEqual({ id: 'test:packages/domain', cmd: 'cd packages/domain && bun test tests/b.test.ts' });
+    });
+
+    test('a colocated suite runs from its top-level directory, not a truncated path', () => {
+        const plans = planLightChecks(
+            { files: [], workspaces: [], tests: ['scripts/commands/flag-contract-parity.test.ts'] },
+            () => false,
+        );
+        expect(plans).toEqual([
+            { id: 'test:scripts', cmd: 'cd scripts && bun test commands/flag-contract-parity.test.ts' },
+        ]);
     });
 
     test('hostile or spaced file names reach sh as one literal argument each', () => {

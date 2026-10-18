@@ -417,10 +417,8 @@ export function resolveReceiptReuse(receiptPath: string, wbs: string, capture: G
             refusal: `receipt belongs to ${String(receipt.wbs)}, not ${wbs}`,
         };
     }
-    return {
-        reuse: readReceiptStatus(receiptPath, capture.tree, wbs).reuse,
-        receiptStatus: readReceiptStatus(receiptPath, capture.tree, wbs),
-    };
+    const receiptStatus = readReceiptStatus(receiptPath, capture.tree, wbs);
+    return { reuse: receiptStatus.reuse, receiptStatus };
 }
 
 const TEST_FILE_PATTERN = /\.test\.tsx?$/;
@@ -462,7 +460,8 @@ export function lightScope(changedFiles: string[], exists: (p: string) => boolea
         // Task 1142 R2: Plugin prose changes map to their structure tests.
         // A changed path under plugins/sp/{skills,commands,agents,references}/** adds
         // plugins/sp/tests/skill-structure.test.ts to the plugins/sp workspace's tests.
-        // Under plugins/sp/commands/** it also adds plugins/sp/tests/flag-contract-parity.test.ts.
+        // Under plugins/sp/commands/** it also adds scripts/commands/flag-contract-parity.test.ts (moved
+        // out of plugins/sp/tests by A9 W1; colocated, so it runs from the `scripts` workspace).
         // A changed plugins/sp/scripts/<x>.ts maps to plugins/sp/tests/<x>.test.ts when that file exists.
         if (file.startsWith('plugins/sp/')) {
             const rest = file.slice('plugins/sp/'.length);
@@ -479,7 +478,7 @@ export function lightScope(changedFiles: string[], exists: (p: string) => boolea
                     matched = true;
                 }
                 if (rest.startsWith('commands/')) {
-                    const flagTest = 'plugins/sp/tests/flag-contract-parity.test.ts';
+                    const flagTest = 'scripts/commands/flag-contract-parity.test.ts';
                     if (exists(flagTest)) {
                         tests.add(flagTest);
                         matched = true;
@@ -512,9 +511,6 @@ export function lightScope(changedFiles: string[], exists: (p: string) => boolea
     }
     return { files, workspaces: [...workspaces].sort(), tests: [...tests].sort() };
 }
-
-/** Task 1142: alias for lightScope. */
-export const scopeFromFiles = lightScope;
 
 /** One planned light check: a stable id plus the shell command to run. */
 export interface LightCheckPlan {
@@ -573,7 +569,10 @@ export function planLightChecks(
     }
     const testsByWorkspace = new Map<string, string[]>();
     for (const test of scope.tests) {
-        const workspace = test.slice(0, test.indexOf('/tests/'));
+        // `<ws>/tests/**` for workspace suites; a colocated suite (`scripts/commands/*.test.ts`)
+        // runs from its top-level directory, which carries the bunfig preload.
+        const cut = test.indexOf('/tests/');
+        const workspace = test.slice(0, cut >= 0 ? cut : test.indexOf('/'));
         const paths = testsByWorkspace.get(workspace) ?? [];
         paths.push(test.slice(workspace.length + 1));
         testsByWorkspace.set(workspace, paths);
@@ -602,7 +601,7 @@ function receiptRunId(env: QualityGateEnv): string {
     return env.runId || env.__runId || `pipeline-${env.wbs}`;
 }
 
-//** Light-gate outcome: the verdict plus the scope it checked. */
+/** Light-gate outcome: the verdict plus the scope it checked. */
 export interface LightGateResult {
     status: CheckStatus;
     scope: LightScope;
