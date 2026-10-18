@@ -94,6 +94,9 @@ describe('lintVerifyAnswer (task 1003 R1)', () => {
     test('an `Item | State | Evidence` table is the same table, not a malformed one', () => {
         const reply = [
             'Verdict: PASS',
+            // ADR-141 (landed on main during this batch): a PASS with MET rows and no AC row at all
+            // derives MEDIUM — the gate recomputes it, so the answer must state the same level.
+            'Confidence: HIGH',
             '',
             '| Item | State | Evidence |',
             '| --- | --- | --- |',

@@ -455,7 +455,10 @@ describe('task-pipeline evidence chain — review certifies (D65 R2)', () => {
                 staged.dir,
                 staged.wbs,
                 'Review',
-                `${REVIEW_HEAD}| P4 (advisory) | Note | src/index.ts:1 | ACCEPTED |\n`,
+                // ADR-141 (review lane): the recorded section carries the verdict and the level the
+                // dispositions derive. A PASS with one ACCEPTED P4 residual derives MEDIUM; without a
+                // stated verdict the derivation would read LOW and the cross-check would block.
+                `${REVIEW_HEAD}| P4 (advisory) | Note | src/index.ts:1 | ACCEPTED |\n\nVerdict: PASS\nConfidence: MEDIUM\n`,
             );
             const vars = { wbs: staged.wbs, __runId: 'run-cert', spurBin: SPUR_BIN, profile: 'auto' };
             const fold = cmdOf('review', '-review.status');
@@ -468,7 +471,9 @@ describe('task-pipeline evidence chain — review certifies (D65 R2)', () => {
                 'run-cert',
                 'Verdict: PASS\n\n| Req | Status | Evidence |\n| --- | --- | --- |\n' +
                     '| R1 | MET | `src/index.ts:1` does the thing |\n' +
-                    '| R2 | UNMET | nothing implements the second half |\n',
+                    '| R2 | UNMET | nothing implements the second half |\n' +
+                    // ADR-141: an UNMET row derives LOW, and the gate cross-checks the stated level.
+                    '\nConfidence: LOW\n',
             );
             const unmet = runTypedGate(
                 staged.dir,
@@ -491,7 +496,9 @@ describe('task-pipeline evidence chain — review certifies (D65 R2)', () => {
                 'run-cert',
                 'Verdict: PASS\n\n| Req | Status | Evidence |\n| --- | --- | --- |\n' +
                     '| R1 | MET | `src/index.ts:1` does the thing |\n' +
-                    '| R2 | MET | `src/index.ts:2` does both |\n',
+                    '| R2 | MET | `src/index.ts:2` does both |\n' +
+                    // ADR-141: all rows MET with no AC table derives HIGH.
+                    '\nConfidence: HIGH\n',
             );
             expect(
                 runTypedGate(

@@ -640,8 +640,11 @@ states:
                     Answer contract (machine-read): end with exactly one plain `Verdict: PASS|FAIL`
                     line, preceded by a `| Req | Status | Evidence |` table with one row per
                     requirement (R1, R2, ...) and a `| AC | Status | Evidence Type | Evidence |` table
-                    with one row per acceptance criterion. Every row cites a repo-relative
-                    `path:line`; no row may be omitted or merged.
+                    with one row per acceptance criterion, and one `Confidence: HIGH|MEDIUM|LOW` line
+                    whose level YOUR finding dispositions derive (ADR-141: no open P1-P3 and no
+                    carried residual is HIGH; a carried residual is MEDIUM; an open P1-P3 or a
+                    non-PASS verdict is LOW) — the gate recomputes it and rejects a disagreement.
+                    Every row cites a repo-relative `path:line`; no row may be omitted or merged.
                 # The captured review answer is the run's certification input (and the
                 # `task verdict` input below): expectFile fails the step when no answer landed.
                 answerFile: .spur/run/${vars.__runId}-review-answer.txt
