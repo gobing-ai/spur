@@ -235,6 +235,7 @@ export default function AgentsView({ pollMs = STATUS_POLL_MS }: { pollMs?: numbe
     const [executors, setExecutors] = useState<ConfiguredAgentExecutor[]>([]);
     const [fleetSnapshot, setFleetSnapshot] = useState<ProjectFleetSnapshot | null>(null);
     const [failed, setFailed] = useState(false);
+    const [rosterFailed, setRosterFailed] = useState(false);
     const [orchOffline, setOrchOffline] = useState(false);
     const [activeSection, setActiveSection] = useState<AgentsSection>('all');
     const [executorFilter, setExecutorFilter] = useState('');
@@ -250,21 +251,26 @@ export default function AgentsView({ pollMs = STATUS_POLL_MS }: { pollMs?: numbe
         let active: AbortController | null = null;
 
         const tick = async (): Promise<void> => {
-            active?.abort();
-            active = new AbortController();
-            const signal = active.signal;
+            // A feed slower than the poll must finish, not be aborted by the next tick and
+            // misreported as a failure; the controller only cancels on unmount.
+            if (active !== null) return;
+            const controller = new AbortController();
+            active = controller;
+            const signal = controller.signal;
             try {
                 const [fleetRes, procRes] = await Promise.all([
                     fetchWithTimeout(new Request(fleetUrl(), { signal })),
-                    fetchWithTimeout(new Request(processesUrl(), { signal })),
+                    fetchWithTimeout(new Request(processesUrl(), { signal })).catch(() => null),
                 ]);
-                if (cancelled || !fleetRes.ok || !procRes.ok) return;
+                if (cancelled) return;
+                if (!fleetRes.ok) throw new Error(`fleet feed HTTP ${fleetRes.status}`);
                 const fleetJson: unknown = await fleetRes.json();
-                const procJson: unknown = await procRes.json();
                 if (cancelled || !isFleetSnapshot(fleetJson)) return;
-                const list = parseProcessList(procJson);
-                if (!list) return; // malformed process payload — skip the tick, never clear the roster
-                setEntries(buildRoster(fleetJson, list));
+                // The process feed only adds live status: its failure must not hide the configuration.
+                const list = procRes?.ok ? parseProcessList(await procRes.json().catch(() => null)) : null;
+                if (cancelled) return;
+                setRosterFailed(list === null);
+                if (list !== null) setEntries(buildRoster(fleetJson, list));
                 if (fleetJson.roles && fleetJson.roles.length > 0) {
                     setRoles(fleetJson.roles);
                 }
@@ -279,6 +285,8 @@ export default function AgentsView({ pollMs = STATUS_POLL_MS }: { pollMs?: numbe
                 setFailed(false);
             } catch {
                 if (!cancelled) setFailed(true);
+            } finally {
+                if (active === controller) active = null;
             }
         };
 
@@ -321,18 +329,18 @@ export default function AgentsView({ pollMs = STATUS_POLL_MS }: { pollMs?: numbe
     return (
         <div className="flex flex-col h-full overflow-hidden bg-spur-bg" data-agents-view>
             <div className="flex-1 overflow-y-auto p-3 space-y-6">
-                {entries === null && !failed && (
+                {fleetSnapshot === null && !failed && (
                     <div className="p-4 text-sm text-spur-text-muted italic" data-roster-loading>
-                        Loading fleet roster…
+                        Loading agent configuration…
                     </div>
                 )}
-                {failed && (
+                {failed && fleetSnapshot === null && (
                     <div className="p-4 text-sm text-spur-text-muted" data-roster-fetch-failed role="alert">
-                        Fleet roster unavailable — the fleet or process feed could not be read.
+                        Agent configuration unavailable — the fleet feed could not be read.
                     </div>
                 )}
 
-                {entries !== null && (
+                {fleetSnapshot !== null && (
                     <>
                         {/* Sub-navigation / Filter Strip */}
                         <div className="flex flex-wrap items-center justify-between gap-3 pb-3 border-b border-spur-border/50">
@@ -343,7 +351,7 @@ export default function AgentsView({ pollMs = STATUS_POLL_MS }: { pollMs?: numbe
                                         { id: 'roles' as const, label: 'Roles', count: roles.length },
                                         { id: 'stages' as const, label: 'Stages', count: stages.length },
                                         { id: 'executors' as const, label: 'Executors', count: executors.length },
-                                        { id: 'fleet' as const, label: 'Fleet', count: entries.length },
+                                        { id: 'fleet' as const, label: 'Fleet', count: entries?.length ?? 0 },
                                     ] as const
                                 ).map((sec) => (
                                     <button
@@ -551,7 +559,19 @@ export default function AgentsView({ pollMs = STATUS_POLL_MS }: { pollMs?: numbe
                                     )}
                                 </div>
 
-                                {entries.length === 0 && (
+                                {entries === null && (
+                                    <div
+                                        className="p-4 text-sm text-spur-text-muted bg-spur-surface border border-spur-border rounded-xl"
+                                        data-roster-fetch-failed={rosterFailed ? 'true' : undefined}
+                                        role={rosterFailed ? 'alert' : undefined}
+                                    >
+                                        {rosterFailed
+                                            ? 'Fleet roster unavailable — the process feed could not be read.'
+                                            : 'Loading fleet roster…'}
+                                    </div>
+                                )}
+
+                                {entries?.length === 0 && (
                                     <div
                                         className="p-4 text-sm text-spur-text-muted italic bg-spur-surface border border-spur-border rounded-xl"
                                         data-roster-empty
@@ -563,7 +583,7 @@ export default function AgentsView({ pollMs = STATUS_POLL_MS }: { pollMs?: numbe
                                     </div>
                                 )}
 
-                                {entries.length > 0 && (
+                                {entries !== null && entries.length > 0 && (
                                     <div className="grid gap-2 md:grid-cols-2 xl:grid-cols-3" data-roster-grid>
                                         {entries.map((entry) => (
                                             <RosterCard
