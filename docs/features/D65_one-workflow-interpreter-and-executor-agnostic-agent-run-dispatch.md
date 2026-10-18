@@ -2,11 +2,11 @@
 schema_version: 1
 id: "D65"
 name: "One workflow interpreter and executor-agnostic agent.run dispatch"
-status: active
+status: done
 priority: P2
 tags: []
 created_at: "2026-10-17T07:27:13.932Z"
-updated_at: "2026-10-17T17:17:52.534Z"
+updated_at: "2026-10-18T02:07:56.470Z"
 ---
 
 # D65: One workflow interpreter and executor-agnostic agent.run dispatch
@@ -163,17 +163,17 @@ Feature: One workflow interpreter and executor-agnostic agent.run dispatch
 | WBS | Task | Status |
 | --- | ---- | ------ |
 | 1231 | Author the workflow execution foundation design satellite | done |
-| 1232 | Executor-agnostic agent.run dispatch with host pause and durable receipt | testing |
-| 1233 | Lint self-contained stages in workflow validate | todo |
-| 1234 | Typed engine builtins for gate, commit-guard and corpus transition | todo |
-| 1235 | Engine-owned leases for the gate, worktree and fleet occupancy | todo |
-| 1236 | Resolve operator gates as decision points under every profile | todo |
-| 1237 | Report gate time and engine traces in run summaries | todo |
-| 1238 | Pilot feature-verification on the foundation and run the executor matrix | todo |
-| 1239 | Rewrite task-pipeline as a seven-state graph without the proof chain | todo |
-| 1240 | Measure the rewritten task-pipeline against the 32-run baseline | todo |
-| 1241 | Migrate idea, wrapup and pr-review pipelines onto the foundation | todo |
-| 1242 | Delete the inline bookkeeping verbs and parity scripts | todo |
+| 1232 | Executor-agnostic agent.run dispatch with host pause and durable receipt | done |
+| 1233 | Lint self-contained stages in workflow validate | done |
+| 1234 | Typed engine builtins for gate, commit-guard and corpus transition | done |
+| 1235 | Engine-owned leases for the gate, worktree and fleet occupancy | done |
+| 1236 | Resolve operator gates as decision points under every profile | done |
+| 1237 | Report gate time and engine traces in run summaries | done |
+| 1238 | Pilot feature-verification on the foundation and run the executor matrix | done |
+| 1239 | Rewrite task-pipeline as a seven-state graph without the proof chain | done |
+| 1240 | Measure the rewritten task-pipeline against the 32-run baseline | done |
+| 1241 | Migrate idea, wrapup and pr-review pipelines onto the foundation | done |
+| 1242 | Delete the inline bookkeeping verbs and parity scripts | done |
 <!-- END AUTO-GENERATED -->
 
 ## Notes
@@ -181,4 +181,6 @@ Feature: One workflow interpreter and executor-agnostic agent.run dispatch
 ## History
 
 - 2026-10-17T17:17:52.534Z backlog → active (system)
+- 2026-10-18T02:07:40.922Z active → verifying (system)
+- 2026-10-18T02:07:56.470Z verifying → done (system)
 

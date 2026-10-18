@@ -1,0 +1,320 @@
+{
+    "schemaVersion": 1,
+    "generatedAt": "2026-10-18T01:49:13.365653+00:00",
+    "sourceHead": "670db1480d5068809026b02499c588c086d06d4e",
+    "workflow": "config/workflows/task-pipeline.yaml",
+    "definitionVersion": "9",
+    "definitionDigest": "sha256:ca504c1978399cc2c3b11a0f7a1b5b7739b006ac7a156c874fe541fde5c822ea",
+    "scope": "Three real D65 tasks, certification-only host executor, original full quality gate; no model stub in measured runs.",
+    "performanceComparison": "not comparable to implementation-bearing baseline; historical baseline is unchanged",
+    "scratchRoot": "/tmp/spur-d65-proof-20261018",
+    "runs": [
+        {
+            "wbs": "1232",
+            "runId": "075683d4-0235-4e3f-832d-f30de89eac6e",
+            "status": "done",
+            "finalState": "done",
+            "startedAt": "2026-10-18T01:38:29.680Z",
+            "completedAt": "2026-10-18T01:42:04.888Z",
+            "wallMs": 215208,
+            "stageActionMs": {
+                "precheck": 842,
+                "implement": 1964,
+                "gate": 202489,
+                "review": 6352,
+                "done": 1792
+            },
+            "engineActionMs": 213439,
+            "gateMs": 200570,
+            "gateStatus": "PASS",
+            "gateTree": "b77430b29994a2aec8f3d7100209ac3599ab6856",
+            "driverOverheadMs": null,
+            "driverOverheadReason": "No compatible host transcript. Certification-only host work and pauses are not implementation benchmark data.",
+            "progressDiagnostics": 19,
+            "summaryRows": [
+                {
+                    "stage": "precheck",
+                    "status": "passed",
+                    "workMs": 847,
+                    "waitMs": 0,
+                    "toolCalls": null,
+                    "tokens": null,
+                    "time": "0:01",
+                    "wait": "0:00",
+                    "token": "n/a"
+                },
+                {
+                    "stage": "implement",
+                    "status": "passed",
+                    "workMs": 649,
+                    "waitMs": 0,
+                    "toolCalls": null,
+                    "tokens": null,
+                    "time": "0:01",
+                    "wait": "0:00",
+                    "token": "n/a"
+                },
+                {
+                    "stage": "gate",
+                    "status": "passed",
+                    "workMs": 202516,
+                    "waitMs": 0,
+                    "toolCalls": null,
+                    "tokens": null,
+                    "time": "3:23",
+                    "wait": "0:00",
+                    "token": "n/a"
+                },
+                {
+                    "stage": "review",
+                    "status": "passed",
+                    "workMs": 6799,
+                    "waitMs": 0,
+                    "toolCalls": null,
+                    "tokens": null,
+                    "time": "0:07",
+                    "wait": "0:00",
+                    "token": "n/a"
+                },
+                {
+                    "stage": "done",
+                    "status": "passed",
+                    "workMs": 1780,
+                    "waitMs": 0,
+                    "toolCalls": null,
+                    "tokens": null,
+                    "time": "0:02",
+                    "wait": "0:00",
+                    "token": "n/a"
+                },
+                {
+                    "stage": "unattributed",
+                    "status": "",
+                    "workMs": 2582,
+                    "waitMs": 0,
+                    "toolCalls": null,
+                    "tokens": null,
+                    "time": "0:03",
+                    "wait": "0:00",
+                    "token": "n/a"
+                }
+            ],
+            "gateActionExitCodes": [0]
+        },
+        {
+            "wbs": "1237",
+            "runId": "0123eef5-e310-4322-a5d6-0e6b023a806e",
+            "status": "done",
+            "finalState": "done",
+            "startedAt": "2026-10-18T01:42:05.503Z",
+            "completedAt": "2026-10-18T01:45:35.760Z",
+            "wallMs": 210257,
+            "stageActionMs": {
+                "precheck": 875,
+                "implement": 1991,
+                "gate": 197970,
+                "review": 5848,
+                "done": 1773
+            },
+            "engineActionMs": 208457,
+            "gateMs": 196120,
+            "gateStatus": "PASS",
+            "gateTree": "b77430b29994a2aec8f3d7100209ac3599ab6856",
+            "driverOverheadMs": null,
+            "driverOverheadReason": "No compatible host transcript. Certification-only host work and pauses are not implementation benchmark data.",
+            "progressDiagnostics": 19,
+            "summaryRows": [
+                {
+                    "stage": "precheck",
+                    "status": "passed",
+                    "workMs": 879,
+                    "waitMs": 0,
+                    "toolCalls": null,
+                    "tokens": null,
+                    "time": "0:01",
+                    "wait": "0:00",
+                    "token": "n/a"
+                },
+                {
+                    "stage": "implement",
+                    "status": "passed",
+                    "workMs": 524,
+                    "waitMs": 0,
+                    "toolCalls": null,
+                    "tokens": null,
+                    "time": "0:01",
+                    "wait": "0:00",
+                    "token": "n/a"
+                },
+                {
+                    "stage": "gate",
+                    "status": "passed",
+                    "workMs": 197996,
+                    "waitMs": 0,
+                    "toolCalls": null,
+                    "tokens": null,
+                    "time": "3:18",
+                    "wait": "0:00",
+                    "token": "n/a"
+                },
+                {
+                    "stage": "review",
+                    "status": "passed",
+                    "workMs": 6417,
+                    "waitMs": 0,
+                    "toolCalls": null,
+                    "tokens": null,
+                    "time": "0:06",
+                    "wait": "0:00",
+                    "token": "n/a"
+                },
+                {
+                    "stage": "done",
+                    "status": "passed",
+                    "workMs": 1767,
+                    "waitMs": 0,
+                    "toolCalls": null,
+                    "tokens": null,
+                    "time": "0:02",
+                    "wait": "0:00",
+                    "token": "n/a"
+                },
+                {
+                    "stage": "unattributed",
+                    "status": "",
+                    "workMs": 2647,
+                    "waitMs": 0,
+                    "toolCalls": null,
+                    "tokens": null,
+                    "time": "0:03",
+                    "wait": "0:00",
+                    "token": "n/a"
+                }
+            ],
+            "gateActionExitCodes": [0]
+        },
+        {
+            "wbs": "1238",
+            "runId": "0e9239ff-d131-40d7-aa97-e58fc41cae11",
+            "status": "done",
+            "finalState": "done",
+            "startedAt": "2026-10-18T01:45:36.374Z",
+            "completedAt": "2026-10-18T01:49:05.314Z",
+            "wallMs": 208940,
+            "stageActionMs": {
+                "precheck": 2277,
+                "implement": 1877,
+                "gate": 195434,
+                "review": 5829,
+                "done": 1766
+            },
+            "engineActionMs": 207183,
+            "gateMs": 193390,
+            "gateStatus": "PASS",
+            "gateTree": "b77430b29994a2aec8f3d7100209ac3599ab6856",
+            "driverOverheadMs": null,
+            "driverOverheadReason": "No compatible host transcript. Certification-only host work and pauses are not implementation benchmark data.",
+            "progressDiagnostics": 19,
+            "summaryRows": [
+                {
+                    "stage": "precheck",
+                    "status": "passed",
+                    "workMs": 2282,
+                    "waitMs": 0,
+                    "toolCalls": null,
+                    "tokens": null,
+                    "time": "0:02",
+                    "wait": "0:00",
+                    "token": "n/a"
+                },
+                {
+                    "stage": "implement",
+                    "status": "passed",
+                    "workMs": 632,
+                    "waitMs": 0,
+                    "toolCalls": null,
+                    "tokens": null,
+                    "time": "0:01",
+                    "wait": "0:00",
+                    "token": "n/a"
+                },
+                {
+                    "stage": "gate",
+                    "status": "passed",
+                    "workMs": 195454,
+                    "waitMs": 0,
+                    "toolCalls": null,
+                    "tokens": null,
+                    "time": "3:15",
+                    "wait": "0:00",
+                    "token": "n/a"
+                },
+                {
+                    "stage": "review",
+                    "status": "passed",
+                    "workMs": 6289,
+                    "waitMs": 0,
+                    "toolCalls": null,
+                    "tokens": null,
+                    "time": "0:06",
+                    "wait": "0:00",
+                    "token": "n/a"
+                },
+                {
+                    "stage": "done",
+                    "status": "passed",
+                    "workMs": 1761,
+                    "waitMs": 0,
+                    "toolCalls": null,
+                    "tokens": null,
+                    "time": "0:02",
+                    "wait": "0:00",
+                    "token": "n/a"
+                },
+                {
+                    "stage": "unattributed",
+                    "status": "",
+                    "workMs": 2496,
+                    "waitMs": 0,
+                    "toolCalls": null,
+                    "tokens": null,
+                    "time": "0:02",
+                    "wait": "0:00",
+                    "token": "n/a"
+                }
+            ],
+            "gateActionExitCodes": [0]
+        }
+    ],
+    "failedAttempt": {
+        "runId": "5162fc56-ac17-4485-b3d1-f3951a28d319",
+        "status": "failed",
+        "wallMs": 1080190,
+        "stageActionMs": {
+            "precheck": 1965,
+            "implement": 2943,
+            "gate": 519723,
+            "remediate": 1733,
+            "failed": 280
+        },
+        "gateExitCodes": [1, 1, 1],
+        "cause": "Fixture ambient environment, temporary collaborator typing integration, then missing TSDoc; original repair budget exhausted; failure retained."
+    },
+    "reproduce": [
+        "bun run apps/cli/src/index.ts workflow run config/workflows/task-pipeline.yaml --vars '{\"wbs\":\"<1232|1237|1238>\",\"executor\":\"host\",\"profile\":\"auto\"}' --json",
+        "Complete returned host work item, write a matching receipt, then workflow continue <runId> --answer-text <receipt> --json",
+        "workflow trace <runId> --json; workflow progress <runId> --json; workflow summary --progress <progress.json>"
+    ],
+    "additionalFailedAttempts": [
+        {
+            "runId": "0be9cca6-0ad4-4ab7-8b3b-4b6dc2e8ab28",
+            "status": "failed",
+            "wallMs": 803115,
+            "cause": "Mixed approval resume and missing task Review confidence repaired; new worktree service then failed architectural pre-checks before final repair."
+        }
+    ],
+    "manualRecheckEvidence": [
+        ".spur/run/d65-verifyall/proof-1232-resume-fix-gate.log",
+        ".spur/run/d65-verifyall/proof-1232-resume-fix-type-failure.log"
+    ]
+}

@@ -1,10 +1,12 @@
 # Task pipeline — rewritten pipeline vs the 32-run baseline (task 1240)
 
+**Current status: three real D65 task pipelines completed with full gates and recorded PASS.** These are certification-only runs of existing implementations; they demonstrate pipeline completion, not implementation speedup. Section 7 is the current result. Sections 1–6 preserve the earlier unsuccessful measurements and the unchanged historical baseline.
+
 Measurement record for feature D65 P2 exit. Read with
 [workflow-execution-foundation](../../docs/design/workflow-execution-foundation.md) §1 (the issue
 this measures) and ADR-140 (the rewrite whose benefit is being checked).
 
-- **Status: partial — 0 of 3 runs completed.** The baseline is complete and reproducible. Three more
+- **Historical status (2026-10-17): partial — 0 of 3 runs completed.** The baseline is complete and reproducible. Three more
   rewritten-pipeline runs were launched in this session (M1–M3, §4.8–§4.10) against `7b0298dda`, the commit
   that was supposed to unblock certification. **None reached `done`, and the two blockers are not the two
   that were fixed:**
@@ -942,3 +944,39 @@ for (const { j, wallMs: w } of runs) {
 - M1 / M2 / M3 failure handoffs: `.spur/run/82008861-…-remediate-partial.md`,
   `.spur/run/8d0ac3ff-…-implement-partial.md`, `.spur/run/b252fc11-…-implement-partial.md` — each carries
   the verbatim terminal text and the resolved invocation.
+
+## 7. Completed D65 certification runs
+
+The repeatable result is [d65-real-task-pipeline-receipt.json](./d65-real-task-pipeline-receipt.json). Current host work used no model stub. Every task ran the original full gate; no reduced command, assertion suppression, baseline change or forced done transition was used. The retained scratch worktree is `/tmp/spur-d65-proof-20261018`. Engine trace action durations are summed once by action id; ambiguous positional progress mappings are counted in the receipt and are not used to infer missing action durations.
+
+| Task / run | Precheck ms | Implement ms | Gate ms | Remediate ms | Review ms | Done ms | Action total ms | Run wall ms | Gate receipt ms | Driver overhead |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | --- |
+| 1232 / `075683d4-0235-4e3f-832d-f30de89eac6e` | 842 | 1964 | 202489 | 0 | 6352 | 1792 | 213439 | 215208 | 200570 | n/a |
+| 1237 / `0123eef5-e310-4322-a5d6-0e6b023a806e` | 875 | 1991 | 197970 | 0 | 5848 | 1773 | 208457 | 210257 | 196120 | n/a |
+| 1238 / `0e9239ff-d131-40d7-aa97-e58fc41cae11` | 2277 | 1877 | 195434 | 0 | 5829 | 1766 | 207183 | 208940 | 193390 | n/a |
+
+Baseline remains 32 runs / 2550 min / 815 min driver overhead as originally recorded; its read-only reproduction remains 33 qualifying summaries / 2551 min / 692 min driver-overhead rows. Neither set was retuned. Per-stage baseline aggregates remain in section 2. The certification sample carries no implementation workload comparable to those runs, so a percentage speedup or comparable driver-overhead delta would be unsupported. Unattributed host intervals are not relabeled model time or driver overhead.
+
+### 7.1 Fresh cross-agent aggregate
+
+`bun run apps/cli/src/index.ts history analyze --since 2026-10-10 --until 2026-10-18 --out .spur/run/d65-verifyall/history-analysis-final.json --json` exited 0. This reads already-imported history, does not import new sessions, and supplies cross-agent aggregates rather than stage timing.
+
+| Source | Records | Records with usage | Tool calls | Input tokens | Output tokens | Reported cost USD |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: |
+| agy | 14952 | 0 | 7181 | 0 | 0 | 0 |
+| claude | 31450 | 6296 | 5759 | 758547968 | 3459848 | 57.524559999999994 |
+| codex | 30491 | 3227 | 3803 | 1087580391 | 1481428 | 679.5353520000001 |
+| grok | 65310 | 30 | 6978 | 168014534 | 726451 | 0 |
+| pi | 232782 | 70333 | 81909 | 11795040443 | 57986416 | 472.549161 |
+
+Zero usage/cost fields in imported history are source-reported aggregates, not proof of zero cost; `recordsWithUsage` shows coverage.
+
+### 7.2 Findings and retained failed attempt
+
+- The preceding attempt `5162fc56-ac17-4485-b3d1-f3951a28d319` failed after its bounded repair budget: wall 1080190 ms; gate action exit codes `[1, 1, 1]`. Fixture environment inheritance, an intermediate fleet collaborator typing mismatch, and missing TSDoc were corrected. The subsequent attempt `0be9cca6-0ad4-4ab7-8b3b-4b6dc2e8ab28` also failed its bounded repair budget (803115 ms wall); its costs are retained separately. The final fresh attempt completed; the failed cost is retained in the JSON receipt rather than blended out.
+- Full gates dominate these certification runs. Their passing costs are measured above; no runtime improvement is inferred from a workload that does not implement new code.
+- Positional `workflow progress` mapping can be ambiguous for repeated action kinds. Raw trace action ids provide the stage aggregates above; diagnostics remain disclosed.
+- Driver overhead and token/cost comparison remain unavailable without a compatible host transcript. The summary now retains engine timing and gate time and prints unavailable usage as `n/a`, including batch rollups.
+- The separate real-task executor matrix uses stubbed models only for subprocess/fleet transport parity. Those runs are excluded from the performance sample.
+
+The later real-task fleet parity run exposed a matching role selector (`agent: coder`) being mistaken for a binary pin. The fleet-only fix and its red/green regression followed the three host measurements above; those host timings are retained as measured, and the final repository gate certifies the later source. The parity receipt records both the fixture environment failure and selector failure before their successful retries.

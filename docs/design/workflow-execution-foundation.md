@@ -26,10 +26,11 @@ ADR-118 (named contract violations). On conflict `00_ADR.md` wins (constitution 
 
 ## 1. Issue and scope
 
-Two interpreters execute the same workflow YAML: the engine (`spur workflow run` /
-`spur workflow continue`) and the host-session inline driver
-([inline-pipeline-driver](../../plugins/sp/skills/spur-dev/references/inline-pipeline-driver.md)),
-which re-implements guards, transitions and deterministic actions by hand. Measured over 32 run
+Before D65, two interpreters executed the same workflow YAML: the engine (`spur workflow run` /
+`spur workflow continue`) and the host-session inline driver, which re-implemented guards,
+transitions and deterministic actions by hand. The retired driver is replaced by the
+[engine execution loop](../../plugins/sp/skills/spur-dev/references/execution-workflow.md).
+Measured over 32 run
 summaries (2550 min), driver overhead was 815 min (32%) and the test-fix loop (~450 min) exceeded
 implement (356 min); the slow runs spent ~230k input tokens per driver turn re-executing engine
 mechanics (ADR-140 Why). The proof chain built to audit that duplicate reached `verifiedOutcome` on
@@ -98,6 +99,14 @@ branch:
 surface exactly as they do today, and headless callers keep the ADR-087 tier substitution. Adding a
 public flag would be an ADR-051 consent item; this contract deliberately does not need one.
 
+Fleet stages with answer capture, diff checks, session policy, capabilities or budgets persist
+their resolved action options beside the prompt (`<state>.execution.json`). The member executes
+the same `AgentRunActionRunner` contract and writes `<state>.result.json` before linking its
+completion receipt to the request. A missing result fails closed. Member drains claim one
+message at a time so stage contracts cannot mix; ordinary conversational delivery is unchanged.
+The agent selector may be omitted, `auto`, or the stage's own role (including the configured
+`coder` default). A different role or pinned binary fails rather than replacing the member's executor.
+
 ### 3.2 Host pause and resume
 
 An `agent.run` resolved to `host` suspends the run with the engine's existing pause primitive and
@@ -107,6 +116,14 @@ subagent per the ADR-047 0508 amendment — writes the receipt, and calls
 `spur workflow continue <run-id> --answer-text <receipt-path>`. The CAS claim makes that resume
 idempotent: repeating the call with the same receipt changes nothing and is refused as
 not-paused, which is the observable idempotency R1 of D65 asserts.
+
+The pause is action-level: the engine snapshots the next action index, so a consumer after
+`agent.run` waits for the receipt. Resume executes only the remaining actions; an exit-action
+pause also retains its selected transition to avoid repeating a decision guard. Spur carries the
+upstream engine fix as a Bun patch of version 0.5.28 until it is released.
+Pending-gate inspection uses that cursor to identify host input before a later approval in the
+same state. After the host action resumes, a subsequent approval uses its own answer contract;
+the completed work item is not attached again as that gate's pause payload.
 
 ### 3.3 Builtins
 
@@ -173,6 +190,10 @@ Every executed action emits an engine action trace carrying the run id, under ev
 and stop hardcoding `null` at [run-summary.ts:598](../../packages/app/src/workflow/run-summary.ts).
 The proof-digest columns go away with the chain (ADR-140 item 7).
 
+When no host transcript is available, summaries retain engine stage timings and gate receipt time.
+Tokens, tool calls and actor timing remain unmeasured; time outside stage windows is unattributed,
+not measured driver overhead.
+
 ### 3.7 Coexistence window
 
 Migrated workflows run on the engine; unmigrated ones keep the inline driver. The driver's parity
@@ -226,6 +247,10 @@ ADR-126 A4 rules bind all three executors:
 - a `contract-violation` outcome (ADR-118) is terminal for that action and reports `contract` plus
   the observed shape;
 - the receipt is durable: the run's evidence is the receipt, not the executor's stdout.
+
+Every keyed fleet dispatch uses the member's invocation path, including workflow keys. A
+persistent stdin send acknowledges delivery but cannot complete a workflow stage because it
+does not create the coordination run receipt.
 
 ### 4.3 Host pause payload
 
@@ -295,6 +320,15 @@ Lockless: `light`, `deferred`, `status`, and the short circuits (receipt reuse, 
 recheck probe). Release runs in a `finally`, so failure and throw release too; a cancelled process
 leaves a dead-pid claim the next gate reclaims. An unclaimed non-empty directory is reported, never
 destroyed.
+
+**Worktree owner.** For `task-pipeline` in a Git worktree, the engine claims the canonical
+worktree path in `project_claims` under slot `worktree`, held by its run id. Execution heartbeats
+the fenced claim; host pauses retain it until that run continues or is cancelled. A competing
+run is refused with the owner's identity. Terminal completion, failure and explicit cancellation
+release it. An expired claim without a live run record can be reclaimed; a paused or interrupted
+run remains its owner, and an abandoned active run must be cancelled before another takes over.
+The worktree's creation and retention policy stays ADR-127, and the fleet's member write-slot
+claim remains separate, so dispatch does not change either owner.
 
 ### 4.7 CLI surface changes
 

@@ -348,8 +348,10 @@ spur workflow summary (--progress <[label=]file>... | --rollup <[label=]file>...
 The measured execution summary `/sp:dev-run` and `/sp:dev-runall` print: the host transcript
 windowed by each state visit's attempt timestamps, per stage time, operator wait, tool calls,
 tokens (total / non-cached) and the actor split, with driver overhead as its own row. `--rollup`
-renders one row per run plus the batch total (and the wall span when runs overlap). No transcript
-or no window → `n/a`, exit `0`. Exit `2`: usage error, untimed progress or unreadable input.
+renders one row per run plus the batch total (and the wall span when runs overlap). Without a host
+transcript, engine stage times and gate time remain available; tokens, tool calls and actor timing
+are unmeasured, and time outside stage windows is labelled unattributed. An explicitly requested
+unavailable transcript returns `n/a`, exit `0`. Exit `2`: usage error, untimed progress or unreadable input.
 Absorbed from the retired `run-summary` plugin script (script-absorption PR-6).
 
 ## spur workflow profile

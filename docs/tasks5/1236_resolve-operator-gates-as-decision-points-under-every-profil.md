@@ -4,7 +4,7 @@ name: Resolve operator gates as decision points under every profile
 status: done
 template: feature-impl
 created_at: 2026-10-17T15:59:56.818Z
-updated_at: "2026-10-17T19:07:41.600Z"
+updated_at: "2026-10-18T02:02:08.161Z"
 feature_id: D65
 priority: P1
 tags:
@@ -95,24 +95,38 @@ Each entry cites the first changed line per file (`file:line`).
 
 | Requirement | Status | Evidence |
 |-------------|--------|----------|
-| R1 | MET | `resolveDecision` (`packages/app/src/workflow/decision-hitl-responder.ts:126`) returns the operator's answer for every profile except `auto`, whatever mode the gate declares, and the trace records the gate's declared mode with reason `operator` (or `policy-never` for `never`). Provenance vocabulary gains `operator` (`:26`). Tests: `packages/app/tests/workflow/decision-profile.test.ts` — an `evidence` gate prompts the operator and never reaches the evaluator, an undeclared profile is interactive, a `never` gate keeps `policy-never` and still prompts |
-| R2 | MET | Under `profile=auto` the declared binding answers: an `evidence` gate with an accepted model answer writes the accepted status var, no evidence for a declared producer defers with the deferred status var, and a degrading maker applies the catalog default recorded as `source: fallback` with the served hub reason rather than as a maker decision (`packages/app/src/workflow/decision-hitl-responder.ts:533`). `hitl.confirm`/`hitl.select` pass the run's `vars.profile` through (`packages/app/src/workflow/actions/hitl-confirm.ts`, `hitl-select.ts`) |
-| R3 | MET | `collectHitlDecisionViolations` (`packages/app/src/workflow/composition-lint.ts:375`) now rejects a non-input gate that declares no decision binding, while `mode: never` stays a valid binding so unmigrated workflows keep validating. The corpus side of R3 (dropping `mode: never` and the `idea_approved`/`design_approved` auto-skip guards) is migration work owned by 1239/1241 and is NOT applied here — see the gaps below |
+| R1 | MET | @run `.spur/run/d65-verifyall/app-tests.log` line 137 — (pass) task 1236 R1: the interactive profile delegates every gate to the operator > an evidence gate prompts the operator and never reaches the evaluator [0.29ms]; fresh targeted run exited 0 |
+| R2 | MET | @run `.spur/run/d65-verifyall/app-tests.log` line 143 — (pass) task 1236 R2: profile=auto answers from the declared binding > a degrading maker applies the catalog default and the trace records the fallback [0.04ms]; fresh targeted run exited 0 |
+| R3 | MET | @run `.spur/run/d65-verifyall/app-tests.log` line 145 — (pass) task 1236 R3: workflow validate requires a declared binding > rejects a confirm gate that declares no decision binding [0.12ms]; fresh targeted run exited 0 |
 
 | Acceptance Criteria | Status | Evidence Type | Evidence |
 |---------------------|--------|---------------|----------|
-| AC1 — R5 — Operator gates resolve as decision points under every profile (req: R1, R2, R3) | MET | command | `packages/app/tests/workflow/decision-profile.test.ts` plus the updated evidence/catalog/workflow-service suites run inside the app workspace → 214 pass, 0 fail, covering operator-under-every-profile, auto-accepted, auto-deferred, maker-degrade-as-fallback, and both validate directions (unbound rejected, `mode: never` accepted). `spur task gate 1236 run` → `quality gate PASS` (log `.spur/run/1236-test-gate.log`) |
+| R5 — Operator gates resolve as decision points under every profile | MET | test | @run `.spur/run/d65-verifyall/app-tests.log` line 137 — (pass) task 1236 R1: the interactive profile delegates every gate to the operator > an evidence gate prompts the operator and never reaches the evaluator [0.29ms]; fresh targeted run exited 0; @run `.spur/run/d65-verifyall/app-tests.log` line 143 — (pass) task 1236 R2: profile=auto answers from the declared binding > a degrading maker applies the catalog default and the trace records the fallback [0.04ms]; fresh targeted run exited 0; @run `.spur/run/d65-verifyall/app-tests.log` line 145 — (pass) task 1236 R3: workflow validate requires a declared binding > rejects a confirm gate that declares no decision binding [0.12ms]; fresh targeted run exited 0 |
 - Coverage: N/A (verdict-based; verify pipeline does not measure code coverage)
 
 ### Review
 
-<!-- spur:record-review -->
+Verdict: PASS
+Confidence: HIGH
 
-**SECU findings** (pipeline verify step — verdict: PASS)
+#### Per-Requirement Traceability
+| Req | Status | Evidence |
+| --- | --- | --- |
+| R1 | MET | @run `.spur/run/d65-verifyall/app-tests.log` line 137 — (pass) task 1236 R1: the interactive profile delegates every gate to the operator > an evidence gate prompts the operator and never reaches the evaluator [0.29ms]; fresh targeted run exited 0 |
+| R2 | MET | @run `.spur/run/d65-verifyall/app-tests.log` line 143 — (pass) task 1236 R2: profile=auto answers from the declared binding > a degrading maker applies the catalog default and the trace records the fallback [0.04ms]; fresh targeted run exited 0 |
+| R3 | MET | @run `.spur/run/d65-verifyall/app-tests.log` line 145 — (pass) task 1236 R3: workflow validate requires a declared binding > rejects a confirm gate that declares no decision binding [0.12ms]; fresh targeted run exited 0 |
 
-| Priority | Dimension | Location | Finding |
-|----------|-----------|----------|----------|
-| P4 | — | — | No findings (verify verdict PASS) |
+#### Acceptance Criteria Verification
+| AC | Status | Evidence Type | Evidence |
+| --- | --- | --- | --- |
+| R5 — Operator gates resolve as decision points under every profile | MET | test | @run `.spur/run/d65-verifyall/app-tests.log` line 137 — (pass) task 1236 R1: the interactive profile delegates every gate to the operator > an evidence gate prompts the operator and never reaches the evaluator [0.29ms]; fresh targeted run exited 0; @run `.spur/run/d65-verifyall/app-tests.log` line 143 — (pass) task 1236 R2: profile=auto answers from the declared binding > a degrading maker applies the catalog default and the trace records the fallback [0.04ms]; fresh targeted run exited 0; @run `.spur/run/d65-verifyall/app-tests.log` line 145 — (pass) task 1236 R3: workflow validate requires a declared binding > rejects a confirm gate that declares no decision binding [0.12ms]; fresh targeted run exited 0 |
+
+
+#### Findings
+
+| Priority | Dimension | Location | Finding | Disposition |
+| --- | --- | --- | --- | --- |
+| P4 | functional/SECUA/architecture | docs/design/workflow-execution-foundation.md:19 | Inline review completed; requirement and AC evidence is listed above; prior verification blockers are resolved | RESOLVED |
 
 ### References
 

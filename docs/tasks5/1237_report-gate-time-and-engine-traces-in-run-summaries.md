@@ -4,7 +4,7 @@ name: Report gate time and engine traces in run summaries
 status: done
 template: feature-impl
 created_at: 2026-10-17T15:59:56.819Z
-updated_at: "2026-10-17T19:16:40.900Z"
+updated_at: "2026-10-18T02:02:11.026Z"
 feature_id: D65
 priority: P2
 tags:
@@ -70,6 +70,8 @@ Each entry cites the first changed line per file (`file:line`).
 | `packages/app/tests/workflow/run-summary-cli.test.ts:605` |
 | `packages/app/tests/workflow/run-summary-cli.test.ts:612` |
 
+Follow-up implementation: packages/app/src/services/quality-gate.ts:601 binds receipts to the engine __runId when no explicit runId is present. packages/app/src/workflow/run-summary-cli.ts:1 retains engine and gate timing without compatible transcript data; unavailable usage remains n/a. docs/reports/d65-real-task-pipeline-receipt.json:1 records three completed runs whose summary gate times equal actual typed gate receipts.
+
 ### Testing
 
 **Pipeline verify results**
@@ -78,23 +80,36 @@ Each entry cites the first changed line per file (`file:line`).
 
 | Requirement | Status | Evidence |
 |-------------|--------|----------|
-| R1 | MET | Root cause was a path/identity mismatch: the gate writes `.spur/run/<wbs>-check-receipt.json` with the run identity recorded INSIDE it, while the summary looked only for `<runId>-check-receipt.json`, so every summary rendered a null gate. `gateFromReceipt` (`packages/app/src/workflow/run-summary-render.ts:209`) now tries the run-id path first, then takes the first receipt in the run dir whose recorded `runId` is this run, and never reads a foreign one. Both callers resolve it: the `spur workflow summary` CLI (`packages/app/src/workflow/run-summary-cli.ts:96`) and the close writer (`packages/app/src/workflow/run-summary-render.ts:174`), which previously left the built summary's placeholder untouched. Proven on this repo's own receipt: `.spur/run/1237-check-receipt.json` carries `runId 1237c-…` and `gateRuntimeMs`, and the renderer emits `of which gate (informational) |
-| R2 | MET | Stage windows come from `action_runs` rows through `ActionRunDao` (`packages/app/src/workflow/progress-projection.ts:250`) and the summary windows over `progress.states[].actions[].attempts[]` timestamps — no inline trace verb and no inline-run artifact is read. The engine's own runs therefore report stage times with no driver bookkeeping; nothing needed changing here |
+| R1 | MET | @run `.spur/run/d65-verifyall/app-tests.log` line 84 — (pass) 1146 — gate receipt and batch roll-up > D65 1237 R1: a WBS-named gate receipt resolves by the identity it records [0.88ms]; fresh targeted run exited 0 |
+| R2 | MET | @run `.spur/run/d65-verifyall/summary-green.log` line 28 — (pass) 1146 — writeCloseSummary (R1/AC1/AC2) > 1237 R2: engine timings survive an unavailable host transcript [0.65ms]; fresh targeted run exited 0 |
 
 | Acceptance Criteria | Status | Evidence Type | Evidence |
 |---------------------|--------|---------------|----------|
-| AC1 — R7 — Run summaries report gate time and engine-emitted traces (req: R1, R2) | MET | command | `packages/app/tests/workflow/run-summary-cli.test.ts` (25 pass, run inside the app workspace) covers the run-id receipt, the WBS-named receipt resolved by its recorded identity, a foreign receipt still refused, an unreadable receipt, and the CLI end-to-end rendering the resolved gate time from a cwd that holds this run's receipt. `spur task gate 1237 run` → `quality gate PASS` (log `.spur/run/1237-test-gate.log`) |
+| R7 — Run summaries report gate time and engine-emitted traces | MET | test | @run `.spur/run/d65-verifyall/app-tests.log` line 84 — (pass) 1146 — gate receipt and batch roll-up > D65 1237 R1: a WBS-named gate receipt resolves by the identity it records [0.88ms]; fresh targeted run exited 0; @run `.spur/run/d65-verifyall/summary-green.log` line 28 — (pass) 1146 — writeCloseSummary (R1/AC1/AC2) > 1237 R2: engine timings survive an unavailable host transcript [0.65ms]; fresh targeted run exited 0 |
 - Coverage: N/A (verdict-based; verify pipeline does not measure code coverage)
 
 ### Review
 
-<!-- spur:record-review -->
+Verdict: PASS
+Confidence: HIGH
 
-**SECU findings** (pipeline verify step — verdict: PASS)
+#### Per-Requirement Traceability
+| Req | Status | Evidence |
+| --- | --- | --- |
+| R1 | MET | @run `.spur/run/d65-verifyall/app-tests.log` line 84 — (pass) 1146 — gate receipt and batch roll-up > D65 1237 R1: a WBS-named gate receipt resolves by the identity it records [0.88ms]; fresh targeted run exited 0 |
+| R2 | MET | @run `.spur/run/d65-verifyall/summary-green.log` line 28 — (pass) 1146 — writeCloseSummary (R1/AC1/AC2) > 1237 R2: engine timings survive an unavailable host transcript [0.65ms]; fresh targeted run exited 0 |
 
-| Priority | Dimension | Location | Finding |
-|----------|-----------|----------|----------|
-| P4 | — | — | No findings (verify verdict PASS) |
+#### Acceptance Criteria Verification
+| AC | Status | Evidence Type | Evidence |
+| --- | --- | --- | --- |
+| R7 — Run summaries report gate time and engine-emitted traces | MET | test | @run `.spur/run/d65-verifyall/app-tests.log` line 84 — (pass) 1146 — gate receipt and batch roll-up > D65 1237 R1: a WBS-named gate receipt resolves by the identity it records [0.88ms]; fresh targeted run exited 0; @run `.spur/run/d65-verifyall/summary-green.log` line 28 — (pass) 1146 — writeCloseSummary (R1/AC1/AC2) > 1237 R2: engine timings survive an unavailable host transcript [0.65ms]; fresh targeted run exited 0 |
+
+
+#### Findings
+
+| Priority | Dimension | Location | Finding | Disposition |
+| --- | --- | --- | --- | --- |
+| P4 | functional/SECUA/architecture | docs/design/workflow-execution-foundation.md:19 | Inline review completed; requirement and AC evidence is listed above; prior verification blockers are resolved | RESOLVED |
 
 ### References
 

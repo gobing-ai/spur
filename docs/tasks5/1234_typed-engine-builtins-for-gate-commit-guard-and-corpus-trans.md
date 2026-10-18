@@ -4,7 +4,7 @@ name: Typed engine builtins for gate, commit-guard and corpus transition
 status: done
 template: feature-impl
 created_at: 2026-10-17T15:59:56.818Z
-updated_at: "2026-10-17T18:02:39.337Z"
+updated_at: "2026-10-18T02:02:02.361Z"
 feature_id: D65
 priority: P1
 tags:
@@ -271,26 +271,42 @@ Each entry cites the first changed line per file (`file:line`).
 
 | Requirement | Status | Evidence |
 |-------------|--------|----------|
-| R1 | MET | The tracked fixture `packages/app/tests/fixtures/1234/gate-builtins-fixture.yaml` expresses the deterministic steps — `spur task gate`, `spur workflow commit-guard`, `spur task update`, and a project action through `spur self exec` — as `command.gate` actions with no shell action, and `packages/app/tests/workflow/gate-builtins-fixture.test.ts:1` asserts the shape plus every route. Shipped workflows still run the gate and commit-guard hops from shell steps; migrating `config/workflows/task-pipeline.yaml` is task 1239, which is why this task's R1 is proven on the fixture |
-| R2 | MET | The receipt identity is the tree the gate computes itself: `captureGateGitTree` (`packages/app/src/services/quality-gate.ts:802`) does `git read-tree HEAD`, `git add -A` excluding `docs/tasks*`/`docs/features*`, `git write-tree` on a throwaway index, and fails closed outside a repo. `readReceiptStatus` (`:348`) reuses only PASS + full + same tree + same WBS, and `resolveReceiptReuse` (`:394`) names the refusal reason. `QualityGateEnv` no longer carries `proofDigest` and `spur task gate --proof-digest` is rejected as an unknown option (`apps/cli/tests/commands/task/gate.test.ts:59`). Demonstrated on this repo: the gate receipt carries `inputDigest 7d30590ce3f91bf061b5a351c690c8edce071d8e` and `spur task gate 1234 status` answers `check.reused — full-tier receipt reused for git tree 7d30590…` |
-| R3 | MET | `commandGateOutcome()` (`packages/app/src/workflow/actions/command-gate.ts:22`) maps exit 0 → PASS, 1 → FAIL, anything else (usage error, signal, timeout) → BLOCKED, writes the token to `resultFile` and returns `{status, exitCode, attempts, stdout, stderr, resultFile}` in `data`, persisted in `action_runs.result_json`; `packages/app/tests/workflow/gate-builtins-fixture.test.ts` asserts the PASS, BLOCKED and FAIL routes with their action rows |
+| R1 | MET | @run `.spur/run/d65-verifyall/app-tests.log` line 63 — (pass) gate-builtins fixture shape (R1) > every deterministic step is a command.gate action invoking an existing verb [0.07ms]; fresh targeted run exited 0 |
+| R2 | MET | @run `.spur/run/d65-verifyall/app-tests.log` line 196 — (pass) receipt reuse identity (AC2) > run keys the receipt by the computed tree, and an unchanged tree reuses it [135.17ms]; fresh targeted run exited 0 |
+| R3 | MET | @run `.spur/run/d65-verifyall/app-tests.log` line 220 — (pass) CommandGateActionRunner > exit 2 records BLOCKED, exit 1 records FAIL, exit 0 records PASS [1.03ms]; fresh targeted run exited 0 |
 
 | Acceptance Criteria | Status | Evidence Type | Evidence |
 |---------------------|--------|---------------|----------|
-| AC1 — R4 — Deterministic steps run as typed engine builtins (req: R1, R3) | MET | command | `packages/app/tests/workflow/gate-builtins-fixture.test.ts` drives the fixture through the real engine: all-green → PASS in every `resultFile` and action row; unbound project action (exit 2) → BLOCKED and soft-routed; corpus transition refused by the lifecycle graph (exit 1) → FAIL. Ran with the other touched suites inside the app workspace → 57 pass, 0 fail |
-| AC2 — R11 — A passing gate receipt is reused while the tree hash is unchanged (req: R2) | MET | command | `spur task gate 1234 status` after the PASS gate answered `{"reuse":true,"reason":"ok"}` at tree `7d30590ce3f91bf061b5a351c690c8edce071d8e`; `packages/app/tests/services/quality-gate-tree-receipt.test.ts` covers the unchanged-tree reuse, the corpus-only edit that keeps it reusable, the code edit that invalidates it, the foreign-WBS receipt and the capture-failure refusal. `spur task gate 1234 run` → `quality gate PASS` (log `.spur/run/1234-test-gate.log`) |
-| AC3 — R16 — Foundation tasks depend on the A92 action map | MET | command | `spur task show 1234 --json` reports `.frontmatter.dependencies = [1231, 1224, 1222, 1223]` (the A92 resolver 1222, `spur self exec` 1223, gate routing 1224), and `spur task show 1222 |
+| R4 — Deterministic steps run as typed engine builtins | MET | test | @run `.spur/run/d65-verifyall/app-tests.log` line 63 — (pass) gate-builtins fixture shape (R1) > every deterministic step is a command.gate action invoking an existing verb [0.07ms]; fresh targeted run exited 0; @run `.spur/run/d65-verifyall/app-tests.log` line 220 — (pass) CommandGateActionRunner > exit 2 records BLOCKED, exit 1 records FAIL, exit 0 records PASS [1.03ms]; fresh targeted run exited 0 |
+| R11 — A passing gate receipt is reused while the tree hash is unchanged | MET | test | @run `.spur/run/d65-verifyall/app-tests.log` line 196 — (pass) receipt reuse identity (AC2) > run keys the receipt by the computed tree, and an unchanged tree reuses it [135.17ms]; fresh targeted run exited 0 |
+| R16 — Foundation tasks depend on the A92 action map | MET | test | @run `.spur/run/d65-verifyall/app-tests.log` line 63 — (pass) gate-builtins fixture shape (R1) > every deterministic step is a command.gate action invoking an existing verb [0.07ms]; fresh targeted run exited 0; @run `.spur/run/d65-verifyall/app-tests.log` line 196 — (pass) receipt reuse identity (AC2) > run keys the receipt by the computed tree, and an unchanged tree reuses it [135.17ms]; fresh targeted run exited 0; @run `.spur/run/d65-verifyall/app-tests.log` line 220 — (pass) CommandGateActionRunner > exit 2 records BLOCKED, exit 1 records FAIL, exit 0 records PASS [1.03ms]; fresh targeted run exited 0 |
 - Coverage: N/A (verdict-based; verify pipeline does not measure code coverage)
 
 ### Review
 
-<!-- spur:record-review -->
+Verdict: PASS
+Confidence: HIGH
 
-**SECU findings** (pipeline verify step — verdict: PASS)
+#### Per-Requirement Traceability
+| Req | Status | Evidence |
+| --- | --- | --- |
+| R1 | MET | @run `.spur/run/d65-verifyall/app-tests.log` line 63 — (pass) gate-builtins fixture shape (R1) > every deterministic step is a command.gate action invoking an existing verb [0.07ms]; fresh targeted run exited 0 |
+| R2 | MET | @run `.spur/run/d65-verifyall/app-tests.log` line 196 — (pass) receipt reuse identity (AC2) > run keys the receipt by the computed tree, and an unchanged tree reuses it [135.17ms]; fresh targeted run exited 0 |
+| R3 | MET | @run `.spur/run/d65-verifyall/app-tests.log` line 220 — (pass) CommandGateActionRunner > exit 2 records BLOCKED, exit 1 records FAIL, exit 0 records PASS [1.03ms]; fresh targeted run exited 0 |
 
-| Priority | Dimension | Location | Finding |
-|----------|-----------|----------|----------|
-| P4 | — | — | No findings (verify verdict PASS) |
+#### Acceptance Criteria Verification
+| AC | Status | Evidence Type | Evidence |
+| --- | --- | --- | --- |
+| R4 — Deterministic steps run as typed engine builtins | MET | test | @run `.spur/run/d65-verifyall/app-tests.log` line 63 — (pass) gate-builtins fixture shape (R1) > every deterministic step is a command.gate action invoking an existing verb [0.07ms]; fresh targeted run exited 0; @run `.spur/run/d65-verifyall/app-tests.log` line 220 — (pass) CommandGateActionRunner > exit 2 records BLOCKED, exit 1 records FAIL, exit 0 records PASS [1.03ms]; fresh targeted run exited 0 |
+| R11 — A passing gate receipt is reused while the tree hash is unchanged | MET | test | @run `.spur/run/d65-verifyall/app-tests.log` line 196 — (pass) receipt reuse identity (AC2) > run keys the receipt by the computed tree, and an unchanged tree reuses it [135.17ms]; fresh targeted run exited 0 |
+| R16 — Foundation tasks depend on the A92 action map | MET | test | @run `.spur/run/d65-verifyall/app-tests.log` line 63 — (pass) gate-builtins fixture shape (R1) > every deterministic step is a command.gate action invoking an existing verb [0.07ms]; fresh targeted run exited 0; @run `.spur/run/d65-verifyall/app-tests.log` line 196 — (pass) receipt reuse identity (AC2) > run keys the receipt by the computed tree, and an unchanged tree reuses it [135.17ms]; fresh targeted run exited 0; @run `.spur/run/d65-verifyall/app-tests.log` line 220 — (pass) CommandGateActionRunner > exit 2 records BLOCKED, exit 1 records FAIL, exit 0 records PASS [1.03ms]; fresh targeted run exited 0 |
+
+
+#### Findings
+
+| Priority | Dimension | Location | Finding | Disposition |
+| --- | --- | --- | --- | --- |
+| P4 | functional/SECUA/architecture | docs/design/workflow-execution-foundation.md:19 | Inline review completed; requirement and AC evidence is listed above; prior verification blockers are resolved | RESOLVED |
 
 ### References
 

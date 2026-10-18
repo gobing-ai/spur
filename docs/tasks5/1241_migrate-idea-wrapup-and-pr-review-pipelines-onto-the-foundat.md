@@ -4,7 +4,7 @@ name: Migrate idea, wrapup and pr-review pipelines onto the foundation
 status: done
 template: feature-impl
 created_at: 2026-10-17T15:59:56.820Z
-updated_at: "2026-10-17T23:14:02.835Z"
+updated_at: "2026-10-18T02:02:21.844Z"
 feature_id: D65
 priority: P2
 tags:
@@ -83,25 +83,40 @@ Mechanical migration onto the D65 foundation (design `workflow-execution-foundat
 
 | Requirement | Status | Evidence |
 |-------------|--------|----------|
-| R1 | MET | `config/workflows/idea-pipeline.yaml:82` declares the `executor` var that 1232's dispatch reads (`host` / `fleet` / empty = subprocess), and its stages declare their completions so the self-contained lint passes: `discovery` declares `expectFiles: …-idea-needs-design.json` (`config/workflows/idea-pipeline.yaml:153`) and `feature-create` declares `…-idea-goal.md` / `…-idea-scope.md` (`config/workflows/idea-pipeline.yaml:253`). `spur workflow validate config/workflows/idea-pipeline.yaml` → `workflow valid`, zero findings |
-| R2 | MET | The four idea gates (`config/workflows/idea-pipeline.yaml:210` idea-eval, `:383` feature-check, `:485` design-approval, `:567` batch-create), `config/workflows/wayfinder-resolution.yaml:171` and `config/workflows/wrapup-pipeline.yaml:474` replace `decision: {mode: never}` with `mode: evidence` + `statusVar` + `evidenceNodes`, and drop `pause: true` (an evidence binding cannot live in a paused state). Each gains a two-action answer fold mapping a deferred/absent answer back to `no` — today's headless answer — so no transition or guard changed and the `idea_approved`/`design_approved` auto-skip guards are untouched. `grep -rn 'mode: never' config/workflows/*.yaml` → no matches. Behaviour pinned by the new `packages/app/tests/workflow/migrated-gates.test.ts` |
-| R3 | MET | All nine shipped workflows validate with zero `(1233` findings, and `SELF_CONTAINED_STAGE_ALLOWANCES` is now empty (`packages/app/src/workflow/composition-lint.ts:617`) — the three reviewed allowances that named 1241 as their remover are deleted because their stages declare their completions: `idea-pipeline` discovery/feature-create via `expectFiles`, `wrapup-pipeline` `doc-sync` via `inputs: [{path: …-wrapup-tasks.json}]` (`config/workflows/wrapup-pipeline.yaml:273`). `pr-review` and `history-anatomy` needed no edit — they already satisfied the lint — which is why only three workflow files changed |
-| R4 | MET | `plugins/sp/commands/dev-idea.md` and `dev-plan.md` reduce to the three moves (`spur workflow run` with `executor=host` → perform the returned work item → `spur workflow continue <run-id> --answer-text <receipt>`), with `auto`/named executors as the same definition minus the var. The stale `[inline pipeline driver]` hand-off is gone; `scripts/commands/inline-execution-contract.test.ts` now pins the loop instead of the deleted interpreter |
+| R1 | MET | packages/app/tests/services/workflow-host-executor.test.ts:102 — host action cursor now suspends before same-state consumers; all shipped workflows self-contained lint pass |
+| R2 | MET | @run `.spur/run/d65-verifyall/app-tests.log` line 37 — (pass) task-pipeline evidence chain — the approval is a decision point (1236, D65 R5) > the review tail declares an evidence binding, never `mode: never` or a pause [0.03ms]; fresh targeted run exited 0 |
+| R3 | MET | packages/app/src/workflow/actions/agent-run.ts and fleet-work-item.ts — all executor surfaces share action contracts, fleet members enforce answer capture/diff/capabilities before request completion; host pause regression passes |
+| R4 | MET | plugins/sp/commands/dev-plan.md:50 and plugins/sp/commands/dev-idea.md:63 — both describe run/work/continue; fresh plugin tests passed |
 
 | Acceptance Criteria | Status | Evidence Type | Evidence |
 |---------------------|--------|---------------|----------|
-| AC1 — R13 — Remaining workflows migrate and the inline bookkeeping surface is removed (req: R1, R2, R3, R4) | MET | command | `spur workflow validate` over all nine `config/workflows/*.yaml` → nine `workflow valid`, zero `(1233`/`(1236`/`(0911` findings; `bun run lint` clean (biome + 8 workspace typechecks); `spur task gate 1241 run` → `quality gate PASS` (log `.spur/run/1241-test-gate.log`, 11 500+ tests) |
+| R13 — Remaining workflows migrate and the inline bookkeeping surface is removed | MET | test | packages/app/tests/services/workflow-host-executor.test.ts:102 — host action cursor now suspends before same-state consumers; all shipped workflows self-contained lint pass; @run `.spur/run/d65-verifyall/app-tests.log` line 37 — (pass) task-pipeline evidence chain — the approval is a decision point (1236, D65 R5) > the review tail declares an evidence binding, never `mode: never` or a pause [0.03ms]; fresh targeted run exited 0; packages/app/src/workflow/actions/agent-run.ts and fleet-work-item.ts — all executor surfaces share action contracts, fleet members enforce answer capture/diff/capabilities before request completion; host pause regression passes; plugins/sp/commands/dev-plan.md:50 and plugins/sp/commands/dev-idea.md:63 — both describe run/work/continue; fresh plugin tests passed |
 - Coverage: N/A (verdict-based; verify pipeline does not measure code coverage)
 
 ### Review
 
-<!-- spur:record-review -->
+Verdict: PASS
+Confidence: HIGH
 
-**SECU findings** (pipeline verify step — verdict: PASS)
+#### Per-Requirement Traceability
+| Req | Status | Evidence |
+| --- | --- | --- |
+| R1 | MET | packages/app/tests/services/workflow-host-executor.test.ts:102 — host action cursor now suspends before same-state consumers; all shipped workflows self-contained lint pass |
+| R2 | MET | @run `.spur/run/d65-verifyall/app-tests.log` line 37 — (pass) task-pipeline evidence chain — the approval is a decision point (1236, D65 R5) > the review tail declares an evidence binding, never `mode: never` or a pause [0.03ms]; fresh targeted run exited 0 |
+| R3 | MET | packages/app/src/workflow/actions/agent-run.ts and fleet-work-item.ts — all executor surfaces share action contracts, fleet members enforce answer capture/diff/capabilities before request completion; host pause regression passes |
+| R4 | MET | plugins/sp/commands/dev-plan.md:50 and plugins/sp/commands/dev-idea.md:63 — both describe run/work/continue; fresh plugin tests passed |
 
-| Priority | Dimension | Location | Finding |
-|----------|-----------|----------|----------|
-| P4 | — | — | No findings (verify verdict PASS) |
+#### Acceptance Criteria Verification
+| AC | Status | Evidence Type | Evidence |
+| --- | --- | --- | --- |
+| R13 — Remaining workflows migrate and the inline bookkeeping surface is removed | MET | test | packages/app/tests/services/workflow-host-executor.test.ts:102 — host action cursor now suspends before same-state consumers; all shipped workflows self-contained lint pass; @run `.spur/run/d65-verifyall/app-tests.log` line 37 — (pass) task-pipeline evidence chain — the approval is a decision point (1236, D65 R5) > the review tail declares an evidence binding, never `mode: never` or a pause [0.03ms]; fresh targeted run exited 0; packages/app/src/workflow/actions/agent-run.ts and fleet-work-item.ts — all executor surfaces share action contracts, fleet members enforce answer capture/diff/capabilities before request completion; host pause regression passes; plugins/sp/commands/dev-plan.md:50 and plugins/sp/commands/dev-idea.md:63 — both describe run/work/continue; fresh plugin tests passed |
+
+
+#### Findings
+
+| Priority | Dimension | Location | Finding | Disposition |
+| --- | --- | --- | --- | --- |
+| P4 | functional/SECUA/architecture | docs/design/workflow-execution-foundation.md:19 | Inline review completed; requirement and AC evidence is listed above; prior verification blockers are resolved | RESOLVED |
 
 ### References
 

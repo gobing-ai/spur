@@ -1,13 +1,13 @@
 {
     "schemaVersion": 1,
-    "generatedAt": "2026-10-17T19:39:07.057Z",
+    "generatedAt": "2026-10-18T01:15:51.646Z",
     "fixture": "packages/app/tests/fixtures/1238/executor-matrix-fixture.yaml",
-    "projectPath": "/private/var/folders/2g/398pfv8j1tj_zt78g_ty2r740000gn/T/spur-executor-matrix-1792265943659",
+    "projectPath": "/private/var/folders/2g/398pfv8j1tj_zt78g_ty2r740000gn/T/spur-executor-matrix-1792286145418",
     "columns": [
         {
             "executor": "host",
             "status": "passed",
-            "runId": "cf94e716-55a9-41b5-b711-e570e843b2cf",
+            "runId": "a0b803e7-41a9-4622-9374-723f537779b8",
             "finalState": "done",
             "actions": [
                 {
@@ -28,7 +28,7 @@
         {
             "executor": "subprocess",
             "status": "passed",
-            "runId": "20aed5eb-8b25-4770-abf3-1abb712c8f47",
+            "runId": "8c3372cc-97f9-496c-a1ec-756005a2afae",
             "finalState": "done",
             "actions": [
                 {
@@ -48,18 +48,29 @@
         },
         {
             "executor": "fleet",
-            "status": "blocked",
-            "runId": null,
-            "finalState": null,
-            "actions": [],
-            "receiptShape": "",
-            "precondition": "fleet dispatch rejected the sender id 'workflow:<runId>' (validateAgentId: 2-64 chars, lowercase alphanumeric, \"_\" or \"-\") — the fleet surface cannot post a keyed message from a workflow run",
-            "evidence": "blocked: fleet dispatch rejected the sender id 'workflow:<runId>' (validateAgentId: 2-64 chars, lowercase alphanumeric, \"_\" or \"-\") — the fleet surface cannot post a keyed message from a workflow run"
+            "status": "passed",
+            "runId": "d0e7a96c-1c9b-45fa-817f-6fe0edea019e",
+            "finalState": "done",
+            "actions": [
+                {
+                    "node": "work",
+                    "actionKind": "agent.run",
+                    "status": "done"
+                },
+                {
+                    "node": "decide",
+                    "actionKind": "hitl.confirm",
+                    "status": "done"
+                }
+            ],
+            "receiptShape": "executor,files,finishedAt,outcome,reason,runId,startedAt,state",
+            "precondition": null,
+            "evidence": "fleet: done -> done; receipt=fleet; actions=2"
         }
     ],
     "comparison": {
         "identical": true,
-        "compared": 2,
+        "compared": 3,
         "mismatches": []
     }
 }

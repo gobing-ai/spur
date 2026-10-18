@@ -4,7 +4,7 @@ name: Lint self-contained stages in workflow validate
 status: done
 template: feature-impl
 created_at: 2026-10-17T15:59:56.817Z
-updated_at: "2026-10-17T17:43:54.750Z"
+updated_at: "2026-10-18T02:02:00.051Z"
 feature_id: D65
 priority: P1
 tags:
@@ -80,24 +80,38 @@ Each entry cites the first changed line per file (`file:line`).
 
 | Requirement | Status | Evidence |
 |-------------|--------|----------|
-| R1 | MET | `packages/app/src/workflow/composition-lint.ts:537` (`collectSelfContainedStageViolations`) reports a stage declaring no completion at the R1 branch, naming the state and the missing declaration; wired into validate at `packages/app/src/services/workflow-inspect-ops.ts:141`. Proof by fixture: an `agent.run` with neither `expectFiles`, `ownedSections` nor `requireDiff` makes `spur workflow validate` exit 1 with that finding, and adding `ownedSections: [\"Solution\"]` clears it. Tests: `packages/app/tests/workflow/self-contained-stage.test.ts` |
-| R2 | MET | `packages/app/src/workflow/composition-lint.ts:576` scans the stage's `input` for `.spur/run/` paths and compares them against static production from earlier-in-state and predecessor states plus the stage's own `inputs:`/`expectFiles`; `normalizeRunPath` (`:473`) normalizes `${vars.x}` templates so a template matches only the same template. Proof by fixture (a throwaway definition under /tmp, not a repo file): a literal run-artifact path under `.spur/run/`, a `${vars.x}`-templated one, and a nested run-directory one each produce the R2 finding, while a path a predecessor writes produces none |
-| R3 | MET | All nine shipped workflows validate clean with zero `(1233` findings and exit 0 (feature-lifecycle, feature-verification, history-anatomy, idea-pipeline, pr-review, task-lifecycle, task-pipeline, wayfinder-resolution, wrapup-pipeline). The three states that cannot satisfy the rule yet are named in `SELF_CONTAINED_STAGE_ALLOWANCES` at `packages/app/src/workflow/composition-lint.ts:598`, each keyed `workflow::state` with its exact normalized paths and the task (1241) that removes it; a stage or path added later still fails |
+| R1 | MET | @run `.spur/run/d65-verifyall/app-tests.log` line 47 — (pass) collectSelfContainedStageViolations R1 — declared completion > flags an agent.run that declares neither expectFiles nor ownedSections [0.23ms]; fresh targeted run exited 0 |
+| R2 | MET | @run `.spur/run/d65-verifyall/app-tests.log` line 50 — (pass) collectSelfContainedStageViolations R2 — prompt paths > flags a run path produced only by a later state [0.06ms]; fresh targeted run exited 0 |
+| R3 | MET | @run `.spur/run/d65-verifyall/app-tests.log` line 57 — (pass) shipped workflows are self-contained (1241) > every shipped workflow passes with no allowance [37.74ms]; fresh targeted run exited 0 |
 
 | Acceptance Criteria | Status | Evidence Type | Evidence |
 |---------------------|--------|---------------|----------|
-| AC1 — R3 — Workflow validate reports a stage that is not self-contained (req: R1, R2, R3) | MET | command | `bun apps/cli/src/index.ts workflow validate` on a fixture stage missing a completion declaration → exit 1 naming the state; on all nine `config/workflows/*.yaml` → exit 0, zero 1233 findings. `packages/app/tests/workflow/self-contained-stage.test.ts` plus the updated `packages/app/tests/workflow/composition-advisory.test.ts` run inside the app workspace → 38 pass, 0 fail. `spur task gate 1233 run` → `quality gate PASS` (log `.spur/run/1233-test-gate.log`) |
+| R3 — Workflow validate reports a stage that is not self-contained | MET | test | @run `.spur/run/d65-verifyall/app-tests.log` line 47 — (pass) collectSelfContainedStageViolations R1 — declared completion > flags an agent.run that declares neither expectFiles nor ownedSections [0.23ms]; fresh targeted run exited 0; @run `.spur/run/d65-verifyall/app-tests.log` line 50 — (pass) collectSelfContainedStageViolations R2 — prompt paths > flags a run path produced only by a later state [0.06ms]; fresh targeted run exited 0; @run `.spur/run/d65-verifyall/app-tests.log` line 57 — (pass) shipped workflows are self-contained (1241) > every shipped workflow passes with no allowance [37.74ms]; fresh targeted run exited 0 |
 - Coverage: N/A (verdict-based; verify pipeline does not measure code coverage)
 
 ### Review
 
-<!-- spur:record-review -->
+Verdict: PASS
+Confidence: HIGH
 
-**SECU findings** (pipeline verify step — verdict: PASS)
+#### Per-Requirement Traceability
+| Req | Status | Evidence |
+| --- | --- | --- |
+| R1 | MET | @run `.spur/run/d65-verifyall/app-tests.log` line 47 — (pass) collectSelfContainedStageViolations R1 — declared completion > flags an agent.run that declares neither expectFiles nor ownedSections [0.23ms]; fresh targeted run exited 0 |
+| R2 | MET | @run `.spur/run/d65-verifyall/app-tests.log` line 50 — (pass) collectSelfContainedStageViolations R2 — prompt paths > flags a run path produced only by a later state [0.06ms]; fresh targeted run exited 0 |
+| R3 | MET | @run `.spur/run/d65-verifyall/app-tests.log` line 57 — (pass) shipped workflows are self-contained (1241) > every shipped workflow passes with no allowance [37.74ms]; fresh targeted run exited 0 |
 
-| Priority | Dimension | Location | Finding |
-|----------|-----------|----------|----------|
-| P4 | — | — | No findings (verify verdict PASS) |
+#### Acceptance Criteria Verification
+| AC | Status | Evidence Type | Evidence |
+| --- | --- | --- | --- |
+| R3 — Workflow validate reports a stage that is not self-contained | MET | test | @run `.spur/run/d65-verifyall/app-tests.log` line 47 — (pass) collectSelfContainedStageViolations R1 — declared completion > flags an agent.run that declares neither expectFiles nor ownedSections [0.23ms]; fresh targeted run exited 0; @run `.spur/run/d65-verifyall/app-tests.log` line 50 — (pass) collectSelfContainedStageViolations R2 — prompt paths > flags a run path produced only by a later state [0.06ms]; fresh targeted run exited 0; @run `.spur/run/d65-verifyall/app-tests.log` line 57 — (pass) shipped workflows are self-contained (1241) > every shipped workflow passes with no allowance [37.74ms]; fresh targeted run exited 0 |
+
+
+#### Findings
+
+| Priority | Dimension | Location | Finding | Disposition |
+| --- | --- | --- | --- | --- |
+| P4 | functional/SECUA/architecture | docs/design/workflow-execution-foundation.md:19 | Inline review completed; requirement and AC evidence is listed above; prior verification blockers are resolved | RESOLVED |
 
 ### References
 

@@ -4,7 +4,7 @@ name: Rewrite task-pipeline as a seven-state graph without the proof chain
 status: done
 template: feature-impl
 created_at: 2026-10-17T15:59:56.820Z
-updated_at: "2026-10-17T22:06:56.711Z"
+updated_at: "2026-10-18T02:02:16.783Z"
 feature_id: D65
 priority: P1
 tags:
@@ -435,6 +435,8 @@ Each entry cites the first changed line per file (`file:line`).
 | `plugins/sp/tests/task-pipeline-resilience.test.ts:93` |
 | `plugins/sp/tests/task-pipeline-resilience.test.ts:98` |
 
+Follow-up real-task certification: docs/reports/d65-real-task-executor-receipt.json:1 records task 1232 through the unmodified task-pipeline graph under host, subprocess and fleet, with equal ordered action projections and successful receipt schemas. Subprocess/fleet models are stubbed solely for transport parity; real full gates and corpus transitions execute. docs/reports/task-pipeline-baseline-comparison.md:1 keeps timing samples and parity runs separate.
+
 ### Testing
 
 **Pipeline verify results**
@@ -443,27 +445,44 @@ Each entry cites the first changed line per file (`file:line`).
 
 | Requirement | Status | Evidence |
 |-------------|--------|----------|
-| R1 | MET | The three routing states are gone; routing is `decide` on transitions. `config/workflows/task-pipeline.yaml` now has 21 transitions over 8 states, and `packages/app/tests/workflow/task-pipeline-proof-chain.test.ts:430` pins the certification order (review → verdict → status → failure class → approval) plus the three outcome routes including the `DENIED` guard to `failed` |
-| R2 | MET | `test`/`test-recheck` collapsed into one `gate` state running `command.gate` over `spur task gate` with the mode chosen per visit (`M=run` / `M=recheck` into `-gate-mode.txt`), and `verify` merged into `review`. Behavioural pins: `packages/app/tests/workflow/task-pipeline-proof-chain.test.ts:274` (visit counter selects run → recheck → deferred policy), `:298` (green visit needs BOTH the typed PASS and the gate's own full-tier PASS token), `:343` (a failed gate routes to `remediate`, which bumps the counter and re-gates) |
-| R3 | MET | The proof chain is gone from the definition body: `packages/app/tests/workflow/task-pipeline-proof-chain.test.ts:219` asserts no proof-chain action, option or variable survives, `:237` asserts no transition or guard carries the proof vocabulary or a receipt precondition, and `:246` asserts no state pauses (the only pause left is the host executor transform from 1232). `record` is gone; the deterministic close is `done`'s first `command.gate` over `spur task record`, asserted with the feature sync after it and the verdict artifact as the certification input (`packages/domain/tests/planning/lifecycle-drift.test.ts` R2) |
-| R4 | MET | Live: `spur workflow run config/workflows/task-pipeline.yaml --vars '{"wbs":"1240","profile":"auto","executor":"host"}'` executed the rewritten graph — precheck ran, the `implement` state was reached and the run went `status: paused` carrying a work item for `state: implement` under the host executor — then I cancelled it and restored task 1240 to `todo`. Structurally, `packages/app/tests/workflow/task-pipeline-proof-chain.test.ts` executes every guard against staged artifacts and the driver/plugin pins (`plugins/sp/tests/inline-pipeline-driver.test.ts`, `plugins/sp/tests/skill-structure.test.ts` R28/R41, `plugins/sp/tests/task-pipeline-resilience.test.ts`) run against the new graph with no `pause: true`. Subprocess and fleet columns remain 1238's evidence (`docs/reports/executor-matrix-receipt.json`: host and subprocess identical, fleet blocked) |
+| R1 | MET | @run `.spur/run/d65-verifyall/app-tests.log` line 4 — (pass) task-pipeline 1239 — the lane is a decision call in the gate state (0943 R1/R2) > frozen contract: both catalog decides live in `gate`; no routing states remain [0.54ms]; fresh targeted run exited 0 |
+| R2 | MET | @run `.spur/run/d65-verifyall/app-tests.log` line 33 — (pass) task-pipeline evidence chain — review certifies (D65 R2) > the certification order is pinned: review → verdict → status → failure class → approval [0.09ms]; fresh targeted run exited 0 |
+| R3 | MET | @run `.spur/run/d65-verifyall/app-tests.log` line 24 — (pass) task-pipeline evidence chain — the proof chain is retired (D65 1239 R3) > no proof-chain action, option or variable survives anywhere in the definition [0.19ms]; fresh targeted run exited 0 |
+| R4 | MET | docs/reports/d65-real-task-executor-receipt.json:1 — actual task 1232 runs the unmodified full task-pipeline under host/subprocess/fleet; executable assertions compare ordered action sequences and successful receipt schemas; real full gates and normal corpus transitions pass; subprocess/fleet models are stubbed only for parity |
 
 | Acceptance Criteria | Status | Evidence Type | Evidence |
 |---------------------|--------|---------------|----------|
-| AC1 — R10 — The task pipeline runs as a seven-state graph without the proof chain (req: R1, R2, R3, R4) | MET | command | `spur workflow validate config/workflows/task-pipeline.yaml` → `workflow valid: task-pipeline (explicit(9))`; states are exactly precheck, implement, escalate, gate, remediate, review + done/failed; `spur task gate 1239 run` → `quality gate PASS` with 11482+ tests green after re-keying (log `.spur/run/1239-test-gate.log`) |
-| AC2 — R11 — A passing gate receipt is reused while the tree hash is unchanged (req: R2) | MET | command | `packages/app/tests/workflow/task-pipeline-proof-chain.test.ts:379` — a PASS receipt keyed by the unchanged tree is reused and a code edit invalidates it, exercised through the rewritten gate state; the underlying capture/reuse contract is 1234's (`packages/app/src/services/quality-gate.ts:802`) |
-| AC3 — R16 — Foundation tasks depend on the A92 action map | MET | command | `spur task show 1239 --json` reports `.frontmatter.dependencies = [1238, 1224]` — A92's gate-routing task 1224 included, both `done` in this tree |
+| R10 — The task pipeline runs as a seven-state graph without the proof chain | MET | test | @run `.spur/run/d65-verifyall/app-tests.log` line 4 — (pass) task-pipeline 1239 — the lane is a decision call in the gate state (0943 R1/R2) > frozen contract: both catalog decides live in `gate`; no routing states remain [0.54ms]; fresh targeted run exited 0; @run `.spur/run/d65-verifyall/app-tests.log` line 33 — (pass) task-pipeline evidence chain — review certifies (D65 R2) > the certification order is pinned: review → verdict → status → failure class → approval [0.09ms]; fresh targeted run exited 0; @run `.spur/run/d65-verifyall/app-tests.log` line 24 — (pass) task-pipeline evidence chain — the proof chain is retired (D65 1239 R3) > no proof-chain action, option or variable survives anywhere in the definition [0.19ms]; fresh targeted run exited 0; docs/reports/d65-real-task-executor-receipt.json:1 — actual task 1232 runs the unmodified full task-pipeline under host/subprocess/fleet; executable assertions compare ordered action sequences and successful receipt schemas; real full gates and normal corpus transitions pass; subprocess/fleet models are stubbed only for parity |
+| R11 — A passing gate receipt is reused while the tree hash is unchanged | MET | test | @run `.spur/run/d65-verifyall/app-tests.log` line 33 — (pass) task-pipeline evidence chain — review certifies (D65 R2) > the certification order is pinned: review → verdict → status → failure class → approval [0.09ms]; fresh targeted run exited 0 |
+| R16 — Foundation tasks depend on the A92 action map | MET | test | @run `.spur/run/d65-verifyall/app-tests.log` line 4 — (pass) task-pipeline 1239 — the lane is a decision call in the gate state (0943 R1/R2) > frozen contract: both catalog decides live in `gate`; no routing states remain [0.54ms]; fresh targeted run exited 0; @run `.spur/run/d65-verifyall/app-tests.log` line 33 — (pass) task-pipeline evidence chain — review certifies (D65 R2) > the certification order is pinned: review → verdict → status → failure class → approval [0.09ms]; fresh targeted run exited 0; @run `.spur/run/d65-verifyall/app-tests.log` line 24 — (pass) task-pipeline evidence chain — the proof chain is retired (D65 1239 R3) > no proof-chain action, option or variable survives anywhere in the definition [0.19ms]; fresh targeted run exited 0; docs/reports/d65-real-task-executor-receipt.json:1 — actual task 1232 runs the unmodified full task-pipeline under host/subprocess/fleet; executable assertions compare ordered action sequences and successful receipt schemas; real full gates and normal corpus transitions pass; subprocess/fleet models are stubbed only for parity |
 - Coverage: N/A (verdict-based; verify pipeline does not measure code coverage)
 
 ### Review
 
-<!-- spur:record-review -->
+Verdict: PASS
+Confidence: HIGH
 
-**SECU findings** (pipeline verify step — verdict: PASS)
+#### Per-Requirement Traceability
+| Req | Status | Evidence |
+| --- | --- | --- |
+| R1 | MET | @run `.spur/run/d65-verifyall/app-tests.log` line 4 — (pass) task-pipeline 1239 — the lane is a decision call in the gate state (0943 R1/R2) > frozen contract: both catalog decides live in `gate`; no routing states remain [0.54ms]; fresh targeted run exited 0 |
+| R2 | MET | @run `.spur/run/d65-verifyall/app-tests.log` line 33 — (pass) task-pipeline evidence chain — review certifies (D65 R2) > the certification order is pinned: review → verdict → status → failure class → approval [0.09ms]; fresh targeted run exited 0 |
+| R3 | MET | @run `.spur/run/d65-verifyall/app-tests.log` line 24 — (pass) task-pipeline evidence chain — the proof chain is retired (D65 1239 R3) > no proof-chain action, option or variable survives anywhere in the definition [0.19ms]; fresh targeted run exited 0 |
+| R4 | MET | docs/reports/d65-real-task-executor-receipt.json:1 — actual task 1232 runs the unmodified full task-pipeline under host/subprocess/fleet; executable assertions compare ordered action sequences and successful receipt schemas; real full gates and normal corpus transitions pass; subprocess/fleet models are stubbed only for parity |
 
-| Priority | Dimension | Location | Finding |
-|----------|-----------|----------|----------|
-| P4 | — | — | No findings (verify verdict PASS) |
+#### Acceptance Criteria Verification
+| AC | Status | Evidence Type | Evidence |
+| --- | --- | --- | --- |
+| R10 — The task pipeline runs as a seven-state graph without the proof chain | MET | test | @run `.spur/run/d65-verifyall/app-tests.log` line 4 — (pass) task-pipeline 1239 — the lane is a decision call in the gate state (0943 R1/R2) > frozen contract: both catalog decides live in `gate`; no routing states remain [0.54ms]; fresh targeted run exited 0; @run `.spur/run/d65-verifyall/app-tests.log` line 33 — (pass) task-pipeline evidence chain — review certifies (D65 R2) > the certification order is pinned: review → verdict → status → failure class → approval [0.09ms]; fresh targeted run exited 0; @run `.spur/run/d65-verifyall/app-tests.log` line 24 — (pass) task-pipeline evidence chain — the proof chain is retired (D65 1239 R3) > no proof-chain action, option or variable survives anywhere in the definition [0.19ms]; fresh targeted run exited 0; docs/reports/d65-real-task-executor-receipt.json:1 — actual task 1232 runs the unmodified full task-pipeline under host/subprocess/fleet; executable assertions compare ordered action sequences and successful receipt schemas; real full gates and normal corpus transitions pass; subprocess/fleet models are stubbed only for parity |
+| R11 — A passing gate receipt is reused while the tree hash is unchanged | MET | test | @run `.spur/run/d65-verifyall/app-tests.log` line 33 — (pass) task-pipeline evidence chain — review certifies (D65 R2) > the certification order is pinned: review → verdict → status → failure class → approval [0.09ms]; fresh targeted run exited 0 |
+| R16 — Foundation tasks depend on the A92 action map | MET | test | @run `.spur/run/d65-verifyall/app-tests.log` line 4 — (pass) task-pipeline 1239 — the lane is a decision call in the gate state (0943 R1/R2) > frozen contract: both catalog decides live in `gate`; no routing states remain [0.54ms]; fresh targeted run exited 0; @run `.spur/run/d65-verifyall/app-tests.log` line 33 — (pass) task-pipeline evidence chain — review certifies (D65 R2) > the certification order is pinned: review → verdict → status → failure class → approval [0.09ms]; fresh targeted run exited 0; @run `.spur/run/d65-verifyall/app-tests.log` line 24 — (pass) task-pipeline evidence chain — the proof chain is retired (D65 1239 R3) > no proof-chain action, option or variable survives anywhere in the definition [0.19ms]; fresh targeted run exited 0; docs/reports/d65-real-task-executor-receipt.json:1 — actual task 1232 runs the unmodified full task-pipeline under host/subprocess/fleet; executable assertions compare ordered action sequences and successful receipt schemas; real full gates and normal corpus transitions pass; subprocess/fleet models are stubbed only for parity |
+
+
+#### Findings
+
+| Priority | Dimension | Location | Finding | Disposition |
+| --- | --- | --- | --- | --- |
+| P4 | functional/SECUA/architecture | docs/design/workflow-execution-foundation.md:19 | Inline review completed; requirement and AC evidence is listed above; prior verification blockers are resolved | RESOLVED |
 
 ### References
 

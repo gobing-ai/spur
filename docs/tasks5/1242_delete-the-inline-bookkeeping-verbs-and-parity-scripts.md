@@ -4,7 +4,7 @@ name: Delete the inline bookkeeping verbs and parity scripts
 status: done
 template: feature-impl
 created_at: 2026-10-17T15:59:56.821Z
-updated_at: "2026-10-18T00:08:28.522Z"
+updated_at: "2026-10-18T02:02:23.846Z"
 feature_id: D65
 priority: P2
 tags:
@@ -281,25 +281,40 @@ Each entry cites the first changed line per file (`file:line`).
 
 | Requirement | Status | Evidence |
 |-------------|--------|----------|
-| R1 | MET | `spur workflow --help` no longer lists an `inline` command and `spur workflow inline begin` exits 1 with `unknown command` (pinned by `apps/cli/tests/commands/workflow/persist.test.ts`); `apps/cli/src/commands/workflow/inline.ts` and its four test files are deleted, as are `scripts/commands/inline-pipeline-parity-check.ts` + its test and `scripts/commands/inline-execution-contract.test.ts` |
-| R2 | MET | Both driver references are deleted (`inline-pipeline-driver.md`, `structured-trace-emission.md`) with `inline-pipeline-driver.test.ts`; the surviving consumers were rewritten to the engine loop — `dev-idea`, `dev-plan`, `dev-run`, `dev-runall`, `parallel-execution/references/dispatch-surface.md`, `spur-cli/references/workflows.md`, `spec-decomposition/references/decomposition.md`, `agents/super-planner.md`, `plugins/sp/README.md` — and `tests/helpers/runbook-parts.ts` no longer declares them as a runbook part |
-| R3 | MET | The ADR-071 leftovers 1239 did not remove are gone: the inline bookkeeping surface, the attribution reader that only the driver used (`inline-run-attribution.ts` now holds only the two consumers that outlive it), and the inline-only `runIdInline` shared-option entry. `spur workflow persist-out\|persist-check` survive as FLAT verbs (see the surface note below) |
-| R4 | MET | The operator approved the two public-surface lists above — `tools.update_plan`-style list added no new entries beyond the approved removal — and the gate is green |
+| R1 | MET | Removal confirmed by source-local workflow help and absent retired files; fresh CLI transport and plugin parity tests passed |
+| R2 | MET | Current dev-idea/dev-plan and execution-workflow references describe run/work/continue; deleted-driver link repaired in the foundation satellite |
+| R3 | MET | @run `.spur/run/d65-verifyall/app-tests.log` line 24 — (pass) task-pipeline evidence chain — the proof chain is retired (D65 1239 R3) > no proof-chain action, option or variable survives anywhere in the definition [0.19ms]; fresh targeted run exited 0 |
+| R4 | MET | @run `.spur/run/d65-verifyall/feature-gate.log` line 1 — bun run spur-check-feature exited 0; 10 repo-wide tests and 45 heavy tests passed. Historical removal authority is recorded in docs/design/workflow-execution-foundation.md:312 |
 
 | Acceptance Criteria | Status | Evidence Type | Evidence |
 |---------------------|--------|---------------|----------|
-| AC1 — R13 — Remaining workflows migrate and the inline bookkeeping surface is removed (req: R1, R2, R3, R4) | MET | command | `spur task gate 1242 run` → `quality gate PASS` (log `.spur/run/1242-test-gate.log`, 11 500+ tests); `bun run lint` exit 0 (biome over 1566 files + 8 workspace typechecks); `spur workflow --help` shows `persist-out`/`persist-check` and no `inline` |
+| R13 — Remaining workflows migrate and the inline bookkeeping surface is removed | MET | test | Removal confirmed by source-local workflow help and absent retired files; fresh CLI transport and plugin parity tests passed; Current dev-idea/dev-plan and execution-workflow references describe run/work/continue; deleted-driver link repaired in the foundation satellite; @run `.spur/run/d65-verifyall/app-tests.log` line 24 — (pass) task-pipeline evidence chain — the proof chain is retired (D65 1239 R3) > no proof-chain action, option or variable survives anywhere in the definition [0.19ms]; fresh targeted run exited 0; @run `.spur/run/d65-verifyall/feature-gate.log` line 1 — bun run spur-check-feature exited 0; 10 repo-wide tests and 45 heavy tests passed. Historical removal authority is recorded in docs/design/workflow-execution-foundation.md:312 |
 - Coverage: N/A (verdict-based; verify pipeline does not measure code coverage)
 
 ### Review
 
-<!-- spur:record-review -->
+Verdict: PASS
+Confidence: HIGH
 
-**SECU findings** (pipeline verify step — verdict: PASS)
+#### Per-Requirement Traceability
+| Req | Status | Evidence |
+| --- | --- | --- |
+| R1 | MET | Removal confirmed by source-local workflow help and absent retired files; fresh CLI transport and plugin parity tests passed |
+| R2 | MET | Current dev-idea/dev-plan and execution-workflow references describe run/work/continue; deleted-driver link repaired in the foundation satellite |
+| R3 | MET | @run `.spur/run/d65-verifyall/app-tests.log` line 24 — (pass) task-pipeline evidence chain — the proof chain is retired (D65 1239 R3) > no proof-chain action, option or variable survives anywhere in the definition [0.19ms]; fresh targeted run exited 0 |
+| R4 | MET | @run `.spur/run/d65-verifyall/feature-gate.log` line 1 — bun run spur-check-feature exited 0; 10 repo-wide tests and 45 heavy tests passed. Historical removal authority is recorded in docs/design/workflow-execution-foundation.md:312 |
 
-| Priority | Dimension | Location | Finding |
-|----------|-----------|----------|----------|
-| P4 | — | — | No findings (verify verdict PASS) |
+#### Acceptance Criteria Verification
+| AC | Status | Evidence Type | Evidence |
+| --- | --- | --- | --- |
+| R13 — Remaining workflows migrate and the inline bookkeeping surface is removed | MET | test | Removal confirmed by source-local workflow help and absent retired files; fresh CLI transport and plugin parity tests passed; Current dev-idea/dev-plan and execution-workflow references describe run/work/continue; deleted-driver link repaired in the foundation satellite; @run `.spur/run/d65-verifyall/app-tests.log` line 24 — (pass) task-pipeline evidence chain — the proof chain is retired (D65 1239 R3) > no proof-chain action, option or variable survives anywhere in the definition [0.19ms]; fresh targeted run exited 0; @run `.spur/run/d65-verifyall/feature-gate.log` line 1 — bun run spur-check-feature exited 0; 10 repo-wide tests and 45 heavy tests passed. Historical removal authority is recorded in docs/design/workflow-execution-foundation.md:312 |
+
+
+#### Findings
+
+| Priority | Dimension | Location | Finding | Disposition |
+| --- | --- | --- | --- | --- |
+| P4 | functional/SECUA/architecture | docs/design/workflow-execution-foundation.md:19 | Inline review completed; requirement and AC evidence is listed above; prior verification blockers are resolved | RESOLVED |
 
 ### References
 

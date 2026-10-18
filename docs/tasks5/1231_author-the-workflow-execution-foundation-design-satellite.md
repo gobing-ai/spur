@@ -4,7 +4,7 @@ name: Author the workflow execution foundation design satellite
 status: done
 template: feature-impl
 created_at: 2026-10-17T15:59:56.814Z
-updated_at: "2026-10-17T16:54:33.604Z"
+updated_at: "2026-10-18T02:01:55.318Z"
 feature_id: D65
 priority: P1
 tags:
@@ -87,28 +87,46 @@ Each entry cites the first changed line per file (`file:line`).
 
 | Requirement | Status | Evidence |
 |-------------|--------|----------|
-| R1 | MET | `plugins/sp/skills/spur-dev/templates/design.md:2` is the design template the satellite was created from (frontmatter + §1–§5 sections); `docs/design/workflow-execution-foundation.md:19` names ADR-140 as the decision of record and the ADR-051 2026-10-17 amendment |
-| R2 | MET | `docs/design/workflow-execution-foundation.md:171` §4.1 work item `{runId, state, skill, prompt, inputs, expectFiles, ownedSections}`; the receipt shape for host/subprocess/fleet and the ADR-126 A4 timeout = outcome-unknown / definite-receipt re-dispatch rules follow in §4.2 |
-| R3 | MET | `docs/design/workflow-execution-foundation.md:96` §3.1 executor table resolves `vars.executor: host` beside the `fleet` branch cited as `packages/app/src/workflow/actions/agent-run.ts:687`; §4.3 defines the input-kind pause payload and `spur workflow continue <run-id> --answer-text <receipt-path>` CAS idempotency |
-| R4 | MET | `docs/design/workflow-execution-foundation.md:119` lists the `command.gate` builtin over `spur task gate`, `spur task update`, `spur self exec` and `spur workflow commit-guard`; `:226` covers the self-contained-stage lint rules and `:248` the host-wide full-gate lock, worktree and fleet-occupancy lease holder/stale rules |
-| R5 | MET | `docs/design/workflow-execution-foundation.md:255` is the CLI surface table: every row is an existing verb, `spur workflow inline *` removal is flagged as the ADR-140 consequence, and any new verb is marked as a consent request |
-| R6 | MET | `docs/04_DESIGN.md:50` adds the satellite row to the design index; `plugins/sp/skills/spur-dev/references/inline-pipeline-driver.md:22` is the migration-target block pointing the reference at the foundation |
+| R1 | MET | docs/design/workflow-execution-foundation.md:19 — ADR-140 and ADR-051 authority; design headings and index verified in this run |
+| R2 | MET | docs/design/workflow-execution-foundation.md:187 — work-item payload and receipt schema; ADR-126 outcome rules immediately below |
+| R3 | MET | docs/design/workflow-execution-foundation.md:101 — host selection and receipt-driven resume contract |
+| R4 | MET | docs/design/workflow-execution-foundation.md:113 — existing typed builtins; decision and lease sections specify modes and holder rules |
+| R5 | MET | docs/design/workflow-execution-foundation.md:301 — complete CLI surface table and operator-consent boundaries |
+| R6 | MET | docs/04_DESIGN.md:50 — satellite index; docs/design/workflow-execution-foundation.md:31 now points to the current execution reference after driver deletion |
 
 | Acceptance Criteria | Status | Evidence Type | Evidence |
 |---------------------|--------|---------------|----------|
-| R14 — The design satellite documents the foundation | MET | command | `bun run lint` exit 0 (biome 1565 files + every workspace typecheck); `spur task gate 1231 run` → `quality gate PASS` (log `.spur/run/1231-test-gate.log`); markdown link resolution over `docs/design/workflow-execution-foundation.md:23` and the two edited files resolves every target |
-| R15 — New commands keep the noun verb shape | MET | command | `git status --porcelain` lists only `docs/04_DESIGN.md:50`, `plugins/sp/skills/spur-dev/references/inline-pipeline-driver.md:22` and the new satellite — no `apps/cli/src/commands` change, so no new command group exists; `docs/design/workflow-execution-foundation.md:255` records the closed grandfathered list |
+| R14 — The design satellite documents the foundation | MET | command | docs/design/workflow-execution-foundation.md:19 — ADR-140 and ADR-051 authority; design headings and index verified in this run; @run `.spur/run/d65-verifyall/design-contract-check.log` — executable design sections/schema/index and live command-surface assertions exit 0; `.spur/run/d65-verifyall/link-check-final.log` — dependency dist check exit 0; `.spur/run/d65-verifyall/workflow-help-final.log` — source-local workflow help confirms noun/verb surface |
+| R15 — New commands keep the noun verb shape | MET | command | docs/design/workflow-execution-foundation.md:301 — complete CLI surface table and operator-consent boundaries; @run `.spur/run/d65-verifyall/design-contract-check.log` — executable design sections/schema/index and live command-surface assertions exit 0; `.spur/run/d65-verifyall/link-check-final.log` — dependency dist check exit 0; `.spur/run/d65-verifyall/workflow-help-final.log` — source-local workflow help confirms noun/verb surface |
 - Coverage: N/A (verdict-based; verify pipeline does not measure code coverage)
 
 ### Review
 
-<!-- spur:record-review -->
+Verdict: PASS
+Confidence: HIGH
 
-**SECU findings** (pipeline verify step — verdict: PASS)
+#### Per-Requirement Traceability
+| Req | Status | Evidence |
+| --- | --- | --- |
+| R1 | MET | docs/design/workflow-execution-foundation.md:19 — ADR-140 and ADR-051 authority; design headings and index verified in this run |
+| R2 | MET | docs/design/workflow-execution-foundation.md:187 — work-item payload and receipt schema; ADR-126 outcome rules immediately below |
+| R3 | MET | docs/design/workflow-execution-foundation.md:101 — host selection and receipt-driven resume contract |
+| R4 | MET | docs/design/workflow-execution-foundation.md:113 — existing typed builtins; decision and lease sections specify modes and holder rules |
+| R5 | MET | docs/design/workflow-execution-foundation.md:301 — complete CLI surface table and operator-consent boundaries |
+| R6 | MET | docs/04_DESIGN.md:50 — satellite index; docs/design/workflow-execution-foundation.md:31 now points to the current execution reference after driver deletion |
 
-| Priority | Dimension | Location | Finding |
-|----------|-----------|----------|----------|
-| P4 | — | — | No findings (verify verdict PASS) |
+#### Acceptance Criteria Verification
+| AC | Status | Evidence Type | Evidence |
+| --- | --- | --- | --- |
+| R14 — The design satellite documents the foundation | MET | command | docs/design/workflow-execution-foundation.md:19 — ADR-140 and ADR-051 authority; design headings and index verified in this run; @run `.spur/run/d65-verifyall/design-contract-check.log` — executable design sections/schema/index and live command-surface assertions exit 0; `.spur/run/d65-verifyall/link-check-final.log` — dependency dist check exit 0; `.spur/run/d65-verifyall/workflow-help-final.log` — source-local workflow help confirms noun/verb surface |
+| R15 — New commands keep the noun verb shape | MET | command | docs/design/workflow-execution-foundation.md:301 — complete CLI surface table and operator-consent boundaries; @run `.spur/run/d65-verifyall/design-contract-check.log` — executable design sections/schema/index and live command-surface assertions exit 0; `.spur/run/d65-verifyall/link-check-final.log` — dependency dist check exit 0; `.spur/run/d65-verifyall/workflow-help-final.log` — source-local workflow help confirms noun/verb surface |
+
+
+#### Findings
+
+| Priority | Dimension | Location | Finding | Disposition |
+| --- | --- | --- | --- | --- |
+| P4 | functional/SECUA/architecture | docs/design/workflow-execution-foundation.md:19 | Inline review completed; requirement and AC evidence is listed above; prior verification blockers are resolved | RESOLVED |
 
 ### References
 
