@@ -112,7 +112,8 @@ bun run apps/cli/src/index.ts feature check <id> --strict --json
   live tasks (a warning in `FeatureCheckService` until `done`); `--strict` elevates both to error,
   so they are reported verbatim but do **not** abort the batch; every other error finding (L1–L3
   structural, `L4.malformed-verdict-artifact`, `L4.uncovered-feature-scenario`) still aborts. The
-  terminal feature-transition gate enforces scenario verification after the batch runs, so pre-run
+  feature-lifecycle done-boundary gate (reached via `spur feature sync <id>`, the forward hop from
+  task-pipeline's done close) enforces scenario verification after the batch runs, so pre-run
   unverified scenarios and incomplete tasks are transient, not defects (dogfood 2026-08-11,
   feature I2; 2026-10-08, feature H1). Extend the set by editing that constant, never this prose.
 - **Auto-repairs are reported.** Structural repairs applied by `--fix` are listed under
@@ -461,14 +462,12 @@ in next-router; this only maps status → primary TABLE A hop for recovery.
 
 ### 3.3c Feature-sync retry suppression (task 0411; 1004 R3)
 
-During a batch, the per-task `record` step and the wrap-up `feature-transition` step each invoke
-feature status sync. When a feature is L4-gate-blocked (e.g. not all linked tasks are `done`), the
-identical blocked proposal repeats on every call with no intervening input change. The service fixes
-this, not the engine.
+During a batch, the per-task `record` step invokes feature status sync. When a feature is
+L4-gate-blocked (e.g. not all linked tasks are `done`), the identical blocked proposal repeats on
+every call with no intervening input change. The service fixes this, not the engine.
 
-Both `task-pipeline.yaml` (`record` step) and `wrapup-pipeline.yaml` (`feature-transition` step)
-invoke `spur feature sync <feature-id> --json` directly — retry suppression lives inside the
-`FeatureService.syncFeature` implementation:
+`task-pipeline.yaml`'s `record` step invokes `spur feature sync <feature-id> --json` directly —
+retry suppression lives inside the `FeatureService.syncFeature` implementation:
 
 1. On a **blocked** result (`gateBlocked` checked first — a partial hop can have `applied: true`
    while still gate-blocked — then an unapplied from≠to deferral), the service persists
@@ -483,7 +482,7 @@ invoke `spur feature sync <feature-id> --json` directly — retry suppression li
    never reads or writes the state.
 
 **Batch driver contract:** the orchestrator does **nothing extra** — the suppression lives inside
-the pipeline's `record` step and the wrap-up's `feature-transition` step. The driver still
+the pipeline's `record` step. The driver still
 launches `task-pipeline.yaml` verbatim (R4.1). Suppression is transparent: the sync emits the same
 `FeatureSyncResult` JSON shape (`suppressed: true` added on replay), so downstream report logic is
 unchanged. The only observable difference is fewer redundant `feature sync` derivations.
@@ -650,7 +649,7 @@ Before launching a full `spur-check:full`:
 | R4.3 (`--agent` merged into per-task vars) | Step 3.2 |
 | R5.1 (orchestrator boundary) | "Zero engine code" preamble + Step 3 |
 | R5.2 (structured batch report) | Step 5 |
-| 0411 (bounded feature-sync retry suppression) | Step 3.3c — wrapper lives in pipeline `record` + wrap-up `feature-transition`; driver unchanged |
+| 0411 (bounded feature-sync retry suppression) | Step 3.3c — wrapper lives in pipeline `record`; driver unchanged |
 | 0510 R2 (feature-derived strict preflight) | Step 1 — "Feature-derived strict preflight (R2, task 0510)" |
 | 0510 R5 (metadata-only host controller) | Step 3.4 + projected `task show` / trace snippets in Step 1, 2.3, 3.1 |
 

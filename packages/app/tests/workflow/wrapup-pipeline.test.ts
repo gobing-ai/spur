@@ -13,10 +13,9 @@
  * tightens the consumers: validation accepts only canonical four-digit WBS
  * strings (whitespace rejected, not trimmed), everything after resolution
  * reads the capture instead of raw `vars.tasks`, metrics revalidate the
- * capture, require well-shaped lookups, serialize rows with jq, and PASS only
- * after every append succeeds, and feature sync succeeds only for a valid
- * matching unblocked proposal whose target status is freshly observed —
- * blocked/partial/unreadable results fail explicitly.
+ * and PASS only
+ * after every append succeeds. 1249 R1 removed the feature write path: wrap-up owns post-task
+ * knowledge work only, and feature state belongs to feature-lifecycle (ADR-142).
  */
 import { describe, expect, test } from 'bun:test';
 import { spawnSync } from 'node:child_process';
@@ -25,6 +24,8 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { getEnvVar, getEnvVars } from '@gobing-ai/spur-config';
 import { loadWorkflowDefFromText } from '@gobing-ai/ts-dual-workflow-engine';
+import type { AgentService } from '../../src/services/agent-service';
+import type { RuleService } from '../../src/services/rule-service';
 
 const REPO_ROOT = join(import.meta.dir, '../../../../');
 const WORKFLOWS_DIR = join(REPO_ROOT, 'config', 'workflows');
@@ -127,28 +128,14 @@ describe('wrapup-pipeline truthfulness (task 0770, feature R8; task 0783, R1-R5)
         // contract-violation edge, so a compound miss fails the step. v10 (1224) routes the
         // doc tripwire through the SDLC action map. v11 (1229) makes the unbound skip print a
         // stderr note instead of passing silently.)
-        expect(def.version).toBe('11');
+        expect(def.version).toBe('12');
     });
 
-    test('default feature gate checks only the selected feature and permits explicit override', () => {
-        expect(def.vars?.featureGateCmd).toBe('$spurBin feature check "$feature"');
-        const cwd = mkdtempSync(join(tmpdir(), 'wrapup-feature-gate-'));
-        try {
-            const stub = join(cwd, 'spur-stub');
-            writeFileSync(stub, '#!/bin/sh\nprintf "%s\\n" "$@"\n');
-            chmodSync(stub, 0o755);
-            const env = { ...getEnvVars(), spurBin: stub, feature: 'D61' };
-            const result = spawnSync('sh', ['-c', def.vars?.featureGateCmd ?? 'exit 99'], { env, encoding: 'utf8' });
-            expect(result.status).toBe(0);
-            expect(result.stdout).toBe('feature\ncheck\nD61\n');
-            // 0824: the feature-transition shell delegates to `spur task wrapup`; the gate itself is
-            // spawned by the step (the steps suite pins `sh -c` with $featureGateCmd).
-            const command = String(shellsOf(def, 'feature-transition')[0]?.options?.command ?? '');
-            expect(command).toContain('$spurBin task wrapup');
-            expect(command).toContain('feature-transition');
-        } finally {
-            cleanup(cwd);
-        }
+    test('1249: wrap-up is bounded and has no feature state or variable', () => {
+        const raw = readFileSync(join(WORKFLOWS_DIR, 'wrapup-pipeline.yaml'), 'utf8');
+        expect(raw.trimEnd().split('\n').length).toBeLessThanOrEqual(250);
+        expect(def.states.some((state) => state.id.startsWith('feature'))).toBe(false);
+        expect(Object.keys(def.vars ?? {}).some((key) => key.startsWith('feature'))).toBe(false);
     });
 
     test('0770 definitions are all explicitly versioned (identity tag, not absence)', () => {
@@ -165,7 +152,7 @@ describe('wrapup-pipeline truthfulness (task 0770, feature R8; task 0783, R1-R5)
         const expectedVersions: Record<string, string> = {
             'task-lifecycle': '1',
             'feature-lifecycle': '3',
-            'wrapup-pipeline': '11',
+            'wrapup-pipeline': '12',
         };
         for (const [name, version] of Object.entries(expectedVersions)) {
             expect(loadDef(name).version).toBe(version);
@@ -179,22 +166,21 @@ describe('wrapup-pipeline truthfulness (task 0770, feature R8; task 0783, R1-R5)
     });
 
     describe('task-resolve validates wrap input exactly once', () => {
-        test('the validation shell is the `task wrapup` wrapper; the route writer reads the validated capture', () => {
+        test('the resolver is one typed gate; the route writer reads the validated capture', () => {
+            const actions = def.states.find((state) => state.id === 'task-resolve')?.onEnter ?? [];
+            const gates = actions.filter((action) => action.kind === 'command.gate');
+            expect(gates).toHaveLength(1);
+            expect(gates[0]?.options).toMatchObject({
+                executable: `\${vars.spurBin}`,
+                args: ['task', 'wrapup', 'resolve', '--no-logo'],
+                resultFile: `.spur/run/\${vars.__runId}-wrapup-resolve.status`,
+                softFail: true,
+            });
             const shells = shellsOf(def, 'task-resolve');
-            expect(shells.length).toBeGreaterThanOrEqual(2);
-            // 0824: shells[0] delegates to `spur task wrapup resolve` and fails closed to FAIL —
-            // it never re-parses raw vars.tasks. The canonical-id validation lives in the step
-            // (the steps suite pins the regex).
-            const validate = String(shells[0]?.options?.command ?? '');
-            expect(validate).toContain('$spurBin task wrapup');
-            expect(validate).toContain('resolve');
-            expect(validate).toContain('wrapup-resolve.status');
-            expect(validate).toContain('failed closed');
-            expect(validate).not.toContain('"$tasks"');
             // 0783 R2/R5: the route-reason writer consumes the capture, never raw input.
             // 0944: the writer moved behind `spur task wrapup` (composition caps) and also reads
             // the drift probe verdict; the capture + reason pins hold against the step source.
-            const route = String(shells[2]?.options?.command ?? '');
+            const route = String(shells[1]?.options?.command ?? '');
             expect(route).toContain('$spurBin task wrapup');
             expect(route).toContain('route-reason');
             // The route-reason writer lives in wrapup/steps.ts (0944): pin its body, not the
@@ -345,28 +331,7 @@ describe('wrapup-pipeline truthfulness (task 0770, feature R8; task 0783, R1-R5)
         });
     });
 
-    describe('doc-sync and feature-transition record truthful outcomes', () => {
-        test('the feature-transition shell is the `task wrapup` wrapper and writes a sync status', () => {
-            const cmd = String(shellsOf(def, 'feature-transition')[0]?.options?.command ?? '');
-            // 0824: proposal-based classification moved into the step (its suite pins
-            // gateBlocked / requiresConfirm / explicit no-change); the wrapper only delegates
-            // and fails closed.
-            expect(cmd).toContain('$spurBin task wrapup');
-            expect(cmd).toContain('feature-transition');
-            expect(cmd).toContain('wrapup-sync.status');
-            expect(cmd).toContain('failed closed');
-            expect(cmd).not.toContain('has("applied")');
-        });
-
-        test('feature-transition fail edge is first; sibling edges require sync PASS', () => {
-            const edges = def.transitions.filter((t: TransitionDef) => t.from === 'feature-transition');
-            expect(edges[0]?.to).toBe('failed');
-            expect(String(edges[0]?.guard?.options?.command ?? '')).toContain('wrapup-sync.status');
-            for (const edge of edges.slice(1)) {
-                expect(String(edge.guard?.options?.command ?? '')).toContain('= PASS');
-            }
-        });
-
+    describe('doc-sync records truthful outcomes', () => {
         test('branch cleanup is consent-only — decisions recorded, no git operation', () => {
             const state = def.states.find((s) => s.id === 'branch-cleanup');
             expect(state?.description).toContain('consent-only');
@@ -380,10 +345,10 @@ describe('wrapup-pipeline truthfulness (task 0770, feature R8; task 0783, R1-R5)
     });
 
     test('route reason writers remain run-attributed (0758 R4/R5 pins survive; 0783 R5 drops the fixed fallback)', () => {
-        // 0824: shells[0] is the `task wrapup resolve` wrapper. 0944: the route-reason writer
-        // also moved behind `task wrapup` (index 2, after the drift probe + mode projection) to
-        // stay inside the ADR-115 shell caps; only the step writes reasons.
-        const route = String(shellOf(def, 'task-resolve', 2)?.options?.command ?? '');
+        // 0824: the resolve step is the first action (a `command.gate` since 1249). 0944: the
+        // route-reason writer moved behind `task wrapup` (the last shell, after the drift probe +
+        // mode projection) to stay inside the ADR-115 shell caps; only the step writes reasons.
+        const route = String(shellOf(def, 'task-resolve', 1)?.options?.command ?? '');
         expect(route).toContain('$spurBin task wrapup');
         expect(route).toContain('route-reason');
         expect(route).not.toContain('.spur/run/wrapup-route-reason.txt');
@@ -392,7 +357,11 @@ describe('wrapup-pipeline truthfulness (task 0770, feature R8; task 0783, R1-R5)
         expect(script).toContain('route-reason.txt`');
         expect(script).not.toContain('.spur/run/wrapup-route-reason.txt');
         // The resolve wrapper writes no reason at all — fixed-path or otherwise.
-        const wrapper = String(shellOf(def, 'task-resolve', 0)?.options?.command ?? '');
+        const wrapper = JSON.stringify(
+            def.states
+                .find((state) => state.id === 'task-resolve')
+                ?.onEnter?.find((action) => action.kind === 'command.gate'),
+        );
         expect(wrapper).not.toContain('route-reason');
     });
 
@@ -434,8 +403,13 @@ describe('wrapup-pipeline truthfulness (task 0770, feature R8; task 0783, R1-R5)
                 expect(result.status, `shell ${index}`).toBe(0);
             };
             mkdirSync(join(cwd, '.spur', 'run'), { recursive: true });
-            runShell(0, callerMode); // resolve: validates and writes the capture
-            runShell(1, callerMode); // probe + mode projection (no-op projection when mode set)
+            const resolved = spawnSync(process.execPath, [CLI, 'task', 'wrapup', 'resolve', '--no-logo'], {
+                cwd,
+                encoding: 'utf8',
+                env: { ...getEnvVars(), __runId: runId, tasks: '["0944"]', spurBin },
+            });
+            expect(resolved.status).toBe(0);
+            runShell(0, callerMode); // probe + mode projection (no-op projection when mode set)
             const raw = readFileSync(join(cwd, '.spur/run', `${runId}-mode.txt`), 'utf8');
             const projectedMode = raw.trim();
             let probe: RouteOutcome['probe'] = null;
@@ -444,7 +418,7 @@ describe('wrapup-pipeline truthfulness (task 0770, feature R8; task 0783, R1-R5)
             } catch {
                 // no probe artifact — the caller mode was set, so the probe never ran
             }
-            runShell(2, projectedMode); // route-reason writer, now seeing the projected mode
+            runShell(1, projectedMode); // route-reason writer, now seeing the projected mode
             const reason = readFileSync(join(cwd, '.spur/run', `${runId}-route-reason.txt`), 'utf8').trim();
             const guardRc = (edge: string): number => {
                 const command = String(
@@ -554,7 +528,7 @@ describe('wrapup-pipeline truthfulness (task 0770, feature R8; task 0783, R1-R5)
         });
 
         test('caller-mode-wins is YAML-level: the probe runs only behind the -n "$mode" gate', () => {
-            const probeShell = String(shellOf(def, 'task-resolve', 1)?.options?.command ?? '');
+            const probeShell = String(shellOf(def, 'task-resolve', 0)?.options?.command ?? '');
             expect(probeShell).toContain('$spurBin task wrapup drift-probe');
             expect(probeShell.indexOf('[ -n "$mode" ]')).toBeGreaterThanOrEqual(0);
             expect(probeShell.indexOf('[ -n "$mode" ]')).toBeLessThan(probeShell.indexOf('task wrapup drift-probe'));
@@ -569,16 +543,20 @@ describe('wrapup-pipeline truthfulness (task 0770, feature R8; task 0783, R1-R5)
             const intoVar = actions.find((a) => a.kind === 'file.read.into-var');
             expect(intoVar?.options?.var).toBe('mode');
             expect(String(intoVar?.options?.path)).toContain('-mode.txt');
-            expect(actions.map((a) => a.kind)).toEqual(['note', 'shell', 'shell', 'file.read.into-var', 'shell']);
+            expect(actions.map((a) => a.kind)).toEqual([
+                'note',
+                'command.gate',
+                'shell',
+                'file.read.into-var',
+                'shell',
+            ]);
         });
     });
 
     describe('0824 wrapper fail-closed contract', () => {
         test('each wrap-up wrapper writes FAIL and exits 0 when `spur task wrapup` exits nonzero', () => {
             const cases: Array<{ state: string; statusFile: string; marker?: string }> = [
-                { state: 'task-resolve', statusFile: 'wrapup-resolve.status' },
                 { state: 'metrics-record', statusFile: 'wrapup-metrics.status' },
-                { state: 'feature-transition', statusFile: 'wrapup-sync.status' },
                 // 1147: the two post-doc-sync checks name their own violation in the status file
                 // (the guard routes on the marker, not on the word FAIL).
                 {
@@ -591,7 +569,7 @@ describe('wrapup-pipeline truthfulness (task 0770, feature R8; task 0783, R1-R5)
             for (const [index, { state, statusFile, marker }] of cases.entries()) {
                 const cwd = mkdtempSync(join(tmpdir(), 'wrapup-failclosed-'));
                 try {
-                    const actionIndex = state === 'doc-sync' ? index - 2 : 0;
+                    const actionIndex = state === 'doc-sync' ? index : 0;
                     const result = spawnSync(
                         'sh',
                         ['-c', String(shellOf(def, state, actionIndex).options?.command ?? '')],
@@ -603,8 +581,6 @@ describe('wrapup-pipeline truthfulness (task 0770, feature R8; task 0783, R1-R5)
                                 __runId: `r-fc-${state}`,
                                 // A spur that fails every call: each wrapper must fail closed.
                                 spurBin: 'false',
-                                featureGateCmd: '$spurBin feature check "$feature"',
-                                feature: 'D61',
                                 PATH: `${cwd}:${getEnvVar('PATH') ?? ''}`,
                             },
                         },
@@ -624,7 +600,11 @@ describe('wrapup-pipeline truthfulness (task 0770, feature R8; task 0783, R1-R5)
         const raw = readFileSync(join(WORKFLOWS_DIR, 'wrapup-pipeline.yaml'), 'utf8');
         expect(raw).not.toContain('never hard-fails');
         expect(raw).not.toContain('Genuinely soft');
-        expect(raw).toContain('cannot convert a failed sync into');
+        // 1249 R1: the feature sync path (and its soft-success language) is gone with it.
+        expect(raw).not.toContain('feature-transition');
+        expect(raw).not.toContain('cannot convert a failed sync into');
+        // Truthful routing stays: the typed resolve-gate status is the only claim a route can make.
+        expect(raw).toContain('-wrapup-resolve.status');
     });
 
     describe('0871 contract-first routing (ADR-118 pilot)', () => {
@@ -1088,4 +1068,85 @@ describe('wrapup-pipeline truthfulness (task 0770, feature R8; task 0783, R1-R5)
             expect(targets.has(terminal)).toBe(true);
         }
     });
+});
+
+// 1249: run the shipped graph with real CLI task resolution and persisted engine evidence.
+describe('1249: wrap-up typed resolution end to end', () => {
+    for (const [name, tasks, taskStatus, expected, token] of [
+        ['done-feature-task', '["1249"]', 'done', 'done', 'PASS'],
+        ['malformed', '{broken', 'done', 'failed', 'FAIL'],
+        ['unknown-wbs', '["9999"]', 'done', 'failed', 'FAIL'],
+        ['unfinished-task', '["1249"]', 'todo', 'failed', 'FAIL'],
+        ['empty', '[]', 'done', 'skipped', 'PASS'],
+        ['crash', '["1249"]', 'done', 'failed', 'BLOCKED'],
+    ] as const) {
+        test(name, async () => {
+            const cwd = mkdtempSync(join(tmpdir(), 'wrapup-1249-'));
+            const { createMigratedDb } = await import('@gobing-ai/spur-domain');
+            const { WorkflowAppService } = await import('../../src/services/workflow-service');
+            const { NodeProcessExecutor } = await import('@gobing-ai/ts-runtime');
+            const db = await createMigratedDb({ url: ':memory:' });
+            try {
+                mkdirSync(join(cwd, 'docs/tasks'), { recursive: true });
+                mkdirSync(join(cwd, 'docs/features'), { recursive: true });
+                const taskFile = join(cwd, 'docs/tasks/1249_wrap.md');
+                const featureFile = join(cwd, 'docs/features/D66_wrap.md');
+                const task = `---\nname: Wrap fixture\nstatus: ${taskStatus}\nfeature_id: D66\n---\n\n## 1249. Wrap fixture\n\n### Testing\n\nVerdict: PASS\n`;
+                const feature = '---\nid: D66\nname: Wrap fixture\nstatus: active\n---\n\n# D66\n';
+                writeFileSync(taskFile, task);
+                writeFileSync(featureFile, feature);
+                const stub = join(cwd, 'source-spur');
+                writeFileSync(
+                    stub,
+                    name === 'crash'
+                        ? '#!/bin/sh\nkill -TERM $$\n'
+                        : `#!/bin/sh\nexec '${process.execPath}' '${CLI}' "$@"\n`,
+                );
+                chmodSync(stub, 0o755);
+                const svc = new WorkflowAppService({
+                    cwd,
+                    getDb: async () => db,
+                    agentService: () =>
+                        ({
+                            run: async () => {
+                                throw new Error('fast path must never dispatch an agent');
+                            },
+                        }) as unknown as AgentService,
+                    ruleService: () =>
+                        ({
+                            evaluate: async () => {
+                                throw new Error('wrap must never evaluate task rules');
+                            },
+                        }) as unknown as RuleService,
+                    hitlResponder: () => ({ respond: async () => ({ value: 'no' }) }),
+                    processExecutor: () => new NodeProcessExecutor(),
+                });
+                const result = await svc.run(join(WORKFLOWS_DIR, 'wrapup-pipeline.yaml'), {
+                    runId: name,
+                    vars: { tasks, mode: 'fast', spurBin: stub, feature: 'D66' },
+                });
+                expect(result.finalState).toBe(expected);
+                expect(readFileSync(join(cwd, `.spur/run/${name}-wrapup-resolve.status`), 'utf8').trim()).toBe(token);
+                expect(readFileSync(taskFile, 'utf8')).toBe(task);
+                expect(readFileSync(featureFile, 'utf8')).toBe(feature);
+                const rows = await db.queryAll<{ kind: string; result_json: string }>(
+                    "SELECT kind, result_json FROM action_runs WHERE run_id = ? AND node = 'task-resolve' AND kind = 'command.gate'",
+                    name,
+                );
+                expect(rows).toHaveLength(1);
+                expect(JSON.parse(rows[0]?.result_json ?? '{}').data.status).toBe(token);
+                if (expected === 'failed' && token === 'FAIL') {
+                    expect(readFileSync(join(cwd, `.spur/run/${name}-route-reason.txt`), 'utf8')).toContain('failed:');
+                }
+                if (expected === 'done') {
+                    expect(
+                        JSON.parse(readFileSync(join(cwd, '.spur/memory/wrapup-metrics.jsonl'), 'utf8')),
+                    ).toMatchObject({ wbs: '1249', status: 'done', verdict: 'PASS' });
+                }
+            } finally {
+                await db.close();
+                cleanup(cwd);
+            }
+        }, 20000);
+    }
 });

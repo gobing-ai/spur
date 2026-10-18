@@ -1,5 +1,5 @@
 /**
- * `spur task wrapup <op>` — deterministic wrap-up capture, metrics and feature sync behind the
+ * `spur task wrapup <op>` — deterministic wrap-up capture and metrics behind the
  * wrapup-pipeline wrappers (task 0824, feature I21, governance §1.2 composition budgets).
  *
  * Absorbed from the retired sp plugin script `plugins/sp/scripts/wrapup-steps.ts`
@@ -8,47 +8,40 @@
  * `apps/cli/tests/script-absorption-pr5-parity.test.ts` against its captured golden output.
  *
  * Reproduces the former wrapup-pipeline `task-resolve:onEnter:0`, `task-resolve:onEnter:1`
- * (route-reason writer, moved here in 0944), `metrics-record:onEnter:0` and
- * `feature-transition:onEnter:0` shell programs one-for-one so the workflow stays inside
- * the shell-program caps while writing the same `.spur/run` artifacts:
+ * (route-reason writer, moved here in 0944) and `metrics-record:onEnter:0` shell programs
+ * one-for-one so the workflow stays inside the shell-program caps while writing the same
+ * `.spur/run` artifacts:
  *   - `<runId>-wrapup-tasks.json`       normalized, deduplicated WBS capture (resolve)
  *   - `<runId>-wrapup-resolve.status`   `PASS`/`FAIL` (resolve)
- *   - `<runId>-wrapup-preflight.json`   full feature-check JSON (resolve pre-flight, when `feature` is set)
  *   - `<runId>-route-reason.txt`        route reason (route-reason subcommand)
  *   - `.spur/memory/wrapup-metrics.jsonl` one row per task (metrics)
  *   - `<runId>-wrapup-metrics.status`   `PASS`/`FAIL` (metrics)
- *   - `<runId>-wrapup-sync.status`      `PASS`/`FAIL` (feature-transition)
  *   - `<runId>-wrapup-doc-sync-snapshot.txt`  working listing at doc-sync entry (doc-sync-snapshot)
  *   - `<runId>-wrapup-doc-sync-scope.status`  `PASS`/`scope-violation: <paths>` (doc-sync-scope)
  *   - `<runId>-wrapup-doc-supersession.status` `PASS`/`supersession-pin-failed: <pin>` (doc-supersession)
  *
- * Environment comes from the workflow vars: `__runId`, `tasks`, `feature`, `featureGateCmd`
- * and `spurBin` (split on whitespace into a command plus prefix args, so
- * `bun apps/cli/src/index.ts` works). The nested `task show` / `feature sync|show|check` lookups
- * still go through `spurBin` so a workflow's PATH-independent override (and test stubs) apply.
+ * Environment comes from the workflow vars: `__runId`, `tasks` and `spurBin` (split on whitespace
+ * into a command plus prefix args, so `bun apps/cli/src/index.ts` works). The nested `task show`
+ * lookups still go through `spurBin` so a workflow's PATH-independent override (and test stubs)
+ * apply.
  *
  * Truthfulness contract (0770 + 0783): wrap-up never mutates task status; a lookup failure is
- * recorded as FAIL, never silently omitted as success; metrics rows are serialized as JSON
- * (never interpolated printf); and the required sync succeeds only for a valid matching
- * unblocked proposal whose target status is freshly observed — a gate PASS can never convert
- * a failed sync into success. The process always exits 0 after resolve/metrics/
- * feature-transition; the verdict lives in the status file (an empty `feature` is a
- * mis-invocation and exits 1).
+ * recorded as FAIL, never silently omitted as success; and metrics rows are serialized as JSON
+ * (never interpolated printf). The verdict lives in the status file; a validation FAIL (or an
+ * empty `__runId`) exits 1 so the `command.gate` hop reads FAIL, not PASS (1249 R2).
  */
 
 import { spawnSync } from 'node:child_process';
 import { appendFileSync, existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { DEFAULT_FEATURES_DIR, DEFAULT_TASKS_DIR } from '@gobing-ai/spur-config';
-import { echo, echoError } from '@gobing-ai/ts-utils';
+import { echoError } from '@gobing-ai/ts-utils';
 import { childEnv, spurCommand } from './spur-command';
 
-/** Env the wrapup workflow passes to the wrapup steps (run id, task/feature ids, spur override). */
+/** Env the wrapup workflow passes to the wrapup steps (run id, task ids, spur override). */
 export interface WrapupStepsEnv {
     __runId?: string;
     tasks?: string;
-    feature?: string;
-    featureGateCmd?: string;
     spurBin?: string;
     [key: string]: string | undefined;
 }
@@ -128,7 +121,7 @@ export interface ResolveResult {
     status: 'PASS' | 'FAIL';
     statusFile: string;
     tasksFile: string;
-    /** Exit code the workflow wrapper observes (only an empty __runId is a hard failure). */
+    /** Exit code the workflow observes: 1 on a validation FAIL or an empty __runId (1249 R2). */
     exitCode: number;
 }
 
@@ -149,7 +142,9 @@ export function resolveTasks(env: WrapupStepsEnv, options: WrapupStepsOptions = 
     const writeFail = (reason: string): ResolveResult => {
         writeFileSync(abs(relReasonFile), reason);
         writeFileSync(abs(relStatusFile), 'FAIL\n');
-        return { status: 'FAIL', statusFile: relStatusFile, tasksFile: relTasksFile, exitCode: 0 };
+        // 1249 R2: the exit code is the gate signal (`command.gate` writes FAIL for exit 1); the
+        // reason file and status file keep their run-scoped contract.
+        return { status: 'FAIL', statusFile: relStatusFile, tasksFile: relTasksFile, exitCode: 1 };
     };
 
     let parsedTasks: unknown;
@@ -186,124 +181,8 @@ export function resolveTasks(env: WrapupStepsEnv, options: WrapupStepsOptions = 
     if (unresolved) {
         return writeFail(`failed:unresolved or non-completed task (see ${relTasksFile})`);
     }
-    if ((env.feature ?? '') !== '') {
-        const pf = preflightFeature(env, cwd, options.spurArgv);
-        if (pf) return writeFail(pf);
-    }
     writeFileSync(abs(relStatusFile), 'PASS\n');
     return { status: 'PASS', statusFile: relStatusFile, tasksFile: relTasksFile, exitCode: 0 };
-}
-
-interface PreflightFinding {
-    severity: string;
-    code: string;
-}
-
-function isFindingList(value: unknown): value is PreflightFinding[] {
-    return (
-        Array.isArray(value) &&
-        value.every(
-            (f) =>
-                f !== null &&
-                typeof f === 'object' &&
-                typeof f.severity === 'string' &&
-                typeof f.code === 'string' &&
-                f.code.length > 0,
-        )
-    );
-}
-
-interface PreflightSyncPayload {
-    proposal?: {
-        gateBlocked?: boolean;
-        from?: string;
-        to?: string;
-        hops?: string[];
-        gateFindings?: PreflightFinding[];
-    };
-}
-
-function sortedUniqueCodes(findings: PreflightFinding[]): string[] {
-    const codes = findings
-        .filter((f) => f.severity === 'error')
-        .map((f) => String(f.code ?? ''))
-        .filter((c) => c.length > 0);
-    return [...new Set(codes)].sort();
-}
-
-/**
- * 1033 R2 feature pre-flight for wrapup resolve — runs after the task list resolves and
- * before any corpus-mutating wrapup state. Returns a `failed:preflight:*` reason on the
- * first blocking condition, or null when wrapup may proceed. Never writes PASS, never
- * relaxes the later feature-transition / feature-verify gates, and uses the same `spurBin`
- * env as `runFeatureTransition`.
- */
-export function preflightFeature(env: WrapupStepsEnv, cwd?: string, spurArgv?: readonly string[]): string | null {
-    const feature = env.feature ?? '';
-    const abs = (p: string): string => (cwd ? join(cwd, p) : p);
-
-    const syncOut = spur(env, ['feature', 'sync', feature, '--dry-run', '--json'], { cwd, spurArgv });
-    let sync: PreflightSyncPayload | undefined;
-    if (syncOut.status === 0) {
-        try {
-            const parsed: unknown = JSON.parse(syncOut.stdout);
-            if (parsed !== null && typeof parsed === 'object') sync = parsed as PreflightSyncPayload;
-        } catch {
-            // fall through to the unreadable branch below
-        }
-    }
-    if (sync === undefined) return 'failed:preflight:sync-unreadable';
-    const proposal = sync.proposal;
-    if (
-        proposal === null ||
-        typeof proposal !== 'object' ||
-        Array.isArray(proposal) ||
-        (proposal.gateBlocked !== undefined && typeof proposal.gateBlocked !== 'boolean') ||
-        (proposal.gateFindings !== undefined && !isFindingList(proposal.gateFindings)) ||
-        (proposal.hops !== undefined &&
-            (!Array.isArray(proposal.hops) || !proposal.hops.every((hop) => typeof hop === 'string'))) ||
-        (proposal.gateBlocked !== true && (typeof proposal.from !== 'string' || typeof proposal.to !== 'string'))
-    ) {
-        return 'failed:preflight:sync-unreadable';
-    }
-
-    if (proposal.gateBlocked === true) {
-        return `failed:preflight:gate-blocked ${sortedUniqueCodes(proposal.gateFindings ?? []).join(',')}`;
-    }
-
-    const reachesDone = proposal.to === 'done' || (proposal.hops ?? []).includes('done');
-    if (!reachesDone) return null;
-
-    const checkOut = spur(env, ['feature', 'check', feature, '--strict', '--as', 'done', '--json'], { cwd, spurArgv });
-    let check: unknown;
-    try {
-        check = JSON.parse(checkOut.stdout);
-    } catch {
-        return 'failed:preflight:check-unreadable';
-    }
-    const payload = Array.isArray(check) && check.length === 1 ? check[0] : check;
-    const findings =
-        payload !== null && typeof payload === 'object' ? (payload as { findings?: unknown }).findings : undefined;
-    if (
-        !isFindingList(findings) ||
-        (checkOut.status !== 0 && (checkOut.status !== 1 || !findings.some((f) => f.severity === 'error')))
-    ) {
-        return 'failed:preflight:check-unreadable';
-    }
-    // The verifying onEnter will produce the receipt, so receipt-only errors on a feature
-    // that is not yet verifying would fail every wrapup forever.
-    const eligible =
-        proposal.from === 'verifying'
-            ? findings
-            : findings.filter((f) => !String(f.code ?? '').startsWith('L4.feature-receipt-'));
-
-    const runId = env.__runId ?? '';
-    if (runId.length > 0) {
-        mkdirSync(abs(join('.spur', 'run')), { recursive: true });
-        writeFileSync(abs(join('.spur', 'run', `${runId}-wrapup-preflight.json`)), `${JSON.stringify(check)}\n`);
-    }
-    const codes = sortedUniqueCodes(eligible);
-    return codes.length > 0 ? `failed:preflight:done-gate ${codes.join(',')}` : null;
 }
 
 /**
@@ -523,170 +402,6 @@ export function runMetrics(env: WrapupStepsEnv, options: WrapupStepsOptions = {}
     return { status, statusFile: relStatusFile };
 }
 
-/** Outcome of the `feature-transition` step: PASS/FAIL, the status file written, and the exit code. */
-export interface FeatureTransitionResult {
-    status: 'PASS' | 'FAIL';
-    statusFile: string;
-    /** Only an empty vars.feature is a hard failure (mis-invocation, not a blocked sync). */
-    exitCode: number;
-}
-
-/** Classify one sync result per 0783 R4; returns the blocking reason or '' for a verified sync. */
-export function classifySync(
-    syncOutput: string,
-    syncRc: number,
-    feature: string,
-    observed: string,
-): { reason: string; applied: string; syncOk: boolean } {
-    if (syncRc !== 0) {
-        return { reason: `sync exited nonzero (rc=${syncRc})`, applied: 'unreadable', syncOk: false };
-    }
-    let parsed: unknown;
-    try {
-        parsed = JSON.parse(syncOutput);
-    } catch {
-        parsed = undefined;
-    }
-    const obj = parsed !== null && typeof parsed === 'object' ? (parsed as Record<string, unknown>) : undefined;
-    const proposal =
-        obj?.proposal !== null && typeof obj?.proposal === 'object'
-            ? (obj.proposal as Record<string, unknown>)
-            : undefined;
-    const shapeOk =
-        obj !== undefined &&
-        proposal !== undefined &&
-        typeof proposal.featureId === 'string' &&
-        typeof proposal.from === 'string' &&
-        typeof proposal.to === 'string' &&
-        typeof obj.applied === 'boolean';
-    if (!shapeOk) {
-        return { reason: 'malformed or unreadable sync result', applied: 'unreadable', syncOk: false };
-    }
-    const applied = obj.applied === true ? 'true' : 'false';
-    const pFrom = String(jqPick(proposal.from, ''));
-    const pTo = String(jqPick(proposal.to, ''));
-    if (String(jqPick(proposal.featureId, '')) !== feature) {
-        return { reason: `sync proposal does not match feature ${feature}`, applied, syncOk: false };
-    }
-    if (proposal.gateBlocked === true) {
-        return {
-            reason: 'sync proposal is gate-blocked — a blocked sync is not a no-change success',
-            applied,
-            syncOk: false,
-        };
-    }
-    if (proposal.requiresConfirm === true) {
-        return { reason: 'sync proposal requires operator confirmation', applied, syncOk: false };
-    }
-    if (applied === 'true' && observed !== pTo) {
-        return {
-            reason: `applied sync did not land on the proposal target (observed=${observed}, to=${pTo})`,
-            applied,
-            syncOk: false,
-        };
-    }
-    if (applied === 'false' && (pFrom !== pTo || observed !== pTo)) {
-        return {
-            reason: `sync applied nothing without a from==to observed no-op (from=${pFrom}, to=${pTo}, observed=${observed})`,
-            applied,
-            syncOk: false,
-        };
-    }
-    return { reason: '', applied, syncOk: true };
-}
-
-/** `feature-transition` — required bounded sync, observation and the affected-feature gate. */
-export function runFeatureTransition(env: WrapupStepsEnv, options: WrapupStepsOptions = {}): FeatureTransitionResult {
-    const cwd = options.cwd;
-    const runId = env.__runId ?? '';
-    const feature = env.feature ?? '';
-    mkdirSync(cwd ? join(cwd, '.spur', 'run') : join('.spur', 'run'), { recursive: true });
-    const relStatusFile = join('.spur', 'run', `${runId}-wrapup-sync.status`);
-    const abs = (p: string): string => (cwd ? join(cwd, p) : p);
-    if (feature.length === 0) {
-        echoError(
-            'feature-transition: vars.feature is empty — refusing no-op feature sync (mis-invocation, not a blocked sync)',
-        );
-        return { status: 'FAIL', statusFile: relStatusFile, exitCode: 1 };
-    }
-
-    // 1004 R5: one direct service sync (stderr streams through, stdout is the JSON payload).
-    // Repeated-BLOCKED suppression (0411) lives in the feature sync service itself (1004 R3),
-    // so the bounded-wrapper resolution branches are gone.
-    let syncOutput = '';
-    let syncRc = 1;
-    const sync = spur(env, ['feature', 'sync', feature, '--json'], {
-        cwd,
-        spurArgv: options.spurArgv,
-        stderr: 'inherit',
-    });
-    syncOutput = sync.stdout;
-    syncRc = sync.status;
-    echo(`${syncOutput}`);
-
-    const shown = spur(env, ['feature', 'show', feature, '--json'], { cwd, spurArgv: options.spurArgv });
-    let observed = '';
-    if (shown.status === 0) {
-        try {
-            const parsed = JSON.parse(shown.stdout) as Record<string, unknown>;
-            const frontmatter =
-                parsed.frontmatter !== null && typeof parsed.frontmatter === 'object'
-                    ? (parsed.frontmatter as Record<string, unknown>)
-                    : {};
-            const picked = jqPick(parsed.status, frontmatter.status, '');
-            observed = picked === '' ? '' : jqText(picked);
-        } catch {
-            observed = '';
-        }
-    }
-    if (observed.length === 0) observed = 'unreadable';
-
-    const classified = classifySync(syncOutput, syncRc, feature, observed);
-    const { reason, applied } = classified;
-    const syncOk = classified.syncOk;
-
-    let gate = 'skipped';
-    if (applied === 'true' || syncRc !== 0) {
-        echo(
-            `feature-transition: sync applied or failed after a possible partial transition for ${feature} — running feature gate: ${env.featureGateCmd ?? ''}`,
-        );
-        const gateResult = spawnSync('sh', ['-c', env.featureGateCmd ?? ''], {
-            cwd,
-            env: childEnv(env),
-            stdio: 'inherit',
-        });
-        if ((gateResult.status ?? 1) === 0) {
-            gate = 'PASS';
-            echo(`feature-transition: feature gate PASS for feature ${feature}`);
-        } else {
-            gate = 'FAIL';
-            echoError(
-                `feature-transition: feature gate FAIL for feature ${feature} — inspect findings before reporting the transition complete`,
-            );
-        }
-    } else {
-        echo(
-            `feature-transition: sync did not apply a transition (rc=${syncRc}, applied=${applied}) — feature gate skipped`,
-        );
-    }
-
-    let syncStatus: 'PASS' | 'FAIL';
-    if (!syncOk || gate === 'FAIL') {
-        syncStatus = 'FAIL';
-        echoError(`feature-transition: required synchronization failed for ${feature} — ${reason}; gate=${gate}`);
-    } else if (applied === 'false') {
-        syncStatus = 'PASS';
-        echo(
-            `feature-transition: feature sync verified for ${feature} (from==to observed at ${observed}, gate=${gate}) — explicit no-change`,
-        );
-    } else {
-        syncStatus = 'PASS';
-        echo(`feature-transition: feature sync verified for ${feature} (applied, observed=${observed}, gate=${gate})`);
-    }
-    writeFileSync(abs(relStatusFile), `${syncStatus}\n`);
-    return { status: syncStatus, statusFile: relStatusFile, exitCode: 0 };
-}
-
 /** Run-scoped snapshot of the working listing taken at doc-sync entry (1147 R1). */
 export const DOC_SYNC_SNAPSHOT_SUFFIX = 'wrapup-doc-sync-snapshot.txt';
 /** Run-scoped verdict of the post-doc-sync write-scope check (1147 R1). */
@@ -888,7 +603,6 @@ export const WRAPUP_STEP_OPS = [
     'resolve',
     'route-reason',
     'metrics',
-    'feature-transition',
     'doc-sync-snapshot',
     'doc-sync-scope',
     'doc-supersession',
@@ -903,8 +617,9 @@ export function isWrapupStepOp(op: string): op is WrapupStepOp {
 }
 
 /**
- * Run one wrap-up step and return the process exit code the workflow wrapper observes (0 after
- * every completed step — the verdict lives in its status file; 1 for a mis-invocation).
+ * Run one wrap-up step and return the process exit code the workflow observes (0 after every
+ * completed step — the verdict lives in its status file; 1 for a validation FAIL or a
+ * mis-invocation, which the `command.gate` hop reads as FAIL).
  */
 export function runWrapupStep(op: WrapupStepOp, env: WrapupStepsEnv, options: WrapupStepsOptions = {}): number {
     switch (op) {
@@ -915,8 +630,6 @@ export function runWrapupStep(op: WrapupStepOp, env: WrapupStepsEnv, options: Wr
         case 'metrics':
             runMetrics(env, options);
             return 0;
-        case 'feature-transition':
-            return runFeatureTransition(env, options).exitCode;
         case 'doc-sync-snapshot':
             return runDocSyncSnapshot(env, options).exitCode;
         case 'doc-sync-scope':

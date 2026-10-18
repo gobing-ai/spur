@@ -36,7 +36,6 @@ export {
 } from './wrapup/drift-probe';
 export { childEnv, spurCommand } from './wrapup/spur-command';
 export {
-    classifySync,
     DOC_SYNC_SCOPE_STATUS_SUFFIX,
     DOC_SYNC_SNAPSHOT_SUFFIX,
     DOC_SYNC_SUPERSESSION_STATUS_SUFFIX,
@@ -46,12 +45,10 @@ export {
     isWrapupStepOp,
     jqPick,
     porcelainPath,
-    preflightFeature,
     resolveTasks,
     runDocSupersessionCheck,
     runDocSyncScope,
     runDocSyncSnapshot,
-    runFeatureTransition,
     runMetrics,
     runWrapupStep,
     SNAPSHOT_MISSING,

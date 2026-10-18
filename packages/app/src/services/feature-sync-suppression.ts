@@ -2,8 +2,8 @@
  * feature-sync-suppression — bounded BLOCKED-retry suppression for `FeatureService.syncFeature`
  * (task 1004 R3, moved from the deleted bounded-sync wrapper script).
  *
- * During a batch (`/sp:dev-runall`) or wrap-up (`/sp:dev-wrapall`), the per-task `record` step
- * and the wrap-up `feature-transition` step each invoke `spur feature sync <id> --json`. If the
+ * During a batch (`/sp:dev-runall`), the per-task `record` step invokes
+ * `spur feature sync <id> --json`. If the
  * feature is L4-gate-blocked, the identical blocked result repeats on every call with no
  * intervening input change. `syncFeature` now classifies its own outcome: a BLOCKED outcome is
  * persisted (with its input fingerprint) at `.spur/run/feature-sync-blocked-<id>.json`, and a

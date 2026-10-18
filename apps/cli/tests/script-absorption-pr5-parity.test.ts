@@ -26,8 +26,8 @@ const ENV: Record<string, string | undefined> = {
 /** Intentional text divergences: usage lines and diagnostic prefixes now name the spur verb. */
 const TEXT_DIVERGENCES: ReadonlyArray<readonly [from: string, to: string]> = [
     [
-        'usage: wrapup-steps.ts <resolve|route-reason|metrics|feature-transition|doc-sync-snapshot|doc-sync-scope|doc-supersession>',
-        'usage: spur task wrapup <resolve|route-reason|metrics|feature-transition|doc-sync-snapshot|doc-sync-scope|doc-supersession|drift-probe>',
+        'usage: wrapup-steps.ts <resolve|route-reason|metrics|feature-transition|doc-sync-snapshot|doc-sync-scope|doc-supersession>  (env: __runId, tasks, mode, feature, featureGateCmd, spurBin)',
+        'usage: spur task wrapup <resolve|route-reason|metrics|doc-sync-snapshot|doc-sync-scope|doc-supersession|drift-probe>  (env: __runId, tasks, mode, spurBin)',
     ],
     ['usage: batch-plan.ts ', 'usage: spur task batch-plan '],
     // Input files now resolve through the CLI fs seam against the project dir (absolute in the message).
@@ -63,6 +63,10 @@ function expected(group: string, id: string): CaseOutcome {
     for (const [index, patch] of Object.entries(STEP_DIVERGENCES[`${group}/${id}`] ?? {})) {
         const step = out.steps[Number(index)];
         if (step) Object.assign(step, patch);
+    }
+    // 1249: resolve FAIL is now a command.gate failure signal, not exit-0 telemetry.
+    if (group === 'wrapup' && ['resolve-invalid-tasks', 'resolve-unresolved'].includes(id)) {
+        for (const step of out.steps) step.exitCode = 1;
     }
     if (group === 'featureVerify') retireReceiptConfidence(out);
     if (group === 'featureVerify') rebindVerifierIdentity(out);

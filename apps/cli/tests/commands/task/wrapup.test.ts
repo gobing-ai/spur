@@ -82,28 +82,13 @@ describe('spur task wrapup', () => {
         expect(readFileSync(join(cwd, '.spur/run/w1-route-reason.txt'), 'utf8')).toBe('skipped:empty task list\n');
     });
 
-    test('feature-transition reads --feature and --feature-gate-cmd', async () => {
-        const { result, stderr } = await captureProcess(() =>
-            run(
-                [
-                    'task',
-                    'wrapup',
-                    'feature-transition',
-                    '--run-id',
-                    'w2',
-                    '--feature',
-                    '',
-                    '--feature-gate-cmd',
-                    'true',
-                ],
-                {
-                    feature: 'F-from-env',
-                },
-            ),
+    test('1249: validation failure exits 1 and the removed feature operation is refused', async () => {
+        const { result } = await captureProcess(() =>
+            run(['task', 'wrapup', 'resolve', '--run-id', 'invalid', '--tasks', '{broken']),
         );
-        // An explicitly empty --feature wins over the env value and is the fail-loud mis-invocation.
         expect(result.exitCode).toBe(1);
-        expect(stderr).toContain('feature');
+        expect(readFileSync(join(cwd, '.spur/run/invalid-wrapup-resolve.status'), 'utf8')).toBe('FAIL\n');
+        expect((await run(['task', 'wrapup', 'feature-transition'])).exitCode).toBe(2);
     });
 
     test('drift-probe runs with the default spur bin and fails safe without a capture', async () => {

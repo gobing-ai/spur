@@ -20,7 +20,7 @@
 | `batch-create` | Create many tasks from validated JSON (all-or-nothing) |
 | `batch-plan <mode>` | Project a task batch: visible plan waves, dependency order, or a task row's phase digits |
 | `preflight [wbs]` | Batch preflight for one task: TABLE A STOP check, quick readiness, recovery hint |
-| `wrapup <op>` | Run one deterministic wrapup-pipeline step (resolve, metrics, feature sync, doc-sync guards, drift probe) |
+| `wrapup <op>` | Run one deterministic wrapup-pipeline step (resolve, metrics, doc-sync guards, drift probe) |
 | `record <wbs>` | Write Testing/Review from verify verdict; optional Solution backfill + status move |
 | `verdict <wbs>` | Derive PASS/PARTIAL/FAIL/UNKNOWN gate verdict from a verify answer file |
 | `verifyall-aggregate` | Aggregate per-task verify outcomes into a deterministic batch verdict |
@@ -321,21 +321,19 @@ spur task wrapup [options] <op>
 
 | Argument | Description |
 |---|---|
-| `op` | `resolve` \| `route-reason` \| `metrics` \| `feature-transition` \| `doc-sync-snapshot` \| `doc-sync-scope` \| `doc-supersession` \| `drift-probe` |
+| `op` | `resolve` \| `route-reason` \| `metrics` \| `doc-sync-snapshot` \| `doc-sync-scope` \| `doc-supersession` \| `drift-probe` |
 
 | Flag | Description |
 |---|---|
 | `--run-id <id>` | Workflow run id (env: `__runId`) |
 | `--tasks <json>` | JSON array of four-digit WBS strings (env: `tasks`) |
 | `--mode <mode>` | Projected wrapup mode for `route-reason` (env: `mode`) |
-| `--feature <id>` | Feature to pre-flight / transition (env: `feature`) |
-| `--feature-gate-cmd <cmd>` | Trusted `sh -c` feature gate for `feature-transition` (env: `featureGateCmd`) |
 | `--spur-bin <cmd>` | Spur invocation for nested lookups (env: `spurBin`; default: this spur) |
 
 The `wrapup-pipeline.yaml` deterministic steps (script-absorption PR-5; replaces the plugin scripts
 `wrapup-steps` and `wrapup-drift-probe`). Each step writes its `.spur/run/<runId>-*` artifact and
-exits `0` once it ran — the verdict lives in the status file; `1` = mis-invocation (empty run id or
-feature), `2` = unknown op.
+exits `0` once it ran — the verdict lives in the status file; `1` = a validation failure or a
+mis-invocation (empty run id), `2` = unknown op.
 
 ## spur task record
 

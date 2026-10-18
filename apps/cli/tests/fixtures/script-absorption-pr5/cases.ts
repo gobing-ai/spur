@@ -60,57 +60,6 @@ export const WRAPUP_CASES: GoldenCase[] = [
         steps: [wrapup('resolve')],
     },
     {
-        id: 'resolve-preflight-gate-blocked',
-        env: { ...RUN, tasks: '["0101"]', feature: 'F1' },
-        files: {
-            'stub/task-show-0101.out': done(),
-            'stub/feature-sync-dry.out': JSON.stringify({
-                proposal: {
-                    gateBlocked: true,
-                    gateFindings: [
-                        { severity: 'error', code: 'L2.b' },
-                        { severity: 'warning', code: 'L2.w' },
-                        { severity: 'error', code: 'L2.a' },
-                    ],
-                },
-            }),
-        },
-        steps: [wrapup('resolve')],
-    },
-    {
-        id: 'resolve-preflight-done-gate',
-        env: { ...RUN, tasks: '["0101"]', feature: 'F1' },
-        files: {
-            'stub/task-show-0101.out': done(),
-            'stub/feature-sync-dry.out': JSON.stringify({ proposal: { from: 'wip', to: 'done' } }),
-            'stub/feature-check.out': JSON.stringify([
-                {
-                    findings: [
-                        { severity: 'error', code: 'L4.feature-receipt-missing' },
-                        { severity: 'error', code: 'L4.scenario-unverified' },
-                    ],
-                },
-            ]),
-            'stub/feature-check.rc': '1',
-        },
-        steps: [wrapup('resolve')],
-    },
-    {
-        id: 'resolve-preflight-not-done-pass',
-        env: { ...RUN, tasks: '["0101"]', feature: 'F1' },
-        files: {
-            'stub/task-show-0101.out': done(),
-            'stub/feature-sync-dry.out': JSON.stringify({ proposal: { from: 'todo', to: 'wip' } }),
-        },
-        steps: [wrapup('resolve')],
-    },
-    {
-        id: 'resolve-preflight-sync-unreadable',
-        env: { ...RUN, tasks: '["0101"]', feature: 'F1' },
-        files: { 'stub/task-show-0101.out': done(), 'stub/feature-sync-dry.out': 'not json' },
-        steps: [wrapup('resolve')],
-    },
-    {
         id: 'route-reason-modes',
         env: { ...RUN, tasks: '["0101"]' },
         files: { 'stub/task-show-0101.out': done() },
@@ -161,73 +110,6 @@ export const WRAPUP_CASES: GoldenCase[] = [
         env: { ...RUN },
         files: { [TASKS_FILE]: '{"not":"array"}' },
         steps: [wrapup('metrics')],
-    },
-    {
-        id: 'feature-transition-empty-feature',
-        env: { ...RUN, feature: '' },
-        steps: [wrapup('feature-transition')],
-    },
-    {
-        id: 'feature-transition-applied-gate-pass',
-        env: { ...RUN, feature: 'F1', featureGateCmd: 'echo gate-ran' },
-        files: {
-            'stub/feature-sync.out': JSON.stringify({
-                proposal: { featureId: 'F1', from: 'wip', to: 'verifying' },
-                applied: true,
-            }),
-            'stub/feature-show.out': JSON.stringify({ status: 'verifying' }),
-        },
-        steps: [wrapup('feature-transition')],
-    },
-    {
-        id: 'feature-transition-noop',
-        env: { ...RUN, feature: 'F1', featureGateCmd: 'echo never' },
-        files: {
-            'stub/feature-sync.out': JSON.stringify({
-                proposal: { featureId: 'F1', from: 'wip', to: 'wip' },
-                applied: false,
-            }),
-            'stub/feature-show.out': JSON.stringify({ frontmatter: { status: 'wip' } }),
-        },
-        steps: [wrapup('feature-transition')],
-    },
-    {
-        id: 'feature-transition-sync-failed-gate-fail',
-        env: { ...RUN, feature: 'F1', featureGateCmd: 'exit 3' },
-        files: { 'stub/feature-sync.out': 'boom', 'stub/feature-sync.rc': '2', 'stub/feature-show.rc': '1' },
-        steps: [wrapup('feature-transition')],
-    },
-    {
-        id: 'feature-transition-blocked-and-mismatch',
-        env: { ...RUN, feature: 'F1', featureGateCmd: 'true' },
-        files: {
-            'stub/feature-sync.out': JSON.stringify({
-                proposal: { featureId: 'F1', from: 'wip', to: 'done', gateBlocked: true },
-                applied: false,
-            }),
-            'stub/feature-show.out': JSON.stringify({ status: 'wip' }),
-        },
-        steps: [
-            wrapup('feature-transition'),
-            {
-                ...wrapup('feature-transition'),
-                before: {
-                    'stub/feature-sync.out': JSON.stringify({
-                        proposal: { featureId: 'F9', from: 'wip', to: 'wip' },
-                        applied: false,
-                    }),
-                },
-            },
-            {
-                ...wrapup('feature-transition'),
-                before: {
-                    'stub/feature-sync.out': JSON.stringify({
-                        proposal: { featureId: 'F1', from: 'wip', to: 'wip', requiresConfirm: true },
-                        applied: false,
-                    }),
-                },
-            },
-        ],
     },
     {
         id: 'doc-sync-scope-violation',

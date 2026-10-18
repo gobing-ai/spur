@@ -1,5 +1,5 @@
 ---
-description: Wrap up a batch of completed tasks — learnings, metrics, doc-sync, feature transition, optional branch cleanup
+description: Wrap up a batch of completed tasks — learnings, metrics, doc-sync, optional branch cleanup
 role: coder
 argument-hint: "[--since <iso-date>] [--feature <id>] [--status <s>] [--agent <inline|auto|name>] [--auto] [--merge] [--dry-run]"
 allowed-tools: ["Bash", "Read", "AskUserQuestion"]
@@ -14,7 +14,7 @@ Wraps the **wrapup-pipeline.yaml** workflow.
 | Flag | Description | Default |
 | --- | --- | --- |
 | `--since` `<iso-date>` | Wrap tasks completed since a date. | configured |
-| `--feature` `<id>` | Wrap tasks in a feature. | omitted |
+| `--feature` `<id>` | Select tasks in a feature (selection only — it no longer advances the feature; follow up with `spur feature sync <id>`). | omitted |
 | `--status` `<s>` | Only wrap tasks in a status. | done |
 | `--agent` `<inline\|auto\|name>` | Who runs the wrap's model-bearing steps. Wrap is workflow-backed (headless): `omit` and `--agent inline` resolve identically per task 0687 — tier substitution under objective trigger 3 (durable auditable run record required) with a warning naming the substituted executor; `auto` tier-resolves an executor; a name pins that executor into `vars.agent`. | inline |
 | `--auto` | Skip objective HITL gates. | off |
@@ -42,8 +42,8 @@ For shared semantics, see the [flag glossary](../skills/spur-dev/references/flag
 ```bash
 AGENT=… # omit≡inline → tier-substituted executor + warning; auto tier-resolved; <name> unchanged
 echo "execution surface: subprocess; reason: trigger 3 — durable auditable run record required; requested agent: <inline|auto|name>; executor: $AGENT"
-VARS=$(jq -nc --arg tasks "$TASKS" --arg feature "$FEATURE" --arg agent "$AGENT" --arg profile "$PROFILE" --arg merge "$MERGE" \
-  '{tasks:$tasks, feature:$feature, agent:$agent, profile:$profile, merge:$merge}')
+VARS=$(jq -nc --arg tasks "$TASKS" --arg agent "$AGENT" --arg profile "$PROFILE" --arg merge "$MERGE" \
+  '{tasks:$tasks, agent:$agent, profile:$profile, merge:$merge}')
 spur workflow run wrapup-pipeline.yaml --vars "$VARS" [--dry-run]
 ```
 

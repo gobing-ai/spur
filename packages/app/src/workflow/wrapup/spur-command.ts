@@ -15,9 +15,9 @@ export function spurCommand(spurBin: string | undefined, argv?: readonly string[
 }
 
 /**
- * Environment for the nested spur lookups and the `sh -c` feature gate: the step env itself (the
- * CLI passes the process env merged with its flag overrides), so `--feature`/`--spur-bin` reach
- * `$feature`/`$spurBin` inside `featureGateCmd` exactly as the workflow's exported vars do.
+ * Environment for the nested spur lookups: the step env itself (the CLI passes the process env
+ * merged with its flag overrides), so `--spur-bin` reaches `$spurBin` exactly as the workflow's
+ * exported vars do.
  */
 export function childEnv(env: Record<string, string | undefined>): Record<string, string> {
     const out: Record<string, string> = {};
