@@ -468,11 +468,14 @@ function reviewConfidenceBasis(
         return stillOpen && blocking;
     });
     if (open.length > 0) return `${open.length} P1-P3 row(s) still open`;
+    // Mirrors deriveReviewConfidence: an open P4 is carried, same as DEFER/ACCEPTED.
     const carried = rows.filter((row) => {
         const disposition = row.disposition.trim().toUpperCase();
-        return disposition.startsWith('DEFER') || disposition === 'ACCEPTED';
+        const openP4 =
+            (disposition.length === 0 || disposition === 'OPEN') && /^P4/.test(row.priority.trim().toUpperCase());
+        return openP4 || disposition.startsWith('DEFER') || disposition === 'ACCEPTED';
     });
-    if (carried.length > 0) return `${carried.length} finding(s) carried as DEFER/ACCEPTED`;
+    if (carried.length > 0) return `${carried.length} finding(s) carried as open P4/DEFER/ACCEPTED`;
     return 'every finding is closed';
 }
 

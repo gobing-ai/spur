@@ -503,6 +503,23 @@ describe('review-report contract at the gate (task 1070 R1 on the review side)',
             expect(texts[0]).toContain('MEDIUM');
         });
 
+        test('an open P4 row derives MEDIUM and the mismatch basis says so, not "every finding is closed"', () => {
+            const content = [
+                '### Review',
+                '',
+                'Verdict: PASS',
+                'Confidence: HIGH',
+                '',
+                '| Priority | Finding | Location | Disposition |',
+                '| --- | --- | --- | --- |',
+                '| P4 | Note | `src/index.ts:1` | OPEN |',
+            ].join('\n');
+            const texts = contractTexts(content);
+            expect(texts).toHaveLength(1);
+            expect(texts[0]).toContain('derive MEDIUM');
+            expect(texts[0]).not.toContain('every finding is closed');
+        });
+
         test('the derived level certifies: one ACCEPTED P4 residual is MEDIUM and leaves the gate green', () => {
             const texts = contractTexts(reviewBodyWith(['Confidence: MEDIUM']));
             expect(texts).toEqual([]);

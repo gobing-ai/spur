@@ -212,7 +212,9 @@ function verifyConfidenceBasis(tables: AnswerTables): string {
         return status === 'PARTIAL' || status === 'UNMET';
     });
     if (weak.length > 0) return `${weak.length} row(s) PARTIAL/UNMET`;
+    // Mirrors deriveVerifyConfidence: a non-MET AC row (`N/A`) never counts as executable.
     const nonExecutable = tables.acs.filter((row) => {
+        if (row.status.trim().toUpperCase() !== 'MET') return true;
         const types = (row.evidenceType ?? '').split('+').map((t) => t.trim().toLowerCase());
         return !types.some((t) => t === 'test' || t === 'command');
     });
