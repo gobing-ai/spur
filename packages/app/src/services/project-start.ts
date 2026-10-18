@@ -2,7 +2,7 @@ import { existsSync, readdirSync, readFileSync, realpathSync, statSync } from 'n
 import { basename, join, resolve } from 'node:path';
 import { getEnvVar, getEnvVars } from '@gobing-ai/spur-config';
 import { NodeProcessExecutor } from '@gobing-ai/ts-runtime';
-import { isPortLive, normalizeProjectPath, ProjectRegistry } from './project-registry';
+import { isPidAlive, isPortLive, normalizeProjectPath, ProjectRegistry } from './project-registry';
 
 /** Result of starting (or attaching to) a registered project serve instance. */
 export interface ProjectStartResult {
@@ -232,16 +232,6 @@ export function resolveSpurServeCommand(): string[] {
     throw new Error(
         'Could not resolve the spur CLI to spawn `spur serve`. Ensure `spur` is on PATH (or invoke start via the monorepo CLI).',
     );
-}
-
-/** Signal-0 existence probe; unknown failures (EPERM) fail closed as alive. */
-function isPidAlive(pid: number): boolean {
-    try {
-        process.kill(pid, 0);
-        return true;
-    } catch (error) {
-        return (error as NodeJS.ErrnoException).code !== 'ESRCH';
-    }
 }
 
 /**

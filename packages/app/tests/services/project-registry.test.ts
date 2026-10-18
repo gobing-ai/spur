@@ -371,6 +371,22 @@ describe('ProjectRegistry', () => {
         }
     });
 
+    // Regression (2026-10-17): a server killed mid-`withLock` left `projects.json.lock/<pid>-<uuid>`
+    // behind; with no owner recovery every later registry call failed after 2.5 s, so the Board
+    // project switcher could no longer list projects.
+    it('withLock reclaims a lock whose only marker belongs to a dead process', async () => {
+        const child = Bun.spawn(['true']);
+        await child.exited;
+        const lockDir = `${projectsFile}.lock`;
+        mkdirSync(lockDir);
+        writeFileSync(join(lockDir, `${child.pid}-stale-marker`), '');
+
+        const started = Date.now();
+        expect(await registry.withLock(async () => 'ok')).toBe('ok');
+        expect(Date.now() - started).toBeLessThan(1000);
+        expect(existsSync(lockDir)).toBe(false);
+    });
+
     // AC1: A long-lived holder is never displaced
     it('AC1: long-lived holder is never displaced and third acquisition succeeds after release', async () => {
         const lockDir = `${projectsFile}.lock`;

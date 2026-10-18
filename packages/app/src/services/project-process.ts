@@ -126,6 +126,16 @@ export async function findListeningPid(
     return undefined;
 }
 
+/** Signal-0 existence probe; unknown failures (EPERM, a non-numeric pid) fail closed as alive. */
+export function isPidAlive(pid: number): boolean {
+    try {
+        process.kill(pid, 0);
+        return true;
+    } catch (error) {
+        return (error as NodeJS.ErrnoException).code !== 'ESRCH';
+    }
+}
+
 /** Send signal to a PID safely, using testProcessKiller if configured. */
 export function sendSignalToPid(pid: number, signal: NodeJS.Signals): boolean {
     if (testProcessKiller) {

@@ -1,9 +1,20 @@
-import { existsSync, mkdirSync, readFileSync, renameSync, rmdirSync, unlinkSync, writeFileSync } from 'node:fs';
+import {
+    existsSync,
+    mkdirSync,
+    readdirSync,
+    readFileSync,
+    renameSync,
+    rmdirSync,
+    rmSync,
+    unlinkSync,
+    writeFileSync,
+} from 'node:fs';
 import { dirname, join } from 'node:path';
 import { getProjectsFilePath, type ProjectEntry, type ProjectsFile, projectsFileSchema } from '@gobing-ai/spur-config';
 import { NodeProcessExecutor, type ProcessExecutor } from '@gobing-ai/ts-runtime';
 import {
     isLocalHost,
+    isPidAlive,
     isPortAvailable,
     isPortLive,
     normalizeProjectPath,
@@ -98,12 +109,12 @@ export class ProjectRegistry {
                 if (code !== 'EEXIST') {
                     throw err;
                 }
+                if (this.reclaimDeadOwnerLock()) continue;
                 await new Promise((r) => setTimeout(r, 50));
             }
         }
 
         if (!acquired) {
-            // shortcut: abandoned registry claims need manual cleanup, add proven-dead owner recovery only when operational evidence requires it.
             throw new Error(`Failed to acquire lock for project registry: ${this.lockDir}`);
         }
 
@@ -136,6 +147,30 @@ export class ProjectRegistry {
                 }
             }
         }
+    }
+
+    /**
+     * Reclaim a lock abandoned by a killed holder: every `<pid>-<uuid>` marker names a process
+     * that no longer exists. A marker-less dir is a holder between mkdir and marker write, so it
+     * stays contention. The lock is moved aside with an atomic rename, so only one reclaimer wins.
+     * ponytail: check-then-rename race if a live writer re-acquires between the check and the rename; needs flock-style locking to close.
+     */
+    private reclaimDeadOwnerLock(): boolean {
+        let markers: string[];
+        try {
+            markers = readdirSync(this.lockDir);
+        } catch {
+            return false;
+        }
+        if (markers.length === 0 || markers.some((marker) => isPidAlive(Number.parseInt(marker, 10)))) return false;
+        const tombstone = `${this.lockDir}.stale-${crypto.randomUUID()}`;
+        try {
+            renameSync(this.lockDir, tombstone);
+        } catch {
+            return false;
+        }
+        rmSync(tombstone, { recursive: true, force: true });
+        return true;
     }
 
     /** Read registry contents from disk. */
