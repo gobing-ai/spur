@@ -1,5 +1,27 @@
 # Changelog
 
+## [0.4.13] - 2026-10-17
+
+### Fixed
+- reclaim a registry lock whose only markers belong to dead processes, so a server killed mid-`withLock` no longer wedges project listing (a9f12392b)
+  <!-- src: packages/app/src/services/project-registry.ts:158 -->
+- render the configured agent roles, stages and executors when the process feed fails, and stop aborting an in-flight request on its own poll tick (33b2d0209)
+  <!-- src: apps/web/src/modules/settings/AgentsView.tsx:256 -->
+- refuse unrendered scoped placeholders in `spur self exec` and resolve `persist-out` against the run's cwd (660325085)
+  <!-- src: apps/cli/src/commands/self/exec.ts:101, apps/cli/src/commands/workflow/persist.ts:50 -->
+- score review confidence mismatches against the derived level, carrying open P4 rows the way `deriveReviewConfidence` does (65ec1b4f3)
+  <!-- src: packages/app/src/services/residual-scan.ts:458 -->
+- map plugin command changes to the relocated flag-parity suite so the light gate stops planning a test file that no longer exists (5ee7ed3d1)
+  <!-- src: packages/app/src/services/quality-gate.ts:481 -->
+
+### Changed
+- drop `inlineFailFast.unattributedStages` from `spur agent doctor` and `countUnattributedInlineStages` from the app export — breaking, since the deleted inline driver was that ledger's only writer (b7cbb816e)
+  <!-- src: packages/app/src/services/agent-doctor-ops.ts:346, packages/app/src/index.ts:444 -->
+- name the host executor instead of the retired inline driver in the `dev-run` command and the execution references (252aaa332)
+  <!-- src: plugins/sp/commands/dev-run.md:56 -->
+- add `workflow-promotion-check` to `spur-check:full` and drop the last stale driver references (dc6e72eee)
+  <!-- src: package.json:96 -->
+
 ## [0.4.12] - 2026-10-17
 
 _Claim bullets carry one source anchor and the level that anchor supports — `HIGH`: a `path:line` was
