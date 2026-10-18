@@ -5,8 +5,8 @@
  * timeline`, or `--transcript`), OR the close-written per-run summary files (`--rollup
  * [<label>=]<file>`, 1146 R3). Absorbed from the retired `plugins/sp/scripts/run-summary.ts`
  * (script-absorption PR-6; argv, stdout and exit codes pinned by the PR-6 golden). Measurement is
- * `./run-summary.ts`, rendering `./run-summary-render.ts`. Reporting only: no transcript or no
- * timed attempts → an `n/a` result, exit 0.
+ * `./run-summary.ts`, rendering `./run-summary-render.ts`. Without a host transcript, engine
+ * timings remain available while transcript metrics are unmeasured.
  */
 import { readFileSync } from 'node:fs';
 import { buildRunSummary, type Progress } from './run-summary';
@@ -78,7 +78,7 @@ export function runRunSummaryCli(argv: string[], io: RunSummaryCliIo): number {
         return 2;
     }
     const resolved = resolveTranscript(env, projectsRoot, transcript);
-    if (!resolved.ok) {
+    if (!resolved.ok && transcript !== undefined) {
         const out = markdown
             ? `Execution summary: n/a (${resolved.reason})`
             : JSON.stringify({ available: false, reason: resolved.reason });
@@ -91,12 +91,13 @@ export function runRunSummaryCli(argv: string[], io: RunSummaryCliIo): number {
             const [label, file] = eq > 0 ? [arg.slice(0, eq), arg.slice(eq + 1)] : [undefined, arg];
             return { label, progress: JSON.parse(readFileSync(file, 'utf8')) as Progress };
         });
-        const { rows, skippedLines } = parseTranscriptRows(readFileSync(resolved.path, 'utf8').split('\n'));
-        const summary = buildRunSummary(rows, inputs, { since, skippedLines });
-        summary.gate = gateFromReceipt(io.cwd ?? process.cwd(), inputs[0]?.progress.runId ?? '');
-        write(
-            `${markdown ? renderSummaryMarkdown(summary) : JSON.stringify({ ...summary, transcript: resolved.path })}\n`,
+        const { rows, skippedLines } = parseTranscriptRows(
+            resolved.ok ? readFileSync(resolved.path, 'utf8').split('\n') : [],
         );
+        const summary = buildRunSummary(rows, inputs, { since, skippedLines });
+        if (resolved.ok) summary.transcript = resolved.path;
+        summary.gate = gateFromReceipt(io.cwd ?? process.cwd(), inputs[0]?.progress.runId ?? '');
+        write(`${markdown ? renderSummaryMarkdown(summary) : JSON.stringify(summary)}\n`);
         return 0;
     } catch (error) {
         writeErr(`spur workflow summary: ${(error as Error).message}\n`);

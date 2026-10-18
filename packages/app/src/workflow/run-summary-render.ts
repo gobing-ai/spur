@@ -34,12 +34,18 @@ export function renderSummaryMarkdown(summary: RunSummary): string {
     const window = summary.total.workMs + summary.total.waitMs;
     const share = (ms: number): string => (window > 0 ? `${Math.round((ms / window) * 100)}%` : 'n/a');
     const gate = summary.gate.ms === null ? `n/a (${summary.gate.reason})` : formatDuration(summary.gate.ms);
-    return [
+    const stages = [
         '| Stage | Status | Time | Wait | Tool calls | Token (total / non-cached) |',
         '| --- | --- | ---: | ---: | ---: | ---: |',
         ...summary.rows.map((r) => line(r)),
         line(summary.total, true),
         '',
+    ];
+    if (summary.transcript === undefined && summary.total.toolCalls === null) {
+        return [...stages, 'Actor timing: n/a (no measured host transcript activity)', `Gate time: ${gate}`].join('\n');
+    }
+    return [
+        ...stages,
         '| Actor | Time | Share |',
         '| --- | ---: | ---: |',
         `| operator wait (longest ${formatDuration(a.longestOperatorWaitMs)}) | ${formatDuration(a.operatorMs)} | ${share(a.operatorMs)} |`,
@@ -70,7 +76,7 @@ export interface RollupInput {
 export function renderRollupMarkdown(rows: RollupInput[]): string {
     const line = (label: string, r: SummaryRow, actors: ActorSplit, bold = false): string => {
         const name = bold ? `**${label}**` : label;
-        return `| ${name} | ${r.status} | ${r.time} | ${r.wait} | ${r.toolCalls ?? 'n/a'} | ${r.token} | ${formatDuration(actors.operatorMs)} | ${formatDuration(actors.subagentMs)} |`;
+        return `| ${name} | ${r.status} | ${r.time} | ${r.wait} | ${r.toolCalls ?? 'n/a'} | ${r.token} | ${r.toolCalls === null ? 'n/a' : formatDuration(actors.operatorMs)} | ${r.toolCalls === null ? 'n/a' : formatDuration(actors.subagentMs)} |`;
     };
     const total = rows.reduce(
         (acc, { summary }) => ({
@@ -86,11 +92,11 @@ export function renderRollupMarkdown(rows: RollupInput[]): string {
         status: '',
         workMs: total.workMs,
         waitMs: total.waitMs,
-        toolCalls: total.toolCalls,
-        tokens: total.tokens,
+        toolCalls: rows.every(({ summary }) => summary.total.toolCalls !== null) ? total.toolCalls : null,
+        tokens: rows.every(({ summary }) => summary.total.tokens !== null) ? total.tokens : null,
         time: formatDuration(total.workMs),
         wait: formatDuration(total.waitMs),
-        token: formatTokenSplit(total.tokens),
+        token: formatTokenSplit(rows.every(({ summary }) => summary.total.tokens !== null) ? total.tokens : null),
     };
     const totalActors: ActorSplit = {
         operatorMs: 0,
@@ -147,7 +153,7 @@ export interface CloseSummaryRun {
 
 /**
  * Write `.spur/run/<runId>-summary.{md,json}` and return the `.md` path (relative to cwd).
- * Never throws: any failure (unresolved transcript, no timed attempts, anything else) leaves the
+ * Missing transcripts retain engine timings. Never throws: any failure (no timed attempts, invalid input) leaves the
  * `.md` holding exactly `Execution summary: n/a (<reason>)` and returns its path, so the close's
  * exit code and JSON verdict are untouched.
  */
@@ -167,13 +173,15 @@ export function writeCloseSummary(
     try {
         if (run.startedAt === undefined) return na('run row has no started_at');
         const resolved = resolveTranscript(opts.env ?? getEnvVars(), opts.projectsRoot);
-        if (!resolved.ok) return na(resolved.reason);
-        const { rows, skippedLines } = parseTranscriptRows(readFileSync(resolved.path, 'utf8').split('\n'));
+        const { rows, skippedLines } = parseTranscriptRows(
+            resolved.ok ? readFileSync(resolved.path, 'utf8').split('\n') : [],
+        );
         const summary = buildRunSummary(rows, [{ progress: run.progress as unknown as Progress }], {
             since: run.startedAt,
             until: run.completedAt,
             skippedLines,
         });
+        if (resolved.ok) summary.transcript = resolved.path;
         if (summary.rows.length === 0) return na('no timed attempts');
         // D65 1237 R1: the close summary is what an operator reads, so it resolves the gate time
         // here too — not only in the `spur workflow summary` CLI path.

@@ -7,9 +7,10 @@ import type { DbAdapter } from '@gobing-ai/ts-db';
  * per-worktree write slot 0837 claims on the same rows (no second migration —
  * the columns `owner_epoch`/`strategy_version` ship from the start). `guest:<id>`
  * is a joined guest occupant's heartbeat lease (G73 R5, task 1081), so the write
- * slot's TTL/heartbeat semantics apply to guests without a new table.
+ * slot's TTL/heartbeat semantics apply to guests without a new table. `worktree`
+ * is the engine's task-run owner, independent of the fleet member's write slot.
  */
-export type ClaimSlot = 'orchestrator' | 'write' | `guest:${string}`;
+export type ClaimSlot = 'orchestrator' | 'write' | 'worktree' | `guest:${string}`;
 
 /**
  * Claim time-to-live (0836 Q&A — CLOSED): a module constant, not config. Nothing
@@ -33,7 +34,7 @@ export interface ProjectClaimRow {
 export interface ProjectClaim {
     projectPath: string;
     slot: ClaimSlot;
-    /** Spec id, verbatim. */
+    /** Spec id for fleet slots; run id for the engine's worktree slot. */
     holderId: string;
     /** Fencing token 0837 reads; bumped on takeover after expiry. */
     ownerEpoch: number;

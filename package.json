@@ -136,5 +136,8 @@
         "typescript": "catalog:",
         "yaml": "2.9.0",
         "zod": "4.4.3"
+    },
+    "patchedDependencies": {
+        "@gobing-ai/ts-dual-workflow-engine@0.5.28": "patches/@gobing-ai%2Fts-dual-workflow-engine@0.5.28.patch"
     }
 }

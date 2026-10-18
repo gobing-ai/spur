@@ -167,9 +167,13 @@ describe('gate lock (D65 1235)', () => {
         setEnvVar(GATE_LOCK_POLL_MS_ENV, '25');
         const tree = { cwd: task, captureGitTree: () => ({ ok: true, tree: 'tree-1' }) as const };
         // A held lock refuses both full tiers — they run the same `qualityGateCmd`.
-        // runQualityGate tees its status lines to process.stdout; keep them out of the reporter.
+        // Capture every tier's diagnostics so they stay asserted without leaking into the reporter.
+        const lines: string[] = [];
         const originalWrite = process.stdout.write;
-        process.stdout.write = () => true;
+        process.stdout.write = (chunk: unknown): boolean => {
+            lines.push(String(chunk));
+            return true;
+        };
         try {
             expect(() => runQualityGate('run', { wbs: '1235', qualityGateCmd: 'true' }, tree)).toThrow(
                 GateLockTimeoutError,
@@ -177,13 +181,15 @@ describe('gate lock (D65 1235)', () => {
             expect(() => runQualityGate('recheck', { wbs: '1235', qualityGateCmd: 'true' }, tree)).toThrow(
                 GateLockTimeoutError,
             );
+
+            // The lock-free tiers answer while the claim is held.
+            expect(runLightGate({ wbs: '1235' }, tree).status).toBe('PASS');
+            expect(qualityGateMain(['status'], { wbs: '1235' }, tree)).toBe(0);
         } finally {
             process.stdout.write = originalWrite;
         }
-
-        // The lock-free tiers answer while the claim is held.
-        expect(runLightGate({ wbs: '1235' }, tree).status).toBe('PASS');
-        expect(qualityGateMain(['status'], { wbs: '1235' }, tree)).toBe(0);
+        expect(lines.join('')).toContain('light gate PASS');
+        expect(lines.join('')).toContain(JSON.stringify({ reuse: false, reason: 'light-only' }));
     });
 
     test('a failing gate releases the claim, so the next gate takes it without waiting', () => {

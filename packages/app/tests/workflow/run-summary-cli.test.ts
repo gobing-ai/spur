@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'bun:test';
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { actorSplit, buildRunSummary, promptText, type Row } from '../../src/workflow/run-summary';
@@ -146,7 +146,7 @@ describe('buildRunSummary', () => {
         expect(md).toMatch(/\| \*\*Total\*\* \| done \| 1:35 \|/);
     });
 
-    test('main --progress --markdown prints the table; unavailable transcript says n/a', () => {
+    test('main --progress --markdown retains engine timings without a transcript', () => {
         const dir = mkdtempSync(join(tmpdir(), 'session-summary-'));
         const transcript = join(dir, 't.jsonl');
         const file = join(dir, 'p.json');
@@ -157,7 +157,8 @@ describe('buildRunSummary', () => {
         expect(out.join('')).toContain('| implement | passed | 0:20 |');
         const none: string[] = [];
         expect(main(['--progress', file, '--markdown'], {}, (s) => none.push(s), '/nope')).toBe(0);
-        expect(none.join('')).toMatch(/^Execution summary: n\/a/);
+        expect(none.join('')).toContain('| implement | passed | 0:20 |');
+        expect(none.join('')).toContain('| n/a | n/a |');
     });
 });
 
@@ -332,6 +333,14 @@ describe('1146 — gate receipt and batch roll-up', () => {
         expect(out).toContain('| b |');
         expect(out).toContain('**Batch total**');
         expect(out).toContain('Wall span: 2026-10-09T00:00:00.000Z');
+        const unknown = mk('unknown', '2026-10-09T00:00:00Z', '2026-10-09T00:01:00Z', 60);
+        const unavailable = renderRollupMarkdown([
+            {
+                label: 'unknown',
+                summary: { ...unknown, total: { ...unknown.total, toolCalls: null, tokens: null, token: 'n/a' } },
+            },
+        ]);
+        expect(unavailable).toContain('| **Batch total** |  | 1:00 | 0:00 | n/a | n/a | n/a | n/a |');
     });
 });
 
@@ -374,8 +383,8 @@ describe('1146 — writeCloseSummary (R1/AC1/AC2)', () => {
                 projectsRoot: dir,
                 cwd: dir,
             });
-            // No host session id and no --transcript here: the n/a path is the honest outcome.
-            expect(readFileSync(join(dir, rel), 'utf8')).toContain('Execution summary: n/a');
+            // Engine timings remain available without a host session.
+            expect(readFileSync(join(dir, rel), 'utf8')).toContain('| implement |');
             const okRel = writeCloseSummary(run('2026-10-09T00:00:00.000Z'), {
                 env: { CLAUDE_CODE_SESSION_ID: 'x' },
                 projectsRoot: dir,
@@ -387,13 +396,18 @@ describe('1146 — writeCloseSummary (R1/AC1/AC2)', () => {
         }
     });
 
-    test('AC2: an unresolvable transcript leaves exactly the n/a line, never throws', () => {
+    test('1237 R2: engine timings survive an unavailable host transcript', () => {
         const dir = mkdtempSync(join(tmpdir(), 'run-summary-na-'));
         try {
             const rel = writeCloseSummary(run('2026-10-09T00:00:00.000Z'), { env: {}, projectsRoot: dir, cwd: dir });
             const body = readFileSync(join(dir, rel), 'utf8');
-            expect(body).toMatch(/^Execution summary: n\/a \(.+\)\n$/);
-            expect(existsSync(join(dir, '.spur', 'run', 'run_close-summary.json'))).toBe(false);
+            expect(body).toContain('| implement |');
+            expect(body).toContain('Actor timing: n/a (no measured host transcript activity)');
+            expect(body).not.toContain('| driver overhead |');
+            const summary = JSON.parse(readFileSync(join(dir, '.spur', 'run', 'run_close-summary.json'), 'utf8'));
+            expect(summary.rows[0].workMs).toBe(290_000);
+            expect(summary.rows[0].tokens).toBeNull();
+            expect(summary.rows[0].toolCalls).toBeNull();
         } finally {
             rmSync(dir, { recursive: true, force: true });
         }

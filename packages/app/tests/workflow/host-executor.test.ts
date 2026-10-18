@@ -44,11 +44,11 @@ describe('selectsHostExecutor', () => {
 });
 
 describe('withHostExecutorPause', () => {
-    test('marks every state that runs agent.run with the engine pause declaration', () => {
+    test('preserves state boundaries so agent.run can pause before its consumers', () => {
         const paused = withHostExecutorPause(STATE_MACHINE) as StateMachineWorkflowDef;
         expect(paused.states.map((state) => [state.id, state.pause])).toEqual([
             ['precheck', undefined],
-            ['implement', true],
+            ['implement', undefined],
             ['done', undefined],
         ]);
     });

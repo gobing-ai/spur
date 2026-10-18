@@ -8,7 +8,12 @@ import type { ActionResult, ActionRunContext, ActionRunner } from '@gobing-ai/ts
 import { createNodeFileSystem, NodeProcessExecutor } from '@gobing-ai/ts-runtime';
 import { resolvePlanningFolders } from '../../config/planning-folders';
 import { type AgentExecutionObserver, redactAndBound } from '../../observability/agent-execution';
-import type { AgentRunInvocation, AgentRunTracedResult, AgentService } from '../../services/agent-service';
+import type {
+    AgentRunDeps,
+    AgentRunInvocation,
+    AgentRunTracedResult,
+    AgentService,
+} from '../../services/agent-service';
 import {
     evaluateAgentBudget,
     type NormalizedAgentUsage,
@@ -31,6 +36,7 @@ import {
 import { ensureDurablePlaneIgnored, runArtifactsDir, runSessionsDir } from '../../services/run-storage';
 import { TaskLocator } from '../../services/task-locator';
 import { dispatchToFleet, type FleetDispatchDeps, fleetUnavailableOutcome } from '../fleet-dispatch';
+import { readFleetWorkItemResult, writeFleetWorkItem } from '../fleet-work-item';
 import { selectsHostExecutor } from '../host-executor';
 import type { WorkflowAgentBudgetEvent, WorkflowObservabilityBus, WorkflowTripwireFiredEvent } from '../observability';
 import {
@@ -71,6 +77,12 @@ export interface AgentRunAgentConfig {
      */
     excludeGlobs?: string[];
 }
+
+/** Agent service operations used by a workflow stage, including member-side dispatch. */
+export type WorkflowAgentService = Pick<
+    AgentService,
+    'runTraced' | 'executorAvailability' | 'resolveRoleFresh' | 'resolve'
+>;
 
 /** Run-scoped executor pin written by precheck/start (B7 R1 / task 0894). */
 export interface ExecutorPin {
@@ -222,7 +234,7 @@ export function parseExecutorPin(raw: unknown): ExecutorPin | undefined {
 export class AgentRunActionRunner implements ActionRunner {
     readonly kind = KIND;
 
-    private readonly agentService: AgentService;
+    private readonly agentService: WorkflowAgentService;
 
     // 0942 R3: the resolved fleet-fallback reason for the current execute() —
     // stamped onto every post-fallback row, including the early contract-violation
@@ -231,7 +243,7 @@ export class AgentRunActionRunner implements ActionRunner {
     private fleetFallbackReason: string | undefined;
 
     constructor(
-        agentService: AgentService,
+        agentService: WorkflowAgentService,
         private readonly observabilityBus?: WorkflowObservabilityBus,
         private readonly steeringController?: WorkflowSteeringController,
         private readonly agentConfig: AgentRunAgentConfig = {},
@@ -290,10 +302,8 @@ export class AgentRunActionRunner implements ActionRunner {
      * Fleet executor surface (task 0942, ADR-126) — the third executor branch,
      * taken ONLY when the run var selects `executor: fleet`. Resolves to a final
      * ActionResult, or to a declared fallback (`fallbackReason`) that drops to
-     * the traditional subprocess path below. Subprocess-only options fail loud:
-     * on this surface there is no stdout to capture, no diff to gate, and no
-     * runner budget to enforce — a member that accepted the work must not have
-     * those guarantees silently dropped.
+     * the traditional subprocess path below. Stages requiring postconditions run
+     * the same action contract on the member before publishing completion.
      */
     private async executeFleetSurface(
         options: Record<string, unknown>,
@@ -310,7 +320,20 @@ export class AgentRunActionRunner implements ActionRunner {
                 },
             };
         }
-        const unsupported = [
+        if (
+            typeof options.agent === 'string' &&
+            options.agent !== '' &&
+            options.agent !== 'auto' &&
+            options.agent !== role
+        ) {
+            return {
+                result: {
+                    ok: false,
+                    error: 'agent.run: fleet uses the declared member executor; agent must be auto, its role or omitted',
+                },
+            };
+        }
+        const delegated = [
             'agent',
             'model',
             'session',
@@ -322,18 +345,16 @@ export class AgentRunActionRunner implements ActionRunner {
             'maxTokens',
             'maxCostUsd',
             'requiresCapabilities',
+            'freshSession',
+            'compareExecutorWith',
+            'priority',
+            'sessionAffinity',
+            'capture',
+            'mode',
         ].filter((key) => {
             const value = options[key];
             return !(value === undefined || value === null || value === false || value === '');
         });
-        if (unsupported.length > 0) {
-            return {
-                result: {
-                    ok: false,
-                    error: `agent.run: option(s) ${unsupported.map((key) => `'${key}'`).join(', ')} are subprocess-surface only and unsupported on the fleet executor (0942)`,
-                },
-            };
-        }
         if (input === undefined || input.trim() === '') {
             return {
                 result: {
@@ -366,6 +387,16 @@ export class AgentRunActionRunner implements ActionRunner {
                 }
             }
         }
+        if (delegated.length > 0) {
+            await writeFleetWorkItem(
+                cwd,
+                context.runId,
+                context.stateOrNodeId,
+                options,
+                context.vars,
+                this.agentConfig.excludeGlobs,
+            );
+        }
         const dispatch = await dispatchToFleet(
             {
                 role,
@@ -378,6 +409,26 @@ export class AgentRunActionRunner implements ActionRunner {
             },
             this.fleetDeps,
         );
+        if (delegated.length > 0 && (dispatch.status === 'completed' || dispatch.status === 'failed')) {
+            const result = await readFleetWorkItemResult(cwd, context.runId, context.stateOrNodeId);
+            return {
+                result:
+                    result === null
+                        ? { ok: false, error: 'agent.run: fleet member returned no work-item result' }
+                        : {
+                              ...result,
+                              data: {
+                                  ...result.data,
+                                  surface: 'fleet',
+                                  agent: dispatch.memberId,
+                                  memberId: dispatch.memberId,
+                                  messageId: dispatch.messageId,
+                                  ...(dispatch.status === 'completed' ? { durationMs: dispatch.durationMs } : {}),
+                                  usage: unavailableAgentUsage('fleet members report no token usage'),
+                              },
+                          },
+            };
+        }
         if (dispatch.status === 'completed') {
             return {
                 result: {
@@ -460,7 +511,7 @@ export class AgentRunActionRunner implements ActionRunner {
     /**
      * Host executor surface (D65 1232, design §3.1/§3.2) — taken ONLY when the run
      * var selects it. Nothing is dispatched: the work item is written and the engine's
-     * existing pause (declared on the stage by `withHostExecutorPause`) suspends the
+     * action-level pause suspends the
      * run, so `spur workflow run|continue --json` carries the work item to the host
      * session. The host performs the work, writes the receipt, and
      * `spur workflow continue --answer-text <receipt-path>` completes the stage.
@@ -510,12 +561,16 @@ export class AgentRunActionRunner implements ActionRunner {
                 error: `agent.run: work item for '${context.stateOrNodeId}' could not be written: ${(error as Error).message}`,
             };
         }
-        return { ok: true, data: { surface: 'host', workItem, reason: 'host-work-item' } };
+        return { ok: true, pause: true, data: { surface: 'host', workItem, reason: 'host-work-item' } };
     }
 
-    async execute(options: Record<string, unknown>, context: ActionRunContext): Promise<ActionResult> {
+    async execute(
+        options: Record<string, unknown>,
+        context: ActionRunContext,
+        execution?: { flags: Record<string, string | boolean>; deps?: AgentRunDeps },
+    ): Promise<ActionResult> {
         const startedAt = new Date().toISOString();
-        const result = await this.dispatch(options, context);
+        const result = await this.dispatch(options, context, execution);
         return await this.recordReceipt(options, context, startedAt, result);
     }
 
@@ -572,7 +627,11 @@ export class AgentRunActionRunner implements ActionRunner {
         return result;
     }
 
-    async dispatch(options: Record<string, unknown>, context: ActionRunContext): Promise<ActionResult> {
+    async dispatch(
+        options: Record<string, unknown>,
+        context: ActionRunContext,
+        execution?: { flags: Record<string, string | boolean>; deps?: AgentRunDeps },
+    ): Promise<ActionResult> {
         // Per-invocation reset: a prior execute()'s fallback reason must never leak
         // onto a default-path row.
         this.fleetFallbackReason = undefined;
@@ -829,12 +888,12 @@ export class AgentRunActionRunner implements ActionRunner {
 
         // D65 1232: the host executor surface, beside the fleet branch and selected the
         // same way — by the run var, never by a flag. The work item is written and the
-        // run pauses on the stage's `pause: true` (declared by `withHostExecutorPause`).
+        // action result pauses the engine before any consumer can run.
         if (selectsHostExecutor(context.vars)) {
             return await this.executeHostSurface(options, context, input, cwd);
         }
 
-        const flags: Record<string, string | boolean> = {};
+        const flags: Record<string, string | boolean> = { ...execution?.flags };
         if (dispatchAgent !== undefined) flags.agent = dispatchAgent;
         // B7 R1 (0894): tell the service the executor was resolved at precheck so
         // its per-stage resolution skips the usability probe.
@@ -1066,7 +1125,11 @@ export class AgentRunActionRunner implements ActionRunner {
                 steeringNote = undefined;
                 let steeringSignal = this.steeringController?.begin(context.runId, actionId, steeringPolicy);
                 while (true) {
-                    traced = await this.agentService.runTraced(dispatchInput, flags, undefined, {
+                    const signal =
+                        context.signal !== undefined && steeringSignal !== undefined
+                            ? AbortSignal.any([context.signal, steeringSignal])
+                            : (context.signal ?? steeringSignal);
+                    traced = await this.agentService.runTraced(dispatchInput, flags, execution?.deps, {
                         correlation: {
                             runId: context.runId,
                             executionId: crypto.randomUUID(),
@@ -1074,7 +1137,7 @@ export class AgentRunActionRunner implements ActionRunner {
                         },
                         ...(observer !== undefined ? { observer } : {}),
                         heartbeatMs: AGENT_RUN_PROGRESS_INTERVAL_MS,
-                        ...(steeringSignal !== undefined ? { signal: steeringSignal } : {}),
+                        ...(signal !== undefined ? { signal } : {}),
                     });
                     if (this.steeringController === undefined) break;
                     const decision = await this.steeringController.boundary(traced.exitCode === 0);

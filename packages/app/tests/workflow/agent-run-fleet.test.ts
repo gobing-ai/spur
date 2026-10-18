@@ -267,7 +267,43 @@ describe('agent.run fleet executor surface (0942/ADR-126, G71 R2/R5)', () => {
         }
     });
 
-    test('subprocess-only options fail loud on the fleet surface instead of dropping guarantees', async () => {
+    test('a matching role selector uses the declared fleet executor', async () => {
+        const workdir = mkdtempSync(join(tmpdir(), 'agent-run-fleet-role-'));
+        try {
+            const deps = fleetDeps(workdir);
+            deps.dispatcher.awaitReceipt = async () => {
+                writeFileSync(
+                    join(workdir, '.spur/run/test-1/prompts/s1.result.json'),
+                    JSON.stringify({ ok: true, data: { outcome: 'completed' } }),
+                );
+                return { status: 'completed', messageId: 'msg-fleet-1', runId: 'run-1' };
+            };
+            const { svc, calls } = subprocessSpy();
+            const result = await newRunner(svc, deps).execute(
+                { role: 'coder', agent: 'coder', input: 'hello' },
+                makeCtx({ workdir, vars: { executor: 'fleet' } }),
+            );
+            expect(result.ok).toBe(true);
+            expect(deps.dispatchCalls[0]?.member).toBe('proj-coder');
+            expect(calls()).toBe(0);
+        } finally {
+            rmSync(workdir, { recursive: true, force: true });
+        }
+    });
+
+    test('an explicit agent selector cannot silently replace the declared fleet executor', async () => {
+        const workdir = mkdtempSync(join(tmpdir(), 'agent-run-fleet-pin-'));
+        const deps = fleetDeps(workdir);
+        const result = await newRunner(subprocessSpy().svc, deps).execute(
+            { role: 'coder', agent: 'codex', input: 'hello' },
+            makeCtx({ workdir, vars: { executor: 'fleet' } }),
+        );
+        expect(result.ok).toBe(false);
+        expect(result.error).toContain('declared member executor');
+        expect(deps.dispatchCalls).toHaveLength(0);
+    });
+
+    test('requireDiff is delegated and a missing member-side contract result fails closed', async () => {
         const workdir = mkdtempSync(join(tmpdir(), 'agent-run-fleet-'));
         try {
             const deps = fleetDeps(workdir);
@@ -277,8 +313,8 @@ describe('agent.run fleet executor surface (0942/ADR-126, G71 R2/R5)', () => {
                 makeCtx({ workdir, vars: { executor: 'fleet' } }),
             );
             expect(result.ok).toBe(false);
-            expect(result.error).toContain('subprocess-surface only');
-            expect(deps.dispatchCalls.length).toBe(0);
+            expect(result.error).toContain('work-item result');
+            expect(deps.dispatchCalls.length).toBe(1);
             expect(calls()).toBe(0);
         } finally {
             rmSync(workdir, { recursive: true, force: true });

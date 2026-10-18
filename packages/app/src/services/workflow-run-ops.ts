@@ -16,6 +16,7 @@ import type {
     WorkflowRunOptions,
     WorkflowRunResult,
 } from './workflow-service';
+import { releaseWorktreeRunLease, withWorktreeRunLease } from './workflow-worktree-lease';
 
 /** Workflow name that triggers a pipeline run-link (matches the shipped `workflows/task-pipeline.yaml`). */
 const TASK_PIPELINE_WORKFLOW = 'task-pipeline';
@@ -140,24 +141,32 @@ export class WorkflowRunOps {
         // above is computed from the UNTRANSFORMED definition, so the transform never
         // changes what the run records as its definition.
         const engineWorkflow = selectsHostExecutor(runVars) ? withHostExecutorPause(workflow) : workflow;
-        const result = await svc.run(engineWorkflow, {
-            workdir: this.ctx.cwd,
+        const result = await withWorktreeRunLease(
+            await this.ctx.getDb(),
+            this.ctx.cwd,
+            isDry ? '' : workflow.name,
             runId,
-            vars: runVars,
-            ...(isDry ? { dryRun: true } : {}),
-            ...(startState !== undefined ? { startState } : {}),
-            ...(opts.redactor !== undefined ? { redactor: opts.redactor } : {}),
-            ...(eventsBus !== undefined
-                ? {
-                      // R3 (0601): engine-native events also carry workflow identity;
-                      // the retired action-boundary aliases are filtered out first (0869 R2).
-                      events: withWorkflowIdentity(
-                          dropRetiredActionBoundaryAliases(bridgeEventBus(eventsBus)),
-                          workflow,
-                      ),
-                  }
-                : {}),
-        });
+            async (signal) =>
+                svc.run(engineWorkflow, {
+                    ...(signal !== undefined ? { signal } : {}),
+                    workdir: this.ctx.cwd,
+                    runId,
+                    vars: runVars,
+                    ...(isDry ? { dryRun: true } : {}),
+                    ...(startState !== undefined ? { startState } : {}),
+                    ...(opts.redactor !== undefined ? { redactor: opts.redactor } : {}),
+                    ...(eventsBus !== undefined
+                        ? {
+                              // R3 (0601): engine-native events also carry workflow identity;
+                              // the retired action-boundary aliases are filtered out first (0869 R2).
+                              events: withWorkflowIdentity(
+                                  dropRetiredActionBoundaryAliases(bridgeEventBus(eventsBus)),
+                                  workflow,
+                              ),
+                          }
+                        : {}),
+                }),
+        );
         // Stamp dryRun and any start-state lineage into metadata_json so `workflow trace`
         // can label a dry run and a continued run's source (task 1072 R4/R7).
         if (isDry || startState !== undefined) {
@@ -182,7 +191,7 @@ export class WorkflowRunOps {
         await this.maybeLinkPipelineRun(file, runId, opts);
         const runResult = result as WorkflowRunResult;
         // D65 1232: surface the work item of the stage the run paused on (§4.3).
-        await attachHostPause(createNodeFileSystem(this.ctx.cwd), this.ctx.cwd, runResult);
+        await attachHostPause(createNodeFileSystem(this.ctx.cwd), this.ctx.cwd, runResult, await this.ctx.getDb());
         // 0768 R1: surface the run's identity on the result. A fresh run is always
         // identity-stamped, so version is the literal or null (known-unversioned) —
         // never absent; absence is reserved for pre-0768 rows.
@@ -290,6 +299,7 @@ export class WorkflowRunOps {
         // already terminal (or raced to terminal), status is unchanged and finalized
         // is false. A pre-existing `failed` row also stays untouched.
         const finalized = after?.status === 'failed' && isNonTerminal;
+        if (finalized) await releaseWorktreeRunLease(db, this.ctx.cwd, runId);
         return { runId, finalized, status: after?.status ?? 'not_found', killed };
     }
 

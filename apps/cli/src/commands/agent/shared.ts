@@ -430,7 +430,7 @@ export async function drainIntoPrompt(
     // `--spec` without `--drain`: address the occupant, leave the inbox alone.
     if (flags.drain !== true) return { prompt, flags: flagsOut, claimed: [] };
 
-    const inbox = await coordination.drainPending(recipient);
+    const inbox = await coordination.drainPending(recipient, flags.singleMessage === true ? { limit: 1 } : undefined);
     if (inbox.count === 0) return { prompt, flags: flagsOut, claimed: [] };
 
     const header = inbox.messages.map((m) => `- ${m.fromId ?? 'operator'}: ${m.body}`).join('\n');

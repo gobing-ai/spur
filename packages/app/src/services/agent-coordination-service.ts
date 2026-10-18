@@ -347,10 +347,10 @@ export class AgentCoordinationService {
      * Unlike {@link getInbox} (non-consuming read), this transitions messages to
      * `injected` so a second call returns nothing — idempotent loop-safe (AC3).
      */
-    async drainPending(agentId: string): Promise<InboxResult> {
+    async drainPending(agentId: string, options?: { limit?: number }): Promise<InboxResult> {
         validateAgentId(agentId);
         const dao = await this.inboxDao();
-        const rows = await dao.drainPending(agentId);
+        const rows = await dao.drainPending(agentId, options);
         return {
             messages: rows.map((row) => ({
                 id: row.id,

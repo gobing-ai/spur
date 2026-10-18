@@ -93,6 +93,8 @@ export interface QualityGateEnv {
     gateProbeCmd?: string;
     /** Receipt run identity; `pipeline-<wbs>` when absent (task-pipeline convention). */
     runId?: string;
+    /** Engine-provided run identity when command.gate forwards workflow vars. */
+    __runId?: string;
     [key: string]: string | undefined;
 }
 
@@ -597,7 +599,7 @@ function gitChangedFiles(cwd: string | undefined): string[] {
 }
 
 function receiptRunId(env: QualityGateEnv): string {
-    return (env.runId ?? '').length > 0 ? (env.runId as string) : `pipeline-${env.wbs}`;
+    return env.runId || env.__runId || `pipeline-${env.wbs}`;
 }
 
 //** Light-gate outcome: the verdict plus the scope it checked. */

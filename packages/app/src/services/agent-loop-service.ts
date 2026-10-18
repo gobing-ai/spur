@@ -2,6 +2,8 @@ import { randomUUID } from 'node:crypto';
 import { CLAIM_TTL_MS, CoordinationRunDao, ProjectClaimDao, SystemEventDao } from '@gobing-ai/spur-domain';
 import type { AgentProcessOptions, AgentSpec } from '@gobing-ai/ts-ai-runner';
 import { EventBus } from '@gobing-ai/ts-infra';
+import type { WorkflowAgentService } from '../workflow/actions/agent-run';
+import { runFleetWorkItem } from '../workflow/fleet-work-item';
 import type { AgentRunDeps, AgentService } from './agent-service';
 import type { DeliveryReconciler } from './delivery-reconciler';
 import type { FleetService } from './fleet-service';
@@ -9,7 +11,6 @@ import type { MemberAgentProcess, MemberSessionDeps } from './member-session';
 import { MemberSession } from './member-session';
 import { normalizeProjectPath } from './project-registry';
 import type { StrategyRuntime } from './strategy-runtime';
-import { FLEET_TASK_KEY_PREFIX } from './strategy-runtime';
 import { FOLLOW_POLL_INTERVAL_MS } from './system-event-follow';
 import type { SystemEventBus } from './system-event-tap';
 import { WRITE_SLOT_TTL_MS } from './write-slot-service';
@@ -90,7 +91,7 @@ export interface AgentLoopDeps {
     /** stderr sink — warnings, delivery failures, idle-hold failures. */
     error(text: string): void;
     /** Per-loop bus-bound agent service. */
-    agentService(bus: SystemEventBus): Pick<AgentService, 'run' | 'runTraced'>;
+    agentService(bus: SystemEventBus): WorkflowAgentService & Pick<AgentService, 'run'>;
     fleet: FleetService;
     /** Strategy runtime factory (the CLI builds one bound to its `./task` services). */
     makeStrategyRuntime(): Promise<StrategyRuntime>;
@@ -454,20 +455,23 @@ export async function runAgentLoopCore(deps: AgentLoopDeps, input: AgentLoopRunI
          * One drain → execute → settle pass (G71 R1/R4). Returns whether anything ran, so the
          * caller can decide between a fresh idle hold and a reset one.
          *
-         * A batch carrying a `fleet:task:*` dispatch key runs through `svc.run` even for a
+         * A batch carrying a dispatch key runs through `svc.run` even for a
          * persistent member: that is the only path that writes the `coordination_runs` receipt
          * 1073's dispatcher waits on — a stdin-accepted send writes none. Unkeyed
          * conversational traffic keeps the stdin path (0831's acceptance-is-delivery contract).
          */
         const runDrain = async (opts: { replyInstruction?: boolean } = {}): Promise<boolean> => {
-            const { prompt, flags: rewritten, claimed, requestKeys } = await deps.drain({ ...flags, drain: true });
+            const {
+                prompt,
+                flags: rewritten,
+                claimed,
+                requestKeys,
+            } = await deps.drain({ ...flags, drain: true, ...(owner === null ? { singleMessage: true } : {}) });
             if (prompt === undefined) return false;
             // Reset per iteration: each drain is an independent delivery attempt.
             invocationStarted = false;
             lastExitRunId = undefined;
-            const keyed = (requestKeys ?? []).some(
-                (key) => typeof key === 'string' && key.startsWith(FLEET_TASK_KEY_PREFIX),
-            );
+            const keyed = (requestKeys ?? []).some((key) => typeof key === 'string' && key.length > 0);
             const body = opts.replyInstruction === true ? `${prompt}\n\n${ORCHESTRATOR_REPLY_INSTRUCTION}` : prompt;
             const ledger = await deps.attachLedger(bus);
             let drainFailed: boolean;
@@ -515,8 +519,26 @@ export async function runAgentLoopCore(deps: AgentLoopDeps, input: AgentLoopRunI
                             memberSession.mode === 'resume' && memberSession.id !== undefined
                                 ? { ...baseFlags, 'session-id': memberSession.id }
                                 : baseFlags;
-                        const exitCode = await svc.run(body, drainFlags, runDeps);
-                        drainFailed = exitCode !== 0 || !invocationStarted;
+                        const workResult =
+                            claimed.length === 1 && requestKeys?.length === 1 && requestKeys[0]
+                                ? await runFleetWorkItem({
+                                      cwd: deps.cwd,
+                                      recipient,
+                                      key: requestKeys[0],
+                                      messageId: claimed[0] as string,
+                                      flags: drainFlags,
+                                      service: svc,
+                                      runDeps,
+                                      getDb: deps.getDb,
+                                  })
+                                : null;
+                        if (workResult !== null) {
+                            invocationStarted = true;
+                            drainFailed = !workResult.ok;
+                        } else {
+                            const exitCode = await svc.run(body, drainFlags, runDeps);
+                            drainFailed = exitCode !== 0 || !invocationStarted;
+                        }
                     } finally {
                         if (runId !== undefined) deps.setSupervisorRun?.(recipient, undefined);
                     }

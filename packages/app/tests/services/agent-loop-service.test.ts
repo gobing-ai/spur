@@ -25,7 +25,6 @@ import {
     runAgentLoopCore,
     waitForWake,
 } from '../../src/services/agent-loop-service';
-import type { AgentService } from '../../src/services/agent-service';
 import type { FleetService } from '../../src/services/fleet-service';
 import { normalizeProjectPath } from '../../src/services/project-registry';
 import type { StrategyRuntime } from '../../src/services/strategy-runtime';
@@ -107,7 +106,9 @@ function memberDeps(db: DbAdapter, overrides: Partial<AgentLoopDeps>): AgentLoop
         write: () => {},
         error: () => {},
         agentService: () =>
-            ({ run: async () => 0, runTraced: async () => ({}) }) as unknown as Pick<AgentService, 'run' | 'runTraced'>,
+            ({ run: async () => 0, runTraced: async () => ({}) }) as unknown as ReturnType<
+                AgentLoopDeps['agentService']
+            >,
         fleet: {
             load: async () => null,
             resolveOrchestrator: async () => null,
@@ -286,42 +287,53 @@ describe('G71 R1/R2/R3 — member drain, keyed run path, slot heartbeat, resume 
         expect(holds).toHaveLength(0);
     });
 
-    test('R1: a keyed batch runs through the run path even for a persistent member (the receipt needs it)', async () => {
-        const db = await memDb();
-        const sent: string[] = [];
-        const runs: string[] = [];
-        const deps = memberOnlyDeps(db, {
-            agentService: () => ({
-                run: async (prompt: string) => {
-                    runs.push(prompt);
-                    return 0;
+    test.each(['fleet:task:0841:1', 'run-1/work'])(
+        'R1: keyed batch %s produces a receipt even for a persistent member',
+        async (requestKey) => {
+            const db = await memDb();
+            const sent: string[] = [];
+            const runs: string[] = [];
+            const deps = memberOnlyDeps(db, {
+                listAgentSpecs: async () => [
+                    { id: 'member-1', type: 'pi', executor: 'e1', config: {}, purpose: 'coder', workspace: '/tmp' },
+                ],
+                agentService: () => ({
+                    run: async (prompt: string) => {
+                        runs.push(prompt);
+                        return 0;
+                    },
+                    runTraced: async () => ({}),
+                }),
+                drain: async () => ({
+                    prompt: 'dispatch: run the task',
+                    flags: {},
+                    claimed: ['m-keyed'],
+                    requestKeys: [requestKey],
+                }),
+                memberSession: {
+                    executors: [{ name: 'e1', agent: 'pi' }],
+                    env: {},
+                    getDb: async () => db,
+                    warn: () => {},
+                    // A persistent member whose stdin WOULD accept — the keyed batch must not use it.
+                    processFactory: () =>
+                        fakeProcess(async (text: string) => {
+                            sent.push(text);
+                            return { ok: true };
+                        }),
+                    sessionCapability: () => ({ supportsPersistentStdin: true, supportsResumeById: false }) as never,
                 },
-                runTraced: async () => ({}),
-            }),
-            drain: async () => ({
-                prompt: 'dispatch: run the task',
+            });
+            await runAgentLoopCore(deps, {
+                recipient: 'member-1',
+                pollMs: 10,
                 flags: {},
-                claimed: ['m-keyed'],
-                requestKeys: ['fleet:task:0841:1'],
-            }),
-            memberSession: {
-                executors: [{ name: 'e1', agent: 'pi' }],
-                env: {},
-                getDb: async () => db,
-                warn: () => {},
-                // A persistent member whose stdin WOULD accept — the keyed batch must not use it.
-                processFactory: () =>
-                    fakeProcess(async (text: string) => {
-                        sent.push(text);
-                        return { ok: true };
-                    }),
-                sessionCapability: () => ({ mode: 'persistent', supportsSessionDir: false }) as never,
-            },
-        });
-        await runAgentLoopCore(deps, { recipient: 'member-1', pollMs: 10, flags: {}, runtime: { maxIterations: 1 } });
-        expect(runs).toEqual(['dispatch: run the task']);
-        expect(sent).toEqual([]);
-    });
+                runtime: { maxIterations: 1 },
+            });
+            expect(runs).toEqual(['dispatch: run the task']);
+            expect(sent).toEqual([]);
+        },
+    );
 
     test('R1: an unkeyed conversational batch claims and renews no write slot', async () => {
         const db = await memDb();
@@ -473,7 +485,7 @@ describe('G71 R1/R2/R3 — member drain, keyed run path, slot heartbeat, resume 
                         return 0;
                     },
                     runTraced: async () => ({}),
-                }) as unknown as Pick<AgentService, 'run' | 'runTraced'>,
+                }) as unknown as ReturnType<AgentLoopDeps['agentService']>,
             makeStrategyRuntime: async () =>
                 ({
                     resume: async () => {},

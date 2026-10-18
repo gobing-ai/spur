@@ -19,7 +19,7 @@ export function registerWorkflowSummaryCommand(workflow: Command, context: CliCo
             [
                 'Measure one or more runs from `spur workflow progress <run-id> --json` files plus the host',
                 'transcript (JSON, or a table with --markdown), OR roll up close-written',
-                '.spur/run/<run>-summary.json files with --rollup. No transcript or no timed attempts → n/a, exit 0.',
+                '.spur/run/<run>-summary.json files with --rollup. Without a host transcript, engine timings remain available.',
                 'Exit: 0 summary (or n/a), 2 usage error or unreadable input.',
             ].join('\n'),
         )

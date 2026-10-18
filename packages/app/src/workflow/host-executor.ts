@@ -7,12 +7,9 @@ import { readWorkItem, type WorkItem } from './receipt';
  * Host executor selection (D65 1232, design `workflow-execution-foundation` §3.1/§3.2).
  *
  * The host executor is a run VAR — `vars.executor: 'host'` — resolved where the
- * fleet branch lives, never a flag (ADR-051 amendment). The engine itself can only
- * pause on a definition declaration (`state.pause === true`), so a host run's
- * definition is transformed at the app seam: every stage that runs `agent.run`
- * pauses after its actions, which is exactly the engine's existing pause
- * primitive. Resume is `skip-enter`, so the stage is not re-executed — the host
- * performed it and `spur workflow continue --answer-text <receipt>` completes it.
+ * fleet branch lives, never a flag (ADR-051 amendment). agent.run returns an
+ * action-level pause; the engine persists its cursor so consumers wait for the
+ * receipt and resume executes only the remaining actions.
  */
 
 /** The run var value that selects the host executor. */
@@ -24,10 +21,8 @@ export function selectsHostExecutor(vars: Record<string, string | undefined> | u
 }
 
 /**
- * Mark every state/node that runs `agent.run` with the engine's existing pause
- * declaration. Pure: the definition is never mutated, and a definition with no
- * `agent.run` stage comes back as the same object — a non-host run keeps the
- * identity it stamps, and a host run's digest covers the untransformed definition.
+ * Keep single-action node pause declarations for compatibility. State-machine
+ * actions pause themselves so a state may safely consume the host output afterward.
  */
 export function withHostExecutorPause(workflow: WorkflowDef): WorkflowDef {
     const runsAgentRun = (actions: readonly { kind: string }[] | undefined): boolean =>
@@ -55,13 +50,8 @@ export function withHostExecutorPause(workflow: WorkflowDef): WorkflowDef {
         });
         return changed ? { ...workflow, nodes } : workflow;
     }
-    let changed = false;
-    const states = workflow.states.map((state) => {
-        if (state.pause === true || !(runsAgentRun(state.onEnter) || runsAgentRun(state.onExit))) return state;
-        changed = true;
-        return { ...state, pause: true };
-    });
-    return changed ? { ...workflow, states } : workflow;
+    // A state may have consumers after agent.run; only its action result can pause at that boundary.
+    return workflow;
 }
 
 /**
@@ -86,8 +76,13 @@ export async function attachHostPause(
     fs: FileSystem,
     workdir: string,
     result: { status: string; runId: string; finalState: string } & Record<string, unknown>,
+    db?: DbAdapter,
 ): Promise<void> {
     if (result.status !== 'paused') return;
+    if (db !== undefined && result.mode === 'state-machine') {
+        const snapshot = await new DbWorkflowPersistenceAdapter(db).loadLatestStateSnapshot(result.runId);
+        if (snapshot?.data.actionResume === undefined) return;
+    }
     const workItem: WorkItem | null = await readWorkItem(fs, workdir, result.runId);
     if (workItem === null || workItem.state !== result.finalState) return;
     result.pause = { kind: 'input', workItem };

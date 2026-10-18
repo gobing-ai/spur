@@ -113,7 +113,7 @@
         },
         "summary no transcript": {
             "exitCode": 0,
-            "stdout": "{\"available\":false,\"reason\":\"no host session id; pass --transcript <path> (pi: ~/.pi/agent/sessions/<cwd-slug>/<file>.jsonl, or set PI_SESSION_FILE)\"}\n",
+            "stdout": "{\"available\":true,\"rows\":[{\"stage\":\"implement\",\"status\":\"passed\",\"workMs\":20000,\"waitMs\":0,\"toolCalls\":null,\"tokens\":null,\"time\":\"0:20\",\"wait\":\"0:00\",\"token\":\"n/a\"},{\"stage\":\"verify\",\"status\":\"passed\",\"workMs\":20000,\"waitMs\":0,\"toolCalls\":null,\"tokens\":null,\"time\":\"0:20\",\"wait\":\"0:00\",\"token\":\"n/a\"},{\"stage\":\"record\",\"status\":\"passed\",\"workMs\":1000,\"waitMs\":0,\"toolCalls\":null,\"tokens\":null,\"time\":\"0:01\",\"wait\":\"0:00\",\"token\":\"n/a\"},{\"stage\":\"unattributed\",\"status\":\"\",\"workMs\":35000,\"waitMs\":0,\"toolCalls\":null,\"tokens\":null,\"time\":\"0:35\",\"wait\":\"0:00\",\"token\":\"n/a\"}],\"total\":{\"stage\":\"Total\",\"status\":\"done\",\"workMs\":76000,\"waitMs\":0,\"toolCalls\":null,\"tokens\":null,\"time\":\"1:16\",\"wait\":\"0:00\",\"token\":\"n/a\"},\"actors\":{\"operatorMs\":0,\"longestOperatorWaitMs\":0,\"modelMs\":0,\"shellMs\":0,\"subagentMs\":0,\"otherToolMs\":0,\"idleMs\":76000,\"compactions\":0,\"subagentErrors\":0},\"gate\":{\"ms\":null,\"reason\":\"no matching check receipt\"},\"skippedLines\":0}\n",
             "stderr": ""
         },
         "summary untimed progress": {

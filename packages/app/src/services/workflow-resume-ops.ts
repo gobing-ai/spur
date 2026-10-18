@@ -35,6 +35,7 @@ import type {
     WorkflowAppServiceContext,
     WorkflowRunResult,
 } from './workflow-service';
+import { withWorktreeRunLease } from './workflow-worktree-lease';
 
 /**
  * 0932 R2: the rejection message for an answer flag that does not match the
@@ -151,7 +152,12 @@ export class WorkflowResumeOps {
         // before the drift-consent and stale-consent metadata writes below — so a refused
         // receipt mutates nothing. `hostExecutor` also keeps the pause transform on for the
         // rest of the host chain.
-        const hostPause = await this.resolveHostPauseReceipt(runId, launchWorkdir, opts?.answerText);
+        const hostPause = await this.resolveHostPauseReceipt(
+            runId,
+            launchWorkdir,
+            opts?.answerText,
+            resolved.workflow.kind,
+        );
         if (persistedDigest !== null && persistedDigest !== resolved.digest) {
             if (opts?.allowDigestMismatch !== true && opts?.force !== true) {
                 const prompt = `Workflow definition drift detected for run "${runId}": launched with ${persistedDigest}, currently ${resolved.digest}. Continue with modified definition?`;
@@ -209,24 +215,32 @@ export class WorkflowResumeOps {
         if (hostPause.receipt !== undefined) {
             await writeReceipt(createNodeFileSystem(launchWorkdir), launchWorkdir, hostPause.receipt);
         }
-        const result = await svc.resumeRun(workflow, runId, {
-            // 0784 R1/R3: resume inside the recorded launch workdir (legacy: the
-            // ambient service cwd), never the ambient process cwd.
-            workdir: launchWorkdir,
-            ...(Object.keys(resumeVars).length > 0 ? { vars: resumeVars } : {}),
-            ...(opts?.redactor !== undefined ? { redactor: opts.redactor } : {}),
-            ...(opts?.resumeOwner !== undefined ? { resumeOwner: opts.resumeOwner } : {}),
-            ...(eventsBus !== undefined
-                ? {
-                      // R3 (0601): engine-native resume events carry workflow identity;
-                      // the retired action-boundary aliases are filtered out first (0869 R2).
-                      events: withWorkflowIdentity(
-                          dropRetiredActionBoundaryAliases(bridgeEventBus(eventsBus)),
-                          workflow,
-                      ),
-                  }
-                : {}),
-        });
+        const result = await withWorktreeRunLease(
+            await this.ctx.getDb(),
+            launchWorkdir,
+            workflow.name,
+            runId,
+            async (signal) =>
+                svc.resumeRun(workflow, runId, {
+                    ...(signal !== undefined ? { signal } : {}),
+                    // 0784 R1/R3: resume inside the recorded launch workdir (legacy: the
+                    // ambient service cwd), never the ambient process cwd.
+                    workdir: launchWorkdir,
+                    ...(Object.keys(resumeVars).length > 0 ? { vars: resumeVars } : {}),
+                    ...(opts?.redactor !== undefined ? { redactor: opts.redactor } : {}),
+                    ...(opts?.resumeOwner !== undefined ? { resumeOwner: opts.resumeOwner } : {}),
+                    ...(eventsBus !== undefined
+                        ? {
+                              // R3 (0601): engine-native resume events carry workflow identity;
+                              // the retired action-boundary aliases are filtered out first (0869 R2).
+                              events: withWorkflowIdentity(
+                                  dropRetiredActionBoundaryAliases(bridgeEventBus(eventsBus)),
+                                  workflow,
+                              ),
+                          }
+                        : {}),
+                }),
+        );
         await this.runOps.stampFailureReason(runId, result);
         const runResult = result as WorkflowRunResult;
         // 0768 R1: echo the run's PERSISTED identity (not the re-resolved one) so
@@ -235,7 +249,7 @@ export class WorkflowResumeOps {
         runResult.definitionDigest = persistedDigest;
         if (persistedVersion !== undefined) runResult.version = persistedVersion;
         // D65 1232: the next host stage's work item is the resume's pause payload (§4.3).
-        await attachHostPause(createNodeFileSystem(launchWorkdir), launchWorkdir, runResult);
+        await attachHostPause(createNodeFileSystem(launchWorkdir), launchWorkdir, runResult, await this.ctx.getDb());
         // 0784 R2: surface degraded/consented-drift resume diagnostics.
         if (warnings.length > 0) (runResult as Record<string, unknown>).warnings = warnings;
         return runResult;
@@ -256,9 +270,14 @@ export class WorkflowResumeOps {
         runId: string,
         workdir: string,
         answerText: string | undefined,
+        kind = 'state-machine',
     ): Promise<{ hostExecutor: boolean; receipt?: WorkItemReceipt }> {
         const db = await this.ctx.getDb();
         if (!(await hostExecutorPersisted(db, runId))) return { hostExecutor: false };
+        if (kind === 'state-machine') {
+            const snapshot = await new DbWorkflowPersistenceAdapter(db).loadLatestStateSnapshot(runId);
+            if (snapshot?.data.actionResume === undefined) return { hostExecutor: true };
+        }
         const fs = createNodeFileSystem(workdir);
         const workItem = await readWorkItem(fs, workdir, runId);
         if (workItem === null) return { hostExecutor: true };
@@ -298,8 +317,12 @@ export class WorkflowResumeOps {
             projectRoot: this.ctx.cwd,
             workflowDef: resolved.workflow,
         });
-        const stateId = projection.currentState;
+        const snapshot = await new DbWorkflowPersistenceAdapter(db).loadLatestStateSnapshot(runId);
+        const stateId = snapshot?.state ?? projection.currentState;
         if (stateId === null) return null;
+        if (snapshot?.data.actionResume !== undefined && (await hostExecutorPersisted(db, runId))) {
+            return { stateId, kind: 'hitl.input', answerVar: '__hostReceipt' };
+        }
         const site = gateSitesForState(resolved.workflow, stateId)[0];
         if (site === undefined) return null;
         return {

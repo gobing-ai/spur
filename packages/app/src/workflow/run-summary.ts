@@ -591,13 +591,20 @@ export function buildRunSummary(
         ) as Tokens,
     };
     if (!overlaps && overhead.workMs > 0)
-        stageRows.push(summaryRow('driver overhead', '', overhead, totalMeasure.measured));
+        stageRows.push(
+            summaryRow(totalMeasure.measured ? 'driver overhead' : 'unattributed', '', overhead, totalMeasure.measured),
+        );
 
+    const actors = actorSplit(rows, totalStart, totalEnd);
+    if (!totalMeasure.measured) {
+        actors.modelMs = 0;
+        actors.idleMs = totalEnd - totalStart;
+    }
     return {
         available: true,
         rows: stageRows,
         total,
-        actors: actorSplit(rows, totalStart, totalEnd),
+        actors,
         gate: { ms: null, reason: 'no matching check receipt' },
         skippedLines: opts.skippedLines ?? 0,
     };

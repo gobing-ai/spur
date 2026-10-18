@@ -70,7 +70,7 @@ function initGitRepo(dir: string): void {
 function runShell(command: string, cwd: string, env: Record<string, string>): { exitCode: number; output: string } {
     const result = Bun.spawnSync(['sh', '-c', command], {
         cwd,
-        env: { ...getEnvVars(), ...env },
+        env: { ...getEnvVars(), deferFeatureSync: 'false', ...env },
         stdout: 'pipe',
         stderr: 'pipe',
     });

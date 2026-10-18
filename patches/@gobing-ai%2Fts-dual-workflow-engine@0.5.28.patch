@@ -1,0 +1,581 @@
+diff --git a/node_modules/@gobing-ai/ts-dual-workflow-engine/.bun-tag-a5288c8bf5a6f02f b/.bun-tag-a5288c8bf5a6f02f
+new file mode 100644
+index 0000000000000000000000000000000000000000..e69de29bb2d1d6434b8b29ae775ad8c2e48c5391
+diff --git a/dist/action-step.d.ts b/dist/action-step.d.ts
+index 741e8598ac38083720ae70905530f1b5788e7ef8..c571259c2bbc49e35fd039f126bd6bdab88360f8 100644
+--- a/dist/action-step.d.ts
++++ b/dist/action-step.d.ts
+@@ -8,7 +8,7 @@ import type { ActionDef, ActionResult, OnErrorPolicy, Vars, WorkflowPersistenceA
+  * 'fail' policy (the caller must halt); `completed` means the step ran (possibly
+  * a failure that the 'continue' policy logged past) and the loop may proceed.
+  */
+-export type ActionStepOutcome = 'completed' | 'terminal' | 'fail';
++export type ActionStepOutcome = 'completed' | 'terminal' | 'fail' | 'paused';
+ /** Result of running one or more action steps: last result, a control-flow discriminator, and the accumulated `setVars` of every step in the sequence. */
+ export interface ActionStepResult {
+     readonly outcome: ActionStepOutcome;
+@@ -20,6 +20,8 @@ export interface ActionStepResult {
+      * the sequence settles.
+      */
+     readonly setVars?: Vars;
++    /** Index of the first unexecuted action when a sequence pauses. */
++    readonly nextAction?: number;
+ }
+ /**
+  * Everything an action step needs that does not change between the two drivers:
+diff --git a/dist/action-step.js b/dist/action-step.js
+index 506edddc43222050517212a3d98441d385090381..cb11152bae590fa1797e3e9492b663c7ee08850a 100644
+--- a/dist/action-step.js
++++ b/dist/action-step.js
+@@ -62,7 +62,7 @@ export async function runActionStep(action, vars, deps) {
+             return { outcome: 'fail', result };
+         lifecycle.warnActionFailed(stateOrNodeId, deps.transitionsTaken, result.error);
+     }
+-    return { outcome: 'completed', result };
++    return { outcome: result.ok && result.pause === true ? 'paused' : 'completed', result };
+ }
+ /**
+  * Run a sequence of actions in declaration order, stopping at the first
+@@ -79,7 +79,7 @@ export async function runActionStep(action, vars, deps) {
+ export async function runActionSequence(actions, vars, deps) {
+     let last;
+     let acc;
+-    for (const action of actions) {
++    for (const [index, action] of actions.entries()) {
+         const step = await runActionStep(action, vars, deps);
+         if (step.result !== undefined)
+             last = step.result;
+@@ -91,6 +91,8 @@ export async function runActionSequence(actions, vars, deps) {
+             return { outcome: 'terminal', result: last, setVars: acc };
+         if (step.outcome === 'fail')
+             return { outcome: 'fail', result: last, setVars: acc };
++        if (step.outcome === 'paused')
++            return { outcome: 'paused', result: last, setVars: acc, nextAction: index + 1 };
+     }
+     return { outcome: 'completed', result: last, setVars: acc };
+ }
+diff --git a/dist/dag.js b/dist/dag.js
+index a5f52b4b02dbbab3c02ed6215c31a585453d9af9..b02e41db2c84ee02eac24926c9705342cb626f0f 100644
+--- a/dist/dag.js
++++ b/dist/dag.js
+@@ -320,7 +320,7 @@ export class DagDriver {
+             // its audit chain first, persists its accepted delta as a 'paused'
+             // row, and only then surfaces the pause result. Fail outcomes and
+             // thrown guard/persistence exceptions still outrank pause.
+-            const isPauseNode = node.pause === true && node.id !== rerunPauseBypass;
++            let isPauseNode = node.pause === true && node.id !== rerunPauseBypass;
+             let acceptedDelta;
+             if (!options.dryRun && node.action) {
+                 const step = await runActionStep(node.action, vars, {
+@@ -345,6 +345,8 @@ export class DagDriver {
+                 if (step.result?.setVars) {
+                     acceptedDelta = pickStringEntries(step.result.setVars);
+                 }
++                if (step.outcome === 'paused')
++                    isPauseNode = true;
+             }
+             // Task 0104 R1: persist the accepted string setVars delta through
+             // outputVars so dependent resumes recover produced variables even
+diff --git a/dist/run-lifecycle.d.ts b/dist/run-lifecycle.d.ts
+index d10984b262dd13209e1922918d1f8f7f9a2eddb2..a8e2bd95274d5006917210260fade959fa86152a 100644
+--- a/dist/run-lifecycle.d.ts
++++ b/dist/run-lifecycle.d.ts
+@@ -3,6 +3,12 @@ import type { WorkflowEngineEvents } from './events';
+ import type { ActionResult, Vars, WorkflowPersistenceAdapter, WorkflowRunOptions, WorkflowRunResult, WorkflowStatus } from './types';
+ /** Workflow dialect carried on every run, span, and persisted record. */
+ export type WorkflowMode = WorkflowRunResult['mode'];
++/** Persisted continuation for an action-requested state-machine pause. */
++export interface ActionResumeCursor {
++    phase: 'enter' | 'exit';
++    nextAction: number;
++    transitionIndex?: number;
++}
+ /** Keys of the runtime builtin namespace, single-sourced for resolver + validator. */
+ export declare const RUNTIME_BUILTIN_KEYS: readonly ["workflow", "runId", "task", "state", "node", "iteration", "run", "runtime"];
+ /** Built-in bare template values available to action options (state-machine + transition-flow). */
+@@ -100,7 +106,7 @@ export declare class RunLifecycle {
+      * would otherwise be lost because the prior snapshot predates this state's
+      * action execution (R3 of 0366).
+      */
+-    pause(stateOrNodeId: string, transitionsTaken: number, vars?: Vars, lastActionResult?: ActionResult, reason?: string): Promise<WorkflowRunResult>;
++    pause(stateOrNodeId: string, transitionsTaken: number, vars?: Vars, lastActionResult?: ActionResult, reason?: string, actionResume?: ActionResumeCursor): Promise<WorkflowRunResult>;
+     /** Emit action-level observability before a host action is invoked. */
+     actionStart(stateOrNodeId: string, kind: string): void;
+     /** Emit action-level observability after a host action settles. */
+diff --git a/dist/run-lifecycle.js b/dist/run-lifecycle.js
+index c27858e6daf8432d10af9f6a7c1654e4278f20d5..7c238a44fae643b7251df64294482bafe6548b3e 100644
+--- a/dist/run-lifecycle.js
++++ b/dist/run-lifecycle.js
+@@ -290,8 +290,10 @@ export class RunLifecycle {
+      * would otherwise be lost because the prior snapshot predates this state's
+      * action execution (R3 of 0366).
+      */
+-    async pause(stateOrNodeId, transitionsTaken, vars, lastActionResult, reason) {
++    async pause(stateOrNodeId, transitionsTaken, vars, lastActionResult, reason, actionResume) {
+         const data = { transitionsTaken };
++        if (actionResume !== undefined)
++            data.actionResume = actionResume;
+         if (vars !== undefined)
+             data.effectiveVars = vars;
+         // Only persist the control bit: raw action data must not bypass result redaction.
+diff --git a/dist/state-machine.js b/dist/state-machine.js
+index f0106ba5e7cc181b7c3a182b6ca57f1c6a8cac4c..a7b0198ef672f81cb5ebcacbfa1e0804c2a31996 100644
+--- a/dist/state-machine.js
++++ b/dist/state-machine.js
+@@ -1,6 +1,6 @@
+ import { runActionSequence } from './action-step.js';
+ import { FSMError } from './errors.js';
+-import { allowedEnv, RunLifecycle, snapshotActionResult, snapshotTransitions } from './run-lifecycle.js';
++import { allowedEnv, RunLifecycle, snapshotActionResult, snapshotTransitions, } from './run-lifecycle.js';
+ import { mergeSetVars, mergeVars, resolveShellCommandTemplates, resolveTemplates } from './variables.js';
+ /** State-machine workflow driver with an R7 single control function. */
+ export class StateMachineDriver {
+@@ -34,6 +34,7 @@ export class StateMachineDriver {
+         const iterationBound = workflow.iterationBound ?? 50;
+         const defaultOnError = workflow.defaultOnError;
+         let resumeMode = resumeFromState !== undefined ? (options.resumeMode ?? 'skip-enter') : undefined;
++        let actionResume = resumeMode === 'skip-enter' ? snapshot?.data.actionResume : undefined;
+         // When `commitHop` has already persisted the new state's snapshot +
+         // phase atomically (every iteration after the first), `enter` must skip
+         // the persist half to avoid duplicate INSERT rows (ADR-020).
+@@ -46,8 +47,19 @@ export class StateMachineDriver {
+             const label = entryState ?? workflow.initialState;
+             throw new FSMError(`State "${label}" is not declared`);
+         }
++        if (actionResume !== undefined) {
++            const actions = actionResume.phase === 'enter' ? current.onEnter : current.onExit;
++            const transition = workflow.transitions[actionResume.transitionIndex ?? -1];
++            if ((actionResume.phase !== 'enter' && actionResume.phase !== 'exit') ||
++                !Number.isInteger(actionResume.nextAction) ||
++                actionResume.nextAction < 0 ||
++                actionResume.nextAction > (actions?.length ?? 0) ||
++                (actionResume.phase === 'exit' && transition?.from !== current.id)) {
++                throw new FSMError(`Invalid action resume cursor for state "${current.id}"`);
++            }
++        }
+         while (true) {
+-            if (resumeMode === 'skip-enter') {
++            if (resumeMode === 'skip-enter' && actionResume?.phase !== 'enter') {
+                 // Resume: skip enter actions on the first iteration (already ran before pause).
+                 resumeMode = undefined;
+                 persistedViaHop = true; // state already persisted before the pause
+@@ -68,9 +80,14 @@ export class StateMachineDriver {
+                 //    commitHop already persisted it atomically on the previous hop).
+                 await lifecycle.enter(current.id, transitionsTaken, !persistedViaHop, vars);
+                 // 2. Execute this state's on-enter actions in declaration order.
++                const enterOffset = actionResume?.phase === 'enter' ? actionResume.nextAction : 0;
++                if (actionResume?.phase === 'enter') {
++                    resumeMode = undefined;
++                    actionResume = undefined;
++                }
+                 const enter = options.dryRun
+                     ? EMPTY_OUTCOME
+-                    : await runActionSequence(current.onEnter ?? [], vars, {
++                    : await runActionSequence((current.onEnter ?? []).slice(enterOffset), vars, {
+                         host: this.options.host,
+                         persistence: this.options.persistence,
+                         lifecycle,
+@@ -100,6 +117,12 @@ export class StateMachineDriver {
+                 if (enter.outcome === 'fail') {
+                     return await lifecycle.fail(current.id, transitionsTaken, lastActionResult?.error);
+                 }
++                if (enter.outcome === 'paused') {
++                    return await lifecycle.pause(current.id, transitionsTaken, vars, lastActionResult, undefined, {
++                        phase: 'enter',
++                        nextAction: enterOffset + (enter.nextAction ?? 0),
++                    });
++                }
+                 // Pause: if the state declares pause, stop advancing and persist the paused position.
+                 if (current.pause === true) {
+                     return await lifecycle.pause(current.id, transitionsTaken, vars, lastActionResult);
+@@ -114,23 +137,27 @@ export class StateMachineDriver {
+                     : await lifecycle.done(current.id, transitionsTaken, declared);
+             }
+             // 5. Evaluate transition guards in declaration order and pick the first passing transition.
+-            const nextTransition = await firstPassingTransition(outbound, this.options.host, {
+-                runId,
+-                current: current.id,
+-                vars,
+-                env,
+-                lastActionResult,
+-                // Shell guards use relative paths (e.g. .spur/run/${vars.__runId}-*) —
+-                // must share the run's workdir with actions or they read the process cwd.
+-                workdir: options.workdir,
+-            }, lifecycle);
++            const nextTransition = actionResume?.phase === 'exit'
++                ? workflow.transitions[actionResume.transitionIndex ?? -1]
++                : await firstPassingTransition(outbound, this.options.host, {
++                    runId,
++                    current: current.id,
++                    vars,
++                    env,
++                    lastActionResult,
++                    // Shell guards use relative paths (e.g. .spur/run/${vars.__runId}-*) —
++                    // must share the run's workdir with actions or they read the process cwd.
++                    workdir: options.workdir,
++                }, lifecycle);
+             if (nextTransition === undefined) {
+                 return await lifecycle.fail(current.id, transitionsTaken, 'no-passing-transition');
+             }
+             // 6. Execute this state's on-exit actions before changing state.
++            const exitOffset = actionResume?.phase === 'exit' ? actionResume.nextAction : 0;
++            actionResume = undefined;
+             const exit = options.dryRun
+                 ? EMPTY_OUTCOME
+-                : await runActionSequence(current.onExit ?? [], vars, {
++                : await runActionSequence((current.onExit ?? []).slice(exitOffset), vars, {
+                     host: this.options.host,
+                     persistence: this.options.persistence,
+                     lifecycle,
+@@ -154,6 +181,13 @@ export class StateMachineDriver {
+             }
+             if (exit.outcome === 'fail')
+                 return await lifecycle.fail(current.id, transitionsTaken, exit.result?.error);
++            if (exit.outcome === 'paused') {
++                return await lifecycle.pause(current.id, transitionsTaken, vars, lastActionResult, undefined, {
++                    phase: 'exit',
++                    nextAction: exitOffset + (exit.nextAction ?? 0),
++                    transitionIndex: workflow.transitions.indexOf(nextTransition),
++                });
++            }
+             // 7. Atomically commit the transition + new state snapshot + phase in a
+             //    single batch (ADR-020). The next iteration's `enter` becomes
+             //    observe-only; a crash between writes is now impossible.
+diff --git a/dist/transition-flow.js b/dist/transition-flow.js
+index df8face97de74f9b2c18b2ae9cfbabf188b8f95a..6dd92780f4d36ae68909cb38db7599808f53ba1f 100644
+--- a/dist/transition-flow.js
++++ b/dist/transition-flow.js
+@@ -92,6 +92,9 @@ export class TransitionFlowDriver {
+                     if (step.outcome === 'fail') {
+                         return await lifecycle.fail(current.id, transitionsTaken, step.result?.error);
+                     }
++                    if (step.outcome === 'paused') {
++                        return await lifecycle.pause(current.id, transitionsTaken, vars, lastActionResult);
++                    }
+                 }
+                 // Pause: if the node declares pause, stop advancing and persist the paused position.
+                 if (current.pause === true) {
+@@ -179,6 +182,7 @@ export class TransitionFlowDriver {
+                                     node: branchCurrent.id,
+                                     ownerAttempt: lifecycle.ownerAttemptId,
+                                 });
++                                let actionPaused = false;
+                                 if (branchCurrent.action !== undefined) {
+                                     const step = await runActionStep(branchCurrent.action, branchVars, {
+                                         host: this.options.host,
+@@ -225,8 +229,9 @@ export class TransitionFlowDriver {
+                                     if (step.outcome === 'terminal') {
+                                         break;
+                                     }
++                                    actionPaused = step.outcome === 'paused';
+                                 }
+-                                if (branchCurrent.pause === true) {
++                                if (branchCurrent.pause === true || actionPaused) {
+                                     lifecycle.branchPaused(parallelNode.id, branch.id, branchCurrent.id);
+                                     await this.options.persistence.saveBranchFinalize(runId, branch.id, 'paused', Date.now() - branchStartMs, branchSetVars, undefined, {
+                                         parallelNode: parallelNode.id,
+diff --git a/dist/types.d.ts b/dist/types.d.ts
+index 0e95103175be60146d666d40b495f3d9b90b0634..8bf982def34de524ea937a727c5b6ad7c25ac328 100644
+--- a/dist/types.d.ts
++++ b/dist/types.d.ts
+@@ -247,6 +247,8 @@ export interface ActionResult {
+     readonly data?: Record<string, unknown>;
+     readonly error?: string;
+     readonly terminal?: boolean;
++    /** Suspend after this successful action; resume continues after it without replay. */
++    readonly pause?: boolean;
+     /** Variables to merge into the run's vars for subsequent steps. Shallow string→string override. */
+     readonly setVars?: Vars;
+ }
+diff --git a/src/action-step.ts b/src/action-step.ts
+index d0777afc8dacc204be9329e782c355a342ff842a..2eaec4eda0fa51058685861aada3096d6173919d 100644
+--- a/src/action-step.ts
++++ b/src/action-step.ts
+@@ -24,7 +24,7 @@ import {
+  * 'fail' policy (the caller must halt); `completed` means the step ran (possibly
+  * a failure that the 'continue' policy logged past) and the loop may proceed.
+  */
+-export type ActionStepOutcome = 'completed' | 'terminal' | 'fail';
++export type ActionStepOutcome = 'completed' | 'terminal' | 'fail' | 'paused';
+
+ /** Result of running one or more action steps: last result, a control-flow discriminator, and the accumulated `setVars` of every step in the sequence. */
+ export interface ActionStepResult {
+@@ -37,6 +37,8 @@ export interface ActionStepResult {
+      * the sequence settles.
+      */
+     readonly setVars?: Vars;
++    /** Index of the first unexecuted action when a sequence pauses. */
++    readonly nextAction?: number;
+ }
+
+ /**
+@@ -132,7 +134,7 @@ export async function runActionStep(
+         if (policy === 'fail') return { outcome: 'fail', result };
+         lifecycle.warnActionFailed(stateOrNodeId, deps.transitionsTaken, result.error);
+     }
+-    return { outcome: 'completed', result };
++    return { outcome: result.ok && result.pause === true ? 'paused' : 'completed', result };
+ }
+
+ /**
+@@ -154,7 +156,7 @@ export async function runActionSequence(
+ ): Promise<ActionStepResult> {
+     let last: ActionResult | undefined;
+     let acc: Vars | undefined;
+-    for (const action of actions) {
++    for (const [index, action] of actions.entries()) {
+         const step = await runActionStep(action, vars, deps);
+         if (step.result !== undefined) last = step.result;
+         if (step.result?.setVars) {
+@@ -163,6 +165,7 @@ export async function runActionSequence(
+         }
+         if (step.outcome === 'terminal') return { outcome: 'terminal', result: last, setVars: acc };
+         if (step.outcome === 'fail') return { outcome: 'fail', result: last, setVars: acc };
++        if (step.outcome === 'paused') return { outcome: 'paused', result: last, setVars: acc, nextAction: index + 1 };
+     }
+     return { outcome: 'completed', result: last, setVars: acc };
+ }
+diff --git a/src/dag.ts b/src/dag.ts
+index 5b48def1aa565bca92aa9e5d4041839b719266be..bb9ee9c5edadaa7c26ba8ac44169f3fdce85ccf5 100644
+--- a/src/dag.ts
++++ b/src/dag.ts
+@@ -418,7 +418,7 @@ export class DagDriver {
+             // its audit chain first, persists its accepted delta as a 'paused'
+             // row, and only then surfaces the pause result. Fail outcomes and
+             // thrown guard/persistence exceptions still outrank pause.
+-            const isPauseNode = node.pause === true && node.id !== rerunPauseBypass;
++            let isPauseNode = node.pause === true && node.id !== rerunPauseBypass;
+
+             let acceptedDelta: Vars | undefined;
+             if (!options.dryRun && node.action) {
+@@ -451,6 +451,7 @@ export class DagDriver {
+                 if (step.result?.setVars) {
+                     acceptedDelta = pickStringEntries(step.result.setVars);
+                 }
++                if (step.outcome === 'paused') isPauseNode = true;
+             }
+
+             // Task 0104 R1: persist the accepted string setVars delta through
+diff --git a/src/run-lifecycle.ts b/src/run-lifecycle.ts
+index b4671c196d5b7db59bbfae8630b290381358368a..6190aedfc607fd0e3f26aa647867ffbf08b587f5 100644
+--- a/src/run-lifecycle.ts
++++ b/src/run-lifecycle.ts
+@@ -22,6 +22,13 @@ import type {
+ /** Workflow dialect carried on every run, span, and persisted record. */
+ export type WorkflowMode = WorkflowRunResult['mode'];
+
++/** Persisted continuation for an action-requested state-machine pause. */
++export interface ActionResumeCursor {
++    phase: 'enter' | 'exit';
++    nextAction: number;
++    transitionIndex?: number;
++}
++
+ /** Keys of the runtime builtin namespace, single-sourced for resolver + validator. */
+ export const RUNTIME_BUILTIN_KEYS = [
+     'workflow',
+@@ -401,8 +408,10 @@ export class RunLifecycle {
+         vars?: Vars,
+         lastActionResult?: ActionResult,
+         reason?: string,
++        actionResume?: ActionResumeCursor,
+     ): Promise<WorkflowRunResult> {
+         const data: Record<string, unknown> = { transitionsTaken };
++        if (actionResume !== undefined) data.actionResume = actionResume;
+         if (vars !== undefined) data.effectiveVars = vars;
+         // Only persist the control bit: raw action data must not bypass result redaction.
+         if (lastActionResult !== undefined) data.lastActionResult = { ok: lastActionResult.ok };
+diff --git a/src/state-machine.ts b/src/state-machine.ts
+index 184df1e4f344dff3f01349ba3b945e3930fcf06b..053309d696e19b9ca3469f0a06e25c09886c542b 100644
+--- a/src/state-machine.ts
++++ b/src/state-machine.ts
+@@ -1,7 +1,13 @@
+ import { runActionSequence } from './action-step';
+ import { FSMError } from './errors';
+ import type { WorkflowEngineHost } from './host';
+-import { allowedEnv, RunLifecycle, snapshotActionResult, snapshotTransitions } from './run-lifecycle';
++import {
++    type ActionResumeCursor,
++    allowedEnv,
++    RunLifecycle,
++    snapshotActionResult,
++    snapshotTransitions,
++} from './run-lifecycle';
+ import type {
+     ActionResult,
+     StateMachineWorkflowDef,
+@@ -76,6 +82,8 @@ export class StateMachineDriver {
+         const iterationBound = workflow.iterationBound ?? 50;
+         const defaultOnError = workflow.defaultOnError;
+         let resumeMode = resumeFromState !== undefined ? (options.resumeMode ?? 'skip-enter') : undefined;
++        let actionResume =
++            resumeMode === 'skip-enter' ? (snapshot?.data.actionResume as ActionResumeCursor | undefined) : undefined;
+         // When `commitHop` has already persisted the new state's snapshot +
+         // phase atomically (every iteration after the first), `enter` must skip
+         // the persist half to avoid duplicate INSERT rows (ADR-020).
+@@ -89,9 +97,22 @@ export class StateMachineDriver {
+             const label = entryState ?? workflow.initialState;
+             throw new FSMError(`State "${label}" is not declared`);
+         }
++        if (actionResume !== undefined) {
++            const actions = actionResume.phase === 'enter' ? current.onEnter : current.onExit;
++            const transition = workflow.transitions[actionResume.transitionIndex ?? -1];
++            if (
++                (actionResume.phase !== 'enter' && actionResume.phase !== 'exit') ||
++                !Number.isInteger(actionResume.nextAction) ||
++                actionResume.nextAction < 0 ||
++                actionResume.nextAction > (actions?.length ?? 0) ||
++                (actionResume.phase === 'exit' && transition?.from !== current.id)
++            ) {
++                throw new FSMError(`Invalid action resume cursor for state "${current.id}"`);
++            }
++        }
+
+         while (true) {
+-            if (resumeMode === 'skip-enter') {
++            if (resumeMode === 'skip-enter' && actionResume?.phase !== 'enter') {
+                 // Resume: skip enter actions on the first iteration (already ran before pause).
+                 resumeMode = undefined;
+                 persistedViaHop = true; // state already persisted before the pause
+@@ -114,9 +135,14 @@ export class StateMachineDriver {
+                 await lifecycle.enter(current.id, transitionsTaken, !persistedViaHop, vars);
+
+                 // 2. Execute this state's on-enter actions in declaration order.
++                const enterOffset = actionResume?.phase === 'enter' ? actionResume.nextAction : 0;
++                if (actionResume?.phase === 'enter') {
++                    resumeMode = undefined;
++                    actionResume = undefined;
++                }
+                 const enter = options.dryRun
+                     ? EMPTY_OUTCOME
+-                    : await runActionSequence(current.onEnter ?? [], vars, {
++                    : await runActionSequence((current.onEnter ?? []).slice(enterOffset), vars, {
+                           host: this.options.host,
+                           persistence: this.options.persistence,
+                           lifecycle,
+@@ -144,6 +170,12 @@ export class StateMachineDriver {
+                 if (enter.outcome === 'fail') {
+                     return await lifecycle.fail(current.id, transitionsTaken, lastActionResult?.error);
+                 }
++                if (enter.outcome === 'paused') {
++                    return await lifecycle.pause(current.id, transitionsTaken, vars, lastActionResult, undefined, {
++                        phase: 'enter',
++                        nextAction: enterOffset + (enter.nextAction ?? 0),
++                    });
++                }
+
+                 // Pause: if the state declares pause, stop advancing and persist the paused position.
+                 if (current.pause === true) {
+@@ -161,30 +193,35 @@ export class StateMachineDriver {
+             }
+
+             // 5. Evaluate transition guards in declaration order and pick the first passing transition.
+-            const nextTransition = await firstPassingTransition(
+-                outbound,
+-                this.options.host,
+-                {
+-                    runId,
+-                    current: current.id,
+-                    vars,
+-                    env,
+-                    lastActionResult,
+-                    // Shell guards use relative paths (e.g. .spur/run/${vars.__runId}-*) —
+-                    // must share the run's workdir with actions or they read the process cwd.
+-                    workdir: options.workdir,
+-                },
+-                lifecycle,
+-            );
++            const nextTransition =
++                actionResume?.phase === 'exit'
++                    ? workflow.transitions[actionResume.transitionIndex ?? -1]
++                    : await firstPassingTransition(
++                          outbound,
++                          this.options.host,
++                          {
++                              runId,
++                              current: current.id,
++                              vars,
++                              env,
++                              lastActionResult,
++                              // Shell guards use relative paths (e.g. .spur/run/${vars.__runId}-*) —
++                              // must share the run's workdir with actions or they read the process cwd.
++                              workdir: options.workdir,
++                          },
++                          lifecycle,
++                      );
+
+             if (nextTransition === undefined) {
+                 return await lifecycle.fail(current.id, transitionsTaken, 'no-passing-transition');
+             }
+
+             // 6. Execute this state's on-exit actions before changing state.
++            const exitOffset = actionResume?.phase === 'exit' ? actionResume.nextAction : 0;
++            actionResume = undefined;
+             const exit = options.dryRun
+                 ? EMPTY_OUTCOME
+-                : await runActionSequence(current.onExit ?? [], vars, {
++                : await runActionSequence((current.onExit ?? []).slice(exitOffset), vars, {
+                       host: this.options.host,
+                       persistence: this.options.persistence,
+                       lifecycle,
+@@ -205,6 +242,13 @@ export class StateMachineDriver {
+                     : await lifecycle.done(current.id, transitionsTaken);
+             }
+             if (exit.outcome === 'fail') return await lifecycle.fail(current.id, transitionsTaken, exit.result?.error);
++            if (exit.outcome === 'paused') {
++                return await lifecycle.pause(current.id, transitionsTaken, vars, lastActionResult, undefined, {
++                    phase: 'exit',
++                    nextAction: exitOffset + (exit.nextAction ?? 0),
++                    transitionIndex: workflow.transitions.indexOf(nextTransition),
++                });
++            }
+
+             // 7. Atomically commit the transition + new state snapshot + phase in a
+             //    single batch (ADR-020). The next iteration's `enter` becomes
+diff --git a/src/transition-flow.ts b/src/transition-flow.ts
+index 56d5f785578463ab0f3211e3b421795c72a4dd92..e1710d6f551729ec1f0991fe842f3e32a2b1d863 100644
+--- a/src/transition-flow.ts
++++ b/src/transition-flow.ts
+@@ -140,6 +140,9 @@ export class TransitionFlowDriver {
+                     if (step.outcome === 'fail') {
+                         return await lifecycle.fail(current.id, transitionsTaken, step.result?.error);
+                     }
++                    if (step.outcome === 'paused') {
++                        return await lifecycle.pause(current.id, transitionsTaken, vars, lastActionResult);
++                    }
+                 }
+
+                 // Pause: if the node declares pause, stop advancing and persist the paused position.
+@@ -262,6 +265,7 @@ export class TransitionFlowDriver {
+                                             ownerAttempt: lifecycle.ownerAttemptId,
+                                         },
+                                     );
++                                    let actionPaused = false;
+                                     if (branchCurrent.action !== undefined) {
+                                         const step = await runActionStep(branchCurrent.action, branchVars, {
+                                             host: this.options.host,
+@@ -324,9 +328,10 @@ export class TransitionFlowDriver {
+                                         if (step.outcome === 'terminal') {
+                                             break;
+                                         }
++                                        actionPaused = step.outcome === 'paused';
+                                     }
+
+-                                    if (branchCurrent.pause === true) {
++                                    if (branchCurrent.pause === true || actionPaused) {
+                                         lifecycle.branchPaused(parallelNode.id, branch.id, branchCurrent.id);
+                                         await this.options.persistence.saveBranchFinalize(
+                                             runId,
+diff --git a/src/types.ts b/src/types.ts
+index 9410898088336b61210394c0c5790f45fbeab620..07e905ce46bbf37f0678097ba8c006dda79e7822 100644
+--- a/src/types.ts
++++ b/src/types.ts
+@@ -273,6 +273,8 @@ export interface ActionResult {
+     readonly data?: Record<string, unknown>;
+     readonly error?: string;
+     readonly terminal?: boolean;
++    /** Suspend after this successful action; resume continues after it without replay. */
++    readonly pause?: boolean;
+     /** Variables to merge into the run's vars for subsequent steps. Shallow string→string override. */
+     readonly setVars?: Vars;
+ }

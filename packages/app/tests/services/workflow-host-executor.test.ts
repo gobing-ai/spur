@@ -1,134 +1,9 @@
 import { describe, expect, test } from 'bun:test';
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, writeFileSync } from 'node:fs';
-import { tmpdir } from 'node:os';
-import { dirname, join } from 'node:path';
-import { ActionRunDao, createMigratedDb, type DbAdapter, RunDao } from '@gobing-ai/spur-domain';
-import type { AgentService } from '../../src/services/agent-service';
-import type { RuleService } from '../../src/services/rule-service';
-import { WorkflowAppService } from '../../src/services/workflow-service';
+import { existsSync, readFileSync, writeFileSync } from 'node:fs';
+import { join } from 'node:path';
+import { ActionRunDao, type DbAdapter, RunDao } from '@gobing-ai/spur-domain';
 import { receiptPath } from '../../src/workflow/receipt';
-
-const HOST_FLOW = `name: host-executor-flow
-kind: state-machine
-initialState: work
-states:
-  - id: work
-    onEnter:
-      - kind: agent.run
-        options:
-          role: coder
-          input: "Write .spur/run/host-artifact.txt"
-          expectFile: .spur/run/host-artifact.txt
-          ownedSections: [Solution]
-          inputs:
-            - path: docs/tasks5/1232_task.md
-              kind: task
-  - id: review
-    onEnter:
-      - kind: agent.run
-        options:
-          role: reviewer
-          input: "Review .spur/run/host-artifact.txt"
-          expectFile: .spur/run/host-review.txt
-  - id: done
-transitions:
-  - from: work
-    to: review
-    guard: { kind: always }
-  - from: review
-    to: done
-    guard: { kind: always }
-terminalStates: [done]
-`;
-
-const TASK_BODY = '### Solution\n\nImplemented in receipt.ts.\n';
-
-interface Harness {
-    svc: WorkflowAppService;
-    dir: string;
-    db: DbAdapter;
-    file: string;
-}
-
-async function harness(): Promise<Harness> {
-    const dir = mkdtempSync(join(tmpdir(), 'spur-host-executor-'));
-    const wfDir = join(dir, '.spur', 'workflows');
-    mkdirSync(wfDir, { recursive: true });
-    const file = join(wfDir, 'host-executor-flow.yaml');
-    writeFileSync(file, HOST_FLOW, 'utf8');
-    mkdirSync(join(dir, 'docs', 'tasks5'), { recursive: true });
-    writeFileSync(join(dir, 'docs', 'tasks5', '1232_task.md'), TASK_BODY, 'utf8');
-
-    const db = await createMigratedDb({ url: ':memory:' });
-    // The fake executor writes the artifacts the fixture stages declare, the way a real one would.
-    const produceArtifacts = (): void => {
-        writeArtifact(dir, '.spur/run/host-artifact.txt');
-        writeArtifact(dir, '.spur/run/host-review.txt');
-    };
-    const svc = new WorkflowAppService({
-        cwd: dir,
-        getDb: async () => db,
-        agentService: () =>
-            ({
-                runTraced: async () => {
-                    produceArtifacts();
-                    return {
-                        exitCode: 0,
-                        stdout: '',
-                        invocation: {
-                            agent: 'claude',
-                            source: 'default',
-                            command: 'claude',
-                            argv: ['-p', 'x'],
-                            cwd: dir,
-                            mode: 'text',
-                            outputMode: 'buffered',
-                            continue: false,
-                            stdinInteractive: false,
-                        },
-                    };
-                },
-            }) as unknown as AgentService,
-        ruleService: () => ({ evaluate: async () => ({ exitCode: 0, findings: [] }) }) as unknown as RuleService,
-        hitlResponder: () => ({ respond: async () => ({ value: 'yes' }) }),
-    });
-    return { svc, dir, db, file };
-}
-
-/** Write the receipt a host session would produce for a paused stage. */
-function writeHostReceipt(
-    dir: string,
-    receipt: {
-        runId: string;
-        state: string;
-        outcome?: string;
-        files?: string[];
-    },
-): string {
-    const target = join(dir, '.spur', 'run', 'host-receipt.json');
-    mkdirSync(dirname(target), { recursive: true });
-    writeFileSync(
-        target,
-        JSON.stringify({
-            runId: receipt.runId,
-            state: receipt.state,
-            executor: 'host',
-            outcome: receipt.outcome ?? 'done',
-            startedAt: '2026-10-17T10:00:00.000Z',
-            finishedAt: '2026-10-17T10:05:00.000Z',
-            files: receipt.files ?? [],
-            reason: null,
-        }),
-        'utf8',
-    );
-    return target;
-}
-
-function writeArtifact(dir: string, path: string): void {
-    const target = join(dir, path);
-    mkdirSync(dirname(target), { recursive: true });
-    writeFileSync(target, 'produced by the host', 'utf8');
-}
+import { HOST_FLOW, harness, writeArtifact, writeHostReceipt } from '../fixtures/workflow-host';
 
 async function actionRowCount(db: DbAdapter, runId: string): Promise<number> {
     return (await new ActionRunDao(db).actionRowsByRunId(runId)).length;
@@ -197,6 +72,55 @@ describe('host executor pause (D65 1232 R1)', () => {
 });
 
 describe('host pause resume (D65 1232 R2)', () => {
+    test('a later approval in the same state does not hide the pending host work item', async () => {
+        const { svc, file, dir } = await harness();
+        writeFileSync(
+            file,
+            HOST_FLOW.replace('  - id: work\n', '  - id: work\n    pause: true\n').replace(
+                '  - id: review',
+                `      - kind: hitl.confirm
+        options:
+          prompt: "Approve host output?"
+  - id: review`,
+            ),
+        );
+        const first = await svc.run(file, { vars: { executor: 'host' } });
+        expect(first).toMatchObject({ status: 'paused', finalState: 'work' });
+        expect((await svc.pendingGate(first.runId))?.kind).toBe('hitl.input');
+        writeArtifact(dir, '.spur/run/host-artifact.txt');
+        const second = await svc.continuePaused(first.runId, {
+            answerText: writeHostReceipt(dir, { runId: first.runId, state: 'work' }),
+        });
+        expect(second.status).toBe('paused');
+        expect(second.finalState).toBe('work');
+        expect(second.pause).toBeUndefined();
+        expect((await svc.pendingGate(first.runId))?.kind).toBe('hitl.confirm');
+        const third = await svc.continuePaused(first.runId, { hitlAnswer: 'yes' });
+        expect(third.finalState).toBe('review');
+        expect(third.pause?.workItem.state).toBe('review');
+    });
+    test('a consumer in the same state waits for the host receipt, then runs exactly once', async () => {
+        const { svc, file, dir } = await harness();
+        writeFileSync(
+            file,
+            HOST_FLOW.replace(
+                '  - id: review',
+                `      - kind: shell
+        options:
+          command: "test -f .spur/run/host-artifact.txt && echo consumed >> .spur/run/consumer.txt"
+  - id: review`,
+            ),
+        );
+        const first = await svc.run(file, { vars: { executor: 'host' } });
+        expect(first.status).toBe('paused');
+        expect(existsSync(join(dir, '.spur/run/consumer.txt'))).toBe(false);
+        writeArtifact(dir, '.spur/run/host-artifact.txt');
+        const receipt = writeHostReceipt(dir, { runId: first.runId, state: 'work' });
+        const second = await svc.continuePaused(first.runId, { answerText: receipt });
+        expect(second.status).toBe('paused');
+        expect(second.pause?.workItem.state).toBe('review');
+        expect(readFileSync(join(dir, '.spur/run/consumer.txt'), 'utf8')).toBe('consumed\n');
+    });
     test('a done receipt advances the run to the next host stage, then to done', async () => {
         const { svc, dir, file } = await harness();
         const run = await svc.run(file, { runId: 'run-advance', vars: { executor: 'host' } });

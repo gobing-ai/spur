@@ -31,6 +31,19 @@ import {
 
 const WBS = '1999';
 
+test('an engine gate receipt keeps its workflow identity; an explicit identity still wins', () => {
+    const { dir, cleanup } = gitRepo();
+    try {
+        gate('run', dir, { __runId: 'engine-run' });
+        expect(storedReceipt(dir).runId).toBe('engine-run');
+        writeFileSync(join(dir, 'src/app.ts'), 'export const one = 2;\n');
+        gate('run', dir, { __runId: 'engine-run', runId: 'explicit-run' });
+        expect(storedReceipt(dir).runId).toBe('explicit-run');
+    } finally {
+        cleanup();
+    }
+});
+
 function git(dir: string, ...args: string[]): void {
     const result = spawnSync('git', args, { cwd: dir, encoding: 'utf8' });
     if (result.status !== 0) throw new Error(`git ${args.join(' ')} failed: ${result.stderr}`);

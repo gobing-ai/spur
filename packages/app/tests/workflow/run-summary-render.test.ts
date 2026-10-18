@@ -108,10 +108,8 @@ describe('1146 — writeCloseSummary (R1/AC1/AC2)', () => {
             expect(read(writeCloseSummary(run(undefined), opts))).toBe(
                 'Execution summary: n/a (run row has no started_at)\n',
             );
-            expect(read(writeCloseSummary(run('2026-10-09T00:00:00.000Z'), opts))).toMatch(
-                /^Execution summary: n\/a \(no host session id; .+\)\n$/,
-            );
-            expect(existsSync(join(dir, '.spur', 'run', 'run_close-summary.json'))).toBe(false);
+            expect(read(writeCloseSummary(run('2026-10-09T00:00:00.000Z'), opts))).toContain('| implement |');
+            expect(existsSync(join(dir, '.spur', 'run', 'run_close-summary.json'))).toBe(true);
 
             const transcript = join(dir, 'session.jsonl');
             writeFileSync(transcript, jsonl(user('2026-10-09T00:00:00.000Z')));
