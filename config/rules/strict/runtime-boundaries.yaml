@@ -100,8 +100,8 @@ rules:
             - "packages/app/src/services/history-anatomy.ts" # deterministic history-anatomy cache core (task 1005 R2): fsync'd tmp+rename atomic publish, readdir digest scans and sync report reads must stay byte-stable; bundled standalone for the bare-node plugin twin (mirrors agent-usage-producer.ts / history-service.ts exemptions)
             - "packages/app/src/observability/workflow-run-log-sink.ts" # sync FD append for mid-run tail-able all-in-one run log (task 0426 / feature D2); append() is sync from the observability bus
             - "packages/app/src/observability/agent-run-log.ts" # same primitive as the sink above for the per-run agent stream (task 1076 R1, ADR-132); append() is sync from the agent service's own onOutput hook, and the byte cap needs the FD position it tracks
-            # Inline-driver transports (script-absorption PR-4, `spur workflow inline|commit-guard`): moved
-            # verbatim from the plugin scripts with their golden output pinned; synchronous probes and
+            # Workflow transports (script-absorption PR-4, `spur workflow commit-guard`): moved
+            # verbatim from the plugin scripts; synchronous probes and
             # atomic tmp+rename snapshot writes inside one short-lived CLI process.
             - "packages/app/src/workflow/commit-guard.ts" # .spur/run/<run>-tree-start.json atomic snapshot + target conflict-marker reads
             - "packages/app/src/workflow/persist-check.ts" # recursive evidence-tree listing + byte comparison of both trees

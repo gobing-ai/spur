@@ -167,7 +167,7 @@ describe('task-diffstat (0943)', () => {
 // ─── 1039: verify dispatch-floor conformance (1033 R1 decision table) ─────────
 
 /**
- * Transcript of `inline-pipeline-driver.md` condition-5 diffstat arm (verify only):
+ * Transcript of the retired inline driver's condition-5 diffstat arm (verify only):
  * Counts must be numeric; `.files <= 3 and (.insertions + .deletions) <= 60 and .sensitive == false`.
  * Hand-transcribed on purpose — this suite pins the contract semantics; the doc text
  * itself is pinned separately by command-flag-parity (fd2ab09f5).

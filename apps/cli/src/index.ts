@@ -92,8 +92,8 @@ export async function main(argv = process.argv.slice(2), options: MainOptions = 
     const migrationCheck =
         (commandTokens[0] === 'migrate' || (commandTokens[0] === 'self' && commandTokens[1] === 'migrate')) &&
         argv.includes('--check');
-    // `workflow commit-guard` is a boot-free transport (script-absorption PR-4): like the plugin
-    // script it replaces, it never creates a database in the cwd. Migration checks must also
+    // `workflow commit-guard|persist-*` are boot-free transports (script-absorption PR-4): like the
+    // plugin scripts they replace, they never create a database in the cwd. Migration checks must also
     // bypass boot, which would create or repair the database being checked.
     if (isWorkflowTransportInvocation(argv) || migrationCheck) {
         const program = new Command().name('spur').exitOverride();

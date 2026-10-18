@@ -20,8 +20,7 @@ import {
  * 1129 R1–R4 / AC1–AC3 and 1209: the commit guard's evidence contract against real temp git repos —
  * the guard reads HEAD, porcelain, blob hashes and the index, so "git says so" is the point.
  * Ported from `plugins/sp/tests/commit-guard.test.ts` when the script became
- * `spur workflow commit-guard` (script-absorption PR-4); the CLI-level golden parity lives in
- * `apps/cli/tests/workflow-inline-parity.test.ts`.
+ * `spur workflow commit-guard` (script-absorption PR-4).
  *
  * AC1 wording note: a post-start foreign edit of a path that was CLEAN at `start` cannot be
  * attributed by git (content has no author), so the scenario is encoded in its attributable form:

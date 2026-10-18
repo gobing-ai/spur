@@ -1196,7 +1196,7 @@ describe('persistWorktreeRuns non-ENOENT abort + external-key conflict (task 104
             await seedWorktree(from.dir, 'run_1045ok');
             // Substitute a directory for the source record: readFile throws EISDIR (not
             // ENOENT), exercising the bare re-throw branch instead of the bookkeeping
-            // ENOENT tolerance at `inline-run-setup.ts`.
+            // ENOENT tolerance in `worktree-persist.ts`.
             const fromRecords = runStoragePaths(from.dir).recordsDir;
             rmSync(join(fromRecords, 'run_1045ok.md'));
             mkdirSync(join(fromRecords, 'run_1045ok.md'));

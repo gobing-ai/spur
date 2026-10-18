@@ -114,8 +114,8 @@ vars:
     # Timeout for the `implement` step specifically (R2a). Implementation is the
     # heaviest agent.run step (full read/write/test-probe loop); the old 600s default
     # failed five consecutive dogfood runs (bugs 742/744/746/748). Default is 45 min
-    # (task 1108); inline hosts receive it only when their dispatch tool accepts a
-    # timeout (inline-pipeline-driver.md § Timeout boundary).
+    # (task 1108); the host executor forwards it only when the host's dispatch tool
+    # accepts a timeout.
     # Override per run: `--vars '{"implementTimeoutMs":"3600000"}'`.
     implementTimeoutMs: "2700000"
     # Answer captured by the review's approval decision point: "yes" | "no" | "cancel"

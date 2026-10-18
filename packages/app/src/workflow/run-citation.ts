@@ -1,6 +1,6 @@
 /**
  * `.spur/run/<name>` citation extraction and resolution, shared by persist-out
- * (`inline-run-setup.ts`, 0984 R3) and the record step (R6, task 1139). Both consumers
+ * (`worktree-persist.ts`, 0984 R3) and the record step (R6, task 1139). Both consumers
  * must agree on what a "literal direct-child citation" is, so the regex and the
  * literalization rule live here once instead of in two drifting copies.
  */

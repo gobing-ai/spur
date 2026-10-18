@@ -93,7 +93,7 @@
         "spur-check-feature": "bun run link-check && bun run transition-shim-check && bun run script-contract-check && bun run workflow-promotion-check && bun run dependency-drift-check && bun run importer-schema-check && bun run test-repo-wide && bun run test:heavy",
         "test-repo-wide": "bun scripts/spur-dev.ts run-tests test --reporter=dots ./repo-wide-tests",
         "test:full": "bun run bundle:config && bun scripts/spur-dev.ts run-tests --publish-coverage test ./apps/cli ./apps/server ./apps/web ./apps/desktop ./packages ./plugins ./scripts",
-        "spur-check:full": "bun run link-check && bun run transition-shim-check && bun run script-contract-check && bun run dependency-drift-check && bun run importer-schema-check && bun run lint && bun run test-pre-check --verbose && bun run test:coverage && bun run test-post-check --verbose && bun run test:heavy",
+        "spur-check:full": "bun run link-check && bun run transition-shim-check && bun run script-contract-check && bun run workflow-promotion-check && bun run dependency-drift-check && bun run importer-schema-check && bun run lint && bun run test-pre-check --verbose && bun run test:coverage && bun run test-post-check --verbose && bun run test:heavy",
         "eval": "bun scripts/spur-dev.ts skill-eval",
         "transition-shim-check": "bun scripts/spur-dev.ts transition-shim-check",
         "script-contract-check": "bun scripts/spur-dev.ts script-contract-check",

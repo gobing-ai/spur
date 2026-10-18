@@ -2,8 +2,7 @@
  * Commit guard — refuse a driver commit that would sweep a *foreign* writer's working-tree changes
  * (task 1129, feature H1; incidents `a94f9f431`, `36f274590` — commits swept other sessions' files).
  * Transport: `spur workflow commit-guard <start|stage|check> --run <id>` (script-absorption PR-4;
- * moved verbatim from the retired `plugins/sp/scripts/commit-guard.ts`, pinned to its golden output
- * by `apps/cli/tests/workflow-inline-parity.test.ts`).
+ * moved verbatim from the retired `plugins/sp/scripts/commit-guard.ts`).
  *
  * Read/write `.spur/run/<id>-tree-start.json`; stage only the listed paths this run wrote; report
  * the rest. "Written by this run" = "changed since base" (task-diffstat semantics) minus start-dirty

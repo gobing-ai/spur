@@ -66,7 +66,7 @@ rules:
     exclude:
       - "packages/config/src/**"
       - "apps/cli/src/index.ts"
-      - "apps/cli/src/workflow-transport.ts" # boot-free composition root of `spur workflow inline|commit-guard` (PR-4)
+      - "apps/cli/src/workflow-transport.ts" # boot-free composition root of `spur workflow commit-guard|persist-*` (PR-4)
       - "apps/server/src/serve.ts"
       - "apps/server/src/context.ts"
       - "**/tests/**"
