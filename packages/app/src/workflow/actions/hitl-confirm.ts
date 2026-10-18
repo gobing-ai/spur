@@ -1,5 +1,11 @@
 import type { ActionResult, ActionRunContext, ActionRunner, HitlResponder } from '@gobing-ai/ts-dual-workflow-engine';
-import { type DecisionEvaluator, parseDecisionConfig, resolveDecision } from '../decision-hitl-responder';
+import {
+    type DecisionEvaluator,
+    hostHitlPause,
+    parseDecisionConfig,
+    resolveDecision,
+} from '../decision-hitl-responder';
+import { selectsHostExecutor } from '../host-executor';
 
 const KIND = 'hitl.confirm';
 
@@ -45,7 +51,11 @@ export class HitlConfirmActionRunner implements ActionRunner {
             parsed.config,
             // 1236: only an explicit profile=auto lets the declared binding answer.
             context.vars.profile,
+            // 1248: a host run has no in-process operator — an unanswered gate pauses.
+            selectsHostExecutor(context.vars),
         );
+        const pause = hostHitlPause(context, resolved, { kind: 'confirm', prompt });
+        if (pause !== null) return pause;
         const { answer } = resolved;
         context.events?.emit('workflow.hitl.response', {
             runId: context.runId,

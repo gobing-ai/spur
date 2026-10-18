@@ -59,8 +59,12 @@ export type WorkflowRunResult = EngineWorkflowRunResult & {
      * D65 1232: present when the run paused on a host-executor `agent.run` stage — the
      * work item the host session performs before `spur workflow continue <run-id>
      * --answer-text <receipt-path>`. Additive: the engine's own result fields are unchanged.
+     *
+     * 1248: an operator-pause gate reports its question instead, answered with
+     * `spur workflow continue <run-id> --answer yes|no|cancel` (`--answer-text` for input) —
+     * never a work-item receipt.
      */
-    pause?: { kind: 'input'; workItem: WorkItem };
+    pause?: { kind: 'input'; workItem: WorkItem } | { reason: 'hitl-pause'; kind: GateActionKind; prompt: string };
     readonly [key: string]: unknown;
 };
 

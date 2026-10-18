@@ -9,7 +9,12 @@ import {
     parseCheckpointMetadata,
 } from '../workflow/checkpoint-contract';
 import { gateSitesForState, hitlAnswerVar } from '../workflow/composition-lint';
-import { attachHostPause, hostExecutorPersisted, withHostExecutorPause } from '../workflow/host-executor';
+import {
+    attachHostPause,
+    hostExecutorPersisted,
+    operatorPauseAt,
+    withHostExecutorPause,
+} from '../workflow/host-executor';
 import { projectWorkflowProgress } from '../workflow/progress-projection';
 import {
     readReceipt,
@@ -152,12 +157,7 @@ export class WorkflowResumeOps {
         // before the drift-consent and stale-consent metadata writes below — so a refused
         // receipt mutates nothing. `hostExecutor` also keeps the pause transform on for the
         // rest of the host chain.
-        const hostPause = await this.resolveHostPauseReceipt(
-            runId,
-            launchWorkdir,
-            opts?.answerText,
-            resolved.workflow.kind,
-        );
+        const hostPause = await this.resolveHostPauseReceipt(runId, launchWorkdir, opts, resolved.workflow);
         if (persistedDigest !== null && persistedDigest !== resolved.digest) {
             if (opts?.allowDigestMismatch !== true && opts?.force !== true) {
                 const prompt = `Workflow definition drift detected for run "${runId}": launched with ${persistedDigest}, currently ${resolved.digest}. Continue with modified definition?`;
@@ -249,7 +249,13 @@ export class WorkflowResumeOps {
         runResult.definitionDigest = persistedDigest;
         if (persistedVersion !== undefined) runResult.version = persistedVersion;
         // D65 1232: the next host stage's work item is the resume's pause payload (§4.3).
-        await attachHostPause(createNodeFileSystem(launchWorkdir), launchWorkdir, runResult, await this.ctx.getDb());
+        await attachHostPause(
+            createNodeFileSystem(launchWorkdir),
+            launchWorkdir,
+            runResult,
+            await this.ctx.getDb(),
+            resolved.workflow,
+        );
         // 0784 R2: surface degraded/consented-drift resume diagnostics.
         if (warnings.length > 0) (runResult as Record<string, unknown>).warnings = warnings;
         return runResult;
@@ -265,24 +271,41 @@ export class WorkflowResumeOps {
      * the receipt must be a definite `done` for THIS run and THIS state whose expected
      * files and owned sections are written (design §4.3, ADR-126 A4). Refusals throw
      * before any resume claim, so a refused continue changes nothing.
+     *
+     * 1248: an operator-pause gate is NOT a host work item even on a host run — it answers
+     * with an explicit `--answer` / `--answer-text`, so no receipt is demanded. Missing
+     * answers are refused before any mutation: resuming skips the paused action. The check is needed
+     * because a gate can pause in the same state an earlier `agent.run` stage left its
+     * (already-consumed) work item behind.
      */
     private async resolveHostPauseReceipt(
         runId: string,
         workdir: string,
-        answerText: string | undefined,
-        kind = 'state-machine',
+        opts: ContinuePausedOptions | undefined,
+        workflow: ResolvedWorkflowDefinition['workflow'],
     ): Promise<{ hostExecutor: boolean; receipt?: WorkItemReceipt }> {
         const db = await this.ctx.getDb();
         if (!(await hostExecutorPersisted(db, runId))) return { hostExecutor: false };
-        if (kind === 'state-machine') {
-            const snapshot = await new DbWorkflowPersistenceAdapter(db).loadLatestStateSnapshot(runId);
-            if (snapshot?.data.actionResume === undefined) return { hostExecutor: true };
+        const snapshot = await new DbWorkflowPersistenceAdapter(db).loadLatestStateSnapshot(runId);
+        const gate = snapshot !== undefined ? operatorPauseAt(workflow, snapshot.state, snapshot.data) : null;
+        if (gate !== null) {
+            const answer = gate.kind === 'hitl.input' ? opts?.answerText : opts?.hitlAnswer;
+            if (answer === undefined || answer === '') {
+                const flag = gate.kind === 'hitl.input' ? '--answer-text <text>' : '--answer yes|no|cancel';
+                throw new ValidationError(
+                    `Cannot resume run "${runId}": state '${snapshot?.state}' waits on a ${gate.kind} gate; use ${flag}. Resume refused; nothing was mutated.`,
+                );
+            }
+            return { hostExecutor: true };
         }
+        if (workflow.kind === 'state-machine' && snapshot?.data.actionResume === undefined)
+            return { hostExecutor: true };
         const fs = createNodeFileSystem(workdir);
         const workItem = await readWorkItem(fs, workdir, runId);
         if (workItem === null) return { hostExecutor: true };
         const currentState = await new DbWorkflowPersistenceAdapter(db).loadCurrentState(runId);
         if (currentState !== workItem.state) return { hostExecutor: true };
+        const answerText = opts?.answerText;
         if (answerText === undefined) {
             throw new ValidationError(
                 `Cannot resume run "${runId}": state '${workItem.state}' paused on a host work item, so --answer-text must name its receipt path.`,
@@ -320,6 +343,17 @@ export class WorkflowResumeOps {
         const snapshot = await new DbWorkflowPersistenceAdapter(db).loadLatestStateSnapshot(runId);
         const stateId = snapshot?.state ?? projection.currentState;
         if (stateId === null) return null;
+        // 1248: an operator-pause gate is answered with --answer / --answer-text, never a
+        // work-item receipt, so it is classified BEFORE the host-receipt branch — a gate can
+        // pause in the same state an earlier `agent.run` stage left its work item behind.
+        const operatorGate = operatorPauseAt(resolved.workflow, stateId, snapshot?.data);
+        if (operatorGate !== null) {
+            return {
+                stateId,
+                kind: operatorGate.kind,
+                answerVar: hitlAnswerVar(operatorGate.kind, operatorGate.options),
+            };
+        }
         if (snapshot?.data.actionResume !== undefined && (await hostExecutorPersisted(db, runId))) {
             return { stateId, kind: 'hitl.input', answerVar: '__hostReceipt' };
         }

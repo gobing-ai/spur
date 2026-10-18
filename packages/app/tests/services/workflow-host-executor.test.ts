@@ -93,11 +93,18 @@ describe('host pause resume (D65 1232 R2)', () => {
         });
         expect(second.status).toBe('paused');
         expect(second.finalState).toBe('work');
-        expect(second.pause).toBeUndefined();
+        // 1248: the gate after the host stage is unanswered on a host run, so it pauses with its
+        // question — never the consumed work item, which is what this test guards against.
+        expect(second.pause).toEqual({ reason: 'hitl-pause', kind: 'hitl.confirm', prompt: 'Approve host output?' });
         expect((await svc.pendingGate(first.runId))?.kind).toBe('hitl.confirm');
         const third = await svc.continuePaused(first.runId, { hitlAnswer: 'yes' });
-        expect(third.finalState).toBe('review');
-        expect(third.pause?.workItem.state).toBe('review');
+        // The answer is consumed, then this fixture's author-declared `pause: true` on `work`
+        // takes its own stop — a declared state pause and an action pause are separate hops.
+        expect(third).toMatchObject({ status: 'paused', finalState: 'work' });
+        expect(third.pause).toBeUndefined();
+        const fourth = await svc.continuePaused(first.runId, {});
+        expect(fourth.finalState).toBe('review');
+        expect(fourth.pause).toMatchObject({ workItem: { state: 'review' } });
     });
     test('a consumer in the same state waits for the host receipt, then runs exactly once', async () => {
         const { svc, file, dir } = await harness();
@@ -118,7 +125,7 @@ describe('host pause resume (D65 1232 R2)', () => {
         const receipt = writeHostReceipt(dir, { runId: first.runId, state: 'work' });
         const second = await svc.continuePaused(first.runId, { answerText: receipt });
         expect(second.status).toBe('paused');
-        expect(second.pause?.workItem.state).toBe('review');
+        expect(second.pause).toMatchObject({ workItem: { state: 'review' } });
         expect(readFileSync(join(dir, '.spur/run/consumer.txt'), 'utf8')).toBe('consumed\n');
     });
     test('a done receipt advances the run to the next host stage, then to done', async () => {
@@ -131,7 +138,7 @@ describe('host pause resume (D65 1232 R2)', () => {
 
         expect(resumed.status).toBe('paused');
         expect(resumed.finalState).toBe('review');
-        expect(resumed.pause?.workItem.state).toBe('review');
+        expect(resumed.pause).toMatchObject({ workItem: { state: 'review' } });
 
         writeArtifact(dir, '.spur/run/host-review.txt');
         const second = writeHostReceipt(dir, { runId: 'run-advance', state: 'review' });

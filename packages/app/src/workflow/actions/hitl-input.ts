@@ -1,5 +1,5 @@
 import type { ActionResult, ActionRunContext, ActionRunner, HitlResponder } from '@gobing-ai/ts-dual-workflow-engine';
-import { parseDecisionConfig } from '../decision-hitl-responder';
+import { hostHitlPause, parseDecisionConfig } from '../decision-hitl-responder';
 
 const KIND = 'hitl.input';
 
@@ -41,6 +41,14 @@ export class HitlInputActionRunner implements ActionRunner {
             message: prompt,
             severity: 'info',
         });
+        // 1248: input gates never carry a decision binding, so on a host run they are always
+        // unanswered in-process — pause before the default responder can invent a value.
+        const pause = hostHitlPause(
+            context,
+            { answer: { value: '' }, operatorPending: true },
+            { kind: 'input', prompt },
+        );
+        if (pause !== null) return pause;
         const answer = await this.responder.respond({
             kind: 'input',
             prompt,

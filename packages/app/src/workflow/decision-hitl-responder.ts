@@ -1,6 +1,12 @@
 import type { ActionRunRow } from '@gobing-ai/spur-domain';
 import type { DecisionMaker } from '@gobing-ai/ts-ai-runner';
-import type { HitlAnswer, HitlRequest, HitlResponder } from '@gobing-ai/ts-dual-workflow-engine';
+import type {
+    ActionResult,
+    ActionRunContext,
+    HitlAnswer,
+    HitlRequest,
+    HitlResponder,
+} from '@gobing-ai/ts-dual-workflow-engine';
 import type { DecisionLogSink } from '../decision/decision-log';
 import type { DecisionLogOption, DecisionService } from '../decision/decision-service';
 import { redactAndBound } from '../observability/agent-execution';
@@ -13,6 +19,7 @@ import {
     selectEvidence,
     type TextCleaner,
 } from './decision-evidence';
+import { selectsHostExecutor } from './host-executor';
 
 /** Stable provenance modes (D5): what the action was asked to do. */
 export type DecisionMode = 'legacy' | 'never' | 'evidence';
@@ -112,6 +119,11 @@ export interface ResolvedHitl {
     /** Evidence mode only: the declared status var to write. */
     statusVar?: string;
     statusValue?: 'accepted' | 'deferred';
+    /**
+     * 1248: the gate needs an operator answer and the run is on the host executor, so no
+     * responder was consulted and `answer` is empty — the caller pauses instead of answering.
+     */
+    operatorPending?: true;
 }
 
 /**
@@ -123,6 +135,11 @@ export interface ResolvedHitl {
  * `profile` is the run's `vars.profile` (task 1236 R1/R2): only `auto` lets the declared binding
  * answer. Unset, `standard`, and any other value are interactive — a gate never auto-answers
  * without an explicit `profile=auto`.
+ *
+ * `hostPause` (1248) is set when the run selects the host executor: there is no in-process
+ * operator to ask, so every path that would consult the responder reports `operatorPending`
+ * instead and the caller pauses the run. The evaluator still runs under `profile=auto`, so an
+ * accepted binding answers exactly as before.
  */
 export async function resolveDecision(
     responder: HitlResponder,
@@ -130,26 +147,26 @@ export async function resolveDecision(
     request: HitlRequest,
     config: DecisionConfig,
     profile?: string,
+    hostPause?: boolean,
 ): Promise<ResolvedHitl> {
+    const ask = async (provenance?: DecisionProvenance): Promise<ResolvedHitl> =>
+        hostPause === true
+            ? { answer: { value: '' }, operatorPending: true, ...(provenance !== undefined ? { provenance } : {}) }
+            : { answer: await responder.respond(request), ...(provenance !== undefined ? { provenance } : {}) };
+
     if (evaluator === undefined) {
         // No evaluator injected: plain responder (backward-compatible direct construction).
-        return { answer: await responder.respond(request) };
+        return ask();
     }
     if (profile !== 'auto') {
         // 1236 R1: interactively the gate is the operator's whatever mode it declares, so the
         // evaluator never runs. `never` keeps its D5 reason; every other mode records `operator`
         // (the declared mode is still the mode, it just did not answer).
-        const provenance = baseProvenance(
-            config.mode,
-            'fallback',
-            config.mode === 'never' ? 'policy-never' : 'operator',
-            0,
-        );
-        return { answer: await responder.respond(request), provenance };
+        return ask(baseProvenance(config.mode, 'fallback', config.mode === 'never' ? 'policy-never' : 'operator', 0));
     }
     const result = await evaluator.evaluate(request, config);
     if (result.kind === 'delegate') {
-        return { answer: await responder.respond(request), provenance: result.provenance };
+        return ask(result.provenance);
     }
     if (result.kind === 'accepted') {
         const resolved: ResolvedHitl = { answer: { value: result.value }, provenance: result.provenance };
@@ -161,11 +178,41 @@ export async function resolveDecision(
     }
     // deferred: clear the answer var so a previous iteration cannot steer the next transition.
     const resolved: ResolvedHitl = { answer: { value: '' }, provenance: result.provenance };
+    // 1248: a defer on a host run is still an unanswered gate — pause rather than letting the
+    // cleared answer fall through to a downstream default-deny shell.
+    if (hostPause === true) resolved.operatorPending = true;
     if (config.mode === 'evidence') {
         resolved.statusVar = config.statusVar;
         resolved.statusValue = 'deferred';
     }
     return resolved;
+}
+
+/**
+ * The pausing result for an unanswered operator gate on a host-executor run (1248).
+ *
+ * A `HitlResponder` cannot suspend — its contract returns an answer — so the only seam that
+ * can wait for the operator is `ActionResult.pause`, the same one `agent.run` host dispatch
+ * uses. Returns `null` when the run is not on the host executor, or when a `profile=auto`
+ * decision binding already accepted an answer.
+ *
+ * It writes ONLY the decision `statusVar`: the answer var stays unset so the operator's
+ * `spur workflow continue --answer…` is the single source of the answer.
+ */
+export function hostHitlPause(
+    context: Pick<ActionRunContext, 'vars'>,
+    resolved: ResolvedHitl,
+    gate: { kind: 'confirm' | 'select' | 'input'; prompt: string },
+): ActionResult | null {
+    if (!selectsHostExecutor(context.vars) || resolved.operatorPending !== true) return null;
+    return {
+        ok: true,
+        pause: true,
+        data: { surface: 'host', reason: 'hitl-pause', kind: gate.kind, prompt: gate.prompt },
+        ...(resolved.statusVar !== undefined && resolved.statusValue !== undefined
+            ? { setVars: { [resolved.statusVar]: resolved.statusValue } }
+            : {}),
+    };
 }
 
 const IDENTIFIER = /^[A-Za-z_][A-Za-z0-9_]*$/;

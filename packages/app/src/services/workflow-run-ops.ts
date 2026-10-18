@@ -191,7 +191,13 @@ export class WorkflowRunOps {
         await this.maybeLinkPipelineRun(file, runId, opts);
         const runResult = result as WorkflowRunResult;
         // D65 1232: surface the work item of the stage the run paused on (§4.3).
-        await attachHostPause(createNodeFileSystem(this.ctx.cwd), this.ctx.cwd, runResult, await this.ctx.getDb());
+        await attachHostPause(
+            createNodeFileSystem(this.ctx.cwd),
+            this.ctx.cwd,
+            runResult,
+            await this.ctx.getDb(),
+            workflow,
+        );
         // 0768 R1: surface the run's identity on the result. A fresh run is always
         // identity-stamped, so version is the literal or null (known-unversioned) —
         // never absent; absence is reserved for pre-0768 rows.
