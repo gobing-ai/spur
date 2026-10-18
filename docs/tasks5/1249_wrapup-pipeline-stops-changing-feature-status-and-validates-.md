@@ -4,7 +4,7 @@ name: wrapup-pipeline stops changing feature status and validates tasks with one
 status: todo
 template: feature-impl
 created_at: 2026-10-18T05:10:06.872Z
-updated_at: "2026-10-18T05:48:22.834Z"
+updated_at: "2026-10-18T06:00:59.068Z"
 feature_id: D66
 priority: P1
 tags:
@@ -12,7 +12,7 @@ tags:
   - wrapup
   - breaking
 
-dependencies: ["1246"]
+dependencies: ["1246", "1247"]
 estimate_hours: 8
 ---
 

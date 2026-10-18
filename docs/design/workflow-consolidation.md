@@ -177,5 +177,5 @@ doc-tripwire → metrics-record → branch-cleanup? → done | skipped | failed`
 - Stale-receipt reporting forces one re-verify per in-flight feature after upgrade; accepted over a
   compatibility read that would trust a digest of a deleted definition.
 - Decided: keep the hidden `spur builder pr` alias; callers use `spur builder pr-*` only.
-- Deferred: wildcard `from` in the engine would remove 17 boilerplate edges in feature-lifecycle and
-  similar blocks in task-lifecycle; recorded as a backlog task under D66, not implemented here.
+- Deferred: wildcard `from` in the engine would remove the 10 `to: cancelled|deprecated` fan-in edges in feature-lifecycle and
+  the 12 in task-lifecycle; recorded as task 1253 under D66 (blocked, deferred), not implemented here.
