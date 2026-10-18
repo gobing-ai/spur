@@ -693,6 +693,7 @@ export class FeatureService {
         }
 
         const appliedHops: string[] = [];
+        let appliedProposal = proposal;
         try {
             for (const hop of hops) {
                 // 0418 R3: the lifecycle must not silently create a state its own rules
@@ -718,6 +719,31 @@ export class FeatureService {
                 await this.transition(featureId, hop);
                 appliedHops.push(hop);
             }
+
+            // 1247 R1/R3: the `verifying` hop's onEnter runs the feature-verification pass (1246),
+            // but the hop list was derived BEFORE that pass recorded its receipt — so a PASS it
+            // just wrote is invisible to this call. Re-derive exactly once, and only when the
+            // verifying hop actually landed (a denied, goal-conflicted or dry-run path never
+            // reaches here). R2: anything short of the receipt-gated `done` hop leaves the feature
+            // in `verifying` and names both the receipt finding and the rework edge.
+            if (proposal.receiptPending === true && appliedHops.at(-1) === 'verifying') {
+                const next = await this.deriveFeatureStatus(featureId, options);
+                if (next.to === 'done' && next.hops?.length === 1 && next.hops[0] === 'done') {
+                    await this.transition(featureId, 'done');
+                    appliedHops.push('done');
+                    appliedProposal = { ...next, from: proposal.from };
+                } else {
+                    const findings = next.gateFindings ?? proposal.gateFindings ?? [];
+                    const codes = findings.map((f) => f.code).join(', ');
+                    appliedProposal = {
+                        ...proposal,
+                        reason:
+                            `${proposal.reason}${codes.length > 0 ? ` (${codes})` : ''}; ` +
+                            `rework with \`spur feature update ${featureId} --status active\``,
+                        ...(findings.length > 0 ? { gateFindings: findings } : {}),
+                    };
+                }
+            }
         } finally {
             // R2 (0625): a multi-hop sync may land an earlier hop before a later
             // lifecycle guard rejects. Refresh in `finally` whenever any hop landed,
@@ -727,7 +753,7 @@ export class FeatureService {
             }
         }
 
-        return { proposal, applied: true, appliedHops };
+        return { proposal: appliedProposal, applied: true, appliedHops };
     }
 
     /**

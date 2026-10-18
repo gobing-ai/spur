@@ -47,8 +47,9 @@ const receiptFs = createNodeFileSystem();
  * bound to the feature's current on-disk content, the way the feature-verification pass
  * does. Validation inside `deriveFeatureStatus` re-captures the same digest, so this makes
  * the completion boundary see PASS evidence instead of `L4.feature-receipt-missing`.
+ * 1247: `status` lets a case fixture the FAIL pass the verifying onEnter records.
  */
-async function recordPassReceipt(featureId: string): Promise<void> {
+async function recordVerificationReceipt(featureId: string, status: 'PASS' | 'FAIL' = 'PASS'): Promise<void> {
     const feature = await svc.show(featureId);
     if (!feature) throw new Error(`feature ${featureId} not found`);
     const selected = await resolveWorkflowDefinition(process.cwd(), 'feature-lifecycle');
@@ -73,8 +74,31 @@ async function recordPassReceipt(featureId: string): Promise<void> {
         inputDigest,
     });
     await completeFeatureVerificationReceipt(receiptFs, runDir, running, {
-        status: 'PASS',
+        status,
         inputDigest,
+    });
+}
+
+/**
+ * 1247: a FeatureService whose lifecycle port simulates the `verifying` onEnter (1246) by
+ * running `onEnter` when that hop is requested — the real adapter's shell step records the
+ * feature-verification receipt there, before the hop's own status write lands.
+ */
+function makeOnEnterService(onEnter: () => Promise<void>): FeatureService {
+    const fs = createNodeFileSystem(root);
+    return new FeatureService({
+        fs,
+        featuresDir,
+        tasksDir,
+        writeService: new PlanningWriteService({
+            fs,
+            lifecycle: {
+                async requestTransition(_ref, currentStatus, to) {
+                    if (to === 'verifying') await onEnter();
+                    return { allowed: true, from: currentStatus, to };
+                },
+            },
+        }),
     });
 }
 
@@ -1005,7 +1029,7 @@ updated_at: "${new Date().toISOString()}"
                     await svc.transition(featureId, 'active');
                     await svc.transition(featureId, 'verifying');
                     // 1119: completion needs the feature-verification receipt — fixture it.
-                    await recordPassReceipt(featureId);
+                    await recordVerificationReceipt(featureId);
 
                     const prop = await svc.deriveFeatureStatus(featureId);
                     expect(prop.from).toBe('verifying');
@@ -1215,7 +1239,7 @@ updated_at: "${new Date().toISOString()}"
             await svc.transition(feat.ref.id, 'active');
             await svc.transition(feat.ref.id, 'verifying');
             // 1119: completion needs the feature-verification receipt — fixture it.
-            await recordPassReceipt(feat.ref.id);
+            await recordVerificationReceipt(feat.ref.id);
 
             const res = await svc.syncFeature(feat.ref.id, { forceConfirm: true });
             expect(res.applied).toBe(true);
@@ -1261,7 +1285,7 @@ updated_at: "${new Date().toISOString()}"
             await svc.transition(feat.ref.id, 'active');
             // 1119: the derivation must still propose `done` so the lifecycle guard is what
             // rejects the later hop — fixture the feature-verification receipt.
-            await recordPassReceipt(feat.ref.id);
+            await recordVerificationReceipt(feat.ref.id);
 
             const fs = createNodeFileSystem(root);
             const partialSvc = new FeatureService({
@@ -1326,7 +1350,7 @@ updated_at: "${new Date().toISOString()}"
             expect(existsSync(join(root, '.spur', 'run', `feature-sync-blocked-${feat.ref.id}.json`))).toBe(false);
 
             // Once the receipt lands, the next sync (no --force) completes the feature.
-            await recordPassReceipt(feat.ref.id);
+            await recordVerificationReceipt(feat.ref.id);
             const second = await svc.syncFeature(feat.ref.id);
             expect(second.suppressed).toBeUndefined();
             expect(second.applied).toBe(true);
@@ -1335,6 +1359,95 @@ updated_at: "${new Date().toISOString()}"
 
             rmSync(filePath, { force: true });
             rmSync(taskPath, { force: true });
+        });
+
+        test('syncFeature re-derives once after the verifying hop and applies done when the onEnter pass recorded a PASS (1247 R1)', async () => {
+            await withDerivationFixture(
+                'Sync ReDerive Pass',
+                [
+                    { wbs: '9951', name: 'Derive Pass Done', status: 'done' },
+                    { wbs: '9952', name: 'Derive Pass Cancelled', status: 'cancelled' },
+                ],
+                async (featureId) => {
+                    await svc.transition(featureId, 'active');
+                    const onEnterSvc = makeOnEnterService(async () => recordVerificationReceipt(featureId));
+
+                    const res = await onEnterSvc.syncFeature(featureId);
+                    expect(res.applied).toBe(true);
+                    // Both hops in ONE call: the receipt the onEnter just wrote released done.
+                    expect(res.appliedHops).toEqual(['verifying', 'done']);
+                    expect(res.proposal.from).toBe('active');
+                    expect(res.proposal.to).toBe('done');
+                    expect(res.proposal.receiptPending).toBeUndefined();
+                    expect((await onEnterSvc.show(featureId))?.status).toBe('done');
+                },
+            );
+        });
+
+        test('syncFeature keeps the feature in verifying and names the rework edge when the onEnter pass FAILed (1247 R2)', async () => {
+            await withDerivationFixture(
+                'Sync ReDerive Fail',
+                [
+                    { wbs: '9953', name: 'Derive Fail Done', status: 'done' },
+                    { wbs: '9954', name: 'Derive Fail Cancelled', status: 'cancelled' },
+                ],
+                async (featureId) => {
+                    await svc.transition(featureId, 'active');
+                    const onEnterSvc = makeOnEnterService(async () => recordVerificationReceipt(featureId, 'FAIL'));
+
+                    const res = await onEnterSvc.syncFeature(featureId);
+                    expect(res.applied).toBe(true);
+                    expect(res.appliedHops).toEqual(['verifying']);
+                    expect(res.proposal.to).toBe('verifying');
+                    expect(res.proposal.receiptPending).toBe(true);
+                    // R2: the reason names the receipt finding AND the rework edge.
+                    expect(res.proposal.reason).toContain('L4.feature-receipt-failed');
+                    expect(res.proposal.reason).toContain(`spur feature update ${featureId} --status active`);
+                    expect((await onEnterSvc.show(featureId))?.status).toBe('verifying');
+                },
+            );
+        });
+
+        test('syncFeature never re-derives when the verifying hop was not applied (1247 R3)', async () => {
+            await withDerivationFixture(
+                'Sync No ReDerive',
+                [{ wbs: '9955', name: 'No Rederive Done', status: 'done' }],
+                async (featureId) => {
+                    await svc.transition(featureId, 'active');
+                    const fs2 = createNodeFileSystem(root);
+                    const deniedSvc = new FeatureService({
+                        fs: fs2,
+                        featuresDir,
+                        tasksDir,
+                        writeService: new PlanningWriteService({
+                            fs: fs2,
+                            lifecycle: {
+                                requestTransition(_ref, currentStatus, to) {
+                                    return to === 'verifying'
+                                        ? { allowed: false, from: currentStatus, to, report: 'verifying denied' }
+                                        : { allowed: true, from: currentStatus, to };
+                                },
+                            },
+                        }),
+                    });
+                    const proto = FeatureService.prototype as unknown as {
+                        deriveFeatureStatus: (...args: unknown[]) => Promise<unknown>;
+                    };
+                    const spy = spyOn(proto, 'deriveFeatureStatus');
+                    try {
+                        await expect(deniedSvc.syncFeature(featureId)).rejects.toThrow('verifying denied');
+                        // A denied hop applied nothing, so the single initial derivation stands.
+                        expect(spy).toHaveBeenCalledTimes(1);
+
+                        // Dry-run applies no hop either — its one derivation is the initial one.
+                        const dry = await deniedSvc.syncFeature(featureId, { dryRun: true });
+                        expect(dry.appliedHops).toEqual([]);
+                        expect(spy).toHaveBeenCalledTimes(2);
+                    } finally {
+                        spy.mockRestore();
+                    }
+                },
+            );
         });
 
         test('syncAllFeatures evaluates features with linked tasks', async () => {
@@ -1397,7 +1510,7 @@ updated_at: "${new Date().toISOString()}"
             await svc.transition(goal.ref.id, 'verifying');
             await svc.transition(goal.ref.id, 'done');
             // 1119: completion needs the feature-verification receipt — fixture it.
-            await recordPassReceipt(contender.ref.id);
+            await recordVerificationReceipt(contender.ref.id);
             const applied = await svc.syncFeature(contender.ref.id);
             expect(applied.applied).toBe(true);
             expect(applied.appliedHops).toEqual(['active', 'verifying', 'done']);

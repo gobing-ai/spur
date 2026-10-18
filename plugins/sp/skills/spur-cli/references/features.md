@@ -272,6 +272,13 @@ spur feature sync H2 --folder docs/custom-tasks --json   # non-default tasks fol
   task statuses, verdict mtimes); an identical next call replays the prior result
   (`suppressed: true`) instead of re-deriving. A changed input, `--force`, or a non-blocked
   outcome re-derives/clears. Dry-run never reads or writes the state.
+- **Single-call completion after the verifying entry (1247):** entering `verifying` runs the
+  feature-verification pass (1246), but the hop list was derived before that pass recorded its
+  receipt. Sync re-derives **once** after a `verifying` hop lands, so a PASS receipt applies
+  `verifying → done` in the same call (`appliedHops: ['verifying','done']`). A FAIL or still-missing
+  receipt leaves the feature in `verifying` and still exits `0`; `proposal.reason` then names the
+  receipt finding and the rework edge (`spur feature update <id> --status active`). The re-derive
+  never runs when the verifying hop was not applied (guard denied, goal conflict, `--dry-run`).
 - **`--json`** single-feature emits `{ proposal, applied, appliedHops[], suppressed? }`; `--all` emits
   `{ totalFeatures, evaluated, updatedCount, results[] }` where each result is the single-feature
   shape. `proposal` is

@@ -8,10 +8,19 @@
  * and exit codes 0/1/2 (design §7.2, §10).
  */
 import { afterAll, beforeAll, describe, expect, test } from 'bun:test';
-import { existsSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import {
+    chmodSync,
+    existsSync,
+    mkdirSync,
+    mkdtempSync,
+    readdirSync,
+    readFileSync,
+    rmSync,
+    writeFileSync,
+} from 'node:fs';
 import { mkdir } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
-import { join } from 'node:path';
+import { join, resolve } from 'node:path';
 import {
     captureFeatureReceiptDigest,
     completeFeatureVerificationReceipt,
@@ -20,6 +29,7 @@ import {
     resolveWorkflowDefinition,
     startFeatureVerificationReceipt,
 } from '@gobing-ai/spur-app';
+import { getEnvVars } from '@gobing-ai/spur-config';
 import { ArtifactDao } from '@gobing-ai/spur-domain';
 import { createNodeFileSystem } from '@gobing-ai/ts-runtime';
 import { createMigratedDbAdapter } from '../../src/context';
@@ -29,7 +39,9 @@ import { type CapturedOutput, createCapturedOutput } from '../helpers';
 let cwd: string;
 
 beforeAll(async () => {
-    cwd = join(import.meta.dir, '..', `.tmp-feature-test-${Date.now()}`);
+    // Throwaway root outside the repo tree: a nested `.git/` inside the checkout is both dirt in
+    // `git status` when cleanup is skipped and unwritable under a sandboxed run.
+    cwd = mkdtempSync(join(tmpdir(), 'spur-feature-test-'));
     await mkdir(join(cwd, 'docs', 'features'), { recursive: true });
     // Real repos ignore `.spur/` — keeps recorded receipts out of the digest tree.
     writeFileSync(join(cwd, '.gitignore'), '.spur/\n');
@@ -942,4 +954,260 @@ Task description
         rmSync(receiptGate.featurePath, { force: true });
         rmSync(receiptGate.taskPath, { force: true });
     });
+});
+
+// ── 1247: one sync completes active → verifying → done on the onEnter's PASS (D66 R4) ──────────
+
+const SYNC_REPO_ROOT = resolve(import.meta.dir, '..', '..', '..', '..');
+const SYNC_CLI_ENTRY = join(SYNC_REPO_ROOT, 'apps', 'cli', 'src', 'index.ts');
+const SYNC_FIXTURE_TIMEOUT_MS = 60_000;
+
+interface SyncFixture {
+    root: string;
+    /** One line per feature-verification pass — the verifying onEnter's call count. */
+    callsLog: string;
+}
+
+const syncFeatureBody = (id: string, name: string, rows: ReadonlyArray<[string, string, string]>): string =>
+    [
+        '---',
+        'schema_version: 1',
+        `id: "${id}"`,
+        `name: "${name}"`,
+        'status: active',
+        'priority: P2',
+        'created_at: 2026-10-18T00:00:00.000Z',
+        'updated_at: 2026-10-18T00:00:00.000Z',
+        '---',
+        '',
+        `# ${id}: ${name}`,
+        '',
+        '## Goal',
+        '',
+        'Drive feature sync through the verifying entry.',
+        '',
+        '## Scope',
+        '',
+        'In: fixture',
+        'Out: nothing',
+        '',
+        '## Acceptance Criteria',
+        '',
+        '- [ ] fixture item',
+        '',
+        '## Tasks',
+        '',
+        '| WBS | Task | Status |',
+        '| --- | ---- | ------ |',
+        ...rows.map(([wbs, task, status]) => `| ${wbs} | ${task} | ${status} |`),
+        '',
+        '## Notes',
+        '',
+        'Fixture.',
+    ].join('\n');
+
+const syncTaskBody = (wbs: string, status: string, featureId: string): string =>
+    [
+        '---',
+        'schema_version: 1',
+        `wbs: "${wbs}"`,
+        `name: "Task ${wbs}"`,
+        `status: ${status}`,
+        `feature_id: "${featureId}"`,
+        'created_at: 2026-10-18T00:00:00.000Z',
+        'updated_at: 2026-10-18T00:00:00.000Z',
+        '---',
+        '',
+        `# ${wbs}: Task ${wbs}`,
+        '',
+        '### Solution',
+        '',
+        'Done.',
+    ].join('\n');
+
+/**
+ * A throwaway project holding F1 (one done + one cancelled task) and a wip sibling G1, plus a stub
+ * `spur` that decides the feature-verification pass (`spur self exec check-feature`) and logs every
+ * invocation. `$spurBin` is PATH-independent, so the stub never shadows the lifecycle's own
+ * `feature check` / `feature verify` calls — only the verification command itself.
+ */
+function makeSyncFixture(label: string, passExit: 0 | 1): SyncFixture {
+    const root = mkdtempSync(join(tmpdir(), `spur-1247-${label}-`));
+    mkdirSync(join(root, 'docs', 'features'), { recursive: true });
+    mkdirSync(join(root, 'docs', 'tasks'), { recursive: true });
+    mkdirSync(join(root, 'stub-bin'), { recursive: true });
+    // Receipts, run rows and the DB land in `.spur/`; keeping it ignored keeps the checked-input
+    // digest stable across the pass.
+    writeFileSync(join(root, '.gitignore'), '.spur/\nstub-bin/\nprojects.json\nslash_commands.json\n');
+    writeFileSync(
+        join(root, 'docs', 'features', 'F1_sync-probe.md'),
+        syncFeatureBody('F1', 'Sync probe', [
+            ['9001', 'done task', 'done'],
+            ['9002', 'cancelled task', 'cancelled'],
+        ]),
+    );
+    writeFileSync(
+        join(root, 'docs', 'features', 'G1_wip-sibling.md'),
+        syncFeatureBody('G1', 'Wip sibling', [['9003', 'wip task', 'wip']]),
+    );
+    writeFileSync(join(root, 'docs', 'tasks', '9001_done.md'), syncTaskBody('9001', 'done', 'F1'));
+    writeFileSync(join(root, 'docs', 'tasks', '9002_cancelled.md'), syncTaskBody('9002', 'cancelled', 'F1'));
+    writeFileSync(join(root, 'docs', 'tasks', '9003_wip.md'), syncTaskBody('9003', 'wip', 'G1'));
+    const callsLog = join(root, 'stub-bin', 'calls.log');
+    const stub = join(root, 'stub-bin', 'spur');
+    writeFileSync(stub, `#!/bin/sh\necho "$@" >> "${callsLog}"\nexit ${passExit}\n`);
+    chmodSync(stub, 0o755);
+    // A silently failed fixture commit leaves the project without HEAD, which the pass's git-tree
+    // digest capture reports as an opaque `feature verify` exit 1 — fail here instead.
+    const git = (args: string): void => {
+        const result = Bun.spawnSync(['git', '-c', 'user.email=t@t', '-c', 'user.name=t', ...args.split(' ')], {
+            cwd: root,
+        });
+        if (result.exitCode !== 0) throw new Error(`fixture git ${args} failed: ${result.stderr.toString()}`);
+    };
+    git('init -q');
+    git('add -A');
+    git('commit -qm init');
+    return { root, callsLog };
+}
+
+async function runSyncCli(root: string, args: string[]): Promise<{ status: number; stdout: string; stderr: string }> {
+    const env = getEnvVars();
+    const proc = Bun.spawn([process.execPath, SYNC_CLI_ENTRY, ...args], {
+        cwd: root,
+        stdout: 'pipe',
+        stderr: 'pipe',
+        env: {
+            ...env,
+            PATH: `${join(root, 'stub-bin')}:${env.PATH ?? ''}`,
+            // Never read or lock the operator's global registry from a test.
+            SPUR_PROJECTS_FILE: join(root, 'projects.json'),
+            SPUR_SLASH_COMMANDS_FILE: join(root, 'slash_commands.json'),
+            // The onEnter's `env -u __runId` must open the pass's OWN run row (1246 R2).
+            __runId: 'run_outerpipeline0000000000',
+        },
+    });
+    const [stdout, stderr, status] = await Promise.all([
+        new Response(proc.stdout).text(),
+        new Response(proc.stderr).text(),
+        proc.exited,
+    ]);
+    return { status: status ?? -1, stdout, stderr };
+}
+
+/** Assert a spawned CLI call succeeded, carrying its output into the failure message. */
+function expectSyncCliOk(result: { status: number; stdout: string; stderr: string }): void {
+    if (result.status !== 0) {
+        throw new Error(`spur exited ${result.status}:\n${result.stdout}${result.stderr}`);
+    }
+}
+
+/** The `--json` payload: pretty-printed, possibly after a logo/banner line. */
+function parseJsonOutput(output: string): unknown {
+    const start = output.indexOf('{');
+    if (start < 0) throw new Error(`no JSON object in output: ${output}`);
+    return JSON.parse(output.slice(start));
+}
+
+const syncFixtureStatus = (root: string, file: string): string =>
+    /^status:\s*(\S+)/m.exec(readFileSync(join(root, 'docs', 'features', file), 'utf8'))?.[1] ?? '';
+
+/** Verification-pass invocations recorded by the stub `spur`, one line per call. */
+const syncVerifierCalls = (callsLog: string): string[] =>
+    existsSync(callsLog) ? readFileSync(callsLog, 'utf8').trim().split('\n').filter(Boolean) : [];
+
+/**
+ * R4's negative path: syncing the wip sibling itself must stay in `active`, apply no hop and run
+ * no verification pass. Reading G1's file after F1's sync proves nothing — only G1's own sync
+ * exercises the non-terminal rule.
+ */
+async function expectWipSiblingSyncStaysActive(root: string, callsLog: string): Promise<void> {
+    const before = syncVerifierCalls(callsLog).length;
+    const sync = await runSyncCli(root, ['feature', 'sync', 'G1', '--json']);
+    expectSyncCliOk(sync);
+
+    const parsed = parseJsonOutput(sync.stdout) as {
+        proposal: { from: string; to: string };
+        applied: boolean;
+        appliedHops: string[];
+    };
+    expect(parsed.proposal.from).toBe('active');
+    expect(parsed.proposal.to).toBe('active');
+    expect(parsed.applied).toBe(false);
+    expect(parsed.appliedHops).toEqual([]);
+    expect(syncFixtureStatus(root, 'G1_wip-sibling.md')).toBe('active');
+    // No verifying hop ⇒ no onEnter ⇒ no additional verification pass.
+    expect(syncVerifierCalls(callsLog).length).toBe(before);
+}
+
+async function withSyncFixture(
+    label: string,
+    passExit: 0 | 1,
+    body: (fixture: SyncFixture) => Promise<void>,
+): Promise<void> {
+    const fixture = makeSyncFixture(label, passExit);
+    try {
+        await body(fixture);
+    } finally {
+        rmSync(fixture.root, { recursive: true, force: true });
+    }
+}
+
+describe('spur feature sync re-derives after the verifying onEnter (1247, D66 R4)', () => {
+    test(
+        'one sync drives active → done on the onEnter PASS, running the pass exactly once',
+        async () => {
+            await withSyncFixture('pass', 0, async ({ root, callsLog }) => {
+                const sync = await runSyncCli(root, ['feature', 'sync', 'F1', '--json']);
+                expectSyncCliOk(sync);
+
+                const parsed = parseJsonOutput(sync.stdout) as {
+                    proposal: { from: string; to: string };
+                    appliedHops: string[];
+                };
+                expect(parsed.proposal.from).toBe('active');
+                expect(parsed.proposal.to).toBe('done');
+                expect(parsed.appliedHops).toEqual(['verifying', 'done']);
+                expect(syncFixtureStatus(root, 'F1_sync-probe.md')).toBe('done');
+
+                // The wip sibling is untouched by F1's sync.
+                expect(syncFixtureStatus(root, 'G1_wip-sibling.md')).toBe('active');
+
+                // The verifying onEnter ran the verification pass exactly once.
+                expect(syncVerifierCalls(callsLog)).toEqual(['self exec check-feature']);
+
+                await expectWipSiblingSyncStaysActive(root, callsLog);
+            });
+        },
+        SYNC_FIXTURE_TIMEOUT_MS,
+    );
+
+    test(
+        'a FAIL pass leaves the feature in verifying, names the rework edge, and exits 0',
+        async () => {
+            await withSyncFixture('fail', 1, async ({ root, callsLog }) => {
+                const sync = await runSyncCli(root, ['feature', 'sync', 'F1', '--json']);
+                // R2: a FAIL is a recorded outcome, not a sync failure.
+                expectSyncCliOk(sync);
+
+                const parsed = parseJsonOutput(sync.stdout) as {
+                    proposal: { to: string; reason: string; receiptPending?: boolean };
+                    appliedHops: string[];
+                };
+                expect(parsed.appliedHops).toEqual(['verifying']);
+                expect(parsed.proposal.to).toBe('verifying');
+                expect(parsed.proposal.receiptPending).toBe(true);
+                expect(parsed.proposal.reason).toContain('L4.feature-receipt-failed');
+                expect(parsed.proposal.reason).toContain('spur feature update F1 --status active');
+                expect(syncFixtureStatus(root, 'F1_sync-probe.md')).toBe('verifying');
+                expect(syncFixtureStatus(root, 'G1_wip-sibling.md')).toBe('active');
+
+                // A FAIL still runs the pass exactly once — the re-derive must not retry it.
+                expect(syncVerifierCalls(callsLog)).toEqual(['self exec check-feature']);
+
+                await expectWipSiblingSyncStaysActive(root, callsLog);
+            });
+        },
+        SYNC_FIXTURE_TIMEOUT_MS,
+    );
 });
