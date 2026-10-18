@@ -172,13 +172,7 @@ Two branches reach the bounded repair hop, not one (session finding after 1088):
   an on-graph, bounded path to remediation instead of dead-ending the run, and the fix re-enters
   quality → review → verify on a freshly captured proof digest.
 
-The completion gate reads deterministic evidence only (F511, task 1207): both `verify → record` and
-`record → done` check the proof digests in `.spur/run/<wbs>-verdict.json` — verdict PASS, matching
-run/definition digests, review stage completed. No confidence is read, stated or acknowledged; the
-asserted `Confidence:` line and the `ackLowConfidence` operator var were retired because a model
-that can write a PASS can write `HIGH` — the grade verified nothing. What protects a hand-driven
-`task update <wbs> done` is unchanged: the digests must match the run's captured proof, and the
-review stage must actually be completed in the artifact.
+The completion gate reads deterministic evidence only: the review stage's **verdict artifact** (`.spur/run/<wbs>-verdict.json`, derived by `spur task verdict --from-answer`) and the **tree-hash gate receipt** (`.spur/run/<wbs>-check-receipt.json`, reused while the tree is unchanged). The ADR-071 proof chain this paragraph used to describe — proof digests, `verify → record`, review-inside-the-bracket — was deleted by the D65 pipeline rewrite; `record` now runs inside `done`'s onEnter and `verify` merged into `review`. Two grades are read, and only as cross-checks against the answer's own rows: the review answer states one `Confidence: HIGH|MEDIUM|LOW` line (ADR-141) and the review gate recomputes it from the finding dispositions, rejecting a disagreement. Nothing grades the *verifier's* opinion: an open P1–P3 finding blocks `done` on its own, and what protects a hand-driven `task update <wbs> done` is unchanged — the gate must show a PASS receipt for this tree and a recorded review artifact.
 
 Agentic steps use the pure slash inputs declared by each YAML `agent.run` action (ADR-043). The
 workflow engine dispatches them; the interactive driver invokes their backing skills in-session.

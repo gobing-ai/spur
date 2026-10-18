@@ -929,7 +929,7 @@ describe('confidence cross-check (ADR-141)', () => {
     });
 
     test('two lines are rejected as a duplicate', () => {
-        const twice = answer(HIGH_REQS, HIGH_ACS) + '\nConfidence: HIGH\n';
+        const twice = `${answer(HIGH_REQS, HIGH_ACS)}\nConfidence: HIGH\n`;
         expect(lintVerifyAnswer(twice, TASK, null).map((f) => f.rule)).toContain('confidence-duplicate');
     });
 });

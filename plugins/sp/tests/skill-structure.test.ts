@@ -1569,6 +1569,28 @@ describe('sp plugin structure — functional split invariants (task 0161 / ADR-0
         }
     });
 
+    test('the answer-confidence contract (ADR-141) is stated on both answer lanes and denied nowhere', () => {
+        // ADR-141 revived the level for the two ANSWER artifacts only, with the gate deriving it from
+        // the answer's own rows. The machinery is pinned elsewhere (verify-answer-lint, residual-scan);
+        // this pin guards the half that failed silently once: the documents a verifier and a reviewer
+        // actually read must ask for the line, and nothing may still say the answer carries none.
+        const lanes = [
+            'plugins/sp/skills/code-verification/SKILL.md',
+            'plugins/sp/skills/code-verification/references/verdict-schema.md',
+            'plugins/sp/commands/dev-review.md',
+            'plugins/sp/skills/spur-dev/references/execution-workflow.md',
+        ];
+        const denial = /carries no `Confidence:` line|No confidence line exists|No confidence is read/i;
+        for (const rel of lanes) {
+            const raw = readFileSync(join(REPO_ROOT, rel), 'utf8');
+            expect(raw, `${rel} must state the ADR-141 level rule`).toMatch(
+                /Confidence:?\s*`?(HIGH|HIGH\|MEDIUM\|LOW)/,
+            );
+            expect(raw, `${rel} must not still deny the line`).not.toMatch(denial);
+            expect(raw, `${rel} must name the superseding decision`).toContain('ADR-141');
+        }
+    });
+
     test('the docs rule family is citation-only — no HIGH/MEDIUM/LOW level half (ADR-138, task 1221)', () => {
         // The level rules (`cited-version-strings-confidence`, `cited-api-claims-confidence`,
         // `cited-high-confidence`) were retired: a model can write HIGH as easily as the claim, so

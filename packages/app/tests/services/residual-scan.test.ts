@@ -463,6 +463,52 @@ describe('buildReviewGateArtifact (task 1122 R2)', () => {
 });
 
 describe('review-report contract at the gate (task 1070 R1 on the review side)', () => {
+    // ADR-141 verification, review lane: the level is DERIVED from the dispositions and the gate
+    // rejects a disagreement. These cases pin all three rejections plus the green case, because a
+    // review answer that states no level (or the wrong one) must never certify a task.
+    describe('review-lane confidence (ADR-141)', () => {
+        const reviewBodyWith = (lines: string[]): string =>
+            [
+                '### Review',
+                '',
+                'Verdict: PASS',
+                ...lines,
+                '',
+                '| Priority | Finding | Location | Disposition |',
+                '| --- | --- | --- | --- |',
+                '| P4 (advisory) | Note | `src/index.ts:1` | ACCEPTED |',
+            ].join('\n');
+        const contractTexts = (content: string): string[] =>
+            buildReviewGateArtifact('9901', content, [])
+                .artifact.items.filter((item) => item.category === 'review-contract')
+                .map((item) => item.text);
+
+        test('a missing level is rejected and the message names the derived one', () => {
+            const texts = contractTexts(reviewBodyWith([]));
+            expect(texts).toHaveLength(1);
+            expect(texts[0]).toContain('carries no `Confidence:` line');
+            expect(texts[0]).toContain('Confidence: MEDIUM');
+        });
+
+        test('two levels are rejected as ambiguous', () => {
+            const texts = contractTexts(reviewBodyWith(['Confidence: MEDIUM', 'Confidence: LOW']));
+            expect(texts).toHaveLength(1);
+            expect(texts[0]).toContain('more than one `Confidence:` line');
+        });
+
+        test('a stated level the dispositions do not support is rejected, naming both', () => {
+            const texts = contractTexts(reviewBodyWith(['Confidence: HIGH']));
+            expect(texts).toHaveLength(1);
+            expect(texts[0]).toContain('HIGH');
+            expect(texts[0]).toContain('MEDIUM');
+        });
+
+        test('the derived level certifies: one ACCEPTED P4 residual is MEDIUM and leaves the gate green', () => {
+            const texts = contractTexts(reviewBodyWith(['Confidence: MEDIUM']));
+            expect(texts).toEqual([]);
+        });
+    });
+
     const reviewWith = (rows: string[]): string =>
         [
             '### Review',
