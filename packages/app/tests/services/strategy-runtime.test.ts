@@ -28,6 +28,7 @@ import {
     type StrategyResult,
     StrategyRuntime,
     type StrategyRuntimeContext,
+    type TaskSummary,
 } from '../../src/index';
 import { createMigratedDb } from '../helpers';
 
@@ -116,17 +117,21 @@ function fleetConfig(): SpurConfig {
 function task(
     wbs: string,
     opts?: { status?: string; tags?: string[]; priority?: string },
-): {
-    wbs: string;
-    name: string;
-    status: string;
-    filePath: string;
-    frontmatter: Record<string, unknown>;
-} {
+): Pick<TaskSummary, 'wbs' | 'name' | 'status' | 'filePath' | 'dependencies' | 'feature_id' | 'frontmatter'> {
     const frontmatter: Record<string, unknown> = {};
     if (opts?.tags !== undefined) frontmatter.tags = opts.tags;
     if (opts?.priority !== undefined) frontmatter.priority = opts.priority;
-    return { wbs, name: `task ${wbs}`, status: opts?.status ?? 'todo', filePath: `/x/${wbs}_t.md`, frontmatter };
+    // TaskSummary now promotes the graph and the feature link (session review); a fixture row
+    // carries them explicitly so it matches the service's real shape.
+    return {
+        wbs,
+        name: `task ${wbs}`,
+        status: opts?.status ?? 'todo',
+        filePath: `/x/${wbs}_t.md`,
+        dependencies: [],
+        feature_id: (frontmatter.feature_id as string | undefined) ?? null,
+        frontmatter,
+    };
 }
 
 async function makeProject(): Promise<{ project: string; cleanup: () => Promise<void> }> {

@@ -195,9 +195,12 @@ export async function dispatchToFleet(
     try {
         // `fromId` is the dispatching RUN, never null: a member may reply, and
         // `replyToMessage` refuses a null sender — so the reply path must be real.
+        // Session review: it was `workflow:<runId>`, and `validateAgentId` (2-64 chars, lowercase
+        // alnum / `_` / `-`) rejects a colon — so every workflow→fleet dispatch failed at the
+        // enqueue and the fleet executor could never be used. Dashes keep the id readable and valid.
         ({ messageId } = await deps.dispatcher.enqueue({
             member: member.instanceId,
-            fromId: `workflow:${input.runId}`,
+            fromId: `workflow-${input.runId}`,
             body,
             requestKey: `${input.runId}/${input.state}`,
         }));

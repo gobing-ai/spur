@@ -3,6 +3,7 @@ import { mkdtempSync, readFileSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import type { AgentFleet } from '@gobing-ai/spur-config';
+import { validateAgentId } from '@gobing-ai/ts-ai-runner';
 import type { FleetDispatcher, FleetDispatchRequest, FleetReceipt } from '../../src/services/fleet-dispatcher';
 import type { FleetService, ResolvedFleet, ResolvedFleetMember } from '../../src/services/fleet-service';
 import { dispatchToFleet, type FleetDispatchDeps, fleetUnavailableOutcome } from '../../src/workflow/fleet-dispatch';
@@ -108,7 +109,10 @@ describe('dispatchToFleet', () => {
         expect(readFileSync(result.promptPath, 'utf8')).toBe('implement task 0942');
         expect(calls.length).toBe(1);
         // The sender is the dispatching RUN, never null: a member's reply needs a real fromId.
-        expect(calls[0]?.request.fromId).toBe('workflow:run-1');
+        // Session review: the sender id must satisfy `validateAgentId`, which rejects a colon —
+        // `workflow:<runId>` made every workflow→fleet dispatch fail at the enqueue.
+        expect(calls[0]?.request.fromId).toBe('workflow-run-1');
+        expect(() => validateAgentId(String(calls[0]?.request.fromId))).not.toThrow();
         expect(calls[0]?.request.member).toBe('p-coder');
         expect(calls[0]?.request.requestKey).toBe('run-1/impl');
         expect(calls[0]?.request.body).toContain('state: impl');

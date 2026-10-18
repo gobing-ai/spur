@@ -168,6 +168,15 @@ export interface TaskSummary {
     status: string;
     /** Absolute file path. */
     filePath: string;
+    /**
+     * The task's `dependencies[]` graph, promoted out of the frontmatter (session review): every
+     * documented batch/projection reads `{wbs, status, dependencies, feature_id}`, and a null
+     * `dependencies` there made `spur task batch-plan order` sort a flat list — the graph existed
+     * only under `.frontmatter`. Empty when the task declares none.
+     */
+    dependencies: string[];
+    /** The linked feature id, promoted for the same reason (`null` when unlinked). */
+    feature_id: string | null;
     frontmatter: Record<string, unknown>;
 }
 

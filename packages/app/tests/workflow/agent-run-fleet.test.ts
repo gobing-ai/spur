@@ -3,6 +3,7 @@ import { existsSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import type { AgentFleet } from '@gobing-ai/spur-config';
+import { validateAgentId } from '@gobing-ai/ts-ai-runner';
 import type { ActionRunContext } from '@gobing-ai/ts-dual-workflow-engine';
 import type { AgentRunInvocation, AgentRunTracedResult, AgentService } from '../../src/services/agent-service';
 import type { FleetDispatchRequest, FleetReceipt } from '../../src/services/fleet-dispatcher';
@@ -348,7 +349,10 @@ describe('agent.run fleet executor surface (0942/ADR-126, G71 R2/R5)', () => {
                 makeCtx({ workdir, vars: { executor: 'fleet' } }),
             );
             expect(deps.dispatchCalls[0]?.member).toBe('proj-coder');
-            expect(deps.dispatchCalls[0]?.fromId).toBe('workflow:test-1');
+            // Session review: the sender id must satisfy `validateAgentId`, which rejects a colon —
+            // `workflow:<runId>` made every fleet dispatch fail at the enqueue.
+            expect(deps.dispatchCalls[0]?.fromId).toBe('workflow-test-1');
+            expect(() => validateAgentId(String(deps.dispatchCalls[0]?.fromId))).not.toThrow();
             expect(deps.dispatchCalls[0]?.requestKey).toBe('test-1/s1');
         } finally {
             rmSync(workdir, { recursive: true, force: true });

@@ -175,7 +175,11 @@ describe('CommandGateActionRunner', () => {
 
         expect(res.ok).toBe(false);
         expect((await fs.readFile(join(workdir, resultFile))).trim()).toBe('FAIL');
-    });
+        // Session review: this test spawns a real process, so a saturated host can stretch it past
+        // the suite's 20 s default (observed once at 20 000 ms with three suites running, while it
+        // finishes in ~0.3 s alone). The explicit ceiling keeps a contention stall from reading as a
+        // behavioural failure without weakening the assertion.
+    }, 60_000);
 
     test('splits a multi-token executable into argv without a shell', async () => {
         const workdir = join(tmpdir(), `test-gate-${crypto.randomUUID()}`);

@@ -29,6 +29,12 @@ export class TaskQueryOps {
             name: (fm.name as string) ?? '',
             status: (fm.status as string) ?? '',
             filePath,
+            // The same two promotions `list()` makes, so `task show --json` and
+            // `task list --json` project the same shape (session review).
+            dependencies: Array.isArray(fm.dependencies)
+                ? (fm.dependencies as unknown[]).filter((dep): dep is string => typeof dep === 'string')
+                : [],
+            feature_id: (fm.feature_id as string | null | undefined) ?? null,
             frontmatter: fm as Record<string, unknown>,
             content: doc.bodyWithoutFrontmatter,
         };
@@ -120,11 +126,18 @@ export class TaskQueryOps {
                 if (filters?.featureId !== undefined && filters.featureId !== featureId) continue;
                 if (wantPhase !== undefined && wantPhase !== status) continue;
 
+                // Promote the two fields every documented projection reads (session review):
+                // `dependencies[]` and `feature_id` used to be reachable only via `.frontmatter`.
+                const declaredDeps = Array.isArray(fm.dependencies)
+                    ? (fm.dependencies as unknown[]).filter((dep): dep is string => typeof dep === 'string')
+                    : [];
                 tasks.push({
                     wbs,
                     name: (fm.name as string) ?? name,
                     status,
                     filePath: actualPath,
+                    dependencies: declaredDeps,
+                    feature_id: (featureId as string | undefined) ?? null,
                     frontmatter: fm as Record<string, unknown>,
                 });
             } catch {

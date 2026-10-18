@@ -68,6 +68,30 @@ describe('TaskQueryOps.list / show', () => {
     });
 });
 
+describe('TaskQueryOps promotes the graph and the feature link (session review)', () => {
+    // The batch driver's documented projection is `{wbs, status, dependencies, feature_id}`. Those two
+    // fields used to live only under `.frontmatter`, so the projection read null and
+    // `spur task batch-plan order` sorted a flat list while the real graph sat one level down.
+    test('list and show expose dependencies[] and feature_id at the top level', async () => {
+        writeTask('0040_a.md', 'name: A\nstatus: done\nfeature_id: F9\ndependencies: ["0039", "0038"]');
+        writeTask('0041_b.md', 'name: B\nstatus: todo');
+        const q = ops();
+
+        const rows = await q.list();
+        const a = rows.find((t) => t.wbs === '0040');
+        const b = rows.find((t) => t.wbs === '0041');
+        expect(a?.dependencies).toEqual(['0039', '0038']);
+        expect(a?.feature_id).toBe('F9');
+        // A task with no graph and no feature is an empty list, never undefined/null-shaped drift.
+        expect(b?.dependencies).toEqual([]);
+        expect(b?.feature_id).toBeNull();
+
+        const shown = await q.show('0040');
+        expect(shown.dependencies).toEqual(['0039', '0038']);
+        expect(shown.feature_id).toBe('F9');
+    });
+});
+
 describe('TaskQueryOps routing through the host service', () => {
     test('refresh lists every registered folder through host.list', async () => {
         const list = mock(async () => [{ wbs: '0001' } as TaskSummary, { wbs: '0002' } as TaskSummary]);
@@ -84,10 +108,28 @@ describe('TaskQueryOps routing through the host service', () => {
                 name: 'Two',
                 status: 'todo',
                 filePath: '',
+                dependencies: [],
+                feature_id: null,
                 frontmatter: { parent_wbs: '0010', name: 'Two' },
             },
-            { wbs: '0011', name: 'One', status: 'done', filePath: '', frontmatter: { parent_wbs: '0010' } },
-            { wbs: '0013', name: 'Other', status: 'todo', filePath: '', frontmatter: { parent_wbs: '0099' } },
+            {
+                wbs: '0011',
+                name: 'One',
+                status: 'done',
+                filePath: '',
+                dependencies: [],
+                feature_id: null,
+                frontmatter: { parent_wbs: '0010' },
+            },
+            {
+                wbs: '0013',
+                name: 'Other',
+                status: 'todo',
+                filePath: '',
+                dependencies: [],
+                feature_id: null,
+                frontmatter: { parent_wbs: '0099' },
+            },
         ] satisfies TaskSummary[];
         const q = ops({ list: mock(async () => kids) });
         expect(await q.refreshRoster('0010')).toEqual({ wbs: '0010', childCount: 2, written: true });
@@ -104,7 +146,15 @@ describe('TaskQueryOps routing through the host service', () => {
             childCount: 0,
             written: false,
         });
-        const kid = { wbs: '0021', name: 'k', status: 'todo', filePath: '', frontmatter: { parent_wbs: '0020' } };
+        const kid = {
+            wbs: '0021',
+            name: 'k',
+            status: 'todo',
+            filePath: '',
+            dependencies: [],
+            feature_id: null,
+            frontmatter: { parent_wbs: '0020' },
+        };
         await expect(ops({ list: mock(async () => [kid]) }).refreshRoster('0020')).rejects.toThrow('no ## Plan');
     });
 });

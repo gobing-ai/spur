@@ -32,6 +32,8 @@ function recent(name: string, extra: Record<string, unknown> = {}): TaskSummary 
         name,
         status: 'backlog',
         filePath: join(tasksDir, '0042_x.md'),
+        dependencies: [],
+        feature_id: null,
         frontmatter: { created_at: new Date().toISOString(), ...extra },
     };
 }

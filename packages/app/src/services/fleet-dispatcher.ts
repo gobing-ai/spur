@@ -24,7 +24,7 @@ export interface FleetDispatchRequest {
     member: string;
     /**
      * Sender identity. A member may reply to this id, so it must be real:
-     * the orchestrator instance id for strategy dispatches, `workflow:<runId>`
+     * the orchestrator instance id for strategy dispatches, `workflow-<runId>`
      * for workflow dispatches.
      */
     fromId: string;

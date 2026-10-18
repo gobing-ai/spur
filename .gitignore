@@ -132,6 +132,9 @@ spur.js
 /docs/**/.spur/
 /plugins/**/.spur/
 /.spur/run
+# Engine JSONL traces (`--trace-file`) are run artifacts, not repo content: unignored, every
+# measured run tripped the empty-implement / diff-scope guard with its own trace file (session review).
+/.spur/workflow/
 /.spur/backups/
 /.spur/config.yaml.bak
 # Team-generated specs are runtime scratch materialized by `spur team up` (ADR-086);
