@@ -1,5 +1,113 @@
 # Changelog
 
+## [0.4.12] - 2026-10-17
+
+_Claim bullets carry one source anchor and the level that anchor supports — `HIGH`: a `path:line` was
+read and matches the bullet; `MEDIUM`: an external URL, or whole-file/artifact presence only; `LOW`: no
+verifiable anchor, so the claim is reworded or dropped. Unanchored bullets are bookkeeping (merges,
+status moves, filings) and assert no code, API or version fact._
+
+### Added
+- bind SDLC actions through one shared resolver over the `builder.actions` config (a0ee73abe)
+  <!-- src: packages/app/src/services/sdlc-actions.ts:66 · confidence: HIGH -->
+- add `spur self exec` to run a declared builder action with `--list`, `--dry-run` and exit-code propagation (0424af573)
+  <!-- src: apps/cli/src/commands/self/exec.ts:28 · confidence: HIGH -->
+- route the quality gate and the shipped workflows through those declared actions instead of hardcoded commands (964009fc6)
+  <!-- src: packages/app/src/services/quality-gate.ts:554 · confidence: HIGH -->
+- seed `builder.actions` from the stack detected at `spur init` (aa4959f5d)
+  <!-- src: apps/cli/src/commands/init.ts:63 · confidence: HIGH -->
+- dispatch `agent.run` to a host pause with a durable work item and receipt (c059ed5d6)
+  <!-- src: packages/app/src/workflow/receipt.ts:45 · confidence: HIGH -->
+- lint self-contained `agent.run` stages in `spur workflow validate` (1a4ff8bb8)
+  <!-- src: packages/app/src/workflow/composition-lint.ts:555 · confidence: HIGH -->
+- key the PASS receipt by the git tree the gate itself computes, so a later run cannot reuse an older proof (fabe53515)
+  <!-- src: packages/app/src/services/quality-gate.ts:31 · confidence: HIGH -->
+- restore the host-wide full-gate lock for `run` and `recheck` (7bffd8f28)
+  <!-- src: packages/app/src/services/quality-gate.ts:19 · confidence: HIGH -->
+- resolve operator gates as decision points under every profile (4c1e9e43f)
+  <!-- src: packages/app/src/workflow/decision-hitl-responder.ts:118 · confidence: HIGH -->
+- derive and cross-check the ADR-141 answer confidence line (90a3a43ac)
+  <!-- src: packages/app/src/services/answer-confidence.ts:17 · confidence: HIGH -->
+- hold a run's worktree claim across host pauses and dispatch fleet stages as persisted work items (3e0c779dd)
+  <!-- src: packages/app/src/services/workflow-worktree-lease.ts:15 · confidence: HIGH -->
+- run feature verification on the engine foundation and add `fleet-e2e --matrix` (8dac0b016)
+  <!-- src: scripts/commands/fleet-e2e.ts:8 · confidence: HIGH -->
+
+### Fixed
+- promote the two task-graph fields every documented projection reads, and unbreak the fleet sender id (670db1480)
+  <!-- src: packages/app/src/services/task-query-ops.ts:129 · confidence: HIGH -->
+- ask for the ADR-141 level on both answer lanes, and pin it (02f4dc8ea)
+  <!-- src: plugins/sp/commands/dev-review.md:46 · confidence: HIGH -->
+- require the derived confidence line in the pipeline's review answer (7b027e350)
+  <!-- src: config/workflows/task-pipeline.yaml:643 · confidence: HIGH -->
+- keep the next turn's `api-request` row out of measured work time (135344d8d)
+  <!-- src: packages/app/src/workflow/run-summary.ts:201 · confidence: HIGH -->
+- accept the review report's `Item | State | Evidence` table as the requirement table (7b0298dda)
+  <!-- src: packages/app/src/services/verify-answer-lint.ts:415 · confidence: HIGH -->
+- fail loudly when a delegated `scripts/spur-dev.ts` module is missing (50c8790af)
+  <!-- src: scripts/spur-dev.ts:94 · confidence: HIGH -->
+- count unbound light-gate actions in the gate summary instead of dropping them (98cf7fe3a)
+  <!-- src: packages/app/src/services/quality-gate.ts:523 · confidence: HIGH -->
+- reject placeholders the light gate never supplies (afbe9ab34)
+  <!-- src: packages/config/src/index.ts:985 · confidence: HIGH -->
+- split a multi-token `spurBin` before spawning the admission check (2fb9fd960)
+  <!-- src: packages/app/src/workflow/actions/agent-run.ts:52 · confidence: HIGH -->
+- resolve the gate receipt from the run dir instead of a guessed path (58654968d)
+  <!-- src: packages/app/src/workflow/run-summary-render.ts:36 · confidence: HIGH -->
+- announce the wrapup doc tripwire instead of passing silently (e70fe9363)
+  <!-- src: config/workflows/wrapup-pipeline.yaml:17 · confidence: HIGH -->
+- single-source the stack-neutral action defaults (3f1d46da3)
+  <!-- src: packages/config/src/index.ts:964 · confidence: HIGH -->
+- reject an empty scope instead of widening the command (61964c383)
+  <!-- src: packages/app/src/services/sdlc-actions.ts:111 · confidence: HIGH -->
+- scope the `self` noun alias claim to the five legacy verbs (ac27ca632)
+  <!-- src: plugins/sp/skills/spur-cli/references/self.md:11 · confidence: HIGH -->
+
+### Changed
+- delete the `spur workflow inline` driver surface, keeping a `workflow persist` primitive (99c0d7524)
+  <!-- src: apps/cli/src/commands/workflow/persist.ts:26 · confidence: HIGH -->
+- rewrite `task-pipeline` as a seven-state graph without the proof chain (60faec03e)
+  <!-- src: config/workflows/task-pipeline.yaml:201 · confidence: HIGH -->
+- migrate the idea, wayfinder and wrapup pipelines onto the foundation (fed6f1da8)
+  <!-- src: config/workflows/idea-pipeline.yaml:79 · confidence: HIGH -->
+- consolidate the `package.json` scripts and script folders onto the action vocabulary (f4b344567)
+  <!-- src: scripts/spur-dev.ts:9 · confidence: HIGH -->
+
+### Other
+- plan A92 stack-neutral SDLC actions and record ADR-139 (4b44d6ef6)
+  <!-- src: docs/design/sdlc-actions.md · confidence: MEDIUM -->
+- record ADR-140 (one workflow interpreter) and amend ADR-051's noun-verb shape (b93dd9d8d)
+  <!-- src: docs/00_ADR.md · confidence: MEDIUM -->
+- plan the D65 foundation with tasks 1231-1242 (ecd5de8b2)
+- author the D65 workflow execution foundation satellite (54a5ad4e6)
+  <!-- src: docs/design/workflow-execution-foundation.md · confidence: MEDIUM -->
+- correct two stale action-vocabulary statements (bede223f1)
+  <!-- src: docs/design/sdlc-actions.md · confidence: MEDIUM -->
+- require `--coverage=false` on narrow test runs, on the inline-driver reference since retired with that surface (6721de5de)
+- record ADR-141 and its two answer contracts (4cf4e0ee7)
+  <!-- src: docs/00_ADR.md · confidence: MEDIUM -->
+- measure the rewritten task pipeline against the 32-run baseline (5193158c8)
+  <!-- src: docs/reports/task-pipeline-baseline-comparison.md · confidence: MEDIUM -->
+- scope narrow test runs to the workspace, in the same now-retired reference (8ee396c6e)
+- record 0 of 3 runs completed and 11 findings for the first measurement attempt (0c23a2505)
+  <!-- src: docs/reports/task-pipeline-baseline-comparison.md · confidence: MEDIUM -->
+- align gate guidance with SDLC actions and `spur self exec` (9c495ad2f)
+- point the plugin's gate guidance at `spur self exec` (b612127c9)
+- record the A92 dogfood report in the tracked ledger (66969adbc)
+- certify three real D65 task pipelines end to end (d8e40bf4e)
+  <!-- src: docs/dogfood/2026-10-17-D65-real-task-pipeline-dogfood.md · confidence: MEDIUM -->
+- update the task evidence after verification (3669137e5)
+- merge main (A92 evidence refresh, history fix, test-scope docs) into the D65 branch (4320cbe2b)
+- refresh the 1222-1227 evidence pointers (13d6ec345)
+- close the fixed review rows and cancel their re-filed tasks (9bd74a10e)
+- cancel the A92 residual follow-ups 1228-1230 (7eb90717e)
+- merge main (D65 plan, ADR-140) into the A92 branch (1971f5bf9)
+- close A92 after the feature-scoped pass (604b107bc)
+- declare this repo's builder actions (d9b062578)
+  <!-- src: .spur/config.yaml:105 · confidence: HIGH -->
+- pin the eval script to its full command (7a0049848)
+  <!-- src: plugins/sp/tests/skill-structure.test.ts · confidence: MEDIUM -->
+
 ## [0.4.11] - 2026-10-16
 
 ### Added
