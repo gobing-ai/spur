@@ -1,11 +1,11 @@
 import { join } from 'node:path';
 import { runStoragePaths } from './run-storage';
 
-// Same synchronous builtin form as inline-run-setup.ts (the runtime-boundaries fs rule forbids
+// Same synchronous builtin form as inline-run-attribution.ts (the runtime-boundaries fs rule forbids
 // a static node:fs import here; top-level await would break `bun test --isolate`).
 const { appendFileSync, existsSync, mkdirSync } = process.getBuiltinModule('node:fs');
 
-// Extracted from `inline-run-setup.ts`: workflow actions (proof-fingerprint, agent-run,
+// Extracted from the deleted `inline-run-setup.ts`: workflow actions (proof-fingerprint, agent-run,
 // run-artifact, action-trace) append run-record lines without importing the whole inline-run
 // service, which imports the workflow service → builtins → those actions (an import cycle).
 

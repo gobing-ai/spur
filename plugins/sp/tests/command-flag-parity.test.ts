@@ -24,18 +24,6 @@ const COMMANDS_DIR = join(ROOT, 'plugins', 'sp', 'commands');
 const DEV_OPS_PATH = join(ROOT, 'plugins', 'sp', 'skills', 'spur-dev', 'references', 'dev-operations.md');
 const GLOSSARY_PATH = join(ROOT, 'plugins', 'sp', 'skills', 'spur-dev', 'references', 'flag-glossary.md');
 
-test('1033: the small-diff verify floor prevents dispatch while the other stages keep their floor', () => {
-    const driver = readFileSync(join(ROOT, 'plugins/sp/skills/spur-dev/references/inline-pipeline-driver.md'), 'utf8');
-    const arm = driver.split('**Diffstat arm (verify only, 1033 R1).**')[1]?.split('All five pass')[0] ?? '';
-    expect(arm).toContain('fails when the triage diffstat');
-    expect(arm).toContain('.files <= 3');
-    expect(arm).toContain('<= 60');
-    expect(arm).toContain('.sensitive == false');
-    expect(arm).toContain('`implement` and `review`');
-    expect(arm).toContain('below dispatch floor:');
-    expect(arm).toContain('missing, unparsable');
-});
-
 // R9 — deprecated-flag ignore-list. Each entry names the command + flag + reason.
 // dev-review --next was dropped entirely in task 0401 (not deprecated) — no entry here.
 const DEPRECATED_FLAGS: Record<string, Record<string, string>> = {
@@ -437,9 +425,12 @@ describe('task 1023 — dev-review target selectors (--tasks / --feature / --sco
     // Biome forbids "${...}" inside string literals; split the token to keep the literal assertion honest.
     const VARREF = '$' + '{vars.wbs}';
     test('R6 — pipeline review step forwards the task via --tasks; generated apps/cli/config matches', () => {
+        // D65 1240: the step now also carries the machine-read answer contract, so its `input` is a
+        // folded scalar. The intent of this pin is unchanged — the task is forwarded by `--tasks`,
+        // never positionally — so it asserts that forwarding wherever the prompt declares it.
         const pipeline = readFileSync(PIPELINE, 'utf8');
-        const forwarded = `input: /sp:dev-review --tasks ${VARREF} --auto`;
-        const bare = `input: /sp:dev-review ${VARREF} --auto`;
+        const forwarded = `/sp:dev-review --tasks ${VARREF} --auto`;
+        const bare = `/sp:dev-review ${VARREF} --auto`;
         expect(pipeline).toContain(forwarded);
         expect(pipeline).not.toContain(bare);
         expect(readFileSync(BUNDLED_PIPELINE, 'utf8')).toContain(forwarded);

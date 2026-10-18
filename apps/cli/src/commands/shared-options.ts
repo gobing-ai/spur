@@ -63,7 +63,6 @@ export const SHARED_OPTIONS = {
     runAgentPin: ['--run <runId>', 'Pin a specific run id (default: spec latest run)'] as const,
     runIdTask: ['--run-id <id>', 'Explicit run_id (auto-generated when omitted)'] as const,
     runIdWorkflow: ['--run-id <id>', 'Persisted run id for workflow run'] as const,
-    runIdInline: ['--run-id <id>', 'Inline run id (one safe filename component under .spur/run/)'] as const,
     sourceLink: ['--source <source>', 'Link source identifier (e.g. next-auto)'] as const,
     sourceHistory: [
         '--source <source>',

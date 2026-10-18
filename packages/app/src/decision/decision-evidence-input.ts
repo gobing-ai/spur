@@ -3,7 +3,7 @@ import { DECIDE_EVIDENCE_MAX_CHARS } from '../workflow/decide';
 
 /**
  * Shared evidence reader (task 1094 R3): every declared evidence file is read, then
- * redacted and bounded with the SAME policy the workflow inline decide uses, so
+ * redacted and bounded with the SAME policy the engine's non-pausing decide uses, so
  * CLI-gathered reliability samples measure the same input the workflow sends. Paths
  * arrive final (the caller resolves against its cwd/workdir). An unreadable file
  * throws — evidence is a declared caller fact, and the caller decides how to fail:

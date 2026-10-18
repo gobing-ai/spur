@@ -87,6 +87,13 @@ describe('lintVerifyAnswer (task 1003 R1)', () => {
         expect(findings[0]?.message).toContain('`Verdict:`');
     });
 
+    // D65 1240: the live review hop writes `**Verdict: PASS** — <note>`, which the old
+    // whole-line regex rejected as `verdict-missing` and folded a real PASS review to UNKNOWN.
+    test('a markdown-wrapped Verdict line with a trailing note is accepted', () => {
+        const reply = answer(CLEAN_REQS, CLEAN_ACS, '**Verdict: PASS** — 3 requirements, 2 ACs');
+        expect(lintVerifyAnswer(reply, TASK, null)).toEqual([]);
+    });
+
     test('invalid Verdict value is rejected with the line number', () => {
         const findings = lintVerifyAnswer(answer(CLEAN_REQS, CLEAN_ACS, 'Verdict: DONE'), TASK, null);
         expect(findings.length).toBe(1);

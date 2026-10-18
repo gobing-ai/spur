@@ -184,7 +184,7 @@ describe('execution-batch spec contract (task 0975 R1 — per-run provenance per
         // The create-mode block resolves WT_PATH once, runs persist-out, then holder cleanup.
         const wtPath = SPEC.indexOf('WT_PATH="$(cd "../<worktree-dir>" && pwd)"');
         // The prose above the block names the same call, so search from the hoisted WT_PATH.
-        const persistOut = SPEC.indexOf('spur workflow inline persist-out --from "$WT_PATH"', wtPath);
+        const persistOut = SPEC.indexOf('spur workflow persist-out --from "$WT_PATH"', wtPath);
         const holderCleanup = SPEC.indexOf('WT-4b — bounded CWD-holder cleanup');
         expect(wtPath).toBeGreaterThanOrEqual(0);
         expect(persistOut).toBeGreaterThan(wtPath);
@@ -200,7 +200,7 @@ describe('execution-batch spec contract (task 0975 R1 — per-run provenance per
 
     test('prose — stage-record copy-out is the mechanical persist-out, not a manual duty', () => {
         expect(SPEC).toContain('persisted by 0975 R1');
-        expect(SPEC).toContain('spur workflow inline persist-out --from <worktree>');
+        expect(SPEC).toContain('spur workflow persist-out --from <worktree>');
         expect(SPEC).toContain('idempotent on re-persist');
         expect(SPEC).not.toContain('must copy those records out');
         expect(SPEC).toContain('spur workflow progress --json` in the\ninvoking tree shows the merged run `done`');
@@ -209,7 +209,7 @@ describe('execution-batch spec contract (task 0975 R1 — per-run provenance per
 
 describe('execution-batch spec contract (task 0984 — cited run evidence survives teardown)', () => {
     test('WT-4a — the persist-out call forwards the merged task file(s) via repeatable --task-file', () => {
-        expect(SPEC).toContain(`spur workflow inline persist-out --from "$WT_PATH" "\${TASK_FILE_ARGS[@]}"`);
+        expect(SPEC).toContain(`spur workflow persist-out --from "$WT_PATH" "\${TASK_FILE_ARGS[@]}"`);
         expect(SPEC).toContain('spur task show <wbs> --json | jq -r .filePath');
         expect(SPEC).toContain('repeatable `--task-file <path>`');
         // The driver resolves paths in the invoking tree post-merge, via the task-show fast path.
@@ -298,28 +298,7 @@ describe('execution-batch spec contract (task 0477 — worktree isolation lifecy
     });
 });
 
-const DRIVER = readRunbook('inline-pipeline-driver');
-
-describe('execution-batch + inline-driver spec contract (task 1058 — per-call tree pin)', () => {
-    test('inline driver — the canonical per-call pin protocol is defined (R1)', () => {
-        expect(DRIVER).toContain('## Per-call execution-tree pin (task 1058)');
-        // The template: cd first, then verify physical path and repository identity.
-        expect(DRIVER).toContain('cd -- "$SPUR_TREE"');
-        expect(DRIVER).toContain('pwd -P');
-        expect(DRIVER).toContain('git rev-parse --show-toplevel');
-        expect(DRIVER).toContain('git branch --show-current');
-        expect(DRIVER).toContain('tree mismatch: expected');
-        expect(DRIVER).toContain('branch mismatch: expected');
-        expect(DRIVER).toContain('Pin reads as well as writes');
-        expect(DRIVER).toContain('heading-only grep is not proof');
-        // Fail closed BEFORE the CLI runs, with named expected/actual — no magic exit-91
-        // contract (task 1058 Q&A, 2026-10-02).
-        expect(DRIVER).toContain('before the CLI runs');
-        expect(DRIVER).not.toContain('exit 91');
-        // Engine shell actions already bind context.workdir — the protocol is host-only.
-        expect(DRIVER).toContain('packages/app/src/workflow/actions/shell.ts:98');
-    });
-
+describe('execution-batch spec contract (task 1058 — per-call tree pin)', () => {
     test('execution batch — host boundaries pin their tree; WT-4 selects the invoking tree (R2)', () => {
         // Collapse markdown reflow so multi-word pins match across wrapped lines.
         const spec = SPEC.replace(/\s+/g, ' ');
@@ -1173,12 +1152,6 @@ describe('execution-batch spec contract (task 1132 R4/R5 — auto-fix-first gate
 describe('1146 — execution summary is a close product (AC6)', () => {
     const ref = (name: string): string => readFileSync(referencePath(name), 'utf8');
 
-    test('the close docs hand the driver summaryFile to print', () => {
-        expect(ref('structured-trace-emission.md')).toContain('summaryFile');
-        expect(ref('inline-pipeline-driver.md')).toContain('summaryFile');
-        expect(ref('inline-pipeline-driver.md')).toContain('### Execution summary');
-    });
-
     test('the batch report names the roll-up built from per-run files', () => {
         const report = ref('execution-batch-report.md');
         expect(report).toContain('spur workflow summary');
@@ -1187,12 +1160,7 @@ describe('1146 — execution summary is a close product (AC6)', () => {
     });
 
     test('no execution-summary reference records SINCE or measures with --since', () => {
-        for (const name of [
-            'dev-operations.md',
-            'execution-batch-report.md',
-            'inline-pipeline-driver.md',
-            'structured-trace-emission.md',
-        ]) {
+        for (const name of ['dev-operations.md', 'execution-batch-report.md']) {
             const body = ref(name);
             expect(body).not.toContain('SINCE=');
             expect(body).not.toContain('--since "$SINCE"');

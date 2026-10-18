@@ -5,8 +5,9 @@ import { join } from 'node:path';
 export function findBookkeepingSuppression(snippet: string, filename = 'snippet.md'): string[] {
     const violations: string[] = [];
     const forbiddenPatterns = [
-        // Script-absorption PR-4: the inline run lifecycle and persist-check are CLI ops now.
-        /spur workflow inline\b[^\n]*?(?:>[^&]*\/dev\/null|2>\s*\/dev\/null|&>\s*\/dev\/null)/,
+        // Script-absorption PR-4 kept these as CLI ops; task 1242 flattened the inline group, so the
+        // WT-4 landing verbs are the live spelling and their output must stay visible too.
+        /spur workflow (?:persist-out|persist-check|commit-guard)\b[^\n]*?(?:>[^&]*\/dev\/null|2>\s*\/dev\/null|&>\s*\/dev\/null)/,
         /(?:bun|node|\$SETUP_SCRIPT|\$RS|\$CHECK_SCRIPT)\s+(?:"?\$[A-Za-z0-9_]+"|\S*inline-run-setup|\S*quality-gate|\S*persist-out)[^\n]*?(?:>[^&]*\/dev\/null|2>\s*\/dev\/null|&>\s*\/dev\/null)/,
         /(?<!superskill script path [^\n]*)(?:inline-run-setup|quality-gate|persist-out)\.(?:ts|mjs)[^\n]*?(?:>[^&]*\/dev\/null|2>\s*\/dev\/null|&>\s*\/dev\/null)/,
     ];
@@ -38,11 +39,10 @@ describe('bookkeeping suppression and scratch pin (task 1136 R2/R6)', () => {
         expect(violations).toEqual([]);
     });
 
-    test('AC2/R2: a snippet redirecting spur workflow inline to /dev/null is rejected naming file and line', () => {
-        const cli = 'spur workflow inline action --run-id 123 --node test >/dev/null 2>&1';
+    test('AC2/R2: a snippet redirecting the WT-4 landing verbs to /dev/null is rejected naming file and line', () => {
+        const cli = 'spur workflow persist-out --from "$WT_PATH" >/dev/null 2>&1';
         expect(findBookkeepingSuppression(cli, 'test-doc.md')).toEqual([`test-doc.md:1: ${cli}`]);
-        expect(findBookkeepingSuppression('spur workflow inline persist-check --from x 2>/dev/null')).toHaveLength(1);
-        expect(findBookkeepingSuppression('spur workflow inline close --run-id r')).toEqual([]);
+        expect(findBookkeepingSuppression('spur workflow persist-check --from x 2>/dev/null')).toHaveLength(1);
     });
 
     test('AC2/R2: a snippet redirecting the retired inline-run-setup script is still rejected', () => {
@@ -51,37 +51,5 @@ describe('bookkeeping suppression and scratch pin (task 1136 R2/R6)', () => {
         expect(violations).toEqual([
             'test-doc.md:1: bun plugins/sp/scripts/inline-run-setup.ts --action --run-id 123 --node test >/dev/null 2>&1',
         ]);
-    });
-
-    test('R6: driver reference states that scratch lives under .spur/run/<run-id>/', () => {
-        const driverRef = readFileSync(
-            join(__dirname, '../../skills/spur-dev/references/inline-pipeline-driver.md'),
-            'utf8',
-        );
-        expect(driverRef).toContain('.spur/run/<run-id>/');
-    });
-
-    test('R6/AC6: driver reference requires a non-empty declared var before its shell action runs, and allows empty optional vars', () => {
-        const driverRef = readFileSync(
-            join(__dirname, '../../skills/spur-dev/references/inline-pipeline-driver.md'),
-            'utf8',
-        );
-        expect(driverRef).toContain('Declared vars are checked before a shell action runs');
-        expect(driverRef).toContain('requires $qualityGateCmd but it is empty/unset');
-        expect(driverRef).toContain('legitimately empty optional vars');
-    });
-
-    test('R2: the driver reference states the no-suppression rule for bookkeeping calls', () => {
-        const driverRef = readFileSync(
-            join(__dirname, '../../skills/spur-dev/references/inline-pipeline-driver.md'),
-            'utf8',
-        );
-        expect(driverRef).toContain('never `/tmp` or `$TMPDIR`');
-        const traceRef = readFileSync(
-            join(__dirname, '../../skills/spur-dev/references/structured-trace-emission.md'),
-            'utf8',
-        );
-        expect(traceRef).toContain('Never suppress this output');
-        expect(traceRef).toContain('redirecting `spur workflow inline`');
     });
 });

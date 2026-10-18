@@ -36,7 +36,6 @@ import { registerServeCommand } from './commands/serve';
 import { registerStatusCommand } from './commands/status';
 import { registerTaskCommand } from './commands/task';
 import { registerWorkflowCommand } from './commands/workflow';
-import type { WorkflowInlineDeps } from './commands/workflow/inline';
 import { CLI_CONFIG } from './config';
 import { EMBEDDED_SPUR_SCHEMAS } from './config/embedded-schemas';
 import { createCliContext, createMigratedDbAdapter } from './context';
@@ -53,8 +52,6 @@ export interface MainOptions {
     db?: DbAdapter;
     /** Database-free serve launch seam for startup tests. */
     startServer?: typeof import('@gobing-ai/spur-server').startServer;
-    /** `spur workflow inline` seams (app runners, self argv) for in-process tests. */
-    workflowTransport?: WorkflowInlineDeps;
 }
 
 /** Run the Spur CLI with explicit argv and injectable runtime dependencies. */
@@ -95,10 +92,9 @@ export async function main(argv = process.argv.slice(2), options: MainOptions = 
     const migrationCheck =
         (commandTokens[0] === 'migrate' || (commandTokens[0] === 'self' && commandTokens[1] === 'migrate')) &&
         argv.includes('--check');
-    // `workflow inline|commit-guard` are the inline driver's transports (script-absorption PR-4):
-    // like the plugin scripts they replace, they never create a database in the cwd (the runners
-    // open the run-owning tree's database) and load config only for the ops that read it.
-    // Migration checks must also bypass boot, which would create or repair the database being checked.
+    // `workflow commit-guard` is a boot-free transport (script-absorption PR-4): like the plugin
+    // script it replaces, it never creates a database in the cwd. Migration checks must also
+    // bypass boot, which would create or repair the database being checked.
     if (isWorkflowTransportInvocation(argv) || migrationCheck) {
         const program = new Command().name('spur').exitOverride();
         program.option('--no-logo').option('-v, --cli-verbose');
@@ -116,7 +112,7 @@ export async function main(argv = process.argv.slice(2), options: MainOptions = 
             registerMigrateCommand(program, migrationContext, { hidden: true });
             registerMigrateCommand(program.command('self'), migrationContext);
         } else {
-            registerWorkflowTransportCommands(program.command('workflow'), context, options.workflowTransport);
+            registerWorkflowTransportCommands(program.command('workflow'), context);
         }
         try {
             await program.parseAsync(argv, { from: 'user' });

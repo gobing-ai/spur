@@ -630,7 +630,18 @@ states:
                 # spec than the implement stage recorded in __agentRouting_implement.
                 # 0943 R1/R2: `--focus` carries the resolved lane depth — `functional` for the
                 # fast lane (traceability, which is the certification input), `all` otherwise.
-                input: /sp:dev-review --tasks ${vars.wbs} --auto --focus ${vars.reviewFocus}
+                # D65 1240: this answer IS the certification input — `spur task verdict --from-answer`
+                # derives the run's verdict from its requirement rows, so the answer contract is part
+                # of the prompt. A report body ending with a `| WBS | Verdict | P1 | … |` summary and
+                # no per-requirement rows derives UNKNOWN and can never certify, which looped every
+                # run through review -> remediate.
+                input: >-
+                    /sp:dev-review --tasks ${vars.wbs} --auto --focus ${vars.reviewFocus}
+                    Answer contract (machine-read): end with exactly one plain `Verdict: PASS|FAIL`
+                    line, preceded by a `| Req | Status | Evidence |` table with one row per
+                    requirement (R1, R2, ...) and a `| AC | Status | Evidence Type | Evidence |` table
+                    with one row per acceptance criterion. Every row cites a repo-relative
+                    `path:line`; no row may be omitted or merged.
                 # The captured review answer is the run's certification input (and the
                 # `task verdict` input below): expectFile fails the step when no answer landed.
                 answerFile: .spur/run/${vars.__runId}-review-answer.txt

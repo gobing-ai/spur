@@ -4,7 +4,7 @@ import { join } from 'node:path';
 
 /**
  * Bootstrap budget (task 1128 R1/R2, AC1) — the runall driver used to load `SKILL.md` +
- * `execution-batch.md` + `inline-pipeline-driver.md` (187,963 B ≈ 47k tokens) before its first
+ * `execution-batch.md` (≈ its measured size in the budget table) before its first
  * dispatch and compacted within minutes. The sections whose trigger fires later now live in sibling
  * on-demand files, and this test keeps the pre-dispatch read small.
  *

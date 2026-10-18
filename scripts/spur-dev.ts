@@ -27,7 +27,6 @@
  *   link-check                                  fail if a linked @gobing-ai pkg serves a stale dist/
  *   script-contract-check [--placement-only]    ADR-130 script/hook placement contract
  *   transition-shim-check                      transition-shim manifest ↔ source markers, two-sided
- *   inline-pipeline-parity-check               inline workflow pipelines must list candidate actions
  *   dependency-drift-check                     lockfile @gobing-ai versions must match installed
  *   validate-commands                          sp command files against the thin-wrapper contract
  *   flag-contract-check                        cross-surface flag parity gate for the sp contract surfaces
@@ -74,7 +73,6 @@ const DELEGATED: Record<string, string> = {
     'plugin-install-smoke': 'plugin-install-smoke.ts',
     'script-contract-check': 'script-contract-check.ts',
     'transition-shim-check': 'transition-shim-check.ts',
-    'inline-pipeline-parity-check': 'inline-pipeline-parity-check.ts',
     'dependency-drift-check': 'dependency-drift-check.ts',
     'validate-commands': 'validate-commands.ts',
     'flag-contract-check': 'validate-flag-contracts.ts',

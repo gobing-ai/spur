@@ -53,10 +53,10 @@ Every batch item's hour estimate MUST also travel into the batch JSON as the ite
 frontmatter, and it can be corrected later with `spur task update <wbs> --estimate-hours <n>`. The
 estimate already exists at this point (the hour knobs were just applied above); writing it down
 costs nothing and makes the size decision visible to later stages instead of re-derived. Its
-primary consumer is the inline pipeline driver's dispatch floor
-([inline-pipeline-driver.md](../../spur-dev/references/inline-pipeline-driver.md)): a task at or
-below 1 hour executes its stages host-inline rather than paying a subagent dispatch. An estimate
-left unwritten forgoes that gate — the task dispatches like any large one.
+primary consumer is the host session's dispatch floor
+([execution-batch.md](../../spur-dev/references/execution-batch.md)): a task at or below 1 hour
+executes its stages in the host rather than paying a subagent dispatch. An estimate left unwritten
+forgoes that gate — the task dispatches like any large one.
 
 ### Worked example: H8's own first decomposition
 

@@ -116,7 +116,7 @@ WT_PATH="$(cd "../<worktree-dir>" && pwd)"   # hoisted: needed by WT-4a AND WT-4
 # automatically reconciles each forwarded terminal task's receiving lifecycle row in
 # the invoking tree (finalizing any stale in-flight or interrupted row left from the
 # task's creation), so a manual DB edit is never required:
-spur workflow inline persist-out --from "$WT_PATH" "${TASK_FILE_ARGS[@]}" \
+spur workflow persist-out --from "$WT_PATH" "${TASK_FILE_ARGS[@]}" \
   || { echo "halt: worktree run-record persist-out failed - worktree retained (WT-5)" >&2; write_marker retained; exit 1; }
 #
 # WT-4b — bounded CWD-holder cleanup (task 0720 R1). $WT_PATH above is the EXACT
@@ -155,9 +155,9 @@ fi                                           #   NO prune/remove/branch delete
 # worktree while it still owns evidence absent from (or divergent from) the invoking tree —
 # the D63 landing skipped persist-out and silently lost verdicts + receipts. WBSes ride the
 # same TASK_FILE_ARGS resolved for WT-4a; run ids are a separate `--run-id <id>` per run and
-# belong to THIS check only — `spur workflow inline persist-out` accepts `--from` and
+# belong to THIS check only — `spur workflow persist-out` accepts `--from` and
 # `--task-file` alone and exits 2 on `--run-id` (1089 driver note).
-spur workflow inline persist-check --from "$WT_PATH" "${TASK_FILE_ARGS[@]}" \
+spur workflow persist-check --from "$WT_PATH" "${TASK_FILE_ARGS[@]}" \
   || { echo "WT-4 halt: worktree evidence would be abandoned - persist-out missing or stale (WT-5)" >&2; write_marker retained; exit 1; }
 git worktree remove "../<worktree-dir>" \
   || { echo "WT-4 halt: worktree remove failed after landed merge $BATCH_TIP" >&2; write_marker retained; exit 1; }
@@ -443,7 +443,7 @@ git checkout <base-ref> && git merge --no-ff -m "<prepared message>" <branch>
 #     ancestry).
 
 # 6. persist evidence out (WT-4a), then WT-4b/4c cleanup, and set the marker to merged
-spur workflow inline persist-out --from <worktree> --task-file …
+spur workflow persist-out --from <worktree> --task-file …
 ```
 
 The report reuses the [`--next` chain contract](flag-glossary.md#--next-chain-contract) halt-report

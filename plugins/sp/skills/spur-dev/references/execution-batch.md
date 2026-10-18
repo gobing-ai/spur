@@ -52,8 +52,8 @@ that a flat FSM cannot express.
 The active batch orchestrator owns the spaces **between** task runs: resolve+freeze the set,
 topo-sort, run each task's pipeline, inspect terminal state, decide continue/halt, and emit the
 report. It does not redefine individual steps. Interactive sequential omit/inline delegates each
-ready WBS to [inline-pipeline-driver.md](inline-pipeline-driver.md); explicit/parallel/headless paths
-delegate to the workflow engine and `vars.agent` resolution.
+ready WBS to the same engine loop as every other path (host executor by default); explicit/parallel/
+headless paths delegate to the workflow engine and `vars.agent` resolution.
 
 ## Step 1 — Selector resolution (R1)
 
@@ -316,7 +316,8 @@ per-task letter is ever hand-assigned.
 4. **When a task ends:** mark the task's letter (and its published digits) with the task's terminal
    outcome — `done` renders completed; `failed`/`skipped`/`blocked` render pending + ` [<outcome>]`
    per the frozen status mapping in
-   [inline-pipeline-driver.md](inline-pipeline-driver.md) § Host todo update styles.
+   [cross-cutting.md](cross-cutting.md#shared-startup-contract-task-0814-r1r3r4r6r7r8) § Publish the
+   generated plan (per-item and full-list host update styles).
 
 ## Step 3 — The driver loop (R3, R4)
 
@@ -338,7 +339,8 @@ for wbs in plan:                                       # default sequential mode
         report += preflight-skip(wbs, preflight); continue
     visible plan (§2.7): letter in_progress + task-children digits at start; letter ← outcome at end
     run: if interactive sequential omit/inline:
-             inline-pipeline-driver(task-pipeline.yaml, wbs)
+             spur workflow run task-pipeline.yaml --vars <vars with executor=host> --json
+             perform the returned work item; spur workflow continue <run-id> --answer-text <receipt>
          else:
              spur workflow run task-pipeline.yaml --vars <vars> --async --json
              follow trace until terminal    # spur workflow trace "$RUN" --follow --timeout 600000
@@ -371,9 +373,9 @@ record the reason.
 ### 3.1 Per-task execution reuses the pipeline verbatim (R4)
 
 Each task runs through the **standard single-task pipeline** — `task-pipeline.yaml`
-— with no new FSM and no step edits. Interactive sequential omit/inline invokes the host
-[inline pipeline driver](inline-pipeline-driver.md), which interprets that file; explicit/parallel
-execution invokes the workflow engine. The batch loop inspects the result and never redefines a
+— with no new FSM and no step edits. Interactive sequential omit/inline and explicit/parallel
+execution both invoke the workflow engine on that file; only the executor differs (host session vs
+child process). The batch loop inspects the result and never redefines a
 step.
 
 **Explicit/parallel path: launch async, then one bounded follow** (per execution-workflow.md §"Step 2"): a pipeline with

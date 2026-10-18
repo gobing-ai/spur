@@ -29,7 +29,7 @@ import {
     executorDisabled,
     getExecutorTier,
 } from './executor-tier';
-import { countUnattributedInlineStages } from './inline-run-setup';
+import { countUnattributedInlineStages } from './inline-run-attribution';
 
 /**
  * `spur agent doctor` for {@link AgentService}: detection + health probing, usage/capability

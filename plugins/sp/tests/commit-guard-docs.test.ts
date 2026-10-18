@@ -5,8 +5,8 @@ import { join } from 'node:path';
 /**
  * 1129 AC4 (R5): the runbooks route every driver commit through `spur workflow commit-guard`.
  * The guard itself moved into the CLI (script-absorption PR-4); its behaviour is pinned by
- * `packages/app/tests/workflow/commit-guard.test.ts` and the golden parity suite
- * `apps/cli/tests/workflow-inline-parity.test.ts`. This file keeps the doc contract.
+ * `packages/app/tests/workflow/commit-guard.test.ts`. This file keeps the doc contract for the
+ * surviving execution runbooks (the inline driver runbook retired with the driver, task 1242).
  */
 
 const ROOT = join(import.meta.dir, '..', '..', '..');
@@ -19,15 +19,12 @@ const DRIVER_DOCS = [
     'execution-worktree-landing.md',
     'execution-parallel-isolation.md',
     'execution-batch-continuation.md',
-    'inline-pipeline-driver.md',
-    'structured-trace-emission.md',
 ] as const;
 /** Files that MUST define at least one commit step — losing one is a contract loss, not a move. */
 const COMMIT_STEP_DOCS = [
     'execution-batch-report.md',
     'execution-worktree-setup.md',
     'execution-worktree-landing.md',
-    'inline-pipeline-driver.md',
 ] as const;
 
 /**

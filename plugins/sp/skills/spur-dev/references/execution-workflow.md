@@ -50,10 +50,11 @@ one thing and yields, so the **pipeline (not the agent) owns the loop**.
 | `review` | `/sp:dev-review --tasks <wbs>` — SECUA-framework review of the diff. | [dev-operations.md §2 review](dev-operations.md) |
 | `verify` | `sp:code-verification` — requirements traceability + verdict. | [dev-operations.md §3 verify](dev-operations.md) |
 
-Interactive omit/`inline` executes these model stages through the
-[inline pipeline driver](inline-pipeline-driver.md) in the host session and records stage/session
-provenance. The host is the controller; eligible `agent.run` stages may dispatch once to a native
-subagent (task 0508), with host fallback and no post-dispatch replay — see the driver reference.
+Interactive omit/`inline` executes these model stages in the host session through the engine loop:
+the engine owns every guard and transition, the host performs each returned work item and records
+its receipt. Eligible `agent.run` stages may dispatch once to a native subagent (task 0508), with
+host fallback and no post-dispatch replay — see
+[cross-cutting.md](cross-cutting.md#inline-default-execution-surface).
 `--agent <name|auto>`, parallel batches, and headless workflow invocation select
 the existing subprocess actions. Direct invocations of the same dev operations remain inline by
 default. See the [inline-default execution-surface contract](cross-cutting.md#inline-default-execution-surface).
@@ -106,9 +107,9 @@ and merge-or-retain after the run reports. The lifecycle is
 applied to a batch of one. Rejected with `--mode implement`.
 
 **Choose the surface before execution.** In an interactive `/sp:dev-run --mode full` invocation,
-omit/`--agent inline` selects the [inline pipeline driver](inline-pipeline-driver.md). Read the YAML
-at invocation time, allocate the inline run id/session provenance, record `task run-link`, and walk
-its actions/guards in declaration order. Do not call `spur workflow run` on this path. `--agent auto`,
+omit/`--agent inline` selects the host executor. Start the run with `spur workflow run <file>
+--vars '{"executor":"host",…}'` and advance it with `spur workflow continue <run-id> --answer-text
+<receipt>`; the engine walks the YAML's actions/guards, this session never re-executes them. `--agent auto`,
 a named executor, an explicit `vars.agent`/`vars.implementAgent`, or a headless caller selects the
 workflow subprocess path below. Never fall back silently from inline to `agent.default`.
 
@@ -338,11 +339,25 @@ the partial work still in the working tree. The failure output names the partial
    [`done-housekeeping.md`](done-housekeeping.md) F6 — it carries the provenance obligations
    (honest `done_reason`, verdict regeneration).
 
-   **Inline path (task 0727).** There is no `<runId>-implement-partial.md` artifact on the inline
-   driver path — it is written only by the subprocess `agent.run` action. The inline equivalent is
-   the dispatch-timeout contract in [`inline-pipeline-driver.md`](inline-pipeline-driver.md):
-   resume from the partial tree, never restart the stage inline; the partial working tree is the
-   recovery input.
+   **Host-executor path (task 0727).** There is no `<runId>-implement-partial.md` artifact on the
+   host path — it is written only by the subprocess `agent.run` action. A host-stage timeout is a
+   recorded stage failure: resume from the partial tree, never restart the stage inline; the partial
+   working tree is the recovery input.
+
+**3a. Verify dispatch floor (task 1039).** A small, clean diff does not need a separate verify
+session: when the diff is below the floor, `verify` runs host-inline in the current session and
+records exactly one log line —
+
+    stage verify executed inline in session <session-id> (below dispatch floor: diffstat files <f> lines <n>)
+
+The floor is read from the recorded diffstat artifact under `.spur/run/`; the filter that decides
+it is
+
+    ([.files, .insertions, .deletions] | all(type == "number")) and .files <= 3 and (.insertions + .deletions) <= 60 and .sensitive == false
+
+A diffstat that is missing, malformed, or names a sensitive path is never below the floor: the
+floor is an optimisation, so an unreadable artifact dispatches the normal verify executor. (This
+contract moved here from the retired inline driver reference, D65 1242.)
 
 **3. Match the executor to the size (task 0487 R3).** Size and executor capability are one
 decision, not two. **≥ 6 requirements or ≥ 9 Plan items → a `reviewer`-role executor (the

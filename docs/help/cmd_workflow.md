@@ -438,132 +438,32 @@ Housekeeping **two scopes** (unless scoped by flag):
    `workflows.logRetentionDays` in `.spur/config.yaml` (default 30 days). Never touches
    `.spur/workflow/<RUNID>.jsonl` or `*-partial.md`.
 
-## spur workflow inline
-
-```
-spur workflow inline <op> [options]
-```
-
-The installed-CLI transport the inline pipeline driver
-(`plugins/sp/skills/spur-dev/references/inline-pipeline-driver.md`) calls around a host-inline run.
-It replaced the plugin scripts `inline-run-setup`, `inline-run-dispatch` and `persist-out-check`
-(script-absorption PR-4). These ops boot without the CLI database or config: they never create
-`.spur/spur.db` in the cwd (the runners open the run-owning tree's database), print no banner, and
-load config only for `decide` and `dispatch-failure`. Exit codes: `0` ok, `1` fail closed (the
-driver must stop), `2` usage error (an unknown flag included). A run id must be one safe filename
-component; an unsafe one is refused before any write.
-
-## spur workflow inline begin
-
-| Flag | Description |
-|---|---|
-| `--run-id <id>` | Inline run id (one safe filename component under `.spur/run/`) |
-| `--file <definition>` | Workflow definition file or name to resolve |
-| `--spur-bin <path>` | Spur invocation that resolves the definition (default: `SPUR_BIN`, then this CLI) |
-
-Create or idempotently attach the authoritative run row and the two-file run record.
-
-## spur workflow inline fingerprint
-
-| Flag | Description |
-|---|---|
-| `--task-file <path>` | Task spec file (required) |
-| `--feature-file <path>` | Feature spec file |
-
-Print the engine's `sha256:<hex>` proof-input digest; creates nothing.
-
-## spur workflow inline action
-
-| Flag | Description |
-|---|---|
-| `--run-id <id>` | Inline run id |
-| `--node <state>` | State the action ran in |
-| `--kind <kind>` | Action kind (`shell`, `agent.run`, `operator-wait`, …) |
-| `--status <status>` | `done` \| `failed` |
-| `--ok <bool>` | `true` \| `false` (required, exact) |
-| `--duration-ms <n>` | Host-measured duration; omitted, it is measured from `node-enter` |
-| `--estimated` | The duration was host-reported, not timed around the action |
-| `--project-root <path>` | Tree that owns the run row (default: the cwd tree) |
-
-## spur workflow inline node-enter
-
-| Flag | Description |
-|---|---|
-| `--run-id <id>` | Inline run id |
-| `--node <state>` | State being entered |
-| `--project-root <path>` | Tree that owns the run row |
-
-## spur workflow inline actions
-
-| Flag | Description |
-|---|---|
-| `--run-id <id>` | Inline run id |
-| `--file <json>` | JSON array of `{node, kind, status, ok, durationMs, estimated?}` rows, validated before any write |
-| `--project-root <path>` | Tree that owns the run row |
-
-## spur workflow inline close
-
-| Flag | Description |
-|---|---|
-| `--run-id <id>` | Inline run id |
-| `--status <status>` | `done` \| `failed` \| `paused` |
-| `--reason <terminal-reason>` | Closed enum; required with `--status failed` |
-| `--no-summary` | Skip the measured execution summary (`.spur/run/<run-id>-summary.md`) |
-| `--project-root <path>` | Tree that owns the run row |
-
-## spur workflow inline decide
-
-| Flag | Description |
-|---|---|
-| `--run-id <id>` | Inline run id |
-| `--node <state>` | State the decision belongs to |
-| `--options-json <file>` | One decide option object (`{id, decision, params?, evidence? \| instructions?, resultFile}`) |
-
-## spur workflow inline persist-out
+## spur workflow persist-out
 
 | Flag | Description |
 |---|---|
 | `--from <worktree>` | Source worktree |
 | `--task-file <path>` | Merged task file whose cited/owned evidence rides along (repeatable) |
 
-Copy a worktree's inline-run provenance and owned evidence into this tree (fail closed).
+WT-4 worktree landing (flat verb since task 1242 flattened the retired `workflow inline` group):
+transfer the worktree's run rows, copy its two-file run records and its cited/owned `.spur/run`
+evidence into this tree, and write `.spur/run/persist-out.json`. Boot-free — never creates
+`.spur/spur.db` in the cwd. Exit codes: `0` persisted, `1` fail closed (a record or external-key
+conflict — retain the worktree and reconcile), `2` usage error.
 
-## spur workflow inline persist-check
+## spur workflow persist-check
 
 | Flag | Description |
 |---|---|
 | `--from <worktree>` | Worktree about to be removed |
 | `--task-file <path>` | Task file whose `<wbs>-` evidence the worktree owns (repeatable) |
 | `--run-id <id>` | Run id whose `<run-id>-` evidence the worktree owns (repeatable) |
-| `--root <invoke-tree>` | Invoking (main) tree (default: the git common dir's parent) |
-| `--success-json <path>` | `persist-out` result to read skips from |
+| `--root <invoke-tree>` | Invoking (main) tree (default: the git common dir parent) |
+| `--success-json <path>` | persist-out result to read skips from |
 
-WT-4 pre-removal assertion: exit `1` when owned evidence is missing, divergent or unforwarded.
-
-## spur workflow inline attribution
-
-| Flag | Description |
-|---|---|
-| `--run-id <id>` | Inline run id |
-| `--stage <state>` | Inline stage |
-| `--executor <name>` | Executor used; omitted records the explicit no-attribution marker |
-| `--agent <name>` | Agent used |
-| `--model <m>` | Model used |
-
-## spur workflow inline dispatch-failure
-
-| Flag | Description |
-|---|---|
-| `--run-id <id>` | Inline run id |
-| `--stage <state>` | Inline stage whose dispatch failed |
-| `--decision <decision>` | `escalate` \| `stop` \| `host-inline` |
-| `--text <record>` | Bounded failure record |
-| `--text-file <path>` | File holding the failure record (exactly one of `--text` / `--text-file`) |
-| `--executor <name>` | Executor that failed |
-| `--agent <name>` | Agent that failed |
-| `--model <m>` | Model that failed |
-
-Classifies the record (capacity vs capability) and writes `.spur/run/<run-id>-dispatch-fallback.json`.
+The WT-4 pre-removal assertion: every `.spur/run/` and `.spur/memory/evidence/` file the worktree
+owns must exist in the invoking tree with identical bytes. Unowned evidence is counted
+(`unowned: N`) and does not block. Exit codes: `0` ok, `1` blocked or divergent, `2` usage error.
 
 ## spur workflow commit-guard
 

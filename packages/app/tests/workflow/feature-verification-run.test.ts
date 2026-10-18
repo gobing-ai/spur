@@ -14,7 +14,7 @@ import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'no
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { RunDao } from '@gobing-ai/spur-domain';
-import { openInlineRunProjectDb } from '../../src/services/inline-run-setup';
+import { openInlineRunProjectDb } from '../../src/services/inline-run-attribution';
 import {
     completeFeatureVerificationReceipt,
     featureReceiptPaths,

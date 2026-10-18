@@ -7,7 +7,7 @@ import { type CloseSummaryRun, renderSummaryMarkdown, writeCloseSummary } from '
 import { parseTranscriptRows } from '../../src/workflow/transcript';
 
 /**
- * 1146 R1/AC1/AC2: the close-step execution summary `spur workflow inline close` writes, plus the
+ * 1146 R1/AC1/AC2: the close-step execution summary the engine's terminal `spur workflow continue` writes, plus the
  * transcript adapter it reads (1138 R1). Ported from `plugins/sp/tests/run-summary.test.ts` when the
  * close callback moved into the app (script-absorption PR-4). The transcript adapter has its own
  * suite (`transcript.test.ts`).

@@ -159,25 +159,6 @@ describe('task 0406 / H82 — unified --agent execution-surface contract', () =>
         expect(attempts.reduce((total, attempt) => total + (attempt.plannerStageDurationMs ?? 0), 0)).toBe(504_122);
     });
 
-    test('0503 — interactive full task execution uses the YAML-backed host driver with provenance', () => {
-        // Task 1128 split the driver: the trace-emission section lives in its own on-demand file.
-        const driver = ['inline-pipeline-driver.md', 'structured-trace-emission.md']
-            .map((file) => readFileSync(join(ROOT, 'plugins', 'sp', 'skills', 'spur-dev', 'references', file), 'utf8'))
-            .join('\n');
-        for (const command of ['dev-run', 'dev-runall']) {
-            const raw = readFileSync(join(COMMANDS_DIR, `${command}.md`), 'utf8');
-            expect(raw, `${command}: missing host driver route`).toContain('inline pipeline driver');
-            expect(raw, `${command}: missing interactive omit/inline contract`).toContain('omit/`inline`');
-        }
-        expect(driver).toContain('remains the sole');
-        expect(driver).toContain('project→registered→shared model');
-        expect(driver).toContain('spur task run-link <wbs> --source inline-full');
-        expect(driver).toContain('stage <id> executed inline in session <session-id>');
-        expect(driver).toContain("execute the action's input in the host session");
-        expect(driver).toContain('Transition guards are not advisory');
-        expect(driver).toContain('Never silently fall back');
-    });
-
     test('0506 R1 — wrap commands are workflow-backed, selector-preserving, and report the subprocess override', () => {
         const WRAP_COMMANDS = ['dev-wrap', 'dev-wrapall'];
         for (const command of WRAP_COMMANDS) {
@@ -219,46 +200,6 @@ describe('task 0406 / H82 — unified --agent execution-surface contract', () =>
         expect(routing, 'B6 must preserve --agent into dev-wrapall').toContain(
             '/sp:dev-wrapall --feature <id>` (`--agent',
         );
-    });
-
-    test('0508 — interactive inline is host-controlled, native-subagent-first with host fallback', () => {
-        const driver = readFileSync(
-            join(ROOT, 'plugins', 'sp', 'skills', 'spur-dev', 'references', 'inline-pipeline-driver.md'),
-            'utf8',
-        );
-        const crossCutting = readFileSync(CROSS_CUTTING, 'utf8');
-        const adr = readFileSync(ADR, 'utf8');
-
-        // Eligibility is deterministic and observable: pure-slash agent.run, non-interactive
-        // state, native subagent with shared-worktree capability, plus the estimate_hours
-        // dispatch floor (2026-09-15). No subjective heuristic beyond the frontmatter gate.
-        expect(driver).toContain('Native-subagent dispatch (R2 eligibility');
-        expect(driver).toContain('pure slash command');
-        expect(driver).toContain('native subagent that shares the working tree');
-        expect(driver).toContain('estimate_hours');
-        expect(driver).toContain('dispatch floor');
-        expect(driver).toContain('no token estimate, model heuristic');
-        // Worker-role continuation resumes the same subagent; reviewer/verify dispatch fresh.
-        expect(driver).toContain('(resumed; host session <session-id>)');
-        expect(driver).toContain('always dispatch **fresh**');
-        // Distinct provenance: subagent vs inline; no post-launch replay; host-owned HITL.
-        expect(driver).toContain('stage <id> executed via subagent <agent-id> (host session <session-id>)');
-        expect(driver).toContain('stage <id> executed inline in session <session-id>');
-        expect(driver).toContain('do **not** replay the stage in the host');
-        expect(driver).toContain('the host alone executes operator-confirmation actions');
-        expect(driver).toContain('do not dispatch this stage again');
-
-        // The value table stays on three values; the inline row carries the nuance in lockstep.
-        expect(crossCutting).toContain('eligible model stages may use a native subagent (0508)');
-        // The ADR-047 amendment records the decision.
-        expect(adr).toContain('Amendment (2026-08-10, task 0508)');
-        expect(adr).toContain('native subagent');
-
-        // Operator surfaces no longer promise host-only model stages.
-        for (const command of ['dev-run', 'dev-runall']) {
-            const raw = readFileSync(join(COMMANDS_DIR, `${command}.md`), 'utf8');
-            expect(raw, `${command}: must document native-subagent-first inline stages`).toContain('native subagent');
-        }
     });
 
     test('excluded commands must not delegate model-bearing work without the contract', () => {
@@ -324,67 +265,6 @@ describe('task 0406 / H82 — unified --agent execution-surface contract', () =>
         // presence check on the documented section so the trade-off cannot silently vanish.
         const crossCutting = readFileSync(CROSS_CUTTING, 'utf8');
         expect(crossCutting).toContain('### Inline trade-off');
-    });
-
-    test('0727 — inline driver contract: todo reconciliation, dispatch timeout, run-log stamps', () => {
-        const driver = readFileSync(
-            join(ROOT, 'plugins', 'sp', 'skills', 'spur-dev', 'references', 'inline-pipeline-driver.md'),
-            'utf8',
-        );
-        // R1: stage-todo reconciliation at every boundary is host-owned and surface-independent.
-        expect(driver).toContain('mark the finished stage completed and the next stage in_progress');
-        expect(driver).toContain('host-owned and execution-surface-independent');
-        // R2: governing timeout boundary, pre-dispatch logging, timeout classification, inline resume.
-        // 1108 amendment: the host's limit still governs as the fallback, and the driver asks the
-        // host for the stage's resolved YAML budget wherever the host exposes a per-dispatch
-        // timeout — so the pre-dispatch record names which of the two bounds is in force.
-        expect(driver).toContain("the host platform's subagent limit, not the YAML timeoutMs");
-        expect(driver).toContain("host's dispatch tool accepts a");
-        expect(driver).toContain('host timeout <ms> (yaml timeoutMs)');
-        expect(driver).toContain('host timeout <ms> (platform subagent limit)');
-        expect(driver).toContain('record the governing timeout boundary and its source before dispatch');
-        expect(driver).toContain('a dispatch timeout is a started-subagent failure');
-        expect(driver).toContain('resume from the partial tree, never restart the stage inline');
-        // R3: normalized run-log stamps; bare local-clock forms are a contract violation.
-        expect(driver).toContain('ISO-8601 UTC');
-        expect(driver).toContain('bare local-clock stamps are prohibited');
-        // The 0424 subprocess runbook names the inline-path equivalent so the resume route is
-        // reachable from the inline dispatch path.
-        const workflow = readFileSync(
-            join(ROOT, 'plugins', 'sp', 'skills', 'spur-dev', 'references', 'execution-workflow.md'),
-            'utf8',
-        );
-        expect(workflow).toContain('resume from the partial tree, never restart the stage inline');
-    });
-
-    test('0865 R2 — implement-stage dispatch payload carries the acceptance-evidence field', () => {
-        const driver = readFileSync(
-            join(ROOT, 'plugins', 'sp', 'skills', 'spur-dev', 'references', 'inline-pipeline-driver.md'),
-            'utf8',
-        );
-        // 0818 R2's payload grows from five fields to six; the sixth is scoped to the implement
-        // stage and every `requireDiff` stage, and carries the three components the delegate
-        // cannot infer: the AC identities (verbatim, read from the task), the required evidence
-        // form, and the success-message-is-not-evidence reminder.
-        expect(driver).toContain('Send exactly these six fields');
-        expect(driver).toContain('implement-stage acceptance-evidence requirement');
-        expect(driver).toContain('`requireDiff`');
-        expect(driver).toContain('AC identities verbatim');
-        expect(driver).toContain('pasted output of the narrow targeted tests');
-        expect(driver).toContain('`file:line` change map');
-        expect(driver).toContain('a delegate success message is not evidence');
-        expect(driver).not.toContain('Send exactly these five fields');
-    });
-
-    test('0865 R3 — the driver carries the pre-dispatch permission rule and its run-log line', () => {
-        const driver = readFileSync(
-            join(ROOT, 'plugins', 'sp', 'skills', 'spur-dev', 'references', 'inline-pipeline-driver.md'),
-            'utf8',
-        );
-        expect(driver).toContain('Pre-dispatch permission check');
-        expect(driver).toContain('dry-run permission API');
-        expect(driver).toContain('blocker immediately on the first missing permission');
-        expect(driver).toContain('stage <id> permission precheck: ok | <missing capability>');
     });
 });
 

@@ -402,7 +402,13 @@ function parseAnswer(text: string): AnswerTables {
         }
     }
 
-    const verdictMatches = [...text.matchAll(/^\s*Verdict:\s*(\S+)\s*$/gim)];
+    // D65 1240: a reviewer writes prose — `**Verdict: PASS** — with the summary above/below — so the
+    // token may be wrapped in markdown emphasis and followed by the same line's dash note. Only the
+    // VALUE stays strict (PASS|PARTIAL|FAIL); a decorated line was previously rejected as
+    // `verdict-missing`, which folded a real PASS review to UNKNOWN.
+    // The value stays whatever the author wrote, so an invalid word keeps the specific
+    // `invalid Verdict value` diagnostic instead of degrading to `verdict-missing`.
+    const verdictMatches = [...text.matchAll(/^[\s*_]*Verdict:[\s*_]*([A-Za-z]+)[\s*_]*(?:[—–-].*)?$/gim)];
     if (verdictMatches.length === 1) {
         out.verdict = {
             value: verdictMatches[0]?.[1] ?? '',

@@ -5,8 +5,8 @@ import { registerWorkflowCleanCommand } from './clean';
 import { registerWorkflowCommitGuardCommand } from './commit-guard';
 import { registerWorkflowContinueCommand } from './continue';
 import { registerWorkflowCostCommand } from './cost';
-import { registerWorkflowInlineCommand } from './inline';
 import { registerWorkflowListCommand } from './list';
+import { registerWorkflowPersistCommand } from './persist';
 import { registerWorkflowProfileCommand } from './profile';
 import { registerWorkflowProgressCommand } from './progress';
 import { registerWorkflowRunCommand } from './run';
@@ -30,10 +30,11 @@ export function registerWorkflowCommand(program: Command, context: CliContext): 
     // Run measurement read-outs absorbed from the plugin scripts (script-absorption PR-6).
     registerWorkflowSummaryCommand(workflow, context);
     registerWorkflowProfileCommand(workflow, context);
-    // The inline driver's transports (PR-4). Real invocations take the boot-free early dispatch in
-    // `index.ts`; mounting them here keeps them in `spur workflow --help` and the full tree.
-    registerWorkflowInlineCommand(workflow, context);
+    // The run-scoped staging guard. Real invocations take the boot-free early dispatch in
+    // `index.ts`; mounting it here keeps it in `spur workflow --help` and the full tree.
     registerWorkflowCommitGuardCommand(workflow, context);
+    // WT-4 worktree landing (flat verbs; task 1242).
+    registerWorkflowPersistCommand(workflow, context);
     registerWorkflowCostCommand(workflow, context);
 }
 

@@ -397,6 +397,8 @@ describe('cli-surface-parity — R2: spine Step-routing CLI rows vs live', () =>
         for (const row of nonCliRows) {
             expect(row.reason.trim().length).toBeGreaterThan(0);
         }
+        // D65 1241/1242: `Pipeline run` left this set — its gate now names the engine verbs
+        // (`spur workflow run` / `spur workflow continue`) instead of a host-side interpreter.
         // Pin the exact non-CLI step set (P3 fix — 0517 verify): a parser regression that
         // drops a step, reclassifies a row as CLI, or loses its gate text fails here.
         expect(nonCliRows.map((r) => r.step).sort()).toEqual([
@@ -409,7 +411,6 @@ describe('cli-surface-parity — R2: spine Step-routing CLI rows vs live', () =>
             'Intake',
             'Operation catalog',
             'Parallel fan-out',
-            'Pipeline run',
             'Review / verify (dispatch)',
             'Test (dispatch)',
         ]);

@@ -21,7 +21,7 @@ import type { AgentQuotaUpdatesContext } from './agent-quota-updates';
 import { drainPendingAgentQuotaUpdates, recordAgentQuotaEvent } from './agent-quota-updates';
 
 // Application sources may not statically import node:fs (runtime-boundaries rule);
-// the synchronous `process.getBuiltinModule` form is the standing workaround (see inline-run-setup.ts).
+// the synchronous `process.getBuiltinModule` form is the standing workaround (see inline-run-attribution.ts).
 const { existsSync, mkdirSync, readFileSync, renameSync, writeFileSync } = process.getBuiltinModule('node:fs');
 const { join } = process.getBuiltinModule('node:path');
 

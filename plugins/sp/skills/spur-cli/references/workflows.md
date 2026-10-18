@@ -119,7 +119,8 @@ The skill's logic divides by **whether the LLM adds value**:
 | `summary` | `spur workflow summary` (CLI) | `--progress <[label=]file>`… \| `--rollup <[label=]file>`… `[--transcript] [--since] [--markdown]` | Measured execution summary (per-stage time, wait, tool calls, tokens, actor split) or the batch roll-up `/sp:dev-runall` prints. `n/a` exit 0 without a transcript; exit 2 on usage or unreadable input |
 | `profile` | `spur workflow profile` (CLI) | `<workflow> [--last n] [--window sec] [--spur-bin cmd] [--json]` | Read-only per-node step profile from `spur workflow trace` with the ADR-115 cache-window flags, for `sp:spur-doctor`. Exit 1 when a trace read fails |
 | `cost` | `spur workflow cost` (CLI) | `[--workflow <name>]… [--by-state] [--include-bookkeeping] [--since <date>] [--budget <file>] [--measured-file <json>] [--json]` | Real terminal non-dry run measurements, or a budget result; unknown measurements stay null. Budget failures exit 1 |
-| `inline` | `spur workflow inline <op>` (CLI) | `begin`, `fingerprint`, `node-enter`, `action`, `actions`, `close`, `decide`, `persist-out`, `persist-check`, `attribution`, `dispatch-failure` | The host-inline driver's run lifecycle transport ([inline-pipeline-driver.md](../../spur-dev/references/inline-pipeline-driver.md)); exit 0 ok / 1 fail closed / 2 usage |
+| `persist-out` | `spur workflow persist-out` (CLI) | `--from <worktree> [--task-file <path>]…` | WT-4 landing: copy a worktree's run rows, two-file records and cited/owned evidence into the invoking tree before teardown; exit 1 fail closed (retain the worktree) |
+| `persist-check` | `spur workflow persist-check` (CLI) | `--from <worktree> [--task-file <path>]… [--run-id <id>]… [--root <tree>] [--success-json <path>]` | WT-4 pre-removal assertion that the worktree owns no unpersisted durable evidence; exit 0 ok / 1 blocked or divergent / 2 usage |
 | `commit-guard` | `spur workflow commit-guard <op>` (CLI) | `start\|stage\|check --run <id> [--base <sha>] [-- <paths…>]` | Stages only paths this run wrote; exit 2 when a listed path is refused, 3 on unmerged/conflict-marked targets |
 | `add` | agent procedure | `"<nl-description>" [--kind <state-machine\|transition-flow>] [--file <path>]` | **Mode chosen (confirmed)** → first reconciled against existing workflows (extend an existing flow rather than duplicate) → YAML authored in real schema shape → **validated AND dry-run** (reaches the expected terminal state) → [add](workflows/operations.md#add) |
 | `refine` | agent procedure | `<workflow-file> [--intent "<goal>"] [--dry-run]` | Smallest change meeting the intent, re-validated and re-dry-run; `--dry-run` emits a diff only → [refine](workflows/operations.md#refine) |
@@ -274,7 +275,8 @@ spur workflow progress <run-id> [--json]
 spur workflow summary  (--progress <[label=]file>... | --rollup <[label=]file>...) [--transcript <path>] [--since <iso>] [--markdown]
 spur workflow profile  <workflow> [--last <n>] [--window <sec>] [--spur-bin <cmd>] [--json]
 spur workflow cost     [--workflow <name>]... [--by-state] [--include-bookkeeping] [--since <YYYY-MM-DD>] [--budget <file>] [--measured-file <json>] [--json]
-spur workflow inline   <op> [options]
+spur workflow persist-out   --from <worktree> [--task-file <path>]...
+spur workflow persist-check --from <worktree> [--task-file <path>]... [--run-id <id>]... [--root <tree>]
 spur workflow commit-guard <op> [options]
 ```
 

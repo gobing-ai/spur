@@ -102,13 +102,13 @@ non-sandboxed shell, or a workspace that owns the storage path). The upstream fi
 pi-coding-agent's storage-path resolution; it is out of scope here and recorded as motivating
 evidence only.
 
-## Composition with the inline pipeline driver (task 0508)
+## Composition with the host executor (task 0508)
 
-The interactive inline driver (`cross-cutting.md` § Inline-default execution surface) applies this
+The interactive host executor (`cross-cutting.md` § Inline-default execution surface) applies this
 reference's default — native subagent first — to sequential `task-pipeline.yaml` `agent.run`
 stages. Eligibility there is the same observable test (pure-slash action, non-interactive state,
-native subagent with shared-worktree capability); the inline driver remains the authority for
-provenance, artifact validation, and no-replay guarantees. This reference stays the authority for
+native subagent with shared-worktree capability); the engine remains the authority for provenance,
+artifact validation, and no-replay guarantees. This reference stays the authority for
 the native-subagent versus `spur agent run` choice everywhere else.
 
 ## Fork dispatch on hosts that support it (2026-09-15 subagent-dispatch evaluation)
@@ -131,9 +131,9 @@ Three constraints keep fork honest:
   adversarial panels — must NOT fork; a worker that inherits the author's reasoning grades its own
   homework. Fork is for continuity, cold dispatch is for independence.
 
-The inline driver's resume-over-re-dispatch rule
-([inline-pipeline-driver.md](../../spur-dev/references/inline-pipeline-driver.md)) is the same
-instinct one level down: reuse a warm worker for continuation, dispatch fresh for judgment.
+The engine's resume-over-re-dispatch rule (a paused run resumes with
+`spur workflow continue` instead of re-dispatching its stage) is the same instinct one level down:
+reuse a warm worker for continuation, dispatch fresh for judgment.
 
 ## Role propagation across fan-out (task 0551, feature I4)
 

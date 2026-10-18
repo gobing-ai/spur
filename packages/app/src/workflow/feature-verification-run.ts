@@ -20,7 +20,7 @@ import { isAbsolute, join } from 'node:path';
 import { ArtifactDao } from '@gobing-ai/spur-domain';
 import { createNodeFileSystem, type FileSystem } from '@gobing-ai/ts-runtime';
 import { resolvePlanningFolders } from '../config/planning-folders';
-import { openInlineRunProjectDb } from '../services/inline-run-setup';
+import { openInlineRunProjectDb } from '../services/inline-run-attribution';
 import {
     captureFeatureReceiptDigest,
     completeFeatureVerificationReceipt,

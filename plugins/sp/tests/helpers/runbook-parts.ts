@@ -4,9 +4,10 @@ import { join } from 'node:path';
 const REFERENCES = join(import.meta.dir, '..', '..', 'skills', 'spur-dev', 'references');
 
 /**
- * Task 1128 split both driver runbooks into sibling on-demand files (a bootstrap-budget split, not a
+ * Task 1128 split the driver runbooks into sibling on-demand files (a bootstrap-budget split, not a
  * rewrite). The prose contracts that pin their text read the LOGICAL runbook, so moving a section
- * into its on-demand sibling cannot silently drop a pin.
+ * into its on-demand sibling cannot silently drop a pin. The second logical runbook (the inline
+ * driver) is gone with the driver (task 1242).
  *
  * Parts are listed in their original document order, so ordering assertions
  * (`indexOf(a) < indexOf(b)`) keep meaning.
@@ -20,7 +21,6 @@ const PARTS = {
         'execution-parallel-isolation.md',
         'execution-batch-continuation.md',
     ],
-    'inline-pipeline-driver': ['inline-pipeline-driver.md', 'structured-trace-emission.md'],
 } as const satisfies Record<string, readonly string[]>;
 
 export type RunbookName = keyof typeof PARTS;

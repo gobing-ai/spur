@@ -441,57 +441,11 @@ export {
     runHistoryReport,
     UnsafeHistoryImporterError,
 } from './services/history-service';
-// Authoritative inline full-pipeline run identity (task 0804 R1)
-export type {
-    InlineRunSetupFailure,
-    InlineRunSetupInput,
-    InlineRunSetupOutcome,
-    InlineRunSetupSuccess,
-} from './services/inline-run-setup';
 export {
-    appendInlineRunLogLine,
-    classifyDispatchFailure,
     countUnattributedInlineStages,
-    createOrAttachInlineRun,
-    type DispatchFailureClass,
-    type DispatchFailureClassification,
-    type DispatchFallbackDecision,
-    type InlineDecideInput,
-    type InlineDecideOutcome,
-    type InlineRunActionEntry,
-    type InlineRunDispatchFailureInput,
-    type InlineRunDispatchFallbackRecord,
-    type InlineRunNodeEnterInput,
     type InlineRunProjectDb,
-    type InlineRunStateOutcome,
-    type InlineRunTraceBatchInput,
-    type InlineRunTraceInput,
-    type InlineRunTraceModeInput,
-    type InlineStageAttribution,
-    inlineRunAttributionPath,
-    inlineRunDispatchFallbackPath,
-    inlineRunRecordLogPath,
-    isInlineRunActionStatus,
-    isInlineRunCloseStatus,
     openInlineRunProjectDb,
-    type PersistWorktreeRunsInput,
-    type PersistWorktreeRunsSuccess,
-    persistWorktreeRuns,
-    type ReadInstalledInventoryInput,
-    readInstalledInventory,
-    recordInlineRunAttribution,
-    runDecideForInlineRun,
-    runInlineRunDecide,
-    runInlineRunDispatchFailure,
-    runInlineRunFingerprint,
-    runInlineRunNodeEnter,
-    runInlineRunPersistOut,
-    runInlineRunSetup,
-    runInlineRunTrace,
-    runInlineRunTraceBatch,
-    runInlineRunTraceMode,
-    writeInlineRunOutcome,
-} from './services/inline-run-setup';
+} from './services/inline-run-attribution';
 export {
     acquireExclusiveJob,
     getExclusiveJobOwner,
@@ -945,6 +899,15 @@ export {
     type WorkflowLayerId,
     workflowLayers,
 } from './services/workflow-service';
+export {
+    MAX_CITED_RUN_FILES,
+    type PersistOutInput,
+    type PersistWorktreeRunsEvidenceSkip,
+    type PersistWorktreeRunsInput,
+    type PersistWorktreeRunsSuccess,
+    persistWorktreeRuns,
+    runPersistOut,
+} from './services/worktree-persist';
 // Write-slot lease (0837) over the 0836 claim table
 export {
     type ClaimOutcome,

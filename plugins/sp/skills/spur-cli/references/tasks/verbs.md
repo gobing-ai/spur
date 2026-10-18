@@ -79,7 +79,7 @@ frontmatter scalar.
 - **Frontmatter** (`--feature <id>`, `--priority <p>`): sets the scalar frontmatter field on an
   existing task — the only post-create path, allow-listed to `feature_id` / `parent_wbs` / `priority`.
 - **Estimate** (`--estimate-hours <n>`): sets the `estimate_hours` frontmatter field (positive number) —
-  the decomposition size estimate the inline pipeline driver reads.
+  the decomposition size estimate the host-session dispatch floor reads.
 - **`--provenance-bypass`** (pair with `--force-done` and `--reason`): records an audited
   provenance-bypass link when no pipeline run exists. Replaces the `SPUR_PROVENANCE_OVERRIDE` env var.
 - **AC controls** (`--ac-altitude <graduating|task-local>`, `--ac-numbering task-local`) — independent

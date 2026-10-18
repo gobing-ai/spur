@@ -26,7 +26,6 @@ const REPO_WIDE_CHECKS = [
     'link-check',
     'transition-shim-check',
     'script-contract-check',
-    'inline-pipeline-parity-check',
     'dependency-drift-check',
     'importer-schema-check',
 ] as const;

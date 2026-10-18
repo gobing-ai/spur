@@ -79,8 +79,8 @@ inherits no cwd from the previous call, so "the loop runs with the worktree as p
 bootstrap convenience, never a carried guarantee. Every host command boundary in this lifecycle —
 corpus reads/writes, the WT-3b commit, WT-4's merge and evidence persistence, the WT-4a
 persist-out — re-selects its intended tree within the same call via the canonical per-call pin
-protocol ([inline-pipeline-driver.md](inline-pipeline-driver.md) § "Per-call execution-tree
-pin"): `cd --` to the quoted absolute tree, verify `pwd -P` against the recorded physical tree,
+protocol ([execution-batch.md](execution-batch.md) § "Per-call execution-tree pin"):
+`cd --` to the quoted absolute tree, verify `pwd -P` against the recorded physical tree,
 verify Git top-level and expected branch, then execute the already-resolved Spur invocation. The
 identity is consumed, not re-derived: it is the WT-3 marker's confirmed `path` + `branch` (or the
 resolved worktree's physical path + checked-out branch in reuse mode). The one deliberate tree
@@ -269,8 +269,8 @@ the tree's own source:
     cd "<worktree>" && bun apps/cli/src/index.ts task check <wbs> --json
 
 Run that as a per-call pin subshell (task 1058) — `cd --` plus the `pwd -P` / git-top-level /
-branch identity checks of the canonical protocol (inline-pipeline-driver.md § "Per-call
-execution-tree pin") — rather than relying on a persistent `cd` between host tool calls.
+branch identity checks of the canonical protocol (execution-batch.md § "Per-call execution-tree
+pin") — rather than relying on a persistent `cd` between host tool calls.
 
 Confirm isolation by making a distinctive change in the worktree and checking that
 the command reflects it.

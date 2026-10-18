@@ -14,7 +14,7 @@ import {
 } from '../../src/workflow/persist-check';
 
 /**
- * 1067 R1/R4: the WT-4 pre-removal assertion (`spur workflow inline persist-check`). A landing
+ * 1067 R1/R4: the WT-4 pre-removal assertion (`spur workflow persist-check`). A landing
  * without persist-out must surface a named warning/block before `git worktree remove`; fixtures
  * stand in for the trees. Ported from `plugins/sp/tests/persist-out-check.test.ts` when the
  * script moved into the CLI (script-absorption PR-4).

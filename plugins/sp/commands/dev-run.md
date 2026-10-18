@@ -38,14 +38,15 @@ For shared semantics, see the [flag glossary](../skills/spur-dev/references/flag
   `.plan` row's `text` verbatim as the host todo list (the `steps[]` inventory when `.plan` is
   `null`) before readiness, Git, or isolation work —
   [shared startup contract](../skills/spur-dev/references/cross-cutting.md#shared-startup-contract-task-0814-r1r3r4r6r7r8)
-  step 1 / [inline pipeline driver](../skills/spur-dev/references/inline-pipeline-driver.md) run
-  setup step 5.
+  step 1 / [engine run setup](../skills/spur-dev/references/cross-cutting.md#shared-startup-contract-task-0814-r1r3r4r6r7r8) step 5.
 - Apply the [inline-default execution-surface contract](../skills/spur-dev/references/cross-cutting.md#inline-default-execution-surface).
 - Apply the [shared startup contract](../skills/spur-dev/references/cross-cutting.md#shared-startup-contract-task-0814-r1r3r4r6r7r8) — publish the generated plan first, quick readiness before isolation, digest binding, comprehensive checks at their owning boundaries (task 0814 R1/R3/R4/R7/R8; 1105 R1).
-- Full pipeline (default `--mode full`): interactive omit/`--agent inline` uses the
-  [inline pipeline driver](../skills/spur-dev/references/inline-pipeline-driver.md) via
-  `Skill(skill="sp:spur-dev", args="run-inline $ARGUMENTS")`; `--agent auto` or a named executor
-  uses `Skill(skill="sp:spur-dev", args="run $ARGUMENTS")` and the workflow subprocess path.
+- Full pipeline (default `--mode full`): interactive omit/`--agent inline` runs
+  [the engine loop](../skills/spur-dev/references/cross-cutting.md#inline-default-execution-surface)
+  with `executor=host` — `spur workflow run` returns a work item, this session performs it, and
+  `spur workflow continue <run-id> --answer-text <receipt>` advances the run; `--agent auto` or a
+  named executor runs the same definition as a child process. Both go through
+  `Skill(skill="sp:spur-dev", args="run $ARGUMENTS")`.
 - Implement step only (`--mode implement`): `Skill(skill="sp:code-implementation", args="$ARGUMENTS")`
 - After a full-mode run settles (done, failed or paused), print the
   [execution summary](../skills/spur-dev/references/dev-operations.md#execution-summary) unless `--no-summary`.

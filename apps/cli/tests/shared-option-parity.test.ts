@@ -25,6 +25,9 @@ function flagKey(flagsLiteral: string): string {
 }
 
 describe('shared option registry parity', () => {
+    // D65 1242: the `runIdInline` entry left the registry with the `spur workflow inline` group it
+    // served. The flag-string SET is unchanged at 28 — `--run-id <id>` is still contributed by
+    // `runIdTask`/`runIdWorkflow` — so only the registry (checked below) lost an entry.
     test('SHARED_OPTION_FLAGS covers exactly 28 shared flag strings', () => {
         expect(SHARED_OPTION_FLAGS.size).toBe(28);
     });

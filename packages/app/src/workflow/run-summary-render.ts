@@ -1,6 +1,6 @@
 /**
  * Close-step execution summary (task 1146 R1): render the measured per-stage table and write
- * `.spur/run/<runId>-summary.{md,json}` when `spur workflow inline close` finalizes a run.
+ * `.spur/run/<runId>-summary.{md,json}` when the engine finalizes a run.
  *
  * Script-absorption PR-4 moved the close callback out of `plugins/sp/lib/run-summary-core.ts`;
  * PR-6 moved the rest (batch roll-up, receipt read) when `spur workflow summary` absorbed the

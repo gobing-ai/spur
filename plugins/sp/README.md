@@ -242,7 +242,7 @@ plugins/sp/
 │   │   └── references/  # ac-style-guide, cross-cutting, decision-brief, dev-operations,
 │   │                      done-housekeeping, execution-batch, execution-workflow,
 │   │                      feature-link-helper, flag-glossary, gate-checklists, glossary,
-│   │                      idea-evaluation, inline-pipeline-driver, planning-workflow,
+│   │                      idea-evaluation, execution-workflow, planning-workflow,
 │   │                      product-planning, section-batching  (16 files)
 │   ├── test-driven-development/                    # TDD workflow companion (SKILL.md only)
 │   ├── reverse-engineering/         # Codebase reverse engineering / HLD / audit

@@ -1,8 +1,8 @@
 /**
  * Persist check — the WT-4 pre-removal assertion for E71 persist-out (task 1067 R1, 1148 R1).
- * Transport: `spur workflow inline persist-check --from <worktree> …` (script-absorption PR-4; moved
+ * Transport: `spur workflow persist-check --from <worktree> …` (script-absorption PR-4; moved
  * from the retired `plugins/sp/scripts/persist-out-check.ts`, pinned to its golden output by
- * `apps/cli/tests/workflow-inline-parity.test.ts`). It pairs with `spur workflow inline persist-out`.
+ * It pairs with `spur workflow persist-out`.
  *
  * Before `git worktree remove`, verify the worktree's OWNED durable evidence would not be abandoned:
  * every `.spur/run/` and `.spur/memory/evidence/` file starting with a forwarded `<wbs>-`/`<runId>-`
@@ -25,7 +25,7 @@ const DURABLE_FAMILY_RE = /^\d{4}-(?:verdict|feature-verification)\.json$/;
 
 /** One-line usage printed when `persist-check` is invoked without `--from`. */
 export const PERSIST_CHECK_USAGE =
-    'usage: spur workflow inline persist-check --from <worktree> [--task-file <path>]… [--run-id <id>]… [--root <invoke-tree>] [--success-json <path>]';
+    'usage: spur workflow persist-check --from <worktree> [--task-file <path>]… [--run-id <id>]… [--root <invoke-tree>] [--success-json <path>]';
 
 /** Task files own their `<wbs>-*` evidence: leading digits before `_` in the basename. */
 export function wbsOfTaskFile(path: string): string | null {
@@ -252,7 +252,7 @@ export function runPersistCheck(input: PersistCheckInput): PersistCheckReport {
         stderr: [
             `persist-out-check: BLOCKED ${missing.length} missing, ${divergent.length} divergent` +
                 `${unforwarded.length > 0 ? `, ${unforwarded.length} unforwarded durable verdict/receipt` : ''}` +
-                ' — run `spur workflow inline persist-out --from <worktree>` (--task-file <wbs>_<slug>.md) before worktree removal',
+                ' — run `spur workflow persist-out --from <worktree>` (--task-file <wbs>_<slug>.md) before worktree removal',
         ],
     };
 }

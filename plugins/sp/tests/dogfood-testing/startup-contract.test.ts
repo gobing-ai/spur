@@ -3,7 +3,6 @@ import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { readRunbook } from '../helpers/runbook-parts';
 
-const DRIVER = readRunbook('inline-pipeline-driver');
 const CROSS = readFileSync(join(import.meta.dir, '../../skills/spur-dev/references/cross-cutting.md'), 'utf8');
 const BATCH = readRunbook('execution-batch');
 const PLANNER = readFileSync(join(import.meta.dir, '../../agents/super-planner.md'), 'utf8');
@@ -12,7 +11,9 @@ const COMMANDS_DIR = join(import.meta.dir, '../../commands');
 /**
  * Shared startup-contract / retention spec pins (task 0814 R1/R3/R7; publish-first 1105 R1–R4).
  *
- * Static pins for the prose startup contract in the shared reference owners —
+ * Static pins for the prose startup contract in the shared reference owners (the inline-driver
+ * runbook retired with the driver, task 1242; its surviving owners are cross-cutting and
+ * execution-batch) —
  * the same pattern as execution-batch-contract.test.ts. 0814 R1 (publish the
  * generated plan → quick readiness → isolation → digest-binding ordering),
  * R3 (quickReadiness precedes worktree creation/adoption; invalid/empty
@@ -29,66 +30,12 @@ describe('shared startup contract (task 0814 R1) — spec pins', () => {
         expect(CROSS).toContain('4. **Bind the published plan to the run digest (R4)');
         expect(CROSS).toContain('--no-logo --format todo --json');
     });
-
-    test('driver run-setup order is publish → quick readiness → isolation → digest binding', () => {
-        const steps = [
-            '5. **Publish the generated plan (R1, 1105)',
-            '6. **Quick deterministic readiness (R2), before isolation',
-            '7. **Isolation (R3), only when `--worktree` is valid',
-            '8. **Bind the published plan to the run digest (R4)',
-        ];
-        let prev = -1;
-        for (const s of steps) {
-            const i = DRIVER.indexOf(s);
-            expect(i).toBeGreaterThan(prev);
-            prev = i;
-        }
-    });
-
-    test('inventory is published before the driver reads the full YAML for model/comprehensive work', () => {
-        expect(DRIVER).toContain('then read the full YAML for comprehensive/model work');
-        expect(DRIVER).toContain('--no-logo --format todo --json');
-    });
 });
 
 describe('publish-first contract (task 1105 R1/R2) — spec pins', () => {
     test('AC1 — the hand-written bootstrap rows and the AA label rule are gone from run instructions', () => {
         expect(CROSS).not.toContain('`A, Quick readiness`');
-        expect(DRIVER).not.toContain('`A, Quick readiness`');
         expect(CROSS).not.toContain('Z, AA, AB');
-        expect(DRIVER).not.toContain('AA, AB');
-        expect(DRIVER).not.toContain('A, B, … Z, AA');
-    });
-
-    test('AC1 — the first run-setup action is workflow show + verbatim .plan publish with a steps[] fallback', () => {
-        expect(DRIVER).toContain('5. **Publish the generated plan (R1, 1105)');
-        expect(DRIVER).toContain("`.plan` row's `text` **verbatim**");
-        expect(DRIVER).toContain('`steps[]` inventory');
-        expect(DRIVER).toContain('columnLabel');
-    });
-
-    test('AC1 — frozen status mapping, insert-on-entry, attempt N, and [outcome] rendering are pinned', () => {
-        expect(DRIVER).toContain('Frozen status mapping: `pending → pending`,');
-        expect(DRIVER).toContain('`active → in_progress`, `completed → completed`,');
-        expect(DRIVER).toContain('skipped|failed|unattempted|blocked → pending` + ` [<outcome>]`');
-        expect(DRIVER).toContain(' — attempt N');
-        expect(DRIVER).toContain('insertOnEntry');
-    });
-
-    test('R2 — per-item and full-list host update styles are documented with the Markdown fallback', () => {
-        for (const needle of [
-            'TaskCreate',
-            'TaskUpdate',
-            'update_plan',
-            'write_todos',
-            'todowrite',
-            'todo_write',
-            'renderProgressMarkdown',
-            'per-item',
-            'full-list',
-        ]) {
-            expect(DRIVER, `driver should document ${needle}`).toContain(needle);
-        }
     });
 });
 
@@ -150,10 +97,5 @@ describe('comprehensive-check retention (task 0814 R7) — spec pins', () => {
         expect(CROSS).toContain(
             'comprehensive gates at their boundaries. Prefer deterministic checks; invoke semantic model work',
         );
-    });
-
-    test('driver retains comprehensive checks at owning boundaries with a named R7 section', () => {
-        expect(DRIVER).toContain('## Comprehensive-check retention and evidence (R7/R8)');
-        expect(DRIVER).toContain('R7 — comprehensive checks stay at their owning boundaries');
     });
 });

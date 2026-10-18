@@ -110,9 +110,10 @@ inside that subprocess boundary runs its backing skill in that process; it must 
 
 **Pipeline wrappers (`dev-run`, `dev-runall`, `dev-idea`, `dev-plan`)** — the orchestrator is a loop; its *stages* do the
 model-bearing work. Interactive omit/`inline` therefore uses the
-[inline pipeline driver](inline-pipeline-driver.md): it reads the selected pipeline YAML, executes each
-`agent.run` input through the backing skill in the host session, and preserves every shell action
-and guard. `auto` or a named executor is merged into per-task `vars.agent` and
+engine loop: `spur workflow run <file> --vars '{"executor":"host",…}'` executes every guard and
+deterministic action on the engine and pauses with one work item per model stage, which this session
+performs through the backing skill before `spur workflow continue <run-id> --answer-text <receipt>`
+advances the run. `auto` or a named executor is merged into per-task `vars.agent` and
 `vars.implementAgent`, and the workflow's `agent.run` steps run under that subprocess executor (see
 `execution-batch.md` § 3.2). The loop itself continues in the current session.
 
@@ -139,8 +140,8 @@ native subagent with shared-worktree read/write/shell capability, and a task abo
 (`.spur/run/<wbs>-diffstat.json`, verify only) keeps that stage host-inline (2026-09-15
 subagent-dispatch evaluation; the floor and the
 resume-over-re-dispatch rule for worker-role continuation stages are owned by
-[inline-pipeline-driver.md](inline-pipeline-driver.md)) — dispatches **once** to that
-native subagent and joins before the driver continues; any pre-dispatch eligibility failure falls
+[cross-cutting.md](#inline-default-execution-surface)) — dispatches **once** to that
+native subagent and joins before the host reports the work-item receipt; any pre-dispatch eligibility failure falls
 back to one host execution, and a failure after dispatch follows the stage's error policy with no
 automatic host replay. Inline resolution (omitted or explicit, 0687 R1/R2) keeps the native-subagent
 leg for eligible stages. Operator

@@ -64,6 +64,10 @@ rules:
       # commit-guard declares no --json: its {staged, foreign} / {foreign} lines are rendered by
       # @gobing-ai/spur-app/commit-guard (byte-identical to the retired script, PR-4 golden).
       - "apps/cli/src/commands/workflow/commit-guard.ts"
+      # WT-4 worktree-landing transports (D65 1242, flat since the inline group was deleted): they
+      # print the app operation's already-serialized payload (runPersistOut/persist-check), and
+      # declare no --json of their own.
+      - "apps/cli/src/commands/workflow/persist.ts"
       # Pipeline-internal task verbs (script-absorption PR-3) declare no --json: their contract is
       # the .spur/run artifact they write (gate status/receipt, residuals.json, diffstat.json) and
       # the exit code; the gate's own status line is serialized by the app service.

@@ -98,12 +98,12 @@ run. Resume with `spur workflow continue --answer-text <answer>` — the guard a
 `maxEscalations` (default 2) bounds the loop; exhausted or empty answer → `failed`. Implement only.
 
 Full procedure: **[references/execution-workflow.md](references/execution-workflow.md)**.
-Host-session procedure: **[references/inline-pipeline-driver.md](references/inline-pipeline-driver.md)**.
+Host executor: `spur workflow run` with `executor=host` → work item → `spur workflow continue`.
 
 ## Bootstrap reads
 
 Read this `SKILL.md` plus your mode's files below before the first dispatch; everything else under
-`references/` is on demand, and the per-task delegate `inline-pipeline-driver.md` is read at dispatch
+`references/` is on demand; the per-task procedure lives in `execution-workflow.md`/`execution-batch.md`
 (budgets: `plugins/sp/tests/bootstrap-budget.test.ts`, task 1128).
 
 - sequential-inline: `references/execution-batch.md`
@@ -131,7 +131,7 @@ reference for the half you're operating; do not duplicate its content here.
 | Refine                     | planning  | `spur task update --section`                                                              | [planning-workflow.md](references/planning-workflow.md)                                                                                 |
 | Batch refine               | planning  | `sp:dev-refineall` → per-task `refine`                                                    | [dev-operations.md](references/dev-operations.md) § refineall · [planning-workflow.md](references/planning-workflow.md)                 |
 | Task selection             | execution | `spur task list`                                                                          | [execution-workflow.md](references/execution-workflow.md)                                                                               |
-| Pipeline run               | execution | inline YAML driver or `spur workflow run`                                                 | [execution-workflow.md](references/execution-workflow.md) · [inline-pipeline-driver.md](references/inline-pipeline-driver.md)           |
+| Pipeline run               | execution | `spur workflow run` / `spur workflow continue`                                            | [execution-workflow.md](references/execution-workflow.md)                                                                               |
 | Implement (dispatch)       | execution | `sp:code-implementation`                                                                  | competency skill — the spine dispatches, does not inline                                                                                |
 | Test (dispatch)            | execution | `sp:code-testing`                                                                         | competency skill — the spine dispatches, does not inline                                                                                |
 | Review / verify (dispatch) | execution | `sp:dev-review` → `sp:code-verification` + `sp:functional-review` + `sp:code-improvement` | competency skills — the spine dispatches, does not inline                                                                               |

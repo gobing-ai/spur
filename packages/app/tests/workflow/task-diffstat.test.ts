@@ -231,8 +231,10 @@ describe('task-diffstat → verify dispatch floor (1039)', () => {
         expect(floorLogLine('sess-1', result)).toBe(
             'stage verify executed inline in session sess-1 (below dispatch floor: diffstat files 1 lines 3)',
         );
+        // D65 1242 deleted the inline driver reference; the floor contract moved to the doc that
+        // owns verify dispatch, so this pin now guards that owner instead of a removed file.
         const driver = readFileSync(
-            join(import.meta.dir, '../../../../plugins/sp/skills/spur-dev/references/inline-pipeline-driver.md'),
+            join(import.meta.dir, '../../../../plugins/sp/skills/spur-dev/references/execution-workflow.md'),
             'utf8',
         );
         expect(driver.replace(/\s+/g, ' ')).toContain(

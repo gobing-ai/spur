@@ -42,6 +42,41 @@ async function seedWorktree(workdir: string, runId: string, workflowName = 'wf')
 }
 
 describe('persistWorktreeRuns (task 0975 R1)', () => {
+    test('a malformed durable verdict identity fails closed before any transfer (0984 R5)', async () => {
+        const from = makeDir('persist-bad-verdict-from-');
+        const to = makeDir('persist-bad-verdict-to-');
+        try {
+            await seedWorktree(from.dir, 'badverdict');
+            const paths = runStoragePaths(from.dir);
+            mkdirSync(paths.evidenceDir, { recursive: true });
+            // wbs in the file name says 1026, the payload claims another task.
+            writeFileSync(join(paths.evidenceDir, '1026-verdict.json'), '{"wbs":"1099","verdict":"PASS"}');
+            await expect(persistWorktreeRuns({ fromWorkdir: from.dir, toWorkdir: to.dir })).rejects.toThrow(
+                'malformed durable verdict identity',
+            );
+        } finally {
+            from.cleanup();
+            to.cleanup();
+        }
+    });
+
+    test('an unclassified durable evidence file is refused, never copied blindly', async () => {
+        const from = makeDir('persist-unclassified-from-');
+        const to = makeDir('persist-unclassified-to-');
+        try {
+            await seedWorktree(from.dir, 'unclassified');
+            const paths = runStoragePaths(from.dir);
+            mkdirSync(paths.evidenceDir, { recursive: true });
+            writeFileSync(join(paths.evidenceDir, 'random-note.txt'), 'not evidence this owner knows');
+            await expect(persistWorktreeRuns({ fromWorkdir: from.dir, toWorkdir: to.dir })).rejects.toThrow(
+                'unclassified durable evidence',
+            );
+        } finally {
+            from.cleanup();
+            to.cleanup();
+        }
+    });
+
     test('exports canonical evidence, registered artifacts and session references without scratch', async () => {
         const from = makeDir('persist-durable-from-');
         const to = makeDir('persist-durable-to-');
