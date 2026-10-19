@@ -543,10 +543,13 @@ export const healthModule: ServerModule = {
             const projects = await Promise.all(
                 rawProjects.map(async (p) => {
                     const normPath = normalizeProjectPath(p.path);
-                    const running = p.port > 0 ? await isPortLive(p.port) : false;
+                    // Probe the entry's own host — a remote entry (e.g. 192.168.87.27)
+                    // must not be liveness-checked against localhost.
+                    const running = p.port > 0 ? await isPortLive(p.port, undefined, p.host) : false;
                     return {
                         name: p.name,
                         path: p.path,
+                        host: p.host ?? 'localhost',
                         port: p.port,
                         running,
                         current: normPath === currentNorm,

@@ -90,6 +90,34 @@ describe('project-start', () => {
         await expect(startRegisteredProject(registry, 'DoesNotExist')).rejects.toThrow(/not found/i);
     });
 
+    it('startRegisteredProject adopts a live remote-host entry without spawning locally', async () => {
+        const remoteHost = '192.168.87.27';
+        const remotePort = 3003;
+        setPortProbeForTests(async (p, host) => (host === remoteHost && p === remotePort ? 'in-use' : 'available'));
+        await registry.upsert({ name: 'RemoteApp', path: '/srv/remote-app', port: remotePort, host: remoteHost });
+        const result = await startRegisteredProject(registry, 'RemoteApp', {
+            spawn: fakeServeSpawn(null, () => {
+                throw new Error('must never spawn a local daemon for a remote-host entry');
+            }),
+        });
+        expect(result.alreadyRunning).toBe(true);
+        expect(result.url).toBe(`http://${remoteHost}:${remotePort}`);
+        expect(result.path).toBe('/srv/remote-app');
+    });
+
+    it('startRegisteredProject refuses an unreachable remote-host entry instead of spawning locally', async () => {
+        const remoteHost = '192.168.87.27';
+        setPortProbeForTests(async () => 'available');
+        await registry.upsert({ name: 'DownRemote', path: '/srv/down-app', port: 3003, host: remoteHost });
+        await expect(
+            startRegisteredProject(registry, 'DownRemote', {
+                spawn: fakeServeSpawn(null, () => {
+                    throw new Error('must never spawn a local daemon for a remote-host entry');
+                }),
+            }),
+        ).rejects.toThrow(new RegExp(`not reachable at ${remoteHost.replace(/\\./g, '\\.')}`));
+    });
+
     it('startRegisteredProject expands tilde paths before treating them as cwd', async () => {
         const tildeStyle = tempDir.replace(getEnvVar('HOME') ?? '', '~');
         await registry.upsert({ name: 'TildeStart', path: tempDir, port: 0 });

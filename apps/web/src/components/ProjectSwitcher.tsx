@@ -5,6 +5,7 @@ import { fetchWithTimeout, resolveApiUrl } from '../lib/rpc-client';
 export interface RegistryProject {
     name: string;
     path: string;
+    host?: string;
     port: number;
     running: boolean;
     current: boolean;
@@ -13,6 +14,17 @@ export interface RegistryProject {
 interface ProjectSwitcherProps {
     currentName: string;
     collapsed?: boolean;
+}
+
+/**
+ * Display label for a registry entry: remote entries carry their host so the
+ * switcher can tell `knowledge-kit (192.168.87.27)` apart from a local project
+ * of the same name. Local entries keep the bare name.
+ */
+export function projectDisplayName(project: Pick<RegistryProject, 'name' | 'host'>): string {
+    const host = project.host?.trim().toLowerCase();
+    const remote = host !== undefined && host !== '' && host !== 'localhost' && host !== '127.0.0.1' && host !== '::1';
+    return remote ? `${project.name} (${project.host?.trim()})` : project.name;
 }
 
 /**
@@ -232,7 +244,7 @@ export default function ProjectSwitcher({ currentName, collapsed = false }: Proj
         }
 
         if (project.running && project.port > 0) {
-            window.location.href = `http://localhost:${project.port}/board`;
+            window.location.href = `http://${project.host ?? 'localhost'}:${project.port}/board`;
             return;
         }
 
@@ -250,7 +262,7 @@ export default function ProjectSwitcher({ currentName, collapsed = false }: Proj
                 throw new Error('Failed to start project');
             }
             const body = (await res.json()) as { url: string; port: number };
-            window.location.href = body.url || `http://localhost:${body.port}/board`;
+            window.location.href = body.url || `http://${project.host ?? 'localhost'}:${body.port}/board`;
         } catch (err) {
             setError(err instanceof Error ? err.message : 'Start failed');
             setLoadingProject(null);
@@ -377,7 +389,7 @@ export default function ProjectSwitcher({ currentName, collapsed = false }: Proj
                                         }`}
                                         title={p.running ? `Running on port ${p.port}` : 'Stopped'}
                                     />
-                                    <span className="truncate">{p.name}</span>
+                                    <span className="truncate">{projectDisplayName(p)}</span>
                                 </div>
                                 {loadingProject === p.name ? (
                                     <span className="text-[10px] text-spur-accent animate-pulse">Starting...</span>

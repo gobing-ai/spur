@@ -2,7 +2,7 @@ import { existsSync, readdirSync, readFileSync, realpathSync, statSync } from 'n
 import { basename, join, resolve } from 'node:path';
 import { getEnvVar, getEnvVars } from '@gobing-ai/spur-config';
 import { NodeProcessExecutor } from '@gobing-ai/ts-runtime';
-import { isPidAlive, isPortLive, normalizeProjectPath, ProjectRegistry } from './project-registry';
+import { isLocalHost, isPidAlive, isPortLive, normalizeProjectPath, ProjectRegistry } from './project-registry';
 
 /** Result of starting (or attaching to) a registered project serve instance. */
 export interface ProjectStartResult {
@@ -373,6 +373,30 @@ export async function startRegisteredProject(
         } else {
             throw new Error(`Project not found in registry: "${target}"`);
         }
+    }
+
+    // Remote-host entries are served on another machine — never probe localhost for
+    // them and never spawn a local daemon over their claimed port (that launched a
+    // wrong local instance and pointed the Board at 127.0.0.1 instead of the remote).
+    // `path` on a remote entry is the path ON THAT HOST; local normalization/existence
+    // checks do not apply.
+    if (!isLocalHost(entry.host)) {
+        const remoteHost = entry.host?.trim() ?? '';
+        if (entry.port > 0 && (await isPortLive(entry.port, 1000, remoteHost))) {
+            return {
+                name: entry.name,
+                path: entry.path,
+                port: entry.port,
+                running: true,
+                url: `http://${remoteHost}:${entry.port}`,
+                alreadyRunning: true,
+            };
+        }
+        throw new Error(
+            `Remote project "${entry.name}" is not reachable at ${remoteHost}` +
+                `${entry.port > 0 ? `:${entry.port}` : ' (no registered port — the last liveness probe reset it)'}. ` +
+                `Start \`spur serve\` on ${remoteHost} and retry.`,
+        );
     }
 
     const projectPath = normalizeProjectPath(entry.path);
