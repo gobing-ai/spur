@@ -98,3 +98,35 @@ describe('0687 R9 permission failures never escalate', () => {
         expect(permissionFailureEvidence('warning: deprecated flag')).toBeUndefined();
     });
 });
+
+/**
+ * 1260 R1 — the reported provider refusals are recognized by the EXISTING classifier so they can
+ * enter the already-configured replacement ladder. Precision is part of the requirement: incidental
+ * identifiers, quoted vocabulary, successful output, generic failures and OS permission denials must
+ * not newly trigger a match.
+ */
+describe('reported provider refusals (1260 R1)', () => {
+    const fail = (stderr: string) => classifyDispatch({ exitCode: 1, stdout: '', stderr });
+
+    test('session-limit and AccountQuotaExceeded refusals classify as resource-exhaustion', () => {
+        expect(fail("You've hit your session limit · resets 1:10am")).toBe('resource-exhaustion');
+        expect(fail('AccountQuotaExceeded: allowance resets at 05:23 +0800')).toBe('resource-exhaustion');
+    });
+
+    test('an OAuth refresh failure with invalid_grant classifies as auth', () => {
+        expect(fail('OAuth refresh failed for openai: invalid_grant')).toBe('auth');
+    });
+
+    test('a bare identifier or an unrelated mention does not match', () => {
+        expect(fail('tool output included invalid_grant in a log line')).toBeUndefined();
+        // The quota phrase needs its reset/allowance wording; a quoted code alone is not evidence.
+        expect(fail('assertion failed: expected AccountQuotaExceeded to be exported')).toBeUndefined();
+        expect(fail('OAuth refresh failed for openai: network unreachable')).toBeUndefined();
+    });
+
+    test('success, ordinary task failure and permission denial keep their existing precedence', () => {
+        expect(classifyDispatch({ exitCode: 0, stdout: "You've hit your session limit", stderr: '' })).toBeUndefined();
+        expect(fail('TypeError: cannot read properties of undefined')).toBeUndefined();
+        expect(fail('EACCES: permission denied, open /tmp/x/privacy')).toBeUndefined();
+    });
+});

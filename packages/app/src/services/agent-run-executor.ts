@@ -590,9 +590,25 @@ export class AgentRunExecutor {
                 // so re-watermark when the root does.
                 await sessionObserver?.watermark(agent, sessionDir);
 
+                // 1260 R3: the policy hook receives THIS attempt's identity — the escalation loop
+                // may already have replaced the executor, so a pre-dispatch pin is not the subject.
+                // A refusal is terminal for the run: it must not spawn this attempt, and it must not
+                // fall to the escalation branch's "prior result stands" either.
+                try {
+                    await options.execution?.beforeDispatch?.({
+                        agent,
+                        ...(currentExecutor !== undefined ? { executor: currentExecutor } : {}),
+                        ...(model !== undefined ? { model } : {}),
+                    });
+                } catch (error) {
+                    const message = error instanceof Error ? error.message : String(error);
+                    lifecycle.finish({ exitCode: null, durationMs: Date.now() - dispatchStartedAt, reason: message });
+                    await sessionObserver?.resolve();
+                    return { ok: false, exitCode: 2, message };
+                }
+
                 // Dispatch
                 try {
-                    await options.execution?.beforeDispatch?.();
                     result = await runner.runPromptCommand(agent, promptOptions, {
                         cwd: cwd || undefined,
                         ...(timeoutMs !== undefined ? { timeout: timeoutMs } : {}),

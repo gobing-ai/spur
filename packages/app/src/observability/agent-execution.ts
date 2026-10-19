@@ -128,10 +128,24 @@ function executionSeverity(detail: {
 /** Best-effort synchronous observer invoked by the asynchronous lifecycle relay. */
 export type AgentExecutionObserver = (event: AgentExecutionEvent) => void;
 
+/**
+ * The attempt an executor is about to spawn (task 1260 R3): the identity a `beforeDispatch` policy
+ * check must inspect. The loop may replace the executor between attempts, so a workflow-level
+ * independence policy cannot read a pre-dispatch pin — it reads this.
+ */
+export interface DispatchAttemptIdentity {
+    /** Canonical agent name for this attempt. */
+    agent: string;
+    /** Executor profile name that won this attempt (absent for a bare-binary pin). */
+    executor?: string;
+    /** Model this attempt will dispatch with, when one was selected. */
+    model?: string;
+}
+
 /** Optional correlation, cancellation, observation, and heartbeat controls for one dispatch. */
 export interface AgentExecutionOptions {
     /** Recheck dispatch authority after resolution/probes and before each subprocess starts. */
-    beforeDispatch?: () => Promise<void>;
+    beforeDispatch?: (attempt: DispatchAttemptIdentity) => Promise<void>;
     readonly correlation?: AgentRunCorrelation;
     readonly signal?: AbortSignal;
     readonly observer?: AgentExecutionObserver;

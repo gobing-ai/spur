@@ -46,6 +46,24 @@ export const FAILURE_RULES: FailureRule[] = [
         ],
     },
     {
+        // 1260 R1: a provider SESSION/allowance refusal is resource exhaustion. Deliberately a
+        // two-part match (the refusal phrase AND its reset/allowance wording) so a quoted
+        // identifier or an incidental mention in unrelated failure output does not trigger a
+        // replacement ladder. These are fallback dispatch signals, not the upstream confirmed-quota
+        // event classifier — nothing here disables an executor.
+        provider: 'openai',
+        signal: 'resource-exhaustion',
+        patterns: [/(?:hit (?:your|the) session limit|AccountQuotaExceeded)/i, /(?:\bresets?\b|allowance)/i],
+    },
+    {
+        // 1260 R1: an OAuth refresh failure is auth evidence ONLY together with the grant error;
+        // a bare `invalid_grant` identifier elsewhere in the output must not escalate.
+        provider: 'openai',
+        signal: 'auth',
+        statusCodes: [401],
+        patterns: [/oauth refresh failed/i, /invalid_grant/i],
+    },
+    {
         provider: 'volc',
         signal: 'auth',
         statusCodes: [401],

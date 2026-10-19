@@ -2788,7 +2788,15 @@ describe('AgentRunActionRunner fresh-session independence (task 0710)', () => {
         let dispatched = false;
         const svc: AgentService = {
             resolve: async () => ({ ok: true, agent: 'claude', executor: 'claude', source: 'role' }),
-            runTraced: async () => {
+            // 1260 R3: the distinctness policy now runs in the executor's per-attempt
+            // `beforeDispatch` hook, so the fixture models the real executor and invokes it.
+            runTraced: async (
+                _input: string | undefined,
+                _flags: Record<string, string | boolean>,
+                _deps: unknown,
+                execution?: { beforeDispatch?: (attempt: { agent: string; executor?: string }) => Promise<void> },
+            ) => {
+                await execution?.beforeDispatch?.({ agent: 'claude', executor: 'claude' });
                 dispatched = true;
                 return { exitCode: 0, stdout: '' };
             },
@@ -2820,6 +2828,27 @@ describe('AgentRunActionRunner fresh-session independence (task 0710)', () => {
         expect(result.ok).toBe(false);
         expect(String(result.error)).toContain('__agentRouting_implement');
         expect(dispatched).toBe(false);
+    });
+
+    test('1260 R3: routing evidence names the FINAL invocation executor profile and model', async () => {
+        const svc: AgentService = {
+            resolve: async () => ({ ok: true, agent: 'pi', executor: 'std-exec', source: 'role' }),
+            // The executor replaced the profile mid-action; the writeback must carry the ACTUAL
+            // final identity, not the pre-dispatch resolution.
+            runTraced: async () => ({
+                exitCode: 0,
+                stdout: 'reviewed',
+                invocation: invocation({ agent: 'claude', executor: 'capable-exec', model: 'anthropic/claude-opus' }),
+            }),
+        } as unknown as AgentService;
+        const runner = new AgentRunActionRunner(svc);
+        const result = await runner.execute({ role: 'reviewer', input: 'review' }, makeCtx({ vars: {} }));
+
+        expect(result.ok).toBe(true);
+        expect(JSON.parse(String(result.setVars?.__agentRouting_s1))).toEqual({
+            agent: 'capable-exec',
+            model: 'anthropic/claude-opus',
+        });
     });
 
     test('R4: a P1 review on a distinct executor dispatches normally', async () => {

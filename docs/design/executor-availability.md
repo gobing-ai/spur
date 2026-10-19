@@ -45,6 +45,14 @@ false overrides it. Code reads availability only through the single normalizer
 (`normalizeExecutorAvailability`) — never raw truthiness. Update the Zod schema,
 `apps/cli/schemas/spur-config.schema.json`, and the existing config example together.
 
+**Dispatch-level refusals are routing signals, not availability facts (task 1260 R1).** The
+dispatch classifier recognizes bounded provider refusal texts — a session/allowance refusal
+(`hit your session limit` / `AccountQuotaExceeded` together with its reset or allowance wording) as
+`resource-exhaustion`, and an OAuth refresh failure together with `invalid_grant` as `auth` — so they
+enter the already-configured replacement ladder. They never write availability: only a confirmed,
+ownership-scoped quota event can disable or recover an executor (B6), auth never fabricates a
+quota-disable, and no fallback configured means no invented retry.
+
 Keep disabled entries in configuration and reference validation. Exclude them at the shared
 `cheapestEligibleExecutors` funnel and the independent escalation filters. Guard explicit names
 in both `resolveExecutor` and `AgentAppService.resolveExecutorSelector` before canonical-binary

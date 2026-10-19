@@ -3003,6 +3003,38 @@ describe('AgentService automatic tier escalation (0407)', () => {
         expect((runPromptCommand.mock.calls[0]?.[1] as Record<string, unknown> | undefined)?.model).toBe('pi/pinned');
     });
 
+    test('1260 R1/R2/AC1: the reported session-limit refusal drives the existing replacement ladder', async () => {
+        const { errors, output } = captureOutput();
+        const svc = makeService({}, output, escalationConfig);
+        // Exactly the reported failed-result text: previously unclassified, so the run died on
+        // the first executor instead of using the configured ladder.
+        const results: AgentRunResult[] = [
+            makeRunResult({ exitCode: 1, stderr: "You've hit your session limit · resets 1:10am" }),
+            makeRunResult({ exitCode: 0 }),
+        ];
+        let callIndex = 0;
+        const runPromptCommand = mock((_agent: string) => {
+            const idx = Math.min(callIndex++, results.length - 1);
+            return Promise.resolve(results[idx] ?? results[results.length - 1]);
+        });
+        const detector = {
+            detectOne: mock(() =>
+                Promise.resolve({ name: 'pi', installed: true, version: '1.0.0', channels: [], error: null }),
+            ),
+        } as unknown as AgentRunDeps['detector'];
+        const doctorRunner = {
+            runOne: mock(() => Promise.resolve(mockDoctorResult({ usable: true }))),
+        } as unknown as AgentRunDeps['doctorRunner'];
+        const deps = { runner: { runPromptCommand } as unknown as AgentRunDeps['runner'], detector, doctorRunner };
+
+        const code = await svc.run('Implement the task', { agent: 'auto', stage: 'implement', json: false }, deps);
+
+        expect(code).toBe(0);
+        expect(runPromptCommand.mock.calls.map((call) => call[0] as string)).toEqual(['pi', 'claude']);
+        expect(errors.some((line) => line.includes('Escalating: std-exec'))).toBe(true);
+        expect(errors.some((line) => line.includes('resource-exhaustion'))).toBe(true);
+    });
+
     test('0503 R1: classified authentication failure escalates to the next executor', async () => {
         const { errors, output } = captureOutput();
         const svc = makeService({}, output, escalationConfig);
