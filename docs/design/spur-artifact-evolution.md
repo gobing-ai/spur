@@ -65,6 +65,7 @@ specs; doctor also reads history findings and plan/design Markdown.
 | rule | `spur rule trace --json`, `spur rule validate` |
 | workflow | `spur workflow list --json`, `spur workflow validate --json`, `spur workflow trace --json`, the step profile (§10) |
 | agent spec | `spur agent list --specs --json` (§9) |
+| decision | `spur decision status --json`, `spur decision status --reliability --json`, `spur decision show <id> --json` |
 | history | A `sp:history-anatomy` report, never raw history records |
 | plan/design Markdown | File content, constitution, spur-dev template, and inbound index/links |
 

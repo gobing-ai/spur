@@ -58,6 +58,7 @@ record saves the returned table under `docs/reports/`; the doctor creates no art
 | rule | `spur rule trace --json`, `spur rule validate` |
 | workflow | `spur workflow validate --json` (findings by `level`), `spur workflow profile <workflow> --json` |
 | agent spec | `spur agent list --specs --json` |
+| decision | `spur decision status --json`, `spur decision status --reliability --json`, `spur decision show <id> --json` |
 | history | A `sp:history-anatomy` report ([../history-anatomy/SKILL.md](../history-anatomy/SKILL.md)), never raw history records |
 | plan/design Markdown | The file itself, the project constitution, the relevant spur-dev template, and inbound index/links; no new CLI needed |
 

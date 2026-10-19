@@ -359,6 +359,19 @@ spur task path 0040 --json
   basename-WBS fallback. Exit `1` when no task owns the path.
 - `path <wbs>` is the inverse — absolute task file path for a WBS.
 
+## Lifecycle playbook
+
+| Stage | How | Gate / evidence |
+| --- | --- | --- |
+| **Create** | `spur task create <title> --feature <id>` ([Creating tasks](#creating-tasks)), then fill sections ([tasks/section-editing.md](tasks/section-editing.md)) | `spur task check <wbs> --json` exits 0 |
+| **Evaluate** | Readiness matrix ([check --json](#the-readiness-matrix--check---json)); `--precheck` before a pipeline run | `sp:spur-doctor` report cites the check rows |
+| **Triage** | Structural finding → `check --fix`; L3 refusal → [tasks/l3-guard-cheatsheet.md](tasks/l3-guard-cheatsheet.md); batch admission → `spur task preflight <wbs> --json` | Re-run `check` until clean |
+| **Enhance** | Replace one section from a temp file; batch refinement through `/sp:dev-refineall --feature <id> --auto` | Same `check` passes; AC still traces to the feature |
+
+- One deliverable per task; split rather than stack ACs from two features.
+- Every AC is observable and verifiable by a named command or file, never by self-report.
+- Status moves only through `update`/`record`; never hand-edit frontmatter.
+
 ## What this skill is NOT
 
 - **Not the pipeline.** Driving a task through `task-pipeline.yaml`, HITL surfacing, and

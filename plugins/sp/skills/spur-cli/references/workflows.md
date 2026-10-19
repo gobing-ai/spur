@@ -422,6 +422,15 @@ a **pipeline** (validate → dry-run → read trace → refine). It also covers 
 extending the engine with custom actions/guards. It does not execute the orchestrated *work* itself —
 the workflow's actions (`shell`, custom runners) do that; this skill builds and operates the workflow.
 
+## Lifecycle playbook
+
+| Stage | How | Gate / evidence |
+| --- | --- | --- |
+| **Create** | [Fit gate](#decide-it-is-a-workflow-at-all--before-the-mode), then the composer ladder (ephemeral → `.spur/workflows/` → shared); author per [workflows/authoring-workflows.md](workflows/authoring-workflows.md) | `spur workflow validate <file> --json` clean |
+| **Evaluate** | Dry-run, then a real run; `spur workflow profile <workflow> --json` and `cost` for measured spend | [Composition measures](#composition-measures-and-the-advisory-0615) within budget |
+| **Triage** | `spur workflow trace <run-id> --json` → the failing node; [workflows/operations.md](workflows/operations.md) for HITL/continue/cancel | Re-run reaches the node and passes |
+| **Enhance** | Tune from measured evidence ([workflows/workflow-fit-and-tuning.md](workflows/workflow-fit-and-tuning.md)); judgement steps adopt a catalog `decide` ([decision/lifecycle.md](decision/lifecycle.md) §3) | Before/after `profile` pair |
+
 ## Gotchas
 
 1. **`kind` is required for transition-flow, optional for state-machine.** A missing `kind` silently

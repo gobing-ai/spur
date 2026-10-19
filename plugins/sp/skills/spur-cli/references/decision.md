@@ -1,6 +1,6 @@
 ---
 name: spur-cli-decision
-description: "spur-cli noun reference: operate `spur decision` as the read/serve surface over the decision catalog - list registered decisions, show one served contract (parameters, criteria vocabulary, effective maker), run a decision to a served outcome (never writes a workflow resultFile), and status the catalog layers with per-maker readiness marks (registered, configured, recorded, probed). Backed by @gobing-ai/ts-ai-decision 0.5.22 hub; offline by default via the built-in `typesafe` maker. Introduced by task 1093; readiness marks and `--probe` by feature P11."
+description: "spur-cli noun reference: operate `spur decision` as the read/serve surface over the decision catalog - list registered decisions, show one served contract (parameters, criteria vocabulary, effective maker), run a decision to a served outcome (never writes a workflow resultFile), and status the catalog layers with per-maker readiness marks (registered, configured, recorded, probed). Backed by the @gobing-ai/ts-ai-decision hub; with no reachable backend every decision serves its declared fallback. Lifecycle (author, evaluate, triage, tune) lives in decision/lifecycle.md."
 see_also:
   - spur-cli
 ---
@@ -28,11 +28,13 @@ Decisions resolve first-wins across three layers:
 The bundled shared catalog ships `task-triage`, `failure-class`, `review-failure-class`,
 `gate-evidence`, `idea-recommendation`, `needs-design`, `anatomy-validation-verdict` and
 `maker-liveness` (the last served only by `spur decision status --probe`; no workflow references
-it). Duplicate ids across layers keep the higher layer; duplicates inside one file are a load error.
+it). Layers win **per file basename** (a project `gates.yaml` replaces the shipped `gates.yaml`
+whole); the same id in two winning files of different basenames is a `duplicateIds` catalog error.
 
 **Config keys** (under `decisions:` in the global `~/.config/spur/config.yaml` or project `.spur/config.yaml`):
 `paths` (extra catalog folders forming the `registered` layer), `maker` (default DecisionMaker
-for every decision point), `makers` (per-decision-id overrides). An unregistered maker name is a
+for every decision point), `makers` (per-decision-id overrides), `log` (`full` | `metadata` | `off`,
+how much of each served decision the ledger keeps). An unregistered maker name is a
 config error, never a silent fallback (design §3.6).
 
 ## Verb map
@@ -95,9 +97,10 @@ keys). An unreadable evidence file exits 1 before any backend call.
 Makers resolve `flag → config-decision → config-default → catalog-decision → catalog-default`;
 `decision show` reports the effective maker as `{name, source}` with that source precedence
 (operator config outranks the shipped catalog because only the machine owner knows which backends
-exist there). The final `catalog-default` maker is the hub built-in `typesafe` — decisions served
-without a configured backend still produce deterministic closed-vocabulary outcomes, which is why
-`run` is usable in tests and scripts with no model access.
+exist there). The final `catalog-default` maker is the hub built-in `typesafe`, a **hosted** maker
+that needs `TYPESAFE_API_KEY`. Without a reachable backend `run` still exits 0 with the declared
+fallback (`source: default`, reason `no-backend`), which is why it is usable in tests and scripts
+with no model access — the outcome is deterministic, not model-judged.
 
 **Available makers:** the three upstream built-ins (`typesafe`, `fm-local`, `laya-local`) plus
 Spur's hosted `clef` (Cloudflare Workers AI via `@gobing-ai/ts-decision-clef`). `clef` registers
@@ -105,6 +108,15 @@ only when both `CLOUDFLARE_ACCOUNT_ID` and `CLOUDFLARE_AUTH_TOKEN` are set in th
 without them it is absent from `registeredMakers`, so naming it in config or `--maker` is a config
 error, never a silent fallback. Its model defaults to `clef-flash` (a catalog `model` selects
 `clef`).
+
+## Workflow consumption
+
+Workflows consume a decision through the catalog-reference `decide` action
+(`{id, decision, params?, evidence? | instructions?, resultFile}`); the inline
+`question`/`method`/`default` form is deprecated. `workflows.decideDecisionMaker` (default off)
+gates model calls there — off, every `decide` serves its fallback. `hitl.confirm`/`hitl.select`
+with `decision: {mode: evidence, …}` route through `gate-evidence`. Shape, adoption classes and
+guards: [decision/lifecycle.md](decision/lifecycle.md) §1, §3.
 
 ## Examples
 
@@ -124,7 +136,9 @@ spur decision status --json | jq '.makers[] | {name, registered, recorded: .evid
 
 - Design: `docs/design/decision-catalog.md` (§2 catalog authoring, §3.4 CLI surface),
   `docs/design/decision-observability-and-adoption.md` (§3.4 reliability report, §3.4.1 readiness view)
-- Hub: `@gobing-ai/ts-ai-decision` 0.5.22 (`DecisionService`, catalog schema, maker registry)
+- Lifecycle: [decision/lifecycle.md](decision/lifecycle.md) (create, wire, evaluate, triage, enhance)
+- Hub: `@gobing-ai/ts-ai-decision`, version pinned by the root `workspaces.catalog` (`DecisionService`,
+  catalog schema, maker registry)
 - App service: `packages/app/src/decision/decision-service.ts` (makers, `probeMaker`),
   `packages/app/src/decision/decision-status-readiness.ts` (readiness marks, probe loop)
 - Shipped catalogs: `config/decisions/*.yaml`

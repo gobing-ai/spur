@@ -285,6 +285,18 @@ spur feature sync H2 --folder docs/custom-tasks --json   # non-default tasks fol
   `{ featureId, from, to, reason, requiresConfirm?, gateBlocked?, gateFindings?, hops? }`.
 - **Exit codes:** `0` success (including NOOP), `1` error, `2` invalid usage (no id and no `--all`).
 
+## Lifecycle playbook
+
+| Stage | How | Gate / evidence |
+| --- | --- | --- |
+| **Create** | `spur feature create <name> [--parent <id>]`; place it MECE in the tree ([features/hierarchy-mece.md](features/hierarchy-mece.md)) | `spur feature check <id> --json` exits 0 |
+| **Evaluate** | AC quality ([features/acceptance-criteria.md](features/acceptance-criteria.md)), [traceability](#traceability-habits), roadmap fit ([features/roadmap-priority.md](features/roadmap-priority.md)) | `sp:spur-doctor` report cites `check` rows |
+| **Triage** | Structural finding → `check --fix`; stale roster → `refresh`; status drift → `sync --dry-run` then `sync` | `check` clean; `sync --dry-run` empty |
+| **Enhance** | `update --section` for AC/scope; `move --dry-run` before re-parenting a subtree | Every task still links to a live AC |
+
+- A feature is a capability, not a work list; tasks own execution.
+- Re-parent with `move`, never by renaming IDs by hand.
+
 ## What this skill is NOT
 
 - **Not the planning loop.** Intake → create → AC generation → check-loop → decomposition →

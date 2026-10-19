@@ -1,6 +1,6 @@
 ---
 name: spur-composer
-description: "Select, compose and tune spur artifacts — tasks, features, rules, workflows, agent specs and project Board modules. Owns workflow catalog selection, the ephemeral→project→shared ladder, ADR-115 budgets, trace-driven rule tuning and applying accepted sp:spur-doctor proposals. Triggers: compose a workflow, tune a rule, add a Board module."
+description: "Select, compose and tune spur artifacts — tasks, features, rules, workflows, decisions, agent specs and project Board modules. Owns workflow catalog selection, the ephemeral→project→shared ladder, ADR-115 budgets, trace-driven rule tuning and applying accepted sp:spur-doctor proposals. Triggers: compose a workflow, tune a rule, add a Board module."
 license: Apache-2.0
 version: 1.0.0
 metadata:
@@ -49,6 +49,7 @@ its own output and never runs a recurring loop — evaluation is the doctor's jo
 | feature | Apply accepted rows through `spur feature update --section --from-file`; keep acceptance criteria in Gherkin | [../spur-cli/references/features.md](../spur-cli/references/features.md) |
 | rule | The trace-driven tuning loop (§ Rule tuning loop) | [../spur-cli/references/rules.md](../spur-cli/references/rules.md) · [fine-tuning](../spur-cli/references/rules/fine-tuning.md) |
 | workflow | Catalog selection, the composition ladder, and the ADR-115 budgets (§ below) | [../spur-cli/references/workflows.md](../spur-cli/references/workflows.md) · [operations](../spur-cli/references/workflows/operations.md) |
+| decision | Select an existing id, place new entries up the layer ladder, tune maker/criteria from reliability evidence, adopt in workflows by class (§ Decision composition) | [../spur-cli/references/decision.md](../spur-cli/references/decision.md) · [lifecycle](../spur-cli/references/decision/lifecycle.md) |
 | agent spec | Read through `spur agent list --specs`; fleet member specs are derived in memory from `agent.fleet` (never written to `.spur/agents/`) | [../spur-cli/references/agent.md](../spur-cli/references/agent.md) |
 | board module | Declare under `bootstrap.modules`, gated by the serve preflight (§ Board module composition) | [../spur-cli/references/serve.md](../spur-cli/references/serve.md) |
 
@@ -143,6 +144,24 @@ Start from trace evidence, never from a guess:
 4. `spur rule validate` on the tuned rule files.
 5. `spur rule run` on the affected inputs (constitution T11 — affected inputs, not a corpus sweep).
 6. Trace again and compare. A tuning with no trace pair behind it is a preference.
+
+## Decision composition
+
+Same select → compose → tune shape, applied to the decision catalog
+([lifecycle](../spur-cli/references/decision/lifecycle.md)):
+
+1. **Classify first.** keep-deterministic, rescue-only, adopt or keep-human (lifecycle §1). Only
+   adopt and rescue-only become a catalog entry.
+2. **Select.** `spur decision list --json`; reuse an id whose criteria fit.
+3. **Compose up the ladder.** `.spur/decisions/<file>.yaml` (project) → `config/decisions/` (shared,
+   recorded operator consent + `build:bundle`). A project file shadows the shipped file of the same
+   basename whole.
+4. **Tune from evidence.** Labelled `spur decision run --maker <name>` fixtures, then
+   `spur decision status --reliability --json`; one lever per pass (lifecycle §6). The maker
+   override goes in operator config, never the shipped catalog.
+5. **Adopt in a workflow.** One catalog-reference `decide` step per change, validated with
+   `spur workflow validate` and `spur workflow run --dry-run`; the fallback must stay safe with
+   `workflows.decideDecisionMaker` off.
 
 ## Applying doctor proposals
 

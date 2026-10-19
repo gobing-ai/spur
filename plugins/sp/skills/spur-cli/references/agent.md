@@ -400,6 +400,18 @@ failed drains marked the session poisoned. The next drain opens a fresh session.
 only. A settled (delivered) inbox message is never redelivered — resuming a session or resetting
 one never re-sends settled work; only never-started deliveries release and redeliver (0831/0834).
 
+## Lifecycle playbook (agent specs)
+
+| Stage | How | Gate / evidence |
+| --- | --- | --- |
+| **Create** | Prefer an `agent.fleet.members` entry; hand-author `.spur/agents/<id>.yaml` only for a spec the fleet cannot express | `spur agent list --specs --json` shows the row with the intended `source` |
+| **Evaluate** | `spur agent doctor [agent] --json` for the executor; `spur agent status --json` for the live process and member session | Executor ready; spec resolves |
+| **Triage** | Run failed → `spur agent trace <runId> --json`; stuck occupant → `spur agent wait <specId> --until <state> --timeout <ms>`; supervisor unreachable → `spur self serve` | Lineage names the failing dispatch |
+| **Enhance** | Change one field (executor, model, role) and re-run the same prompt | Compare the two `trace` records |
+
+- The fleet declaration wins on an id clash; do not keep a same-id file "as a backup".
+- Coordinate through `spur message` / `spur agent wait`, never terminal scraping.
+
 ## What this skill is NOT
 
 - **Not the dispatch decision.** *When* to use `spur agent run` vs a native subagent is the

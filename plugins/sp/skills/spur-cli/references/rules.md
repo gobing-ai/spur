@@ -22,6 +22,8 @@ Operating the gate well is a full lifecycle — not just running it. This skill 
 | **Run & fix** | Gate the diff, interpret findings, self-correct, re-run until green | this file |
 | **Author** | Add a constraint by writing a new rule when a standard/anti-pattern emerges | [rules/authoring-rules.md](rules/authoring-rules.md) |
 | **Fine-tune** | Dial in quality: severity, glob scoping, exemptions, preset `disable`/`overrides`, layering | [rules/fine-tuning.md](rules/fine-tuning.md) |
+| **Evaluate** | `spur rule trace --last <n> --json` for hit rates and noise; `spur rule list --preset <name> --json` for what is enforced | this file, [rules/operations.md](rules/operations.md) |
+| **Triage** | Start from `spur rule trace <run-id> --json`: false positive → scope/exempt; true positive → fix the code, never the rule | [rules/fine-tuning.md](rules/fine-tuning.md) |
 | **Validate & extend** | Validate files/presets, smoke-test, add custom evaluators/resolvers/formatters | [rules/validation-and-extension.md](rules/validation-and-extension.md) |
 
 ## When to use
