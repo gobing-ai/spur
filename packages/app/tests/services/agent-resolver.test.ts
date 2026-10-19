@@ -105,6 +105,36 @@ describe('AgentResolver capability-aware role walk (1255 R3-R5)', () => {
         }
     });
 
+    test('a mixed rejection names the usability leg separately from the capability leg', async () => {
+        const doctor = {
+            runOne: mock(async (agent: string) => ({
+                agent,
+                installed: agent !== 'omp',
+                version: agent === 'omp' ? null : '1.0.0',
+                authenticated: 'authenticated',
+                usable: agent !== 'omp',
+                tier: 1,
+                channels: [],
+                error: agent === 'omp' ? 'not installed' : null,
+            })),
+        } as unknown as DoctorRunner;
+        const resolver = resolverWithExecutors([
+            { name: 'cap-skip', agent: 'pi', tier: 'standard', disabled: false },
+            attested('doc-reject', 'omp'),
+        ]);
+        const result = await resolver.resolveAgent(
+            { agent: 'auto', role: 'coder', requiresCapabilities: WRITE_STAGE },
+            doctor,
+        );
+        expect(result.ok).toBe(false);
+        if (!result.ok) {
+            expect(result.message).toContain('unusable: doc-reject');
+            expect(result.message).toContain('skipped for unmet stage requiresCapabilities: cap-skip');
+            // The capability clause must not absorb the usability-rejected executor.
+            expect(result.message.split('requiresCapabilities:')[1]).not.toContain('doc-reject');
+        }
+    });
+
     test('a malformed requirement flag leaves the walk unchanged', async () => {
         const resolver = resolverWithExecutors([
             { name: 'unattested', agent: 'omp', tier: 'standard', disabled: false },

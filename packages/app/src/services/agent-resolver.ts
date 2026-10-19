@@ -770,8 +770,11 @@ export class AgentResolver {
         }
         const eligible = cheapestEligibleExecutors(executors, roleTier);
         // 1255 R3/R5: capability-rejected candidates are named in the failure diagnostic —
-        // executor and unmet axes only, never config or env values.
+        // executor and unmet axes only, never config or env values. The name list beside the
+        // formatted entries lets the failure message split usability rejections from
+        // capability skips (the two legs used to render as one undifferentiated `tried` list).
         const capabilitySkipped: string[] = [];
+        const capabilitySkippedNames: string[] = [];
         for (const executor of eligible) {
             const canonical = resolveAgentName(executor.agent);
             if (canonical === undefined) {
@@ -785,6 +788,7 @@ export class AgentResolver {
                 const unmet = this.unmetStageCapability(executor, requires);
                 if (unmet !== undefined) {
                     capabilitySkipped.push(`${executor.name} (${unmet})`);
+                    capabilitySkippedNames.push(executor.name);
                     continue;
                 }
             }
@@ -818,20 +822,30 @@ export class AgentResolver {
                 };
             }
         }
-        let tried = eligible.length > 0 ? eligible.map((e) => e.name).join(', ') : 'none eligible';
-        // 111 R6: an all-disabled candidate set names the disabled profiles so
-        // the fix (re-enable one) is actionable instead of "none eligible".
-        if (eligible.length === 0 && executors !== undefined) {
-            const disabledEligible = executors
-                .filter((e) => executorDisabled(e) && isTierEligible(getExecutorTier(e), roleTier))
-                .map((e) => e.name);
-            if (disabledEligible.length > 0) tried = `disabled: ${disabledEligible.join(', ')}`;
+        let tried: string;
+        if (eligible.length > 0) {
+            // Every eligible executor reaching this return was rejected by exactly one leg:
+            // capability filtering (named in the skip clause) or the usability probe. Naming
+            // only the usability-rejected names here keeps the two legs distinguishable.
+            const unusable = eligible.map((e) => e.name).filter((name) => !capabilitySkippedNames.includes(name));
+            tried =
+                unusable.length > 0 ? `unusable: ${unusable.join(', ')} (spur agent doctor)` : 'no further candidates';
+        } else {
+            tried = 'none eligible';
+            // 111 R6: an all-disabled candidate set names the disabled profiles so
+            // the fix (re-enable one) is actionable instead of "none eligible".
+            if (executors !== undefined) {
+                const disabledEligible = executors
+                    .filter((e) => executorDisabled(e) && isTierEligible(getExecutorTier(e), roleTier))
+                    .map((e) => e.name);
+                if (disabledEligible.length > 0) tried = `disabled: ${disabledEligible.join(', ')}`;
+            }
         }
         return {
             ok: false,
             exitCode: 1,
             message:
-                `No usable executor for role '${role}' (tier ${roleTier}) — tried: ${tried} (spur agent doctor)` +
+                `No usable executor for role '${role}' (tier ${roleTier}) — tried: ${tried}` +
                 (capabilitySkipped.length > 0
                     ? `; skipped for unmet stage requiresCapabilities: ${capabilitySkipped.join(', ')}`
                     : ''),
