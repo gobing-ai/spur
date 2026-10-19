@@ -246,6 +246,28 @@ describe('persist-out-check', () => {
         expect(files?.files).toContain(join('.spur', 'run', 'run_abc', '1209-verdict.json'));
     });
 
+    test('a durable file the invoking tree already holds identically does not block (session review)', () => {
+        const { wt, invoke } = makeTrees();
+        mkdirSync(join(invoke, '.spur', 'memory', 'evidence'), { recursive: true });
+        // 1254–1260 session: the worktree plane was seeded from the invoking tree, persist-out
+        // refused before writing a forwarding receipt, and every pre-existing file read as
+        // "unforwarded" although its content was already in the invoking tree.
+        for (const wbs of ['1254', '1255']) {
+            writeFileSync(join(wt, '.spur', 'memory', 'evidence', `${wbs}-verdict.json`), `{"wbs":"${wbs}"}`);
+            writeFileSync(join(invoke, '.spur', 'memory', 'evidence', `${wbs}-verdict.json`), `{"wbs":"${wbs}"}`);
+        }
+        const identical = runMain({ from: wt, runIds: ['batch-run'] }, invoke);
+        expect(identical.code).toBe(0);
+
+        // A genuinely worktree-only durable file still blocks, and only that file is named.
+        writeFileSync(join(wt, '.spur', 'memory', 'evidence', '1260-verdict.json'), '{"wbs":"1260"}');
+        const onlyHere = runMain({ from: wt, runIds: ['batch-run'] }, invoke);
+        expect(onlyHere.code).toBe(1);
+        expect(onlyHere.out).toContain('UNFORWARDED .spur/memory/evidence/1260-verdict.json');
+        expect(onlyHere.out).not.toContain('1254-verdict.json');
+        expect(onlyHere.out).not.toContain('1255-verdict.json');
+    });
+
     test('unforwarded durable-verdict family blocks the teardown (batch-run-id-only forwarding)', () => {
         const { wt, invoke } = makeTrees();
         // The session incident: only the batch run id was forwarded, so the driver's

@@ -188,6 +188,18 @@ function readPersistOutSkips(candidates: string[]): {
     return { foreignDivergent, skips };
 }
 
+/**
+ * True when the worktree and the invoking tree hold byte-identical content for one
+ * worktree-relative evidence path. Unreadable on either side is `false` (fail closed).
+ */
+function identicalInBothTrees(wtRoot: string, invokeRoot: string, rel: string): boolean {
+    try {
+        return readFileSync(join(wtRoot, rel)).equals(readFileSync(join(invokeRoot, rel)));
+    } catch {
+        return false;
+    }
+}
+
 /** Run the WT-4 assertion. Exit 0 ok · 1 blocked/divergent/unforwarded · 2 usage. */
 export function runPersistCheck(input: PersistCheckInput): PersistCheckReport {
     const usage = (detail?: string): PersistCheckReport => ({
@@ -226,7 +238,14 @@ export function runPersistCheck(input: PersistCheckInput): PersistCheckReport {
     // files outside the prefixes (not foreign-divergent) block teardown; non-family scratch never does.
     const unforwarded = planeFiles
         .filter((rel) => DURABLE_FAMILY_RE.test(basename(rel)))
-        .filter((rel) => !files.includes(rel) && !foreignDivergent.has(rel) && !foreignDivergent.has(basename(rel)));
+        .filter((rel) => !files.includes(rel) && !foreignDivergent.has(rel) && !foreignDivergent.has(basename(rel)))
+        // Session review 2026-10-19: this assertion refuses teardown while the worktree "still owns
+        // evidence absent from (or divergent from) the invoking tree". A durable file the invoking
+        // tree already holds BYTE-IDENTICALLY is neither, so it cannot be abandoned by removal. It
+        // still read as `unforwarded` after a refused persist-out (which writes no forwarding
+        // receipt), turning 420 identical files into an 805-file BLOCKED in the 1254–1260 batch and
+        // forcing a manual comparison. Genuinely absent or divergent evidence keeps blocking.
+        .filter((rel) => !identicalInBothTrees(wtRoot, invokeRoot, rel));
     const { missing, divergent, ok } = compareTrees(wtRoot, invokeRoot, files, foreignDivergent);
     const findings = [
         ...missing.map((f) => `MISSING ${f}`),
