@@ -4,7 +4,7 @@ name: wrapup-pipeline stops changing feature status and validates tasks with one
 status: done
 template: feature-impl
 created_at: 2026-10-18T05:10:06.872Z
-updated_at: "2026-10-18T19:32:22.769Z"
+updated_at: "2026-10-19T01:34:19.990Z"
 feature_id: D66
 priority: P1
 tags:
@@ -174,17 +174,17 @@ Execution budget: about 8h. Persisted artifacts: the YAML, steps.ts, tests and s
 
 | Requirement | Status | Evidence |
 |-------------|--------|----------|
-| R1 | MET | config/workflows/wrapup-pipeline.yaml:245-246 (metrics-record routes PASS → branch-cleanup merge=true / done; no feature-transition/feature-verify states or feature/featureGateCmd vars anywhere in the file); packages/app/src/workflow/wrapup/steps.ts:602 (WRAPUP_STEP_OPS lacks feature-transition; preflightFeature/classifySync/runFeatureTransition deleted); packages/app/src/workflow/pipeline-steps.ts:38-52 (re-exports dropped); apps/cli/src/commands/task/wrapup.ts:7-46 (op list and --feature/--feature-gate-cmd flags removed) |
-| R2 | MET | config/workflows/wrapup-pipeline.yaml:68-74 (one command.gate on `spur task wrapup resolve`, resultFile <runId>-wrapup-resolve.status, softFail); packages/app/src/workflow/wrapup/steps.ts:147 (writeFail returns exitCode: 1, reason file still written first); packages/app/src/workflow/actions/command-gate.ts:29-33 (exit≠0/1 → BLOCKED); config/workflows/wrapup-pipeline.yaml:226-228 (FAIL and BLOCKED edges → failed precede the [] → skipped edge); tests pass: 86/86 packages/app, 39/39 apps/cli |
-| R3 | MET | config/workflows/wrapup-pipeline.yaml:94-138 (doc-sync one agent.run + unchanged scope/supersession checks), :140-172 (learnings-validate/append/repair unchanged), :174-183 (doc-tripwire unchanged), :185-205 (metrics-record, branch-cleanup hitl.confirm unchanged); order preserved in transitions config/workflows/wrapup-pipeline.yaml:237-248; drift probe and route-reason remain at config/workflows/wrapup-pipeline.yaml:76-91 |
-| R4 | MET | wc -l config/workflows/wrapup-pipeline.yaml = 248 ≤ 250 |
-| R5 | MET | plugins/sp/commands/dev-wrap.md:2 and plugins/sp/commands/dev-wrapall.md:17 (--feature = selection only + spur feature sync follow-up; feature var dropped from the vars snippet); plugins/sp/skills/spur-dev/references/dev-operations.md:492-513 (wrap/wrapall rows drop feature passing); plugins/sp/skills/spur-dev/references/execution-batch.md:115-116,465-486,652; plugins/sp/skills/spur-cli/references/tasks.md:54 (wrapup row drops feature-transition op and both flags); docs/help/cmd_task.md:23,324-336 |
+| R1 | MET | `packages/app/src/workflow/wrapup/steps.ts:601-609`; surviving YAML and CLI omit feature mutation states, variables and operation; wrapup E2E preserves feature files. |
+| R2 | MET | `config/workflows/wrapup-pipeline.yaml:68-74`; `packages/app/src/workflow/wrapup/steps.ts:143-149`; malformed, unresolved, incomplete, empty and crash paths passed. |
+| R3 | MET | `config/workflows/wrapup-pipeline.yaml:94-205`; wrapup graph tests prove preserved doc-sync, learnings, tripwire, metrics and consent ordering. |
+| R4 | MET | `config/workflows/wrapup-pipeline.yaml:248`; executable line count is 248, within the 250-line budget. |
+| R5 | MET | `plugins/sp/commands/dev-wrapall.md:17`; plugin contract tests prove feature is selection-only and the CLI reference drops removed wrapup flags. |
 
 | Acceptance Criteria | Status | Evidence Type | Evidence |
 |---------------------|--------|---------------|----------|
-| AC1 — wrapup-pipeline never changes feature status (req: R1, R5) | MET | test | No state or var writes feature status: config/workflows/wrapup-pipeline.yaml:54-248 (no feature* state/edge/var); start-state note config/workflows/wrapup-pipeline.yaml:57-60; E2E asserts the fixture feature file is unchanged and the run ends done — packages/app/tests/workflow/wrapup-pipeline.test.ts (86/86 pass) |
-| AC2 — wrapup-pipeline validates its task list with one typed gate (req: R2) | MET | test | config/workflows/wrapup-pipeline.yaml:68-74 single command.gate; steps.ts:147 exit 1 on FAIL; malformed/unknown-wbs/non-done → failed, [] → skipped, crash → BLOCKED → failed covered in packages/app/tests/workflow/wrapup-pipeline.test.ts and apps/cli/tests/commands/task/wrapup.test.ts (1249 case: validation failure exits 1, removed feature op refused) |
-| AC3 — wrapup-pipeline keeps doc sync, the doc tripwire, metrics and the branch cleanup pause (req: R3, R4) | MET | test | Order/artifacts/outcomes preserved per R3 evidence rows; branch-cleanup stays hitl.confirm consent-only (config/workflows/wrapup-pipeline.yaml:194-205); 248 lines ≤ 250 |
+| R5 — wrapup-pipeline never changes feature status | MET | test | `packages/app/tests/workflow/wrapup-pipeline-e2e.test.ts:204-258`; fresh real-CLI fixtures assert terminal outcomes, artifacts and unchanged feature state. |
+| R6 — wrapup-pipeline validates its task list with one typed gate | MET | test | `packages/app/tests/workflow/wrapup-pipeline.test.ts:1-35`; fresh wrapup suites pass the typed-gate invalid, missing, empty and BLOCKED paths. |
+| R7 — wrapup-pipeline keeps doc sync, the doc tripwire, metrics and the branch cleanup pause | MET | test | `config/workflows/wrapup-pipeline.yaml:94-205`; fresh wrapup graph/action tests pass; command line count is 248. |
 - Coverage: N/A (verdict-based; verify pipeline does not measure code coverage)
 
 ### Review
