@@ -178,7 +178,8 @@ doc-tripwire → metrics-record → branch-cleanup? → done | skipped | failed`
   compatibility read that would trust a digest of a deleted definition.
 - Decided: keep the hidden `spur builder pr` alias; callers use `spur builder pr-*` only.
 - Deferred: wildcard `from` in the engine would remove the 10 `to: cancelled|deprecated` fan-in edges in feature-lifecycle and
-  the 12 in task-lifecycle; recorded as task 1253 under D66 (blocked, deferred), not implemented here.
+  the 12 in task-lifecycle; recorded as task 1253 under D66 (cancelled on close — deferred until the engine
+  ships, not implemented here).
 
 ## 6. Verification
 
