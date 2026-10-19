@@ -3,8 +3,8 @@ import type { CliContext } from '../../context';
 
 /**
  * Register `spur feature verify [id]` — the feature-verification pass (ADR-119, D63 task 0915).
- * The `feature-verification.yaml` wrapper workflow was retired by 1246: `feature-lifecycle`'s
- * `verifying` onEnter calls this verb directly.
+ * The wrapper workflow that used to call this verb was retired by 1246 (ADR-142):
+ * `feature-lifecycle`'s `verifying` onEnter calls it directly.
  *
  * Thin transport over the app operation `runFeatureVerification`: resolve the
  * `feature-lifecycle` definition, record and register the RUNNING receipt, run the effective

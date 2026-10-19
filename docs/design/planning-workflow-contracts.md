@@ -53,23 +53,25 @@ task. See `packages/app/src/services/planning-write-service.ts:326,367`.
 and asserts state sets == the `TASK_STATUSES` / `FEATURE_STATUSES` unions from `schema.ts`. The
 YAML files and the 0041 enums can never drift silently.
 
-**onEnter error contract (1147 R3/R4).** The feature lifecycle's `verifying` entry is the one
-lifecycle transition whose `onEnter` spawns another workflow (`$spurBin workflow run
-feature-verification.yaml`). Two contracts govern it:
+**onEnter error contract (1147 R3/R4; amended by D66 task 1246, ADR-142).** The feature lifecycle's
+`verifying` entry is the one lifecycle transition whose `onEnter` runs a command:
+`env -u __runId $spurBin feature verify $featureId --no-logo`. Two contracts govern it:
 
 - **Diagnosis.** A failing `onEnter` shell denies the hop with a report carrying the shell's exit
   code, its error line, and the **last 2 KiB of the child's stderr** — byte-bounded
   (`utf8SafeByteTail`, `ENTER_STDERR_TAIL_BYTES`) and redacted with the same configured secrets the
-  run's shell-output redactor uses. A nested child that refuses itself prints its reason on stderr,
-  so the tail is what makes the denial self-explaining instead of a bare `exit 1`
+  run's shell-output redactor uses. A child that refuses itself prints its reason on stderr, so the
+  tail is what makes the denial self-explaining instead of a bare `exit 1`
   (`packages/app/src/workflow/lifecycle-adapter.ts`).
-- **Nested invocation.** `spur workflow run` refuses to start while `SPUR_WORKFLOW_RUN_ACTIVE=1` is
-  in the environment (nested-run guard, 0610 R4), and a workflow shell action's env inherits that
-  marker from the running parent. The lifecycle caller therefore clears the marker for this one
-  child (`env -u SPUR_WORKFLOW_RUN_ACTIVE …`): the feature-verification pass is a bounded,
-  definition-pinned run (shell-only, no `agent.run`, no further nesting), so nested and standalone
-  runs return the same verdict — while the recursion guard stays binding for every other nested
-  invocation. Without it the pass that passes standalone fails under a wrapup with `exit 1`.
+- **Run binding, not nesting.** Until 1246 the entry spawned a nested wrapper run and had to clear
+  the recursion marker (`env -u SPUR_WORKFLOW_RUN_ACTIVE …`) to get past the nested-run guard
+  (0610 R4). The wrapper is retired: the pass is the verb, so nothing nests and the guard stays
+  binding for every nested invocation without an exception. What the entry clears instead is
+  `__runId` — the verb's `--run-id` falls back to that env name, and a hop driven from inside
+  another run (a pipeline step, the quality gate) would otherwise inherit the OUTER run's id and
+  bind its receipt there. That receipt is still `running` at `verifying → done`, so the done gate
+  would fail closed. With the unset, the verb opens and finalizes its own run row bound to this
+  definition (1246 R2) and the done gate's receipt-integrity rule holds.
 
 Validate: `spur workflow validate config/workflows/task-lifecycle.yaml` — full JSON-Schema
 validation resolves the `@gobing-ai/spur` workspace package and passes (no `--no-schema`

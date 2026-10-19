@@ -137,6 +137,10 @@ assigned once below. Every package includes focused positive/negative checks and
 | P7 | R9, R11 subset | basic, history-anatomy, pr-review: command execution, evidence/cache safety, head-pinned pending review | P3, P4 |
 | P8 | R10, R11 whole, R12 | task-pipeline last; unchanged proof floor; bundle/skills/templates parity and comparable savings evidence | P5, P6, P7 |
 
+**Superseded (D66, 2026-10-18).** The D61 phase matrix names definitions feature D66 later deleted
+(`wayfinder-resolution` in P5, `basic` and `pr-review` in P7); those phase scopes lapsed with
+their subjects. See [workflow-consolidation.md](workflow-consolidation.md) (ADR-142).
+
 Task 0723 is done and its doctor-free, count-only precheck is present in the current source. P8
 consumes that implementation; it has no unfinished 0723 prerequisite. D9 fast routes remain dormant without the existing ≥5 real terminal runs
 and ≥80% mapped run coverage per workflow. No manufacturing runs to bypass that decision.

@@ -1,9 +1,9 @@
 ---
 kind: design
 title: "Workflow consolidation — one owner per lifecycle, D65 primitives everywhere"
-status: proposed
+status: implemented
 created_at: 2026-10-17
-updated_at: 2026-10-17
+updated_at: 2026-10-18
 related: [D66, D64, D65, A92]
 tags: [system, D66, workflow]
 ---
@@ -179,3 +179,12 @@ doc-tripwire → metrics-record → branch-cleanup? → done | skipped | failed`
 - Decided: keep the hidden `spur builder pr` alias; callers use `spur builder pr-*` only.
 - Deferred: wildcard `from` in the engine would remove the 10 `to: cancelled|deprecated` fan-in edges in feature-lifecycle and
   the 12 in task-lifecycle; recorded as task 1253 under D66 (blocked, deferred), not implemented here.
+
+## 6. Verification
+
+| Surface | Proof |
+| --- | --- |
+| feature-lifecycle `verifying` entry (1246/1247) | `packages/app/tests/workflow/feature-lifecycle-verifying-entry.test.ts` — fixture project, real CLI: receipt, own `feature-lifecycle` run row, verifier identity |
+| wrapup-pipeline (1249) | `packages/app/tests/workflow/wrapup-pipeline-e2e.test.ts` — fixture project, real CLI: run row, terminal state, resolve/metrics status files, persisted task list; no feature-status write on any path |
+| idea-pipeline (1250) | `packages/app/tests/workflow/idea-pipeline-routing.test.ts` — live YAML guards driven against fixture fact files: profile-independent routes, typed entry status file, decide rescues |
+| Repo-wide absence of the three retired definitions (1252) | `repo-wide-tests/workflow-consolidation-absence.test.ts` — runs inside `spur-check-feature` |

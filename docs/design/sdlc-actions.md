@@ -34,7 +34,7 @@ Status: **proposed**. Migrating superskill and knowledge-kit is follow-up work p
 | --- | --- |
 | `packages/app/src/services/quality-gate.ts:554-576` (light tier) | `bunx biome check <files>`, `bun run test-pre-check`, `bun run test-post-check`, `cd <ws> && bun run typecheck`, `cd <ws> && bun test <paths>`; `workspaceHasTypecheck` reads `package.json` |
 | `config/workflows/task-pipeline.yaml:174,180` | `qualityGateCmd: "bun run spur-check"`, `gateProbeCmd: "bun run lint"` |
-| `config/workflows/feature-verification.yaml:54`, `packages/app/src/workflow/feature-verification-run.ts:187` | `bun run spur-check-feature` |
+| `packages/app/src/services/sdlc-actions.ts:37` (`check-feature` default) | `bun run spur-check-feature` |
 | `config/workflows/wrapup-pipeline.yaml:132` | `jq '.scripts["test-repo-wide"]' package.json … bun run test-repo-wide` |
 | `plugins/sp` commands/skills (≈30 files) | prose instructing `bun run spur-check`, `bun run gate`, `bun run lint` |
 

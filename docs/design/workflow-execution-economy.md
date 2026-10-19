@@ -183,7 +183,7 @@ The feature-scoped pass is deliberately the slow one, run once per feature (invo
 
 The per-task pipeline's quality gate is `bun run spur-check` (task-pipeline `qualityGateCmd`). Task
 0872 relocates its repo-wide components into `bun run spur-check-feature`, run by the
-`feature-verification` workflow, leaving `spur-check` task-local. The pipeline's own precheck shells
+feature-verification pass (`spur feature verify`), leaving `spur-check` task-local. The pipeline's own precheck shells
 (`task-size-precheck`, `task-evidence-precheck`, `spur task check`) are task-local by construction.
 
 | Check | Invariant it protects | Scope |
@@ -309,12 +309,13 @@ consequence rather than a second fix.
 The feature-scoped verification pass (above) recorded evidence as a bare
 `.spur/run/<fid>-feature-verification.status` string — identity-blind, input-blind,
 writer-blind. Task 0915 replaces it with a bound receipt service; the status file
-remains as coarse routing evidence for the `feature-verification` workflow's internal
-`verify→done` transition, but it no longer satisfies completion by itself.
+remains as coarse routing evidence for the feature lifecycle's `verifying→done` guard, but it
+no longer satisfies completion by itself.
 
-**Writer.** The `feature-verification` workflow invokes `spur feature verify`, whose application
-operation in `packages/app/src/workflow/feature-verification-run.ts` owns the pass: it resolves
-the workflow definition, captures the before digest, records a RUNNING receipt, shells
+**Writer.** `feature-lifecycle`'s `verifying` entry invokes `spur feature verify` (1246; before
+that, a wrapper definition did), whose application operation in
+`packages/app/src/workflow/feature-verification-run.ts` owns the pass: it resolves
+the `feature-lifecycle` definition, captures the before digest, records a RUNNING receipt, shells
 the configured command via `splitLaunchCommand` (log appended to
 `.spur/run/<runId>-feature-verification.log`, 4h timeout), captures the after digest and
 completes the receipt atomically (tmp+rename). The former plugin script was retired when the
@@ -351,15 +352,15 @@ error reasons, checked in order: `missing`, `malformed`, `cross-feature`, `diver
 (the two copies disagree), `failed`, `run` (run-store binding broken: run row absent,
 not done, verifier digest mismatch, or receipt not registered as a run artifact —
 skipped when no run port is supplied), `contract-mismatch` (recorded verifier name/
-layer/digest or `verificationCmd` differs from the currently resolved `feature-verification`
+layer/digest or `verificationCmd` differs from the currently resolved `feature-lifecycle`
 definition — `--cmd` overrides cannot forge a contract; `sourcePath` is diagnostic only, since
 bundled and source-local CLIs resolve the same shared definition from different paths), and `stale` (digest drift: the recorded `inputDigest` no longer matches the current tree). Git failure during digest capture is
 fail-closed (0751 R1). All completion paths enforce: `feature advance`'s done hop, the engine `verifying→done` guard (`feature check --strict --as done`), and `feature sync`'s receipt-pending stop at `verifying` (1119 — sync holds a feature at `verifying` when its feature-verification receipt is missing, without persisting a BLOCKED replay).
 
-**Stale-consumer diagnosis (task 1185, A33).** A project-layer `feature-verification.yaml` override whose
+**Stale-consumer diagnosis (task 1185, A33).** A project-layer workflow override whose
 consumer script (project-rooted under `.spur/`) requires a generated-bundle export the shipped entry no
 longer provides (e.g. the retired `openInlineRunProjectDb` / `ArtifactDao`, §2.4) no longer surfaces as a
-bare `State "verifying" onEnter shell failed (exit 1)`: the denial and the nested `workflow run` failure
+bare `State "verifying" onEnter shell failed (exit 1)`: the denial and the failing shell action both
 append a named diagnosis — override path, consumer script, missing export(s), entry path — offering only
 the two remedies that can work (remove the override so the bundled definition applies; migrate the
 consumer to the app-owned `runFeatureVerification`), never reinstall/upgrade advice for an already-current

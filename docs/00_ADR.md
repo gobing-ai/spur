@@ -1917,7 +1917,10 @@ descriptions above record earlier stages, not supported configuration.
   failures trigger: `resolve-scope` fails 43%, `doc-sync` 35%, `verify` 21%. Consolidation also
   concentrates the expensive checks where they can be run once, in parallel, against a settled tree.
 - **Consequence:** the per-task pipeline gets cheaper and more local; the feature-scoped pass becomes
-  deliberately the slow one, and a feature is not done until it passes.
+  deliberately the slow one, and a feature is not done until it passes. *(Amended 2026-10-17 by
+  ADR-142: the pass is no longer a workflow of its own — it is `spur feature verify`, run from
+  `feature-lifecycle`'s `verifying` onEnter. The scope rule, the once-per-feature cadence and the
+  not-done-until-PASS boundary are unchanged; only the carrier is.)*
 - **Retains:** ADR-072 (one canonical pipeline per lifecycle boundary — the feature-scoped pass owns
   a boundary no existing pipeline owns, rather than duplicating one).
 - **Detail:** [workflow execution economy](design/workflow-execution-economy.md) §4.
@@ -2576,11 +2579,11 @@ has 11 fields, skill/agent output contracts carry no level, and `response.valida
 
 ## ADR-142: feature-lifecycle Owns Feature State and Feature Verification
 
-- **Status:** Proposed · **Date:** 2026-10-17 · **Feature:** D66 · **Amends:** ADR-119's consequence (the
-  feature-scoped pass runs as its own workflow)
+- **Status:** Accepted · **Date:** 2026-10-17 (accepted 2026-10-18, task 1252) · **Feature:** D66 ·
+  **Amends:** ADR-119's consequence (the feature-scoped pass runs as its own workflow)
 - **Decision:** feature state has one workflow owner, `feature-lifecycle`. Entering `verifying` runs
-  `spur feature verify` as a `command.gate`, and the verification receipt's verifier identity is the
-  resolved `feature-lifecycle` definition. `feature-verification.yaml` is deleted, and
+  `spur feature verify` from a `shell` onEnter action, and the verification receipt's verifier
+  identity is the resolved `feature-lifecycle` definition. `feature-verification.yaml` is deleted, and
   `wrapup-pipeline` no longer requests feature transitions.
 - **Why:** the separate workflow wrapped one verb and needed a nested-run workaround (1147 R4) to run
   from the lifecycle. Three writers of feature state (lifecycle, wrapup, idea handoff) made

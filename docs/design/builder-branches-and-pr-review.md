@@ -30,7 +30,7 @@ Feature L1 (child of the `spur builder` umbrella L). Three related gaps:
 
 In scope: a new read-only `spur builder show-branches` verb; replacing the pass-through `pr <op>`
 layer with four flat verbs (`pr-status`, `pr-check`, `pr-open`, `pr-review`) and shrinking
-`pr-review.yaml` to match; a from-scratch `/sp:dev-pr-review` with three modes; the governance
+the Codex review workflow to match; a from-scratch `/sp:dev-pr-review` with three modes; the governance
 consent amendments and CLI facade docs. Out of scope: branch deletion or pruning, renaming
 `builder`, changing the Codex request/collect core logic, full-history graphs, a Board view.
 
@@ -41,11 +41,11 @@ consent amendments and CLI facade docs. Out of scope: branch deletion or pruning
   consent-gate amendment. The operator's feature-L1 asks are that consent and must be recorded
   there: "add one more CLI `spur builder show-branches`" and the follow-up choice of four flat
   `pr-<verb>` verbs over a `pr` sub-noun (both 2026-10-16).
-- The eight `pr` ops are called only by `pr-review.yaml` (and its generated copy),
+- The eight `pr` ops are called only by the Codex review workflow (and its generated copy),
   `sp:pr-reviewing` and the `sp:spur-cli` builder reference; nobody runs a single op by hand.
 - Apps are thin transports (ADR-021): git logic belongs in `packages/app`, Commander wiring in
   `apps/cli/src/commands/builder/`.
-- `pr-review.yaml` consumes `--json`, `--status-file <f>` and exit codes
+- The workflow consumes `--json`, `--status-file <f>` and exit codes
   `0 ok · 1 usage · 2 hard failure · 3 wait timeout`. That contract carries over to the new verbs;
   the workflow's terminal states and `mode` values (full, submit, rerun) are unchanged.
 - The pr-review service already owns a `CommandRunner` seam (`createSpawnRunner`,
@@ -128,9 +128,10 @@ flags plus `--json` and `--status-file`.
 the request record stays in-process, the workflow no longer needs the `prSince`/`prHead`
 file-var plumbing.
 
-`pr-review.yaml` becomes `check → precheck → open → review` with the same terminal states
+The workflow becomes `check → precheck → open → review` with the same terminal states
 (`done`, `pending`, `failed`) and the same `mode` values (`rerun` → `--force`, `submit` →
 `--no-wait`). The `review` state also writes the findings and status artifacts that `fix` reads.
+*(Superseded two days later: D66 task 1251 deleted the definition outright — see §5.)*
 
 `spur builder pr <op>` stays for one release as a hidden alias that prints a deprecation line
 naming the replacement verb, then runs the unchanged pass-through `main()`. A parity test compares
@@ -142,7 +143,7 @@ each verb against the old op sequence on the same stubbed runner (stdout, status
 | --- | --- | --- |
 | `status` (default) | direct CLI | `spur builder show-branches --base <pr-base> --pr` scoped to current branch + `spur builder pr-status --json`; read-only |
 | `review` | local stack | `spur builder pr-check --scan-only` (BLOCK stops) → `/sp:dev-review --scope <base...HEAD changed files>`; findings by severity with `file:line`; nothing posted |
-| `review --codex` | `pr-review.yaml` | `mode=full`; `--force` → `mode=rerun`; `--no-wait` → `mode=submit` |
+| `review --codex` | flat verbs (was: the Codex review workflow, §5) | `pr-check` → `pr-open` → `pr-review`; `--force` re-requests, `--no-wait` returns `pending` |
 | `fix` | skill model work | findings from the local verdict or `pr-status --json` `.review`; validate each, fix, verify, one focused commit, push; never force-push |
 
 Retired modes print one notice and run their replacement: `full`→`review --codex`,
@@ -178,3 +179,10 @@ Retired modes print one notice and run their replacement: `full`→`review --cod
   because a request already made for the same head is collected, not repeated.
 - **Local review default.** Shifts cost from Codex quota to the local session; Codex stays one
   flag away.
+- **Superseded: the Codex review workflow is gone (D66 task 1251, 2026-10-18).** Shrinking the
+  definition to `check → precheck → open → review` (§3.2) left a four-state graph whose every
+  state ran one flat verb — a shell script in YAML, and the last caller keeping the definition
+  alive against its own zero real completions (0866). `--codex` now calls `pr-check` → `pr-open` →
+  `pr-review` → `pr-status` directly from `sp:pr-reviewing`, which is also where the mode→flag
+  mapping the YAML held now lives. The verb contracts in §2 and §4 are unchanged — only the
+  caller is. See [workflow-consolidation.md](workflow-consolidation.md).

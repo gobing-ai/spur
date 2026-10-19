@@ -290,9 +290,13 @@ Classes:
 | idea-pipeline · recommendation (`idea-pipeline.yaml:154`) | awk over `## Recommendation` → `unknown` pauses | rescue-only | `idea-recommendation` · proceed/reshape/drop · *pause* (fallback writes `unknown`) |
 | idea-pipeline · `needs_design` (`:140`) | agent-written JSON. A missing or corrupt file means design. | rescue-only | `needs-design` · design/skip · design |
 | history-anatomy · validation verdict (`history-anatomy.yaml:270`) | shell normalization of `Verdict:` lines; rescue shell step after it | rescue-only | `anatomy-validation-verdict` · PASS/FAIL · FAIL. Any exact `Verdict: FAIL` line short-circuits to FAIL without calling a maker. |
-| 7 operator gates: idea-eval, feature-check, design-approval, batch-create (`idea-pipeline.yaml:195/346/434/502`), task-pipeline approve (`task-pipeline.yaml:801`), wayfinder (`wayfinder-resolution.yaml:163`), wrapup branch cleanup (`wrapup-pipeline.yaml:443`) | `hitl.confirm` `mode: never` | keep-human (bundled). In evidence-mode overrides, the decision is catalog-backed. | `gate-evidence` · yes/no · defer to operator |
-| pr-review preflight/hygiene/precheck; wayfinder precheck/final; wrapup gates; feature-verification; history structure-gate; task-pipeline `command.gate`s | exact status files | keep-deterministic | — |
+| 4 operator gates: idea-eval, design-approval (`idea-pipeline.yaml:156/299`), task-pipeline approve (`task-pipeline.yaml:706`), wrapup branch cleanup (`wrapup-pipeline.yaml:197`) | `hitl.confirm` `mode: never` | keep-human (bundled). In evidence-mode overrides, the decision is catalog-backed. | `gate-evidence` · yes/no · defer to operator |
+| wrapup gates; history structure-gate; task-pipeline `command.gate`s | exact status files | keep-deterministic | — |
 | feature-lifecycle, task-lifecycle | status transitions | keep-deterministic | — |
+
+The bundled operator-gate count fell from 7 to 4 under feature D66 (2026-10-18): task 1250 folded
+idea-pipeline's `feature-check` and `batch-create` gates into the typed entry gate and `decide`
+routing, and task 1251 retired the wayfinder definition that carried the seventh.
 
 The evidence-mode confirm path routes through `DecisionService` (`gate-evidence`, slice S7, task
 1099; `decision-hitl-responder.ts:473`), so override gates get catalog entries and lifecycle events.

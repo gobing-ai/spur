@@ -179,6 +179,10 @@ Per workflow: keep / fix / retire with evidence from the baseline report. Initia
 `pr-review`, `wayfinder-resolution`, `decision-routing-example`. Retirement deletes the YAML and
 reroutes callers (ADR-076 "delete, don't layer"); §10 records the outcome.
 
+**Superseded (D66, 2026-10-18).** All three suspects are now deleted, as is `feature-verification`: §10's
+`wayfinder-resolution` **keep** verdict and the rest of this section are the dated 0938-window
+census, not current state. See [workflow-consolidation.md](workflow-consolidation.md) (ADR-142).
+
 ## 9. Sequencing and blast radius
 
 ```text

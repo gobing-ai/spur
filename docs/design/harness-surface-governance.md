@@ -196,7 +196,10 @@ preflight+hygiene, push+ensure, request+wait+collect — with only its own flags
 3 wait timeout` where exit 3 is `PENDING`, never a failure; justification: `pr [argv...]` was a raw
 pass-through with `allowUnknownOption`, so per-op help did not exist and typos were silently
 accepted, and the sequencing now lives once in `runPrVerb`, which lets `pr-review.yaml` shrink from
-eight states to four and drop the `prSince`/`prHead` `file.read.into-var` plumbing). Rejected shapes
+eight states to four and drop the `prSince`/`prHead` `file.read.into-var` plumbing; D66 task
+1251 then deleted that four-state definition outright — see
+[workflow-consolidation.md](workflow-consolidation.md) — which does not disturb the consent
+recorded here, whose subject is the verb set). Rejected shapes
 recorded at the gate: eight `pr <op>` Commander subcommands (adds a command layer), eight flat
 `pr-<op>` verbs (noisy `builder --help`, eight consent rows), and deleting `pr` immediately
 (installed plugin copies in other projects may still call it). `spur builder pr <op>` stays

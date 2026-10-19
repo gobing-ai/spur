@@ -292,7 +292,7 @@ spur feature check [options] [id]
 `--strict` elevates warnings to failures.
 
 Completion evidence: when the target is `done`, `feature check` validates the feature
-verification receipt recorded by the `feature-verification` workflow
+verification receipt recorded by `spur feature verify`
 (see `docs/design/workflow-execution-economy.md` — v1 receipt contract).
 
 ## spur feature verify
@@ -310,11 +310,14 @@ spur feature verify [options] [id]
 | `--run-id <id>` | Workflow run id the receipt binds to (env: `__runId`) |
 | `--cmd <command>` | Verification command override (env: `verificationCmd`) |
 
-The `feature-verification.yaml` pass (D63 task 0915; script-absorption PR-5 replaced the plugin
+The feature-verification pass (D63 task 0915; script-absorption PR-5 replaced the plugin
 script `feature-verification-steps`): runs the selected definition's command once (or `--cmd`)
 through the safe argv splitter and writes the run-scoped + feature-latest receipts and
 `.spur/run/<runId>-feature-verification.status`. Exit `0` after a completed pass (PASS or FAIL);
 `1` when the pass could not run (unsafe or missing ids, unknown feature, run-store errors).
+
+D66 task 1246 retired the wrapper definition that used to call this verb: `feature-lifecycle`'s
+`verifying` entry now invokes `spur feature verify` directly (ADR-142).
 
 ## spur feature handoff
 

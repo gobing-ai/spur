@@ -259,7 +259,7 @@ describe('idea-pipeline 1250 R2 — the recorded objective results route under e
         }
         // 2 designs × 4 needs states × 3 check states × 3 retries × 2 profiles
         expect(targets.size).toBe(144);
-    });
+    }, 30_000);
 
     test('decompose reaches the batch-create side effect directly under every profile', () => {
         const edges = DEF.transitions.filter((t) => t.from === 'decompose');

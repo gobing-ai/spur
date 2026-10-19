@@ -696,9 +696,10 @@ pipeline owns one lifecycle phase:
 | `idea-pipeline.yaml`        | Idea/planning → feature + tasks   | `/sp:dev-idea`, `/sp:dev-plan`    |
 | `wrapup-pipeline.yaml`      | Post-execution wrap-up            | `/sp:dev-wrap`, `/sp:dev-wrapall` |
 
-> 1251 (D66): the `pr-review` and `wayfinder-resolution` spines were retired — the PR sequencing
+> 1251 (D66): the PR-review and wayfinder-investigate spines were retired — the PR sequencing
 > lives in the `spur builder pr-status | pr-check | pr-open | pr-review` verbs, and the wayfinder
-> investigate hop is a skill procedure in `sp:wayfinder`.
+> investigate hop is a skill procedure in `sp:wayfinder`. 1246 retired the feature-verification
+> wrapper the same way: `feature-lifecycle`'s `verifying` entry calls `spur feature verify`.
 
 > 0946 (D64): the `decision-routing-example.yaml` authoring sample was retired from the catalogue
 > (zero runs, example-only — `docs/design/workflow-catalogue-refactor.md` §10); the pattern lives on

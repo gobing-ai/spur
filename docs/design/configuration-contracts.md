@@ -141,14 +141,13 @@ config/
   rules/
     recommended-pre-check.yaml      # default preset for `spur rule run`
     recommended-post-check.yaml     # stricter dev gate (coverage)
-  workflows/
-    basic.yaml                      # canonical implement → check → fix loop
-    feature-dev.yaml                # existing-feature reuse loop: roster-contract precheck → frozen-list runall → one-shot completion check (0782)
+  workflows/                        # the full bundled set after the D66 consolidation (ADR-142)
     task-lifecycle.yaml             # task status state-machine (ADR-022)
-    feature-lifecycle.yaml          # feature status state-machine (ADR-022)
+    feature-lifecycle.yaml          # feature status state-machine (ADR-022); `verifying` onEnter runs `spur feature verify` (1246)
     task-pipeline.yaml              # task execution pipeline with guards
-    planning-pipeline.yaml          # RETIRED (D5-K): no longer seeded or referenced; deleted on ADR-072 accept
-    pr-review.yaml                  # GitHub Codex PR-review spine (/sp:dev-pr-review; skill sp:pr-reviewing)
+    idea-pipeline.yaml              # idea → feature → AC → task batch; stops at handoff (1250)
+    wrapup-pipeline.yaml            # post-execution wrap-up for one task or a batch; never mutates status (1249)
+    history-anatomy.yaml            # diagnostic report over already-imported history (I8, ADR-079)
   tasks/
     section-matrix.yaml             # Section-Status-Matrix for `spur task check` (§7.4)
   transition-shims.json            # transition-shim manifest — removal worklist for the agent-role transition (task 0541, §2.5)

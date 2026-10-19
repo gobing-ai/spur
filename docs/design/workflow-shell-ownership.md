@@ -43,6 +43,12 @@ of five options under ADR-051:
   boundary. They are classified individually below, so every program has a recorded owner
   regardless of the boundary.
 
+**Superseded (D66, 2026-10-18).** Three of the surveyed definitions — `feature-verification.yaml`,
+`pr-review.yaml`, `wayfinder-resolution.yaml` — were deleted by feature D66 (ADR-142), so their
+rows below and their share of the 150-program total are a dated inventory, not a live one. The
+ownership classification the survey established is unaffected. See
+[workflow-consolidation.md](workflow-consolidation.md).
+
 Measurement method: parse each `config/workflows/*.yaml` state-machine definition; collect every
 `kind: shell` action in `onEnter` / `onExit` plus every transition `guard.kind === 'shell'`.
 Reproducible via any YAML parser over the same files.

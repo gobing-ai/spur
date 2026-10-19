@@ -1,5 +1,23 @@
 # Changelog
 
+## [Unreleased]
+
+### Changed
+- `feature-lifecycle` owns the feature verification pass: entering `verifying` calls `spur feature verify`, which records its own run row and a receipt whose verifier is the `feature-lifecycle` definition (D66)
+  <!-- src: config/workflows/feature-lifecycle.yaml:51, packages/app/src/workflow/feature-verification-run.ts:240 -->
+- `wrapup-pipeline` validates its task list with one `command.gate` and no longer changes feature status; run `spur feature sync <id>` as the follow-up (D66)
+  <!-- src: config/workflows/wrapup-pipeline.yaml:175, packages/app/src/workflow/wrapup/steps.ts:136 -->
+- `idea-pipeline` runs on the typed entry gate, the decision catalog and the selected executor, and no longer pauses at `feature-check` or `batch-create` (D66)
+  <!-- src: config/workflows/idea-pipeline.yaml:120, packages/app/src/workflow/actions/doctor-probe.ts:139 -->
+- `hitl.confirm`, `hitl.select` and `hitl.input` pause an `executor=host` run for the operator instead of answering `no` from the default responder (D66)
+  <!-- src: packages/app/src/workflow/decision-hitl-responder.ts:202, packages/app/src/services/workflow-resume-ops.ts:338 -->
+
+### Removed
+- `feature-verification.yaml`, `pr-review.yaml` and `wayfinder-resolution.yaml` leave `config/workflows`, the generated CLI config and the init scaffold; the `spur workflow` list now carries six definitions and no scaffold entry names a removed one (D66)
+  <!-- src: config/workflows/feature-lifecycle.yaml:51, repo-wide-tests/workflow-consolidation-absence.test.ts:1 -->
+
+BREAKING CHANGE: the three removed workflows no longer exist, so a project override of any of them stops applying. Migrate a `feature-verification` override into the `feature-lifecycle` `verifying` state, a `pr-review` override onto the `spur builder pr-*` verbs (`/sp:dev-pr-review` runs them directly), and a `wayfinder-resolution` override onto `sp/wayfinder` over the direct verbs. A verification receipt recorded under the retired `feature-verification` identity is stale after upgrade: run `spur feature verify <id>` once. A wrap-up step that relied on `wrapup-pipeline` advancing feature status must now call `spur feature sync <id>`.
+
 ## [0.4.13] - 2026-10-17
 
 ### Fixed

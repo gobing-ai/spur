@@ -348,10 +348,11 @@ calls and relative status writes in the invocation cwd (ADR-021 — the CLI is a
 - `pr-review`: `--no-wait` posts the request and returns `PENDING`; an already-reviewed HEAD is
   collected without a new request unless `--force` re-requests; a wait timeout exits 3 with
   `PENDING`, never `FAIL`.
-- The `pr-review.yaml` workflow (check → precheck → open → review) drives these verbs with `--json`
-  and `--status-file`. The former `spur builder pr <op>` pass-through stays registered but **hidden**
-  for one release: it prints one stderr deprecation line naming the replacement verb, then runs the
-  unchanged pass-through.
+- The verbs are the sequencing surface: D66 task 1251 retired the workflow that used to drive them
+  (check → precheck → open → review), and the `sp:pr-reviewing` skill now calls `pr-check` →
+  `pr-open` → `pr-review` → `pr-status` directly with `--json`. The former `spur builder pr <op>`
+  pass-through stays registered but **hidden** for one release: it prints one stderr deprecation
+  line naming the replacement verb, then runs the unchanged pass-through.
 
 <a id="spur-decision-list---layer---json--spur-decision-show-id---json--spur-decision-run-id---param---evidence---maker---model---json--spur-decision-status---json"></a>
 
