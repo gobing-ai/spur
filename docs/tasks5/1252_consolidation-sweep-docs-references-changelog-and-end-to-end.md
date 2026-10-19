@@ -4,7 +4,7 @@ name: "Consolidation sweep: docs, references, CHANGELOG and end-to-end proofs"
 status: done
 template: feature-impl
 created_at: 2026-10-18T05:10:06.873Z
-updated_at: "2026-10-19T01:38:27.056Z"
+updated_at: "2026-10-19T02:10:38.303Z"
 feature_id: D66
 priority: P2
 tags:
@@ -155,6 +155,8 @@ Deferred: `bun run spur-check` / `spur-check-feature` run at the pipeline's test
 
 **D66 forced re-verification repairs (2026-10-18):** recorded the three ADR-142 retirement decisions in `config/workflow-candidates.json:70` and pinned their presence in `repo-wide-tests/workflow-consolidation-absence.test.ts:107`; the original feature gate failed on real run history because these records were missing. Added `apps/cli/tests/workflow/idea-pipeline-e2e.test.ts:7`, which drives the bundled definition through host discovery, both catalog decision artifacts, operator pause and explicit cancellation with a terminal recorded run. Updated the satellite proof table and corrected its stale Proposed label. Restored the seeded-copy cleanup and removed wrap-up feature variable migration details in `CHANGELOG.md:19` from commit 609ec46f9. Preserved a stale manually copied local engine directory under `.spur/run/D66-engine-before-reinstall` and reinstalled the locked engine; dependency-drift-check now passes.
 
+**Pre-commit completion audit (2026-10-18):** removed the stale wrap-up feature preflight claim from `plugins/sp/skills/spur-dev/references/execution-worktree-setup.md:210-217`; worktree evidence staging still serves feature completion checks and wrap-up metrics, while task resolution checks identity and terminal status only. Aligned D66 Scope with ADR-142 and the refined 1246/1250 designs: direct shell entry, stale retired-verifier receipts, deterministic objective routing and discovery-only decision rescues. No behavior or acceptance criterion changed.
+
 ### Testing
 
 **Pipeline verify results**
@@ -165,7 +167,7 @@ Deferred: `bun run spur-check` / `spur-check-feature` run at the pipeline's test
 |-------------|--------|----------|
 | R1 | MET | `repo-wide-tests/workflow-consolidation-absence.test.ts:106-147`; absence scan passes and now pins all three required retirement decisions against real run history. |
 | R2 | MET | `repo-wide-tests/workflow-consolidation-absence.test.ts:149-165`; alias caller scan passes while the deprecated registration is retained. |
-| R3 | MET | `docs/00_ADR.md:2582-2595`; `docs/design/workflow-consolidation.md:4-14`; current-owner and retired-reference tests pass; corrected stale Proposed label. |
+| R3 | MET | `docs/00_ADR.md:2582-2595`; `docs/design/workflow-consolidation.md:4-14`; current-owner and retired-reference tests pass; corrected stale Proposed label. Pre-commit audit also aligned D66 Scope with the accepted design and corrected worktree evidence staging at `plugins/sp/skills/spur-dev/references/execution-worktree-setup.md:210-217`. |
 | R4 | MET | `CHANGELOG.md:19`; source-checked against commit 609ec46f9: removed workflows, override moves, seeded-copy cleanup, removed wrap-up feature variable and re-verification command are all present. |
 | R5 | MET | `apps/cli/tests/workflow/idea-pipeline-e2e.test.ts:7-72`; real bundled-run proof joins the passing feature-lifecycle and wrapup fixture proofs; fresh feature verification executes the required repo-wide and heavy gates. |
 

@@ -6,7 +6,7 @@ status: done
 priority: P2
 tags: []
 created_at: "2026-10-18T05:06:26.563Z"
-updated_at: "2026-10-19T01:07:47.639Z"
+updated_at: "2026-10-19T02:08:45.000Z"
 ---
 
 # D66: Workflow consolidation: one owner per lifecycle, D65 primitives everywhere
@@ -19,9 +19,9 @@ Reduce the bundled workflow set to the definitions that own a distinct lifecycle
 
 In scope:
 - Delete feature-verification.yaml, pr-review.yaml and wayfinder-resolution.yaml with their scaffold entries, callers, CLI help text, sp skill/command/agent references and owning docs.
-- feature-lifecycle: `verifying` entry runs `spur feature verify` as a command.gate; receipt verifier identity rebound to feature-lifecycle with a compatibility read for existing receipts; guarded active→verifying when all linked tasks are terminal.
+- feature-lifecycle: `verifying` entry calls `spur feature verify` directly from one shell action; the pass records its own feature-lifecycle run and receipt. Receipts from the retired verifier are stale and require re-verification; guarded active→verifying when linked-task completion allows it.
 - wrapup-pipeline: remove feature-transition/feature-verify, remove steps duplicated by task-pipeline's done close, typed task-resolve gate; keep doc-sync, doc-tripwire, metrics, branch-cleanup HITL.
-- idea-pipeline: objective gates as `decide` nodes, host/fleet executor stages, typed entry gate replacing doctor/agent-resolution shell, stale feature-dev.yaml reference fixed.
+- idea-pipeline: objective checks route on recorded deterministic results under every profile; `decide` actions rescue unclassifiable discovery signals. Host/fleet executor stages, an executor-aware entry check and removal of the stale feature-dev.yaml reference complete the migration.
 - Operator gates on host runs pause instead of resolving an absent answer to a denial.
 - Sync dev-wrap, dev-wrapall, dev-runall, dev-plan, dev-idea, dev-verifyall, dev-pr-review, sp:pr-reviewing, sp:wayfinder, spur-cli and spur-dev references, composition-lint, docs/03, docs/design satellites, ADR-119 consequence, CHANGELOG with BREAKING CHANGE note.
 

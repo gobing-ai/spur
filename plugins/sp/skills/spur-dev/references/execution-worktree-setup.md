@@ -208,10 +208,10 @@ the worktree directory before launching the loop.
 #### Evidence staging before the first task (create and reuse mode)
 
 `.spur/memory/evidence/` and `.spur/run/` are **untracked per-tree** planes, so a fresh worktree
-starts with neither while the invoking tree holds every earlier task's verdict. Both
-`preflightFeature` (`spur task wrapup resolve` → `spur feature check --strict --as done`
-with cwd = the worktree) and `runMetrics` resolve verdict artifacts relative to the tree they run
-in, so without this step an already-`done` linked task reads as missing evidence
+starts with neither while the invoking tree holds every earlier task's verdict. Feature completion
+checks (`spur feature check --strict --as done`) and wrap-up metrics resolve verdict artifacts relative
+to the tree they run in; wrap-up task resolution itself checks task identity and terminal status only.
+Without this step an already-`done` linked task reads as missing evidence
 (`L4.evidence-not-recoverable`, `L4.scenario-unverified`) and its metrics row degrades to
 `UNKNOWN`.
 
