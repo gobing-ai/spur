@@ -4,7 +4,7 @@ name: Make role-stage executor resolution keep the pinned executor's agent
 status: done
 template: issue
 created_at: 2026-10-18T19:33:16.740Z
-updated_at: "2026-10-19T07:38:35.742Z"
+updated_at: "2026-10-19T17:46:51.722Z"
 
 feature_id: B21
 priority: P1
@@ -97,16 +97,16 @@ auto/role selection walk instead of only the pre-spawn guard.
 
 | Requirement | Status | Evidence |
 |-------------|--------|----------|
-| R1 | MET | `packages/app/src/services/agent-run-executor.ts:459` applies the model preference to the initial dispatch only; `packages/app/tests/services/agent-service.test.ts:2914` dispatches pi with the override, escalates to claude, and asserts the replacement got `anthropic/claude-opus` — the test fails with the fix reverted |
+| R1 | MET | `packages/app/src/services/agent-run-executor.ts:459` applies the model preference to the initial dispatch only (anchor re-read this run); `packages/app/tests/services/agent-service.test.ts:2914` dispatches pi with the override, escalates to claude, and asserts the replacement got `anthropic/claude-opus` |
 | R2 | MET | `packages/app/tests/services/agent-service.test.ts:2914` (caller override on the initial executor) and `:2975` (pin with its own model, one attempt); the diff contains no model-name translation and no provider lookup |
-| R3 | MET | `packages/app/src/services/agent-resolver.ts:598-870` filters the declared-role, inherited-role and `agent.default`-role walks with `evaluateCapabilities`/`evaluateSessionCapabilities`; `packages/app/src/workflow/actions/agent-run.ts:691` forwards the same flag into the fresh disabled-pin re-resolution; `packages/app/tests/services/agent-resolver.test.ts:94` and `packages/app/tests/workflow/actions/agent-run.test.ts:3402` pin both paths |
-| R4 | MET | `cheapestEligibleExecutors` and the tier helpers are untouched (`packages/app/src/services/executor-tier.ts:36` only adds an optional mirror field), so rank order and config-order ties are unchanged; `packages/app/tests/services/agent-resolver.test.ts:94` asserts the no-requirement walk still selects the first candidate and the tier suite passes unchanged |
-| R5 | MET | `packages/app/tests/services/agent-service.test.ts:2914,2975`, `packages/app/tests/services/agent-resolver.test.ts:94-158` and `packages/app/tests/workflow/actions/agent-run.test.ts:3402` use fakes only (no provider discovery); `packages/app/tests/services/agent-resolver.test.ts:118` asserts the diagnostic names the rejected executor and `fsWrite: unknown` and carries no config/env values |
+| R3 | MET | `packages/app/src/services/agent-resolver.ts:598-870` filters the declared-role, inherited-role and `agent.default`-role walks with the existing attestation evaluators; `packages/app/src/workflow/actions/agent-run.ts:691` forwards the same flag into the fresh disabled-pin re-resolution; `packages/app/tests/services/agent-resolver.test.ts:94` and `packages/app/tests/workflow/actions/agent-run.test.ts:3402` pin both paths |
+| R4 | MET | `cheapestEligibleExecutors` and the tier helpers are untouched (`packages/app/src/services/executor-tier.ts:36` only adds an optional mirror field); `packages/app/tests/services/agent-resolver.test.ts:94` asserts the no-requirement walk still selects the first candidate |
+| R5 | MET | `packages/app/tests/services/agent-service.test.ts:2914,2975`, `packages/app/tests/services/agent-resolver.test.ts:94-158` and `packages/app/tests/workflow/actions/agent-run.test.ts:3402` use fakes only; `packages/app/tests/services/agent-resolver.test.ts:118` asserts the diagnostic names the rejected executor and unmet axes without config/env values |
 
 | Acceptance Criteria | Status | Evidence Type | Evidence |
 |---------------------|--------|---------------|----------|
-| AC1 | MET | test | `packages/app/tests/services/agent-service.test.ts:2914` — escalation dispatches the replacement's own model; reverting `packages/app/src/services/agent-run-executor.ts:459` makes it fail |
-| AC2 | MET | test | `packages/app/tests/services/agent-resolver.test.ts:94` (incapable first candidate skipped, attested next selected) and `packages/app/tests/workflow/actions/agent-run.test.ts:3200` (explicit incapable pin fails closed pre-spawn, no substitution) |
+| AC1 | MET | test | `packages/app/tests/services/agent-service.test.ts:2914` — escalation dispatches the replacement's own model; re-run this session: `bun test tests/services/agent-service.test.ts` 224 pass / 0 fail |
+| AC2 | MET | test | `packages/app/tests/services/agent-resolver.test.ts:94` (incapable first candidate skipped, attested next selected) and `packages/app/tests/workflow/actions/agent-run.test.ts:3200` (explicit incapable pin fails closed pre-spawn); re-run this session: resolver 32 pass / 0 fail, agent-run 166 pass / 0 fail |
 | AC3 | MET | test | `packages/app/tests/services/agent-resolver.test.ts:94` (no-requirement resolution unchanged) plus the untouched `packages/app/tests/services/executor-tier.test.ts` rank/tie suite |
 - Coverage: N/A (verdict-based; verify pipeline does not measure code coverage)
 

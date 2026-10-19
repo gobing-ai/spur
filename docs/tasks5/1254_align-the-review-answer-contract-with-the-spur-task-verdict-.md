@@ -4,7 +4,7 @@ name: Align the review answer contract with the spur task verdict vocabulary
 status: done
 template: issue
 created_at: 2026-10-18T19:33:15.525Z
-updated_at: "2026-10-19T07:08:12.453Z"
+updated_at: "2026-10-19T17:46:39.406Z"
 
 feature_id: F91
 priority: P1
@@ -91,14 +91,14 @@ level its own consumer derives, and pinned the consumer vocabularies with tests.
 
 | Requirement | Status | Evidence |
 |-------------|--------|----------|
-| R1 | MET | `config/workflows/task-pipeline.yaml:646-654` states both table headers, the requirement statuses `MET |
-| R2 | MET | `config/workflows/task-pipeline.yaml:649-652` names `deriveReviewConfidence` for the `## Review` section and `deriveVerifyConfidence` for the captured answer, and forbids repeating the section level; `packages/app/tests/workflow/task-pipeline-proof-chain.test.ts:830` asserts both derivations and both real gates in one run |
-| R3 | MET | `config/workflows/task-pipeline.yaml:653-654` keys AC rows on the task's own identities or a declared `AC-N` alias and states a task-local criterion needs no feature credit; `packages/app/tests/workflow/task-pipeline-proof-chain.test.ts:814` pins it |
-| R4 | MET | `packages/app/tests/workflow/task-pipeline-proof-chain.test.ts:830` and `:914` run the real `spur task verdict --from-answer` path for the documented answer, keep the open P1-P3 review-gate block, and reject prose-only, invalid-vocabulary and missing-row answers with their diagnostics |
+| R1 | MET | `config/workflows/task-pipeline.yaml:646-654` states both exact table headers, the requirement statuses MET/PARTIAL/UNMET (N/A for AC), evidence-type tokens including `+` compounds, one row per declared requirement/AC, and exactly one plain Verdict line (anchor re-read this run) |
+| R2 | MET | `config/workflows/task-pipeline.yaml:649-652` names `deriveReviewConfidence` for the Review section and `deriveVerifyConfidence` for the captured answer without changing either policy; `packages/app/tests/workflow/task-pipeline-proof-chain.test.ts:830` asserts both derivations in one run |
+| R3 | MET | `config/workflows/task-pipeline.yaml:653-654` keys AC rows on canonical scenario titles or declared `AC-N` aliases and states a task-local criterion needs no feature credit; `packages/app/tests/workflow/task-pipeline-proof-chain.test.ts:814` pins it |
+| R4 | MET | `packages/app/tests/workflow/task-pipeline-proof-chain.test.ts:830` and `:914` run the real `spur task verdict --from-answer` path, keep the open P1-P3 review-gate block, and reject prose-only, invalid-vocabulary and missing-row answers |
 
 | Acceptance Criteria | Status | Evidence Type | Evidence |
 |---------------------|--------|---------------|----------|
-| AC1 | MET | test | `packages/app/tests/workflow/task-pipeline-proof-chain.test.ts:830` — task verdict exits 0 on the certified answer, verdict artifact PASS |
+| AC1 | MET | test | `packages/app/tests/workflow/task-pipeline-proof-chain.test.ts:830` — verdict exits 0 on the certified answer, verdict artifact PASS; re-run this session: `bun test tests/workflow/task-pipeline-proof-chain.test.ts tests/services/task-record.test.ts` 177 pass / 0 fail |
 | AC2 | MET | test | `packages/app/tests/workflow/task-pipeline-proof-chain.test.ts:830` — Review section MEDIUM passes `spur task residual review-gate` while the answer derives HIGH and certifies |
 | AC3 | MET | test | `packages/app/tests/workflow/task-pipeline-proof-chain.test.ts:914` (three negative answers, non-PASS with diagnostics) and `:902` (open P2 → review.status FAIL) |
 - Coverage: N/A (verdict-based; verify pipeline does not measure code coverage)

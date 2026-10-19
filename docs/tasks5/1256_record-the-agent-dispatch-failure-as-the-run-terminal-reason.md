@@ -4,7 +4,7 @@ name: Record the agent dispatch failure as the run terminal reason
 status: done
 template: issue
 created_at: 2026-10-18T19:33:17.168Z
-updated_at: "2026-10-19T07:59:29.789Z"
+updated_at: "2026-10-19T17:46:52.486Z"
 
 feature_id: D3
 priority: P2
@@ -94,16 +94,16 @@ Threaded the failing action's identity into the existing run-closure classifier,
 
 | Requirement | Status | Evidence |
 |-------------|--------|----------|
-| R1 | MET | `packages/app/src/workflow/action-trace.ts:222` records the failing action at its boundary and `:250,371` consume it at `finalizeRun`/`closeRun`; `packages/app/tests/workflow/action-trace.test.ts:749` persists `failed-agent` through the real adapter with the action row keeping node, kind and ok, and `:788` covers `failed-timeout` |
-| R2 | MET | `packages/app/tests/workflow/action-trace.test.ts:770` keeps the gate classification after a recovered agent failure, `:788` lets an explicit `cancelled` reason outrank a live failure, `:806` isolates concurrent runs and `:820` keeps the reasonless null; declared/guard/outcome-unknown precedence is unchanged in `packages/app/src/workflow/terminal-reason.ts:129` |
-| R3 | MET | `packages/app/src/workflow/observability.ts:526` classifies once and `:531` persists that same value while `:538` emits it as `terminalReason` on `workflow.run.finalized`; `packages/app/tests/workflow/observability.test.ts:427` asserts persisted == emitted |
-| R4 | MET | `packages/app/tests/workflow/action-trace.test.ts:729` drives the closure through `DbWorkflowPersistenceAdapter` over a real project database for immediate failure, timeout, recovered-then-gate, cancellation, concurrent isolation and reasonless close; `packages/app/tests/workflow/terminal-reason.test.ts:146` covers the tracker semantics without stubbing classification |
+| R1 | MET | `packages/app/src/workflow/action-trace.ts:222` records the failing action at its boundary and `:250,371` consume it at finalize/close (anchor re-read this run); `packages/app/tests/workflow/action-trace.test.ts:749` persists `failed-agent` through the real adapter and `:788` covers `failed-timeout` |
+| R2 | MET | `packages/app/tests/workflow/action-trace.test.ts:770` keeps the gate classification after a recovered agent failure, `:788` lets an explicit `cancelled` reason outrank a live failure, `:806` isolates concurrent runs, `:820` keeps the reasonless null; declared/guard/outcome-unknown precedence unchanged in `packages/app/src/workflow/terminal-reason.ts:129` |
+| R3 | MET | `packages/app/src/workflow/observability.ts:526` classifies once, `:531` persists that same value and `:538` emits it as `terminalReason` on `workflow.run.finalized`; `packages/app/tests/workflow/observability.test.ts:427` asserts persisted == emitted |
+| R4 | MET | `packages/app/tests/workflow/action-trace.test.ts:729` drives closure through the real persistence adapter over a real project database for immediate failure, timeout, recovered-then-gate, cancellation, concurrent isolation and reasonless close; `packages/app/tests/workflow/terminal-reason.test.ts:146` covers the tracker semantics |
 
 | Acceptance Criteria | Status | Evidence Type | Evidence |
 |---------------------|--------|---------------|----------|
-| AC1 | MET | test | `packages/app/tests/workflow/action-trace.test.ts:749` (`failed-agent`) and `:788` (`failed-timeout`) read the persisted `runs.terminal_reason` back through `RunDao.traceRowById` |
+| AC1 | MET | test | `packages/app/tests/workflow/action-trace.test.ts:749` (`failed-agent`) and `:788` (`failed-timeout`) read persisted `runs.terminal_reason` back through the DAO; re-run this session: `bun test tests/workflow/action-trace.test.ts tests/workflow/observability.test.ts tests/workflow/terminal-reason.test.ts` 60 pass / 0 fail |
 | AC2 | MET | test | `packages/app/tests/workflow/action-trace.test.ts:770` (recovered failure + gate), `:788` (explicit cancellation/timeout precedence) and `:820` (reasonless close) |
-| AC3 | MET | test | `packages/app/tests/workflow/observability.test.ts:427,455` assert the emitted `terminalReason` equals the persisted reason; `packages/app/tests/workflow/action-trace.test.ts:806` asserts two runs keep separate contexts |
+| AC3 | MET | test | `packages/app/tests/workflow/observability.test.ts:427,455` assert emitted `terminalReason` equals the persisted reason; `packages/app/tests/workflow/action-trace.test.ts:806` asserts two runs keep separate contexts |
 - Coverage: N/A (verdict-based; verify pipeline does not measure code coverage)
 
 ### Review

@@ -4,7 +4,7 @@ name: "Harness operational seams: staging, dispatch, cleanup, scheduler and CLI 
 status: done
 template: issue
 created_at: 2026-10-19T02:36:33.290Z
-updated_at: "2026-10-19T16:37:53.110Z"
+updated_at: "2026-10-19T17:47:02.208Z"
 
 feature_id: D3
 priority: P2
@@ -94,14 +94,14 @@ or recommends a replay.
 
 | Requirement | Status | Evidence |
 |-------------|--------|----------|
-| R2 | MET | `apps/cli/src/commands/workflow/run.ts:140` polls only while the error is the engine's `Run not found:` and `:169` holds that single predicate; `apps/cli/tests/commands/workflow/run.test.ts:1164` asserts a non-absence failure rejects, and `:1276` drives a dropped `runs` table through the CLI to the read-failure diagnostic |
-| R7 | MET | `apps/cli/src/commands/workflow/run.ts:626` builds the deadline reason from the configured budget and `:634` the guidance that the worker may still be starting with inspection commands; `apps/cli/tests/commands/workflow/run.test.ts:1220,1258` assert the human and JSON wording, the run-id omission and the absence of replay advice |
-| R8 | MET | `apps/cli/src/commands/workflow/run.ts:645` keeps the unchanged started payload and plan stamp for a confirmed registration; `apps/cli/tests/commands/workflow/run.test.ts:1312` registers the row late and asserts `started`, the run id and exactly one dispatch, and both failure tests assert one dispatch |
+| R2 | MET | `apps/cli/src/commands/workflow/run.ts:140` polls only while the error is the engine's `Run not found:` and `:169` holds that single predicate (anchor re-read this run); `apps/cli/tests/commands/workflow/run.test.ts:1164` asserts a non-absence failure rejects, and `:1276` drives a dropped `runs` table to the read-failure diagnostic |
+| R7 | MET | `apps/cli/src/commands/workflow/run.ts:626` builds the deadline reason from the configured budget and `:634` the guidance that the worker may still be starting with inspection commands; `apps/cli/tests/commands/workflow/run.test.ts:1220,1258` assert the human and JSON wording, run-id omission and absence of replay advice |
+| R8 | MET | `apps/cli/src/commands/workflow/run.ts:645` keeps the unchanged started payload and plan stamp for a confirmed registration; `apps/cli/tests/commands/workflow/run.test.ts:1312` registers the row late and asserts `started`, the run id and exactly one dispatch |
 | R9 | MET | Four regression classes in human and JSON modes with dispatch counts: eventual/late registration (`apps/cli/tests/commands/workflow/run.test.ts:1164,1312`), never registered (`:1220,1258`) and store-read error (`:1276`) |
 
 | Acceptance Criteria | Status | Evidence Type | Evidence |
 |---------------------|--------|---------------|----------|
-| AC2 | MET | test | `apps/cli/tests/commands/workflow/run.test.ts:1220` (human) and `:1258` (JSON) report uncertainty and never replay; `:1312` proves a late registration still succeeds |
+| AC2 | MET | test | `apps/cli/tests/commands/workflow/run.test.ts:1220` (human) and `:1258` (JSON) report uncertainty and never replay; `:1312` proves a late registration still succeeds; re-run this session: `bun test tests/commands/workflow/run.test.ts` 47 pass / 0 fail |
 | AC5 | MET | test | `apps/cli/tests/commands/workflow/run.test.ts:1276` reports a genuine store error separately from missing registration, and `:1312` keeps the successful-start contract with one dispatch |
 - Coverage: N/A (verdict-based; verify pipeline does not measure code coverage)
 
