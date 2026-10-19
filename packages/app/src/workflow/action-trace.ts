@@ -51,7 +51,7 @@ import { createNodeFileSystem } from '@gobing-ai/ts-runtime';
 import { ensureDurablePlaneIgnored, runStoragePaths } from '../services/run-storage';
 import { resolveDurableArtifactPath } from './actions/run-path';
 import { projectShellInvocation } from './observability';
-import { classifyTerminalReason } from './terminal-reason';
+import { classifyTerminalReason, createCausalActionContext } from './terminal-reason';
 
 function isRecord(value: unknown): value is Record<string, unknown> {
     return typeof value === 'object' && value !== null && !Array.isArray(value);
@@ -148,6 +148,13 @@ export class WorkflowActionTraceWriter implements WorkflowPersistenceAdapter {
         { runId: string; node: string; kind: string; options?: Record<string, unknown> }
     >();
 
+    /**
+     * 1256 R1: the run's current causal action failure, tracked at the action boundary so the
+     * run-row closure can classify an immediate `agent.run` failure as `failed-agent` instead of
+     * falling through to `failed-check`. Run-scoped and cleared on progress/close (R2).
+     */
+    private readonly causal = createCausalActionContext();
+
     constructor(
         private readonly inner: WorkflowPersistenceAdapter,
         private readonly recordFailure?: ActionTraceFailureRecorder,
@@ -210,6 +217,9 @@ export class WorkflowActionTraceWriter implements WorkflowPersistenceAdapter {
         await this.guard('action.finish', { runId: origin?.runId ?? '', node: origin?.node, kind }, () =>
             this.inner.saveActionFinalize(actionId, status, durationMs, ok, kind, stamped, redactor),
         );
+        // 1256 R1/R2: remember this action's outcome for the run's closure. A success clears the
+        // context, so a failure the run later recovered from cannot relabel an unrelated close.
+        this.causal.noteActionFinalize(origin?.runId ?? '', kind, ok, stamped);
         this.boundaries.delete(actionId);
     }
 
@@ -234,6 +244,10 @@ export class WorkflowActionTraceWriter implements WorkflowPersistenceAdapter {
         // seam, so `runs.terminal_reason` always holds a declared or mapped value. The
         // engine also surfaces the failing action's error text as this reason (review
         // P2#2), so forward it as errorText for the failed-timeout/failed-agent checks.
+        // 1256 R1: the engine's reason is the failing action's error text, but not its kind —
+        // the action boundary supplies that identity, and it is consumed here so the run's
+        // terminal close classifies from its own evidence exactly once.
+        const causal = this.causal.consume(runId);
         await this.inner.finalizeRun(
             runId,
             status,
@@ -241,7 +255,12 @@ export class WorkflowActionTraceWriter implements WorkflowPersistenceAdapter {
             fence,
             reason === undefined
                 ? undefined
-                : classifyTerminalReason({ status, engineReason: reason, errorText: reason }),
+                : classifyTerminalReason({
+                      status,
+                      engineReason: reason,
+                      actionKind: causal?.kind ?? null,
+                      errorText: causal?.errorText ?? reason,
+                  }),
         );
     }
 
@@ -347,6 +366,9 @@ export class WorkflowActionTraceWriter implements WorkflowPersistenceAdapter {
         if (existing === undefined) {
             throw new RunRowNotFoundError(runId);
         }
+        // 1256 R1/R3: the inline-driver close classifies from the same run-scoped causal context
+        // the engine path uses, so both execution surfaces persist one reason.
+        const causal = this.causal.consume(runId);
         await this.inner.finalizeRun(
             runId,
             status,
@@ -354,7 +376,12 @@ export class WorkflowActionTraceWriter implements WorkflowPersistenceAdapter {
             undefined,
             reason === undefined
                 ? undefined
-                : classifyTerminalReason({ status, engineReason: reason, errorText: reason }),
+                : classifyTerminalReason({
+                      status,
+                      engineReason: reason,
+                      actionKind: causal?.kind ?? null,
+                      errorText: causal?.errorText ?? reason,
+                  }),
         );
         if (this.db === undefined) return { ok: true, startedAt: existing.started_at };
         const rows = await new ActionRunDao(this.db).actionRowsByRunId(runId);

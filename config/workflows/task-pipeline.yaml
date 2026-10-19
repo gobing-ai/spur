@@ -630,21 +630,29 @@ states:
                 # spec than the implement stage recorded in __agentRouting_implement.
                 # 0943 R1/R2: `--focus` carries the resolved lane depth — `functional` for the
                 # fast lane (traceability, which is the certification input), `all` otherwise.
-                # D65 1240: this answer IS the certification input — `spur task verdict --from-answer`
+                # D65 1240 + 1254: this answer IS the certification input — `spur task verdict --from-answer`
                 # derives the run's verdict from its requirement rows, so the answer contract is part
                 # of the prompt. A report body ending with a `| WBS | Verdict | P1 | … |` summary and
                 # no per-requirement rows derives UNKNOWN and can never certify, which looped every
                 # run through review -> remediate.
+                # 1254: the review emits TWO artifacts with different consumers — the `## Review`
+                # section (finding dispositions, deriveReviewConfidence) and this captured answer
+                # (requirement/AC evidence, deriveVerifyConfidence). The prompt has to teach both
+                # lanes and the fact that a single `Confidence:` line may only carry the second one.
+                # 1254: the prompt stays inside the 1000-char composition cap — the full
+                # contract (tables, vocabularies, the two confidence lanes, AC identity vs
+                # feature credit) is owned by `plugins/sp/agents/super-reviewer.md` Output Format,
+                # which this pointer names.
                 input: >-
-                    /sp:dev-review --tasks ${vars.wbs} --auto --focus ${vars.reviewFocus}
-                    Answer contract (machine-read): end with exactly one plain `Verdict: PASS|FAIL`
-                    line, preceded by a `| Req | Status | Evidence |` table with one row per
-                    requirement (R1, R2, ...) and a `| AC | Status | Evidence Type | Evidence |` table
-                    with one row per acceptance criterion, and one `Confidence: HIGH|MEDIUM|LOW` line
-                    whose level YOUR finding dispositions derive (ADR-141: no open P1-P3 and no
-                    carried residual is HIGH; a carried residual is MEDIUM; an open P1-P3 or a
-                    non-PASS verdict is LOW) — the gate recomputes it and rejects a disagreement.
-                    Every row cites a repo-relative `path:line`; no row may be omitted or merged.
+                    /sp:dev-review --tasks ${vars.wbs} --auto --focus ${vars.reviewFocus} Answer contract (full: super-reviewer Output
+                    Format). Two artifacts: the `## Review` section (dispositions, deriveReviewConfidence) and your captured answer
+                    (certification input for `spur task verdict`). The answer has one `Confidence: HIGH|MEDIUM|LOW` line, EVIDENCE-derived
+                    (deriveVerifyConfidence), never the section's disposition level. End with one `Verdict: PASS|PARTIAL|FAIL` line
+                    preceded by `| Req | Status | Evidence |` (one row per requirement; MET | PARTIAL | UNMET) and `| AC | Status |
+                    Evidence Type | Evidence |` (one row per AC; MET | PARTIAL | UNMET | N/A). Evidence types (`+` compound allowed): test
+                    | command | static-ref | manual-review | llm-judge | n/a. Evidence cells cite `path:line` or a named check. AC rows
+                    key on the task's identities or a declared `AC-N` alias; a linked scenario covers its task and a task-local criterion
+                    needs no feature credit. Open P1-P3 blocks completion.
                 # The captured review answer is the run's certification input (and the
                 # `task verdict` input below): expectFile fails the step when no answer landed.
                 answerFile: .spur/run/${vars.__runId}-review-answer.txt

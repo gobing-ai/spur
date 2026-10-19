@@ -7,7 +7,11 @@ import { getAgentSessionCapability, resolveAgentName } from '@gobing-ai/ts-ai-ru
 import type { ActionResult, ActionRunContext, ActionRunner } from '@gobing-ai/ts-dual-workflow-engine';
 import { createNodeFileSystem, NodeProcessExecutor } from '@gobing-ai/ts-runtime';
 import { resolvePlanningFolders } from '../../config/planning-folders';
-import { type AgentExecutionObserver, redactAndBound } from '../../observability/agent-execution';
+import {
+    type AgentExecutionObserver,
+    type DispatchAttemptIdentity,
+    redactAndBound,
+} from '../../observability/agent-execution';
 import type {
     AgentRunDeps,
     AgentRunInvocation,
@@ -27,7 +31,6 @@ import {
     type SessionCapabilityRecord,
 } from '../../services/capability-attestation';
 import { permissionFailureEvidence } from '../../services/failure-classification';
-import type { AgentRoutingIdentity } from '../../services/review-independence';
 import {
     checkExecutorIndependence,
     parseAgentRoutingIdentity,
@@ -684,9 +687,19 @@ export class AgentRunActionRunner implements ActionRunner {
                             'for this run. Restore executor availability or abort the run.',
                     };
                 }
+                // 1255 R1/R3: the re-resolution replaces the DISABLED executor with a fresh
+                // role pick, so the requirement flag rides along — the fresh candidate must be
+                // able to serve this stage (and the next-checked capability record below stays
+                // the re-resolved executor's).
+                const rerollCapabilityFlag = requiresCapabilitiesFlagForResolve(options.requiresCapabilities);
                 const rerolled =
                     typeof this.agentService.resolveRoleFresh === 'function'
-                        ? await this.agentService.resolveRoleFresh({ role })
+                        ? await this.agentService.resolveRoleFresh({
+                              role,
+                              ...(rerollCapabilityFlag !== undefined
+                                  ? { requiresCapabilities: rerollCapabilityFlag }
+                                  : {}),
+                          })
                         : undefined;
                 if (rerolled === undefined || !rerolled.ok) {
                     const reason = rerolled !== undefined ? rerolled.message : 'no agent service for re-resolution';
@@ -990,39 +1003,39 @@ export class AgentRunActionRunner implements ActionRunner {
             }
         }
 
-        // 0710 R4/R5: executor-distinctness policy — evaluated AFTER the reviewer
-        // routing is resolved and BEFORE any dispatch. P0/P1 tasks require a
-        // different executor spec than the implementation stage; every violation
-        // and every unknown fails closed with the configuration remedy.
+        // 0710 R4/R5 + 1260 R3: executor-distinctness is a property of the ACTUAL attempt, not of
+        // the pre-dispatch pin — the executor loop may replace the executor (escalation, disabled
+        // pin re-resolution), and a pin-derived identity would then describe an executor that never
+        // spawned. The policy is therefore evaluated in the executor's per-attempt
+        // `beforeDispatch` hook, where the identity is the one about to run.
         const requireDistinct = requiresDistinctExecutor(priority);
-        if (requireDistinct) {
-            const prior = parseAgentRoutingIdentity(context.vars[`__agentRouting_${compareExecutorWith}`]);
-            let current: AgentRoutingIdentity | undefined;
-            if (pin !== undefined) {
-                // B7 R1 (0894): the pin is the precheck resolution — no per-stage call.
-                current = { agent: pin.name };
-            } else {
-                try {
-                    const resolveFlags: Record<string, string> = { role: role as string };
-                    if (dispatchAgent !== undefined) resolveFlags.agent = dispatchAgent;
-                    if (model !== undefined) resolveFlags.model = model;
-                    const resolved = await this.agentService.resolve(resolveFlags);
-                    current = resolved.ok ? { agent: resolved.executor ?? resolved.agent } : undefined;
-                } catch {
-                    current = undefined;
-                }
-            }
+        const priorRoutingIdentity = requireDistinct
+            ? parseAgentRoutingIdentity(context.vars[`__agentRouting_${compareExecutorWith}`])
+            : undefined;
+        // Missing routing evidence is unrecoverable for every attempt, so it still fails before the
+        // dispatch chain starts (the same policy call, so the diagnostic stays identical).
+        if (requireDistinct && priorRoutingIdentity === undefined) {
             const verdict = checkExecutorIndependence({
                 priority: priority as string,
                 requireDistinct,
-                prior,
-                current,
+                prior: undefined,
+                current: { agent: dispatchAgent ?? agentLabel },
                 priorVar: `__agentRouting_${compareExecutorWith}`,
             });
-            if (!verdict.ok) {
-                return { ok: false, error: verdict.reason };
-            }
+            if (!verdict.ok) return { ok: false, error: verdict.reason };
         }
+        const independenceHook = async (attempt: DispatchAttemptIdentity): Promise<void> => {
+            if (!requireDistinct) return;
+            const verdict = checkExecutorIndependence({
+                priority: priority as string,
+                requireDistinct,
+                prior: priorRoutingIdentity,
+                // The attempt's profile identity; a bare-binary dispatch has no profile name.
+                current: { agent: attempt.executor ?? attempt.agent },
+                priorVar: `__agentRouting_${compareExecutorWith}`,
+            });
+            if (!verdict.ok) throw new Error(verdict.reason);
+        };
 
         // Hard token/cost budgets (0707 R4): validated at the trust boundary.
         const budget = parseAgentBudget(options);
@@ -1129,16 +1142,28 @@ export class AgentRunActionRunner implements ActionRunner {
                         context.signal !== undefined && steeringSignal !== undefined
                             ? AbortSignal.any([context.signal, steeringSignal])
                             : (context.signal ?? steeringSignal);
-                    traced = await this.agentService.runTraced(dispatchInput, flags, execution?.deps, {
-                        correlation: {
-                            runId: context.runId,
-                            executionId: crypto.randomUUID(),
-                            actionId,
-                        },
-                        ...(observer !== undefined ? { observer } : {}),
-                        heartbeatMs: AGENT_RUN_PROGRESS_INTERVAL_MS,
-                        ...(signal !== undefined ? { signal } : {}),
-                    });
+                    try {
+                        traced = await this.agentService.runTraced(dispatchInput, flags, execution?.deps, {
+                            beforeDispatch: independenceHook,
+                            correlation: {
+                                runId: context.runId,
+                                executionId: crypto.randomUUID(),
+                                actionId,
+                            },
+                            ...(observer !== undefined ? { observer } : {}),
+                            heartbeatMs: AGENT_RUN_PROGRESS_INTERVAL_MS,
+                            ...(signal !== undefined ? { signal } : {}),
+                        });
+                    } catch (error) {
+                        // 1260 R3: a policy refusal raised at the dispatch boundary (or an executor
+                        // surface failure) is a failed action, not an unhandled exception. The real
+                        // executor catches its own hook refusals pre-spawn; this keeps every surface
+                        // (including injected services) fail-closed with a named reason.
+                        return {
+                            ok: false,
+                            error: `agent.run: ${error instanceof Error ? error.message : String(error)}`,
+                        };
+                    }
                     if (this.steeringController === undefined) break;
                     const decision = await this.steeringController.boundary(traced.exitCode === 0);
                     if (decision.reason?.includes('retry-exhausted')) {
@@ -1625,9 +1650,14 @@ export class AgentRunActionRunner implements ActionRunner {
                           // shared by the success and failure outcomes.
                           ...(reresolvedVars ?? {}),
                           // 0710 R3: bounded routing evidence for later independence checks.
+                          // 1260 R3: the FINAL successful invocation names the executor profile and
+                          // model that actually ran; `resolvedAgent` alone loses the profile and the
+                          // replaced attempt's model.
                           [`__agentRouting_${context.stateOrNodeId}`]: JSON.stringify({
-                              agent: resolvedAgent,
-                              ...(model !== undefined ? { model } : {}),
+                              agent: invocation?.executor ?? resolvedAgent,
+                              ...((invocation?.model ?? model) !== undefined
+                                  ? { model: invocation?.model ?? model }
+                                  : {}),
                           }),
                           ...(steeringNote !== undefined ? { __steeringNote: steeringNote } : {}),
                       }
@@ -1705,6 +1735,19 @@ function buildResultData(
         data.stderrTail = tail(redactAndBound(stderr, secretValues, Number.MAX_SAFE_INTEGER), 4096);
     }
     return data;
+}
+
+/**
+ * 1255 R3: serialize this action's capability requirements into the `requiresCapabilities`
+ * resolve flag. The resolver's role walk reads the same flag the pre-spawn guard does, so a
+ * fresh role re-resolution (disabled pin) filters candidates by capability too. An invalid
+ * shape serializes to `undefined` here — the fail-closed validation stays at the pre-spawn
+ * boundary (`parseRequiresCapabilities` at the flag-building step), never duplicated leniently.
+ */
+function requiresCapabilitiesFlagForResolve(raw: unknown): string | undefined {
+    const parsed = parseRequiresCapabilities(raw);
+    if (!parsed.ok || Object.keys(parsed.requires).length === 0) return undefined;
+    return JSON.stringify(parsed.requires);
 }
 
 function asOptionalString(value: unknown): string | undefined {

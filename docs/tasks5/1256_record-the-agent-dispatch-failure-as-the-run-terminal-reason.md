@@ -1,16 +1,18 @@
 ---
 schema_version: 1
 name: Record the agent dispatch failure as the run terminal reason
-status: todo
+status: done
 template: issue
 created_at: 2026-10-18T19:33:17.168Z
-updated_at: "2026-10-19T06:37:46.575Z"
+updated_at: "2026-10-19T07:59:29.789Z"
 
 feature_id: D3
 priority: P2
 ac_altitude: task-local
 estimate_hours: 4
 dependencies: []
+done_forced: "false"
+done_reason: unforced close; PASS artifact at .spur/memory/evidence/1256-verdict.json
 ---
 
 ## 1256. Record the agent dispatch failure as the run terminal reason
@@ -27,18 +29,18 @@ Valid cause-attribution gap: classifyTerminalReason has an agent.run branch, but
 
 ### Requirements
 
-- [ ] R1. A new run closing directly because its current agent.run action failed records failed-agent; a definite timeout records failed-timeout through the existing classifier. The associated action row retains the node, selected executor/agent and redacted error evidence.
-- [ ] R2. Gate/guard failures, explicit declared terminal reasons, cancellation, interruption, paused-operator, retry exhaustion and outcome-unknown keep existing precedence and vocabulary. A previously recovered agent failure must not relabel a later unrelated close.
-- [ ] R3. The persisted run terminal reason and workflow.run.finalized event report the same classification in inline and engine-backed execution. Existing callers that supply no reason retain their legacy null behavior.
-- [ ] R4. Real persistence-adapter tests cover immediate agent failure, timeout, gate failure, recovered failure followed by a gate, explicit cancellation/retry bound, outcome-unknown and concurrent run isolation.
+- [x] R1. A new run closing directly because its current agent.run action failed records failed-agent; a definite timeout records failed-timeout through the existing classifier. The associated action row retains the node, selected executor/agent and redacted error evidence.
+- [x] R2. Gate/guard failures, explicit declared terminal reasons, cancellation, interruption, paused-operator, retry exhaustion and outcome-unknown keep existing precedence and vocabulary. A previously recovered agent failure must not relabel a later unrelated close.
+- [x] R3. The persisted run terminal reason and workflow.run.finalized event report the same classification in inline and engine-backed execution. Existing callers that supply no reason retain their legacy null behavior.
+- [x] R4. Real persistence-adapter tests cover immediate agent failure, timeout, gate failure, recovered failure followed by a gate, explicit cancellation/retry bound, outcome-unknown and concurrent run isolation.
 
 Out of scope: dispatch retry policy, quota/auth handling, new terminal enum members, database columns/migrations, Board UI redesign, historical DB repair and executor/model resolution.
 
 ### Acceptance Criteria
 
-- [ ] AC1 — An immediate agent failure and timeout persist the existing specific terminal reasons (req: R1, R4)
-- [ ] AC2 — Recovered failures and explicit lifecycle reasons retain the true terminal cause (req: R2, R4)
-- [ ] AC3 — Event and stored reason agree across execution paths without cross-run leakage (req: R3, R4)
+- [x] AC1 — An immediate agent failure and timeout persist the existing specific terminal reasons (req: R1, R4)
+- [x] AC2 — Recovered failures and explicit lifecycle reasons retain the true terminal cause (req: R2, R4)
+- [x] AC3 — Event and stored reason agree across execution paths without cross-run leakage (req: R3, R4)
 
 ### Q&A
 
@@ -58,11 +60,11 @@ Dependencies: none; 1255 fixes dispatch input, 1260 owns failover policy, 1257 w
 
 ### Plan
 
-- [ ] 1. Reproduce through the real decorator chain: failing fake agent action closes with failed-check despite kind agent.run; capture the stored row and finalized event (R1, R3).
-- [ ] 2. Add regressions for recovered-failure/later-gate, concurrent runs, explicit cancel/bound, timeout and outcome-unknown precedence (R2, R4).
-- [ ] 3. Thread current causal action context into the existing closure classifier and keep persisted/event classification identical; retain null/no-reason compatibility (R1-R3).
-- [ ] 4. Run focused terminal-reason, trace, observability and workflow service tests inside packages/app; run app/CLI typechecks and a hermetic CLI trace probe (R4).
-- [ ] 5. Update the owning contract, run task-local gate, then review/verify. Do not mutate historical run rows or taxonomy to make tests green.
+- [x] 1. Reproduce through the real decorator chain: failing fake agent action closes with failed-check despite kind agent.run; capture the stored row and finalized event (R1, R3).
+- [x] 2. Add regressions for recovered-failure/later-gate, concurrent runs, explicit cancel/bound, timeout and outcome-unknown precedence (R2, R4).
+- [x] 3. Thread current causal action context into the existing closure classifier and keep persisted/event classification identical; retain null/no-reason compatibility (R1-R3).
+- [x] 4. Run focused terminal-reason, trace, observability and workflow service tests inside packages/app; run app/CLI typechecks and a hermetic CLI trace probe (R4).
+- [x] 5. Update the owning contract, run task-local gate, then review/verify. Do not mutate historical run rows or taxonomy to make tests green.
 
 ### Root Cause
 
@@ -70,15 +72,67 @@ WorkflowActionTraceWriter already receives action kind, run/node identity and th
 
 ### Solution
 
-<!-- Filled during implementation: file:line change map and concise rationale. -->
+Threaded the failing action's identity into the existing run-closure classifier, so an immediate
+`agent.run` failure is recorded as `failed-agent` instead of falling through to `failed-check`.
+
+| File | Change |
+| --- | --- |
+| `packages/app/src/workflow/terminal-reason.ts:47-127` | New exported `CausalActionContext` (plus `CausalActionFailure`): a run-scoped record of the last failed action's kind and its own bounded error text, set at the action boundary, cleared by any successful action, consumed at the run's terminal close, and bounded to 64 live runs. Pure, no schema and no new terminal enum member. |
+| `packages/app/src/workflow/action-trace.ts:222,250,371` | `WorkflowActionTraceWriter` notes every action finalize against its boundary run id (success clears, failure replaces) and consumes the context at both closures — `finalizeRun` (engine/lifecycle) and `closeRun` (inline driver). The classified value is exactly one classification per close. |
+| `packages/app/src/workflow/observability.ts:526,633` | `ObservableWorkflowAdapter` uses its own tracker from its `saveActionFinalize` hook and classifies once, then persists that value and emits it as `terminalReason` on `workflow.run.finalized` (new optional field on `WorkflowRunFinalizedEvent`), so the row and the event agree. |
+| `packages/app/src/index.ts:1156-1164` | Barrel exports the tracker and its result type for the app layer. |
+| `docs/design/workflow-catalogue-refactor.md:59-68` | Owning taxonomy contract records the causal-identity rule, the precedence that stays authoritative (declared reason, guard/bound, outcome-unknown) and the event/row agreement. |
+| `packages/app/tests/workflow/action-trace.test.ts:729-835` | Real persistence-adapter closure tests: immediate agent failure → `failed-agent` (action row keeps node/kind/ok), recovered failure + gate → `failed-guard`, cancellation and timeout precedence, concurrent-run isolation, and reasonless-close null compatibility. |
+| `packages/app/tests/workflow/observability.test.ts:424-481` | The emitted event's `terminalReason` equals the persisted reason for an immediate failure, a recovered failure and a reasonless close. |
+| `packages/app/tests/workflow/terminal-reason.test.ts:146-203` | Tracker semantics: failure/timeout classification, progress clearing, declared/outcome-unknown precedence, run isolation, destructive consume. |
 
 ### Testing
 
-<!-- Filled during verification: regression command(s), outcomes, coverage claim or N/A. -->
+**Pipeline verify results**
+
+- Verdict: PASS (from verdict artifact)
+
+| Requirement | Status | Evidence |
+|-------------|--------|----------|
+| R1 | MET | `packages/app/src/workflow/action-trace.ts:222` records the failing action at its boundary and `:250,371` consume it at `finalizeRun`/`closeRun`; `packages/app/tests/workflow/action-trace.test.ts:749` persists `failed-agent` through the real adapter with the action row keeping node, kind and ok, and `:788` covers `failed-timeout` |
+| R2 | MET | `packages/app/tests/workflow/action-trace.test.ts:770` keeps the gate classification after a recovered agent failure, `:788` lets an explicit `cancelled` reason outrank a live failure, `:806` isolates concurrent runs and `:820` keeps the reasonless null; declared/guard/outcome-unknown precedence is unchanged in `packages/app/src/workflow/terminal-reason.ts:129` |
+| R3 | MET | `packages/app/src/workflow/observability.ts:526` classifies once and `:531` persists that same value while `:538` emits it as `terminalReason` on `workflow.run.finalized`; `packages/app/tests/workflow/observability.test.ts:427` asserts persisted == emitted |
+| R4 | MET | `packages/app/tests/workflow/action-trace.test.ts:729` drives the closure through `DbWorkflowPersistenceAdapter` over a real project database for immediate failure, timeout, recovered-then-gate, cancellation, concurrent isolation and reasonless close; `packages/app/tests/workflow/terminal-reason.test.ts:146` covers the tracker semantics without stubbing classification |
+
+| Acceptance Criteria | Status | Evidence Type | Evidence |
+|---------------------|--------|---------------|----------|
+| AC1 | MET | test | `packages/app/tests/workflow/action-trace.test.ts:749` (`failed-agent`) and `:788` (`failed-timeout`) read the persisted `runs.terminal_reason` back through `RunDao.traceRowById` |
+| AC2 | MET | test | `packages/app/tests/workflow/action-trace.test.ts:770` (recovered failure + gate), `:788` (explicit cancellation/timeout precedence) and `:820` (reasonless close) |
+| AC3 | MET | test | `packages/app/tests/workflow/observability.test.ts:427,455` assert the emitted `terminalReason` equals the persisted reason; `packages/app/tests/workflow/action-trace.test.ts:806` asserts two runs keep separate contexts |
+- Coverage: N/A (verdict-based; verify pipeline does not measure code coverage)
 
 ### Review
 
-<!-- Filled during review: P1-P4 findings, residual risk, and final disposition. -->
+#### Review Report — 1256
+**Scope:** task 1256 diff — `packages/app/src/workflow/terminal-reason.ts`, `action-trace.ts`, `observability.ts`, `packages/app/src/index.ts`, `docs/design/workflow-catalogue-refactor.md`, three workflow test files
+**Dimensions:** functional, security, efficiency, correctness, usability, architecture
+**Verdict:** PASS
+
+##### Findings (ranked)
+
+| # | Priority | Dimension | Finding | Location | Disposition |
+|---|----------|-----------|---------|----------|-------------|
+| 1 | P4 (advisory) | correctness | `causalErrorText` reads only the top-level `error`/`message`/`reason` string of an action result. A diagnostic nested inside `data` records the action kind but no text — the kind still classifies `failed-agent`, and the engine reason is passed as the fallback error text, so the timeout branch stays reachable; a nested-only timeout string would classify as `failed-agent`. | `packages/app/src/workflow/terminal-reason.ts:66` | ACCEPTED |
+| 2 | P4 (advisory) | architecture | Each persistence decorator owns a separate tracker instance by design: they classify the same run's closure independently, and a shared tracker would let whichever runs first consume the context and leave the other classifying without it (the persisted row could then disagree with the event). The cost is a few duplicated lines of Map handling. | `packages/app/src/workflow/observability.ts:497` | ACCEPTED |
+
+##### Functional Traceability
+
+| Req | Status | Evidence |
+|-----|--------|----------|
+| R1 | MET | `packages/app/src/workflow/action-trace.ts:222,250,371` track and consume the causal context at both closures; `packages/app/tests/workflow/action-trace.test.ts:749` asserts the persisted `failed-agent` through the real SQLite adapter, with the action row keeping node/kind/ok, and `:788` covers `failed-timeout` |
+| R2 | MET | `packages/app/tests/workflow/action-trace.test.ts:770` (recovered failure then gate failure → `failed-guard`), `:788` (declared `cancelled` outranks a live failure), `:806` (concurrent runs stay isolated) and `:820` (reasonless close keeps the legacy null); the declared-reason/guard/outcome-unknown precedence in `classifyTerminalReason` is unchanged and re-pinned in `packages/app/tests/workflow/terminal-reason.test.ts:170` |
+| R3 | MET | `packages/app/src/workflow/observability.ts:526-543` classifies once and both persists and emits that value (`WorkflowRunFinalizedEvent.terminalReason`, `:77-87`); `packages/app/tests/workflow/observability.test.ts:427` asserts `persisted === emitted === 'failed-agent'` and `:455` the recovered/reasonless cases |
+| R4 | MET | The closures run against `DbWorkflowPersistenceAdapter` over a real in-memory project DB (`packages/app/tests/workflow/action-trace.test.ts:729-835`): immediate failure, timeout, recovered-then-gate, cancellation, concurrent isolation, reasonless null; no fake-level stubbing of the classification path |
+
+**Residual risk:** the two P4 advisories above. The nested-diagnostic gap is bounded: the kind-based classification (`failed-agent`) is correct regardless, and only the timeout sub-classification depends on the text.
+
+**Next:** close 1256 (`record` writes Testing from the PASS verdict; no open P1-P3).
+Confidence: MEDIUM
 
 ### References
 
@@ -131,3 +185,8 @@ Implement-ready checklist (specification, not an implementation PASS):
 ```
 
 ### History
+
+- 2026-10-19T07:46:32.942Z todo → wip (system)
+- 2026-10-19T07:59:27.836Z wip → testing (system)
+- 2026-10-19T07:59:29.784Z testing → done (system)
+

@@ -209,12 +209,28 @@ export async function runRetention(db: DbAdapter, cwd: string, now: Date = new D
     return result;
 }
 
+/**
+ * Rows one store may delete per `runRetention` invocation (task 1258 R1). A single daily pass used to
+ * execute each store's whole expired backlog in one write transaction; the cap keeps that write
+ * bounded and lets the next daily pass continue, with no persisted cursor to repair.
+ */
+const RETENTION_BATCH_SIZE = 1000;
+
 /** Purge finished rule evaluations older than the window. `created_at` is ISO TEXT. */
 async function purgeRuleEvalRuns(db: DbAdapter, now: Date): Promise<number> {
+    // Bounded key-selection DELETE (task 1258 R1): the selection predicate is the age predicate, so
+    // the rows chosen for deletion are exactly the rows the unrestricted form would have removed.
+    // The key is `rowid`, not the declared PK: SQLite permits a NULL TEXT primary key, so a producer
+    // that inserts a row without one would make `id IN (...)` silently match nothing. No ORDER BY:
+    // these stores have no index on the age column, and ordering would buy a sort over the backlog
+    // for no benefit — every eligible row is equally purgeable and the next pass takes the rest.
     return purgeRows(
         db,
-        `DELETE FROM rule_eval_runs WHERE created_at < ?`,
+        `DELETE FROM rule_eval_runs WHERE rowid IN (
+             SELECT rowid FROM rule_eval_runs WHERE created_at < ? LIMIT ?
+         )`,
         new Date(now.getTime() - RULE_EVAL_RUN_RETENTION_DAYS * DAY_MS).toISOString(),
+        RETENTION_BATCH_SIZE,
     );
 }
 
@@ -222,8 +238,12 @@ async function purgeRuleEvalRuns(db: DbAdapter, now: Date): Promise<number> {
 async function purgeQueueJobs(db: DbAdapter, now: Date): Promise<number> {
     return purgeRows(
         db,
-        `DELETE FROM queue_jobs WHERE status IN ('completed', 'failed') AND updated_at < ?`,
+        `DELETE FROM queue_jobs WHERE rowid IN (
+             SELECT rowid FROM queue_jobs
+             WHERE status IN ('completed', 'failed') AND updated_at < ? LIMIT ?
+         )`,
         now.getTime() - QUEUE_JOB_RETENTION_DAYS * DAY_MS,
+        RETENTION_BATCH_SIZE,
     );
 }
 
@@ -231,8 +251,11 @@ async function purgeQueueJobs(db: DbAdapter, now: Date): Promise<number> {
 async function purgeLedger(db: DbAdapter, now: Date): Promise<number> {
     return purgeRows(
         db,
-        `DELETE FROM history_import_ledger WHERE imported_at < ?`,
+        `DELETE FROM history_import_ledger WHERE rowid IN (
+             SELECT rowid FROM history_import_ledger WHERE imported_at < ? LIMIT ?
+         )`,
         new Date(now.getTime() - LEDGER_RETENTION_DAYS * DAY_MS).toISOString(),
+        RETENTION_BATCH_SIZE,
     );
 }
 
@@ -262,10 +285,14 @@ function pruneBackups(cwd: string, now: Date): number {
     return reclaimed;
 }
 
-/** One bounded DELETE with its changed-row count; a SQL failure is swallowed into `0`. */
-async function purgeRows(db: DbAdapter, sql: string, cutoff: string | number): Promise<number> {
+/**
+ * One bounded DELETE with its changed-row count; a SQL failure is swallowed into `0`.
+ * 1258 R3: the count comes from SQLite's own `changes()`, so it reports rows actually removed on
+ * this pass — never the rows the store merely considered.
+ */
+async function purgeRows(db: DbAdapter, sql: string, ...params: Array<string | number>): Promise<number> {
     try {
-        await db.run(sql, cutoff);
+        await db.run(sql, ...params);
         const row = await db.queryFirst<{ n: number }>('SELECT changes() AS n');
         return row?.n ?? 0;
     } catch {

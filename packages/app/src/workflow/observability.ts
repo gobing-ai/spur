@@ -32,7 +32,7 @@ type BranchVars = Parameters<WorkflowPersistenceAdapter['commitJoin']>[3];
 import type { EventBus } from '@gobing-ai/ts-infra';
 import type { AgentExecutionEvent } from '../observability/agent-execution';
 import type { SteeringAck } from './steering';
-import { classifyTerminalReason } from './terminal-reason';
+import { classifyTerminalReason, createCausalActionContext, type TerminalReason } from './terminal-reason';
 
 /** The engine does not export its reseed-result type; derive it from the interface. */
 type ReseedResult = Awaited<ReturnType<WorkflowPersistenceAdapter['reseedRun']>>;
@@ -77,6 +77,11 @@ export interface WorkflowRunStartedEvent extends WorkflowEventBase {
 export interface WorkflowRunFinalizedEvent extends WorkflowEventBase {
     /** The terminal status the run settled on. */
     status: WorkflowStatus;
+    /**
+     * 1256 R3: the SAME closed terminal reason the run row persisted, so event consumers never
+     * re-derive (or disagree with) the stored classification. Absent on legacy/reasonless closes.
+     */
+    terminalReason?: TerminalReason;
 }
 /** A state-machine phase changed status (entered / completed / failed). */
 export interface WorkflowPhaseEvent extends WorkflowEventBase {
@@ -485,6 +490,12 @@ export class ObservableWorkflowAdapter implements WorkflowPersistenceAdapter {
     private readonly workflowNames = new Map<string, string>();
     private readonly actions = new Map<string, { runId: string; node: string; kind: string }>();
 
+    /**
+     * 1256 R1/R3: the run's current causal action failure, tracked at the action boundary so the
+     * emitted `workflow.run.finalized` reason agrees with the persisted `runs.terminal_reason`.
+     */
+    private readonly causal = createCausalActionContext();
+
     constructor(
         private readonly inner: WorkflowPersistenceAdapter,
         private readonly bus: WorkflowObservabilityBus,
@@ -510,18 +521,23 @@ export class ObservableWorkflowAdapter implements WorkflowPersistenceAdapter {
         // event consumers and `runs.terminal_reason` agree on the closed enum (0937 R4).
         // The reason doubles as the failing action's error text (review P2#2), so pass
         // it as errorText too — failed-timeout classification stays reachable.
-        await this.inner.finalizeRun(
-            runId,
-            status,
-            completedAt,
-            fence,
+        // 1256 R1/R3: the action boundary supplies the failing action's KIND, which the engine
+        // reason does not carry; it is consumed here so the event and the row classify identically.
+        const causal = this.causal.consume(runId);
+        const terminalReason =
             reason === undefined
                 ? undefined
-                : classifyTerminalReason({ status, engineReason: reason, errorText: reason }),
-        );
+                : classifyTerminalReason({
+                      status,
+                      engineReason: reason,
+                      actionKind: causal?.kind ?? null,
+                      errorText: causal?.errorText ?? reason,
+                  });
+        await this.inner.finalizeRun(runId, status, completedAt, fence, terminalReason);
         await this.bus.emit('workflow.run.finalized', {
             ...this.envelope(runId, completedAt),
             status,
+            ...(terminalReason !== undefined ? { terminalReason } : {}),
             severity: status === 'failed' ? 'error' : status === 'paused' ? 'warning' : 'info',
         });
         // Do not clear correlation state here: the upstream engine deliberately
@@ -612,6 +628,9 @@ export class ObservableWorkflowAdapter implements WorkflowPersistenceAdapter {
             // Suppress an uncorrelated event instead of violating the non-empty runId contract.
             return;
         }
+        // 1256 R1/R2: remember this action's outcome for the run's closure; a success clears the
+        // run's context so a recovered failure cannot relabel a later, unrelated close.
+        this.causal.noteActionFinalize(action.runId, kind, ok, result);
         this.actions.delete(actionId);
         const projected = projectResult(result);
         await this.bus.emit('workflow.action.finished', {

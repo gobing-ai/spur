@@ -194,3 +194,81 @@ describe('compactDatabase WAL checkpoint mode (task 0803 R2)', () => {
         }
     });
 });
+
+/**
+ * 1258 — the existing expiry policy executed in bounded batches. One pass used to delete a store's
+ * entire expired backlog in a single write transaction; each store now removes at most 1000 rows
+ * per invocation and the next daily pass continues from committed state (no cursor to repair).
+ */
+describe('bounded retention batches (1258)', () => {
+    test('a backlog above the cap drains across repeatable passes with accurate per-store counts', async () => {
+        const db = await createMigratedDb({ url: ':memory:' });
+        const expired = 1001;
+        for (let i = 0; i < expired; i++) await seedRuleEvalRun(db, 200, `bulk-${i}`);
+        await seedRuleEvalRun(db, 10, 'fresh'); // inside the window → never eligible
+        await seedQueueJob(db, 'scheduler.custom', 'completed', 90); // eligible
+        await seedQueueJob(db, 'scheduler.custom', 'pending', 90); // live → protected
+        await seedLedger(db, 'ledger-old', 400);
+        await seedLedger(db, 'ledger-fresh', 10); // inside the window → kept
+        for (let i = 0; i < expired; i++) await seedLedger(db, `ledger-bulk-${i}`, 400);
+
+        const first = await runRetention(db, '/nonexistent-cwd', NOW);
+        expect(first.ruleEvalRuns).toBe(1000);
+        expect(first.ledgerRows).toBe(1000);
+        expect(first.queueJobs).toBe(1);
+
+        // Committed state carries the progress: the second pass takes the remainder (+ the sentinel).
+        const second = await runRetention(db, '/nonexistent-cwd', NOW);
+        expect(second.ruleEvalRuns).toBe(1); // the 1001st expired eval run
+        expect(second.ledgerRows).toBe(2); // ledger-old + ledger-bulk-1000
+        expect(second.queueJobs).toBe(0);
+
+        const third = await runRetention(db, '/nonexistent-cwd', NOW);
+        expect(third.ruleEvalRuns).toBe(0);
+        expect(third.ledgerRows).toBe(0);
+
+        // Protected rows survive every pass: inside-window rows and the non-terminal job.
+        const keptRuns = await db.queryAll<{ run_id: string }>('SELECT run_id FROM rule_eval_runs');
+        expect(keptRuns.map((row) => row.run_id)).toEqual(['fresh']);
+        const keptLedger = await db.queryAll<{ record_hash: string }>('SELECT record_hash FROM history_import_ledger');
+        expect(keptLedger.map((row) => row.record_hash)).toEqual(['ledger-fresh']);
+        const keptJobs = await db.queryAll<{ status: string }>('SELECT status FROM queue_jobs');
+        expect(keptJobs.map((row) => row.status)).toEqual(['pending']);
+    }, 30000);
+
+    test('cutoff rows stay intact while eligible rows satisfy the cap exactly', async () => {
+        const db = await createMigratedDb({ url: ':memory:' });
+        // Boundary: the predicate is `< cutoff`, so a row exactly at the cutoff is NOT eligible.
+        await seedRuleEvalRun(db, 90, 'at-cutoff');
+        await seedRuleEvalRun(db, 90.5, 'just-past');
+
+        const result = await runRetention(db, '/nonexistent-cwd', NOW);
+
+        expect(result.ruleEvalRuns).toBe(1);
+        const kept = await db.queryAll<{ run_id: string }>('SELECT run_id FROM rule_eval_runs');
+        expect(kept.map((row) => row.run_id)).toEqual(['at-cutoff']);
+    }, 30000);
+
+    test('an empty store reports zero without disturbing the other stores', async () => {
+        const db = await createMigratedDb({ url: ':memory:' });
+        await seedLedger(db, 'only-ledger', 400);
+        const result = await runRetention(db, '/nonexistent-cwd', NOW);
+        expect(result.ruleEvalRuns).toBe(0);
+        expect(result.queueJobs).toBe(0);
+        expect(result.ledgerRows).toBe(1);
+    }, 30000);
+
+    test('one failing store stays best-effort and does not skip the others', async () => {
+        const db = await createMigratedDb({ url: ':memory:' });
+        await seedRuleEvalRun(db, 200, 'doomed');
+        await seedLedger(db, 'ledger-doomed', 400);
+        // Break only the queue store's selection: the other two must still run.
+        await db.exec('DROP TABLE queue_jobs');
+
+        const result = await runRetention(db, '/nonexistent-cwd', NOW);
+
+        expect(result.queueJobs).toBe(0);
+        expect(result.ruleEvalRuns).toBe(1);
+        expect(result.ledgerRows).toBe(1);
+    }, 30000);
+});

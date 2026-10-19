@@ -7,9 +7,22 @@ import {
     type StageRecord,
     TIER_RANK,
 } from '@gobing-ai/spur-domain';
-import { type AgentName, type DoctorRunner, resolveAgentName, TIER1_PRIORITY } from '@gobing-ai/ts-ai-runner';
+import {
+    type AgentName,
+    type DoctorRunner,
+    getAgentSessionCapability,
+    resolveAgentName,
+    TIER1_PRIORITY,
+} from '@gobing-ai/ts-ai-runner';
 import { stringFlag } from './agent-run-flags';
 import type { AgentResolveResult, AgentResolveSource, AgentServiceContext, AgentServiceOutput } from './agent-service';
+import {
+    evaluateCapabilities,
+    evaluateSessionCapabilities,
+    parseRequiresCapabilities,
+    type RequiresCapabilities,
+    SESSION_CAPABILITY_AXES,
+} from './capability-attestation';
 import {
     type AgentExecutorConfig,
     cheapestEligibleExecutors,
@@ -296,7 +309,14 @@ export class AgentResolver {
                     message: `Unknown declared role: '${declaredRole}'. Accepted: ${this.roleVocabulary()}.`,
                 };
             }
-            return this.resolveRole(declaredRole, roleTier, doctorRunner, 'declared');
+            return this.resolveRole(
+                declaredRole,
+                roleTier,
+                doctorRunner,
+                'declared',
+                'role',
+                this.stageCapabilityRequirements(flags),
+            );
         }
 
         // Stage-registry adaptive model routing (R1/R2/R3). Explicit flag only:
@@ -324,7 +344,14 @@ export class AgentResolver {
                     `Warning: ignoring inherited role '${inherited}' — not in ${this.roleVocabulary()}`,
                 );
             } else {
-                return this.resolveRole(inherited, inheritedTier, doctorRunner, 'inherited');
+                return this.resolveRole(
+                    inherited,
+                    inheritedTier,
+                    doctorRunner,
+                    'inherited',
+                    'role',
+                    this.stageCapabilityRequirements(flags),
+                );
             }
         }
 
@@ -567,6 +594,8 @@ export class AgentResolver {
                 // declared role resolution — the four selection sources (role /
                 // pin / default / escalated) must stay distinct in attribution.
                 source === 'default' ? 'default' : 'role',
+                // 1255 R3: a stage's declared capabilities filter the walk.
+                this.stageCapabilityRequirements(flags),
             );
         }
 
@@ -704,6 +733,11 @@ export class AgentResolver {
         // when the selector came from `agent.default` so the selection source
         // stays distinguishable in attribution.
         source: AgentResolveSource = 'role',
+        // 1255 R3: the dispatching stage's declared capability requirements. When present,
+        // a candidate that cannot satisfy them is skipped here instead of being selected and
+        // then refused by the pre-spawn guard, which would hard-fail a dispatch a later
+        // eligible candidate could have served. Absent (the pre-1255 contract) walks unchanged.
+        requires?: Partial<RequiresCapabilities>,
     ): Promise<AgentResolveResult> {
         // B7 R6 (task 0895): a fresh-roster re-resolve temporarily overrides the
         // construction-time executors so the eligibility walk sees a mid-run
@@ -717,6 +751,9 @@ export class AgentResolver {
             };
         }
         const eligible = cheapestEligibleExecutors(executors, roleTier);
+        // 1255 R3/R5: capability-rejected candidates are named in the failure diagnostic —
+        // executor and unmet axes only, never config or env values.
+        const capabilitySkipped: string[] = [];
         for (const executor of eligible) {
             const canonical = resolveAgentName(executor.agent);
             if (canonical === undefined) {
@@ -725,6 +762,13 @@ export class AgentResolver {
                     exitCode: 2,
                     message: `Executor '${executor.name}' for role '${role}' maps to unknown agent '${executor.agent}'`,
                 };
+            }
+            if (requires !== undefined) {
+                const unmet = this.unmetStageCapability(executor, requires);
+                if (unmet !== undefined) {
+                    capabilitySkipped.push(`${executor.name} (${unmet})`);
+                    continue;
+                }
             }
             const usable = await this.checkUsable(canonical, doctorRunner);
             if (usable.ok) {
@@ -768,8 +812,59 @@ export class AgentResolver {
         return {
             ok: false,
             exitCode: 1,
-            message: `No usable executor for role '${role}' (tier ${roleTier}) — tried: ${tried} (spur agent doctor)`,
+            message:
+                `No usable executor for role '${role}' (tier ${roleTier}) — tried: ${tried} (spur agent doctor)` +
+                (capabilitySkipped.length > 0
+                    ? `; skipped for unmet stage requiresCapabilities: ${capabilitySkipped.join(', ')}`
+                    : ''),
         };
+    }
+
+    /**
+     * 1255 R3/R5: one candidate's unmet stage capabilities, or `undefined` when it satisfies
+     * them. Mirrors the pre-spawn guard's two evaluations (executor attestation, then the
+     * runner's session-capability record) so role selection and admission answer the same
+     * question. Pure and process-free; the returned clause names axes and states only.
+     */
+    private unmetStageCapability(
+        executor: AgentExecutorConfig,
+        requires: Partial<RequiresCapabilities>,
+    ): string | undefined {
+        const evaluation = evaluateCapabilities(requires, executor);
+        if (!evaluation.ok) {
+            const unmet = evaluation.entries
+                .filter((entry) => !entry.satisfied)
+                .map((entry) => `${entry.axis}: ${entry.state}`)
+                .join(', ');
+            return `unmet execution capability (${unmet})`;
+        }
+        if (!SESSION_CAPABILITY_AXES.some((axis) => requires[axis] !== undefined)) return undefined;
+        const canonical = resolveAgentName(executor.agent);
+        const record = canonical !== undefined ? getAgentSessionCapability(canonical) : undefined;
+        const session = evaluateSessionCapabilities(requires, record, executor.agent);
+        return session.ok ? undefined : `unmet session capability (${session.observed})`;
+    }
+
+    /**
+     * 1255 R3: the capability requirements a dispatch declared, read from the same
+     * `requiresCapabilities` flag the pre-spawn guard consumes. Absent or malformed reads as
+     * "no requirements" — the pre-spawn guard owns fail-closed validation, so selection never
+     * becomes a second, more lenient schema.
+     */
+    private stageCapabilityRequirements(
+        flags: Record<string, string | boolean>,
+    ): Partial<RequiresCapabilities> | undefined {
+        const raw = stringFlag(flags, 'requiresCapabilities', '');
+        if (raw === '') return undefined;
+        let value: unknown;
+        try {
+            value = JSON.parse(raw);
+        } catch {
+            return undefined;
+        }
+        const parsed = parseRequiresCapabilities(value);
+        if (!parsed.ok) return undefined;
+        return Object.keys(parsed.requires).length > 0 ? parsed.requires : undefined;
     }
 
     /**

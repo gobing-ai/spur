@@ -1,16 +1,18 @@
 ---
 schema_version: 1
 name: Bound project database growth from imported history tables
-status: todo
+status: done
 template: issue
 created_at: 2026-10-18T19:33:17.981Z
-updated_at: "2026-10-19T06:37:49.119Z"
+updated_at: "2026-10-19T15:49:25.746Z"
 
 feature_id: E5
 priority: P2
 ac_altitude: task-local
 estimate_hours: 3
 dependencies: []
+done_forced: "false"
+done_reason: unforced close; PASS artifact at .spur/memory/evidence/1258-verdict.json
 ---
 
 ## 1258. Bound project database growth from imported history tables
@@ -28,18 +30,18 @@ The confirmed remaining issue is unbounded deletion in the existing retention pa
 
 ### Requirements
 
-- [ ] R1. Each existing SQL retention store deletes at most 1000 expired rows per runRetention invocation, using a bounded key-selection DELETE. Keep the existing age predicates, cutoff inclusivity and terminal-queue status predicate unchanged.
-- [ ] R2. Repeated passes drain eligible backlog without a new persisted cursor. An interrupted pass leaves only committed deletions and the next pass safely continues. Fresh rows, pending/processing jobs, imported target history and task_run_links are preserved.
-- [ ] R3. RetentionResult reports actual deletions per store; a store error remains best-effort and does not skip unrelated stores. Preserve backup policy and existing compaction gates/PASSIVE checkpoint semantics. A row cap is not a wall-clock or database-size guarantee.
-- [ ] R4. Database-backed regressions exercise more than one batch, repeated passes, cutoff boundaries, live queue protection, no eligible rows and one-store failure. Keep the existing daily caller and result shape compatible.
+- [x] R1. Each existing SQL retention store deletes at most 1000 expired rows per runRetention invocation, using a bounded key-selection DELETE. Keep the existing age predicates, cutoff inclusivity and terminal-queue status predicate unchanged.
+- [x] R2. Repeated passes drain eligible backlog without a new persisted cursor. An interrupted pass leaves only committed deletions and the next pass safely continues. Fresh rows, pending/processing jobs, imported target history and task_run_links are preserved.
+- [x] R3. RetentionResult reports actual deletions per store; a store error remains best-effort and does not skip unrelated stores. Preserve backup policy and existing compaction gates/PASSIVE checkpoint semantics. A row cap is not a wall-clock or database-size guarantee.
+- [x] R4. Database-backed regressions exercise more than one batch, repeated passes, cutoff boundaries, live queue protection, no eligible rows and one-store failure. Keep the existing daily caller and result shape compatible.
 
 Out of scope: raw history retention or reset, scheduler retry/lease changes, async dispatch, new CLI/config/schema, new maintenance schedule, parallel delete workers and automatic VACUUM policy changes.
 
 ### Acceptance Criteria
 
-- [ ] AC1 — A backlog exceeding 1000 eligible rows drains across bounded repeatable retention passes (req: R1, R2, R4)
-- [ ] AC2 — Cutoff and live/provenance rows remain intact while actual deletion counts agree (req: R1, R2, R3, R4)
-- [ ] AC3 — Store failures stay isolated and daily/compaction contracts remain compatible (req: R3, R4)
+- [x] AC1 — A backlog exceeding 1000 eligible rows drains across bounded repeatable retention passes (req: R1, R2, R4)
+- [x] AC2 — Cutoff and live/provenance rows remain intact while actual deletion counts agree (req: R1, R2, R3, R4)
+- [x] AC3 — Store failures stay isolated and daily/compaction contracts remain compatible (req: R3, R4)
 
 ### Q&A
 
@@ -60,11 +62,11 @@ Dependencies: none. 1259 owns detached registration diagnostics; do not add queu
 
 ### Plan
 
-- [ ] 1. Add a failing migrated-DB regression with 1001+ expired rows and protected cutoff/live/provenance sentinels; assert the first pass deletes at most 1000 per store (R1, R2, R4).
-- [ ] 2. Replace the unrestricted DELETE inputs with bounded key subqueries and one shared internal batch size; preserve eligibility and best-effort error handling (R1, R3).
-- [ ] 3. Repeat passes to prove eventual drain, accurate counts and safe restart from committed state; cover empty stores and one-store failure without mocking the SQL behavior (R2-R4).
-- [ ] 4. Run domain retention tests inside packages/domain and existing app history daily tests inside packages/app; verify unchanged result shape and compaction semantics (R3, R4).
-- [ ] 5. Update the existing daily retention contract, record reproducible fixture counts, run task-local gate and verify against these ACs. Do not run destructive cleanup against the operator database.
+- [x] 1. Add a failing migrated-DB regression with 1001+ expired rows and protected cutoff/live/provenance sentinels; assert the first pass deletes at most 1000 per store (R1, R2, R4).
+- [x] 2. Replace the unrestricted DELETE inputs with bounded key subqueries and one shared internal batch size; preserve eligibility and best-effort error handling (R1, R3).
+- [x] 3. Repeat passes to prove eventual drain, accurate counts and safe restart from committed state; cover empty stores and one-store failure without mocking the SQL behavior (R2-R4).
+- [x] 4. Run domain retention tests inside packages/domain and existing app history daily tests inside packages/app; verify unchanged result shape and compaction semantics (R3, R4).
+- [x] 5. Update the existing daily retention contract, record reproducible fixture counts, run task-local gate and verify against these ACs. Do not run destructive cleanup against the operator database.
 
 ### Root Cause
 
@@ -72,15 +74,64 @@ purgeRows executes each caller's whole DELETE without LIMIT or a bounded key sub
 
 ### Solution
 
-<!-- Filled during implementation: file:line change map and concise rationale. -->
+Bounded each existing retention store's per-pass deletion at 1000 rows, keeping the current expiry
+policy, result shape and daily caller unchanged.
+
+| File | Change |
+| --- | --- |
+| `packages/domain/src/retention.ts:217` | New internal `RETENTION_BATCH_SIZE = 1000` (no config key, no public surface). |
+| `packages/domain/src/retention.ts:220,236,250` | Each store's `DELETE` becomes a bounded key-selection delete (`rowid IN (SELECT rowid … WHERE <age predicate> LIMIT 1000)`, intentionally unordered (no index backs these age columns; every eligible row is equally purgeable)), with the store's existing age predicate, `<` cutoff and terminal-queue status predicate preserved in both the selection and the deletion. `rowid` rather than the declared PK because SQLite allows a NULL TEXT primary key, which made the first `id IN (…)` attempt silently match nothing. |
+| `packages/domain/src/retention.ts:293-302` | `purgeRows` takes variadic params so cutoff and limit bind as real statement parameters (no string interpolation), and still reports rows actually removed via `changes()`; a failing store is swallowed into `0` and never skips the others. |
+| `docs/design/history-cli-contracts.md:192-200` | Owning daily-retention contract records the batch cap, the `rowid` selection rule, the absence of a cursor (committed deletions are the progress), preserved best-effort/result semantics, and that this is an execution bound rather than a byte/size guarantee. |
+| `packages/domain/tests/retention.test.ts:203-274` | Migrated-DB regressions: a 1001+ expired-row backlog drains across repeated passes with exact per-store counts and protected sentinels; cutoff boundary (`<`); empty store; one failing store (dropped table) leaving the others successful. Verified red against the previous unrestricted deletes. |
 
 ### Testing
 
-<!-- Filled during verification: regression command(s), outcomes, coverage claim or N/A. -->
+**Pipeline verify results**
+
+- Verdict: PASS (from verdict artifact)
+
+| Requirement | Status | Evidence |
+|-------------|--------|----------|
+| R1 | MET | `packages/domain/src/retention.ts:220` bounds rule-eval deletion to the shared 1000-row batch with `rowid IN (SELECT rowid … LIMIT ?)`, `:236` does the same for terminal queue jobs keeping the status predicate, and `:250` for the ledger keeping the `<` cutoff; `packages/domain/tests/retention.test.ts:203` asserts exactly 1000 rows removed on the first pass of a 1001-row backlog |
+| R2 | MET | `packages/domain/tests/retention.test.ts:203` runs three passes over the same store (1000 → remainder → 0) with no persisted cursor, and asserts the inside-window rule-eval and ledger rows plus the `pending` job survive every pass |
+| R3 | MET | `packages/domain/src/retention.ts:293` binds cutoff and limit as statement parameters and reports `SELECT changes()`; `packages/domain/tests/retention.test.ts:260` drops the queue table and asserts the other two stores still delete, with `RetentionResult` unchanged |
+| R4 | MET | `packages/domain/tests/retention.test.ts:203-274` exercises multi-batch drain, cutoff boundary, live-queue protection, empty store and one-store failure on a migrated database with fixed `now`; the existing daily caller is unchanged and `packages/app` history-service tests pass (70) |
+
+| Acceptance Criteria | Status | Evidence Type | Evidence |
+|---------------------|--------|---------------|----------|
+| AC1 | MET | test | `packages/domain/tests/retention.test.ts:203` — 1001 eligible rows drain across bounded, repeatable passes |
+| AC2 | MET | test | `packages/domain/tests/retention.test.ts:240` (cutoff row intact, only the past-cutoff row removed) and `:203` (protected in-window rows and the live job survive; counts equal rows actually removed) |
+| AC3 | MET | test | `packages/domain/tests/retention.test.ts:260` (one failing store isolated) plus the unchanged daily/compaction tests in `packages/domain/tests/retention.test.ts` and `packages/app` history-service |
+- Coverage: N/A (verdict-based; verify pipeline does not measure code coverage)
 
 ### Review
 
-<!-- Filled during review: P1-P4 findings, residual risk, and final disposition. -->
+#### Review Report — 1258
+**Scope:** task 1258 diff — `packages/domain/src/retention.ts`, `packages/domain/tests/retention.test.ts`, `docs/design/history-cli-contracts.md`
+**Dimensions:** functional, security, efficiency, correctness, usability, architecture
+**Verdict:** PASS
+
+##### Findings (ranked)
+
+| # | Priority | Dimension | Finding | Location | Disposition |
+|---|----------|-----------|---------|----------|-------------|
+| 1 | P4 (advisory) | efficiency | The bounded selection is deliberately unordered: none of the three stores has an index on its age column (`rule_eval_runs.created_at`, `history_import_ledger.imported_at`), so an `ORDER BY` would add a sort over the eligible backlog for no benefit. The scan cost is the predicate scan the previous unrestricted `DELETE` already paid, now stopped after 1000 deletions. | `packages/domain/src/retention.ts:217-260` | ACCEPTED |
+| 2 | P4 (advisory) | correctness | A store whose selection errors still reports `0` rather than distinguishing "nothing eligible" from "failed" — unchanged best-effort semantics (R3), and the failing-store regression asserts the other two stores still succeed. | `packages/domain/src/retention.ts:293` | ACCEPTED |
+
+##### Functional Traceability
+
+| Req | Status | Evidence |
+|-----|--------|----------|
+| R1 | MET | `packages/domain/src/retention.ts:220,236,250` cap each store at `RETENTION_BATCH_SIZE` (1000) with a `rowid IN (SELECT rowid … LIMIT ?)` delete, keeping each store's age predicate, `<` cutoff and terminal-status predicate; `packages/domain/tests/retention.test.ts:203` asserts exactly 1000 removed on the first pass of a 1001+ backlog |
+| R2 | MET | `packages/domain/tests/retention.test.ts:203` repeats passes (1000 → remainder → 0) with no cursor, and asserts the inside-window rule-eval/ledger rows and the `pending` queue job survive every pass |
+| R3 | MET | `packages/domain/src/retention.ts:293-302` binds params (no interpolation) and reports `changes()`; `RetentionResult` keeps its shape; `packages/domain/tests/retention.test.ts:260` drops one store's table and asserts the other two still delete |
+| R4 | MET | The regressions run on `createMigratedDb` with fixed `now` (`packages/domain/tests/retention.test.ts:203-274`): multi-batch drain, cutoff boundary, live-queue protection, empty store and one-store failure; `packages/app` history daily tests (70 pass) confirm the existing caller and result shape |
+
+**Residual risk:** both findings are advisories; the pass is an execution bound, not a byte bound (documented in the owning contract).
+
+**Next:** close 1258 (`record` writes Testing from the PASS verdict; no open P1-P3).
+Confidence: MEDIUM
 
 ### References
 
@@ -133,3 +184,8 @@ Implement-ready checklist (specification, not an implementation PASS):
 ```
 
 ### History
+
+- 2026-10-19T15:43:08.038Z todo → wip (system)
+- 2026-10-19T15:49:23.905Z wip → testing (system)
+- 2026-10-19T15:49:25.741Z testing → done (system)
+

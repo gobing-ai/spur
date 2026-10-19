@@ -720,3 +720,115 @@ describe('WorkflowActionTraceWriter — branch pass-through (engine 0.5.15)', ()
         ]);
     });
 });
+
+/**
+ * 1256 — the run-row closure classifies from the action boundary it already observes. Before this
+ * the ordinary closure passed only the engine reason, so an immediate `agent.run` failure fell
+ * through to `failed-check`; the persisted reason and the emitted event now agree on the closed enum.
+ */
+describe('WorkflowActionTraceWriter terminal-reason causality (1256 R1-R4)', () => {
+    let base: string;
+    let projectDb: InlineRunProjectDb;
+    const CAUSAL_RUN = 'run-1256-causal';
+
+    beforeAll(async () => {
+        base = mkdtempSync(join(tmpdir(), 'spur-1256-causal-'));
+        projectDb = await openInlineRunProjectDb(base);
+    });
+
+    afterAll(() => {
+        projectDb.close();
+        rmSync(base, { recursive: true, force: true });
+    });
+
+    beforeEach(async () => {
+        await projectDb.adapter.run('DELETE FROM action_runs');
+        await projectDb.adapter.run('DELETE FROM runs');
+    });
+
+    async function runRow(runId: string) {
+        const inner = new DbWorkflowPersistenceAdapter(projectDb.adapter);
+        await inner.createRun({ ...runRecord(), id: runId });
+        return { inner, writer: new WorkflowActionTraceWriter(inner) };
+    }
+
+    const reasonOf = async (runId: string): Promise<string | null | undefined> =>
+        (await new RunDao(projectDb.adapter).traceRowById(runId))?.terminal_reason;
+
+    test('an immediate agent.run failure persists failed-agent through the ordinary closure', async () => {
+        const { writer } = await runRow(CAUSAL_RUN);
+        const actionId = await writer.saveActionStart(CAUSAL_RUN, 'implement', 'agent.run');
+        await writer.saveActionFinalize(actionId, 'failed', 1200, false, 'agent.run', {
+            error: 'executor exited 1',
+        });
+        await writer.finalizeRun(CAUSAL_RUN, 'failed', '2026-10-19T00:00:10.000Z', undefined, 'executor exited 1');
+
+        expect(await reasonOf(CAUSAL_RUN)).toBe('failed-agent');
+        // The action row keeps its own detailed evidence (R1).
+        const rows = await new ActionRunDao(projectDb.adapter).actionRowsByRunId(CAUSAL_RUN);
+        expect(rows[0]?.kind).toBe('agent.run');
+        expect(rows[0]?.node).toBe('implement');
+        expect(rows[0]?.ok).toBeFalsy();
+    }, 30000);
+
+    test('a recovered agent failure followed by a gate failure keeps the gate classification', async () => {
+        const runId = 'run-1256-recovered';
+        const { writer } = await runRow(runId);
+        const failedAction = await writer.saveActionStart(runId, 'implement', 'agent.run');
+        await writer.saveActionFinalize(failedAction, 'failed', 10, false, 'agent.run', { error: 'rate limited' });
+        // The escalation retry succeeded — the run progressed.
+        const okAction = await writer.saveActionStart(runId, 'implement', 'agent.run');
+        await writer.saveActionFinalize(okAction, 'done', 10, true, 'agent.run');
+        await writer.finalizeRun(runId, 'failed', '2026-10-19T00:00:20.000Z', undefined, 'no-passing-transition');
+
+        expect(await reasonOf(runId)).toBe('failed-guard');
+    }, 30000);
+
+    test('an explicit cancellation reason outranks a live agent failure, and timeout text keeps failed-timeout', async () => {
+        const cancelledRun = 'run-1256-cancelled';
+        const { writer: cancelledWriter } = await runRow(cancelledRun);
+        const actionId = await cancelledWriter.saveActionStart(cancelledRun, 'implement', 'agent.run');
+        await cancelledWriter.saveActionFinalize(actionId, 'failed', 10, false, 'agent.run', { error: 'boom' });
+        await cancelledWriter.finalizeRun(cancelledRun, 'failed', '2026-10-19T00:00:30.000Z', undefined, 'cancelled');
+        expect(await reasonOf(cancelledRun)).toBe('cancelled');
+
+        const timeoutRun = 'run-1256-timeout';
+        const { writer: timeoutWriter } = await runRow(timeoutRun);
+        const timeoutAction = await timeoutWriter.saveActionStart(timeoutRun, 'implement', 'agent.run');
+        await timeoutWriter.saveActionFinalize(timeoutAction, 'failed', 600000, false, 'agent.run', {
+            error: 'step timeout after 600s',
+        });
+        await timeoutWriter.finalizeRun(
+            timeoutRun,
+            'failed',
+            '2026-10-19T00:00:40.000Z',
+            undefined,
+            'step timeout after 600s',
+        );
+        expect(await reasonOf(timeoutRun)).toBe('failed-timeout');
+    }, 30000);
+
+    test('concurrent runs do not share causal context', async () => {
+        const first = 'run-1256-first';
+        const second = 'run-1256-second';
+        const { writer } = await runRow(first);
+        await new DbWorkflowPersistenceAdapter(projectDb.adapter).createRun({ ...runRecord(), id: second });
+        const firstAction = await writer.saveActionStart(first, 'implement', 'agent.run');
+        await writer.saveActionFinalize(firstAction, 'failed', 10, false, 'agent.run', { error: 'first blew up' });
+        const secondAction = await writer.saveActionStart(second, 'gate', 'shell');
+        await writer.saveActionFinalize(secondAction, 'failed', 10, false, 'shell', { error: 'second failed' });
+
+        await writer.finalizeRun(second, 'failed', '2026-10-19T00:00:50.000Z', undefined, 'second failed');
+        await writer.finalizeRun(first, 'failed', '2026-10-19T00:00:51.000Z', undefined, 'first blew up');
+
+        expect(await reasonOf(second)).toBe('failed-check');
+        expect(await reasonOf(first)).toBe('failed-agent');
+    }, 30000);
+
+    test('a reasonless close keeps the legacy null behavior', async () => {
+        const runId = 'run-1256-reasonless';
+        const { writer } = await runRow(runId);
+        await writer.finalizeRun(runId, 'done', '2026-10-19T00:01:00.000Z');
+        expect(await reasonOf(runId)).toBeNull();
+    }, 30000);
+});

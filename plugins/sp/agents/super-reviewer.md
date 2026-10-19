@@ -243,6 +243,35 @@ No verdict-artifact field, no receipt level, no per-finding grade, and no operat
 (ADR-138 stands for every other carrier). Evidence gaps still belong in the report body: name them,
 then let the dispositions decide the level.
 
+**Two artifacts, one `Confidence:` line each (1254).** The body you write into `### Review` states
+the disposition-derived level above. When the pipeline also captures your final answer as the
+certification input for `spur task verdict`, that text is a *second* artifact with a *different*
+consumer, and it carries the **evidence-derived** level (`deriveVerifyConfidence`): PASS with every
+AC row MET on executable evidence (`test`/`command`) is HIGH; a citation-only (`static-ref`),
+`manual-review`, `llm-judge` or `N/A` AC is MEDIUM; a non-PASS verdict or any PARTIAL/UNMET row is
+LOW. It ends with exactly one plain `Verdict: PASS|PARTIAL|FAIL` line preceded by both tables, in
+this exact shape:
+
+| Req | Status | Evidence |
+| --- | --- | --- |
+| R1 | MET | `src/api/users.ts:42` |
+
+| AC | Status | Evidence Type | Evidence |
+| --- | --- | --- | --- |
+| AC1 — the guard rejects an unsafe input | MET | test | `packages/app/tests/guard.test.ts:12` |
+
+One row per declared requirement (`MET | PARTIAL | UNMET`, none omitted or merged) and one row per
+acceptance criterion (`MET | PARTIAL | UNMET | N/A`), with the evidence-type token alone in its own
+cell — `test | command | static-ref | manual-review | llm-judge | n/a`, or a `+` compound when more
+than one kind applies. Evidence cells cite a repo-relative `path:line` or a named test/command. AC
+identities stay the task's own (checklist label, title, bold head, `Scenario:` prefix, bracket tag or
+declared `AC-N` alias): a linked feature's scenario title covers the task that implements it, and a
+task-local criterion is legal as-is — it needs no feature credit.
+Never repeat the section's disposition-derived `Confidence:` line here: a second `Confidence:` line is
+a `confidence-duplicate` rejection of the whole answer, and so is a level the rows do not derive. A
+PASS with executable AC and one accepted P4 therefore certifies as `Confidence: HIGH` in the answer
+while the section keeps `Confidence: MEDIUM`.
+
 **Source citations for external claims (one claim contract, 2026-10-12).** A Finding cell or a
 Functional Traceability `Evidence` cell that asserts an external API/library claim carries a
 verifiable citation in the SAME cell — a repo `path:line(-end)`, the external named-origin form

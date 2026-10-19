@@ -64,6 +64,14 @@ no level (ADR-131, 1196), no operator `ackLowConfidence`-style var exists, and h
 findings carry no per-finding grade. A verifier that can write a PASS can still write a wrong
 `HIGH` — which is exactly why the gate derives the level instead of trusting it.
 
+**A review run carries two answer artifacts, one `Confidence:` line each (1254).** The `## Review`
+section states the disposition-derived level (`deriveReviewConfidence`); the captured answer handed
+to `spur task verdict --from-answer` states the evidence-derived level (`deriveVerifyConfidence`)
+under the table above and carries exactly one `Confidence:` line. The two legitimately disagree — a
+PASS with executable AC and one carried P4 is section `MEDIUM`, answer `HIGH` — so the captured
+answer must not repeat the section's line (`confidence-duplicate` rejects the whole answer). The
+review stage's prompt owns that instruction; this schema owns the shape it must produce.
+
 ## Compatibility alias: `scenario` row key
 
 Task 0410 hardened the verdict reader. Producers SHOULD use the canonical `id` field for every

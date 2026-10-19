@@ -2788,7 +2788,15 @@ describe('AgentRunActionRunner fresh-session independence (task 0710)', () => {
         let dispatched = false;
         const svc: AgentService = {
             resolve: async () => ({ ok: true, agent: 'claude', executor: 'claude', source: 'role' }),
-            runTraced: async () => {
+            // 1260 R3: the distinctness policy now runs in the executor's per-attempt
+            // `beforeDispatch` hook, so the fixture models the real executor and invokes it.
+            runTraced: async (
+                _input: string | undefined,
+                _flags: Record<string, string | boolean>,
+                _deps: unknown,
+                execution?: { beforeDispatch?: (attempt: { agent: string; executor?: string }) => Promise<void> },
+            ) => {
+                await execution?.beforeDispatch?.({ agent: 'claude', executor: 'claude' });
                 dispatched = true;
                 return { exitCode: 0, stdout: '' };
             },
@@ -2820,6 +2828,27 @@ describe('AgentRunActionRunner fresh-session independence (task 0710)', () => {
         expect(result.ok).toBe(false);
         expect(String(result.error)).toContain('__agentRouting_implement');
         expect(dispatched).toBe(false);
+    });
+
+    test('1260 R3: routing evidence names the FINAL invocation executor profile and model', async () => {
+        const svc: AgentService = {
+            resolve: async () => ({ ok: true, agent: 'pi', executor: 'std-exec', source: 'role' }),
+            // The executor replaced the profile mid-action; the writeback must carry the ACTUAL
+            // final identity, not the pre-dispatch resolution.
+            runTraced: async () => ({
+                exitCode: 0,
+                stdout: 'reviewed',
+                invocation: invocation({ agent: 'claude', executor: 'capable-exec', model: 'anthropic/claude-opus' }),
+            }),
+        } as unknown as AgentService;
+        const runner = new AgentRunActionRunner(svc);
+        const result = await runner.execute({ role: 'reviewer', input: 'review' }, makeCtx({ vars: {} }));
+
+        expect(result.ok).toBe(true);
+        expect(JSON.parse(String(result.setVars?.__agentRouting_s1))).toEqual({
+            agent: 'capable-exec',
+            model: 'anthropic/claude-opus',
+        });
     });
 
     test('R4: a P1 review on a distinct executor dispatches normally', async () => {
@@ -3367,25 +3396,58 @@ describe('AgentRunActionRunner pin invalidation + trace columns (0895)', () => {
         dispatchExitCode = 0,
     ) {
         let capturedFlags: Record<string, string | boolean> = {};
+        let rerollFlags: Record<string, string | boolean> = {};
         const svc = {
             executorAvailability: async () => availability,
-            resolveRoleFresh: async () => ({
-                ok: true,
-                agent: 'claude',
-                executor: 'claude-b',
-                model: 'sonnet',
-                tier: 3,
-                source: 'role',
-                role: 'coder',
-            }),
+            resolveRoleFresh: async (flags: Record<string, string | boolean> = {}) => {
+                rerollFlags = flags;
+                return {
+                    ok: true,
+                    agent: 'claude',
+                    executor: 'claude-b',
+                    model: 'sonnet',
+                    tier: 3,
+                    source: 'role',
+                    role: 'coder',
+                };
+            },
             runTraced: async (_input: string | undefined, flags: Record<string, string | boolean>) => {
                 capturedFlags = flags;
                 return { exitCode: dispatchExitCode, stdout: '', invocation: invocation({ agent: 'claude' }) };
             },
             flags: () => capturedFlags,
-        } as unknown as AgentService & { flags: () => Record<string, string | boolean> };
+            reroll: () => rerollFlags,
+        } as unknown as AgentService & {
+            flags: () => Record<string, string | boolean>;
+            reroll: () => Record<string, string | boolean>;
+        };
         return svc;
     }
+
+    // 1255 R3: the fresh role re-resolution replaces a DISABLED pin, so the stage's declared
+    // capability requirements must ride the re-resolve call — otherwise the walk can land on a
+    // candidate the pre-spawn guard then refuses, hard-failing a dispatch that had an eligible
+    // alternative. The requirement flag is the same one the guard consumes.
+    test('1255 R3: the disabled-pin re-resolution carries the stage requiresCapabilities', async () => {
+        const svc = svcWithDisabledPin({ disabled: true, owner: 'drain' });
+        const runner = new AgentRunActionRunner(svc);
+        const ctx = makeCtx({ runId: 'run-1255', vars: { '__executor.coder': PIN_A } });
+        const result = await runner.execute(
+            { role: 'coder', input: 'hello', requiresCapabilities: { fsWrite: 'available' } },
+            ctx,
+        );
+        expect(result.ok).toBe(true);
+        const flags = (svc as unknown as { reroll: () => Record<string, string | boolean> }).reroll();
+        expect(flags.role).toBe('coder');
+        expect(JSON.parse(String(flags.requiresCapabilities))).toEqual({ fsWrite: 'available' });
+
+        // No requirement means no flag — the re-resolution contract stays unchanged for stages
+        // that declare nothing (R3 "No requirements means unchanged resolution").
+        const plain = svcWithDisabledPin({ disabled: true, owner: 'drain' });
+        await new AgentRunActionRunner(plain).execute({ role: 'coder', input: 'hello' }, ctx);
+        const plainFlags = (plain as unknown as { reroll: () => Record<string, string | boolean> }).reroll();
+        expect(plainFlags.requiresCapabilities).toBeUndefined();
+    });
 
     test('mid-run disable re-resolves the role once: fresh dispatch, new pin persisted, trace records the hop (R1)', async () => {
         const svc = svcWithDisabledPin({ disabled: true, owner: 'drain', reason: 'quota exhausted' });

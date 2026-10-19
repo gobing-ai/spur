@@ -189,6 +189,19 @@ with `PRAGMA wal_checkpoint(PASSIVE)` after compaction — never `TRUNCATE`, whi
 lock and would block every other writer for the checkpoint's duration. Full WAL truncation stays on
 the manual `spur self maintain` path, where the operator explicitly accepts the exclusive-lock cost.
 
+**Bounded retention batches (task 1258).** Each existing retention store (rule evaluations, terminal
+queue jobs, the import ledger) deletes at most **1000** eligible rows per `runRetention` invocation,
+through a bounded key-selection DELETE (`rowid IN (SELECT rowid … WHERE <age predicate> LIMIT 1000)` with no ordering (no index backs the age columns, and every eligible row is equally purgeable)) that
+keeps the store's age predicate, cutoff inclusivity (`<`) and terminal-queue status predicate
+unchanged. The key is `rowid`, not the declared primary key: SQLite allows a NULL TEXT primary key,
+so an inserted row without one would make `id IN (…)` silently match nothing. No cursor, marker or
+config key is added — committed deletions are the progress, and the next daily pass continues until
+the backlog drains; an interrupted pass leaves only committed work. `RetentionResult` keeps its shape
+and reports rows actually removed per store (`changes()`), a store error stays best-effort and never
+skips the other stores, and backup pruning plus the compaction/checkpoint semantics above are
+untouched. This is an execution bound, not a byte bound: total database size and eventual expiry are
+not guaranteed by one pass.
+
 **`--mode <name>` (task 0555 R4) is a pure pass-through:** when set, `daily` additionally writes a
 `.md` sidecar next to the artifact rendered in that report mode (`reportPath` in `DailyResult`,
 `report:` line in the human output). The mode is validated up front — an unknown name fails before

@@ -148,13 +148,26 @@ export async function waitForRunRegistration(
         try {
             await service.trace(runId);
             return true;
-        } catch {
+        } catch (error) {
+            // 1259 R2: ONLY a genuine "Run not found" observation means "not registered yet".
+            // A store/read/permission failure is not a deadline and polling cannot fix it, so it
+            // propagates to the caller's bounded handler — swallowing it here is what turned a
+            // broken read into a worker-failure verdict with a synchronous replay as "recovery".
+            if (!isRunNotFound(error)) throw error;
             if (Date.now() >= deadline) {
                 return false;
             }
             await sleep(pollMs);
         }
     }
+}
+
+/**
+ * The engine's own "this run row does not exist" signal — the ONE absence predicate shared by the
+ * registration poll (1259 R2) and the pre-launch existing-run check (0901 R1).
+ */
+function isRunNotFound(error: unknown): boolean {
+    return error instanceof Error && error.message.startsWith('Run not found:');
 }
 
 /**
@@ -169,7 +182,7 @@ export async function existingWorkflowRun(service: Pick<WorkflowAppService, 'tra
         await service.trace(runId);
         return true;
     } catch (error) {
-        if (error instanceof Error && error.message.startsWith('Run not found:')) return false;
+        if (isRunNotFound(error)) return false;
         throw error;
     }
 }
@@ -587,25 +600,46 @@ export function registerWorkflowRunCommand(workflow: Command, context: CliContex
                 // wrapper in spawnAsyncWorkflowWorker makes a dead-on-arrival worker invisible on
                 // every channel, so a failed spawn would otherwise print a phantom run id that
                 // `spur workflow trace` cannot resolve and the caller would poll forever (0484 R2).
-                if (
-                    !(await waitForRunRegistration(
+                // 1259 R7/R8: confirmation runs once. A deadline expiry and a read failure are
+                // different observations and say so; neither dispatches anything further, and the
+                // started response below stays exactly as it was for a confirmed run.
+                const registrationTimeoutMs = asyncRegisterTimeoutMs(context.spurConfig);
+                let registered = false;
+                let registrationReadError: string | undefined;
+                try {
+                    registered = await waitForRunRegistration(
                         makeWorkflowService(context, options.json),
                         runId,
-                        asyncRegisterTimeoutMs(context.spurConfig),
-                    ))
-                ) {
+                        registrationTimeoutMs,
+                    );
+                } catch (error) {
+                    // 1259 R2: the store could not be read — redact it, name it, and never
+                    // recommend (or perform) a replay that could duplicate side effects.
+                    const message = error instanceof Error ? error.message : String(error);
+                    registrationReadError = redactAndBound(message, configuredSecretValues(context.env), 512);
+                }
+                if (!registered) {
                     // Deliberately omit runId from BOTH payloads: this handle is precisely the
                     // phantom R2 exists to suppress, and a machine caller reading `.runId`
                     // without checking `.status` would poll it forever — the exact failure the
                     // human-readable branch already avoids (0484 R2).
-                    const reason = 'async worker failed to start or register the run';
-                    const hint = 'run the workflow synchronously (omit --async) to see the failure';
+                    // It is also omitted from the guidance: the id is what the operator checks
+                    // WITH, never a confirmed handle.
+                    const reason =
+                        registrationReadError !== undefined
+                            ? `async run registration could not be read: ${registrationReadError}`
+                            : `async run registration was not confirmed within ${registrationTimeoutMs}ms`;
+                    const caveat =
+                        registrationReadError !== undefined
+                            ? 'the detached worker may or may not be running'
+                            : 'the detached worker may still be starting';
+                    const hint = `${caveat}; inspect "spur workflow list" and then "spur workflow trace <run-id>" before deciding whether to rerun`;
                     if (json) {
                         context.output.write(
                             toEnvelopeJson({ status: 'failed', reason, hint }, { enveloped: options.jsonEnvelope }),
                         );
                     } else if (!silent) {
-                        context.output.write(`async spawn failed: ${reason} — ${hint}.`);
+                        context.output.write(`async spawn unconfirmed: ${reason} — ${hint}.`);
                     }
                     context.setExitCode(1);
                     return;

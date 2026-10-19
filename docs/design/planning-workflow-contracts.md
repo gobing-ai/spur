@@ -408,6 +408,14 @@ priority) require fresh context only, with executor reuse allowed. Distinctness 
 routing and BEFORE dispatch via the pure `review-independence` module (R5): missing implementation
 evidence, unresolvable reviewer routing, and equal executor names all fail closed with the exact
 configuration remedy (`roles.reviewer` tier override or an explicit pin) — never a silent dispatch.
+**Per-attempt identity (task 1260 R3).** The comparison subject is the attempt that is about to
+spawn, not the pre-dispatch resolution: the executor loop may replace the executor (escalation,
+disabled-pin re-resolution, 1255), so the policy runs in the executor's `beforeDispatch` hook with
+the attempt's own `{agent, executor?, model?}` and a refusal is terminal before any subprocess starts
+(the escalation branch's "prior result stands" never applies to it). Missing prior evidence still
+fails before the dispatch chain begins. The final `__agentRouting_<node>` writeback records the
+successful invocation's executor profile and model, so a replaced attempt is named as replaced rather
+than as the agent that merely resolved first.
 Composition (R8): the live pipeline itself is checked — a proof-chain test fails if review/verify
 re-pin an executor, lose `freshSession: true`, or drift from `compareExecutorWith: implement`, and
 the composition baseline digest regenerates with every pipeline change.

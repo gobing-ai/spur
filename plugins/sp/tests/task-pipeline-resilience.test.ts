@@ -372,6 +372,39 @@ esac`,
         expect(cmds.find((c) => c.includes('+ {proof:'))).toBeUndefined();
     });
 
+    // 1254: the review stage produces TWO artifacts — the `## Review` section (finding
+    // dispositions -> deriveReviewConfidence) and the captured certification answer
+    // (requirement/AC evidence -> deriveVerifyConfidence). The two derivations legitimately
+    // disagree (PASS + executable AC + one carried P4 is answer HIGH, section MEDIUM), so the
+    // prompt teaches both lanes, refuses a second `Confidence:` line in the answer, and points
+    // at the owner that carries the exhaustive wording (the YAML prompt is under the 1000-char
+    // composition cap, ADR-115).
+    test('the review prompt teaches both confidence lanes and points at its owner (1254 R1-R3)', () => {
+        const dispatch = (PIPELINE.states.find((s) => s.id === 'review')?.onEnter ?? []).find(
+            (a) => a.kind === 'agent.run',
+        );
+        const input = String((dispatch?.options as { input?: string })?.input ?? '');
+        expect(input).toContain('deriveReviewConfidence');
+        expect(input).toContain('deriveVerifyConfidence');
+        expect(input).toContain("never the section's disposition level");
+        expect(input).toContain('has one `Confidence:');
+        expect(input).toContain('super-reviewer Output Format');
+        // The consumer vocabularies the prompt must spell out (lint parity for these tokens is
+        // pinned in packages/app/tests/workflow/task-pipeline-proof-chain.test.ts).
+        expect(input).toContain('| Req | Status | Evidence |');
+        expect(input).toContain('| AC | Status | Evidence Type | Evidence |');
+        expect(input).toContain('MET | PARTIAL | UNMET | N/A');
+        expect(input).toContain('static-ref');
+        // The named owner carries the full contract the prompt only summarises.
+        const reviewer = readFileSync(join(ROOT, 'plugins', 'sp', 'agents', 'super-reviewer.md'), 'utf8');
+        expect(reviewer).toContain('certifies as `Confidence: HIGH` in the answer');
+        expect(reviewer).toContain('keeps `Confidence: MEDIUM`');
+        expect(reviewer).toContain('| AC | Status | Evidence Type | Evidence |');
+        expect(reviewer).toContain('llm-judge | n/a');
+        expect(reviewer).toContain('confidence-duplicate');
+        expect(reviewer).toContain('task-local criterion is legal as-is');
+    });
+
     test('the close sweeps after the box flips and before the done transition (0983 R1/R3)', () => {
         const cmds = shellCommands('done');
         const actions = PIPELINE.states.find((s) => s.id === 'done')?.onEnter ?? [];
