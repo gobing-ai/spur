@@ -4,7 +4,7 @@ name: feature sync advances an active feature to verifying when all linked tasks
 status: done
 template: feature-impl
 created_at: 2026-10-18T05:10:06.870Z
-updated_at: "2026-10-18T17:34:22.258Z"
+updated_at: "2026-10-19T01:30:13.397Z"
 feature_id: D66
 priority: P1
 tags:
@@ -35,7 +35,7 @@ The valid residual gap after 1246: the `verifying` onEnter now runs `spur featur
 ### Requirements
 
 - [x] R1. After a sync hop lands in `verifying` and the derived proposal stopped there on `receiptPending`, `runSyncFeature` re-derives once. When the new proposal is `verifying→done` (PASS receipt from the onEnter pass), it applies that hop in the same call.
-- [x] R2. A FAIL or missing receipt after the re-derive leaves the feature in `verifying`. The result's reason names the receipt finding and the rework edge (`spur feature update <id> --status active`), and sync exits 0.
+- [x] R2. A FAIL or missing receipt after the re-derive leaves the feature in `verifying`. The result's reason names the receipt finding and the rework edge (`spur feature update <id> active`), and sync exits 0.
 - [x] R3. The re-derive runs at most once per call, and never when the verifying hop was not applied (guard denied, goal conflict, dry-run).
 - [x] R4. An E2E proof drives a fixture feature (one task done, one cancelled) from `active` through one `feature sync`: it runs the verifying onEnter exactly once and lands in `done` on PASS, or in `verifying` on FAIL. A sibling feature with one `wip` task stays `active`.
 
@@ -148,6 +148,8 @@ invalidated by the targeted workspace test runs above. Its documented recovery i
 `bun run test:full`, which is the pipeline's `test` hop. Every other light-gate check passed
 (format-lint:changed, rules:pre, typecheck apps/cli + packages/app, tests apps/cli + packages/app +
 plugins/sp).
+
+**D66 forced re-verification repair (2026-10-18):** corrected the FAIL receipt recovery hint to the CLI positional form `spur feature update <id> active` at `packages/app/src/services/feature-service.ts:742`; the feature-sync CLI regression now executes that recovery command and confirms the feature returns to active. The service expectation and spur-cli feature reference use the same form.
 
 ### Testing
 

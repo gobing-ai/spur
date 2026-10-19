@@ -1402,7 +1402,7 @@ updated_at: "${new Date().toISOString()}"
                     expect(res.proposal.receiptPending).toBe(true);
                     // R2: the reason names the receipt finding AND the rework edge.
                     expect(res.proposal.reason).toContain('L4.feature-receipt-failed');
-                    expect(res.proposal.reason).toContain(`spur feature update ${featureId} --status active`);
+                    expect(res.proposal.reason).toContain(`spur feature update ${featureId} active`);
                     expect((await onEnterSvc.show(featureId))?.status).toBe('verifying');
                 },
             );

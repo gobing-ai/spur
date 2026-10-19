@@ -739,7 +739,7 @@ export class FeatureService {
                         ...proposal,
                         reason:
                             `${proposal.reason}${codes.length > 0 ? ` (${codes})` : ''}; ` +
-                            `rework with \`spur feature update ${featureId} --status active\``,
+                            `rework with \`spur feature update ${featureId} active\``,
                         ...(findings.length > 0 ? { gateFindings: findings } : {}),
                     };
                 }

@@ -277,7 +277,7 @@ spur feature sync H2 --folder docs/custom-tasks --json   # non-default tasks fol
   receipt. Sync re-derives **once** after a `verifying` hop lands, so a PASS receipt applies
   `verifying → done` in the same call (`appliedHops: ['verifying','done']`). A FAIL or still-missing
   receipt leaves the feature in `verifying` and still exits `0`; `proposal.reason` then names the
-  receipt finding and the rework edge (`spur feature update <id> --status active`). The re-derive
+  receipt finding and the rework edge (`spur feature update <id> active`). The re-derive
   never runs when the verifying hop was not applied (guard denied, goal conflict, `--dry-run`).
 - **`--json`** single-feature emits `{ proposal, applied, appliedHops[], suppressed? }`; `--all` emits
   `{ totalFeatures, evaluated, updatedCount, results[] }` where each result is the single-feature

@@ -1198,7 +1198,7 @@ describe('spur feature sync re-derives after the verifying onEnter (1247, D66 R4
                 expect(parsed.proposal.to).toBe('verifying');
                 expect(parsed.proposal.receiptPending).toBe(true);
                 expect(parsed.proposal.reason).toContain('L4.feature-receipt-failed');
-                expect(parsed.proposal.reason).toContain('spur feature update F1 --status active');
+                expect(parsed.proposal.reason).toContain('spur feature update F1 active');
                 expect(syncFixtureStatus(root, 'F1_sync-probe.md')).toBe('verifying');
                 expect(syncFixtureStatus(root, 'G1_wip-sibling.md')).toBe('active');
 
@@ -1206,6 +1206,9 @@ describe('spur feature sync re-derives after the verifying onEnter (1247, D66 R4
                 expect(syncVerifierCalls(callsLog)).toEqual(['self exec check-feature']);
 
                 await expectWipSiblingSyncStaysActive(root, callsLog);
+                const rework = await runSyncCli(root, ['feature', 'update', 'F1', 'active', '--json']);
+                expectSyncCliOk(rework);
+                expect(syncFixtureStatus(root, 'F1_sync-probe.md')).toBe('active');
             });
         },
         SYNC_FIXTURE_TIMEOUT_MS,
