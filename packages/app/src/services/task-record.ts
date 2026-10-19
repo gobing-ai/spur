@@ -356,10 +356,21 @@ function acRowProves(
 ): string | undefined {
     const ordinal = /^AC-(\d+)$/.exec(rowId.trim());
     const key = normalizeKey(ordinal ? (scenarioTitles[Number(ordinal[1]) - 1] ?? '') : rowId);
+    // A scenario-keyed row (`R10 — <title>`) carries the feature's id prefix, which never appears
+    // in the task AC bullet, so the bare title is the only string both sides share (D66: 1251/1252
+    // reviews keyed by scenario, left their AC box unticked, and the done gate refused).
+    const bare = key.replace(/^r\d+\s*—\s*/, '');
     for (const item of items) {
         if (!item.requirementId?.startsWith('AC')) continue;
         const alias = normalizeKey(item.text.replace(/\s*\(req:[^)]*\)\s*$/, ''));
-        if (alias !== '' && key !== '' && (alias === key || alias.endsWith(`— ${key}`))) return item.requirementId;
+        if (alias === '') continue;
+        if (
+            key !== '' &&
+            (alias === key ||
+                alias.endsWith(`— ${key}`) ||
+                (bare !== '' && (alias === bare || alias.endsWith(`— ${bare}`))))
+        )
+            return item.requirementId;
     }
     if (ordinal || /^R\d+\s*[—-]\s*\S/.test(rowId.trim())) return undefined;
     return prefixId(rowId);

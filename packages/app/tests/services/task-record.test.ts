@@ -2091,6 +2091,26 @@ describe('flipVerifiedCheckboxes', () => {
         expect(boxed(flipVerifiedCheckboxes(body, verdict))).toBe('- [x] AC1 — R3 — The loop is a service (req: R1)');
     });
 
+    test('D66: an unaliased AC bullet still flips when its text is the scenario title', () => {
+        // Task AC bullets in the D66 corpus restate the scenario title and carry only `(req: …)`;
+        // the lint forces the verdict row to be scenario-keyed, so the bare title is the join.
+        const body = '- [ ] AC1 — The loop is a service (req: R1, R2)\n';
+        const verdict = mkVerdict('PASS', []);
+        verdict.acceptanceCriteria = [
+            { id: 'R3 — The loop is a service', status: 'MET', evidenceType: 'test', evidence: 'e' },
+        ] as VerifyVerdict['acceptanceCriteria'];
+        expect(boxed(flipVerifiedCheckboxes(body, verdict))).toBe('- [x] AC1 — The loop is a service (req: R1, R2)');
+    });
+
+    test('D66: a partial title match never flips an unaliased AC bullet', () => {
+        const body = '- [ ] AC1 — The loop is a service (req: R1)\n';
+        const verdict = mkVerdict('PASS', []);
+        verdict.acceptanceCriteria = [
+            { id: 'R3 — The loop is a service boundary', status: 'MET', evidenceType: 'test', evidence: 'e' },
+        ] as VerifyVerdict['acceptanceCriteria'];
+        expect(flipVerifiedCheckboxes(body, verdict)).toBe(body);
+    });
+
     test('0996: a hyphen or en-dash alias separator resolves like an em dash', () => {
         const body = '- [ ] AC1 - R3 – The loop is a service (req: R1)\n';
         const verdict = mkVerdict('PASS', []);
