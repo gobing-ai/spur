@@ -1,20 +1,39 @@
 # Changelog
 
-## [Unreleased]
+## [0.4.15] - 2026-10-18
+
+_Claim bullets carry one source anchor and the level that anchor supports — `HIGH`: a `path:line` was
+read and matches the bullet; `MEDIUM`: an external URL, or whole-file/artifact presence only; `LOW`: no
+verifiable anchor, so the claim is reworded or dropped. Unanchored bullets are bookkeeping (merges,
+status moves, filings) and assert no code, API or version fact._
+
+### Added
+- run the feature-verification pass from the `feature-lifecycle` `verifying` entry, so entering the state opens and finalizes its own run row and a receipt bound to that definition (af8bb928f)
+  <!-- src: config/workflows/feature-lifecycle.yaml:53 · confidence: HIGH -->
+- re-derive the feature status once after the `verifying` hop, so a PASS that hop just recorded reaches `done` in the same `spur feature sync` call and a FAIL stays in `verifying` and names the rework edge (afa999afd)
+  <!-- src: packages/app/src/services/feature-service.ts:729 · confidence: HIGH -->
+- pause an `executor=host` run on an unanswered `hitl.confirm`, `hitl.select` or `hitl.input` gate instead of answering `no` from the default responder (cdaf2015f)
+  <!-- src: packages/app/src/workflow/decision-hitl-responder.ts:207 · confidence: HIGH -->
+
+### Fixed
+- stop reading a dotted workflow action kind (`hitl.confirm`, `kind: hitl.select`) as gate language in `spur task check` (2c9a58f96)
+  <!-- src: packages/app/src/services/task-check.ts:449 · confidence: HIGH -->
+- flip the task AC box from a `R<n> — <title>` scenario-keyed verdict row, so a passing review no longer leaves the box unticked and the done gate refusing (9973c0f63)
+  <!-- src: packages/app/src/services/task-record.ts:362 · confidence: HIGH -->
+- emit a runnable receipt recovery command — `spur feature update <id> active`, not the rejected `--status active` form (aa9b8c37f)
+  <!-- src: packages/app/src/services/feature-service.ts:742 · confidence: HIGH -->
 
 ### Changed
-- `feature-lifecycle` owns the feature verification pass: entering `verifying` calls `spur feature verify`, which records its own run row and a receipt whose verifier is the `feature-lifecycle` definition (D66)
-  <!-- src: config/workflows/feature-lifecycle.yaml:51, packages/app/src/workflow/feature-verification-run.ts:240 -->
-- `wrapup-pipeline` validates its task list with one `command.gate` and no longer changes feature status; run `spur feature sync <id>` as the follow-up (D66)
-  <!-- src: config/workflows/wrapup-pipeline.yaml:175, packages/app/src/workflow/wrapup/steps.ts:136 -->
-- `idea-pipeline` runs on the typed entry gate, the decision catalog and the selected executor, and no longer pauses at `feature-check` or `batch-create` (D66)
-  <!-- src: config/workflows/idea-pipeline.yaml:120, packages/app/src/workflow/actions/doctor-probe.ts:139 -->
-- `hitl.confirm`, `hitl.select` and `hitl.input` pause an `executor=host` run for the operator instead of answering `no` from the default responder (D66)
-  <!-- src: packages/app/src/workflow/decision-hitl-responder.ts:202, packages/app/src/services/workflow-resume-ops.ts:338 -->
+- `wrapup-pipeline` validates its task list with one `command.gate` and no longer changes feature status; run `spur feature sync <id>` as the follow-up (844c21656)
+  <!-- src: config/workflows/wrapup-pipeline.yaml:68, config/workflows/wrapup-pipeline.yaml:3 · confidence: HIGH -->
+- `idea-pipeline` runs on the typed entry gate, the decision catalog and the selected executor, and no longer pauses at `feature-check` or `batch-create` (86ffce10f)
+  <!-- src: config/workflows/idea-pipeline.yaml:13, config/workflows/idea-pipeline.yaml:120, packages/app/src/workflow/actions/doctor-probe.ts:60 · confidence: HIGH -->
+- upgrade the `@gobing-ai/ts-*` catalog from 0.5.28 to 0.5.29 (88fa8d509)
+  <!-- src: package.json:32 · confidence: HIGH -->
 
 ### Removed
-- `feature-verification.yaml`, `pr-review.yaml` and `wayfinder-resolution.yaml` leave `config/workflows`, the generated CLI config and the init scaffold; the `spur workflow` list now carries six definitions and no scaffold entry names a removed one (D66)
-  <!-- src: config/workflows/feature-lifecycle.yaml:51, repo-wide-tests/workflow-consolidation-absence.test.ts:1 -->
+- `feature-verification.yaml`, `pr-review.yaml` and `wayfinder-resolution.yaml` leave `config/workflows`, the generated CLI config and the init scaffold — the first folded into `feature-lifecycle`'s `verifying` entry (1246), the other two replaced by the flat `spur builder pr-<verb>` verbs and the `sp/wayfinder` skill — and a repo-wide absence proof plus a recorded retirement guard the removal (fe86b4fdf, b7ed2885f, b4e9d3e7b)
+  <!-- src: config/workflow-candidates.json:70, repo-wide-tests/workflow-consolidation-absence.test.ts:1 · confidence: MEDIUM -->
 
 BREAKING CHANGE: the three removed workflows no longer exist, so a project override of any of them stops applying. Migrate a `feature-verification` override into the `feature-lifecycle` `verifying` state, a `pr-review` override onto the `spur builder pr-*` verbs (`/sp:dev-pr-review` runs them directly), and a `wayfinder-resolution` override onto `sp/wayfinder` over the direct verbs. Delete the three stale seeded copies from `~/.config/spur/workflows/`; init preserves existing files. A verification receipt recorded under the retired `feature-verification` identity is stale after upgrade: run `spur feature verify <id>` once. The wrap-up `feature` variable has been removed. A wrap-up step that relied on `wrapup-pipeline` advancing feature status must now call `spur feature sync <id>`.
 
