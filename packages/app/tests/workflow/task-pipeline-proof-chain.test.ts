@@ -15,11 +15,13 @@
  *   boolean silently changes fails here.
  */
 import { describe, expect, test } from 'bun:test';
-import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { getEnvVars } from '@gobing-ai/spur-config';
 import { parse as parseYaml } from 'yaml';
+import { deriveReviewConfidence, deriveVerifyConfidence } from '../../src/services/answer-confidence';
+import { lintVerifyAnswer } from '../../src/services/verify-answer-lint';
 
 interface Action {
     kind: string;
@@ -734,4 +736,229 @@ describe('task-pipeline evidence chain — kept invariants (0710/0751/0804)', ()
         expect(JSON.stringify(lifecycle[1]?.action.options)).toContain('"done"');
         for (const { action } of lifecycle) expect(action.options?.softFail).toBe(false);
     });
+});
+
+/**
+ * 1254 — the review stage is the PRODUCER of two artifacts with different consumers: the `## Review`
+ * section (checked against finding dispositions) and the captured certification answer (checked
+ * against requirement/AC evidence). These tests pin the producer instructions to the consumer
+ * vocabulary, and pin that the two confidence lanes legitimately differ for one run.
+ */
+describe('review answer contract — producer vocabulary and the two confidence lanes (1254)', () => {
+    const reviewInput = (): string =>
+        String((actionOf('review', 'agent.run')?.options as Record<string, unknown> | undefined)?.input ?? '');
+
+    const ANSWER_TASK = `
+## 9002. Review answer fixture
+
+### Requirements
+
+- [ ] R1. Do the thing.
+
+### Acceptance Criteria
+
+- [ ] The thing is done
+`;
+
+    const certificationAnswer = (
+        acStatus: string,
+        evidenceType: string,
+        rows = '| R1 | MET | `src/index.ts:1` |',
+    ): string =>
+        [
+            'Verdict: PASS',
+            '',
+            '| Req | Status | Evidence |',
+            '| --- | --- | --- |',
+            rows,
+            '',
+            '| AC | Status | Evidence Type | Evidence |',
+            '| --- | --- | --- | --- |',
+            `| The thing is done | ${acStatus} | ${evidenceType} | \`src/index.ts:1\` |`,
+            '',
+            'Confidence: HIGH',
+            '',
+        ].join('\n');
+
+    test('the certification answer contract states the exact tables, statuses and one-row rules (R1)', () => {
+        const input = reviewInput();
+        expect(input).toContain('| Req | Status | Evidence |');
+        expect(input).toContain('| AC | Status | Evidence Type | Evidence |');
+        expect(input).toContain('MET | PARTIAL | UNMET');
+        expect(input).toContain('MET | PARTIAL | UNMET | N/A');
+        expect(input).toContain('one row per requirement');
+        expect(input).toContain('one row per AC');
+        expect(input).toContain('Verdict: PASS|PARTIAL|FAIL');
+        expect(input).toContain('Confidence: HIGH|MEDIUM|LOW');
+        // One line each: one `Verdict:` and exactly one `Confidence:` in the captured answer.
+        expect(input).toContain('End with one `Verdict:');
+        expect(input).toContain('has one `Confidence:');
+        // 1254: the exhaustive wording lives in the owning producer doc, and the prompt names it —
+        // the composition cap rejects an in-YAML essay (ADR-115).
+        expect(input).toContain('super-reviewer Output Format');
+        expect(input.length).toBeLessThanOrEqual(1000);
+    });
+
+    test('the taught evidence-type vocabulary is exactly what the real answer lint accepts (R1)', () => {
+        // The YAML folded scalar renders as one line, so locate the vocabulary clause directly.
+        const vocab = /Evidence types \([^)]*\):\s*([^.]+)\./.exec(reviewInput());
+        expect(vocab).not.toBeNull();
+        const tokens = (vocab?.[1] ?? '').split('|').map((token) => token.trim());
+        expect(tokens).toEqual(['test', 'command', 'static-ref', 'manual-review', 'llm-judge', 'n/a']);
+        for (const token of [...tokens, 'test + command']) {
+            const findings = lintVerifyAnswer(certificationAnswer('MET', token), ANSWER_TASK);
+            expect(findings.filter((f) => f.rule === 'ac-evidence-type')).toEqual([]);
+        }
+    });
+
+    test('the prompt separates AC identity from feature credit (R3)', () => {
+        const input = reviewInput();
+        // Keyed on the task's own identities; a linked scenario covers its task; task-local is legal.
+        expect(input).toContain("the task's identities");
+        expect(input).toContain('a declared `AC-N` alias');
+        expect(input).toContain('a linked scenario covers its task');
+        expect(input).toContain('a task-local criterion needs no feature credit');
+    });
+
+    test('the two confidence lanes are named with their own derivations (R2)', () => {
+        const input = reviewInput();
+        expect(input).toContain('deriveReviewConfidence');
+        expect(input).toContain('deriveVerifyConfidence');
+        expect(input).toContain("never the section's disposition level");
+    });
+
+    test('behavioral: one carried P4 gives Review MEDIUM and certification HIGH in the same run (R2, R4, AC2)', () => {
+        const staged = stage();
+        try {
+            setSection(staged.dir, staged.wbs, 'Requirements', '- [ ] R1. Do the thing.\n');
+            setSection(staged.dir, staged.wbs, 'Acceptance Criteria', '- [ ] The thing is done\n');
+            // The reviewer's authored section: dispositions only, so it derives MEDIUM.
+            setSection(
+                staged.dir,
+                staged.wbs,
+                'Review',
+                '| Priority | Finding | Location | Disposition |\n| --- | --- | --- | --- |\n' +
+                    '| P4 (advisory) | Note | `src/index.ts:1` | ACCEPTED |\n\nVerdict: PASS\nConfidence: MEDIUM\n',
+            );
+            writeReviewAnswer(staged.dir, 'run-1254', certificationAnswer('MET', 'test'));
+            const vars = { wbs: staged.wbs, __runId: 'run-1254', spurBin: SPUR_BIN, profile: 'auto' };
+
+            // Both lanes independently: the answer's rows derive HIGH, the section's rows MEDIUM.
+            expect(
+                deriveVerifyConfidence({
+                    verdict: 'PASS',
+                    requirements: [{ status: 'MET' }],
+                    acceptanceCriteria: [{ status: 'MET', evidenceType: 'test' }],
+                }),
+            ).toBe('HIGH');
+            expect(
+                deriveReviewConfidence({
+                    verdict: 'PASS',
+                    findings: [{ priority: 'P4', disposition: 'ACCEPTED' }],
+                }),
+            ).toBe('MEDIUM');
+
+            // The real gates accept both artifacts without normalizing either one.
+            expect(
+                runTypedGate(
+                    staged.dir,
+                    '.spur/run/run-1254-review-verdict.status',
+                    ['task', 'verdict', staged.wbs, '--from-answer', '.spur/run/run-1254-review-answer.txt'],
+                    vars,
+                ),
+            ).toBe('PASS');
+            expect(
+                JSON.parse(readFileSync(join(staged.dir, '.spur/run', `${staged.wbs}-verdict.json`), 'utf8')),
+            ).toMatchObject({ verdict: 'PASS' });
+            const residual = Bun.spawnSync([...SPUR_CLI, 'task', 'residual', staged.wbs, 'review-gate', '--no-logo'], {
+                cwd: staged.dir,
+                env: { ...getEnvVars() },
+                stdout: 'pipe',
+                stderr: 'pipe',
+            });
+            expect(residual.exitCode).toBe(0);
+
+            // The fold certifies and the close is reachable; the section keeps its MEDIUM line.
+            expect(runSh(cmdOf('review', '-review.status'), staged.dir, vars).code).toBe(0);
+            expect(readFileSync(join(staged.dir, '.spur/run', `${staged.wbs}-review.status`), 'utf8').trim()).toBe(
+                'PASS',
+            );
+            writeFileSync(join(staged.dir, '.spur/run', `${staged.wbs}-approval.status`), 'APPROVED\n');
+            expect(firstPassingEdge('review', staged.dir, vars)).toBe('done');
+
+            // 1122 preserved: an open P1-P3 in the same section still blocks completion.
+            setSection(
+                staged.dir,
+                staged.wbs,
+                'Review',
+                '| Priority | Finding | Location | Disposition |\n| --- | --- | --- | --- |\n' +
+                    '| P2 (major) | Missing validation | `src/index.ts:8` | OPEN |\n\nVerdict: PASS\nConfidence: LOW\n',
+            );
+            const blocked = Bun.spawnSync([...SPUR_CLI, 'task', 'residual', staged.wbs, 'review-gate', '--no-logo'], {
+                cwd: staged.dir,
+                env: { ...getEnvVars() },
+                stdout: 'pipe',
+                stderr: 'pipe',
+            });
+            expect(blocked.exitCode).not.toBe(0);
+            expect(runSh(cmdOf('review', '-review.status'), staged.dir, vars).code).toBe(0);
+            expect(readFileSync(join(staged.dir, '.spur/run', `${staged.wbs}-review.status`), 'utf8').trim()).toBe(
+                'FAIL',
+            );
+            expect(firstPassingEdge('review', staged.dir, vars)).not.toBe('done');
+        } finally {
+            staged.cleanup();
+        }
+    }, 120000);
+
+    test('behavioral: prose-only, invalid-vocabulary and missing-row answers cannot certify (R4, AC3)', () => {
+        const staged = stage();
+        try {
+            setSection(staged.dir, staged.wbs, 'Requirements', '- [ ] R1. Do the thing.\n');
+            setSection(staged.dir, staged.wbs, 'Acceptance Criteria', '- [ ] The thing is done\n');
+            const verdictPath = join(staged.dir, '.spur/run', `${staged.wbs}-verdict.json`);
+            rmSync(verdictPath, { force: true });
+            const certify = (body: string): { token: string; output: string } => {
+                writeReviewAnswer(staged.dir, 'run-neg', body);
+                const run = Bun.spawnSync(
+                    [
+                        ...SPUR_CLI,
+                        'task',
+                        'verdict',
+                        staged.wbs,
+                        '--from-answer',
+                        '.spur/run/run-neg-review-answer.txt',
+                        '--no-logo',
+                    ],
+                    { cwd: staged.dir, env: { ...getEnvVars() }, stdout: 'pipe', stderr: 'pipe' },
+                );
+                const token = (run.exitCode ?? -1) === 0 ? 'PASS' : 'FAIL';
+                writeFileSync(join(staged.dir, '.spur/run/run-neg-review-verdict.status'), `${token}\n`);
+                return { token, output: `${run.stdout.toString()}${run.stderr.toString()}` };
+            };
+
+            // Prose only — no tables, so no requirement row can certify.
+            const prose = certify('Verdict: PASS\n\nEverything looks good; shipped.\nConfidence: HIGH\n');
+            expect(prose.token).toBe('FAIL');
+            expect(prose.output).toContain('missing requirement row');
+
+            // Invalid vocabulary — an evidence type the lint does not accept.
+            const invalid = certify(certificationAnswer('MET', 'screenshot'));
+            expect(invalid.token).toBe('FAIL');
+            expect(invalid.output).toContain('invalid evidence type');
+
+            // Missing row — an AC table without the declared requirement row.
+            const missing = certify(certificationAnswer('MET', 'test', '| R2 | MET | `src/index.ts:2` |'));
+            expect(missing.token).toBe('FAIL');
+            expect(missing.output).toContain('missing requirement row');
+
+            // Nothing manufactured a PASS on the way through.
+            const recorded = existsSync(verdictPath)
+                ? (JSON.parse(readFileSync(verdictPath, 'utf8')) as { verdict?: string }).verdict
+                : null;
+            expect(recorded).not.toBe('PASS');
+        } finally {
+            staged.cleanup();
+        }
+    }, 120000);
 });
