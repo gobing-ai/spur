@@ -4,7 +4,7 @@ name: Remove pr-review and wayfinder-resolution workflows; skills call the verbs
 status: done
 template: feature-impl
 created_at: 2026-10-18T05:10:06.872Z
-updated_at: "2026-10-18T23:02:28.460Z"
+updated_at: "2026-10-19T01:34:22.818Z"
 feature_id: D66
 priority: P1
 tags:
@@ -217,16 +217,16 @@ clobbered it. Docs/design + `docs/03` + CHANGELOG sweep and the stale seeded cop
 
 | Requirement | Status | Evidence |
 |-------------|--------|----------|
-| R1 | MET | Both YAMLs deleted; bundle has exactly 6 definitions; budgets clean; live `workflow list --json` probe (fresh HOME) names neither |
-| R2 | MET | `pr-reviewing/SKILL.md:42,64,126-157` flat-verb sequence with verdict gates; `dev-pr-review.md:20,40`; README:351 drops the YAML |
-| R3 | MET | `pipeline-resolution.md` deleted, `references/` gone; contract folded into `wayfinder/SKILL.md:149,155` |
-| R4 | MET | `pr-review/index.ts:1-8,1026`, `packages/app/src/services/done-transition-guard.ts:7`; zero retired-name hits in `packages/app/src` |
-| R5 | MET | Alias live (deprecation line verified); one doc home at `plugins/sp/skills/spur-cli/references/builder.md:100`; all other pages pinned clean |
+| R1 | MET | `plugins/sp/tests/retired-workflow-refs.test.ts:54-69`; fresh retirement assertions and rebuilt six-definition bundle prove removed files and budgets stay absent. |
+| R2 | MET | `plugins/sp/skills/pr-reviewing/SKILL.md:126-157`; flat-verb sequence and no-workflow reference tests passed. |
+| R3 | MET | `plugins/sp/skills/wayfinder/SKILL.md:149-159`; local skill procedure and removed resolution-reference tests passed. |
+| R4 | MET | `packages/app/src/services/pr-review/index.ts:1-8`; `packages/app/src/services/done-transition-guard.ts:1-10`; fresh retired-reference scan passed. |
+| R5 | MET | `apps/cli/src/commands/builder/pr.ts:163-169`; hidden alias remains registered and plugin scans prove all callers use flat verbs. |
 
 | Acceptance Criteria | Status | Evidence Type | Evidence |
 |---------------------|--------|---------------|----------|
-| R1 — The bundled workflow set no longer ships feature-verification, pr-review or wayfinder-resolution | MET | test | Both YAMLs deleted; bundle has exactly 6 definitions; `workflow list --json` probe on a fresh HOME names neither |
-| R11 — Callers, skills and docs describe only the surviving workflows | MET | test | skills/commands/README and packages/app source describe the surviving workflows and the direct verbs; alias kept and documented once |
+| R1 — The bundled workflow set no longer ships feature-verification, pr-review or wayfinder-resolution | MET | test | `plugins/sp/tests/retired-workflow-refs.test.ts:54-69`; fresh plugin tests pass and regenerated CLI assets match the six surviving definitions. |
+| R11 — Callers, skills and docs describe only the surviving workflows | MET | test | `plugins/sp/tests/retired-workflow-refs.test.ts:83-117`; fresh caller, skill, alias and direct-verb sequence assertions passed. |
 - Coverage: N/A (verdict-based; verify pipeline does not measure code coverage)
 
 ### Review
