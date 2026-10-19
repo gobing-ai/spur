@@ -4,7 +4,7 @@ name: "Consolidation sweep: docs, references, CHANGELOG and end-to-end proofs"
 status: done
 template: feature-impl
 created_at: 2026-10-18T05:10:06.873Z
-updated_at: "2026-10-19T01:03:51.270Z"
+updated_at: "2026-10-19T01:38:27.056Z"
 feature_id: D66
 priority: P2
 tags:
@@ -153,6 +153,8 @@ Verification this pass (targeted probes only — the full project gate is the pi
 
 Deferred: `bun run spur-check` / `spur-check-feature` run at the pipeline's test/feature boundaries, not inside implement.
 
+**D66 forced re-verification repairs (2026-10-18):** recorded the three ADR-142 retirement decisions in `config/workflow-candidates.json:70` and pinned their presence in `repo-wide-tests/workflow-consolidation-absence.test.ts:107`; the original feature gate failed on real run history because these records were missing. Added `apps/cli/tests/workflow/idea-pipeline-e2e.test.ts:7`, which drives the bundled definition through host discovery, both catalog decision artifacts, operator pause and explicit cancellation with a terminal recorded run. Updated the satellite proof table and corrected its stale Proposed label. Restored the seeded-copy cleanup and removed wrap-up feature variable migration details in `CHANGELOG.md:19` from commit 609ec46f9. Preserved a stale manually copied local engine directory under `.spur/run/D66-engine-before-reinstall` and reinstalled the locked engine; dependency-drift-check now passes.
+
 ### Testing
 
 **Pipeline verify results**
@@ -161,17 +163,17 @@ Deferred: `bun run spur-check` / `spur-check-feature` run at the pipeline's test
 
 | Requirement | Status | Evidence |
 |-------------|--------|----------|
-| R1 | MET | `repo-wide-tests/workflow-consolidation-absence.test.ts:1` — tracked-file scan rejects every deleted workflow identity; 4 tests pass, with the documented allowlist (CHANGELOG, ADRs, historical task/plan records) each carrying a reason. |
-| R2 | MET | `repo-wide-tests/workflow-consolidation-absence.test.ts:1` — the same suite rejects `spur builder pr <op>` outside the alias registration file; the alias stays live and documented once. |
-| R3 | MET | `docs/00_ADR.md:2582` ADR-142 Accepted; `docs/design/workflow-consolidation.md:4` status implemented; the diff updates 14 design satellites, `docs/help/cmd_feature.md`, `plugins/sp/README.md` and the spur-dev reference. |
-| R4 | MET | `CHANGELOG.md:3` Unreleased section carries the BREAKING CHANGE note naming the three removed workflows and the three override migrations plus the stale-receipt re-verify. |
-| R5 | MET | `packages/app/tests/workflow/wrapup-pipeline-e2e.test.ts:1` 3 pass; `packages/app/tests/workflow/feature-lifecycle-verifying-entry.test.ts:201` (1246) and `packages/app/tests/workflow/idea-pipeline-routing.test.ts:209` (1250) cover the other two; `bun run spur-check-feature` green end to end (repo-wide 14 pass, heavy 45 pass). |
+| R1 | MET | `repo-wide-tests/workflow-consolidation-absence.test.ts:106-147`; absence scan passes and now pins all three required retirement decisions against real run history. |
+| R2 | MET | `repo-wide-tests/workflow-consolidation-absence.test.ts:149-165`; alias caller scan passes while the deprecated registration is retained. |
+| R3 | MET | `docs/00_ADR.md:2582-2595`; `docs/design/workflow-consolidation.md:4-14`; current-owner and retired-reference tests pass; corrected stale Proposed label. |
+| R4 | MET | `CHANGELOG.md:19`; source-checked against commit 609ec46f9: removed workflows, override moves, seeded-copy cleanup, removed wrap-up feature variable and re-verification command are all present. |
+| R5 | MET | `apps/cli/tests/workflow/idea-pipeline-e2e.test.ts:7-72`; real bundled-run proof joins the passing feature-lifecycle and wrapup fixture proofs; fresh feature verification executes the required repo-wide and heavy gates. |
 
 | Acceptance Criteria | Status | Evidence Type | Evidence |
 |---------------------|--------|---------------|----------|
-| R1 — The bundled workflow set no longer ships feature-verification, pr-review or wayfinder-resolution | MET | test | `repo-wide-tests/workflow-consolidation-absence.test.ts:1` (4 pass) plus the CHANGELOG BREAKING CHANGE entry at `CHANGELOG.md:3`. |
-| R11 — Callers, skills and docs describe only the surviving workflows | MET | test | `docs/00_ADR.md:2582`, `docs/design/workflow-consolidation.md:4`, `plugins/sp/README.md` and the design satellites in this diff; `repo-wide-tests/workflow-consolidation-absence.test.ts:1` fails any trackable file that names a retired identity (4 pass). |
-| R12 — Each consolidated workflow has a repeatable end-to-end proof | MET | test | `packages/app/tests/workflow/wrapup-pipeline-e2e.test.ts:1` (3 pass), `feature-lifecycle-verifying-entry.test.ts:201`, `idea-pipeline-routing.test.ts:209`; `bun run spur-check-feature` passed. |
+| R1 — The bundled workflow set no longer ships feature-verification, pr-review or wayfinder-resolution | MET | test | `repo-wide-tests/workflow-consolidation-absence.test.ts:106-147`; fresh absence and retirement-ledger assertions pass, including deleted asset checks. |
+| R11 — Callers, skills and docs describe only the surviving workflows | MET | test | `repo-wide-tests/workflow-consolidation-absence.test.ts:120-165`; fresh owner/reference and alias scans pass; release migration note is complete at `CHANGELOG.md:19`. |
+| R12 — Each consolidated workflow has a repeatable end-to-end proof | MET | test | `apps/cli/tests/workflow/idea-pipeline-e2e.test.ts:7-72`; full bundled-run terminal/artifact proof passes alongside feature-lifecycle and wrapup E2E; feature verification records the fresh repo-wide and heavy gate result. |
 - Coverage: N/A (verdict-based; verify pipeline does not measure code coverage)
 
 ### Review

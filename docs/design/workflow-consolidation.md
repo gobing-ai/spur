@@ -10,7 +10,7 @@ tags: [system, D66, workflow]
 
 # Workflow consolidation — one owner per lifecycle, D65 primitives everywhere
 
-- **Status:** Proposed · **Date:** 2026-10-17 · **Feature:** D66
+- **Status:** Implemented · **Date:** 2026-10-17 · **Feature:** D66
 - **Decisions:** ADR-142 (feature-lifecycle owns feature state and verification); amends the
   ADR-119 consequence. Builds on ADR-125 (`decide`), ADR-126 (fleet executor), ADR-140 (one
   interpreter, work-item dispatch).
@@ -187,5 +187,5 @@ doc-tripwire → metrics-record → branch-cleanup? → done | skipped | failed`
 | --- | --- |
 | feature-lifecycle `verifying` entry (1246/1247) | `packages/app/tests/workflow/feature-lifecycle-verifying-entry.test.ts` — fixture project, real CLI: receipt, own `feature-lifecycle` run row, verifier identity |
 | wrapup-pipeline (1249) | `packages/app/tests/workflow/wrapup-pipeline-e2e.test.ts` — fixture project, real CLI: run row, terminal state, resolve/metrics status files, persisted task list; no feature-status write on any path |
-| idea-pipeline (1250) | `packages/app/tests/workflow/idea-pipeline-routing.test.ts` — live YAML guards driven against fixture fact files: profile-independent routes, typed entry status file, decide rescues |
+| idea-pipeline (1250) | `apps/cli/tests/workflow/idea-pipeline-e2e.test.ts` — bundled definition through the CLI: host discovery receipt, recorded decision artifacts, operator pause, explicit cancellation and terminal run row; `packages/app/tests/workflow/idea-pipeline-routing.test.ts` covers the route matrix |
 | Repo-wide absence of the three retired definitions (1252) | `repo-wide-tests/workflow-consolidation-absence.test.ts` — runs inside `spur-check-feature` |
