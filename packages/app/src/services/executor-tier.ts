@@ -4,7 +4,11 @@
  * it must import nothing from that module; consumers (`fleet-service`,
  * `history-service`, and the agent service itself) read policy from here.
  */
-import { type ExecutorDisabledValue, normalizeExecutorAvailability } from '@gobing-ai/spur-config';
+import {
+    type ExecutionCapabilities,
+    type ExecutorDisabledValue,
+    normalizeExecutorAvailability,
+} from '@gobing-ai/spur-config';
 import { type CapabilityTier, isTierEligible, TIER_RANK } from '@gobing-ai/spur-domain';
 
 /**
@@ -26,6 +30,12 @@ export interface AgentExecutorConfig {
     tier?: CapabilityTier;
     /** 111: routing kill-switch; validated/merged at the config boundary. */
     disabled: ExecutorDisabledValue;
+    /**
+     * 0706/1255: executor-side capability attestation, mirrored from the config zod block so the
+     * role walk can filter candidates by the stage's declared requirements without importing CLI
+     * types. Absent means every axis is `unknown`, exactly as the pre-spawn guard resolves it.
+     */
+    executionCapabilities?: ExecutionCapabilities;
 }
 
 /**

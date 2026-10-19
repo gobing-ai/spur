@@ -491,7 +491,21 @@ field; 0343 split bare `capable` into quality sub-tiers) and escalates along the
 chain on an objective failure signal
 (`gate-fail`/`timeout`/`insufficient-evidence`/`retry-exhausted`/`resource-exhaustion`/`auth`),
 with the escalation record naming the current executor and tier. Legacy bare `capable` normalizes to `capable-1` during
-the deprecation window. The stage-registry schema version is 1.3 (1.2 added the `auth` trigger; 1.3 added optional artifact `identity` — the exact task-section/file identity used for the one-writer-per-section projection (F92 0593)).
+the deprecation window.
+
+**Model binding and capability-filtered selection (task 1255).** A model chosen for the selected
+executor — an explicit `--model`/action override or the executor pin's own model — binds to that
+executor for the **initial dispatch only**. An escalation (0407/0482) or a disabled-pin re-resolution
+(0894) replaces the executor, and the replacement dispatches its own model: a pin- or caller-derived
+model name never travels onto a different executor, and model values stay opaque (no name translation,
+no provider lookup). Separately, when a stage declares `requiresCapabilities`, the auto/role walk
+(`--agent auto`, a declared role, `agent.default` routing through a role, and the fresh disabled-pin
+re-resolution) skips candidates that cannot satisfy the required execution axes (executor attestation)
+or session axes (the runner capability record) — the same two evaluations the pre-spawn guard runs, so
+selection and admission answer one question. A candidate set with nothing capable fails naming each
+rejected executor and its unmet axes. An **explicit named pin is never filtered or silently
+substituted**: it resolves as declared and an incapable one still fails closed at the pre-spawn guard
+(ADR-118). No requirement means unchanged resolution; no new flag, verb or policy is added. The stage-registry schema version is 1.3 (1.2 added the `auth` trigger; 1.3 added optional artifact `identity` — the exact task-section/file identity used for the one-writer-per-section projection (F92 0593)).
 **Stage floors (cost-aware):** `plan` starts at `capable-2` (escalate to
 `capable-3`) so Design is authored at create by default; `refine` floors at `standard` (fallback
 `capable-2`) as the blank-Design fallback; `implement` stays `standard`; `verify`/`dogfood` floor at

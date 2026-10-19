@@ -312,6 +312,11 @@ export class AgentRunExecutor {
         }
 
         // Flag-derived values that do not change across iterations.
+        // 1255 R1/R2: this is the model chosen for the SELECTED executor — an explicit
+        // caller/action override, or the executor pin's own model forwarded by the action.
+        // It binds to that executor for the initial dispatch only: `currentModel` below is
+        // the current executor's model, and an escalation replaces the executor (0407), so
+        // the frozen preference must not follow the run onto a different executor.
         const explicitModel = stringFlag(flags, 'model', '') || undefined;
         const purpose = stringFlag(flags, 'purpose', '') || undefined;
         const tags = parseTagsFlag(flags);
@@ -447,7 +452,11 @@ export class AgentRunExecutor {
         try {
             for (let attempt = 0; ; attempt++) {
                 const agent = currentAgent;
-                const model = explicitModel ?? currentModel;
+                // 1255 R1/R2: the model preference applies to the initial dispatch only. Every
+                // later attempt ran because the ladder replaced the executor, and a replacement
+                // dispatches its OWN model — a pin- or caller-derived name from the previous
+                // executor must never travel with it (tasks 0407/0482 escalation, 0894 reroll).
+                const model = (attempt === 0 ? explicitModel : undefined) ?? currentModel;
 
                 // Capability gate (0706 R5): resolve-first, compare-before-spawn.
                 // Evaluated per attempt — the escalation ladder may land on a

@@ -684,9 +684,19 @@ export class AgentRunActionRunner implements ActionRunner {
                             'for this run. Restore executor availability or abort the run.',
                     };
                 }
+                // 1255 R1/R3: the re-resolution replaces the DISABLED executor with a fresh
+                // role pick, so the requirement flag rides along — the fresh candidate must be
+                // able to serve this stage (and the next-checked capability record below stays
+                // the re-resolved executor's).
+                const rerollCapabilityFlag = requiresCapabilitiesFlagForResolve(options.requiresCapabilities);
                 const rerolled =
                     typeof this.agentService.resolveRoleFresh === 'function'
-                        ? await this.agentService.resolveRoleFresh({ role })
+                        ? await this.agentService.resolveRoleFresh({
+                              role,
+                              ...(rerollCapabilityFlag !== undefined
+                                  ? { requiresCapabilities: rerollCapabilityFlag }
+                                  : {}),
+                          })
                         : undefined;
                 if (rerolled === undefined || !rerolled.ok) {
                     const reason = rerolled !== undefined ? rerolled.message : 'no agent service for re-resolution';
@@ -1705,6 +1715,19 @@ function buildResultData(
         data.stderrTail = tail(redactAndBound(stderr, secretValues, Number.MAX_SAFE_INTEGER), 4096);
     }
     return data;
+}
+
+/**
+ * 1255 R3: serialize this action's capability requirements into the `requiresCapabilities`
+ * resolve flag. The resolver's role walk reads the same flag the pre-spawn guard does, so a
+ * fresh role re-resolution (disabled pin) filters candidates by capability too. An invalid
+ * shape serializes to `undefined` here — the fail-closed validation stays at the pre-spawn
+ * boundary (`parseRequiresCapabilities` at the flag-building step), never duplicated leniently.
+ */
+function requiresCapabilitiesFlagForResolve(raw: unknown): string | undefined {
+    const parsed = parseRequiresCapabilities(raw);
+    if (!parsed.ok || Object.keys(parsed.requires).length === 0) return undefined;
+    return JSON.stringify(parsed.requires);
 }
 
 function asOptionalString(value: unknown): string | undefined {

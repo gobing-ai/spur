@@ -2,6 +2,7 @@ import { beforeEach, describe, expect, mock, test } from 'bun:test';
 import type { DoctorRunner } from '@gobing-ai/ts-ai-runner';
 import { _resetAgentServiceShimsForTest, AgentResolver } from '../../src/services/agent-resolver';
 import type { AgentRoleDefinition, AgentServiceContext } from '../../src/services/agent-service';
+import type { AgentExecutorConfig } from '../../src/services/executor-tier';
 
 // AgentResolver is the `--agent` / role / stage resolution funnel AgentService owns. These tests
 // pin its own state: the scoped fresh-roster override and the process-global bare-binary
@@ -39,6 +40,83 @@ function resolverWith(errors: string[] = []): AgentResolver {
     };
     return new AgentResolver(ctx);
 }
+
+/** A resolver over an explicit executor roster (1255 capability-walk cases). */
+function resolverWithExecutors(executors: AgentExecutorConfig[]): AgentResolver {
+    return new AgentResolver({
+        cwd: process.cwd(),
+        env: {},
+        output: { write: () => {}, error: () => {} },
+        roles: ROLES,
+        agentConfig: { executors },
+    });
+}
+
+/** An executor entry attesting the execution axes a write-capable stage requires. */
+function attested(name: string, agent: string): AgentExecutorConfig {
+    return {
+        name,
+        agent,
+        tier: 'standard',
+        disabled: false,
+        executionCapabilities: {
+            version: 1,
+            axes: {
+                fsWrite: { state: 'available', provenance: 'operator-configured' },
+                processSpawn: { state: 'available', provenance: 'operator-configured' },
+            },
+        },
+    };
+}
+
+describe('AgentResolver capability-aware role walk (1255 R3-R5)', () => {
+    const WRITE_STAGE = JSON.stringify({ fsWrite: 'available', processSpawn: 'available' });
+
+    test('an incapable first candidate is skipped for the attested next one', async () => {
+        const resolver = resolverWithExecutors([
+            { name: 'unattested', agent: 'omp', tier: 'standard', disabled: false },
+            attested('attested', 'pi'),
+        ]);
+        const withRequirements = await resolver.resolveAgent(
+            { agent: 'auto', role: 'coder', requiresCapabilities: WRITE_STAGE },
+            usableDoctor(),
+        );
+        expect(withRequirements.ok && withRequirements.executor).toBe('attested');
+        // No requirement means unchanged resolution: config order still wins (AC3).
+        const without = await resolver.resolveAgent({ agent: 'auto', role: 'coder' }, usableDoctor());
+        expect(without.ok && without.executor).toBe('unattested');
+    });
+
+    test('an all-incapable roster fails naming each rejected executor and its unmet axes', async () => {
+        const resolver = resolverWithExecutors([
+            { name: 'unattested', agent: 'omp', tier: 'standard', disabled: false },
+        ]);
+        const result = await resolver.resolveAgent(
+            { agent: 'auto', role: 'coder', requiresCapabilities: WRITE_STAGE },
+            usableDoctor(),
+        );
+        expect(result.ok).toBe(false);
+        if (!result.ok) {
+            expect(result.message).toContain('unattested');
+            expect(result.message).toContain('unmet execution capability');
+            expect(result.message).toContain('fsWrite: unknown');
+            // Bounded diagnostics: no config blob or env value rides the message.
+            expect(result.message).not.toContain('operator-configured');
+        }
+    });
+
+    test('a malformed requirement flag leaves the walk unchanged', async () => {
+        const resolver = resolverWithExecutors([
+            { name: 'unattested', agent: 'omp', tier: 'standard', disabled: false },
+            attested('attested', 'pi'),
+        ]);
+        const result = await resolver.resolveAgent(
+            { agent: 'auto', role: 'coder', requiresCapabilities: '{not json' },
+            usableDoctor(),
+        );
+        expect(result.ok && result.executor).toBe('unattested');
+    });
+});
 
 beforeEach(() => {
     _resetAgentServiceShimsForTest();

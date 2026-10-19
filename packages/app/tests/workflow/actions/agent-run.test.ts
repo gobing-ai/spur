@@ -3367,25 +3367,58 @@ describe('AgentRunActionRunner pin invalidation + trace columns (0895)', () => {
         dispatchExitCode = 0,
     ) {
         let capturedFlags: Record<string, string | boolean> = {};
+        let rerollFlags: Record<string, string | boolean> = {};
         const svc = {
             executorAvailability: async () => availability,
-            resolveRoleFresh: async () => ({
-                ok: true,
-                agent: 'claude',
-                executor: 'claude-b',
-                model: 'sonnet',
-                tier: 3,
-                source: 'role',
-                role: 'coder',
-            }),
+            resolveRoleFresh: async (flags: Record<string, string | boolean> = {}) => {
+                rerollFlags = flags;
+                return {
+                    ok: true,
+                    agent: 'claude',
+                    executor: 'claude-b',
+                    model: 'sonnet',
+                    tier: 3,
+                    source: 'role',
+                    role: 'coder',
+                };
+            },
             runTraced: async (_input: string | undefined, flags: Record<string, string | boolean>) => {
                 capturedFlags = flags;
                 return { exitCode: dispatchExitCode, stdout: '', invocation: invocation({ agent: 'claude' }) };
             },
             flags: () => capturedFlags,
-        } as unknown as AgentService & { flags: () => Record<string, string | boolean> };
+            reroll: () => rerollFlags,
+        } as unknown as AgentService & {
+            flags: () => Record<string, string | boolean>;
+            reroll: () => Record<string, string | boolean>;
+        };
         return svc;
     }
+
+    // 1255 R3: the fresh role re-resolution replaces a DISABLED pin, so the stage's declared
+    // capability requirements must ride the re-resolve call — otherwise the walk can land on a
+    // candidate the pre-spawn guard then refuses, hard-failing a dispatch that had an eligible
+    // alternative. The requirement flag is the same one the guard consumes.
+    test('1255 R3: the disabled-pin re-resolution carries the stage requiresCapabilities', async () => {
+        const svc = svcWithDisabledPin({ disabled: true, owner: 'drain' });
+        const runner = new AgentRunActionRunner(svc);
+        const ctx = makeCtx({ runId: 'run-1255', vars: { '__executor.coder': PIN_A } });
+        const result = await runner.execute(
+            { role: 'coder', input: 'hello', requiresCapabilities: { fsWrite: 'available' } },
+            ctx,
+        );
+        expect(result.ok).toBe(true);
+        const flags = (svc as unknown as { reroll: () => Record<string, string | boolean> }).reroll();
+        expect(flags.role).toBe('coder');
+        expect(JSON.parse(String(flags.requiresCapabilities))).toEqual({ fsWrite: 'available' });
+
+        // No requirement means no flag — the re-resolution contract stays unchanged for stages
+        // that declare nothing (R3 "No requirements means unchanged resolution").
+        const plain = svcWithDisabledPin({ disabled: true, owner: 'drain' });
+        await new AgentRunActionRunner(plain).execute({ role: 'coder', input: 'hello' }, ctx);
+        const plainFlags = (plain as unknown as { reroll: () => Record<string, string | boolean> }).reroll();
+        expect(plainFlags.requiresCapabilities).toBeUndefined();
+    });
 
     test('mid-run disable re-resolves the role once: fresh dispatch, new pin persisted, trace records the hop (R1)', async () => {
         const svc = svcWithDisabledPin({ disabled: true, owner: 'drain', reason: 'quota exhausted' });

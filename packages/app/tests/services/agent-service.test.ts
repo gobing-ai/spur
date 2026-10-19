@@ -2911,6 +2911,98 @@ describe('AgentService automatic tier escalation (0407)', () => {
         expect(errors.some((e) => e.includes('retrying on capable-exec'))).toBe(true);
     });
 
+    test('1255 R1/R2/AC1: a model chosen for the starting executor never follows an escalation onto another executor', async () => {
+        // The pin (or a caller override) names a model for the executor that STARTS the run.
+        // Before 1255 that flag was frozen for every attempt, so an escalation dispatched the
+        // replacement executor with the dead executor's model. The preference is now bound to
+        // the initial dispatch: attempt 0 keeps it, the replacement dispatches its own model.
+        const { errors, output } = captureOutput();
+        const svc = makeConfiguredService(
+            {
+                executors: [
+                    { name: 'std-exec', agent: 'pi', tier: 'standard', disabled: false },
+                    // A replacement executor with its OWN configured model.
+                    {
+                        name: 'capable-exec',
+                        agent: 'claude',
+                        tier: 'capable-1',
+                        disabled: false,
+                        model: 'anthropic/claude-opus',
+                    },
+                ],
+            },
+            {},
+            roleMap(),
+            output,
+        );
+        const results: AgentRunResult[] = [
+            makeRunResult({ exitCode: 1, stderr: 'Error: rate limit exceeded (429)' }),
+            makeRunResult({ exitCode: 0 }),
+        ];
+        let callIndex = 0;
+        const runPromptCommand = mock((_agent: string, _opts?: Record<string, unknown>) => {
+            const idx = Math.min(callIndex++, results.length - 1);
+            return Promise.resolve(results[idx] ?? results[results.length - 1]);
+        });
+        const detector = {
+            detectOne: mock(() =>
+                Promise.resolve({ name: 'pi', installed: true, version: '1.0.0', channels: [], error: null }),
+            ),
+        } as unknown as AgentRunDeps['detector'];
+        const doctorRunner = {
+            runOne: mock(() => Promise.resolve(mockDoctorResult({ usable: true }))),
+        } as unknown as AgentRunDeps['doctorRunner'];
+        const deps = { runner: { runPromptCommand } as unknown as AgentRunDeps['runner'], detector, doctorRunner };
+
+        const code = await svc.run(
+            'Implement the task',
+            { agent: 'auto', role: 'coder', model: 'volc/glm-dead', json: false },
+            deps,
+        );
+
+        expect(code).toBe(0);
+        expect(runPromptCommand).toHaveBeenCalledTimes(2);
+        expect(errors.some((e) => e.includes('Escalating: std-exec'))).toBe(true);
+        const models = runPromptCommand.mock.calls.map(
+            (call) => (call[1] as Record<string, unknown> | undefined)?.model,
+        );
+        // Attempt 0 keeps the selected executor's model (the explicit caller override).
+        expect(models[0]).toBe('volc/glm-dead');
+        // The replacement dispatches ITS configured model — never the previous executor's.
+        expect(models[1]).toBe('anthropic/claude-opus');
+    });
+
+    test('1255 R2: a pinned executor with its own model keeps it until the executor changes', async () => {
+        const { output } = captureOutput();
+        const svc = makeConfiguredService(
+            {
+                executors: [
+                    { name: 'pinned-exec', agent: 'pi', tier: 'standard', disabled: false, model: 'pi/pinned' },
+                ],
+            },
+            {},
+            roleMap(),
+            output,
+        );
+        const runPromptCommand = mock((_agent: string, _opts?: Record<string, unknown>) =>
+            Promise.resolve(makeRunResult()),
+        );
+        const detector = {
+            detectOne: mock(() =>
+                Promise.resolve({ name: 'pi', installed: true, version: '1.0.0', channels: [], error: null }),
+            ),
+        } as unknown as AgentRunDeps['detector'];
+        const doctorRunner = {
+            runOne: mock(() => Promise.resolve(mockDoctorResult({ usable: true }))),
+        } as unknown as AgentRunDeps['doctorRunner'];
+        const deps = { runner: { runPromptCommand } as unknown as AgentRunDeps['runner'], detector, doctorRunner };
+
+        const code = await svc.run('Implement the task', { agent: 'pinned-exec', json: false }, deps);
+        expect(code).toBe(0);
+        expect(runPromptCommand).toHaveBeenCalledTimes(1);
+        expect((runPromptCommand.mock.calls[0]?.[1] as Record<string, unknown> | undefined)?.model).toBe('pi/pinned');
+    });
+
     test('0503 R1: classified authentication failure escalates to the next executor', async () => {
         const { errors, output } = captureOutput();
         const svc = makeService({}, output, escalationConfig);
