@@ -200,9 +200,12 @@ Feature: Spur decision production readiness: events and workflow adoption
 | 1115 | Migrate task-pipeline test-fail-triage decide to the failure-class catalog decision | done |
 | 1116 | Migrate task-pipeline review-fail-triage decide to the review-failure-class catalog decision | done |
 | 1124 | Residuals from 1100 | done |
-| 1193 | Fix decide action evidence path resolution: an absolute evidence path is joined with the workdir | wip |
+| 1193 | Fix decide action evidence path resolution: an absolute evidence path is joined with the workdir | done |
 | 1194 | Fix decide action evidence path resolution: an absolute evidence path is joined with the workdir | cancelled |
-| 1195 | Fix clef DecisionMaker: the hub passes state null and Cloudflare rejects the request with 422 | wip |
+| 1195 | Fix clef DecisionMaker: the hub passes state null and Cloudflare rejects the request with 422 | done |
+| 1262 | Decision-maker reliability and effectiveness: laya worker bundling, decide ledger gap, task-pipeline decision rework | todo |
+| 1263 | Decision outcome pairing and accuracy report for catalog decisions | todo |
+| 1264 | Executor-failure rescue classifier for unmatched dispatch failures | todo |
 <!-- END AUTO-GENERATED -->
 
 ## Notes
