@@ -1154,7 +1154,10 @@ export {
 } from './workflow/step-reporter';
 export {
     BOOKKEEPING_WORKFLOWS,
+    type CausalActionFailure,
+    type CausalActionTracker,
     classifyTerminalReason,
+    createCausalActionContext,
     isBookkeepingWorkflow,
     isTerminalReason,
     TERMINAL_REASONS,

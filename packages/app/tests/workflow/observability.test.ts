@@ -416,3 +416,76 @@ describe('ObservableWorkflowAdapter — branch pass-through (engine 0.5.15)', ()
         expect(emitted).toEqual([]);
     });
 });
+
+/**
+ * 1256 — the emitted `workflow.run.finalized` event and the persisted `runs.terminal_reason` must
+ * carry the SAME classification, including the causal action kind the engine reason omits.
+ */
+describe('ObservableWorkflowAdapter terminal-reason causality (1256 R1/R3)', () => {
+    test('an immediate agent.run failure persists and emits failed-agent', async () => {
+        const persisted: Array<string | undefined> = [];
+        const adapter = {
+            async createRun() {},
+            async finalizeRun(
+                _runId: string,
+                _status: string,
+                _completedAt: string,
+                _fence?: unknown,
+                reason?: string,
+            ) {
+                persisted.push(reason);
+            },
+            async saveActionStart() {
+                return 'action-1256';
+            },
+            async saveActionFinalize() {},
+        } as unknown as WorkflowPersistenceAdapter;
+        const bus = new EventBus<WorkflowObservabilityEventMap>();
+        const emitted: Array<string | undefined> = [];
+        bus.on('workflow.run.finalized', (event) => emitted.push(event.terminalReason));
+
+        const dec = new ObservableWorkflowAdapter(adapter, bus);
+        await dec.saveActionStart('run-1256', 'implement', 'agent.run');
+        await dec.saveActionFinalize('action-1256', 'failed', 10, false, 'agent.run', { error: 'executor exited 1' });
+        await dec.finalizeRun('run-1256', 'failed', '2026-10-19T00:00:00.000Z', undefined, 'executor exited 1');
+
+        expect(persisted).toEqual(['failed-agent']);
+        expect(emitted).toEqual(['failed-agent']);
+    });
+
+    test('a recovered failure does not relabel the event, and a reasonless close emits no reason', async () => {
+        const persisted: Array<string | undefined> = [];
+        const adapter = {
+            async finalizeRun(
+                _runId: string,
+                _status: string,
+                _completedAt: string,
+                _fence?: unknown,
+                reason?: string,
+            ) {
+                persisted.push(reason);
+            },
+            async saveActionStart() {
+                return 'action-1256';
+            },
+            async saveActionFinalize() {},
+        } as unknown as WorkflowPersistenceAdapter;
+        const bus = new EventBus<WorkflowObservabilityEventMap>();
+        const emitted: Array<string | undefined> = [];
+        bus.on('workflow.run.finalized', (event) => emitted.push(event.terminalReason));
+
+        const dec = new ObservableWorkflowAdapter(adapter, bus);
+        const failedAction = await dec.saveActionStart('run-1256-r', 'implement', 'agent.run');
+        await dec.saveActionFinalize(failedAction, 'failed', 10, false, 'agent.run', { error: 'boom' });
+        const okAction = await dec.saveActionStart('run-1256-r', 'implement', 'agent.run');
+        await dec.saveActionFinalize(okAction, 'done', 10, true, 'agent.run');
+        await dec.finalizeRun('run-1256-r', 'failed', '2026-10-19T00:00:01.000Z', undefined, 'no-passing-transition');
+
+        expect(persisted).toEqual(['failed-guard']);
+        expect(emitted).toEqual(['failed-guard']);
+
+        await dec.finalizeRun('run-1256-p', 'done', '2026-10-19T00:00:02.000Z');
+        expect(persisted).toEqual(['failed-guard', undefined]);
+        expect(emitted).toEqual(['failed-guard', undefined]);
+    });
+});

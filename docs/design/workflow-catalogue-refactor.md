@@ -56,7 +56,15 @@ pauses, making the fleet default, a new public `spur` noun/verb without separate
   the enum and a classifier over engine built-ins (`no-passing-transition` → `failed-guard`,
   `iteration-bound-exceeded` → `retry-exhausted`, …). `inline-run-setup --close --reason` covers the
   inline surface; validation requires a declared reason on every edge into a `failureStates` member.
-  Legacy nulls read `unclassified`.
+  Legacy nulls read `unclassified`. **Causal action identity (task 1256).** The engine reason does not
+  carry the failing action's KIND, so an ordinary closure could not distinguish an immediate
+  `agent.run` failure from any other check failure. Both persistence decorators that already observe
+  the action boundary (`WorkflowActionTraceWriter`, `ObservableWorkflowAdapter`) keep a run-scoped
+  `CausalActionContext`: the last failed action's kind plus its own bounded error text, cleared by any
+  successful action (recovery/progression) and consumed at the run's terminal close. Classification
+  therefore runs once with `{status, engineReason, actionKind, errorText}` and the declared reason,
+  guard/bound and outcome-unknown precedences are unchanged. `workflow.run.finalized` carries the same
+  `terminalReason` the row persists, so event consumers never re-derive it.
 - **Bookkeeping vs metrics.** Lifecycle runs (`task-lifecycle`, `feature-lifecycle`, which dominate run
   counts) are classified report-side by one `BOOKKEEPING_WORKFLOWS` constant and excluded from cost
   rollups by default — no row-kind column.

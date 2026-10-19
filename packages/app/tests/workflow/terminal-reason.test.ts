@@ -3,6 +3,7 @@ import { DbWorkflowPersistenceAdapter, type WorkflowPersistenceAdapter } from '@
 import {
     BOOKKEEPING_WORKFLOWS,
     classifyTerminalReason,
+    createCausalActionContext,
     isBookkeepingWorkflow,
     isTerminalReason,
     TERMINAL_REASONS,
@@ -133,5 +134,82 @@ describe('terminal-reason (0937)', () => {
             projectDb.close();
             rmSync(base, { recursive: true, force: true });
         }
+    });
+});
+
+/**
+ * 1256 — the causal action context that lets an ordinary run closure classify an immediate
+ * `agent.run` failure as `failed-agent`. The tracker is run-scoped: progress or a successful
+ * action clears it, and the run's own close consumes it, so a recovered failure can never
+ * relabel a later, unrelated close.
+ */
+describe('createCausalActionContext (1256 R1/R2/R4)', () => {
+    test('an immediate agent.run failure classifies failed-agent; a timeout keeps failed-timeout', () => {
+        const context = createCausalActionContext();
+        context.noteActionFinalize('run-a', 'agent.run', false, { error: 'executor exited 1' });
+        const failed = context.consume('run-a');
+        expect(
+            classifyTerminalReason({
+                status: 'failed',
+                engineReason: 'executor exited 1',
+                actionKind: failed?.kind ?? null,
+                errorText: failed?.errorText ?? 'executor exited 1',
+            }),
+        ).toBe('failed-agent');
+
+        context.noteActionFinalize('run-b', 'agent.run', false, { error: 'step timeout after 600s' });
+        const timedOut = context.consume('run-b');
+        expect(
+            classifyTerminalReason({
+                status: 'failed',
+                engineReason: 'step timeout after 600s',
+                actionKind: timedOut?.kind ?? null,
+                errorText: timedOut?.errorText ?? null,
+            }),
+        ).toBe('failed-timeout');
+    });
+
+    test('a successful action clears the run context, so a recovered failure cannot relabel a later close', () => {
+        const context = createCausalActionContext();
+        context.noteActionFinalize('run-c', 'agent.run', false, { error: 'rate limited' });
+        context.noteActionFinalize('run-c', 'agent.run', true);
+        expect(context.consume('run-c')).toBeUndefined();
+        // The later close is a guard failure: the engine reason decides, not the old action.
+        expect(classifyTerminalReason({ status: 'failed', engineReason: 'no-passing-transition' })).toBe(
+            'failed-guard',
+        );
+    });
+
+    test('explicit declared reasons and outcome-unknown keep their precedence over the action kind', () => {
+        const context = createCausalActionContext();
+        context.noteActionFinalize('run-d', 'agent.run', false, { error: 'member still working' });
+        const causal = context.consume('run-d');
+        // A declared enum reason passes through unchanged even with a live failure context.
+        expect(
+            classifyTerminalReason({
+                status: 'failed',
+                engineReason: 'cancelled',
+                actionKind: causal?.kind ?? null,
+                errorText: causal?.errorText ?? null,
+            }),
+        ).toBe('cancelled');
+        expect(
+            classifyTerminalReason({
+                status: 'failed',
+                engineReason: 'outcome-unknown',
+                actionKind: causal?.kind ?? null,
+                errorText: 'fleet wait ended outcome-unknown',
+            }),
+        ).toBe('interrupted');
+    });
+
+    test('runs stay isolated, empty run ids are ignored and consume is destructive', () => {
+        const context = createCausalActionContext();
+        context.noteActionFinalize('', 'agent.run', false, { error: 'no run id' });
+        context.noteActionFinalize('run-e', 'agent.run', false, { error: 'e failed' });
+        context.noteActionFinalize('run-f', 'shell', false, { error: 'f failed' });
+        expect(context.consume('run-e')?.kind).toBe('agent.run');
+        expect(context.consume('run-e')).toBeUndefined();
+        expect(context.consume('run-f')?.kind).toBe('shell');
     });
 });
