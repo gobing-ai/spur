@@ -5,6 +5,7 @@ import { GuardDeniedError } from '../errors';
 import { resolveDurableArtifactPath } from '../workflow/actions/run-path';
 import { reconcileExistingLifecycleRow, TASK_LIFECYCLE_PROFILE } from '../workflow/lifecycle-adapter';
 import { extractRunCitations, RUN_CITATION_DIRS } from '../workflow/run-citation';
+import { buildTrackedBasenameIndex, qualifySectionBody } from './anchor-qualifier';
 import {
     defaultVerdictRunDir,
     featureScenarioTitles,
@@ -123,6 +124,22 @@ export class TaskRecordOps {
         }
     }
 
+    /**
+     * Rewrite unambiguous bare-basename anchors in a rendered section body to their repo-relative
+     * form — the same pass `spur task migrate-anchors` runs over task sections, applied where `record`
+     * creates the citation. Best-effort: an unreadable index or an ambiguous basename leaves the body
+     * exactly as rendered (the check still reports the unresolved anchor; nothing is guessed).
+     */
+    private async qualifyRenderedAnchors(body: string): Promise<string> {
+        try {
+            const projectRoot = this.ctx.fs.resolve('.');
+            const index = await buildTrackedBasenameIndex(projectRoot);
+            return qualifySectionBody(body, index).newBody;
+        } catch {
+            return body;
+        }
+    }
+
     /** Implementation of {@link TaskService.record} (see its doc comment for the contract). */
     async record(wbs: string, opts: RecordOptions = {}): Promise<RecordResult> {
         const filePath = await this.files.resolveTaskFile(wbs);
@@ -188,7 +205,12 @@ export class TaskRecordOps {
                 verdict,
             );
             if (scenarioWarnings.length > 0) result.scenarioWarnings = scenarioWarnings;
-            const testingBody = renderTesting(verdict);
+            // Session review 2026-10-19: the evidence cells are the reviewer's own text, transcribed
+            // verbatim from the certification answer. A bare basename anchor in that prose failed the
+            // `--as done` check (L4.anchor-unresolved) on tasks whose implementation had already
+            // qualified its own anchors — twice in the 1254–1260 batch. Qualify at the transcription
+            // point so the recorded Testing and the done gate share one anchor vocabulary.
+            const testingBody = await this.qualifyRenderedAnchors(renderTesting(verdict));
             // R6 (1139): a rendered Testing citation must resolve in THIS tree's planes, so
             // teardown is never the first detector of a phantom `.spur/run/<name>` reference.
             await this.assertTestingCitationsResolved(verdict, testingBody);
