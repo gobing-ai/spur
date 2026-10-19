@@ -17,6 +17,7 @@ git ls-files docs/dogfood | grep -Ev '(README|INDEX)\.md$'
 
 ## Reports
 
+- `2026-10-18-D66-workflow-consolidation-dogfood.md`
 - `2026-10-17-D65-real-task-pipeline-dogfood.md`
 - `2026-10-13-F43-task-deprecated-status-dogfood.md`
 - `2026-10-12-F42-deprecated-status-dogfood.md`

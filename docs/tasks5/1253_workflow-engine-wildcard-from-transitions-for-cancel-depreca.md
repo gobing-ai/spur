@@ -1,10 +1,10 @@
 ---
 schema_version: 1
 name: "Workflow engine: wildcard from transitions for cancel/deprecate edges (deferred)"
-status: blocked
+status: cancelled
 template: standard
 created_at: 2026-10-18T05:22:19.813Z
-updated_at: "2026-10-18T05:53:34.544Z"
+updated_at: "2026-10-19T01:04:15.306Z"
 
 feature_id: D66
 ac_altitude: task-local
@@ -15,6 +15,8 @@ priority: P3
 ## 1253. Workflow engine: wildcard from transitions for cancel/deprecate edges (deferred)
 
 ### Background
+
+> Deferred: D66 shipped without it (2026-10-18). Wildcard `from` transitions are a released `@gobing-ai/ts-dual-workflow-engine` change, tracked separately; the cancel/deprecate edges stay explicit in feature-lifecycle and task-lifecycle until then.
 
 Deferred follow-up from feature D66 (operator decision 2026-10-17: record it, do not implement yet).
 `transition.from` in the state-machine schema is a plain string and `requestTransition` matches one
@@ -114,4 +116,6 @@ Handoff: when 1252 lands and this task is still deferred, cancel it or move it w
 
 - 2026-10-18T05:30:34.347Z backlog → todo (system)
 - 2026-10-18T05:44:22.769Z todo → blocked (system)
+- 2026-10-19T01:04:05.816Z blocked → todo (system)
+- 2026-10-19T01:04:15.306Z todo → cancelled (system)
 
