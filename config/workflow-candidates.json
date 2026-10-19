@@ -69,6 +69,24 @@
     ],
     "retirements": [
         {
+            "name": "feature-verification",
+            "recordedBy": "1246/1252 (D66, ADR-142)",
+            "date": "2026-10-18",
+            "rationale": "The wrapper was retired by the D66 consolidation decision; feature-lifecycle's verifying entry calls spur feature verify directly. Existing run history is retained."
+        },
+        {
+            "name": "pr-review",
+            "recordedBy": "1251/1252 (D66, ADR-142)",
+            "date": "2026-10-18",
+            "rationale": "The sequencing workflow was retired by the D66 consolidation decision; the PR review skill calls the flat spur builder pr-* verbs directly. Existing run history is retained."
+        },
+        {
+            "name": "wayfinder-resolution",
+            "recordedBy": "1251/1252 (D66, ADR-142)",
+            "date": "2026-10-18",
+            "rationale": "The workflow was retired by the D66 consolidation decision; investigation remains a wayfinder skill procedure. Existing run history is retained."
+        },
+        {
             "name": "planning-pipeline",
             "recordedBy": "0872 (ADR-072/075 composition-baseline pass 2dc86579a)",
             "date": "2026-08-19",

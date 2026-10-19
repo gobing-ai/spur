@@ -53,6 +53,7 @@ const ALIAS_DOC = 'plugins/sp/skills/spur-cli/references/builder.md';
  * attestation has to spell what it removed. Every entry carries its reason.
  */
 const HISTORY_ALLOWLIST: ReadonlyArray<{ glob: string; reason: string }> = [
+    { glob: 'config/workflow-candidates.json', reason: 'recorded retirement decisions required by the promotion gate' },
     { glob: 'CHANGELOG.md', reason: 'generated release history — the BREAKING note names what was removed' },
     { glob: 'docs/00_ADR.md', reason: 'ADR decisions and their numbers are never rewritten (constitution §6.1)' },
     { glob: 'docs/tasks*/**', reason: 'task records are dated execution evidence owned by `spur task`' },
@@ -103,6 +104,19 @@ function readTracked(rel: string): string | null {
 }
 
 describe('D66 workflow consolidation — the deleted definitions are gone everywhere (1252 R1/R2)', () => {
+    test('R1: every retired definition has a recorded retirement decision', () => {
+        const ledger = JSON.parse(readFileSync(join(REPO_ROOT, 'config/workflow-candidates.json'), 'utf8')) as {
+            retirements: { name: string; recordedBy: string; date: string; rationale: string }[];
+        };
+        for (const identity of RETIRED_IDENTITIES) {
+            const record = ledger.retirements.find((entry) => entry.name === identity.replace(/\.yaml$/, ''));
+            expect(record, `${identity} needs a retirement decision`).toBeDefined();
+            expect(record?.recordedBy).toContain('ADR-142');
+            expect(record?.date).toBe('2026-10-18');
+            expect(record?.rationale.trim().length).toBeGreaterThan(0);
+        }
+    });
+
     test('R1: no tracked file outside the history allowlist names a retired workflow identity', () => {
         const offenders: string[] = [];
         for (const rel of trackedFiles()) {
