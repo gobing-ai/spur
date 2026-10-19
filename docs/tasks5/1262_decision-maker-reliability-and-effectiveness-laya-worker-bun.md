@@ -4,7 +4,7 @@ name: "Decision-maker reliability and effectiveness: laya worker bundling, decid
 status: todo
 template: issue
 created_at: 2026-10-19T18:00:11.379Z
-updated_at: "2026-10-19T18:01:40.871Z"
+updated_at: "2026-10-19T18:26:31.776Z"
 
 ac_altitude: task-local
 ac_numbering: task-local
@@ -120,9 +120,7 @@ Scenario: AC6 — history-anatomy uses a native decide step (req: R8)
   Given `history-anatomy.yaml`
   When it is validated with `spur workflow show`
   Then the anatomy verdict is a `kind: decide` step and no shell step invokes `decision run`
-```
 
-```gherkin
 Scenario: AC7 — review-failure-class no longer returns a constant equal to its fallback (req: R6)
   Given the reworked review lane
   When it runs on a fixture review verdict asking for redesign
