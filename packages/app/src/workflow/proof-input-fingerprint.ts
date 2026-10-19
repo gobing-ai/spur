@@ -400,14 +400,14 @@ export function extractFeatureProofData(content: string): FeatureProofData {
 }
 
 /**
- * Computes canonical composite SHA-256 fingerprint over git working tree, task spec, and feature spec.
- *
- * @param options - Fingerprint options including optional task/feature contents and custom excludes.
- * @returns Composite SHA-256 fingerprint string (`sha256:<hex>`).
- * @throws ProofCaptureError when the git-tree half cannot be captured - no digest is derived from a
- * failed capture (task 0751 R1: an empty string no longer doubles as both "no tree" and "failed").
+ * Detailed variant of {@link computeProofInputFingerprint} that also returns the raw
+ * git-tree SHA-1 the composite digest folds in. Diagnostics (e.g. coverage
+ * certification stale-tree refusals) diff two tree SHAs to NAME the drifted paths
+ * instead of reporting a bare digest mismatch.
  */
-export async function computeProofInputFingerprint(options: ComputeProofInputOptions = {}): Promise<string> {
+export async function computeProofInputFingerprintDetailed(
+    options: ComputeProofInputOptions = {},
+): Promise<{ fingerprint: string; gitTree: string }> {
     const cwd = options.cwd ?? process.cwd();
     const gitTree = await createGitAlternateTree(
         cwd,
@@ -434,7 +434,19 @@ export async function computeProofInputFingerprint(options: ComputeProofInputOpt
     });
 
     const hash = crypto.createHash('sha256').update(canonical, 'utf8').digest('hex');
-    return `sha256:${hash}`;
+    return { fingerprint: `sha256:${hash}`, gitTree };
+}
+
+/**
+ * Computes canonical composite SHA-256 fingerprint over git working tree, task spec, and feature spec.
+ *
+ * @param options - Fingerprint options including optional task/feature contents and custom excludes.
+ * @returns Composite SHA-256 fingerprint string (`sha256:<hex>`).
+ * @throws ProofCaptureError when the git-tree half cannot be captured - no digest is derived from a
+ * failed capture (task 0751 R1: an empty string no longer doubles as both "no tree" and "failed").
+ */
+export async function computeProofInputFingerprint(options: ComputeProofInputOptions = {}): Promise<string> {
+    return (await computeProofInputFingerprintDetailed(options)).fingerprint;
 }
 
 /**

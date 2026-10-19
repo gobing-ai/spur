@@ -139,7 +139,11 @@ describe('canonical certification producer (task 1203)', () => {
         writeFileSync(join(fixture, 'case', 'new-source.ts'), 'export const added = true;\n');
         const result = await certifyCanonicalRun(fixture, start);
         expect(result.ok).toBe(false);
-        if (!result.ok) expect(result.reason).toBe('stale-tree');
+        if (!result.ok) {
+            expect(result.reason).toBe('stale-tree');
+            // The refusal must NAME the drifted path — a bare digest mismatch is undiagnosable.
+            expect(result.message).toContain('case/new-source.ts');
+        }
     });
 
     test('a noncanonical launcher cannot overwrite certified full-suite coverage', async () => {
@@ -285,6 +289,7 @@ describe('canonical certification producer (task 1203)', () => {
         expect(certified.ok).toBe(false);
         if (!certified.ok) {
             expect(certified.reason).toBe('stale-tree');
+            expect(certified.message).toContain('case/tiny.test.ts');
         }
         expect(readMarker(fixture).status).toBe('pending');
         expect(await refuseReason(fixture)).toBe('pending');
@@ -427,6 +432,9 @@ describe('post-check provenance refusals are distinct (task 1203 R2)', () => {
         expect((await certifyCanonicalRun(fixture, start)).ok).toBe(true);
         writeFileSync(join(fixture, 'case', 'tiny.test.ts'), '// source changed after certification\n');
         expect(await refuseReason(fixture)).toBe('stale-tree');
+        const result = await validateCoverageCertification(fixture);
+        expect(result.ok).toBe(false);
+        if (!result.ok) expect(result.message).toContain('case/tiny.test.ts');
     }, 30000);
 
     test('a failed tree capture is a named provenance refusal', async () => {

@@ -14,6 +14,7 @@
  * share a short exclusive lock; only the owning run can publish its own bytes.
  * The tree digest includes tracked and nonignored new files, excluding coverage output.
  */
+import { execFileSync } from 'node:child_process';
 import { createHash, randomUUID } from 'node:crypto';
 import {
     closeSync,
@@ -27,7 +28,7 @@ import {
 } from 'node:fs';
 import { join, resolve } from 'node:path';
 // Repo-command precedent (0775): spur-app has no root workspace link.
-import { computeProofInputFingerprint } from '../../packages/app/src/workflow/proof-input-fingerprint';
+import { computeProofInputFingerprintDetailed } from '../../packages/app/src/workflow/proof-input-fingerprint';
 
 export const CERT_RELATIVE_PATH = join('.coverage', 'coverage-certification.json');
 export const LCOV_RELATIVE_PATH = join('.coverage', 'lcov.info');
@@ -48,6 +49,8 @@ export interface CertificationMarker {
     startedAt: string;
     /** Tree fingerprint captured when the canonical run launched. */
     treeDigest: string;
+    /** Raw git-tree SHA backing `treeDigest` — lets a stale-tree refusal name the drifted paths. */
+    gitTreeSha?: string;
     /** Set when this pending marker replaced earlier evidence (supersede chain). */
     supersedes?: string;
     certifiedAt?: string;
@@ -58,6 +61,7 @@ export interface CertificationMarker {
 export interface CanonicalRunStart {
     runId: string;
     treeDigest: string;
+    gitTree: string;
     startedAt: string;
     coverageDir: string;
 }
@@ -118,7 +122,32 @@ function withPublicationLock<T>(cwd: string, visit: () => T): T {
 }
 
 export async function treeFingerprint(cwd: string): Promise<string> {
-    return computeProofInputFingerprint({ cwd });
+    return (await treeCapture(cwd)).digest;
+}
+
+/** Composite digest plus the raw git-tree SHA it folds in. */
+async function treeCapture(cwd: string): Promise<{ digest: string; gitTree: string }> {
+    const { fingerprint, gitTree } = await computeProofInputFingerprintDetailed({ cwd });
+    return { digest: fingerprint, gitTree };
+}
+
+/**
+ * Name the paths that differ between two captured git trees (best-effort: the
+ * diagnostic enriches the refusal, it never decides it). `git write-tree`
+ * objects persist in .git/objects, so a later diff still resolves. Untracked
+ * drift appears as an added path — that is the case this exists for.
+ */
+function changedPathsBetween(cwd: string, beforeTree: string | undefined, afterTree: string): string {
+    if (beforeTree === undefined || beforeTree === afterTree) return '';
+    try {
+        const out = execFileSync('git', ['diff', '--name-only', beforeTree, afterTree], { cwd, encoding: 'utf8' });
+        const paths = out.split('\n').filter(Boolean);
+        if (paths.length === 0) return '';
+        const shown = paths.slice(0, 12).join(', ');
+        return ` — changed paths: ${shown}${paths.length > 12 ? `, … (+${paths.length - 12} more)` : ''}`;
+    } catch {
+        return '';
+    }
 }
 
 /**
@@ -129,7 +158,7 @@ export async function treeFingerprint(cwd: string): Promise<string> {
  */
 export async function startCanonicalRun(cwd: string): Promise<CanonicalRunStart> {
     const startedAt = new Date().toISOString();
-    const treeDigest = await treeFingerprint(cwd);
+    const { digest: treeDigest, gitTree } = await treeCapture(cwd);
     const runId = randomUUID();
     const coverageDir = resolve(cwd, '.coverage', `run-${runId}`);
     mkdirSync(coverageDir, { recursive: true });
@@ -142,10 +171,11 @@ export async function startCanonicalRun(cwd: string): Promise<CanonicalRunStart>
             pid: process.pid,
             startedAt,
             treeDigest,
+            gitTreeSha: gitTree,
             ...(previous !== undefined ? { supersedes: previous.runId } : {}),
         });
     });
-    return { runId, treeDigest, startedAt, coverageDir };
+    return { runId, treeDigest, gitTree, startedAt, coverageDir };
 }
 
 function readMarker(cwd: string): CertificationMarker | undefined {
@@ -175,13 +205,14 @@ export async function certifyCanonicalRun(
             message: `run ${start.runId.slice(0, 8)} no longer owns the pending window — a later canonical run superseded it`,
         };
     }
-    const finishDigest = await treeFingerprint(cwd);
-    if (finishDigest !== start.treeDigest) {
+    const finish = await treeCapture(cwd);
+    if (finish.digest !== start.treeDigest) {
         return {
             ok: false,
             reason: 'stale-tree',
             message:
-                'working tree changed during the canonical run — the tested fingerprint is stale, certification refused',
+                'working tree changed during the canonical run — the tested fingerprint is stale, certification refused' +
+                changedPathsBetween(cwd, start.gitTree, finish.gitTree),
         };
     }
     const producedPath = join(start.coverageDir, 'lcov.info');
@@ -250,6 +281,7 @@ export async function validateCoverageCertification(cwd: string): Promise<Valida
             typeof marker.runId !== 'string' ||
             typeof marker.treeDigest !== 'string' ||
             (marker.supersedes !== undefined && typeof marker.supersedes !== 'string') ||
+            (marker.gitTreeSha !== undefined && typeof marker.gitTreeSha !== 'string') ||
             (marker.status === 'certified' && typeof marker.lcovDigest !== 'string') ||
             (marker.status !== 'pending' && marker.status !== 'certified')
         ) {
@@ -286,17 +318,19 @@ export async function validateCoverageCertification(cwd: string): Promise<Valida
             message: `${LCOV_RELATIVE_PATH} bytes changed after certification — a non-canonical producer overwrote the tracefile`,
         };
     }
-    let currentTree: string;
+    let currentTree: { digest: string; gitTree: string };
     try {
-        currentTree = await treeFingerprint(cwd);
+        currentTree = await treeCapture(cwd);
     } catch (error) {
         return { ok: false, reason: 'tree-unavailable', message: `cannot capture tested tree: ${String(error)}` };
     }
-    if (currentTree !== marker.treeDigest) {
+    if (currentTree.digest !== marker.treeDigest) {
         return {
             ok: false,
             reason: 'stale-tree',
-            message: 'working tree changed after the certified run — evidence no longer describes this tree',
+            message:
+                'working tree changed after the certified run — evidence no longer describes this tree' +
+                changedPathsBetween(cwd, marker.gitTreeSha, currentTree.gitTree),
         };
     }
     return { ok: true, marker };
