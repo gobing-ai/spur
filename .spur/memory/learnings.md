@@ -6516,3 +6516,39 @@ Date: 2026-10-16 · Branch: sp/runall-l1-05cd · Tasks: 1218, 1219, 1220 (all do
 - **Tabular data with `|`-joined values must escape the pipe** (`PASS\|WARN\|BLOCK\|FAIL`) inside GFM table
   cells, or the row silently splits into extra columns.
 
+## 2026-10-19 — Task 1254
+
+- **Convention discovered:** the review stage emits two artifacts with different consumers — the `## Review` section (finding dispositions → `deriveReviewConfidence`) and the captured certification answer (requirement/AC evidence → `deriveVerifyConfidence`). The captured answer may carry exactly one `Confidence:` line, and it must be the evidence-derived one.
+- **Gotcha:** the YAML `agent.run` prompt has a 1000-character composition cap (ADR-115); the exhaustive vocabulary belongs in the owning producer doc (`super-reviewer` Output Format) with the prompt pointing at it.
+
+## 2026-10-19 — Task 1255
+
+- **Pattern that worked:** a model chosen for the selected executor (caller override or pin model) binds to the attempt it was chosen for; any replacement dispatches the replacement's own model. Scope it to the attempt (`attempt === 0`) instead of tracking provenance.
+- **Pattern that worked:** capability requirements filter the role walk using the same evaluations as the pre-spawn guard, so selection and admission answer one question; explicit pins stay unfiltered and fail closed at the guard.
+
+## 2026-10-19 — Task 1256
+
+- **Root cause pattern:** the engine's terminal `reason` carries the failing action's error TEXT but not its KIND, so every ordinary run closure classified agent failures as `failed-check`. Track the causal action identity at the boundary the decorator already observes, clear it on progress, consume it at close.
+- **Gotcha:** bun's coverage instrumentation counts a **class declaration** as a function unit it never enters, so a file whose measured baseline is 100% functions cannot reach it. Use a factory returning closures instead of a class in a coverage-measured file.
+
+## 2026-10-19 — Task 1258
+
+- **Gotcha:** SQLite permits a NULL TEXT primary key, so `DELETE … WHERE id IN (SELECT id …)` silently matches nothing for rows inserted without an id. Bound retention deletes on `rowid`.
+- **Convention discovered:** no index backs the retention age columns; an `ORDER BY` in the bounded selection buys a sort for no benefit — every eligible row is equally purgeable.
+
+## 2026-10-19 — Task 1259
+
+- **Convention discovered:** in the async launcher, only the engine's own `Run not found:` observation means "not registered yet". Everything else is a read failure: report it, never infer a deadline, never replay.
+- **Gotcha:** a deadline proves only that registration was not confirmed — the detached worker may still be starting, so the diagnostic must say that and point at `workflow list` / `trace` instead of recommending a rerun.
+
+## 2026-10-19 — Task 1260
+
+- **Convention discovered:** review/verify distinctness is a property of the ACTUAL attempt, not the pre-dispatch pin; evaluate it in the executor's `beforeDispatch` hook, which now carries `{agent, executor, model}`.
+- **Gotcha (test pattern):** an action-level fixture that fakes `runTraced` must invoke the supplied `beforeDispatch` hook, or a per-attempt policy looks untested. Wrap the dispatch call so a policy refusal is a failed action rather than an unhandled exception.
+
+## 2026-10-19 — Batch gotchas (1254–1260)
+
+- **Gotcha:** bare `path:line` anchors in the captured review answer propagate into `## Testing` and fail the `--as done` gate. Always cite repo-relative paths in review answers, including inside explanatory prose.
+- **Gotcha:** the residual sweep only downgrades; unticked `### Plan` boxes at close time downgrade the verdict to PARTIAL and make `done` unreachable. Tick the Plan before the pipeline close, not after.
+- **Pattern that worked:** driving the task pipeline inline with `executor: host` — `workflow run --json` returns one work item per `agent.run`, and the stage completes by writing `{runId,state,executor:'host',outcome:'done',files,reason}` to `.spur/run/<runId>/receipts/<state>.json` and passing that path to `workflow continue --answer-text`.
+
