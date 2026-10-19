@@ -4,69 +4,71 @@ name: Bound project database growth from imported history tables
 status: todo
 template: issue
 created_at: 2026-10-18T19:33:17.981Z
-updated_at: "2026-10-19T02:41:29.259Z"
+updated_at: "2026-10-19T06:37:49.119Z"
 
 feature_id: E5
+priority: P2
+ac_altitude: task-local
+estimate_hours: 3
+dependencies: []
 ---
 
 ## 1258. Bound project database growth from imported history tables
 
 ### Background
 
-The D66 batch (2026-10-18) surfaced two coupled symptoms of the unbounded history plane in one project tree.
+The confirmed remaining issue is unbounded deletion in the existing retention pass: packages/domain/src/retention.ts:211-237 supplies three unrestricted DELETE statements to purgeRows at :266-273. One invocation can delete the entire expired backlog in one write transaction, despite the helper comment calling it bounded. Current read-only observation found approximately 9 GB and 4.4M ledger rows; size alone does not establish a retention defect or a scheduler/dispatch causal chain.
 
-**1. Size.** `~/xprojects/spur-new/.spur/spur.db` = **8.9 GB** while the same project's fresh worktree DB was 3.3 MB. Row counts in the main tree: `history_import_ledger` 4,413,985 · `history_message` 3,494,990 · `history_tool_call` 911,856 · `history_board_tool_5m` 269,654 · `history_board_message_5m` 227,519 · `history_board_rollup_bucket` 104,561 · `rule_eval_runs` 288,272 · `queue_jobs` 86,849. `spur self maintain` offers optimize / WAL-checkpoint / VACUUM but nothing prunes.
-
-**2. Scheduler saturation.** `queue_jobs` held 8 `failed` rows of type `scheduler.custom` for the `history-refresh` job, every one `timed out after 600000ms (killed after 600015ms elapsed)`, plus one row stuck in `processing`. During that window `spur workflow run --async` could not start anything: it reported "async worker failed to start or register the run" and only a synchronous run made progress (task 1259 tracks the dispatch surface; this task tracks the job lifetime and table growth).
-
-**Mechanism.** `packages/app/src/services/scheduler-custom-job-service.ts:153` documents a 15-minute `history-refresh` cadence with "its short" budget; the observed 600 s kills mean the job's own work now exceeds the scheduler's timeout, and a killed job leaves the ledger/message tables to grow by another import pass. The importer writes into `history_import_ledger` + `history_message` with no retention predicate.
-
-**Boundary with E5.** E5 owns *import* retention (raw tool args, derived variables). This task owns *storage* retention and job lifetime for the same plane.
+**Refine corrections (2026-10-18)**
+- Retained: bound existing expired-row deletions and resume safely on subsequent daily passes.
+- Removed: absence of retention. runRetention already ages rule evaluations at 90 days, terminal queue jobs at 30 days, ledger at 180 days, and backups at 30 days; HistoryService.daily already invokes it after import/analyze/report pruning. self maintain intentionally performs physical maintenance.
+- Removed: new history prune verb, new history.retention configuration, raw-message/tool/rollup deletion, report-reference graph, extra checkpoint marker and migrations. They introduce destructive policy and public surface without an established contract or consent.
+- Removed: missing incremental resume; history daily already uses importer checkpoints. Removed unproven claims that DB size causes 600-second scheduler kills, those kills leave a permanently wedged job, or scheduler saturation blocks the detached async worker. Existing custom-job timeout and queue visibility mechanisms must not be replaced here.
+- Title still names broad database growth; retained scope is bounded execution of existing expiry policy, not an absolute byte/row bound on all imported history. CLI cannot rename the task. Estimate unset → 3h. Feature E5 link is preserved; AC is task-local.
 
 ### Requirements
 
-- [ ] R1. A documented retention policy exists for the imported-history tables with a prune verb (age- and/or row-bounded), applied by `spur self maintain` or an explicit `spur history prune`.
-- [ ] R2. The prune preserves `task_run_links` and run provenance (the `history reset` contract), and any row a report/artifact still references by id.
-- [ ] R3. A prune of the D66 shape (4.4M ledger rows) runs bounded and resumable — no single unbounded `DELETE` that holds the write lock for minutes.
-- [ ] R4. `history-refresh` either finishes inside the scheduler budget or is chunked/checkpointed so a kill resumes instead of redoing the pass; a kill must not leave a `processing` row wedged.
-- [ ] R5. A wedged `processing` row is reclaimable (lease expiry) rather than requiring manual SQL — the same reclaim rule `project_claims`/`queue_jobs` already carry.
-- [ ] R6. A test seeds more rows than the bound and asserts a bounded table with provenance intact; a second test kills a chunked refresh mid-pass and asserts it resumes.
+- [ ] R1. Each existing SQL retention store deletes at most 1000 expired rows per runRetention invocation, using a bounded key-selection DELETE. Keep the existing age predicates, cutoff inclusivity and terminal-queue status predicate unchanged.
+- [ ] R2. Repeated passes drain eligible backlog without a new persisted cursor. An interrupted pass leaves only committed deletions and the next pass safely continues. Fresh rows, pending/processing jobs, imported target history and task_run_links are preserved.
+- [ ] R3. RetentionResult reports actual deletions per store; a store error remains best-effort and does not skip unrelated stores. Preserve backup policy and existing compaction gates/PASSIVE checkpoint semantics. A row cap is not a wall-clock or database-size guarantee.
+- [ ] R4. Database-backed regressions exercise more than one batch, repeated passes, cutoff boundaries, live queue protection, no eligible rows and one-store failure. Keep the existing daily caller and result shape compatible.
+
+Out of scope: raw history retention or reset, scheduler retry/lease changes, async dispatch, new CLI/config/schema, new maintenance schedule, parallel delete workers and automatic VACUUM policy changes.
 
 ### Acceptance Criteria
 
-- [ ] AC1 — A prune command bounds the imported-history tables and keeps run provenance (req: R1, R2, R3)
-- [ ] AC2 — `history-refresh` resumes after a mid-pass kill and never wedges a `processing` row (req: R4, R5)
-- [ ] AC3 — Seeding above the bound and killing a refresh are both covered by tests (req: R6)
+- [ ] AC1 — A backlog exceeding 1000 eligible rows drains across bounded repeatable retention passes (req: R1, R2, R4)
+- [ ] AC2 — Cutoff and live/provenance rows remain intact while actual deletion counts agree (req: R1, R2, R3, R4)
+- [ ] AC3 — Store failures stay isolated and daily/compaction contracts remain compatible (req: R3, R4)
 
 ### Q&A
 
-<!-- Clarifications and triage decisions. Keep empty if none. -->
+- Closed: preserve current expiry windows and public surfaces; cap each existing store at 1000 rows per pass.
+- Closed: no raw history deletion or promise that total DB size is bounded.
+- Closed: no queue lease ownership or scheduler timeout policy change; alleged saturation-to-dispatch causality is unproven.
+- Delegation: implement only the bounded-retention seam and its database-backed evidence.
 
 ### Design
 
-**Chosen: bounded storage + resumable job.**
-1. Retention (R1-R3): per-table bounds (e.g. `history_message` by day + count, `history_import_ledger` by checkpoint watermark) expressed in config with defaults, applied by a prune verb that deletes in chunks (`DELETE … WHERE rowid IN (SELECT rowid … LIMIT n)` looped with a sleep budget) and reports what it kept.
-2. Job lifetime (R4-R5): make `history-refresh` chunked with an importer checkpoint (the importer already has `history_import_checkpoint`), so a 600 s kill resumes from the watermark; on start, reclaim a `processing` row whose `lease_expires_at` has passed.
-3. Report the numbers: prune and refresh both emit rows/duration so the 8.9 GB shape is visible before it recurs.
+Chosen: cap one DELETE per store per pass in the existing packages/domain/src/retention.ts helper/callers; no new API. Use an internal RETENTION_BATCH_SIZE = 1000 and the table's existing primary key in a limited subquery (verify migrated schema for each store before choosing id versus record_hash). Apply the same eligibility predicate to selection and deletion; parameterize cutoff and limit. No sleep loop, full-backlog loop, new cursor or count-all pre-scan. Subsequent existing daily calls provide continuation. Do not rely on optional SQLite DELETE LIMIT compilation.
 
-**Rejected.**
-- `VACUUM` as the fix: it reclaims free pages, never removes rows; after a prune it is the right *follow-up*, not the mechanism.
-- A blanket `history reset` on a schedule: it destroys the forensic plane E5/I81 depend on.
-- Raising the scheduler timeout: it postpones the kill and doubles the lost work.
+Primary targets: packages/domain/src/retention.ts and packages/domain/tests/retention.test.ts. Caller to inspect/preserve: packages/app/src/services/history-service.ts daily. Integration evidence may extend the existing history daily fixture only if needed to observe result propagation. Owning contract: docs/design/history-cli-contracts.md daily retention paragraph, updated to state the batch cap and eventual expiry without promising a byte bound.
 
-**Frozen names.** `spur history prune --older-than <dur> --max-rows <n> [--dry-run]`; `history.refresh.checkpoint` marker; retention keys under `history.retention`.
+Tests use a migrated temporary database, fixed now, more than 1000 eligible rows and a protected-row sentinel set. Run each pass through runRetention and save counts before/after as a repeatable artifact. Use current compaction test seams or an in-memory DB so physical VACUUM timing does not become the assertion. Separate statements are atomic; a failed/interrupted pass requires no cursor repair. Preserve existing best-effort semantics and actual affected-row accounting.
 
-**File targets.** `packages/app/src/services/history-refresh-service.ts`; `packages/app/src/services/scheduler-custom-job-service.ts:140-170`; `apps/cli/src/commands/history/*` (new `prune`); `apps/cli/src/commands/self/maintain*`; migrations only if a watermark column is needed; tests `packages/app/tests/services/history-*.test.ts`, `apps/cli/tests/commands/history/*`.
-
-**Anti-patterns.** No unbounded `DELETE`; do not prune rows a task/verdict artifact still cites; do not touch `task_run_links`; do not silence the scheduler's timeout — make the job fit it.
+Dependencies: none. 1259 owns detached registration diagnostics; do not add queue lookups there from this task. No live database purge, historical repair, new dependency or public command is needed. Budget 3h.
 
 ### Plan
 
-<!-- Ordered debugging/fix checklist. Fill before moving to todo/wip. -->
+- [ ] 1. Add a failing migrated-DB regression with 1001+ expired rows and protected cutoff/live/provenance sentinels; assert the first pass deletes at most 1000 per store (R1, R2, R4).
+- [ ] 2. Replace the unrestricted DELETE inputs with bounded key subqueries and one shared internal batch size; preserve eligibility and best-effort error handling (R1, R3).
+- [ ] 3. Repeat passes to prove eventual drain, accurate counts and safe restart from committed state; cover empty stores and one-store failure without mocking the SQL behavior (R2-R4).
+- [ ] 4. Run domain retention tests inside packages/domain and existing app history daily tests inside packages/app; verify unchanged result shape and compaction semantics (R3, R4).
+- [ ] 5. Update the existing daily retention contract, record reproducible fixture counts, run task-local gate and verify against these ACs. Do not run destructive cleanup against the operator database.
 
 ### Root Cause
 
-<!-- Verified underlying cause with file:line evidence. Fill once reproduced/isolated. -->
+purgeRows executes each caller's whole DELETE without LIMIT or a bounded key subquery. The existing retention policy and daily integration are present; the missing mechanism is a per-pass deletion cap, not another retention command or a new importer.
 
 ### Solution
 
@@ -82,6 +84,52 @@ The D66 batch (2026-10-18) surfaced two coupled symptoms of the unbounded histor
 
 ### References
 
-<!-- Links to failing logs, related issues, tasks, docs, or external references. -->
+Refinement audit: 2026-10-18, source-local CLI, tasks 1254–1260 processed sequentially.
+
+Evidence: retention.ts existing expiry policy/unrestricted purgeRows; history-service.ts daily; retention.test.ts.
+
+Concurrency snapshot: git worktree list shows main only; task list --status wip returns []; one writer per tree. Recheck both before implementation. The tracked tree advanced to release 0.4.15 during the audit; preserve those external commits. Inspect installed versions/bundle at task start, then regenerate only artifacts affected by implementation.
+
+Implement-ready checklist (specification, not an implementation PASS):
+
+```json
+[
+  {
+    "id": "requirements",
+    "pass": true,
+    "evidence": "Requirements contain bounded observable outcomes, scope exclusions and named current seams."
+  },
+  {
+    "id": "design",
+    "pass": true,
+    "evidence": "Design freezes reused contracts, algorithm/precedence, files, negative cases and no-new-surface constraints."
+  },
+  {
+    "id": "plan",
+    "pass": true,
+    "evidence": "Ordered Plan starts with failing fixtures, then minimal fix and named workspace/gate evidence."
+  },
+  {
+    "id": "ac",
+    "pass": true,
+    "evidence": "Task-local checkbox ACs map every retained requirement to test-observable outcomes; implementation remains unchecked."
+  },
+  {
+    "id": "decisions",
+    "pass": true,
+    "evidence": "Q&A closes original design choices; false premises and speculative APIs removed."
+  },
+  {
+    "id": "dependencies",
+    "pass": true,
+    "evidence": "No unmet design prerequisites; boundaries to adjacent tasks explicit."
+  },
+  {
+    "id": "premises",
+    "pass": true,
+    "evidence": "retention.ts existing expiry policy/unrestricted purgeRows; history-service.ts daily; retention.test.ts"
+  }
+]
+```
 
 ### History

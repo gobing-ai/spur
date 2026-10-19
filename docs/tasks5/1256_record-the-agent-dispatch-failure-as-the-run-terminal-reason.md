@@ -4,7 +4,7 @@ name: Record the agent dispatch failure as the run terminal reason
 status: todo
 template: issue
 created_at: 2026-10-18T19:33:17.168Z
-updated_at: "2026-10-19T03:02:29.037Z"
+updated_at: "2026-10-19T06:37:46.575Z"
 
 feature_id: D3
 priority: P2
@@ -52,9 +52,9 @@ Chosen: carry bounded, run-scoped causal action context through the existing per
 
 Precedence: explicit declared reasons and terminal/resumable status semantics stay authoritative; action kind refines only otherwise unclassified direct failures. Timeout remains the existing failed-timeout branch; outcome-unknown remains interrupted. Never pick the last historical failed row by a broad database query. No concatenated stage/executor in terminal_reason: trace/action rows are the detailed evidence.
 
-Targets: `packages/app/src/workflow/terminal-reason.ts`, `packages/app/src/workflow/action-trace.ts`, `packages/app/src/workflow/observability.ts`; composition wiring only if necessary to avoid double classification. Tests: `packages/app/tests/workflow/terminal-reason.test.ts`, existing action-trace/observability adapter tests and one fake-agent workflow close fixture. Resolve the current run-record/observability owner from docs/04_DESIGN.md and update only changed semantics.
+Targets: `packages/app/src/workflow/terminal-reason.ts`, `packages/app/src/workflow/action-trace.ts`, `packages/app/src/workflow/observability.ts`; composition wiring only if necessary to avoid double classification. Tests: `packages/app/tests/workflow/terminal-reason.test.ts`, `packages/app/tests/workflow/action-trace.test.ts` and `packages/app/tests/workflow/observability.test.ts` and one fake-agent workflow close fixture. Owning taxonomy/write-path contract: `docs/design/workflow-catalogue-refactor.md` §3, referenced by `docs/design/observability-contracts.md`; update only changed semantics.
 
-Dependencies: none; 1255 fixes dispatch input, 1260 owns failover policy, 1257 owns parking long-lived lifecycle rows. Preserve all three boundaries. Budget 4h; evidence is persisted run row plus matching emitted event, not only a helper unit test.
+Dependencies: none; 1255 fixes dispatch input, 1260 owns failover policy, 1257 was cancelled because durable lifecycle behavior already exists. Preserve that behavior. Budget 4h; evidence is persisted run row plus matching emitted event, not only a helper unit test.
 
 ### Plan
 
@@ -82,6 +82,52 @@ WorkflowActionTraceWriter already receives action kind, run/node identity and th
 
 ### References
 
-<!-- Links to failing logs, related issues, tasks, docs, or external references. -->
+Refinement audit: 2026-10-18, source-local CLI, tasks 1254–1260 processed sequentially.
+
+Evidence: action-trace.ts and observability.ts closure call sites; terminal-reason.ts precedence and closed enum.
+
+Concurrency snapshot: git worktree list shows main only; task list --status wip returns []; one writer per tree. Recheck both before implementation. The tracked tree advanced to release 0.4.15 during the audit; preserve those external commits. Inspect installed versions/bundle at task start, then regenerate only artifacts affected by implementation.
+
+Implement-ready checklist (specification, not an implementation PASS):
+
+```json
+[
+  {
+    "id": "requirements",
+    "pass": true,
+    "evidence": "Requirements contain bounded observable outcomes, scope exclusions and named current seams."
+  },
+  {
+    "id": "design",
+    "pass": true,
+    "evidence": "Design freezes reused contracts, algorithm/precedence, files, negative cases and no-new-surface constraints."
+  },
+  {
+    "id": "plan",
+    "pass": true,
+    "evidence": "Ordered Plan starts with failing fixtures, then minimal fix and named workspace/gate evidence."
+  },
+  {
+    "id": "ac",
+    "pass": true,
+    "evidence": "Task-local checkbox ACs map every retained requirement to test-observable outcomes; implementation remains unchecked."
+  },
+  {
+    "id": "decisions",
+    "pass": true,
+    "evidence": "Q&A closes original design choices; false premises and speculative APIs removed."
+  },
+  {
+    "id": "dependencies",
+    "pass": true,
+    "evidence": "No unmet design prerequisites; boundaries to adjacent tasks explicit."
+  },
+  {
+    "id": "premises",
+    "pass": true,
+    "evidence": "action-trace.ts and observability.ts closure call sites; terminal-reason.ts precedence and closed enum"
+  }
+]
+```
 
 ### History

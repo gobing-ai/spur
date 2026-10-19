@@ -4,7 +4,7 @@ name: Finalize lifecycle run rows left running by a manual transition
 status: cancelled
 template: issue
 created_at: 2026-10-18T19:33:17.580Z
-updated_at: "2026-10-19T03:03:08.692Z"
+updated_at: "2026-10-19T06:37:48.059Z"
 
 feature_id: D3
 ---
@@ -27,7 +27,7 @@ Removed every original issue, R-item, AC and implementation step: per-transition
 
 ### Requirements
 
-None retained. The terminal-close behavior already exists; nonterminal durable running state is intentional. No new sweep API, schema, UI change or failure policy is authorized by this cancelled task.
+<!-- No requirements retained: cancelled after validation; see Background. -->
 
 ### Acceptance Criteria
 
@@ -45,7 +45,7 @@ No implementation. Preserve one durable lifecycle run per entity, file-wins rese
 
 ### Plan
 
-No implementation steps remain; cancelled after current-tree inspection, read-only DB lookup and 29 passing lifecycle tests.
+<!-- No implementation plan: all alleged defects were invalid or already addressed. -->
 
 ### Root Cause
 
@@ -65,7 +65,13 @@ No current defect reproduced. The filing conflated a durable entity lifecycle ro
 
 ### References
 
-<!-- Links to failing logs, related issues, tasks, docs, or external references. -->
+Refinement audit: 2026-10-18, source-local CLI, tasks 1254–1260 processed sequentially.
+
+Evidence: lifecycle-adapter.ts terminal/reconciliation paths; lifecycle-adapter.test.ts 29 pass; agent/status.ts process source.
+
+Concurrency snapshot: git worktree list shows main only; task list --status wip returns []; one writer per tree. Recheck both before implementation. The tracked tree advanced to release 0.4.15 during the audit; preserve those external commits. Inspect installed versions/bundle at task start, then regenerate only artifacts affected by implementation.
+
+Disposition: cancelled; not delegated and no implementation verdict claimed.
 
 ### History
 

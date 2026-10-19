@@ -4,7 +4,7 @@ name: Align the review answer contract with the spur task verdict vocabulary
 status: todo
 template: issue
 created_at: 2026-10-18T19:33:15.525Z
-updated_at: "2026-10-19T03:00:39.257Z"
+updated_at: "2026-10-19T06:37:44.180Z"
 
 feature_id: F91
 priority: P1
@@ -50,7 +50,7 @@ Out of scope: model retry orchestration, new CLI flags/verbs, new workflow state
 
 Chosen: repair the producer instructions and pin the existing consumer contracts; no new API. Change the review agent.run input in `config/workflows/task-pipeline.yaml`, retaining current answerFile/expectFile paths, fresh reviewer independence and action order. Spell the small vocabulary directly in the prompt, with a contract test against the existing accepted tokens rather than exporting a new public constant solely for YAML. The final captured answer uses verify confidence; Review uses review confidence. Keep task verdict a pure deterministic lint/derive/write command.
 
-Primary targets: `config/workflows/task-pipeline.yaml`; `packages/app/tests/workflow/task-pipeline-proof-chain.test.ts`; `plugins/sp/tests/task-pipeline-resilience.test.ts`; canonical `plugins/sp/agents/super-reviewer.md` only if its output guidance conflicts; owning docs `docs/design/workflow-execution-foundation.md` or the existing certification owner if its contract text changes. Tests for the linter/confidence functions may add a narrow fixture but production matchers are not refactored. Rebuild generated CLI config through build:bundle; do not hand-edit installed adapters.
+Primary targets: `config/workflows/task-pipeline.yaml`; `packages/app/tests/workflow/task-pipeline-proof-chain.test.ts`; `plugins/sp/tests/task-pipeline-resilience.test.ts`; canonical `plugins/sp/agents/super-reviewer.md` only if its output guidance conflicts; owning certification contract `docs/design/planning-workflow-contracts.md` if its contract text changes. Tests for the linter/confidence functions may add a narrow fixture but production matchers are not refactored. Rebuild generated CLI config through build:bundle; do not hand-edit installed adapters.
 
 Algorithm: normal review → author Review with dispositions → captured final answer with requirement/AC evidence and verify-derived confidence → existing task verdict → existing residual review gate → approval. Assert the two confidence values independently in the fixture. Negative answers fail deterministically and retain lint diagnostics; do not consume a new repair budget or silently normalize them.
 
@@ -82,6 +82,52 @@ The review agent produces two artifacts with different consumers: Review is chec
 
 ### References
 
-<!-- Links to failing logs, related issues, tasks, docs, or external references. -->
+Refinement audit: 2026-10-18, source-local CLI, tasks 1254–1260 processed sequentially.
+
+Evidence: task-pipeline review input; verify-answer-lint.ts; answer-confidence.ts; task-pipeline-proof-chain.test.ts.
+
+Concurrency snapshot: git worktree list shows main only; task list --status wip returns []; one writer per tree. Recheck both before implementation. The tracked tree advanced to release 0.4.15 during the audit; preserve those external commits. Inspect installed versions/bundle at task start, then regenerate only artifacts affected by implementation.
+
+Implement-ready checklist (specification, not an implementation PASS):
+
+```json
+[
+  {
+    "id": "requirements",
+    "pass": true,
+    "evidence": "Requirements contain bounded observable outcomes, scope exclusions and named current seams."
+  },
+  {
+    "id": "design",
+    "pass": true,
+    "evidence": "Design freezes reused contracts, algorithm/precedence, files, negative cases and no-new-surface constraints."
+  },
+  {
+    "id": "plan",
+    "pass": true,
+    "evidence": "Ordered Plan starts with failing fixtures, then minimal fix and named workspace/gate evidence."
+  },
+  {
+    "id": "ac",
+    "pass": true,
+    "evidence": "Task-local checkbox ACs map every retained requirement to test-observable outcomes; implementation remains unchecked."
+  },
+  {
+    "id": "decisions",
+    "pass": true,
+    "evidence": "Q&A closes original design choices; false premises and speculative APIs removed."
+  },
+  {
+    "id": "dependencies",
+    "pass": true,
+    "evidence": "No unmet design prerequisites; boundaries to adjacent tasks explicit."
+  },
+  {
+    "id": "premises",
+    "pass": true,
+    "evidence": "task-pipeline review input; verify-answer-lint.ts; answer-confidence.ts; task-pipeline-proof-chain.test.ts"
+  }
+]
+```
 
 ### History

@@ -4,7 +4,7 @@ name: Make role-stage executor resolution keep the pinned executor's agent
 status: todo
 template: issue
 created_at: 2026-10-18T19:33:16.740Z
-updated_at: "2026-10-19T03:01:40.464Z"
+updated_at: "2026-10-19T06:37:45.366Z"
 
 feature_id: B21
 priority: P1
@@ -55,7 +55,7 @@ Chosen: repair existing AgentResolver/AgentRunExecutor seams; no new API surface
 
 Model precedence: first attempt = explicit caller/action override if supplied, else selected executor model. Any replacement attempt = replacement executor model. A pin-derived flag must not become a permanent override; implement the narrowest provenance/attempt handling at the existing dispatcher/loop boundary, not a model-name heuristic. Preserve existing successful pinned, bare-agent and session-affinity paths. Do not replay the old executor session when the executor changes; existing fresh-re-resolution handling remains.
 
-Targets: `packages/app/src/workflow/actions/agent-run.ts`, `packages/app/src/services/agent-run-executor.ts`, `packages/app/src/services/agent-resolver.ts`, `packages/app/src/services/agent-service.ts` only for existing fresh-role plumbing; reuse `packages/app/src/services/capability-attestation.ts`. Tests: `packages/app/tests/workflow/actions/agent-run.test.ts`, `packages/app/tests/services/agent-resolver.test.ts`, existing agent-service escalation suites and executor-tier tests. Owning contract: `docs/design/agent-execution-contracts.md` if present, otherwise resolve the existing agent-routing owner from docs/04_DESIGN.md before editing; no new satellite solely for this fix.
+Targets: `packages/app/src/workflow/actions/agent-run.ts`, `packages/app/src/services/agent-run-executor.ts`, `packages/app/src/services/agent-resolver.ts`, `packages/app/src/services/agent-service.ts` only for existing fresh-role plumbing; reuse `packages/app/src/services/capability-attestation.ts`. Tests: `packages/app/tests/workflow/actions/agent-run.test.ts`, `packages/app/tests/services/agent-resolver.test.ts`, existing agent-service escalation suites and executor-tier tests. Owning routing contract: `docs/design/cli-contracts.md` agent role/stage resolution section; capability boundary: `docs/design/session-pinned-dispatch.md`. Update only changed facts; no new satellite.
 
 No prerequisites; 1260 consumes the corrected selected-executor/model/eligibility contract and owns resource-failure policy. Do not implement 1260 here. Bound work to one task and 6h; persist captured argv/routing fixtures as evidence, never live provider credentials.
 
@@ -85,6 +85,52 @@ A model inherited from a workflow executor pin becomes indistinguishable from an
 
 ### References
 
-<!-- Links to failing logs, related issues, tasks, docs, or external references. -->
+Refinement audit: 2026-10-18, source-local CLI, tasks 1254–1260 processed sequentially.
+
+Evidence: agent-run.ts pin flags; agent-run-executor.ts explicitModel lifetime; agent-resolver.ts role walk; executor-tier.ts ordering probe.
+
+Concurrency snapshot: git worktree list shows main only; task list --status wip returns []; one writer per tree. Recheck both before implementation. The tracked tree advanced to release 0.4.15 during the audit; preserve those external commits. Inspect installed versions/bundle at task start, then regenerate only artifacts affected by implementation.
+
+Implement-ready checklist (specification, not an implementation PASS):
+
+```json
+[
+  {
+    "id": "requirements",
+    "pass": true,
+    "evidence": "Requirements contain bounded observable outcomes, scope exclusions and named current seams."
+  },
+  {
+    "id": "design",
+    "pass": true,
+    "evidence": "Design freezes reused contracts, algorithm/precedence, files, negative cases and no-new-surface constraints."
+  },
+  {
+    "id": "plan",
+    "pass": true,
+    "evidence": "Ordered Plan starts with failing fixtures, then minimal fix and named workspace/gate evidence."
+  },
+  {
+    "id": "ac",
+    "pass": true,
+    "evidence": "Task-local checkbox ACs map every retained requirement to test-observable outcomes; implementation remains unchecked."
+  },
+  {
+    "id": "decisions",
+    "pass": true,
+    "evidence": "Q&A closes original design choices; false premises and speculative APIs removed."
+  },
+  {
+    "id": "dependencies",
+    "pass": true,
+    "evidence": "No unmet design prerequisites; boundaries to adjacent tasks explicit."
+  },
+  {
+    "id": "premises",
+    "pass": true,
+    "evidence": "agent-run.ts pin flags; agent-run-executor.ts explicitModel lifetime; agent-resolver.ts role walk; executor-tier.ts ordering probe"
+  }
+]
+```
 
 ### History
