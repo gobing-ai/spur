@@ -934,6 +934,19 @@ clean` reclaims retained logs older than `workflows.logRetentionDays` (default 3
   key. The run-start plan marks states that precede the start point `unattempted` with note
   `before start state` — never `completed`.
 
+**`run --async` registration confirmation (task 1259 R2/R7/R8).** After the spawn request the
+launcher polls until the run row is traceable or `bootstrap.options.asyncRegisterTimeoutMs` expires.
+Only the engine's own `Run not found:` observation counts as "not registered yet"; any other trace
+failure (store, read, permission) stops polling and is reported as a **read failure** with a redacted
+message — never as a deadline, and never followed by a synchronous replacement run. Both outcomes
+exit non-zero with the existing `{status: 'failed', reason, hint}` JSON shape and omit the run id (an
+unconfirmed id is not a handle a caller may poll). A deadline diagnostic states that registration was
+**not confirmed** within the budget and that the detached worker may still be starting; a read
+failure states that the worker may or may not be running. Both point at `spur workflow list` and then
+`spur workflow trace <run-id>` and deliberately do **not** recommend an immediate replay. Confirmation
+— including a successful observation on the final allowed poll — keeps the unchanged `started`
+response, the plan-artifact stamp and exactly one dispatch.
+
   Worked example — re-drive the publish tail of a completed daily run after fixing a credential:
 
   ```bash

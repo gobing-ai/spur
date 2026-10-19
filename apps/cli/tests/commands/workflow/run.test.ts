@@ -1161,6 +1161,25 @@ describe('waitForRunRegistration', () => {
         await expect(waitForRunRegistration({ trace } as never, 'r', 1000, 50)).resolves.toBe(true);
     });
 
+    test('1259 R2: a non-`Run not found` read failure propagates instead of reading as absence', async () => {
+        const trace = async () => {
+            throw new Error('SQLITE_BUSY: database is locked');
+        };
+        await expect(waitForRunRegistration({ trace } as never, 'r', 120, 30)).rejects.toThrow('SQLITE_BUSY');
+    });
+
+    test('1259 R8: the final allowed observation still counts as a confirmed registration', async () => {
+        let calls = 0;
+        const trace = async () => {
+            calls += 1;
+            // Two absences, then the row appears on the third (last) observation.
+            if (calls < 3) throw new Error('Run not found: r');
+            return undefined;
+        };
+        await expect(waitForRunRegistration({ trace } as never, 'r', 5000, 20)).resolves.toBe(true);
+        expect(calls).toBe(3);
+    });
+
     test('returns false when the run never registers (phantom async spawn)', async () => {
         const trace = async () => {
             throw new Error('Run not found: r');
@@ -1198,7 +1217,7 @@ describe('async launcher failure branch (0484 R2)', () => {
         await Bun.write(join(dir, '.spur/config.yaml'), 'bootstrap:\n  options:\n    asyncRegisterTimeoutMs: 80\n');
     };
 
-    test('an unregistered async run exits non-zero with a sync-fallback hint and no run id', async () => {
+    test('1259 R7: an unconfirmed registration reports a deadline, not a failed spawn, and no replay', async () => {
         const dir = await createTempProject();
         await withFastTimeout(dir);
         const workflowFile = join(dir, 'workflow.yaml');
@@ -1216,14 +1235,20 @@ describe('async launcher failure branch (0484 R2)', () => {
 
         expect(exitCode).toBe(1);
         const text = output.messages.join('\n');
-        expect(text).toContain('async spawn failed');
-        expect(text).toContain('omit --async');
+        // 1259 R7: a deadline proves only that registration was NOT CONFIRMED — the worker may
+        // still be starting — so the diagnostic says that, points at the inspection commands, and
+        // never recommends (or runs) an immediate replay that could duplicate side effects.
+        expect(text).toContain('async spawn unconfirmed');
+        expect(text).toContain('was not confirmed within 80ms');
+        expect(text).toContain('may still be starting');
+        expect(text).toContain('spur workflow list');
+        expect(text).not.toContain('synchronously (omit --async)');
         expect(text, 'must not hand back a run id trace cannot resolve').not.toContain(runId);
         expect(text).not.toMatch(/^Started async run:/m);
         await rm(dir, { recursive: true, force: true });
     });
 
-    test('--json failure payload carries status + hint and omits the phantom run id', async () => {
+    test('1259 R7: the --json deadline payload keeps its shape and omits the phantom run id', async () => {
         const dir = await createTempProject();
         await withFastTimeout(dir);
         const workflowFile = join(dir, 'workflow.yaml');
@@ -1241,9 +1266,83 @@ describe('async launcher failure branch (0484 R2)', () => {
         expect(exitCode).toBe(1);
         const parsed = JSON.parse(output.messages[0] ?? '{}');
         expect(parsed.status).toBe('failed');
-        expect(parsed.reason).toContain('failed to start or register');
-        expect(parsed.hint).toContain('omit --async');
+        expect(parsed.reason).toContain('was not confirmed within 80ms');
+        expect(parsed.hint).toContain('spur workflow list');
+        expect(parsed.hint).toContain('may still be starting');
         expect(parsed, 'a machine caller reading .runId would poll a phantom run').not.toHaveProperty('runId');
+        await rm(dir, { recursive: true, force: true });
+    });
+
+    test('1259 R2: a store-read failure is reported as such, never as a deadline or a replay', async () => {
+        const dir = await createTempProject();
+        await withFastTimeout(dir);
+        const workflowFile = join(dir, 'workflow.yaml');
+        await writeFile(workflowFile, MINIMAL_WORKFLOW_YAML);
+        const output = createCapturedOutput();
+        const db = await createMigratedDb({ url: ':memory:' });
+        const runId = 'unreadable-store';
+        // The worker "starts", then the store becomes unreadable: every trace read throws a
+        // non-`Run not found` error, which must not be mistaken for an unregistered run.
+        const runSpy = spyOn(NodeProcessExecutor.prototype, 'run').mockImplementation(async () => {
+            // Break the store itself: `trace` now fails for a reason that is NOT "Run not found".
+            await db.exec('DROP TABLE runs');
+            return { exitCode: 0 } as never;
+        });
+        try {
+            const exitCode = await main(['workflow', 'run', '--async', '--json', '--run-id', runId, workflowFile], {
+                output,
+                cwd: dir,
+                db,
+            });
+
+            expect(exitCode).toBe(1);
+            const parsed = JSON.parse(output.messages[0] ?? '{}');
+            expect(parsed.status).toBe('failed');
+            expect(parsed.reason).toContain('registration could not be read');
+            expect(parsed.hint).toContain('may or may not be running');
+            expect(parsed).not.toHaveProperty('runId');
+            // Exactly one dispatch: no synchronous replacement run was launched.
+            expect(runSpy).toHaveBeenCalledTimes(1);
+        } finally {
+            runSpy.mockRestore();
+        }
+        await rm(dir, { recursive: true, force: true });
+    });
+
+    test('1259 R8: a worker that registers on a later observation still reports started exactly once', async () => {
+        const dir = await createTempProject();
+        const workflowFile = join(dir, 'workflow.yaml');
+        await writeFile(workflowFile, MINIMAL_WORKFLOW_YAML);
+        const output = createCapturedOutput();
+        const db = await createMigratedDb({ url: ':memory:' });
+        const runId = 'late-registration';
+        // The row lands 300ms after spawn — inside the default budget, after several polls.
+        const runSpy = spyOn(NodeProcessExecutor.prototype, 'run').mockImplementation(async () => {
+            setTimeout(() => {
+                const now = Date.now();
+                void db.run(
+                    'INSERT INTO runs (id, workflow_name, mode, status, started_at, metadata_json, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
+                    [runId, 'cli-test-flow', 'async', 'running', now, '{}', now, now],
+                );
+            }, 300);
+            return { exitCode: 0 } as never;
+        });
+        try {
+            const exitCode = await main(['workflow', 'run', '--async', '--json', '--run-id', runId, workflowFile], {
+                output,
+                cwd: dir,
+                db,
+            });
+
+            expect(exitCode).toBe(0);
+            const parsed = JSON.parse(output.messages[0] ?? '{}');
+            expect(parsed.status).toBe('started');
+            expect(parsed.runId).toBe(runId);
+            // One dispatch, one plan/run: the confirmation never re-launches the worker.
+            expect(runSpy).toHaveBeenCalledTimes(1);
+        } finally {
+            runSpy.mockRestore();
+        }
         await rm(dir, { recursive: true, force: true });
     });
 });
