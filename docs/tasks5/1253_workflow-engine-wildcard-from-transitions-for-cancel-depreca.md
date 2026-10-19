@@ -4,9 +4,9 @@ name: "Workflow engine: wildcard from transitions for cancel/deprecate edges (de
 status: cancelled
 template: standard
 created_at: 2026-10-18T05:22:19.813Z
-updated_at: "2026-10-19T01:04:15.306Z"
+updated_at: "2026-10-19T02:41:45.963Z"
 
-feature_id: D66
+feature_id: D3
 ac_altitude: task-local
 estimate_hours: 6
 priority: P3
@@ -34,6 +34,10 @@ when 1252 lands, implement it, cancel it, or move it to the feature that owns th
 - Engine match sites live in ../ts-libs/packages/dual-workflow-engine/src: `service.ts:420` (external `requestTransition`, exact `find`), `state-machine.ts:186` (auto-advance outbound filter) and `config.ts:86-90` (source validation, outbound index). All three compare `transition.from ===` a single state id.
 - Spur also reads `transition.from` directly, so R3 must keep these consumers correct: packages/app/src/workflow/{lifecycle-adapter,composition-lint,mermaid-render,step-reporter,progress-projection}.ts, packages/app/src/services/{feature-transition,run-store-service,planning-write-service}.ts and apps/web/src/modules/observability/TraceTab.tsx. An engine-only change would leave the Board graph and the legal-path denial text blind to wildcard edges.
 - Status stays backlog (operator decision: deferred); the refine fills it to ready depth so it can be scheduled without re-planning.
+
+**Refine note (2026-10-18, D66 close).** The D66 batch shipped the explicit cancel/deprecate fan-in instead of the wildcard: 10 edges in `feature-lifecycle` and 12 in `task-lifecycle` (the earlier "17 boilerplate edges" figure was wrong; corrected in `docs/design/workflow-consolidation.md` §5). This task was **cancelled, not dropped**: it needs a released `@gobing-ai/ts-dual-workflow-engine` change (a wildcard `from` in the state-machine schema, today `transition.from` is a plain string), after which the 22 edges collapse. Owner when it resumes: the interpreter/engine surface (`packages/app/src/workflow`, the engine package), not a workflow YAML. Re-open it as `todo` once the engine ships the schema form, and verify with a definition that uses a wildcard `from` plus a composition-lint pass over the two lifecycles.
+
+**Owner feature (2026-10-18).** Linked to D3 rather than D65: D65 (the interpreter feature) is `done` and the CLI refuses new links to a closed parent, so D3 — the live workflow-run/schema-reliability feature — carries it until the engine ships the wildcard `from`. D66 remains the historical record of the deferral; the design satellite (`docs/design/workflow-consolidation.md` §5) cites the corrected 10/12 edge counts.
 
 ### Requirements
 
