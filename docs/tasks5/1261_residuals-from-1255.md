@@ -1,10 +1,10 @@
 ---
 schema_version: 1
 name: Residuals from 1255
-status: backlog
+status: cancelled
 template: standard
 created_at: 2026-10-19T07:37:47.449Z
-updated_at: "2026-10-19T07:37:47.516Z"
+updated_at: "2026-10-19T17:24:40.667Z"
 
 ---
 
@@ -55,3 +55,7 @@ Source task: 1255 (feature B21) — deferred residuals filed by residual-scan se
 <!-- Links to features, docs, ADRs, related tasks, or external references. -->
 
 ### History
+
+- **2026-10-19 — closed without implementation as a task.** The single deferred finding this residual carried (a stage `requiresCapabilities` fallback was admitted by the ladder and only then refused by the pre-spawn guard, hard-failing a run a later capable tier could serve) was fixed directly on `main` in commit `c42e6248e` (`packages/app/src/services/agent-resolver.ts`), with regression coverage in `packages/app/tests/services/agent-service.test.ts` (`1261:` cases) and the owning contract updated in `docs/design/cli-contracts.md`. Verified by the full `spur self exec check` gate on that tree (11438 tests, 0 fail). Cancelled rather than deleted so the residual's provenance stays traceable to 1255's review.
+- 2026-10-19T17:24:40.667Z backlog → cancelled (system)
+
