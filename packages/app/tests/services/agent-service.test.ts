@@ -3003,6 +3003,86 @@ describe('AgentService automatic tier escalation (0407)', () => {
         expect((runPromptCommand.mock.calls[0]?.[1] as Record<string, unknown> | undefined)?.model).toBe('pi/pinned');
     });
 
+    // 1261 (residual from 1255): capability requirements used to reach the pre-spawn guard only
+    // AFTER the ladder picked a candidate, so an incapable fallback hard-failed the run instead of
+    // the ladder continuing to the next capable tier. The walk now skips it.
+    const capabilityLadderConfig = {
+        executors: [
+            { name: 'std-exec', agent: 'pi', tier: 'standard', disabled: false },
+            // Incapable fallback: no execution attestation at all.
+            { name: 'capable-exec', agent: 'claude', tier: 'capable-1', disabled: false },
+            {
+                name: 'capable2-exec',
+                agent: 'codex',
+                tier: 'capable-2',
+                disabled: false,
+                executionCapabilities: {
+                    version: 1,
+                    axes: {
+                        fsWrite: { state: 'available', provenance: 'operator-configured' },
+                        processSpawn: { state: 'available', provenance: 'operator-configured' },
+                    },
+                },
+            },
+        ],
+    } as AgentConfig;
+
+    function capabilityLadderDeps() {
+        const runPromptCommand = mock((_agent: string) => Promise.resolve(makeRunResult()));
+        const detector = {
+            detectOne: mock(() =>
+                Promise.resolve({ name: 'pi', installed: true, version: '1.0.0', channels: [], error: null }),
+            ),
+        } as unknown as AgentRunDeps['detector'];
+        const doctorRunner = {
+            runOne: mock(() => Promise.resolve(mockDoctorResult({ usable: true }))),
+        } as unknown as AgentRunDeps['doctorRunner'];
+        return {
+            runPromptCommand,
+            deps: { runner: { runPromptCommand } as unknown as AgentRunDeps['runner'], detector, doctorRunner },
+        };
+    }
+
+    test('1261: an incapable fallback is skipped so the ladder reaches the next capable tier', async () => {
+        const { errors, output } = captureOutput();
+        const svc = makeService({}, output, capabilityLadderConfig);
+        const { runPromptCommand, deps } = capabilityLadderDeps();
+
+        const code = await svc.run(
+            'Implement the task',
+            {
+                agent: 'auto',
+                stage: 'implement',
+                signal: 'gate-fail',
+                'from-executor': 'std-exec',
+                requiresCapabilities: JSON.stringify({ fsWrite: 'available', processSpawn: 'available' }),
+                json: false,
+            },
+            deps,
+        );
+
+        expect(code).toBe(0);
+        expect(runPromptCommand.mock.calls.map((call) => call[0] as string)).toEqual(['codex']);
+        expect(errors.some((line) => line.includes('capable-exec') && line.toLowerCase().includes('capabilit'))).toBe(
+            true,
+        );
+    });
+
+    test('1261: no declared requirements leaves the ladder unchanged', async () => {
+        const { output } = captureOutput();
+        const svc = makeService({}, output, capabilityLadderConfig);
+        const { runPromptCommand, deps } = capabilityLadderDeps();
+
+        const code = await svc.run(
+            'Implement the task',
+            { agent: 'auto', stage: 'implement', signal: 'gate-fail', 'from-executor': 'std-exec', json: false },
+            deps,
+        );
+
+        expect(code).toBe(0);
+        expect(runPromptCommand.mock.calls.map((call) => call[0] as string)).toEqual(['claude']);
+    });
+
     test('1260 R1/R2/AC1: the reported session-limit refusal drives the existing replacement ladder', async () => {
         const { errors, output } = captureOutput();
         const svc = makeService({}, output, escalationConfig);

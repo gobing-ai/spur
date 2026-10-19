@@ -389,6 +389,10 @@ export class AgentResolver {
         }
 
         const policy = stageRecord.model_policy;
+        // 1261 (residual from 1255 R3): a declared `requiresCapabilities` filters THIS walk too.
+        // Without it the ladder could select a fallback the pre-spawn guard then refuses, which
+        // hard-fails a run whose next reachable tier could have served the stage.
+        const requires = this.stageCapabilityRequirements(flags);
         const signalRaw = stringFlag(flags, 'signal', '');
         const signal = signalRaw.length > 0 ? (signalRaw as ObjectiveEscalationSignal) : undefined;
         const fromExecutor = stringFlag(flags, 'from-executor', '') || undefined;
@@ -434,6 +438,13 @@ export class AgentResolver {
                             exitCode: 2,
                             message: `Executor '${executor.name}' for stage '${stageRecord.id}' maps to unknown agent '${executor.agent}'`,
                         };
+                    }
+                    if (requires !== undefined) {
+                        const unmet = this.unmetStageCapability(executor, requires);
+                        if (unmet !== undefined) {
+                            this.noteCapabilitySkip(stageRecord.id, executor.name, unmet);
+                            continue;
+                        }
                     }
                     const usable = await this.checkUsable(canonical, doctorRunner);
                     if (usable.ok) {
@@ -527,6 +538,13 @@ export class AgentResolver {
                     exitCode: 2,
                     message: `Executor '${executor.name}' for stage '${stageRecord.id}' maps to unknown agent '${executor.agent}'`,
                 };
+            }
+            if (requires !== undefined) {
+                const unmet = this.unmetStageCapability(executor, requires);
+                if (unmet !== undefined) {
+                    this.noteCapabilitySkip(stageRecord.id, executor.name, unmet);
+                    continue;
+                }
             }
             const usable = await this.checkUsable(canonical, doctorRunner);
             if (usable.ok) {
@@ -843,6 +861,23 @@ export class AgentResolver {
         const record = canonical !== undefined ? getAgentSessionCapability(canonical) : undefined;
         const session = evaluateSessionCapabilities(requires, record, executor.agent);
         return session.ok ? undefined : `unmet session capability (${session.observed})`;
+    }
+
+    /** Stage+candidate pairs already reported as capability-skipped (warn once per service). */
+    private readonly capabilitySkipWarnings = new Set<string>();
+
+    /**
+     * 1261: one bounded, redacted line when a declared capability requirement removes a candidate
+     * from the ladder — the executor that was rejected and the axes it could not satisfy, never
+     * config values. Warn-once per stage+candidate so a retried ladder stays quiet.
+     */
+    private noteCapabilitySkip(stageId: string, executor: string, unmet: string): void {
+        const key = `${stageId}:${executor}`;
+        if (this.capabilitySkipWarnings.has(key)) return;
+        this.capabilitySkipWarnings.add(key);
+        this.ctx.output.error(
+            `Stage '${stageId}': skipping executor '${executor}' — declared requiresCapabilities unmet (${unmet}); continuing the ladder`,
+        );
     }
 
     /**

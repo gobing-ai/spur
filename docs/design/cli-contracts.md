@@ -498,14 +498,20 @@ executor — an explicit `--model`/action override or the executor pin's own mod
 executor for the **initial dispatch only**. An escalation (0407/0482) or a disabled-pin re-resolution
 (0894) replaces the executor, and the replacement dispatches its own model: a pin- or caller-derived
 model name never travels onto a different executor, and model values stay opaque (no name translation,
-no provider lookup). Separately, when a stage declares `requiresCapabilities`, the auto/role walk
-(`--agent auto`, a declared role, `agent.default` routing through a role, and the fresh disabled-pin
-re-resolution) skips candidates that cannot satisfy the required execution axes (executor attestation)
-or session axes (the runner capability record) — the same two evaluations the pre-spawn guard runs, so
-selection and admission answer one question. A candidate set with nothing capable fails naming each
-rejected executor and its unmet axes. An **explicit named pin is never filtered or silently
-substituted**: it resolves as declared and an incapable one still fails closed at the pre-spawn guard
-(ADR-118). No requirement means unchanged resolution; no new flag, verb or policy is added. The stage-registry schema version is 1.3 (1.2 added the `auth` trigger; 1.3 added optional artifact `identity` — the exact task-section/file identity used for the one-writer-per-section projection (F92 0593)).
+no provider lookup). Separately, when a stage declares `requiresCapabilities`, every runtime
+executor walk skips candidates that cannot satisfy the required execution axes (executor attestation) or
+session axes (the runner capability record) — the same two evaluations the pre-spawn guard runs, so
+selection and admission answer one question. The filtered walks are the auto/role resolution
+(`--agent auto`, a declared role, `agent.default` routing through a role), the fresh disabled-pin
+re-resolution, and the stage `model_policy` ladder including its same-tier availability failover, so
+an incapable fallback no longer hard-fails a run whose next reachable tier could serve it (task 1261).
+Skipping is reported warn-once per stage+candidate with the rejected executor and its unmet axes. A
+candidate set with nothing capable fails naming each rejected executor and its unmet axes. The
+legacy Tier-1 priority walk is deliberately unfiltered: it runs only when no executor roster exists,
+has no attestation to evaluate, and the pre-spawn guard remains authoritative there too. An
+**explicit named pin is never filtered or silently substituted**: it resolves as declared and an
+incapable one still fails closed at the pre-spawn guard (ADR-118). No requirement means unchanged
+resolution; no new flag, verb or policy is added. The stage-registry schema version is 1.3 (1.2 added the `auth` trigger; 1.3 added optional artifact `identity` — the exact task-section/file identity used for the one-writer-per-section projection (F92 0593)).
 **Stage floors (cost-aware):** `plan` starts at `capable-2` (escalate to
 `capable-3`) so Design is authored at create by default; `refine` floors at `standard` (fallback
 `capable-2`) as the blank-Design fallback; `implement` stays `standard`; `verify`/`dogfood` floor at
