@@ -4,7 +4,7 @@ name: "idea-pipeline on D65 primitives: typed entry gate, decide routing, execut
 status: done
 template: feature-impl
 created_at: 2026-10-18T05:10:06.872Z
-updated_at: "2026-10-18T22:33:06.121Z"
+updated_at: "2026-10-19T01:34:21.589Z"
 feature_id: D66
 priority: P1
 tags:
@@ -194,17 +194,17 @@ design: those executors do not dispatch a subprocess that needs the pin.
 
 | Requirement | Status | Evidence |
 |-------------|--------|----------|
-| R1 | MET | packages/app/src/workflow/actions/doctor-probe.ts:139-157 (host PASS reason at :146, fleet-unwired FAIL naming executor at :151, FleetDispatchDeps wired at packages/app/src/workflow/builtins.ts:134-140); shared status file + `FAIL: idea text is empty` config/workflows/idea-pipeline.yaml:74-91; first-line report :440 |
-| R2 | MET | No feature-check/batch-create states config/workflows/idea-pipeline.yaml:67-427; profile conjunct dropped :448-453; decompose→batch-create-run always :464; FAIL hop retarget :458 |
-| R3 | MET | `kind: decide` ×2 config/workflows/idea-pipeline.yaml:120-126, 138-144; projections :129-135, 145-151; rescue test apps/cli/tests/workflow/idea-pipeline-rescue.test.ts:142-160 |
-| R4 | MET | hitl.confirm intact config/workflows/idea-pipeline.yaml:156, 299; `--auto` edges :441-444, :455 |
-| R5 | MET | version "3" :38; zero feature-dev.yaml refs; 469 lines; bundle byte-identical |
-| R6 | MET | plugins/sp/commands/dev-idea.md:52, dev-plan.md:2, README.md:98-99, dev-operations.md:375,541, planning-workflow.md:13-28 |
+| R1 | MET | `packages/app/src/workflow/actions/doctor-probe.ts:139-157`; executor probe regressions and the bundled idea-pipeline E2E passed; empty idea writes its named failure status. |
+| R2 | MET | `packages/app/tests/workflow/idea-pipeline-routing.test.ts:209-280`; executed route truth table passes for both profiles without deleted objective pause states. |
+| R3 | MET | `config/workflows/idea-pipeline.yaml:120-151`; both catalog decide actions and fallback projections pass their executable tests and appear in the full run artifacts. |
+| R4 | MET | `config/workflows/idea-pipeline.yaml:154-173`; interactive taste pause and explicit cancellation pass in the full bundled-run E2E; auto routing is covered by the route suite. |
+| R5 | MET | `config/workflows/idea-pipeline.yaml:469`; executable size check is 469 lines, below 600; absence tests reject stale workflow references. |
+| R6 | MET | `plugins/sp/commands/dev-idea.md:52`; plugin and definition tests pass for updated planning references. |
 
 | Acceptance Criteria | Status | Evidence Type | Evidence |
 |---------------------|--------|---------------|----------|
-| R8 — idea-pipeline routes its objective checks through the decision catalog | MET | test | config/workflows/idea-pipeline.yaml:120-151 + deleted states; tests: idea-pipeline-routing.test.ts:209-498, idea-pipeline-definition.test.ts:725, idea-pipeline-rescue.test.ts:142-160 — 89 tests, 0 fail |
-| R9 — idea-pipeline starts on a typed entry check and dispatches stages through the host or fleet executor | MET | test | doctor-probe.ts:139-157 + yaml:74-91, :440; idea-pipeline-routing.test.ts:316-363 + doctor-probe.test.ts 4 executor cases — 89 tests, 0 fail |
+| R8 — idea-pipeline routes its objective checks through the decision catalog | MET | test | `packages/app/tests/workflow/idea-pipeline-routing.test.ts:209-280`; fresh executable profile-independent route matrix and decide projection tests passed. |
+| R9 — idea-pipeline starts on a typed entry check and dispatches stages through the host or fleet executor | MET | test | `apps/cli/tests/workflow/idea-pipeline-e2e.test.ts:7-72`; real bundled definition records host entry PASS, discovery receipt and catalog artifacts; doctor-probe executor tests passed. |
 - Coverage: N/A (verdict-based; verify pipeline does not measure code coverage)
 
 ### Review
