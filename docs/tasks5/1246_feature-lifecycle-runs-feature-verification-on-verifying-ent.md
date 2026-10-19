@@ -4,7 +4,7 @@ name: feature-lifecycle runs feature verification on verifying entry; remove fea
 status: done
 template: feature-impl
 created_at: 2026-10-18T05:10:06.867Z
-updated_at: "2026-10-18T09:10:57.791Z"
+updated_at: "2026-10-19T01:34:14.971Z"
 feature_id: D66
 priority: P1
 tags:
@@ -267,18 +267,18 @@ exit=0
 
 | Requirement | Status | Evidence |
 |-------------|--------|----------|
-| R1 | MET | config/workflows/feature-lifecycle.yaml:51-53 — verifying onEnter is one `kind: shell` action `env -u __runId $spurBin feature verify $featureId --no-logo`; nested `spur workflow run` and the 0948/1147 `SPUR_WORKFLOW_RUN_ACTIVE` block deleted. E2E: packages/app/tests/workflow/feature-lifecycle-verifying-entry.test.ts:201 asserts no `feature-verification` run row on entering verifying (pass, 3.69s run below). |
-| R2 | MET | packages/app/src/workflow/feature-verification-run.ts:240 resolves the definition once; :254-265 open/finalize branch — empty runId opens a row (`workflow_name: FEATURE_VERIFIER_DEFINITION`, :191; digest/version stamped via `withRunIdentityRecording`, :180-190) and finalizes `done` after a completed pass, `failed` only when the pass cannot run (:260,:264). Explicit `--run-id` keeps caller-owned behaviour (:244-251). Unit pins: feature-verification-run.test.ts "an empty run id opens and finalizes the pass's own run row (1246 R2)" + the failed-finalize twin (pass). |
-| R3 | MET | `FEATURE_VERIFIER_DEFINITION = 'feature-lifecycle'` exported at packages/app/src/workflow/feature-verification-receipt.ts:71, re-exported packages/app/src/index.ts:1018; consumed by feature-verification-run.ts:240,331 and packages/app/src/services/feature-check.ts:562,564. E2E: entering verifying records a PASS receipt that then lets `feature update <id> done` succeed (feature-lifecycle-verifying-entry.test.ts:201). |
-| R4 | MET | Stale-identity finding at packages/app/src/workflow/feature-verification-receipt.ts:419-423 — `latest.verifier.name !== FEATURE_VERIFIER_DEFINITION` returns `reason: 'stale'` naming `spur feature verify <id>`, checked before run-row integrity (deterministic message). Test: packages/app/tests/workflow/feature-verification-receipt.test.ts:540 (pass). |
-| R5 | MET | `config/workflows/feature-verification.yaml` deleted (git status `D`); rebuilt bundle listing `apps/cli/config/workflows/` contains no feature-verification.yaml (bundle-config.ts:56 removes-then-copies, so the listing is a full regeneration). `verificationCmd` var reads removed — both sites read `DEFAULT_FEATURE_VERIFICATION_CMD = 'spur self exec check-feature'` (feature-verification-run.ts:311-316 region; feature-check.ts:571; constant at feature-verification-receipt.ts:61). |
-| R6 | MET | Receipt file names unchanged — feature-verification-receipt.ts:143-146 still `<runId>-feature-verification.{json,log,status}` / `<featureId>-feature-verification.json`. Diff touches neither packages/app/src/workflow/persist-check.ts, services/run-storage.ts, nor services/worktree-persist.ts. |
+| R1 | MET | `config/workflows/feature-lifecycle.yaml:51-53`; verifying-entry E2E proves no retired workflow run is opened. |
+| R2 | MET | `packages/app/src/workflow/feature-verification-run.ts:237-267`; owned-run PASS/FAIL cases and explicit-run compatibility passed in the receipt suites. |
+| R3 | MET | `packages/app/src/workflow/feature-verification-receipt.ts:63-71`; `packages/app/src/services/feature-check.ts:562-571`; verifying-entry E2E accepts the current verifier receipt. |
+| R4 | MET | `packages/app/src/workflow/feature-verification-receipt.ts:415-426`; stale-identity receipt regression passed. |
+| R5 | MET | `packages/app/src/workflow/feature-verification-run.ts:311-318`; rebuilt bundle has exactly the six surviving workflows; all six validate successfully. |
+| R6 | MET | `packages/app/src/workflow/feature-verification-receipt.ts:138-146`; receipt path and persistence regression suites passed. |
 
 | Acceptance Criteria | Status | Evidence Type | Evidence |
 |---------------------|--------|---------------|----------|
-| AC1 — Entering verifying runs the feature verification pass inside feature-lifecycle (req: R1, R2) | MET | test | packages/app/tests/workflow/feature-lifecycle-verifying-entry.test.ts:201,236 — throwaway-root fixtures: entering verifying records a PASS receipt on its own terminal-`done` `feature-lifecycle` row with null external key, no `feature-verification` row exists, and the FAIL-path fixture closes the row `done` while the done edge denies; config/workflows/feature-lifecycle.yaml:51-53. |
-| AC2 — The verification receipt names feature-lifecycle as its verifier (req: R3, R4) | MET | test | feature-verification-receipt.ts:71 (one constant), :419-423 (stale finding); feature-check.ts:562,564; feature-verification-run.ts:331; receipt test at feature-verification-receipt.test.ts:540. All suites green (below). |
-| AC3 — The bundled workflow set no longer ships feature-verification, pr-review or wayfinder-resolution (req: R5, R6) | MET | command | `ls apps/cli/config/workflows/` and `ls config/workflows/` — no feature-verification.yaml; `rg feature-verification config/workflows/` → no matches. pr-review/wayfinder-resolution remain by design: 1251's scope per this task's out-of-scope list. |
+| R2 — Entering verifying runs the feature verification pass inside feature-lifecycle | MET | test | `packages/app/tests/workflow/feature-lifecycle-verifying-entry.test.ts:201-260`; fresh focused suite passes both own-run and FAIL-denial fixtures. |
+| R3 — The verification receipt names feature-lifecycle as its verifier | MET | test | `packages/app/tests/workflow/feature-verification-receipt.test.ts:540-565`; fresh receipt suite and verifying-entry E2E passed. |
+| R1 — The bundled workflow set no longer ships feature-verification, pr-review or wayfinder-resolution | MET | test | `repo-wide-tests/workflow-consolidation-absence.test.ts:134-147`; six validated surviving definitions, rebuilt assets contain no retired definition. |
 - Coverage: N/A (verdict-based; verify pipeline does not measure code coverage)
 
 ### Review
