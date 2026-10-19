@@ -4,7 +4,7 @@ name: feature sync advances an active feature to verifying when all linked tasks
 status: done
 template: feature-impl
 created_at: 2026-10-18T05:10:06.870Z
-updated_at: "2026-10-19T01:30:13.397Z"
+updated_at: "2026-10-19T01:34:16.940Z"
 feature_id: D66
 priority: P1
 tags:
@@ -159,14 +159,14 @@ plugins/sp).
 
 | Requirement | Status | Evidence |
 |-------------|--------|----------|
-| R1 | MET | `packages/app/src/services/feature-service.ts:729` — bounded re-derive applies done in the same call. |
-| R2 | MET | `apps/cli/tests/commands/feature.test.ts:1189` — FAIL retains verifying, reports recovery, exits 0. |
-| R3 | MET | `packages/app/tests/services/feature-service.test.ts:1438` — denied-hop and dry-run derivation counts; `packages/app/src/services/feature-service.ts:705` — goal-conflict return. |
-| R4 | MET | `apps/cli/tests/commands/feature.test.ts:1161` — PASS flow; `apps/cli/tests/commands/feature.test.ts:1189` — FAIL flow; `apps/cli/tests/commands/feature.test.ts:1124` — wip sibling remains active. |
+| R1 | MET | `packages/app/src/services/feature-service.ts:729-734`; PASS sync E2E reaches done in one call with one verification pass. |
+| R2 | MET | `packages/app/src/services/feature-service.ts:735-744`; FAIL sync E2E retains verifying and successfully executes the corrected positional recovery command. |
+| R3 | MET | `packages/app/src/services/feature-service.ts:729-730`; service tests prove denied-hop and dry-run paths never re-derive. |
+| R4 | MET | `apps/cli/tests/commands/feature.test.ts:1156-1216`; fresh PASS/FAIL fixtures and nonterminal sibling checks pass. |
 
 | Acceptance Criteria | Status | Evidence Type | Evidence |
 |---------------------|--------|---------------|----------|
-| AC1 — A feature with every linked task terminal can advance to verifying on its own (req: R1, R2, R3, R4) | MET | test | `apps/cli/tests/commands/feature.test.ts:1156` — spawned-CLI E2E cases passed, including exactly-once verification and the non-terminal sibling. |
+| R4 — A feature with every linked task terminal can advance to verifying on its own | MET | test | `apps/cli/tests/commands/feature.test.ts:1156-1216`; fresh targeted re-derive E2E: 2 pass, 0 fail; PASS/FAIL, exactly-once verification, nonterminal sibling and executable recovery covered. |
 - Coverage: N/A (verdict-based; verify pipeline does not measure code coverage)
 
 ### Review
