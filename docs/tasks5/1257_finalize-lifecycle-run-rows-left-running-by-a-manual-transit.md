@@ -1,10 +1,10 @@
 ---
 schema_version: 1
 name: Finalize lifecycle run rows left running by a manual transition
-status: todo
+status: cancelled
 template: issue
 created_at: 2026-10-18T19:33:17.580Z
-updated_at: "2026-10-19T02:41:28.906Z"
+updated_at: "2026-10-19T03:03:08.692Z"
 
 feature_id: D3
 ---
@@ -13,62 +13,43 @@ feature_id: D3
 
 ### Background
 
-After task 1246 reached `done` through `spur task record --transition testing` + `spur task update 1246 done` and `spur feature sync D66`, the project DB held a lifecycle run that nothing ever finalized:
+**Refine corrections (2026-10-18): no valid current implementation issue remains; cancel this filing.**
 
-```
-id                                       workflow_name      status   external_key  started_at
-run_524dae91-f944-40e6-855b-b382ac852773  feature-lifecycle  running  feature:D66   2026-10-18T06:45:10.245Z
-```
+The filing interpreted a durable feature lifecycle row in an active/nonterminal state as an abandoned process. Current `packages/app/src/workflow/lifecycle-adapter.ts:300-320` already finalizes done as done and cancelled as failed/cancelled; other entity states deliberately keep the durable row running so later transitions attach/reseed it. `packages/app/src/workflow/lifecycle-adapter.ts:78-109` also provides lookup-only reconciliation for terminal writes that suppress lifecycle run creation.
 
-`metadata_json` is `{}`, `completed_at` is null, and no later call closes it — it survived the rest of the batch (10+ hours) and every subsequent `spur agent status` / Board read renders it as a live run.
+The cited run run_524dae91-f944-40e6-855b-b382ac852773 and external key feature:D66 are absent from the current project DB, so the historical snapshot cannot establish a currently stuck terminal entity. A read-only query was used; no database rows were repaired or deleted.
 
-**Mechanism (partly traced).** `packages/app/src/workflow/lifecycle-adapter.ts:71-72` opens a `feature-lifecycle` run for a feature transition (`linkKind`/`workflowName`), and `requestTransition` drives it one transition per `(from, to)` pair. The manual path (`spur task update <wbs> <status>` → feature sync → `requestTransition`) creates the row but the caller does not finalize it when the transition completes outside a pipeline run. The exact owner of the close is unconfirmed — confirm with a log at the adapter's transition completion and at `spur feature sync`'s exit path.
+The filing's claim that spur agent status renders these lifecycle rows as live is false: `apps/cli/src/commands/agent/status.ts:20-60` reads declared agent specs plus supervisor GET /api/processes. The hypothetical future exclusivity check does not justify adding a new sweep command.
 
-**Impact.** A phantom `running` row: `spur agent status` and the Board show an active run that no process owns; a future `project_claims`-style exclusivity check keyed on "there is a running lifecycle run" would refuse work; and an operator reading the runs table cannot tell a crashed session from a live one.
+Fresh evidence: `(cd packages/app && bun test tests/workflow/lifecycle-adapter.test.ts)` → 29 pass, 0 fail; terminal mapping, cancelled reconciliation, no-lifecycle lookup-only repair, nonterminal running and reopen behavior are covered. Receipt: .spur/run/refine-1257-lifecycle-tests.log.
+
+Removed every original issue, R-item, AC and implementation step: per-transition terminalization would contradict the existing durable lifecycle contract; try/finally cannot guarantee cleanup after process termination; a new pid/lease sweeper lacks an ownership contract and is outside this invalid filing.
 
 ### Requirements
 
-- [ ] R1. A lifecycle run opened by a feature transition reaches a terminal state (`done` on success, `failed` on a denied/errored guard) before `requestTransition` returns, including the manual `spur task update` → `feature sync` path.
-- [ ] R2. When the caller abandons the transition (exception, early return, process exit), the row is finalized `interrupted` — never left `running`.
-- [ ] R3. An ops verb can list run rows whose owning process is gone (no live pid/lease) and sweep them to `interrupted`, so a crash is recoverable without SQL.
-- [ ] R4. `spur agent status`, the Board feed and `spur history analyze` exclude or label swept rows so a phantom is never rendered as live.
-- [ ] R5. A regression test drives one manual transition and asserts no `running` lifecycle row remains afterwards.
+None retained. The terminal-close behavior already exists; nonterminal durable running state is intentional. No new sweep API, schema, UI change or failure policy is authorized by this cancelled task.
 
 ### Acceptance Criteria
 
-- [ ] AC1 — A feature transition leaves no `running` lifecycle row, on the pipeline path and the manual `task update` path (req: R1, R2, R5)
-- [ ] AC2 — A crashed session's row is sweepable to `interrupted` without SQL (req: R3)
-- [ ] AC3 — Reads never render a swept row as live (req: R4)
+None retained after issue validation. The existing lifecycle suite is the regression evidence for cancellation, not a claim of new delivery.
 
 ### Q&A
 
-<!-- Clarifications and triage decisions. Keep empty if none. -->
+- Closed: cancel because all original issues are invalid, already addressed or speculative.
+- Closed: do not finalize active/blocked/testing lifecycle entities merely because one CLI invocation returned.
+- No pending delegation; this task is excluded from the implementation-ready set.
 
 ### Design
 
-**Chosen: finalize at the owner, sweep as the backstop.**
-1. Make the adapter's transition completion finalize the row it opened (R1), in a `try/finally` so an exception or early return closes it `interrupted` (R2) — the same shape `feature-verification-run.ts` already uses for the verification pass (open → finalize `done`/`failed`), which is the precedent to copy.
-2. Add the sweep as a narrow ops surface (R3): list `runs` where `status='running'` and the run's owning pid/lease is dead, then finalize `interrupted` with a reason carrying the sweep's evidence. Prefer extending an existing ops noun over a new one.
-3. Reads (R4): a swept row is `interrupted`, which the existing status vocabulary already renders as not-live; add it to whatever "active run" filter the Board/agent status uses.
-
-**Rejected.**
-- Deleting the row: provenance is the point of the runs table.
-- A cron sweeper only: it hides the missing finalize and leaves a window where the phantom is live.
-- Refusing new transitions while a `running` lifecycle row exists: that turns the defect into an outage.
-
-**Frozen names.** `interrupted` (existing status) with a `swept` marker in `terminal_reason`; no new status value.
-
-**File targets.** `packages/app/src/workflow/lifecycle-adapter.ts:60-120,330-360`; `packages/app/src/services/planning-write-service.ts:471` (`requestTransition` call site); `packages/app/src/services/feature-service.ts` (sync path); `apps/cli/src/commands/agent/*` or `apps/cli/src/commands/workflow/*` for the sweep verb; tests `packages/app/tests/workflow/feature-lifecycle-adapter.test.ts`, `packages/app/tests/services/feature-service.test.ts`.
-
-**Anti-patterns.** No second "lifecycle run" concept; do not reuse the feature's verification run row for a transition; do not let a sweep finalize a row whose owner is still alive (check the pid/lease first).
+No implementation. Preserve one durable lifecycle run per entity, file-wins reseeding, existing done/cancelled finalization and lookup-only terminal reconciliation. If a new reproducible mismatch is found later, file its exact terminal entity/run state and owning writer under a separate issue; do not resurrect the generic abandoned-process premise.
 
 ### Plan
 
-<!-- Ordered debugging/fix checklist. Fill before moving to todo/wip. -->
+No implementation steps remain; cancelled after current-tree inspection, read-only DB lookup and 29 passing lifecycle tests.
 
 ### Root Cause
 
-<!-- Verified underlying cause with file:line evidence. Fill once reproduced/isolated. -->
+No current defect reproduced. The filing conflated a durable entity lifecycle row with a supervised process and overlooked the existing terminal-state finalization/reconciliation paths.
 
 ### Solution
 
@@ -87,3 +68,6 @@ run_524dae91-f944-40e6-855b-b382ac852773  feature-lifecycle  running  feature:D6
 <!-- Links to failing logs, related issues, tasks, docs, or external references. -->
 
 ### History
+
+- 2026-10-19T03:03:08.692Z todo → cancelled (system)
+

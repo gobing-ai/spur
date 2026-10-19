@@ -4,79 +4,72 @@ name: Make role-stage executor resolution keep the pinned executor's agent
 status: todo
 template: issue
 created_at: 2026-10-18T19:33:16.740Z
-updated_at: "2026-10-19T02:41:28.111Z"
+updated_at: "2026-10-19T03:01:40.464Z"
 
 feature_id: B21
+priority: P1
+ac_altitude: task-local
+estimate_hours: 6
+dependencies: []
 ---
 
 ## 1255. Make role-stage executor resolution keep the pinned executor's agent
 
 ### Background
 
-Four distinct executor-resolution failures in the D66 batch (2026-10-18), all in the hop between a stage's declared role and the executor it dispatches.
+Two current routing gaps remain. First, `packages/app/src/workflow/actions/agent-run.ts:717-718` forwards a run pin's model as a model flag. `packages/app/src/services/agent-run-executor.ts:315,450` freezes that flag as explicitModel and gives it precedence on every attempt, even after `currentAgent/currentModel` are replaced at `:731-732`. A cross-executor escalation can therefore inherit the previous executor's model. Second, `packages/app/src/services/agent-resolver.ts:698-744` selects a role candidate on availability/tier/doctor usability, whereas required execution capabilities are checked later at `packages/app/src/services/agent-run-executor.ts:453-470`; the initial candidate can be unusable for this stage while a later eligible one would satisfy it.
 
-**Evidence (one row per failure; the `## resolved invocation` block of each partial artifact names both sources).**
-
-| Run | Symptom | Partial artifact |
-| --- | --- | --- |
-| `379d95ff` | `--agent auto` resolved role `coder` to `agy-gemini`, which is enabled but carries no `executionCapabilities`; the 0706 R5 preflight refused dispatch 144 ms in | `.spur/memory/runs/379d95ff…/artifacts/…-implement-partial.md` |
-| `1ae85188` | `remediate` (`role: coder`, `session: reuse`) dispatched `agent=pi` with `model=claude-opus-5-5-medium` (the pinned `agy-opus-5.5`'s model) → pi "Model not found" | `…/1ae85188…-remediate-partial.md` |
-| `db097057` | the same hop dispatched `agent=codex` with `model=volc/deepseek-v4-1-flash-261017` (the pinned `pi-dsv4.1-flash-volc` model) → codex read it as `provider: openai` | `…/db097057…-remediate-partial.md` |
-| `e398b8b9`, `d1f40ce0`, `d5bfbe22` | `implementAgent=codex-sol`/`pi-dsv4.1-flash-volc` resolved `agent=pi` with an antigravity or bare provider model (`gpt-6.1-sol` is ambiguous across seven authenticated providers) | `…-implement-partial.md` each |
-
-**Mechanism (verified in source).**
-- `packages/app/src/services/executor-tier.ts:68-76` (`cheapestEligibleExecutors`) filters only `executorDisabled` and tier, then sorts by tier rank. It never consults capability attestation, so a role can resolve an executor that will be refused 100 ms later; and within one rank the winner is config order, which is how a `capable-1` antigravity entry serves a `standard` role before an attested `standard` pi entry.
-- `packages/app/src/workflow/actions/agent-run.ts:688` resolves the role (`resolveRoleFresh`), while `:718` computes `model = asOptionalString(options.model) ?? pin?.model` and `:902/:963/:1008` push that model onto the *resolved* agent's flags. Agent comes from one source, model from another — the observed cross-wiring.
-- Config defaults (`~/.config/spur/config.yaml`, `agent.roles`): `coder: standard`, `reviewer: capable-1`, `planner: capable-2`. A role's tier is a floor for selection, so `capable-1` executors are eligible for a `standard` role and can win on list order.
-
-**Operator impact.** Eight pipeline runs across two tasks died on dispatch (144 ms to 20 min), each requiring an executor sweep by hand; the batch also reported an unattested executor as the *cause* of a failure whose pin was valid, which reads as a false accusation against the operator's config.
+**Refine corrections (2026-10-18)**
+- Retained: atomic executor/model binding across replacement, and stage-specific capability-aware auto/role selection.
+- Removed: higher tiers winning ahead of a cheaper attested standard executor because of config order. A direct call with higher-tier first returned floor-tier first; executor-tier.ts sorts by rank, and equal-tier config order is already intentional/stable.
+- Removed: provider registry discovery and ambiguous bare-model rejection. Models are opaque runner options; no verified provider registry exists at this seam. Retain the existing explicit model override contract on the selected initial executor.
+- Removed: options.model becoming an executor selector; this would silently change a valid public/action option.
+- Archived run IDs and operator-global settings are historical hypotheses, not prerequisites or secrets to read. Use hermetic fake executors and deterministic runner captures. Estimate unset → 6h for the narrowed shared-seam fix.
 
 ### Requirements
 
-- [ ] R1. A role-resolved stage never pairs one source's agent with another's model: either both come from the same executor spec (the pin), or the stage resolves both from the role. A mismatch is refused before dispatch with a message naming both sources.
-- [ ] R2. Executor usability includes capability attestation: `agent: auto` and every role tier skip an executor whose required axes are unattested, so resolution cannot return an executor the preflight will refuse.
-- [ ] R3. A bare model id that is ambiguous across authenticated providers is resolved deterministically (qualified) or refused before dispatch, naming the candidates.
-- [ ] R4. Tier eligibility is honest about ranks: an executor below or above the role's tier is only eligible under the documented rule, and within a rank the order is deterministic and documented (not incidental config order).
-- [ ] R5. The failure message for a refused dispatch names the offending executor, the stage, and the reason class (`attestation` | `model-resolution` | `agent-mismatch`), so an operator is not told their config is wrong when the pin was valid.
-- [ ] R6. A regression test covers each of the four observed pairings (`agy` model + pi, volc model + codex, bare ambiguous `gpt-6.1-sol` via pi, unattested `auto` resolution) and asserts either a correct dispatch or exactly one actionable error.
+- [ ] R1. Every dispatched attempt uses one selected executor's agent and default model together. A model inherited from a workflow pin never overrides a replacement executor's model after escalation or disabled-pin re-resolution.
+- [ ] R2. Preserve a deliberate caller/action model override on the initial selected executor. Once routing changes executor, use the new executor's model; do not translate model names, query provider registries or reinterpret model as an executor selector.
+- [ ] R3. Auto/role resolution with declared requiresCapabilities skips candidates that cannot satisfy the required execution/session axes using existing attestation evaluators. No requirements means unchanged resolution. Explicit named pins still fail clearly rather than silently substituting. The pre-spawn guard remains authoritative on every actual attempt.
+- [ ] R4. Preserve tier-floor semantics, ascending rank and stable config-order ties. Capability filtering belongs in the runtime resolution walk, without changing fleet roster materialization or the generic cheapestEligibleExecutors helper's semantics.
+- [ ] R5. Hermetic tests cover replacement between different agent/model namespaces, explicit override lifetime, unattested-first/attested-next selection, exhausted capability eligibility and unchanged explicit pin refusal. Diagnostics name the actual rejected executor and unmet axes without exposing config/env values.
+
+Out of scope: new CLI commands/flags, changing tier defaults or pin precedence, provider/model catalogs, automatic name translation, new failover policy (1260), changing shared availability state, and rewriting stage graphs.
 
 ### Acceptance Criteria
 
-- [ ] AC1 — A stage always dispatches one executor's agent and model together, or refuses with both sources named (req: R1, R5)
-- [ ] AC2 — Resolution never returns an executor the capability preflight will refuse (req: R2, R4)
-- [ ] AC3 — An ambiguous bare model id is refused before dispatch with its candidates (req: R3)
-- [ ] AC4 — The four observed pairings each produce one actionable error or a correct dispatch in tests (req: R6)
+- [ ] AC1 — An executor replacement cannot dispatch the prior executor's model (req: R1, R2, R5)
+- [ ] AC2 — Auto role selection skips an incapable first candidate while an explicit incapable pin fails closed (req: R3, R5)
+- [ ] AC3 — Rank order, stable ties and no-requirement resolution remain unchanged (req: R4, R5)
 
 ### Q&A
 
-<!-- Clarifications and triage decisions. Keep empty if none. -->
+- Closed: same-tier order is configured order; higher tiers are fallbacks after cheaper eligible tiers. No new ordering setting.
+- Closed: model values stay opaque and explicit model overrides keep their current meaning for the initial executor.
+- Closed: capability-aware selection is stage-specific runtime filtering; no global ban on unattested read-only executors.
+- Closed: execution/resource failure retries belong to 1260.
 
 ### Design
 
-**Chosen: one resolution, one spec.**
-1. Resolve a stage to a *single* `AgentExecutorConfig` (agent + model + tier + capabilities together) at `agent-run.ts` dispatch time, then derive `flags.agent`/`flags.model` from that spec only. `options.model` remains a documented override that replaces both when it names an executor, not a bare model string.
-2. Add `capabilityAttestation` to the eligibility predicate in `cheapestEligibleExecutors` (R2), reusing the 0706 R5 requirement check so resolution and preflight agree by construction; export the predicate for `agent doctor`.
-3. Resolve bare model ids through the provider registry before dispatch; ambiguity is a refusal with the candidate list (R3).
-4. State the tier rule in one place: `isTierEligible` today admits any executor at or above the floor, and the rank sort decides. Keep the semantics, add the deterministic tie-break (rank, then config order) as an explicit comparator with a comment and a test, so the ordering cannot drift with YAML order.
+Chosen: repair existing AgentResolver/AgentRunExecutor seams; no new API surface or second resolver. Thread the already parsed requiresCapabilities through internal resolve flags/role walks, including resolveRoleFresh when an existing pin is disabled. Reuse evaluateCapabilities/evaluateSessionCapabilities and runner capability records; preserve the current pre-spawn guard. Keep cheapestEligibleExecutors a generic ordered candidate supplier because FleetService also uses it without a stage.
 
-**Rejected.**
-- Mapping model ids between agent CLIs: a pi model name passed to codex is never meaningful; refusing is correct.
-- A per-stage allowlist of executors: it duplicates the tier policy and would need edits in every workflow.
-- Silent fallback to the next executor inside `agent.run`: that is a separate capability (see 1260 — failover on quota/auth), and doing it here would hide resolution defects.
+Model precedence: first attempt = explicit caller/action override if supplied, else selected executor model. Any replacement attempt = replacement executor model. A pin-derived flag must not become a permanent override; implement the narrowest provenance/attempt handling at the existing dispatcher/loop boundary, not a model-name heuristic. Preserve existing successful pinned, bare-agent and session-affinity paths. Do not replay the old executor session when the executor changes; existing fresh-re-resolution handling remains.
 
-**Frozen names.** `resolveStageExecutor()` (returns the single spec), `isExecutorUsable(executor, requiresCapabilities)`, reason classes `attestation` | `model-resolution` | `agent-mismatch`.
+Targets: `packages/app/src/workflow/actions/agent-run.ts`, `packages/app/src/services/agent-run-executor.ts`, `packages/app/src/services/agent-resolver.ts`, `packages/app/src/services/agent-service.ts` only for existing fresh-role plumbing; reuse `packages/app/src/services/capability-attestation.ts`. Tests: `packages/app/tests/workflow/actions/agent-run.test.ts`, `packages/app/tests/services/agent-resolver.test.ts`, existing agent-service escalation suites and executor-tier tests. Owning contract: `docs/design/agent-execution-contracts.md` if present, otherwise resolve the existing agent-routing owner from docs/04_DESIGN.md before editing; no new satellite solely for this fix.
 
-**File targets.** `packages/app/src/services/executor-tier.ts:68-76`; `packages/app/src/workflow/actions/agent-run.ts:688-720,902,963,1008`; `packages/app/src/services/capability-attestation.ts`; `packages/app/src/services/agent-service.ts:363` (`resolveRoleFresh`); tests `packages/app/tests/services/{executor-tier,agent-service}.test.ts`, `packages/app/tests/workflow/actions/agent-run.test.ts`.
-
-**Anti-patterns.** No provider-name heuristics (`contains('claude')`); no automatic model translation between CLIs; do not change tier defaults to work around the ordering; do not relax the capability preflight (0706 R5) to make `auto` succeed.
+No prerequisites; 1260 consumes the corrected selected-executor/model/eligibility contract and owns resource-failure policy. Do not implement 1260 here. Bound work to one task and 6h; persist captured argv/routing fixtures as evidence, never live provider credentials.
 
 ### Plan
 
-<!-- Ordered debugging/fix checklist. Fill before moving to todo/wip. -->
+- [ ] 1. Add failing captured-dispatch tests for pinned A → B with different agent/model namespaces and for a true explicit first-attempt override (R1-R2).
+- [ ] 2. Add a resolver fixture with incapable first candidate, capable second, same-tier ties and no-requirement cases; explicit pin must still refuse (R3-R5).
+- [ ] 3. Fix model override lifetime in the existing dispatch loop; thread existing capability requirements into the runtime role-selection walk and fresh reroll without changing fleet/tier helper policy (R1-R4).
+- [ ] 4. Run targeted action/resolver/escalation/capability/tier suites inside packages/app, plus affected CLI agent tests and app/CLI typechecks. Use a fake runner public CLI probe, not real provider discovery (R5).
+- [ ] 5. Update the owning contract if changed; run task-local gate, review and verify before done. Record exact routing pairs and negative admission evidence.
 
 ### Root Cause
 
-<!-- Verified underlying cause with file:line evidence. Fill once reproduced/isolated. -->
+A model inherited from a workflow executor pin becomes indistinguishable from an enduring caller override in AgentRunExecutor: explicitModel remains fixed while the escalation loop replaces the executor. Separately, stage requiresCapabilities reach the pre-spawn guard after role candidate selection, so selection and admission answer different questions. The pure shared tier helper intentionally has no stage-capability or doctor input and must stay process-free.
 
 ### Solution
 

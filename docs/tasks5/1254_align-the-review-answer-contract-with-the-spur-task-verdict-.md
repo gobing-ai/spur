@@ -4,76 +4,69 @@ name: Align the review answer contract with the spur task verdict vocabulary
 status: todo
 template: issue
 created_at: 2026-10-18T19:33:15.525Z
-updated_at: "2026-10-19T02:41:27.626Z"
+updated_at: "2026-10-19T03:00:39.257Z"
 
 feature_id: F91
+priority: P1
+ac_altitude: task-local
+estimate_hours: 4
 ---
 
 ## 1254. Align the review answer contract with the spur task verdict vocabulary
 
 ### Background
 
-Observed across the whole D66 batch on 2026-10-18 (feature D66, tasks 1246-1252, branch `sp/runall-d66-7760`). The review hop asks its agent for one answer shape and `spur task verdict --from-answer` enforces a different one, so a *correct* review is certified as non-PASS and the run burns its remediation budget.
+The merged review/certification stage has a reproducible producer-contract mismatch. `config/workflows/task-pipeline.yaml:637-646` specifies the table headers but omits row status/evidence vocabularies and feature-credit guidance. It also asks the captured certification answer for confidence derived from finding dispositions, while `packages/app/src/services/verify-answer-lint.ts:163-203` checks that answer with deriveVerifyConfidence. The authored Review section is independently checked with deriveReviewConfidence by `packages/app/src/services/residual-scan.ts:363-377`. A PASS with executable AC and a carried P4 legitimately derives HIGH in the certification answer and MEDIUM in Review. A direct current-tree call to both derivations reproduced that distinction.
 
-**What each side says.**
-- The pipeline prompt (`config/workflows/task-pipeline.yaml`, `review` onEnter `input`, ~line 622-660) asks for a plain `Verdict: PASS|FAIL` line preceded by a `| Req | Status | Evidence |` table and a `| AC | Status | Evidence Type | Evidence |` table. It never states the status vocabulary, the evidence-type vocabulary, or the AC-identity rule.
-- `packages/app/src/services/verify-answer-lint.ts` (~line 140-205) enforces: `MET | PARTIAL | UNMET` (not PASS/FAIL), an AC id matching a declared label or scenario title, and an evidence type from `test | command | static-ref | manual-review | llm-judge | n/a` (or a `+` compound).
-- `packages/app/src/services/feature-check.ts:1490-1545` plus `apps/cli/src/commands/task/verdict.ts:85` add a *second* requirement: at least one row must key to a feature scenario, with accepted forms `scenario title`, `AC-<n>` alias, `(feature R<n>)`, `(covers: R<n>)`, `[R<n>]`.
-- `confidence-mismatch` contradicts ADR-141: a reviewer that states `MEDIUM` because it carries a residual (an OPEN/DEFER row) is rejected, because the derivation reads only the requirement/AC rows and cannot see the residual.
-
-**What happened (evidence).**
-- Runs `6078a8a6` (pi-k3), `8e680e1e` (codex-sol), `bc16c064` and `db097057` (pi-k3) each ended `retry-exhausted` while the reviewer's own verdict was PASS.
-- 1249's answer said "artifact written … and merged into the task's `## Review`" — the tables landed in the section, the answer text was prose.
-- 8e680e1e's answer was cut mid-sentence ("First draft failed the …"), so the captured stdout is not a reliable carrier either.
-- 1246, 1247, 1249, 1250, 1251 and 1252 were only certifiable after an operator rebuilt the answer from the reviewer's own tables with the vocabulary normalized (`PASS`→`MET`, AC ids re-keyed, evidence types mapped, confidence aligned). 1248 was certifiable only because the reviewer happened to write `.spur/run/1248-verdict.json` = PASS while the pipeline's own status token read FAIL.
-- Downstream symptom already partially fixed on 2026-10-18: `flipVerifiedCheckboxes` (`packages/app/src/services/task-record.ts:319-410`) could not tick a task AC box from a scenario-keyed row whose scenario id was not echoed in the AC bullet; the bare-title match was added, with two tests in `packages/app/tests/services/task-record.test.ts`.
+**Refine corrections (2026-10-18)**
+- Valid: incomplete review-stage answer instructions and use of the wrong confidence lane for its captured certification answer.
+- Removed: model re-asks inside task verdict (deterministic CLI ownership violation), certifying prose with tables elsewhere (contradicts the answer-file gate), unconditional acceptance of MEDIUM for any OPEN row (open P1-P3 remains blocking), and an unproven requirement to merge every AC matcher. Task AC identity and feature credit are distinct contracts; the checkbox bare-title defect is already fixed at `packages/app/src/services/task-record.ts:365-389`.
+- Historical run IDs from the filing are context, not independently re-established runtime evidence. Current code and existing certification tests establish the defect without depending on archived stdout.
+- Task-local AC is explicit because these regressions are narrower than F91's ship scenarios. No feature link changes. Estimate previously unset → 4h after removing retry/identity redesign scope.
 
 ### Requirements
 
-- [ ] R1. The review hop's `input` states the exact answer contract the lint enforces: `MET | PARTIAL | UNMET` statuses, the enumerated evidence-type tokens, the AC column carrying the declared AC label or the feature scenario title (never a scenario suffix glued onto a truncated label), and the requirement that at least one row key to a feature scenario.
-- [ ] R2. `spur task verdict --from-answer` re-asks once, naming the failing lint rules, when the answer parses but fails the vocabulary/identity lint — instead of deriving a review FAIL that enters remediation.
-- [ ] R3. Accepted AC-identity forms are stated in one place and shared by the lint, the scenario-key gap check and the checkbox flip: declared label, bare title, `AC<n>`, `AC-<n>`, scenario title, `(feature R<n>)`, `(covers: R<n>)`, `[R<n>]`.
-- [ ] R4. A `Confidence: MEDIUM` stated for a carried residual (an OPEN or DEFER row in the answer's findings table) is accepted, and a mismatch message names the row responsible.
-- [ ] R5. A missing/`UNKNOWN`-deriving answer (no tables) is reported as `answer-shape` in the run's terminal reason and in the review status token, distinguishable from a substantive FAIL.
-- [ ] R6. An end-to-end test drives one review whose final message is prose with the tables in `## Review` and asserts the run certifies with no operator normalization.
+- [ ] R1. The review-stage prompt states the existing exact requirement/AC table headers, MET/PARTIAL/UNMET statuses (plus N/A for AC), evidence-type tokens including + compounds, and one row per declared requirement/AC. The captured answer itself contains these tables and exactly one plain Verdict line.
+- [ ] R2. The prompt distinguishes the Review section's disposition-derived confidence from the certification answer's evidence-derived confidence, using the existing deriveReviewConfidence and deriveVerifyConfidence formulas without changing either policy. A carried nonblocking residual can produce Review MEDIUM and certification HIGH.
+- [ ] R3. Teach task AC identity separately from feature scenario credit: canonical exact scenario titles or existing AC-N feature aliases for covering tasks; task-local identities remain legal and no feature-credit requirement is invented for an unlinked/non-covering task. No new accepted ID forms.
+- [ ] R4. Regression tests execute the real task verdict certification path for the documented answer, preserve blocking review residual behavior, and reject prose-only, invalid-vocabulary and missing-row answers without manufacturing PASS.
+
+Out of scope: model retry orchestration, new CLI flags/verbs, new workflow states/status/terminal-reason vocabularies, blanket matcher unification, confidence policy changes, reconstructing answers from rendered task sections, and product-code remediation.
 
 ### Acceptance Criteria
 
-- [ ] AC1 — A review answer in the documented vocabulary certifies with no operator normalization (req: R1, R6)
-- [ ] AC2 — A prose-only answer is re-asked once, then reported as answer-shape instead of a review FAIL (req: R2, R5)
-- [ ] AC3 — Every accepted AC-identity form resolves the same way in the lint, the scenario-key gap and the checkbox flip (req: R3)
-- [ ] AC4 — A carried residual keeps MEDIUM admissible (req: R4)
+- [ ] AC1 — A documented answer certifies through the real task verdict path without normalization (req: R1, R3, R4)
+- [ ] AC2 — Review MEDIUM and certification HIGH coexist for executable AC with one carried P4 (req: R2, R4)
+- [ ] AC3 — Prose-only and invalid rows remain non-PASS, and an open P1-P3 still blocks completion (req: R4)
 
 ### Q&A
 
-<!-- Clarifications and triage decisions. Keep empty if none. -->
+- Closed: task verdict remains deterministic; no re-ask flag or hidden agent call.
+- Closed: preserve both ADR-141 lane derivations; fix which instructions reach each artifact.
+- Closed: no identity-policy redesign without a failing accepted-form fixture.
+- Delegation: implementation only after this refinement; no implementation or PASS certification claimed here.
 
 ### Design
 
-**Chosen: one contract, stated by the producer, checked by the consumer.**
-1. Put the vocabulary in the prompt (R1). The pipeline owns the ask; the lint owns the check; a shared constant list keeps them from drifting (`packages/app/src/services/verify-answer-lint.ts` exports the accepted tokens; the prompt text cites the same words).
-2. Add a bounded re-ask (R2): after `spur task verdict --from-answer` returns lint findings that are all `answer-shape` class, re-dispatch the reviewer once with those findings quoted. Budget one retry, reuse the same session, then fail closed with `answer-shape`.
-3. Unify identity forms (R3) behind one exported matcher used by `verify-answer-lint.ts`, `feature-check.ts` (`verdictScenarioKeyGap`) and `task-record.ts` (`acRowProves`). The bare-title match added on 2026-10-18 is the seed of that matcher.
-4. Confidence (R4): when the answer's findings table carries an OPEN or DEFER row, `MEDIUM` is the admissible level; the message names that row.
+Chosen: repair the producer instructions and pin the existing consumer contracts; no new API. Change the review agent.run input in `config/workflows/task-pipeline.yaml`, retaining current answerFile/expectFile paths, fresh reviewer independence and action order. Spell the small vocabulary directly in the prompt, with a contract test against the existing accepted tokens rather than exporting a new public constant solely for YAML. The final captured answer uses verify confidence; Review uses review confidence. Keep task verdict a pure deterministic lint/derive/write command.
 
-**Rejected.**
-- Accepting `PASS`/`FAIL` as synonyms in the lint: the verdict vocabulary is the machine contract, and the ambiguity between "requirement PASS" and "row PARTIAL" would move into every consumer. State it instead.
-- Dropping the scenario-key requirement: it is what makes a covering task's verdict evidence the feature scenario (0958 R2); the fix is to state it in the prompt.
-- Making the pipeline read `## Review` instead of the answer: the section is a rendered projection and can be rewritten after the run.
+Primary targets: `config/workflows/task-pipeline.yaml`; `packages/app/tests/workflow/task-pipeline-proof-chain.test.ts`; `plugins/sp/tests/task-pipeline-resilience.test.ts`; canonical `plugins/sp/agents/super-reviewer.md` only if its output guidance conflicts; owning docs `docs/design/workflow-execution-foundation.md` or the existing certification owner if its contract text changes. Tests for the linter/confidence functions may add a narrow fixture but production matchers are not refactored. Rebuild generated CLI config through build:bundle; do not hand-edit installed adapters.
 
-**Frozen names.** `ANSWER_SHAPE` finding class; `VERDICT_STATUS_TOKENS`, `VERDICT_EVIDENCE_TYPES`, `VERDICT_SCENARIO_KEY_FORMS` exported from `verify-answer-lint.ts` / `feature-check.ts`.
+Algorithm: normal review → author Review with dispositions → captured final answer with requirement/AC evidence and verify-derived confidence → existing task verdict → existing residual review gate → approval. Assert the two confidence values independently in the fixture. Negative answers fail deterministically and retain lint diagnostics; do not consume a new repair budget or silently normalize them.
 
-**File targets.** `config/workflows/task-pipeline.yaml` review `input`; `packages/app/src/services/verify-answer-lint.ts`; `apps/cli/src/commands/task/verdict.ts:85`; `packages/app/src/services/feature-check.ts:1490-1545`; `packages/app/src/services/task-record.ts:319-410`; tests `packages/app/tests/services/{verify-answer-lint,task-record,feature-check}.test.ts`, `apps/cli/tests/commands/task/verdict*.test.ts`.
-
-**Anti-patterns.** No per-model prompt variants; no "accept anything" fallback; never derive PASS from prose the lint cannot parse; do not weaken the scenario-key rule for task-local tasks (they are already exempt by `checkAcCoverage`).
+Rejected: new prompt generators, a new schema API, model work in CLI, deriving PASS from task-section prose, weakening evidence/scenario-credit rules. Dependencies: none; use current D65 merged review stage. Handoff to 1256: runtime dispatch failure classification remains that task's ownership, not answer-format remediation. Execution budget 4h; persisted output is prompt/contract-test diff plus standard task evidence.
 
 ### Plan
 
-<!-- Ordered debugging/fix checklist. Fill before moving to todo/wip. -->
+- [ ] 1. Add a failing prompt-contract assertion for vocabulary and the two confidence lanes (R1-R3).
+- [ ] 2. Extend the existing certification fixture with executable AC + accepted/open P4: Review MEDIUM, captured answer HIGH, task verdict PASS; assert open P1-P3 still blocks (R2, R4).
+- [ ] 3. Repair only canonical review producer instructions; preserve artifact paths and stage order (R1-R3).
+- [ ] 4. Run malformed/prose-only/missing-row negatives through the existing real CLI fixture; no PASS and no new model dispatch (R4).
+- [ ] 5. Run focused app pipeline/lint/confidence and plugin contract tests inside their workspaces, rebuild bundle, validate task-pipeline and run the task-owned gate. Update owning contract text only if changed. Record real evidence before completion.
 
 ### Root Cause
 
-<!-- Verified underlying cause with file:line evidence. Fill once reproduced/isolated. -->
+The review agent produces two artifacts with different consumers: Review is checked against finding dispositions, but the captured final answer is fed to task verdict and checked against requirement/AC evidence. `config/workflows/task-pipeline.yaml:637-646` teaches only the former confidence formula for the latter artifact. `packages/app/tests/workflow/task-pipeline-proof-chain.test.ts:462-511` already demonstrates a Review MEDIUM alongside a certification HIGH; the prompt does not teach this existing separation.
 
 ### Solution
 
