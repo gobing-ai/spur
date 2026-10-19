@@ -4,7 +4,7 @@ name: Unanswered operator pauses on host runs pause instead of resolving to a de
 status: done
 template: issue
 created_at: 2026-10-18T05:10:06.871Z
-updated_at: "2026-10-18T18:46:10.800Z"
+updated_at: "2026-10-19T01:34:18.459Z"
 feature_id: D66
 priority: P1
 tags:
@@ -183,14 +183,14 @@ for headless non-host runs (R4 keeps it byte-identical).
 
 | Requirement | Status | Evidence |
 |-------------|--------|----------|
-| R1 | MET | `packages/app/src/workflow/decision-hitl-responder.ts:202` (`hostHitlPause` returns `{ ok: true, pause: true, data: { surface: 'host', reason: 'hitl-pause', kind, prompt } }`, sets only the decision statusVar); called from all three runners at `packages/app/src/workflow/actions/hitl-confirm.ts:57`, `packages/app/src/workflow/actions/hitl-select.ts:70`, `packages/app/src/workflow/actions/hitl-input.ts:46`; responder is never consulted on host runs (`packages/app/src/workflow/decision-hitl-responder.ts:150-156`, `:183`); regression tests green at `packages/app/tests/workflow/host-operator-pause.test.ts:48` (13 pass, 0 fail this pass) |
-| R2 | MET | `packages/app/src/services/workflow-resume-ops.ts:349` classifies the paused operator gate so existing CLI flag validation (`apps/cli/src/commands/workflow/continue.ts:64`, `:100-109`) accepts `--answer yes\|no\|cancel` and `--answer-text` resumes input gates; E2E green at `apps/cli/tests/commands/workflow/host-operator-pause.test.ts:106` (`--answer yes` → done with answer in file, no gate replay) and `:123` (`--answer no` → rejected) |
-| R3 | MET | `packages/app/src/workflow/host-executor.ts:95` (`operatorPauseAt` resolves the gate at `nextAction - 1`, including transition-flow node actions at `:103-105`); `packages/app/src/services/workflow-resume-ops.ts:349-356` names the operator gate before the `__hostReceipt` branch (`:358`); E2E green at `apps/cli/tests/commands/workflow/host-operator-pause.test.ts:137` (`--answer-text` refused, exit 2, run left paused) |
-| R4 | MET | Non-host paths untouched: `hostHitlPause` guards on `selectsHostExecutor(context.vars)` (`packages/app/src/workflow/decision-hitl-responder.ts:207`); regressions green at `packages/app/tests/workflow/host-operator-pause.test.ts:102` (headless non-host records `no`), `:113` (unset executor never pauses), `:122` (accepted profile=auto binding answers without pausing), `:133` (fleet executor keeps responder answer) and `apps/cli/tests/commands/workflow/host-operator-pause.test.ts:155` |
+| R1 | MET | `packages/app/src/workflow/decision-hitl-responder.ts:202-216`; host confirm/select/input unit and CLI tests pass without consulting default deny. |
+| R2 | MET | `packages/app/src/services/workflow-resume-ops.ts:280-310`; CLI resume tests prove explicit answers reach the consumer once, including input text. |
+| R3 | MET | `packages/app/src/services/workflow-resume-ops.ts:343-359`; cursor classification and wrong-answer-flag CLI regressions pass. |
+| R4 | MET | `packages/app/tests/workflow/host-operator-pause.test.ts:101-142`; non-host, unset, fleet and accepted-auto binding regressions passed. |
 
 | Acceptance Criteria | Status | Evidence Type | Evidence |
 |---------------------|--------|---------------|----------|
-| R10 — An interactive operator pause on a host run waits for an answer | MET | test | `apps/cli/tests/commands/workflow/host-operator-pause.test.ts:94` (host run pauses with the question, default-deny shell never runs), `:106` (`continue --answer yes` → done, answer lands, no replay), `:123` (explicit `no` → rejected branch); 18 pass, 0 fail through `main()` this pass; unit seam at `packages/app/tests/workflow/host-operator-pause.test.ts:48-133`; full check receipt PASS at `.spur/run/1248-check-receipt.json` (run bc16c064, tier full) |
+| R10 — An interactive operator pause on a host run waits for an answer | MET | test | `apps/cli/tests/commands/workflow/host-operator-pause.test.ts:94-164`; fresh CLI suite passes; `apps/cli/tests/workflow/idea-pipeline-e2e.test.ts:7-72` proves the bundled idea workflow pauses and cancels explicitly. |
 - Coverage: N/A (verdict-based; verify pipeline does not measure code coverage)
 
 ### Review
