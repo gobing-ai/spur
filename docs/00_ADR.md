@@ -854,7 +854,7 @@ bounded polling remains the convergence fallback.
 
 ## ADR-071: Mutation After Verification Invalidates the Proof
 
-**Status:** Accepted (design) · **Date:** 2026-08-19 · **Feature:** D5
+**Status:** Superseded by ADR-140 (2026-10-19) · **Date:** 2026-08-19 · **Feature:** D5
 
 **Decision.** Every proof-bearing action declares repository/corpus state effects separately from
 evidence writes; `write` or `may-write` invalidates prior proof, and PASS is valid only when the
@@ -862,8 +862,8 @@ quality, review, and observe-only verification evidence names one unchanged fina
 
 **Why.** A verdict cannot prove tree state that was allowed to change after the verdict was produced.
 
-**Current reading (2026-10-17).** ADR-140 (Proposed) supersedes the proof-digest mechanism on
-acceptance: the invariant stays — evidence names the unchanged final tree — but it is carried by a
+**Current reading (2026-10-19).** ADR-140 (Accepted) supersedes the proof-digest mechanism:
+the invariant stays — evidence names the unchanged final tree — but it is carried by a
 tree-hash gate receipt, not by per-action effect declarations and digest tripwires.
 
 **Detail:** `03 §20.3`; `docs/design/workflow-composition-contract.md` §Verification proof state.
@@ -1874,9 +1874,9 @@ descriptions above record earlier stages, not supported configuration.
   intent, and no consumer reads `system_events` for the inline surface today. Revisit only when a
   consumer exists.
 
-- **Current reading (2026-10-17):** ADR-140 (Proposed) keeps the obligation but leaves one
-  executing surface — the engine — so the inline driver's emission duty and its `workflow inline`
-  bookkeeping verbs retire as workflows migrate.
+- **Current reading (2026-10-19):** ADR-140 (Accepted, implemented by D65) keeps the obligation
+  but leaves one executing surface — the engine — so the inline driver's emission duty and its
+  `workflow inline` bookkeeping verbs are retired (task 1242).
 
 ## ADR-118: A Violated Stage Contract Is a Distinct Outcome From an Executor Failure
 
@@ -2289,7 +2289,7 @@ owner split this entry established.
 
 ## ADR-134: Decision Catalogs Are the SSOT for AI Decisions; `spur decision` Ships First, Workflow Adoption Is Staged
 
-- **Status:** Proposed · **Date:** 2026-10-06 · **Feature:** P (adoption: P1) · **Extends:** ADR-125
+- **Status:** Accepted (implemented) · **Date:** 2026-10-06 · **Feature:** P (adoption: P1, done) · **Extends:** ADR-125
 - **Decision:** Every AI classification Spur makes is declared in a versioned decision catalog
   (`@gobing-ai/ts-ai-decision` YAML, `version: 1`) whose repo SSOT is `config/decisions/` and
   which ships in the npm tarball beside `config/workflows/`. One app service builds a
@@ -2313,6 +2313,13 @@ owner split this entry established.
   "Deterministic" means *total*: every call returns a value from the closed vocabulary, with the
   declared fallback on no backend, error, timeout or low confidence; model output itself is not
   deterministic.
+- **Current reading (2026-10-19):** features P, P1 and P11 are done; shipped workflows call catalog
+  decisions (`config/decisions/`, e.g. `idea-pipeline.yaml`, `wrapup-pipeline.yaml`, `task-pipeline.yaml`
+  gate/review) and no inline `decide` remains in `config/workflows/`. The staging below is historical.
+- **Current reading (2026-10-19):** features P, P1 and P11 are done. Shipped workflows call
+  catalog decisions from `config/decisions/` (e.g. `idea-pipeline.yaml`, `wrapup-pipeline.yaml`,
+  `task-pipeline.yaml` gate/review), and no inline `decide` remains in `config/workflows/`. The
+  staging described above and below is historical.
 - **Consequence:** two decision vocabularies (catalog and inline `decide`) coexist until P1
   completes; P1's end state is no inline decide in shipped workflows, with inline options
   deprecated for one release. An unregistered configured maker is an error, never a silent
@@ -2461,7 +2468,8 @@ has 11 fields, skill/agent output contracts carry no level, and `response.valida
 
 ## ADR-139: SDLC Commands Resolve Through a Project-Bound Action Map
 
-- **Status:** Proposed · **Date:** 2026-10-16 · **Feature:** A92 · **Extends:** ADR-130, ADR-119
+- **Status:** Accepted (implemented) · **Date:** 2026-10-16 (implemented 2026-10-17) · **Feature:** A92
+  · **Extends:** ADR-130, ADR-119
 - **Decision:** Spur owns a closed vocabulary of reserved SDLC actions (`build`, `lint`, `test`,
   `check`, `check-feature`, `rules-pre`, scoped `*-changed`, …). A project binds them in
   `.spur/config.yaml` `builder.actions` (string = shell command, list = fail-fast composite of
@@ -2481,8 +2489,9 @@ has 11 fields, skill/agent output contracts carry no level, and `response.valida
 
 ## ADR-140: One Workflow Interpreter; `agent.run` Dispatches a Work Item to Any Executor
 
-- **Status:** Proposed · **Date:** 2026-10-17 · **Amends:** ADR-047, ADR-087, ADR-117, ADR-126,
-  ADR-134 · **Supersedes:** ADR-071 (on acceptance) · **Sequenced after:** feature A92 (ADR-139)
+- **Status:** Accepted (implemented) · **Date:** 2026-10-17 (implemented 2026-10-18, feature D65)
+  · **Amends:** ADR-047, ADR-087, ADR-117, ADR-126, ADR-134 · **Supersedes:** ADR-071
+  · **Sequenced after:** feature A92 (ADR-139)
 - **Decision:**
   1. **One interpreter.** The engine (`spur workflow run` / `spur workflow continue`) evaluates
      every guard, transition and deterministic action for every surface. A host session never

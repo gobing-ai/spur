@@ -1,9 +1,9 @@
 ---
 kind: design
 title: "Workflow execution foundation — one interpreter and executor-agnostic agent.run dispatch"
-status: proposed
+status: implemented
 created_at: 2026-10-17
-updated_at: 2026-10-17
+updated_at: 2026-10-19
 related: [D65, A92, "1231", "1232", "1233", "1234", "1235", "1236", "1237", "1238", "1239", "1240", "1241", "1242"]
 tags: [contract, workflow, execution, design, D65]
 ---
@@ -13,10 +13,11 @@ tags: [contract, workflow, execution, design, D65]
 **Area:** the engine/dispatch boundary: who interprets workflow YAML, how an `agent.run` stage
 reaches its executor, what a completed stage leaves behind as evidence, and which leases serialize
 expensive work. Non-UI surface contract (CLI verbs, action kinds, receipt schema, lease rules).
-**Status:** proposed. This satellite is the single owner of the contracts feature D65 implements;
-tasks 1232–1242 cite it instead of restating mechanics. Text marked *current* describes the tree as
-of 2026-10-17; text marked *proposed* is the target state those tasks land.
-**Authority:** derived; [ADR-140](../../docs/00_ADR.md) (one workflow interpreter, Proposed) is the
+**Status:** implemented (feature D65, tasks 1231–1242, done 2026-10-18). This satellite is the single
+owner of the contracts feature D65 implements; tasks 1232–1242 cite it instead of restating mechanics.
+Text marked *current* describes the tree as of 2026-10-17; text marked *proposed* is the target state
+those tasks landed.
+**Authority:** derived; [ADR-140](../../docs/00_ADR.md) (one workflow interpreter, Accepted) is the
 decision of record, with the [ADR-051](../../docs/00_ADR.md) 2026-10-17 noun-verb amendment
 (public command shape), ADR-126 A4 (fleet receipt semantics), ADR-127 (per-task worktree
 isolation), ADR-134 (decision catalog), ADR-139/feature A92 (`spur self exec` action map) and

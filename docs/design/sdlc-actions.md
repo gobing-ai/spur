@@ -1,9 +1,9 @@
 ---
 kind: design
 title: Stack-neutral SDLC actions — builder.actions, spur self exec, and script-structure consolidation
-status: proposed
+status: implemented
 created_at: 2026-10-16
-updated_at: 2026-10-16
+updated_at: 2026-10-19
 related:
   - docs/features/A92_stack-neutral-sdlc-actions-builder-actions-spur-self-exec-and-script-structure-consolidation.md
   - docs/design/harness-surface-governance.md
@@ -24,7 +24,7 @@ binding. The same vocabulary is the target shape for this repository's `package.
 for the next pass of the `scripts/` / `plugins/sp/scripts/hooks` / `plugins/sp/lib` consolidation
 (ADR-130, A91).
 
-Status: **proposed**. Migrating superskill and knowledge-kit is follow-up work per repository.
+Status: **implemented** (feature A92, tasks 1222–1227). Migrating superskill and knowledge-kit is follow-up work per repository.
 
 ## 2. Context and constraints
 

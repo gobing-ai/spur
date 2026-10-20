@@ -1,9 +1,9 @@
 ---
 kind: design
 title: Projects Database tab — read-only table browser over the project database
-status: proposed
+status: implemented
 created_at: 2026-10-11
-updated_at: 2026-10-11
+updated_at: 2026-10-19
 related: [G631, ADR-021, G63]
 tags: [board, projects, database, http, read-only]
 ---

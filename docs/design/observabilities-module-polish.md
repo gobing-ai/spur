@@ -1,16 +1,16 @@
 ---
 kind: design
 title: "Observabilities module polish — shell naming, shell-level time range, catalog-open ingestion"
-status: proposed
+status: implemented
 created_at: 2026-09-06
-updated_at: 2026-09-07
+updated_at: 2026-10-19
 related: [J31, "0793", "0794", "0795", "0802"]
 tags: [system, J31, observability, web]
 ---
 
 # Observabilities module polish — shell naming, shell-level time range, catalog-open ingestion
 
-Feature: **J31** · Status: proposed · Date: 2026-09-07
+Feature: **J31** · Status: implemented (tasks 0793–0795, 0802) · Date: 2026-09-07
 
 ## Problem
 

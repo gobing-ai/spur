@@ -1,9 +1,9 @@
 ---
 kind: design
 title: Decision catalogs and the `spur decision` noun
-status: proposed
+status: implemented
 created_at: 2026-10-06
-updated_at: 2026-10-11
+updated_at: 2026-10-19
 related: [ADR-134, ADR-125, ADR-113, feature P, feature P1, workflow-catalogue-refactor.md]
 tags: [decision, workflow, cli, config]
 ---
@@ -24,7 +24,8 @@ the operator choose the DecisionMaker per decision point in the global config.
 Adoption is staged. Feature P does not touch any workflow. Its purpose is to let operators
 measure DecisionMaker reliability on real decision points. Child feature P1 owns all workflow
 replacement. It is postponed until that reliability is established, and then proceeds one
-decision point at a time.
+decision point at a time. P1 is done (2026-10-19): shipped workflows now call catalog decisions,
+and no inline `decide` remains in `config/workflows/`.
 
 **In scope (P):**
 - The four verbs.

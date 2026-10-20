@@ -897,12 +897,14 @@ Shapes: `04 §2.1` (`agent.roles`); `packages/config/src/index.ts` (`DEFAULT_AGE
 `AgentRoleConfigSchema`); `config/config.global.yaml` (the ADR-078 SSOT); `plugins/sp/references/roles.md` (projection);
 `packages/app/src/services/agent-service.ts` (run-scoped pins, session slots, availability check).
 
-## 20. Workflow Composition and Canonical Pipelines (ADR-069/072 accepted; ADR-071 accepted design)
+## 20. Workflow Composition and Canonical Pipelines (ADR-069/072 accepted; ADR-071 superseded by ADR-140)
 
 D5 implemented an existing-seam, infrastructure-first migration. Workflow definitions remain the
 orchestration graph; they do not become a second application layer. Shared deterministic behavior
 is owned behind existing application and persistence interfaces. The canonical task and docs
 pipelines enforce the final-state proof invariant described in ADR-071 and §20.3.
+Since ADR-140 (accepted 2026-10-19, feature D65) that invariant is carried by a tree-hash gate
+receipt instead of the proof-digest chain; §20.3 is kept as the D5 design record.
 
 ### 20.1 Options and decision
 
@@ -958,6 +960,13 @@ never dropped (ADR-050; 0980). Exact shapes live in
 `docs/design/workflow-composition-contract.md`.
 
 ### 20.3 Proof-state invariant
+
+> **Superseded (ADR-140, D65).** The proof-digest chain below — `proofDigest`, `proof.fingerprint`
+> brackets, receipt preconditions, `verifiedOutcome` — is retired. The gate now keys a PASS receipt
+> by the git tree hash it computes itself, reused while the tree is unchanged and invalidated when
+> it moves ([workflow-execution-foundation.md](design/workflow-execution-foundation.md) §3.3,
+> `packages/app/src/services/quality-gate.ts`). The invariant (evidence names the unchanged final
+> tree) is unchanged; the text below records the D5 mechanism.
 
 A verification verdict proves one final proof-input digest. Mutating remediation and proof
 establishment are separate phases:
