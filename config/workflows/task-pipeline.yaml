@@ -571,12 +571,12 @@ states:
             options:
                 command: >-
                     printf '%s\n' "$(( $(cat ".spur/run/$wbs-test-fix-attempt" 2>/dev/null || echo 0) + 1 ))" > ".spur/run/$wbs-test-fix-attempt"; [ -f ".spur/run/$wbs-residuals.json" ] && echo '--- residual artifact (F96 fix targets; deferrals go to residual-deferrals.json, P3/markers only) ---' >> ".spur/run/$wbs-test-gate.log" && cat ".spur/run/$wbs-residuals.json" >> ".spur/run/$wbs-test-gate.log"; exit 0
-          # Review-lane input: the review failure class routes a non-PASS review into this same
-          # bounded repair hop, but it stages no gate evidence — the fixer would receive a GREEN
-          # gate log and an empty findings list. Project the reviewer's answer into the same log
-          # the other lane uses, and only on the review lane: remediate after a GREEN gate this
-          # run means review sent it. The review decision row is no lane marker — it outlives its
-          # review, so a red recheck after a review repair would re-feed that stale answer.
+          # Review-lane input: a non-PASS review status routes into this same bounded repair hop
+          # (1262 R6), but it stages no gate evidence — the fixer would receive a GREEN gate log
+          # and an empty findings list. Project the reviewer's answer into the same log the other
+          # lane uses, and only on the review lane: remediate after a GREEN gate this run means
+          # review sent it. The review status file is no lane marker — it outlives its review, so
+          # a red recheck after a review repair would re-feed that stale answer.
           # Own action, not an append to the one above (ADR-115 cap).
           - kind: shell
             options:

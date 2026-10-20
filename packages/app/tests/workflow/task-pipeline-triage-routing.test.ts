@@ -444,4 +444,30 @@ describe('task-pipeline 1263 — outcome recording is routing-neutral', () => {
         expect([edge.to, edge.terminalReason]).toEqual(['review', undefined]);
         rmSync(staged.cwd, { recursive: true, force: true });
     });
+
+    test('AC4: a green recheck hands the previous invocation to the outcome verb; routing unchanged', () => {
+        const staged = stage({
+            files: { 'apps/cli/src/index.ts': 'export const start = 2;\n' },
+            laneDecision: { value: 'no', method: 'noul', invocationId: null },
+            gateStatus: 'PASS',
+        });
+        writeFileSync(
+            join(staged.cwd, '.spur/run', `${WBS}-failure-class.decision`),
+            '{"value":"fix","invocationId":"inv-ac4"}\n',
+        );
+        // A recording stub stands in for the CLI; the verb's own PASS → fixed mapping is pinned in
+        // apps/cli/tests/commands/decision.test.ts (AC4).
+        const argsLog = join(staged.cwd, 'spur-args.txt');
+        const stub = join(staged.cwd, 'spur-stub.sh');
+        writeFileSync(stub, `#!/bin/sh\nprintf '%s ' "$@" > "${argsLog}"\n`, { mode: 0o755 });
+        runShellsMatching('gate', ['--gate-status'], staged.cwd, {
+            ...staged.vars,
+            spurBin: stub,
+            gateMode: 'recheck',
+        });
+        expect(readFileSync(argsLog, 'utf8')).toContain(`decision outcome inv-ac4 --gate-status ${RUN_ID}`);
+        const edge = firstPassingEdge('gate', staged.cwd, staged.vars);
+        expect([edge.to, edge.terminalReason]).toEqual(['review', undefined]);
+        rmSync(staged.cwd, { recursive: true, force: true });
+    });
 });

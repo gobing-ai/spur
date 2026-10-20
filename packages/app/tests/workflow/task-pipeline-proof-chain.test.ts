@@ -521,7 +521,12 @@ describe('task-pipeline evidence chain — review certifies (D65 R2)', () => {
             expect(runSh(fold, staged.dir, vars).code).toBe(0);
             expect(statusNow()).toBe('FAIL');
             writeFileSync(join(staged.dir, '.spur/run', `${staged.wbs}-approval.status`), 'APPROVED\n');
-            expect(firstPassingEdge('review', staged.dir, vars)).not.toBe('done');
+            // 1262 R6/AC6: under the attempt cap a non-PASS review routes to remediate on the
+            // status file alone — no review-failure-class decision is read or written.
+            expect(firstPassingEdge('review', staged.dir, vars)).toBe('remediate');
+            expect(existsSync(join(staged.dir, '.spur/run', `${staged.wbs}-review-failure-class.decision`))).toBe(
+                false,
+            );
 
             // The same reviewer, every requirement MET, certifies and the close is reachable.
             writeReviewAnswer(
