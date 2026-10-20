@@ -5,6 +5,8 @@ description: >-
   "join the fleet", "become a fleet guest", "pull fleet inbox work in this session", or when a
   session should receive fleet messages without being supervised. Runs `spur agent join`, then
   loops `spur agent wait --inbox`, and releases the lease with `spur agent leave`.
+metadata:
+  version: "1.0"
 ---
 # fleet-join — a live session as a fleet guest (G73, task 1081)
 
