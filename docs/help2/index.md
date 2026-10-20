@@ -44,7 +44,7 @@ spur task create "Investigate flaky login test" --skip-ready
 | `spur history` | [history](./history.md) | `spur task` | [task](./task.md) |
 | `spur self init` | [init](./init.md) | `spur workflow` | [workflow](./workflow.md) |
 | `spur self maintain` | [maintain](./maintain.md) | `spur self migrate` | [migrate](./migrate.md) |
-| `spur message` | [message](./message.md) | | |
+| `spur message` | [message](./message.md) | `spur self exec` | [exec](./exec.md) |
 
 ## Global conventions
 
