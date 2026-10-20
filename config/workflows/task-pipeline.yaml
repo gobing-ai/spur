@@ -661,16 +661,14 @@ states:
                 # which this pointer names.
                 input: >-
                     /sp:dev-review --tasks ${vars.wbs} --auto --focus ${vars.reviewFocus} Answer contract (full: super-reviewer Output
-                    Format). Two artifacts: the `## Review` section (dispositions, deriveReviewConfidence) and your captured answer
-                    (certification input for `spur task verdict`). The answer has one `Confidence: HIGH|MEDIUM|LOW` line, EVIDENCE-derived
-                    (deriveVerifyConfidence), never the section's disposition level. End with one `Verdict: PASS|PARTIAL|FAIL` line
-                    preceded by `| Req | Status | Evidence |` (one row per requirement; MET | PARTIAL | UNMET) and `| AC | Status |
-                    Evidence Type | Evidence |` (one row per AC; MET | PARTIAL | UNMET | N/A). Evidence types (`+` compound allowed): test
-                    | command | static-ref | manual-review | llm-judge | n/a. Evidence cells cite repo-root-relative `path:line` or a
-                    named check — an absolute path outside the repo (`/tmp/…:12`) is an unresolved anchor that blocks the done
-                    projection, so cite the owning source or a corpus artifact instead. AC rows key on the task's identities or a
-                    declared `AC-N` alias; a linked scenario covers its task and a task-local criterion needs no feature credit. Open
-                    P1-P3 blocks completion.
+                    Format). Two artifacts: the `## Review` section (deriveReviewConfidence) and your captured answer
+                    (`spur task verdict` input). The answer has one `Confidence: HIGH|MEDIUM|LOW` line, EVIDENCE-derived
+                    (deriveVerifyConfidence), never the section's disposition level. End with one `Verdict: PASS|PARTIAL|FAIL` line after `| Req | Status | Evidence |` (one row per requirement; MET | PARTIAL | UNMET) and `| AC | Status |
+                    Evidence Type | Evidence |` (one row per AC; MET | PARTIAL | UNMET | N/A). Evidence types (`+` ok): test
+                    | command | static-ref | manual-review | llm-judge | n/a. Evidence cells cite a repo-root-relative `path:line`
+                    (never `/tmp`: out-of-repo blocks done) or a named check. AC rows
+                    key on the task's identities or a declared `AC-N` alias; a linked scenario covers its task and a task-local criterion
+                    needs no feature credit. Open P1-P3 blocks completion.
                 # The captured review answer is the run's certification input (and the
                 # `task verdict` input below): expectFile fails the step when no answer landed.
                 answerFile: .spur/run/${vars.__runId}-review-answer.txt

@@ -265,7 +265,9 @@ this exact shape:
 One row per declared requirement (`MET | PARTIAL | UNMET`, none omitted or merged) and one row per
 acceptance criterion (`MET | PARTIAL | UNMET | N/A`), with the evidence-type token alone in its own
 cell — `test | command | static-ref | manual-review | llm-judge | n/a`, or a `+` compound when more
-than one kind applies. Evidence cells cite a repo-relative `path:line` or a named test/command. AC
+than one kind applies. Evidence cells cite a repo-root-relative `path:line` or a named test/command.
+An absolute path outside the repo (`/tmp/<report>.md:12`) is an unresolved anchor that blocks the
+done projection (`L4.anchor-unresolved`); cite the owning source or a corpus artifact instead. AC
 identities stay the task's own (checklist label, title, bold head, `Scenario:` prefix, bracket tag or
 declared `AC-N` alias): a linked feature's scenario title covers the task that implements it, and a
 task-local criterion is legal as-is — it needs no feature credit.

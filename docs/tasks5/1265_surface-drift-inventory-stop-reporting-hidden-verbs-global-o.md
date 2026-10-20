@@ -4,7 +4,7 @@ name: "surface-drift-inventory: stop reporting hidden verbs, global options, nes
 status: done
 template: feature-impl
 created_at: 2026-10-20T04:51:58.580Z
-updated_at: "2026-10-20T16:12:23.804Z"
+updated_at: "2026-10-20T17:05:28.501Z"
 feature_id: I3
 
 ac_altitude: task-local
@@ -195,27 +195,27 @@ listing alone, and prose tokens stop being read as flags or invocations. No plug
 
 | Requirement | Status | Evidence |
 |-------------|--------|----------|
-| R1 | MET | `scripts/commands/surface-drift-inventory.ts:373`; test `scripts/commands/surface-drift-inventory.test.ts:559`; live row `spur workflow show --no-logo → ok · global option (root program)` at `.spur/run/1265-inventory-after.md` |
-| R2 | MET | `scripts/commands/surface-drift-inventory.ts:113`, injectable probe `:100`; tests `scripts/commands/surface-drift-inventory.test.ts:593,606,614,626`; live row `spur agent loop → ok · hidden verb present` at `.spur/run/1265-inventory-after.md` |
-| R3 | MET | `scripts/commands/surface-drift-inventory.ts:391-403`; test `scripts/commands/surface-drift-inventory.test.ts:643`; live rows `spur agent dogfood --testee/--steps/--json/--file/--max-retry-present → unverified · nested shorthand` at `.spur/run/1265-inventory-after.md` |
-| R4 | MET | `scripts/commands/surface-drift-inventory.ts:323`; test `scripts/commands/surface-drift-inventory.test.ts:215`; inventory contains no `-id`, `-local` or `-Z` row |
-| R5 | MET | `scripts/commands/surface-drift-inventory.ts:198`; test `scripts/commands/surface-drift-inventory.test.ts:671`; live row `spur maintain → ok · legacy alias; canonical self/maintain command is present` at `.spur/run/1265-inventory-after.md` |
-| R6 | MET | `scripts/commands/surface-drift-inventory.ts:531,558,595`; tests `scripts/commands/surface-drift-inventory.test.ts:843,851,873`; live rows `spur exec`/`spur check` → `documented absence confirmed` at `.spur/run/1265-inventory-after.md` |
-| R7 | MET | `scripts/commands/surface-drift-inventory.ts:285`; tests `scripts/commands/surface-drift-inventory.test.ts:143,163,170,857`; zero `spur exits` rows in `/tmp/1265-review-r3.md` |
-| R8 | MET | test `scripts/commands/surface-drift-inventory.test.ts:839` (`spur task check --bogus-flag` → mismatch); exit mapping `scripts/commands/surface-drift-inventory.ts:1177-1182` |
-| R9 | MET | `bun scripts/spur-dev.ts surface-drift-inventory --out /tmp/1265-review-r3.md` exit 0, `Totals: 424 ok · 0 mismatch · 15 unverified`; per-row resolution at `.spur/run/1265-inventory-after.md` |
+| R1 | MET | `scripts/commands/surface-drift-inventory.ts:373` root flags checked first; test `scripts/commands/surface-drift-inventory.test.ts:560`, guard `scripts/commands/surface-drift-inventory.test.ts:567`; fresh live row `spur workflow show --no-logo` ok · global option (root program) in .spur/run `1265-inventory-after.md` line 410 |
+| R2 | MET | `scripts/commands/surface-drift-inventory.ts:113` hidden probe, injectable runner `scripts/commands/surface-drift-inventory.ts:100`; tests `scripts/commands/surface-drift-inventory.test.ts:594`, `scripts/commands/surface-drift-inventory.test.ts:607`, `scripts/commands/surface-drift-inventory.test.ts:615`, `scripts/commands/surface-drift-inventory.test.ts:627`; fresh live row `spur agent loop` ok · hidden verb present in .spur/run `1265-inventory-after.md` line 50 |
+| R3 | MET | `scripts/commands/surface-drift-inventory.ts:391-406`; tests `scripts/commands/surface-drift-inventory.test.ts:644`, `scripts/commands/surface-drift-inventory.test.ts:658`; fresh rows `spur agent dogfood --testee/--steps/--json/--file/--max-retry-present` unverified · nested shorthand in .spur/run `1265-inventory-after.md` line 420 |
+| R4 | MET | `scripts/commands/surface-drift-inventory.ts:323`; tests `scripts/commands/surface-drift-inventory.test.ts:215`, `scripts/commands/surface-drift-inventory.test.ts:223`; fresh inventory grep for -id/-local/-Z rows = 0 |
+| R5 | MET | `scripts/commands/surface-drift-inventory.ts:198`; tests `scripts/commands/surface-drift-inventory.test.ts:672`, `scripts/commands/surface-drift-inventory.test.ts:688`; fresh row `spur maintain` ok · legacy alias in .spur/run `1265-inventory-after.md` line 190 |
+| R6 | MET | `scripts/commands/surface-drift-inventory.ts:533`, `scripts/commands/surface-drift-inventory.ts:560`, `scripts/commands/surface-drift-inventory.ts:597`, wiring `scripts/commands/surface-drift-inventory.ts:728`; tests `scripts/commands/surface-drift-inventory.test.ts:844`, `scripts/commands/surface-drift-inventory.test.ts:852`, `scripts/commands/surface-drift-inventory.test.ts:862`, `scripts/commands/surface-drift-inventory.test.ts:874`; fresh rows `spur exec`/`spur check` ok · documented absence confirmed (.spur/run `1265-inventory-after.md` line 118 and line 103) |
+| R7 | MET | `scripts/commands/surface-drift-inventory.ts:285`; tests `scripts/commands/surface-drift-inventory.test.ts:143`, `scripts/commands/surface-drift-inventory.test.ts:163`, `scripts/commands/surface-drift-inventory.test.ts:170`, `scripts/commands/surface-drift-inventory.test.ts:858`; fresh inventory has zero `spur exits` rows |
+| R8 | MET | seeded fake flag `scripts/commands/surface-drift-inventory.test.ts:841`, fake noun `scripts/commands/surface-drift-inventory.test.ts:884`, fake verb `scripts/commands/surface-drift-inventory.test.ts:919` all assert mismatch; exit mapping `scripts/commands/surface-drift-inventory.ts:1179-1184` |
+| R9 | MET | `bun scripts/spur-dev.ts surface-drift-inventory --out .spur/run/1265-inventory-after.md` exit 0 this run; Totals 424 ok · 0 mismatch · 15 unverified; "Confirmed mismatches: None" |
 
 | Acceptance Criteria | Status | Evidence Type | Evidence |
 |---------------------|--------|---------------|----------|
-| AC1 | MET | test | `scripts/commands/surface-drift-inventory.test.ts:559` (ok + actual `global option (root program)`), `:566` (verb-level miss stays mismatch), `:573` (noun level and legacy alias) |
-| AC2 | MET | test | `scripts/commands/surface-drift-inventory.test.ts:593` (present + `--json` captured from the probe), `:606` `:614` `:626` (present only on the probed path, absent on parent help, timeout unverified) |
-| AC3 | MET | test | `scripts/commands/surface-drift-inventory.test.ts:643` (`unverified` + `nested shorthand` + `1/2 subcommands` + `gate`), `:652`, `:657` |
-| AC4 | MET | test | `scripts/commands/surface-drift-inventory.test.ts:215` (`--ac-numbering task-local`, `--assignee <spec-id>`, `--letter <A-Z>`), `:223` |
-| AC5 | MET | test | `scripts/commands/surface-drift-inventory.test.ts:671` (`maintain` present, `exec` excluded by the root-alias probe, `spur maintain` ok), `:687` (baseline kept when the probe cannot answer) |
-| AC6 | MET | test | `scripts/commands/surface-drift-inventory.test.ts:843` (absence shapes confirm), `:851` (forbidden surface → hidden verb present), `:873` (flag-scoped absence), `:861` (per-span ownership) |
-| AC7 | MET | test | `scripts/commands/surface-drift-inventory.test.ts:163` (`spur exits with the child's exit code.` → `[]`), `:143` (no double extraction), `:170` (fenced/bun retains shell context), `:857` (no row for `spur exits`) |
-| AC8 | MET | test | `scripts/commands/surface-drift-inventory.test.ts:839` (`spur task check --bogus-flag` and `spur fenced check` seeded in the fixture → `mismatch`, no new rule excusing them); mismatch→exit-1 mapping `scripts/commands/surface-drift-inventory.ts:1177-1182` |
-| AC9 | MET | command | `bun scripts/spur-dev.ts surface-drift-inventory --out /tmp/1265-review-r3.md` → exit 0, `424 ok · 0 mismatch · 15 unverified`, "None — every mechanically-checked assertion matches the live surface"; rows 1 (`:410` ok global option), 2 (`:50` hidden verb), 3-7 (`:420-424` unverified shorthand), 8 (`:190` legacy alias), 9 (`:118` absence), 10 (no row), 11-13 (no `-id`/`-local`/`-Z` rows), 14 (`:103` absence) |
+| AC1 | MET | test | `scripts/commands/surface-drift-inventory.test.ts:560`, `scripts/commands/surface-drift-inventory.test.ts:567`, `scripts/commands/surface-drift-inventory.test.ts:574` — bun test 101 pass / 0 fail this run |
+| AC2 | MET | test | `scripts/commands/surface-drift-inventory.test.ts:594`, `scripts/commands/surface-drift-inventory.test.ts:607`, `scripts/commands/surface-drift-inventory.test.ts:615`, `scripts/commands/surface-drift-inventory.test.ts:627` |
+| AC3 | MET | test | `scripts/commands/surface-drift-inventory.test.ts:644`, `scripts/commands/surface-drift-inventory.test.ts:653`, `scripts/commands/surface-drift-inventory.test.ts:658` |
+| AC4 | MET | test | `scripts/commands/surface-drift-inventory.test.ts:215`, `scripts/commands/surface-drift-inventory.test.ts:223` |
+| AC5 | MET | test | `scripts/commands/surface-drift-inventory.test.ts:672`, `scripts/commands/surface-drift-inventory.test.ts:688` |
+| AC6 | MET | test | `scripts/commands/surface-drift-inventory.test.ts:844`, `scripts/commands/surface-drift-inventory.test.ts:852`, `scripts/commands/surface-drift-inventory.test.ts:862`, `scripts/commands/surface-drift-inventory.test.ts:874` |
+| AC7 | MET | test | `scripts/commands/surface-drift-inventory.test.ts:143`, `scripts/commands/surface-drift-inventory.test.ts:163`, `scripts/commands/surface-drift-inventory.test.ts:170`, `scripts/commands/surface-drift-inventory.test.ts:858` |
+| AC8 | MET | test | `scripts/commands/surface-drift-inventory.test.ts:841` (flag), `scripts/commands/surface-drift-inventory.test.ts:884` (noun), `scripts/commands/surface-drift-inventory.test.ts:919` (verb) → mismatch; exit-1 mapping `scripts/commands/surface-drift-inventory.ts:1179-1184` |
+| AC9 | MET | command | `bun scripts/spur-dev.ts surface-drift-inventory --out .spur/run/1265-inventory-after.md` → exit 0, 424 ok · 0 mismatch · 15 unverified; rows 1/2/3-7/8/9/14 resolved at report lines 410/50/420-424/190/118/103; rows 10-13 absent |
 - Coverage: N/A (verdict-based; verify pipeline does not measure code coverage)
 
 ### Review
