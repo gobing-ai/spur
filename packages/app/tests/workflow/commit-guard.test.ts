@@ -1,6 +1,6 @@
 import { describe, expect, test } from 'bun:test';
 import { spawnSync } from 'node:child_process';
-import { mkdtempSync, readFileSync, writeFileSync } from 'node:fs';
+import { mkdirSync, mkdtempSync, readFileSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import {
@@ -12,6 +12,7 @@ import {
     commitGuardStart,
     commitGuardUsage,
     conflictMarkerLine,
+    currentHostSessionId as currentHostSessionIdForTest,
     type GitRunner,
     parsePorcelainZ,
 } from '../../src/workflow/commit-guard';
@@ -308,5 +309,39 @@ describe('commit-guard (1209 R2) — failed safety probes never reach git add', 
         expect(staged(cwd)).toEqual([]);
         // `start` has nothing to protect yet: a throwing runner propagates (the CLI reports it, exit 1).
         expect(() => commitGuardStart('r2x', options)).toThrow('runner exploded');
+    });
+});
+
+describe('commit-guard — foreign session owner (task 1265 session finding)', () => {
+    // Two peer agent sessions in one checkout committed over each other on 2026-10-20: a second
+    // session committed this run's working files and rewrote a shared test file mid-run. The
+    // registry already records the owner; `check` now names it instead of staying silent.
+    const seedSession = (cwd: string, owner: { host: string; sessionId: string } | null): void => {
+        const dir = join(cwd, '.spur', 'context');
+        mkdirSync(dir, { recursive: true });
+        writeFileSync(join(dir, '.session.json'), JSON.stringify(owner === null ? {} : { owner }));
+    };
+
+    test('a pointer owned by another session is reported on stderr and in the JSON', () => {
+        const cwd = makeRepo();
+        commitGuardStart('run-foreign', { cwd });
+        seedSession(cwd, { host: 'pi', sessionId: 'someone-else' });
+        const result = commitGuardCheck('run-foreign', { cwd });
+        expect(result.exitCode).toBe(0);
+        expect(JSON.parse(out(result))).toMatchObject({ foreignSession: { sessionId: 'someone-else' } });
+        expect(err(result)).toContain('another session owns this tree');
+    });
+
+    test('the current session and an ownerless pointer stay silent', () => {
+        const cwd = makeRepo();
+        commitGuardStart('run-owned', { cwd });
+        seedSession(cwd, { host: 'pi', sessionId: 'me' });
+        // No env manipulation: the fixture owns a session id that cannot match this process's
+        // own host session, so a matching owner is simulated by writing ITS id below.
+        const self = currentHostSessionIdForTest();
+        seedSession(cwd, { host: 'pi', sessionId: self === '' ? 'nobody' : self });
+        expect(err(commitGuardCheck('run-owned', { cwd }))).not.toContain('another session');
+        seedSession(cwd, null);
+        expect(err(commitGuardCheck('run-owned', { cwd }))).not.toContain('another session');
     });
 });

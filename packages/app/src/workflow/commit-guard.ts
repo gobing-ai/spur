@@ -22,6 +22,7 @@
 
 import { mkdirSync, readFileSync, renameSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
+import { getEnvVar } from '@gobing-ai/spur-config';
 import { NodeSyncProcessExecutor } from '@gobing-ai/ts-runtime';
 
 /** Base directory for the probes; `git` is the test seam (a fake runner instead of spawning). */
@@ -238,6 +239,42 @@ export function commitGuardStage(
     };
 }
 
+/**
+ * The tree's recorded session owner when it is NOT this session (task 1265 session finding).
+ *
+ * `.spur/context/.session.json` records `owner: {host, sessionId}` from the last session start.
+ * Two peer agent sessions in one checkout is the documented one-writer-per-tree hazard, and it
+ * happened: a second session committed this run's working files under its own messages and
+ * rewrote a shared test file mid-run. A lock is a design change; naming the foreign owner at the
+ * commit boundary is the bounded detection — the driver sees the collision before it commits.
+ */
+function foreignSessionOwner(cwd: string): { host: string; sessionId: string } | null {
+    try {
+        const raw = JSON.parse(readFileSync(join(cwd, '.spur', 'context', '.session.json'), 'utf8')) as {
+            owner?: { host?: unknown; sessionId?: unknown };
+        };
+        const sessionId = typeof raw.owner?.sessionId === 'string' ? raw.owner.sessionId : '';
+        if (sessionId === '') return null;
+        const current = currentHostSessionId();
+        if (current === '' || current === sessionId) return null;
+        return { host: typeof raw.owner?.host === 'string' ? raw.owner.host : 'unknown', sessionId };
+    } catch {
+        return null; // no pointer (or unreadable) is not a collision
+    }
+}
+
+/** This process's host session id: the pi transcript stem's uuid, else the Claude env var. */
+export function currentHostSessionId(): string {
+    const transcript = getEnvVar('PI_SESSION_FILE') ?? '';
+    const stem =
+        transcript
+            .replace(/\.jsonl$/, '')
+            .split('/')
+            .pop() ?? '';
+    const pi = stem.includes('_') ? (stem.split('_').pop() ?? '') : '';
+    return pi !== '' ? pi : (getEnvVar('CLAUDE_CODE_SESSION_ID') ?? '').trim();
+}
+
 /** Report the working-tree changes this run did not write, staging nothing (R3). */
 export function commitGuardCheck(run: string, options: CommitGuardOptions = {}): CommitGuardReport {
     try {
@@ -245,7 +282,13 @@ export function commitGuardCheck(run: string, options: CommitGuardOptions = {}):
         if (!context) return missingStart(run);
         const { base, git, written } = context; // second changed-path scan — guarded too (1209 R1)
         const foreign = [...changedSinceBase(base, git)].filter((path) => !written.has(path)).sort();
-        return report(0, [JSON.stringify({ foreign })]);
+        const owner = foreignSessionOwner(options.cwd ?? process.cwd());
+        const stderr = owner
+            ? [
+                  `commit-guard: another session owns this tree — .spur/context/.session.json records ${owner.host} ${owner.sessionId}; use a separate worktree (one writer per tree)`,
+              ]
+            : [];
+        return { ...report(0, [JSON.stringify({ foreign, ...(owner ? { foreignSession: owner } : {}) })], stderr) };
     } catch (err) {
         return report(1, [], [probeDiagnostic(err)]); // a failed probe emits no success JSON (R1)
     }
