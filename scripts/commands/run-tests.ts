@@ -87,6 +87,92 @@ if (Math.max(load1, load5, load15) > cores) {
     );
 }
 
+/**
+ * Wall-clock bound for the suite child (task 1265 session finding).
+ *
+ * A suite child that blocks in `spawnSync` — a test shelling out to a CLI that waits on a
+ * database lock, a child reading stdin, a wedged `git` — never returns, and Bun's per-test
+ * `--timeout` cannot interrupt it: the wait is synchronous, so the timer never fires. Observed
+ * on 2026-10-20: one isolated worker sat at ~98% CPU for 9 h 28 m with no progress line and no
+ * file name, and the gate that launched it held the whole pipeline run. The bound converts
+ * that silent total loss into a named failure that retains the log.
+ *
+ * 60 minutes clears the measured 3-6 minute suite by an order of magnitude while still
+ * bounding a wedged run; `SPUR_TEST_WATCHDOG_MS` overrides it (0 disables the kill, the
+ * heartbeat still runs).
+ */
+const WATCHDOG_MS = (() => {
+    const raw = Number.parseInt(getEnvVar('SPUR_TEST_WATCHDOG_MS') ?? '', 10);
+    return Number.isFinite(raw) && raw >= 0 ? raw : 60 * 60_000;
+})();
+
+/** Heartbeat cadence: enough to see life in a 10-minute call, quiet enough for a log. */
+const HEARTBEAT_MS = (() => {
+    const raw = Number.parseInt(getEnvVar('SPUR_TEST_HEARTBEAT_MS') ?? '', 10);
+    return Number.isFinite(raw) && raw > 0 ? raw : 60_000;
+})();
+
+const clock = (ms: number): string => {
+    const total = Math.round(ms / 1000);
+    const h = Math.floor(total / 3600);
+    const m = Math.floor((total % 3600) / 60);
+    const s = total % 60;
+    return h > 0
+        ? `${h}:${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`
+        : `${m}:${String(s).padStart(2, '0')}`;
+};
+
+/**
+ * Spawn the suite and wait for it under a heartbeat + watchdog, instead of an unbounded
+ * `spawnSync`. The child runs in its own process group so an expiry kills the whole tree
+ * (Bun's isolated test workers included) rather than orphaning them.
+ */
+async function runSuiteChild(argv: string[]): Promise<number> {
+    const startedAt = Date.now();
+    const child = Bun.spawn(argv, { env, stdio: ['inherit', 'inherit', 'inherit'], detached: true });
+    const heartbeat = setInterval(() => {
+        process.stderr.write(
+            `run-tests: suite running ${clock(Date.now() - startedAt)} (watchdog ${WATCHDOG_MS > 0 ? clock(WATCHDOG_MS) : 'off'})\n`,
+        );
+    }, HEARTBEAT_MS);
+    heartbeat.unref?.();
+    let expired = false;
+    const timer =
+        WATCHDOG_MS > 0
+            ? setTimeout(() => {
+                  expired = true;
+                  process.stderr.write(
+                      `run-tests: suite exceeded the ${clock(WATCHDOG_MS)} watchdog — killing the child process group. ` +
+                          'A blocked child cannot be interrupted by --timeout; raise SPUR_TEST_WATCHDOG_MS if the suite legitimately needs longer\n',
+                  );
+                  try {
+                      if (child.pid !== undefined) process.kill(-child.pid, 'SIGTERM');
+                  } catch {
+                      // already gone — the exit path below reports the code
+                  }
+              }, WATCHDOG_MS)
+            : undefined;
+    timer?.unref?.();
+    try {
+        const code = await child.exited;
+        if (expired) {
+            process.stderr.write(
+                'run-tests: refused to report the killed suite as a test failure — exit 124 (timeout)\n',
+            );
+            return 124;
+        }
+        return code ?? 1;
+    } finally {
+        clearInterval(heartbeat);
+        if (timer !== undefined) clearTimeout(timer);
+        try {
+            if (child.pid !== undefined) process.kill(-child.pid, 'SIGKILL');
+        } catch {
+            // the child already exited; nothing to reap
+        }
+    }
+}
+
 // Canonical coverage window (task 1203 R1): invalidate prior certification and capture
 // the tested-tree fingerprint BEFORE launching, so the window is closed while the suite
 // runs and any mid-run source change is caught at publish time.
@@ -117,11 +203,7 @@ try {
     // Bun's configured coverageDir overrides its CLI flag; copy the config without changing its gates.
     const isolatedConfig = join(registryDir, 'bunfig.toml');
     writeFileSync(isolatedConfig, Bun.TOML.stringify(config));
-    const result = Bun.spawnSync(['bun', `--config=${isolatedConfig}`, ...suiteArgs], {
-        env,
-        stdio: ['inherit', 'inherit', 'inherit'],
-    });
-    exitCode = result.exitCode ?? 1;
+    exitCode = await runSuiteChild(['bun', `--config=${isolatedConfig}`, ...suiteArgs]);
 
     if (canonicalStart !== undefined && exitCode === 0) {
         const certified = await certifyCanonicalRun(process.cwd(), canonicalStart);

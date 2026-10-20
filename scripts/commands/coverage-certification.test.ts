@@ -516,3 +516,58 @@ test('entrypoint wiring pins the canonical route and post-check provenance first
     expect(postCheck.startsWith('bun scripts/spur-dev.ts coverage-provenance-check &&')).toBe(true);
     expect(postCheck).toContain('rule run');
 });
+
+describe('run-tests watchdog — a blocked child cannot hang the gate (task 1265 session finding)', () => {
+    // 2026-10-20: one isolated suite worker sat at ~98% CPU for 9 h 28 m with no progress line.
+    // A test that blocks in a synchronous spawn never returns, and Bun's per-test --timeout
+    // cannot interrupt it — so the launcher itself must bound the child.
+    const fixture = (): string => {
+        const dir = mkdtempSync(join(tmpdir(), 'spur-watchdog-'));
+        mkdirSync(join(dir, 'case'), { recursive: true });
+        writeFileSync(
+            join(dir, 'case', 'blocked.test.ts'),
+            "import { test } from 'bun:test';\ntest('blocks in a synchronous spawn', () => { Bun.spawnSync(['sleep', '30']); });\n",
+        );
+        return dir;
+    };
+
+    test('an expiry kills the child group and reports exit 124, never a fake test failure', () => {
+        const dir = fixture();
+        try {
+            const proc = Bun.spawnSync([process.execPath, PRODUCER, 'test', join(dir, 'case')], {
+                cwd: dir,
+                env: { ...getEnvVars(), SPUR_TEST_WATCHDOG_MS: '1500' },
+                stdout: 'pipe',
+                stderr: 'pipe',
+            });
+            const stderr = proc.stderr.toString();
+            expect(proc.exitCode).toBe(124);
+            expect(stderr).toContain('run-tests: suite exceeded the');
+            expect(stderr).toContain('watchdog — killing the child process group');
+            expect(stderr).toContain('refused to report the killed suite as a test failure');
+        } finally {
+            rmSync(dir, { recursive: true, force: true });
+        }
+    }, 20_000);
+
+    test('a healthy run is untouched by the watchdog and keeps its exit code', () => {
+        const dir = mkdtempSync(join(tmpdir(), 'spur-watchdog-ok-'));
+        try {
+            mkdirSync(join(dir, 'case'), { recursive: true });
+            writeFileSync(
+                join(dir, 'case', 'fine.test.ts'),
+                "import { test, expect } from 'bun:test';\ntest('passes', () => { expect(1).toBe(1); });\n",
+            );
+            const proc = Bun.spawnSync([process.execPath, PRODUCER, 'test', join(dir, 'case')], {
+                cwd: dir,
+                env: { ...getEnvVars(), SPUR_TEST_WATCHDOG_MS: '60000' },
+                stdout: 'pipe',
+                stderr: 'pipe',
+            });
+            expect(proc.exitCode).toBe(0);
+            expect(proc.stderr.toString()).not.toContain('watchdog');
+        } finally {
+            rmSync(dir, { recursive: true, force: true });
+        }
+    }, 20_000);
+});
