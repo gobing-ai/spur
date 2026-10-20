@@ -49,16 +49,16 @@ import {
 import { tmpdir } from 'node:os';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { StrategyRuntime } from '@gobing-ai/spur-app';
 import { getEnvVar, getEnvVars } from '@gobing-ai/spur-config';
-import { StrategyRuntime } from '../../packages/app/src/services/strategy-runtime';
-import { CoordinationRunDao } from '../../packages/domain/src/dao/coordination-run-dao';
-import { InboxUnfinishedDao } from '../../packages/domain/src/dao/inbox-unfinished-dao';
-import { readMemberSessions } from '../../packages/domain/src/dao/member-session';
-// Deep relative imports (the precedent set by the retired `real-run-cost.ts`): the root node_modules has no
-// workspace link for `scripts/commands`, so `@gobing-ai/spur-*` cannot resolve here.
-import { ProjectClaimDao } from '../../packages/domain/src/dao/project-claim-dao';
-import { SystemEventDao } from '../../packages/domain/src/dao/system-event-dao';
-import { createMigratedDb } from '../../packages/domain/src/db';
+import {
+    CoordinationRunDao,
+    createMigratedDb,
+    InboxUnfinishedDao,
+    ProjectClaimDao,
+    readMemberSessions,
+    SystemEventDao,
+} from '@gobing-ai/spur-domain';
 
 const REPO_ROOT = fileURLToPath(new URL('../../', import.meta.url));
 /** The source-local CLI entry (this repo's own transport, never an installed binary). */

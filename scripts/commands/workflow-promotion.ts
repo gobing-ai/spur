@@ -36,16 +36,10 @@ import { readdirSync, readFileSync, statSync } from 'node:fs';
 import { readFile, writeFile } from 'node:fs/promises';
 import { basename, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { extractResolvedWorkflowFacts } from '@gobing-ai/spur-app';
+import { openExistingDb, readAgentRunHistoryRows, readRealTerminalRunCounts } from '@gobing-ai/spur-domain';
 import type { DbAdapter } from '@gobing-ai/ts-db';
 import { parse } from 'yaml';
-// Deep relative import (0775): the root node_modules has no @gobing-ai/spur-app workspace link
-// for scripts/commands, so the §1.1 cross-workspace alias rule cannot resolve here.
-import { extractResolvedWorkflowFacts } from '../../packages/app/src/workflow/composition-baseline';
-import {
-    readAgentRunHistoryRows,
-    readRealTerminalRunCounts,
-} from '../../packages/domain/src/analytics/workflow-measurements';
-import { openExistingDb } from '../../packages/domain/src/db';
 
 const REPO_ROOT = fileURLToPath(new URL('../../', import.meta.url));
 const CANDIDATES_PATH = join(REPO_ROOT, 'config/workflow-candidates.json');

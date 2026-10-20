@@ -22,13 +22,12 @@ import { mkdir, mkdtemp, readdir, readFile, rm, stat, symlink, writeFile } from 
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { getEnvVar, setEnvVar } from '@gobing-ai/spur-config';
-import { parse } from 'yaml';
 // Deep relative import (0775): the root node_modules has no @gobing-ai/spur-app workspace
 // link for scripts/commands, so the §1.1 cross-workspace alias rule cannot resolve here.
-import { extractResolvedWorkflowFacts } from '../../packages/app/src/workflow/composition-baseline';
-import { readHistoryCostInWindow } from '../../packages/domain/src/analytics/workflow-measurements';
-import { openExistingDb } from '../../packages/domain/src/db';
+import { extractResolvedWorkflowFacts } from '@gobing-ai/spur-app';
+import { getEnvVar, setEnvVar } from '@gobing-ai/spur-config';
+import { openExistingDb, readHistoryCostInWindow } from '@gobing-ai/spur-domain';
+import { parse } from 'yaml';
 
 const REPO_ROOT = fileURLToPath(new URL('../../', import.meta.url));
 const FIXTURE_DIR = join(REPO_ROOT, 'tests/fixtures/pipeline-eval');

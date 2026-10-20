@@ -2,6 +2,9 @@
     "name": "@gobing-ai/spur-web",
     "type": "module",
     "private": true,
+    "exports": {
+        "./runtime-manifest": "./src/modules/runtime/manifest.ts"
+    },
     "scripts": {
         "build": "astro build --outDir ../../dist/web",
         "dev": "astro dev",

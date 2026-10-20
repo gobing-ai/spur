@@ -12,7 +12,7 @@ import {
     BOARD_FACADE_SPECIFIERS,
     buildRuntimeManifest,
     renderImportMapScript,
-} from '../../apps/web/src/modules/runtime/manifest';
+} from '@gobing-ai/spur-web/runtime-manifest';
 import { bundleWeb } from './bundle-web';
 
 /** Minimal board distribution that satisfies the packaging contract. */

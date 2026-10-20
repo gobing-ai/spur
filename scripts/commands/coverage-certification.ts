@@ -27,11 +27,7 @@ import {
     writeFileSync,
 } from 'node:fs';
 import { join, resolve } from 'node:path';
-// Repo-command precedent (0775): spur-app has no root workspace link.
-import {
-    computeProofInputFingerprintDetailed,
-    DEFAULT_EXCLUDE_GLOBS,
-} from '../../packages/app/src/workflow/proof-input-fingerprint';
+import { computeProofInputFingerprintDetailed, DEFAULT_EXCLUDE_GLOBS } from '@gobing-ai/spur-app';
 
 export const CERT_RELATIVE_PATH = join('.coverage', 'coverage-certification.json');
 export const LCOV_RELATIVE_PATH = join('.coverage', 'lcov.info');

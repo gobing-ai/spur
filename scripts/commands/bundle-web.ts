@@ -18,7 +18,7 @@ import { cp, realpath, rm } from 'node:fs/promises';
 import { basename, dirname, isAbsolute, join, relative, resolve, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { boardHostRuntimeSchema } from '@gobing-ai/spur-contracts';
-import { BOARD_FACADE_SPECIFIERS } from '../../apps/web/src/modules/runtime/manifest';
+import { BOARD_FACADE_SPECIFIERS } from '@gobing-ai/spur-web/runtime-manifest';
 
 const REPO_ROOT = fileURLToPath(new URL('../../', import.meta.url));
 const DEFAULT_SOURCE = join(REPO_ROOT, 'dist/web');
