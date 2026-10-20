@@ -2548,32 +2548,36 @@ has 11 fields, skill/agent output contracts carry no level, and `response.valida
 - **Status:** Accepted · **Date:** 2026-10-17 · **Supersedes:** the ADR-138 amendment's blanket
   "no HIGH|MEDIUM|LOW label anywhere" invariant, **for the two answer artifacts only**
 - **Decision:** a verify answer and a review answer each carry one top-level
-  `Confidence: HIGH|MEDIUM|LOW` line, and the gate **recomputes** that level from the answer's own
-  rows and rejects a disagreement:
-  - verify — `LOW` when the verdict is not PASS or any row is PARTIAL/UNMET; `HIGH` when every AC row
-    is MET on executable evidence (`test`/`command`); `MEDIUM` otherwise (citation, manual review, LLM
-    judge or `N/A` carrying a MET row).
-  - review — `LOW` when the verdict is not PASS or an open P1–P3 row survives; `HIGH` when every
-    finding is closed; `MEDIUM` when only carried residuals remain (`DEFER(...)`, `ACCEPTED`, open P4).
+  `Confidence: HIGH|MEDIUM|LOW` line. The level is a **function of the answer's rows**, not a
+  judgment; the gate recomputes it and rejects a disagreement.
 
-  Rejections are first-class and named: `confidence-missing`, `confidence-duplicate`,
-  `confidence-mismatch` for verify (`verify-answer-lint`), the same three as blocking
-  `review-contract` violations for review (`residual-scan.reviewContractViolations`). One shared
-  derivation module (`packages/app/src/services/answer-confidence.ts`) serves both lanes.
-- **Why:** the ADR-138 amendment required a superseding ADR to name what the label measures that
-  existing evidence did not. This one does: **evidence composition**. Nothing recorded whether a PASS
-  rested on re-runnable checks or on prose a reader must trust, so a reviewer had to re-derive it from
-  the rows every time, and a batch could not tell a PASS built on `static-ref` from one built on
-  `test`. The label is now a *function of the rows*, and the cross-check is what makes it
-  verification rather than a self-grade: a model that writes `HIGH` over citation-only rows is
-  rejected by the gate (the exact failure ADR-138 was written to prevent).
-- **Retains:** everything else in ADR-138's invariant. No verdict-artifact `confidence` field (the
-  answer remains the record of truth — a test pins its absence), no feature-receipt level, no
-  `ackLowConfidence`-style operator var, no per-finding history-anatomy confidence, no
-  decision-engine grading, and no requirement in any skill/agent prose to *self-assess*.
-- **Consequence:** an answer that omits the line no longer certifies, so a legacy answer (and any
-  workflow fixture) must state the derived level. A `LOW` answer is legal and asserts nothing extra:
-  the verdict it carries is already PARTIAL/FAIL, and the gate reads the rows, not the label.
+  | Lane | LOW | HIGH | MEDIUM |
+  | --- | --- | --- | --- |
+  | verify | verdict not PASS, or any row PARTIAL/UNMET | every AC row MET on `test`/`command` evidence | otherwise (citation, manual review, LLM judge, `N/A`) |
+  | review | verdict not PASS, or an open P1–P3 row | every finding closed | only carried residuals (`DEFER(...)`, `ACCEPTED`, open P4) |
+
+  Rejections: `confidence-missing`, `confidence-duplicate`, `confidence-mismatch` — in
+  `verify-answer-lint` for verify, as blocking `review-contract` violations
+  (`residual-scan.reviewContractViolations`) for review. One module,
+  `packages/app/src/services/answer-confidence.ts`, owns the derivation for both.
+- **What it is not** (the recurring confusion):
+  - **Not self-assessment.** The writer copies the level the table above yields; a stated level the
+    rows do not support is rejected. The level adds no evidence — it summarizes **evidence
+    composition** (re-runnable vs trust-me rows) so a reader or batch need not re-derive it.
+  - **Not the agent-side "state your confidence" check** that `cc:anti-hallucination` hooks request
+    (ADR-138 assigns that to the agent side; Spur never gates on it).
+  - **Not decision-maker `confidence`/`minConfidence`** — the decision engine's numeric routing
+    threshold, kept by ADR-138.
+  - **Not revived anywhere else.** Verdict-artifact `confidence` fields, feature-receipt levels,
+    `ackLowConfidence`-style vars, per-finding history-anatomy confidence and decision grading stay
+    retired (ADR-138 invariant); a test pins the verdict artifact's missing field.
+- **Why:** ADR-138's amendment demanded that a re-introduction name what the label measures that
+  existing evidence did not. This one measures evidence composition, and the cross-check is what makes
+  it verification: a `HIGH` over citation-only rows is exactly the failure ADR-138 was written to stop,
+  and the gate now rejects it.
+- **Consequence:** an answer without the line no longer certifies, so legacy answers and workflow
+  fixtures state the derived level. A `LOW` answer is legal and asserts nothing extra — its verdict is
+  already PARTIAL/FAIL, and the gate reads the rows, not the label.
 - **Detail:** [verdict schema](../plugins/sp/skills/code-verification/references/verdict-schema.md);
   [super-reviewer output contract](../plugins/sp/agents/super-reviewer.md).
 
