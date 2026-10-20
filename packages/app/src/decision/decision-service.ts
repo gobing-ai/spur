@@ -7,6 +7,7 @@ import {
     DecisionMakerRegistry,
     type DecisionResult,
     type DecisionSummary,
+    type MakerRef,
     resolveDecisionInput,
     UnknownDecisionError,
     UnknownDecisionMakerError,
@@ -636,8 +637,8 @@ export class DecisionService {
      */
     private effectiveMaker(
         id: string,
-        catalogEntryMaker?: string,
-        catalogDefaultsMaker?: string,
+        catalogEntryMaker?: MakerRef,
+        catalogDefaultsMaker?: MakerRef,
         flagMaker?: string,
     ): EffectiveMaker {
         const config = this.config;
@@ -646,9 +647,23 @@ export class DecisionService {
         if (perDecision !== undefined) return { name: perDecision, source: 'config-decision' };
         const global = config?.decisions?.maker;
         if (global !== undefined) return { name: global, source: 'config-default' };
-        if (catalogEntryMaker !== undefined) return { name: catalogEntryMaker, source: 'catalog-decision' };
-        if (catalogDefaultsMaker !== undefined) return { name: catalogDefaultsMaker, source: 'catalog-default' };
+        const entryName = this.firstRegistered(catalogEntryMaker);
+        if (entryName !== undefined) return { name: entryName, source: 'catalog-decision' };
+        const defaultsName = this.firstRegistered(catalogDefaultsMaker);
+        if (defaultsName !== undefined) return { name: defaultsName, source: 'catalog-default' };
         return { name: this.hub.describe(id).maker, source: 'catalog-default' };
+    }
+
+    /**
+     * A catalog `maker` may also be an ordered fallback chain (upstream ADR-040). The hub requires
+     * every entry to be registered (it drops a decision whose chain names an unknown maker), so a
+     * chain that reaches here is fully registered and its first entry — the name Spur serves
+     * through — is the answer; the scan also holds if a future hub preserves a partial chain.
+     */
+    private firstRegistered(ref: MakerRef | undefined): string | undefined {
+        if (ref === undefined) return undefined;
+        if (typeof ref === 'string') return ref;
+        return ref.find((name) => this.registry.has(name)) ?? ref[0];
     }
 
     /** Config threaded at create time; kept off the constructor signature so tests can build without one. */

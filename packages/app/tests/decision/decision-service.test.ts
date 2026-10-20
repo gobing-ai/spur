@@ -125,6 +125,46 @@ describe('DecisionService (task 1092, design §3.3/§3.6)', () => {
         ]);
     });
 
+    test('a catalog maker chain resolves to its first entry, not the raw array', async () => {
+        const root = await newRoot();
+        roots.push(root);
+        await writeCatalog(
+            root,
+            'chain.yaml',
+            `
+version: 1
+defaults:
+    minConfidence: 0.8
+    maker: [typesafe, fm-local]
+decisions:
+    chained-entry:
+        type: choice
+        criteria:
+            a: a
+            b: b
+        fallback: a
+        maker: [fm-local, typesafe]
+    chained-defaults:
+        type: choice
+        criteria:
+            a: a
+            b: b
+        fallback: a
+`,
+        );
+        const service = await getDecisionService(null as never, root, join(root, 'shared'));
+        // Entry chain and defaults chain each resolve to their own first entry (ADR-040 order);
+        // the hub only loads a chain whose every name is registered.
+        expect(service.describe('chained-entry').effectiveMaker).toEqual({
+            name: 'fm-local',
+            source: 'catalog-decision',
+        });
+        expect(service.describe('chained-defaults').effectiveMaker).toEqual({
+            name: 'typesafe',
+            source: 'catalog-default',
+        });
+    });
+
     test('dup ids decide fail-closed; config outranks catalog; unregistered config maker errors', async () => {
         // Own root: the service cache is keyed by cwd, so tests must not share one.
         const root = await newRoot();
