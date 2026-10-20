@@ -1,10 +1,10 @@
 ---
 schema_version: 1
 name: Carry a derived HIGH/MEDIUM/LOW confidence level on the feature-verification receipt and gate completion on it
-status: done
+status: deprecated
 template: standard
 created_at: 2026-10-13T19:03:27.230Z
-updated_at: "2026-10-14T04:37:01.739Z"
+updated_at: "2026-10-20T02:18:54.257Z"
 
 done_forced: "false"
 done_reason: unforced close; PASS artifact at tracked Testing section (scratch verdict not retained)
@@ -152,4 +152,5 @@ Observed in knowledge-kit during G14's verification (run `6a95b206`): the receip
 - 2026-10-13T19:46:13.900Z todo → wip (system)
 - 2026-10-13T19:46:15.405Z wip → testing (system)
 - 2026-10-13T19:47:19.992Z testing → done (system)
+- 2026-10-20T02:18:54.257Z done → deprecated (system)
 

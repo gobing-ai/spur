@@ -1,10 +1,10 @@
 ---
 schema_version: 1
 name: Verify the claimed confidence level is earned by the verdict evidence
-status: done
+status: deprecated
 template: standard
 created_at: 2026-10-08T22:44:30.518Z
-updated_at: "2026-10-09T17:11:28.541Z"
+updated_at: "2026-10-20T02:18:53.862Z"
 
 ac_numbering: task-local
 ac_altitude: task-local
@@ -244,4 +244,5 @@ The earlier auto change-map also listed `apps/web/src/lib/rpc-client.ts` and `pl
 - 2026-10-08T22:45:22.644Z backlog → todo (system)
 - 2026-10-09T06:36:37.491Z todo → testing (system)
 - 2026-10-09T06:36:45.698Z testing → done (system)
+- 2026-10-20T02:18:53.862Z done → deprecated (system)
 

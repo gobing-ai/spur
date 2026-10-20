@@ -1,10 +1,10 @@
 ---
 schema_version: 1
 name: Verify answer files carry a confidence level (HIGH/MEDIUM/LOW)
-status: done
+status: deprecated
 template: standard
 created_at: 2026-10-03T16:19:55.477Z
-updated_at: "2026-10-05T18:22:32.274Z"
+updated_at: "2026-10-20T02:18:53.439Z"
 
 done_forced: "false"
 done_reason: unforced close; PASS artifact at .spur/memory/evidence/1068-verdict.json
@@ -97,4 +97,5 @@ Captured from the creation title: "Verify answer files carry a confidence level 
 - 2026-10-03T16:29:17.859Z todo → wip (system)
 - 2026-10-03T16:31:55.983Z wip → testing (system)
 - 2026-10-03T16:32:12.323Z testing → done (system)
+- 2026-10-20T02:18:53.439Z done → deprecated (system)
 
