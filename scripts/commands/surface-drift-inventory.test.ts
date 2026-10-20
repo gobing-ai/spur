@@ -29,14 +29,17 @@ import {
     flagNames,
     flattenKeys,
     isFlagSpan,
+    legacySelfAliases,
     lineInvocationSpans,
     nounOfReference,
     parseInvocation,
     probeJsonShapes,
     record,
     render,
+    resetLegacySelfAliases,
     rows,
     runCli,
+    setHiddenProbeRunner,
     surfaceCache,
     sweepHooks,
     sweepPluginTrees,
@@ -137,6 +140,14 @@ describe('span extraction', () => {
         );
     });
 
+    test('lineInvocationSpans extracts a backticked invocation once, not also as bare text', () => {
+        // Double extraction made the words inside an inline-code citation their own claims:
+        // `spur self exec` also yielded a bare `spur self`, and a negated `spur exec <action>`
+        // left a stray `spur exec` (task 1265 row 9).
+        const spans = lineInvocationSpans('it exists only as `spur self exec` — there is no `spur exec` top-level');
+        expect(spans).toEqual(['spur self exec', 'spur exec']);
+    });
+
     test('lineInvocationSpans ignores backticked spans that are not invocations', () => {
         expect(lineInvocationSpans('the `feature_id` frontmatter field')).toEqual([]);
     });
@@ -144,9 +155,22 @@ describe('span extraction', () => {
     test('lineInvocationSpans finds bare (unbackticked) shell-style invocations', () => {
         // The bare regex captures `spur <noun>` (one token), keeping any leading shell
         // separator in the match; full invocations travel backticked. Both forms must
-        // be found.
-        expect(lineInvocationSpans('spur workflow validate x.yaml')).toContain('spur workflow');
+        // be found — but a bare span needs shell context (task 1265 R7).
+        expect(lineInvocationSpans('$ spur workflow validate x.yaml')).toContain('spur workflow');
         expect(lineInvocationSpans('then; spur task check 0042').some((s) => s.includes('spur task'))).toBe(true);
+    });
+
+    test('lineInvocationSpans treats an un-backticked prose sentence as no claim at all', () => {
+        // `spur exits with the child exit code.` is English, not an invocation. Matching it at
+        // line start reported the word `exits` as a missing noun (task 1265 R7, row 10).
+        expect(lineInvocationSpans("spur exits with the child's exit code.")).toEqual([]);
+        expect(lineInvocationSpans('spur exits 0 on success')).toEqual([]);
+    });
+
+    test('lineInvocationSpans keeps fenced code and bun prefixes as shell context', () => {
+        // A fenced line may start with the invocation — that is why the sweep opts in explicitly.
+        expect(lineInvocationSpans('spur task check 0042', { fenced: true }).length).toBeGreaterThan(0);
+        expect(lineInvocationSpans('bun run apps/cli/src/index.ts task check 0042').length).toBeGreaterThan(0);
     });
 
     test('lineInvocationSpans finds the monorepo dev entry form bare', () => {
@@ -155,7 +179,8 @@ describe('span extraction', () => {
     });
 
     test('lineInvocationSpans does not grab a bare span across a shell separator', () => {
-        const spans = lineInvocationSpans('spur task check | jq .');
+        const spans = lineInvocationSpans('then; spur task check | jq .');
+        expect(spans.length).toBeGreaterThan(0);
         expect(spans.every((s) => !s.includes('jq'))).toBe(true);
     });
 });
@@ -185,6 +210,19 @@ describe('flag spans', () => {
 
     test('flagNames returns empty for a span with no flags', () => {
         expect(flagNames('task check')).toEqual([]);
+    });
+
+    test('flagNames needs a left token boundary, so a value tail is not a flag', () => {
+        // `-local` was read out of the value `task-local`, and `-id` out of the placeholder
+        // `<spec-id>` — both reported as missing flags (task 1265 R4, rows 11-12).
+        expect(flagNames('--ac-numbering task-local')).toEqual(['--ac-numbering']);
+        expect(flagNames('--assignee <spec-id>')).toEqual(['--assignee']);
+        expect(flagNames('--letter <A-Z>')).toEqual(['--letter']);
+    });
+
+    test('stripping placeholders keeps a real flag sitting next to one', () => {
+        expect(flagNames('--tasks <file> --letter <A-Z>')).toEqual(['--tasks', '--letter']);
+        expect(isFlagSpan('--tasks <file> --letter <A-Z>')).toBe(true);
     });
 });
 
@@ -399,7 +437,7 @@ describe('runCli — exit classification against the source-local CLI', () => {
 // stable: these tests assert how a claim is judged, not which verbs the CLI
 // happens to ship today, so a real verb rename can never turn them red.
 
-surfaceCache.set('', { commands: ['alpha', 'zeta', 'task', 'self'], flags: ['--help'] });
+surfaceCache.set('', { commands: ['alpha', 'zeta', 'task', 'self', 'agent', 'grp'], flags: ['--help', '--no-logo'] });
 surfaceCache.set('alpha', { commands: ['run', 'peek'], flags: ['--noun-flag'] });
 surfaceCache.set('alpha run', { commands: [], flags: ['--json', '--force'] });
 surfaceCache.set('alpha peek', { commands: [], flags: ['--json'] });
@@ -407,8 +445,21 @@ surfaceCache.set('zeta', { commands: ['live'], flags: [] });
 surfaceCache.set('task', { commands: ['check', 'update'], flags: [] });
 surfaceCache.set('task check', { commands: [], flags: ['--json'] });
 surfaceCache.set('task update', { commands: [], flags: ['--section', '--from-file'] });
-surfaceCache.set('self', { commands: ['init', 'migrate', 'serve', 'status'], flags: [] });
+surfaceCache.set('self', { commands: ['init', 'maintain', 'migrate', 'serve', 'status', 'exec'], flags: [] });
 surfaceCache.set('self status', { commands: [], flags: ['--json'] });
+// A verb that is itself a command group: its documented flags live one level deeper (task 1265 R3).
+surfaceCache.set('grp', { commands: ['nested'], flags: [] });
+surfaceCache.set('grp nested', { commands: ['gate', 'validate-report'], flags: ['--json'] });
+surfaceCache.set('grp nested gate', { commands: [], flags: ['--testee'] });
+surfaceCache.set('grp nested validate-report', { commands: [], flags: ['--file'] });
+
+/**
+ * Default probe answer for the whole seeded suite: "no such command". Hermetic (the probe
+ * never shells a real CLI) and it keeps the derived self-alias set on its documented
+ * baseline, so the rows below stay stable against today's CLI shape.
+ */
+const probeAbsent: CliRunner = () => ({ exit: 1, out: '', err: 'error: unknown command' });
+setHiddenProbeRunner(probeAbsent);
 
 afterAll(() => surfaceCache.clear());
 
@@ -495,6 +546,152 @@ describe('checkNounVerbFlags — drift verdicts', () => {
     });
 });
 
+// ─── Task 1265 — the four verified false-positive classes ────────────────
+//
+// Each of these was a CONFIRMED mismatch the inventory reported against correct prose
+// (see the task's root-cause table). They are grouped because they are one defect class:
+// the checker judged the citation against a surface Commander cannot express — a global
+// option, a hidden command, a nested command group, or a prose token that is not a flag.
+
+describe('global options (task 1265 R1, row 1)', () => {
+    const occ = { file: 'fixture.md', line: 1 };
+
+    test('a root program option is ok on any command path, and says why', () => {
+        checkNounVerbFlags(['alpha'], ['peek'], ['--no-logo'], occ);
+        const row = rowFor('spur alpha peek --no-logo');
+        expect(row?.status).toBe('ok');
+        expect(row?.actual).toBe('global option (root program)');
+    });
+
+    test('the exemption is exactly root membership — it does not widen a verb-level miss', () => {
+        // `--force` is a real flag but on a DIFFERENT verb; nothing about the global rule
+        // may turn a genuinely absent flag green.
+        checkNounVerbFlags(['alpha'], ['peek'], ['--force'], occ);
+        expect(rowFor('spur alpha peek --force')?.status).toBe('mismatch');
+    });
+
+    test('a global option is accepted at the noun level and on a legacy self alias too', () => {
+        checkNounVerbFlags(['alpha'], [], ['--no-logo'], occ);
+        expect(rowFor('spur alpha --no-logo')?.status).toBe('ok');
+        checkNounVerbFlags(['status'], [], ['--no-logo'], occ);
+        expect(rowFor('spur status --no-logo')?.status).toBe('ok');
+    });
+});
+
+describe('hidden verbs (task 1265 R2, rows 2-7)', () => {
+    const occ = { file: 'fixture.md', line: 1 };
+    const hiddenHelp = [
+        'Usage: spur agent loop [options]',
+        '',
+        'Options:',
+        '  --json  machine-readable output',
+        '  -h, --help  display help for command',
+    ].join('\n');
+
+    afterAll(() => setHiddenProbeRunner(probeAbsent));
+
+    test('a hidden registered verb is present, with its flags captured from the probe', () => {
+        setHiddenProbeRunner((args) =>
+            args.join(' ') === 'agent loop --help'
+                ? { exit: 0, out: hiddenHelp, err: '' }
+                : { exit: 1, out: '', err: 'error: unknown command' },
+        );
+        checkNounVerbFlags(['agent'], ['loop'], ['--json'], occ);
+        const row = rowFor('spur agent loop');
+        expect(row?.status).toBe('ok');
+        expect(row?.actual).toBe('hidden verb present (not listed in --help)');
+        expect(rowFor('spur agent loop --json')?.status).toBe('ok');
+    });
+
+    test('a probe answering "unknown command" records mismatch, never ok', () => {
+        setHiddenProbeRunner(probeAbsent);
+        checkNounVerbFlags(['zeta'], ['ghost'], [], occ);
+        const row = rowFor('spur zeta ghost');
+        expect(row?.status).toBe('mismatch');
+        expect(row?.actual).toContain('verb absent');
+    });
+
+    test('a probe that answers the PARENT help is absence, not presence', () => {
+        // Commander prints the parent's help and exits 0 for an unknown command's `--help`
+        // (`spur exec --help` → root help, `spur workflow monitor --help` → workflow help).
+        setHiddenProbeRunner((args) =>
+            args.join(' ') === 'zeta ghosthood --help'
+                ? { exit: 0, out: 'Usage: spur zeta [options] [command]\n\nOptions:\n  --json  out', err: '' }
+                : probeAbsent(args),
+        );
+        checkNounVerbFlags(['zeta'], ['ghosthood'], [], occ);
+        expect(rowFor('spur zeta ghosthood')?.status).toBe('mismatch');
+    });
+
+    test('a probe that times out is unverified — never ok, never drift', () => {
+        // A distinct verb: rows merge by (asserted, method) and a recorded mismatch is sticky.
+        setHiddenProbeRunner((args) =>
+            args.join(' ') === 'zeta ghostly --help'
+                ? { exit: 124, out: '', err: 'timed out' }
+                : { exit: 0, out: 'not commander help at all', err: '' },
+        );
+        checkNounVerbFlags(['zeta'], ['ghostly'], [], occ);
+        const row = rowFor('spur zeta ghostly');
+        expect(row?.status).toBe('unverified');
+        expect(row?.actual).toContain('did not answer');
+    });
+});
+
+describe('nested command groups (task 1265 R3, rows 3-7)', () => {
+    const occ = { file: 'fixture.md', line: 1 };
+
+    test('a flag living on a subcommand is unverified shorthand, naming the subcommands', () => {
+        checkNounVerbFlags(['grp'], ['nested'], ['--testee'], occ);
+        const row = rowFor('spur grp nested --testee');
+        expect(row?.status).toBe('unverified');
+        expect(row?.actual).toContain('nested shorthand');
+        expect(row?.actual).toContain('1/2 subcommands');
+        expect(row?.actual).toContain('gate');
+    });
+
+    test('a verb-level flag stays ok and is not downgraded to shorthand', () => {
+        checkNounVerbFlags(['grp'], ['nested'], ['--json'], occ);
+        expect(rowFor('spur grp nested --json')?.status).toBe('ok');
+    });
+
+    test('a flag on none of the subcommands is still drift', () => {
+        checkNounVerbFlags(['grp'], ['nested'], ['--nowhere'], occ);
+        expect(rowFor('spur grp nested --nowhere')?.status).toBe('mismatch');
+    });
+});
+
+describe('legacy self-alias set (task 1265 R5, row 8)', () => {
+    const occ = { file: 'fixture.md', line: 1 };
+
+    afterAll(() => {
+        setHiddenProbeRunner(probeAbsent);
+        resetLegacySelfAliases();
+    });
+
+    test('the set is derived from `spur self`, so maintain cannot be missing', () => {
+        resetLegacySelfAliases();
+        setHiddenProbeRunner((args) => {
+            const alias = args[0] ?? '';
+            if (args[1] !== '--help' || alias === 'exec') return { exit: 1, out: '', err: 'error: unknown command' };
+            // A real hidden alias answers with its OWN usage line — that is what proves the probe.
+            return { exit: 0, out: `Usage: spur ${alias} [options]\n\nOptions:\n  --json  out`, err: '' };
+        });
+        const aliases = legacySelfAliases();
+        expect(aliases.has('maintain')).toBe(true);
+        // `exec` exists only under `spur self`; a root-alias probe is what keeps it out.
+        expect(aliases.has('exec')).toBe(false);
+        checkNounVerbFlags(['maintain'], [], [], occ);
+        expect(rowFor('spur maintain')?.status).toBe('ok');
+    });
+
+    test('a probe that cannot answer keeps the documented baseline instead of shrinking', () => {
+        resetLegacySelfAliases();
+        setHiddenProbeRunner(probeAbsent);
+        const aliases = legacySelfAliases();
+        for (const name of ['init', 'maintain', 'migrate', 'serve', 'status']) expect(aliases.has(name)).toBe(true);
+    });
+});
+
 // ─── Semantic --section operand layer (I7 / task 0906 R2) ────────────────
 
 describe('checkSectionOperand — semantic --section operand drift (task 0906 R2)', () => {
@@ -565,6 +762,7 @@ describe('sweepPluginTrees / sweepScriptArgv — claims found in a plugin tree',
                 '# Demo',
                 '',
                 'Run `spur task check 0042 --json` before anything else.',
+                'Run `spur task check 0042 --bogus-flag` to prove true drift still fails.',
                 '',
                 '```bash',
                 'spur fenced check',
@@ -572,6 +770,14 @@ describe('sweepPluginTrees / sweepScriptArgv — claims found in a plugin tree',
                 '',
                 'Prose: no `spur task vanish` verb exists.',
                 'Prose: no `spur zeta live` verb exists.',
+                'Prose: there is no `spur exec` top-level alias (`spur exec <action>` is an unknown command).',
+                'Prose: a public `spur check` verb is out of scope without separate consent.',
+                'Prose: **Forbidden surface: `spur agent loop`** (supervisor-internal).',
+                'Prose: spur exits with the child exit code.',
+                // Failure mode 6: a negation must not swallow a positive claim on the same line.
+                'Prose: `spur task check 0042 --json` is the gate; there is no `spur task` noun-level alias.',
+                // A flag-scoped absence claim is about the FLAG, not the verb (review P2).
+                'Prose: there is no `spur task update --tags` flag; use `--add-tag`.',
             ].join('\n'),
         );
         writeFileSync(
@@ -607,15 +813,68 @@ describe('sweepPluginTrees / sweepScriptArgv — claims found in a plugin tree',
             ].join('\n'),
         );
 
+        // `spur agent loop` is the hidden-verb case the sweep must now probe for; every other
+        // probe answer stays "unknown command" so the fixture is hermetic.
+        resetLegacySelfAliases();
+        setHiddenProbeRunner((args) =>
+            args.join(' ') === 'agent loop --help'
+                ? { exit: 0, out: 'Usage: spur agent loop [options]\n\nOptions:\n  --json  out', err: '' }
+                : probeAbsent(args),
+        );
         sweepPluginTrees(dir);
         sweepScriptArgv(dir);
     });
 
-    afterAll(() => rmSync(dir, { recursive: true, force: true }));
+    afterAll(() => {
+        resetLegacySelfAliases();
+        setHiddenProbeRunner(probeAbsent);
+        rmSync(dir, { recursive: true, force: true });
+    });
 
     test('a backticked invocation in prose is checked, flags included', () => {
         expect(rowFor('spur task check')?.status).toBe('ok');
         expect(rowFor('spur task check --json')?.status).toBe('ok');
+    });
+
+    test('true drift still yields a mismatch — a fake flag is excused by no new rule (R8)', () => {
+        expect(rowFor('spur task check --bogus-flag')?.status).toBe('mismatch');
+    });
+
+    test('every documented-absence shape confirms, instead of reporting drift (R6)', () => {
+        for (const asserted of ['spur exec', 'spur check']) {
+            const row = rowFor(asserted);
+            expect(row?.status).toBe('ok');
+            expect(row?.actual).toContain('documented absence confirmed');
+        }
+    });
+
+    test('a forbidden-surface mention is internal, not absence — the hidden verb is ok (R6)', () => {
+        const row = rowFor('spur agent loop');
+        expect(row?.status).toBe('ok');
+        expect(row?.actual).toContain('hidden verb present');
+    });
+
+    test('a prose line that merely begins "spur <word>" yields no row (R7)', () => {
+        expect(rowFor('spur exits')).toBeUndefined();
+    });
+
+    test('a negation does not swallow a positive claim on the same line (failure mode 6)', () => {
+        // `spur task` is negated here; `spur task check 0042 --json` beside it is not, and a
+        // prefix-based clause match produced an EXTRA stale-negation row for `spur task check`.
+        // Asserting the row set is the guard: individual rows look identical either way.
+        expect(rowFor('spur task check')?.status).toBe('ok');
+        // The one line in the fixture with no clause owner is the pre-existing `spur zeta live`.
+        expect(rows.filter((r) => (r.actual ?? '').includes('stale negation')).map((r) => r.asserted)).toEqual([
+            'spur zeta live',
+            'spur task',
+        ]);
+    });
+
+    test('a flag-scoped absence claim is judged on the flag, not on the verb (review P2)', () => {
+        // `spur task update` exists; `--tags` does not. Judging the command alone reported drift.
+        const row = rowFor('spur task update --tags');
+        expect(row?.status).toBe('ok');
+        expect(row?.actual).toContain('documented absence confirmed');
     });
 
     test('an invocation inside a fenced code block is checked too', () => {
@@ -837,12 +1096,15 @@ describe('render — the inventory report', () => {
             record('c', 'ut-render(x)', 'ok', 'fine', { file: 'f.md', line: 1 });
 
             const out = render();
-            expect(out).toContain('Root nouns: alpha, zeta, task, self.');
+            expect(out).toContain('Root nouns: alpha, zeta, task, self, agent, grp.');
             expect(out).toContain('**Totals: 1 ok · 1 mismatch · 0 unverified**');
             expect(out).toContain('## ut-render — 1 mismatch / 2 entries');
             expect(out).toContain('`a \\| b`'); // an unescaped pipe would break the table row
             expect(out).toContain('…+2'); // occurrences beyond the first four are counted
             expect(out).toContain('## Confirmed mismatches (R3 disposition)');
+            // The reader must be able to see the two rules that decide most rows (task 1265).
+            expect(out).toContain('global option');
+            expect(out).toContain('hidden-verb probe');
         } finally {
             rows.splice(0, rows.length);
             rows.push(...saved);

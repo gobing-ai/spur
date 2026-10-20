@@ -29,7 +29,7 @@
 import { execFileSync } from 'node:child_process';
 import { existsSync, mkdirSync, readdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { dirname, join, relative, resolve } from 'node:path';
-import { captureCliSurface } from '../../plugins/sp/tests/helpers/cli-surface';
+import { captureCliSurface, parseCommanderHelp } from '../../plugins/sp/tests/helpers/cli-surface';
 
 const REPO_ROOT = resolve(import.meta.dir, '..', '..');
 const PLUGIN_ROOT = join(REPO_ROOT, 'plugins', 'sp');
@@ -72,10 +72,17 @@ export function record(
 
 // ─── Live surface captures (cached) ─────────────────────────────────────────
 
-/** Exported so unit tests can seed a fake live surface and keep the verdict logic hermetic. */
-export const surfaceCache = new Map<string, { commands: string[]; flags: string[] }>();
+export interface LiveSurface {
+    commands: string[];
+    flags: string[];
+    /** Captured by a `<path> --help` probe because Commander hides it from the parent listing. */
+    hidden?: boolean;
+}
 
-function surface(path: string[]): { commands: string[]; flags: string[] } {
+/** Exported so unit tests can seed a fake live surface and keep the verdict logic hermetic. */
+export const surfaceCache = new Map<string, LiveSurface>();
+
+function surface(path: string[]): LiveSurface {
     const key = path.join(' ');
     let s = surfaceCache.get(key);
     if (!s) {
@@ -88,6 +95,63 @@ function surface(path: string[]): { commands: string[]; flags: string[] } {
 
 /** How the live-CLI sweeps below reach the CLI. Injectable so unit tests can drive them hermetically. */
 export type CliRunner = (args: string[], timeoutMs?: number) => { exit: number; out: string; err: string };
+
+/** Probe transport for `hiddenSurface`. Injectable for the same reason the sweeps take a runner. */
+let hiddenProbeRunner: CliRunner = runCli;
+
+export function setHiddenProbeRunner(runner: CliRunner): void {
+    hiddenProbeRunner = runner;
+}
+
+/**
+ * Probe a `<path> --help` for a command Commander does not list in its parent.
+ *
+ * Why: `{ hidden: true }` commands (e.g. `spur agent loop`, the legacy root aliases) are real
+ * and runnable but absent from the parent `Commands:` block, so judging an assertion against the
+ * listing alone reports live surface as drift (task 1265 R2).
+ */
+function hiddenSurface(
+    path: string[],
+):
+    | { kind: 'present'; surface: LiveSurface }
+    | { kind: 'absent'; detail: string }
+    | { kind: 'unverified'; detail: string } {
+    const key = path.join(' ');
+    const cached = surfaceCache.get(key);
+    if (cached) return { kind: 'present', surface: cached };
+    const probe = hiddenProbeRunner([...path, '--help'], 20_000);
+    if (probe.exit === 124) return { kind: 'unverified', detail: 'probe did not answer (timeout)' };
+    if (probe.exit !== 0) return { kind: 'absent', detail: 'probe answered a non-help error' };
+    // Commander answers an unknown command's `--help` by printing the PARENT's (or the root's)
+    // help and exiting 0, so exit status alone proves nothing: the `Usage:` line must name the
+    // probed path. Without this, `spur exec --help` (root help) and `spur workflow monitor --help`
+    // (workflow help) reported nonexistent commands as present.
+    const usage = (probe.out.match(/^Usage:\s*(.+)$/m)?.[1] ?? '').trim();
+    const expected = `spur ${path.join(' ')}`;
+    if (!new RegExp(`^${expected.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}(\\s|$|\\[)`).test(usage)) {
+        return { kind: 'absent', detail: `probe answered help for another command (${usage || 'no Usage: line'})` };
+    }
+    let parsed: { commands: string[]; flags: string[] };
+    try {
+        parsed = parseCommanderHelp(probe.out);
+    } catch {
+        // Exit 0 without a Commander help body proves nothing about the surface.
+        return { kind: 'unverified', detail: 'probe did not answer with commander help' };
+    }
+    const captured: LiveSurface = { commands: parsed.commands, flags: parsed.flags, hidden: true };
+    surfaceCache.set(key, captured);
+    return { kind: 'present', surface: captured };
+}
+
+/**
+ * Is `child` reachable under `path`? A visible listing first, then the hidden probe — so a
+ * hidden registration reads as present instead of absent (task 1265 R2).
+ */
+function commandState(path: string[], child: string): 'visible' | 'hidden' | 'absent' | 'unverified' {
+    if (surface(path).commands.includes(child)) return 'visible';
+    const probe = hiddenSurface([...path, child]);
+    return probe.kind === 'present' ? 'hidden' : probe.kind;
+}
 
 export function runCli(args: string[], timeoutMs = 30_000): { exit: number; out: string; err: string } {
     try {
@@ -118,7 +182,37 @@ interface Parsed {
 }
 
 const PLACEHOLDER = /^([<[{($#"'`]|…|\.\.\.)/;
-const LEGACY_SELF_ALIASES = new Set(['init', 'migrate', 'serve', 'status']);
+
+/** The documented root aliases of `spur self` — the baseline when a probe cannot answer. */
+const SELF_ALIAS_BASELINE = ['init', 'maintain', 'migrate', 'serve', 'status'];
+let selfAliasCache: Set<string> | null = null;
+
+/**
+ * Root aliases that redirect to `spur self <verb>`.
+ *
+ * Derived from the live `spur self` command list ∩ a root-level `<alias> --help` probe, because
+ * the hand-maintained constant silently missed `maintain` (task 1265 R5, row 8) and would miss the
+ * next alias too. A probe that cannot answer keeps the documented baseline rather than shrinking
+ * the set. Cached: the sweep calls this once per span.
+ */
+export function legacySelfAliases(): Set<string> {
+    if (selfAliasCache) return selfAliasCache;
+    const baseline = new Set(SELF_ALIAS_BASELINE);
+    const candidates = surface(['self']).commands.filter((c) => c !== 'help');
+    const derived = new Set<string>();
+    for (const name of candidates) {
+        const state = commandState([], name);
+        if (state === 'visible' || state === 'hidden') derived.add(name);
+        else if (state === 'unverified' && baseline.has(name)) derived.add(name);
+    }
+    selfAliasCache = derived.size > 0 ? derived : baseline;
+    return selfAliasCache;
+}
+
+/** Test seam: drop the memoized alias set after the probe transport or surface cache changes. */
+export function resetLegacySelfAliases(): void {
+    selfAliasCache = null;
+}
 
 /** Normalize an asserted invocation span into nouns / verbs / flags. Null when it asserts nothing. */
 export function parseInvocation(spanRaw: string): Parsed | null {
@@ -177,25 +271,58 @@ export function backticks(line: string): string[] {
     return [...line.matchAll(/`([^`\n]+)`/g)].map((m) => m[1] ?? '');
 }
 
-/** Candidate invocation spans from one line: backticked + bare shell-style matches. */
-export function lineInvocationSpans(line: string): string[] {
+const INVOCATION_TARGET = '(?:apps/cli/src/index\\.ts|spur)\\s+[^\\s`"\'|;&)]+';
+
+/**
+ * Candidate invocation spans from one line: backticked + bare shell-style matches.
+ *
+ * A bare match needs shell context — a shell separator/quote prefix or a `bun run` prefix — so
+ * English prose that happens to start with `spur <word>` asserts no surface (task 1265 R7,
+ * row 10: "spur exits with the child's exit code."). Fenced code is shell context by position,
+ * which is why the caller opts in with `{ fenced: true }` instead of the regex matching `^`
+ * everywhere.
+ */
+export function lineInvocationSpans(line: string, opts: { fenced?: boolean } = {}): string[] {
     const spans = backticks(line).filter((s) => /(?:^|\s)(?:spur|apps\/cli\/src\/index\.ts)\s/.test(s));
-    const bare = [
-        ...line.matchAll(
-            /(?:^|[`"'=;&|;(]\s*)(?:bun(?:\s+run)?\s+)?(?:apps\/cli\/src\/index\.ts|spur)\s+[^\s`"'|;&)]+/g,
-        ),
-    ].map((m) => (m[0] ?? '').trim());
+    const patterns = [
+        // `bun run …` / `bunx …` names the tool explicitly, so no shell prefix is needed.
+        new RegExp(`(?:^|[\`$"'=;&|;(]\\s*)bun(?:x|\\s+run)?\\s+${INVOCATION_TARGET}`, 'g'),
+        // Any other bare form must follow a prompt, a shell separator, `=`, `(` or a quote.
+        new RegExp(`[\`$"'=;&|;(]\\s*(?:bun(?:\\s+run)?\\s+)?${INVOCATION_TARGET}`, 'g'),
+    ];
+    if (opts.fenced) patterns.push(new RegExp(`^\\s*(?:bun(?:\\s+run)?\\s+)?${INVOCATION_TARGET}`, 'g'));
+    // The match carries the shell prompt/separator; it is context, not part of the invocation.
+    // Backticked text is already covered by `spans`; mask it before the bare pass so one
+    // citation cannot be extracted twice (and its inner words cannot become claims of their own).
+    const masked = line.replace(/`[^`\n]*`/g, (m) => ' '.repeat(m.length));
+    const bare = patterns.flatMap((re) =>
+        [...masked.matchAll(re)].map((m) => (m[0] ?? '').replace(/^[`$"'=;&|;(]\s*/, '').trim()),
+    );
     return [...spans, ...bare];
 }
 
+const FLAG_TOKEN = /(?:^|\s)(-{1,2}[A-Za-z][A-Za-z0-9-]*)/g;
+/** Placeholders and inline-code delimiters are not part of a flag token. */
+const PLACEHOLDER_GROUP = /<[^>]*>|\[[^\]]*\]|`/g;
+
 /** A pure flag list (backticked "--from-answer <path> --folder" spans). */
 export function isFlagSpan(span: string): boolean {
-    const toks = span.trim().split(/\s+/);
-    return toks.length > 0 && toks.every((t) => /^-{1,2}[A-Za-z][A-Za-z0-9-]*/.test(t) || PLACEHOLDER.test(t));
+    const stripped = span.replace(PLACEHOLDER_GROUP, ' ').trim();
+    if (!stripped) return span.trim().length > 0; // a bare placeholder group is a placeholder
+    const toks = stripped.split(/\s+/).filter(Boolean);
+    return toks.every((t) => /^-{1,2}[A-Za-z][A-Za-z0-9-]*$/.test(t) || PLACEHOLDER.test(t));
 }
 
+/**
+ * Flag tokens in a span.
+ *
+ * A flag starts the span or follows whitespace, and placeholder groups are stripped first: without
+ * both, the value tail `task-local` read as `-local` and the placeholder `<spec-id>` as `-id`
+ * (task 1265 R4, rows 11-13).
+ */
 export function flagNames(span: string): string[] {
-    return [...span.matchAll(/-{1,2}[A-Za-z][A-Za-z0-9-]*/g)].map((m) => m[0] ?? '');
+    const stripped = span.replace(PLACEHOLDER_GROUP, ' ');
+    return [...stripped.matchAll(FLAG_TOKEN)].map((m) => m[1] ?? '');
 }
 
 /** Files in the R1 surfaces: commands/, skills/ (incl. references), scripts/, hooks/. */
@@ -235,6 +362,50 @@ export function nounOfReference(file: string): string | null {
 
 // ─── A. Plugin assertion checks ─────────────────────────────────────────────
 
+/**
+ * Judge one flag on one command path.
+ *
+ * Order is the contract (task 1265): a root program option is global (`apps/cli/src/index.ts`
+ * strips it before dispatch, so it is valid everywhere); then the command's own flags; then — when
+ * the command is itself a group — its subcommands, as unverified shorthand because the citation
+ * omits the subcommand.
+ */
+function checkFlags(
+    path: string[],
+    label: string,
+    flags: string[],
+    vs: LiveSurface,
+    method: string,
+    occ: { file: string; line: number },
+): void {
+    const root = surface([]);
+    for (const f of flags) {
+        const asserted = `${label} ${f}`;
+        if (root.flags.includes(f)) {
+            record(asserted, method, 'ok', 'global option (root program)', occ);
+            continue;
+        }
+        if (vs.flags.includes(f)) {
+            record(asserted, method, 'ok', 'flag present', occ);
+            continue;
+        }
+        if (vs.commands.length > 0) {
+            const withFlag = vs.commands.filter((c) => surface([...path, c]).flags.includes(f));
+            record(
+                asserted,
+                method,
+                withFlag.length > 0 ? 'unverified' : 'mismatch',
+                withFlag.length > 0
+                    ? `nested shorthand — flag present on ${withFlag.length}/${vs.commands.length} subcommands (${withFlag.join(', ')})`
+                    : `flag absent (live flags: ${vs.flags.join(', ')}; group subcommands: ${vs.commands.join(', ')})`,
+                occ,
+            );
+            continue;
+        }
+        record(asserted, method, 'mismatch', `flag absent (live flags: ${vs.flags.join(', ')})`, occ);
+    }
+}
+
 export function checkNounVerbFlags(
     nouns: string[],
     verbs: string[],
@@ -244,7 +415,7 @@ export function checkNounVerbFlags(
     const root = surface([]);
     for (const noun of nouns) {
         if (noun === 'help' || /^(foo|bar|baz)$/.test(noun)) continue;
-        if (LEGACY_SELF_ALIASES.has(noun)) {
+        if (legacySelfAliases().has(noun)) {
             const self = surface(['self']);
             const command = surface(['self', noun]);
             const present = self.commands.includes(noun);
@@ -257,14 +428,13 @@ export function checkNounVerbFlags(
                     : `canonical self/${noun} command is absent`,
                 occ,
             );
-            for (const f of flags) {
-                record(
-                    `spur ${noun} ${f}`,
+            if (present) {
+                checkFlags(
+                    ['self', noun],
+                    `spur ${noun}`,
+                    flags,
+                    command,
                     `help-capture(spur self ${noun}; hidden root alias)`,
-                    present && command.flags.includes(f) ? 'ok' : 'mismatch',
-                    command.flags.includes(f)
-                        ? 'flag present on canonical command'
-                        : `flag absent (${command.flags.join(', ')})`,
                     occ,
                 );
             }
@@ -283,32 +453,42 @@ export function checkNounVerbFlags(
         const ns = surface([noun]);
         for (const verb of verbs) {
             if (verb === 'help') continue;
-            if (!ns.commands.includes(verb)) {
+            const method = `help-capture(spur ${noun})`;
+            const state = commandState([noun], verb);
+            if (state === 'absent' || state === 'unverified') {
                 record(
                     `spur ${noun} ${verb}`,
-                    `help-capture(spur ${noun})`,
-                    'mismatch',
-                    `verb absent (live verbs: ${ns.commands.join(', ')})`,
+                    method,
+                    state === 'absent' ? 'mismatch' : 'unverified',
+                    state === 'absent'
+                        ? `verb absent (live verbs: ${ns.commands.join(', ')})`
+                        : 'hidden-verb probe did not answer (timeout or non-help output)',
                     occ,
                 );
                 continue;
             }
             const vs = surface([noun, verb]);
-            record(`spur ${noun} ${verb}`, `help-capture(spur ${noun})`, 'ok', 'verb present', occ);
-            for (const f of flags) {
-                record(
-                    `spur ${noun} ${verb} ${f}`,
-                    `help-capture(spur ${noun} ${verb})`,
-                    vs.flags.includes(f) ? 'ok' : 'mismatch',
-                    vs.flags.includes(f) ? 'flag present' : `flag absent (live flags: ${vs.flags.join(', ')})`,
-                    occ,
-                );
-            }
+            record(
+                `spur ${noun} ${verb}`,
+                method,
+                'ok',
+                state === 'hidden' ? 'hidden verb present (not listed in --help)' : 'verb present',
+                occ,
+            );
+            checkFlags([noun, verb], `spur ${noun} ${verb}`, flags, vs, `help-capture(spur ${noun} ${verb})`, occ);
         }
         if (verbs.length === 0) {
             record(`spur ${noun} (noun)`, `help-capture(spur ${noun})`, 'ok', `${ns.commands.length} live verbs`, occ);
             for (const f of flags) {
-                if (ns.flags.includes(f)) {
+                if (root.flags.includes(f)) {
+                    record(
+                        `spur ${noun} ${f}`,
+                        `help-capture(spur ${noun})`,
+                        'ok',
+                        'global option (root program)',
+                        occ,
+                    );
+                } else if (ns.flags.includes(f)) {
                     record(`spur ${noun} ${f}`, `help-capture(spur ${noun})`, 'ok', 'noun-level flag present', occ);
                 } else {
                     const withFlag = ns.commands.filter((v) => surface([noun, v]).flags.includes(f));
@@ -326,12 +506,123 @@ export function checkNounVerbFlags(
         }
     }
     for (const verb of verbs) {
-        if (nouns.length === 0 && LEGACY_SELF_ALIASES.has(verb)) {
+        if (nouns.length === 0 && legacySelfAliases().has(verb)) {
             checkNounVerbFlags([verb], [], flags, occ);
             continue;
         }
         if (nouns.length === 0 && root.commands.includes(verb)) {
             record(`spur ${verb}`, 'help-capture(root)', 'ok', 'root verb present', occ);
+        }
+    }
+}
+
+// ─── Negated / absence prose (task 1265 R6) ─────────────────────────────────
+
+type NegationKind = 'absent' | 'internal';
+
+/**
+ * Line shapes that claim a surface does NOT exist, or exists only internally.
+ *
+ * The single literal form the sweep used to recognize (`no `spur X` verb exists`) missed four
+ * documented-absence spellings and read a "Forbidden surface" note as a positive claim (rows 9
+ * and 14). `internal` is not an absence claim — the verb exists but is hidden — so it routes
+ * through the normal check, where the hidden-verb probe answers for it.
+ */
+const NEGATION_PATTERNS: { re: RegExp; kind: NegationKind }[] = [
+    { re: /\bforbidden\s+surface\s*:?\s*`spur ([^`]+)`/gi, kind: 'internal' },
+    { re: /\bno\s+`spur ([^`]+)`\s+(?:verb|alias|noun|command)\b/gi, kind: 'absent' },
+    { re: /\bthere\s+is\s+no\s+`spur ([^`]+)`/gi, kind: 'absent' },
+    { re: /`spur ([^`]+)`\s+is\s+an\s+unknown\s+command/gi, kind: 'absent' },
+    { re: /\bpublic\s+`spur ([^`]+)`\s+(?:verb|noun)\s+is\s+out\s+of\s+scope/gi, kind: 'absent' },
+];
+
+/** The negated clauses on one line, each naming the invocation whose claim is inverted. */
+export function negationClaims(line: string): { asserted: string; kind: NegationKind }[] {
+    const claims: { asserted: string; kind: NegationKind }[] = [];
+    for (const { re, kind } of NEGATION_PATTERNS) {
+        for (const m of line.matchAll(re)) {
+            const text = (m[1] ?? '').trim();
+            if (text) claims.push({ asserted: `spur ${text}`, kind });
+        }
+    }
+    return claims;
+}
+
+/**
+ * Does this negated clause own this span?
+ *
+ * Compared on the PARSED command path, not raw text: a prefix test let a short negated path
+ * (`spur task`) invert a longer correct citation on the same line (`spur task check 0042 --json`)
+ * — the exact swallow Design failure mode 6 forbids (task 1265 review P3).
+ */
+export function claimOwnsSpan(asserted: string, span: string): boolean {
+    const claim = parseInvocation(asserted);
+    const target = parseInvocation(span);
+    if (claim === null || target === null) return false;
+    return (
+        claim.nouns.join(' ') === target.nouns.join(' ') &&
+        claim.verbs.join(' ') === target.verbs.join(' ') &&
+        claim.flags.join(' ') === target.flags.join(' ')
+    );
+}
+
+/** Record one absence row: an existing surface is a stale negation, an absent one confirms the prose. */
+function recordAbsenceRow(
+    asserted: string,
+    method: string,
+    present: boolean,
+    what: string,
+    occ: { file: string; line: number },
+): void {
+    record(
+        asserted,
+        method,
+        present ? 'mismatch' : 'ok',
+        present
+            ? `line asserts absence but the ${what} EXISTS on the live surface (stale negation)`
+            : 'documented absence confirmed against live surface',
+        occ,
+    );
+}
+
+/**
+ * Confirm a documented absence against the live surface.
+ *
+ * The claim is judged at the altitude it is written: `no `spur X` verb exists` is about the verb,
+ * `there is no `spur task update --tags` flag` is about the FLAG — judging the latter on the
+ * command alone reported a true claim as drift (task 1265 review P2).
+ */
+function recordAbsence(parsed: Parsed, occ: { file: string; line: number }): void {
+    const root = surface([]);
+    for (const noun of parsed.nouns) {
+        const nounState = commandState([], noun);
+        const nounPresent = nounState === 'visible' || nounState === 'hidden';
+        if (parsed.verbs.length === 0) {
+            if (parsed.flags.length > 0 && nounPresent) {
+                // Flag-scoped claim on a noun: present anywhere on the noun or its verbs = stale.
+                for (const f of parsed.flags) {
+                    const present =
+                        root.flags.includes(f) ||
+                        surface([noun]).flags.includes(f) ||
+                        surface([noun]).commands.some((v) => surface([noun, v]).flags.includes(f));
+                    recordAbsenceRow(`spur ${noun} ${f}`, `help-capture(spur ${noun})`, present, 'flag', occ);
+                }
+                continue;
+            }
+            recordAbsenceRow(`spur ${noun}`, 'help-capture(root)', nounPresent, 'command', occ);
+            continue;
+        }
+        for (const verb of parsed.verbs) {
+            const method = `help-capture(spur ${noun})`;
+            const verbPresent = commandState([noun], verb) === 'visible' || commandState([noun], verb) === 'hidden';
+            if (parsed.flags.length > 0 && verbPresent) {
+                for (const f of parsed.flags) {
+                    const present = root.flags.includes(f) || surface([noun, verb]).flags.includes(f);
+                    recordAbsenceRow(`spur ${noun} ${verb} ${f}`, method, present, 'flag', occ);
+                }
+                continue;
+            }
+            recordAbsenceRow(`spur ${noun} ${verb}`, method, verbPresent, 'verb', occ);
         }
     }
 }
@@ -426,28 +717,19 @@ export function sweepPluginTrees(root: string = PLUGIN_ROOT): void {
                     return;
                 }
                 if (inVerbTable && !/^\|/.test(line)) inVerbTable = false;
-                const negated = /\bno\s+`spur [^`]+`\s+verb exists\b/i.test(line);
+                // Absence clauses are evaluated per span and matched on the parsed command path, so a
+                // negation elsewhere on the line cannot invert a positive claim beside it (R6).
+                const negations = negationClaims(line);
                 for (const span of lineInvocationSpans(line)) {
                     const parsed = parseInvocation(span);
                     if (!parsed) continue;
-                    if (negated) {
-                        // Inverted assertion: the line claims absence. Confirm against the live surface.
-                        for (const noun of parsed.nouns) {
-                            const ns = surface([noun]);
-                            for (const verb of parsed.verbs) {
-                                record(
-                                    `spur ${noun} ${verb}`,
-                                    `help-capture(spur ${noun})`,
-                                    ns.commands.includes(verb) ? 'mismatch' : 'ok',
-                                    ns.commands.includes(verb)
-                                        ? 'line asserts absence but the verb EXISTS on the live surface (stale negation)'
-                                        : 'documented absence confirmed against live surface',
-                                    occ,
-                                );
-                            }
-                        }
+                    const claim = negations.find((n) => claimOwnsSpan(n.asserted, span));
+                    if (claim?.kind === 'absent') {
+                        recordAbsence(parsed, occ);
                         continue;
                     }
+                    // `internal` and non-negated spans take the normal path: the hidden-verb probe
+                    // is what answers "it exists, just not in --help".
                     checkNounVerbFlags(parsed.nouns, parsed.verbs, parsed.flags, occ);
                     checkSectionOperand(span, occ);
                 }
@@ -463,7 +745,7 @@ export function sweepPluginTrees(root: string = PLUGIN_ROOT): void {
                         const nounCommands = surface([refNoun]).commands;
                         if (nounCommands.includes(first)) {
                             checkNounVerbFlags([refNoun], [first], flagNames(lastCell), occ);
-                        } else if (rootCommands.includes(first) || LEGACY_SELF_ALIASES.has(first)) {
+                        } else if (rootCommands.includes(first) || legacySelfAliases().has(first)) {
                             checkNounVerbFlags([], [first], flagNames(lastCell), occ);
                         } else {
                             checkNounVerbFlags([refNoun], [first], flagNames(lastCell), occ);
@@ -480,7 +762,8 @@ export function sweepPluginTrees(root: string = PLUGIN_ROOT): void {
                     }
                 }
             } else {
-                for (const span of lineInvocationSpans(line)) {
+                // A fenced line is shell context by position, so an invocation may start the line.
+                for (const span of lineInvocationSpans(line, { fenced: true })) {
                     const parsed = parseInvocation(span);
                     if (parsed) {
                         checkNounVerbFlags(parsed.nouns, parsed.verbs, parsed.flags, occ);
@@ -804,6 +1087,12 @@ export function render(): string {
     L.push('| --- | --- |');
     L.push(
         '| `help-capture` | Parses live Commander `Commands:`/`Options:` blocks from `spur <path> --help` (source-local entry) and diffs asserted noun/verb/flag |',
+    );
+    L.push(
+        '| ↳ global option | A root program option (`--no-logo`) is valid on every command path — the entry strips it before dispatch |',
+    );
+    L.push(
+        '| ↳ hidden-verb probe | A verb absent from the parent `Commands:` block is probed with `spur <noun> <verb> --help`; exit 0 = present (hidden), timeout = unverified, error = absent |',
     );
     L.push(
         '| `json-exec` | Executes read-only commands with `--json` and records the actual envelope; mutating commands stay unverified |',
