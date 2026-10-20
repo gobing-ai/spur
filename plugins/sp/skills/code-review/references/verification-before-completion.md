@@ -42,10 +42,11 @@ Before reporting a task as complete, a test as passing, a bug as fixed, or a fea
 
 ## Under the pipeline
 
-`task-pipeline.yaml`'s `verify` step (Phase 8) and `record` step enforce this gate. The `verify`
-step runs `sp:code-verification` verify mode, which produces a `VerifyVerdict` artifact; the
-`record` step transcribes it to the task's `## Testing` section. A `done` transition requires a
-PASS verdict.
+`task-pipeline.yaml` enforces this gate deterministically. The `gate` state runs `spur task gate`
+and a red result goes through the `failure-class` decision to `remediate`; the `review` state
+certifies the review answer with `spur task verdict`, which writes the `VerifyVerdict` artifact.
+`review → done` requires that PASS plus the approval decision point, and `done`'s `spur task record`
+close transcribes the verdict to the task's `## Testing` section.
 
 Under manual execution (no pipeline), the agent must still run the gates and paste the evidence.
 "Manual" is not an exemption — it just means the agent, not the pipeline, runs the commands.

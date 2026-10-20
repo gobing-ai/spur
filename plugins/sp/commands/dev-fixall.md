@@ -27,12 +27,17 @@ For shared semantics, see the [flag glossary](../skills/spur-dev/references/flag
 
 ## Implementation
 
-Follow the inline procedure in [dev-operations.md](../skills/spur-dev/references/dev-operations.md#10-fixall) (fixall). Pipeline signal: when `--gate-log` is set (the `test-fix` hop), run no full gate — the `test-recheck` state immediately after is the deciding run (R4, task 0483).
+Follow the inline procedure in [dev-operations.md](../skills/spur-dev/references/dev-operations.md#10-fixall) (fixall). Pipeline signal: when `--gate-log` is set (the `remediate` hop), run no full gate — the `gate` state's recheck immediately after is the deciding run (R4, task 0483).
 
-When dispatched from the pipeline's test-fix stage (F96, task 0950), the gate log carries a
+When dispatched from the pipeline's `remediate` hop (F96, task 0950), the gate log carries a
 `residual artifact` block (`<wbs>-residuals.json`) and the findings file already
 contains the merged residual anchors: treat those items as fix targets, in order,
 alongside gate anchors. The fixer may write `.spur/run/<wbs>-residual-deferrals.json`
 — one `{id, reason}` entry per item — but only for P3 findings or diff markers it
 cannot fix inside the task; the done stage settles deferrals into follow-up tasks.
+
+The `remediate` hop is entered only after a `fix` decision (`failure-class` on a red gate,
+`review-failure-class` on a non-PASS review). A `stop` decision ends the run before this command
+runs, so do not invoke it by hand to overrule a `stop`
+([decision points](../skills/spur-dev/references/decision-points.md)).
 

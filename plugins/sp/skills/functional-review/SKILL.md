@@ -295,7 +295,7 @@ Include the per-requirement traceability table in the report:
 **Under the pipeline**, `sp:functional-review` is a component of `/sp:dev-review`: it returns its
 fragment to the coordinator (`sp:super-reviewer` — the invoking session under `/sp:dev-review`),
 which writes the combined `## Review`. The
-`record` step transcribes only `## Testing` from the verdict artifact and backfills `## Review`
+`done` state's `spur task record` close transcribes only `## Testing` from the verdict artifact and backfills `## Review`
 only when the section is bare (`sectionIsBare` guard, `task-section-bodies.ts`); it never overwrites the
 coordinator's authored Review. Keep the priority-table lead stable in the fragment so the L3 gate
 stays satisfied through `record` → `done`.

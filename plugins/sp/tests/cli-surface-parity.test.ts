@@ -397,6 +397,8 @@ describe('cli-surface-parity — R2: spine Step-routing CLI rows vs live', () =>
         for (const row of nonCliRows) {
             expect(row.reason.trim().length).toBeGreaterThan(0);
         }
+        // D65 1239: `Test (dispatch)` became the CLI-gated `Gate / remediate` row and `verify` merged into
+        // `Review (dispatch)`.
         // D65 1241/1242: `Pipeline run` left this set — its gate now names the engine verbs
         // (`spur workflow run` / `spur workflow continue`) instead of a host-side interpreter.
         // Pin the exact non-CLI step set (P3 fix — 0517 verify): a parser regression that
@@ -411,8 +413,7 @@ describe('cli-surface-parity — R2: spine Step-routing CLI rows vs live', () =>
             'Intake',
             'Operation catalog',
             'Parallel fan-out',
-            'Review / verify (dispatch)',
-            'Test (dispatch)',
+            'Review (dispatch)',
         ]);
         // Every retained row's diagnostic entry must pair the step with its original gate text.
         for (const row of nonCliRows) {

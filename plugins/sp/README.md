@@ -29,7 +29,7 @@ One feature, start to finish — see the Command index below for exact command n
 ```
 idea/plan  vague description → feature + AC + decomposed task batch
      ↓
-run        <wbs>  → pipeline: precheck → implement → test → review → approve(HITL) → verify → record → done
+run        <wbs>  → pipeline: precheck → implement → gate ⇄ remediate → review → done  (decision points route repair, stop and approval)
      ↓
 verify     <wbs>  → traceability + AC verdict (PASS clears the gate; this also runs inside the run step)
      ↓

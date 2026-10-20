@@ -29,7 +29,7 @@ while ready or running:
         RUN[t] = (cd "$WT" && spur workflow run task-pipeline.yaml \
                   --vars '{"wbs":"<wbs>","deferFeatureSync":"true"[,"deferQualityGate":"true"],...}' --async --json)
                      # deferQualityGate is added ONLY under the opt-in --defer-gate flag (1111 R3):
-                     # the task's `test` hop then runs the light tier and writes DEFERRED.
+                     # the task's `gate` state then runs the light tier and writes DEFERRED.
     wait for any RUN terminal        # trace poll --follow --timeout 600000; stale-evidence rule applies
     on done:    WT-3b commit on $BRANCH → integrate(t)
     on failed:  WT-5 retain (marker retained); failure policy — stop-the-batch default / --keep-going subtree skip
@@ -92,9 +92,9 @@ per-task with `/sp:dev-run <wbs> --worktree <branch>`.
 
 ### Generated regions — defer the sync, regenerate once (R5)
 
-The only per-task writer of feature files is the `record` step's post-record feature sync
+The only per-task writer of feature files is the `done` state's post-record feature sync
 (`task-pipeline.yaml`). Parallel launches set
-the pipeline var `deferFeatureSync: "true"` (default `"false"`): the record step appends
+the pipeline var `deferFeatureSync: "true"` (default `"false"`): the done state appends
 `feature sync deferred to batch integration` to the task report and skips the sync, so task
 branches never touch feature files or `docs/features/INDEX.md`. After the last integration, on the
 base ref, the orchestrator runs `spur feature sync <f> --json` (service-level suppression) plus `spur feature refresh --feature <f>`
@@ -103,7 +103,7 @@ inline runs keep the default `"false"` and are unchanged. Any rebase conflict �
 path or any other — is an R4 `integration-conflict`; there is no path-based exception.
 
 **Deferred gate (`--defer-gate`, task 1111 R3/R4).** The opt-in flag adds
-`deferQualityGate: "true"` to the same per-task `--vars`, so each task's `test` hop runs the light
+`deferQualityGate: "true"` to the same per-task `--vars`, so each task's `gate` state runs the light
 tier and writes `DEFERRED` instead of a full-gate `PASS` (see
 [flag-glossary](flag-glossary.md#flag-defer-gate)). The orchestrator then runs the project
 `qualityGateCmd` **once** on the integrated `BASE_REF` **before** the deferred feature sync:

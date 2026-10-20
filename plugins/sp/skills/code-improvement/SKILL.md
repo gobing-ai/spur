@@ -89,8 +89,8 @@ and the deepening direction. Full definitions and examples in
 | **minor** | advisory | Local friction: a module slightly too shallow, coupling that's awkward but not coordinated. |
 | **advisory** | advisory | Deepening opportunity: the code works and is testable, but would be cleaner with a deeper module. Always non-blocking. |
 
-**Under the pipeline** (`/sp:dev-review` in a task run), `blocker` and `major` block the
-`approve(HITL)` gate. `minor` and `advisory` are recorded but do not block. **Standalone** reviews
+**Under the pipeline** (`/sp:dev-review` in a task run), `blocker` and `major` block review
+certification (a non-PASS review goes to the `review-failure-class` decision). `minor` and `advisory` are recorded but do not block. **Standalone** reviews
 are advisory-only — the operator decides what to act on.
 
 ---
@@ -185,7 +185,7 @@ Each candidate is a structured finding:
 When invoked as the `--focus architecture` dimension of `/sp:dev-review`:
 
 - The scope is the task's diff (pipeline) or the `path` arg (standalone).
-- `blocker`/`major` candidates block the `approve(HITL)` gate alongside any SECUA blockers from
+- `blocker`/`major` candidates block review certification alongside any SECUA blockers from
   `sp:code-verification`.
 - The candidate list is returned as a **review fragment**; the review coordinator
   (`sp:super-reviewer` — the invoking session under `/sp:dev-review`) merges it into the combined

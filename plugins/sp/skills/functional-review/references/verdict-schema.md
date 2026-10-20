@@ -130,4 +130,4 @@ all core requirements MET                                    → PASS
 | `VerifyVerdict` | `sp:code-verification` | Is the code SECUA-correct and AC-complete? | any core req/AC UNMET → FAIL; any blocker correctness/security → FAIL; any PARTIAL → PARTIAL; else PASS |
 
 A complete `/sp:dev-review --focus all` pipeline may produce both artifacts; they are consumed by
-the pipeline's `record` step and written to the task's `## Testing` section.
+the `done` state's `spur task record` close and written to the task's `## Testing` section.

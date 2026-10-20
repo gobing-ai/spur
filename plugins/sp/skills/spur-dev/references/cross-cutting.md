@@ -181,14 +181,14 @@ spawned step resolves to `agent.default` (step 2) or the YAML literal (step 3).
 
 `task-pipeline.yaml` declares a separate `implementAgent` var. The `implement` state's `agent.run`
 step reads `${vars.implementAgent}` instead of `${vars.agent}`, so an operator can pin the
-implement hop to one executor while review/verify/test-fix hops keep the default agent:
+implement hop to one executor while the remediate and review hops keep the default agent:
 
 ```bash
 # Pin implement to a specific executor; other hops keep agent.default / YAML literal
 --vars '{"implementAgent":"omp-zai"}'
 ```
 
-All other `agent.run` steps (test-fix, review, verify) read `${vars.agent}`. `implementAgent`
+All other `agent.run` steps (remediate, review) read `${vars.agent}`. `implementAgent`
 applies **only** to the implement hop. **The `--agent` flag forwards into BOTH `agent` and
 `implementAgent`** at the execution-batch boundary (§3.2), so a pinned `--agent X` reaches every
 hop including implement. To pin ONLY implement to a different executor while other hops keep the

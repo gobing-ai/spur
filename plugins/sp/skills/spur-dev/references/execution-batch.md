@@ -462,11 +462,11 @@ in next-router; this only maps status → primary TABLE A hop for recovery.
 
 ### 3.3c Feature-sync retry suppression (task 0411; 1004 R3)
 
-During a batch, the per-task `record` step invokes feature status sync. When a feature is
+During a batch, the per-task `done` state invokes feature status sync. When a feature is
 L4-gate-blocked (e.g. not all linked tasks are `done`), the identical blocked proposal repeats on
 every call with no intervening input change. The service fixes this, not the engine.
 
-`task-pipeline.yaml`'s `record` step invokes `spur feature sync <feature-id> --json` directly —
+`task-pipeline.yaml`'s `done` state invokes `spur feature sync <feature-id> --json` directly —
 retry suppression lives inside the `FeatureService.syncFeature` implementation:
 
 1. On a **blocked** result (`gateBlocked` checked first — a partial hop can have `applied: true`
@@ -482,7 +482,7 @@ retry suppression lives inside the `FeatureService.syncFeature` implementation:
    never reads or writes the state.
 
 **Batch driver contract:** the orchestrator does **nothing extra** — the suppression lives inside
-the pipeline's `record` step. The driver still
+the pipeline's `done` state. The driver still
 launches `task-pipeline.yaml` verbatim (R4.1). Suppression is transparent: the sync emits the same
 `FeatureSyncResult` JSON shape (`suppressed: true` added on replay), so downstream report logic is
 unchanged. The only observable difference is fewer redundant `feature sync` derivations.

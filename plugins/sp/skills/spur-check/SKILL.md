@@ -92,7 +92,7 @@ preserved by construction. `recheck` stays the no-progress probe path for fix lo
 
 ## Composition
 
-- **Pipeline:** `sp:spur-dev` runs `run` at `test` and `recheck` at `test-recheck`; light mode
+- **Pipeline:** `sp:spur-dev` runs `run` on the `gate` state's first visit and `recheck` on later visits (after `remediate`); light mode
   belongs to implement/fix edits, not to the gate state.
 - **Fix loops:** `/sp:dev-fixall --gate-log` consumes `<wbs>-test-gate.log` (and the bounded
   `<wbs>-test-gate.findings` anchors) after a red gate; it never writes receipts. A green fixall

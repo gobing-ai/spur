@@ -125,7 +125,7 @@ token, deterministic).
 means the workspace holds unfinished task residue, so fixall/unit reruns would either clean it
 unintentionally or re-certify a folded verdict. C6 fires before any fix/unit dispatch; recovery is
 the operator re-running the pipeline (`/sp:dev-run <wbs>`), which re-enters the normal
-verify → test-fix remediation budget.
+gate ⇄ remediate budget.
 
 **Explicit non-probes in v1:** no freeform chat history; no always-on full `bun run test` for every
 call; no git dirtiness as a route (optional advisory print only).

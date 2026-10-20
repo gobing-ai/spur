@@ -26,7 +26,7 @@ Wraps the **sp:spur-dev** skill.
 | `--worktree` `[<name>]` | Run the batch in an isolated git worktree; FF-merge on success, retain on failure. Bare `--worktree` creates a fresh tree; `--worktree <name>` adopts an existing worktree by name/path/branch. | off |
 | `--no-summary` | Skip the measured execution summary (one row per task run: time, wait, tool calls, total / non-cached tokens) printed after the batch report. | off (summary printed) |
 | `--concurrency` `<n>` | Parallel-mode worker bound: at most `<n>` task pipelines run at once (task 0931); a dependent starts only after its in-set dependencies are integrated onto the base ref. No-op in sequential mode (ignored). | 2 |
-| `--defer-gate` | Opt-in parallel-batch gate policy (task 1111): each task's `test` hop runs the light tier and writes `DEFERRED`; the batch runs one integrated full gate on the base ref before the feature sync. Requires `--mode parallel`, or `--mode auto` resolved to parallel (dropped with a note otherwise); default off. | off |
+| `--defer-gate` | Opt-in parallel-batch gate policy (task 1111): each task's `gate` state runs the light tier and writes `DEFERRED`; the batch runs one integrated full gate on the base ref before the feature sync. Requires `--mode parallel`, or `--mode auto` resolved to parallel (dropped with a note otherwise); default off. | off |
 
 For shared semantics, see the [flag glossary](../skills/spur-dev/references/flag-glossary.md).
 
@@ -82,8 +82,8 @@ FF-merge on success. This is expected, not a bug.
 
 **`--next` (batch-once wrap).** `--next`
 is chain-to-completion with propagation. On `dev-runall`, each task in the batch runs its
-`task-pipeline.yaml` to terminal status (the pipeline already drives precheck → implement → test →
-review → approve → verify → record → done); when the batch is complete, the wrap hop runs **once
+`task-pipeline.yaml` to terminal status (the pipeline already drives precheck → implement → gate ⇄ remediate →
+review → done); when the batch is complete, the wrap hop runs **once
 for the batch** — mirroring the batch-once shippable gate `dev-verifyall` uses — rather than once
 per task. Without `--next`, `--wrap` is wrap-without-chaining (the single batch wraps without
 advancing the feature lifecycle). **was: `--next` deliberately omitted; the old no-`--next` rationale argued against the old per-task-transition meaning and does not carry.**
@@ -111,3 +111,6 @@ full distinction.
 - Explicit executor (any mode, including `auto`) or parallel mode: `Skill(skill="sp:spur-dev", args="runall $ARGUMENTS")` → `sp:super-planner` agent.
 - After the batch report, print the [execution summary](../skills/spur-dev/references/dev-operations.md#execution-summary) over every attempted run unless
   `--no-summary`.
+- A failed task's report row names the decision row that ended it (`failure-class` or
+  `review-failure-class` = `stop`, or approval `DENIED`) per
+  [reporting a run](../skills/spur-dev/references/decision-points.md#reporting-a-run); the batch failure policy then applies unchanged.

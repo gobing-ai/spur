@@ -1,10 +1,10 @@
 ---
 name: spur-dev
-description: 'The thin orchestration spine for the planning→execution lifecycle: intake, feature-check/batch-create gates, the execution pipeline (precheck→implement→test→review→verify→record→done), HITL gating. Dispatches competency skills; never inlines them. Triggers: "run the pipeline", "drive this task", "plan a feature end to end", "continue the pipeline run", or operating the full lifecycle.'
+description: 'The thin orchestration spine for the planning→execution lifecycle: intake, feature-check/batch-create gates, the execution pipeline (precheck→implement→gate⇄remediate→review→done), catalog decision points, HITL gating. Dispatches competency skills; never inlines them. Triggers: "run the pipeline", "drive this task", "plan a feature end to end", "continue the pipeline run", or operating the full lifecycle.'
 license: Apache-2.0
 metadata:
   author: spur
-  version: "1.1"
+  version: "1.2"
   platforms: "claude-code,codex,openclaw,opencode,antigravity"
   interactions:
     - pipeline
@@ -23,11 +23,9 @@ metadata:
   execution_steps:
     - precheck
     - implement
-    - test
+    - gate
+    - remediate
     - review
-    - approve
-    - verify
-    - record
     - done
   openclaw:
     emoji: "🔄"
@@ -80,7 +78,7 @@ Full procedure: **[references/planning-workflow.md](references/planning-workflow
 
 ```
 pick task (spur task list --json)
-  → interactive omit/inline: read task-pipeline.yaml → drive actions + guards in host session
+  → interactive omit/inline: spur workflow run … executor=host → perform each returned work item
   → explicit/headless executor: spur workflow run task-pipeline.yaml --vars '{"wbs":"<wbs>"}'
   → on HITL pause: surface to operator; resume the selected driver from the paused state
 ```
@@ -88,7 +86,7 @@ pick task (spur task list --json)
 The pipeline (`kind: state-machine`) runs the work loop:
 
 ```
-precheck → implement[→escalate(HITL)] → test → review → approve(HITL) → verify → record → done
+precheck → implement[⇄escalate(HITL)] → gate[⇄remediate] → review → done | failed
 ```
 
 **Escalation contract (0933).** The implement agent may pause on an operator question: it writes
@@ -96,6 +94,10 @@ precheck → implement[→escalate(HITL)] → test → review → approve(HITL) 
 run. Resume with `spur workflow continue --answer-text <answer>` — the guard appends the Q/A to
 `.spur/run/<wbs>-escalation.md` and re-enters implement (transcript via `--escalation-file`).
 `maxEscalations` (default 2) bounds the loop; exhausted or empty answer → `failed`. Implement only.
+
+**Decision points.** Lane, failure class, review failure class and approval are recorded
+`spur decision` answers with deterministic fallbacks, read by the next guard. Report the row; never
+re-judge it: **[references/decision-points.md](references/decision-points.md)**.
 
 Full procedure: **[references/execution-workflow.md](references/execution-workflow.md)**.
 Host executor: `spur workflow run` with `executor=host` → work item → `spur workflow continue`.
@@ -111,9 +113,6 @@ Read this `SKILL.md` plus your mode's files below before the first dispatch; eve
 - --mode parallel: `references/execution-batch.md`, `references/execution-parallel-isolation.md`
 
 `--mode auto` reads as sequential-inline until § 2.4a resolves it.
-
-Byte budgets for these sums live in `plugins/sp/tests/bootstrap-budget.test.ts`
-(`BOOTSTRAP_BUDGETS_BYTES`, task 1128); the test fails the build when a mode's bootstrap grows.
 
 ## Step routing
 
@@ -133,8 +132,9 @@ reference for the half you're operating; do not duplicate its content here.
 | Task selection             | execution | `spur task list`                                                                          | [execution-workflow.md](references/execution-workflow.md)                                                                               |
 | Pipeline run               | execution | `spur workflow run` / `spur workflow continue`                                            | [execution-workflow.md](references/execution-workflow.md)                                                                               |
 | Implement (dispatch)       | execution | `sp:code-implementation`                                                                  | competency skill — the spine dispatches, does not inline                                                                                |
-| Test (dispatch)            | execution | `sp:code-testing`                                                                         | competency skill — the spine dispatches, does not inline                                                                                |
-| Review / verify (dispatch) | execution | `sp:dev-review` → `sp:code-verification` + `sp:functional-review` + `sp:code-improvement` | competency skills — the spine dispatches, does not inline                                                                               |
+| Gate / remediate | execution | `spur task gate` + `sp:dev-fixall` | [execution-workflow.md](references/execution-workflow.md) |
+| Review (dispatch) | execution | `sp:dev-review` → `sp:code-verification` + `sp:functional-review` + `sp:code-improvement` | competency skills — the spine dispatches, does not inline |
+| Decision points | execution | `spur decision status` (+ `show`, `run`) | [decision-points.md](references/decision-points.md) |
 | Operation catalog          | execution | `sp:dev-*` operations                                                                     | [dev-operations.md](references/dev-operations.md) (spine dispatch table)                                                                |
 | Continue                   | execution | `spur feature update` / `refresh`                                                         | [execution-workflow.md](references/execution-workflow.md)                                                                               |
 | Batch run                  | execution | `sp:super-planner` + `spur workflow run`                                                  | [execution-batch.md](references/execution-batch.md)                                                                                     |
@@ -193,8 +193,8 @@ CLI does.
    you ship corrupted corpus.
 2. **One writer per evidence section (F92 0593 R1).** `## Solution` is authored by the
    implement step; `## Review` by the review coordinator (`/sp:dev-review`); `## Testing` by the
-   deterministic `record` step from the verdict artifact (`record` backfills `## Review` only when
-   bare — fallback-only, never an overwrite). During execution, do not hand-edit another stage's
+   deterministic `spur task record` close in `done` from the verdict artifact (it backfills
+   `## Review` only when bare — fallback-only, never an overwrite). During execution, do not hand-edit another stage's
    section.
 3. **Resolve task IDs through the CLI.** Read a known WBS with `spur task show <wbs> --json`; it
    returns metadata, full content, and `filePath` across configured task folders. Use `spur task
@@ -226,7 +226,7 @@ section adds per-file content summaries and items with no single step (glossary,
   five gates (feature-check, batch-create, precheck, review, verify).
 - [references/section-batching.md](references/section-batching.md) — the evidence-section
   **one-writer protocol** (F92 0593 R1/R2): implement owns `Solution`, the review coordinator owns
-  `Review`, deterministic `record` owns `Testing`; skills query `spur task sections` /
+  `Review`, the deterministic `spur task record` close owns `Testing`; skills query `spur task sections` /
   `spur task check` instead of static section tables.
 - [references/ac-style-guide.md](references/ac-style-guide.md) — BDD scenario authoring:
   R-numbering, the two AC tiers, scenario-title stability, Gherkin template usage.

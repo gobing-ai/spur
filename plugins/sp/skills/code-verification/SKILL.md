@@ -29,7 +29,7 @@ The **verifier** in the Spur execution loop. A coding agent reports "done" with 
 this skill is the deterministic counterweight that proves — or disproves — the claim against the
 task's own requirements and Acceptance Criteria, then emits the canonical verdict artifact
 through CLI verbs (section writes are owned by the review coordinator and the deterministic
-`record` step — F92 0593 R1).
+`spur task record` close in `done` — F92 0593 R1).
 
 It backs two commands:
 
@@ -321,7 +321,7 @@ spur task residual <wbs> fold
 > **Do not write `## Review` directly, ever.** The `## Review` section is owned by the
 > `review` coordinator (`/sp:dev-review` → `sp:super-reviewer`), which merges
 > `functional-review` + `code-verification` review mode + `code-improvement` fragments. The
-> `record` step backfills `## Review` from the verdict artifact **only** if the section is bare
+> `spur task record` close backfills `## Review` from the verdict artifact **only** if the section is bare
 > (`sectionIsBare` guard, `task-section-bodies.ts`) — a standalone compatibility fallback, never an
 > overwrite of authored Review. Writing `## Review` here destroys the review step's
 > three-dimensional findings.
@@ -546,7 +546,7 @@ Flags: `--agent <inline|auto|name>` (execution surface — inline default, with 
 
 ## When to use
 
-- **Verify a task before `done`** — the pipeline's `verify` step, or a manual `/sp:dev-verify`.
+- **Verify a task before `done`** — the pipeline's `review` state certifies it (`spur task verdict`), or a manual `/sp:dev-verify`.
 - **Audit completed work** — `--force` re-verifies a `done` task (compliance, post-merge).
 - **Focused code review** — `/sp:dev-review` for SECUA findings on a diff.
 
@@ -581,7 +581,7 @@ Do **not** use this skill for:
   rubric.
 - `plugins/sp/references/roles.md` — the Layer-1 role→tier table; this skill's verify/review modes
   run under the `reviewer` role (0538 R4: this file points at roles.md, it does not restate tiers).
-- `task-pipeline.yaml` — the `verify → record` gate that consumes the verdict.
+- `task-pipeline.yaml` — the `review → done` gate that consumes the verdict.
 - **`sp:spur-dev`** — the execution-half umbrella that drives the pipeline this skill gates.
 - [references/code-improvement.md](references/code-improvement.md) — architecture-improvement lens
   for module depth, seam placement, locality, coupling, and testability.

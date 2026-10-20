@@ -80,9 +80,18 @@ Avoid: *prompt* (reserved for LLM input text), *interrupt* (implies an exception
 pause point).
 
 **DecisionMaker** — optional provider-backed responder for executed `hitl.confirm`/`hitl.select`
-actions (ADR-123), enabled via `workflows.hitlDecisionMaker: true` and `TYPESAFE_API_KEY`.
-Evidence answers clear the answer variable and record `statusVar: accepted/deferred`; unresolved
-cases defer or delegate to the human. Offline readiness: `spur self status`.
+actions (ADR-123), enabled via `workflows.hitlDecisionMaker: true`. Evidence-mode confirm gates
+answer through the catalog decision `gate-evidence`, so the effective maker (and its credentials)
+comes from `decisions.*` config. Evidence answers clear the answer variable and record
+`statusVar: accepted/deferred`; unresolved cases defer or delegate to the human. Readiness:
+`spur decision status --probe`.
+
+**decision point** — a recorded, closed-vocabulary judgment inside a workflow: a `decide` action
+(or an evidence-mode HITL gate) that names a catalog decision id and writes a schemaVersion-1
+`.decision` row whose `value` the next guard reads. It always has a deterministic fallback, so it
+works with no model. Inventory: [decision-points.md](decision-points.md).
+Avoid: *decision brief* (the operator-facing HITL summary format in
+[decision-brief.md](decision-brief.md) — prose for a human, not a catalog answer).
 
 **WBS** (work-breakdown-structure ID) — the four-digit task identifier (e.g. `0187`) that
 names a task file and its position in the corpus. WBS IDs are assigned once and never reused.

@@ -151,7 +151,7 @@ halt-on-first-failure. Never silently retried; the failure is still reported.
 **Applies to:** `/sp-dev-runall --mode parallel`, and `--mode auto` when it resolves to parallel.
 **Default:** off — every task pipeline runs its own FULL project gate inside its worktree.
 
-With `--defer-gate`, each task's `test` / `test-recheck` hop runs the **light tier** (changed-scope
+With `--defer-gate`, each task's `gate` state (every visit) runs the **light tier** (changed-scope
 format, per-workspace typecheck, related tests) and writes `DEFERRED` — never `PASS` — to
 `.spur/run/<wbs>-test-gate.status`. The orchestrator then owes **one integrated full gate** on the
 base ref over the merged slices, **before** the deferred feature sync; on FAIL the batch verdict is
@@ -164,8 +164,8 @@ Two properties are load-bearing and are asserted structurally:
   fails inside its own worktree instead of at the end of the batch (the reason ADR-124 rejected an
   unconditional single end-of-run gate).
 - **The full tier is still the only `PASS` writer.** Only the integrated run can claim a green
-  project gate; the per-task token is `DEFERRED`, and the `test → triage` /
-  `test-recheck → triage` guards accept it only while `deferQualityGate = "true"`.
+  project gate; the per-task token is `DEFERRED`, and the deferred `gate → review`
+  guard accepts it only while `deferQualityGate = "true"`.
 
 `--defer-gate` with `--mode sequential` (or omitted `--mode`) is rejected — the flag exists to move
 one full gate from N worktrees to the one place the integrated tree exists. Under `--mode auto` it

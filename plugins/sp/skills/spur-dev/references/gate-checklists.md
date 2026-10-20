@@ -98,9 +98,10 @@ Entered before `task-pipeline.yaml` `review` state dispatches `sp:code-verificat
 
 ## verify gate
 
-Entered before `task-pipeline.yaml` `verify` state produces a task verdict.
+Entered before the `task-pipeline.yaml` `review` state certifies a task verdict (D65 merged the
+former `verify` state into `review`; standalone `/sp:dev-verify` applies the same list).
 
-- [ ] The verify answer file (`.spur/run/<wbs>-verify-answer.txt`) is lint-clean before
+- [ ] The answer file (`.spur/run/<runId>-review-answer.txt` in the pipeline) is lint-clean before
       verdict derivation: `spur task verdict <wbs> --from-answer …` (0726 R3) lints the
       file first and rejects missing/duplicate/unknown R IDs, AC identities that are not an
       exact task checklist label or linked-feature scenario title, invalid status/evidence-type

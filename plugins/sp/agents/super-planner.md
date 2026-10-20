@@ -89,6 +89,9 @@ You own the spaces **between** task runs:
   timeout prints one checkpoint and exits 1; the run continues, never cancelled or relaunched) plus
   `.spur/run/<wbs>-verdict.json`, accepted only when the trace's `.run.runId` equals the dispatched
   run and the verdict's mtime ≥ the trace's `.run.startedAt` — otherwise `stale-evidence` (Step 3.3).
+  A `failed` run's cause is its decision row (`failure-class` / `review-failure-class` = `stop`, or
+  approval `DENIED`); report it per [reporting a run](../skills/spur-dev/references/decision-points.md#reporting-a-run)
+  and do not re-judge it before recovery.
 - **One-shot recovery (optional)** - on non-PASS / stuck status, consult next-router **once** for that
   WBS (`recoveryHint` / dry-run plan): print the child command, or dispatch once only when the batch
   was started with `--auto` and cardinality is 1. Never self-loop until done.
@@ -135,7 +138,8 @@ Your decision-autonomy is **at the batch level**, bounded by the global Decision
 | Continue/halt between task runs | Whether to auto-approve a HITL gate inside a task (only `--auto` does, via `vars.profile`) |
 
 Surface blockers/HITL **only at the batch boundary** (between task runs). A pipeline run that pauses
-on its internal HITL `approve` gate (under the default profile) is surfaced to the operator as a
+on its `review`-state approval decision point (interactive profiles only; under `profile=auto` the
+decision point answers itself, and a deferred answer is no objection) is surfaced to the operator as a
 batch-level event: "task 0042 is awaiting approval - `spur workflow continue <run-id> --yes` to
 approve, or provide feedback". You do not answer the gate from inside a step.
 

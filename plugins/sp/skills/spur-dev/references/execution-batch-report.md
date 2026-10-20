@@ -15,7 +15,7 @@ Read at Step 5 and once at batch end (task 1128 R1).
 When the batch finishes — clean (all `done`), halted (default failure policy), parked (`paused`:
 one or more tasks sit on an operator question (escalate, 0933) or an approval gate), or aborted
 (cycle / unknown selector) — emit a structured report. The report is the orchestrator's sole
-output; it does not mutate the corpus (the pipeline's `record` step already wrote per-task
+output; it does not mutate the corpus (the pipeline's `done` state already recorded per-task
 results). A `paused` task is non-terminal — the report marks it `paused` (never `done`) and names
 the resume command. Unless `--no-summary`, follow it with the measured
 [execution summary](dev-operations.md#execution-summary), one `--progress <wbs>=<file>` per attempted run.

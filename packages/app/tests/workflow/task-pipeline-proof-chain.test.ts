@@ -378,6 +378,34 @@ describe('task-pipeline evidence chain — the gate state owns the quality gate 
         }
     });
 
+    test('behavioral: remediate projects the review answer only on the review lane, never after a red gate', () => {
+        const dir = mkdtempSync(join(tmpdir(), 'tp-remediate-lane-'));
+        try {
+            const run = join(dir, '.spur/run');
+            mkdirSync(run, { recursive: true });
+            const vars = { wbs: '1239', __runId: 'run-lane' };
+            const project = cmdOf('remediate', 'review lane');
+            const log = join(run, '1239-test-gate.log');
+            // A review FAIL earlier in this run left its decision row and answer behind.
+            writeFileSync(join(run, '1239-review-failure-class.decision'), '{"value":"fix"}\n');
+            writeFileSync(join(run, 'run-lane-review-answer.txt'), 'STALE REVIEW FINDING\n');
+
+            // Review lane: the gate this run last produced is green, so the answer is the input.
+            writeFileSync(join(run, 'run-lane-gate.status'), 'PASS\n');
+            writeFileSync(log, 'gate output\n');
+            expect(runSh(project, dir, vars).code).toBe(0);
+            expect(readFileSync(log, 'utf8')).toContain('STALE REVIEW FINDING');
+
+            // Gate lane: the recheck after that repair went red — the fixer gets the gate log only.
+            writeFileSync(join(run, 'run-lane-gate.status'), 'FAIL\n');
+            writeFileSync(log, 'gate output\n');
+            expect(runSh(project, dir, vars).code).toBe(0);
+            expect(readFileSync(log, 'utf8')).toBe('gate output\n');
+        } finally {
+            rmSync(dir, { recursive: true, force: true });
+        }
+    });
+
     test('R11 behavioral: a PASS receipt keyed by the unchanged tree is reused, and a code edit invalidates it', () => {
         const staged = stage();
         try {

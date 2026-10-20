@@ -10,15 +10,17 @@ see_also:
 
 ```
 pick task (spur task list --json)
-  → interactive omit/inline: host driver reads task-pipeline.yaml and walks it in-session
+  → interactive omit/inline: spur workflow run task-pipeline.yaml with executor=host
   → explicit/headless executor: spur workflow run task-pipeline.yaml
   → on HITL pause: surface to operator → resume the selected driver
 ```
 
-The execution half runs a single task through the `task-pipeline.yaml` FSM. In an interactive
-omit/inline invocation, the skill's host driver interprets that YAML directly. Explicit executors
-and headless invocations use the workflow engine. Both surfaces preserve the same actions, guards,
-artifacts, HITL gates, and terminal states.
+The execution half runs a single task through the `task-pipeline.yaml` FSM, always on the workflow
+engine. In an interactive omit/inline invocation the engine runs with `executor=host`: it executes
+every deterministic action (shell, `command.gate`, `decide`) and every guard itself, and hands each
+model stage back to this session as a work item. Explicit executors and headless invocations run the
+model stages as subprocesses. Both surfaces share the same actions, guards, artifacts, decision
+rows, HITL gates and terminal states.
 
 > **Single-task vs batch.** This file covers the **single-task** execution half — one task through
 > `task-pipeline.yaml`. For **batch** execution (a set of tasks in dependency-correct order), see
@@ -32,11 +34,11 @@ This file owns **how operations sequence** in the pipeline. What each operation 
 
 > **`/sp:dev-run` drives the pipeline — it is NEVER a pipeline step.** The command
 > `/sp:dev-run <wbs>` means "run this whole pipeline" (default `--mode full`). The pipeline's
-> internal stages call `/sp:dev-run --mode implement`, shell quality gate + optional
-> `/sp:dev-fixall`, `/sp:dev-review`, `/sp:dev-verify` — never `/sp:dev-run` in full mode.
+> internal stages call `/sp:dev-run --mode implement`, the typed quality gate + optional
+> `/sp:dev-fixall`, and `/sp:dev-review` — never `/sp:dev-run` in full mode.
 > Calling `/sp:dev-run --mode full` from inside the `implement` step would recurse into another
 > full pipeline run. The `implement` step is the **implement operation** (dev-operations.md §4);
-> the verify step is `sp:code-verification`.
+> requirement/AC certification happens inside `review` (D65 merged the former `verify` stage).
 
 ## The pipeline's internal stages
 
@@ -45,10 +47,11 @@ one thing and yields, so the **pipeline (not the agent) owns the loop**.
 
 | Stage | Operation | Defined in |
 | ------- | ----------- | ------------ |
-| `implement` | `/sp:dev-run --mode implement <wbs>` — write the code that satisfies the task; author `## Solution`. | [dev-operations.md §4 run](dev-operations.md) → `sp:code-implementation` |
-| `test` → (`test-fix` ↔ `test-recheck`) → `review` \| `failed` | **Project quality gate** (not `/sp:dev-unit`). Soft shell probe of `${vars.qualityGateCmd}` (default `spur self exec check`) — green path pays **one** full gate run. On FAIL: bounded `/sp:dev-fixall` loop (`qualityGateMaxFixAttempts`, default 2) with soft recheck; exhausted attempts route to pipeline `failed`. `/sp:dev-unit` remains **coverage gap-fill** (router C3/C5 / standalone). | [dev-operations.md §10 fixall](dev-operations.md); unit op still §1 |
-| `review` | `/sp:dev-review --tasks <wbs>` — SECUA-framework review of the diff. | [dev-operations.md §2 review](dev-operations.md) |
-| `verify` | `sp:code-verification` — requirements traceability + verdict. | [dev-operations.md §3 verify](dev-operations.md) |
+| `implement` | `/sp:dev-run --mode implement <wbs>` — write the code that satisfies the task; author `## Solution`. May pause through `escalate` (operator question). | [dev-operations.md §4 run](dev-operations.md) → `sp:code-implementation` |
+| `gate` | **Typed quality gate** (not `/sp:dev-unit`): `spur task gate <wbs> run\|recheck` over `${vars.qualityGateCmd}` (default `spur self exec check`) under the host-wide lock, with tree-hash receipt reuse. The first visit runs `run`; every visit after a remediation runs `recheck`. Also resolves the review lane (`task-triage`) and classifies a red gate (`failure-class`). | `spur task gate` ([tasks reference](../../spur-cli/references/tasks/verbs.md)) |
+| `remediate` | `/sp:dev-fixall "${vars.qualityGateCmd}" --gate-log … --findings …` — the bounded repair hop for a red gate **or** a fixable non-PASS review; re-enters `gate`. One shared counter (`qualityGateMaxFixAttempts`, default 2) bounds both lanes. `/sp:dev-unit` stays coverage gap-fill (router C3/C5 / standalone). | [dev-operations.md §10 fixall](dev-operations.md) |
+| `review` | `/sp:dev-review --tasks <wbs> --auto --focus <functional\|all>` — SECUA + requirement/AC traceability; `spur task verdict --from-answer` certifies the answer, `review-failure-class` classifies a non-PASS, then the approval decision point answers. | [dev-operations.md §2 review](dev-operations.md) |
+| `done` | Deterministic close: `spur task record` writes `## Testing` from the verdict, then `spur task update <wbs> done --no-lifecycle` runs the completion check. | [dev-operations.md §3 verify](dev-operations.md) (standalone re-certification) |
 
 Interactive omit/`inline` executes these model stages in the host session through the engine loop:
 the engine owns every guard and transition, the host performs each returned work item and records
@@ -144,7 +147,7 @@ Synchronous invocation (`--json` without `--async`) is acceptable **only** for s
 On the subprocess path, when `--agent <value>` is set (passed through from the thin wrapper), merge it into the vars as
 **both** `agent` and `implementAgent` (task 0483 R2):
 `--vars '{"wbs":"<wbs>","agent":"<value>","implementAgent":"<value>"}'`. The pipeline YAML reads
-`${vars.agent}` for review/verify/test-fix and `${vars.implementAgent}` for implement — setting
+`${vars.agent}` for remediate/review and `${vars.implementAgent}` for implement — setting
 both keys ensures the pinned executor reaches every hop. The full value-semantics contract (one
 rule, value table, objective triggers, and headless `inline` substitution (tier resolution + one warning) per ADR-087)
 lives in [cross-cutting.md](cross-cutting.md#inline-default-execution-surface) — the SSOT.
@@ -161,34 +164,39 @@ pipeline (bug-742).
 The pipeline (`kind: state-machine`) runs the work loop:
 
 ```
-precheck → implement → test [→ test-fix → test-recheck] → review → approve(HITL) → verify → record → done
+precheck → implement[⇄ escalate] → gate[⇄ remediate] → review → done | failed
 ```
 
-Two branches reach the bounded repair hop, not one (session finding after 1088):
+Two branches reach the bounded `remediate` hop, and each is routed by a recorded decision row, not
+by this session's judgment:
 
-- `test`/`test-recheck` FAIL → `test-fail-triage` (0943's failure-class router) → `test-fix`;
-- `review` without a `Verdict: PASS` in its answer → `review-fail-triage` (the review-side twin) →
-  `test-fix`, bounded by the SAME `qualityGateMaxFixAttempts` counter. A FAIL review therefore has
-  an on-graph, bounded path to remediation instead of dead-ending the run, and the fix re-enters
-  quality → review → verify on a freshly captured proof digest.
+- a red `gate` → `failure-class` (`fix` → `remediate`, `stop` → `failed`);
+- a review that did not certify PASS → `review-failure-class` (`fix` → `remediate`, `stop` →
+  `failed`), bounded by the SAME `qualityGateMaxFixAttempts` counter. The repair re-enters
+  `gate` (recheck) → `review` on the remediated tree.
+
+Every decision point, its fallback and its consumer are listed in
+[decision-points.md](decision-points.md); read the rows it names instead of re-judging them.
 
 The completion gate reads deterministic evidence only: the review stage's **verdict artifact** (`.spur/run/<wbs>-verdict.json`, derived by `spur task verdict --from-answer`) and the **tree-hash gate receipt** (`.spur/run/<wbs>-check-receipt.json`, reused while the tree is unchanged). The ADR-071 proof chain this paragraph used to describe — proof digests, `verify → record`, review-inside-the-bracket — was deleted by the D65 pipeline rewrite; `record` now runs inside `done`'s onEnter and `verify` merged into `review`. Two grades are read, and only as cross-checks against the answer's own rows: the review answer states one `Confidence: HIGH|MEDIUM|LOW` line (ADR-141) and the review gate recomputes it from the finding dispositions, rejecting a disagreement. Nothing grades the *verifier's* opinion: an open P1–P3 finding blocks `done` on its own, and what protects a hand-driven `task update <wbs> done` is unchanged — the gate must show a PASS receipt for this tree and a recorded review artifact.
 
 Agentic steps use the pure slash inputs declared by each YAML `agent.run` action (ADR-043). The
 workflow engine dispatches them; the interactive driver invokes their backing skills in-session.
-The `test` hop is primarily
-**deterministic shell** (quality gate); only the optional `test-fix` hop is agentic
+The `gate` state is
+**deterministic** (quality gate plus decision points); only the optional `remediate` hop is agentic
 (`/sp:dev-fixall`). The skill monitors the run:
 
-- **On HITL pause** (`approve` state): surface the review output to the operator. On the subprocess
-  path use `spur workflow continue <run-id> --yes`; on the inline path retain the current state and
-  resume the host driver with the operator's answer.
+- **On HITL pause** (`escalate`, or the approval decision point inside `review`): surface the
+  question, or the review answer and verdict, to the operator. Resume with `spur workflow continue
+  <run-id> --answer-text <answer>` (or `--yes` for the approval). The approval answer lands in
+  `.spur/run/<wbs>-approval.status`; a `no`/`cancel` ends the run `failed` with terminal reason
+  `cancelled`, a recorded denial rather than a check failure.
 - **On guard failure** (`precheck`): the task's check findings block progress — fix the
   task first.
-- **On completion** (`done`): the pipeline's `record` step has already written the verdict
+- **On completion** (`done`): the `done` state's onEnter has already written the verdict
   transcript into the task's `## Testing` via `spur task record <wbs>` (matrix-compliant tables;
   `## Review` was authored by the review step and is only backfilled bare, never overwritten —
-  F92 0593 R1; never transitions to `done` — the gate stays in the workflow).
+  F92 0593 R1) and moved the task to `done` through the verb's own completion check.
 
 ## `--next` chain — advance to the next step
 
@@ -400,6 +408,10 @@ After a completed task, decide next action:
 
 ## Skipping HITL
 
-Passing `--vars '{"profile":"auto"}'` to `spur workflow run` (a var choice, not a YAML fork) skips
-the `approve` HITL gate — use for low-risk, well-understood tasks where operator review adds no value.
+Passing `--vars '{"profile":"auto"}'` to `spur workflow run` (a var choice, not a YAML fork) makes the
+approval decision point answer itself instead of prompting: its evidence binding answers from the
+recorded review evidence, through the `gate-evidence` decision when `workflows.hitlDecisionMaker`
+is on. It is not a bypass — an auto run still ends `failed`/`cancelled` when the maker answers
+`no`; a deferred answer (switch off, no reachable maker, or insufficient evidence) is not a denial. Use it for low-risk,
+well-understood tasks where operator review adds no value.
 (Combine with `wbs` in one object: `--vars '{"wbs":"0042","profile":"auto"}'`.)

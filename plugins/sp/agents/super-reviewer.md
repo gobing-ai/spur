@@ -70,8 +70,10 @@ Only when invoked under the pipeline do blocker/major findings block a gate.
 
 Invoked by `task-pipeline.yaml`'s `review` step. The pipeline hands you the task WBS and the
 `--focus` dimensions. You run the review, write findings to the task's `## Review` section, and
-return a PASS/PARTIAL/FAIL verdict to the pipeline's `approve(HITL)` gate. `blocker`/`major`
-findings block the gate; `minor`/`advisory` are recorded but do not block.
+return a PASS/PARTIAL/FAIL verdict. `spur task verdict` certifies the answer; a PASS then reaches the
+approval decision point before `done`, and a non-PASS feeds the `review-failure-class` decision
+(`fix` → `remediate`, `stop` → `failed`). `blocker`/`major` findings block certification;
+`minor`/`advisory` are recorded but do not block.
 
 ### Multi-target coordination (task 1023)
 
@@ -181,11 +183,11 @@ with the commit) drops the row from the sweep; `DEFER(<reason>)` reclassifies a 
 the cell, not the sentence. `OPEN` states "still live", and `ACCEPTED` marks a non-blocking P4
 observation you are deliberately not acting on; both behave as an ordinary open row.
 
-**Pipeline cost of an open finding (1122).** The review PASS edges run this same classification
-before verify (`spur task residual <wbs> review-gate`): a PASS whose table still carries an open P1-P3 row
-routes into `review-fail-triage` → the bounded repair hop instead of verify. Open P1-P3 findings
-block `done`; fixing one invalidates the certified digest and re-runs quality → review → verify on
-a fresh digest. Only P4 rows and `DEFER`-ed P3 rows are wrap residuals — disposition the finding in
+**Pipeline cost of an open finding (1122).** The review certification runs this same classification
+(`spur task residual <wbs> review-gate`): a PASS whose table still carries an open P1-P3 row is a
+non-PASS review, so the `review-failure-class` decision routes it to `remediate` instead of `done`.
+Open P1-P3 findings block `done`; fixing one invalidates the certified digest and re-runs
+gate → review on a fresh digest. Only P4 rows and `DEFER`-ed P3 rows are wrap residuals — disposition the finding in
 its cell now, while you hold the context, instead of leaving the cost to be rediscovered after a
 full cycle.
 
@@ -220,9 +222,9 @@ shallower.
 ```
 
 The **Verdict line is machine-read** by the task pipeline (session finding after 1088): `review →
-verify|approve` requires a line matching `Verdict: PASS` (plain or bold), and ANYTHING ELSE —
-FAIL, PARTIAL, a missing line, a line split across two lines — routes the run into
-`review-fail-triage` and its bounded repair hop. Keep it on one line, in that shape, in every
+done` requires a line matching `Verdict: PASS` (plain or bold), and ANYTHING ELSE —
+FAIL, PARTIAL, a missing line, a line split across two lines — routes the run through the
+`review-failure-class` decision into the bounded `remediate` hop. Keep it on one line, in that shape, in every
 review answer; never restate it as prose only.
 
 **State `Confidence: HIGH | MEDIUM | LOW` — the gate derives it from your dispositions (ADR-141).**
@@ -287,8 +289,8 @@ as an explicit gap in the report body (above), so a reader can re-check it.
 
 **Machine-checked at the gate (findings table).** `spur task residual <wbs> review-gate` applies the same two
 predicates to every finding row: a Finding cell carrying one of the verify lint's claim markers with
-no citation form becomes a **blocking** `review-contract` item, so `review → verify` stops and the
-run enters `review-fail-triage`. The `Location` column is deliberately not consulted as a citation —
+no citation form becomes a **blocking** `review-contract` item, so `review → done` stops and the
+run enters the `review-failure-class` decision. The `Location` column is deliberately not consulted as a citation —
 that is the rule stated above, and a gate that accepted it would pass every row that has an anchor.
 Functional Traceability `Evidence` cells stay reviewer-enforced (SECUA review): they are free prose
 in a table the gate does not parse.

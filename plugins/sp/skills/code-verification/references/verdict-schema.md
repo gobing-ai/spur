@@ -249,25 +249,33 @@ Wave C verification can emit the following additive `checks[]` rows:
 
 ## How the gate reads it
 
-`task-pipeline.yaml`, transition `verify → record`:
+In `task-pipeline.yaml` the `review` state writes this artifact: `spur task verdict <wbs>
+--from-answer` lints the review answer and derives `.spur/run/<wbs>-verdict.json`. A fold step then
+writes `.spur/run/<wbs>-review.status` = PASS only when the typed verdict is PASS, the artifact's own
+`verdict` is PASS (`jq -r '.verdict // empty'`) and `spur task residual <wbs> review-gate` is clean.
+The `review → done` guard reads that status **and** the approval decision point's token:
 
 ```yaml
 guard:
   kind: shell
   options:
-    command: 'test "$(jq -r .verdict .spur/run/${vars.wbs}-verdict.json)" = PASS'
+    command: >-
+      test "$(cat ".spur/run/$wbs-review.status" 2>/dev/null)" = PASS &&
+      test "$(cat ".spur/run/$wbs-approval.status" 2>/dev/null)" = APPROVED
 ```
 
-with a sibling `verify → failed` guarded on the negation. So a missing file, malformed JSON, or any
-non-`PASS` verdict routes the run to `failed` rather than `done` — the pipeline cannot certify
-completion without an explicit PASS artifact.
+A missing file, malformed JSON or any non-`PASS` verdict leaves the status FAIL, which the
+`review-failure-class` decision routes to `remediate` (`fix`) or `failed` (`stop`). The pipeline
+cannot certify completion without an explicit PASS artifact.
 
 ## Lifecycle
 
-- **Written:** Step 9 of verify mode, *after* the verdict is final (never partially).
-- **Read:** by the workflow gate on the `verify → record` transition.
-- **Location:** `.spur/run/` (the run-scratch dir the pipeline's `record` step also uses).
-- **Lifetime:** per execution attempt; overwritten on the next verify of the same WBS.
+- **Written:** by `spur task verdict` in the pipeline's `review` state, or by Step 9 of standalone
+  verify mode, *after* the verdict is final (never partially).
+- **Read:** by the review fold and the `review → done` guard, then by `done`'s `spur task record`
+  close, which transcribes it.
+- **Location:** `.spur/run/`.
+- **Lifetime:** per execution attempt; overwritten on the next certification of the same WBS.
 
 ## Optional check severity (task 0592, feature F92)
 
@@ -312,6 +320,6 @@ The prose shape above is executed by a single runtime-validated contract:
   failure can never yield PASS.
 - A row-less artifact aggregates to UNKNOWN — a stored PASS that does not recompute to PASS
   (including a row-less PASS) is treated as non-PASS at the done gate. The done-transition choke
-  point (`done-transition-guard.ts` `evaluateDoneTransition`) is the final authority; workflow JSON
-  routing may select `verify → record/failed` but cannot weaken the final transition.
+  point (`done-transition-guard.ts` `evaluateDoneTransition`) is the final authority; workflow
+  routing may select `review → done/failed` but cannot weaken the final transition.
 - `--force-done --reason` on `spur task update <wbs> done` remains the sole auditable override.

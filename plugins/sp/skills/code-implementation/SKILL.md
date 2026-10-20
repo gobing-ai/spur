@@ -103,7 +103,7 @@ surfaces is what keeps that gate quiet.
 
 ## Implement scope: do not run the project quality gate
 
-During implement, the pipeline's `test` hop runs `${vars.qualityGateCmd}` (the full project gate:
+During implement, the pipeline's `gate` state runs `${vars.qualityGateCmd}` (the full project gate:
 `spur self exec check`) immediately after this step and is the gate that actually
 decides pass/fail. Running it inside implement is pure redundancy — it cannot change the outcome and
 only burns wall clock and context budget.
@@ -118,9 +118,9 @@ only burns wall clock and context budget.
   re-select the execution tree inside the call (`cd -- "$TREE"` plus the identity check) instead of
   relying on a `cd` a previous call left behind.
 - **NEVER run** `spur self exec test`, `spur self exec check`, `bun run check`, or any other full-suite /
-  project-gate command from inside implement. These belong to the pipeline's `test` hop.
+  project-gate command from inside implement. These belong to the pipeline's `gate` state.
 - **Full-suite budget: at most 2 per task** (task 0436 R2) — counted across the whole task run
-  (implement probes + the pipeline `test` hop + verify/recheck), not per step. When a check fails,
+  (implement probes + the pipeline `gate` state and its rechecks), not per step. When a check fails,
   run the narrow target (`bun test <file> --test-name-pattern <test>`) to green before any full
   suite; reach for the second full run only when the narrow target cannot reproduce the failure.
 - **Consolidate dogfood runs**: one combined real-data execution that exercises all scenarios,
@@ -128,7 +128,7 @@ only burns wall clock and context budget.
   rerunning the same dogfood command with one flag changed, stop and fold the variants into a
   single run — repeated identical commands are loop-detector findings and pure cost.
 - If a targeted probe reveals a failure you cannot fix within implement scope, note it in
-  `## Solution` and let the `test` hop's fixall handle it — do not pre-empt the gate.
+  `## Solution` and let the `gate` state's `remediate` hop handle it — do not pre-empt the gate.
 
 ### Public-surface probe (task 1135 R1/R6/R8)
 
@@ -155,7 +155,7 @@ changed no public surface, report the single line
 - the paired-script parity test when `package.json` changed (a half-updated `spur-check` /
   `spur-check:full` chain).
 
-The single full project check stays the pipeline `test` hop's job (see the section above); these are
+The single full project check stays the pipeline `gate` state's job (see the section above); these are
 changed-path checks, not that gate.
 
 ## Changed-path targeted checks (dependency-aware verification, task 0510 R3 / task 1142 R3)
@@ -164,14 +164,14 @@ changed-path checks, not that gate.
 surface can break a downstream consumer. The matrix below is dependency-aware — domain → app →
 CLI — so a shared change verifies its consumers without recreating the full project check inside
 implement. **It augments narrow behavior tests; it never authorizes `spur self exec check`,
-`spur self exec test`, or another full project check inside implement** — the pipeline's `test` hop owns
+`spur self exec test`, or another full project check inside implement** — the pipeline's `gate` state owns
 that single full gate.
 
 **Worker iteration check order (task 1142 R3):**
 1. The **changed-path matrix** below (narrow behavior tests + affected consumers);
 2. `spur task gate <wbs> light` (biome on changed files, per-workspace typecheck, rule presets `rules:pre`/`rules:post`, related tests).
 
-Neither step takes the full project gate. The full gate is named only for the pipeline's `test` and `test-recheck` hops.
+Neither step takes the full project gate. The full gate is named only for the pipeline's `gate` state (first visit and rechecks).
 
 | Changed surface | Required targeted tests | Required typechecks |
 | --- | --- | --- |
@@ -189,7 +189,7 @@ Neither step takes the full project gate. The full gate is named only for the pi
   (a flag the plugin layer consumes) actually changes, so an unconditional parity suite does not
   creep into every plugin edit.
 - Run the applicable rows, then stop: the single full project check belongs to the pipeline's
-  `test` hop (`task-pipeline.yaml` `${vars.qualityGateCmd}`).
+  `gate` state (`task-pipeline.yaml` `${vars.qualityGateCmd}`).
 - **Mirrored surfaces: an edit lands on all of them.** When the change is one instance of a repeated
   pattern — the same wiring rule on two runbooks, a signature in both a generator and its generated
   `.d.mts`, a command chain in both `spur-check` and `spur-check:full` — grep for the siblings and

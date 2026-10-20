@@ -560,12 +560,14 @@ states:
           # Review-lane input: the review failure class routes a non-PASS review into this same
           # bounded repair hop, but it stages no gate evidence — the fixer would receive a GREEN
           # gate log and an empty findings list. Project the reviewer's answer into the same log
-          # the other lane uses, and only on the review lane (the decision file exists only
-          # after a review FAIL). Own action, not an append to the one above (ADR-115 cap).
+          # the other lane uses, and only on the review lane: remediate after a GREEN gate this
+          # run means review sent it. The review decision row is no lane marker — it outlives its
+          # review, so a red recheck after a review repair would re-feed that stale answer.
+          # Own action, not an append to the one above (ADR-115 cap).
           - kind: shell
             options:
                 command: >-
-                    [ -f ".spur/run/$wbs-review-failure-class.decision" ] && [ -f ".spur/run/$__runId-review-answer.txt" ] && echo '--- review verdict (remediation input, review lane) ---' >> ".spur/run/$wbs-test-gate.log" && cat ".spur/run/$__runId-review-answer.txt" >> ".spur/run/$wbs-test-gate.log"; exit 0
+                    [ "$(cat ".spur/run/$__runId-gate.status" 2>/dev/null)" = PASS ] && [ -f ".spur/run/$__runId-review-answer.txt" ] && echo '--- review verdict (remediation input, review lane) ---' >> ".spur/run/$wbs-test-gate.log" && cat ".spur/run/$__runId-review-answer.txt" >> ".spur/run/$wbs-test-gate.log"; exit 0
           # R3 (0482): project the extracted gate anchors into a var so the dispatch input
           # can NAME the failing file:line, not merely point at a log. A vars template cannot
           # run a shell, so the read is an action, not an inline `$(cat ...)` substitution.
