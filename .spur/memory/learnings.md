@@ -6552,3 +6552,53 @@ Date: 2026-10-16 · Branch: sp/runall-l1-05cd · Tasks: 1218, 1219, 1220 (all do
 - **Gotcha:** the residual sweep only downgrades; unticked `### Plan` boxes at close time downgrade the verdict to PARTIAL and make `done` unreachable. Tick the Plan before the pipeline close, not after.
 - **Pattern that worked:** driving the task pipeline inline with `executor: host` — `workflow run --json` returns one work item per `agent.run`, and the stage completes by writing `{runId,state,executor:'host',outcome:'done',files,reason}` to `.spur/run/<runId>/receipts/<state>.json` and passing that path to `workflow continue --answer-text`.
 
+## 2026-10-19 — P1 batch (1262, 1263, 1264)
+
+### Conventions confirmed
+- **A `fail-open` invariant needs its own test at the boundary, not at the seam.** Twice the
+  interesting defect was on a side path: the worktree ledger transfer (runs persisted, their
+  `system_events`/`decision_logs` dropped) and the outcome write (a bus emission that a detached tap
+  could drop while the verb reported `recorded: true`). Both were found by writing the row-level
+  test first, not by reading the wiring.
+- **A decision that always answers its own fallback adds no information.** `review-failure-class`
+  (15/15 `fix`) and the 24/24 `true` replay of `task-semantic-risk` are the same shape. When a
+  catalog entry's answer set collapses onto the fallback, the routing change is zero and the cost
+  is one maker call per visit; measure `outcomes`, not just acceptance.
+- **A resampled maker's confidence is unanimity, not calibration.** A 0.8 floor plus a
+  k-sample vote means "every sample agreed". Writing the floor as "at or above HIGH" (rather than
+  "at or below") is the property that keeps an accepted answer from displaying as MEDIUM.
+- **`String(value)` is the join key for catalog outcomes.** A noul decision's row stores the label
+  (`"yes"`/`"no"`), never a boolean, so a `jq '.value == false'` projection silently never fires and
+  an `outcomeMap` keyed on `true`/`false` must be quoted in YAML.
+
+### Errors fixed (worth remembering)
+- **The inline pipeline digest changes when the task edits its own pipeline.** Resuming a host run
+  after editing `config/workflows/task-pipeline.yaml` is *consented definition drift*: `workflow
+  continue --force` records `resumeDefinitionDigest` and keeps the launch identity. Without
+  `--force` the resume refuses, which reads like a corrupt run.
+- **`task verdict` expects declared identities.** `Req` cells must be the bare id (`R1`) and `AC`
+  cells the task's exact scenario titles; anything else fails the answer lint with "unknown
+  requirement/AC ID". The `## Review` section additionally needs `Verdict:` and `Confidence:` lines,
+  and the disposition cell must be a bare `ACCEPTED`/`DEFERRED` token for the derivation to read it.
+- **Review-report contract violations are blocking, not advisory.** A finding cell that mentions a
+  scoped package or a backticked call shape (`@scope/name`, `` `fn()` ``) without a same-cell
+  `path:line` fails `spur task residual <wbs> review-gate`. Cite inside the finding text.
+- **A full-suite gate can flake on a 20 s per-test timeout** under machine load: two different tests
+  timed out in one run and passed in isolation in under a second. A retry is the honest response;
+  do not weaken the assertion or the timeout.
+- **ADR-115 composition caps count subshell commands.** An 11-command shell action fails the
+  workflow composition gate (limit 10), so a derivation that needs more than a couple of
+  `$(...)` calls belongs in a CLI flag (`--gate-status`) rather than in YAML.
+- **A doc comment above an inserted `export interface` detaches from its function** and trips
+  `every-export-has-tsdoc` in `test-post-check` after a green suite — the suite passing does not mean
+  the gate passed.
+
+### Patterns
+- **Two-layer docs/tests obey a parity census**: a new verb needs `docs/help/cmd_<noun>.md`,
+  `docs/help2/<noun>.md`, `docs/help/spur-cli-matrix.md` (row + both verb-count rows + summary
+  counts), the JSON-envelope inventory count, and — for a new event — the `docs/design/event-tracking.md`
+  §11 matrix row plus its presenter row.
+- **A rescue seam belongs on the service context as one function returning `undefined` on every
+  doubt**, so the executor never learns about catalogs and a failure to rescue is indistinguishable
+  from not rescuing. Redact the full text, *then* tail it — the reverse order can slice a secret.
+
