@@ -10,10 +10,9 @@ import { describe, expect, test } from 'bun:test';
 import { mkdtemp, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { InboxMessageDao } from '@gobing-ai/spur-domain';
 import { refuseGuestStageTarget, runAgentJoin, runAgentWaitInbox } from '../../src/commands/agent';
 import { type CliContext, createCliContext } from '../../src/context';
-import { createCapturedOutput } from '../helpers';
+import { createCapturedOutput, inboxFixture } from '../helpers';
 
 async function makeCtx(env: Record<string, string | undefined> = {}): Promise<{
     ctx: CliContext;
@@ -43,7 +42,7 @@ describe('spur agent wait --inbox (1081 R4)', () => {
         const { ctx, out, cleanup } = await makeCtx();
         try {
             await runAgentJoin(ctx, { role: 'reviewer', id: 'g-review', json: false });
-            await new InboxMessageDao(await ctx.getDb()).enqueue('proj-lead', 'g-review', 'please review');
+            await inboxFixture(await ctx.getDb()).enqueue('proj-lead', 'g-review', 'please review');
             expect(await runAgentWaitInbox(ctx, { id: 'g-review', timeoutMs: 5000, json: false, pollMs: 10 })).toBe(0);
             expect(out.messages.join('\n')).toContain('g-review: 1 pending message(s)');
         } finally {

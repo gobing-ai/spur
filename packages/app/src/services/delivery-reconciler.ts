@@ -1,19 +1,5 @@
-import {
-    type CoordinationArtifactRef,
-    CoordinationRunDao,
-    type DbAdapter,
-    InboxMessageDao,
-    InboxUnfinishedDao,
-    type InboxUnfinishedRow,
-} from '@gobing-ai/spur-domain';
-
-/**
- * Bounded redelivery budget (0831 Q&A): attempts ARE counted by the drain
- * claim; promote to config only if a deployment needs it to vary. Hoisted here
- * from the CLI drain path (0834) so the drain's release-or-fail settle and the
- * restart reconciler share one constant — never re-derive the number.
- */
-export const MAX_INJECT_ATTEMPTS = 3;
+import type { CoordinationArtifactRef, DbAdapter, InboxRequestRow } from '@gobing-ai/spur-domain';
+import { InboxService, MAX_DELIVERY_ATTEMPTS } from './inbox-service';
 
 /**
  * Why an unfinished message is being held (0834 R4). Each reason derives from a
@@ -32,7 +18,8 @@ export interface UnresolvedDelivery {
     /**
      * The row's `request_key` (0832 keyed-submission identity), or null for keyless traffic
      * (G71 R1). Carried so a consumer can tell a fleet dispatch from an operator/conversational
-     * message without re-reading the inbox row.
+     * message without re-reading the inbox row. Never parsed — dispatch linkage lives in
+     * `task_id`/`parent_run_id` (G11 R9).
      */
     requestKey: string | null;
     runId?: string;
@@ -44,7 +31,7 @@ export interface UnresolvedDelivery {
 /** Result of one reconciliation pass (0834 R1). */
 export interface ReconcileReport {
     unresolved: UnresolvedDelivery[];
-    /** Message ids marked `failed` by THIS pass (the only write; empty on a pure pass). */
+    /** Message ids settled `failed` by THIS pass (empty on a pure pass). */
     exhausted: string[];
     scanned: number;
 }
@@ -54,84 +41,96 @@ export interface DeliveryReconcilerContext {
     getDb(): Promise<DbAdapter>;
 }
 
-/** Classifies request outcomes separately from delivery; never requeues ambiguous work. */
+/**
+ * Classifies request outcomes separately from delivery; never requeues ambiguous work.
+ *
+ * G11 R4/R8: the reads and the one write all go through {@link InboxService} — request rows
+ * (never chat) with their newest run receipt in a single join, and `sweep` before `classify`
+ * so an expired claim is resolved by its receipt instead of being re-dispatched (0834 R2).
+ */
 export class DeliveryReconciler {
     constructor(private readonly ctx: DeliveryReconcilerContext) {}
 
-    /** Read-only classification for the CLI, Board, and restart reconciler. */
-    async classify(agentId?: string): Promise<UnresolvedDelivery[]> {
-        const db = await this.ctx.getDb();
-        const rows: InboxUnfinishedRow[] = await new InboxUnfinishedDao(db).listUnfinished(agentId);
-        const runs = new CoordinationRunDao(db);
+    private async inbox(): Promise<InboxService> {
+        return new InboxService({ getDb: () => this.ctx.getDb() });
+    }
+
+    /**
+     * Read-only classification for the CLI, Board, and restart reconciler.
+     *
+     * `rows` lets {@link reconcile} hand over the request read it already did, so one pass
+     * issues one query instead of two.
+     */
+    async classify(agentId?: string, rows?: readonly InboxRequestRow[]): Promise<UnresolvedDelivery[]> {
+        const requests = rows ?? (await (await this.inbox()).requests(agentId));
         const unresolved: UnresolvedDelivery[] = [];
-        for (const row of rows) {
+        for (const row of requests) {
             const base = {
                 messageId: row.id,
-                toId: row.to_id,
-                injectAttempts: row.inject_attempts,
-                requestKey: row.request_key,
-                ...(row.inject_error !== null && row.inject_error !== '' ? { injectError: row.inject_error } : {}),
+                toId: row.toId,
+                injectAttempts: row.attempts,
+                requestKey: row.requestKey,
+                ...(row.error !== null && row.error !== '' ? { injectError: row.error } : {}),
             };
 
             // 1. Terminal delivery failure — queryable hold, never repaired.
             if (row.status === 'failed') {
                 unresolved.push({
                     ...base,
-                    reason: row.inject_attempts >= MAX_INJECT_ATTEMPTS ? 'attempts-exhausted' : 'delivery-failed',
+                    reason: row.attempts >= MAX_DELIVERY_ATTEMPTS ? 'attempts-exhausted' : 'delivery-failed',
                     artifacts: [],
                 });
                 continue;
             }
 
-            // 2/3. Consumed by a drain: the receipt decides.
-            if (row.status === 'injected' || row.status === 'delivered') {
-                const runRow = (await runs.listByMessageId(row.id))[0];
-                if (runRow === undefined) {
+            // 2/3. Claimed or delivered: the run receipt decides.
+            if (row.status === 'claimed' || row.status === 'delivered') {
+                if (row.runId === null) {
+                    // A delivered row always came from a claim, so a missing receipt is an
+                    // absence of evidence, not a failure — never repaired here.
                     unresolved.push({ ...base, reason: 'outcome-unknown', artifacts: [] });
                     continue;
                 }
-                const completed = runRow.completed_at !== null && runRow.status !== 'running';
-                if (completed && runRow.outcome === 'verified') continue;
+                const completed = row.runStatus !== 'running';
+                if (completed && row.runOutcome === 'verified') continue;
                 unresolved.push({
                     ...base,
                     reason: !completed
                         ? 'outcome-unknown'
-                        : runRow.outcome === 'errored'
+                        : row.runOutcome === 'errored'
                           ? 'delivery-failed'
-                          : runRow.outcome === 'run-exit-only'
+                          : row.runOutcome === 'run-exit-only'
                             ? 'run-exit-only'
                             : 'outcome-unknown',
-                    runId: runRow.run_id,
-                    runStatus: runRow.status,
-                    ...(runRow.task_id !== null ? { taskId: runRow.task_id } : {}),
-                    artifacts: parseArtifactRefs(runRow.artifact_refs_json),
+                    runId: row.runId,
+                    ...(row.runStatus !== null ? { runStatus: row.runStatus } : {}),
+                    ...(row.runTaskId !== null ? { taskId: row.runTaskId } : {}),
+                    artifacts: parseArtifactRefs(row.runArtifactRefsJson),
                 });
             }
 
-            // 4/5. Still queued: step 4 (the budget marking) is reconcile()'s
-            // only write; a pure classification omits every queued row.
+            // 4. Still queued: nothing to classify — the member has not claimed it yet.
         }
         return unresolved;
     }
 
+    /**
+     * Sweep expired claims, then classify. The sweep is the pass's only write: it settles a
+     * claim from its receipt, requeues an unclaimed work item, and fails a message whose
+     * attempt budget is spent.
+     */
     async reconcile(agentId?: string): Promise<ReconcileReport> {
-        const db = await this.ctx.getDb();
-        const rows: InboxUnfinishedRow[] = await new InboxUnfinishedDao(db).listUnfinished(agentId);
-        const inbox = new InboxMessageDao(db);
-        const report: ReconcileReport = { unresolved: [], exhausted: [], scanned: rows.length };
-        for (const row of rows) {
-            if (row.status === 'queued' && row.inject_attempts >= MAX_INJECT_ATTEMPTS) {
-                await inbox.markFailed(row.id, `attempts exhausted after ${MAX_INJECT_ATTEMPTS} deliveries`);
-                report.exhausted.push(row.id);
-            }
-        }
-        report.unresolved = await this.classify(agentId);
-        return report;
+        const service = await this.inbox();
+        const swept = await service.sweep();
+        // One request read per pass: the same rows are classified and counted.
+        const rows = await service.requests(agentId);
+        return { unresolved: await this.classify(agentId, rows), exhausted: swept.failed, scanned: rows.length };
     }
 }
 
 /** Parse a run row's path-only artifact refs; corrupt/absent JSON → []. */
-function parseArtifactRefs(artifactRefsJson: string): CoordinationArtifactRef[] {
+function parseArtifactRefs(artifactRefsJson: string | null): CoordinationArtifactRef[] {
+    if (artifactRefsJson === null) return [];
     try {
         const parsed: unknown = JSON.parse(artifactRefsJson);
         return Array.isArray(parsed) ? (parsed as CoordinationArtifactRef[]) : [];

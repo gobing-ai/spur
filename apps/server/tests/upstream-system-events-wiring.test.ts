@@ -11,8 +11,7 @@ import {
     type SystemEventTap,
     WorkflowAppService,
 } from '@gobing-ai/spur-app';
-import { InboxMessageDao, SystemEventDao } from '@gobing-ai/spur-domain';
-import { type AgentProcessOptions, saveAgentSpec, TeamAgentProcess, TeamOrchestrator } from '@gobing-ai/ts-ai-runner';
+import { SystemEventDao } from '@gobing-ai/spur-domain';
 import type { HitlRequest } from '@gobing-ai/ts-dual-workflow-engine';
 import { EventBus } from '@gobing-ai/ts-infra';
 import { createNodeFileSystem } from '@gobing-ai/ts-runtime';
@@ -38,39 +37,6 @@ async function loadTap(
     diagnosticEnabled: boolean,
 ): Promise<SystemEventTap> {
     return registerSystemEventTap(bus, dao, { warn: () => {}, debug: () => {} }, { diagnosticEnabled });
-}
-
-/** Fake agent process for 0237 R4 — no real subprocess spawn. */
-class FakeTeamAgentProcess extends TeamAgentProcess {
-    private fakeStatus: 'running' | 'stopped' | 'errored' = 'stopped';
-
-    constructor(options: AgentProcessOptions) {
-        super(options);
-    }
-
-    override async start(): Promise<void> {
-        this.fakeStatus = 'running';
-    }
-
-    override async stop(): Promise<void> {
-        this.fakeStatus = 'stopped';
-    }
-
-    override async send(_message: string): Promise<{ ok: boolean }> {
-        return { ok: true };
-    }
-
-    override getStatus(): 'running' | 'stopped' | 'errored' {
-        return this.fakeStatus;
-    }
-
-    override getPid(): number | null {
-        return this.fakeStatus === 'running' ? 99 : null;
-    }
-
-    override getExitCode(): number | null {
-        return null;
-    }
 }
 
 /**
@@ -460,49 +426,6 @@ describe('upstream system event wiring (task 0221 R3 + task 0226 R8)', () => {
     // emits workflow.run.finalized / phase / transition / action.started / action.finished
     // onto the same bus the system_events tap persists.
     // ─────────────────────────────────────────────────────────────────────
-    // ─────────────────────────────────────────────────────────────────────
-    // Task 0237 R4 — TeamOrchestrator events on the server bus reach the tap.
-    // Server context wires AgentCoordinationServiceContext.events → eventsBus; orchestrator
-    // lifecycle emits agent.started/stopped/message.sent onto that bus.
-    // ─────────────────────────────────────────────────────────────────────
-    test('[0237 R4] TeamOrchestrator on server eventsBus produces agent lifecycle system_events', async () => {
-        const { ctx, bus, tap, dao } = await buildContextWithTap();
-        try {
-            const configDir = join(ctx.cwd, '.spur', 'agents');
-            mkdirSync(configDir, { recursive: true });
-            await saveAgentSpec(
-                {
-                    id: 'coder',
-                    name: 'coder',
-                    type: 'codex',
-                    workspace: ctx.cwd,
-                    purpose: 'Implement',
-                    tags: [],
-                    config: {},
-                },
-                configDir,
-            );
-
-            // Same bus identity the coordination() accessor injects as `events`.
-            // Casts: dual package instances (ts-infra/ts-db) at the type seam; runtime is identical.
-            const orchestrator = new TeamOrchestrator(configDir, new InboxMessageDao(await ctx.getDb()) as never, {
-                events: bus as never,
-                processFactory: (options: AgentProcessOptions) => new FakeTeamAgentProcess(options),
-            });
-
-            await orchestrator.startAgent('coder');
-            await orchestrator.sendMessage('planner', 'coder', 'ping');
-            await orchestrator.stopAgent('coder');
-            await tap.flush();
-
-            for (const name of ['agent.started', 'agent.stopped', 'agent.message.sent'] as const) {
-                const rows = await dao.query({ name, limit: 10 });
-                expect(rows.length).toBeGreaterThanOrEqual(1);
-            }
-        } finally {
-            tap.unsubscribe();
-        }
-    });
 
     test('[0236 R2] ctx.workflowService() produces adapter verb-form workflow events', async () => {
         const { ctx, tap, dao } = await buildContextWithTap();

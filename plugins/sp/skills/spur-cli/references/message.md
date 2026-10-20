@@ -86,7 +86,7 @@ carry their persisted origin and run status; exhausted attempts keep the same re
 | `reason` | Meaning |
 | -------- | --------- |
 | `delivery-failed` | The drain marked the delivery failed (`injectError` carries why), or its run's receipt outcome is `errored`. |
-| `attempts-exhausted` | The message burned its bounded redelivery budget (`MAX_INJECT_ATTEMPTS`, 0831); the reconciler marks it `failed` — the reconciler's only write. |
+| `attempts-exhausted` | The message burned its bounded redelivery budget (`MAX_DELIVERY_ATTEMPTS`, 0831; renamed by G11); the claim sweeper marks it `failed`. |
 | `outcome-unknown` | The drain consumed it and no completion receipt ever arrived: the agent may have edited files. **Never requeued, never auto-released** — a human decides. |
 | `run-exit-only` | Its run exited (receipt outcome `run-exit-only`) with no workflow verification result. |
 

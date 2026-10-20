@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, test } from 'bun:test';
-import { CoordinationRunDao, createMigratedDb, type DbAdapter, InboxMessageDao } from '@gobing-ai/spur-domain';
-import { DeliveryReconciler, MAX_INJECT_ATTEMPTS, type ReconcileReport } from '../../src';
+import { CoordinationRunDao, createMigratedDb, type DbAdapter } from '@gobing-ai/spur-domain';
+import { DeliveryReconciler, InboxService, MAX_DELIVERY_ATTEMPTS, type ReconcileReport } from '../../src';
 
 /**
  * 0834 — delivery reconciler: five-step classification precedence, idempotence,
@@ -8,17 +8,22 @@ import { DeliveryReconciler, MAX_INJECT_ATTEMPTS, type ReconcileReport } from '.
  */
 
 let db: DbAdapter;
-let inbox: InboxMessageDao;
+let inbox: InboxService;
 let runs: CoordinationRunDao;
 let reconciler: DeliveryReconciler;
 
+/**
+ * G11 R8: only `kind: 'request'` rows are unresolved work, so the fixtures are requests.
+ * A chat row is asserted separately (it must never surface as a held delivery).
+ */
 async function seedQueued(): Promise<string> {
-    return inbox.enqueue('operator', 'worker', 'do the work');
+    const { message } = await inbox.send({ from: 'operator', to: 'worker', body: 'do the work', kind: 'request' });
+    return message.id;
 }
 
-/** Move queued rows to `injected` exactly like a drain claim does. */
+/** Claim queued rows exactly like a drain does (queued → claimed, attempts charged). */
 async function claim(): Promise<void> {
-    await inbox.drainPending('worker');
+    await inbox.claim('worker', 10);
 }
 
 /** Write a completion receipt for a run that lists `messageIds` (0833 shape). */
@@ -52,7 +57,7 @@ function reasons(report: ReconcileReport): Array<[string, string]> {
 
 beforeEach(async () => {
     db = await createMigratedDb({ url: ':memory:' });
-    inbox = new InboxMessageDao(db);
+    inbox = new InboxService({ getDb: async () => db });
     runs = new CoordinationRunDao(db);
     reconciler = new DeliveryReconciler({ getDb: async () => db });
 });
@@ -61,7 +66,7 @@ describe('0834 five-step classification precedence', () => {
     test('delivered run outcomes remain visible; only a verified receipt clears the hold', async () => {
         const id = await seedQueued();
         await claim();
-        await inbox.markDelivered(id);
+        await inbox.settle([id], 'accepted');
         await writeReceipt('delivered-run', [id], 'errored', [{ kind: 'log', path: '/tmp/failure.log' }], '0834');
         expect((await reconciler.classify('worker'))[0]).toMatchObject({
             messageId: id,
@@ -80,7 +85,7 @@ describe('0834 five-step classification precedence', () => {
             outcome: 'verified',
         });
         expect(await reconciler.classify('worker')).toEqual([]);
-        expect((await inbox.getById(id))?.status).toBe('delivered');
+        expect((await inbox.get(id))?.status).toBe('delivered');
     });
 
     test('an interrupted run carries its durable origin and artifacts without claiming an exit', async () => {
@@ -111,13 +116,13 @@ describe('0834 five-step classification precedence', () => {
             artifacts: [{ kind: 'log', path: '/tmp/interrupted.log' }],
         });
         expect(await reconciler.classify('worker')).toEqual(report.unresolved);
-        expect((await inbox.getById(id))?.status).toBe('injected');
+        expect((await inbox.get(id))?.status).toBe('claimed');
     });
 
     test('step 1: failed row → delivery-failed with its injectError', async () => {
         const id = await seedQueued();
         await claim();
-        await inbox.markFailed(id, 'invocation never started');
+        await inbox.settle([id], 'not-started', 'invocation never started');
         const report = await reconciler.reconcile('worker');
         expect(reasons(report)).toEqual([[id, 'delivery-failed']]);
         const held = report.unresolved[0];
@@ -165,19 +170,24 @@ describe('0834 five-step classification precedence', () => {
         expect(report.unresolved[0]?.artifacts).toEqual([]);
         expect(report.unresolved[0]?.runId).toBeUndefined();
         // Never touched: still injected, never requeued or released.
-        expect((await inbox.getById(id))?.status).toBe('injected');
+        expect((await inbox.get(id))?.status).toBe('claimed');
         expect(report.exhausted).toEqual([]);
     });
 
-    test(`step 4: queued at MAX_INJECT_ATTEMPTS (${MAX_INJECT_ATTEMPTS}) → attempts-exhausted and marked failed (the only write)`, async () => {
-        const id = await seedQueued();
-        await db.run('UPDATE inbox_messages SET inject_attempts = ?1 WHERE id = ?2', MAX_INJECT_ATTEMPTS, id);
+    test('a queued row is never failed by reconcile — the sweep owns the attempt ceiling (G11 R4)', async () => {
+        await seedQueued();
+        // Burn the delivery budget through the service itself: claim (queued→claimed, attempts+1)
+        // then release (claimed→queued). No raw SQL seam is needed to reach the ceiling.
+        for (let attempt = 0; attempt < MAX_DELIVERY_ATTEMPTS; attempt += 1) {
+            await inbox.claim('worker', 10);
+            await inbox.release((await inbox.list('worker', 'in')).map((row) => row.id));
+        }
+        const id = (await inbox.list('worker', 'in'))[0]?.id ?? '';
         const report = await reconciler.reconcile('worker');
-        expect(reasons(report)).toEqual([[id, 'attempts-exhausted']]);
-        expect(report.exhausted).toEqual([id]);
-        const row = await inbox.getById(id);
-        expect(row?.status).toBe('failed');
-        expect(row?.injectError).toBe(`attempts exhausted after ${MAX_INJECT_ATTEMPTS} deliveries`);
+        // Nothing was claimed, so nothing is reconciled: the row is untouched and unheld.
+        expect(report.unresolved).toEqual([]);
+        expect(report.exhausted).toEqual([]);
+        expect((await inbox.get(id))?.status).toBe('queued');
     });
 
     test('step 5: queued under budget → omitted from the report', async () => {
@@ -186,26 +196,25 @@ describe('0834 five-step classification precedence', () => {
         expect(report.unresolved).toEqual([]);
         expect(report.exhausted).toEqual([]);
         expect(report.scanned).toBe(1);
-        expect((await inbox.getById(id))?.status).toBe('queued');
+        expect((await inbox.get(id))?.status).toBe('queued');
     });
 
     test('delivered rows without a receipt remain outcome-unknown and are never replayed', async () => {
         const id = await seedQueued();
         await claim();
-        await inbox.markDelivered(id);
+        await inbox.settle([id], 'accepted');
         const report = await reconciler.reconcile('worker');
         expect(report.scanned).toBe(1);
         expect(reasons(report)).toEqual([[id, 'outcome-unknown']]);
-        expect((await inbox.getById(id))?.status).toBe('delivered');
+        expect((await inbox.get(id))?.status).toBe('delivered');
     });
 
     test('reconcile() with no agentId scans all recipients', async () => {
-        const a = await inbox.enqueue('operator', 'agent-a', 'a');
-        await inbox.enqueue('operator', 'agent-b', 'b');
-        await inbox.drainPending('agent-a'); // a: injected no receipt; b: queued under budget
+        const a = (await inbox.send({ from: 'operator', to: 'agent-a', body: 'a', kind: 'request' })).message.id;
+        await inbox.send({ from: 'operator', to: 'agent-b', body: 'b', kind: 'request' });
+        await inbox.claim('agent-a', 10); // a: claimed, no receipt; b: queued
         const report = await reconciler.reconcile();
         expect(report.scanned).toBe(2);
-        // b is queued below budget (step 5) — scanned, but not unresolved.
         expect(reasons(report)).toEqual([[a, 'outcome-unknown']]);
     });
 });
@@ -213,23 +222,17 @@ describe('0834 five-step classification precedence', () => {
 describe('0834 idempotence and late receipts', () => {
     test('double reconcile: identical classification, exhausted empty on pass 2', async () => {
         const noReceipt = await seedQueued();
-        await inbox.drainPending('worker'); // claims only this row → injected, no receipt
-        const overBudget = await seedQueued(); // stays queued
-        await db.run('UPDATE inbox_messages SET inject_attempts = ?1 WHERE id = ?2', MAX_INJECT_ATTEMPTS, overBudget);
+        await claim(); // claimed, no receipt
+        await seedQueued(); // stays queued
 
         const pass1 = await reconciler.reconcile('worker');
         const pass2 = await reconciler.reconcile('worker');
 
-        expect(pass1.exhausted).toEqual([overBudget]);
+        expect(pass1.exhausted).toEqual([]);
         expect(pass2.exhausted).toEqual([]);
         expect(pass2.unresolved).toEqual(pass1.unresolved);
-        expect(new Set(pass2.unresolved.map((u) => u.messageId))).toEqual(
-            new Set(pass1.unresolved.map((u) => u.messageId)),
-        );
         expect(pass2.scanned).toBe(pass1.scanned);
-        const pass2Reasons = new Map(reasons(pass2));
-        expect(pass2Reasons.get(overBudget)).toBe('attempts-exhausted');
-        expect(pass2Reasons.get(noReceipt)).toBe('outcome-unknown');
+        expect(new Map(reasons(pass2)).get(noReceipt)).toBe('outcome-unknown');
     });
 
     test('late receipt after a pass: outcome-unknown → run-exit-only, still never requeued', async () => {
@@ -243,7 +246,7 @@ describe('0834 idempotence and late receipts', () => {
         const pass2 = await reconciler.reconcile('worker');
         expect(reasons(pass2)).toEqual([[id, 'run-exit-only']]);
         expect(pass2.unresolved[0]?.runId).toBe('run-late');
-        expect((await inbox.getById(id))?.status).toBe('injected');
+        expect((await inbox.get(id))?.status).toBe('claimed');
     });
 });
 
@@ -298,7 +301,10 @@ describe('0838 advisory: multi-receipt tie-break (newest receipt decides)', () =
 describe('0844 classify(): steps 1/2/3/5 without the step-4 write', () => {
     test('every terminal/injected case classifies identically to reconcile()', async () => {
         const failed = await seedQueued();
-        await inbox.markFailed(failed, 'inject error');
+        // Settlement is guarded on `claimed` (G11 R4), so the fixture claims first — exactly
+        // what a drain does before a run refuses to start.
+        await inbox.claim('worker', 10);
+        await inbox.settle([failed], 'not-started', 'inject error');
         const exitOnly = await seedQueued();
         await writeReceipt('r-exit', [exitOnly], 'run-exit-only', [], 'T-1');
         const errored = await seedQueued();
@@ -321,9 +327,11 @@ describe('0844 classify(): steps 1/2/3/5 without the step-4 write', () => {
     test('queued rows are omitted entirely — even at/over budget — and nothing is written', async () => {
         await seedQueued(); // under budget — steps 4/5's business either way
         const overBudget = await seedQueued();
-        // Push one row to the budget boundary without the DAO's own drain:
-        // reconcile() would mark it failed; classify() must not.
-        await db.run(`UPDATE inbox_messages SET inject_attempts = ? WHERE id = ?`, [MAX_INJECT_ATTEMPTS, overBudget]);
+        // Reach the budget boundary through the service: claim + release until the counter is spent.
+        for (let attempt = 0; attempt < MAX_DELIVERY_ATTEMPTS; attempt += 1) {
+            await inbox.claim('worker', 10);
+            await inbox.release((await inbox.list('worker', 'in')).map((row) => row.id));
+        }
 
         const classified = await reconciler.classify();
         expect(classified).toEqual([]);
@@ -334,8 +342,11 @@ describe('0844 classify(): steps 1/2/3/5 without the step-4 write', () => {
         )[0];
         expect(row?.status).toBe('queued');
 
-        // The report path, by contrast, marks it.
+        // G11 R4 moved the attempt ceiling to the sweep, which only touches EXPIRED CLAIMS.
+        // reconcile() therefore leaves a queued row alone too — it classifies, it does not
+        // condemn undelivered work (the sweeper's own test asserts the failure it does write).
         const report = await reconciler.reconcile();
-        expect(report.exhausted).toContain(overBudget);
+        expect(report.exhausted).toEqual([]);
+        expect(report.unresolved).toEqual([]);
     });
 });

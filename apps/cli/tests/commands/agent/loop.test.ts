@@ -5,14 +5,15 @@ import { afterEach, beforeEach, describe, expect, mock, spyOn, test } from 'bun:
 import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { _resetAgentServiceShimsForTest, AgentCoordinationService } from '@gobing-ai/spur-app';
+import { _resetAgentServiceShimsForTest, AgentCoordinationService, MAX_DELIVERY_ATTEMPTS } from '@gobing-ai/spur-app';
 import { spurConfigSchema } from '@gobing-ai/spur-config';
-import { createMigratedDb, type DbAdapter, InboxMessageDao } from '@gobing-ai/spur-domain';
+import { createMigratedDb, type DbAdapter } from '@gobing-ai/spur-domain';
 import { AgentDetector } from '@gobing-ai/ts-ai-runner';
 import { runAgentLoop } from '../../../src/commands/agent';
 import { type CliContext, createCliContext } from '../../../src/context';
 import { main } from '../../../src/index';
 import type { CommandOutput } from '../../../src/output';
+import { inboxFixture } from '../../helpers';
 
 /**
  * CLI-spawning / fingerprint tests: `agent doctor` measures ~1.5s on a quiet host and 7-8s while
@@ -211,13 +212,24 @@ describe('runAgentLoop', () => {
         const ctx = createCliContext({ cwd: tempDir, output, db });
         const team = new AgentCoordinationService(ctx);
         await team.createAgentSpec({ id: 'reconcile-worker', type: 'claude-code', executor: 'claude' });
-        const inbox = new InboxMessageDao(db);
+        const inbox = inboxFixture(db);
+        // G11 R8: reconciliation reads `kind: 'request'` rows, so both seeds are dispatches.
         // In-flight: consumed by a previous drain that never settled (no receipt).
-        const stuck = await inbox.enqueue('operator', 'reconcile-worker', 'ambiguous work');
+        const stuck = (
+            await inbox.enqueueIdempotent('operator', 'reconcile-worker', 'ambiguous work', 'fleet:task:0841:1')
+        ).id;
         await inbox.drainPending('reconcile-worker');
-        // Over-budget redelivery still waiting in the queue.
-        const overBudget = await inbox.enqueue('operator', 'reconcile-worker', 'exhausted work');
-        await db.run('UPDATE inbox_messages SET inject_attempts = ?1 WHERE id = ?2', 3, overBudget);
+        // An expired claim that has spent its delivery budget — the sweeper's case (G11 R4).
+        const overBudget = (
+            await inbox.enqueueIdempotent('operator', 'reconcile-worker', 'exhausted work', 'fleet:task:0842:1')
+        ).id;
+        await db.run('UPDATE inbox_messages SET attempts = ?1 WHERE id = ?2', MAX_DELIVERY_ATTEMPTS, overBudget);
+        await inbox.drainPending('reconcile-worker');
+        await db.run(
+            'UPDATE inbox_messages SET attempts = ?1, claimed_at = 0 WHERE id = ?2',
+            MAX_DELIVERY_ATTEMPTS,
+            overBudget,
+        );
 
         const run = mock(() => Promise.resolve(0));
         const customCtx = {
@@ -231,10 +243,10 @@ describe('runAgentLoop', () => {
         expect(stdout).toContain('reconcile: scanned=2 unresolved=2 exhausted=1');
         expect(stdout).toContain(`${stuck} outcome-unknown`);
         expect(stdout).toContain(`${overBudget} attempts-exhausted`);
-        // The reconciler's only write: the budget row is terminally failed.
+        // The sweeper's write: an expired claim at the budget ceiling is terminally failed.
         const row = await inbox.getById(overBudget);
         expect(row?.status).toBe('failed');
-        expect(row?.injectError).toBe('attempts exhausted after 3 deliveries');
+        expect(row?.error).toBe('attempts exhausted after 3 deliveries');
         // Reconciliation preceded dispatch: nothing re-claimed, no agent run.
         expect(run).not.toHaveBeenCalled();
     });

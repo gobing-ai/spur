@@ -49,12 +49,11 @@ import {
 import { tmpdir } from 'node:os';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { StrategyRuntime } from '@gobing-ai/spur-app';
+import { InboxService, StrategyRuntime } from '@gobing-ai/spur-app';
 import { getEnvVar, getEnvVars } from '@gobing-ai/spur-config';
 import {
     CoordinationRunDao,
     createMigratedDb,
-    InboxUnfinishedDao,
     ProjectClaimDao,
     readMemberSessions,
     SystemEventDao,
@@ -1497,8 +1496,8 @@ export async function runFleetE2e(args: string[]): Promise<number> {
             const openDb = db;
             if (openDb === undefined) throw new Error('no project db');
             const runs = new CoordinationRunDao(openDb);
-            const inboxRows = new InboxUnfinishedDao(openDb);
-            const keyedRows = (wbs: string) => inboxRows.listByRequestKeyPrefix(`fleet:task:${wbs}:`);
+            const inboxRows = new InboxService({ getDb: async () => openDb });
+            const keyedRows = (wbs: string) => inboxRows.taskAttempts(wbs);
 
             // (0) R1's E2E proof: ONE unkeyed conversational message to the persistent coder,
             // delivered through stdin with NO coordination run row — exactly the message class that
@@ -1515,8 +1514,8 @@ export async function runFleetE2e(args: string[]): Promise<number> {
                     const done = jsonOk<{ status: string }>(['task', 'show', state.wbs ?? '', '--json'], scratch);
                     if (done.status !== 'done') return undefined;
                     if (await runs.hasRunning(state.coderId)) return undefined;
-                    const queued = (await inboxRows.listUnfinished(state.coderId)).filter(
-                        (row) => row.status === 'queued' || row.status === 'injected',
+                    const queued = (await inboxRows.list(state.coderId, 'in', { limit: 500 })).filter(
+                        (row) => row.status === 'queued' || row.status === 'claimed',
                     );
                     return queued.length === 0 ? true : undefined;
                 },
@@ -1534,7 +1533,9 @@ export async function runFleetE2e(args: string[]): Promise<number> {
                         scratch,
                     ).messages;
                     const row = rows.find((message) => message.id === chat.msgId);
-                    if (row === undefined || row.status === 'queued' || row.status === 'injected') return undefined;
+                    // G11 renamed the consumed state `injected` → `claimed`: a chat row that a
+                    // drain picked up is `claimed`, so only `queued` means "not delivered yet".
+                    if (row === undefined || row.status === 'queued') return undefined;
                     // A run row here would make it a receipt-bearing delivery: this message must be
                     // delivered through stdin, alone, with no run row at all.
                     if ((await runs.listByMessageId(chat.msgId)).length > 0) {
@@ -1596,7 +1597,7 @@ export async function runFleetE2e(args: string[]): Promise<number> {
             // path never writes.
             const attemptOne = await pollUntil(
                 `the strategy to dispatch fleet:task:${wbs}:1`,
-                async () => (await keyedRows(wbs)).find((row) => row.request_key === `fleet:task:${wbs}:1`),
+                async () => (await keyedRows(wbs)).find((row) => row.requestKey === `fleet:task:${wbs}:1`),
                 BOUNDS.hang,
             );
             // The keyed turn writes its coordination row at invoke start; the stub then hangs.
@@ -1636,7 +1637,7 @@ export async function runFleetE2e(args: string[]): Promise<number> {
             // (d) the strategy re-dispatches under the next attempt key with no operator message.
             const attemptTwo = await pollUntil(
                 `the strategy to re-dispatch fleet:task:${wbs}:2`,
-                async () => (await keyedRows(wbs)).find((row) => row.request_key === `fleet:task:${wbs}:2`),
+                async () => (await keyedRows(wbs)).find((row) => row.requestKey === `fleet:task:${wbs}:2`),
                 BOUNDS.dispatch,
             );
             const resumed = await pollUntil(
@@ -1667,9 +1668,9 @@ export async function runFleetE2e(args: string[]): Promise<number> {
                 STEP_SIX_ASSERTION,
                 [
                     `unkeyed delivered=${chat.msgId} status=delivered (stdin, no run row) — named by 0 of ${keyedOnlyHolds.length} unresolved-deliveries hold(s)`,
-                    `attempt-1=${attemptOne.request_key} run=${runningRun.run_id} hung directive=${hungDirective}`,
+                    `attempt-1=${attemptOne.requestKey} run=${runningRun.run_id} hung directive=${hungDirective}`,
                     `killed → restarted pid=${restartedPid}; attempt-1 run=${terminalRun.run_id} status=${terminalRun.status} completed_at=${terminalRun.completed_at}`,
-                    `attempt-2=${attemptTwo.request_key} dispatched by the strategy; resumed directive=${resumedDirective}`,
+                    `attempt-2=${attemptTwo.requestKey} dispatched by the strategy; resumed directive=${resumedDirective}`,
                 ].join(' | '),
             );
         } catch (error) {

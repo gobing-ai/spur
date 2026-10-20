@@ -3,6 +3,7 @@ import { existsSync, mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import {
+    InboxService,
     normalizeProjectPath,
     ProjectRegistry,
     setDetachedServeSpawnForTests,
@@ -11,7 +12,7 @@ import {
 } from '@gobing-ai/spur-app';
 import { removeEnvVar, setEnvVar, spurConfigSchema } from '@gobing-ai/spur-config';
 import { loadSpurConfig } from '@gobing-ai/spur-config/loader';
-import { CoordinationRunDao, createMigratedDb, InboxMessageDao, ProjectStrategyDao } from '@gobing-ai/spur-domain';
+import { CoordinationRunDao, createMigratedDb, ProjectStrategyDao } from '@gobing-ai/spur-domain';
 import { createNodeFileSystem } from '@gobing-ai/ts-runtime';
 import { Hono } from 'hono';
 import type { ServerContext } from '../../src/context';
@@ -591,16 +592,19 @@ describe('healthModule', () => {
             expect(instanceId).toBeTruthy();
 
             const db = await ctx.getDb();
-            const inbox = new InboxMessageDao(db);
+            // G11 R6: the inbox read is the service's; the operator sends as `operator` (the
+            // retired `board-operator` id is no longer an address).
+            const inbox = new InboxService({ getDb: async () => db });
             const runs = new CoordinationRunDao(db);
 
-            // A consumed request with a run receipt (drained → injected → run exited).
-            const consumed = await inbox.enqueueIdempotent(
-                'board-operator',
-                instanceId as string,
-                'consumed request',
-                'rk-consumed',
-            );
+            // A consumed request with a run receipt (queued → claimed → run exited).
+            const consumed = await inbox.send({
+                from: 'operator',
+                to: instanceId as string,
+                body: 'consumed request',
+                kind: 'request',
+                requestKey: 'rk-consumed',
+            });
             await runs.insertStart({
                 specId: instanceId as string,
                 agentKind: 'planner',
@@ -610,15 +614,27 @@ describe('healthModule', () => {
                 startedAt: new Date().toISOString(),
             });
             await runs.updateExit('run-1', 'exited', new Date().toISOString(), '[]', {
-                messageIds: [consumed.id],
+                messageIds: [consumed.message.id],
                 taskId: '0844',
                 outcome: 'run-exit-only',
             });
-            await inbox.drainPending(instanceId as string);
+            await inbox.claim(instanceId as string, 10);
 
             // A queued operator request with a durable key, and a foreign row that must be dropped.
-            await inbox.enqueueIdempotent('board-operator', instanceId as string, 'queued request', 'rk-queued');
-            await inbox.enqueueIdempotent('some-member', instanceId as string, 'not an operator request', 'rk-foreign');
+            await inbox.send({
+                from: 'operator',
+                to: instanceId as string,
+                body: 'queued request',
+                kind: 'request',
+                requestKey: 'rk-queued',
+            });
+            await inbox.send({
+                from: 'some-member',
+                to: instanceId as string,
+                body: 'not an operator request',
+                kind: 'request',
+                requestKey: 'rk-foreign',
+            });
 
             const res = await app.request('/api/project/requests');
             expect(res.status).toBe(200);
@@ -639,10 +655,10 @@ describe('healthModule', () => {
             // Foreign mailbox traffic is filtered; only operator rows remain.
             expect(body.requests).toHaveLength(2);
 
-            const consumedRow = body.requests.find((r) => r.messageId === consumed.id);
+            const consumedRow = body.requests.find((r) => r.messageId === consumed.message.id);
             expect(consumedRow).toBeDefined();
             expect(consumedRow?.requestKey).toBe('rk-consumed');
-            expect(consumedRow?.deliveryStatus).toBe('injected');
+            expect(consumedRow?.deliveryStatus).toBe('claimed');
             expect(consumedRow?.runId).toBe('run-1');
             expect(consumedRow?.taskId).toBe('0844');
             expect(consumedRow?.outcome).toBe('run-exit-only');

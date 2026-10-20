@@ -273,6 +273,41 @@ export interface EventSummaryResult {
 const SYSTEM_EVENT_COLUMNS =
     'id, event_name, occurred_at, actor, payload_json, run_id, entity_kind, entity_id, sequence';
 
+/** One parameterized `system_events` INSERT, ready for any adapter or transaction handle. */
+export interface SystemEventInsertStatement {
+    sql: string;
+    params: readonly unknown[];
+}
+
+/**
+ * The single `system_events` insert statement, shared by {@link SystemEventDao.insert} and by
+ * producers that must write an event inside their OWN transaction (the inbox, G11 R3): sharing
+ * the statement is what keeps the ledger cursor assignment identical on both paths.
+ *
+ * `sequence` is auto-assigned as a global monotonic ledger cursor when omitted: the
+ * `MAX(sequence)` subquery runs under the same statement's write lock, so concurrent inserts
+ * cannot both read the same max. An explicit sequence (tests, backfills) is honored verbatim.
+ */
+export function systemEventInsertSql(input: CreateSystemEventInput): SystemEventInsertStatement {
+    return {
+        sql: `INSERT INTO system_events (${SYSTEM_EVENT_COLUMNS})
+              SELECT ?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8,
+                     CASE WHEN ?9 IS NULL THEN COALESCE(MAX(sequence), 0) + 1 ELSE ?9 END
+              FROM system_events`,
+        params: [
+            input.id,
+            input.event_name,
+            input.occurred_at,
+            input.actor ?? null,
+            input.payload_json ?? null,
+            input.run_id ?? null,
+            input.entity_kind ?? null,
+            input.entity_id ?? null,
+            input.sequence ?? null,
+        ],
+    };
+}
+
 /**
  * DAO for the append-only `system_events` ledger, written by the server
  * EventBus tap (task 0189 wave A / 0198) and the CLI planning emitter
@@ -297,21 +332,8 @@ export class SystemEventDao {
      * same max. An explicit sequence (tests, backfills) is honored verbatim.
      */
     async insert(input: CreateSystemEventInput): Promise<void> {
-        await this.db.run(
-            `INSERT INTO system_events (${SYSTEM_EVENT_COLUMNS})
-             SELECT ?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8,
-                    CASE WHEN ?9 IS NULL THEN COALESCE(MAX(sequence), 0) + 1 ELSE ?9 END
-             FROM system_events`,
-            input.id,
-            input.event_name,
-            input.occurred_at,
-            input.actor ?? null,
-            input.payload_json ?? null,
-            input.run_id ?? null,
-            input.entity_kind ?? null,
-            input.entity_id ?? null,
-            input.sequence ?? null,
-        );
+        const statement = systemEventInsertSql(input);
+        await this.db.run(statement.sql, ...statement.params);
     }
 
     /**

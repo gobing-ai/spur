@@ -10,7 +10,6 @@ import {
     ProjectStrategyDao,
     SystemEventDao,
 } from '@gobing-ai/spur-domain';
-import { InboxMessageDao } from '@gobing-ai/ts-db';
 import { createNodeFileSystem } from '@gobing-ai/ts-runtime';
 import { parse as yamlParse } from 'yaml';
 import {
@@ -30,6 +29,7 @@ import {
     type StrategyRuntimeContext,
     type TaskSummary,
 } from '../../src/index';
+import { InboxService } from '../../src/services/inbox-service';
 import { createMigratedDb } from '../helpers';
 
 /**
@@ -37,31 +37,78 @@ import { createMigratedDb } from '../helpers';
  * inbox DAO: keyed idempotent enqueue and one row read. Faithful to the app service's
  * signatures and behaviour, so the REAL FleetDispatcher drives the rig.
  */
+/**
+ * Test fixture with the pre-G11 ts-db DAO surface, backed by {@link InboxService} (G11 R2
+ * retired the ts-db `InboxMessageDao`; the rebuilt table has no `inject_*` columns). Seeds are
+ * `kind: 'request'` and carry `task_id` so the strategy's attempt count reads the column.
+ */
+function legacyInbox(db: DbAdapter) {
+    const service = new InboxService({ getDb: async () => db });
+    const taskIdOf = (requestKey: string) => /^fleet:task:([^:]+):/.exec(requestKey)?.[1];
+    return {
+        async enqueue(fromId: string | null, toId: string, body: string) {
+            return (await service.send({ from: fromId ?? 'operator', to: toId, body })).message.id;
+        },
+        async enqueueIdempotent(fromId: string | null, toId: string, body: string, requestKey: string) {
+            const taskId = taskIdOf(requestKey);
+            const { message, replayed } = await service.send({
+                from: fromId ?? 'operator',
+                to: toId,
+                body,
+                kind: 'request',
+                requestKey,
+                ...(taskId !== undefined ? { taskId } : {}),
+            });
+            return { id: message.id, replayed };
+        },
+        async drainPending(member: string) {
+            return service.claim(member, 100);
+        },
+        async getById(id: string) {
+            return service.get(id);
+        },
+        async inbox(member: string) {
+            return service.list(member, 'in', { limit: 100 });
+        },
+    };
+}
+
 function coordinationOver(db: DbAdapter) {
     return {
         sendMessage: async (
             fromId: string | null,
             toId: string,
             body: string,
-            replyTo?: string,
+            _replyTo?: string,
             requestKey?: string,
         ) => {
-            const dao = new InboxMessageDao(db);
-            const keyed =
-                requestKey !== undefined ? await dao.enqueueIdempotent(fromId, toId, body, requestKey, replyTo) : null;
-            const msgId = keyed?.id ?? (await dao.enqueue(fromId, toId, body, replyTo));
+            const service = new InboxService({ getDb: async () => db });
+            if (requestKey === undefined) {
+                const { message } = await service.send({ from: fromId ?? 'operator', to: toId, body });
+                return { msgId: message.id, toId, status: 'queued' as const, injected: false };
+            }
+            const taskId = /^fleet:task:([^:]+):/.exec(requestKey)?.[1];
+            const { message, replayed } = await service.send({
+                from: fromId ?? 'operator',
+                to: toId,
+                body,
+                kind: 'request',
+                requestKey,
+                ...(taskId !== undefined ? { taskId } : {}),
+            });
             return {
-                msgId,
+                msgId: message.id,
                 toId,
                 status: 'queued' as const,
                 injected: false,
-                ...(keyed !== null ? { replayed: keyed.replayed, requestKey } : {}),
+                replayed,
+                requestKey,
             };
         },
         getMessage: async (msgId: string) => {
-            const row = await new InboxMessageDao(db).getById(msgId);
-            if (row === undefined) return null;
-            return { id: row.id, toId: row.toId, status: row.status, requestKey: row.requestKey ?? null };
+            const row = await new InboxService({ getDb: async () => db }).get(msgId);
+            if (row === null) return null;
+            return { id: row.id, toId: row.toId, status: row.status, requestKey: row.requestKey };
         },
     };
 }
@@ -757,7 +804,7 @@ describe('StrategyRuntime.resume (0838 R6)', () => {
             // One ambiguous FLEET-KEYED delivery: injected by the drain, never settled, no receipt.
             // Only the fleet's own `fleet:task:*` dispatches can hold GTD (G71 R1) — an unkeyed
             // conversational message no longer does, so this hold case must be keyed.
-            const inbox = new (await import('@gobing-ai/spur-domain')).InboxMessageDao(rig.db);
+            const inbox = legacyInbox(rig.db);
             const keyed = await inbox.enqueueIdempotent('operator', 'proj-coder', 'do the work', 'fleet:task:0900:1');
             const messageId = keyed.id;
             await inbox.drainPending('proj-coder');
@@ -781,7 +828,7 @@ describe('StrategyRuntime.resume (0838 R6)', () => {
         const rig = await makeRig({ strategy: 'gtd' });
         try {
             await rig.claims.claim(rig.project, 'orchestrator', 'proj-orch', 30_000);
-            const inbox = new (await import('@gobing-ai/spur-domain')).InboxMessageDao(rig.db);
+            const inbox = legacyInbox(rig.db);
             const ids: string[] = [];
             for (let n = 1; n <= 7; n++) {
                 ids.push((await inbox.enqueueIdempotent('operator', 'proj-coder', 'work', `fleet:task:090${n}:1`)).id);
@@ -799,23 +846,24 @@ describe('StrategyRuntime.resume (0838 R6)', () => {
         }
     });
 
-    test('F1: an unkeyed delivery with no receipt does NOT hold GTD dispatch (G71 R1)', async () => {
+    test('F1: an unkeyed CHAT delivery is never reported as unresolved work (G71 R1 / G11 R8)', async () => {
         const rig = await makeRig({ strategy: 'gtd' });
         try {
             await rig.claims.claim(rig.project, 'orchestrator', 'proj-orch', 30_000);
             // An operator/conversational message accepted through the persistent stdin path: by
             // the 0831 "acceptance is delivery" contract it writes NO coordination run row, so its
             // missing receipt is the designed outcome — it must not wedge the fleet.
-            const inbox = new (await import('@gobing-ai/spur-domain')).InboxMessageDao(rig.db);
+            const inbox = legacyInbox(rig.db);
             const messageId = await inbox.enqueue('operator', 'proj-coder', 'status?');
             await inbox.drainPending('proj-coder');
 
             const report = await rig.runtime.resume(rig.project);
-            // Still REPORTED (the reconciler's contract is unchanged)…
-            expect(report.unresolved.map((u) => [u.messageId, u.reason, u.requestKey])).toEqual([
-                [messageId, 'outcome-unknown', null],
-            ]);
-            // …but never a hold: the task dispatches with its keyed attempt-1 row.
+            // G11 R8 (AC8): only `kind: 'request'` rows enter receipt reconciliation. A chat
+            // message is never unresolved work, so it is not reported at all — previously it was
+            // listed as `outcome-unknown`, which is the conflation ADR-143 removes.
+            expect(report.unresolved).toEqual([]);
+            expect(messageId).toBeTruthy();
+            // …and never a hold: the task dispatches with its keyed attempt-1 row.
             const selected = await rig.runtime.selectNext(rig.project);
             expect(selected.holds.some((hold) => hold.detail?.includes('unresolved-deliveries'))).toBe(false);
             expect(selected.decisions.length).toBeGreaterThan(0);
@@ -828,8 +876,14 @@ describe('StrategyRuntime.resume (0838 R6)', () => {
         const rig = await makeRig({ strategy: 'gtd' });
         try {
             await rig.claims.claim(rig.project, 'orchestrator', 'proj-orch', 30_000);
-            const inbox = new InboxMessageDao(rig.db);
-            const messageId = await inbox.enqueue('operator', 'proj-coder', 'do the work');
+            const inbox = legacyInbox(rig.db);
+            // G11 R8: reconciliation only reads request rows, so this seed is a keyed dispatch.
+            const { id: messageId } = await inbox.enqueueIdempotent(
+                'operator',
+                'proj-coder',
+                'do the work',
+                'fleet:task:0841:1',
+            );
             await inbox.drainPending('proj-coder');
             // The dispatch drained the message and closed as `run-exit-only` — the only terminal
             // outcome a strategy sink can write (agent-service never writes 'verified'), which is
@@ -868,7 +922,7 @@ describe('StrategyRuntime.resume (0838 R6)', () => {
         try {
             await rig.claims.claim(rig.project, 'orchestrator', 'proj-orch', 30_000);
             // A stale terminal message to an unrelated ad-hoc agent, never settled.
-            const inbox = new (await import('@gobing-ai/spur-domain')).InboxMessageDao(rig.db);
+            const inbox = legacyInbox(rig.db);
             await inbox.enqueue('terminal', 'demo-claude', 'hello');
             await inbox.drainPending('demo-claude');
 
@@ -924,18 +978,22 @@ describe('managed GTD dispatch and reconciliation (G62)', () => {
             // Both P0 tasks go out: the write-capable coder takes the single write slot,
             // the proven read-only reader needs none (0837 R5).
             expect(ticked.dispatched.map((d) => d.taskId)).toEqual(['0841', '0843']);
+            // G11 R9: the dispatch carries its task id in the column — the strategy no longer
+            // encodes-and-parses the request key to recover it.
             expect(rig.enqueued).toEqual([
                 {
                     member: 'proj-coder',
                     fromId: 'proj-orch',
                     body: '/sp:dev-run 0841 --auto',
                     requestKey: 'fleet:task:0841:1',
+                    taskId: '0841',
                 },
                 {
                     member: 'proj-reader',
                     fromId: 'proj-orch',
                     body: '/sp:dev-run 0843 --auto',
                     requestKey: 'fleet:task:0843:1',
+                    taskId: '0843',
                 },
             ]);
             expect((await rig.claims.get(rig.project, 'write'))?.holderId).toBe('proj-coder');
@@ -966,7 +1024,7 @@ describe('managed GTD dispatch and reconciliation (G62)', () => {
         try {
             await rig.claims.claim(rig.project, 'orchestrator', 'proj-orch', 30_000);
             const runs = new CoordinationRunDao(rig.db);
-            const inbox = new InboxMessageDao(rig.db);
+            const inbox = legacyInbox(rig.db);
             const { id } = await inbox.enqueueIdempotent('proj-orch', 'proj-coder', 'attempt 1', 'fleet:task:0841:1');
             await runs.insertStart({
                 specId: 'proj-coder',
@@ -1036,7 +1094,7 @@ describe('managed GTD dispatch and reconciliation (G62)', () => {
         try {
             await rig.claims.claim(rig.project, 'orchestrator', 'proj-orch', 30_000);
             const runs = new CoordinationRunDao(rig.db);
-            const inbox = new InboxMessageDao(rig.db);
+            const inbox = legacyInbox(rig.db);
             const { id } = await inbox.enqueueIdempotent('proj-orch', 'proj-coder', 'attempt 1', 'fleet:task:0841:1');
             await runs.insertStart({
                 specId: 'proj-coder',
@@ -1065,7 +1123,7 @@ describe('managed GTD dispatch and reconciliation (G62)', () => {
         try {
             await rig.claims.claim(rig.project, 'orchestrator', 'proj-orch', 30_000);
             const runs = new CoordinationRunDao(rig.db);
-            const inbox = new InboxMessageDao(rig.db);
+            const inbox = legacyInbox(rig.db);
             const settle = async (wbs: string, n: number, status: 'exited' | 'errored') => {
                 const { id } = await inbox.enqueueIdempotent(
                     'proj-orch',
@@ -1141,7 +1199,7 @@ describe('managed GTD dispatch and reconciliation (G62)', () => {
             expect((await rig.claims.get(rig.project, 'write'))?.holderId).toBe('proj-coder');
 
             // The member's run lands an errored receipt for the dispatched message.
-            const inbox = new InboxMessageDao(rig.db);
+            const inbox = legacyInbox(rig.db);
             const [row] = await inbox.inbox('proj-coder');
             expect(row).toBeDefined();
             const runs = new CoordinationRunDao(rig.db);

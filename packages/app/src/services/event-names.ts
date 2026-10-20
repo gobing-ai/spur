@@ -273,6 +273,10 @@ const BASE_CATALOG = [
     baseEvent('message.sent', 'message', 'message'),
     baseEvent('message.replied', 'message', 'message'),
     baseEvent('message.read', 'message', 'message'),
+    baseEvent('message.claimed', 'message', 'message'),
+    baseEvent('message.delivered', 'message', 'message'),
+    baseEvent('message.failed', 'message', 'message'),
+    baseEvent('message.requeued', 'message', 'message'),
 
     baseEvent('process.spawned', 'process', 'process'),
     baseEvent('process.exited', 'process', 'process'),
@@ -675,6 +679,66 @@ export const SYSTEM_EVENT_PRESENTERS: Record<SystemEventName, SystemEventPresent
             const reader = s(data, 'toId');
             const msg = s(data, 'msgId');
             return reader !== undefined && msg !== undefined ? `[message] ${reader} read ${msg}` : '[message] read';
+        },
+        outcome: unsupported,
+    },
+    'message.claimed': {
+        description: 'A member claimed a queued inbox message; the delivery budget was charged.',
+        fields: [
+            field('msgId', 'Message'),
+            field('fromId', 'From'),
+            field('toId', 'Member'),
+            field('threadId', 'Thread'),
+            field('status', 'Status'),
+        ],
+        summary: ({ data }) => {
+            const to = s(data, 'toId');
+            return to !== undefined ? `[message] ${to} claimed` : '[message] claimed';
+        },
+        outcome: unsupported,
+    },
+    'message.delivered': {
+        description: 'A claimed message was delivered to its member.',
+        fields: [
+            field('msgId', 'Message'),
+            field('fromId', 'From'),
+            field('toId', 'Member'),
+            field('threadId', 'Thread'),
+            field('status', 'Status'),
+        ],
+        summary: ({ data }) => {
+            const to = s(data, 'toId');
+            return to !== undefined ? `[message] ${to} delivered` : '[message] delivered';
+        },
+        outcome: unsupported,
+    },
+    'message.failed': {
+        description: 'A message could not be delivered — the attempt budget was spent or the run errored.',
+        fields: [
+            field('msgId', 'Message'),
+            field('fromId', 'From'),
+            field('toId', 'Member'),
+            field('threadId', 'Thread'),
+            field('status', 'Status'),
+        ],
+        summary: ({ data }) => {
+            const to = s(data, 'toId');
+            return to !== undefined ? `[message] ${to} delivery failed` : '[message] failed';
+        },
+        outcome: unsupported,
+    },
+    'message.requeued': {
+        description: 'A claim expired or was released, returning the message to the member queue.',
+        fields: [
+            field('msgId', 'Message'),
+            field('fromId', 'From'),
+            field('toId', 'Member'),
+            field('threadId', 'Thread'),
+            field('status', 'Status'),
+        ],
+        summary: ({ data }) => {
+            const to = s(data, 'toId');
+            return to !== undefined ? `[message] ${to} requeued` : '[message] requeued';
         },
         outcome: unsupported,
     },

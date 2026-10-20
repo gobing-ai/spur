@@ -3,11 +3,11 @@ import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { FleetGuestService } from '@gobing-ai/spur-app';
-import { CoordinationRunDao, createMigratedDb, InboxMessageDao, SystemEventDao } from '@gobing-ai/spur-domain';
+import { CoordinationRunDao, createMigratedDb, SystemEventDao } from '@gobing-ai/spur-domain';
 import { runAgentJoin, runAgentWaitInbox } from '../../../src/commands/agent';
 import { createCliContext } from '../../../src/context';
 import { main } from '../../../src/index';
-import { createCapturedOutput } from '../../helpers';
+import { createCapturedOutput, inboxFixture } from '../../helpers';
 
 /** A shared temp dir with in-memory DB for multi-call main() tests. */
 async function makeCtx(): Promise<{
@@ -382,7 +382,7 @@ describe('spur agent wait --inbox — JSON and lease surfaces', () => {
         const { ctx, out, cleanup } = await guestCtx();
         try {
             await runAgentJoin(ctx, { role: 'reviewer', id: 'g-json', json: false });
-            await new InboxMessageDao(await ctx.getDb()).enqueue('proj-lead', 'g-json', 'hello');
+            await inboxFixture(await ctx.getDb()).enqueue('proj-lead', 'g-json', 'hello');
             expect(await runAgentWaitInbox(ctx, { id: 'g-json', timeoutMs: 5000, json: true, pollMs: 10 })).toBe(0);
             expect(JSON.parse(out.messages.at(-1) ?? '{}')).toEqual({ id: 'g-json', pending: 1 });
         } finally {

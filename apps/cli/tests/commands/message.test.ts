@@ -2,12 +2,12 @@ import { describe, expect, test } from 'bun:test';
 import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { AgentCoordinationService } from '@gobing-ai/spur-app';
-import { CoordinationRunDao, createMigratedDb, InboxMessageDao, SystemEventDao } from '@gobing-ai/spur-domain';
+import { AgentCoordinationService, CLAIM_LEASE_MS, MAX_DELIVERY_ATTEMPTS } from '@gobing-ai/spur-app';
+import { CoordinationRunDao, createMigratedDb, SystemEventDao } from '@gobing-ai/spur-domain';
 import { createNodeFileSystem } from '@gobing-ai/ts-runtime';
 import { defaultSleep, parseInterval, runMessageWatch } from '../../src/commands/message';
 import { main } from '../../src/index';
-import { createCapturedOutput } from '../helpers';
+import { createCapturedOutput, inboxFixture } from '../helpers';
 
 /** A shared temp dir with file-based SQLite for multi-call main() tests. */
 async function makeCtx(): Promise<{
@@ -53,7 +53,7 @@ describe('spur message send', () => {
             expect((await send('request-2', 'different')).receipt.msgId).not.toBe(first.receipt.msgId);
             expect((await send('   ', 'work')).code).not.toBe(0);
             const db = await createMigratedDb({ url: dbUrl });
-            expect(await new InboxMessageDao(db).inbox('planner', 10)).toHaveLength(2);
+            expect(await inboxFixture(db).inbox('planner', 10)).toHaveLength(2);
             await db.close();
         } finally {
             await cleanup();
@@ -188,18 +188,27 @@ describe('spur message inbox', () => {
     test('0834: --unresolved --json shows held messages with reason, attempts, error, run correlation', async () => {
         const db = await createMigratedDb({ url: ':memory:' });
         const out = createCapturedOutput();
-        const inbox = new InboxMessageDao(db);
+        const inbox = inboxFixture(db);
+        // G11 R8: reconciliation reads `kind: 'request'` rows only, so these are dispatches.
         // In-flight, receipt missing → outcome-unknown.
-        const stuck = await inbox.enqueue('operator', 'planner', 'ambiguous work');
+        const stuck = (await inbox.enqueueIdempotent('operator', 'planner', 'ambiguous work', 'fleet:task:0841:1')).id;
         await inbox.drainPending('planner');
-        // Normal redeliverable queued row → omitted from --unresolved.
-        const normal = await inbox.enqueue('operator', 'planner', 'normal work');
-        // Over budget → attempts-exhausted (the reconciler's only write marks it failed).
-        const budget = await inbox.enqueue('operator', 'planner', 'exhausted work');
-        await db.run('UPDATE inbox_messages SET inject_attempts = ?1 WHERE id = ?2', 3, budget);
+        // Over budget → attempts-exhausted; the sweep owns the ceiling (G11 R4), so this row is
+        // claimed and lease-expired rather than hand-stamped.
+        const budget = (await inbox.enqueueIdempotent('operator', 'planner', 'exhausted work', 'fleet:task:0843:1')).id;
+        await db.run('UPDATE inbox_messages SET attempts = ?1 WHERE id = ?2', MAX_DELIVERY_ATTEMPTS - 1, budget);
+        await inbox.drainPending('planner');
+        await db.run('UPDATE inbox_messages SET claimed_at = 0 WHERE id = ?1', budget);
+        await inbox.service.sweep(CLAIM_LEASE_MS + 1);
         // Terminal delivery failure with its recorded error.
-        const broken = await inbox.enqueue('operator', 'planner', 'broken delivery');
+        const broken = (await inbox.enqueueIdempotent('operator', 'planner', 'broken delivery', 'fleet:task:0844:1'))
+            .id;
+        // A failed settle is guarded on `claimed` (G11 R4), so claim it like a drain would first.
+        await inbox.drainPending('planner');
         await inbox.markFailed(broken, 'invocation never started');
+        // Normal redeliverable queued row → omitted from --unresolved. Seeded LAST: a claim takes
+        // every queued row for the member, so an earlier seed would be consumed by these claims.
+        const normal = (await inbox.enqueueIdempotent('operator', 'planner', 'normal work', 'fleet:task:0842:1')).id;
 
         const code = await main(['message', 'inbox', '--agent', 'planner', '--unresolved', '--json'], {
             db,
@@ -232,9 +241,10 @@ describe('spur message inbox', () => {
     test('0834: run-correlated rows carry runId, taskId, and artifacts in --json', async () => {
         const db = await createMigratedDb({ url: ':memory:' });
         const out = createCapturedOutput();
-        const inbox = new InboxMessageDao(db);
+        const inbox = inboxFixture(db);
         const runs = new CoordinationRunDao(db);
-        const msg = await inbox.enqueue('operator', 'planner', 'exit-only work');
+        // G11 R8: only request rows enter receipt reconciliation, so this is a dispatch.
+        const msg = (await inbox.enqueueIdempotent('operator', 'planner', 'exit-only work', 'fleet:task:0007:1')).id;
         await inbox.drainPending('planner');
         await inbox.markDelivered(msg);
         await runs.insertStart({
@@ -271,8 +281,9 @@ describe('spur message inbox', () => {
     test('0834: plain-text --unresolved lists only held messages', async () => {
         const db = await createMigratedDb({ url: ':memory:' });
         const out = createCapturedOutput();
-        const inbox = new InboxMessageDao(db);
-        const stuck = await inbox.enqueue('operator', 'planner', 'ambiguous work');
+        const inbox = inboxFixture(db);
+        // G11 R8: a chat row is never unresolved work, so the held one must be a request.
+        const stuck = (await inbox.enqueueIdempotent('operator', 'planner', 'ambiguous work', 'fleet:task:0841:1')).id;
         await inbox.drainPending('planner');
         await inbox.enqueue('operator', 'planner', 'normal work');
 

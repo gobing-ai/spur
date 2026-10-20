@@ -104,7 +104,7 @@
             └── [done] **F961**: Residual-scan ignores placeholder no-finding review rows ([F961_residual-scan-ignores-placeholder-no-finding-review-rows.md](./F961_residual-scan-ignores-placeholder-no-finding-review-rows.md))
 [active] **G**: Collaboration ([G_collaboration.md](./G_collaboration.md))
     ├── [active] **G1**: Inbox IPC ([G1_inbox-ipc.md](./G1_inbox-ipc.md))
-        └── [backlog] **G11**: Inbox module refactor — one fleet member, one inbox ([G11_inbox-module-refactor-one-instance-one-inbox.md](./G11_inbox-module-refactor-one-instance-one-inbox.md))
+        └── [active] **G11**: Inbox module refactor — one fleet member, one inbox ([G11_inbox-module-refactor-one-instance-one-inbox.md](./G11_inbox-module-refactor-one-instance-one-inbox.md))
     ├── [done] **G2**: Team process supervision ([G2_team-process-supervision.md](./G2_team-process-supervision.md))
     ├── [deprecated] **G3**: Workspace module ([G3_workspace-module.md](./G3_workspace-module.md))
     ├── [verifying] **G4**: Inter-agent control plane ([G4_inter-agent-control-plane.md](./G4_inter-agent-control-plane.md))

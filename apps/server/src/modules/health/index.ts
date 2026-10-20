@@ -4,8 +4,10 @@ import {
     DeliveryReconciler,
     FleetGuestService,
     FleetService,
+    InboxService,
     isPortLive,
     normalizeProjectPath,
+    OPERATOR_INBOX_ID,
     type OrchestratorBinding,
     ProjectRegistry,
     type ResolvedFleetMember,
@@ -25,7 +27,7 @@ import {
     resolveConfigLayers,
     setExecutorAvailability,
 } from '@gobing-ai/spur-config/loader';
-import { CoordinationRunDao, InboxMessageDao, REGISTERED_CANONICAL_STAGES, TIER_RANK } from '@gobing-ai/spur-domain';
+import { CoordinationRunDao, REGISTERED_CANONICAL_STAGES, TIER_RANK } from '@gobing-ai/spur-domain';
 import { createNodeFileSystem } from '@gobing-ai/ts-runtime';
 import type { Hono } from 'hono';
 import { version } from '../../../package.json';
@@ -34,9 +36,6 @@ import type { ServerModule } from '../types';
 
 /** Server start timestamp for uptime calculation. */
 const startedAt = Date.now();
-
-/** The operator mailbox the Board submits from (0841) — twin of the web constant. */
-const OPERATOR_AGENT_ID = 'board-operator';
 
 /**
  * Health module — the reference ServerModule implementation.
@@ -504,17 +503,21 @@ export const healthModule: ServerModule = {
 
             const REQUESTED_RUN_OUTCOMES = ['run-exit-only', 'errored', 'verified'] as const;
             const requests = [];
-            // Read the max page once; filter to the operator mailbox, then cap.
-            for (const row of await new InboxMessageDao(db).inbox(instanceId, 200)) {
-                if (row.fromId !== OPERATOR_AGENT_ID) continue;
+            // G11 R6: the inbox read goes through InboxService; the operator's own messages are
+            // the ones sent from the `operator` address (the retired `board-operator` id).
+            const inboxRows = await new InboxService({ getDb: () => ctx.getDb() }).list(instanceId, 'in', {
+                limit: 200,
+            });
+            for (const row of inboxRows) {
+                if (row.fromId !== OPERATOR_INBOX_ID) continue;
                 if (requests.length >= limit) break;
                 const runRow = (await runs.listByMessageId(row.id))[0];
                 requests.push({
                     messageId: row.id,
                     requestKey: row.requestKey,
                     deliveryStatus: row.status,
-                    injectAttempts: row.injectAttempts,
-                    injectError: row.injectError,
+                    injectAttempts: row.attempts,
+                    injectError: row.error,
                     runId: runRow?.run_id ?? null,
                     taskId: runRow?.task_id ?? null,
                     outcome:

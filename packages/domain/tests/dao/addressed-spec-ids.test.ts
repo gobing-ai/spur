@@ -1,16 +1,40 @@
 import { describe, expect, test } from 'bun:test';
 import { createDbAdapter } from '@gobing-ai/ts-db';
-import { applyCliMigrations, CoordinationRunDao, InboxMessageDao, listAddressedSpecIds } from '../../src/index';
+import { applyCliMigrations, CoordinationRunDao, InboxDao, listAddressedSpecIds } from '../../src/index';
 
 describe('listAddressedSpecIds', () => {
     test('unions inbox to_id and coordination_runs.spec_id, deduped and sorted', async () => {
         const adapter = await createDbAdapter({ driver: 'bun-sqlite', url: ':memory:' });
         await applyCliMigrations(adapter);
 
-        const inbox = new InboxMessageDao(adapter);
-        await inbox.enqueue('operator', 'beta', 'for beta');
-        await inbox.enqueue('operator', 'alpha', 'for alpha');
-        await inbox.enqueue('operator', 'alpha', 'again'); // duplicate to_id → one entry
+        // G11: the inbox half of the union now reads through InboxDao.distinctRecipients().
+        const inbox = new InboxDao(adapter);
+        const seed = (to: string, body: string) =>
+            inbox.insert(
+                {
+                    id: `msg_${to}_${body.replace(/\s/g, '-')}`,
+                    fromId: 'operator',
+                    toId: to,
+                    body,
+                    kind: 'chat',
+                    status: 'queued',
+                    requestKey: null,
+                    taskId: null,
+                    parentRunId: null,
+                    inReplyTo: null,
+                    threadId: `msg_${to}_${body.replace(/\s/g, '-')}`,
+                    createdAt: Date.now(),
+                    updatedAt: Date.now(),
+                },
+                (row) => ({
+                    id: `sev_${row.id}`,
+                    event_name: 'message.sent',
+                    occurred_at: new Date(row.createdAt).toISOString(),
+                }),
+            );
+        await seed('beta', 'for beta');
+        await seed('alpha', 'for alpha');
+        await seed('alpha', 'again'); // duplicate to_id → one entry
 
         const runs = new CoordinationRunDao(adapter);
         await runs.insertStart({

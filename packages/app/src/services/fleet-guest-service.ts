@@ -4,11 +4,10 @@ import {
     type ClaimSlot,
     CoordinationRunDao,
     type DbAdapter,
-    InboxMessageDao,
-    InboxUnfinishedDao,
     ProjectClaimDao,
 } from '@gobing-ai/spur-domain';
 import type { FileSystem } from '@gobing-ai/ts-runtime';
+import { InboxService, isReservedInboxId } from './inbox-service';
 
 // ---------------------------------------------------------------------------
 // Fleet guest occupants (G73 R2/R5, task 1081)
@@ -156,6 +155,15 @@ export class FleetGuestService {
         const joined = new Set(guests.map((g) => g.id));
         const requested = input.id?.trim();
         const id = requested !== undefined && requested !== '' ? requested : this.nextGuestId(role, declared, joined);
+        // G11 R5: `operator` and `spur` are reserved inbox identities — a guest claiming one
+        // would shadow the human's or the system's inbox.
+        if (isReservedInboxId(id)) {
+            return {
+                ok: false,
+                code: 'collision',
+                message: `guest id "${id}" is a reserved inbox identity — pass a free --id`,
+            };
+        }
         // A restarted session rejoining its own live guest renews it rather than colliding:
         // the session id proves it is the same occupant. Absent or different sessions fall
         // through to the collision refusal below.
@@ -248,7 +256,11 @@ export class FleetGuestService {
 
     /** Queued (unclaimed) messages waiting for this guest — the `wait --inbox` predicate. */
     async pendingCount(id: string): Promise<number> {
-        return await new InboxMessageDao(await this.ctx.getDb()).countPending(id);
+        return await this.inbox().countQueued(id);
+    }
+
+    private inbox(): InboxService {
+        return new InboxService({ getDb: () => this.ctx.getDb() });
     }
 
     /** Release the lease, retire the occupant row and drop the record. Shared by leave/expire. */
@@ -258,12 +270,13 @@ export class FleetGuestService {
         if (claim !== null) {
             await new ProjectClaimDao(db).release(this.ctx.cwd, this.slot(record.id), record.id, claim.ownerEpoch);
         }
-        // A guest that dies mid-delivery must not strand its claimed messages: every
-        // `injected` row for it returns to `queued` so the next drain (or another
+        // A guest that dies mid-delivery must not strand its claimed messages: every claimed
+        // row returns to `queued` through the service (G11 R10), so the next drain (or another
         // occupant) sees it again.
-        const unfinished = await new InboxUnfinishedDao(db).listUnfinished(record.id);
-        const claimed = unfinished.filter((row) => row.status === 'injected').map((row) => row.id);
-        if (claimed.length > 0) await new InboxMessageDao(db).release(claimed);
+        const claimed = (await this.inbox().list(record.id, 'in', { limit: 500 }))
+            .filter((row) => row.status === 'claimed')
+            .map((row) => row.id);
+        if (claimed.length > 0) await this.inbox().release(claimed);
         if (record.runId !== '') {
             await new CoordinationRunDao(db).updateExit(record.runId, 'exited', new Date().toISOString(), '[]', {
                 messageIds: [],

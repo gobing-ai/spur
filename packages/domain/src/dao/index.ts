@@ -1,4 +1,3 @@
-export { type InboxMessage, InboxMessageDao } from '@gobing-ai/ts-db';
 export { ActionRunDao, type ActionRunRow } from './action-run-dao';
 export { listAddressedSpecIds } from './addressed-spec-ids';
 export {
@@ -44,8 +43,18 @@ export {
     type DecisionLogSummaryRow,
     type DecisionSummaryVolumeBucket,
 } from './decision-log-dao';
-export { type InboxReadReceipt, InboxRecentDao, type InboxRecentRow } from './inbox-recent-dao';
-export { InboxUnfinishedDao, type InboxUnfinishedRow } from './inbox-unfinished-dao';
+export {
+    InboxDao,
+    type InboxEventFactory,
+    type InboxMemberCounts,
+    type InboxMessage,
+    type InboxMessageKind,
+    type InboxMessageStatus,
+    type InboxReadReceipt,
+    type InboxRequestRow,
+    type InboxTaskAttempts,
+    type NewInboxMessage,
+} from './inbox-dao';
 export {
     AGENT_LIFECYCLE_EVENT,
     MEMBER_LIFECYCLE_STATES,

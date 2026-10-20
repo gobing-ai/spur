@@ -10,8 +10,9 @@ import {
     FleetDispatcher,
     FleetGuestService,
     FleetService,
+    InboxService,
     isPortLive,
-    MAX_INJECT_ATTEMPTS,
+    MAX_DELIVERY_ATTEMPTS,
     normalizeProjectPath,
     ProjectRegistry,
     resolvePlanningFolders,
@@ -20,7 +21,7 @@ import {
     SUPERVISOR_RUN_MARKER,
 } from '@gobing-ai/spur-app';
 import { ExecutorDisabledError, type ProjectEntry, resolveExecutor } from '@gobing-ai/spur-config';
-import { CoordinationRunDao, InboxMessageDao, type MemberSessionObservation } from '@gobing-ai/spur-domain';
+import { CoordinationRunDao, type MemberSessionObservation } from '@gobing-ai/spur-domain';
 import { type AgentSpec, isAgentName } from '@gobing-ai/ts-ai-runner';
 import type { CliContext } from '../../context';
 import { toEnvelopeJson, writeJsonError } from '../../output';
@@ -362,28 +363,28 @@ export async function settleClaimedMessages(
     outcome: 'accepted' | 'not-started',
 ): Promise<void> {
     if (claimed.length === 0) return;
-    const coordination = new AgentCoordinationService(context);
+    const inbox = new InboxService({ getDb: () => context.getDb() });
     if (outcome === 'accepted') {
-        await coordination.settleDelivered(claimed);
+        await inbox.settle(claimed, 'accepted');
         return;
     }
     // Not started: release within the claim budget, else a queryable terminal failure.
-    const dao = new InboxMessageDao(await context.getDb());
     const releasable: string[] = [];
     const exhausted: string[] = [];
     for (const id of claimed) {
-        const row = await dao.getById(id);
+        const row = await inbox.get(id);
         // Already settled on another path (e.g. the live stdin-injection delivery)
         // or gone — never re-settle someone else's row.
-        if (row?.status !== 'injected') continue;
-        if (row.injectAttempts >= MAX_INJECT_ATTEMPTS) exhausted.push(id);
+        if (row?.status !== 'claimed') continue;
+        if (row.attempts >= MAX_DELIVERY_ATTEMPTS) exhausted.push(id);
         else releasable.push(id);
     }
-    if (releasable.length > 0) await coordination.releasePending(releasable);
-    for (const id of exhausted) {
-        await coordination.settleFailed(
-            [id],
-            `delivery not accepted: invocation never started after ${MAX_INJECT_ATTEMPTS} inject attempts`,
+    if (releasable.length > 0) await inbox.release(releasable);
+    if (exhausted.length > 0) {
+        await inbox.settle(
+            exhausted,
+            'not-started',
+            `delivery not accepted: invocation never started after ${MAX_DELIVERY_ATTEMPTS} inject attempts`,
         );
     }
 }

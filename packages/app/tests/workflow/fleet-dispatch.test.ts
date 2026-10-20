@@ -108,10 +108,11 @@ describe('dispatchToFleet', () => {
         // The durable artifact carries the step prompt itself (ADR-057).
         expect(readFileSync(result.promptPath, 'utf8')).toBe('implement task 0942');
         expect(calls.length).toBe(1);
-        // The sender is the dispatching RUN, never null: a member's reply needs a real fromId.
-        // Session review: the sender id must satisfy `validateAgentId`, which rejects a colon —
-        // `workflow:<runId>` made every workflow→fleet dispatch fail at the enqueue.
-        expect(calls[0]?.request.fromId).toBe('workflow-run-1');
+        // G11 R7: a workflow has no member identity, so it sends as `spur` (the system address)
+        // and the dispatching run rides `parentRunId`. The old `workflow-<runId>` fake address
+        // made replies land in a mailbox no member owns.
+        expect(calls[0]?.request.fromId).toBe('spur');
+        expect(calls[0]?.request.parentRunId).toBe('run-1');
         expect(() => validateAgentId(String(calls[0]?.request.fromId))).not.toThrow();
         expect(calls[0]?.request.member).toBe('p-coder');
         expect(calls[0]?.request.requestKey).toBe('run-1/impl');

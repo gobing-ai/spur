@@ -5,13 +5,12 @@ import { join } from 'node:path';
 import { AgentCoordinationService, DeliveryReconciler } from '@gobing-ai/spur-app';
 import { spurConfigSchema } from '@gobing-ai/spur-config';
 import type { AgentProcessOptions, DoctorResult } from '@gobing-ai/ts-ai-runner';
-import { RequestKeyConflictError } from '@gobing-ai/ts-db';
 import { EventBus } from '@gobing-ai/ts-infra';
 import { createNodeFileSystem } from '@gobing-ai/ts-runtime';
 import { main } from '../../src';
 import { type AgentRunDeps, type MemberAgentProcess, runAgentLoop, runAgentRun } from '../../src/commands/agent';
 import { type CliContext, createCliContext } from '../../src/context';
-import { createCapturedOutput } from '../helpers';
+import { createCapturedOutput, inboxFixture } from '../helpers';
 
 async function makeCtx(
     env: Record<string, string | undefined> = {},
@@ -396,7 +395,7 @@ function g6Doctor() {
 // asserting idempotent suppression. Probe 4 (at-most-once claiming) keeps
 // asserting the MET SQL property.
 // ═══════════════════════════════════════════════════════════════════════════════
-import { CoordinationRunDao, createMigratedDb, InboxMessageDao } from '@gobing-ai/spur-domain';
+import { CoordinationRunDao, createMigratedDb } from '@gobing-ai/spur-domain';
 
 /**
  * Capture the handlers registered for `agent.invoke.start` while a test runs.
@@ -464,9 +463,9 @@ describe('G61 delivery settle regressions (0831)', () => {
                     deps,
                 );
             }
-            expect(await new InboxMessageDao(await ctx.getDb()).getById(sent.msgId)).toMatchObject({
+            expect(await inboxFixture(await ctx.getDb()).getById(sent.msgId)).toMatchObject({
                 status: 'queued',
-                injectAttempts: 1,
+                attempts: 1,
             });
         } finally {
             accepted.restore();
@@ -505,13 +504,13 @@ describe('G61 delivery settle regressions (0831)', () => {
 
             // Fixed contract: the invocation ran, so the message settles delivered —
             // not stranded at 'injected' forever.
-            const rows = await new InboxMessageDao(db).inbox('planner', 10);
+            const rows = await inboxFixture(db).inbox('planner', 10);
             expect(rows.length).toBe(1);
             expect(rows[0]?.status).toBe('delivered');
             expect((await team.drainPending('planner')).count).toBe(0);
-            expect((await new DeliveryReconciler(ctx).reconcile('planner')).unresolved[0]?.reason).toBe(
-                'run-exit-only',
-            );
+            // G11 R8: the fixture sent a CHAT message, which is never unresolved work, so the
+            // reconciler reports nothing — the delivered status above is the assertion that matters.
+            expect((await new DeliveryReconciler(ctx).reconcile('planner')).unresolved).toEqual([]);
         } finally {
             accepted.restore();
             await cleanup();
@@ -542,16 +541,16 @@ describe('G61 delivery settle regressions (0831)', () => {
             const code = await runAgentRun('work', ctx, { spec: 'planner', drain: true, json: true }, deps);
             expect(code).toBe(2);
 
-            const dao = new InboxMessageDao(db);
+            const dao = inboxFixture(db);
             const rows = await dao.inbox('planner', 10);
             expect(rows.length).toBe(1);
             // Released back to queued — redeliverable, attempts preserved (the
             // claim counter IS the budget; release never resets it).
             expect(rows[0]?.status).toBe('queued');
-            expect(rows[0]?.injectAttempts).toBe(1);
+            expect(rows[0]?.attempts).toBe(1);
             expect((await team.drainPending('planner')).count).toBe(1);
             const again = await dao.inbox('planner', 10);
-            expect(again[0]?.injectAttempts).toBe(2);
+            expect(again[0]?.attempts).toBe(2);
         } finally {
             await cleanup();
         }
@@ -594,13 +593,13 @@ describe('G61 delivery settle regressions (0831)', () => {
             // The member kept resume mode: no degradation was reported.
             expect(out.errors.join('\n')).not.toContain('member-persistent-stdin-unwired');
 
-            const dao = new InboxMessageDao(db);
+            const dao = inboxFixture(db);
             let rows = await dao.inbox('planner', 10);
             expect(rows.length).toBe(1);
             // Terminal failed state with a reason — not stranded at 'injected'.
             expect(rows[0]?.status).toBe('failed');
-            expect(rows[0]?.injectAttempts).toBe(3);
-            expect(rows[0]?.injectError).toContain('never started');
+            expect(rows[0]?.attempts).toBe(3);
+            expect(rows[0]?.error).toContain('never started');
             // Budget exhausted: no further redelivery.
             expect((await team.drainPending('planner')).count).toBe(0);
             rows = await dao.inbox('planner', 10);
@@ -648,7 +647,7 @@ describe('G61 delivery settle regressions (0831)', () => {
 
             // Delivery: settled delivered because the invocation STARTED, exit
             // code irrelevant (0831 R2/Q&A — no delivery/run-outcome conflation).
-            const rows = await new InboxMessageDao(db).inbox('planner', 10);
+            const rows = await inboxFixture(db).inbox('planner', 10);
             expect(rows.length).toBe(1);
             expect(rows[0]?.status).toBe('delivered');
         } finally {
@@ -663,7 +662,7 @@ describe('G61 delivery settle regressions (0831)', () => {
         const { ctx, cleanup } = await makeCtx();
         try {
             const db = await ctx.getDb();
-            const dao = new InboxMessageDao(db);
+            const dao = inboxFixture(db);
             const team = new AgentCoordinationService(ctx);
             await team.createAgentSpec({ id: 'planner', type: 'claude', executor: 'claude' });
 
@@ -687,7 +686,7 @@ describe('G61 delivery settle regressions (0831)', () => {
             // nor a second identity.
             await expect(
                 team.sendMessage('operator', 'planner', 'different body', undefined, 'retry-key-1'),
-            ).rejects.toThrow(RequestKeyConflictError);
+            ).rejects.toThrow(/already names a different message/);
             expect((await dao.inbox('planner', 10)).length).toBe(1);
         } finally {
             await cleanup();
@@ -700,7 +699,7 @@ describe('G61 delivery settle regressions (0831)', () => {
         // conditional UPDATE ... WHERE status='queued' ... RETURNING (ts-db 0.4.62).
         const db = await createMigratedDb({ url: ':memory:' });
         try {
-            const dao = new InboxMessageDao(db);
+            const dao = inboxFixture(db);
             await dao.enqueue('operator', 'planner', 'consumed once');
             await dao.enqueue('operator', 'planner', 'consumed twice');
             const a = new AgentCoordinationService({
@@ -724,7 +723,7 @@ describe('G61 delivery settle regressions (0831)', () => {
             expect(claimed.map((m) => m.id).length).toBe(new Set(claimed.map((m) => m.id)).size);
             expect(claimed.length).toBe(2);
             const rows = await dao.inbox('planner', 10);
-            for (const row of rows) expect(row.injectAttempts).toBe(1);
+            for (const row of rows) expect(row.attempts).toBe(1);
 
             // Target invariant met on this seam: the claim is statement-atomic —
             // duplicate consumption of the same row does NOT occur here. Recorded
@@ -828,7 +827,7 @@ describe('G61 completion receipt regressions (0833)', () => {
 
             // R3: states stay distinct — delivery is 0831's (`delivered`), the run
             // exit is this receipt's, and the task is NOT advanced by the exit.
-            const rows = await new InboxMessageDao(db).inbox('planner', 10);
+            const rows = await inboxFixture(db).inbox('planner', 10);
             expect(rows[0]?.status).toBe('delivered');
             expect((await team.drainPending('planner')).count).toBe(0);
         } finally {

@@ -32,6 +32,10 @@ export interface FleetDispatchRequest {
     body: string;
     /** `fleet:task:<wbs>:<n>` for strategy dispatches, `<runId>/<state>` for workflow ones. */
     requestKey: string;
+    /** The task this dispatch delivers (G11 R9) — a request-key parse never happens now. */
+    taskId?: string;
+    /** The dispatching run, for workflow-originated requests (ADR-132 lineage). */
+    parentRunId?: string;
 }
 
 /** A resolved receipt. `runId` is present whenever a run row exists. */
@@ -78,6 +82,12 @@ export class FleetDispatcher {
             req.body,
             undefined,
             req.requestKey,
+            {
+                // G11 R7/R9: a dispatch is a request, and its task/run linkage rides the columns.
+                kind: 'request',
+                ...(req.taskId !== undefined ? { taskId: req.taskId } : {}),
+                ...(req.parentRunId !== undefined ? { parentRunId: req.parentRunId } : {}),
+            },
         );
         return { messageId: sent.msgId, replayed: sent.replayed === true };
     }

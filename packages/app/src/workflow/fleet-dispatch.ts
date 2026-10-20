@@ -200,9 +200,12 @@ export async function dispatchToFleet(
         // enqueue and the fleet executor could never be used. Dashes keep the id readable and valid.
         ({ messageId } = await deps.dispatcher.enqueue({
             member: member.instanceId,
-            fromId: `workflow-${input.runId}`,
+            // G11 R7: a workflow has no member identity, so it sends as `spur` — the system
+            // address. The dispatching run rides `parentRunId` instead of faking an address.
+            fromId: 'spur',
             body,
             requestKey: `${input.runId}/${input.state}`,
+            parentRunId: input.runId,
         }));
     } catch (error) {
         // Nothing was queued, so a declared `executorFallback: traditional` may

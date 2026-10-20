@@ -10,15 +10,9 @@ import { describe, expect, test } from 'bun:test';
 import { mkdtemp, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import {
-    CoordinationRunDao,
-    createMigratedDb,
-    InboxMessageDao,
-    InboxUnfinishedDao,
-    ProjectClaimDao,
-} from '@gobing-ai/spur-domain';
+import { CoordinationRunDao, createMigratedDb, ProjectClaimDao } from '@gobing-ai/spur-domain';
 import { createNodeFileSystem } from '@gobing-ai/ts-runtime';
-import { FleetGuestService, GUEST_LEASE_TTL_MS, GUEST_RECORD_DIR } from '../../src/index';
+import { FleetGuestService, GUEST_LEASE_TTL_MS, GUEST_RECORD_DIR, InboxService } from '../../src/index';
 
 async function makeGuestService(declared: string[] = []): Promise<{
     service: FleetGuestService;
@@ -139,11 +133,11 @@ describe('FleetGuestService (1081 R2/R5)', () => {
             const id = result.ok ? result.guest.id : '';
             const runId = result.ok ? result.guest.runId : '';
 
-            const inbox = new InboxMessageDao(db);
-            await inbox.enqueue('proj-lead', id, 'please review 1081');
-            const claimed = await inbox.drainPending(id);
+            const inbox = new InboxService({ getDb: async () => db });
+            await inbox.send({ from: 'proj-lead', to: id, body: 'please review 1081' });
+            const claimed = await inbox.claim(id, 10);
             expect(claimed.length).toBe(1);
-            expect((await new InboxUnfinishedDao(db).listUnfinished(id))[0]?.status).toBe('injected');
+            expect((await inbox.list(id, 'in'))[0]?.status).toBe('claimed');
 
             // Age the lease past its TTL without waiting 30 s.
             await db.run(
@@ -153,7 +147,7 @@ describe('FleetGuestService (1081 R2/R5)', () => {
             );
             expect(await service.expire()).toEqual([id]);
 
-            const after = await new InboxUnfinishedDao(db).listUnfinished(id);
+            const after = await inbox.list(id, 'in');
             expect(after[0]?.status).toBe('queued');
             expect(await service.read(id)).toBeNull();
             const runRow = await db.queryFirst<{ status: string }>(
@@ -175,7 +169,11 @@ describe('FleetGuestService (1081 R2/R5)', () => {
             expect(await service.read(id)).not.toBeNull();
 
             expect(await service.pendingCount(id)).toBe(0);
-            await new InboxMessageDao(db).enqueue('proj-lead', id, 'work for you');
+            await new InboxService({ getDb: async () => db }).send({
+                from: 'proj-lead',
+                to: id,
+                body: 'work for you',
+            });
             expect(await service.pendingCount(id)).toBe(1);
         } finally {
             await cleanup();
@@ -190,6 +188,20 @@ describe('FleetGuestService (1081 R2/R5)', () => {
             expect(GUEST_RECORD_DIR).toBe(join('.spur', 'run', 'guests'));
             expect(await service.read('guest-x')).not.toBeNull();
             void cwd;
+        } finally {
+            await cleanup();
+        }
+    });
+
+    test('a reserved inbox identity cannot join as a guest (G11 R5)', async () => {
+        const { service, cleanup } = await makeGuestService();
+        try {
+            // `operator` and `spur` own real inboxes; a guest claiming one would shadow it.
+            for (const reserved of ['operator', 'spur']) {
+                const refused = await service.join({ role: 'reviewer', id: reserved });
+                expect(refused.ok).toBe(false);
+                expect(refused.ok ? '' : refused.message).toContain('reserved inbox identity');
+            }
         } finally {
             await cleanup();
         }

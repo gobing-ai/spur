@@ -301,6 +301,10 @@ The following matrix fixes summary behavior, retained facts, and outcome support
 | `message.sent` | `msgId`, `fromId`, `toId`, `threadId`, `createdAt` | `[message] {fromId} -> {toId}` | — |
 | `message.replied` | `msgId`, `fromId`, `toId`, `threadId`, `createdAt` | `[message] {fromId} replied in {threadId}` | — |
 | `message.read` | `msgId`, `fromId`, `toId` (reader), `threadId`, `createdAt` (read time) | `[message] {toId} read {msgId}` | — |
+| `message.claimed` | `msgId`, `fromId`, `toId` (member), `threadId`, `status`, `createdAt` | `[message] {toId} claimed` | — |
+| `message.delivered` | `msgId`, `fromId`, `toId` (member), `threadId`, `status`, `createdAt` | `[message] {toId} delivered` | — |
+| `message.failed` | `msgId`, `fromId`, `toId` (member), `threadId`, `status`, `createdAt` | `[message] {toId} delivery failed` | — |
+| `message.requeued` | `msgId`, `fromId`, `toId` (member), `threadId`, `status`, `createdAt` | `[message] {toId} requeued` | — |
 | `process.spawned` | `label`, `pid`, `agentId` | `[process] {label | pid} spawned` | — |
 | `process.exited` | `label`, `pid`, `exitCode`, `signal`, `durationMs`, `reason`, `error` | `[process] {label | pid} exited` | `exitCode` / `signal` / `reason` |
 | `process.stopped` | `label`, `pid`, `signal`, `reason` | `[process] {label | pid} stopped` | `reason` |

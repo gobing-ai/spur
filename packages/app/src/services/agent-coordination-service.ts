@@ -2,12 +2,9 @@ import { join } from 'node:path';
 import type { SpurConfig } from '@gobing-ai/spur-config';
 import {
     type DbAdapter,
-    InboxMessageDao,
-    InboxRecentDao,
     type MemberLifecycleState,
     type RecordLifecycleResult,
     recordLifecycle,
-    SystemEventDao,
 } from '@gobing-ai/spur-domain';
 import {
     type AgentEvents,
@@ -21,6 +18,14 @@ import type { EventBus } from '@gobing-ai/ts-infra';
 import type { FileSystem } from '@gobing-ai/ts-runtime';
 import type { AgentRoleDefinition } from './agent-service';
 import { FleetService, mergeAgentSpecs, type ResolvedFleetMember } from './fleet-service';
+import {
+    type InboxMessage,
+    type InboxMessageKind,
+    type InboxMessageStatus,
+    InboxService,
+    isReservedInboxId,
+    OPERATOR_INBOX_ID,
+} from './inbox-service';
 import type { TaskService } from './task-service';
 
 // ---------------------------------------------------------------------------
@@ -132,7 +137,8 @@ export class MessageNotFoundError extends Error {}
 export interface SendResult {
     msgId: string;
     toId: string;
-    status: 'queued' | 'injected';
+    /** The message's post-send status: `queued` on a fresh send, or the stored row's status on a replay. */
+    status: InboxMessageStatus;
     injected: boolean;
     /** Present only on a keyed send (0832): true when the request key replayed an earlier submission. */
     replayed?: boolean;
@@ -165,6 +171,21 @@ export interface InboxMessageView {
     toId: string;
     status: string;
     requestKey: string | null;
+}
+
+/** Project one inbox message onto the display shape the CLI, server and Board already read. */
+function toInboxEntry(row: InboxMessage): InboxEntry {
+    return {
+        id: row.id,
+        fromId: row.fromId,
+        body: row.body,
+        status: row.status,
+        createdAt: new Date(row.createdAt).toISOString(),
+        inReplyTo: row.inReplyTo,
+        injectAttempts: row.attempts,
+        injectError: row.error,
+        requestKey: row.requestKey,
+    };
 }
 
 /** Result of listing an agent's inbox. */
@@ -261,30 +282,42 @@ export class AgentCoordinationService {
         body: string,
         replyTo?: string,
         requestKey?: string,
+        extra?: { kind?: InboxMessageKind; taskId?: string; parentRunId?: string },
     ): Promise<SendResult> {
         validateAgentId(toId);
         if (fromId !== null) validateAgentId(fromId);
         if (requestKey !== undefined && requestKey.trim() === '') {
             throw new Error('requestKey must be a non-empty string');
         }
-        const dao = await this.inboxDao();
-        // Keyed send (0832): routes through `enqueueIdempotent` — same key + same payload
-        // replays the original row (no second row, no second delivery). Keyless path unchanged.
-        const keyed =
-            requestKey !== undefined ? await dao.enqueueIdempotent(fromId, toId, body, requestKey, replyTo) : null;
-        const msgId = keyed?.id ?? (await dao.enqueue(fromId, toId, body, replyTo));
-        // Emit a single lifecycle event: `message.replied` when this send is a reply
-        // (thread context), otherwise `message.sent`. Metadata only — never the body.
-        await this.emitMessageEvent(replyTo !== undefined ? 'message.replied' : 'message.sent', {
-            msgId,
-            fromId,
-            toId,
-            threadId: replyTo ?? null,
-            createdAt: new Date().toISOString(),
+        // G11 R5: `from_id` is never null. A caller with no identity is the human operator —
+        // the same attribution the retired CLI-path event fallback used.
+        const sender = fromId ?? OPERATOR_INBOX_ID;
+        const service = await this.inboxService();
+        if (replyTo !== undefined) {
+            // A reply is addressed to the original sender and inherits the thread root; the
+            // service writes it with its `message.replied` event in one transaction.
+            const reply = await service.reply(replyTo, sender, body);
+            return { msgId: reply.id, toId: reply.toId, status: reply.status, injected: false };
+        }
+        const { message, replayed } = await service.send({
+            from: sender,
+            to: toId,
+            body,
+            kind: extra?.kind ?? 'chat',
+            ...(requestKey !== undefined ? { requestKey } : {}),
+            ...(extra?.taskId !== undefined ? { taskId: extra.taskId } : {}),
+            ...(extra?.parentRunId !== undefined ? { parentRunId: extra.parentRunId } : {}),
         });
-        return keyed === null
-            ? { msgId, toId, status: 'queued', injected: false }
-            : { msgId, toId, status: 'queued', injected: false, replayed: keyed.replayed, requestKey };
+        return requestKey === undefined
+            ? { msgId: message.id, toId: message.toId, status: message.status, injected: false }
+            : {
+                  msgId: message.id,
+                  toId: message.toId,
+                  status: message.status,
+                  injected: false,
+                  replayed,
+                  requestKey,
+              };
     }
 
     /**
@@ -294,40 +327,20 @@ export class AgentCoordinationService {
      */
     async markMessageRead(msgId: string, readerId: string): Promise<{ readAt: string; transitioned: boolean }> {
         validateAgentId(readerId);
-        const receipt = await (await this.inboxRecentDao()).markRead(msgId, readerId);
+        const receipt = await (await this.inboxService()).markRead(msgId, readerId).catch(() => null);
         if (receipt === null) throw new MessageNotFoundError(`message ${msgId} not found for ${readerId}`);
-        const readAt = new Date(receipt.readAt).toISOString();
-        if (receipt.transitioned) {
-            await this.emitMessageEvent('message.read', {
-                msgId,
-                fromId: receipt.fromId,
-                toId: readerId,
-                threadId: receipt.inReplyTo,
-                createdAt: readAt,
-            });
-        }
-        return { readAt, transitioned: receipt.transitioned };
+        // The `message.read` ledger row is written by the service inside the mark's transaction.
+        return { readAt: new Date(receipt.readAt).toISOString(), transitioned: receipt.transitioned };
     }
 
     /** List the pending + delivered messages addressed to an agent. */
     async getInbox(agentId: string, limit?: number, offset?: number): Promise<InboxResult> {
         validateAgentId(agentId);
-        const dao = await this.inboxDao();
-        const rows = await dao.inbox(agentId, limit, offset);
-        return {
-            messages: rows.map((row) => ({
-                id: row.id,
-                fromId: row.fromId,
-                body: row.body,
-                status: row.status,
-                createdAt: new Date(row.createdAt).toISOString(),
-                inReplyTo: row.inReplyTo,
-                injectAttempts: row.injectAttempts,
-                injectError: row.injectError,
-                requestKey: row.requestKey,
-            })),
-            count: rows.length,
-        };
+        const rows = await (await this.inboxService()).list(agentId, 'in', {
+            ...(limit !== undefined ? { limit } : {}),
+            ...(offset !== undefined ? { offset } : {}),
+        });
+        return { messages: rows.map(toInboxEntry), count: rows.length };
     }
 
     /**
@@ -336,45 +349,31 @@ export class AgentCoordinationService {
      * no run receipt) from one still pending/claimed/running.
      */
     async getMessage(msgId: string): Promise<InboxMessageView | null> {
-        const dao = await this.inboxDao();
-        const row = await dao.getById(msgId);
-        if (row === undefined) return null;
-        return { id: row.id, toId: row.toId, status: row.status, requestKey: row.requestKey ?? null };
+        const row = await (await this.inboxService()).get(msgId);
+        if (row === null) return null;
+        return { id: row.id, toId: row.toId, status: row.status, requestKey: row.requestKey };
     }
 
     /**
-     * Atomically drain pending (queued→injected) messages for an agent (R5, 0253 fix).
-     * Unlike {@link getInbox} (non-consuming read), this transitions messages to
-     * `injected` so a second call returns nothing — idempotent loop-safe (AC3).
+     * Drain pending (queued→claimed) messages for an agent (R5, 0253 fix), charging the
+     * delivery budget. Unlike {@link getInbox} (non-consuming read), a second call returns
+     * nothing — idempotent loop-safe (AC3).
      */
     async drainPending(agentId: string, options?: { limit?: number }): Promise<InboxResult> {
         validateAgentId(agentId);
-        const dao = await this.inboxDao();
-        const rows = await dao.drainPending(agentId, options);
-        return {
-            messages: rows.map((row) => ({
-                id: row.id,
-                fromId: row.fromId,
-                body: row.body,
-                status: row.status,
-                createdAt: new Date(row.createdAt).toISOString(),
-                inReplyTo: row.inReplyTo,
-                requestKey: row.requestKey,
-            })),
-            count: rows.length,
-        };
+        const rows = await (await this.inboxService()).claim(agentId, options?.limit ?? 100);
+        return { messages: rows.map(toInboxEntry), count: rows.length };
     }
 
     /**
-     * Release claimed (injected) messages back to queued for redelivery (0831 R1).
-     * Only rows currently at `injected` match the guard, so settling a message
-     * twice is a no-op; `injectAttempts` is left untouched — the claim counter
+     * Release claimed messages back to queued for redelivery (0831 R1).
+     * Only rows currently claimed match the guard, so settling a message
+     * twice is a no-op; `attempts` is left untouched — the claim counter
      * IS the bounded attempt budget (0831 R3). Returns the released count.
      */
     async releasePending(msgIds: string[]): Promise<number> {
         if (msgIds.length === 0) return 0;
-        const dao = await this.inboxDao();
-        return dao.release(msgIds);
+        return (await (await this.inboxService()).release(msgIds)).length;
     }
 
     /**
@@ -384,8 +383,7 @@ export class AgentCoordinationService {
      */
     async settleDelivered(msgIds: string[]): Promise<void> {
         if (msgIds.length === 0) return;
-        const dao = await this.inboxDao();
-        for (const msgId of msgIds) await dao.markDelivered(msgId);
+        await (await this.inboxService()).settle(msgIds, 'accepted');
     }
 
     /**
@@ -395,23 +393,21 @@ export class AgentCoordinationService {
      */
     async settleFailed(msgIds: string[], error: string): Promise<void> {
         if (msgIds.length === 0) return;
-        const dao = await this.inboxDao();
-        for (const msgId of msgIds) await dao.markFailed(msgId, error);
+        await (await this.inboxService()).settle(msgIds, 'not-started', error);
     }
 
     /** Count pending (queued) messages for an agent — used by the drain loop to idle (0253). */
     async countPending(agentId: string): Promise<number> {
         validateAgentId(agentId);
-        const dao = await this.inboxDao();
-        return dao.countPending(agentId);
+        return (await this.inboxService()).countQueued(agentId);
     }
 
     /**
      * List recent messages across ALL agents (newest first), for the board's
      * global message feed. Differs from {@link getInbox} (one agent's queue) by
-     * spanning every recipient. Delegates to {@link InboxRecentDao} (domain) so
-     * this package stays raw-SQL-free (project rule `raw-sql-only-in-domain`).
-     * Returns an empty list when the table is absent.
+     * spanning every recipient. Delegates to `InboxService.recent`, whose SQL lives in
+     * the domain `InboxDao` (G11), so this package stays raw-SQL-free per the
+     * `raw-sql-only-in-domain` rule.
      *
      * Identity join (R11): `fromId`/`toId` are composed ids. We resolve them
      * against the agent specs on disk — the spec's name as the member label and
@@ -424,8 +420,8 @@ export class AgentCoordinationService {
      * table (global for those parents, not limited to children in the window).
      */
     async listRecent(limit = 50): Promise<RecentMessagesResult> {
-        const dao = await this.inboxRecentDao();
-        const rows = await dao.listRecent(limit);
+        const service = await this.inboxService();
+        const { messages: rows, replyCounts } = await service.recent(limit);
         if (rows.length === 0) {
             return { messages: [], count: 0 };
         }
@@ -441,24 +437,16 @@ export class AgentCoordinationService {
             });
         }
 
-        // Reply counts: global child count for each parent id in the current window.
-        const replyCounts = await dao.countReplies(rows.map((r) => r.id));
-
         const resolveEndpoint = (agentId: string): MessageEndpointIdentity => identityById.get(agentId) ?? { agentId };
 
         return {
             messages: rows.map((row) => {
                 const replyCount = replyCounts.get(row.id) ?? 0;
                 return {
-                    id: row.id,
-                    fromId: row.from_id,
-                    toId: row.to_id,
-                    body: row.body,
-                    status: row.status,
-                    createdAt: new Date(row.created_at).toISOString(),
-                    inReplyTo: row.in_reply_to,
-                    ...(row.from_id !== null ? { from: resolveEndpoint(row.from_id) } : {}),
-                    to: resolveEndpoint(row.to_id),
+                    ...toInboxEntry(row),
+                    toId: row.toId,
+                    from: resolveEndpoint(row.fromId),
+                    to: resolveEndpoint(row.toId),
                     hasReply: replyCount > 0,
                     replyCount,
                 };
@@ -468,20 +456,18 @@ export class AgentCoordinationService {
     }
 
     /**
-     * Thread a reply to an existing message: look up the original, address the
-     * reply back to its sender, and link it via `in_reply_to`. Operator-originated
-     * messages (`from_id` null) cannot be replied to — there is no addressable peer.
+     * Thread a reply to an existing message: the reply is addressed to its original sender
+     * and inherits the thread root (G11 R5). Every address is replyable, including
+     * `operator` and `spur`.
      */
     async replyToMessage(msgId: string, body: string): Promise<SendResult> {
-        const dao = await this.inboxDao();
-        const original = await dao.getById(msgId);
-        if (original === undefined) {
-            throw new Error(`No message found with id "${msgId}"`);
-        }
-        if (original.fromId === null) {
-            throw new Error(`Message "${msgId}" has no sender to reply to (operator-originated)`);
-        }
-        return this.sendMessage(original.toId, original.fromId, body, msgId);
+        const service = await this.inboxService();
+        const original = await service.get(msgId);
+        if (original === null) throw new Error(`No message found with id "${msgId}"`);
+
+        // Reply as the original recipient: that is the peer the sender is talking to.
+        const reply = await service.reply(msgId, original.toId, body);
+        return { msgId: reply.id, toId: reply.toId, status: reply.status, injected: false };
     }
 
     // -------------------------------------------------------------------------
@@ -569,7 +555,14 @@ export class AgentCoordinationService {
         for (const id of shadowed) {
             this.ctx.output?.error(`agent spec "${id}" under .spur/agents/ is shadowed by the agent.fleet declaration`);
         }
-        return specs;
+        // G11 R5: `operator` and `spur` are reserved identities. A spec claiming one would
+        // shadow a real inbox, so it is reported and dropped from the addressable set.
+        const addressable = specs.filter((spec) => {
+            if (!isReservedInboxId(spec.id)) return true;
+            this.ctx.output?.error(`agent spec "${spec.id}" uses a reserved inbox identity and is ignored`);
+            return false;
+        });
+        return addressable;
     }
 
     /**
@@ -621,39 +614,10 @@ export class AgentCoordinationService {
         });
     }
 
-    private async inboxDao(): Promise<InboxMessageDao> {
-        const db = await this.ctx.getDb();
-        return new InboxMessageDao(db);
+    private async inboxService(): Promise<InboxService> {
+        return new InboxService({ getDb: () => this.ctx.getDb() });
     }
 
-    /**
-     * Publish through the attached bus, or persist the wake directly for CLI
-     * senders. The inbox row is already durable; an event failure cannot undo it.
-     */
-    private async emitMessageEvent(
-        name: 'message.sent' | 'message.replied' | 'message.read',
-        payload: MessageEventPayload,
-    ): Promise<void> {
-        const bus = this.ctx.eventBus;
-        try {
-            if (bus) {
-                bus.emit(name, { ...payload, severity: 'info' });
-            } else {
-                await new SystemEventDao(await this.ctx.getDb()).insert({
-                    id: crypto.randomUUID(),
-                    event_name: name,
-                    occurred_at: payload.createdAt,
-                    // A read is acted by its reader; sends by their sender.
-                    actor: (name === 'message.read' ? payload.toId : payload.fromId) ?? 'operator',
-                    payload_json: JSON.stringify(payload),
-                });
-            }
-        } catch (error) {
-            this.ctx.output?.error(
-                `Message stored, but wake event failed: ${error instanceof Error ? error.message : String(error)}`,
-            );
-        }
-    }
     /**
      * Publish the `task.assigned` event when a bus is wired. Payload fields may be
      * null (unknown spec) — the event is never dropped (R5).
@@ -681,10 +645,5 @@ export class AgentCoordinationService {
         } catch {
             return null;
         }
-    }
-
-    private async inboxRecentDao(): Promise<InboxRecentDao> {
-        const db = await this.ctx.getDb();
-        return new InboxRecentDao(db);
     }
 }

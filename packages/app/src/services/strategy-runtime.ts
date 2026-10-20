@@ -3,8 +3,6 @@ import type { FleetStrategy } from '@gobing-ai/spur-config';
 import {
     CoordinationRunDao,
     type DbAdapter,
-    InboxUnfinishedDao,
-    type InboxUnfinishedRow,
     type MemberLifecycleState,
     ProjectClaimDao,
     ProjectStrategyDao,
@@ -14,6 +12,7 @@ import {
 import { DeliveryReconciler, type UnresolvedDelivery } from './delivery-reconciler';
 import type { FleetDispatcher, FleetReceipt } from './fleet-dispatcher';
 import type { FleetService, OrchestratorBinding, ResolvedFleetMember } from './fleet-service';
+import { type InboxMessage, InboxService } from './inbox-service';
 import { normalizeProjectPath } from './project-registry';
 import type { TaskService, TaskSummary } from './task-service';
 import { type DispatchDecision, WRITE_SLOT_TTL_MS, WriteSlotService } from './write-slot-service';
@@ -49,24 +48,6 @@ export const FLEET_TASK_KEY_PREFIX = 'fleet:task:';
 /** The full attempt-key prefix for one task: `fleet:task:<wbs>:`. */
 export function fleetTaskKeyPrefix(wbs: string): string {
     return `${FLEET_TASK_KEY_PREFIX}${wbs}:`;
-}
-
-/**
- * Parse the attempt ordinal out of a `fleet:task:<wbs>:<n>` request key, or null when the
- * key is unrelated or malformed. Refusing to guess keeps a malformed key from silently
- * becoming "attempt 1" and resetting a task's retry budget.
- */
-export function parseFleetTaskAttempt(requestKey: string, wbs: string): number | null {
-    const prefix = fleetTaskKeyPrefix(wbs);
-    if (!requestKey.startsWith(prefix)) return null;
-    const suffix = requestKey.slice(prefix.length);
-    if (!/^[1-9][0-9]*$/.test(suffix)) return null;
-    return Number.parseInt(suffix, 10);
-}
-
-/** The task wbs named by a `fleet:task:<wbs>:<n>` request key, or undefined for any other key. */
-function fleetTaskWbs(requestKey: string | null): string | undefined {
-    return /^fleet:task:([^:]+):[1-9][0-9]*$/.exec(requestKey ?? '')?.[1];
 }
 
 /**
@@ -477,7 +458,7 @@ export class StrategyRuntime {
             };
         }
         const db = await this.ctx.openDb(normalized);
-        const inbox = new InboxUnfinishedDao(db);
+        const inbox = new InboxService({ getDb: async () => db });
         const slots = new WriteSlotService(this.ctx);
         const dispatched: DispatchDecision[] = [];
         for (const decision of result.decisions) {
@@ -503,6 +484,7 @@ export class StrategyRuntime {
                     // partial work up instead of starting over.
                     body: `/sp:dev-run ${wbs} --auto${resumeHint ? ' --continue' : ''}`,
                     requestKey: `${fleetTaskKeyPrefix(wbs)}${attempt}`,
+                    taskId: wbs,
                 });
                 dispatched.push(decision);
                 // The slot stays held until the receipt lands: the orchestrator keeps it
@@ -556,15 +538,15 @@ export class StrategyRuntime {
         }
         const dispatcher = this.ctx.dispatcher;
         if (dispatcher === undefined) return { released: [] };
-        const rows = await new InboxUnfinishedDao(db).listUnfinished(holder.holderId);
-        const pending = rows.find((row) => (row.request_key ?? '').startsWith('fleet:task:'));
+        const rows = await new InboxService({ getDb: async () => db }).requests(holder.holderId);
+        const pending = rows.find((row) => row.taskId !== null);
         if (pending === undefined) return { released: [] };
         const receipt: FleetReceipt | null = await dispatcher.receipt(pending.id, holder.holderId);
         if (receipt === null) return { released: [] };
         this.stopHeartbeat(normalized);
         const slots = new WriteSlotService(this.ctx);
         await slots.validateResult(normalized, holder.holderId, holder.ownerEpoch, {
-            taskId: fleetTaskWbs(pending.request_key),
+            taskId: pending.taskId ?? undefined,
         });
         const released = await slots.release(normalized, holder.holderId, holder.ownerEpoch);
         return { released: released ? [holder.holderId] : [] };
@@ -707,7 +689,7 @@ export class StrategyRuntime {
                 idleInstances.push(member);
             }
         }
-        const inbox = new InboxUnfinishedDao(db);
+        const inbox = new InboxService({ getDb: async () => db });
         // G73 R3 (1080): the members' reported lifecycle rides the same snapshot. A read
         // failure degrades to "no state" (nobody is blocked) rather than failing the tick —
         // the deterministic guards still apply.
@@ -735,7 +717,7 @@ export class StrategyRuntime {
             const latest = attempts.latest;
             let state: DispatchAttemptState | undefined;
             if (latest !== null) {
-                const receipt = await this.ctx.dispatcher?.receipt(latest.row.id, latest.row.to_id);
+                const receipt = await this.ctx.dispatcher?.receipt(latest.row.id, latest.row.toId);
                 state = {
                     attempt: latest.attempt,
                     // Only a DEFINITE receipt leaves the attempt in flight (R2): a
@@ -779,24 +761,21 @@ export class StrategyRuntime {
     }
 
     /**
-     * Every keyed dispatch attempt recorded for `wbs`: the total count (the next attempt
-     * number is `count + 1`) and the latest attempt by ordinal. A malformed key is skipped
-     * rather than read as attempt 1 — guessing would silently reset a retry budget.
+     * Every dispatch attempt recorded for `wbs`, read from the `task_id` column (G11 R9)
+     * rather than parsed out of a request key: the total count (the next attempt number is
+     * `count + 1`) and the newest attempt row.
      */
     private async readAttempts(
-        inbox: InboxUnfinishedDao,
+        inbox: InboxService,
         wbs: string,
     ): Promise<{
         count: number;
-        latest: { row: InboxUnfinishedRow; attempt: number } | null;
+        latest: { row: InboxMessage; attempt: number } | null;
     }> {
-        const rows = await inbox.listByRequestKeyPrefix(fleetTaskKeyPrefix(wbs));
-        let latest: { row: InboxUnfinishedRow; attempt: number } | null = null;
-        for (const row of rows) {
-            const attempt = parseFleetTaskAttempt(row.request_key ?? '', wbs);
-            if (attempt === null) continue;
-            if (latest === null || attempt > latest.attempt) latest = { row, attempt };
-        }
-        return { count: rows.length, latest };
+        const attempts = await inbox.attempts(wbs);
+        return {
+            count: attempts.count,
+            latest: attempts.latest === null ? null : { row: attempts.latest, attempt: attempts.count },
+        };
     }
 }

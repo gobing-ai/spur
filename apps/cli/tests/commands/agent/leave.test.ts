@@ -10,11 +10,10 @@ import { describe, expect, test } from 'bun:test';
 import { mkdtemp, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { InboxMessageDao } from '@gobing-ai/spur-domain';
 import { main } from '../../../src';
 import { runAgentLeave } from '../../../src/commands/agent';
 import { type CliContext, createCliContext } from '../../../src/context';
-import { createCapturedOutput } from '../../helpers';
+import { createCapturedOutput, inboxFixture } from '../../helpers';
 
 async function makeCtx(env: Record<string, string | undefined> = {}): Promise<{
     ctx: CliContext;
@@ -65,11 +64,7 @@ describe('guest CLI surface through the real command tree (1081 E2E)', () => {
             expect(out.messages.join('\n')).toContain('guest-stage-refused');
 
             // wait --inbox with queued work returns 0 (text branch)
-            await new InboxMessageDao(await (await createCliContext(deps)).getDb()).enqueue(
-                'proj-lead',
-                'g-env',
-                'work',
-            );
+            await inboxFixture(await (await createCliContext(deps)).getDb()).enqueue('proj-lead', 'g-env', 'work');
             expect(await main(['agent', 'wait', '--inbox', 'g-env', '--timeout', '5000'], deps)).toBe(0);
             expect(out.messages.join('\n')).toContain('pending message(s)');
 

@@ -5,7 +5,7 @@ import { HISTORY_IMPORT_SCHEMA_SQL } from '@gobing-ai/ts-llm-jsonl-importer';
 import { RULE_ENGINE_SCHEMA_SQL } from '@gobing-ai/ts-rule-engine';
 import { createNodeFileSystem } from '@gobing-ai/ts-runtime';
 import { IMPORTER_SCHEMA_KEY, IMPORTER_SCHEMA_LEDGER_PREFIX } from './analytics/importer-schema-version';
-import { DOMAIN_SCHEMA_SQL, PLANNING_SCHEMA_SQL } from './schema';
+import { DOMAIN_SCHEMA_SQL, INBOX_MESSAGES_TABLE_SQL, PLANNING_SCHEMA_SQL } from './schema';
 
 /** Embedded CLI migration used when no migration folder is available. */
 export interface CliMigration {
@@ -78,6 +78,23 @@ CREATE UNIQUE INDEX IF NOT EXISTS idx_inbox_messages_request_key ON inbox_messag
  */
 export const INBOX_MESSAGES_READ_AT_SCHEMA_SQL = `
 ALTER TABLE inbox_messages ADD COLUMN read_at INTEGER;
+`;
+
+/**
+ * 1266 R1 (G11, ADR-143): drop and recreate `inbox_messages` as a Spur-owned table.
+ *
+ * The ts-db shape could not express routing (`kind`), dispatch linkage (`task_id`,
+ * `parent_run_id`) or a non-null sender, and extending it column by column would leave
+ * two owners of one table. Existing inbox rows are dropped by operator decision A6 —
+ * there is no migration of old messages. `DROP TABLE IF EXISTS` makes the step
+ * idempotent on both a fresh DB (0001 created the old table) and a journal that never
+ * had the table, so this migration needs no table-absence guard; the 0043/0053 guards
+ * stay because they run before this step and protect legacy journals. Mirrored in
+ * `drizzle/0054_spur_cli_inbox_messages_rebuild.sql`.
+ */
+export const INBOX_MESSAGES_REBUILD_SQL = `
+DROP TABLE IF EXISTS inbox_messages;
+${INBOX_MESSAGES_TABLE_SQL}
 `;
 
 /**
@@ -1661,6 +1678,13 @@ export const CLI_MIGRATIONS: CliMigration[] = [
         id: '0053_spur_cli_inbox_messages_read_at',
         sql: INBOX_MESSAGES_READ_AT_SCHEMA_SQL,
         addColumnIfMissing: { table: 'inbox_messages', column: 'read_at' },
+    },
+    {
+        // 1266 R1: rebuild inbox_messages as a Spur-owned table (ADR-143). DROP first so
+        // both the 0001 ts-db mirror shape and a table-less legacy journal converge on the
+        // §13 columns; old rows are intentionally discarded (operator decision A6).
+        id: '0054_spur_cli_inbox_messages_rebuild',
+        sql: INBOX_MESSAGES_REBUILD_SQL,
     },
 ];
 

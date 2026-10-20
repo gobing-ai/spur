@@ -279,7 +279,6 @@ export {
     DeliveryReconciler,
     type DeliveryReconcilerContext,
     type HoldReason,
-    MAX_INJECT_ATTEMPTS,
     type ReconcileReport,
     type UnresolvedDelivery,
 } from './services/delivery-reconciler';
@@ -451,6 +450,31 @@ export {
     runHistoryReport,
     UnsafeHistoryImporterError,
 } from './services/history-service';
+// G11 (ADR-143): the single inbox reader/writer and its delivery budget (replaces
+// MAX_INJECT_ATTEMPTS, which the reconciler now derives from the shared constant).
+export {
+    CLAIM_LEASE_MS,
+    type InboxDirection,
+    type InboxMarkReadResult,
+    type InboxMemberCounts,
+    type InboxMessage,
+    type InboxMessageKind,
+    type InboxMessageStatus,
+    type InboxRequestRow,
+    type InboxSendInput,
+    type InboxSendResult,
+    InboxService,
+    type InboxServiceDeps,
+    type InboxSettleOutcome,
+    type InboxSweepResult,
+    isReservedInboxId,
+    MAX_DELIVERY_ATTEMPTS,
+    type MessageEventName,
+    OPERATOR_INBOX_ID,
+    RESERVED_INBOX_IDS,
+    RequestKeyConflictError,
+    SPUR_INBOX_ID,
+} from './services/inbox-service';
 export { type InlineRunProjectDb, openInlineRunProjectDb } from './services/inline-run-attribution';
 export {
     acquireExclusiveJob,
