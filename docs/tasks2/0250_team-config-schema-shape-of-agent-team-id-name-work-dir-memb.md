@@ -3,7 +3,7 @@ template: standard
 schema_version: 1
 name: "Team config schema: shape of agent.team.<id> (name, work_dir, members) + member reference form"
 description: ""
-status: done
+status: deprecated
 type: task
 profile: standard
 feature_id: M
@@ -12,7 +12,7 @@ priority: P2
 tags: []
 dependencies: []
 created_at: "2026-07-14T04:28:57.672Z"
-updated_at: "2026-07-14T05:59:39.019Z"
+updated_at: "2026-10-20T01:53:09.966Z"
 ---
 
 ## 0250. Team config schema: shape of agent.team.<id> (name, work_dir, members) + member reference form
@@ -157,6 +157,9 @@ Zod/YAML lives in **### Design**.
 <!-- Links to features, docs, ADRs, related tasks, or external references. -->
 
 ### History
+
 - 2026-07-14T04:39:56.253Z todo → wip (system)
 - 2026-07-14T04:49:01.187Z wip → testing (system)
 - 2026-07-14T04:49:03.723Z testing → done (system)
+- 2026-10-20T01:53:09.966Z done → deprecated (system)
+

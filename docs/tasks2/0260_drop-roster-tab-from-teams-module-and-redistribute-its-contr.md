@@ -3,7 +3,7 @@ template: feature-impl
 schema_version: 1
 name: "Drop Roster tab from Teams module and redistribute its controls"
 description: ""
-status: done
+status: deprecated
 type: task
 profile: standard
 feature_id: M1
@@ -12,7 +12,7 @@ priority: P2
 tags: []
 dependencies: []
 created_at: "2026-07-15T05:35:23.327Z"
-updated_at: "2026-08-18T04:42:47.378Z"
+updated_at: "2026-10-20T01:53:12.975Z"
 ---
 
 ## 0260. Drop Roster tab from Teams module and redistribute its controls
@@ -261,6 +261,9 @@ M1
 <!-- Links to the parent feature, design docs, related tasks, or external references. -->
 
 ### History
+
 - 2026-07-15T18:19:28.465Z todo → wip (system)
 - 2026-07-15T18:19:33.130Z wip → testing (system)
 - 2026-07-15T18:19:59.823Z testing → done (system)
+- 2026-10-20T01:53:12.975Z done → deprecated (system)
+

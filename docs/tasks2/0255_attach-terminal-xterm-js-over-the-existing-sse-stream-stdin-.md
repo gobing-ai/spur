@@ -3,7 +3,7 @@ template: feature-impl
 schema_version: 1
 name: "Attach terminal: xterm.js over the existing SSE stream + stdin POST endpoints"
 description: ""
-status: done
+status: deprecated
 type: task
 profile: standard
 feature_id: M
@@ -12,7 +12,7 @@ priority: P2
 tags: []
 dependencies: []
 created_at: "2026-07-14T04:29:09.688Z"
-updated_at: "2026-08-18T04:42:47.336Z"
+updated_at: "2026-10-20T01:53:11.453Z"
 ---
 
 ## 0255. Attach terminal: xterm.js over the existing SSE stream + stdin POST endpoints
@@ -176,3 +176,5 @@ M
 - 2026-07-14T16:44:54.445Z blocked → wip (system)
 - 2026-07-14T17:05:30.800Z wip → testing (system)
 - 2026-07-14T17:05:35.915Z testing → done (system)
+- 2026-10-20T01:53:11.453Z done → deprecated (system)
+

@@ -3,7 +3,7 @@ template: feature-impl
 schema_version: 1
 name: "Implement agent.team config schema + parsing (0250): zod, member union, executor resolution, validation"
 description: ""
-status: done
+status: deprecated
 type: task
 profile: standard
 feature_id: M
@@ -12,7 +12,7 @@ priority: P2
 tags: []
 dependencies: []
 created_at: "2026-07-14T06:50:47.941Z"
-updated_at: "2026-08-18T04:42:47.356Z"
+updated_at: "2026-10-20T01:53:12.056Z"
 ---
 
 ## 0257. Implement agent.team config schema + parsing (0250): zod, member union, executor resolution, validation
@@ -150,6 +150,9 @@ M
 <!-- Links to the parent feature, design docs, related tasks, or external references. -->
 
 ### History
+
 - 2026-07-14T07:15:58.316Z todo → wip (system)
 - 2026-07-14T16:19:06.923Z wip → testing (system)
 - 2026-07-14T16:19:16.873Z testing → done (system)
+- 2026-10-20T01:53:12.056Z done → deprecated (system)
+

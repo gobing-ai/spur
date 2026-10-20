@@ -3,7 +3,7 @@ template: feature-impl
 schema_version: 1
 name: Workspace module implementation (gated on approved workspace design)
 description: ""
-status: done
+status: deprecated
 type: task
 profile: standard
 feature_id: G3
@@ -12,7 +12,7 @@ priority: P3
 tags: [approach-c,collaboration,board,gated]
 dependencies: []
 created_at: 2026-07-03T23:35:28.260Z
-updated_at: "2026-08-12T00:46:15.390Z"
+updated_at: "2026-10-20T01:53:09.669Z"
 ---
 
 ## 0197. Workspace module implementation (gated on approved workspace design)
@@ -224,8 +224,11 @@ Residual risk: none blocking. P3/P4 advisories tracked as non-blocking notes (sh
 - `docs/plans/2026-08-11-g3-team-inbox-workspace-boundary-brainstorm.md`
 - Tasks 0193, 0195, 0196, and 0422
 ### History
+
 - 2026-07-03T23:44:29.208Z todo → blocked (system)
 - 2026-08-11T20:04:01.961Z blocked → todo (system)
 - 2026-08-11T23:13:04.592Z todo → wip (system)
 - 2026-08-12T00:46:14.625Z wip → testing (system)
 - 2026-08-12T00:46:15.390Z testing → done (system)
+- 2026-10-20T01:53:09.669Z done → deprecated (system)
+

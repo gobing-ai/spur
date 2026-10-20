@@ -3,7 +3,7 @@ template: feature-impl
 schema_version: 1
 name: "Workspace design: ADR + design doc (data model, config, API, board tabs)"
 description: ""
-status: done
+status: deprecated
 type: task
 profile: standard
 feature_id: G3
@@ -12,7 +12,7 @@ priority: P2
 tags: [approach-c,design,collaboration]
 dependencies: []
 created_at: 2026-07-03T23:35:28.259Z
-updated_at: 2026-07-05T07:23:47.486Z
+updated_at: "2026-10-20T01:52:58.780Z"
 ---
 
 ## 0196. Workspace design: ADR + design doc (data model, config, API, board tabs)
@@ -95,3 +95,6 @@ G3
 <!-- Links to the parent feature, design docs, related tasks, or external references. -->
 
 ### History
+
+- 2026-10-20T01:52:58.780Z done → deprecated (system)
+

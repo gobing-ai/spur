@@ -3,7 +3,7 @@ template: feature-impl
 schema_version: 1
 name: "Process watch list filters and teamId tagging"
 description: ""
-status: done
+status: deprecated
 type: task
 profile: standard
 feature_id: M2
@@ -12,7 +12,7 @@ priority: P2
 tags: ["teams", "process-registry"]
 dependencies: []
 created_at: "2026-07-15T23:03:21.136Z"
-updated_at: "2026-08-18T04:42:47.452Z"
+updated_at: "2026-10-20T01:53:15.065Z"
 ---
 
 ## 0267. Process watch list filters and teamId tagging
@@ -148,6 +148,9 @@ M2
 <!-- Links to the parent feature, design docs, related tasks, or external references. -->
 
 ### History
+
 - 2026-07-16T01:25:19.608Z todo → wip (system)
 - 2026-07-16T01:27:06.873Z wip → testing (system)
 - 2026-07-16T01:28:04.572Z testing → done (system)
+- 2026-10-20T01:53:15.065Z done → deprecated (system)
+

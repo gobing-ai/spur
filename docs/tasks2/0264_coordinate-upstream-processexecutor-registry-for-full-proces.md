@@ -3,7 +3,7 @@ template: meta
 schema_version: 1
 name: "Coordinate upstream ProcessExecutor registry for full process watch list (ts-runtime / ts-ai-runner)"
 description: ""
-status: done
+status: deprecated
 type: meta
 profile: standard
 feature_id: M1
@@ -12,7 +12,7 @@ priority: P2
 tags: ["meta"]
 dependencies: []
 created_at: "2026-07-15T05:35:35.523Z"
-updated_at: "2026-07-15T22:54:16.776Z"
+updated_at: "2026-10-20T01:53:14.183Z"
 ---
 
 ## 0264. Coordinate upstream ProcessExecutor registry for full process watch list (ts-runtime / ts-ai-runner)
@@ -199,6 +199,9 @@ This task is complete when:
 - Upstream: `@gobing-ai/ts-runtime@0.4.10` — `ProcessRegistry` / `createInMemoryProcessRegistry`
 - Catalog pin: root `package.json` workspaces.catalog `"@gobing-ai/ts-runtime": "^0.4.10"`
 ### History
+
 - 2026-07-15T22:02:51.758Z todo → wip (system)
 - 2026-07-15T22:02:53.199Z wip → testing (system)
 - 2026-07-15T22:02:54.626Z testing → done (system)
+- 2026-10-20T01:53:14.183Z done → deprecated (system)
+

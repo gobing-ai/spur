@@ -3,7 +3,7 @@ template: standard
 schema_version: 1
 name: "Team lifecycle over supervisor: self-drain keep-alive, autostart, and the no-auto-restart gap"
 description: ""
-status: done
+status: deprecated
 type: task
 profile: standard
 feature_id: M
@@ -12,7 +12,7 @@ priority: P2
 tags: []
 dependencies: []
 created_at: "2026-07-14T04:29:04.883Z"
-updated_at: "2026-08-18T04:42:47.316Z"
+updated_at: "2026-10-20T01:53:10.845Z"
 ---
 
 ## 0253. Team lifecycle over supervisor: self-drain keep-alive, autostart, and the no-auto-restart gap
@@ -143,6 +143,9 @@ message: queued → injected (drainPending) → [delivered (optional ack via mar
 <!-- Links to features, docs, ADRs, related tasks, or external references. -->
 
 ### History
+
 - 2026-07-14T06:23:21.624Z todo → wip (system)
 - 2026-07-14T06:30:37.306Z wip → testing (system)
 - 2026-07-14T06:30:39.837Z testing → done (system)
+- 2026-10-20T01:53:10.845Z done → deprecated (system)
+

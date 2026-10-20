@@ -3,7 +3,7 @@ template: feature-impl
 schema_version: 1
 name: "Implement team backend runtime (0251/0252/0253): materialize service methods, lifecycle loop+restart, team up/down/status CLI, drain idempotency"
 description: ""
-status: done
+status: deprecated
 type: task
 profile: standard
 feature_id: M
@@ -12,7 +12,7 @@ priority: P2
 tags: []
 dependencies: []
 created_at: "2026-07-14T06:50:50.344Z"
-updated_at: "2026-07-14T20:43:20.076Z"
+updated_at: "2026-10-20T01:53:12.373Z"
 ---
 
 ## 0258. Implement team backend runtime (0251/0252/0253): materialize service methods, lifecycle loop+restart, team up/down/status CLI, drain idempotency
@@ -141,9 +141,12 @@ M
 <!-- Links to the parent feature, design docs, related tasks, or external references. -->
 
 ### History
+
 - 2026-07-14T17:06:06.031Z todo → wip (system)
 - 2026-07-14T17:18:05.602Z wip → testing (system)
 - 2026-07-14T17:18:26.249Z testing → done (system)
 - 2026-07-14T20:20:35.967Z done → wip (system)
 - 2026-07-14T20:43:17.506Z wip → testing (system)
 - 2026-07-14T20:43:20.076Z testing → done (system)
+- 2026-10-20T01:53:12.373Z done → deprecated (system)
+

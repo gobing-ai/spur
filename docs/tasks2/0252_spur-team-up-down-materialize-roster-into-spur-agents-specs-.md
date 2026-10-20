@@ -3,7 +3,7 @@ template: feature-impl
 schema_version: 1
 name: "spur team up/down: materialize roster into .spur/agents specs; reconcile with existing team start/stop"
 description: ""
-status: done
+status: deprecated
 type: task
 profile: standard
 feature_id: M
@@ -12,7 +12,7 @@ priority: P2
 tags: []
 dependencies: []
 created_at: "2026-07-14T04:29:02.470Z"
-updated_at: "2026-08-18T04:42:47.294Z"
+updated_at: "2026-10-20T01:53:10.558Z"
 ---
 
 ## 0252. spur team up/down: materialize roster into .spur/agents specs; reconcile with existing team start/stop
@@ -150,6 +150,9 @@ M
 <!-- Links to the parent feature, design docs, related tasks, or external references. -->
 
 ### History
+
 - 2026-07-14T06:12:39.186Z todo → wip (system)
 - 2026-07-14T06:17:20.143Z wip → testing (system)
 - 2026-07-14T06:17:22.672Z testing → done (system)
+- 2026-10-20T01:53:10.558Z done → deprecated (system)
+

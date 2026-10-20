@@ -3,7 +3,7 @@ template: feature-impl
 schema_version: 1
 name: "Persist Terminal selection in localStorage and improve empty states / headers"
 description: ""
-status: done
+status: deprecated
 type: task
 profile: standard
 feature_id: M1
@@ -12,7 +12,7 @@ priority: P2
 tags: []
 dependencies: []
 created_at: "2026-07-15T05:35:26.848Z"
-updated_at: "2026-08-18T04:42:47.412Z"
+updated_at: "2026-10-20T01:53:13.886Z"
 ---
 
 ## 0263. Persist Terminal selection in localStorage and improve empty states / headers
@@ -208,6 +208,9 @@ M1
 <!-- Links to the parent feature, design docs, related tasks, or external references. -->
 
 ### History
+
 - 2026-07-15T21:51:39.316Z todo → wip (system)
 - 2026-07-15T21:51:40.983Z wip → testing (system)
 - 2026-07-15T21:51:46.572Z testing → done (system)
+- 2026-10-20T01:53:13.886Z done → deprecated (system)
+

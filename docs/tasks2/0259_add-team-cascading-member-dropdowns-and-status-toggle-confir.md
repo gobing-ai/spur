@@ -3,7 +3,7 @@ template: feature-impl
 schema_version: 1
 name: "Add team + cascading member dropdowns and status toggle+confirm to Terminal toolbar"
 description: ""
-status: done
+status: deprecated
 type: task
 profile: standard
 feature_id: M1
@@ -12,7 +12,7 @@ priority: P2
 tags: []
 dependencies: []
 created_at: "2026-07-15T05:35:23.261Z"
-updated_at: "2026-08-18T04:42:47.367Z"
+updated_at: "2026-10-20T01:53:12.678Z"
 ---
 
 ## 0259. Add team + cascading member dropdowns and status toggle+confirm to Terminal toolbar
@@ -241,8 +241,11 @@ M1
 <!-- Links to the parent feature, design docs, related tasks, or external references. -->
 
 ### History
+
 - 2026-07-15T07:01:07.216Z todo → wip (system)
 - 2026-07-15T16:09:14.363Z wip → todo (system)
 - 2026-07-15T17:45:45.655Z todo → wip (system)
 - 2026-07-15T17:46:07.030Z wip → testing (system)
 - 2026-07-15T17:50:35.755Z testing → done (system)
+- 2026-10-20T01:53:12.678Z done → deprecated (system)
+

@@ -3,7 +3,7 @@ template: feature-impl
 schema_version: 1
 name: "Extract shared useTeamsData and remove dead TeamsContext selection"
 description: ""
-status: done
+status: deprecated
 type: task
 profile: standard
 feature_id: M2
@@ -12,7 +12,7 @@ priority: P2
 tags: ["teams", "cleanup"]
 dependencies: []
 created_at: "2026-07-15T23:03:21.145Z"
-updated_at: "2026-08-18T04:42:47.473Z"
+updated_at: "2026-10-20T01:53:15.364Z"
 ---
 
 ## 0268. Extract shared useTeamsData and remove dead TeamsContext selection
@@ -180,6 +180,9 @@ M2
 <!-- Links to the parent feature, design docs, related tasks, or external references. -->
 
 ### History
+
 - 2026-07-16T04:40:05.177Z todo → wip (system)
 - 2026-07-16T04:52:54.138Z wip → testing (system)
 - 2026-07-16T04:54:06.371Z testing → done (system)
+- 2026-10-20T01:53:15.364Z done → deprecated (system)
+

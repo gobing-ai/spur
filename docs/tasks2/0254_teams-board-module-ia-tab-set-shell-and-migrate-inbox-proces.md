@@ -3,7 +3,7 @@ template: feature-impl
 schema_version: 1
 name: "Teams Board module IA: tab set + shell, and migrate Inbox/Process tabs out of Observability"
 description: ""
-status: done
+status: deprecated
 type: task
 profile: standard
 feature_id: M
@@ -12,7 +12,7 @@ priority: P2
 tags: []
 dependencies: []
 created_at: "2026-07-14T04:29:07.281Z"
-updated_at: "2026-07-14T22:58:15.630Z"
+updated_at: "2026-10-20T01:53:11.152Z"
 ---
 
 ## 0254. Teams Board module IA: tab set + shell, and migrate Inbox/Process tabs out of Observability
@@ -176,6 +176,9 @@ M
 <!-- Links to the parent feature, design docs, related tasks, or external references. -->
 
 ### History
+
 - 2026-07-14T17:25:25.232Z todo → wip (system)
 - 2026-07-14T18:31:20.887Z wip → testing (system)
 - 2026-07-14T18:32:00.323Z testing → done (system)
+- 2026-10-20T01:53:11.152Z done → deprecated (system)
+

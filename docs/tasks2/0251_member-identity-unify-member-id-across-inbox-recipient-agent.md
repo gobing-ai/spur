@@ -3,7 +3,7 @@ template: standard
 schema_version: 1
 name: "Member identity: unify member id across inbox recipient, agent spec id, and supervised process id"
 description: ""
-status: done
+status: deprecated
 type: task
 profile: standard
 feature_id: M
@@ -12,7 +12,7 @@ priority: P2
 tags: []
 dependencies: []
 created_at: "2026-07-14T04:29:00.065Z"
-updated_at: "2026-07-14T06:02:52.568Z"
+updated_at: "2026-10-20T01:53:10.261Z"
 ---
 
 ## 0251. Member identity: unify member id across inbox recipient, agent spec id, and supervised process id
@@ -135,6 +135,9 @@ and design soundness apply.
 <!-- Links to features, docs, ADRs, related tasks, or external references. -->
 
 ### History
+
 - 2026-07-14T05:44:28.027Z todo → wip (system)
 - 2026-07-14T05:49:58.420Z wip → testing (system)
 - 2026-07-14T05:50:01.070Z testing → done (system)
+- 2026-10-20T01:53:10.261Z done → deprecated (system)
+

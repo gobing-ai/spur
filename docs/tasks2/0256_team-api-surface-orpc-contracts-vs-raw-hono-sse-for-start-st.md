@@ -3,7 +3,7 @@ template: standard
 schema_version: 1
 name: "Team API surface: oRPC contracts vs raw Hono/SSE for start/stop/stdin/stream/messages"
 description: ""
-status: done
+status: deprecated
 type: task
 profile: standard
 feature_id: M
@@ -12,7 +12,7 @@ priority: P2
 tags: []
 dependencies: []
 created_at: "2026-07-14T04:29:12.104Z"
-updated_at: "2026-07-14T22:06:44.301Z"
+updated_at: "2026-10-20T01:53:11.763Z"
 ---
 
 ## 0256. Team API surface: oRPC contracts vs raw Hono/SSE for start/stop/stdin/stream/messages
@@ -143,9 +143,12 @@ All **6 requirements** and **8 AC** MET.
 <!-- Links to features, docs, ADRs, related tasks, or external references. -->
 
 ### History
+
 - 2026-07-14T17:18:57.550Z todo → wip (system)
 - 2026-07-14T17:25:00.048Z wip → testing (system)
 - 2026-07-14T17:25:05.342Z testing → done (system)
 - 2026-07-14T22:01:20.382Z done → wip (system)
 - 2026-07-14T22:06:41.790Z wip → testing (system)
 - 2026-07-14T22:06:44.301Z testing → done (system)
+- 2026-10-20T01:53:11.763Z done → deprecated (system)
+

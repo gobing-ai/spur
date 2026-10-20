@@ -3,7 +3,7 @@ template: feature-impl
 schema_version: 1
 name: "Wire Processes Attach to TerminalTab local selection"
 description: ""
-status: done
+status: deprecated
 type: task
 profile: standard
 feature_id: M2
@@ -12,7 +12,7 @@ priority: P1
 tags: ["teams", "terminal", "processes"]
 dependencies: []
 created_at: "2026-07-15T23:03:21.117Z"
-updated_at: "2026-08-18T04:42:47.433Z"
+updated_at: "2026-10-20T01:53:14.477Z"
 ---
 
 ## 0265. Wire Processes Attach to TerminalTab local selection
@@ -156,6 +156,9 @@ M2
 <!-- Links to the parent feature, design docs, related tasks, or external references. -->
 
 ### History
+
 - 2026-07-15T23:19:20.063Z todo → wip (system)
 - 2026-07-15T23:19:26.188Z wip → testing (system)
 - 2026-07-15T23:20:02.975Z testing → done (system)
+- 2026-10-20T01:53:14.477Z done → deprecated (system)
+

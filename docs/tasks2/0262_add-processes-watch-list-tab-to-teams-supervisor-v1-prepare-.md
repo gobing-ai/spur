@@ -3,7 +3,7 @@ template: feature-impl
 schema_version: 1
 name: "Add Processes watch-list tab to Teams (supervisor v1, prepare for full ProcessExecutor registry)"
 description: ""
-status: done
+status: deprecated
 type: task
 profile: standard
 feature_id: M1
@@ -12,7 +12,7 @@ priority: P2
 tags: []
 dependencies: []
 created_at: "2026-07-15T05:35:26.619Z"
-updated_at: "2026-08-18T04:42:47.401Z"
+updated_at: "2026-10-20T01:53:13.590Z"
 ---
 
 ## 0262. Add Processes watch-list tab to Teams (supervisor v1, prepare for full ProcessExecutor registry)
@@ -224,6 +224,9 @@ M1
 <!-- Links to the parent feature, design docs, related tasks, or external references. -->
 
 ### History
+
 - 2026-07-15T21:43:57.563Z todo → wip (system)
 - 2026-07-15T21:43:59.071Z wip → testing (system)
 - 2026-07-15T21:44:04.075Z testing → done (system)
+- 2026-10-20T01:53:13.590Z done → deprecated (system)
+

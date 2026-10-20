@@ -3,7 +3,7 @@ template: feature-impl
 schema_version: 1
 name: "Implement local echo + message-enqueue behavior for Terminal input (loop agents)"
 description: ""
-status: done
+status: deprecated
 type: task
 profile: standard
 feature_id: M1
@@ -12,7 +12,7 @@ priority: P2
 tags: []
 dependencies: []
 created_at: "2026-07-15T05:35:23.418Z"
-updated_at: "2026-08-18T04:42:47.389Z"
+updated_at: "2026-10-20T01:53:13.271Z"
 ---
 
 ## 0261. Implement local echo + message-enqueue behavior for Terminal input (loop agents)
@@ -210,6 +210,9 @@ M1
 <!-- Links to the parent feature, design docs, related tasks, or external references. -->
 
 ### History
+
 - 2026-07-15T21:28:28.918Z todo → wip (system)
 - 2026-07-15T21:28:30.288Z wip → testing (system)
 - 2026-07-15T21:28:35.303Z testing → done (system)
+- 2026-10-20T01:53:13.271Z done → deprecated (system)
+

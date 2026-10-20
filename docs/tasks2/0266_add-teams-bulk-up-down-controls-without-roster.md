@@ -3,7 +3,7 @@ template: feature-impl
 schema_version: 1
 name: "Add Teams bulk Up/Down controls without Roster"
 description: ""
-status: done
+status: deprecated
 type: task
 profile: standard
 feature_id: M2
@@ -12,7 +12,7 @@ priority: P1
 tags: ["teams", "roster-redistribution"]
 dependencies: []
 created_at: "2026-07-15T23:03:21.128Z"
-updated_at: "2026-08-18T04:42:47.442Z"
+updated_at: "2026-10-20T01:53:14.774Z"
 ---
 
 ## 0266. Add Teams bulk Up/Down controls without Roster
@@ -139,6 +139,9 @@ M2
 <!-- Links to the parent feature, design docs, related tasks, or external references. -->
 
 ### History
+
 - 2026-07-16T00:06:26.647Z todo → wip (system)
 - 2026-07-16T00:08:05.098Z wip → testing (system)
 - 2026-07-16T00:08:16.147Z testing → done (system)
+- 2026-10-20T01:53:14.774Z done → deprecated (system)
+
