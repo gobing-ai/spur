@@ -530,6 +530,16 @@ belongs to a subagent or the operator, not to the batch controller's report loop
 By default, the **first** pipeline failure halts the batch. Remaining tasks in the plan are reported
 as `not-attempted`. The report lists succeeded, failed, and not-attempted tasks.
 
+**Run-failed / task-done (observed 2026-10-19, feature P1).** A run can fail *after* the task is
+already finished: the `done` state's close commands run last, and a lint or anchor rule can refuse
+the transition on an otherwise green task. Resolve it the honest way — fix the finding through the
+owning surface, re-run the same close command, and confirm the task reads `done` with a PASS verdict
+— then record the task as `done (run-failed-recovered)` with the failing command in the report.
+That is **not** a `failed` outcome: the failure policy applies to a task that did not reach its
+contract, not to a run whose last recorded state was superseded. Surface it in the report either
+way (never silently continue), and never re-run the pipeline just to flip a run row from `failed` to
+`done` — a second run re-executes model stages for a task that is already closed.
+
 ### 4.2 `--keep-going` (R3.2)
 
 With `--keep-going`, a failed task does **not** halt the batch. Instead:

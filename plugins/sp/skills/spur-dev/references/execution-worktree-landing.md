@@ -118,6 +118,39 @@ WT_PATH="$(cd "../<worktree-dir>" && pwd)"   # hoisted: needed by WT-4a AND WT-4
 # task's creation), so a manual DB edit is never required:
 spur workflow persist-out --from "$WT_PATH" "${TASK_FILE_ARGS[@]}" \
   || { echo "halt: worktree run-record persist-out failed - worktree retained (WT-5)" >&2; write_marker retained; exit 1; }
+
+**Two refusals this step raises, and how to clear each without touching foreign evidence.**
+
+1. **`durable evidence conflicts: <name>`** — the worktree owns a receipt (`*-feature-verification.json`)
+   whose canonical target already holds *different* bytes. The conflict policy is fail-closed on
+   purpose: overwriting would destroy the invoking tree's copy. When the worktree receipt is the
+   newer, authoritative one (e.g. the feature transition this batch performed), archive the
+   superseded copy out of the canonical path and re-run — never delete it, and never copy the
+   worktree file in with `cp`:
+
+   ```bash
+   mkdir -p .spur/memory/evidence/superseded
+   mv ".spur/memory/evidence/<name>" ".spur/memory/evidence/superseded/<name>.<iso-timestamp>.json"
+   # then re-run the persist-out command above; the newer receipt lands at the canonical path
+   ```
+
+   When the *invoking* copy is the newer one, do nothing: `persist-check` reports it as foreign and
+   divergent, which is not a blocker.
+2. **`persist-check … BLOCKED n unforwarded durable verdict/receipt`** — the worktree holds
+   `*-verdict.json` files for tasks this batch did not run, because **WT-2 stages the invoking tree's
+   evidence into the worktree before the first task**. Forwarding them back (`--task-file`) is wrong
+   when the invoking tree's copies are newer: persist-out then refuses with `cited run evidence …
+   diverges`, and it would write stale bytes over fresh ones. Compare mtimes and delete the staged
+   worktree copies, then re-run `persist-check` with only this batch's `--task-file` arguments:
+
+   ```bash
+   for w in <staged-wbs>; do
+     [ .spur/run/$w-verdict.json -nt "$WT_PATH/.spur/run/$w-verdict.json" ] \
+       && rm -f "$WT_PATH/.spur/run/$w-verdict.json"
+   done
+   ```
+
+   Both steps are reads plus a delete of a *copy* whose source still holds it — no evidence is lost.
 #
 # WT-4b — bounded CWD-holder cleanup (task 0720 R1). $WT_PATH above is the EXACT
 # absolute worktree path; a relative path or a stale entry matches the wrong processes.
