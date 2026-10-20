@@ -3,6 +3,7 @@ import { spawnSync } from 'node:child_process';
 import { mkdirSync, mkdtempSync, readFileSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import { getEnvVar, setEnvVar } from '@gobing-ai/spur-config';
 import {
     COMMIT_GUARD_USAGE,
     type CommitGuardOptions,
@@ -12,7 +13,6 @@ import {
     commitGuardStart,
     commitGuardUsage,
     conflictMarkerLine,
-    currentHostSessionId as currentHostSessionIdForTest,
     type GitRunner,
     parsePorcelainZ,
 } from '../../src/workflow/commit-guard';
@@ -322,25 +322,46 @@ describe('commit-guard — foreign session owner (task 1265 session finding)', (
         writeFileSync(join(dir, '.session.json'), JSON.stringify(owner === null ? {} : { owner }));
     };
 
+    // Detection compares the recorded owner against THIS process's host session id, so the test
+    // must own that id: the runner env has neither variable (CI), which made the comparison
+    // vacuously silent and the assertion below fail on GitHub only.
+    const withHostSession = <T>(sessionId: string, fn: () => T): T => {
+        const pi = getEnvVar('PI_SESSION_FILE');
+        const claude = getEnvVar('CLAUDE_CODE_SESSION_ID');
+        setEnvVar('PI_SESSION_FILE', undefined);
+        setEnvVar('CLAUDE_CODE_SESSION_ID', sessionId);
+        try {
+            return fn();
+        } finally {
+            setEnvVar('PI_SESSION_FILE', pi);
+            setEnvVar('CLAUDE_CODE_SESSION_ID', claude);
+        }
+    };
+
     test('a pointer owned by another session is reported on stderr and in the JSON', () => {
         const cwd = makeRepo();
         commitGuardStart('run-foreign', { cwd });
         seedSession(cwd, { host: 'pi', sessionId: 'someone-else' });
-        const result = commitGuardCheck('run-foreign', { cwd });
-        expect(result.exitCode).toBe(0);
-        expect(JSON.parse(out(result))).toMatchObject({ foreignSession: { sessionId: 'someone-else' } });
-        expect(err(result)).toContain('another session owns this tree');
+        withHostSession('me', () => {
+            const result = commitGuardCheck('run-foreign', { cwd });
+            expect(result.exitCode).toBe(0);
+            expect(JSON.parse(out(result))).toMatchObject({ foreignSession: { sessionId: 'someone-else' } });
+            expect(err(result)).toContain('another session owns this tree');
+        });
     });
 
-    test('the current session and an ownerless pointer stay silent', () => {
+    test('the current session, an unidentified host and an ownerless pointer stay silent', () => {
         const cwd = makeRepo();
         commitGuardStart('run-owned', { cwd });
-        seedSession(cwd, { host: 'pi', sessionId: 'me' });
-        // No env manipulation: the fixture owns a session id that cannot match this process's
-        // own host session, so a matching owner is simulated by writing ITS id below.
-        const self = currentHostSessionIdForTest();
-        seedSession(cwd, { host: 'pi', sessionId: self === '' ? 'nobody' : self });
-        expect(err(commitGuardCheck('run-owned', { cwd }))).not.toContain('another session');
+        withHostSession('me', () => {
+            seedSession(cwd, { host: 'pi', sessionId: 'me' });
+            expect(err(commitGuardCheck('run-owned', { cwd }))).not.toContain('another session');
+            // No host id at all (CI): there is no self to compare against, so a recorded owner is
+            // not reported as foreign — naming a collision needs knowing who this process is.
+            setEnvVar('CLAUDE_CODE_SESSION_ID', undefined);
+            seedSession(cwd, { host: 'pi', sessionId: 'someone-else' });
+            expect(err(commitGuardCheck('run-owned', { cwd }))).not.toContain('another session');
+        });
         seedSession(cwd, null);
         expect(err(commitGuardCheck('run-owned', { cwd }))).not.toContain('another session');
     });
