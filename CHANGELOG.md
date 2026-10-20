@@ -1,5 +1,56 @@
 # Changelog
 
+## [0.4.16] - 2026-10-19
+
+_Claim bullets carry one source anchor and the level that anchor supports — `HIGH`: a `path:line` was
+read and matches the bullet; `MEDIUM`: an external URL, or whole-file/artifact presence only; `LOW`: no
+verifiable anchor, so the claim is reworded or dropped. Unanchored bullets are bookkeeping (merges,
+status moves, filings) and assert no code, API or version fact._
+
+### Added
+- add `spur decision outcome <invocation-id>` to record what actually happened after a served decision, with `--review-severity <wbs>` / `--gate-status <run-id>` derivations, first-write-wins and exit 2 on a malformed outcome; `spur decision status --reliability` scores accuracy against `decisions.outcomeMap`, and a shipped `executor-failure-class` catalog (off by default) rescues a dispatch failure no `FAILURE_RULES` entry matched (f04edd1bc)
+  <!-- src: apps/cli/src/commands/decision.ts:251, config/config.global.yaml:176, config/decisions/executor.yaml:1 · confidence: HIGH -->
+- name the drifted paths in a coverage stale-tree refusal, so "what changed during the canonical run?" is answerable from the marker's raw git-tree SHA instead of a bare fingerprint mismatch (51040cab4)
+  <!-- src: scripts/commands/coverage-certification.ts:140 · confidence: HIGH -->
+
+### Fixed
+- resolve a catalog `maker` that is an ordered fallback chain to its first registered entry, so the widened `MakerRef` no longer breaks `effectiveMaker` (ccb5fe785)
+  <!-- src: packages/app/src/decision/decision-service.ts:721 · confidence: HIGH -->
+- append the review answer to the remediation log only when this run's gate is PASS, so a red recheck cannot re-feed a stale review verdict; the stage vocabulary is now gate ⇄ remediate and review → done (76ec58071)
+  <!-- src: config/workflows/task-pipeline.yaml:584, plugins/sp/skills/spur-dev/SKILL.md:89 · confidence: HIGH -->
+- split a capability skip from a usability rejection in the no-usable-executor message and keep the `spur agent doctor` hint on the usability clause only (056d7b958)
+  <!-- src: packages/app/src/services/agent-resolver.ts:832 · confidence: HIGH -->
+- stop calling byte-identical evidence unforwarded in the pre-removal assertion, so a refused persist-out no longer blocks teardown over files the invoking tree already holds (9c00002ce)
+  <!-- src: packages/app/src/workflow/persist-check.ts:195 · confidence: HIGH -->
+- qualify unambiguous bare-basename anchors when `spur task record` transcribes the verdict into `## Testing`, so a reviewer's prose anchor no longer fails `--as done` with L4.anchor-unresolved (e8ab1ed7f)
+  <!-- src: packages/app/src/services/task-record-ops.ts:133 · confidence: HIGH -->
+- skip incapable candidates inside the stage escalation ladder, so an unmet `requiresCapabilities` continues to the next reachable tier instead of hard-failing the run at the pre-spawn guard (c42e6248e)
+  <!-- src: packages/app/src/services/agent-resolver.ts:445 · confidence: HIGH -->
+- classify a provider session/allowance refusal and an OAuth `invalid_grant` failure as dispatch replacement signals, and evaluate review/verify independence per attempt through the `beforeDispatch` hook that receives that attempt's `{agent, executor, model}` (4763f9e6d)
+  <!-- src: packages/app/src/services/failure-classification.ts:57, packages/app/src/observability/agent-execution.ts:136 · confidence: HIGH -->
+- report a store read failure during async run registration as itself, not as a worker that never registered with a replay hint (5a4cc00ac)
+  <!-- src: apps/cli/src/commands/workflow/run.ts:169 · confidence: HIGH -->
+- bound each store's retention delete to 1000 rows per pass through a rowid key-selection `DELETE`, so one daily pass no longer runs the whole expired backlog in a single write transaction (b11b9d728)
+  <!-- src: packages/domain/src/retention.ts:217 · confidence: HIGH -->
+- persist and emit the same terminal reason for an immediate `agent.run` failure by tracking the run's causal action kind at the action boundary, so it classifies as `failed-agent` instead of `failed-check` (a42e36465)
+  <!-- src: packages/app/src/workflow/terminal-reason.ts:105 · confidence: HIGH -->
+- bind a pinned or overridden model to the executor it was chosen for, so an escalation dispatches the replacement with its own model; stage capability requirements now filter the role walk before a candidate is selected (1a9abfb8f)
+  <!-- src: packages/app/src/services/agent-run-executor.ts:460, packages/app/src/services/agent-resolver.ts:445 · confidence: HIGH -->
+- honor a registry entry's own host: `/api/projects` probes and exposes it, `startRegisteredProject` attaches to the live remote serve instead of spawning a local one, and the switcher labels and navigates to `name (host)` (1e38cc2d7)
+  <!-- src: apps/server/src/modules/health/index.ts:548, apps/web/src/components/ProjectSwitcher.tsx:24 · confidence: HIGH -->
+- teach the task-pipeline review prompt both artifacts it emits — the `## Review` section and the captured certification answer — with the exact tables, statuses and evidence tokens, so a PASS with executable AC can certify (bb889d1b6)
+  <!-- src: config/workflows/task-pipeline.yaml:664 · confidence: HIGH -->
+- state that the review status file is not the review-lane marker in the pipeline's repair hop: the reviewer's answer is projected only on a green gate this run produced (1262 R6), with both lanes pinned in the proof-chain and triage-routing tests (4aaca6c88)
+  <!-- src: config/workflows/task-pipeline.yaml:576, packages/app/tests/workflow/task-pipeline-proof-chain.test.ts:1 · confidence: MEDIUM -->
+- grade a decision's confidence level from the value it carries, so an out-of-range or non-finite confidence never reads HIGH/MEDIUM and the 0.8 cut is documented as the level cut rather than a retired catalog bar (7e46dd941)
+  <!-- src: packages/app/src/decision/confidence-level.ts:22 · confidence: HIGH -->
+- persist the executor rescue on the run's ledger-attached event bus, so `--reliability` and `spur decision outcome` see it, and default the catalog's `wbs` parameter so a rescue from a seam that has no WBS is no longer rejected (738b8dd5f)
+  <!-- src: apps/cli/src/context.ts:228, config/decisions/executor.yaml:42 · confidence: HIGH -->
+
+### Changed
+- upgrade the `@gobing-ai/ts-*` catalog from 0.5.30 to 0.5.32 (19f359739)
+  <!-- src: package.json:33 · confidence: HIGH -->
+
 ## [0.4.15] - 2026-10-18
 
 _Claim bullets carry one source anchor and the level that anchor supports — `HIGH`: a `path:line` was
