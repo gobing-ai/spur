@@ -2,11 +2,11 @@
 schema_version: 1
 id: "I3"
 name: "Harness surface reconciliation: plugins/sp and workflow YAML against the live spur CLI"
-status: verifying
+status: done
 priority: P2
 tags: []
 created_at: "2026-08-13T23:27:41.734Z"
-updated_at: "2026-10-20T16:14:14.792Z"
+updated_at: "2026-10-20T17:28:26.600Z"
 ---
 
 # I3: Harness surface reconciliation: plugins/sp and workflow YAML against the live spur CLI
@@ -126,4 +126,5 @@ evidence base — runtime behavior of the harness as installed.
 - 2026-09-30T16:40:38.286Z active → verifying (system)
 - 2026-10-20T04:51:58.717Z verifying → active (system)
 - 2026-10-20T16:14:14.792Z active → verifying (system)
+- 2026-10-20T17:28:26.600Z verifying → done (system)
 
