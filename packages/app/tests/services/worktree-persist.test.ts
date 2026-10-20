@@ -49,6 +49,27 @@ describe('runPersistOut — the worktree-landing transport (survivor of 1242)', 
         }
     });
 
+    test('a same-tree call fails closed instead of self-copying the evidence away', async () => {
+        // Task 1265 session finding: the CLI passes its cwd as the destination, so running
+        // `persist-out` from INSIDE the worktree made every copy a self-copy, reported
+        // `ok: true, persisted: 0`, and left the durable verdict to die with the tree.
+        const dir = mkdtempSync(join(tmpdir(), 'spur-persist-same-'));
+        const restore = captureStreams();
+        try {
+            streamWrites.length = 0;
+            mkdirSync(join(dir, '.spur', 'run'), { recursive: true });
+            const result = await runPersistOut({ from: dir, to: dir, taskFiles: [] });
+            expect(result.exitCode).toBe(1);
+            const payload = JSON.parse(result.stdout[0] ?? '{}') as { ok?: boolean; error?: unknown };
+            expect(payload.ok).toBe(false);
+            expect(String(payload.error)).toContain('same tree');
+            expect(streamWrites).toEqual([]);
+        } finally {
+            restore();
+            rmSync(dir, { recursive: true, force: true });
+        }
+    });
+
     test('a real worktree persists into the given invoking tree and reports ok:true', async () => {
         const from = mkdtempSync(join(tmpdir(), 'spur-persist-from-'));
         const to = mkdtempSync(join(tmpdir(), 'spur-persist-to-'));

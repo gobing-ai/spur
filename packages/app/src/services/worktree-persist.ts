@@ -134,12 +134,24 @@ export async function persistWorktreeRuns(input: PersistWorktreeRunsInput): Prom
     if (fromStat === undefined || !fromStat.isDirectory()) {
         throw new Error(`persist-out: source worktree does not exist or is not a directory: ${input.fromWorkdir}`);
     }
+    // Fail closed on a same-tree call (task 1265 session finding): the destination is the
+    // invoking tree (the CLI passes its cwd), so running this from INSIDE the worktree makes
+    // every copy a self-copy and reports `ok: true` with `persisted: 0` — the evidence then
+    // dies with the tree. Observed: `1265-verdict.json` was never transferred, and the task's
+    // recorded done_reason cited the durable path that had ceased to exist.
+    const fs = createNodeFileSystem();
+    const fromReal = fs.realPath?.(fromDir) ?? fromDir;
+    const toReal = fs.realPath?.(toDir) ?? toDir;
+    if (fromReal === toReal) {
+        throw new Error(
+            `persist-out: source and destination are the same tree (${fromDir}) — run it from the invoking tree, or the evidence is copied onto itself and lost with the worktree`,
+        );
+    }
     const fromRunDir = join(fromDir, '.spur', 'run');
     const toRunDir = join(toDir, '.spur', 'run');
     // 1026 R7: the durable run-record plane migrates alongside the scratch evidence.
     const fromRecordsDir = runStoragePaths(fromDir).recordsDir;
     const toRecordsDir = runStoragePaths(toDir).recordsDir;
-    const fs = createNodeFileSystem();
     const fromEvidence = runStoragePaths(fromDir).evidenceDir;
     const toEvidence = runStoragePaths(toDir).evidenceDir;
     const evidenceCopies: Array<{ source: string; target: string; bytes: Buffer }> = [];
