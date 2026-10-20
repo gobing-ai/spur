@@ -6,7 +6,7 @@ status: backlog
 priority: P2
 tags: []
 created_at: "2026-10-20T06:57:26.966Z"
-updated_at: "2026-10-20T16:42:12.457Z"
+updated_at: "2026-10-20T17:57:47.698Z"
 ---
 
 # G11: Inbox module refactor — one instance, one inbox
@@ -76,9 +76,10 @@ Feature: Inbox module refactor — one fleet member, one inbox
 
   Scenario: R7 — System-originated messages use the spur sender
     # covers: I3
-    Given the fleet dispatcher or a workflow sends a task request to a member
+    Given a workflow with executor=fleet sends a task request to a member
     When the message is stored
     Then its sender is spur, its kind is request, and its task_id and parent_run_id columns are set
+    And a strategy dispatch keeps the orchestrator member as sender, with kind request and task_id set
 
   Scenario: R8 — Chat messages are never reported as unresolved work
     # covers: I2, I3
