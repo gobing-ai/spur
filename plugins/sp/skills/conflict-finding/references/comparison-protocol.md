@@ -76,8 +76,10 @@ Join keys, in priority order:
 
 Construction protocol:
 
-1. **Seed from scope.** If `<scope>` is a path/WBS/feature-id/symbol/command/config-key, seed the
-   graph with every artifact whose identity or content references that scope.
+1. **Seed from the frozen target.** Every object in the `--tasks` / `--feature` / `--scope` set is
+   a seed, plus every artifact whose identity or content references one of them (its WBS, feature
+   ID, or path). Multiple seeds share one graph, so edges between seeds are compared too. No
+   selector → the whole project is the seed set.
 2. **Grow by shared keys.** For each seed, add an edge to any artifact sharing one of the keys
    above for the _same subject_. A key matches only when it refers to the same subject, not merely
    the same string in an unrelated context (see normalize).

@@ -218,7 +218,7 @@ inventory, findings, unresolved, coverage, cost, remediation, errors
 {
   "schema_version": 1,
   "command": "dev-find-conflict",
-  "scope": "docs/00_ADR.md",
+  "scope": "scope:docs/00_ADR.md",
   "mode": "adaptive",
   "pillars": ["authority"],
   "authority_map": {},
@@ -236,7 +236,7 @@ inventory, findings, unresolved, coverage, cost, remediation, errors
 | ---------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `schema_version` | integer, `1`. The envelope contract version — not a semantic-reasoning version.                                                                                             |
 | `command`        | string, `dev-find-conflict`.                                                                                                                                                |
-| `scope`          | string. The resolved audit scope (path, WBS, feature ID, symbol, command, or `"<project>"`).                                                                                |
+| `scope`          | string. The frozen target as `<kind>:<id>[,<id>]` — `tasks:0486,0487`, `feature:H11,H12`, `scope:apps,docs` — or `"<project>"` when no selector was given.               |
 | `mode`           | string, `adaptive` \| `full`.                                                                                                                                               |
 | `pillars`        | string[]. The pillars actually audited (subset of `source`, `tasks`, `features`, `authority`).                                                                              |
 | `authority_map`  | object. Claim-type → authoritative artifact/rule, with each precedence edge citing its project rule or fallback (see [./authority-resolution.md](authority-resolution.md)). |

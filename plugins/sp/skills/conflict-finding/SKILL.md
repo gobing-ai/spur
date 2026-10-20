@@ -57,24 +57,29 @@ dependency, or dedicated subagent.
 - Code review — use `sp:code-review` / `sp:code-verification`.
 - General documentation drift maintenance — use `sp:doc-evolve`.
 - Performing repairs automatically — this skill only audits and (with `--resolve`) proposes
-  confirmed, owner-routed repairs; it never mutates without explicit confirmation.
+  confirmed, owner-routed repairs; it never mutates without explicit confirmation (interactive, or
+  the operator's explicit `--auto` pre-approval of eligible items).
 
 ## Arguments
 
 | Argument                                             | Description                                                                                                                                          | Default         |
 | ---------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------- | --------------- |
-| `[scope]`                                            | Optional path, WBS, feature ID, symbol, command, config key, or free-form subject to scope the audit.                                                | current project |
+| `--tasks <selector>`                                 | Task set (comma WBS list or `feature:<id>`, batch selector grammar) seeding the audit.                                                                | —               |
+| `--feature <id>[,<id>]`                              | Union of the `feature:<id>` task sets plus the feature records themselves, seeding the audit.                                                        | —               |
+| `--scope <path>[,<path>]`                            | Tracked files under one or more existing paths, seeding the audit.                                                                                   | —               |
+| `[<wbs\|path>]`                                      | Deprecated positional alias for `--tasks <wbs>` / `--scope <path>` (one release).                                                                    | —               |
 | `--pillar <source\|tasks\|features\|authority\|all>` | Limit the internal audit to one pillar; the minimum authorities needed to judge it still load.                                                       | `all`           |
 | `--mode <adaptive\|full>`                            | Scan protocol — `adaptive` reuses fresh, provenance-verifiable indexed context and discloses skipped areas; `full` forces a cold comprehensive scan. | `adaptive`      |
 | `--resolve`                                          | Enable the proposal, confirmation, and owner-routed remediation workflow. Its absence guarantees no source/corpus/numbered-doc mutation.             | off             |
+| `--auto`                                             | Under `--resolve`, pre-approve the eligible repair set at the confirmation gate (Step 10). Requires `--resolve`.                                    | off             |
 | `--agent <inline\|auto\|name>`                       | Who runs the model-bearing analysis. `inline` is the default; `--agent auto`/a named executor isolates the analysis. Not a dedicated subagent.       | `inline`        |
 | `--json`                                             | Emit the same result envelope as Markdown as JSON. Never implies deterministic semantic reasoning.                                                   | off             |
 
 ## The 10-Step Audit Protocol
 
 ```
-scope + flags
-  → PARSE & GUARD     resolve scope/flags; confirm repository root; set audit-only vs resolve mode
+target + flags
+  → PARSE & GUARD     resolve + freeze the target set; confirm repository root; set audit-only vs resolve mode
   → DISCOVER AUTHORITY  read entry/process rules; build the claim-specific authority matrix
   → PREFLIGHT         git, rg, spur task/feature --json, relevant spur … check, doc-evolve audit
   → INVENTORY         four-pillar inventory: pillar, identity, path, anchor, freshness, scan status
@@ -84,13 +89,35 @@ scope + flags
   → CROSS-PILLAR      all six applicable boundaries
   → CLASSIFY          lifecycle, supersession, abstraction-level, intentional-deprecation challenges
   → REPORT            order by severity then confidence; coverage, unresolved authority, scan cost
-  → REMEDIATE         only with --resolve and explicit confirmation + freshness recheck
+  → REMEDIATE         only with --resolve and explicit (or --auto pre-) confirmation + freshness recheck
 ```
 
 ### Step 1 — Parse and guard
 
-Resolve `<scope>` and `--pillar`; confirm the repository root; establish **audit-only** versus
-`--resolve` mode. Without `--resolve`, the run is strictly read-only: no source, corpus, or
+Resolve the target and `--pillar`; confirm the repository root; establish **audit-only** versus
+`--resolve` mode.
+
+**Target selection.** At most one of `--tasks`, `--feature`, `--scope` (a deprecated positional
+beside an explicit selector counts as a second kind) — more than one refuses the audit naming the
+conflicting selectors. None → the whole project. Resolve the set **once** and freeze it:
+
+- `--tasks` / `--feature` go through the shared batch resolver
+  ([execution-batch.md § Step 1](../spur-dev/references/execution-batch.md#step-1--selector-resolution-r1));
+  `--feature <id>[,<id>]` is sugar for the union of the `feature:<id>` sets, and the feature records
+  join the seed set. Status pseudo-lists and `ready` are refused. An unresolvable WBS/feature refuses
+  the audit.
+- `--scope` paths must exist; normalize them, drop duplicates, collapse nested paths to the ancestor.
+- Deprecated positional: a `^\d{4}$` token with a resolvable task → `--tasks <wbs>`; an existing path
+  → `--scope <path>`; anything else refuses. Emit a deprecation warning naming the replacement.
+
+The frozen objects **seed one audit** — they are the starting nodes of the candidate graph (Step 5),
+not the boundary of what may be read: the authorities and counterpart artifacts needed to judge them
+still load. One audit, not one per object, so conflicts *between* selected objects stay visible.
+Every finding names the seed object(s) it traces to; `coverage` accounts per seed object.
+
+`--auto` without `--resolve` refuses the audit (it has no gate to skip in audit mode).
+
+Without `--resolve`, the run is strictly read-only: no source, corpus, or
 numbered-document mutation of any kind. With `--resolve`, no write happens until a repair set is
 presented, explicitly confirmed, and freshness-revalidated.
 
@@ -98,7 +125,7 @@ Validate every enum flag against the domain declared by the command surface
 (`plugins/sp/commands/dev-find-conflict.md`): `--pillar` ∈ `source|tasks|features|authority|all`,
 `--mode` ∈ `adaptive|full`, `--agent` ∈ `inline|auto|name`. An out-of-domain value **refuses** the
 audit before any discovery work — report the received value, the flag's valid domain, and stop;
-never silently coerce or ignore it. Only `<scope>` is free-form and exempt from this check.
+never silently coerce or ignore it.
 
 ### Step 2 — Discover local authority
 
@@ -157,8 +184,9 @@ findings, evidence, authority provenance, coverage, unresolved decisions, and re
 
 ### Step 10 — Remediate only when requested
 
-With `--resolve`: present the proposed repair set, obtain explicit confirmation, revalidate evidence
-freshness, then route each approved repair through its verified owner surface. Report the completed,
+With `--resolve`: present the proposed repair set, obtain explicit confirmation (or, under
+`--auto`, the pre-approval of the eligible subset — [remediation-routing.md §2.2a](references/remediation-routing.md#22a---auto-pre-approval)),
+revalidate evidence freshness, then route each approved repair through its verified owner surface. Report the completed,
 failed, and untouched sets; never silently roll forward past a partial failure. See
 [references/remediation-routing.md](references/remediation-routing.md).
 
@@ -173,7 +201,7 @@ items; no mutation.
 {
   "schema_version": 1,
   "command": "dev-find-conflict",
-  "scope": "docs/00_ADR.md",
+  "scope": "scope:docs/00_ADR.md",
   "mode": "adaptive",
   "pillars": ["authority"],
   "authority_map": {},
@@ -226,10 +254,10 @@ Thin wrapper: `Skill(skill="sp:conflict-finding", args="$ARGUMENTS")`.
 
 ```
 /sp:dev-find-conflict
-/sp:dev-find-conflict docs/00_ADR.md
-/sp:dev-find-conflict --pillar tasks --mode full
-/sp:dev-find-conflict 0486 --resolve
-/sp:dev-find-conflict "command surface" --json
+/sp:dev-find-conflict --scope docs/00_ADR.md
+/sp:dev-find-conflict --tasks 0486,0487 --pillar tasks --mode full
+/sp:dev-find-conflict --feature H11 --resolve
+/sp:dev-find-conflict --scope apps/cli --resolve --auto --json
 ```
 
 ## Common rationalizations
@@ -240,6 +268,7 @@ Thin wrapper: `Skill(skill="sp:conflict-finding", args="$ARGUMENTS")`.
 | "Lower-numbered docs always win."          | Authority is claim-specific; the constitution's precedence applies only within its stated boundary.                                                             |
 | "Code is always right."                    | Code is authoritative for what currently happens, not automatically for what should happen.                                                                     |
 | "`--resolve` authorizes automatic repair." | It opens the proposal/confirmation workflow; every repair still needs explicit confirmation and a freshness check, then the owner surface.                      |
+| "`--auto` approves everything."            | It pre-approves only eligible items (resolved authority, `high` confidence, verified owner surface); authority decisions still pause; freshness still applies. |
 | "Adaptive can reuse any context."          | Reuse requires freshness + verifiable provenance; absent/stale/unverifiable context degrades to a cold scan or an explicit incomplete-coverage result.          |
 
 ## Red flags
@@ -248,7 +277,8 @@ Thin wrapper: `Skill(skill="sp:conflict-finding", args="$ARGUMENTS")`.
 - Forcing an ambiguous/missing authority through a global ranking instead of an unresolved HITL item.
 - Silently omitting a selected pillar or a tool failure (no coverage accounting).
 - Claiming "comprehensive" when `coverage.complete` is false.
-- Any mutation in audit mode, or automatic mutation merely because `--resolve` is present.
+- Any mutation in audit mode, or automatic mutation merely because `--resolve` is present (without `--auto`).
+- Under `--auto`, applying an ineligible item or settling a `needs-authority-decision` item.
 - Editing a derived projection before correcting a defective authority, or changing a correct authority merely to repair its stale projection.
 - Adding a production analyzer, index/cache/database, dependency, or dedicated subagent in v1.
 

@@ -219,8 +219,8 @@ or irreversible HITL gates.
 
 Scope the operation to all tasks under a feature id (`^[A-Z][1-9]*$`). On feature-advancing
 commands (`dev-wrapall`) it also advances the feature through legal lifecycle edges with guards
-honored. On `dev-review` it takes a comma list (`--feature <id>[,<id>]`) — sugar for the union of
-the `feature:<id>` sets, resolved once and frozen.
+honored. On `dev-review` and `dev-find-conflict` it takes a comma list (`--feature <id>[,<id>]`) —
+sugar for the union of the `feature:<id>` sets, resolved once and frozen.
 
 ### `--check <cmd>` — validation command for iterate-and-check loops
 
@@ -250,9 +250,10 @@ all dimensions.
 **Anchor:** `#flag-scope`.
 
 Limit the operation to a file or directory path (`dev-arch`, `dev-debug`, `dev-fixall`,
-`dev-gitmsg`, `dev-gtd`, `dev-refactor`, `dev-review`, `dev-simplify`) to bound the working set.
-On `dev-review` it takes a comma list of paths — normalized, nested and duplicate paths merged,
-one advisory sub-review per surviving path.
+`dev-find-conflict`, `dev-gitmsg`, `dev-gtd`, `dev-refactor`, `dev-review`, `dev-simplify`) to
+bound the working set. On `dev-review` and `dev-find-conflict` it takes a comma list of paths —
+normalized, nested and duplicate paths merged; `dev-review` runs one advisory sub-review per
+surviving path, `dev-find-conflict` seeds one audit with all of them.
 
 ### `--all` — widen the operation to everything in its domain
 
@@ -275,9 +276,9 @@ is the contract; divergence between `--dry-run` and the real run is a bug.
 
 **Anchor:** `#flag-tasks`.
 
-Batch operation (`dev-refineall`, `dev-review`, `dev-runall`, `dev-verifyall`). An
+Batch operation (`dev-find-conflict`, `dev-refineall`, `dev-review`, `dev-runall`, `dev-verifyall`). An
 explicit selector — WBS list, status pseudo-list (`todo`, `wip`), `feature:<id>`, or `ready` —
-resolving to the set the batch runs over. On `dev-review` the selector is restricted to the
+resolving to the set the batch runs over. On `dev-review` and `dev-find-conflict` the selector is restricted to the
 review-safe forms: comma WBS list and `feature:<id>` — status pseudo-lists and `ready` are
 rejected (they select work to do, not work to review). Required on `dev-runall` and
 `dev-verifyall`, where `--feature` is an optional restrictor. On `dev-refineall` it is instead

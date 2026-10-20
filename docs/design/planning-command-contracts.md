@@ -114,24 +114,31 @@ dev commands. Full shapes:
 Thin wrapper over the `sp:conflict-finding` skill. Standalone audit, not a spine pipeline stage.
 
 ```text
-/sp:dev-find-conflict [<scope>]
+/sp:dev-find-conflict [--tasks <selector> | --feature <id>[,<id>] | --scope <path>[,<path>]]  # default: whole project
     [--pillar <source|tasks|features|authority|all>]   # default all
     [--mode <adaptive|full>]                            # default adaptive
     [--resolve]                                         # default off
+    [--auto]                                            # default off; requires --resolve
     [--agent <inline|auto|name>]                        # default omitted
     [--json]                                            # default off
 ```
 
 Enum flags are validated at Step 1 (`--pillar` ∈ `source|tasks|features|authority|all`, `--mode` ∈
 `adaptive|full`, `--agent` ∈ `inline|auto|name`); an out-of-domain value refuses the audit naming
-the valid set — no silent coercion. `<scope>` remains free-form.
+the valid set — no silent coercion. At most one target selector; more than one exits 2. `--tasks`
+/`--feature` resolve once through the shared batch resolver (status pseudo-lists and `ready`
+refused); `--scope` paths must exist and are normalized/collapsed as in `dev-review`. The frozen
+objects seed **one** audit so cross-object conflicts stay visible. The positional `<wbs|path>` is a
+deprecated one-release alias; free-form subjects are no longer accepted.
 
 Behavior: audits the four pillars (source code, task files, feature files, project authority files)
 for within-pillar and cross-pillar semantic conflicts. Authority is resolved per **subject + claim
 type** — never by a global `docs > features > tasks > code` ranking; incomparable or missing
 authority yields a `needs-authority-decision` item rather than a fabricated winner. Without
 `--resolve` the run is read-only with respect to source, corpus, and numbered docs. With `--resolve`
-the skill presents a repair set, requires explicit confirmation, revalidates evidence freshness, then
+the skill presents a repair set, requires explicit confirmation (`--auto` pre-approves only items with
+resolved authority, `high` confidence and a verified owner surface; authority decisions still pause),
+revalidates evidence freshness, then
 routes each approved repair through its owner surface (`spur task`/`spur feature`, `sp:doc-evolve`,
 the Spur dev lifecycle, or the Superskill capability lifecycle).
 

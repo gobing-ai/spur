@@ -13,7 +13,8 @@ opt-in, gated workflow. This file is the SSOT for *when a write is allowed*, *wh
 
 The governing rule, carried through everything below: **no mutation in audit mode, and no automatic
 mutation merely because `--resolve` is present.** Every write requires (a) a presented repair set,
-(b) explicit operator confirmation, (c) a freshness revalidation of the supporting evidence, and
+(b) explicit operator confirmation (interactive, or the explicit `--auto` pre-approval of eligible
+items — §2.2a), (c) a freshness revalidation of the supporting evidence, and
 (d) dispatch through the artifact owner's verified harness surface. Ambiguity or partial failure is
 reported, never silently continued.
 
@@ -23,7 +24,7 @@ reported, never silently continued.
 |-----------|-----------|
 | Audit mode is read-only | Without `--resolve`, no source, corpus (task/feature), or numbered-document mutation of any kind. |
 | `--resolve` is not a write | It only *opens* the proposal → confirmation → owner-routed workflow. It never authorizes automatic repair. |
-| Confirmation precedes every write | No repair executes until the operator explicitly approves the specific proposed repair set. |
+| Confirmation precedes every write | No repair executes until the operator explicitly approves the specific proposed repair set — interactively, or by `--auto` pre-approval of its eligible subset (§2.2a). |
 | Freshness precedes mutation | The supporting evidence anchors are re-read and compared against the finding's fingerprint before any write. |
 | Owner surface, not raw edits | Each approved repair routes through the artifact's owner (Spur CLI, `sp:doc-evolve`, Spur dev lifecycle, Superskill lifecycle) — never a direct file write where an owner surface exists. |
 | Idempotent and partial-failure aware | Already-matching artifacts resolve without a write; one repair's failure neither marks others successful nor silently rolls forward. |
@@ -92,6 +93,23 @@ is:
 
 A declined or deferred repair is left **untouched** and reported as such; it is not re-attempted
 implicitly in the same run.
+
+### 2.2a `--auto` pre-approval
+
+`--auto` (only valid with `--resolve`) is the operator's explicit, up-front confirmation of the
+**eligible** subset of the repair set — it replaces the interactive pause for that subset only. The
+repair set is still presented (§2.1) before anything is applied. An item is eligible only when all
+hold:
+
+- `status` is `open` — never `needs-authority-decision` (authority is resolved, not ambiguous/missing);
+- `confidence` is `high`;
+- `repair_owner` resolves to a verified owner surface in §3 (no manual/unknown owner).
+
+Ineligible items are the HITL that remains: authority decisions and medium/low-confidence repairs
+**still pause** for the operator, exactly as without `--auto`. In a non-interactive run (no operator
+to answer), they are recorded `deferred` and left untouched. The remediation report marks each
+approved item `approved_by: auto` or `approved_by: operator`, so the audit trail distinguishes the two.
+`--auto` never skips freshness revalidation (§2.3), owner routing (§3), or partial-failure handling (§5).
 
 ### 2.3 Revalidate evidence freshness
 
@@ -245,6 +263,7 @@ These are the explicit boundaries for remediation. Each is a hard violation, not
 | Anti-pattern | Why it is prohibited |
 |--------------|----------------------|
 | **Automatic mutation merely because `--resolve` is present** | `--resolve` only opens the workflow; it never authorizes automatic repair. Confirmation + freshness + owner surface are all required. |
+| **`--auto` beyond its eligible subset** | `--auto` pre-approves only §2.2a-eligible items; applying an authority decision or a medium/low-confidence repair under it is a violation. |
 | **Changing correct authority for projection drift** | A stale projection is repaired against its governing contract. Correct authority only when defective and authorized; then update affected projections. |
 | **Broad cleanup outside confirmed findings** | Only the artifacts named by confirmed, freshness-checked findings are touched. No opportunistic refactors or doc "improvements" while repairing. |
 | **Ambiguity silently resolved** | Ambiguous/missing authority stops for an operator decision; it is never forced through a global ranking or a guessed owner. |
@@ -260,7 +279,7 @@ Before dispatching any write, confirm each of the following:
 
 - [ ] Audit mode performed **no** governed mutation; the report is a pure envelope.
 - [ ] `--resolve` was present, and the **repair set was presented** (keyed by finding ID + fingerprint).
-- [ ] The operator **explicitly confirmed** the specific selected repair set.
+- [ ] The operator **explicitly confirmed** the specific selected repair set, or `--auto` pre-approved only §2.2a-eligible items.
 - [ ] Evidence **freshness revalidated** per finding at dispatch; `stale-evidence` items returned to audit.
 - [ ] Each approved repair routed through its **owner surface** (§3), never a raw write where an owner exists.
 - [ ] **Idempotent** already-matching items marked `resolved` without a write.
