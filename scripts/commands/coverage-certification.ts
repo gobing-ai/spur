@@ -28,7 +28,10 @@ import {
 } from 'node:fs';
 import { join, resolve } from 'node:path';
 // Repo-command precedent (0775): spur-app has no root workspace link.
-import { computeProofInputFingerprintDetailed } from '../../packages/app/src/workflow/proof-input-fingerprint';
+import {
+    computeProofInputFingerprintDetailed,
+    DEFAULT_EXCLUDE_GLOBS,
+} from '../../packages/app/src/workflow/proof-input-fingerprint';
 
 export const CERT_RELATIVE_PATH = join('.coverage', 'coverage-certification.json');
 export const LCOV_RELATIVE_PATH = join('.coverage', 'lcov.info');
@@ -125,9 +128,19 @@ export async function treeFingerprint(cwd: string): Promise<string> {
     return (await treeCapture(cwd)).digest;
 }
 
+/**
+ * Tree paths no test reads, so an edit mid-run cannot change the measured result. CHANGELOG.md is
+ * rewritten by release/changelog commands that routinely land during a long canonical run. Docs
+ * stay in: contract tests read ADRs and design satellites, so they are coverage inputs.
+ */
+const CERTIFICATION_EXCLUDE_GLOBS = [...DEFAULT_EXCLUDE_GLOBS, 'CHANGELOG.md'];
+
 /** Composite digest plus the raw git-tree SHA it folds in. */
 async function treeCapture(cwd: string): Promise<{ digest: string; gitTree: string }> {
-    const { fingerprint, gitTree } = await computeProofInputFingerprintDetailed({ cwd });
+    const { fingerprint, gitTree } = await computeProofInputFingerprintDetailed({
+        cwd,
+        excludeGlobs: CERTIFICATION_EXCLUDE_GLOBS,
+    });
     return { digest: fingerprint, gitTree };
 }
 

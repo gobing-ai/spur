@@ -318,6 +318,15 @@ describe('canonical certification producer (task 1203)', () => {
         expect((await validateCoverageCertification(fixture)).ok).toBe(true);
     });
 
+    test('a CHANGELOG.md edit during the run does not invalidate coverage certification', async () => {
+        const fixture = initFixtureRepo(PASSING);
+        const start = await startCanonicalRun(fixture);
+        writeRunLcov(start, FIXTURE_LCOV);
+        writeFileSync(join(fixture, 'CHANGELOG.md'), '## 0.0.1\n- generated\n');
+        expect(await certifyCanonicalRun(fixture, start)).toEqual({ ok: true });
+        expect((await validateCoverageCertification(fixture)).ok).toBe(true);
+    });
+
     test('a later canonical start supersedes the earlier run; the earlier publish is refused (AC4)', async () => {
         const fixture = initFixtureRepo(PASSING);
         const first = await startCanonicalRun(fixture);
