@@ -4,7 +4,7 @@ name: Make role-stage executor resolution keep the pinned executor's agent
 status: done
 template: issue
 created_at: 2026-10-18T19:33:16.740Z
-updated_at: "2026-10-19T17:46:51.722Z"
+updated_at: "2026-10-20T02:48:29.430Z"
 
 feature_id: B21
 priority: P1
@@ -97,17 +97,17 @@ auto/role selection walk instead of only the pre-spawn guard.
 
 | Requirement | Status | Evidence |
 |-------------|--------|----------|
-| R1 | MET | `packages/app/src/services/agent-run-executor.ts:459` applies the model preference to the initial dispatch only (anchor re-read this run); `packages/app/tests/services/agent-service.test.ts:2914` dispatches pi with the override, escalates to claude, and asserts the replacement got `anthropic/claude-opus` |
-| R2 | MET | `packages/app/tests/services/agent-service.test.ts:2914` (caller override on the initial executor) and `:2975` (pin with its own model, one attempt); the diff contains no model-name translation and no provider lookup |
-| R3 | MET | `packages/app/src/services/agent-resolver.ts:598-870` filters the declared-role, inherited-role and `agent.default`-role walks with the existing attestation evaluators; `packages/app/src/workflow/actions/agent-run.ts:691` forwards the same flag into the fresh disabled-pin re-resolution; `packages/app/tests/services/agent-resolver.test.ts:94` and `packages/app/tests/workflow/actions/agent-run.test.ts:3402` pin both paths |
-| R4 | MET | `cheapestEligibleExecutors` and the tier helpers are untouched (`packages/app/src/services/executor-tier.ts:36` only adds an optional mirror field); `packages/app/tests/services/agent-resolver.test.ts:94` asserts the no-requirement walk still selects the first candidate |
-| R5 | MET | `packages/app/tests/services/agent-service.test.ts:2914,2975`, `packages/app/tests/services/agent-resolver.test.ts:94-158` and `packages/app/tests/workflow/actions/agent-run.test.ts:3402` use fakes only; `packages/app/tests/services/agent-resolver.test.ts:118` asserts the diagnostic names the rejected executor and unmet axes without config/env values |
+| R1 | MET | `packages/app/src/services/agent-run-executor.ts:456-460` applies the model preference to attempt 0 only (anchor re-read this run); `packages/app/tests/services/agent-service.test.ts:2914` escalates pi to claude and asserts the replacement dispatches its own model |
+| R2 | MET | `packages/app/tests/services/agent-service.test.ts:2914` (caller override on the initial executor) and `packages/app/tests/services/agent-service.test.ts:2975` (pin with its own model keeps it until the executor changes); no model-name translation in the diff |
+| R3 | MET | `packages/app/src/services/agent-resolver.ts:754-772` filters the role walk by the declared requiresCapabilities and names rejected candidates; `packages/app/src/workflow/actions/agent-run.ts:690` forwards the flag into the disabled-pin re-resolution; `packages/app/tests/services/agent-resolver.test.ts:75` and `packages/app/tests/workflow/actions/agent-run.test.ts:3431` pin both paths |
+| R4 | MET | `packages/app/src/services/executor-tier.ts:34` only adds the optional attestation mirror; `packages/app/tests/services/agent-resolver.test.ts:85-87` asserts the no-requirement walk keeps config order; `packages/app/tests/services/agent-resolver.test.ts:138` malformed flag leaves the walk unchanged |
+| R5 | MET | `packages/app/tests/services/agent-resolver.test.ts:90` asserts the failure names each rejected executor and its unmet axes using fake rosters only; agent-service/agent-run cases use fakes |
 
 | Acceptance Criteria | Status | Evidence Type | Evidence |
 |---------------------|--------|---------------|----------|
-| AC1 | MET | test | `packages/app/tests/services/agent-service.test.ts:2914` — escalation dispatches the replacement's own model; re-run this session: `bun test tests/services/agent-service.test.ts` 224 pass / 0 fail |
-| AC2 | MET | test | `packages/app/tests/services/agent-resolver.test.ts:94` (incapable first candidate skipped, attested next selected) and `packages/app/tests/workflow/actions/agent-run.test.ts:3200` (explicit incapable pin fails closed pre-spawn); re-run this session: resolver 32 pass / 0 fail, agent-run 166 pass / 0 fail |
-| AC3 | MET | test | `packages/app/tests/services/agent-resolver.test.ts:94` (no-requirement resolution unchanged) plus the untouched `packages/app/tests/services/executor-tier.test.ts` rank/tie suite |
+| AC1 | MET | test | `packages/app/tests/services/agent-service.test.ts:2914` — escalation dispatches the replacement's own model; re-run this session: agent-service + agent-resolver + agent-run + executor-tier 418 pass / 0 fail |
+| AC2 | MET | test | `packages/app/tests/services/agent-resolver.test.ts:75` (incapable first candidate skipped) and `packages/app/tests/workflow/actions/agent-run.test.ts:3230` (unmet requirement fails closed before spawn naming executor + axis) |
+| AC3 | MET | test | `packages/app/tests/services/agent-resolver.test.ts:85-87` no-requirement resolution unchanged, plus the executor-tier rank/tie suite in the same 418-pass run |
 - Coverage: N/A (verdict-based; verify pipeline does not measure code coverage)
 
 ### Review
@@ -121,7 +121,7 @@ auto/role selection walk instead of only the pre-spawn guard.
 
 | # | Priority | Dimension | Finding | Location | Disposition |
 |---|----------|-----------|---------|----------|-------------|
-| 1 | P3 (minor) | correctness | Capability filtering applies to the auto/role walks and the fresh disabled-pin re-resolution, but not to the escalation fallback walk: a fallback executor that cannot satisfy the stage's requirements still fails closed at the pre-spawn guard (exit 2) instead of trying the next fallback entry. That is the declared boundary (the guard stays authoritative, R3) and changing the ladder is 1260's failover policy. | `packages/app/src/services/agent-run-executor.ts:457` | DEFER(1260 owns executor failover policy; this task narrows selection, not the ladder) |
+| 1 | P3 (minor) | correctness | Capability filtering applies to the auto/role walks and the fresh disabled-pin re-resolution, but not to the escalation fallback walk: a fallback executor that cannot satisfy the stage's requirements still fails closed at the pre-spawn guard (exit 2) instead of trying the next fallback entry. That is the declared boundary (the guard stays authoritative, R3) and changing the ladder is 1260's failover policy. | `packages/app/src/services/agent-run-executor.ts:457` | FIXED(c42e6248e — residual task 1261, closed as fixed-on-main: the escalation ladder skips incapable candidates, `packages/app/src/services/agent-resolver.ts:392`; regression `packages/app/tests/services/agent-service.test.ts:3046`) |
 | 2 | P4 (advisory) | architecture | The app-layer `AgentExecutorConfig` mirror now carries `executionCapabilities` as a second structural copy of the config zod block; `executorAttestation` resolves an absent block to `unknown` per axis, so drift degrades to fail-closed rather than permissive. | `packages/app/src/services/executor-tier.ts:36` | ACCEPTED |
 | 3 | P4 (advisory) | efficiency | Every role resolve that declares requirements runs one extra pure evaluation per candidate (no doctor probe added — the walk already probed usability); measured cost is a set lookup per axis. | `packages/app/src/services/agent-resolver.ts:767` | ACCEPTED |
 

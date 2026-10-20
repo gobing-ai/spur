@@ -4,7 +4,7 @@ name: Fail over to the next eligible executor when an executor hits quota or aut
 status: done
 template: issue
 created_at: 2026-10-19T02:36:33.983Z
-updated_at: "2026-10-19T17:47:03.099Z"
+updated_at: "2026-10-20T02:35:38.032Z"
 
 feature_id: B6
 priority: P1
@@ -102,17 +102,17 @@ policy onto the attempt that actually spawns, with final routing evidence naming
 
 | Requirement | Status | Evidence |
 |-------------|--------|----------|
-| R1 | MET | `packages/app/src/services/failure-classification.ts:48-70` holds the two-part session/allowance rule and the two-part OAuth + `invalid_grant` rule on the existing table (anchor re-read this run); `packages/app/tests/services/failure-classification.test.ts:108` asserts all three reported texts classify and `:120` the bare-identifier, unpaired, OAuth-without-grant, success, generic-failure and permission negatives |
-| R2 | MET | `packages/app/tests/services/agent-service.test.ts:3006` drives the reported session-limit text through the real service into the existing ladder (`pi` then `claude`) with the unchanged escalation diagnostics; attempted-executor exclusion, tier policy and cwd handling untouched |
-| R3 | MET | `packages/app/src/workflow/actions/agent-run.ts:1027` runs the executor-independence check inside the per-attempt `beforeDispatch` hook (`packages/app/src/services/agent-run-executor.ts:592`) with the attempt's own identity (anchor re-read this run); the final `__agentRouting` writeback uses the successful invocation's executor profile and model (`packages/app/src/workflow/actions/agent-run.ts:1645`), pinned by `packages/app/tests/workflow/actions/agent-run.test.ts:2833` |
-| R5 | MET | The change emits no new event and writes no availability: the classifier only returns an existing signal, the ladder reuses the existing escalated/exhausted events, and `docs/design/executor-availability.md:48-55` records that auth never fabricates a quota disable |
-| R7 | MET | Hermetic fixtures: `packages/app/tests/services/failure-classification.test.ts:108` (recognition + negatives), `packages/app/tests/services/agent-service.test.ts:3006` (recognition-to-replacement), `packages/app/tests/workflow/actions/agent-run.test.ts:2833` plus the updated independence tests; no credentials or live provider calls |
+| R1 | MET | `packages/app/src/services/failure-classification.ts:50-70` holds the two-part session/allowance rule and the OAuth + invalid_grant rule (anchor re-read this run); `packages/app/tests/services/failure-classification.test.ts:111` and `packages/app/tests/services/failure-classification.test.ts:116` classify the three reported texts; `packages/app/tests/services/failure-classification.test.ts:120` and `:127` cover the bare-identifier, success, task-failure and permission negatives |
+| R2 | MET | `packages/app/tests/services/agent-service.test.ts:3086` drives the reported session-limit refusal through the real service into the existing ladder (pi then claude); exclusion, tier policy and cwd untouched |
+| R3 | MET | `packages/app/src/workflow/actions/agent-run.ts:1006-1027` runs the independence check in the per-attempt hook invoked at `packages/app/src/services/agent-run-executor.ts:594` with the attempt's own identity; `packages/app/src/workflow/actions/agent-run.ts:1653` writes routing from the final invocation; `packages/app/tests/workflow/actions/agent-run.test.ts:2787`, `:2814` and `:2833` pin refusal, missing evidence and final routing |
+| R5 | MET | no new event or availability write: the classifier returns an existing signal and the ladder reuses existing escalated/exhausted events; `docs/design/executor-availability.md:48-55` records that auth never fabricates a quota disable |
+| R7 | MET | hermetic fixtures `packages/app/tests/services/failure-classification.test.ts:108`, `packages/app/tests/services/agent-service.test.ts:3086` and `packages/app/tests/workflow/actions/agent-run.test.ts:2787-2854`; no credentials or live provider calls |
 
 | Acceptance Criteria | Status | Evidence Type | Evidence |
 |---------------------|--------|---------------|----------|
-| AC1 | MET | test | `packages/app/tests/services/agent-service.test.ts:3006` — the recognized refusal uses the configured bounded replacement path; re-run this session: `bun test tests/services/agent-service.test.ts` 224 pass / 0 fail, `tests/services/failure-classification.test.ts` + resolver 32 pass / 0 fail, agent-run 166 pass / 0 fail |
-| AC3 | MET | test | Exhaustion/negative behavior unchanged and actionable (`packages/app/tests/services/failure-classification.test.ts:120-126` and `packages/app/tests/workflow/actions/agent-run.test.ts` failure paths); no availability write exists in the diff |
-| AC4 | MET | test | `packages/app/tests/workflow/actions/agent-run.test.ts` independence tests (same-executor and missing-evidence refusals before dispatch) plus `:2833` (final routing evidence) and the classifier negatives |
+| AC1 | MET | test | `packages/app/tests/services/agent-service.test.ts:3086` recognized refusal uses the bounded replacement path; re-run this session: failure-classification + agent-service + agent-run 421 pass / 0 fail |
+| AC3 | MET | test | `packages/app/tests/services/failure-classification.test.ts:116` auth classifies as auth (not quota) and `:120-127` negatives keep precedence; no availability write in the diff (`docs/design/executor-availability.md:48-55`) |
+| AC4 | MET | test | `packages/app/tests/workflow/actions/agent-run.test.ts:2787` same-executor refusal, `:2814` missing evidence fails closed, `:2833` final routing evidence; classifier negatives `packages/app/tests/services/failure-classification.test.ts:127` |
 - Coverage: N/A (verdict-based; verify pipeline does not measure code coverage)
 
 ### Review

@@ -4,7 +4,7 @@ name: Bound project database growth from imported history tables
 status: done
 template: issue
 created_at: 2026-10-18T19:33:17.981Z
-updated_at: "2026-10-19T17:47:01.439Z"
+updated_at: "2026-10-20T02:33:45.992Z"
 
 feature_id: E5
 priority: P2
@@ -93,16 +93,16 @@ policy, result shape and daily caller unchanged.
 
 | Requirement | Status | Evidence |
 |-------------|--------|----------|
-| R1 | MET | `packages/domain/src/retention.ts:220` bounds rule-eval deletion to the shared 1000-row batch with a key-selection DELETE (anchor re-read this run), `:236` does the same for terminal queue jobs keeping the status predicate, and `:250` for the ledger keeping the cutoff; `packages/domain/tests/retention.test.ts:203` asserts exactly 1000 rows removed on the first pass of a 1001-row backlog |
-| R2 | MET | `packages/domain/tests/retention.test.ts:203` runs three passes over the same store (1000 → remainder → 0) with no persisted cursor, and asserts inside-window rows plus the pending job survive every pass |
-| R3 | MET | `packages/domain/src/retention.ts:293` binds cutoff and limit as statement parameters and reports actual deletions; `packages/domain/tests/retention.test.ts:260` drops the queue table and asserts the other two stores still delete, with `RetentionResult` unchanged |
-| R4 | MET | `packages/domain/tests/retention.test.ts:203-274` exercises multi-batch drain, cutoff boundary, live-queue protection, empty store and one-store failure on a migrated database with fixed `now`; the existing daily caller is unchanged |
+| R1 | MET | `packages/domain/src/retention.ts:220-230` bounds rule-eval deletion with a rowid key-selection `LIMIT ?` DELETE (anchor re-read this run); `packages/domain/src/retention.ts:238-243` keeps the terminal-queue status predicate under the same cap; `packages/domain/src/retention.ts:251-255` keeps the ledger cutoff; `packages/domain/tests/retention.test.ts:204` asserts exactly 1000 removed on the first pass |
+| R2 | MET | `packages/domain/tests/retention.test.ts:204` runs repeated passes (1000 → remainder → 0) with no persisted cursor and asserts in-window rows plus the pending job survive |
+| R3 | MET | `packages/domain/src/retention.ts:293` binds cutoff/limit as parameters and returns actual deletions; `packages/domain/tests/retention.test.ts:261` one failing store is best-effort and the others still delete |
+| R4 | MET | `packages/domain/tests/retention.test.ts:203-274` multi-batch drain, cutoff boundary (`:239`), empty store (`:252`) and one-store failure (`:261`) on a migrated database; daily caller unchanged |
 
 | Acceptance Criteria | Status | Evidence Type | Evidence |
 |---------------------|--------|---------------|----------|
-| AC1 | MET | test | `packages/domain/tests/retention.test.ts:203` — 1001 eligible rows drain across bounded, repeatable passes; re-run this session: `bun test tests/retention.test.ts` 11 pass / 0 fail |
-| AC2 | MET | test | `packages/domain/tests/retention.test.ts:240` (cutoff row intact) and `:203` (protected in-window rows and the live job survive; counts equal rows actually removed) |
-| AC3 | MET | test | `packages/domain/tests/retention.test.ts:260` (one failing store isolated) plus the unchanged daily/compaction tests in the same suite |
+| AC1 | MET | test | `packages/domain/tests/retention.test.ts:204` — backlog above the cap drains across repeatable passes; re-run this session: `bun test tests/retention.test.ts` 11 pass / 0 fail |
+| AC2 | MET | test | `packages/domain/tests/retention.test.ts:239` (cutoff rows intact, cap exact) and `:204` (live/in-window rows survive; counts match removals) |
+| AC3 | MET | test | `packages/domain/tests/retention.test.ts:261` (failing store isolated) plus the unchanged daily/compaction tests in the same 11-pass run |
 - Coverage: N/A (verdict-based; verify pipeline does not measure code coverage)
 
 ### Review
