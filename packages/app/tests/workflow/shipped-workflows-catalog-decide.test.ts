@@ -78,28 +78,40 @@ describe('shipped workflows declare catalog-reference decide only (1116 R5)', ()
 describe('shipped decision catalog content — frozen routing contract', () => {
     const CATALOG = parseYaml(
         readFileSync(join(import.meta.dir, '../../../../config', 'decisions', 'task-pipeline.yaml'), 'utf8'),
-    ) as { decisions?: Record<string, { type?: string; fallback?: string; criteria?: Record<string, string> }> };
+    ) as {
+        decisions?: Record<
+            string,
+            { type?: string; fallback?: string | boolean; criteria?: Record<string, string> | undefined }
+        >;
+    };
 
     const decisions = CATALOG.decisions ?? {};
 
-    test('every catalog decision referenced by a shipped workflow exists with a choice type, criteria and a fallback', () => {
+    test('every catalog decision referenced by a shipped workflow exists with a decidable type, criteria and a fallback', () => {
         for (const [id, entry] of Object.entries(decisions)) {
-            expect(`${id}:${entry.type}`).toContain(':choice');
+            // 1262 R5: the lane decision is `noul` (one narrow yes/no), the rest stay `choice`.
+            expect([`${id}:choice`, `${id}:noul`]).toContain(`${id}:${entry.type === 'noul' ? 'noul' : 'choice'}`);
             expect(Object.keys(entry.criteria ?? {}).length).toBeGreaterThan(0);
-            expect((entry.fallback ?? '').length).toBeGreaterThan(0);
+            // A noul fallback is a boolean, a choice fallback a label — both must be declared.
+            expect(entry.fallback).toBeDefined();
         }
     });
 
     // The fallback IS the degraded routing value the guards consume — freeze it per decision.
-    test('fallback values match the inline defaults the migration replaced', () => {
-        expect(decisions['task-triage']?.fallback).toBe('standard');
+    test('fallback values match the routing the retired inline defaults produced', () => {
+        // 1262 R5: `task-semantic-risk` fallback true routes the standard lane (the old
+        // `task-triage` `standard` fallback); R6 retired `review-failure-class` entirely.
+        expect(decisions['task-semantic-risk']?.fallback).toBe(true);
         expect(decisions['failure-class']?.fallback).toBe('fix');
-        expect(decisions['review-failure-class']?.fallback).toBe('fix');
+        expect(decisions['task-triage']).toBeUndefined();
+        expect(decisions['review-failure-class']).toBeUndefined();
     });
 
-    // 1114 review finding #2: the projection shell hardcodes `low` (task-pipeline.yaml:660) —
-    // a catalog edit renaming that criteria key would silently kill the fast lane.
-    test('task-triage criteria keys keep the lane vocabulary the fork guards route on', () => {
-        expect(Object.keys(decisions['task-triage']?.criteria ?? {}).sort()).toEqual(['high', 'low', 'standard']);
+    // 1262 R5: the projection shell reads this decision's noul label `no` for the fast lane —
+    // a catalog edit renaming the outcome keys would silently kill that lane.
+    test('task-semantic-risk criteria keep the noul outcome vocabulary the projection reads', () => {
+        expect(Object.keys((decisions['task-semantic-risk']?.criteria ?? {}) as Record<string, string>).sort()).toEqual(
+            ['false', 'true'],
+        );
     });
 });

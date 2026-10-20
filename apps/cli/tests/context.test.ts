@@ -1,6 +1,9 @@
 import { describe, expect, test } from 'bun:test';
-import type { AgentConfig } from '@gobing-ai/spur-config';
-import { createCliContext } from '../src/context';
+import { mkdirSync, mkdtempSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+import type { AgentConfig, SpurConfig } from '@gobing-ai/spur-config';
+import { createCliContext, executorRescue } from '../src/context';
 import type { CommandOutput } from '../src/output';
 
 function nullOutput(): CommandOutput {
@@ -64,5 +67,69 @@ describe('context', () => {
             agentConfig: { roles: { reviewer: { tier: 'capable-2' } } },
         });
         expect(overridden.agentRoles?.get('reviewer')?.tier).toBe('capable-2');
+    });
+});
+
+/**
+ * 1264 R4 — the executor rescue is wired only under its opt-in flag.
+ *
+ * The seam is one function on the service context; the composition root is the only place that
+ * reads `workflows.executorFailureDecisionMaker`, and with the flag absent nothing is added (the
+ * default context stays byte-identical, AC4). With it on, the function redacts the failure text
+ * and resolves through the real decision service, so an offline maker degrades to "no rescue"
+ * instead of failing the run.
+ */
+describe('executorRescue (task 1264 R4)', () => {
+    function projectWithConfig(configBody: string): string {
+        const dir = mkdtempSync(join(tmpdir(), 'spur-cli-context-rescue-'));
+        mkdirSync(join(dir, '.spur'), { recursive: true });
+        writeFileSync(join(dir, '.spur', 'config.yaml'), configBody);
+        return dir;
+    }
+
+    function deps(_cwd: string): {
+        config: SpurConfig;
+        env: Record<string, string | undefined>;
+        output: { write: (m: string) => void; error: (m: string) => void };
+        errors: string[];
+        getDb: () => Promise<never>;
+    } {
+        const errors: string[] = [];
+        return {
+            config: { workflows: { executorFailureDecisionMaker: true } } as SpurConfig,
+            env: { SPUR_TEST_TOKEN: 'secret-value-12345' },
+            output: { write: () => {}, error: (message: string) => errors.push(message) },
+            errors,
+            // No DB in this sandbox: the sink path must degrade, not throw.
+            getDb: () => Promise.reject(new Error('no db in this test')),
+        };
+    }
+
+    test('AC4: an absent/off flag adds no seam at all', () => {
+        const d = deps(projectWithConfig('{}'));
+        expect(executorRescue(null, '/tmp', d.env, d.output, d.getDb)).toEqual({});
+        expect(
+            executorRescue(
+                { workflows: { executorFailureDecisionMaker: false } } as SpurConfig,
+                '/tmp',
+                d.env,
+                d.output,
+                d.getDb,
+            ),
+        ).toEqual({});
+    });
+
+    test('AC5: the wired seam redacts the failure text and degrades when the maker cannot answer', async () => {
+        const cwd = projectWithConfig('{}');
+        const d = deps(cwd);
+        const wired = executorRescue(d.config, cwd, d.env, d.output, d.getDb);
+        expect(typeof wired.classifyUnmatchedFailure).toBe('function');
+        // The offline `typesafe` maker serves the `task-defect` fallback, so the rescue declines —
+        // and the run keeps today's behaviour rather than failing on the rescue.
+        await expect(
+            wired.classifyUnmatchedFailure?.('provider said: credits depleted secret-value-12345', { runId: 'run-1' }),
+        ).resolves.toBeUndefined();
+        // A non-auth failure is not re-raised as an error string either.
+        expect(d.errors.join(' ')).not.toContain('secret-value-12345');
     });
 });

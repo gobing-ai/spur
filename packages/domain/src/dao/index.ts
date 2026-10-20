@@ -105,6 +105,8 @@ export {
 } from './run-transfer';
 export {
     type CreateSystemEventInput,
+    type DecisionEndRow,
+    type DecisionOutcomePair,
     type DecisionSummaryGroup,
     type DecisionSummaryQuery,
     type EventSummaryRecentError,

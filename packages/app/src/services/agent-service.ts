@@ -12,6 +12,7 @@ import { AgentDetector, type AgentName, type AgentRunResult, AiRunner, DoctorRun
 import type { EventBus } from '@gobing-ai/ts-infra';
 import type { FileSystem } from '@gobing-ai/ts-runtime';
 import { NodeProcessExecutor, type OutputPolicy, type ProcessRegistry } from '@gobing-ai/ts-runtime';
+import type { DecisionCorrelation } from '../decision/decision-events';
 import type { AgentExecutionOptions } from '../observability/agent-execution';
 import { toEnvelopeJson } from '../output/envelope';
 import { parseArtifactRefs } from './agent-invocation-sanitize';
@@ -251,6 +252,20 @@ export interface AgentServiceContext {
     fs?: FileSystem;
     env: Record<string, string | undefined>;
     output: AgentServiceOutput;
+    /**
+     * Catalog rescue for a dispatch failure no `FAILURE_RULES` entry matched (task 1264 R4).
+     *
+     * The executor hands the RAW `stderr + "\n" + stdout` and never a network client, so the
+     * composition root — the only place that reads `workflows.executorFailureDecisionMaker` —
+     * owns redaction, the evidence tail and the decision call. Absent (the default) keeps the
+     * narrow rule-based behaviour. A `resource-exhaustion`/`auth` answer enters the 1260
+     * escalation path unchanged; `undefined` (declined, uncertain, or thrown) means no rescue,
+     * so a rescue can never fail a run differently than it would have without one.
+     */
+    classifyUnmatchedFailure?: (
+        evidence: string,
+        correlation: DecisionCorrelation,
+    ) => Promise<'resource-exhaustion' | 'auth' | undefined>;
     /**
      * Validated `agent` config block (executors + phase map). Optional — when
      * absent (un-init'd CLI, tests), `--agent auto` resolves via the legacy

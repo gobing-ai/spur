@@ -1208,6 +1208,14 @@ catalogue of §20/§27 keeps running unchanged by default.
   degraded row, so a declared fallback is never readable as a model decision. It complements
   ADR-123, which decorates *pausing* HITL actions, and leaves deterministic facts with commands.
   Inline and subprocess drivers execute it through one shared application service for parity.
+  A served row now carries its ledger key (`invocationId`) and the real evidence digest, so
+  acceptance can be joined to what later happened: `spur decision outcome` records that outcome
+  (`decision.outcome`, first write wins) and the reliability report scores `accuracy` /
+  `fallbackAccuracy` against the config `decisions.outcomeMap` instead of guessing. The agent
+  executor adds one opt-in decision point of its own — `executor-failure-class` behind
+  `workflows.executorFailureDecisionMaker` (default off) — which classifies only the dispatch
+  failures no `FAILURE_RULES` entry matched; a rule match, a timeout, a permission denial and a
+  confirmed quota event never reach it, and the `task-defect` fallback equals today's behaviour.
 - **Fleet executor surface (ADR-126).** When `agent.fleet.enabled` and the operator selects it
   (`--agent fleet` or `executor: fleet`), `agent.run` dispatches through the G4 control plane (§17)
   and waits on the member's durable artifact, while inline and subprocess remain the default

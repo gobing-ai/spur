@@ -47,6 +47,7 @@ import {
     SESSION_CAPABILITY_AXES,
 } from './capability-attestation';
 import { bridgeEventBus, withInvokeRouting } from './event-bridge';
+import { permissionFailureEvidence } from './failure-classification';
 import { RunSessionObserver, type RunSessionOverlapRegistry } from './run-session-observer';
 import { resolveRunRecordDir } from './run-storage';
 
@@ -670,7 +671,23 @@ export class AgentRunExecutor {
                 // and the run-scoped attempted set excludes the exhausted executor.
                 const quotaConfirmed = currentExecutor !== undefined && runQuotaExhaustedExecutors.has(currentExecutor);
                 const classifiedSignal = classifyObjectiveFailure(result);
-                const escalationSignal = quotaConfirmed ? ('resource-exhaustion' as const) : classifiedSignal;
+                let escalationSignal = quotaConfirmed ? ('resource-exhaustion' as const) : classifiedSignal;
+                // 1264 R2/R3: the catalog rescue covers only the residue the rules left behind.
+                // A rule match, a timeout, a permission denial (0687 R9) or a confirmed quota
+                // event keeps today's route untouched, and a rescue that declines, throws or
+                // reports uncertainty resolves to `undefined` — exactly the no-rescue behaviour.
+                if (
+                    escalationSignal === undefined &&
+                    result.signal === undefined &&
+                    this.ctx.classifyUnmatchedFailure !== undefined
+                ) {
+                    const text = `${result.stderr ?? ''}\n${result.stdout ?? ''}`;
+                    if (text.trim() !== '' && permissionFailureEvidence(text) === undefined) {
+                        escalationSignal = await this.ctx
+                            .classifyUnmatchedFailure(text, { runId: lifecycle.identity.runId })
+                            .catch(() => undefined);
+                    }
+                }
                 if (escalationSignal === undefined || currentStage === undefined) {
                     break;
                 }

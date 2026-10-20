@@ -1,16 +1,18 @@
 ---
 schema_version: 1
 name: Executor-failure rescue classifier for unmatched dispatch failures
-status: todo
+status: done
 template: issue
 created_at: 2026-10-19T18:27:34.608Z
-updated_at: "2026-10-19T20:41:57.355Z"
+updated_at: "2026-10-20T01:20:55.384Z"
 
 ac_altitude: task-local
 ac_numbering: task-local
 priority: P2
 dependencies: ["1260", "1262"]
 feature_id: P1
+done_forced: "false"
+done_reason: unforced close; PASS artifact at .spur/memory/evidence/1264-verdict.json
 ---
 
 ## 1264. Executor-failure rescue classifier for unmatched dispatch failures
@@ -33,12 +35,12 @@ default.
 
 ### Requirements
 
-- [ ] R1. **Catalog decision.** New shipped catalog `config/decisions/executor.yaml` with decision `executor-failure-class`: `type: choice`, labels `resource-exhaustion`, `auth`, `task-defect`; `fallback: task-defect`; `minConfidence: 0.85`; `instructions` embedding `${params.instructions}` with observable criteria per label. There is no `transient` label; the escalation enum has no retry signal (`packages/domain/src/stage-registry/schema.ts:375-382`).
-- [ ] R2. **Rescue only the residue.** Consult the decision only when all of these hold: the dispatch exited non-zero without a signal (no timeout); `classifyDispatch` returned `undefined`; `permissionFailureEvidence(text)` is `undefined` (a permission denial stays terminal, 0687 R9); `quotaConfirmed` is false; the stderr+stdout text is non-blank; and the rescue seam is wired (R4). Evidence is `redactAndBound(text, configuredSecretValues(env), Number.MAX_SAFE_INTEGER).slice(-4096)` over `text = stderr + "\n" + stdout` (`packages/app/src/observability/agent-execution.ts:342,352`): redact the **full** text first, then take the tail. `redactAndBound` keeps the head (`slice(0, maxChars)`), and slicing before redacting can cut a secret at the boundary and leak its unmatched fragment.
-- [ ] R3. **Mapping.** Accepted `resource-exhaustion` or `auth` becomes `escalationSignal` and enters the existing 1260 path unchanged (fallback matching, attempted-set exclusion, chain-exhausted diagnostic). `task-defect`, any fallback, low confidence, or a thrown error → `undefined` (today's behaviour). A rescue failure never fails the run differently than it would have without the rescue.
-- [ ] R4. **Opt-in seam.** `AgentServiceContext` (`packages/app/src/services/agent-service.ts:249`) gains optional `classifyUnmatchedFailure?: (evidence: string, correlation: DecisionCorrelation) => Promise<'resource-exhaustion' | 'auth' | undefined>`. `apps/cli/src/context.ts:168` wires it only when `spurConfig.workflows.executorFailureDecisionMaker === true`. The new optional boolean sits beside `decideDecisionMaker` at `packages/config/src/index.ts:823` and defaults to absent/false. The wired function calls `getDecisionService(spurConfig, cwd).decide('executor-failure-class', { instructions: evidence }, { bus, context: { caller: 'executor', correlation }, decisionLog })`.
-- [ ] R5. **Ledger attribution.** Add `'executor'` to `DecisionCaller` (`packages/app/src/decision/decision-events.ts:32`), so every rescue appears in `decision.*` events and `decision_logs` with `caller: executor` and the run id. Then `spur decision status --reliability` reports it with no extra work.
-- [ ] R6. **Docs.** `plugins/sp/skills/spur-cli/references/decision.md` documents the flag, the off-box evidence caveat for hosted makers, the recommended maker (probability-native; `laya-local` keeps evidence on-box once 1262 R1 lands), and a `decision_logs` query that lists accepted rescues so a maintainer can promote recurring text to a `FAILURE_RULES` entry.
+- [x] R1. **Catalog decision.** New shipped catalog `config/decisions/executor.yaml` with decision `executor-failure-class`: `type: choice`, labels `resource-exhaustion`, `auth`, `task-defect`; `fallback: task-defect`; `minConfidence: 0.85`; `instructions` embedding `${params.instructions}` with observable criteria per label. There is no `transient` label; the escalation enum has no retry signal (`packages/domain/src/stage-registry/schema.ts:375-382`).
+- [x] R2. **Rescue only the residue.** Consult the decision only when all of these hold: the dispatch exited non-zero without a signal (no timeout); `classifyDispatch` returned `undefined`; `permissionFailureEvidence(text)` is `undefined` (a permission denial stays terminal, 0687 R9); `quotaConfirmed` is false; the stderr+stdout text is non-blank; and the rescue seam is wired (R4). Evidence is `redactAndBound(text, configuredSecretValues(env), Number.MAX_SAFE_INTEGER).slice(-4096)` over `text = stderr + "\n" + stdout` (`packages/app/src/observability/agent-execution.ts:342,352`): redact the **full** text first, then take the tail. `redactAndBound` keeps the head (`slice(0, maxChars)`), and slicing before redacting can cut a secret at the boundary and leak its unmatched fragment.
+- [x] R3. **Mapping.** Accepted `resource-exhaustion` or `auth` becomes `escalationSignal` and enters the existing 1260 path unchanged (fallback matching, attempted-set exclusion, chain-exhausted diagnostic). `task-defect`, any fallback, low confidence, or a thrown error → `undefined` (today's behaviour). A rescue failure never fails the run differently than it would have without the rescue.
+- [x] R4. **Opt-in seam.** `AgentServiceContext` (`packages/app/src/services/agent-service.ts:249`) gains optional `classifyUnmatchedFailure?: (evidence: string, correlation: DecisionCorrelation) => Promise<'resource-exhaustion' | 'auth' | undefined>`. `apps/cli/src/context.ts:168` wires it only when `spurConfig.workflows.executorFailureDecisionMaker === true`. The new optional boolean sits beside `decideDecisionMaker` at `packages/config/src/index.ts:823` and defaults to absent/false. The wired function calls `getDecisionService(spurConfig, cwd).decide('executor-failure-class', { instructions: evidence }, { bus, context: { caller: 'executor', correlation }, decisionLog })`.
+- [x] R5. **Ledger attribution.** Add `'executor'` to `DecisionCaller` (`packages/app/src/decision/decision-events.ts:32`), so every rescue appears in `decision.*` events and `decision_logs` with `caller: executor` and the run id. Then `spur decision status --reliability` reports it with no extra work.
+- [x] R6. **Docs.** `plugins/sp/skills/spur-cli/references/decision.md` documents the flag, the off-box evidence caveat for hosted makers, the recommended maker (probability-native; `laya-local` keeps evidence on-box once 1262 R1 lands), and a `decision_logs` query that lists accepted rescues so a maintainer can promote recurring text to a `FAILURE_RULES` entry.
 
 ### Acceptance Criteria
 
@@ -158,15 +160,78 @@ No second classifier exists, so recall equals the regex table's coverage.
 
 ### Solution
 
-<!-- Filled during implementation: file:line change map and concise rationale. -->
+| File:line | Change |
+|---|---|
+| `config/decisions/executor.yaml` | New shipped catalog: `executor-failure-class` (choice; `resource-exhaustion` / `auth` / `task-defect`; fallback `task-defect`; `minConfidence: 0.85`) with an `instructions` template embedding `${params.instructions}` and observable criteria per label. No `transient` label — the escalation enum has no retry signal. |
+| `packages/app/src/services/agent-run-executor.ts:672-690` | The rescue hook sits exactly where the loop used to `break`: after `classifyObjectiveFailure` and the quota confirmation, and only when there is no timeout signal, the seam is wired, the output is non-blank and `permissionFailureEvidence` is undefined. The promise is `.catch(() => undefined)`, so a rescue can never change how a run fails. |
+| `packages/app/src/services/agent-service.ts:249` | `AgentServiceContext.classifyUnmatchedFailure?(evidence, correlation)` — one optional function; the executor never learns about catalogs or ts-ai-decision. |
+| `packages/app/src/services/failure-classification.ts:142` | `rescueEvidenceTail(text, secrets, maxChars = 4096)`: redact the **full** text, then keep the last 4096 characters. Tailing first would slice a secret at the boundary and hand the maker its fragment. |
+| `apps/cli/src/context.ts:200-250` | The composition root wires the seam only when `spurConfig.workflows.executorFailureDecisionMaker === true`, then calls `getDecisionService(...).decide('executor-failure-class', { instructions: tail }, { bus, context: { caller: 'executor', correlation }, decisionLog })`. Absent config → the empty object, so the default service context is byte-identical to before. |
+| `packages/config/src/index.ts:829` | `workflows.executorFailureDecisionMaker?: boolean` beside `decideDecisionMaker`, absent/false by default. |
+| `packages/app/src/decision/decision-events.ts:33` | `DecisionCaller` gains `'executor'`, so rescues carry `caller: executor` and the run id in `decision.*` events and `decision_logs` (and appear in `spur decision status --reliability` for free). Exported through `packages/app/src/index.ts`. |
+| Tests | `packages/app/tests/services/agent-service.test.ts` (AC1 rule match never calls the seam; AC2 an unmatched "credits depleted" fails over under the 1260 exclusion rules; AC3 decline/throw/permission-denial keep today's behaviour; AC4 no seam → no rescue), `packages/app/tests/services/failure-classification.test.ts` (AC5 redact-then-tail: a secret straddling the 4096 boundary is `[REDACTED]`, never sliced), `packages/app/tests/decision/decision-service.test.ts` (AC5 caller `executor` + `runId` on the event and the `decision_logs` row), `packages/app/tests/decision/confidence-level.test.ts` (the shipped-bar invariant restated for a 0.85 floor), `apps/cli/tests/commands/decision.test.ts` (shared catalog count 5 → 6). |
+| Docs | `plugins/sp/skills/spur-cli/references/decision.md` § "Executor failure rescue" (off-by-default flag, residue-only rules, redact-then-tail, the hosted-maker evidence caveat, the probability-native maker recommendation, and the `decision_logs` promotion query), `docs/design/decision-observability-and-adoption.md` §4 (audit row for the executor decision point, marked opt-in). |
+
+**Design notes, recorded.** The flag stays off in every shipped config; this task never flips it, so
+no P1 evidence bar applies (operator-confirmed in Q&A). The `confidence-level` invariant test was
+restated rather than loosened: a served bar is an acceptance floor, so a bar below the HIGH cut
+would let an accepted answer read MEDIUM/LOW — the new assertion is that every real bar is at or
+above the HIGH threshold and that `executor-failure-class` is the strictest at 0.85, which is the
+fail-safe direction this decision needs.
 
 ### Testing
 
-<!-- Filled during verification: regression command(s), outcomes, coverage claim or N/A. -->
+**Pipeline verify results**
+
+- Verdict: PASS (from verdict artifact)
+
+| Requirement | Status | Evidence |
+|-------------|--------|----------|
+| R1 | MET | catalog decision — `config/decisions/executor.yaml` (`executor-failure-class`: choice, `resource-exhaustion`/`auth`/`task-defect`, fallback `task-defect`, `minConfidence: 0.85`, `instructions` embedding `${params.instructions}`, observable criteria per label, no `transient` label); loads in `spur decision list` and in the shipped-catalog tests |
+| R2 | MET | rescue only the residue — `packages/app/src/services/agent-run-executor.ts:672-690` (no timeout signal, `undefined` from `classifyObjectiveFailure`, `permissionFailureEvidence` undefined, non-blank text, seam wired) + `packages/app/src/services/failure-classification.ts:142` (`rescueEvidenceTail`: redact the full text, then keep the last 4096 chars); AC1/AC3 in `packages/app/tests/services/agent-service.test.ts` and AC5's boundary case in `packages/app/tests/services/failure-classification.test.ts` |
+| R3 | MET | mapping — `packages/app/src/services/agent-run-executor.ts:681-690`: accepted `resource-exhaustion`/`auth` becomes `escalationSignal` and reuses the 1260 path; `task-defect`, a fallback, low confidence, a throw or an unwired seam resolve to `undefined`; AC2/AC3 tests show the failover and the unchanged failures |
+| R4 | MET | opt-in seam — `packages/app/src/services/agent-service.ts:249` (`classifyUnmatchedFailure`), `packages/config/src/index.ts:829` (`workflows.executorFailureDecisionMaker`, absent/false), `apps/cli/src/context.ts:200-250` (wires the decision call only under the flag); AC4 in `apps/cli/tests/context.test.ts` and `packages/app/tests/services/agent-service.test.ts` |
+| R5 | MET | ledger attribution — `packages/app/src/decision/decision-events.ts:33` (`DecisionCaller` gains `executor`), exported at `packages/app/src/index.ts:33`; AC5 attribution test in `packages/app/tests/decision/decision-service.test.ts` (event `caller: executor` + `runId`, `decision_logs` row same) |
+| R6 | MET | docs — `plugins/sp/skills/spur-cli/references/decision.md` § "Executor failure rescue" (flag, residue-only rules, redact-then-tail, hosted-maker evidence caveat, probability-native maker recommendation, the `decision_logs` promotion query) + `docs/design/decision-observability-and-adoption.md` §4 audit row |
+
+| Acceptance Criteria | Status | Evidence Type | Evidence |
+|---------------------|--------|---------------|----------|
+| AC1 — rule matches never consult the model (req: R2) | MET | test | `packages/app/tests/services/agent-service.test.ts` (AC1 case): a FAILURE_RULES 429 escalates while the recording double's call count stays 0 |
+| AC2 — an unmatched exhaustion message fails over when accepted (req: R1, R3) | MET | test | `packages/app/tests/services/agent-service.test.ts` (AC2 case): "credits depleted" + a double answering `resource-exhaustion` dispatches `['pi','claude']` under the 1260 exclusion rules |
+| AC3 — uncertainty, errors and permission denials keep today's behaviour (req: R2, R3) | MET | test | `packages/app/tests/services/agent-service.test.ts` (AC3 case): decline and throw both end with one dispatch and a non-zero exit; a permission denial never calls the double |
+| AC4 — disabled by default (req: R4) | MET | test | `apps/cli/tests/context.test.ts` (`executorRescue` returns `{}` for absent/false) + `packages/app/tests/services/agent-service.test.ts` (AC4 case: no seam → no rescue attempt) |
+| AC5 — the wired rescue is redacted and attributed (req: R1, R2, R5) | MET | test | `packages/app/tests/services/failure-classification.test.ts` (secret straddling the 4096 boundary is `[REDACTED]`, never sliced) + `packages/app/tests/decision/decision-service.test.ts` (`caller: executor` and `runId` on the event and the row) + `apps/cli/tests/context.test.ts` (wired seam end to end) |
+| AC6 — the operator guide exists (req: R6) | MET | test | parity gate: `plugins/sp/tests/help-docs-parity.test.ts` + `apps/cli/tests/help-doc-parity.test.ts` keep every live verb/flag documented; prose read: `plugins/sp/skills/spur-cli/references/decision.md` § "Executor failure rescue" (flag, off-box caveat, maker recommendation, promotion query) |
+- Coverage: N/A (verdict-based; verify pipeline does not measure code coverage)
 
 ### Review
 
-<!-- Filled during review: P1-P4 findings, residual risk, and final disposition. -->
+Reviewed the diff against R1–R6 plus the three edges this change creates: what the rescue may see,
+what it may send off-box, and what happens when it declines.
+
+| Priority | Location | Finding | Disposition |
+|---|---|---|---|
+| P3 | `apps/cli/src/context.ts:216` | The new CLI seam was uncovered — the gate's coverage floor flagged it (`funcs 87.5% / lines 75%`), and an untested wiring closure is where a flag inversion or a redaction reorder hides. | FIXED — `executorRescue` is exported and `apps/cli/tests/context.test.ts` covers the off flag (no seam, AC4) and the wired path (redact → decide → decline on an offline maker, AC5) |
+| P3 | `packages/app/tests/decision/confidence-level.test.ts:88` | The shipped-bar invariant claimed every catalog bar is "at or below the HIGH threshold". A served bar is an acceptance floor, so a bar *above* the threshold is the safe direction (accepted answers are then always HIGH) — the old wording would have blocked the 0.85 rescue floor for the wrong reason. | FIXED — the invariant now reads "every non-zero bar is at least the HIGH threshold, and the rescue is the strictest at 0.85", which is the property that actually protects the display |
+| P4 | `packages/app/src/services/agent-run-executor.ts:686` | The rescue is guarded twice: `.catch(() => undefined)` at the loop and a `try/catch` that logs inside the wired seam. Redundant on purpose (the seam is injectable, so the loop cannot assume its shape), but it means a silent decline is only visible through the operator log line. | ACCEPTED |
+
+Correctness notes checked, no finding raised: the rescue is unreachable for a rule match, a timeout
+(`result.signal` set), a permission denial (0687 R9) or a confirmed quota event, so the 0407
+precision bias is intact and AC1/AC3 pin it; `rescueEvidenceTail` redacts the whole text before the
+4096 cut, and the boundary case is tested with a secret straddling it; `undefined` from a decline, a
+throw, or a `task-defect` answer leaves `escalationSignal` undefined, which is bit-for-bit the
+pre-1264 route; the flag defaults absent and `executorRescue` returns an empty context object, so
+the shipped CLI behaves exactly as before; the caller attribution (`executor` + run id) rides the
+existing event/log path, so the reliability report needs no change.
+
+Residual risk: the decision ships off and this task does not flip it; nothing in this batch
+exercised a *real* accepted rescue against a live maker (the tests use doubles, and the offline
+`typesafe` maker declines). The replay evidence the Q&A requires before default-on therefore does
+not exist yet — that is the intended state, and the operator guide documents the promotion query
+that would collect it.
+
+Verdict: PASS
+Confidence: MEDIUM
 
 ### References
 
@@ -176,3 +241,8 @@ No second classifier exists, so recall equals the regex table's coverage.
 - ts-libs `docs/design/llm-agent-decision-backend.md` § Confidence granularity.
 
 ### History
+
+- 2026-10-20T01:09:00.105Z todo → wip (system)
+- 2026-10-20T01:20:51.735Z wip → testing (system)
+- 2026-10-20T01:20:55.368Z testing → done (system)
+

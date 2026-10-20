@@ -280,3 +280,127 @@ describe('decisionReliability (task 1096)', () => {
         expect(report.groups).toEqual([]);
     });
 });
+
+/**
+ * 1263 R4/R5 — acceptance is not accuracy. A recorded outcome joins its `decision.end` row by
+ * `invocationId`; the report scores it against the config `outcomeMap`, and reports null (never a
+ * guessed number) when the decision has no mapping or no outcome.
+ */
+describe('decisionReliability accuracy (task 1263 R4/R5)', () => {
+    function endRow(
+        id: string,
+        at: string,
+        invocationId: string,
+        fields: { decisionId?: string; source?: string; value?: unknown },
+    ): {
+        id: string;
+        at: string;
+        payload: string;
+    } {
+        return {
+            id,
+            at,
+            payload: JSON.stringify({
+                schemaVersion: 2,
+                data: {
+                    caller: 'workflow',
+                    decisionId: fields.decisionId ?? 'failure-class',
+                    maker: 'typesafe',
+                    invocationId,
+                    durationMs: 5,
+                    ...(fields.source !== undefined ? { source: fields.source } : {}),
+                    ...(fields.value !== undefined ? { value: fields.value } : {}),
+                },
+                context: {},
+                presentation: {},
+            }),
+        };
+    }
+
+    function outcomeRow(
+        id: string,
+        at: string,
+        invocationId: string,
+        outcome: string,
+    ): {
+        id: string;
+        at: string;
+        payload: string;
+    } {
+        return {
+            id,
+            at,
+            payload: JSON.stringify({
+                schemaVersion: 2,
+                data: { decisionId: 'failure-class', invocationId, outcome },
+                context: {},
+                presentation: {},
+            }),
+        };
+    }
+
+    async function daoWith(rows: Array<{ id: string; at: string; payload: string }>): Promise<SystemEventDao> {
+        const adapter = await createDbAdapter({ driver: 'bun-sqlite', url: ':memory:' });
+        await applyCliMigrations(adapter);
+        const dao = new SystemEventDao(adapter);
+        for (const row of rows) {
+            await dao.insert({
+                id: row.id,
+                event_name: row.payload.includes('"outcome"') ? 'decision.outcome' : 'decision.end',
+                occurred_at: row.at,
+                payload_json: row.payload,
+            });
+        }
+        return dao;
+    }
+
+    const T = '2026-10-19T00:00:00.000Z';
+
+    test('AC5: outcomes count per group and both ratios follow the outcome map', async () => {
+        const dao = await daoWith([
+            // accepted `fix` that was right, accepted `fix` that was wrong, fallback `fix` that was right.
+            endRow('e1', T, 'inv-1', { source: 'model', value: 'fix' }),
+            outcomeRow('o1', T, 'inv-1', 'fixed'),
+            endRow('e2', T, 'inv-2', { source: 'model', value: 'fix' }),
+            outcomeRow('o2', T, 'inv-2', 'not-fixed'),
+            endRow('e3', T, 'inv-3', { source: 'default', value: 'fix' }),
+            outcomeRow('o3', T, 'inv-3', 'fixed'),
+            // An invocation with no outcome is an acceptance sample, not an accuracy sample.
+            endRow('e4', T, 'inv-4', { source: 'model', value: 'fix' }),
+        ]);
+        const report = await decisionReliability(dao, {
+            outcomeMap: { 'failure-class': { fix: ['fixed'], stop: ['not-fixed'] } },
+        });
+        const group = report.groups.find((g) => g.decisionId === 'failure-class');
+        expect(group?.outcomes).toEqual({ fixed: 2, 'not-fixed': 1 });
+        expect(group?.accuracy).toBe(0.5);
+        expect(group?.fallbackAccuracy).toBe(1);
+    });
+
+    test('AC5: no mapping and no outcome both report null accuracy, never a guess', async () => {
+        const dao = await daoWith([
+            endRow('e1', T, 'inv-1', { decisionId: 'task-semantic-risk', source: 'model', value: 'true' }),
+            outcomeRow('o1', T, 'inv-1', 'p4'),
+        ]);
+        const unmapped = (await decisionReliability(dao)).groups.find((g) => g.decisionId === 'task-semantic-risk');
+        expect(unmapped?.outcomes).toEqual({ p4: 1 });
+        expect(unmapped?.accuracy).toBeNull();
+        expect(unmapped?.fallbackAccuracy).toBeNull();
+
+        const mapped = (
+            await decisionReliability(dao, {
+                outcomeMap: { 'task-semantic-risk': { true: ['p1', 'p2'], false: ['none', 'p4', 'p3'] } },
+            })
+        ).groups.find((g) => g.decisionId === 'task-semantic-risk');
+        // The value key is the served value, so `true` scored against [p1, p2] is a miss.
+        expect(mapped?.accuracy).toBe(0);
+    });
+
+    test('AC5: an invocation with no outcome leaves accuracy null (acceptance alone)', async () => {
+        const dao = await daoWith([endRow('e1', T, 'inv-1', { source: 'model', value: 'fix' })]);
+        const group = (await decisionReliability(dao, { outcomeMap: { 'failure-class': { fix: ['fixed'] } } }))
+            .groups[0];
+        expect(group?.outcomes).toEqual({});
+        expect(group?.accuracy).toBeNull();
+    });
+});

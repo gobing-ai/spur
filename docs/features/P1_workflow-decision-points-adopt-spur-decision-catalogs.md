@@ -2,11 +2,11 @@
 schema_version: 1
 id: "P1"
 name: "Spur decision production readiness: events and workflow adoption"
-status: active
+status: done
 priority: P2
 tags: []
 created_at: "2026-10-06T18:15:41.140Z"
-updated_at: "2026-10-13T22:25:03.151Z"
+updated_at: "2026-10-20T01:22:43.842Z"
 ---
 
 # P1: Workflow decision points adopt spur decision catalogs
@@ -203,9 +203,9 @@ Feature: Spur decision production readiness: events and workflow adoption
 | 1193 | Fix decide action evidence path resolution: an absolute evidence path is joined with the workdir | done |
 | 1194 | Fix decide action evidence path resolution: an absolute evidence path is joined with the workdir | cancelled |
 | 1195 | Fix clef DecisionMaker: the hub passes state null and Cloudflare rejects the request with 422 | done |
-| 1262 | Decision-maker reliability and effectiveness: laya worker bundling, decide ledger gap, task-pipeline decision rework | todo |
-| 1263 | Decision outcome pairing and accuracy report for catalog decisions | todo |
-| 1264 | Executor-failure rescue classifier for unmatched dispatch failures | todo |
+| 1262 | Decision-maker reliability and effectiveness: laya worker bundling, decide ledger gap, task-pipeline decision rework | done |
+| 1263 | Decision outcome pairing and accuracy report for catalog decisions | done |
+| 1264 | Executor-failure rescue classifier for unmatched dispatch failures | done |
 <!-- END AUTO-GENERATED -->
 
 ## Notes
@@ -219,4 +219,6 @@ Feature: Spur decision production readiness: events and workflow adoption
 - 2026-10-13T17:57:55.012Z verifying → active (system)
 - 2026-10-13T18:00:50.896Z active → verifying (system)
 - 2026-10-13T22:25:03.151Z verifying → active (system)
+- 2026-10-20T01:22:42.177Z active → verifying (system)
+- 2026-10-20T01:22:43.842Z verifying → done (system)
 

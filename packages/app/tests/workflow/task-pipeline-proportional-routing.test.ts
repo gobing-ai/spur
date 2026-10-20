@@ -74,9 +74,9 @@ describe('task-pipeline proportional routing (task 0759, S5; re-keyed by D65 123
             ).toBeUndefined();
         }
         const gate = def.states.find((s) => s.id === 'gate');
-        const decide = gate?.onEnter?.find((a) => a.kind === 'decide' && a.options?.id === 'task-triage');
+        const decide = gate?.onEnter?.find((a) => a.kind === 'decide' && a.options?.id === 'task-semantic-risk');
         expect(decide).toBeDefined();
-        expect(decide?.options?.decision).toBe('task-triage');
+        expect(decide?.options?.decision).toBe('task-semantic-risk');
         // The deterministic safety floor runs BEFORE the decide: a caller-set mode wins, and a
         // sensitive path or >400 lines pins safety without a model call.
         const kinds = (gate?.onEnter ?? []).map((a) => a.kind);

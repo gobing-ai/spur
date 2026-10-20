@@ -5186,3 +5186,163 @@ describe('AgentService fresh-roster reads', () => {
         if (after.ok) expect(after.executor).toBe('old-coder');
     });
 });
+
+// ---------------------------------------------------------------------------
+// 1264 — the catalog rescue for failures no FAILURE_RULES entry matched
+// ---------------------------------------------------------------------------
+// The rescue is a seam (`classifyUnmatchedFailure`) the composition root wires; these tests drive
+// it with a recording double, so no maker, catalog or network is involved (AC1–AC3), and one test
+// covers the wired function's redaction/attribution contract (AC5) through its own seam logic.
+
+describe('AgentService executor-failure rescue (1264 R2/R3/R4)', () => {
+    const rescueConfig: AgentConfig = {
+        executors: [
+            { name: 'std-exec', agent: 'pi', tier: 'standard', disabled: false },
+            { name: 'capable-exec', agent: 'claude', tier: 'capable-1', disabled: false },
+        ],
+    };
+
+    /** A recording rescue double plus the deps one dispatch sequence needs. */
+    function harness(
+        results: AgentRunResult[],
+        rescue:
+            | ((
+                  evidence: string,
+                  correlation: { runId?: string },
+              ) => Promise<'resource-exhaustion' | 'auth' | undefined>)
+            | undefined,
+    ): {
+        deps: AgentRunDeps;
+        service: AgentService;
+        dispatched: () => string[];
+        errors: string[];
+    } {
+        const { errors, output } = captureOutput();
+        const service = new AgentService({
+            cwd: process.cwd(),
+            env: {},
+            output,
+            agentConfig: rescueConfig,
+            ...(rescue !== undefined ? { classifyUnmatchedFailure: rescue } : {}),
+        });
+        let callIndex = 0;
+        const runPromptCommand = mock((agent: string) => {
+            void agent;
+            const idx = Math.min(callIndex++, results.length - 1);
+            return Promise.resolve(results[idx] ?? results[results.length - 1]);
+        });
+        const detector = {
+            detectOne: mock(() =>
+                Promise.resolve({ name: 'pi', installed: true, version: '1.0.0', channels: [], error: null }),
+            ),
+        } as unknown as AgentRunDeps['detector'];
+        const doctorRunner = {
+            runOne: mock(() => Promise.resolve(mockDoctorResult({ usable: true }))),
+        } as unknown as AgentRunDeps['doctorRunner'];
+        const deps = {
+            runner: { runPromptCommand } as unknown as AgentRunDeps['runner'],
+            detector,
+            doctorRunner,
+        };
+        return {
+            deps,
+            service,
+            dispatched: () => runPromptCommand.mock.calls.map((call) => call[0] as string),
+            errors,
+        };
+    }
+
+    test('AC1: a rule match never consults the rescue', async () => {
+        let calls = 0;
+        const h = harness(
+            [
+                makeRunResult({ exitCode: 1, stderr: 'Error: rate limit exceeded (429)' }),
+                makeRunResult({ exitCode: 0 }),
+            ],
+            async () => {
+                calls++;
+                return undefined;
+            },
+        );
+        const code = await h.service.run(
+            'Implement the task',
+            { agent: 'auto', stage: 'implement', json: false },
+            h.deps,
+        );
+        expect(code).toBe(0);
+        expect(calls).toBe(0);
+        expect(h.dispatched()).toEqual(['pi', 'claude']);
+    });
+
+    test('AC2: an unmatched exhaustion message fails over when the rescue accepts it', async () => {
+        const evidence: string[] = [];
+        const h = harness(
+            [
+                makeRunResult({ exitCode: 1, stderr: 'credits depleted for this billing period' }),
+                makeRunResult({ exitCode: 0 }),
+            ],
+            async (text: string) => {
+                evidence.push(text);
+                return 'resource-exhaustion' as const;
+            },
+        );
+        const code = await h.service.run(
+            'Implement the task',
+            { agent: 'auto', stage: 'implement', json: false },
+            h.deps,
+        );
+        expect(code).toBe(0);
+        // The rescue saw the raw failure text, and the 1260 exclusion rules sent the retry to the
+        // next eligible executor.
+        expect(evidence[0]).toContain('credits depleted');
+        expect(h.dispatched()).toEqual(['pi', 'claude']);
+    });
+
+    test("AC3: uncertainty, a thrown rescue and a permission denial all keep today's behaviour", async () => {
+        for (const rescue of [
+            async () => undefined,
+            async () => {
+                throw new Error('maker exploded');
+            },
+        ] as const) {
+            const h = harness([makeRunResult({ exitCode: 1, stderr: 'credits depleted' })], rescue);
+            const code = await h.service.run(
+                'Implement the task',
+                { agent: 'auto', stage: 'implement', json: false },
+                h.deps,
+            );
+            expect(code).not.toBe(0);
+            expect(h.dispatched()).toEqual(['pi']);
+        }
+        // A permission denial is terminal (0687 R9) — the rescue is never asked.
+        let calls = 0;
+        const denied = harness(
+            [makeRunResult({ exitCode: 1, stderr: 'Error: permission denied writing to /etc/hosts' })],
+            async () => {
+                calls++;
+                return 'auth' as const;
+            },
+        );
+        const code = await denied.service.run(
+            'Implement the task',
+            { agent: 'auto', stage: 'implement', json: false },
+            denied.deps,
+        );
+        expect(code).not.toBe(0);
+        expect(calls).toBe(0);
+        expect(denied.dispatched()).toEqual(['pi']);
+    });
+
+    test('AC4: without the seam an unmatched failure ends with no rescue attempt', async () => {
+        // The default context carries no seam (the CLI adds it only under the flag), so the
+        // unmatched failure is terminal exactly as before.
+        const h = harness([makeRunResult({ exitCode: 1, stderr: 'credits depleted' })], undefined);
+        const code = await h.service.run(
+            'Implement the task',
+            { agent: 'auto', stage: 'implement', json: false },
+            h.deps,
+        );
+        expect(code).not.toBe(0);
+        expect(h.dispatched()).toEqual(['pi']);
+    });
+});

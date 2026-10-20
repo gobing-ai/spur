@@ -457,8 +457,11 @@ describe('task-pipeline evidence chain — the gate state owns the quality gate 
 });
 
 describe('task-pipeline evidence chain — review certifies (D65 R2)', () => {
-    test('the certification order is pinned: review → verdict → status → failure class → approval', () => {
-        expect(kindsOf('review')).toEqual(['agent.run', 'command.gate', 'shell', 'decide', 'hitl.confirm', 'shell']);
+    test('the certification order is pinned: review → verdict → status → approval (1262 R6: no decide)', () => {
+        // 1262 R6 retired the `review-failure-class` decide: the review status file plus the
+        // attempt cap is the whole remediation signal, so the state carries no model call.
+        // 1263 R3b adds the outcome-recording shell between the status write and the approval.
+        expect(kindsOf('review')).toEqual(['agent.run', 'command.gate', 'shell', 'shell', 'hitl.confirm', 'shell']);
         const options = actionOf('review', 'agent.run')?.options as Record<string, unknown> | undefined;
         expect(String(options?.input)).toContain(`/sp:dev-review --tasks ${VAR('wbs')} --auto`);
         // 0943 R1/R2: the resolved lane sets the review depth (fast  functional-only).

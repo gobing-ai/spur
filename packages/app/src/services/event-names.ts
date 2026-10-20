@@ -375,6 +375,8 @@ const BASE_CATALOG = [
     baseEvent('decision.failure', 'decision', 'decision'),
     baseEvent('decision.end', 'decision', 'decision'),
     baseEvent('decision.rejected', 'decision', 'decision'),
+    // Outcome recorded after the fact — acceptance is not accuracy (task 1263 R2).
+    baseEvent('decision.outcome', 'decision', 'decision'),
 ] satisfies readonly BaseCatalogEntry[];
 
 /** Union of all system event names registered in the base catalog policy. */
@@ -1717,6 +1719,25 @@ export const SYSTEM_EVENT_PRESENTERS: Record<SystemEventName, SystemEventPresent
                 : `[decision] ${id ?? 'decision'} finished`;
         },
         outcome: derivedFromValue('reason'),
+    },
+    // 1263 R2: what actually happened after the decision, recorded by the caller that observed it.
+    'decision.outcome': {
+        description: 'A recorded outcome for a served decision invocation (fixed, not-fixed, a review severity, …).',
+        fields: [
+            field('decisionId', 'Decision'),
+            field('invocationId', 'Invocation'),
+            field('outcome', 'Outcome'),
+            field('source', 'Source'),
+        ],
+        retain: [field('source', 'Source')],
+        summary: ({ data }) => {
+            const id = s(data, 'decisionId');
+            const outcome = s(data, 'outcome');
+            return outcome !== undefined
+                ? `[decision] ${id ?? 'decision'} outcome ${outcome}`
+                : `[decision] ${id ?? 'decision'} outcome recorded`;
+        },
+        outcome: derivedFromValue('outcome'),
     },
     'decision.rejected': {
         description: 'A caller mistake refused a decision before any maker call (unknown id, maker, or parse).',

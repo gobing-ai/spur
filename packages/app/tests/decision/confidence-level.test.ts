@@ -85,11 +85,13 @@ describe('confidenceLevel', () => {
         }
     });
 
-    test('every shipped catalog bar is at or below the HIGH threshold, and one reaches it', async () => {
-        // The threshold is anchored to the strictest served bar (docstring: review-failure-class
-        // 0.8). A catalog that raised a bar above it would let a decision declare a floor the
-        // strongest level cannot express; a corpus that lost the bar entirely would leave the
-        // threshold unanchored. Both are drift this pins.
+    test('every shipped catalog bar is at least the HIGH threshold, and the rescue is the strictest', async () => {
+        // A served bar is a floor on ACCEPTANCE, so a bar below the HIGH cut would let an accepted
+        // answer be reported MEDIUM/LOW — the level would then describe a decision the catalog
+        // already refused. `maker-liveness` declares 0 on purpose (it asks whether the maker
+        // answered, task P11) and is excluded from that rule.
+        // 1264: `executor-failure-class` raises the ceiling to 0.85 — a false
+        // `resource-exhaustion` costs a failover attempt, so uncertainty must resolve downward.
         const files = readdirSync(DECISIONS_DIR).filter((name) => name.endsWith('.yaml'));
         expect(files.length).toBeGreaterThan(0);
         const bars: number[] = [];
@@ -102,7 +104,8 @@ describe('confidenceLevel', () => {
             bars.push(...declared);
         }
         expect(bars.length).toBeGreaterThan(0);
-        expect(Math.max(...bars)).toBe(CONFIDENCE_HIGH_THRESHOLD);
+        expect(bars.filter((bar) => bar > 0).every((bar) => bar >= CONFIDENCE_HIGH_THRESHOLD)).toBe(true);
+        expect(Math.max(...bars)).toBe(0.85);
     });
 
     test('an out-of-range confidence still satisfies the contract row schema as LOW', () => {

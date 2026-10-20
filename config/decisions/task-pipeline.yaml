@@ -1,10 +1,10 @@
-# Decision catalogs for the task pipeline (feature P / task 1092, ADR-134).
+# Decision catalogs for the task pipeline (feature P1, ADR-134).
 #
-# These entries mirror the inline decide actions that ship in
-# config/workflows/task-pipeline.yaml today — same questions, choices and
-# fallbacks — so their reliability can be measured with `spur decision run`
-# before feature P1 migrates the workflow actions onto them (design §3.5).
-# No workflow references this catalog yet.
+# The shipped `config/workflows/task-pipeline.yaml` decide actions reference these ids
+# (`failure-class`, and `task-semantic-risk` once its evidence bar is met). Each entry's
+# reliability is measured from recorded `decision.*` events — `spur decision status
+# --reliability` — and an adoption slice only keeps a decision point while that evidence
+# shows it adds information the deterministic guards do not.
 #
 # Resolution: this file ships in the shared layer (the installed package's
 # config/decisions/). A project can override it per basename through
@@ -16,39 +16,55 @@ defaults:
     minConfidence: 0.8
 
 decisions:
-    task-triage:
-        type: choice
-        description: Which verification lane does a green-gate diff deserve?
+    task-semantic-risk:
+        type: noul
+        description: >
+            Does this task's change set change behaviour a reviewer must reason about beyond what
+            the diffstat already shows? (false projects the fast lane, true or a fallback the
+            standard lane.)
+        instructions: |
+            You are classifying one Spur task's change set for review depth.
+            Change set: ${params.instructions}
+            Answer true when the change alters behaviour a reviewer must reason about: control
+            flow, a data shape, persistence, security, an external contract, or error handling.
+            Answer false only when the change is mechanical — docs, comments, formatting, renames,
+            test-only edits, or a dependency bump with no source edit.
+            Judge the change set only; do not score its quality or estimate its size.
         parameters:
             wbs:
                 type: string
-                description: Task WBS the diff belongs to.
+                description: Task WBS whose change set is being classified.
         criteria:
-            low: Small, contained diff — the fast lane is enough.
-            standard: Ordinary diff — the standard verification lane applies.
-            high: Broad or risky diff — verify with high caution.
-        fallback: standard
+            "true": >
+                The change set touches executable behaviour — a branch, a boundary, a stored
+                schema, a public signature, or a failure path — so a reviewer must read the diff,
+                not only its diffstat.
+            "false": >
+                The change set is mechanical — docs, comments, formatting, renames, test-only
+                edits, or a version bump with no executable change — so the diffstat is enough.
+        fallback: true
 
     failure-class:
         type: choice
         description: Is a failed quality gate fixable by the repair agent, or should the run stop?
+        instructions: |
+            You are classifying one failed quality-gate run for Spur's task pipeline.
+            Gate output: ${params.instructions}
+            Answer `fix` when the output names a concrete defect inside this repository that the
+            repair agent can act on: a failing test with an expected/actual diff, a type error
+            naming a file and symbol, a lint rule id with a file:line, or a missing export or
+            import. Answer `stop` when the failure is environmental or not repairable by editing
+            this tree: a missing tool or binary, a permission or disk error, a network or registry
+            failure, a gate timeout, or output that names no in-tree file.
         parameters:
             wbs:
                 type: string
                 description: Task WBS whose gate failed.
         criteria:
-            fix: The failure looks fixable — send it to the repair agent.
-            stop: The failure is not mechanically fixable — stop the run for the operator.
-        fallback: fix
-
-    review-failure-class:
-        type: choice
-        description: Is a non-PASS review fixable by the repair agent, or should the run stop?
-        parameters:
-            wbs:
-                type: string
-                description: Task WBS whose review did not certify PASS.
-        criteria:
-            fix: The findings look fixable — send them to the repair agent.
-            stop: The findings are not mechanically fixable — stop the run for the operator.
+            fix: >
+                The output names an in-tree defect — a failing test, a type error with a file and
+                symbol, a lint rule id with a file:line, or a missing import.
+            stop: >
+                The output names no in-tree defect — a missing tool, a permission or disk error,
+                a network or registry failure, or a timeout — so editing the tree cannot fix it.
         fallback: fix

@@ -67,6 +67,14 @@ const CHILD_TABLES = [
     'task_run_links',
 ] as const;
 
+/**
+ * Ledger tables correlated by `run_id`, copied after the run's children (task 1262 R2).
+ * Deliberately NOT part of {@link CHILD_TABLES}: that list also drives the `ownsChildren`
+ * conflict grading below, where a run owning only ledger rows must not read as provenance
+ * for a lifecycle bookkeeping row (and vice versa).
+ */
+const LEDGER_TABLES = ['system_events', 'decision_logs'] as const;
+
 const LIFECYCLE_WORKFLOWS = new Set(['task-lifecycle', 'feature-lifecycle']);
 const TERMINAL_STATUSES = new Set(['done', 'failed', 'cancelled']);
 
@@ -89,6 +97,49 @@ function insertIfAbsentOps(
             params: columns.map((column) => row[column]),
         };
     });
+}
+
+/**
+ * Copy one run's ledger rows (task 1262 R2). `system_events.sequence` is the target ledger's
+ * global cursor, so copied events are renumbered above the target's current maximum in source
+ * order — verbatim source sequences collide with the target's own rows. `decision_logs` carries
+ * no cursor and copies as-is. Both insert by id, so a second persist is a no-op.
+ */
+async function ledgerOps(
+    from: DbAdapter,
+    to: DbAdapter,
+    runId: string,
+): Promise<{ sql: string; params: readonly unknown[] }[]> {
+    const ops: { sql: string; params: readonly unknown[] }[] = [];
+    for (const table of LEDGER_TABLES) {
+        // A source DB older than the ledger migration has no such table; skipping it keeps a
+        // pre-ledger worktree transferable instead of refusing teardown on a missing table.
+        const present = await from.queryFirst<{ name: string }>(
+            "SELECT name FROM sqlite_master WHERE type = 'table' AND name = ?",
+            table,
+        );
+        if (present === undefined) continue;
+        const rows =
+            table === 'system_events'
+                ? await from.queryAll<RawRow>('SELECT * FROM system_events WHERE run_id = ? ORDER BY sequence', runId)
+                : await from.queryAll<RawRow>(`SELECT * FROM ${table} WHERE run_id = ?`, runId);
+        if (rows.length === 0) continue;
+        const columns = await tableColumns(to, table);
+        if (table === 'system_events') {
+            const targetMax =
+                (await to.queryFirst<{ m: number | null }>('SELECT MAX(sequence) AS m FROM system_events'))?.m ?? 0;
+            ops.push(
+                ...insertIfAbsentOps(
+                    table,
+                    rows.map((row, index) => ({ ...row, sequence: targetMax + index + 1 })),
+                    columns,
+                ),
+            );
+            continue;
+        }
+        ops.push(...insertIfAbsentOps(table, rows, columns));
+    }
+    return ops;
 }
 
 async function tableColumns(db: DbAdapter, table: string): Promise<Set<string>> {
@@ -172,6 +223,7 @@ export async function transferRunTables(from: DbAdapter, to: DbAdapter): Promise
                 ),
             );
         }
+        ops.push(...(await ledgerOps(from, to, id)));
         await to.batch(ops);
         persistedIds.push(id);
     }

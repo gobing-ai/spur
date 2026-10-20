@@ -10,6 +10,7 @@
  *
  *   L1 build / package
  *   bundle-config <out-dir>                     copy config/ into a tarball dir
+ *   bundle-laya-worker [out-dir]                copy the laya-local Python worker next to the bundle
  *   bundle-web [out-dir]                        copy dist/web into apps/cli/web for npm
  *   bundle-plugins                               copy plugins/ + .claude-plugin into apps/cli for npm
  *   emit-board-types                            emit apps/cli/board/index.d.ts from the authoring source
@@ -54,6 +55,7 @@ import { buildBinaries } from './commands/build-binaries';
 import { buildCli } from './commands/build-cli';
 import { buildServer } from './commands/build-server';
 import { bundleConfig } from './commands/bundle-config';
+import { bundleLayaWorker } from './commands/bundle-laya-worker';
 import { bundlePlugins } from './commands/bundle-plugins';
 import { bundleWeb } from './commands/bundle-web';
 import { devAll } from './commands/dev-all';
@@ -83,7 +85,7 @@ const DELEGATED: Record<string, string> = {
 
 function usage(message?: string): never {
     console.error(
-        `Commands: bundle-config, bundle-web, bundle-plugins, emit-board-types, verify-pack, build-binaries, build-cli, build-server, dev-all, link-check, eval-pipeline, fleet-e2e, promotion, ${Object.keys(DELEGATED).join(', ')}`,
+        `Commands: bundle-config, bundle-laya-worker, bundle-web, bundle-plugins, emit-board-types, verify-pack, build-binaries, build-cli, build-server, dev-all, link-check, eval-pipeline, fleet-e2e, promotion, ${Object.keys(DELEGATED).join(', ')}`,
     );
     process.exit(message ? 1 : 0);
 }
@@ -108,6 +110,11 @@ try {
             console.log(
                 `Bundled config -> ${result.target} (fixtures/OS junk excluded, ${result.injected} $schema directives injected)`,
             );
+            break;
+        }
+        case 'bundle-laya-worker': {
+            const result = await bundleLayaWorker(args[0]);
+            console.log(`Bundled laya worker ${result.source} -> ${result.target} (${result.bytes} bytes)`);
             break;
         }
         case 'bundle-web': {

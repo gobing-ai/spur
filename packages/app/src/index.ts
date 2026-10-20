@@ -31,6 +31,7 @@ export {
     beginDecisionInvocation,
     type DecisionCallContext,
     type DecisionCaller,
+    type DecisionCorrelation,
     type DecisionEndFields,
     type DecisionFailureFields,
     type DecisionInvocation,
@@ -58,6 +59,15 @@ export {
     DecisionLogQueryService,
     type DecisionLogQuerySpec,
 } from './decision/decision-log-query';
+// Decision outcome recording (task 1263): the CLI records what happened after a decision.
+export {
+    DECISION_OUTCOME_PATTERN,
+    type DecisionOutcomeResult,
+    type RecordDecisionOutcomeDeps,
+    recordDecisionOutcome,
+    reviewSeverityOutcome,
+    UnknownDecisionInvocationError,
+} from './decision/decision-outcome';
 // Decision reliability report (task 1096, slice S3): reads the recorded
 // `decision.end` ledger; the CLI imports only through this package index.
 export {
@@ -296,7 +306,7 @@ export {
     parseTimeoutInput,
 } from './services/execution-policy';
 export type { FailureRule } from './services/failure-classification';
-export { classifyDispatch, permissionFailureEvidence } from './services/failure-classification';
+export { classifyDispatch, permissionFailureEvidence, rescueEvidenceTail } from './services/failure-classification';
 export type {
     CheckFeatureFindings,
     CheckFeatureResult,

@@ -106,6 +106,8 @@ describe('runDecide acceptance', () => {
             reason: 'accepted',
             source: 'model',
             evidenceDigest: expect.any(String),
+            // 1263 R1: the inline form opens no catalog invocation.
+            invocationId: null,
             durationMs: 0,
         });
         // The offered labels are the declared choices verbatim (0941 R1).

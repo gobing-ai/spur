@@ -25,7 +25,7 @@ Decisions resolve first-wins across three layers:
 | `registered` | folders listed in config `decisions.paths` | Operator-added catalogs |
 | `shared` | `decisions/` under the bundled config root | Shipped catalogs (`config/decisions/` in-repo) |
 
-The bundled shared catalog ships `task-triage`, `failure-class`, `review-failure-class`,
+The bundled shared catalog ships `task-semantic-risk`, `failure-class`,
 `gate-evidence`, `idea-recommendation`, `needs-design`, `anatomy-validation-verdict` and
 `maker-liveness` (the last served only by `spur decision status --probe`; no workflow references
 it). Layers win **per file basename** (a project `gates.yaml` replaces the shipped `gates.yaml`
@@ -45,6 +45,7 @@ config error, never a silent fallback (design §3.6).
 | `show <id>` | One served contract: type, parameters, criteria, fallback, minConfidence, effective maker + source | `--json` |
 | `run <id>` | Serve one outcome (closed vocabulary; **never writes a resultFile**) | `--param <pairs...>`, `--evidence <files...>`, `--maker <name>`, `--json` |
 | `status` | Sectioned readiness report: one status line, errors, aligned `Makers` and `Decisions` tables (registration, configuration source, recorded evidence), `Catalog` block | `--probe`, `--reliability [--since <iso>]`, `--json` |
+| `outcome <invocation-id>` | Record what actually happened after a served decision — acceptance is not accuracy (task 1263). First write wins | `<outcome>`, `--review-severity <wbs>`, `--gate-status <run-id>`, `--source <text>`, `--json` |
 
 All verbs support `--json` (bare payload) and `--json-envelope` (`{ok, data|error}` envelope,
 ADR-091). Failure output for `--json` commands uses the canonical error envelope only under
@@ -53,6 +54,62 @@ ADR-091). Failure output for `--json` commands uses the canonical error envelope
 **Exit codes:** `status` exits 1 on any catalog load error or maker-config error; `show` exits 1 on unknown id; `list` exits 0
 (design §3.4 — load errors surface via `status`) except for an invalid `--layer` value (exit 1).
 Error envelopes use `NOT_FOUND` for an unknown id and `VALIDATION_FAILED` for every other caller mistake.
+`outcome` exits 1 for an unknown invocation id (there is no decision to score) and 2 for a malformed
+outcome (it must match `^[a-z0-9-]{1,32}$`) or for naming zero/several outcome sources.
+
+## Acceptance versus accuracy (`outcome` + `--reliability`)
+
+`decision.end` says **what was answered**; it never says whether the answer was right. A maker can
+be accepted on every call and still add no information: `review-failure-class` answered its own
+fallback 15/15 times at confidence 1.0 before task 1262 retired it. Tuning `minConfidence`, choosing
+a maker, or judging a shadow maker therefore needs (value, outcome) pairs.
+
+**Recording one.** A decide step now writes the invocation's ledger key into its result row
+(`invocationId`, task 1263 R1) — the same id the `decision.*` events and the `decision_logs` row
+carry. Once the outcome is known, record it:
+
+```bash
+# an explicit label (lowercase slug): what a human or a later check observed
+spur decision outcome <invocation-id> fixed --source "quality gate recheck"
+# derived from a task's Review findings: the worst finding, resolved rows included (p1-p4, or none)
+spur decision outcome <invocation-id> --review-severity 1263
+# derived from a gate visit: PASS -> fixed, anything else (or a missing token) -> not-fixed
+spur decision outcome <invocation-id> --gate-status <run-id>
+```
+
+First write wins: a replay exits 0 with `recorded: false` and the outcome that already stands. The
+row lands in `system_events` beside `decision.end`, on the same `run_id`, so the report joins it by
+`invocationId`.
+
+**Scoring one.** `decisions.outcomeMap` in config (project or global layer) holds Spur's reading of
+Spur's own artifacts — per decision id, which recorded outcomes count as correct for each served
+value (`String(value)` keys, so a yes/no decision uses `"true"`/`"false"`). The shipped defaults
+score `failure-class` (`fix` → `fixed`, `stop` → `not-fixed`) and `task-semantic-risk`
+(`"false"` → `none`/`p4`/`p3`, `"true"` → `p1`/`p2`).
+
+`spur decision status --reliability` then reports, per (decision × maker) group:
+
+| Field | Meaning |
+| --- | --- |
+| `samples`, `accepted`, `acceptedRate` | `decision.end` rows; acceptance only |
+| `outcomes` | recorded outcomes by label over those samples |
+| `accuracy` | correct accepted answers ÷ accepted answers **with an outcome**; null when the decision has no map entry or no accepted sample recorded one |
+| `fallbackAccuracy` | the same ratio over fallback (`source: default`) samples |
+
+`accuracy: null` is deliberate: an unmapped decision or an unobserved one is unknown, never zero.
+Acceptance and accuracy answer different questions — a high `acceptedRate` with `accuracy: null`
+means "the maker answered and we have not looked at whether it was right yet".
+
+**Reading a sampled maker.** Sampled makers report unanimity, not calibration: with two options,
+2-of-3 agreement is ~0.08 confidence and the 0.8 floor only accepts when every sample agreed
+(ts-libs `docs/design/llm-agent-decision-backend.md` § Confidence granularity). A 1.0 confidence on
+that kind of maker therefore means "the samples agreed", not "the answer is calibrated".
+
+**Retuning `minConfidence` from the report.** Read a group's `accuracy` and `fallbackAccuracy`
+together with `fallbacks` by reason. Accepted-but-wrong answers point at raising the floor (or
+changing the maker); fallbacks that were right point at lowering it. Change the floor in the
+catalog entry (or `defaults.minConfidence`), record the new samples, and compare the same two
+numbers — never one of them alone.
 
 ## Readiness marks (`status`, feature P11)
 
@@ -78,6 +135,57 @@ error surfaced as fallback, declined — is still a **successful serve** (exit 0
 `source`/`confidence` so callers can see why). Exit 1 is reserved for caller mistakes caught
 **before** the backend: unknown id, unknown parameter, missing required parameter, type-invalid
 parameter, unregistered `--maker`, unreadable evidence file.
+
+## Executor failure rescue (`executor-failure-class`)
+
+The agent executor escalates on `FAILURE_RULES` matches only (`packages/app/src/services/failure-classification.ts`).
+A failure no rule matches — a reworded rate limit, "credits depleted", a proxy error body — ends
+the run as a task defect until somebody adds a regex. `executor-failure-class` covers that residue:
+`resource-exhaustion` / `auth` / `task-defect`, fallback `task-defect`, `minConfidence: 0.85`
+(a false `resource-exhaustion` costs a failover attempt; a false `task-defect` equals today's
+behaviour, so uncertainty must resolve downward).
+
+**It ships off.** `workflows.executorFailureDecisionMaker: true` is the opt-in; without it the executor
+makes no model call and the context carries no rescue seam at all. Turning it on is an operator
+call backed by replay evidence (`spur decision run executor-failure-class --evidence <tail>` over
+real unmatched tails), not a default.
+
+The rescue runs only when every deterministic check declined: non-zero exit without a timeout
+signal, `undefined` from `classifyDispatch`, no permission-denial evidence (a denial stays terminal),
+no confirmed quota event, and non-blank output. It sees the failure text **redacted first, then
+tailed** to 4096 characters — tailing first could cut a secret at the boundary and send the
+fragment off-box, so never reorder that.
+
+**Evidence leaves the machine with a hosted maker.** The tail is failure output from whatever the
+agent printed, so a hosted maker (`clef`) sees it. Two consequences:
+
+- Prefer a **probability-native** maker for this id (`decisions.makers.executor-failure-class`):
+  sampled makers accept only on unanimity (ts-libs `docs/design/llm-agent-decision-backend.md`
+  § Confidence granularity), so the 0.85 floor does not grade them.
+- `laya-local` keeps the evidence on-box (it needs Apple Silicon, and since task 1262 R1 the bundled
+  CLI ships its worker, so `workerScript` resolves without a source checkout).
+
+Every rescue is attributed `caller: executor` with the failing run's id, so it shows up in
+`decision.*` events, `decision_logs` and `spur decision status --reliability` with no extra work.
+To promote recurring text into a deterministic rule, list the accepted rescues:
+
+```bash
+sqlite3 .spur/spur.db "
+  SELECT o.decision_id, json_extract(o.payload_json, '$.data.outcome') AS answer,
+         json_extract(s.payload_json, '$.data.workflowName') AS workflow, o.run_id
+  FROM system_events o
+  JOIN system_events s
+    ON s.event_name = 'decision.start'
+   AND json_extract(s.payload_json, '$.data.invocationId')
+       = json_extract(o.payload_json, '$.data.invocationId')
+  WHERE o.event_name = 'decision.end'
+    AND json_extract(o.payload_json, '$.data.caller') = 'executor'
+    AND json_extract(o.payload_json, '$.data.source') = 'model'
+  ORDER BY o.occurred_at DESC;"
+```
+
+Add the `FAILURE_RULES` entry by hand, with a test — the rescue stays the safety net for what the
+table still misses.
 
 ## Parameters and evidence
 
@@ -129,8 +237,9 @@ guards: [decision/lifecycle.md](decision/lifecycle.md) §1, §3.
 
 ```bash
 spur decision list --json | jq -r '.[].id'
-spur decision show task-triage                      # inspect contract before serving
-spur decision run task-triage --param wbs=1093 --json
+spur decision show task-semantic-risk               # inspect contract before serving
+spur decision run task-semantic-risk --param wbs=1093 \
+    --evidence .spur/run/1093-diffstat.json --evidence docs/tasks/1093_*.md --json
 spur decision run failure-class --param wbs=1093 \
     --evidence .spur/run/<runId>-test-output.txt    # redacted evidence -> instructions
 spur decision status --json | jq '.loadErrors'      # audit catalog health

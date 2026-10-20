@@ -112,7 +112,7 @@ describe('spur decision list (AC1)', () => {
         expect(parsed.ok).toBe(true);
         const ids = parsed.data.map((entry) => entry.id);
         expect(ids).toContain('triage-test');
-        expect(ids).toContain('task-triage'); // shipped shared catalog
+        expect(ids).toContain('task-semantic-risk'); // shipped shared catalog
         const fixture = parsed.data.find((entry) => entry.id === 'triage-test');
         expect(fixture?.layer).toBe('project');
         expect(fixture?.source.endsWith('fixture.yaml')).toBe(true);
@@ -120,7 +120,7 @@ describe('spur decision list (AC1)', () => {
         const shared = await main(['decision', 'list', '--layer', 'shared', '--json', '--json-envelope'], CLEAN);
         expect(shared.code).toBe(0);
         const sharedIds = (JSON.parse(shared.out) as { data: Array<{ id: string }> }).data.map((entry) => entry.id);
-        expect(sharedIds).toContain('task-triage');
+        expect(sharedIds).toContain('task-semantic-risk');
         expect(sharedIds).not.toContain('triage-test');
     });
 
@@ -147,7 +147,7 @@ describe('spur decision list (AC1)', () => {
         });
         const result = await main(['decision', 'list'], broken);
         expect(result.code).toBe(0);
-        expect(result.out).toContain('task-triage'); // shared catalog still serves; broken file is dropped
+        expect(result.out).toContain('task-semantic-risk'); // shared catalog still serves; broken file is dropped
     });
 });
 
@@ -382,7 +382,7 @@ describe('spur decision status (AC5)', () => {
             /^✓\s+triage-test\s+choice\s+typesafe\s+catalog-default\s+0.8\s+project\s+0\s+0\s+—$/m,
         );
         expect(result.out).toMatch(/^Catalog$/m);
-        expect(result.out).toMatch(/^ {2}layers {6}project 1 · registered 0 · shared 5$/m);
+        expect(result.out).toMatch(/^ {2}layers {6}project 1 · registered 0 · shared 6$/m);
         expect(result.out).toMatch(/^ {2}duplicates {2}\(none\)$/m);
         // Object values never render as a JSON blob (the old output did).
         expect(result.out).not.toContain('"project":');
@@ -586,7 +586,7 @@ describe('spur decision status --reliability (task 1096)', () => {
         const gate = parsed.data.groups.find((g) => g.decisionId === 'gate-test');
         expect(gate).toMatchObject({ evidence: 'recorded', samples: 1 });
         // Catalog ids without rows report evidence none (shared catalog included).
-        const shared = parsed.data.groups.find((g) => g.decisionId === 'review-failure-class');
+        const shared = parsed.data.groups.find((g) => g.decisionId === 'task-semantic-risk');
         expect(shared).toMatchObject({ evidence: 'none', samples: 0 });
         // A recorded id is never duplicated as a none row.
         expect(parsed.data.groups.filter((g) => g.decisionId === 'triage-test')).toHaveLength(1);
@@ -622,5 +622,147 @@ describe('spur decision status --reliability (task 1096)', () => {
         const bad = await main(['decision', 'status', '--since', '2026-10-01T00:00:00Z'], RELIABILITY);
         expect(bad.code).toBe(1);
         expect(bad.out).toContain('--since is only valid together with --reliability');
+    });
+});
+
+/**
+ * Task 1263 — acceptance is not accuracy. A served decision now carries the ledger key
+ * (`invocationId`) and digest it was recorded under, and the outcome verb records what later
+ * happened to it. First write wins; an unknown invocation is a caller mistake.
+ */
+describe('spur decision outcome (task 1263 R2/R3)', () => {
+    const OUTCOMES = tempProject({
+        '.spur/decisions/fixture.yaml': FIXTURE,
+        '.spur/config.yaml': 'decisions:\n    outcomeMap:\n        triage-test:\n            standard: [fixed]\n',
+        // A task whose Review table carries one FIXED P2 row and one open P4 row (AC3).
+        'docs/tasks/1263_severity-fixture.md': [
+            '---',
+            'schema_version: 1',
+            'name: Severity fixture',
+            'status: done',
+            'created_at: "2026-10-19T00:00:00.000Z"',
+            'updated_at: "2026-10-19T00:00:00.000Z"',
+            '---',
+            '',
+            '## 1263. Severity fixture',
+            '',
+            '### Review',
+            '',
+            '| Priority | Location | Finding | Disposition |',
+            '|---|---|---|---|',
+            '| P2 | `src/a.ts:3` | Missing guard on the retry path. | FIXED |',
+            '| P4 | `src/b.ts:9` | Naming nit. | OPEN |',
+            '',
+        ].join('\n'),
+    });
+
+    /** A fresh project per accuracy sample: outcomes accumulate in the ledger, so a shared one
+     * would blend this test's sample with an earlier test's. */
+    function accuracyProject(): string {
+        return tempProject({
+            '.spur/decisions/fixture.yaml': FIXTURE,
+            '.spur/config.yaml': 'decisions:\n    outcomeMap:\n        triage-test:\n            standard: [fixed]\n',
+        });
+    }
+
+    async function servedInvocation(project: string = OUTCOMES): Promise<string> {
+        const run = await main(['decision', 'run', 'triage-test', '--param', 'wbs=1', '--json'], project);
+        expect(run.code).toBe(0);
+        const served = JSON.parse(run.out) as { invocationId: string; evidenceDigest: string | null };
+        // AC1's service contract: the served result carries the key and the digest.
+        expect(served.invocationId).toMatch(/^[0-9a-f-]{36}$/);
+        expect(served.evidenceDigest).toBeNull();
+        return served.invocationId;
+    }
+
+    test('AC2: records once, reports recorded false on a replay, refuses an unknown id', async () => {
+        const invocationId = await servedInvocation();
+        const first = await main(['decision', 'outcome', invocationId, 'fixed', '--json', '--json-envelope'], OUTCOMES);
+        expect(first.code).toBe(0);
+        expect(JSON.parse(first.out)).toMatchObject({
+            ok: true,
+            data: { invocationId, decisionId: 'triage-test', outcome: 'fixed', recorded: true },
+        });
+        const second = await main(
+            ['decision', 'outcome', invocationId, 'not-fixed', '--json', '--json-envelope'],
+            OUTCOMES,
+        );
+        expect(second.code).toBe(0);
+        // The first write stands; the replay reports what is actually recorded.
+        expect(JSON.parse(second.out)).toMatchObject({
+            ok: true,
+            data: { outcome: 'fixed', recorded: false },
+        });
+
+        const unknown = await main(['decision', 'outcome', 'no-such-invocation', 'fixed', '--json'], OUTCOMES);
+        expect(unknown.code).toBe(1);
+        const malformed = await main(['decision', 'outcome', invocationId, 'Not A Slug', '--json'], OUTCOMES);
+        expect(malformed.code).toBe(2);
+    });
+
+    test('AC3: --review-severity derives the worst finding, counting resolved rows', async () => {
+        const invocationId = await servedInvocation();
+        const result = await main(
+            ['decision', 'outcome', invocationId, '--review-severity', '1263', '--json', '--json-envelope'],
+            OUTCOMES,
+        );
+        expect(result.code).toBe(0);
+        expect(JSON.parse(result.out)).toMatchObject({
+            ok: true,
+            data: { outcome: 'p2', recorded: true },
+        });
+    });
+
+    test('AC4: --gate-status maps a recheck gate to fixed / not-fixed', async () => {
+        for (const [status, expected] of [
+            ['PASS\n', 'fixed'],
+            ['FAIL\n', 'not-fixed'],
+        ] as const) {
+            const project = tempProject({
+                '.spur/decisions/fixture.yaml': FIXTURE,
+                '.spur/run/run-ac4/gate.status': status,
+                '.spur/run/run-ac4-gate.status': status,
+            });
+            const invocationId = await servedInvocation(project);
+            const result = await main(
+                ['decision', 'outcome', invocationId, '--gate-status', 'run-ac4', '--json', '--json-envelope'],
+                project,
+            );
+            expect(result.code).toBe(0);
+            expect(JSON.parse(result.out)).toMatchObject({ ok: true, data: { outcome: expected, recorded: true } });
+        }
+        // A missing gate token is not evidence the repair worked: it records `not-fixed`.
+        const missing = tempProject({ '.spur/decisions/fixture.yaml': FIXTURE });
+        const invocationId = await servedInvocation(missing);
+        const absent = await main(
+            ['decision', 'outcome', invocationId, '--gate-status', 'no-such-run', '--json', '--json-envelope'],
+            missing,
+        );
+        expect(JSON.parse(absent.out)).toMatchObject({ ok: true, data: { outcome: 'not-fixed' } });
+    });
+
+    test('AC5: the reliability report scores accuracy against the configured outcome map', async () => {
+        const project = accuracyProject();
+        const invocationId = await servedInvocation(project);
+        await main(['decision', 'outcome', invocationId, 'fixed', '--json'], project);
+        const report = await main(['decision', 'status', '--reliability', '--json', '--json-envelope'], project);
+        expect(report.code).toBe(0);
+        const parsed = JSON.parse(report.out) as {
+            data: {
+                groups: Array<{
+                    decisionId: string;
+                    outcomes: Record<string, number>;
+                    accuracy: number | null;
+                    fallbackAccuracy: number | null;
+                }>;
+            };
+        };
+        const group = parsed.data.groups.find((g) => g.decisionId === 'triage-test');
+        expect(group?.outcomes).toEqual({ fixed: expect.any(Number) });
+        // The offline maker serves the fallback (`standard`); the map scores `standard: [fixed]`,
+        // so fallback accuracy is 1 for the samples that recorded an outcome.
+        expect(group?.fallbackAccuracy).toBe(1);
+        // No accepted sample recorded an outcome, so accuracy stays null rather than 0.
+        expect(group?.accuracy).toBeNull();
     });
 });

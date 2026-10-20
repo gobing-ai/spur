@@ -822,6 +822,12 @@ export const WorkflowsConfigSchema = z.object({
     /** Opt-in DecisionMaker backend for the non-pausing decide action (0941 R4); false keeps the degraded default. */
     decideDecisionMaker: z.boolean().optional(),
     /**
+     * Opt-in catalog rescue for an agent-dispatch failure no `FAILURE_RULES` entry matched
+     * (task 1264 R4). Absent/false keeps the narrow rule-based behaviour and makes no model call;
+     * true routes only that residue through `executor-failure-class`.
+     */
+    executorFailureDecisionMaker: z.boolean().optional(),
+    /**
      * How old a retained `.spur/memory/runs/<RUNID>.log` must be (mtime) before
      * `spur workflow clean` reclaims it. Default 30. Config units are days here
      * because retention is a policy; the stale-run `--older-than` flag stays
@@ -842,12 +848,19 @@ export const WorkflowsConfigSchema = z.object({
  * keys and evidence digest without the input or inline question, `off` writes
  * no rows. Default `full` — the logs are redacted and bounded, and retention
  * is capped at the newest 10,000 invocations.
+ *
+ * `outcomeMap` (task 1263 R5) is Spur's reading of Spur's own artifacts: per decision id, which
+ * recorded outcomes count as correct for each served value (`String(value)` keys, so a noul
+ * `true`/`false` matches `"true"`/`"false"`). It lives here rather than in the catalog because the
+ * catalog schema belongs to ts-libs (ADR-033) and this mapping is not a property of the decision.
+ * Without an entry the reliability report reports `accuracy: null` instead of guessing.
  */
 export const DecisionsConfigSchema = z.object({
     paths: z.array(z.string()).optional(),
     maker: z.string().optional(),
     makers: z.record(z.string(), z.string()).optional(),
     log: z.enum(['full', 'metadata', 'off']).optional(),
+    outcomeMap: z.record(z.string(), z.record(z.string(), z.array(z.string()))).optional(),
 });
 
 /** Schema for the `redaction` section. */

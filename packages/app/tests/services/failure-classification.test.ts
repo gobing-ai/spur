@@ -1,6 +1,6 @@
 import { describe, expect, test } from 'bun:test';
 import type { AgentRunResult } from '@gobing-ai/ts-ai-runner';
-import { classifyDispatch, permissionFailureEvidence } from '../../src';
+import { classifyDispatch, permissionFailureEvidence, rescueEvidenceTail } from '../../src';
 
 function result(stderr: string, overrides: Partial<AgentRunResult> = {}): AgentRunResult {
     return {
@@ -128,5 +128,36 @@ describe('reported provider refusals (1260 R1)', () => {
         expect(classifyDispatch({ exitCode: 0, stdout: "You've hit your session limit", stderr: '' })).toBeUndefined();
         expect(fail('TypeError: cannot read properties of undefined')).toBeUndefined();
         expect(fail('EACCES: permission denied, open /tmp/x/privacy')).toBeUndefined();
+    });
+});
+
+/**
+ * 1264 R2/AC5 — the rescue evidence contract.
+ *
+ * The tail is what a maker sees, so the redaction must happen on the FULL text before the cut:
+ * `redactAndBound` keeps the head, and tailing first would slice a secret at the boundary and send
+ * its unmatched fragment off-box.
+ */
+describe('rescueEvidenceTail (1264 R2)', () => {
+    const SECRET = 'sk-live-abcdef123456';
+
+    test('AC5: a secret straddling the tail boundary is redacted, not sliced', () => {
+        // Place the secret so a 4096-character tail would cut it in half.
+        const filler = 'x'.repeat(4086);
+        const text = `${filler}${SECRET}tail-after-secret`;
+        const tail = rescueEvidenceTail(text, [SECRET]);
+        expect(tail.length).toBeLessThanOrEqual(4096);
+        expect(tail).not.toContain('abcdef123456');
+        expect(tail).not.toContain(SECRET);
+        // The redacted marker survives the cut, which is what proves the order.
+        expect(tail).toContain('[REDACTED]');
+    });
+
+    test('the tail keeps the newest failure lines and a short text passes through', () => {
+        const text = ['early noise', 'last line: credits depleted'].join('\n');
+        expect(rescueEvidenceTail(text, [])).toBe(text);
+        const long = `${'a'.repeat(5000)}END`;
+        expect(rescueEvidenceTail(long, [])).toBe(`…${'a'.repeat(4095).slice(0, 4095)}END`.slice(-4096));
+        expect(rescueEvidenceTail(long, []).endsWith('END')).toBe(true);
     });
 });

@@ -155,15 +155,28 @@ workflows:
 # catalogs. `paths` registers extra catalog folders (absolute or
 # project-relative); the first layer wins per file basename (ADR-113 style).
 # `maker` selects the default DecisionMaker for every decision point, and
-# `makers` overrides it per decision id. Built-in makers: typesafe, fm-local,
-# laya-local (laya-local needs Apple Silicon) and clef (hosted Cloudflare
-# Workers AI, registered only when CLOUDFLARE_ACCOUNT_ID and
-# CLOUDFLARE_AUTH_TOKEN are both set). An unregistered name is a config error,
-# never a silent fallback. Inspect the effective choice with
-# `spur decision status`. `init` never overwrites this file — until you add the
-# keys, the shipped catalog's maker applies (see `status`).
+# `makers` overrides it per decision id. The value is any maker name the
+# registry currently registers — the list lives in the CLI, not here, so
+# `spur decision status` (registeredMakers) is the authority, together with each
+# maker's own prerequisites (a local maker needs its local stack; a hosted maker
+# registers only when its credentials are set). An unregistered name is a config
+# error, never a silent fallback. Inspect the effective choice per decision with
+# the same command. `init` never overwrites this file — until you add the keys,
+# the shipped catalog's maker applies (see `status`).
 decisions:
     paths: []
     maker: typesafe
     # makers:
-    #     task-triage: laya-local
+    #     task-semantic-risk: laya-local
+    # What "the decision was right" means (task 1263 R5): per decision id, the recorded outcomes
+    # that count as correct for each served value. `String(value)` keys, so a yes/no decision uses
+    # "true"/"false". The outcome verb records them (`spur decision outcome <invocation-id> ...`);
+    # `spur decision status --reliability` scores accuracy against this map and reports null for a
+    # decision with no entry, rather than guessing.
+    outcomeMap:
+        failure-class:
+            fix: [fixed]
+            stop: [not-fixed]
+        task-semantic-risk:
+            "false": [none, p4, p3]
+            "true": [p1, p2]

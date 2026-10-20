@@ -114,14 +114,26 @@ function reviewBody(taskContent: string): string | null {
     return section === undefined ? null : (section.split(/^### /m)[0] ?? '');
 }
 
+/** Options for {@link parseReviewFindings}. */
+export interface ReviewFindingsOptions {
+    /**
+     * Keep rows whose disposition marks them resolved (task 1263 R3b). Default false — the
+     * residual scan only cares about what is still open — but the review-severity outcome asks
+     * what the diff put at risk, and a fixed P2 was still there.
+     */
+    readonly includeResolved?: boolean;
+}
+
 /**
  * Extract review-finding rows: any `### Review` section table whose header carries a
  * Priority column. Rows need `^P[1-4]` priority and a finding other than `none`/`—`.
  * A disposition column (Disposition/Action/Status/Resolution/Fixed) is honored: `FIXED`/
- * `RESOLVED`/`DONE` rows are dropped; `DEFER` rows carry the cell as an in-table deferral reason.
+ * `RESOLVED`/`DONE` rows are dropped (unless {@link ReviewFindingsOptions.includeResolved});
+ * `DEFER` rows carry the cell as an in-table deferral reason.
  */
 export function parseReviewFindings(
     taskContent: string,
+    options: ReviewFindingsOptions = {},
 ): Array<{ priority: string; location: string; text: string; deferral?: string }> {
     const section = reviewBody(taskContent);
     if (section === null) return [];
@@ -156,7 +168,7 @@ export function parseReviewFindings(
                 !RANGE_PRIORITY.test(priority) &&
                 !NONE_FINDING.test(finding) &&
                 finding.length > 0 &&
-                !RESOLVED_DISPOSITION.test(disposition)
+                (options.includeResolved === true || !RESOLVED_DISPOSITION.test(disposition))
             ) {
                 const location = locationOf(cells[locationCol] ?? '', finding);
                 out.push(

@@ -1,0 +1,49 @@
+# Executor-failure rescue catalog (feature P1, task 1264).
+#
+# The executor loop escalates on `FAILURE_RULES` matches only (0407 precision bias). Anything the
+# rules miss — a reworded rate limit, "credits depleted", a proxy error body — ends the run as a
+# task defect. This decision classifies ONLY that residue, after the rules and the terminal checks
+# (timeout, permission denial, confirmed quota) have had their say, and only while
+# `workflows.executorFailureDecisionMaker` is on. It ships off by default: shipping off routes
+# nothing, and turning it on is an operator call backed by replay evidence in task 1264's Q&A.
+#
+# Resolution: shared layer, overridable per basename through `.spur/decisions/` or
+# `decisions.paths` (first layer wins, ADR-113 style).
+version: 1
+
+defaults:
+    # Higher than the catalog floor: a false `resource-exhaustion` costs a failover attempt, and a
+    # false `task-defect` equals today's behaviour — so the uncertainty must resolve downward.
+    minConfidence: 0.85
+
+decisions:
+    executor-failure-class:
+        type: choice
+        description: Is an unmatched agent-dispatch failure resource exhaustion, an auth failure, or a task defect?
+        instructions: |
+            You are classifying why one agent dispatch exited non-zero, after every deterministic
+            rule already declined to classify it.
+            Failure output: ${params.instructions}
+            Answer `resource-exhaustion` only when the output states a provider-side capacity or
+            billing limit: a quota/credit/billing message, a 429 or rate-limit body, a token or
+            request budget, or an "overloaded"/"capacity" error. Answer `auth` only when the
+            output states a credential or authorization fault: an invalid/expired key or token, a
+            401/403 body, or a missing credential for the provider. Answer `task-defect` for
+            everything else: a compile or test failure, a missing file, a malformed prompt, a
+            socket/proxy error, or output that does not name a provider limit at all.
+            Classify only what the output says. Do not infer a vendor, and do not guess.
+        parameters:
+            wbs:
+                type: string
+                description: Task WBS the failing dispatch belongs to, when known.
+        criteria:
+            resource-exhaustion: >
+                The output names a provider-side limit — quota, credits, billing period, rate
+                limit, 429, token budget, or capacity.
+            auth: >
+                The output names a credential or authorization fault — invalid or expired key or
+                token, 401/403, or a missing credential.
+            task-defect: >
+                The output names no provider limit or credential fault — a code/test/file error, a
+                prompt problem, or a transport error that is not a provider quota.
+        fallback: task-defect

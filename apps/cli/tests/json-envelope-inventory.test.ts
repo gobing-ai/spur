@@ -283,8 +283,9 @@ describe('0699 R1 — no flag-declaring verb exits non-zero without JSON', () =>
         // 71 → 70 (D63 0915 remediation: `feature verify` verb removed),
         // 70 → 71 (G73 1080: `agent report` declares `--json-envelope`),
         // 71 → 73 (G73 1081: `agent join` and `agent leave` declare `--json-envelope`),
-        // 73 → 77 (P 1093: `decision list/show/run/status` declare `--json-envelope`).
-        expect(advertising.length).toBe(77);
+        // 73 → 77 (P 1093: `decision list/show/run/status` declare `--json-envelope`),
+        // 77 → 78 (P1 1263: `decision outcome` declares it too).
+        expect(advertising.length).toBe(78);
         expect(new Set(advertising.map((b) => `${b.noun} ${b.verb}`)).size).toBe(advertising.length);
     });
 

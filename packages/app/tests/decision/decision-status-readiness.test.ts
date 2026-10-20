@@ -150,6 +150,9 @@ describe('decisionStatusReadiness (task 1170)', () => {
                 p95DurationMs: 20,
                 firstSeen: '2026-10-06T01:00:00.000Z',
                 lastSeen: '2026-10-06T02:00:00.000Z',
+                outcomes: {},
+                accuracy: null,
+                fallbackAccuracy: null,
             },
             {
                 decisionId: 'failure-class',
@@ -164,6 +167,9 @@ describe('decisionStatusReadiness (task 1170)', () => {
                 p95DurationMs: 5,
                 firstSeen: '2026-10-03T01:00:00.000Z',
                 lastSeen: '2026-10-07T09:00:00.000Z',
+                outcomes: {},
+                accuracy: null,
+                fallbackAccuracy: null,
             },
         ]);
         const typesafe = readiness.makers.find((m) => m.name === 'typesafe');
@@ -193,6 +199,9 @@ describe('decisionStatusReadiness (task 1170)', () => {
                 p95DurationMs: 2,
                 firstSeen: '2026-10-06T01:00:00.000Z',
                 lastSeen: '2026-10-06T01:00:00.000Z',
+                outcomes: {},
+                accuracy: null,
+                fallbackAccuracy: null,
             },
         ]);
         // The rows belong to fm-local for task-triage; task-triage now resolves to typesafe.

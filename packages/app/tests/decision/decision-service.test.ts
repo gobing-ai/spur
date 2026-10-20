@@ -3,7 +3,9 @@ import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { getEnvVar, removeEnvVar, setEnvVar } from '@gobing-ai/spur-config';
+import type { CreateDecisionLogInput } from '@gobing-ai/spur-domain';
 import { DecisionHub } from '@gobing-ai/ts-ai-decision';
+import { EventBus } from '@gobing-ai/ts-infra';
 import { LayaWorkerClient } from '@gobing-ai/ts-laya-mlx';
 
 import { DecisionService, disposeDecisionServices, getDecisionService } from '../../src/decision/decision-service';
@@ -366,5 +368,117 @@ describe('DecisionService — hosted clef maker (design §3.6)', () => {
                 maker: 'clef',
             });
         });
+    });
+});
+
+describe('DecisionService — fallback cause (task 1262 R3)', () => {
+    // AC3: a hub fallback that came from a caught failure names the error class and message,
+    // with every configured secret redacted before it reaches the event or the row.
+    test('AC3: a fallback carries its cause with the configured secret redacted', async () => {
+        const secret = 'secret-value-12345';
+        await withEnv({ SPUR_TEST_TOKEN: secret }, async () => {
+            const root = await newRoot();
+            roots.push(root);
+            await writeCatalog(root, 'cause.yaml', CATALOG);
+            const service = await getDecisionService(null as never, root, join(root, 'shared'));
+            const spy = spyOn(DecisionHub.prototype, 'decide').mockResolvedValue({
+                id: 'pick-lane',
+                type: 'choice',
+                value: 'slow',
+                confidence: null,
+                source: 'default',
+                reason: 'error',
+                maker: 'typesafe',
+                durationMs: 3,
+                error: { name: 'LayaWorkerError', message: `worker spawn failed with ${secret}` },
+            } as never);
+            const failures: Record<string, unknown>[] = [];
+            const bus = new EventBus<Record<string, (event: unknown) => void>>();
+            bus.on('decision.failure', (event) => failures.push(event as Record<string, unknown>));
+            let written: CreateDecisionLogInput | undefined;
+            const sink = {
+                dao: {
+                    insert: async (row: CreateDecisionLogInput) => {
+                        written = row;
+                    },
+                },
+                secrets: [secret],
+                mode: 'full' as const,
+            };
+            let served: unknown;
+            try {
+                served = await service.decide(
+                    'pick-lane',
+                    {},
+                    {
+                        bus: bus as never,
+                        decisionLog: { sink: sink as never },
+                        context: { caller: 'cli' },
+                    },
+                );
+            } finally {
+                spy.mockRestore();
+            }
+            expect(served).toMatchObject({ value: 'slow', source: 'default', reason: 'error' });
+            expect(failures).toHaveLength(1);
+            expect(failures[0]?.error).toBe('LayaWorkerError: worker spawn failed with [REDACTED]');
+            expect(JSON.stringify(failures[0])).not.toContain(secret);
+            // The row's error column carries the same cause (the sink redacts the raw text).
+            await Promise.resolve();
+            expect(written?.error).toContain('LayaWorkerError');
+            expect(written?.error).toContain('[REDACTED]');
+            expect(written?.error).not.toContain(secret);
+        });
+    });
+});
+
+describe('DecisionService — executor caller attribution (task 1264 R5)', () => {
+    // AC5: a rescue is a decision like any other, so its events and its log row must name the
+    // executor caller and the run they belong to — that attribution is what makes
+    // `spur decision status --reliability` and the promotion query usable.
+    test('AC5: caller executor and the run id ride the events and the decision_logs row', async () => {
+        const root = await newRoot();
+        roots.push(root);
+        await writeCatalog(root, 'executor.yaml', CATALOG);
+        const service = await getDecisionService(null as never, root, join(root, 'shared'));
+        const spy = spyOn(DecisionHub.prototype, 'decide').mockResolvedValue({
+            id: 'pick-lane',
+            type: 'choice',
+            value: 'slow',
+            confidence: 0.9,
+            source: 'model',
+            reason: 'accepted',
+            maker: 'typesafe',
+            durationMs: 4,
+        } as never);
+        const events: Record<string, unknown>[] = [];
+        const bus = new EventBus<Record<string, (event: unknown) => void>>();
+        bus.on('decision.end', (event) => events.push(event as Record<string, unknown>));
+        let written: CreateDecisionLogInput | undefined;
+        const sink = {
+            dao: {
+                insert: async (row: CreateDecisionLogInput) => {
+                    written = row;
+                },
+            },
+            secrets: [],
+            mode: 'full' as const,
+        };
+        try {
+            await service.decide(
+                'pick-lane',
+                { instructions: 'credits depleted' },
+                {
+                    bus: bus as never,
+                    decisionLog: { sink: sink as never },
+                    context: { caller: 'executor', correlation: { runId: 'run-1264' } },
+                },
+            );
+        } finally {
+            spy.mockRestore();
+        }
+        expect(events[0]).toMatchObject({ caller: 'executor', correlation: { runId: 'run-1264' } });
+        await Promise.resolve();
+        expect(written).toMatchObject({ caller: 'executor', run_id: 'run-1264', decision_id: 'pick-lane' });
     });
 });

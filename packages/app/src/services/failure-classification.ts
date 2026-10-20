@@ -1,5 +1,6 @@
 import type { ObjectiveEscalationSignal } from '@gobing-ai/spur-domain';
 import type { AgentRunResult } from '@gobing-ai/ts-ai-runner';
+import { redactAndBound } from '../observability/agent-execution';
 
 /** Provider-specific evidence that maps a failed dispatch to an objective escalation signal. */
 export type FailureRule = {
@@ -136,6 +137,17 @@ export function permissionFailureEvidence(text: string): string | undefined {
         .map((candidate) => candidate.trim())
         .find((candidate) => PERMISSION_PATTERNS.some((pattern) => pattern.test(candidate)));
     return line !== undefined && line !== '' ? line : undefined;
+}
+
+/**
+ * The evidence tail a catalog rescue may send to a maker (task 1264 R2): redact the FULL text with
+ * the configured secrets, then keep the last `maxChars` characters.
+ *
+ * The order is load-bearing. `redactAndBound` keeps the head, so tailing first could cut a secret
+ * at the boundary and hand the maker its unmatched fragment — a leak the redactor never sees.
+ */
+export function rescueEvidenceTail(text: string, secrets: readonly string[], maxChars = 4096): string {
+    return redactAndBound(text, secrets, Number.MAX_SAFE_INTEGER).slice(-maxChars);
 }
 
 /** Classifies objective failure evidence from a completed agent dispatch. */

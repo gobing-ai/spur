@@ -28,8 +28,12 @@ import type { DecisionMakerSource } from './decision-service';
 /** Upper bound for the redacted `message` carried by `decision.rejected` (§3.2). */
 const DECISION_MESSAGE_MAX_CHARS = 512;
 
-/** Who asked for the decision. The workflow inline-question path is caller `workflow`. */
-export type DecisionCaller = 'cli' | 'workflow' | 'gate';
+/**
+ * Who asked for the decision. The workflow inline-question path is caller `workflow`; the agent
+ * executor's unmatched-failure rescue is caller `executor` (task 1264 R5), so every rescue lands in
+ * `decision.*` and `decision_logs` attributed to the run that needed it.
+ */
+export type DecisionCaller = 'cli' | 'workflow' | 'gate' | 'executor';
 
 /** Run/node correlation carried by every decision event for report joins. */
 export interface DecisionCorrelation {
@@ -92,6 +96,11 @@ export interface DecisionEndFields {
 
 /** The one lifecycle opened by {@link beginDecisionInvocation}. */
 export interface DecisionInvocation {
+    /**
+     * Ledger key of this invocation (task 1263 R1): the same id carries `decision.*` events and
+     * the `decision_logs` row, so a caller can publish an outcome against it later.
+     */
+    readonly invocationId: string;
     /** Emit `decision.success` — an accepted model answer. */
     succeed(fields: DecisionTerminalFields): void;
     /** Emit `decision.failure` — the fallback was served. */
@@ -222,6 +231,7 @@ export function beginDecisionInvocation(
         minConfidence: start.minConfidence,
     });
     return {
+        invocationId,
         succeed(fields: DecisionTerminalFields): void {
             emitDecisionEvent(bus, 'decision.success', { ...base(), severity: 'info', ...fields });
         },

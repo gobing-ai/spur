@@ -1,5 +1,6 @@
 import { createHash } from 'node:crypto';
 import { getEnvVars, type SpurConfig } from '@gobing-ai/spur-config';
+import { bundledConfigRoot } from '@gobing-ai/spur-config/loader';
 import {
     DecisionCatalogError,
     type DecisionDescriptor,
@@ -21,7 +22,8 @@ import {
     type LayaWorkerResult,
     type WorkerQuestion,
 } from '@gobing-ai/ts-laya-mlx';
-import { redactAndBound } from '../observability/agent-execution';
+import { dirnamePath, joinPath, nodeBunFactory } from '@gobing-ai/ts-runtime';
+import { configuredSecretValues, redactAndBound } from '../observability/agent-execution';
 import type { SystemEventBus } from '../services/system-event-tap';
 import {
     type DecisionLayerId,
@@ -132,7 +134,13 @@ export interface DecideOptions {
 }
 
 /** One decide outcome plus the maker resolution that served it. */
-export type ServedDecision = DecisionResult & { makerSource: DecisionMakerSource };
+export type ServedDecision = DecisionResult & {
+    makerSource: DecisionMakerSource;
+    /** Task 1263 R1: the ledger key (`decision.*` events and the `decision_logs` row). */
+    invocationId: string;
+    /** Task 1263 R1: the digest `decision.start` recorded, or null when the input carried none. */
+    evidenceDigest: string | null;
+};
 
 /** One maker's liveness-probe result (feature P11 R5) — the readiness report's "working now" mark. */
 export interface DecisionProbeOutcome {
@@ -169,6 +177,32 @@ class OwnedLayaClient implements LayaClient {
         this.client?.dispose();
         this.client = undefined;
     }
+}
+
+/**
+ * The shipped `laya-local` worker script, or `undefined` when this process is not a bundled
+ * install (task 1262 R1).
+ *
+ * `@gobing-ai/ts-laya-mlx` resolves its worker relative to its own module directory, which a
+ * bundle relocates to `node_modules/@gobing-ai/worker/laya_worker.py` — a path that does not
+ * exist, so every `laya-local` ask failed in ~100 ms with `reason: error`. `build:bundle` copies
+ * the script to `worker/laya_worker.py` beside the bundled config root; this resolves that
+ * sibling. A source checkout has no such sibling (the repo's `config/` has no `worker/`), so it
+ * keeps passing nothing and the package default applies. `LAYA_WORKER_SCRIPT` always wins: the
+ * upstream client already reads it, so an operator override must reach it undiminished.
+ */
+export function bundledLayaWorkerScript(
+    configRoot: string | null = bundledConfigRoot(),
+    env: Record<string, string | undefined> = getEnvVars(),
+): string | undefined {
+    const override = env.LAYA_WORKER_SCRIPT;
+    if (override !== undefined && override !== '') return undefined;
+    if (configRoot === null) return undefined;
+    const script = joinPath(dirnamePath(configRoot), 'worker', 'laya_worker.py');
+    // The node/bun backend answers synchronously; a promise-returning stub has no real fs to
+    // ship a worker on, so it reads as absent.
+    const exists = nodeBunFactory.createFileSystem().exists(script);
+    return exists === true ? script : undefined;
 }
 
 /**
@@ -224,16 +258,23 @@ export class DecisionService {
      * {@link dispose}; each entry builds its real client on first ask.
      */
     private readonly ownedLayaClients: OwnedLayaClient[] = [];
+    /** Bundled worker script resolved once per service (task 1262 R1), never per ask. */
+    private readonly layaWorkerScript: string | undefined;
 
     private constructor(resolution: DecisionResolution) {
         this.resolution = resolution;
         this.duplicateIds = new Map(resolution.duplicateIds.map((d) => [d.id, d.sources]));
         const env = getEnvVars();
+        this.layaWorkerScript = bundledLayaWorkerScript(undefined, env);
+        const layaDriverOptions = (): LayaDriverOptions => ({
+            env,
+            ...(this.layaWorkerScript !== undefined ? { workerScript: this.layaWorkerScript } : {}),
+        });
         this.registry = new DecisionMakerRegistry({
             builtins: {
                 makerOptions: { env },
                 driverOptions: {
-                    'laya-local': { env, client: this.ownLayaClient({ env }) },
+                    'laya-local': { ...layaDriverOptions(), client: this.ownLayaClient(layaDriverOptions()) },
                 },
             },
         });
@@ -359,8 +400,10 @@ export class DecisionService {
                 driverOptions: {
                     'laya-local': {
                         env,
+                        ...(this.layaWorkerScript !== undefined ? { workerScript: this.layaWorkerScript } : {}),
                         client: this.ownLayaClient({
                             env,
+                            ...(this.layaWorkerScript !== undefined ? { workerScript: this.layaWorkerScript } : {}),
                             startupTimeoutMs: PROBE_DRIVER_BUDGET_MS,
                             requestTimeoutMs: PROBE_DRIVER_BUDGET_MS,
                         }),
@@ -492,6 +535,10 @@ export class DecisionService {
             log.phases.push({ phase: 'resolve', startedAt: entryAt, durationMs: Date.now() - entryAt });
         }
         const digestSource = evidenceDigestSource(input);
+        const evidenceDigest =
+            digestSource !== undefined
+                ? `sha256:${createHash('sha256').update(digestSource, 'utf8').digest('hex')}`
+                : null;
         const invocation = beginDecisionInvocation(
             options?.bus,
             ctx,
@@ -504,9 +551,7 @@ export class DecisionService {
                 // Task 1113 R5: digest the evidence-bearing input consistently — the
                 // implicit instructions channel when it is a non-empty string, else a
                 // string `evidence` input (the gate path passes evidence there).
-                ...(digestSource !== undefined
-                    ? { evidenceDigest: `sha256:${createHash('sha256').update(digestSource, 'utf8').digest('hex')}` }
-                    : {}),
+                ...(evidenceDigest !== null ? { evidenceDigest } : {}),
                 minConfidence: description.minConfidence,
             },
             log,
@@ -528,18 +573,31 @@ export class DecisionService {
             if (outcome.source === 'model' && outcome.reason === 'accepted') {
                 invocation.succeed({ value: outcome.value, confidence: outcome.confidence, maker: outcome.maker });
             } else {
+                // 1262 R3: a fallback that came from a caught failure now names its cause. The
+                // hub carries `error` on `no-backend` / `timeout` / `error` results (ts-ai-decision
+                // 0117, ADR-040); without it a dead local worker was indistinguishable from a
+                // low-confidence answer and cost a manual repro to diagnose.
+                const cause =
+                    outcome.error !== undefined ? `${outcome.error.name}: ${outcome.error.message}` : undefined;
+                if (cause !== undefined && log !== undefined) {
+                    // The raw text rides the log arg; the emitter redacts it into the row.
+                    log.error = cause;
+                }
                 invocation.fail({
                     reason: outcome.reason,
                     fallbackValue: outcome.value,
                     confidence: outcome.confidence,
                     maker: outcome.maker,
+                    ...(cause !== undefined
+                        ? { error: redactAndBound(cause, configuredSecretValues(getEnvVars()), 512) }
+                        : {}),
                 });
             }
             if (log !== undefined) {
                 // serve: mapping + emitting the result back to the caller.
                 log.phases.push({ phase: 'serve', startedAt: makerEndedAt, durationMs: Date.now() - makerEndedAt });
             }
-            return { ...outcome, makerSource: source };
+            return { ...outcome, makerSource: source, invocationId: invocation.invocationId, evidenceDigest };
         } catch (error) {
             if (log !== undefined) {
                 // The raw message rides the log arg; the emitter redacts it into

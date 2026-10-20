@@ -18,8 +18,8 @@ import { defaultDecisionMaker } from './decision-hitl-responder';
 /** v1 decision methods. `ask`/`score` are deferred until a candidate needs them (0941 Q&A). */
 export type DecideMethod = 'choice' | 'noul';
 
-/** Closed degraded-reason vocabulary (0941 R3, frozen). */
-export type DecideDegradedReason = 'disabled' | 'no-backend' | 'error' | 'timeout' | 'low-confidence';
+/** Closed degraded-reason vocabulary (0941 R3, frozen). `no-evidence` = a declared evidence set that was entirely missing or empty (1262 R4). */
+export type DecideDegradedReason = 'disabled' | 'no-backend' | 'error' | 'timeout' | 'low-confidence' | 'no-evidence';
 
 /** `minConfidence` when the options omit it (0941 R1). */
 export const DEFAULT_MIN_CONFIDENCE = 0.8;
@@ -67,6 +67,12 @@ export interface DecideResult {
      */
     source: 'model' | 'default';
     evidenceDigest: string | null;
+    /**
+     * Ledger key of the invocation this row came from (task 1263 R1): `decision.*` events and the
+     * `decision_logs` row share it, so a later outcome can be joined to this decision. Null for a
+     * row that never opened an invocation (switch off, `no-evidence`, inline form).
+     */
+    invocationId: string | null;
     durationMs: number;
 }
 
@@ -102,6 +108,8 @@ export async function runDecide(options: DecideOptions, deps: DecideDeps): Promi
         reason,
         source: 'default',
         evidenceDigest,
+        // The inline form runs no catalog invocation, so it has no ledger key (1263 R1).
+        invocationId: null,
         durationMs: deps.now() - started,
     });
 
@@ -156,6 +164,7 @@ export async function runDecide(options: DecideOptions, deps: DecideDeps): Promi
                 reason: 'accepted',
                 source: 'model',
                 evidenceDigest,
+                invocationId: null,
                 durationMs: deps.now() - started,
             };
         }
@@ -174,6 +183,7 @@ export async function runDecide(options: DecideOptions, deps: DecideDeps): Promi
             reason: 'accepted',
             source: 'model',
             evidenceDigest,
+            invocationId: null,
             durationMs: deps.now() - started,
         };
     } catch (error) {

@@ -78,6 +78,8 @@ out
 
 # Bundled default config copied into the CLI package for npm publish (bundle-config)
 /apps/cli/config
+# laya-local Python worker copied into the CLI package for npm publish (bundle-laya-worker, 1262 R1)
+/apps/cli/worker
 # Board static assets copied into the CLI package for npm publish (bundle-web)
 /apps/cli/web
 # Plugin + marketplace content copied into the CLI package for npm publish (bundle-plugins)

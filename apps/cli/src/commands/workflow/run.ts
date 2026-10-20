@@ -566,9 +566,15 @@ export function registerWorkflowRunCommand(workflow: Command, context: CliContex
                 } catch {
                     // If spawn throws, fall through to the sync path so the workflow still runs.
                     markWorkflowRunActive();
+                    // 1262 R2: the fallback is still the same run, so it carries the same
+                    // observability bus + ledger bridge the sync path builds below — without
+                    // it a fallback run records zero system_events/decision rows.
+                    const fallbackBus: WorkflowObservabilityBus = new EventBus();
+                    // SAFETY: one structural ts-infra EventBus behind the nominal names (ADR-044).
+                    await attachSystemEventLedger(fallbackBus as unknown as SystemEventBus, context);
                     let result: Awaited<ReturnType<WorkflowAppService['run']>>;
                     try {
-                        result = await makeWorkflowService(context, options.json).run(file, {
+                        result = await makeWorkflowService(context, options.json, fallbackBus).run(file, {
                             runId,
                             vars: { spurBin: resolveSpurBin(), ...parseVars(options.vars) },
                             dryRun: options.dryRun || undefined,

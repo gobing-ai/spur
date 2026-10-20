@@ -3,7 +3,7 @@
 > Decision catalog surface: list registered decisions, show one served contract, run a decision to
 > a served outcome (never writes a workflow resultFile), and audit catalog health. Thin transport
 > over `DecisionService`; the hub is `@gobing-ai/ts-ai-decision` (task 1093). Frozen at exactly
-> these four verbs (`docs/design/decision-catalog.md` §3.4).
+> these five verbs (`docs/design/decision-catalog.md` §3.4; `outcome` added by task 1263).
 
 ## Subcommands
 
@@ -13,6 +13,7 @@
 | `show <id>` | One served contract: parameters, criteria, fallback, effective maker + source |
 | `run <id>` | Serve one outcome with `--param` inputs and redacted `--evidence` files |
 | `status` | Sectioned readiness report: registration, configuration, recorded evidence and the opt-in liveness probe |
+| `outcome <invocation-id>` | Record what actually happened after a served decision (acceptance is not accuracy); first write wins |
 
 ## Catalog layers and config
 
@@ -88,6 +89,33 @@ With no backend configured, the built-in `typesafe` maker serves the catalog fal
 { "id": "task-triage", "type": "choice", "value": "standard", "source": "default",
   "reason": "no-backend", "confidence": null, "maker": "typesafe", "makerSource": "catalog-default" }
 ```
+
+## spur decision outcome
+
+```
+spur decision outcome <invocation-id> [<outcome>] [options]
+```
+
+| Option | Description |
+|---|---|
+| `--review-severity <wbs>` | Derive the outcome from that task's `## Review` findings: the worst P1-P4 row, resolved rows included (`p1`-`p4`), or `none` |
+| `--gate-status <run-id>` | Derive the outcome from that run's gate token (`PASS` -> `fixed`, anything else or a missing token -> `not-fixed`) |
+| `--source <text>` | Free-text note on where the outcome was observed |
+| `--json` | Output machine-readable JSON |
+| `--json-envelope` | Wrap `--json` output in the `{ok, data}` envelope |
+
+Pass exactly one outcome source: the positional `<outcome>` (a lowercase slug matching
+`^[a-z0-9-]{1,32}$`), `--review-severity`, or `--gate-status`. The invocation id is the one a decide
+step writes into its result row (`invocationId`) and that keys the `decision.*` events and the
+`decision_logs` row.
+
+Exit 0 when the outcome is recorded, or when one already stands (`recorded: false`, first write
+wins). Exit 1 for an unknown invocation id — there is no decision to score. Exit 2 for a malformed
+outcome slug or for naming zero or several outcome sources.
+
+`--json` payload: `{ invocationId, decisionId, outcome, recorded }`. The row lands in
+`system_events` beside `decision.end`, on the same run id, and
+`spur decision status --reliability` scores it against `decisions.outcomeMap`.
 
 ## spur decision status
 

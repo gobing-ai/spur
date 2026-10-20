@@ -2,6 +2,8 @@ import { resolve } from 'node:path';
 import type { Command } from '@commander-js/extra-typings';
 import {
     confidenceLevel,
+    configuredSecretValues,
+    DECISION_OUTCOME_PATTERN,
     DecisionInputError,
     type DecisionProbeOutcome,
     type DecisionStatus,
@@ -14,8 +16,13 @@ import {
     probeDecisionMakers,
     readDecisionEvidence,
     readDecisionStatusReadiness,
+    recordDecisionOutcome,
+    resolvePlanningFolders,
+    reviewSeverityOutcome,
     type SystemEventBus,
+    TaskLocator,
     UnknownDecisionError,
+    UnknownDecisionInvocationError,
 } from '@gobing-ai/spur-app';
 import { getEnvVars } from '@gobing-ai/spur-config';
 import { SystemEventDao } from '@gobing-ai/spur-domain';
@@ -241,6 +248,95 @@ export function registerDecisionCommand(program: Command, context: CliContext): 
             }
         });
 
+    noun.command('outcome')
+        .summary('record what actually happened after a served decision')
+        .description(
+            [
+                'Record the outcome of one served decision invocation (task 1263 R2): whether the',
+                'answer turned out to be right, as later observed by the caller.',
+                '',
+                'The invocation id is the one a decide step now writes into its result row',
+                '(invocationId) and that keys the decision.* events and the decision_logs row.',
+                'The outcome must match ^[a-z0-9-]{1,32}$; --review-severity <wbs> derives it from',
+                "the worst finding in that task's Review table instead (p1-p4, or none).",
+                '',
+                'First write wins: a second outcome for the same invocation exits 0 and reports',
+                'recorded: false with the outcome that already stands. An unknown invocation id',
+                'exits 1 (there is no decision to score); a malformed outcome exits 2.',
+                '',
+                'The row lands in system_events beside decision.end, on the same run id, so',
+                '`spur decision status --reliability` can score accuracy against',
+                '`decisions.outcomeMap`.',
+            ].join('\n'),
+        )
+        .argument('<invocation-id>', 'invocation id of the served decision')
+        .argument('[outcome]', 'outcome label (lowercase slug, e.g. fixed, not-fixed, p2)')
+        .option('--review-severity <wbs>', "derive the outcome from that task's Review findings")
+        .option('--gate-status <run-id>', "derive the outcome from that run's gate status (fixed / not-fixed)")
+        .option('--source <text>', 'free-text note on where the outcome was observed')
+        .option(...SHARED_OPTIONS.json)
+        .option(...SHARED_OPTIONS.jsonEnvelope)
+        .action(async (invocationId: string, outcomeArg: string | undefined, options) => {
+            try {
+                const derived = [options.reviewSeverity, options.gateStatus].filter((value) => value !== undefined);
+                if ((outcomeArg === undefined) === (derived.length === 0) || derived.length > 1) {
+                    // Exit 2: a malformed invocation, not a ledger miss.
+                    writeJsonError(
+                        context.output,
+                        options,
+                        'provide exactly one of <outcome>, --review-severity <wbs> or --gate-status <run-id>',
+                        'VALIDATION_FAILED',
+                    );
+                    context.setExitCode(2);
+                    return;
+                }
+                let outcome: string;
+                if (options.gateStatus !== undefined) {
+                    outcome = await gateOutcome(context, String(options.gateStatus));
+                } else if (options.reviewSeverity !== undefined) {
+                    const path = await taskSpecPath(context, String(options.reviewSeverity));
+                    outcome = reviewSeverityOutcome(await context.fs.readFile(path));
+                } else {
+                    outcome = String(outcomeArg);
+                    if (!DECISION_OUTCOME_PATTERN.test(outcome)) {
+                        writeJsonError(
+                            context.output,
+                            options,
+                            `invalid outcome "${outcome}": expected ^[a-z0-9-]{1,32}$ (e.g. fixed, not-fixed, p2)`,
+                            'VALIDATION_FAILED',
+                        );
+                        context.setExitCode(2);
+                        return;
+                    }
+                }
+                const dao = new SystemEventDao(await context.getDb());
+                const result = await recordDecisionOutcome(
+                    {
+                        dao,
+                        secretValues: configuredSecretValues(context.env ?? {}),
+                        projectRoot: context.cwd,
+                    },
+                    {
+                        invocationId: String(invocationId),
+                        outcome,
+                        ...(options.source !== undefined ? { source: String(options.source) } : {}),
+                    },
+                );
+                context.output.write(
+                    options.json === true
+                        ? toEnvelopeJson(result, { enveloped: options.jsonEnvelope === true })
+                        : `${result.decisionId}: outcome ${result.outcome}${result.recorded ? '' : ' (already recorded; first write wins)'}`,
+                );
+            } catch (error) {
+                if (error instanceof UnknownDecisionInvocationError) {
+                    context.output.error(`decision outcome: ${error.message}`);
+                    context.setExitCode(1);
+                    return;
+                }
+                fail(context, options, error);
+            }
+        });
+
     noun.command('status')
         .summary('catalog and maker-config readiness report')
         .description(
@@ -288,12 +384,15 @@ export function registerDecisionCommand(program: Command, context: CliContext): 
                         throw new Error(`invalid --since "${options.since}": expected an ISO timestamp`);
                     }
                     const dao = new SystemEventDao(await context.getDb());
+                    const outcomeMap = context.spurConfig?.decisions?.outcomeMap;
                     const report = await decisionReliability(dao, {
                         ...(options.since !== undefined ? { since: options.since } : {}),
                         catalog: service.status().perDecision.map((row) => ({
                             decisionId: row.id,
                             maker: row.maker,
                         })),
+                        // 1263 R5: what "right" means for each decision comes from config.
+                        ...(outcomeMap !== undefined ? { outcomeMap } : {}),
                     });
                     if (options.json === true) {
                         context.output.write(toEnvelopeJson(report, { enveloped: options.jsonEnvelope === true }));
@@ -312,6 +411,9 @@ export function registerDecisionCommand(program: Command, context: CliContext): 
                                     group.p95DurationMs === null ? '-' : String(group.p95DurationMs),
                                     group.firstSeen ?? '-',
                                     group.lastSeen ?? '-',
+                                    toJson(group.outcomes),
+                                    group.accuracy === null ? '-' : group.accuracy.toFixed(4),
+                                    group.fallbackAccuracy === null ? '-' : group.fallbackAccuracy.toFixed(4),
                                 ].join('\t'),
                             );
                         }
@@ -544,6 +646,33 @@ function parseParams(
  * Every throw reaching here is a caller mistake (design §3.4): unknown id → NOT_FOUND,
  * everything else (bad param/layer/maker/evidence, duplicate id) → VALIDATION_FAILED.
  */
+/**
+ * The outcome a gate visit produced for the decision it was scoring (task 1263 R3a): `fixed` when
+ * that run's gate status is PASS, `not-fixed` otherwise — including a missing token, because an
+ * unrecorded gate is not evidence that the repair worked.
+ */
+async function gateOutcome(context: CliContext, runId: string): Promise<string> {
+    const path = resolve(context.cwd, '.spur', 'run', `${runId}-gate.status`);
+    if (!(await context.fs.exists(path))) return 'not-fixed';
+    const status = String(await context.fs.readFile(path)).trim();
+    return status === 'PASS' ? 'fixed' : 'not-fixed';
+}
+
+/**
+ * The task file a `--review-severity <wbs>` call reads. Folder resolution runs through the same
+ * config the task noun uses, so a task in a phase folder (`docs/tasks5`) resolves like any other.
+ */
+async function taskSpecPath(context: CliContext, wbs: string): Promise<string> {
+    const { foldersConfig } = await resolvePlanningFolders(context.fs);
+    const locator = TaskLocator.forDirs(context.fs, [
+        context.fs.resolve(foldersConfig.active_folder),
+        ...Object.keys(foldersConfig.folders ?? {}).map((folder) => context.fs.resolve(folder)),
+    ]);
+    const path = await locator.findPathByWbs(wbs);
+    if (path === null) throw new Error(`no task file carries WBS ${wbs}`);
+    return path;
+}
+
 function fail(context: CliContext, options: { json?: boolean; jsonEnvelope?: boolean }, error: unknown): void {
     const message = error instanceof Error ? error.message : String(error);
     if (options.json === true) {

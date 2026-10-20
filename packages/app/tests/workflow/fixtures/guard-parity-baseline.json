@@ -106,19 +106,13 @@
             "from": "review",
             "to": "failed",
             "kind": "shell",
-            "command": "jq -e '.value == \"stop\"' \".spur/run/$wbs-review-failure-class.decision\" >/dev/null 2>&1"
-        },
-        {
-            "from": "review",
-            "to": "failed",
-            "kind": "shell",
             "command": "fix_attempts=\"$(cat .spur/run/$wbs-test-fix-attempt 2>/dev/null || echo 0)\"; test \"$fix_attempts\" -ge \"$qualityGateMaxFixAttempts\""
         },
         {
             "from": "review",
             "to": "remediate",
             "kind": "shell",
-            "command": "jq -e '.value == \"fix\"' \".spur/run/$wbs-review-failure-class.decision\" >/dev/null 2>&1"
+            "command": "test -f \".spur/run/$wbs-review.status\" &&\ntest \"$(cat \".spur/run/$wbs-review.status\" 2>/dev/null)\" != PASS"
         },
         {
             "from": "review",

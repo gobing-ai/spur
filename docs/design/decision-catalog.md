@@ -83,8 +83,16 @@ decision point (§3.5).
   decisions go in `config/decisions/task-pipeline.yaml`, one file per owning workflow.
   - `gates.yaml` carries `gate-evidence`; `idea-pipeline.yaml` `idea-recommendation` and
     `needs-design`; `history-anatomy.yaml` `anatomy-validation-verdict`; `task-pipeline.yaml`
-    `task-triage`, `failure-class` and `review-failure-class`. The workflow audit that maps them
-    to steps is `decision-observability-and-adoption.md` §4.
+    `task-semantic-risk` and `failure-class`. The workflow audit that maps them to steps is
+    `decision-observability-and-adoption.md` §4.
+
+    Current state (2026-10-19, task 1262). The pipeline's lane decision is
+    `task-semantic-risk` (noul, fallback `true`; `false` projects the fast lane) and its
+    gate-failure decision is `failure-class`. `task-triage` (low/standard/high) was replaced
+    because 36 real calls accepted twice at 0.07–0.45 confidence while duplicating the
+    deterministic pre-guard, and `review-failure-class` was retired after 15/15 runs answered
+    its fallback. `failure-class` now declares `skipWhenEvidenceEmpty`, so a green gate's 0-byte
+    findings file costs no maker call.
   - `maker-liveness.yaml` carries `maker-liveness`, served by exactly one caller: `spur decision
     status --probe` (§3.4). It declares `minConfidence: 0` because the probe asks whether the maker
     *answered*, not whether the answer was good — a working maker reporting low confidence must not
@@ -210,7 +218,7 @@ decisions:
     paths: []                # optional extra catalog folders (registered layer)
     maker: typesafe          # default DecisionMaker for every decision point
     makers:                  # per-decision-point overrides
-        task-triage: laya-local
+        task-semantic-risk: laya-local
 ```
 
 The effective maker is resolved per call. The first source that is set wins:

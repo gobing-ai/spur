@@ -147,6 +147,25 @@ each group it reports:
 It never calls a maker. A decision with zero rows reports `evidence: none`. This report is the
 evidence each adoption slice cites.
 
+**Accuracy (task 1263, feature P1).** Acceptance alone cannot say whether a maker is *right*:
+`review-failure-class` was accepted 15/15 at confidence 1.0 and only ever answered its own
+fallback. The report therefore also joins recorded outcomes by `invocationId` and adds, per group:
+`outcomes` (recorded outcomes by label), `accuracy` (correct accepted answers ÷ accepted answers
+with an outcome) and `fallbackAccuracy` (the same over fallback samples). Both ratios are null when
+the decision has no `decisions.outcomeMap` entry or no sample recorded an outcome — an unknown
+expectation is not a wrong answer.
+
+The outcome side is a verb, not a model judgement: a decide step writes its invocation's ledger key
+into the result row (`invocationId`, plus the real `evidenceDigest` instead of the hard-coded
+null), and a later shell step or operator records what happened —
+`spur decision outcome <invocation-id> <outcome>` with `--review-severity <wbs>` (worst Review
+finding, resolved rows included) or `--gate-status <run-id>` (PASS → `fixed`, else `not-fixed`).
+First write wins; every step ends in `exit 0`, so recording never changes routing. The
+`task-pipeline` records `failure-class` on the recheck visit (it scores the previous visit's answer)
+and `task-semantic-risk` from the Review table when that row exists. What each value *should* have
+produced is Spur config (`decisions.outcomeMap`), never a catalog field: the catalog schema belongs
+to ts-libs (ADR-033) and this mapping is Spur's reading of Spur's own artifacts.
+
 #### 3.4.1 Readiness view (the default `status` output, feature P11)
 
 The default output answers a different question than §3.4: not "how well did this maker do" but
@@ -284,9 +303,10 @@ Classes:
 
 | Workflow · step | Today | Class | Catalog id · choices · fallback |
 | --- | --- | --- | --- |
-| task-pipeline · `triage` (`task-pipeline.yaml:603`) | catalog `decide` — migrated (task 1114, operator waiver on the evidence bar) | adopted | `task-triage` · low/standard/high · standard |
+| task-pipeline · `triage` (`task-pipeline.yaml:603`) | catalog `decide` — re-keyed by task 1262 to `task-semantic-risk` (noul, fallback `true`); `task-triage` retired as duplicated by the deterministic pre-guard | adopted | `task-semantic-risk` · yes/no · true |
 | task-pipeline · `test-fail-triage` (`task-pipeline.yaml:667`) | catalog `decide` — migrated (task 1115) | adopted | `failure-class` · fix/stop · fix |
-| task-pipeline · `review-fail-triage` (`task-pipeline.yaml:758`) | catalog `decide` — migrated (task 1116) | adopted | `review-failure-class` · fix/stop · fix |
+| task-pipeline · `review-fail-triage` (`task-pipeline.yaml:758`) | retired by task 1262 R6 — the review status file plus the attempt cap is the whole signal (15/15 runs answered the decision's own fallback) | retired | — |
+| executor · `agent-run-executor` unmatched dispatch failure (`agent-run-executor.ts:672`) | catalog `decide` behind `workflows.executorFailureDecisionMaker`, off by default (task 1264) | adopted (opt-in) | `executor-failure-class` · resource-exhaustion/auth/task-defect · task-defect, minConfidence 0.85 |
 | idea-pipeline · recommendation (`idea-pipeline.yaml:154`) | awk over `## Recommendation` → `unknown` pauses | rescue-only | `idea-recommendation` · proceed/reshape/drop · *pause* (fallback writes `unknown`) |
 | idea-pipeline · `needs_design` (`:140`) | agent-written JSON. A missing or corrupt file means design. | rescue-only | `needs-design` · design/skip · design |
 | history-anatomy · validation verdict (`history-anatomy.yaml:270`) | shell normalization of `Verdict:` lines; rescue shell step after it | rescue-only | `anatomy-validation-verdict` · PASS/FAIL · FAIL. Any exact `Verdict: FAIL` line short-circuits to FAIL without calling a maker. |

@@ -251,6 +251,56 @@ describe('transferRunTables (task 0975 R1)', () => {
         target.close();
     });
 
+    test("1262 R2: a worktree run's ledger rows reach the target ledger above its cursor (AC2)", async () => {
+        const source = await setup();
+        const target = await setup();
+        await insertRun(source, 'run_wt', { workflowName: 'task-pipeline', externalKey: null });
+        await insertChild(source, 'action_runs', 'act_wt', 'run_wt', 'gate');
+        for (const [id, name, seq] of [
+            ['ev_1', 'decision.start', 11],
+            ['ev_2', 'decision.failure', 12],
+            ['ev_3', 'decision.end', 13],
+        ] as const) {
+            await source.run(
+                `INSERT INTO system_events (id, event_name, occurred_at, run_id, sequence)
+                 VALUES (?, ?, '2026-10-19T00:00:00Z', 'run_wt', ?)`,
+                id,
+                name,
+                seq,
+            );
+        }
+        await source.run(
+            `INSERT INTO decision_logs (id, decision_id, caller, run_id, outcome, started_at, ended_at, duration_ms)
+             VALUES ('dl_1', 'failure-class', 'workflow', 'run_wt', 'fallback', '2026-10-19T00:00:00Z', '2026-10-19T00:00:01Z', 10)`,
+        );
+        // The target ledger already owns events of its own, with its own cursor (99).
+        await target.run(
+            `INSERT INTO system_events (id, event_name, occurred_at, run_id, sequence)
+             VALUES ('ev_tgt', 'workflow.start', '2026-10-18T00:00:00Z', 'run_inv', 99)`,
+        );
+
+        const result = await transferRunTables(source, target);
+        expect(result.persistedIds).toEqual(['run_wt']);
+        expect(await count(target, 'decision_logs')).toBe(1);
+        // Copied events keep source order and land above the target's previous maximum.
+        const events = await target.queryAll<{ id: string; sequence: number }>(
+            'SELECT id, sequence FROM system_events WHERE run_id = ? ORDER BY sequence',
+            'run_wt',
+        );
+        expect(events).toEqual([
+            { id: 'ev_1', sequence: 100 },
+            { id: 'ev_2', sequence: 101 },
+            { id: 'ev_3', sequence: 102 },
+        ]);
+
+        // Idempotent: a second persist adds nothing and moves no cursor.
+        await transferRunTables(source, target);
+        expect(await count(target, 'system_events')).toBe(4);
+        expect(await count(target, 'decision_logs')).toBe(1);
+        source.close();
+        target.close();
+    });
+
     test('re-persisting the same worktree is idempotent: counts unchanged, rows unmodified', async () => {
         const source = await setup();
         const target = await setup();

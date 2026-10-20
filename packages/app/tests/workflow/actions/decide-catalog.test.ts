@@ -39,6 +39,16 @@ function fakeFs(files: Record<string, string> = {}): {
             writeFile: async (path: string, content: string) => {
                 writes[path] = content;
             },
+            // The skip-when-empty check reads size only (1262 R4), never the file body.
+            stat: async (path: string) =>
+                files[path] === undefined
+                    ? null
+                    : {
+                          size: files[path].length,
+                          isFile: () => true,
+                          isDirectory: () => false,
+                          mtimeMs: 0,
+                      },
         } as unknown as import('@gobing-ai/ts-runtime').FileSystem,
     };
 }
@@ -182,6 +192,66 @@ describe('DecideActionRunner catalog path (task 1094 R4)', () => {
             source: 'model',
             durationMs: 7,
         });
+    });
+
+    // 1262 AC4: a 0-byte evidence file carries nothing a model can read, so the decide degrades
+    // to the catalog fallback without a maker call and without lifecycle events.
+    test('AC4: skipWhenEvidenceEmpty with a 0-byte evidence file makes no maker call and no events', async () => {
+        const { fs, writes } = fakeFs({ 'out/findings.log': '' });
+        const { bus, rejected } = captureBus();
+        let serviceReads = 0;
+        const service = {
+            describe: () => ({
+                id: 'failure-class',
+                type: 'choice' as const,
+                fallback: 'fix',
+                parameters: [],
+            }),
+            decide: async () => {
+                serviceReads += 1;
+                throw new Error('decide must not run when the evidence is empty');
+            },
+        } as unknown as DecisionService;
+        const runner = new DecideActionRunner(fs, {
+            enabled: true,
+            decisionService: async () => service,
+            observabilityBus: bus as never,
+        });
+        const result = await runner.execute(
+            {
+                ...catalogOptions,
+                decision: 'failure-class',
+                evidence: ['out/findings.log'],
+                skipWhenEvidenceEmpty: true,
+            },
+            makeContext('.'),
+        );
+        expect(result.ok).toBe(true);
+        expect(serviceReads).toBe(0);
+        expect(rejected).toHaveLength(0);
+        const row = JSON.parse(writes['out/lane.decision.json'] ?? '{}') as Record<string, unknown>;
+        expect(row).toMatchObject({
+            value: 'fix',
+            degraded: true,
+            reason: 'no-evidence',
+            backend: null,
+            confidence: null,
+        });
+    });
+
+    test('a non-empty evidence file still reaches the maker (AC4 negative)', async () => {
+        const { fs, writes } = fakeFs({ 'out/findings.log': 'FAIL: 3 findings' });
+        const runner = new DecideActionRunner(fs, {
+            enabled: true,
+            decisionService: async () => fakeService({ id: 'pick-lane', type: 'choice', fallback: 'slow' }, served()),
+        });
+        const result = await runner.execute(
+            { ...catalogOptions, evidence: ['out/findings.log'], skipWhenEvidenceEmpty: true },
+            makeContext('.'),
+        );
+        expect(result.ok).toBe(true);
+        const row = JSON.parse(writes['out/lane.decision.json'] ?? '{}') as Record<string, unknown>;
+        expect(row).toMatchObject({ value: 'retry', degraded: false, reason: 'accepted' });
     });
 
     test('unknown decision id: describe throw emits decision.rejected and fails the action', async () => {

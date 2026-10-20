@@ -182,6 +182,27 @@ export interface DecisionSummaryGroup {
     confidence: number[];
 }
 
+/** The `decision.end` facts an outcome write needs (task 1263 R2). */
+export interface DecisionEndRow {
+    readonly decisionId: string;
+    /** Run the invocation belonged to; the outcome row is copied onto it. */
+    readonly runId: string | null;
+    /** `$.data.source` of the end row: `model` (accepted) or `default` (fallback). */
+    readonly source: string | null;
+    /** `String($.data.value)` — the config `outcomeMap` key; null when the value was absent. */
+    readonly value: string | null;
+}
+
+/** One invocation's (value, outcome) pair (task 1263 R4). */
+export interface DecisionOutcomePair {
+    readonly decisionId: string;
+    readonly maker: string;
+    /** `model` for an accepted answer, `default` for a served fallback (null on a legacy row). */
+    readonly source: string | null;
+    readonly value: string | null;
+    readonly outcome: string;
+}
+
 /**
  * Default "bounded recent" window for {@link SystemEventDao.routingSummary}
  * (task 0546 frozen names — "no unbounded scan"). One week of ledger.
@@ -559,6 +580,106 @@ export class SystemEventDao {
             }
             throw error;
         }
+    }
+
+    /**
+     * The `decision.end` row one invocation closed with (task 1263 R2): the outcome verb needs its
+     * `decisionId` and its `run_id` (the outcome row is copied onto the same run). `undefined`
+     * when no end row carries that invocation id — the caller refuses the write.
+     */
+    async decisionEndByInvocation(invocationId: string): Promise<DecisionEndRow | undefined> {
+        const row = await this.db.queryFirst<{
+            decision_id: string | null;
+            run_id: string | null;
+            source: string | null;
+            value: unknown;
+        }>(
+            `SELECT json_extract(payload_json, '$.data.decisionId') AS decision_id,
+                    run_id,
+                    json_extract(payload_json, '$.data.source') AS source,
+                    json_extract(payload_json, '$.data.value') AS value
+             FROM system_events
+             WHERE event_name = 'decision.end'
+               AND json_valid(payload_json) = 1
+               AND json_extract(payload_json, '$.data.invocationId') = ?
+             ORDER BY sequence DESC
+             LIMIT 1`,
+            invocationId,
+        );
+        if (row === undefined || row.decision_id === null) return undefined;
+        return {
+            decisionId: row.decision_id,
+            runId: row.run_id,
+            source: row.source,
+            value: row.value === null || row.value === undefined ? null : String(row.value),
+        };
+    }
+
+    /** The outcome already recorded for one invocation, if any (first write wins). */
+    async decisionOutcomeByInvocation(invocationId: string): Promise<string | undefined> {
+        const row = await this.db.queryFirst<{ outcome: string | null }>(
+            `SELECT json_extract(payload_json, '$.data.outcome') AS outcome
+             FROM system_events
+             WHERE event_name = 'decision.outcome'
+               AND json_valid(payload_json) = 1
+               AND json_extract(payload_json, '$.data.invocationId') = ?
+             ORDER BY sequence ASC
+             LIMIT 1`,
+            invocationId,
+        );
+        return row?.outcome ?? undefined;
+    }
+
+    /**
+     * (value, outcome) pairs for every invocation that recorded an outcome (task 1263 R4). The
+     * app layer joins them to its config `outcomeMap`; the DAO only reports what the ledger says.
+     */
+    async decisionOutcomePairs(spec: DecisionSummaryQuery = {}): Promise<DecisionOutcomePair[]> {
+        const clauses: string[] = [
+            "e.event_name = 'decision.end'",
+            'json_valid(e.payload_json) = 1',
+            "json_extract(e.payload_json, '$.data.invocationId') IS NOT NULL",
+            "json_extract(e.payload_json, '$.data.decisionId') IS NOT NULL",
+            "json_extract(e.payload_json, '$.data.maker') IS NOT NULL",
+        ];
+        const params: string[] = [];
+        if (spec.since !== undefined) {
+            params.push(spec.since);
+            clauses.push(`e.occurred_at >= ?${params.length}`);
+        }
+        if (spec.decisionId !== undefined) {
+            params.push(spec.decisionId);
+            clauses.push(`json_extract(e.payload_json, '$.data.decisionId') = ?${params.length}`);
+        }
+        const rows = await this.db.queryAll<{
+            decision_id: string;
+            maker: string;
+            source: string | null;
+            value: unknown;
+            outcome: string;
+        }>(
+            `SELECT json_extract(e.payload_json, '$.data.decisionId') AS decision_id,
+                    json_extract(e.payload_json, '$.data.maker') AS maker,
+                    json_extract(e.payload_json, '$.data.source') AS source,
+                    json_extract(e.payload_json, '$.data.value') AS value,
+                    json_extract(o.payload_json, '$.data.outcome') AS outcome
+             FROM system_events e
+             JOIN system_events o
+               ON o.event_name = 'decision.outcome'
+              AND json_valid(o.payload_json) = 1
+              AND json_extract(o.payload_json, '$.data.invocationId')
+                  = json_extract(e.payload_json, '$.data.invocationId')
+             WHERE ${clauses.join(' AND ')}
+             ORDER BY e.sequence ASC`,
+            ...params,
+        );
+        return rows.map((row) => ({
+            decisionId: row.decision_id,
+            maker: row.maker,
+            source: row.source,
+            value: row.value === null || row.value === undefined ? null : String(row.value),
+            outcome: row.outcome,
+        }));
     }
 
     /**

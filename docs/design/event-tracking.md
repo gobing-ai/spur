@@ -134,7 +134,8 @@ Scores are family-uniform **by construction** — the defect from §2.1 means pr
 | 78 | `decision.failure` *(added 1095)* | `decision-events.ts:231` (`invocation.fail` ← `decision-service.ts`) | ~ | P | P | ~ | P | – |
 | 79 | `decision.end` *(added 1095)* | `decision-events.ts:238` (`invocation.end` ← `decision-service.ts` `finally`) | ~ | ~ | P | ~ | ~ | P |
 | 80 | `decision.rejected` *(added 1095)* | `decision-events.ts:156` (`decision-service.ts:236,243,262,279,285` / `commands/decision.ts:173,197,205`) | – | ~ | P | ~ | P | – |
-| 81 | `message.read` *(added 0204)* | `agent-coordination-service.ts:299` (first read only) | ~ | ~ | P | ~ | – | – |
+| 81 | `decision.outcome` *(added 1263)* | `decision-outcome.ts:73` (`recordDecisionOutcome` → `SystemEventDao.insert`, on the `decision.end` run) | ~ | P | P | P | ~ | – |
+| 82 | `message.read` *(added 0204)* | `agent-coordination-service.ts:299` (first read only) | ~ | ~ | P | ~ | – | – |
 
 **Tally:** Who — present `0`, partial `54`, absent `25`. What — present `6`, partial `73`, absent `0`. When — present `75`, partial `4`, absent `0`. Where — present `29`, partial `46`, absent `4`. Why — present `22`, partial `13`, absent `44`. How — present `36`, partial `36`, absent `7`.
 
@@ -359,6 +360,7 @@ The following matrix fixes summary behavior, retained facts, and outcome support
 | `decision.failure` | `decisionId`, `reason`, `fallbackValue`, `confidence`, `maker`, error | `[decision] {decisionId} fell back ({reason})` | `reason` |
 | `decision.end` | `decisionId`, `durationMs`, `value`, `source`, `reason`, `maker`, `confidence` | `[decision] {decisionId} finished via {source}` | `reason` |
 | `decision.rejected` | `decisionId`, `errorKind`, `message`, `maker` | `[decision] {decisionId} rejected ({errorKind})` | `errorKind` |
+| `decision.outcome` | `decisionId`, `invocationId`, `outcome`, `source` | `[decision] {decisionId} outcome {outcome}` | `outcome` |
 
 The deterministic gate compares matrix event names with `SYSTEM_EVENT_CATALOG` in both directions and validates each
 resolved catalog entry has non-generated description text, an explicit field list, a summary function, and exactly one

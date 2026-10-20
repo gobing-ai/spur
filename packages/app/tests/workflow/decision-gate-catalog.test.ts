@@ -56,6 +56,9 @@ function servedChoice(overrides: Partial<ServedChoice> = {}): ServedChoice {
         maker: 'typesafe',
         durationMs: 4,
         makerSource: 'catalog-default',
+        // 1263 R1: the ledger key and digest the service now returns with every served result.
+        invocationId: 'inv-gate-1',
+        evidenceDigest: null,
     };
     return { ...base, ...overrides };
 }

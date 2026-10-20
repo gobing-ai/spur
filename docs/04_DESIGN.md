@@ -71,7 +71,7 @@ Root [DESIGN.md](../DESIGN.md) owns visual and interaction design;
 | Fleet declaration in spur config — `agent.fleet` + member session modes/observability (G65, G66) | [fleet-config-declaration.md](design/fleet-config-declaration.md) |
 | Workflow catalogue refactor — check receipts, `decide` action, fleet executor, measured candidates (feature D64) | [workflow-catalogue-refactor.md](design/workflow-catalogue-refactor.md) |
 | Workflow consolidation — feature-lifecycle owns verification, wrapup/idea on D65 primitives, three workflows removed (feature D66) | [workflow-consolidation.md](design/workflow-consolidation.md) |
-| Decision catalogs and the `spur decision` noun — layered catalogs, CLI contract, per-decision maker config, staged workflow adoption (features P/P1, ADR-134) | [decision-catalog.md](design/decision-catalog.md) |
+| Decision catalogs and the `spur decision` noun — layered catalogs, CLI contract (`list`/`show`/`run`/`status`/`outcome`), per-decision maker config, `decisions.outcomeMap` accuracy scoring, staged workflow adoption (features P/P1, ADR-134) | [decision-catalog.md](design/decision-catalog.md) |
 | Decision lifecycle events, decision log table and Board Decisions tab, reliability report, workflow decision-point audit and staged adoption roadmap (feature P1) | [decision-observability-and-adoption.md](design/decision-observability-and-adoption.md) |
 | Inbox Board module — durable message plane — **superseded by ADR-116** (retired by 0849; message plane now in the Projects Conversation tab) | [inbox-board-module.md](design/inbox-board-module.md) |
 | Workflow run log (all-in-one per-run log) | [workflow-run-log.md](design/workflow-run-log.md) |

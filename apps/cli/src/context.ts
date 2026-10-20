@@ -5,7 +5,12 @@ import {
     type AgentRoleDefinition,
     AgentService,
     type AgentServiceContext,
+    configuredSecretValues,
+    type DecisionCorrelation,
+    decisionLogSink,
+    getDecisionService,
     RuleService,
+    rescueEvidenceTail,
     resolveAgentRoles,
 } from '@gobing-ai/spur-app';
 import {
@@ -181,6 +186,9 @@ export function createCliContext(options: {
                 ...(serviceOptions?.processRegistry !== undefined
                     ? { processRegistry: serviceOptions.processRegistry }
                     : {}),
+                // 1264 R4: the composition root is the only place that reads the flag; the
+                // executor gets one function and never a DecisionService or a network client.
+                ...executorRescue(spurConfigOrNull(options), cwd, env, options.output, getDb),
             }),
         ruleService: () => new RuleService({ cwd, env, fs, output: options.output, getDb }),
         hitlResponder: (json?: boolean) => {
@@ -190,6 +198,66 @@ export function createCliContext(options: {
             return new DefaultHitlResponder({ confirmDefault });
         },
     };
+}
+
+/**
+ * The opt-in catalog rescue for unmatched dispatch failures (task 1264 R4/R2).
+ *
+ * Returns an empty object unless `workflows.executorFailureDecisionMaker` is true, so the default
+ * service context is byte-identical to the pre-1264 one. When wired it redacts the FULL failure
+ * text with the configured secrets and only then keeps the last 4096 characters: `redactAndBound`
+ * keeps the head, and tailing before redacting can cut a secret at the boundary and send its
+ * unmatched fragment to a maker.
+ */
+export function executorRescue(
+    config: SpurConfig | null,
+    cwd: string,
+    env: Record<string, string | undefined>,
+    output: CommandOutput,
+    getDb: () => Promise<DbAdapter>,
+): Pick<AgentServiceContext, 'classifyUnmatchedFailure'> {
+    if (config?.workflows?.executorFailureDecisionMaker !== true) return {};
+    return {
+        classifyUnmatchedFailure: async (evidence: string, correlation: DecisionCorrelation) => {
+            try {
+                const tail = rescueEvidenceTail(evidence, configuredSecretValues(env));
+                const service = await getDecisionService(config, cwd);
+                const served = await service.decide(
+                    'executor-failure-class',
+                    { instructions: tail },
+                    // The sink rides the CLI context DB, like every other CLI-context decision call.
+                    { context: { caller: 'executor', correlation }, ...(await sinkFor(getDb, config, env)) },
+                );
+                if (served.source !== 'model' || served.reason !== 'accepted') return undefined;
+                if (served.value === 'resource-exhaustion' || served.value === 'auth') return served.value;
+                return undefined;
+            } catch (error) {
+                // A rescue never fails the run: an unrouted failure keeps today's behaviour, and
+                // the operator still sees why the rescue did not answer.
+                output.error(`executor failure rescue: ${error instanceof Error ? error.message : String(error)}`);
+                return undefined;
+            }
+        },
+    };
+}
+
+/** Decision-log sink for the rescue, when the project DB is reachable (rows are best-effort). */
+async function sinkFor(
+    getDb: () => Promise<DbAdapter>,
+    config: SpurConfig | null,
+    env: Record<string, string | undefined>,
+): Promise<{ decisionLog?: { sink: NonNullable<ReturnType<typeof decisionLogSink>> } }> {
+    try {
+        const sink = decisionLogSink(await getDb(), config, env);
+        return sink !== undefined ? { decisionLog: { sink } } : {};
+    } catch {
+        return {};
+    }
+}
+
+/** The merged config as the service sees it; `undefined` inputs stay `null`. */
+function spurConfigOrNull(options: { spurConfig?: SpurConfig }): SpurConfig | null {
+    return options.spurConfig ?? null;
 }
 
 /** No-op fallback when `setExitCode` is not provided to createCliContext. */

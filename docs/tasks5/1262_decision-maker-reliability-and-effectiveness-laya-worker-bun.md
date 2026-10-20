@@ -1,15 +1,17 @@
 ---
 schema_version: 1
 name: "Decision-maker reliability and effectiveness: laya worker bundling, decide ledger gap, task-pipeline decision rework"
-status: todo
+status: done
 template: issue
 created_at: 2026-10-19T18:00:11.379Z
-updated_at: "2026-10-19T20:40:26.810Z"
+updated_at: "2026-10-19T23:17:19.406Z"
 
 ac_altitude: task-local
 ac_numbering: task-local
 priority: P1
 feature_id: P1
+done_forced: "false"
+done_reason: unforced close; PASS artifact at .spur/memory/evidence/1262-verdict.json
 ---
 
 ## 1262. Decision-maker reliability and effectiveness: laya worker bundling, decide ledger gap, task-pipeline decision rework
@@ -70,14 +72,14 @@ the worktree transfer, not a missing bus wire.
 
 ### Requirements
 
-- [ ] R1. **laya worker ships with the bundle.** `build:bundle` copies `laya_worker.py` from the installed `@gobing-ai/ts-laya-mlx` to `apps/cli/worker/laya_worker.py`, and `worker/` joins `apps/cli/package.json` `files`. `DecisionService` passes `workerScript` to both `ownLayaClient` calls (`decision-service.ts:235,361`) when the shipped file exists beside the bundled config root and `LAYA_WORKER_SCRIPT` is unset in the env; otherwise it passes nothing (source runs keep the package default).
-- [ ] R2. **Worktree decision rows survive persist-out.** `transferRunTables` also copies, for every persisted run id, the `system_events` rows and `decision_logs` rows with that `run_id`: insert-if-absent by `id`, and `system_events.sequence` reassigned in source order above the target's `MAX(sequence)` (it is the global ledger cursor). The async-spawn fallback at `run.ts:571` passes the same bus as the sync path. The four residual main-workdir runs (Root Cause) get a repro or a recorded explanation in `## Solution`.
-- [ ] R3. **Fallback rows carry the cause.** When the hub returns a fallback with `error: { name, message }` (ts-libs task `0117`, ADR-040), `DecisionService.decide` passes `redactAndBound(name + ": " + message, configuredSecretValues(env), 512)` to `invocation.fail({ error })` and sets `log.error` to the raw text (the sink redacts it). Bump the `@gobing-ai/ts-ai-decision` catalog pin to the first release exposing `DecisionResult.error`.
-- [ ] R4. **Skip decides that have nothing to read.** Catalog decide options gain `skipWhenEvidenceEmpty?: boolean`. When true and every `evidence` path is missing or 0 bytes, the action writes a degraded row (`value` = catalog fallback, `degraded: true`, `reason: 'no-evidence'`, `backend: null`, `confidence: null`), calls no maker and emits no events. `DecideDegradedReason` gains `'no-evidence'`. `failure-class` in task-pipeline sets it.
-- [ ] R5. **Triage asks one narrow question, or none.** Keep the deterministic pre-guard (`task-pipeline.yaml:440-450`) unchanged. Replace catalog `task-triage` (choice low/standard/high) with `task-semantic-risk` (noul, fallback `true`): "does this diff change behaviour a reviewer must reason about beyond the diffstat?". `false` projects the fast lane, `true` or a fallback projects standard. If the evidence bar in Q&A is not met, delete the decide step and the catalog entry instead; the lane is then the pre-guard result or standard.
-- [ ] R6. **Retire `review-failure-class`.** Remove the decide step (`task-pipeline.yaml:697-706`) and its catalog entry. Replace the two review guards that read its row (`:1022-1030` stop, `:1040-1048` fix) with one guard: review status file exists and is not `PASS`, under the attempt cap → `remediate`. The remediate log projection at `:568` keys on the same status file instead of the deleted `.decision` file.
-- [ ] R7. **Catalog text the model can use.** Each remaining entry in `config/decisions/task-pipeline.yaml` gets an `instructions` template that embeds `${params.instructions}` and states what the evidence is, plus criteria that name observable signals (file kinds, error classes), not adjectives. Replace the stale header comment with a short accurate one.
-- [ ] R8. **No hard-coded maker list in config docs.** The `decisions.maker` / `decisions.makers` comment at `config/config.global.yaml:152-170` says the value is any registered maker name and points to `spur decision status`; it no longer enumerates four names.
+- [x] R1. **laya worker ships with the bundle.** `build:bundle` copies `laya_worker.py` from the installed `@gobing-ai/ts-laya-mlx` to `apps/cli/worker/laya_worker.py`, and `worker/` joins `apps/cli/package.json` `files`. `DecisionService` passes `workerScript` to both `ownLayaClient` calls (`decision-service.ts:235,361`) when the shipped file exists beside the bundled config root and `LAYA_WORKER_SCRIPT` is unset in the env; otherwise it passes nothing (source runs keep the package default).
+- [x] R2. **Worktree decision rows survive persist-out.** `transferRunTables` also copies, for every persisted run id, the `system_events` rows and `decision_logs` rows with that `run_id`: insert-if-absent by `id`, and `system_events.sequence` reassigned in source order above the target's `MAX(sequence)` (it is the global ledger cursor). The async-spawn fallback at `run.ts:571` passes the same bus as the sync path. The four residual main-workdir runs (Root Cause) get a repro or a recorded explanation in `## Solution`.
+- [x] R3. **Fallback rows carry the cause.** When the hub returns a fallback with `error: { name, message }` (ts-libs task `0117`, ADR-040), `DecisionService.decide` passes `redactAndBound(name + ": " + message, configuredSecretValues(env), 512)` to `invocation.fail({ error })` and sets `log.error` to the raw text (the sink redacts it). Bump the `@gobing-ai/ts-ai-decision` catalog pin to the first release exposing `DecisionResult.error`.
+- [x] R4. **Skip decides that have nothing to read.** Catalog decide options gain `skipWhenEvidenceEmpty?: boolean`. When true and every `evidence` path is missing or 0 bytes, the action writes a degraded row (`value` = catalog fallback, `degraded: true`, `reason: 'no-evidence'`, `backend: null`, `confidence: null`), calls no maker and emits no events. `DecideDegradedReason` gains `'no-evidence'`. `failure-class` in task-pipeline sets it.
+- [x] R5. **Triage asks one narrow question, or none.** Keep the deterministic pre-guard (`task-pipeline.yaml:440-450`) unchanged. Replace catalog `task-triage` (choice low/standard/high) with `task-semantic-risk` (noul, fallback `true`): "does this diff change behaviour a reviewer must reason about beyond the diffstat?". `false` projects the fast lane, `true` or a fallback projects standard. If the evidence bar in Q&A is not met, delete the decide step and the catalog entry instead; the lane is then the pre-guard result or standard.
+- [x] R6. **Retire `review-failure-class`.** Remove the decide step (`task-pipeline.yaml:697-706`) and its catalog entry. Replace the two review guards that read its row (`:1022-1030` stop, `:1040-1048` fix) with one guard: review status file exists and is not `PASS`, under the attempt cap → `remediate`. The remediate log projection at `:568` keys on the same status file instead of the deleted `.decision` file.
+- [x] R7. **Catalog text the model can use.** Each remaining entry in `config/decisions/task-pipeline.yaml` gets an `instructions` template that embeds `${params.instructions}` and states what the evidence is, plus criteria that name observable signals (file kinds, error classes), not adjectives. Replace the stale header comment with a short accurate one.
+- [x] R8. **No hard-coded maker list in config docs.** The `decisions.maker` / `decisions.makers` comment at `config/config.global.yaml:152-170` says the value is any registered maker name and points to `spur decision status`; it no longer enumerates four names.
 
 ### Acceptance Criteria
 
@@ -200,15 +202,119 @@ second, minor gap: the async-spawn fallback at `apps/cli/src/commands/workflow/r
 
 ### Solution
 
-<!-- Filled during implementation: file:line change map and concise rationale. -->
+| File:line | Change |
+|---|---|
+| `packages/domain/src/dao/run-transfer.ts:76` | `LEDGER_TABLES = ['system_events','decision_logs']`, kept out of `CHILD_TABLES` so the `ownsChildren` conflict grading is unchanged. |
+| `packages/domain/src/dao/run-transfer.ts:108` | `ledgerOps()` copies one run's ledger rows per persisted run: `decision_logs` verbatim by id, `system_events` renumbered above the target's `MAX(sequence)` in source order (the cursor is global, so verbatim sequences collide). |
+| `packages/domain/src/dao/run-transfer.ts:222` | `transferRunTables` appends the ledger ops to the same per-run batch (atomic with the run row). |
+| `apps/cli/src/commands/workflow/run.ts:572` | The async-spawn fallback builds the same `EventBus` + system-event ledger bridge the sync path builds, and hands it to `makeWorkflowService`. |
+| `packages/app/src/workflow/actions/decide.ts:110` | `CatalogDecideOptionsSchema.skipWhenEvidenceEmpty?: boolean`. |
+| `packages/app/src/workflow/actions/decide.ts:466` | Skip branch: after option/service validation, before the evidence read — writes the degraded row with `reason: 'no-evidence'`, calls no maker, emits no events. `evidenceIsEmpty()` (line 310) treats an unreadable path as empty and an undeclared evidence set as *not* empty. |
+| `packages/app/src/workflow/actions/decide.ts:360` | `degradedCatalogRow` accepts the new `'no-evidence'` reason; `packages/app/src/workflow/decide.ts:22` adds it to `DecideDegradedReason`. |
+| `packages/app/src/decision/decision-service.ts:197` | `bundledLayaWorkerScript()` resolves `worker/laya_worker.py` beside the bundled config root, once per service (line 271) and for both laya clients (serving + probe); `LAYA_WORKER_SCRIPT` and a source checkout both yield `undefined`, so the package default still applies there. |
+| `scripts/commands/bundle-laya-worker.ts` | New bundle step: resolves the installed `@gobing-ai/ts-laya-mlx` package root through `packages/app` (bun hoists it under `node_modules/.bun/`) and copies its `worker/laya_worker.py` to `apps/cli/worker/`. Wired into `scripts/spur-dev.ts` (`bundle-laya-worker`) and `apps/cli/package.json` (`build:bundle`, `files: ["worker"]`); `.gitignore` keeps the generated copy untracked. |
+| `packages/app/src/decision/decision-service.ts:581` | A hub fallback carrying `DecisionResult.error` now passes `redactAndBound("Name: message", configuredSecretValues(env), 512)` to `invocation.fail({ error })` and sets `log.error` to the raw text (the sink redacts it). `@gobing-ai/ts-ai-decision@0.5.32` already exposes `DecisionResult.error` (`@gobing-ai/ts-ai-decision` lines 64-65), so R3 needed no pin bump. |
+| `config/workflows/task-pipeline.yaml:456` | The gate's lane decide is now `task-semantic-risk` (noul, fallback `true`, `skipWhenEvidenceEmpty: true`). |
+| `config/workflows/task-pipeline.yaml:478` | Lane projection reads `.value == false or .value == "no"` → `fast`; route-log reasons renamed (`fast:semantic-risk mechanical change`, `safety:deterministic-high`, `safety:standard lane`). The deterministic pre-guard is untouched. |
+| `config/workflows/task-pipeline.yaml:536` | `failure-class` sets `skipWhenEvidenceEmpty: true` (a green gate's findings file is 0 bytes). |
+| `config/workflows/task-pipeline.yaml:696` | The `review-failure-class` decide is removed; `:574` projects the review verdict on the **status file** instead of the deleted `.decision` row. |
+| `config/workflows/task-pipeline.yaml:1031` | One review→remediate guard replaces the two decision rows: review status exists and is not `PASS` (the cap edge above it still bounds the loop). No stop edge remains — a review that must stop ends at the approval denial or the cap. |
+| `config/decisions/task-pipeline.yaml` | `task-triage` retired, `task-semantic-risk` added (noul, fallback `true`), `review-failure-class` removed, `failure-class` rewritten. Every remaining entry has an `instructions` template that embeds `${params.instructions}` and states what the evidence is, plus criteria naming observable signals (file kinds, error classes) instead of adjectives. Header comment replaced. |
+| `config/config.global.yaml:157` | The `decisions.maker` comment no longer enumerates four makers: the value is any registered maker name, `spur decision status` is the authority, and the example override names `task-semantic-risk`. |
+| Tests | `packages/domain/tests/dao/run-transfer.test.ts` (AC2 + idempotence), `packages/app/tests/workflow/actions/decide-catalog.test.ts` (AC4 + negative), `packages/app/tests/decision/laya-worker-script.test.ts` (AC1 resolution), `scripts/commands/bundle-laya-worker.test.ts` (AC1 bundle + packed file list), `packages/app/tests/decision/decision-service.test.ts` (AC3 redaction), `packages/app/tests/workflow/task-pipeline-triage-routing.test.ts` (AC5, re-keyed to the noul lane), plus the fixtures/tests the retire-and-replace touched: `task-pipeline-proof-chain.test.ts`, `task-pipeline-proportional-routing.test.ts`, `shipped-workflows-catalog-decide.test.ts`, `guard-parity-baseline.json`, `apps/cli/tests/commands/decision.test.ts`. |
+
+**R5 evidence replay (Q&A bar: ≥20 reachable-maker samples, accepted ≥ 0.5, no accepted `false` on a P1/P2 review).** Served by `fm-local` against `spur decision run task-semantic-risk` with `--evidence .spur/run/<wbs>-diffstat.json --evidence <task spec>`, in the project DB (`cwd` = invoking tree), over historical tasks that carry both a diffstat and a recorded `## Review`.
+
+| WBS | Review top | value | confidence | reason |
+|---|---|---|---|---|
+| 0958 | P1 | true | 1.0 | accepted |
+| 0962 | P1 | true | 1.0 | accepted |
+| 0965 | P1 | true | 1.0 | accepted |
+| 0966 | P1 | true | 1.0 | accepted |
+| 0983 | P2 | true | 1.0 | accepted |
+| 0984 | P2 | true | 1.0 | accepted |
+| 1008 | P1 | true | 1.0 | accepted |
+| 1043 | P1 | true | 1.0 | accepted |
+| 1057 | P1 | true | 1.0 | accepted |
+| 1070 | P1 | true | 1.0 | accepted |
+| 1071 | P1 | true | 1.0 | accepted |
+| 1073 | P1 | true | 1.0 | accepted |
+| 0956 | P4 | true | 1.0 | accepted |
+| 0975 | P4 | true | 1.0 | accepted |
+| 0977 | P4 | true | 1.0 | accepted |
+| 0980 | P4 | true | 1.0 | accepted |
+| 0998 | P4 | true | 1.0 | accepted |
+| 1020 | P3 | true | 1.0 | accepted |
+| 1024 | P4 | true | 1.0 | accepted |
+| 1045 | P4 | true | 1.0 | accepted |
+| 1046 | P4 | true | 1.0 | accepted |
+| 1047 | P4 | true | 1.0 | accepted |
+| 1050 | P4 | true | 1.0 | accepted |
+| 1052 | P3 | true | 1.0 | accepted |
+
+24 samples, accepted rate 1.0, zero accepted `false` on a P1/P2 review — the recorded bar is met, so R5 keeps `task-semantic-risk` and rewires the projection rather than taking the delete branch. **Caveat for 1263:** every sample answered `true`, so the fast lane was not projected once; the answer equals the catalog fallback on this corpus, exactly the "adds no information" pattern R6 retired. The sample is all real code changes (each earned a gate and a review), so it holds little negative class — the classifier is not proven wrong, but its routing value is unproven and 1263's outcome pairing owns measuring whether `false` ever appears in production.
+
+**R2 residual runs (Root Cause): explained, no second bus gap remains.** `c35ef140…`, `e70fa727…`, `5ea1240e…` (2026-10-12) and `runall-1151-1165-af998a` (2026-10-10) each own `runs` rows, 25–278 `action_runs` including `decide` nodes, and **zero** `system_events` / `decision_logs` rows — while six same-day runs in the same DB hold 7–17 events each. That signature is exactly the transfer gap: the rows that reached the invoking tree are the ones `persist-out` copied (`runs` + `CHILD_TABLES`), and the ledger tables were dropped with the worktree. The second gap named in Root Cause (the async-spawn fallback constructing the service without a bus) produces the same all-events-missing shape for a fallback-launched run and is closed at `run.ts:572`. Both paths are covered by AC2's test; the four runs predate both fixes and are not re-generated.
+
+**Deviations from the Design, recorded.** (1) The lane projection reads `.value == "no"` as well as `.value == false`: the frozen schemaVersion-1 row stores the noul **label** (`"yes"`/`"no"`), not a boolean, so the Design's `.value == false` alone would never have projected the fast lane. (2) `packages/app` did not typecheck on the base commit (`chore(project): upgrade project dependencies` broke three `effectiveMaker` call sites against `ts-ai-decision` 0.5.32's `MakerRef = string | readonly string[]`); repaired with `firstMaker()` (`decision-service.ts:181`, the head of a maker chain, which is the maker asked first) so the pipeline gate can be green. No shipped catalog declares a chain, so routing is unchanged.
 
 ### Testing
 
-<!-- Filled during verification: regression command(s), outcomes, coverage claim or N/A. -->
+**Pipeline verify results**
+
+- Verdict: PASS (from verdict artifact)
+
+| Requirement | Status | Evidence |
+|-------------|--------|----------|
+| R1 | MET | laya worker ships with the bundle — `scripts/commands/bundle-laya-worker.ts:44-56` (copy step), `scripts/spur-dev.ts:107-111` (dispatch), `apps/cli/package.json` (`files` carries `worker`, `build:bundle` runs the step), `packages/app/src/decision/decision-service.ts:197-209` (resolve beside the bundled config root, env override wins), `.gitignore:82` |
+| R2 | MET | worktree decision rows survive persist-out — `packages/domain/src/dao/run-transfer.ts:76,108-147,222` (LEDGER_TABLES + renumbered sequence, same per-run batch), `apps/cli/src/commands/workflow/run.ts:572-577` (fallback passes the bus), AC2 test `packages/domain/tests/dao/run-transfer.test.ts:263-322`, residual-run explanation in `## Solution` |
+| R3 | MET | fallback rows carry the cause — `packages/app/src/decision/decision-service.ts:576-595` (`outcome.error` → redacted `invocation.fail({error})`, raw `log.error`), ``@gobing-ai/ts-ai-decision` lines 64-65` (already-resolved pin exposes `DecisionResult.error`), AC3 test `packages/app/tests/decision/decision-service.test.ts:334-393` |
+| R4 | MET | skip decides that have nothing to read — `packages/app/src/workflow/actions/decide.ts:110,310-325,466-480` (option, size-based check, degraded row), `packages/app/src/workflow/decide.ts:22` (`no-evidence`), `config/workflows/task-pipeline.yaml:536`, AC4 test `packages/app/tests/workflow/actions/decide-catalog.test.ts:199-248` |
+| R5 | MET | triage asks one narrow question — `config/workflows/task-pipeline.yaml:456-478` (`task-semantic-risk`, `false`→fast), `config/decisions/task-pipeline.yaml` (noul entry, fallback `true`), replay table in `## Solution` (24 samples, accepted 1.0, no accepted `false` on P1/P2), AC5 test `packages/app/tests/workflow/task-pipeline-triage-routing.test.ts:290-298` |
+| R6 | MET | retire review-failure-class — `config/workflows/task-pipeline.yaml` (decide removed, `:574` projection on the status file, `:1031` single remediate guard), `config/decisions/task-pipeline.yaml` (entry removed), AC6 via `packages/app/tests/workflow/task-pipeline-triage-routing.test.ts` failure-class/review routing cases + `packages/app/tests/workflow/task-pipeline-proof-chain.test.ts:432` |
+| R7 | MET | catalog text the model can use — `config/decisions/task-pipeline.yaml` (`instructions` templates embedding `${params.instructions}` for `task-semantic-risk` and `failure-class`; observable-signal criteria; stale header replaced), `docs/design/decision-catalog.md:16,86-95`, `plugins/sp/skills/spur-cli/references/decision.md:28`, `docs/help2/decision.md:18` |
+| R8 | MET | no hard-coded maker list in config docs — `config/config.global.yaml:157-165` (registered-name rule + `spur decision status` as authority; example override renamed) |
+
+| Acceptance Criteria | Status | Evidence Type | Evidence |
+|---------------------|--------|---------------|----------|
+| AC1 — the bundled CLI finds the laya worker (req: R1) | MET | test | bundled CLI finds the laya worker — `scripts/commands/bundle-laya-worker.test.ts:24-39` (bundle writes a non-empty worker, `files` carries `worker`), `packages/app/tests/decision/laya-worker-script.test.ts:33-52` (bundled root resolves, source tree and env override yield nothing) |
+| AC2 — a worktree run's decision rows reach the project ledger (req: R2) | MET | test | a worktree run's decision rows reach the project ledger — `packages/domain/tests/dao/run-transfer.test.ts:263-322` (three events + one log copied; sequences 100-102 above the target's 99; second persist adds nothing) |
+| AC3 — a fallback names its cause without leaking secrets (req: R3) | MET | test | a fallback names its cause without leaking secrets — `packages/app/tests/decision/decision-service.test.ts:334-393` (`LayaWorkerError: … [REDACTED]` on `decision.failure`, same cause on the `decision_logs` row, secret absent from both) |
+| AC4 — an empty-evidence decide makes no maker call (req: R4) | MET | test | an empty-evidence decide makes no maker call — `packages/app/tests/workflow/actions/decide-catalog.test.ts:203-234` (degraded `no-evidence` row, zero service calls, zero events) plus the negative case `:236-248` |
+| AC5 — triage keeps the deterministic floor (req: R5) | MET | test | triage keeps the deterministic floor — `packages/app/tests/workflow/task-pipeline-triage-routing.test.ts:290-298` (450-line diffstat → `safety`, route reason `safety:deterministic-high`) |
+| AC6 — a non-PASS review routes to remediation without a decision (req: R6) | MET | test | a non-PASS review routes to remediation without a decision — `packages/app/tests/workflow/task-pipeline-triage-routing.test.ts` (review routing cases) + `packages/app/tests/workflow/task-pipeline-proof-chain.test.ts:432-434` (`review` carries no decide action) |
+| AC7 — shipped catalogs carry instructions (req: R7, R8) | MET | test | shipped catalogs carry instructions — `packages/app/tests/workflow/shipped-workflows-catalog-decide.test.ts:88-110` (decidable type + criteria + declared fallback; retired ids absent) + catalog load in `spur decision list` |
+- Coverage: N/A (verdict-based; verify pipeline does not measure code coverage)
 
 ### Review
 
-<!-- Filled during review: P1-P4 findings, residual risk, and final disposition. -->
+Reviewed the full task diff against R1–R8 with the SECUA lenses plus the two edges the diff creates
+(worktree ledger transfer, and a pipeline that is itself being edited). Two findings were raised in
+review and both are FIXED in this diff; one residual is carried as P4.
+
+| Priority | Location | Finding | Disposition |
+|---|---|---|---|
+| P3 | `packages/app/src/workflow/actions/decide.ts:466` | The skip branch was placed before the reserved-parameter check at `packages/app/src/workflow/actions/decide.ts:459`, so a malformed decide with empty evidence would have written a degraded row instead of failing the action. Option validation must precede any evidence work. | FIXED — reserved-param check moved above the skip; the "params.instructions is reserved" test still passes |
+| P3 | `packages/domain/src/dao/run-transfer.ts:108` | The ledger copy queried both tables unconditionally; a source worktree DB older than the ledger migration at `drizzle/0052_spur_cli_decision_logs.sql:1` would throw and make persist-out refuse teardown on a missing table. | FIXED — each ledger table is skipped when it is absent from the catalogue (`packages/domain/src/dao/run-transfer.ts:112`); AC2's test still covers the present-table path |
+| P4 | `packages/app/src/decision/decision-service.ts:181` | The new head-of-chain helper collapses a catalog maker **chain** to its first name for `EffectiveMaker.name` (the chain type is declared at `@gobing-ai/ts-ai-decision` lines 60 (`MakerRef`)); a future chained catalog would report only the first maker while the hub still walks the chain. No shipped catalog declares a chain, so no behaviour changes today. Out of R-scope; recorded for the maker-chain slice. | ACCEPTED |
+
+Correctness notes checked, no finding raised: the ledger copy is inside the same per-run batch, so a
+teardown can never leave a run row whose ledger is half-copied; `system_events.sequence` is renumbered
+above the target maximum in source order and stays idempotent (AC2 test asserts both); the review
+guard replacement keeps the declaration order `done → denied → cap → remediate → always-fail`, so the
+cap still bounds the loop before remediation (AC6 test); `skipWhenEvidenceEmpty` runs only for catalog
+decides and never for the inline form; the laya `workerScript` resolution is read once per service and
+is bypassed by `LAYA_WORKER_SCRIPT` (AC1 test); the bundled worker stays untracked (`.gitignore`) and
+reaches the tarball through `files: ["worker"]` (AC1 test).
+
+Residual risk. The `task-semantic-risk` replay answered `true` on 24/24 samples, so the fast lane was
+never projected (see `## Solution`); 1263's outcome pairing is where that gets measured. Two evidence
+gaps stay open by design: no acceptance snapshot exists for the `decision_logs` transfer against a
+real pre-migration worktree DB (covered by the table-absent guard and the in-memory AC2 test), and the
+laya worker resolution is proven at the resolver seam, not by a packaged-host run.
+
+Verdict: PASS
+Confidence: MEDIUM
 
 ### References
 
@@ -221,3 +327,8 @@ second, minor gap: the async-spawn fallback at `apps/cli/src/commands/workflow/r
 - Related: task 1263 (outcome pairing over these rows), task 1264 (executor-failure rescue).
 
 ### History
+
+- 2026-10-19T23:01:21.619Z todo → wip (system)
+- 2026-10-19T23:15:47.609Z wip → testing (system)
+- 2026-10-19T23:17:19.399Z testing → done (system)
+

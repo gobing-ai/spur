@@ -102,6 +102,12 @@ export const CatalogDecideOptionsSchema = z
         params: z.record(z.string(), z.union([z.string(), z.number(), z.boolean(), z.null()])).optional(),
         evidence: z.array(z.string().min(1)).optional(),
         instructions: z.string().min(1).optional(),
+        /**
+         * Task 1262 R4: skip the maker call when every declared `evidence` path is missing or
+         * empty. A gate that produced a 0-byte findings file has nothing for a model to read,
+         * so the row degrades to the declared fallback with no maker call and no events.
+         */
+        skipWhenEvidenceEmpty: z.boolean().optional(),
         resultFile: z.string().min(1),
     })
     .strict()
@@ -296,6 +302,27 @@ export class DecideActionRunner implements ActionRunner {
         return await this.deps.decisionService();
     }
 
+    /**
+     * True when the step declares evidence and every declared path is missing or 0 bytes
+     * (1262 R4). An undeclared evidence set is not empty evidence — the step simply does not
+     * run on files, so it keeps its maker call.
+     */
+    private async evidenceIsEmpty(options: CatalogDecideOptions, workdir: string): Promise<boolean> {
+        if (options.evidence === undefined || options.evidence.length === 0) return false;
+        for (const path of options.evidence) {
+            try {
+                // Size, not content: the contract is "missing or 0 bytes", and a maker input read
+                // is the expensive half this option exists to avoid.
+                const info = await this.fileSystem.stat(resolveWorkdirPath(workdir, path));
+                if (info !== null && info.size > 0) return false;
+            } catch {
+                // A missing or unreadable path is the empty case, not a rejection: the caller
+                // opted into "decide only when there is something to read".
+            }
+        }
+        return true;
+    }
+
     /** R4 field mapping: one served catalog result onto the frozen schemaVersion-1 row. */
     private catalogRow(
         served: {
@@ -306,6 +333,8 @@ export class DecideActionRunner implements ActionRunner {
             source: 'model' | 'default';
             reason: 'accepted' | DecideResult['reason'];
             durationMs: number;
+            invocationId: string;
+            evidenceDigest: string | null;
         },
         actionId: string,
     ): DecideResult {
@@ -320,10 +349,10 @@ export class DecideActionRunner implements ActionRunner {
             degraded: served.source === 'default',
             reason: served.reason,
             source: served.source,
-            // The digest lives on the service's lifecycle events (input.instructions);
-            // the row keeps the frozen field shape without duplicating the service's
-            // digest input rule.
-            evidenceDigest: null,
+            // 1263 R1: the row carries the service's own digest and ledger key, so a later
+            // `spur decision outcome` can join it to its events without re-deriving either.
+            evidenceDigest: served.evidenceDigest,
+            invocationId: served.invocationId,
             durationMs: served.durationMs,
         };
     }
@@ -332,7 +361,7 @@ export class DecideActionRunner implements ActionRunner {
     private degradedCatalogRow(
         description: { fallback: string | number | boolean; type: DecideMethod },
         actionId: string,
-        reason: 'disabled' | 'error',
+        reason: 'disabled' | 'error' | 'no-evidence',
     ): DecideResult {
         return {
             schemaVersion: 1,
@@ -346,6 +375,8 @@ export class DecideActionRunner implements ActionRunner {
             reason,
             source: 'default',
             evidenceDigest: null,
+            // A degraded row opened no invocation, so it has no ledger key to join.
+            invocationId: null,
             durationMs: 0,
         };
     }
@@ -435,14 +466,30 @@ export class DecideActionRunner implements ActionRunner {
             };
         }
 
-        // Evidence before any backend interaction (R4 step 3): an unreadable declared file is
-        // rejected (before decision.start) and degrades to the mapped fallback row.
+        // Option validation precedes the skip: a caller mistake must reject even when its
+        // evidence happens to be empty.
         if (options.params?.instructions !== undefined) {
             return {
                 ok: false,
                 error: `${DECIDE_KIND}: params.instructions is reserved — pass implicit input through the instructions option or evidence`,
             };
         }
+
+        // 1262 R4: nothing to read ⇒ no maker call, no events, no cost. The check sits after
+        // option/service validation and before the evidence read that would otherwise fail
+        // differently on a 0-byte file.
+        if (options.skipWhenEvidenceEmpty === true && (await this.evidenceIsEmpty(options, workdir))) {
+            return await writeRow(
+                this.degradedCatalogRow(
+                    { fallback: description.fallback, type: description.type },
+                    options.id,
+                    'no-evidence',
+                ),
+            );
+        }
+
+        // Evidence before any backend interaction (R4 step 3): an unreadable declared file is
+        // rejected (before decision.start) and degrades to the mapped fallback row.
         let instructionsText: string | undefined;
         let evidencePrelude: { startedAt: number; phases: DecisionPhase[] } | undefined;
         if (sink !== undefined) evidencePrelude = { startedAt: Date.now(), phases: [] };

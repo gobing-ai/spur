@@ -3,7 +3,7 @@
 Decision-catalog transport: list visible decisions, show one served contract, run a decision to a
 served outcome (never writes a workflow resultFile), and audit catalog health. Thin CLI over
 `DecisionService`; the hub is `@gobing-ai/ts-ai-decision` (task 1093). Frozen at exactly these
-four verbs (`docs/design/decision-catalog.md` §3.4).
+five verbs (`docs/design/decision-catalog.md` §3.4; `outcome` added by task 1263).
 
 ## Catalog layers
 
@@ -15,7 +15,7 @@ Decisions resolve first-wins across three layers:
 | `registered` | config `decisions.paths` folders + programmatic registrations |
 | `shared` | bundled `config/decisions/` |
 
-The shared layer ships `task-triage`, `failure-class`, `review-failure-class`, `gate-evidence`,
+The shared layer ships `task-semantic-risk`, `failure-class`, `gate-evidence`,
 `idea-recommendation`, `needs-design`, `anatomy-validation-verdict` and `maker-liveness` (the last
 served only by `spur decision status --probe`; no workflow references it).
 
@@ -58,6 +58,19 @@ missing required parameter, type-invalid parameter, unregistered maker, unreadab
 | `--maker <name>` | Override the resolved DecisionMaker for this call |
 | `--json` | Output machine-readable JSON (bare payload) |
 | `--json-envelope` | Wrap `--json` output in the `{ok, data}` envelope |
+
+## spur decision outcome
+
+| Option | Description |
+|---|---|
+| `--review-severity <wbs>` | Derive the outcome from that task's Review findings (worst P1-P4 row, resolved included) |
+| `--gate-status <run-id>` | Derive the outcome from that run's gate token: PASS -> `fixed`, otherwise `not-fixed` |
+| `--source <text>` | Free-text note on where the outcome was observed |
+| `--json` | Output machine-readable JSON |
+
+Records what actually happened after a served decision, keyed by the `invocationId` its result row
+carries. First write wins; an unknown invocation id exits 1, a malformed outcome slug exits 2.
+`spur decision status --reliability` scores recorded outcomes against `decisions.outcomeMap`.
 
 ## spur decision status
 

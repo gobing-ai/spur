@@ -9,7 +9,7 @@
  * evidence every P1 adoption slice cites before it starts (§5).
  */
 
-import type { DecisionSummaryGroup, SystemEventDao } from '@gobing-ai/spur-domain';
+import type { DecisionOutcomePair, DecisionSummaryGroup, SystemEventDao } from '@gobing-ai/spur-domain';
 
 /** Filter + fill options for {@link decisionReliability}. */
 export interface DecisionReliabilitySpec {
@@ -24,6 +24,11 @@ export interface DecisionReliabilitySpec {
      * only recorded groups.
      */
     readonly catalog?: ReadonlyArray<DecisionReliabilityCatalogEntry>;
+    /**
+     * Spur's expected-outcome map (task 1263 R5): decision id → served value (`String(value)`) →
+     * the outcomes that count as correct. Absent, every group reports `accuracy: null`.
+     */
+    readonly outcomeMap?: Readonly<Record<string, Readonly<Record<string, readonly string[]>>>>;
 }
 
 /** One catalog entry the evidence-none fill needs: a served id and its effective maker. */
@@ -49,6 +54,18 @@ export interface DecisionReliabilityGroup {
     p95DurationMs: number | null;
     firstSeen: string | null;
     lastSeen: string | null;
+    /**
+     * Recorded outcomes for this group's invocations (task 1263 R4), by outcome label. Empty when
+     * no invocation has an outcome yet — acceptance alone is not accuracy.
+     */
+    outcomes: Record<string, number>;
+    /**
+     * Correct accepted answers ÷ accepted answers that recorded an outcome (task 1263 R4).
+     * Null when the decision has no `outcomeMap` entry or no accepted sample recorded one.
+     */
+    accuracy: number | null;
+    /** The same ratio over fallback ("source: default") samples. */
+    fallbackAccuracy: number | null;
 }
 
 /** Report behind `spur decision status --reliability`. */
@@ -71,7 +88,16 @@ export async function decisionReliability(
         ...(spec.since !== undefined ? { since: spec.since } : {}),
         ...(spec.decisionId !== undefined ? { decisionId: spec.decisionId } : {}),
     });
-    const reliability: DecisionReliabilityGroup[] = groups.map(toReliabilityGroup);
+    // One extra read for the outcome join; a ledger with no outcome rows returns [] and every
+    // group keeps its null accuracy.
+    const pairs = await dao.decisionOutcomePairs({
+        ...(spec.since !== undefined ? { since: spec.since } : {}),
+        ...(spec.decisionId !== undefined ? { decisionId: spec.decisionId } : {}),
+    });
+    const scored = scoreOutcomes(pairs, spec.outcomeMap);
+    const reliability: DecisionReliabilityGroup[] = groups.map((group) =>
+        toReliabilityGroup(group, scored.get(groupKey(group.decisionId, group.maker))),
+    );
 
     const recordedIds = new Set(reliability.map((group) => group.decisionId));
     for (const entry of spec.catalog ?? []) {
@@ -92,6 +118,9 @@ export async function decisionReliability(
             p95DurationMs: null,
             firstSeen: null,
             lastSeen: null,
+            outcomes: {},
+            accuracy: null,
+            fallbackAccuracy: null,
         });
     }
 
@@ -99,7 +128,7 @@ export async function decisionReliability(
 }
 
 /** Map one DAO group onto the report shape, computing rate, median and percentiles. */
-function toReliabilityGroup(group: DecisionSummaryGroup): DecisionReliabilityGroup {
+function toReliabilityGroup(group: DecisionSummaryGroup, scored: ScoredOutcomes | undefined): DecisionReliabilityGroup {
     return {
         decisionId: group.decisionId,
         maker: group.maker,
@@ -113,7 +142,76 @@ function toReliabilityGroup(group: DecisionSummaryGroup): DecisionReliabilityGro
         p95DurationMs: nearestRank(group.durationMs, 95),
         firstSeen: group.firstSeen,
         lastSeen: group.lastSeen,
+        outcomes: scored?.outcomes ?? {},
+        accuracy: scored?.accuracy ?? null,
+        fallbackAccuracy: scored?.fallbackAccuracy ?? null,
     };
+}
+
+/** One group's outcome tally plus the two accuracy ratios (task 1263 R4). */
+interface ScoredOutcomes {
+    readonly outcomes: Record<string, number>;
+    readonly accuracy: number | null;
+    readonly fallbackAccuracy: number | null;
+}
+
+/** (decisionId, maker) pair key — the report's own grouping. */
+function groupKey(decisionId: string, maker: string): string {
+    return `${decisionId}\u0000${maker}`;
+}
+
+/**
+ * Fold the (value, outcome) pairs into per-group tallies and ratios (task 1263 R4).
+ *
+ * The expected-outcome map decides correctness: a pair counts only when its value has an entry
+ * and the recorded outcome is in that entry's list. A group with no map entry reports null — an
+ * unknown expectation is not a wrong answer, and inventing one would make the report lie.
+ */
+function scoreOutcomes(
+    pairs: ReadonlyArray<DecisionOutcomePair>,
+    outcomeMap: DecisionReliabilitySpec['outcomeMap'],
+): Map<string, ScoredOutcomes> {
+    const tallies = new Map<
+        string,
+        {
+            outcomes: Record<string, number>;
+            accepted: number;
+            acceptedCorrect: number;
+            fallback: number;
+            fallbackCorrect: number;
+        }
+    >();
+    for (const pair of pairs) {
+        const key = groupKey(pair.decisionId, pair.maker);
+        const tally = tallies.get(key) ?? {
+            outcomes: {},
+            accepted: 0,
+            acceptedCorrect: 0,
+            fallback: 0,
+            fallbackCorrect: 0,
+        };
+        tallies.set(key, tally);
+        tally.outcomes[pair.outcome] = (tally.outcomes[pair.outcome] ?? 0) + 1;
+        const expected = pair.value === null ? undefined : outcomeMap?.[pair.decisionId]?.[pair.value];
+        if (expected === undefined) continue;
+        const correct = expected.includes(pair.outcome);
+        if (pair.source === 'model') {
+            tally.accepted++;
+            if (correct) tally.acceptedCorrect++;
+        } else {
+            tally.fallback++;
+            if (correct) tally.fallbackCorrect++;
+        }
+    }
+    const scored = new Map<string, ScoredOutcomes>();
+    for (const [key, tally] of tallies) {
+        scored.set(key, {
+            outcomes: tally.outcomes,
+            accuracy: tally.accepted > 0 ? tally.acceptedCorrect / tally.accepted : null,
+            fallbackAccuracy: tally.fallback > 0 ? tally.fallbackCorrect / tally.fallback : null,
+        });
+    }
+    return scored;
 }
 
 /**

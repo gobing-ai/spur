@@ -396,7 +396,7 @@ states:
     # (probe-then-full), `deferred` under the opt-in batch policy.
     #
     # The three former routing states are decision CALLS here and in `review` (D65 1239 R1):
-    # the lane decision (0943 R1/R2, catalog `task-triage`) picks the review depth, and the
+    # the lane decision (0943 R1/R2, catalog `task-semantic-risk`, 1262 R5) picks the review depth, and the
     # gate's own failure class (catalog `failure-class`) drives the red-gate transitions.
     # Both run unconditionally — the engine has no onEnter conditionals — and both degrade to
     # their catalog fallback with no model call while `workflows.decideDecisionMaker` is off.
@@ -407,7 +407,7 @@ states:
           title: Run quality gate
       description: >
           Typed quality gate: resolve the task path/priority, produce the diffstat lane
-          evidence, consult `task-triage` for the review depth (deterministic safety floor
+          evidence, consult `task-semantic-risk` for the review depth (deterministic safety floor
           first), run `${vars.qualityGateCmd}` through `spur task gate <wbs> <mode>` under the
           host-wide lock (tree-hash receipt reuse on the same tree), then classify a red gate
           through `failure-class`. Writes the typed outcome to
@@ -446,27 +446,30 @@ states:
             options:
                 command: >-
                     mkdir -p .spur/run; if [ -n "$mode" ]; then printf '%s\n' "$mode" > ".spur/run/$wbs-mode.txt"; exit 0; fi; DF=".spur/run/$wbs-diffstat.json"; if ! jq -e 'type == "object"' "$DF" >/dev/null 2>&1; then printf 'safety\n' > ".spur/run/$wbs-mode.txt"; exit 0; fi; jq -r 'if .sensitive == true or ((.insertions // 0) + (.deletions // 0)) > 400 then "safety" else empty end' "$DF" 2>/dev/null > ".spur/run/$wbs-mode.txt"; exit 0
-          # (d) lane decision — degrades to the standard default whenever
-          # workflows.decideDecisionMaker is off, so with the flag off the pipeline makes no
-          # model call (1114/1116: the bundled catalog owns question, choices and fallback).
+          # (d) lane decision (1262 R5) — one narrow question: does this change set alter
+          # behaviour beyond its diffstat? `false` projects the fast lane; `true` or the catalog
+          # fallback projects standard. Degrades to that fallback with no model call whenever
+          # workflows.decideDecisionMaker is off (the bundled catalog owns question, criteria and
+          # fallback), and `skipWhenEvidenceEmpty` keeps a missing diffstat from costing a call.
           - kind: decide
             options:
-                id: task-triage
-                decision: task-triage
+                id: task-semantic-risk
+                decision: task-semantic-risk
                 params:
                     wbs: ${vars.wbs}
                 evidence:
                     - .spur/run/${vars.wbs}-diffstat.json
                     - ${vars.taskSpecPath}
-                resultFile: .spur/run/${vars.wbs}-triage.decision
-          # (d) project the decision and append the triage route reason (1007 R3: the
-          # non-empty mode file is never overridden; the append keeps the failure signal of the
-          # original pair). low → fast lane; anything else (standard/high, degraded default,
-          # missing row) stays empty → the standard review path.
+                skipWhenEvidenceEmpty: true
+                resultFile: .spur/run/${vars.wbs}-semantic-risk.decision
+          # (d) project the decision and append the route reason (1007 R3: the non-empty mode
+          # file is never overridden; the append keeps the failure signal of the original pair).
+          # `no` (a noul row stores the label, not a boolean) → fast lane; anything else (`yes`,
+          # degraded default, missing row) stays empty → the standard review path.
           - kind: shell
             options:
                 command: >-
-                    MF=".spur/run/$wbs-mode.txt"; [ -s "$MF" ] || jq -r 'if .value == "low" then "fast" else empty end' ".spur/run/$wbs-triage.decision" 2>/dev/null > "$MF"; m="$(cat "$MF")"; RUN_ID="$__runId"; [ -n "$RUN_ID" ] || RUN_ID="pipeline-$wbs"; mkdir -p .spur/memory; printf '%s %s %s\n' "$RUN_ID" "$wbs" "$(jq -rn --arg m "$m" --arg c "$mode" 'if $c != "" then ($c + ":caller-set") else {"fast":"fast:triage low lane","safety":"safety:triage deterministic-high","":"safety:triage standard lane"}[$m] // "safety:triage unrecognized mode" end')" >> .spur/memory/task-pipeline-routes.log
+                    MF=".spur/run/$wbs-mode.txt"; [ -s "$MF" ] || jq -r 'if (.value == false or .value == "no") then "fast" else empty end' ".spur/run/$wbs-semantic-risk.decision" 2>/dev/null > "$MF"; m="$(cat "$MF")"; RUN_ID="$__runId"; [ -n "$RUN_ID" ] || RUN_ID="pipeline-$wbs"; mkdir -p .spur/memory; printf '%s %s %s\n' "$RUN_ID" "$wbs" "$(jq -rn --arg m "$m" --arg c "$mode" 'if $c != "" then ($c + ":caller-set") else {"fast":"fast:semantic-risk mechanical change","safety":"safety:deterministic-high","":"safety:standard lane"}[$m] // "safety:unrecognized mode" end')" >> .spur/memory/task-pipeline-routes.log
           # (d) review depth from the resolved lane (D65 1239 R2): the fast lane reviews the
           # requirement/AC traceability only — that table is the certification input, so the
           # cheap lane never drops the evidence, it drops the SECUA/architecture passes.
@@ -515,6 +518,14 @@ states:
                 args: ["task", "gate", "${vars.wbs}", "${vars.gateMode}", "--no-logo"]
                 resultFile: .spur/run/${vars.__runId}-gate.status
                 softFail: true
+          # (d) record what the PREVIOUS gate visit's failure-class answer turned out to be
+          # (1263 R3a): a recheck visit means the last class was `fix` and the repair hop ran, so
+          # this visit's gate status says whether it was right. First write wins, the step never
+          # changes routing, and a missing invocationId (degraded row) or a first visit is a no-op.
+          - kind: shell
+            options:
+                command: >-
+                    [ "$gateMode" = recheck ] || exit 0; ID="$(jq -r '.invocationId // empty' ".spur/run/$wbs-failure-class.decision" 2>/dev/null)"; [ -n "$ID" ] || exit 0; $spurBin decision outcome "$ID" --gate-status "$__runId" --source gate-recheck --no-logo >/dev/null 2>&1; exit 0
           # (d) failure class of the gate this visit produced (0943 R3): stop → failed
           # before the cap can mislabel it, fix → the bounded remediation hop. A missing or
           # corrupt row fails closed to failed-check. Runs unconditionally (no onEnter
@@ -528,6 +539,9 @@ states:
                     wbs: ${vars.wbs}
                 evidence:
                     - .spur/run/${vars.wbs}-test-gate.findings
+                # 1262 R4: a green gate writes a 0-byte findings file — there is nothing to read,
+                # so the row degrades to the catalog `fix` fallback with no maker call and no events.
+                skipWhenEvidenceEmpty: true
                 resultFile: .spur/run/${vars.wbs}-failure-class.decision
 
     # ── remediate hop (bounded repair; former `test-fix`) ─────────────────────
@@ -691,21 +705,14 @@ states:
             options:
                 command: >-
                     mkdir -p .spur/run; S=FAIL; if [ "$(cat ".spur/run/$__runId-review-verdict.status" 2>/dev/null)" = PASS ] && [ "$(jq -r '.verdict // empty' ".spur/run/$wbs-verdict.json" 2>/dev/null)" = PASS ] && $spurBin task residual "$wbs" review-gate --no-logo >&2; then S=PASS; fi; printf '%s\n' "$S" > ".spur/run/$wbs-review.status"; exit 0
-          # (d) review failure class (session finding after 1088): stop → failed before the cap
-          # can mislabel it, fix → the SAME bounded repair hop the red gate uses, so the
-          # iteration bound stays finite across both lanes. Degrades to the catalog `fix`
-          # fallback with no model call while the decision switch is off; a missing/corrupt row
-          # fails closed to failed-check.
-          - kind: decide
+          # (d) record the review severity as the lane decision's outcome (1263 R3b): the
+          # question `task-semantic-risk` answered is "is this risky?", and the Review table's
+          # worst finding is the answer as observed. Resolved rows count (a fixed P2 was still
+          # risky). First write wins, so a later review visit changes nothing.
+          - kind: shell
             options:
-                id: review-failure-class
-                decision: review-failure-class
-                params:
-                    wbs: ${vars.wbs}
-                evidence:
-                    - .spur/run/${vars.__runId}-review-answer.txt
-                    - ${vars.taskSpecPath}
-                resultFile: .spur/run/${vars.wbs}-review-failure-class.decision
+                command: >-
+                    [ -f ".spur/run/$wbs-semantic-risk.decision" ] || exit 0; ID="$(jq -r '.invocationId // empty' ".spur/run/$wbs-semantic-risk.decision" 2>/dev/null)"; [ -n "$ID" ] || exit 0; $spurBin decision outcome "$ID" --review-severity "$wbs" --source "task-pipeline review" --no-logo >/dev/null 2>&1; exit 0
           # (d) Operator approval as a DECISION POINT, not a state (D65 1239 R1/R5, ADR-140
           # item 5): interactively the operator responder answers; under `profile=auto` the
           # declared binding answers (evidence status var, catalog fallback when the maker
@@ -1022,15 +1029,6 @@ transitions:
               command: 'test "$(cat ".spur/run/$wbs-approval.status" 2>/dev/null)" = DENIED'
     - from: review
       to: failed
-      terminalReason: failed-check
-      description: Review failure class stop — the run terminates at failed, never bypassed.
-      guard:
-          kind: shell
-          options:
-              command: >-
-                  jq -e '.value == "stop"' ".spur/run/$wbs-review-failure-class.decision" >/dev/null 2>&1
-    - from: review
-      to: failed
       terminalReason: retry-exhausted
       description: Attempt cap reached — the shared counter bounds the review repair lane too.
       guard:
@@ -1041,12 +1039,16 @@ transitions:
                   test "$fix_attempts" -ge "$qualityGateMaxFixAttempts"
     - from: review
       to: remediate
-      description: Review failure class fix and under the cap — the shared bounded repair hop, then gate → review on the remediated tree.
+      description: Review did not certify and the attempt cap still allows a repair — the shared bounded repair hop, then gate → review on the remediated tree.
       guard:
           kind: shell
           options:
+              # 1262 R6: no decision row and no model call. The review status file is the whole
+              # signal — it exists and is not PASS — and the cap guard above already bounds the
+              # loop, so a non-PASS review always has exactly one forward route.
               command: >-
-                  jq -e '.value == "fix"' ".spur/run/$wbs-review-failure-class.decision" >/dev/null 2>&1
+                  test -f ".spur/run/$wbs-review.status" &&
+                  test "$(cat ".spur/run/$wbs-review.status" 2>/dev/null)" != PASS
     # Defense: a review that did not certify and no clearer route — fail closed instead of
     # dead-ending the run (a FAIL, PARTIAL, missing or unparseable certification lands here).
     - from: review
