@@ -449,7 +449,8 @@ surfaceCache.set('self', { commands: ['init', 'maintain', 'migrate', 'serve', 's
 surfaceCache.set('self status', { commands: [], flags: ['--json'] });
 // A verb that is itself a command group: its documented flags live one level deeper (task 1265 R3).
 surfaceCache.set('grp', { commands: ['nested'], flags: [] });
-surfaceCache.set('grp nested', { commands: ['gate', 'validate-report'], flags: ['--json'] });
+// Commander lists its implicit `help` subcommand in a group's `Commands:` block, as the live CLI does.
+surfaceCache.set('grp nested', { commands: ['gate', 'validate-report', 'help'], flags: ['--json'] });
 surfaceCache.set('grp nested gate', { commands: [], flags: ['--testee'] });
 surfaceCache.set('grp nested validate-report', { commands: [], flags: ['--file'] });
 

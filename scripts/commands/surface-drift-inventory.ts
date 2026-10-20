@@ -389,15 +389,17 @@ function checkFlags(
             record(asserted, method, 'ok', 'flag present', occ);
             continue;
         }
-        if (vs.commands.length > 0) {
-            const withFlag = vs.commands.filter((c) => surface([...path, c]).flags.includes(f));
+        // Commander's implicit `help` is not a subcommand a citation could mean.
+        const subs = vs.commands.filter((c) => c !== 'help');
+        if (subs.length > 0) {
+            const withFlag = subs.filter((c) => surface([...path, c]).flags.includes(f));
             record(
                 asserted,
                 method,
                 withFlag.length > 0 ? 'unverified' : 'mismatch',
                 withFlag.length > 0
-                    ? `nested shorthand — flag present on ${withFlag.length}/${vs.commands.length} subcommands (${withFlag.join(', ')})`
-                    : `flag absent (live flags: ${vs.flags.join(', ')}; group subcommands: ${vs.commands.join(', ')})`,
+                    ? `nested shorthand — flag present on ${withFlag.length}/${subs.length} subcommands (${withFlag.join(', ')})`
+                    : `flag absent (live flags: ${vs.flags.join(', ')}; group subcommands: ${subs.join(', ')})`,
                 occ,
             );
             continue;
