@@ -2,7 +2,9 @@ import { describe, expect, test } from 'bun:test';
 import { mkdirSync, mkdtempSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import type { SystemEventBus } from '@gobing-ai/spur-app';
 import type { AgentConfig, SpurConfig } from '@gobing-ai/spur-config';
+import { EventBus } from '@gobing-ai/ts-infra';
 import { createCliContext, executorRescue } from '../src/context';
 import type { CommandOutput } from '../src/output';
 
@@ -131,5 +133,25 @@ describe('executorRescue (task 1264 R4)', () => {
         ).resolves.toBeUndefined();
         // A non-auth failure is not re-raised as an error string either.
         expect(d.errors.join(' ')).not.toContain('secret-value-12345');
+    });
+
+    test('AC5 (R5): the wired seam emits its decision events on the run bus, attributed to executor', async () => {
+        const cwd = projectWithConfig('{}');
+        const d = deps(cwd);
+        const bus = new EventBus<Record<string, (event: unknown) => void>>();
+        const ends: Record<string, unknown>[] = [];
+        const rejected: unknown[] = [];
+        bus.on('decision.end', (event) => ends.push(event as Record<string, unknown>));
+        bus.on('decision.rejected', (event) => rejected.push(event));
+        // Without the run's bus the rescue wrote decision_logs only, so `--reliability` and the
+        // 1263 outcome verb never saw it; and the shipped catalog's required `wbs` param (which
+        // the seam cannot supply) rejected every rescue before it reached a maker.
+        const wired = executorRescue(d.config, cwd, d.env, d.output, d.getDb, bus as unknown as SystemEventBus);
+        await wired.classifyUnmatchedFailure?.('provider said: credits depleted', { runId: 'run-r5' });
+        expect(rejected).toHaveLength(0);
+        expect(d.errors).toEqual([]);
+        expect(ends).toHaveLength(1);
+        expect(JSON.stringify(ends[0])).toContain('"caller":"executor"');
+        expect(JSON.stringify(ends[0])).toContain('run-r5');
     });
 });

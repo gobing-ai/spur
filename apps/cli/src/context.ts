@@ -12,6 +12,7 @@ import {
     RuleService,
     rescueEvidenceTail,
     resolveAgentRoles,
+    type SystemEventBus,
 } from '@gobing-ai/spur-app';
 import {
     buildConfigFromEnv,
@@ -188,7 +189,16 @@ export function createCliContext(options: {
                     : {}),
                 // 1264 R4: the composition root is the only place that reads the flag; the
                 // executor gets one function and never a DecisionService or a network client.
-                ...executorRescue(spurConfigOrNull(options), cwd, env, options.output, getDb),
+                ...executorRescue(
+                    spurConfigOrNull(options),
+                    cwd,
+                    env,
+                    options.output,
+                    getDb,
+                    // SAFETY: the agent service's events bus and SystemEventBus are nominal names
+                    // over one structural ts-infra EventBus (ADR-044); callers attach the ledger.
+                    serviceOptions?.events as SystemEventBus | undefined,
+                ),
             }),
         ruleService: () => new RuleService({ cwd, env, fs, output: options.output, getDb }),
         hitlResponder: (json?: boolean) => {
@@ -215,6 +225,7 @@ export function executorRescue(
     env: Record<string, string | undefined>,
     output: CommandOutput,
     getDb: () => Promise<DbAdapter>,
+    bus?: SystemEventBus,
 ): Pick<AgentServiceContext, 'classifyUnmatchedFailure'> {
     if (config?.workflows?.executorFailureDecisionMaker !== true) return {};
     return {
@@ -226,7 +237,13 @@ export function executorRescue(
                     'executor-failure-class',
                     { instructions: tail },
                     // The sink rides the CLI context DB, like every other CLI-context decision call.
-                    { context: { caller: 'executor', correlation }, ...(await sinkFor(getDb, config, env)) },
+                    // The bus is the run's ledger-attached one, so decision.* events persist and the
+                    // rescue shows up in `--reliability` and can take a 1263 outcome (1264 R5).
+                    {
+                        ...(bus !== undefined ? { bus } : {}),
+                        context: { caller: 'executor', correlation },
+                        ...(await sinkFor(getDb, config, env)),
+                    },
                 );
                 if (served.source !== 'model' || served.reason !== 'accepted') return undefined;
                 if (served.value === 'resource-exhaustion' || served.value === 'auth') return served.value;

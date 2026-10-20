@@ -36,6 +36,9 @@ decisions:
             wbs:
                 type: string
                 description: Task WBS the failing dispatch belongs to, when known.
+                # Optional: the executor seam knows only the run id, and a required param would
+                # reject every rescue before it reached a maker.
+                default: ""
         criteria:
             resource-exhaustion: >
                 The output names a provider-side limit — quota, credits, billing period, rate
