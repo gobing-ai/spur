@@ -290,3 +290,40 @@ loop is `spur agent wait --inbox <id>` (heartbeating the lease) → work → `sp
 re-armed inside the Bash ~10-minute budget by the `fleet-join` skill; a joined session's Stop hook
 may also deliver pending messages through `decision: block`, which converts the block into the next
 inbox item, never into a terminal write (ADR-057 A1).
+
+## 13. Inbox message plane (G11, ADR-143)
+
+**One fleet member, one inbox.** A fleet member is one declared member slot in one project, addressed
+by `<project-slug>-<member-id>` (`fleet-service.ts:470`). Replicas each get their own slot. The
+address is stable across restarts. The member's inbox records every message sent to or from the
+member and buffers its pending input. Processes, runs, generations and guest sessions that serve a
+member consume its inbox but never own one, so queued input survives a respawn. Which run consumed a
+message is recorded in the run receipt (§11), not in the inbox key. Hand-authored specs, guest ids
+(§12), `operator` and `spur` are addresses too, with one inbox each. `to_id`/`from_id` never hold a
+process, run or generation id. `InboxService` (`packages/app`) is the only reader and writer. `InboxDao` (`packages/domain`) is the only module that names `inbox_messages`.
+
+| Column | Meaning |
+| --- | --- |
+| `from_id`, `to_id` | Never null. `operator` is the human (CLI and Board global input). `spur` is the system (fleet dispatcher, workflows). Both are rejected as agent spec ids. |
+| `kind` | `chat` or `request`. Only `request` rows enter receipt reconciliation (§11). |
+| `status` | `queued` → `claimed` → `delivered` \| `failed`. `release` and the sweeper move a row back to `queued`. Each transition is guarded by its prior status. |
+| `claimed_at`, `attempts`, `error` | Claim lease (default 10 min). The sweeper requeues expired claims and fails a row at `MAX_ATTEMPTS`. |
+| `in_reply_to`, `thread_id` | `thread_id` is the root message id. A reply inherits it and is addressed to the original `from_id`. |
+| `request_key` | Idempotency only (partial unique index). Never parsed. |
+| `task_id`, `parent_run_id` | Request linkage (formerly regex-parsed from `request_key`). |
+| `read_at` | Set by `markRead`. |
+
+**Atomicity:** each service mutation writes its row and one `system_events` row in one
+transaction. The events are `message.sent`, `replied`, `claimed`, `delivered`, `failed`, `requeued`
+and `read`. Bus fan-out happens after commit, so a failed event insert rolls back the row.
+
+**Surfaces:**
+
+| Surface | Calls |
+| --- | --- |
+| oRPC inbox contract | `list(member, direction)`, `thread(id)`, `send`, `reply`, `read`, `requests(orchestrator)`. Reads are side-effect free; guest expiry and the claim sweep run in the server reconciler pass. |
+| CLI | `spur message send` (defaults to the orchestrator, sender `operator`), `inbox` (read-only), `show <id>`, `read <id>`, `reply`, `watch`. |
+| `spur agent run` | Claims its inbox into the prompt and settles via the service on exit. |
+| Board Projects → Inbox | Member list → two-direction thread → composer, with reply and mark-read. Updates come over SSE `message.*` events. |
+| Board global input | Sends from `operator` to the orchestrator. |
+| Member terminal | Writes stdin only, never the inbox. |

@@ -2606,3 +2606,43 @@ has 11 fields, skill/agent output contracts carry no level, and `response.valida
 - **Consequence:** receipts recorded under the old verifier name are stale after upgrade and need one
   `spur feature verify <id>`. Project overrides of the deleted workflow stop applying.
 - **Detail:** [workflow consolidation](design/workflow-consolidation.md).
+
+## ADR-143: The Inbox Is a Spur-Owned Service With One Writer
+
+- **Status:** Proposed · **Date:** 2026-10-19 · **Feature:** G11 · **Amends:** ADR-057 (the inbox
+  remains the only agent transport; this fixes its ownership and identity model)
+- **Decision:**
+  - Each fleet member has exactly one inbox. A fleet member is one declared member slot in one project,
+    addressed by `<project-slug>-<member-id>`; each replica is its own slot. Processes, runs and guest
+    sessions that serve a member consume its inbox but never own one. Hand-authored specs, guest ids,
+    `operator` and `spur` are addresses with one inbox each. Inbox keys never hold a process, run or
+    generation id.
+  - `InboxService` in `packages/app` is the sole reader and writer, over a Spur-owned `InboxDao` and
+    schema in `packages/domain`. Spur no longer imports ts-db's `InboxMessageDao`.
+  - Every mutation commits the message row and its `system_events` row in one transaction. Status
+    transitions are guarded by the expected prior status.
+  - A claim carries a lease that a sweeper reclaims.
+  - The human operator is the reserved id `operator`, and system-originated messages use `spur`.
+  - Messages carry `kind` (`chat` | `request`); only requests are reconciled against runs.
+    `request_key` is an idempotency key only, and task and parent-run linkage are columns.
+- **Why:**
+  - Keying by member, not process, keeps queued input across respawns and gives replies a live
+    address; run receipts already record which process consumed a message.
+  - Split ownership (a ts-db DAO, Spur migrations, five bypassing modules, drain logic in the CLI
+    transport) produced four human identities, replies that were lost or threw, terminal input
+    delivered twice, and claims stuck in `injected`.
+  - Chat traffic was misreported as unresolved work, and metadata had to be parsed out of keys and
+    body envelopes.
+- **Retains:**
+  - ADR-057's inbox-only transport and terminal-write ban.
+  - ADR-121 guest occupancy.
+  - ADR-132's rule that every execution is a run.
+  - The G61 receipt and hold semantics, now scoped to `kind = request`.
+- **Consequence:**
+  - Migration 0054 drops and recreates `inbox_messages`; existing messages are discarded by
+    operator decision.
+  - `/api/messages*` and `/api/project/requests` are replaced by an oRPC inbox contract.
+  - `spur message` gains `show` and `read`, and `send` defaults to the orchestrator.
+  - Terminal stdin no longer enqueues messages.
+- **Detail:** [inter-agent control plane](design/inter-agent-control-plane.md) §13;
+  [plan](plans/2026-10-19-inbox-module-refactor.md).
