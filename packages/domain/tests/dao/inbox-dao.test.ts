@@ -65,7 +65,7 @@ describe('1266 R2 — InboxDao is the single inbox writer', () => {
              BEGIN SELECT RAISE(ABORT, 'boom'); END;`,
         );
         await expect(seed()).rejects.toThrow('boom');
-        expect(await dao.list('proj-coder', 'in', 10, 0)).toEqual([]);
+        expect(await dao.list('proj-coder', 'in', 10)).toEqual([]);
     });
 
     test('a repeated request key violates the partial unique index', async () => {

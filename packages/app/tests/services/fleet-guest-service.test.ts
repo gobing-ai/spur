@@ -137,7 +137,7 @@ describe('FleetGuestService (1081 R2/R5)', () => {
             await inbox.send({ from: 'proj-lead', to: id, body: 'please review 1081' });
             const claimed = await inbox.claim(id, 10);
             expect(claimed.length).toBe(1);
-            expect((await inbox.list(id, 'in'))[0]?.status).toBe('claimed');
+            expect((await inbox.list(id, 'in')).messages[0]?.status).toBe('claimed');
 
             // Age the lease past its TTL without waiting 30 s.
             await db.run(
@@ -147,7 +147,7 @@ describe('FleetGuestService (1081 R2/R5)', () => {
             );
             expect(await service.expire()).toEqual([id]);
 
-            const after = await inbox.list(id, 'in');
+            const after = (await inbox.list(id, 'in')).messages;
             expect(after[0]?.status).toBe('queued');
             expect(await service.read(id)).toBeNull();
             const runRow = await db.queryFirst<{ status: string }>(

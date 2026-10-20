@@ -377,23 +377,30 @@ export class InboxDao extends BaseDao {
         return rows.map(toMessage);
     }
 
-    /** One address's messages by direction, newest first. */
+    /**
+     * One address's messages by direction, newest first, keyset-paged.
+     *
+     * `before` is the last row of the previous page: rows strictly older than
+     * `(created_at, id)` are returned. A keyset page is stable under concurrent inserts, which an
+     * offset is not. `limit + 1` rows are read so the caller knows whether a next page exists.
+     */
     async list(
         member: string,
         direction: 'in' | 'out' | 'both',
         limit: number,
-        offset: number,
+        before?: { createdAt: number; id: string },
     ): Promise<InboxMessage[]> {
         const scope =
             direction === 'in' ? 'to_id = ?1' : direction === 'out' ? 'from_id = ?1' : '(to_id = ?1 OR from_id = ?1)';
+        const cursor = before === undefined ? '' : 'AND (created_at < ?3 OR (created_at = ?3 AND id < ?4))';
+        const params: unknown[] = [member, Math.max(0, limit) + 1];
+        if (before !== undefined) params.push(before.createdAt, before.id);
         const rows = await this.adapter.queryAll<InboxRow>(
             `SELECT ${COLUMNS} FROM inbox_messages
-             WHERE ${scope}
-             ORDER BY created_at DESC, rowid DESC
-             LIMIT ?2 OFFSET ?3`,
-            member,
-            Math.max(0, limit),
-            Math.max(0, offset),
+             WHERE ${scope} ${cursor}
+             ORDER BY created_at DESC, id DESC
+             LIMIT ?2`,
+            ...params,
         );
         return rows.map(toMessage);
     }

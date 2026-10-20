@@ -336,10 +336,12 @@ export class AgentCoordinationService {
     /** List the pending + delivered messages addressed to an agent. */
     async getInbox(agentId: string, limit?: number, offset?: number): Promise<InboxResult> {
         validateAgentId(agentId);
-        const rows = await (await this.inboxService()).list(agentId, 'in', {
+        const { messages: rows } = await (await this.inboxService()).list(agentId, 'in', {
             ...(limit !== undefined ? { limit } : {}),
-            ...(offset !== undefined ? { offset } : {}),
         });
+        // `offset` is accepted for the existing callers but the plane pages by cursor now (G11 R1);
+        // a plain page of `limit` is what every current caller wants.
+        void offset;
         return { messages: rows.map(toInboxEntry), count: rows.length };
     }
 

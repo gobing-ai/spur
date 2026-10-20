@@ -9,6 +9,7 @@ import {
     type InboxTaskAttempts,
     SystemEventDao,
 } from '@gobing-ai/spur-domain';
+import { MessageNotFoundError } from './agent-coordination-service';
 import { ensureRetentionQuotaForPrefix } from './system-event-catch-all';
 import { DEFAULT_SYSTEM_EVENT_RETENTION_QUOTA, resolveRetentionQuotas } from './system-event-retention';
 
@@ -132,6 +133,22 @@ export interface InboxServiceDeps {
     now?: () => number;
 }
 
+/** Opaque keyset cursor: base64url of `{createdAt, id}` — the client never parses it. */
+function encodeCursor(row: { createdAt: number; id: string }): string {
+    return Buffer.from(JSON.stringify({ c: row.createdAt, i: row.id })).toString('base64url');
+}
+
+/** Decode a cursor; a malformed one is a caller error, so it throws rather than paging wrong. */
+function decodeCursor(cursor: string): { createdAt: number; id: string } {
+    try {
+        const parsed = JSON.parse(Buffer.from(cursor, 'base64url').toString('utf8')) as { c: number; i: string };
+        if (typeof parsed.c !== 'number' || typeof parsed.i !== 'string') throw new Error('shape');
+        return { createdAt: parsed.c, id: parsed.i };
+    } catch {
+        throw new Error('malformed list cursor');
+    }
+}
+
 /** Metadata-only event payload: message bodies stay in inbox storage. */
 interface MessageEventData {
     msgId: string;
@@ -217,7 +234,7 @@ export class InboxService {
         const db = await this.deps.getDb();
         const dao = new InboxDao(db);
         const original = await dao.get(id);
-        if (original === null) throw new Error(`No message found with id "${id}"`);
+        if (original === null) throw new MessageNotFoundError(`No message found with id "${id}"`);
 
         const now = this.clock();
         const replyId = `msg_${crypto.randomUUID()}`;
@@ -333,15 +350,30 @@ export class InboxService {
     async markRead(id: string, reader: string): Promise<InboxMarkReadResult> {
         const db = await this.deps.getDb();
         const receipt = await new InboxDao(db).markRead(id, reader, this.clock(), this.eventFactory('message.read'));
-        if (receipt === null) throw new Error(`message ${id} not found for ${reader}`);
+        if (receipt === null) throw new MessageNotFoundError(`message ${id} not found for ${reader}`);
         await this.pruneEvents(db);
         return { readAt: receipt.message.readAt ?? this.clock(), transitioned: receipt.transitioned };
     }
 
-    /** One address's messages by direction, newest first. */
-    async list(member: string, direction: InboxDirection = 'in', page?: { limit?: number; offset?: number }) {
+    /**
+     * One address's messages by direction, newest first, keyset-paged (G11 R1's cursor).
+     * `cursor` is a previous page's `nextCursor`; `nextCursor` is null on the last page.
+     */
+    async list(
+        member: string,
+        direction: InboxDirection = 'in',
+        page?: { limit?: number; cursor?: string },
+    ): Promise<{ messages: InboxMessage[]; nextCursor: string | null }> {
         const dao = new InboxDao(await this.deps.getDb());
-        return dao.list(member, direction, page?.limit ?? 100, page?.offset ?? 0);
+        const limit = page?.limit ?? 100;
+        const before = page?.cursor === undefined ? undefined : decodeCursor(page.cursor);
+        const rows = await dao.list(member, direction, limit, before);
+        const messages = rows.slice(0, limit);
+        const last = messages.at(-1);
+        return {
+            messages,
+            nextCursor: rows.length > limit && last !== undefined ? encodeCursor(last) : null,
+        };
     }
 
     /** Every message in one thread, oldest first (root plus replies). */

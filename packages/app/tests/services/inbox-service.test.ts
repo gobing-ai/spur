@@ -45,7 +45,7 @@ describe('1266 R3/R1 — one transaction per mutation', () => {
         expect(message.kind).toBe('chat');
         expect(await eventCount('message.sent')).toBe(1);
 
-        const inbox = await service.list(MEMBER, 'in');
+        const inbox = (await service.list(MEMBER, 'in')).messages;
         expect(inbox.map((row) => row.id)).toEqual([message.id]);
     });
 
@@ -57,7 +57,7 @@ describe('1266 R3/R1 — one transaction per mutation', () => {
         );
 
         await expect(service.send({ from: OPERATOR, to: MEMBER, body: 'nope' })).rejects.toThrow();
-        expect(await service.list(MEMBER, 'in')).toEqual([]);
+        expect((await service.list(MEMBER, 'in')).messages).toEqual([]);
         expect(await eventCount('message.sent')).toBe(0);
     });
 });
@@ -133,7 +133,7 @@ describe('1266 R4 — the sweep requeues expired claims and eventually fails the
 
         const swept = await service.sweep(nowMs + 1000);
         expect(swept).toEqual({ requeued: [], failed: [], settled: [] });
-        expect((await service.list(MEMBER, 'in'))[0]?.status).toBe('claimed');
+        expect((await service.list(MEMBER, 'in')).messages[0]?.status).toBe('claimed');
     });
 
     test('a claimed row with a still-running receipt stays claimed', async () => {
@@ -207,7 +207,7 @@ describe('1266 R5 — idempotency and reserves', () => {
 
         expect(second.replayed).toBe(true);
         expect(second.message.id).toBe(first.message.id);
-        expect(await service.list(MEMBER, 'in')).toHaveLength(1);
+        expect((await service.list(MEMBER, 'in')).messages).toHaveLength(1);
         expect(await eventCount('message.sent')).toBe(1);
     });
 
@@ -221,7 +221,7 @@ describe('1266 R5 — idempotency and reserves', () => {
         expect(results.every((result) => result.status === 'fulfilled')).toBe(true);
         const ids = results.flatMap((result) => (result.status === 'fulfilled' ? [result.value.message.id] : []));
         expect(new Set(ids).size).toBe(1);
-        expect(await service.list(MEMBER, 'in')).toHaveLength(1);
+        expect((await service.list(MEMBER, 'in')).messages).toHaveLength(1);
         expect(await eventCount('message.sent')).toBe(1);
     });
 
@@ -229,7 +229,7 @@ describe('1266 R5 — idempotency and reserves', () => {
         expect(RESERVED_INBOX_IDS).toEqual([OPERATOR, SPUR]);
         // Addressing them is normal: operator and spur own an inbox each.
         const { message } = await service.send({ from: MEMBER, to: OPERATOR, body: 'done' });
-        expect((await service.list(OPERATOR, 'in')).map((row) => row.id)).toEqual([message.id]);
+        expect((await service.list(OPERATOR, 'in')).messages.map((row) => row.id)).toEqual([message.id]);
     });
 
     test('from_id is never null and a blank sender is refused', async () => {
@@ -247,7 +247,7 @@ describe('1266 R5/R6 — replies reach the original sender', () => {
         expect(reply.fromId).toBe(MEMBER);
         expect(reply.inReplyTo).toBe(message.id);
         expect(reply.threadId).toBe(message.id);
-        expect((await service.list(OPERATOR, 'in')).map((row) => row.id)).toEqual([reply.id]);
+        expect((await service.list(OPERATOR, 'in')).messages.map((row) => row.id)).toEqual([reply.id]);
         expect(await eventCount('message.replied')).toBe(1);
     });
 
@@ -268,7 +268,7 @@ describe('1266 R8 — only requests are unresolved work', () => {
         await service.send({ from: SPUR, to: MEMBER, body: 'task', kind: 'request' });
         await service.claim(MEMBER, 10);
         await service.settle(
-            (await service.list(MEMBER, 'in')).map((row) => row.id),
+            (await service.list(MEMBER, 'in')).messages.map((row) => row.id),
             'accepted',
         );
 

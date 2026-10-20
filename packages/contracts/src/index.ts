@@ -4,6 +4,7 @@ import { boardContract } from './board';
 import { featureContract } from './feature';
 import { fleetContract, processesContract } from './fleet';
 import { historyContract } from './history';
+import { inboxContract } from './inbox';
 import { planningEventContract } from './planning-event';
 import { runsContract } from './runs';
 import { taskContract } from './task';
@@ -33,6 +34,7 @@ export const contract = {
     board: { ...boardContract },
     feature: { ...featureContract },
     history: { ...historyContract },
+    inbox: { ...inboxContract },
     fleet: { ...fleetContract },
     processes: { ...processesContract },
     runs: { ...runsContract },

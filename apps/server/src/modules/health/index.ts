@@ -1,13 +1,9 @@
 import { homedir } from 'node:os';
 import { basename, join, relative, resolve } from 'node:path';
 import {
-    DeliveryReconciler,
-    FleetGuestService,
     FleetService,
-    InboxService,
     isPortLive,
     normalizeProjectPath,
-    OPERATOR_INBOX_ID,
     type OrchestratorBinding,
     ProjectRegistry,
     type ResolvedFleetMember,
@@ -27,7 +23,7 @@ import {
     resolveConfigLayers,
     setExecutorAvailability,
 } from '@gobing-ai/spur-config/loader';
-import { CoordinationRunDao, REGISTERED_CANONICAL_STAGES, TIER_RANK } from '@gobing-ai/spur-domain';
+import { REGISTERED_CANONICAL_STAGES, TIER_RANK } from '@gobing-ai/spur-domain';
 import { createNodeFileSystem } from '@gobing-ai/ts-runtime';
 import type { Hono } from 'hono';
 import { version } from '../../../package.json';
@@ -424,114 +420,6 @@ export const healthModule: ServerModule = {
                 stages,
                 executors,
             });
-        });
-
-        // ── Project request receipts (0844 R1/R5) ──
-        // Durable results feed for the global input: the operator's
-        // `inbox_messages` rows addressed to the orchestrator, joined with the
-        // delivery classification (DeliveryReconciler.classify — the PURE pass,
-        // it never writes the attempts-exhausted marking) and the coordination
-        // run receipt. Same mailbox selection as 0841's buildThread: rows to
-        // the orchestrator instance from `board-operator`. Degraded facts are
-        // named states, never a 500 — no project context or no bound
-        // orchestrator returns `{ requests: [] }`.
-        app.get('/api/project/requests', async (c) => {
-            if (!ctx) {
-                return c.json({ requests: [] });
-            }
-            const limitRaw = c.req.query('limit');
-            const parsedLimit = limitRaw === undefined ? NaN : Number.parseInt(limitRaw, 10);
-            const limit = Number.isNaN(parsedLimit) || parsedLimit < 0 ? 50 : Math.min(parsedLimit, 200);
-            const path = normalizeProjectPath(ctx.cwd);
-            const openDb = () => ctx.getDb();
-            const fleet = new FleetService({
-                fs: ctx.fs,
-                // Same loader seam the /api/project/fleet route uses (0799 R3).
-                reloadAgentConfig: () => ctx.reloadAgentConfig(),
-                openDb,
-            });
-            const runtime = new StrategyRuntime({
-                openDb,
-                tasks: ctx.taskService(),
-                fleet,
-                dependencyBlocked: async () => null,
-            });
-            // Wire contract (0840 review F1): project the claim to its binding
-            // fields; the raw project_claims row is never echoed.
-            let orchestrator: OrchestratorBinding = { state: 'unresolvable', reason: 'unavailable' };
-            try {
-                const { state, instanceId, holderId, reason } = await fleet.resolveOrchestrator(path);
-                orchestrator = { state, instanceId, holderId, reason };
-            } catch {
-                orchestrator = { state: 'unresolvable', reason: 'unavailable' };
-            }
-            const instanceId =
-                orchestrator.state === 'missing' || orchestrator.state === 'unresolvable'
-                    ? undefined
-                    : orchestrator.instanceId;
-            if (instanceId === undefined) {
-                return c.json({ requests: [] });
-            }
-
-            const db = await openDb();
-            const unresolved = await new DeliveryReconciler({ getDb: openDb }).classify(instanceId);
-            // G73 R2 (1081): the same reconciler pass retires expired guest occupants — their
-            // claimed messages return to `queued` and their rows are marked exited, so nothing
-            // stays stranded behind a session that stopped pulling.
-            try {
-                await new FleetGuestService({
-                    cwd: ctx.cwd,
-                    fs: ctx.fs ?? createNodeFileSystem(ctx.cwd),
-                    getDb: openDb,
-                }).expire();
-            } catch {
-                // Guest expiry is housekeeping — never fail the requests view over it.
-            }
-            const reasonByMessage = new Map(unresolved.map((u) => [u.messageId, u.reason]));
-            const runs = new CoordinationRunDao(db);
-            // Strategy holds, keyed by wbs, joined onto the request's task id
-            // (0838). A selectNext failure leaves holds empty — named as null
-            // on the wire, never a 500.
-            const holdByTask = new Map<string, string>();
-            try {
-                for (const h of (await runtime.selectNext(path, { readOnly: true })).holds) {
-                    holdByTask.set(h.wbs, h.reason);
-                }
-            } catch {
-                // holds stay empty
-            }
-
-            const REQUESTED_RUN_OUTCOMES = ['run-exit-only', 'errored', 'verified'] as const;
-            const requests = [];
-            // G11 R6: the inbox read goes through InboxService; the operator's own messages are
-            // the ones sent from the `operator` address (the retired `board-operator` id).
-            const inboxRows = await new InboxService({ getDb: () => ctx.getDb() }).list(instanceId, 'in', {
-                limit: 200,
-            });
-            for (const row of inboxRows) {
-                if (row.fromId !== OPERATOR_INBOX_ID) continue;
-                if (requests.length >= limit) break;
-                const runRow = (await runs.listByMessageId(row.id))[0];
-                requests.push({
-                    messageId: row.id,
-                    requestKey: row.requestKey,
-                    deliveryStatus: row.status,
-                    injectAttempts: row.attempts,
-                    injectError: row.error,
-                    runId: runRow?.run_id ?? null,
-                    taskId: runRow?.task_id ?? null,
-                    outcome:
-                        runRow !== undefined && REQUESTED_RUN_OUTCOMES.includes(runRow.outcome as never)
-                            ? (runRow.outcome as (typeof REQUESTED_RUN_OUTCOMES)[number])
-                            : null,
-                    reason: reasonByMessage.get(row.id) ?? null,
-                    hold:
-                        runRow?.task_id !== null && runRow?.task_id !== undefined
-                            ? (holdByTask.get(runRow.task_id) ?? null)
-                            : null,
-                });
-            }
-            return c.json({ requests });
         });
 
         // ── Multi-project list ──

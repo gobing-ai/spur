@@ -1514,7 +1514,7 @@ export async function runFleetE2e(args: string[]): Promise<number> {
                     const done = jsonOk<{ status: string }>(['task', 'show', state.wbs ?? '', '--json'], scratch);
                     if (done.status !== 'done') return undefined;
                     if (await runs.hasRunning(state.coderId)) return undefined;
-                    const queued = (await inboxRows.list(state.coderId, 'in', { limit: 500 })).filter(
+                    const queued = (await inboxRows.list(state.coderId, 'in', { limit: 500 })).messages.filter(
                         (row) => row.status === 'queued' || row.status === 'claimed',
                     );
                     return queued.length === 0 ? true : undefined;

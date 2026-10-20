@@ -139,7 +139,7 @@ export function inboxFixture(db: import('@gobing-ai/spur-domain').DbAdapter) {
             return service.get(id);
         },
         async inbox(member: string, limit = 100) {
-            return service.list(member, 'in', { limit });
+            return (await service.list(member, 'in', { limit })).messages;
         },
         async countPending(member: string) {
             return service.countQueued(member);

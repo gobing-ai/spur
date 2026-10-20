@@ -13,6 +13,7 @@ import {
     featureTransitionResponseSchema,
 } from '../src/feature';
 import { fleetContract, memberSessionSchema, processesContract } from '../src/fleet';
+import { inboxContract, inboxMessageSchema, inboxRequestSchema } from '../src/inbox';
 import { planningEventContract, planningEventEnvelopeSchema } from '../src/planning-event';
 import { apiErrorSchema, apiSuccessSchema, paginatedResponseSchema, paginationMetaSchema } from '../src/shared';
 import {
@@ -399,6 +400,59 @@ describe('contract composition', () => {
         expect(keys).toContain('show');
         expect(keys).toContain('create');
         expect(keys).toContain('transition');
+    });
+
+    test('inbox namespace exposes the seven procedures with their verbs (G11 R9)', () => {
+        const keys = Object.keys(contract.inbox).filter((k) => !k.startsWith('~'));
+        expect(keys.sort()).toEqual(['list', 'members', 'read', 'reply', 'requests', 'send', 'thread'].sort());
+        expect(routeOf(inboxContract.list)).toMatchObject({ method: 'GET', path: '/inbox/messages' });
+        expect(routeOf(inboxContract.thread)).toMatchObject({ method: 'GET', path: '/inbox/messages/{id}/thread' });
+        expect(routeOf(inboxContract.send)).toMatchObject({ method: 'POST', path: '/inbox/messages' });
+        expect(routeOf(inboxContract.reply)).toMatchObject({ method: 'POST', path: '/inbox/messages/{id}/reply' });
+        expect(routeOf(inboxContract.read)).toMatchObject({ method: 'POST', path: '/inbox/messages/{id}/read' });
+        expect(routeOf(inboxContract.requests)).toMatchObject({ method: 'GET', path: '/inbox/requests' });
+        expect(routeOf(inboxContract.members)).toMatchObject({ method: 'GET', path: '/inbox/members' });
+    });
+
+    test('inbox DTOs reject a null sender and an unknown status (G11 R5)', () => {
+        const base = {
+            id: 'msg_1',
+            fromId: 'operator',
+            toId: 'proj-coder',
+            body: 'hi',
+            kind: 'chat',
+            status: 'queued',
+            attempts: 0,
+            error: null,
+            claimedAt: null,
+            deliveredAt: null,
+            readAt: null,
+            inReplyTo: null,
+            threadId: 'msg_1',
+            requestKey: null,
+            taskId: null,
+            parentRunId: null,
+            createdAt: 1,
+        };
+        expect(inboxMessageSchema.parse(base).fromId).toBe('operator');
+        expect(() => inboxMessageSchema.parse({ ...base, fromId: null })).toThrow();
+        expect(() => inboxMessageSchema.parse({ ...base, status: 'injected' })).toThrow();
+        expect(() => inboxMessageSchema.parse({ ...base, kind: 'broadcast' })).toThrow();
+        // The requests feed reuses the same status vocabulary, so the retired names cannot leak in.
+        expect(() =>
+            inboxRequestSchema.parse({
+                messageId: 'msg_1',
+                requestKey: null,
+                status: 'injected',
+                attempts: 1,
+                error: null,
+                runId: null,
+                taskId: null,
+                outcome: null,
+                reason: null,
+                hold: null,
+            }),
+        ).toThrow();
     });
 
     test('feature namespace has all feature routes', () => {

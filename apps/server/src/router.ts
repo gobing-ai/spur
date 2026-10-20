@@ -5,6 +5,7 @@ import { version } from '../package.json';
 import type { ServerContext } from './context';
 import { createFeatureHandlers } from './modules/feature';
 import { createHistoryHandlers } from './modules/history';
+import { createInboxHandlers } from './modules/inbox/handlers';
 import { createTaskHandlers } from './modules/task';
 
 const os = implement(contract);
@@ -39,6 +40,8 @@ export function createRouter(ctx?: ServerContext) {
         feature: createFeatureHandlers(ctx ?? stubCtx),
 
         history: createHistoryHandlers(ctx ?? stubCtx),
+
+        inbox: createInboxHandlers(ctx ?? stubCtx),
 
         // Read-only project module catalog: the frozen startup snapshot, never a live re-read (AC5).
         board: {

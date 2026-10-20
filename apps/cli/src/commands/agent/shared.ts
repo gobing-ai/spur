@@ -557,6 +557,9 @@ export async function makeFleetRuntime(context: CliContext): Promise<StrategyRun
             const check = await makeCheckService(context);
             return await check.firstBlockingPrerequisite(context.fs.resolve(foldersConfig.active_folder), wbs);
         },
+        // G11 R3: guest leases expire on the write side of the tick, beside the reconcile. The
+        // requests read no longer terminates a guest, so this is the one owner of that write.
+        guestExpiry: async () => await guestService(context).expire(),
     });
 }
 

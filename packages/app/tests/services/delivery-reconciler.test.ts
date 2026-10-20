@@ -180,9 +180,9 @@ describe('0834 five-step classification precedence', () => {
         // then release (claimed→queued). No raw SQL seam is needed to reach the ceiling.
         for (let attempt = 0; attempt < MAX_DELIVERY_ATTEMPTS; attempt += 1) {
             await inbox.claim('worker', 10);
-            await inbox.release((await inbox.list('worker', 'in')).map((row) => row.id));
+            await inbox.release((await inbox.list('worker', 'in')).messages.map((row) => row.id));
         }
-        const id = (await inbox.list('worker', 'in'))[0]?.id ?? '';
+        const id = (await inbox.list('worker', 'in')).messages[0]?.id ?? '';
         const report = await reconciler.reconcile('worker');
         // Nothing was claimed, so nothing is reconciled: the row is untouched and unheld.
         expect(report.unresolved).toEqual([]);
@@ -330,7 +330,7 @@ describe('0844 classify(): steps 1/2/3/5 without the step-4 write', () => {
         // Reach the budget boundary through the service: claim + release until the counter is spent.
         for (let attempt = 0; attempt < MAX_DELIVERY_ATTEMPTS; attempt += 1) {
             await inbox.claim('worker', 10);
-            await inbox.release((await inbox.list('worker', 'in')).map((row) => row.id));
+            await inbox.release((await inbox.list('worker', 'in')).messages.map((row) => row.id));
         }
 
         const classified = await reconciler.classify();

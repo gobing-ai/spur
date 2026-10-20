@@ -1,4 +1,5 @@
-import type { SystemEventQuery } from '@gobing-ai/spur-domain';
+import { followSystemEventsAfter } from '@gobing-ai/spur-app';
+import type { SystemEventQuery, SystemEventRow } from '@gobing-ai/spur-domain';
 import type { EventBus } from '@gobing-ai/ts-infra';
 import type { Hono } from 'hono';
 import type { ServerContext } from '../../context';
@@ -123,6 +124,45 @@ export function sendKeepalive(
  * Gated by ServerContext: on Bun the stream is active; on Cloudflare Workers
  * (ctx undefined) the module is a no-op and the board falls back to polling.
  */
+/**
+ * One relay per server (G11 R5, ADR-143). `InboxService` writes `message.*` rows in the same
+ * transaction as the inbox row it describes, and a bus-less service means the server's own
+ * sends emit nothing. Agent CLI processes write the same ledger rows and never touch this
+ * process's bus at all. Following `system_events` is therefore the only channel that sees
+ * every process's message lifecycle, and it emits each row exactly once.
+ */
+const relayedContexts = new WeakSet<ServerContext>();
+
+function startMessageRelay(ctx: ServerContext): void {
+    if (relayedContexts.has(ctx)) return;
+    relayedContexts.add(ctx);
+    const controller = new AbortController();
+    void (async () => {
+        try {
+            const bus: EventBus<Record<string, (event: unknown) => void>> = ctx.eventBus();
+            // Snapshot first: rows written before this server booted are replayed by the
+            // history endpoint, not re-emitted as live events.
+            const start = await (await ctx.systemEventDao()).latestSequence();
+            const stream = followSystemEventsAfter(() => ctx.getDb(), {
+                afterSequence: start,
+                match: (row: SystemEventRow) => row.event_name.startsWith('message.'),
+                signal: controller.signal,
+            });
+            for await (const row of stream) {
+                try {
+                    bus.emit(row.event_name, JSON.parse(row.payload_json ?? '{}'));
+                } catch {
+                    // A malformed row is skipped: the relay must not stop on one bad payload.
+                }
+            }
+        } catch {
+            // A ledger read failure leaves the relay stopped, exactly like the SSE stream's
+            // other degraded states — the endpoint still serves the bus it has.
+        }
+    })();
+}
+
+/** SSE + history transport for the system-event ledger, and the `message.*` relay (G11 R5). */
 export const eventsModule: ServerModule = {
     name: 'events',
 
@@ -154,6 +194,8 @@ export const eventsModule: ServerModule = {
               )
             : [];
         const streamNames = [...baseNames, ...diagnosticNames];
+        startMessageRelay(ctx);
+
         app.get('/api/events/planning', (c) => {
             const bus: EventBus<Record<string, (event: unknown) => void>> = ctx.eventBus();
             const closed = { current: false };
@@ -213,7 +255,21 @@ export const eventsModule: ServerModule = {
                                 actor,
                                 prefix: entry?.prefix ?? name.split('.')[0],
                                 renderer: entry?.renderer ?? 'generic',
-                                payload: buildSystemEventEnvelope(entry, event, projectContext, secretValues, actor),
+                                // Stored-envelope aware, exactly like the history endpoint: a row
+                                // relayed from the ledger (every `message.*`, G11 R5) already IS the
+                                // v2 envelope, so re-building the presentation from its raw `data`
+                                // would strip the summary and fields. Live and history must agree
+                                // for the same row.
+                                payload:
+                                    event !== null && typeof event === 'object' && 'schemaVersion' in event
+                                        ? projectStoredSystemEventEnvelope(
+                                              entry,
+                                              event,
+                                              projectContext,
+                                              secretValues,
+                                              actor,
+                                          )
+                                        : buildSystemEventEnvelope(entry, event, projectContext, secretValues, actor),
                             };
                             try {
                                 controller.enqueue(encoder.encode(`data: ${JSON.stringify(envelope)}\n\n`));

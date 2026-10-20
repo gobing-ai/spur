@@ -310,6 +310,14 @@ export interface StrategyRuntimeContext {
      * then dispatches nothing and says so instead of faking a decision.
      */
     dispatcher?: Pick<FleetDispatcher, 'enqueue' | 'receipt'>;
+    /**
+     * Guest-lease expiry (G11 R3). Runs on the WRITE side of {@link StrategyRuntime.resume},
+     * never inside a read: the Board's requests view must not terminate a live guest. Absent
+     * means this host owns no guests (tests, read-only views).
+     */
+    guestExpiry?: () => Promise<string[]>;
+    /** Warn sink for housekeeping failures that must not fail a tick. */
+    logger?: { warn(message: string, meta?: Record<string, unknown>): void };
 }
 
 /** R6: what a restart found and whether the runtime may accept dispatch work. */
@@ -425,6 +433,19 @@ export class StrategyRuntime {
                     ? await reconciler.classify(member.instanceId)
                     : (await reconciler.reconcile(member.instanceId)).unresolved),
             );
+        }
+        // G11 R3 (ADR-143): guest leases expire on the WRITE side of the tick, next to the
+        // reconcile — never inside a read. With no orchestrator nothing dispatches to a guest,
+        // so nothing can be stranded by skipping it (the early return above).
+        if (!options.readOnly && this.ctx.guestExpiry !== undefined) {
+            try {
+                await this.ctx.guestExpiry();
+            } catch (error) {
+                // Lease housekeeping must not take the orchestrator's tick down.
+                this.ctx.logger?.warn('strategy resume: guest expiry failed', {
+                    error: error instanceof Error ? error.message : String(error),
+                });
+            }
         }
         return { strategy, version, orchestrator, unresolved, reconciled: true };
     }

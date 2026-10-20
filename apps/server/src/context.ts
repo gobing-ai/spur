@@ -4,6 +4,7 @@ import type {
     AgentService,
     FeatureService,
     HistoryBoardService,
+    InboxService,
     PlanningEvent as PlanningEventType,
     PlanningFolders,
     PreparedBoardModules,
@@ -32,6 +33,7 @@ import {
     type GuardedTransitionInput,
     type GuardedTransitionResult,
     hitlConfirmDefault,
+    InboxService as InboxServiceImpl,
     LiveHistoryBoardService,
     systemEventProjectContext as makeSystemEventProjectContext,
     type PlanningEventMap,
@@ -227,6 +229,13 @@ export interface ServerContext {
 
     /** Lazy, cached AgentCoordinationService (messaging + task assignment). */
     coordination(): AgentCoordinationService;
+
+    /**
+     * Lazy, cached `InboxService` (G11 R9). Bun-only and deliberately bus-less: the ledger
+     * relay in `modules/events` re-emits `message.*` for every process, so a bus here would
+     * emit the server's own writes twice.
+     */
+    inbox(): InboxService;
 
     /** Lazy, cached SupervisorService (process supervision, task 0195/0207). */
     supervisor(): SupervisorService;
@@ -429,6 +438,7 @@ export function createServerContext(appRt: ApplicationRuntime, options: CreateSe
     let featureSvc: FeatureService | undefined;
     let historyBoardSvc: HistoryBoardService | undefined;
     let coordinationSvc: AgentCoordinationService | undefined;
+    let inboxSvc: InboxService | undefined;
     let supervisorSvc: SupervisorService | undefined;
     let processInventorySvc: ProcessInventoryService | undefined;
     let processRegistrySvc: ProcessRegistry | undefined;
@@ -673,6 +683,11 @@ export function createServerContext(appRt: ApplicationRuntime, options: CreateSe
                 });
             }
             return coordinationSvc;
+        },
+
+        inbox(): InboxService {
+            if (!inboxSvc) inboxSvc = new InboxServiceImpl({ getDb: this.getDb.bind(this) });
+            return inboxSvc;
         },
 
         reloadAgentConfig: async () => {

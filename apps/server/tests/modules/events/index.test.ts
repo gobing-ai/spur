@@ -341,4 +341,57 @@ describe('sendKeepalive', () => {
         sendKeepalive(closed, controller, new TextEncoder());
         expect(enqueued.length).toBe(0);
     });
+
+    test('the ledger relay re-emits a message row written by another process (G11 R5)', async () => {
+        // The server's own InboxService is bus-less, and an agent CLI process writes the same
+        // ledger rows without touching this process's bus. Following `system_events` is the only
+        // channel that sees both, so this test writes a row the way an agent process would and
+        // asserts it surfaces on the bus exactly once.
+        const { createMigratedDb, SystemEventDao } = await import('@gobing-ai/spur-domain');
+        const db = await createMigratedDb({ url: ':memory:' });
+        const seen: Array<{ name: string; payload: unknown }> = [];
+        const bus = {
+            on: () => {},
+            off: () => {},
+            emit: (name: string, payload: unknown) => {
+                seen.push({ name, payload });
+            },
+        };
+        const ctx = {
+            cwd: '/workspace/acme',
+            getDb: async () => db,
+            systemEventDao: async () => new SystemEventDao(db),
+            systemEventProjectContext: () => ({ name: 'acme', root: '/workspace/acme' }),
+            systemEventSecretValues: () => [],
+            eventBus: () => bus,
+        } as unknown as ServerContext;
+
+        const app = new Hono();
+        eventsModule.mount(app, ctx);
+        // Let the relay take its boot snapshot first: rows written BEFORE it are history (the
+        // history endpoint replays those), so this row must land after it to be a live event.
+        await new Promise((resolve) => setTimeout(resolve, 250));
+
+        // Written AFTER boot, like an agent process replying mid-session.
+        await new SystemEventDao(db).insert({
+            id: 'sev_relay_1',
+            event_name: 'message.replied',
+            occurred_at: new Date().toISOString(),
+            actor: 'proj-coder',
+            payload_json: JSON.stringify({ msgId: 'msg_relay_1', fromId: 'proj-coder', toId: 'operator' }),
+        });
+
+        // The relay polls the ledger; give it a bounded window rather than a fixed sleep.
+        for (let attempt = 0; attempt < 50 && seen.length === 0; attempt += 1) {
+            await new Promise((resolve) => setTimeout(resolve, 20));
+        }
+
+        expect(seen.map((event) => event.name)).toEqual(['message.replied']);
+        expect(seen[0]?.payload).toMatchObject({ msgId: 'msg_relay_1' });
+
+        // Exactly once: a second poll must not re-emit the same row.
+        await new Promise((resolve) => setTimeout(resolve, 150));
+        expect(seen).toHaveLength(1);
+        db.close();
+    });
 });

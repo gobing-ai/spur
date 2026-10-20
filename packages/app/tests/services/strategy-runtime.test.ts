@@ -1,4 +1,4 @@
-import { describe, expect, spyOn, test, vi } from 'bun:test';
+import { afterEach, beforeEach, describe, expect, spyOn, test, vi } from 'bun:test';
 import { mkdir, mkdtemp, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -748,6 +748,64 @@ describe('StrategyRuntime.reconcileStrategy (0859 R1)', () => {
     });
 });
 
+describe('StrategyRuntime.resume — guest expiry ownership (G11 R3)', () => {
+    let expiryDb: DbAdapter;
+    beforeEach(async () => {
+        expiryDb = await createMigratedDb();
+    });
+    afterEach(() => {
+        expiryDb.close();
+    });
+
+    /** Build a runtime whose guest-expiry seam records its calls. */
+    function withGuestExpiry(calls: string[]): StrategyRuntime {
+        return new StrategyRuntime({
+            openDb: async () => expiryDb,
+            tasks: { list: async () => [] },
+            fleet: {
+                resolve: async () => ({ members: [], resolvedAt: '', projectPath: '/tmp/p' }) as never,
+                resolveOrchestrator: async () =>
+                    ({ state: 'bound-online', instanceId: 'proj-orch', holderId: 'proj-orch' }) as never,
+            },
+            dependencyBlocked: async () => null,
+            guestExpiry: async () => {
+                calls.push('expire');
+                return [];
+            },
+        });
+    }
+
+    test('a readOnly resume never expires a guest', async () => {
+        const calls: string[] = [];
+        await withGuestExpiry(calls).resume('/tmp/p', { readOnly: true });
+        expect(calls).toEqual([]);
+    });
+
+    test('a write resume expires guest leases exactly once, beside the reconcile', async () => {
+        const calls: string[] = [];
+        await withGuestExpiry(calls).resume('/tmp/p');
+        expect(calls).toEqual(['expire']);
+    });
+
+    test('an expiry failure is swallowed — housekeeping must not fail a tick', async () => {
+        const runtime = new StrategyRuntime({
+            openDb: async () => expiryDb,
+            tasks: { list: async () => [] },
+            fleet: {
+                resolve: async () => ({ members: [], resolvedAt: '', projectPath: '/tmp/p' }) as never,
+                resolveOrchestrator: async () =>
+                    ({ state: 'bound-online', instanceId: 'proj-orch', holderId: 'proj-orch' }) as never,
+            },
+            dependencyBlocked: async () => null,
+            guestExpiry: async () => {
+                throw new Error('lease store unavailable');
+            },
+        });
+        const report = await runtime.resume('/tmp/p');
+        expect(report.reconciled).toBe(true);
+    });
+});
+
 describe('StrategyRuntime.resume (0838 R6)', () => {
     test('strict order: persists the rest default when absent, restores a persisted strategy without resetting it', async () => {
         const rig = await makeRig({ strategy: 'gtd' });
@@ -1200,7 +1258,7 @@ describe('managed GTD dispatch and reconciliation (G62)', () => {
 
             // The member's run lands an errored receipt for the dispatched message.
             const inbox = legacyInbox(rig.db);
-            const [row] = await inbox.inbox('proj-coder');
+            const [row] = (await inbox.inbox('proj-coder')).messages;
             expect(row).toBeDefined();
             const runs = new CoordinationRunDao(rig.db);
             await runs.insertStart({
