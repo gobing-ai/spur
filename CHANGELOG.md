@@ -1,5 +1,36 @@
 # Changelog
 
+## [0.4.18] - 2026-10-20
+
+_Every claim bullet carries one source anchor; unanchored bullets are bookkeeping (filings, status
+moves) and assert no code, API or version fact._
+
+### Fixed
+- bound the test-suite child with a 60-minute watchdog in its own process group, so a test blocked in a synchronous `spawnSync` — which `bun test`'s per-test `--timeout` does not interrupt — is killed and reported as exit 124 instead of hanging the gate; `SPUR_TEST_WATCHDOG_MS` overrides the bound and a heartbeat prints elapsed time (0fe9851cc)
+  <!-- src: scripts/commands/run-tests.ts:104, scripts/commands/coverage-certification.test.ts:520, https://bun.com/docs/cli/test ("Use the `--timeout` flag to specify a _per-test_ timeout in milliseconds") -->
+- skip Commander's implicit `help` command — added by default when a command has subcommands, and listed in that group's `Commands:` block — when counting which subcommands carry a flag, so a documented nested-shorthand flag is no longer reported against a subcommand no citation can mean (36ca79219)
+  <!-- src: scripts/commands/surface-drift-inventory.ts:393, scripts/commands/surface-drift-inventory.test.ts:453, https://github.com/tj/commander.js#help-command ("A `help` command is added by default if your command has subcommands") -->
+- stop `surface-drift-inventory` reporting the live surface as drift (1265): a root program option resolves as global before a verb-level mismatch, hidden verbs are probed rather than assumed absent, `spur maintain` and a documented absence resolve instead of failing, and a confirmed mismatch still exits 1 (f0b79b19b)
+  <!-- src: scripts/commands/surface-drift-inventory.ts:385, scripts/commands/surface-drift-inventory.ts:429, scripts/commands/surface-drift-inventory.ts:477, scripts/commands/surface-drift-inventory.ts:585, scripts/commands/surface-drift-inventory.ts:1183 -->
+- refuse a `persist-out` whose source and destination are the same tree, so running it from inside the worktree no longer self-copies evidence and reports `ok: true` with nothing persisted (869a04b12)
+  <!-- src: packages/app/src/services/worktree-persist.ts:147, packages/app/tests/services/worktree-persist.test.ts:52 -->
+
+### Changed
+- link `@gobing-ai/spur-app`, `spur-domain` and `spur-web` into the root workspace and export the web runtime manifest, so `scripts/commands` imports through the alias instead of deep relative paths (ddadbc219)
+  <!-- src: package.json:109, apps/web/package.json:6 -->
+- require a repo-root-relative `path:line` in the review answer's evidence cells: an absolute path outside the repo is an unresolved anchor that blocks the done projection (`L4.anchor-unresolved`) (57a7865f1, 0852d6b1a)
+  <!-- src: config/workflows/task-pipeline.yaml:668, plugins/sp/agents/super-reviewer.md:270 -->
+- document `spur self exec` — the `builder`-config-resolved SDLC action that replaces build/lint/test script aliases (ADR-139) — in the help reference set (dd2dc3dc4)
+  <!-- src: docs/help2/exec.md:1, docs/help2/index.md:47 -->
+
+### Other
+- propose ADR-143 for a Spur-owned inbox with one writer, with its design satellite (17828dfca)
+- open the G11 inbox-module refactor feature with a plan and tasks 1266-1269 (2d4a557f3)
+- open task 1265 and reactivate I3 (c5c8b2998)
+- add new tasks to the G11 feature (19bae790e)
+- mark ADR-139, ADR-140 and their design satellites implemented (492d8441e)
+- index the 1265 surface-drift inventory dogfood run (9c9980000)
+
 ## [0.4.16] - 2026-10-19
 
 _Claim bullets carry one source anchor and the level that anchor supports — `HIGH`: a `path:line` was
