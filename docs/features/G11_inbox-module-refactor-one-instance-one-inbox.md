@@ -6,7 +6,7 @@ status: backlog
 priority: P2
 tags: []
 created_at: "2026-10-20T06:57:26.966Z"
-updated_at: "2026-10-20T07:06:50.206Z"
+updated_at: "2026-10-20T16:42:12.457Z"
 ---
 
 # G11: Inbox module refactor — one instance, one inbox
@@ -153,6 +153,21 @@ Feature: Inbox module refactor — one fleet member, one inbox
     Given two queued messages in a fleet member's inbox and its agent process exits before claiming them
     When a new process for the same member starts and drains its inbox
     Then it claims both messages under the same member address and no message is stranded
+
+  Scenario: R20 — A fleet dispatch completes a round trip through the member inbox
+    # covers: I1, I2
+    Given a strategy tick or a workflow agent.run with executor fleet dispatches a task to a fleet member
+    When the member's spur agent loop claims the message, runs, and exits
+    Then the message is delivered and the run receipt links the message id and task_id
+    And the dispatcher receipt resolves and the strategy or workflow advances
+    And nothing reaches the member except through its inbox
+
+  Scenario: R21 — Every member consumer claims and settles through the inbox service
+    # covers: I2
+    Given queued messages for a fleet member and for a guest occupant
+    When spur agent loop, spur agent run, and the guest pull via spur agent wait --inbox consume them
+    Then each claim and settle goes through the inbox service and the keyed write-slot hold reads task_id from its column
+    And retiring the guest returns its claimed messages to queued
 ```
 
 ## Tasks
