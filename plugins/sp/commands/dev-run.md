@@ -50,6 +50,9 @@ For shared semantics, see the [flag glossary](../skills/spur-dev/references/flag
 - Implement step only (`--mode implement`): `Skill(skill="sp:code-implementation", args="$ARGUMENTS")`
 - After a full-mode run settles (done, failed or paused), print the
   [execution summary](../skills/spur-dev/references/dev-operations.md#execution-summary) unless `--no-summary`.
+- Then report the run's decision points (triage lane, failure classes, approval) from their rows
+  ([reporting a run](../skills/spur-dev/references/decision-points.md#reporting-a-run)). A `failed` or `remediate` route is explained by the row
+  that chose it; quote its value, source and reason, never a fresh judgment.
 
 **Flags:**
 

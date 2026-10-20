@@ -102,12 +102,17 @@ that needs `TYPESAFE_API_KEY`. Without a reachable backend `run` still exits 0 w
 fallback (`source: default`, reason `no-backend`), which is why it is usable in tests and scripts
 with no model access — the outcome is deterministic, not model-judged.
 
-**Available makers:** the three upstream built-ins (`typesafe`, `fm-local`, `laya-local`) plus
-Spur's hosted `clef` (Cloudflare Workers AI via `@gobing-ai/ts-decision-clef`). `clef` registers
-only when both `CLOUDFLARE_ACCOUNT_ID` and `CLOUDFLARE_AUTH_TOKEN` are set in the environment;
-without them it is absent from `registeredMakers`, so naming it in config or `--maker` is a config
-error, never a silent fallback. Its model defaults to `clef-flash` (a catalog `model` selects
-`clef`).
+**Available makers:** the four upstream built-ins (`typesafe`, `fm-local`, `laya-local`,
+`llm-agent`) plus Spur's hosted `clef` (Cloudflare Workers AI via `@gobing-ai/ts-decision-clef`).
+
+- `llm-agent` samples an installed coding agent: by default the first installed tier-1 agent, 3
+  one-shot samples, accepted only when every sample agrees. Spur passes it no driver options, so
+  each ask costs several agent runs; name it per decision (`decisions.makers.<id>`) rather than as
+  the project-wide `decisions.maker`.
+- `clef` registers only when both `CLOUDFLARE_ACCOUNT_ID` and `CLOUDFLARE_AUTH_TOKEN` are set in
+  the environment; without them it is absent from `registeredMakers`, so naming it in config or
+  `--maker` is a config error, never a silent fallback. Its model defaults to `clef-flash` (a
+  catalog `model` selects `clef`).
 
 ## Workflow consumption
 
@@ -115,7 +120,9 @@ Workflows consume a decision through the catalog-reference `decide` action
 (`{id, decision, params?, evidence? | instructions?, resultFile}`); the inline
 `question`/`method`/`default` form is deprecated. `workflows.decideDecisionMaker` (default off)
 gates model calls there — off, every `decide` serves its fallback. `hitl.confirm`/`hitl.select`
-with `decision: {mode: evidence, …}` route through `gate-evidence`. Shape, adoption classes and
+with `decision: {mode: evidence, …}` route through `gate-evidence` under the separate
+`workflows.hitlDecisionMaker` switch (default off — the gate defers to the operator, or under
+`profile=auto` to its declared fallback). Neither switch affects `spur decision run`. Shape, adoption classes and
 guards: [decision/lifecycle.md](decision/lifecycle.md) §1, §3.
 
 ## Examples

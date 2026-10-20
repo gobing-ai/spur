@@ -53,8 +53,9 @@ when the run count justifies it. One or zero → **descriptive procedure**; say 
 | "Retry until the gate passes", "loop until clean" | workflow — bounded loop is the engine's job |
 | "Pause for approval, continue later / in another session" | workflow — HITL resume needs a run record |
 | "Every night", "for each task in the batch", unattended | workflow — replay + record |
-| "Then check whether it looks right and decide" | prose — the predicate is judgment, not an exit code |
-| "It depends what the diff says" | prose — the branch has no machine-checkable condition |
+| "Then check whether it looks right and decide" | prose — unless the answer is a closed set with a safe default; then a catalog `decide` step |
+| "It depends what the diff says" | prose — unless a deterministic floor routes first and a catalog decision refines it (task-triage pattern) |
+| "Classify the failure, then fix or stop" | workflow — a `decide` row the guard reads ([decision points](../../../spur-dev/references/decision-points.md)) |
 | Runs once, then the situation has changed | prose — a checklist, not a definition |
 | One operator, in-session, watching each step | prose — the trace has no second reader |
 

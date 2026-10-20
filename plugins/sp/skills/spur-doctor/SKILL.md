@@ -136,6 +136,28 @@ optimization**, and the change comes from the §10 table:
 - A proposal that changes a shared workflow goes through §7 of the composition ladder
   ([spur-composer](../spur-composer/SKILL.md)), including its recorded operator consent.
 
+## Decision flags
+
+Decision evidence is `spur decision status --json` (catalog and per-maker readiness) and
+`spur decision status --reliability [--since <iso>] --json` (per decision × maker). Each flag is a
+predicate over those fields, so compute it with `jq` and never estimate from prose. Each flag becomes
+one row with action class **workflow optimization**. A catalog or config change routes through
+`sp:spur-composer` and the decision lifecycle
+([decision/lifecycle.md](../spur-cli/references/decision/lifecycle.md)).
+
+| Evidence | Flag | Proposed change |
+| --- | --- | --- |
+| `status`: `loadErrors[]` or `duplicateIds[]` non-empty | `catalog-error` | Fix the named catalog file; a layer collision is renamed, not suppressed |
+| `status` `makers[]`: `evidence.recorded > 0` and `evidence.accepted == 0` | `maker-never-accepted` | Re-point `decisions.makers.<id>` for the decisions in `serves`, after `--probe` confirms the maker answers |
+| `status` `makers[]`: `configuredBy` non-empty and `evidence.recorded == 0` | `maker-unrecorded` | Run `spur decision status --probe`; propose only when the probe fails |
+| `--reliability` `groups[]`: `samples >= 10` and `acceptedRate < 0.5` | `low-accept-rate` | Read the dominant `fallbacks` reason: `low-confidence` → tune criteria or `minConfidence`, or change the maker; `no-backend` / errors → maker config; invalid answers → the criteria vocabulary |
+| A workflow step's shell command (not a YAML comment) runs `spur decision run` — read it from `spur workflow show <workflow> --json` | `shell-decision-run` | Convert to a typed `decide` step plus a projection. The shell call ignores both workflow switches |
+
+- `samples < 10` is not evidence: the row says so instead of raising `low-accept-rate`.
+- A run's rows under `.spur/run/*.decision` explain one route; the reliability report is the only
+  rate evidence. Never compute a rate from row files.
+- A decision whose `source: default` rows are expected (switch off, `reason: disabled`) is a no-op.
+
 ## Reflection map over history findings
 
 For each history-anatomy finding (`key`, `category`, `trend`, `ownerSurface`), assign **exactly

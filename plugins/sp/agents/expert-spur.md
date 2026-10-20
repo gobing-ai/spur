@@ -42,6 +42,9 @@ Use for:
   ladder, trace-driven rule tuning, and applying accepted doctor proposals.
 - Evaluation and reflection campaigns via `sp:spur-doctor`: read-only evidence, history-finding
   reflection, and a proposal table.
+- Decision campaigns: catalog health and reliability audits (`spur decision status --json`,
+  `--reliability`, `--probe`) through `sp:spur-doctor`'s decision flags, and new or tuned decision
+  points through the decision lifecycle and `sp:spur-composer` (shared ids need operator consent).
 
 One bounded campaign per dispatch. Do not use for one CLI invocation. Do not use for
 planning→implementation→verification lifecycle or batch task execution; `sp:spur-dev` owns that

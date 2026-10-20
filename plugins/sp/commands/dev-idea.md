@@ -44,13 +44,18 @@ trace records the answering source. `--auto` takes the recommended option at eac
 
 | Gate | Pauses when | Recommendation comes from | `--auto` takes |
 | --- | --- | --- | --- |
-| idea-eval | after discovery | eval report `## Recommendation` (`proceed` / `reshape` / `drop`) | `proceed`/`reshape` → continue; `drop` → cancel; missing → still asks |
+| idea-eval | after discovery | eval report `## Recommendation` (`proceed` / `reshape` / `drop`); when unparseable, a model answer from the `idea-recommendation` decision | `proceed`/`reshape` → continue; `drop` → cancel; neither → the gate asks, and under `--auto` its `gate-evidence` decision answers (a deferred answer denies) |
 | design-approval | after system-design (skipped by `--skip-design`) | recorded design check | PASS → approve; FAIL → still asks |
 
 The AC check and the batch create are deterministic pipeline steps, not gates: `ac-generate`
 runs `spur feature check` and routes on the recorded result (a FAIL retries the AC loop, cap 3),
 and `batch-create-run` runs `spur task batch-create` and routes on its own recorded result.
 Neither ever pauses, under any profile.
+
+The rescue decisions and the gate answers are catalog decision points; their rows and switches
+are in [decision points](../skills/spur-dev/references/decision-points.md). With both switches off
+(the default) no model is called and a `--auto` run with no parseable recommendation stops at
+idea-eval as a denial rather than creating a feature.
 
 Flag → vars: `--auto` sets `profile=auto`, `idea_approved=true`, `design_approved=true`;
 `--skip-design` sets `design=skip`.
