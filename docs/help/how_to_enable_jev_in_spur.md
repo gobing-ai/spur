@@ -157,4 +157,4 @@ template. Validation rejects mis-declared evidence mode at `workflow validate` t
 - [Decision responder](../../packages/app/src/workflow/decision-hitl-responder.ts)
 - [Workflow service composition](../../packages/app/src/services/workflow-service.ts)
 - [Headless fallback](../../apps/cli/src/workflow/hitl/default-responder.ts)
-- [Inline driver contract](../../plugins/sp/skills/spur-dev/references/inline-pipeline-driver.md)
+- [Inline-default execution surface](../../plugins/sp/skills/spur-dev/references/cross-cutting.md#inline-default-execution-surface)

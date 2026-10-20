@@ -131,8 +131,9 @@ surface instead of spawning a subprocess; a subprocess fallback happens only whe
 
 **Interactive task pipelines invert control into the host session (ADR-047 amendment).**
 `dev-run --mode full` and sequential `dev-runall` with omitted `--agent` or explicit `--agent
-inline` interpret the existing `task-pipeline.yaml` in the host session; they do not launch `spur
-workflow run` and never redirect silently to `agent.default`. Interactive **omit** is
+inline` run the existing `task-pipeline.yaml` on the host executor — the engine loop above
+(`spur workflow run … executor=host` → work item → `spur workflow continue`), with no subprocess —
+and never redirect silently to `agent.default`. Interactive **omit** is
 **host-controlled and non-subprocess**, but no longer guarantees host-context execution for every
 model stage (task 0508): an eligible `agent.run` stage — pure-slash input, non-interactive state,
 native subagent with shared-worktree read/write/shell capability, and a task above the

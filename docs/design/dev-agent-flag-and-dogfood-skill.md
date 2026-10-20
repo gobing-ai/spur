@@ -38,8 +38,9 @@ answer/diff artifacts, HITL behavior, and the iteration bound. It records a pipe
 
 `--agent auto`, a named executor, parallel batch mode, `spur workflow run`, and `spur agent run`
 retain the subprocess surface and its timeout/trace contracts. The engine and YAML schema are
-unchanged; the command/skill wrapper owns the control inversion. Driver contract:
-`plugins/sp/skills/spur-dev/references/inline-pipeline-driver.md`.
+unchanged; the command/skill wrapper owns the control inversion. The inline driver contract was
+retired in task 1242; the current host-executor contract is
+[`cross-cutting.md`](../../plugins/sp/skills/spur-dev/references/cross-cutting.md#inline-default-execution-surface).
 
 ## Problem
 

@@ -903,7 +903,7 @@ clean` reclaims retained logs older than `workflows.logRetentionDays` (default 3
   diagram}`; bare `--json` returns the mermaid envelope. Both envelopes carry `source: {layer,
   path}`, the layer and file that name resolution picked (ADR-113). Unknown `--format` exits 1
   naming both values before file resolution; not-found and schema-invalid errors are identical for every
-  format. Consumer: the inline driver's layer-1 todo (0696, `inline-pipeline-driver.md`).
+  format. Consumer: the dev-command layer-1 todo (0696; the original inline driver consumer was retired in 1242).
   Task 1104: the todo `--json` payload additionally carries `plan` — the two-layer A-Z/1-9
   phased plan projected from the definition's `display` annotations (`null` when no state declares
   display; unannotated projections keep the pre-1104 `steps` shape plus `plan: null`). `plan` rows are

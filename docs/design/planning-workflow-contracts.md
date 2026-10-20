@@ -285,7 +285,8 @@ step carries a `timeoutMs` option — `${vars.stepTimeoutMs}` for review/verify/
 `"2700000"` (45 min, task 1108 — a reasoned default, not a proven bound) respectively. The
 implement budget governs subprocess surfaces; inline dispatch passes it to the host only where the
 host's dispatch tool accepts a timeout, and the host's own limit is the boundary otherwise
-(`inline-pipeline-driver.md` § Timeout boundary).
+([`execution-workflow.md`](../../plugins/sp/skills/spur-dev/references/execution-workflow.md#large-tasks-and-timed-out-implement-resume-task-0424)
+§ Host-executor path).
 On elapse the ts-libs `ProcessExecutor` kills the subprocess (never abandons it); the agent step
 exits non-zero → `ok:false` → pipeline routes to `failed`, and a partial-work handoff artifact is
 written to `.spur/run/<runId>-<state>-partial.md`. The artifact carries a `## resume context` block
@@ -598,26 +599,18 @@ session, with eligible model stages allowed a native platform subagent per task-
 tier resolution there and emits one warning naming the resolved executor — no rejection, no
 frozen message, no `exit 2`. Genuine resolution failures keep the existing
 `agent-resolution` envelope.
-Interactive full task execution uses the YAML-backed host driver defined in
-[`inline-pipeline-driver.md`](../../plugins/sp/skills/spur-dev/references/inline-pipeline-driver.md).
-Interactive omit is host-controlled and **non-subprocess** (no `spur agent run`, no
-`spur workflow run`), but eligible sequential model-bearing `agent.run` stages dispatch once to a
+Interactive full task execution runs on the host executor (task 1242 retired the inline driver):
+`spur workflow run task-pipeline.yaml --vars '{"executor":"host"}'` returns one work item per model
+stage, the session performs it, and `spur workflow continue <run-id> --answer-text <receipt>`
+advances the run. Interactive omit is host-controlled and **non-subprocess** (no `spur agent run`),
+but eligible sequential model-bearing `agent.run` stages dispatch once to a
 native platform subagent when the host exposes one with shared-worktree read/write/shell
 capability; host fallback covers every ineligible stage, and post-dispatch failures follow the
 stage error policy without host replay (ADR-047 amendment, task 0508). Operator confirmation
 actions and approve/taste/ask decisions stay host-owned.
-The inline driver's run identity is frozen at invocation (task 0809 R4): setup persists the
-authoritative run row with the complete launch identity — canonical `definitionDigest`,
-`workflowVersion` including explicit null, and `definitionSource` path/layer/workdir — in the
-initial insert, and the driver keeps one invocation-time parsed definition for the entire run.
-`proof.digest` is the fresh current-input fingerprint while `proof.definitionDigest` identifies
-the workflow actually interpreted; a tracked YAML source edit before capture lands in current
-input proof, post-capture input edits invalidate it, and switching the executed definition stops
-the run in favor of a fresh inline run — never a history repair or resume stamp at record (0784
-owns paused-engine consent). The inline record is 0808's registration-equivalent run-log line
-with run/definition identity agreement checked from authoritative setup/run evidence; there is
-no inline artifact-ledger write. Owner:
-[`inline-pipeline-driver.md`](../../plugins/sp/skills/spur-dev/references/inline-pipeline-driver.md).
+Run identity on the host executor is the engine run's own row (task 0809 R4 originally froze it
+in the retired inline driver's setup): the engine records `definitionDigest`, `workflowVersion`,
+and `definitionSource` at launch, so the inline-only setup and run-log equivalence no longer apply.
 The SSOT is
 [`cross-cutting.md`](../../plugins/sp/skills/spur-dev/references/cross-cutting.md#inline-default-execution-surface).
 The `review` operation resolves to deterministic modes: WBS mode runs functional traceability (`sp:functional-review`), SECUA framework (`sp:code-verification`), and architectural depth (`sp:code-improvement`), writing findings to the task's `## Review` section; Path mode runs advisory SECUA and architecture with no task mutation. `--fix` is deprecated (no-op + warning; route remediation → `/sp:dev-verify --fix`). `--next` was **removed** from `dev-review` (feature H8, task 0401 R3): it had been a deprecated no-op, and once `--next` was redefined as chain-to-completion with propagation (ADR-039) keeping a no-op spelling of a now-meaningful flag would have been the fourth contradictory meaning. Route progression through `/sp:dev-next`.
