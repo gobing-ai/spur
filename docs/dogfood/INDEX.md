@@ -88,3 +88,4 @@ git ls-files docs/dogfood | grep -Ev '(README|INDEX)\.md$'
 - `2026-10-15-A91-inline-lifecycle-dogfood.md`
 - `2026-10-16-L1-pr-review-branch-topology-dogfood.md`
 - `2026-10-17-A92-sdlc-actions-dogfood.md`
+- `2026-10-20-G11-inbox-module-dogfood.md`
