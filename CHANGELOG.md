@@ -1,5 +1,58 @@
 # Changelog
 
+## [0.4.20] - 2026-10-21
+
+_Claim bullets carry one source anchor and the level that anchor supports — `HIGH`: every anchor is a
+`path:line` beyond line 1 and resolves; `MEDIUM`: every anchor resolves but the set is not all
+line-precise (a URL or a whole file); `LOW`: an anchor that does not resolve, or none. The level is a
+function of the anchors, not a judgement (ADR-144; the check is
+`repo-wide-tests/changelog-confidence.test.ts`). Unanchored bullets are bookkeeping (status moves,
+filings) and assert no code, API or version fact._
+
+### Added
+- add a per-job `timeoutMs` to the bootstrap scheduler schema, so one model-driven chain is bounded without raising the global scheduler default: absent inherits that default, `null` is explicit unlimited, and the deadline SIGTERMs the owned process group before the SIGKILL (9944b6ec9)
+  <!-- src: apps/cli/schemas/spur-config.schema.json:124, .spur/config.yaml:60, config/config.example.yaml:64 · confidence: HIGH -->
+
+### Fixed
+- escalate the test-suite watchdog independently of child exit and reap the owned process group, so a suite whose `child.exited` never resolves is killed instead of hanging the gate; Windows tree cleanup runs through a bounded `taskkill /T /F` (31134da87)
+  <!-- src: scripts/commands/run-tests.ts:163, scripts/commands/run-tests.ts:189, scripts/commands/test-suite-termination.ts:7 · confidence: HIGH -->
+- project the latest recorded attempt as a step's current status while the earlier rows stay history, and name the row ids in the ambiguous-action diagnostic (31134da87)
+  <!-- src: packages/app/src/workflow/progress-projection.ts:536, packages/app/src/workflow/progress-projection.ts:528 · confidence: HIGH -->
+- redact the request URL's credentials and every header value from an `http.request` failure message, not just the `headers` block (31134da87)
+  <!-- src: packages/app/src/workflow/actions/http-request.ts:261 · confidence: HIGH -->
+- release the progress-follow timeout timer and abort listener in a `finally`, and make the event follower's sleep abortable with a configurable poll interval (31134da87)
+  <!-- src: packages/app/src/workflow/progress-follow.ts:104, packages/app/src/services/system-event-follow.ts:36 · confidence: HIGH -->
+- launch a Windows async workflow worker through `Start-Process` with a data-only argv handoff, refusing a `.cmd`/`.bat` launcher that would re-expand the arguments (31134da87)
+  <!-- src: apps/cli/src/commands/workflow/shared.ts:38, apps/cli/src/commands/workflow/shared.ts:61 · confidence: HIGH -->
+- run inbox row/event mutations through the adapter's synchronous transaction facade instead of a chained `BEGIN IMMEDIATE` on the shared connection, so a failed event write rolls back only its own mutation (69c2d9d61)
+  <!-- src: packages/domain/src/dao/inbox-dao.ts:165, patches/README.md:3 · confidence: HIGH -->
+- fence inbox settle and release to the exact claim generation (`{id, attempts}`), so a stale claimant cannot mutate a replacement claim, and return claims in created order (69c2d9d61)
+  <!-- src: packages/domain/src/dao/inbox-dao.ts:12, packages/domain/src/dao/inbox-dao.ts:276, packages/app/src/services/inbox-service.ts:282 · confidence: HIGH -->
+- reject a replayed request key whose task or parent-run metadata conflicts with the stored row, instead of serving that row as the idempotent answer (69c2d9d61)
+  <!-- src: packages/app/src/services/inbox-service.ts:116, packages/app/src/services/inbox-service.ts:118 · confidence: HIGH -->
+- read the current inbox JSON in the guest Stop hook so answered work is claimed and settled on handoff, keeping inbox reads side-effect free (69c2d9d61)
+  <!-- src: plugins/sp/scripts/hooks/fleet-guest-stop.ts:107, apps/cli/src/commands/agent/wait.ts:21 · confidence: HIGH -->
+- derive the global composer receipt from the durable `inbox.requests` row for any message kind and exact recipient, and poll only while the receipt or its run is still active (69c2d9d61)
+  <!-- src: apps/web/src/components/GlobalAgentBar.tsx:187, apps/web/src/components/GlobalAgentBar.tsx:337, apps/server/src/modules/inbox/handlers.ts:269 · confidence: HIGH -->
+- fence Inbox pagination to the selected member and project through a selection generation, and list declared fleet members before their first message (69c2d9d61)
+  <!-- src: apps/web/src/modules/projects/InboxView.tsx:121, apps/web/src/modules/projects/InboxView.tsx:22 · confidence: HIGH -->
+- read task status and feature id through one canonical projection, including the legacy `feature-id` key and status casing, and bind the feature edge into the readiness digest (69c2d9d61)
+  <!-- src: packages/app/src/services/task-metadata.ts:4, packages/app/src/services/task-query-ops.ts:27, packages/app/src/services/task-readiness.ts:411 · confidence: HIGH -->
+- resolve the feature directory from the task check's configured `featuresDir`, so a non-sibling features tree still validates scenario linkage (69c2d9d61)
+  <!-- src: packages/app/src/services/task-feature-link.ts:36 · confidence: HIGH -->
+- remove the retired `accepted`-baseline suppression from the planning and task checks, leaving `severityOverrides` and the unsuppressible error set as the only severity controls (69c2d9d61)
+  <!-- src: packages/app/src/services/planning-check-base.ts:318 · confidence: HIGH -->
+
+### Changed
+- upgrade the `@gobing-ai/ts-*` catalog from 0.5.32 to 0.5.33 and superskill from 0.3.39 to 0.3.42: the engine bump is what supplies the per-job scheduler `timeoutMs`, the ts-db synchronous-transaction patch is regenerated at 0.5.33, and the retired dual-workflow-engine 0.5.28 patch is dropped (f327408ef)
+  <!-- src: package.json:37, package.json:44, package.json:143, package.json:144, patches/README.md:3 · confidence: HIGH -->
+
+### Other
+- align the role-SSOT references with ADR-078 and note the shipped todo projection's declared ordering in D7 (55ec783a8)
+- deprecate superseded M4, F61, G5 and B3 with tasks 0422/0565/0566/0572/0586/0670 and record each successor (07c86761f)
+- reconcile feature history and stale projections (1270) (9b2a96f0d)
+- mark the superskill legacy-lib pitfall resolved in the project context (ba9b428bf)
+
 ## [0.4.19] - 2026-10-20
 
 _Claim bullets carry one source anchor and the level that anchor supports — `HIGH`: a `path:line` was
