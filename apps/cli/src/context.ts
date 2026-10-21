@@ -83,7 +83,7 @@ export interface CliContext {
     agentRolesSource: 'config' | 'fallback';
     /**
      * Layer-1 role → tier map resolved from `DEFAULT_AGENT_ROLES`
-     * (packages/config SSOT, 0572 / ADR-061) with the project's validated
+     * (fallback when no config layer supplies `agent.roles`, ADR-078) with the project's validated
      * `agent.roles` override merged per-field. Threaded into every
      * {@link agentService} construction so `--agent <role>` resolves. Always
      * defined — `resolveAgentRoles` cannot yield undefined (0572 P3 cleanup).

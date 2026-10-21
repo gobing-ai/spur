@@ -61,7 +61,7 @@ export interface AgentRunDeps {
  * Absent → resolution behaves exactly as the legacy Tier-1 priority path.
  *
  * `roles` (0572): optional per-role tier/stage overrides over the
- * `DEFAULT_AGENT_ROLES` SSOT (packages/config); the CLI boundary merges them
+ * config-layer role table (ADR-078; `DEFAULT_AGENT_ROLES` fallback in packages/config); the CLI boundary merges them
  * before threading {@link AgentServiceContext.roles}, so resolution never
  * reads this field — it rides here only so the validated section passes through
  * the CLI context unchanged.
@@ -107,7 +107,7 @@ export type AgentResolveResult =
           role?: string;
           /** Whether the role was declared by the caller or inherited via SPUR_ROLE (0551). */
           roleOrigin?: 'declared' | 'inherited';
-          /** Tier the role's row declares in the Layer-1 role table (DEFAULT_AGENT_ROLES SSOT, 0572/ADR-061; source `role`). */
+          /** Tier the role's row declares in the Layer-1 role table (config-layer table per ADR-078, `DEFAULT_AGENT_ROLES` fallback; source `role`). */
           tier?: CapabilityTier;
           /** Executor entry name that won — role resolution or an executor pin. */
           executor?: string;
@@ -151,7 +151,7 @@ export interface AgentRunInvocation {
     role?: string;
     /** Origin of the effective role — declared or inherited via SPUR_ROLE (0551). */
     roleOrigin?: 'declared' | 'inherited';
-    /** Tier the role's row declares in the Layer-1 role table (DEFAULT_AGENT_ROLES SSOT, 0572/ADR-061; source `role`). */
+    /** Tier the role's row declares in the Layer-1 role table (config-layer table per ADR-078, `DEFAULT_AGENT_ROLES` fallback; source `role`). */
     tier?: CapabilityTier;
     /** Executor entry name that won — role resolution or an executor pin. */
     executor?: string;
@@ -231,7 +231,7 @@ export interface AgentServiceOutput {
 }
 
 /**
- * A Layer-1 role as declared in the `DEFAULT_AGENT_ROLES` SSOT (task 0572 / ADR-061;
+ * A Layer-1 role as declared in the config-layer role table (ADR-078; `DEFAULT_AGENT_ROLES` is the fallback;
  * `plugins/sp/references/roles.md` survives as a parity-gated projection).
  *
  * `stages` lists the canonical stage ids the role folds. It is not decoration:
@@ -279,7 +279,7 @@ export interface AgentServiceContext {
     rolesSource?: 'config' | 'fallback';
     /**
      * Layer-1 role map resolved at the CLI boundary (0536 R1) from the
-     * `DEFAULT_AGENT_ROLES` SSOT (0572 / ADR-061) merged with the project's
+     * config-layer role table (ADR-078, `DEFAULT_AGENT_ROLES` fallback) merged with the project's
      * `agent.roles` override. Absent → role selectors are not recognized
      * and fall through to the executor / binary lookup.
      */

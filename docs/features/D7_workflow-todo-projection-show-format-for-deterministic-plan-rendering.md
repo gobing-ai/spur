@@ -6,7 +6,7 @@ status: done
 priority: P2
 tags: []
 created_at: "2026-08-27T23:55:37.175Z"
-updated_at: "2026-08-28T04:59:41.504Z"
+updated_at: "2026-10-21T20:42:51.389Z"
 ---
 
 # D7: Workflow todo projection: show --format for deterministic plan rendering
@@ -129,6 +129,13 @@ Feature: Workflow todo projection: show --format for deterministic plan renderin
 <!-- END AUTO-GENERATED -->
 
 ## Notes
+
+### Current reading — 2026-10-21
+
+Goal/Scope wording about topologically ordered transition-flow checklists is historical. The shipped `--format todo` renders declared node order (stable R2), per the premise correction below; no topological sort exists or is planned.
+
+### Historical notes
+
 **Premise correction (refine, `--depth ready`).** Every workflow definition shipped in
 `config/workflows/` is `kind: state-machine`; the repository contains zero `transition-flow`
 definitions, and the concrete consumer (`task-pipeline.yaml`) is a state machine. Scenario R2
@@ -144,6 +151,7 @@ a transition-flow definition lands whose declaration order is not already a vali
   error paths for a different output encoding only.
 - Caching the rendered todo — the parse is single-digit milliseconds and the render is pure; a cache
   buys an invalidation bug class and a stale-output failure mode for no measured gain.
+
 ## History
 - 2026-08-28T04:47:13.345Z backlog → active (system)
 - 2026-08-28T04:48:06.348Z active → verifying (system)
