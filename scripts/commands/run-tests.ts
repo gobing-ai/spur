@@ -99,18 +99,19 @@ if (Math.max(load1, load5, load15) > cores) {
  * that silent total loss into a named failure that retains the log.
  *
  * 60 minutes clears the measured 3-6 minute suite by an order of magnitude while still
- * bounding a wedged run; `SPUR_TEST_WATCHDOG_MS` overrides it (0 disables the kill, the
- * heartbeat still runs).
+ * bounding a wedged run; `SPUR_TEST_WATCHDOG_MS` overrides it (0 disables the kill).
+ * The heartbeat is opt-in (`SPUR_TEST_HEARTBEAT_MS`, default off): in a normal run the
+ * reporter's own dots already show life, and a per-minute line reads as output leak.
  */
 const WATCHDOG_MS = (() => {
     const raw = Number.parseInt(getEnvVar('SPUR_TEST_WATCHDOG_MS') ?? '', 10);
     return Number.isFinite(raw) && raw >= 0 ? raw : 60 * 60_000;
 })();
 
-/** Heartbeat cadence: enough to see life in a 10-minute call, quiet enough for a log. */
+/** Heartbeat cadence; 0 (default) means silent — set SPUR_TEST_HEARTBEAT_MS to see life signs. */
 const HEARTBEAT_MS = (() => {
     const raw = Number.parseInt(getEnvVar('SPUR_TEST_HEARTBEAT_MS') ?? '', 10);
-    return Number.isFinite(raw) && raw > 0 ? raw : 60_000;
+    return Number.isFinite(raw) && raw > 0 ? raw : 0;
 })();
 
 const clock = (ms: number): string => {
@@ -131,12 +132,15 @@ const clock = (ms: number): string => {
 async function runSuiteChild(argv: string[]): Promise<number> {
     const startedAt = Date.now();
     const child = Bun.spawn(argv, { env, stdio: ['inherit', 'inherit', 'inherit'], detached: true });
-    const heartbeat = setInterval(() => {
-        process.stderr.write(
-            `run-tests: suite running ${clock(Date.now() - startedAt)} (watchdog ${WATCHDOG_MS > 0 ? clock(WATCHDOG_MS) : 'off'})\n`,
-        );
-    }, HEARTBEAT_MS);
-    heartbeat.unref?.();
+    const heartbeat =
+        HEARTBEAT_MS > 0
+            ? setInterval(() => {
+                  process.stderr.write(
+                      `\nrun-tests: suite running ${clock(Date.now() - startedAt)} (watchdog ${WATCHDOG_MS > 0 ? clock(WATCHDOG_MS) : 'off'})\n`,
+                  );
+              }, HEARTBEAT_MS)
+            : undefined;
+    heartbeat?.unref?.();
     let expired = false;
     let childSettled = false;
     let windowsKiller: ReturnType<typeof Bun.spawn> | undefined;
@@ -147,7 +151,7 @@ async function runSuiteChild(argv: string[]): Promise<number> {
                   if (childSettled || child.exitCode !== null || child.signalCode !== null) return;
                   expired = true;
                   process.stderr.write(
-                      `run-tests: suite exceeded the ${clock(WATCHDOG_MS)} watchdog — killing the child process group. ` +
+                      `\nrun-tests: suite exceeded the ${clock(WATCHDOG_MS)} watchdog — killing the child process group. ` +
                           'A blocked child cannot be interrupted by --timeout; raise SPUR_TEST_WATCHDOG_MS if the suite legitimately needs longer\n',
                   );
                   try {
@@ -184,7 +188,7 @@ async function runSuiteChild(argv: string[]): Promise<number> {
         return code ?? 1;
     } finally {
         childSettled = true;
-        clearInterval(heartbeat);
+        if (heartbeat !== undefined) clearInterval(heartbeat);
         if (timer !== undefined) clearTimeout(timer);
         if (killTimer !== undefined) clearTimeout(killTimer);
         if (windowsKiller !== undefined) {
