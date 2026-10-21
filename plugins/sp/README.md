@@ -536,14 +536,18 @@ block/ask prints one JSON object that superskill renders per host:
 targets:
 
 - Codex, OpenCode, Antigravity and Hermes get only `scripts/`, staged as
-  `.agents/scripts/sp/`, with `lib/` beside it as `.agents/scripts/lib/`.
+  `.agents/scripts/sp/` — together with `lib/`, which lands **inside** the plugin root
+  (`.agents/scripts/sp/lib/`). Install drops the `scripts/` level, so it retargets an entry's
+  `../../lib/…` to `../lib/…` for the staged tree; older superskill builds stage the same `lib/`
+  at the shared `.agents/scripts/lib/` instead and leave the import depth alone. Both resolve.
 - Native targets (Claude Code, omp, Grok) get the whole plugin.
 
-So `scripts/hooks/<id>.ts`, importing `../../lib/…`, is the only path that resolves the same way on
-every target. `hooks/` keeps the registry only. `script-contract-check`
-rejects a hook entry there: on native installs it would shadow the staged one, and staged targets
-would never receive it. Hook logic stays in the plugin (Revision 2026-10-15); the files are entries
-and lib cores, not `spur` commands.
+So `scripts/hooks/<id>.ts`, importing `../../lib/…` relative to `plugins/sp/`, is the only path that
+resolves the same way on every target. Keep that import depth as written — it is correct for the
+plugin tree, and install fixes it up for the collapsed staged tree. `hooks/` keeps the registry
+only; `script-contract-check` rejects a hook entry there, because on native installs it would shadow
+the staged one and staged targets would never receive it. Hook logic stays in the plugin (Revision
+2026-10-15); the files are entries and lib cores, not `spur` commands.
 
 **Escape hatch:** `SPUR_WRITE_GUARD=off` short-circuits the write guard before any subprocess.
 

@@ -475,9 +475,10 @@ function registeredHookIdentities(hooksJsonPath: string): { registered: Set<stri
  * helpers live in `plugins/sp/lib`, and hook tests live in `plugins/sp/tests/hooks`.
  *
  * Why `scripts/hooks` and not `hooks`: `superskill hook run sp <id>` resolves `hooks/<id>` before
- * `scripts/hooks/<id>` under every plugin root, but install stages only `scripts/` (and `lib/` as its
- * sibling) for Codex/OpenCode/Antigravity/Hermes. `scripts/hooks/<id>.ts` is therefore the single
- * location every target reaches. `plugins/sp/hooks` keeps the registry only (the plugin Pi extension
+ * `scripts/hooks/<id>` under every plugin root, but install stages only the `scripts/` subtree (plus
+ * the sibling `lib/`) for Codex/OpenCode/Antigravity/Hermes, collapsing the `scripts/` level and
+ * retargeting `../../lib/…` to `../lib/…` so it still lands in the plugin's staged `lib/`.
+ * `scripts/hooks/<id>.ts` is therefore the single location every target reaches. `plugins/sp/hooks` keeps the registry only (the plugin Pi extension
  * was retired 2026-10-15) — an entry there would shadow the staged one on native installs and never ship to staged targets.
  * Pure and side-effect free.
  */
