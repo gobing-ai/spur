@@ -12,6 +12,75 @@ registerHappyDom();
 const sendCalls: unknown[] = [];
 const replyCalls: unknown[] = [];
 const readCalls: unknown[] = [];
+const listCalls: Array<{ cursor?: string }> = [];
+/** The newest page's `nextCursor`; a test sets it to offer older history. */
+let newestCursor: string | null = null;
+
+const olderRow = {
+    id: 'msg_0',
+    fromId: 'operator',
+    toId: 'proj-coder',
+    body: 'older question',
+    kind: 'chat',
+    status: 'delivered',
+    attempts: 1,
+    error: null,
+    claimedAt: null,
+    deliveredAt: null,
+    readAt: null,
+    inReplyTo: null,
+    threadId: 'msg_0',
+    requestKey: null,
+    taskId: null,
+    parentRunId: null,
+    createdAt: 0,
+};
+
+function newestPage() {
+    return {
+        messages: [
+            {
+                id: 'msg_1',
+                fromId: 'operator',
+                toId: 'proj-coder',
+                body: 'question',
+                kind: 'chat',
+                status: 'queued',
+                attempts: 0,
+                error: null,
+                claimedAt: null,
+                deliveredAt: null,
+                readAt: null,
+                inReplyTo: null,
+                threadId: 'msg_1',
+                requestKey: null,
+                taskId: null,
+                parentRunId: null,
+                createdAt: 1,
+            },
+            {
+                id: 'msg_2',
+                fromId: 'proj-coder',
+                toId: 'operator',
+                body: 'answer',
+                kind: 'chat',
+                status: 'delivered',
+                attempts: 1,
+                error: null,
+                claimedAt: 2,
+                deliveredAt: 3,
+                readAt: null,
+                inReplyTo: 'msg_1',
+                threadId: 'msg_1',
+                requestKey: null,
+                taskId: null,
+                parentRunId: null,
+                createdAt: 4,
+            },
+        ],
+        nextCursor: newestCursor,
+    };
+}
 
 const stubApi = {
     inbox: {
@@ -19,49 +88,11 @@ const stubApi = {
             { id: 'proj-coder', queued: 1, unread: 1 },
             { id: 'operator', queued: 0, unread: 0 },
         ],
-        list: async () => ({
-            messages: [
-                {
-                    id: 'msg_1',
-                    fromId: 'operator',
-                    toId: 'proj-coder',
-                    body: 'question',
-                    kind: 'chat',
-                    status: 'queued',
-                    attempts: 0,
-                    error: null,
-                    claimedAt: null,
-                    deliveredAt: null,
-                    readAt: null,
-                    inReplyTo: null,
-                    threadId: 'msg_1',
-                    requestKey: null,
-                    taskId: null,
-                    parentRunId: null,
-                    createdAt: 1,
-                },
-                {
-                    id: 'msg_2',
-                    fromId: 'proj-coder',
-                    toId: 'operator',
-                    body: 'answer',
-                    kind: 'chat',
-                    status: 'delivered',
-                    attempts: 1,
-                    error: null,
-                    claimedAt: 2,
-                    deliveredAt: 3,
-                    readAt: null,
-                    inReplyTo: 'msg_1',
-                    threadId: 'msg_1',
-                    requestKey: null,
-                    taskId: null,
-                    parentRunId: null,
-                    createdAt: 4,
-                },
-            ],
-            nextCursor: null,
-        }),
+        list: async (input: { cursor?: string }) => {
+            listCalls.push(input);
+            if (input.cursor !== undefined) return { messages: [olderRow], nextCursor: null };
+            return newestPage();
+        },
         send: async (input: unknown) => {
             sendCalls.push(input);
             return { message: { id: 'msg_new' }, replayed: false };
@@ -78,13 +109,15 @@ const stubApi = {
     },
 };
 
-const { cleanup, render, waitFor } = await import('@testing-library/react');
+const { cleanup, fireEvent, render, waitFor } = await import('@testing-library/react');
 const { resetFetchForTesting, setFetchForTesting } = await import('../../../src/lib/rpc-client');
 const { createElement } = await import('react');
 const { ProjectContext } = await import('../../../src/modules/projects/useProjectContext');
 const {
     default: InboxView,
+    frameTargets,
     groupThreads,
+    mergePages,
     memberRank,
     statusLabel,
 } = await import('../../../src/modules/projects/InboxView');
@@ -95,6 +128,8 @@ afterEach(() => {
     sendCalls.length = 0;
     replyCalls.length = 0;
     readCalls.length = 0;
+    listCalls.length = 0;
+    newestCursor = null;
 });
 
 const projectValue = {
@@ -103,6 +138,17 @@ const projectValue = {
     fleet: { members: [{ instanceId: 'proj-coder' }], orchestrator: { state: 'bound-online' } },
     state: 'ready',
 } as never;
+
+/**
+ * Type into a controlled field. `tests/happy-dom.ts` imports testing-library statically, so react-dom
+ * evaluates before `window` exists and wires its legacy input polyfill (focusin + keyup value
+ * check) instead of native `input` events; a bare `fireEvent.change` never reaches `onChange`.
+ */
+function type(field: HTMLTextAreaElement, value: string): void {
+    fireEvent.focusIn(field);
+    fireEvent.change(field, { target: { value } });
+    fireEvent.keyUp(field);
+}
 
 function renderView() {
     // The component takes its client as a prop (no module mocking): the stub IS the transport.
@@ -142,6 +188,58 @@ describe('Projects Inbox tab (G11 R1)', () => {
         // Only the inbound row is replyable: a reply goes to the original sender, so replying to
         // your own message would store operator → operator and never reach the member.
         expect(view.getAllByRole('button', { name: 'Reply' })).toHaveLength(1);
+    });
+});
+
+describe('Projects Inbox tab actions reach the contract (G11 R1/R2)', () => {
+    test('typing and submitting sends to the selected member as operator, scoped to the project', async () => {
+        const view = renderView();
+        await waitFor(() => expect(view.getByText('question')).toBeDefined());
+        const box = view.getByRole('textbox') as HTMLTextAreaElement;
+        type(box, '  hello coder  ');
+        fireEvent.submit(box.closest('form') as HTMLFormElement);
+        await waitFor(() => expect(sendCalls).toHaveLength(1));
+        expect(sendCalls[0]).toEqual({ to: 'proj-coder', projectPath: '/tmp/proj', body: 'hello coder' });
+        expect(replyCalls).toHaveLength(0);
+        await waitFor(() => expect(box.value).toBe(''));
+    });
+
+    test('Reply on an inbound row turns the composer into a reply to that message', async () => {
+        const view = renderView();
+        await waitFor(() => expect(view.getByText('answer')).toBeDefined());
+        fireEvent.click(view.getByRole('button', { name: 'Reply' }));
+        await waitFor(() => expect(view.getByText(/Replying to proj-coder/)).toBeDefined());
+        const box = view.getByRole('textbox') as HTMLTextAreaElement;
+        type(box, 'got it');
+        fireEvent.submit(box.closest('form') as HTMLFormElement);
+        await waitFor(() => expect(replyCalls).toHaveLength(1));
+        expect(replyCalls[0]).toEqual({ id: 'msg_2', from: 'operator', body: 'got it' });
+        expect(sendCalls).toHaveLength(0);
+    });
+
+    test('Mark read marks the inbound row read as the operator', async () => {
+        const view = renderView();
+        await waitFor(() => expect(view.getByText('answer')).toBeDefined());
+        fireEvent.click(view.getByRole('button', { name: 'Mark read' }));
+        await waitFor(() => expect(readCalls).toHaveLength(1));
+        expect(readCalls[0]).toEqual({ id: 'msg_2', reader: 'operator' });
+    });
+
+    test('Load older appears only with a cursor and appends the older page', async () => {
+        newestCursor = 'cur_1';
+        const view = renderView();
+        await waitFor(() => expect(view.getByText('question')).toBeDefined());
+        fireEvent.click(view.getByRole('button', { name: 'Load older' }));
+        await waitFor(() => expect(view.getByText('older question')).toBeDefined());
+        expect(listCalls.some((call) => call.cursor === 'cur_1')).toBe(true);
+        // The older page carried no cursor, so the affordance is gone.
+        await waitFor(() => expect(view.queryByRole('button', { name: 'Load older' })).toBeNull());
+    });
+
+    test('no cursor, no Load older', async () => {
+        const view = renderView();
+        await waitFor(() => expect(view.getByText('question')).toBeDefined());
+        expect(view.queryByRole('button', { name: 'Load older' })).toBeNull();
     });
 });
 
@@ -211,6 +309,33 @@ describe('Projects Inbox tab helpers (G11 R1/R2)', () => {
     test('memberRank puts declared fleet members above other addresses', () => {
         expect(memberRank({ id: 'proj-coder', queued: 0, unread: 0 }, ['proj-coder'])).toBe(0);
         expect(memberRank({ id: 'operator', queued: 0, unread: 0 }, ['proj-coder'])).toBe(1);
+    });
+
+    test('frameTargets: members always refetch; the thread only for the selected member or an id-less frame', () => {
+        const frame = (data: unknown) => ({ eventName: 'message.sent', payload: { data } });
+        expect(frameTargets(frame({ fromId: 'operator', toId: 'proj-coder' }), 'proj-coder')).toEqual({
+            members: true,
+            thread: true,
+        });
+        expect(frameTargets(frame({ fromId: 'operator', toId: 'proj-other' }), 'proj-coder')).toEqual({
+            members: true,
+            thread: false,
+        });
+        expect(frameTargets(frame(undefined), 'proj-coder')).toEqual({ members: true, thread: true });
+        expect(frameTargets({ eventName: 'task.updated', payload: {} }, 'proj-coder')).toEqual({
+            members: false,
+            thread: false,
+        });
+        expect(frameTargets(null, 'proj-coder')).toEqual({ members: false, thread: false });
+    });
+
+    test('mergePages keeps loaded older rows and lets the fresh copy of a row win', () => {
+        const merged = mergePages(
+            [row({ id: 'a', status: 'delivered' }), row({ id: 'b' })],
+            [row({ id: 'a', status: 'queued' }), row({ id: 'z' })],
+        ) as unknown as Array<{ id: string; status: string }>;
+        expect(merged.map((entry) => entry.id)).toEqual(['a', 'b', 'z']);
+        expect(merged[0]?.status).toBe('delivered');
     });
 
     test('statusLabel surfaces the failure reason verbatim, and plain states otherwise', () => {

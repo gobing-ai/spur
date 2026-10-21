@@ -6,7 +6,7 @@
  * message store of its own. Live updates ride the SSE `message.*` frames the server relays from the
  * ledger, so a reply written by an agent CLI process shows up here without a reload.
  */
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { api, resolveApiUrl } from '../../lib/rpc-client';
 import { useProjectContext } from './useProjectContext';
 
@@ -35,6 +35,27 @@ export function groupThreads(rows: readonly InboxRow[]): InboxRow[][] {
     }
     const threads = [...byThread.values()].map((thread) => thread.sort((a, b) => a.createdAt - b.createdAt));
     return threads.sort((a, b) => (a[0]?.createdAt ?? 0) - (b[0]?.createdAt ?? 0));
+}
+
+/**
+ * Which panes one SSE frame invalidates. Every `message.*` frame can change a member's counts, so
+ * the member list always refetches; the thread refetches only when the frame names the selected
+ * member as sender or recipient (R1). A frame that carries neither id fails open: refetching an
+ * idempotent read is cheaper than a thread that silently stops updating.
+ */
+export function frameTargets(frame: unknown, selected: string | null): { members: boolean; thread: boolean } {
+    if (frame === null || typeof frame !== 'object') return { members: false, thread: false };
+    const { eventName, payload } = frame as { eventName?: unknown; payload?: { data?: unknown } };
+    if (typeof eventName !== 'string' || !eventName.startsWith('message.')) return { members: false, thread: false };
+    const data = (payload?.data ?? null) as { fromId?: unknown; toId?: unknown } | null;
+    const ids = [data?.fromId, data?.toId].filter((id): id is string => typeof id === 'string');
+    return { members: true, thread: ids.length === 0 || (selected !== null && ids.includes(selected)) };
+}
+
+/** A refreshed newest page merged over older pages already loaded; the fresh copy of a row wins. */
+export function mergePages(fresh: readonly InboxRow[], loaded: readonly InboxRow[]): InboxRow[] {
+    const ids = new Set(fresh.map((row) => row.id));
+    return [...fresh, ...loaded.filter((row) => !ids.has(row.id))];
 }
 
 /** The status label the operator reads for one row. */
@@ -68,16 +89,28 @@ export default function InboxView({ client = INBOX_CLIENT }: { client?: InboxCli
     const [members, setMembers] = useState<MemberRow[] | null>(null);
     const [selected, setSelected] = useState<string | null>(null);
     const [rows, setRows] = useState<InboxRow[] | null>(null);
+    // The cursor of the oldest page loaded so far; null once the thread's first row is on screen.
+    const [olderCursor, setOlderCursor] = useState<string | null>(null);
     const [replyTo, setReplyTo] = useState<InboxRow | null>(null);
     const [draft, setDraft] = useState('');
     const [error, setError] = useState<string | null>(null);
-    const [liveTick, setLiveTick] = useState(0);
-    const refresh = useCallback(() => setLiveTick((tick) => tick + 1), []);
+    // Separate refetch keys so a frame about another member refreshes the counts, not this thread.
+    const [membersTick, setMembersTick] = useState(0);
+    const [threadTick, setThreadTick] = useState(0);
+    const refresh = useCallback(() => {
+        setMembersTick((tick) => tick + 1);
+        setThreadTick((tick) => tick + 1);
+    }, []);
+    // Read by the SSE handler, which must not reconnect on every member switch.
+    const selectedRef = useRef(selected);
+    selectedRef.current = selected;
+    // Which member `rows` belongs to, and whether older pages were appended to it.
+    const paging = useRef<{ member: string | null; pagedOlder: boolean }>({ member: null, pagedOlder: false });
 
     const fleetIds = useMemo(() => (project.fleet?.members ?? []).map((member) => member.instanceId), [project.fleet]);
 
     // ── live tail ──────────────────────────────────────────────────────────
-    // `message.*` frames are metadata-only, so each one bumps a refetch key. There is deliberately
+    // `message.*` frames are metadata-only, so each one bumps the refetch keys it touches. There is deliberately
     // no polling fallback: the transport that cannot stream gets the explicit Refresh action
     // instead of a timer that keeps the tab reading forever.
     useEffect(() => {
@@ -86,8 +119,9 @@ export default function InboxView({ client = INBOX_CLIENT }: { client?: InboxCli
         const stream = new EventSource(SSE_URL());
         stream.onmessage = (message) => {
             try {
-                const name = (JSON.parse(message.data) as { eventName?: unknown }).eventName;
-                if (typeof name === 'string' && name.startsWith('message.')) setLiveTick((tick) => tick + 1);
+                const targets = frameTargets(JSON.parse(message.data), selectedRef.current);
+                if (targets.members) setMembersTick((tick) => tick + 1);
+                if (targets.thread) setThreadTick((tick) => tick + 1);
             } catch {
                 // A malformed frame is not worth a state update.
             }
@@ -97,7 +131,7 @@ export default function InboxView({ client = INBOX_CLIENT }: { client?: InboxCli
 
     // ── member list ────────────────────────────────────────────────────────
     useEffect(() => {
-        void liveTick;
+        void membersTick;
         if (project.path === null) return;
         let cancelled = false;
         void (async () => {
@@ -113,18 +147,24 @@ export default function InboxView({ client = INBOX_CLIENT }: { client?: InboxCli
         return () => {
             cancelled = true;
         };
-    }, [client, project.path, liveTick]);
+    }, [client, project.path, membersTick]);
 
     // ── selected member's thread ───────────────────────────────────────────
     useEffect(() => {
-        void liveTick;
+        void threadTick;
         if (project.path === null || selected === null) return;
         let cancelled = false;
         void (async () => {
             try {
                 const page = await client.list({ member: selected, direction: 'both' });
                 if (!cancelled) {
-                    setRows(page.messages);
+                    // Older pages the operator already loaded for THIS member stay on screen across
+                    // a live refetch, and their cursor keeps pointing past them. A member switch
+                    // starts over from the newest page.
+                    const sameMember = paging.current.member === selected;
+                    setRows((current) => (sameMember ? mergePages(page.messages, current ?? []) : page.messages));
+                    if (!sameMember || !paging.current.pagedOlder) setOlderCursor(page.nextCursor);
+                    if (!sameMember) paging.current = { member: selected, pagedOlder: false };
                     setError(null);
                 }
             } catch (cause) {
@@ -134,7 +174,19 @@ export default function InboxView({ client = INBOX_CLIENT }: { client?: InboxCli
         return () => {
             cancelled = true;
         };
-    }, [client, project.path, selected, liveTick]);
+    }, [client, project.path, selected, threadTick]);
+
+    const loadOlder = useCallback(async () => {
+        if (selected === null || olderCursor === null) return;
+        try {
+            const page = await client.list({ member: selected, direction: 'both', cursor: olderCursor });
+            setRows((current) => mergePages(current ?? [], page.messages));
+            setOlderCursor(page.nextCursor);
+            paging.current = { member: selected, pagedOlder: true };
+        } catch (cause) {
+            setError(cause instanceof Error ? cause.message : 'could not read older messages');
+        }
+    }, [client, selected, olderCursor]);
 
     const send = useCallback(async () => {
         const body = draft.trim();
@@ -151,22 +203,22 @@ export default function InboxView({ client = INBOX_CLIENT }: { client?: InboxCli
             }
             setDraft('');
             setReplyTo(null);
-            setLiveTick((tick) => tick + 1);
+            refresh();
         } catch (cause) {
             setError(cause instanceof Error ? cause.message : 'the message was not sent');
         }
-    }, [client, draft, replyTo, selected, project.path]);
+    }, [client, draft, replyTo, selected, project.path, refresh]);
 
     const markRead = useCallback(
         async (row: InboxRow) => {
             try {
                 await client.read({ id: row.id, reader: OPERATOR_ID });
-                setLiveTick((tick) => tick + 1);
+                refresh();
             } catch (cause) {
                 setError(cause instanceof Error ? cause.message : 'could not mark this message read');
             }
         },
-        [client],
+        [client, refresh],
     );
 
     const ordered = useMemo(() => {
@@ -231,6 +283,11 @@ export default function InboxView({ client = INBOX_CLIENT }: { client?: InboxCli
                     <p role="alert" style={{ color: 'var(--color-spur-text-muted)' }}>
                         {error}
                     </p>
+                ) : null}
+                {selected !== null && olderCursor !== null ? (
+                    <button type="button" onClick={() => void loadOlder()} style={{ marginBottom: 8 }}>
+                        Load older
+                    </button>
                 ) : null}
                 {selected === null ? (
                     <p style={{ color: 'var(--color-spur-text-faint)' }}>Select a member to read its thread.</p>
