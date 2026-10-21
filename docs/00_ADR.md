@@ -2186,7 +2186,7 @@ launched with `ackLowConfidence=true`); the feature boundary now carries the sam
 
 ## ADR-130: Spur Logic Lives in the CLI; Plugin Scripts, Hooks and Lib Are Thin Glue
 
-- **Status:** Accepted · **Date:** 2026-09-28 · **Feature:** A9 · **Amended:** 2026-10-11, 2026-10-15, 2026-10-16
+- **Status:** Accepted · **Date:** 2026-09-28 · **Feature:** A9 · **Amended:** 2026-10-11, 2026-10-15, 2026-10-16, 2026-10-21
 - **Current reading (2026-10-16):** Classify by responsibility before path or size. Every script surface has one owner:
 
   | Surface | Owns | Never holds |
@@ -2210,6 +2210,7 @@ launched with `ackLowConfidence=true`); the feature boundary now carries the sam
 - **Amendment (2026-10-15 · hook entry location):** Hook entries live at `plugins/sp/scripts/hooks/<id>.ts`, run by `superskill hook run sp <id>` (superskill ADR-039); an entry prints nothing on allow, a PreToolUse guard prints Claude-native JSON, Stop prints `{decision,reason}`. Why: `hook run` resolves `hooks/<id>` then `scripts/hooks/<id>`, but install stages only `scripts/` (with `lib/` beside it) for Codex, OpenCode, Antigravity and Hermes, so `scripts/hooks` is the one location every target resolves. Rejected: a forwarding wrapper (cannot reach across trees on staged targets) and duplicated entries.
 - **Amendment (2026-10-15 · tasks 1211–1213, hook-only):** Every non-hook plugin script was absorbed into existing CLI nouns; the generated lib bundles, `.mjs` twins, `config/plugin-scripts.json`, the script-root resolver, `spur-bin.ts` and the placement baseline were deleted. Why: each absorbed script had been a second implementation and a second installed contract, and the bundles exposed app/DB code inside the plugin. A skill helper that would justify a script is an unapproved CLI surface instead.
 - **Amendment (2026-10-16 · consolidation):** Added the current reading and extended the DB boundary to `scripts/commands`. Why: the register still described skill scripts, lib bundles and `spur-bin.ts` as legal, so it licensed the pattern the 2026-10-15 cleanup removed; and repo tooling had no DB check, so raw SQL analytics sat outside `packages/domain` (the one DB owner, ADR-011). Rejected: a per-file allowlist (a baseline by another name).
+- **Amendment (2026-10-21 · staged lib location):** The 2026-10-15 clause "install stages only `scripts/` (with `lib/` beside it)" is superseded on the superskill side: install now stages `lib/` **inside** the plugin's staged root (`.agents/scripts/sp/lib/`) and retargets an entry's `../../lib/…` to `../lib/…`, because the staged tree drops the `scripts/` level. Why: a shared `.agents/scripts/lib/` leaf can collide between lib-shipping plugins, is written by overlay copy (so files a newer plugin version dropped survive as stale residue), and takes a hand symlink or stray file there as a fatal install error. Nothing in `plugins/sp` changes: `scripts/hooks/<id>.ts` keeps its `../../lib/…` import, which is correct for the plugin tree and correct for native targets, and stays the one path every target resolves. Rejected: shipping self-contained bundled hook entries (regenerates generated twins ADR-130 retired) and keeping the shared leaf behind an ownership manifest. Older superskill builds keep staging the shared leaf and need no plugin change.
 
 ## ADR-131: Completed Run Scratch Is Disposable; Lasting Records Have Durable Owners
 
@@ -2440,6 +2441,9 @@ owner split this entry established.
   (`cited-version-strings`, `cited-api-claims`), and the changelog "no confidence ratings" invariant.
   (As first accepted this clause also kept the derived feature-receipt level and the history-anatomy
   per-finding confidence; the 2026-10-16 amendment retires both.)
+  **Amended 2026-10-21 (ADR-144):** the changelog clause is superseded — a claim bullet states a
+  level derived from its own anchors and cross-checked by the repo-wide changelog check; every other
+  carrier listed above stays retired.
 
 **Amendment (2026-10-16 · task 1221) — every HIGH/MEDIUM/LOW label is retired, not only the asserted
 one.** The "derived" family kept above still graded a self-claim one hop removed, and it re-imported
@@ -2646,3 +2650,41 @@ has 11 fields, skill/agent output contracts carry no level, and `response.valida
   - Terminal stdin no longer enqueues messages.
 - **Detail:** [inter-agent control plane](design/inter-agent-control-plane.md) §13;
   [plan](plans/2026-10-19-inbox-module-refactor.md).
+
+## ADR-144: Changelog Claim Confidence Is Derived From Its Anchors and Cross-Checked
+
+- **Status:** Accepted · **Date:** 2026-10-21 · **Extends:** ADR-141 · **Amends:** the changelog
+  "no confidence ratings" clause ADR-138 retains
+- **Decision:** a changelog claim bullet's `<!-- src: … -->` comment carries one
+  `· confidence: HIGH|MEDIUM|LOW` token. The level is a **function of the anchors in that comment**,
+  not a judgment, and the repo-wide check recomputes it and fails on disagreement. A `:1` anchor
+  locates nothing a reader could not take from the bare path, so it counts as whole-file evidence.
+
+  | Derived | When |
+  | --- | --- |
+  | `HIGH` | every anchor is a repo `path:line` beyond line 1, and each resolves (file exists, line within it) |
+  | `MEDIUM` | every anchor resolves, but the set is not all line-precise — an http(s) URL, a path without a line, or a `:1` anchor |
+  | `LOW` | an anchor does not resolve (missing file, line past EOF) or the comment lists none |
+
+  Rejections: `confidence-vocabulary` (a token outside the three), `confidence-mismatch` (stated
+  level ≠ derived), `confidence-missing` (an anchor in the newest release section states no level;
+  older sections are cross-checked where they state one, never retro-levelled).
+- **What it is not:** not self-assessment — a `HIGH` over URL-only or dead anchors is rejected, which
+  is the failure ADR-138 was written to stop. Not the retired asserted family (verdict-artifact
+  fields, feature-receipt levels, `ackLowConfidence` vars, per-finding history-anatomy confidence,
+  the docs rule family): those stay dead. Not ADR-141's answer lanes, which keep
+  `packages/app/src/services/answer-confidence.ts` as their owner.
+- **Why:** the anchor comment records *where* a claim points; it does not record whether that pointer
+  is still live. A `path:line` drifts with every refactor and nothing notices — the 2026-10-21 pass
+  over `CHANGELOG.md` found 183 anchors, 79 levelled, and one stating `HIGH` over a whole-file anchor.
+  Deriving from resolvability records anchor composition (re-runnable line vs external or whole-file
+  citation vs dead pointer), which no artifact recorded, and the cross-check makes it evidence rather
+  than assertion — the test ADR-138's amendment set for any re-introduction.
+- **Consequence:** `dev-operations.md` §8 step 7 and `dev-changelog.md` state the level instead of
+  denying it; the generator's claim pass now emits the derived level per bullet. The changelog lane's
+  derivation lives in its checker (`repo-wide-tests/changelog-confidence.test.ts`) because it needs
+  tree resolution, and shares the three-token vocabulary with the answer lanes.
+- **Retains:** ADR-138's invariant for every other surface; ADR-141's answer-lane derivation,
+  rejections and owner module unchanged.
+- **Detail:** `repo-wide-tests/changelog-confidence.test.ts`;
+  `plugins/sp/skills/spur-dev/references/dev-operations.md` §8 step 7.

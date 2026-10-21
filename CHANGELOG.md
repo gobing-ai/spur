@@ -2,34 +2,39 @@
 
 ## [0.4.19] - 2026-10-20
 
-_Every claim bullet carries one source anchor; unanchored bullets are bookkeeping (filings, status
+_Claim bullets carry one source anchor and the level that anchor supports — `HIGH`: a `path:line` was
+read and matches the bullet (`:1` locates nothing, so it counts as whole-file); `MEDIUM`: an external
+URL, or whole-file/artifact presence only; `LOW`: an anchor that no longer resolves or none at all, so
+the claim is reworded or dropped. The level is a function of the anchors, not a judgement: to record
+`MEDIUM` cite a URL or a whole file. ADR-144; the check is
+`repo-wide-tests/changelog-confidence.test.ts`. Unanchored bullets are bookkeeping (filings, status
 moves) and assert no code, API or version fact._
 
 ### Added
 - rebuild the inbox as one DAO (`InboxDao`) plus one service (`InboxService`), replacing `InboxRecentDao`; migration 0054 rebuilds `inbox_messages` as a Spur-owned table carrying `kind`, `task_id`, `parent_run_id` and a non-null sender (8064812d3)
-  <!-- src: packages/domain/src/dao/inbox-dao.ts:164, packages/app/src/services/inbox-service.ts:170, drizzle/0054_spur_cli_inbox_messages_rebuild.sql:1 -->
+  <!-- src: packages/domain/src/dao/inbox-dao.ts:164, packages/app/src/services/inbox-service.ts:170, drizzle/0054_spur_cli_inbox_messages_rebuild.sql:9, drizzle/0054_spur_cli_inbox_messages_rebuild.sql:22 · confidence: HIGH -->
 - add a typed oRPC `inbox` contract (`list`, `thread`, `send`, `reply`, `requests`) and the server module implementing it, replacing the raw `/api/messages*` routes and the health module's requests block; a server-scoped relay follows `system_events` `message.*` rows so a reply written by an agent CLI process reaches SSE exactly once (61001c457)
-  <!-- src: packages/contracts/src/inbox.ts:137, apps/server/src/modules/inbox/handlers.ts:157, apps/server/src/modules/events/index.ts:144 -->
+  <!-- src: packages/contracts/src/inbox.ts:137, apps/server/src/modules/inbox/handlers.ts:157, apps/server/src/modules/events/index.ts:144 · confidence: HIGH -->
 - split `spur message` into one module per verb on `InboxService` and add `show` (the whole thread, oldest first) and `read` (`--reader`, operator by default) (60b54895c)
-  <!-- src: apps/cli/src/commands/message/index.ts:20, apps/cli/src/commands/message/show.ts:8, apps/cli/src/commands/message/read.ts:9 -->
+  <!-- src: apps/cli/src/commands/message/index.ts:20, apps/cli/src/commands/message/show.ts:8, apps/cli/src/commands/message/read.ts:9 · confidence: HIGH -->
 - replace the board Conversation view with a three-pane Projects Inbox tab (member list, both-direction thread, composer) driven by `api.inbox.*`, with the global input sending as operator and reading its receipt from `inbox.requests` (2f1706e52)
-  <!-- src: apps/web/src/modules/projects/tabs.tsx:20, apps/web/src/components/GlobalAgentBar.tsx:279, apps/web/src/components/GlobalAgentBar.tsx:423 -->
+  <!-- src: apps/web/src/modules/projects/tabs.tsx:20, apps/web/src/components/GlobalAgentBar.tsx:279, apps/web/src/components/GlobalAgentBar.tsx:423 · confidence: HIGH -->
 - page older inbox history through a cursor, keeping already-loaded older pages across a live refetch of the same member, and refetch only the panes a `message.*` frame touches — the member list always, the open thread only when the frame names the selected member (a90bad268)
-  <!-- src: apps/web/src/modules/projects/InboxView.tsx:46, apps/web/src/modules/projects/InboxView.tsx:56, apps/web/src/modules/projects/InboxView.tsx:180 -->
+  <!-- src: apps/web/src/modules/projects/InboxView.tsx:46, apps/web/src/modules/projects/InboxView.tsx:56, apps/web/src/modules/projects/InboxView.tsx:180 · confidence: HIGH -->
 
 ### Fixed
 - render a relayed ledger row live exactly as history renders it: `actor` and `occurred_at` sit beside the payload, so the relay carries them out of band and a live message frame now shows the same agent chip and timestamp as the history endpoint (c16d60117)
-  <!-- src: apps/server/src/modules/events/index.ts:142, apps/server/src/modules/events/index.ts:163, apps/server/src/modules/events/index.ts:264 -->
+  <!-- src: apps/server/src/modules/events/index.ts:142, apps/server/src/modules/events/index.ts:163, apps/server/src/modules/events/index.ts:264 · confidence: HIGH -->
 - keep a review PASS when the review state is re-entered without an answer: the answer file is consumed as a stage input, so the run-scoped verdict status is consulted only when an answer is present, instead of rewriting PASS to FAIL and closing the task's run as failed (b1c8456d7)
-  <!-- src: config/workflows/task-pipeline.yaml:704, config/workflows/task-pipeline.yaml:712 -->
+  <!-- src: config/workflows/task-pipeline.yaml:704, config/workflows/task-pipeline.yaml:712 · confidence: HIGH -->
 
 ### Changed
 - finish the G11 consolidation under `InboxService`: the lifecycle probe counts what the service queues (`countQueued`), the superseded `recent`/`listRecent`/`countReplies` paths and the coordination service's send duplicates are deleted, and an expired-claim read no longer requeues anything by itself (0d6781d80)
-  <!-- src: packages/app/src/services/occupant-wait.ts:160, packages/app/src/services/inbox-service.ts:392, packages/domain/src/dao/inbox-dao.ts:367 -->
+  <!-- src: packages/app/src/services/occupant-wait.ts:160, packages/app/src/services/inbox-service.ts:392, packages/domain/src/dao/inbox-dao.ts:367 · confidence: HIGH -->
 - retire the SPUR-REQUEST/1 draft refs surface: the draft is text-only, and a stored legacy `refs` key is ignored on load rather than rejected (118cb0fda)
-  <!-- src: apps/web/src/modules/projects/drafts.tsx:51 -->
+  <!-- src: apps/web/src/modules/projects/drafts.tsx:51 · confidence: HIGH -->
 - document `spur message` send/show/read and the inbox service in the CLI contracts reference (204bd1ef6)
-  <!-- src: docs/design/cli-contracts.md:810 -->
+  <!-- src: docs/design/cli-contracts.md:810 · confidence: HIGH -->
 
 ### Other
 - mark G11 verified — dogfood report, feature status done (bfecbd8e9)
@@ -75,7 +80,7 @@ status moves, filings) and assert no code, API or version fact._
 
 ### Added
 - add `spur decision outcome <invocation-id>` to record what actually happened after a served decision, with `--review-severity <wbs>` / `--gate-status <run-id>` derivations, first-write-wins and exit 2 on a malformed outcome; `spur decision status --reliability` scores accuracy against `decisions.outcomeMap`, and a shipped `executor-failure-class` catalog (off by default) rescues a dispatch failure no `FAILURE_RULES` entry matched (f04edd1bc)
-  <!-- src: apps/cli/src/commands/decision.ts:251, config/config.global.yaml:176, config/decisions/executor.yaml:1 · confidence: HIGH -->
+  <!-- src: apps/cli/src/commands/decision.ts:251, config/config.global.yaml:176, config/decisions/executor.yaml:1 · confidence: MEDIUM -->
 - name the drifted paths in a coverage stale-tree refusal, so "what changed during the canonical run?" is answerable from the marker's raw git-tree SHA instead of a bare fingerprint mismatch (51040cab4)
   <!-- src: scripts/commands/coverage-certification.ts:140 · confidence: HIGH -->
 
