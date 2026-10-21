@@ -133,6 +133,14 @@ export function sendKeepalive(
  */
 const relayedContexts = new WeakSet<ServerContext>();
 
+/**
+ * Ledger columns of a relayed row, keyed by the emitted payload object. The `actor` and
+ * `occurred_at` columns live beside the payload, not in it (a `message.*` payload names
+ * `fromId`/`toId`, which the actor extractor does not read), so the SSE handler looks them up
+ * here to render a relayed row exactly as the history endpoint renders the same row (1267 #7).
+ */
+const relayedRowColumns = new WeakMap<object, { actor: string | null; occurredAt: string }>();
+
 function startMessageRelay(ctx: ServerContext): void {
     if (relayedContexts.has(ctx)) return;
     relayedContexts.add(ctx);
@@ -150,7 +158,11 @@ function startMessageRelay(ctx: ServerContext): void {
             });
             for await (const row of stream) {
                 try {
-                    bus.emit(row.event_name, JSON.parse(row.payload_json ?? '{}'));
+                    const payload: unknown = JSON.parse(row.payload_json ?? '{}');
+                    if (payload !== null && typeof payload === 'object') {
+                        relayedRowColumns.set(payload, { actor: row.actor, occurredAt: row.occurred_at });
+                    }
+                    bus.emit(row.event_name, payload);
                 } catch {
                     // A malformed row is skipped: the relay must not stop on one bad payload.
                 }
@@ -248,10 +260,12 @@ export const eventsModule: ServerModule = {
                             // task 0226 F5: share the actor extractor with the
                             // persistence tap so the live SSE envelope matches
                             // the persisted history row.
-                            const actor = extractSystemEventActor(event);
+                            const ledger =
+                                event !== null && typeof event === 'object' ? relayedRowColumns.get(event) : undefined;
+                            const actor = ledger !== undefined ? ledger.actor : extractSystemEventActor(event);
                             const envelope = {
                                 eventName: name,
-                                occurredAt: new Date().toISOString(),
+                                occurredAt: ledger?.occurredAt ?? new Date().toISOString(),
                                 actor,
                                 prefix: entry?.prefix ?? name.split('.')[0],
                                 renderer: entry?.renderer ?? 'generic',
