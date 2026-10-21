@@ -12,7 +12,7 @@ const PATH_A = '/repo/wt-a';
 const PATH_B = '/repo/wt-b';
 
 function record(overrides: Partial<DraftRecord> = {}): DraftRecord {
-    return { path: PATH_A, text: 'working on it', refs: [{ kind: 'task', wbs: '0841' }], revision: 3, ...overrides };
+    return { path: PATH_A, text: 'working on it', revision: 3, ...overrides };
 }
 
 const originalStorage = Object.getOwnPropertyDescriptor(globalThis, 'localStorage');
@@ -54,12 +54,10 @@ describe('loadDraft path guard (0841 R2)', () => {
 
     test('shape-valid-but-wrong records each yield an empty draft (no throw, no notice)', () => {
         const garbage: unknown[] = [
-            { text: 'no path', refs: [], revision: 1 },
-            { path: PATH_A, refs: [], revision: 1 }, // missing text
-            { path: PATH_A, text: 42, refs: [], revision: 1 }, // non-string text
-            { path: PATH_A, text: 'x', refs: [], revision: 'many' }, // bad revision
-            { path: PATH_A, text: 'x', refs: { nope: true }, revision: 1 }, // bad refs
-            { path: PATH_A, text: 'x', refs: [{ kind: 'widget' }], revision: 1 }, // bad ref item
+            { text: 'no path', revision: 1 },
+            { path: PATH_A, revision: 1 }, // missing text
+            { path: PATH_A, text: 42, revision: 1 }, // non-string text
+            { path: PATH_A, text: 'x', revision: 'many' }, // bad revision
             [1, 2, 3],
             'just a string',
             null,
@@ -68,6 +66,12 @@ describe('loadDraft path guard (0841 R2)', () => {
             stubStorage({ getItem: () => JSON.stringify(g), setItem: () => {} });
             expect(loadDraft(PATH_A)).toEqual(emptyDraft(PATH_A));
         }
+    });
+
+    test('a legacy refs key (retired SPUR-REQUEST/1 surface, G11 1269) still loads, minus refs', () => {
+        const legacy = { ...record(), refs: [{ kind: 'task', wbs: '0841' }] };
+        stubStorage({ getItem: () => JSON.stringify(legacy), setItem: () => {} });
+        expect(loadDraft(PATH_A)).toEqual(record());
     });
 
     test('invalid JSON and a throwing accessor each yield an empty draft, never a throw', () => {
@@ -100,7 +104,7 @@ describe('pending round-trip (0844 R1/R3)', () => {
         expect(loadDraft(PATH_A)).toEqual(withPending);
 
         // The clear contract (R2): a fresh empty revision, pending dropped.
-        const cleared = { path: PATH_A, text: '', refs: [], revision: 4 };
+        const cleared = { path: PATH_A, text: '', revision: 4 };
         saveDraft(cleared);
         expect(loadDraft(PATH_A)).toEqual(cleared);
     });

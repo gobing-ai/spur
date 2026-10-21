@@ -619,10 +619,9 @@ name used as the mailbox prefix. Invalid fleet declarations fail startup before 
 
 The merge is retired: `apps/web/src/modules/inbox/timeline.ts` and its `mergeTimeline(messages,
 frames, agentId) → TimelineEntry[]` pure function were deleted with the Inbox module (0849). Its two
-inputs survive as separate panes (§14.1): durable rows in the Conversation thread, process frames in
-the member terminal, each read through the transports in the table above and each with its own
-narrowing function (`parseInboxMessages` in `projects/conversation.ts`, `parseFrame` in
-`lib/process-stream.ts`). The process-frame **history boundary** it used (`seq` monotonic per
+inputs survive as separate panes (§14.1): durable rows in the Projects Inbox tab, process frames in
+the member terminal, each read through the transports in the table above (rows typed by the oRPC
+`inbox` contract; frames narrowed by `parseFrame` in `lib/process-stream.ts`). The process-frame **history boundary** it used (`seq` monotonic per
 stream) still governs the terminal's ring buffer.
 
 ### 14.2 Shared process-stream helpers (R9)

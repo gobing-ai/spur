@@ -411,9 +411,9 @@ See [contract detail](design/observability-contracts.md#team--message-http-route
 
 See [contract detail](design/observability-contracts.md#team-routes-appsserversrcmodulesteamindexts).
 
-### Message routes (`apps/server/src/modules/messages/index.ts`)
+### Message routes — retired; typed `inbox` namespace (G11)
 
-See [contract detail](design/observability-contracts.md#message-routes-appsserversrcmodulesmessagesindexts).
+See [contract detail](design/inter-agent-control-plane.md#13-inbox-message-plane-g11-adr-143).
 
 ## Project identity + fleet HTTP routes (0840)
 
@@ -445,9 +445,9 @@ modules, and `/board/projects/work` falls back to the default tab.
 
 See [contract detail](design/project-switcher.md#processes-tab-0852).
 
-## Board request envelope `SPUR-REQUEST/1` (0841)
+## Board request envelope `SPUR-REQUEST/1` (0841) — retired (G11)
 
-See [contract detail](design/project-switcher.md#request-envelope-0841).
+See [retirement note](design/project-switcher.md#request-envelope-0841).
 
 ## Project workflows reading surface (server + web, 2026-09-22)
 

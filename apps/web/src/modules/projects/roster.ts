@@ -10,13 +10,11 @@
  * so they are never collapsed into one status (R2).
  */
 
-/** The operator address (G11 R4: `operator` everywhere; `board-operator` is retired). */
-const OPERATOR_ID = 'operator';
-
 import type { ProcessStatus } from './MemberTerminal';
 import type { MemberSession, ProjectFleetSnapshot, ResolvedFleetMember } from './useProjectContext';
 
 /** The operator address (G11 R4: `operator` everywhere; `board-operator` is retired). */
+const OPERATOR_ID = 'operator';
 
 /** Read-only session text for the roster: `resume · 3f9c2a1d` / `one-shot`; null when no session. */
 export function sessionLabel(session: MemberSession | undefined): string | null {

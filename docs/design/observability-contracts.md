@@ -395,16 +395,14 @@ can't express). Web consumes via `fetchWithTimeout` + `resolveApiUrl` and native
 
 <a id="message-routes-appsserversrcmodulesmessagesindexts"></a>
 
-### Message routes (`apps/server/src/modules/messages/index.ts`)
+### Message routes — retired (G11)
 
-| Method | Path                      | Body / Query                         | Response                                                                  | Notes                             |
-| ------ | ------------------------- | ------------------------------------ | ------------------------------------------------------------------------- | --------------------------------- |
-| GET    | `/api/messages/inbox`     | `?agent=<id>&limit=<n>&offset=<n>`              | `{ messages: [{id, fromId, body, status, createdAt, inReplyTo}], count }` | One agent's inbox queue; `agent` is required. `limit` defaults to 50 and is capped at 500; `offset` is a page position with no ceiling (a nonnegative decimal safe integer, otherwise 0, omitted stays omitted).          |
-| GET    | `/api/messages`           | `?limit=<n>`                         | `{ messages: [...], count }`                                              | Global message feed (all agents). |
-| POST   | `/api/messages`           | `{ to, body, from?, requestKey?, projectPath? }` | `{ msgId, toId, status: 'queued', injected, replayed?, requestKey? }` (201) | Enqueue a message; a mismatched `projectPath` returns 409 before writing. |
-| POST   | `/api/messages/:id/reply` | `{ body }`                   | `{ msgId, toId, status: 'queued', injected }` (201)                                 | Reply to the original sender as the original recipient. |
-| POST   | `/api/messages/:id/read`  | `{ reader }`                 | `{ readAt, transitioned }` (200)                                                    | Recipient marks the message read (`inbox_messages.read_at`, migration 0053). Idempotent: only the first mark emits the metadata-only `message.read`; 404 when no such message is addressed to `reader`. |
+The raw `/api/messages*` routes and `apps/server/src/modules/messages/` were deleted by G11 (task
+1267 R4) and answer 404. The inbox is now the typed oRPC `inbox` namespace
+(`packages/contracts/src/inbox.ts`, `/inbox/*` paths in `/openapi.json`), served over
+`InboxService`; its contract lives in
+[inter-agent-control-plane.md §13](inter-agent-control-plane.md#13-inbox-message-plane-g11-adr-143).
 
 **Convention:** response envelopes use `{ data…, count }` for lists and `{ ok, ... }` for mutations,
 matching the existing board routes. Error shape: `{ error: string }` with the appropriate HTTP status.
-Process and message routes are Bun-gated (require `ServerContext`); they return 503 on the Cloudflare Workers path.
+Process routes are Bun-gated (require `ServerContext`); they return 503 on the Cloudflare Workers path.

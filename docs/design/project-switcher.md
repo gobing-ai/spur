@@ -300,29 +300,12 @@ Optional later: `POST /api/projects/stop` (CLI covers stop for v1).
 
 ### Request envelope (0841)
 
-Board requests travel as ordinary `inbox_messages` rows — operator mailbox
-`board-operator` to the orchestrator instance, read back through the existing
-non-consuming `GET /api/messages/inbox` (no new endpoint, no client-side
-message store). When the request carries explicit references, the web client
-prefixes the body with a single envelope line; a request without refs stays a
-plain message so `spur message` output and the Projects Conversation tab see the operator's
-text verbatim:
-
-```
-SPUR-REQUEST/1 {"refs":[{"kind":"task","wbs":"0844"},{"kind":"feature","id":"G63"}]}
-
-<human request text, verbatim>
-```
-
-- `refs` items are `{kind:'task', wbs}` or `{kind:'feature', id}`; fields are
-  serialized in that fixed order so the envelope is deterministic.
-- Decoding is prefix-guarded and total: missing prefix, truncated or non-JSON
-  payload, wrong shape, or malformed ref items degrade to the whole body as
-  text with `refs: []` — a malformed envelope is prose, never a dropped
-  message.
-- Owner: `apps/web/src/modules/projects/conversation.ts`
-  (`encodeRequestEnvelope` / `decodeRequestEnvelope`); submission wiring is
-  task 0844.
+**Retired by G11 (R4).** The `SPUR-REQUEST/1` body envelope, the `board-operator`
+mailbox and `apps/web/src/modules/projects/conversation.ts` are deleted. Board
+requests are sent through the typed `inbox.send` procedure with no `from` (the
+server defaults the sender to `operator`) and the operator's text travels
+verbatim as the body; references no longer ride the body. The contract lives in
+[inter-agent-control-plane.md §13](inter-agent-control-plane.md#13-inbox-message-plane-g11-adr-143).
 
 ### Agents roster two-fact card (0842)
 
@@ -350,10 +333,10 @@ Issue labels are frozen and shared with the global input receipts (0844):
   `apps/web/src/modules/projects/roster.ts`. The orchestrator is marked only
   when the binding carries a matching `instanceId` (never guessed on
   `missing`/`unresolvable`); undeclared live processes are appended
-  (`undeclared`); the operator mailbox `board-operator` is never rendered.
+  (`undeclared`); the operator address `operator` is never rendered.
 - Member detail: a pane (not a route, no focus trap) mounting the existing
-  process/terminal (`MemberTerminal`), messages (non-consuming
-  `GET /api/messages/inbox`), activity (`GET /api/events/history`), and the
+  process/terminal (`MemberTerminal`), messages (the read-only typed
+  `inbox.list` read), activity (`GET /api/events/history`), and the
   lifecycle verbs the owning-noun routes already expose (`POST /api/agents/:id/start|stop`,
   `POST /api/processes/:id/stdin`) — start, stop, stdin. Escape
   restores focus to the opener card.
@@ -374,7 +357,9 @@ removed on 2026-09-14: Tasks and Features are their own Board modules, so
 Projects no longer duplicates them. `/board/projects/work` resolves to the
 default tab through the `useProjectTab` unknown-segment rule. The Work-side task
 reference capture (`addRef({kind:'task', wbs})`) left with it. The draft's ref
-contract (`ConversationRef`, chips, submission) is unchanged.
+contract (`ConversationRef`, `addRef`/`removeRef`) was later retired with the
+`SPUR-REQUEST/1` envelope (G11 1269): the draft is text-only, and a stored
+legacy `refs` key is ignored on load.
 
 - `ProcessesView` restores the retired 0262/0264/0267 watch list. It polls
   `GET /api/processes` for rows: supervised processes plus registry

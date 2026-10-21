@@ -402,7 +402,7 @@ export default function GlobalAgentBar({ activeModule: _activeModule }: GlobalAg
         if (path === null || targetInstance === undefined || inFlight) return;
         const text = draft.text;
         if (text.trim().length === 0) return;
-        const submitted = { text, refs: draft.refs, revision: draft.revision };
+        const submitted = { text, revision: draft.revision };
         const pending =
             draft.pending !== undefined &&
             typeof draft.pending.requestKey === 'string' &&
