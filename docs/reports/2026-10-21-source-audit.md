@@ -20,7 +20,7 @@ Companion to [the full feature audit](2026-10-21-feature-legacy-audit.md). Revie
 
 Independent reviews traced sibling consumers and produced follow-up fixes for project-change send completion, draft identity, full guest instruction bodies and exact non-orchestrator request classification. Focused suites, workspace typechecks and script contract checks passed before integration. The integrated task gate passed: **11,557 tests, zero failures, 43,708 assertions across 742 files**, plus lint, all workspace typechecks and pre/post rules. All nine requirements and nine acceptance criteria are certified MET; residual blocking findings are zero. A review-table authoring error stopped the original pipeline close; the table/citation was corrected and normal guarded standalone recording completed without a waiver.
 
-The dependency patch includes source, runtime distribution and declarations and is registered in the lockfile. It remains pinned to ts-db 0.5.32 until an upstream release provides the facade. Unsupported adapters reject inbox mutations explicitly. No upstream package was published.
+The dependency patch includes source, runtime distribution and declarations and is registered in the lockfile. It remains pinned to ts-db 0.5.33 until an upstream release provides the facade. Unsupported adapters reject inbox mutations explicitly. No upstream package was published.
 
 ## Task 1272 — workflow and process lifecycle
 
