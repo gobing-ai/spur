@@ -42,9 +42,11 @@ describe('spur agent wait --inbox (1081 R4)', () => {
         const { ctx, out, cleanup } = await makeCtx();
         try {
             await runAgentJoin(ctx, { role: 'reviewer', id: 'g-review', json: false });
-            await inboxFixture(await ctx.getDb()).enqueue('proj-lead', 'g-review', 'please review');
+            const inbox = inboxFixture(await ctx.getDb());
+            const messageId = await inbox.enqueue('proj-lead', 'g-review', 'please review');
             expect(await runAgentWaitInbox(ctx, { id: 'g-review', timeoutMs: 5000, json: false, pollMs: 10 })).toBe(0);
-            expect(out.messages.join('\n')).toContain('g-review: 1 pending message(s)');
+            expect(out.messages.join('\n')).toContain(`[${messageId}] proj-lead: please review`);
+            expect((await inbox.getById(messageId))?.status).toBe('delivered');
         } finally {
             await cleanup();
         }

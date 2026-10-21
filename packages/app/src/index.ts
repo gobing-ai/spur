@@ -451,6 +451,7 @@ export {
 // MAX_INJECT_ATTEMPTS, which the reconciler now derives from the shared constant).
 export {
     CLAIM_LEASE_MS,
+    type InboxClaim,
     type InboxDirection,
     type InboxMarkReadResult,
     type InboxMemberCounts,

@@ -28,13 +28,16 @@ find this session, though the `wait --inbox` loop still works.
 
 ## Pull loop
 
-`spur agent wait --inbox <id> --timeout 540000` returns **0** the moment queued work exists and
-**1** on timeout. Each call heartbeats the lease, so a looping session stays joined. The Bash tool's
+`spur agent wait --inbox <id> --timeout 540000 --json` returns **0** with up to five claimed messages
+in `{ id, pending, messages }`, settling their delivery after the output handoff. It returns **1**
+on timeout. An output failure releases the exact claims for retry; inbox listing itself never
+consumes messages. Each call heartbeats the lease, so a looping session stays joined. The Bash tool's
 own ~10-minute limit is why the timeout stays under it: one bounded call per turn, re-armed after
 the work is done.
 
-1. `spur agent wait --inbox <id> --timeout 540000 --json` → exit 0 means work is waiting.
-2. `spur message inbox --agent <id> --json` → read the messages.
+1. `spur agent wait --inbox <id> --timeout 540000 --json` → exit 0 hands this session `messages`.
+2. Read the returned messages, including their IDs. `spur message show <id> --json` can reread one;
+   `spur message inbox --agent <id> --json` is a non-consuming historical view.
 3. Do the work the message asks for.
 4. `spur message reply <msgId> "<result>"` → reply to each one.
 5. Re-arm: go back to step 1 while the operator wants this session in the fleet.

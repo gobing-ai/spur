@@ -44,6 +44,7 @@ export {
     type DecisionSummaryVolumeBucket,
 } from './decision-log-dao';
 export {
+    type InboxClaim,
     InboxDao,
     type InboxEventFactory,
     type InboxMemberCounts,

@@ -127,6 +127,39 @@ describe('1267 R3 — GET procedures write nothing', () => {
 });
 
 describe('1267 R1/R2 — send', () => {
+    test('exact receipts include chat sent to a non-orchestrator without changing the default feed', async () => {
+        const sent = await call<{ message: { id: string } }>('send', { to: 'proj-coder', body: 'chat' });
+        const before = await counts();
+        expect(await call('requests', {})).toEqual([]);
+        const receipts = await call<Array<{ messageId: string; status: string; reason: string | null }>>('requests', {
+            messageId: sent.message.id,
+        });
+        expect(receipts).toMatchObject([{ messageId: sent.message.id, status: 'queued', reason: null }]);
+        const inbox = harness.ctx.inbox();
+        const claims = await inbox.claim('proj-coder', 1);
+        await inbox.settle(claims, 'accepted');
+        const afterSettlement = await counts();
+        expect(await call('requests', { messageId: sent.message.id })).toMatchObject([
+            { messageId: sent.message.id, status: 'delivered', reason: null },
+        ]);
+        expect(await counts()).toEqual(afterSettlement);
+        expect(before.messages).toBe(afterSettlement.messages);
+        expect(await call('requests', { messageId: 'missing' })).toEqual([]);
+    });
+
+    test('an exact non-orchestrator request retains its unresolved delivery reason', async () => {
+        const sent = await call<{ message: { id: string } }>('send', {
+            to: 'proj-coder',
+            body: 'dispatch',
+            kind: 'request',
+        });
+        await harness.ctx.inbox().claim('proj-coder', 1);
+        expect(await call('requests', { messageId: sent.message.id })).toMatchObject([
+            { messageId: sent.message.id, status: 'claimed', reason: 'outcome-unknown' },
+        ]);
+        expect(await call('requests', {})).toEqual([]);
+    });
+
     test('a served-project send stores one message and returns it', async () => {
         const result = await call<{ message: { id: string; toId: string; status: string }; replayed: boolean }>(
             'send',
@@ -392,8 +425,8 @@ describe('1267 R4 — the raw routes are gone', () => {
                     taskId: '1267',
                     requestKey: 'fleet:task:1267:1',
                 });
-                await inbox.claim('proj-orch', 5);
-                await inbox.settle([sent.message.id], 'accepted');
+                const claims = await inbox.claim('proj-orch', 5);
+                await inbox.settle(claims, 'accepted');
                 await new CoordinationRunDao(db).insertStart({
                     specId: 'proj-orch',
                     agentKind: 'claude',
@@ -427,6 +460,7 @@ describe('1267 R4 — the raw routes are gone', () => {
                     messageId: sent.message.id,
                     status: 'delivered',
                     runId: 'run-1267',
+                    runStatus: 'running',
                     taskId: '1267',
                     attempts: 1,
                 });

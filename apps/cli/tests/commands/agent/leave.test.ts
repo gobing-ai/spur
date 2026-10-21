@@ -64,9 +64,11 @@ describe('guest CLI surface through the real command tree (1081 E2E)', () => {
             expect(out.messages.join('\n')).toContain('guest-stage-refused');
 
             // wait --inbox with queued work returns 0 (text branch)
-            await inboxFixture(await (await createCliContext(deps)).getDb()).enqueue('proj-lead', 'g-env', 'work');
+            const inbox = inboxFixture(await (await createCliContext(deps)).getDb());
+            const messageId = await inbox.enqueue('proj-lead', 'g-env', 'work');
             expect(await main(['agent', 'wait', '--inbox', 'g-env', '--timeout', '5000'], deps)).toBe(0);
-            expect(out.messages.join('\n')).toContain('pending message(s)');
+            expect(out.messages.join('\n')).toContain(`[${messageId}] proj-lead: work`);
+            expect((await inbox.getById(messageId))?.status).toBe('delivered');
 
             // leave by an explicit --session-id, then a second leave is a usage error
             expect(await main(['agent', 'leave', '--session-id', 'sess-env'], deps)).toBe(0);

@@ -1,4 +1,4 @@
-import { dirname, join } from 'node:path';
+import { dirname } from 'node:path';
 import { MarkdownDocument, stripAcFence } from '@gobing-ai/spur-domain';
 import { readFeatureAcBody } from './feature-check';
 import { FeatureService } from './feature-service';
@@ -131,7 +131,7 @@ export class TaskFeatureLink {
         const fm = doc.frontmatterData ?? {};
         const featureId = (fm.feature_id as string | undefined) ?? (fm['feature-id'] as string | undefined);
         if (!featureId || featureId.length === 0) return null;
-        const ac = await readFeatureAcBody(this.ctx.fs, join(dirname(taskFilePath), '..', 'features'), featureId);
+        const ac = await readFeatureAcBody(this.ctx.fs, this.deriveFeaturesDir(), featureId);
         if (ac === null) return null;
         return { featureId, ac, taskAc: stripAcFence(doc.getSection('Acceptance Criteria') ?? '') };
     }

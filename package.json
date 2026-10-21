@@ -141,6 +141,7 @@
         "zod": "4.4.3"
     },
     "patchedDependencies": {
+        "@gobing-ai/ts-db@0.5.32": "patches/@gobing-ai%2Fts-db@0.5.32.patch",
         "@gobing-ai/ts-dual-workflow-engine@0.5.28": "patches/@gobing-ai%2Fts-dual-workflow-engine@0.5.28.patch"
     }
 }

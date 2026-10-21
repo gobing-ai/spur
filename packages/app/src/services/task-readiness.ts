@@ -26,6 +26,7 @@ import { createHash } from 'node:crypto';
 import { MarkdownDocument, TASK_CANONICAL_SECTIONS, type TaskBatchItem, taskBatchSchema } from '@gobing-ai/spur-domain';
 import type { AgentRunCaptureResult, AgentRunTracedResult } from './agent-service';
 import type { CheckFindings } from './planning-check-base';
+import { taskMetadata } from './task-metadata';
 
 /** The canonical ready checklist (docs/design/task-creation-readiness.md, ADR-109). */
 export const READY_CHECKLIST_IDS = [
@@ -407,7 +408,7 @@ export function computePlanningDigest(raw: string): string {
             const body = doc.getSection(name);
             return { name, body: body === null ? null : body.trim() };
         }),
-        featureId: typeof fm.feature_id === 'string' ? fm.feature_id : null,
+        featureId: taskMetadata(fm).featureId,
         template: typeof fm.template === 'string' ? fm.template : null,
     };
     return createHash('sha256').update(JSON.stringify(payload)).digest('hex');

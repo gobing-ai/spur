@@ -2,7 +2,7 @@ import { describe, expect, spyOn, test } from 'bun:test';
 import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { FleetGuestService } from '@gobing-ai/spur-app';
+import { FleetGuestService, InboxService } from '@gobing-ai/spur-app';
 import { CoordinationRunDao, createMigratedDb, SystemEventDao } from '@gobing-ai/spur-domain';
 import { runAgentJoin, runAgentWaitInbox } from '../../../src/commands/agent';
 import { createCliContext } from '../../../src/context';
@@ -378,13 +378,62 @@ describe('spur agent wait --inbox — JSON and lease surfaces', () => {
         }
     });
 
-    test('pending work is reported as JSON', async () => {
+    test('pending work is handed off once as JSON and a reply never requeues it', async () => {
         const { ctx, out, cleanup } = await guestCtx();
         try {
             await runAgentJoin(ctx, { role: 'reviewer', id: 'g-json', json: false });
-            await inboxFixture(await ctx.getDb()).enqueue('proj-lead', 'g-json', 'hello');
+            const messageId = await inboxFixture(await ctx.getDb()).enqueue('proj-lead', 'g-json', 'hello');
             expect(await runAgentWaitInbox(ctx, { id: 'g-json', timeoutMs: 5000, json: true, pollMs: 10 })).toBe(0);
-            expect(JSON.parse(out.messages.at(-1) ?? '{}')).toEqual({ id: 'g-json', pending: 1 });
+            expect(JSON.parse(out.messages.at(-1) ?? '{}')).toMatchObject({
+                id: 'g-json',
+                pending: 1,
+                messages: [{ id: messageId, body: 'hello', attempts: 1 }],
+            });
+            const inbox = new InboxService({ getDb: () => ctx.getDb() });
+            expect((await inbox.get(messageId))?.status).toBe('delivered');
+            await inbox.reply(messageId, 'g-json', 'done');
+            expect(await runAgentWaitInbox(ctx, { id: 'g-json', timeoutMs: 0, json: true })).toBe(1);
+            expect(JSON.parse(out.messages.at(-1) ?? '{}')).toMatchObject({ error: { code: 'timeout' } });
+        } finally {
+            await cleanup();
+        }
+    });
+
+    test('failed handoff releases the exact claim for retry', async () => {
+        const { ctx, cleanup } = await guestCtx();
+        try {
+            await runAgentJoin(ctx, { role: 'reviewer', id: 'g-failed', json: false });
+            const inbox = new InboxService({ getDb: () => ctx.getDb() });
+            const sent = await inbox.send({ from: 'operator', to: 'g-failed', body: 'keep this work' });
+            const write = spyOn(ctx.output, 'write').mockImplementation(() => {
+                throw new Error('output closed');
+            });
+            try {
+                await expect(runAgentWaitInbox(ctx, { id: 'g-failed', timeoutMs: 0, json: true })).rejects.toThrow(
+                    'output closed',
+                );
+            } finally {
+                write.mockRestore();
+            }
+            expect((await inbox.get(sent.message.id))?.status).toBe('queued');
+            expect((await inbox.get(sent.message.id))?.attempts).toBe(1);
+            expect(await runAgentWaitInbox(ctx, { id: 'g-failed', timeoutMs: 0, json: false })).toBe(0);
+        } finally {
+            await cleanup();
+        }
+    });
+
+    test('a bounded handoff returns five messages and leaves the remainder queued', async () => {
+        const { ctx, out, cleanup } = await guestCtx();
+        try {
+            await runAgentJoin(ctx, { role: 'reviewer', id: 'g-batch', json: false });
+            const inbox = new InboxService({ getDb: () => ctx.getDb() });
+            for (let i = 0; i < 7; i += 1) await inbox.send({ from: 'operator', to: 'g-batch', body: `work ${i}` });
+            expect(await runAgentWaitInbox(ctx, { id: 'g-batch', timeoutMs: 0, json: true })).toBe(0);
+            const result = JSON.parse(out.messages.at(-1) ?? '{}');
+            expect(result.pending).toBe(5);
+            expect(result.messages).toHaveLength(5);
+            expect(await inbox.countQueued('g-batch')).toBe(2);
         } finally {
             await cleanup();
         }

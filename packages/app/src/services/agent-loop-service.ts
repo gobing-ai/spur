@@ -1,5 +1,11 @@
 import { randomUUID } from 'node:crypto';
-import { CLAIM_TTL_MS, CoordinationRunDao, ProjectClaimDao, SystemEventDao } from '@gobing-ai/spur-domain';
+import {
+    CLAIM_TTL_MS,
+    CoordinationRunDao,
+    type InboxClaim,
+    ProjectClaimDao,
+    SystemEventDao,
+} from '@gobing-ai/spur-domain';
 import type { AgentProcessOptions, AgentSpec } from '@gobing-ai/ts-ai-runner';
 import { EventBus } from '@gobing-ai/ts-infra';
 import type { WorkflowAgentService } from '../workflow/actions/agent-run';
@@ -101,11 +107,11 @@ export interface AgentLoopDeps {
     drain(flags: Record<string, string | boolean>): Promise<{
         prompt?: string;
         flags: Record<string, string | boolean>;
-        claimed: string[];
+        claimed: InboxClaim[];
         /** The claimed rows' request keys (G71 R1) — a `fleet:task:*` key marks a keyed dispatch. */
         requestKeys?: Array<string | null | undefined>;
     }>;
-    settle(claimed: string[], outcome: 'accepted' | 'not-started'): Promise<void>;
+    settle(claimed: InboxClaim[], outcome: 'accepted' | 'not-started'): Promise<void>;
     attachLedger(bus: SystemEventBus): Promise<{ flush(): Promise<void>; unsubscribe(): void }>;
     /**
      * 1076 R2: name the run a member's live frames belong to, for the duration of a keyed drain.
@@ -525,7 +531,7 @@ export async function runAgentLoopCore(deps: AgentLoopDeps, input: AgentLoopRunI
                                       cwd: deps.cwd,
                                       recipient,
                                       key: requestKeys[0],
-                                      messageId: claimed[0] as string,
+                                      messageId: claimed[0]?.id ?? '',
                                       flags: drainFlags,
                                       service: svc,
                                       runDeps,

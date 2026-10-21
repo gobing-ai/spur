@@ -1,6 +1,7 @@
 import {
     CoordinationRunDao,
     type DbAdapter,
+    type InboxClaim,
     InboxDao,
     type InboxEventFactory,
     type InboxMemberCounts,
@@ -14,6 +15,7 @@ import { ensureRetentionQuotaForPrefix } from './system-event-catch-all';
 import { DEFAULT_SYSTEM_EVENT_RETENTION_QUOTA, resolveRetentionQuotas } from './system-event-retention';
 
 export type {
+    InboxClaim,
     InboxMemberCounts,
     InboxMessage,
     InboxMessageKind,
@@ -110,7 +112,9 @@ function assertSameRequest(existing: InboxMessage, input: InboxSendInput): Inbox
         existing.fromId === input.from &&
         existing.toId === input.to &&
         existing.body === input.body &&
-        existing.kind === (input.kind ?? 'chat');
+        existing.kind === (input.kind ?? 'chat') &&
+        existing.taskId === (input.taskId ?? null) &&
+        existing.parentRunId === (input.parentRunId ?? null);
     if (!sameRequest) throw new RequestKeyConflictError(input.requestKey ?? '');
     return existing;
 }
@@ -231,6 +235,7 @@ export class InboxService {
      * (G11 R5). Any address can be replied to, including `operator` and `spur`.
      */
     async reply(id: string, from: string, body: string): Promise<InboxMessage> {
+        if (from.trim() === '') throw new Error('inbox message requires a non-empty sender');
         const db = await this.deps.getDb();
         const dao = new InboxDao(db);
         const original = await dao.get(id);
@@ -274,11 +279,11 @@ export class InboxService {
     }
 
     /** Settle claimed messages: `accepted` → delivered, `not-started` → failed. */
-    async settle(ids: readonly string[], outcome: InboxSettleOutcome, error?: string): Promise<InboxMessage[]> {
-        if (ids.length === 0) return [];
+    async settle(claims: readonly InboxClaim[], outcome: InboxSettleOutcome, error?: string): Promise<InboxMessage[]> {
+        if (claims.length === 0) return [];
         const db = await this.deps.getDb();
         const settled = await new InboxDao(db).settle(
-            ids,
+            claims,
             outcome === 'accepted' ? 'delivered' : 'failed',
             this.clock(),
             this.eventFactory(outcome === 'accepted' ? 'message.delivered' : 'message.failed'),
@@ -289,10 +294,10 @@ export class InboxService {
     }
 
     /** Return claimed messages to `queued` (guest retire, drain release). */
-    async release(ids: readonly string[]): Promise<InboxMessage[]> {
-        if (ids.length === 0) return [];
+    async release(claims: readonly InboxClaim[]): Promise<InboxMessage[]> {
+        if (claims.length === 0) return [];
         const db = await this.deps.getDb();
-        const released = await new InboxDao(db).release(ids, this.clock(), this.eventFactory('message.requeued'));
+        const released = await new InboxDao(db).release(claims, this.clock(), this.eventFactory('message.requeued'));
         await this.pruneEvents(db);
         return released;
     }
@@ -318,7 +323,7 @@ export class InboxService {
                 if (receipt.status === 'running') continue;
                 const delivered = receipt.outcome === 'verified' || receipt.outcome === 'run-exit-only';
                 const settled = await dao.settle(
-                    [message.id],
+                    [message],
                     delivered ? 'delivered' : 'failed',
                     now,
                     this.eventFactory(delivered ? 'message.delivered' : 'message.failed'),
@@ -329,7 +334,7 @@ export class InboxService {
             }
             if (message.attempts >= MAX_DELIVERY_ATTEMPTS) {
                 const failed = await dao.settle(
-                    [message.id],
+                    [message],
                     'failed',
                     now,
                     this.eventFactory('message.failed'),
@@ -338,7 +343,7 @@ export class InboxService {
                 for (const row of failed) result.failed.push(row.id);
                 continue;
             }
-            const requeued = await dao.release([message.id], now, this.eventFactory('message.requeued'));
+            const requeued = await dao.release([message], now, this.eventFactory('message.requeued'));
             for (const row of requeued) result.requeued.push(row.id);
         }
 
@@ -383,9 +388,9 @@ export class InboxService {
         return dao.thread(root?.threadId ?? id);
     }
 
-    /** Request rows for one member (or every address when omitted), each with its newest run receipt. */
-    async requests(member?: string) {
-        return new InboxDao(await this.deps.getDb()).requests(member === undefined ? undefined : [member]);
+    /** Request feed by default; an exact message id also exposes chat delivery and its newest run receipt. */
+    async requests(member?: string, messageId?: string) {
+        return new InboxDao(await this.deps.getDb()).requests(member === undefined ? undefined : [member], messageId);
     }
 
     /** Queued (undelivered) message count for one address. */

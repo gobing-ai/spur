@@ -273,9 +273,9 @@ export class FleetGuestService {
         // A guest that dies mid-delivery must not strand its claimed messages: every claimed
         // row returns to `queued` through the service (G11 R10), so the next drain (or another
         // occupant) sees it again.
-        const claimed = (await this.inbox().list(record.id, 'in', { limit: 500 })).messages
-            .filter((row) => row.status === 'claimed')
-            .map((row) => row.id);
+        const claimed = (await this.inbox().list(record.id, 'in', { limit: 500 })).messages.filter(
+            (row) => row.status === 'claimed',
+        );
         if (claimed.length > 0) await this.inbox().release(claimed);
         if (record.runId !== '') {
             await new CoordinationRunDao(db).updateExit(record.runId, 'exited', new Date().toISOString(), '[]', {

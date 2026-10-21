@@ -98,11 +98,11 @@ export interface ConversationDraft {
     persistPending(requestKey: string): void;
     /**
      * Clear exactly the submitted revision (0844 R2): a no-op when any newer
-     * edit has landed since submission (`revision !== submittedRevision`) —
+     * edit has landed since submission or the served project changed —
      * the newer edit survives verbatim, checked against LIVE state inside the
      * functional update.
      */
-    clearSubmitted(submittedRevision: number): void;
+    clearSubmitted(submittedRevision: number, submittedPath: string): void;
 }
 
 const noopDraft: ConversationDraft = {
@@ -141,28 +141,28 @@ export function ConversationDraftProvider({ children }: { children: ReactNode })
             draft,
             setText: (text) =>
                 setDraft((prev) => {
-                    if (prev.path === '') return prev; // identity not resolved yet — nothing to guard or persist
+                    if (prev.path !== servedPath) return prev;
                     const next = { ...prev, text, revision: prev.revision + 1 };
                     saveDraft(next);
                     return next;
                 }),
             persistPending: (requestKey) =>
                 setDraft((prev) => {
-                    if (prev.path === '') return prev;
+                    if (prev.path !== draft.path || prev.revision !== draft.revision) return prev;
                     const next = { ...prev, pending: { requestKey, revision: prev.revision } };
                     saveDraft(next);
                     return next;
                 }),
-            clearSubmitted: (submittedRevision) =>
+            clearSubmitted: (submittedRevision, submittedPath) =>
                 setDraft((prev) => {
-                    if (prev.path === '') return prev;
+                    if (prev.path !== submittedPath) return prev;
                     if (prev.revision !== submittedRevision) return prev; // newer edit exists — leave it alone (R2)
                     const next = { path: prev.path, text: '', revision: prev.revision + 1 };
                     saveDraft(next);
                     return next;
                 }),
         }),
-        [draft],
+        [draft, servedPath],
     );
 
     return <ConversationDraftContext.Provider value={value}>{children}</ConversationDraftContext.Provider>;

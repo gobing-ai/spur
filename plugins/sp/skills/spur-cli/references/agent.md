@@ -239,10 +239,12 @@ is refused (R3), and `requiresCapabilities` stages therefore can never reach one
 spur agent wait --inbox reviewer-g1 --timeout 540000 --json
 ```
 
-Returns `0` as soon as queued inbox work exists for the guest and `1` on timeout or when the id is
-not a joined guest — never a silent hang. Every call heartbeats the guest's lease, so a session that
-keeps looping stays joined; the timeout stays under the Bash tool's ~10-minute limit. The
-`fleet-join` skill loops it (wait → `spur message inbox --agent <id>` → work → `spur message reply`),
+Returns `0` after handing off up to five queued messages, with `{ id, pending, messages }` in JSON;
+`pending` is the handed-off batch count. Exact claims settle as delivered after output succeeds and
+release for retry if output fails; further queued work stays for the next pull. Returns `1` on timeout
+or when the id is not a joined guest. Every call heartbeats the guest's lease, so a session that keeps
+looping stays joined; the timeout stays under the Bash tool's ~10-minute limit. The
+`fleet-join` skill loops it (wait → work from returned messages → `spur message reply`),
 and the `fleet-guest-stop` plugin hook delivers the same messages at a turn boundary on hosts that
 support a blocking Stop hook.
 

@@ -26,12 +26,17 @@ function makeProject(records: Array<{ id: string; sessionId?: string }>): string
     return cwd;
 }
 
-/** A `spur` stub: `wait --inbox` succeeds when `pending`, `message inbox` returns the given rows. */
+/** The pull returns its accepted messages; a second inbox read would lose their ownership. */
 function stubCli(pending: boolean, rows: unknown[] = []): GuestStopCli {
     return (args) => {
-        if (args[0] === 'agent' && args[1] === 'wait') return { status: pending ? 0 : 1, stdout: '' };
-        if (args[0] === 'message') return { status: 0, stdout: JSON.stringify(rows) };
-        return { status: 1, stdout: '' };
+        if (args[0] === 'agent' && args[1] === 'wait') {
+            expect(args).toContain('--json');
+            return {
+                status: pending ? 0 : 1,
+                stdout: JSON.stringify({ id: 'reviewer-g1', pending: rows.length, messages: rows }),
+            };
+        }
+        throw new Error('the hook must use the pulled messages without a second inbox read');
     };
 }
 
@@ -75,19 +80,53 @@ describe('fleet-guest-stop hook (1081 R4)', () => {
                 {
                     cwd,
                     cli: stubCli(true, [
-                        { from_id: 'proj-lead', body: 'review 1081', status: 'queued' },
-                        { from_id: 'proj-lead', body: 'already handled', status: 'delivered' },
+                        { id: 'msg_1081', fromId: 'proj-lead', body: 'review 1081', status: 'delivered' },
+                        { fromId: 'proj-lead', body: 'failed work', status: 'failed' },
                     ]),
                 },
             );
             expect(line).not.toBeNull();
             const parsed = JSON.parse(line ?? '{}') as { decision: string; reason: string };
             expect(parsed.decision).toBe('block');
-            expect(parsed.reason).toContain('proj-lead: review 1081');
-            expect(parsed.reason).not.toContain('already handled');
+            expect(parsed.reason).toContain('proj-lead [msg_1081]: review 1081');
+            expect(parsed.reason).not.toContain('failed work');
         } finally {
             rmSync(cwd, { recursive: true, force: true });
         }
+    });
+
+    test('current message objects, envelopes and legacy arrays share bounded delivery parsing', () => {
+        const messages = [null, { body: 42 }, { id: 'm1', fromId: 'lead', body: 'review', status: 'queued' }];
+        const current = stopDecisionFor('g', JSON.stringify({ messages, count: messages.length }));
+        expect(current).not.toBeNull();
+        expect(stopDecisionFor('g', JSON.stringify({ ok: true, data: { messages } }))).toBe(current);
+        expect(stopDecisionFor('g', JSON.stringify(messages))).toBe(current);
+        expect(stopDecisionFor('g', JSON.stringify({ messages }), 0)).toBeNull();
+        expect(stopDecisionFor('g', JSON.stringify({ messages: [{ body: 'x', status: 'invalid' }] }))).toBeNull();
+        expect(
+            stopDecisionFor('g', JSON.stringify({ messages: [{ body: 'handled', status: 'delivered' }] })),
+        ).toBeNull();
+        const pulled = {
+            pending: 2,
+            messages: [
+                { body: 'one', status: 'claimed' },
+                { body: 'two', status: 'delivered' },
+            ],
+        };
+        const reason = JSON.parse(stopDecisionFor('g', JSON.stringify(pulled), 1) ?? '{}').reason;
+        expect(reason).toContain('one');
+        expect(reason).toContain('two');
+    });
+
+    test('handed-off messages preserve trailing instructions and multiline bodies', () => {
+        const body = `${'context '.repeat(30)}\nDo the final instruction too.\n  preserve indentation`;
+        const line = stopDecisionFor(
+            'g',
+            JSON.stringify({ pending: 1, messages: [{ id: 'msg_long', body, status: 'claimed' }] }),
+        );
+        expect(JSON.parse(line ?? '{}').reason).toContain(body);
+        const legacy = stopDecisionFor('g', JSON.stringify([{ id: 'msg_long', body, status: 'queued' }]));
+        expect(JSON.parse(legacy ?? '{}').reason).toContain('spur message show msg_long --json');
     });
 
     test('a joined session with nothing queued stays silent', () => {

@@ -56,6 +56,7 @@ export const inboxRequestSchema = z.object({
     attempts: z.number().int().nonnegative(),
     error: z.string().nullable(),
     runId: z.string().nullable(),
+    runStatus: z.string().nullable().optional(),
     taskId: z.string().nullable(),
     outcome: z.string().nullable(),
     reason: z.string().nullable(),
@@ -131,6 +132,8 @@ const inboxReadResponseSchema = z.object({
 
 const inboxRequestsInputSchema = z.object({
     limit: z.number().int().positive().max(200).optional(),
+    /** Exact receipt for a sent message, including chat and non-orchestrator recipients. */
+    messageId: z.string().min(1).optional(),
 });
 
 /** The `inbox` procedure set: reads are side-effect free, mutations name their actor. */

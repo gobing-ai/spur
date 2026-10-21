@@ -3485,10 +3485,10 @@ describe('classifyExternalEvidence — frozen external form (0584 R1/R2)', () =>
     });
 });
 
-describe('accepted baseline debt in TaskCheckService.check (0586 R1, R2, R5)', () => {
+describe('1271 — checks retain findings after accepted-baseline retirement', () => {
     // Status `testing` (0714 R1): the anchor-subject matcher only runs on live records,
     // so this fixture must be non-terminal for the mismatch finding to fire and the
-    // baseline-debt machinery below to have something to accept/elevate.
+    // checker has a real warning/error whose retention can be observed.
     const brokenTask = [
         '---',
         'schema_version: 1',
@@ -3521,69 +3521,39 @@ describe('accepted baseline debt in TaskCheckService.check (0586 R1, R2, R5)', (
         return env;
     }
 
-    test('R1: baselined finding at matching error severity is dropped and passes check', async () => {
+    test('retired accepted-map options cannot suppress an observed error', async () => {
         const { fs, path, cleanup } = seedMismatchEnv();
-        const svc = new TaskCheckService(fs, matrix);
-
-        // When severity override treats anchor mismatch as error
-        const severityOverrides = { [FINDING_CODES.L4_ANCHOR_SUBJECT_MISMATCH]: 'error' as const };
-        const accepted = new Map([['task:0121:L4.anchor-subject-mismatch', 'error' as const]]);
-
-        const result = await svc.check(path, '0121', { severityOverrides, accepted });
-        cleanup();
-
-        const mismatchFindings = result.findings.filter((f) => f.code === FINDING_CODES.L4_ANCHOR_SUBJECT_MISMATCH);
-        expect(mismatchFindings).toHaveLength(0);
-        expect(result.pass).toBe(true);
+        try {
+            const svc = new TaskCheckService(fs, matrix);
+            // Old JavaScript callers can still send extra properties; they carry no policy authority.
+            const retiredOptions = {
+                severityOverrides: { [FINDING_CODES.L4_ANCHOR_SUBJECT_MISMATCH]: 'error' as const },
+                accepted: new Map([['task:0121:L4.anchor-subject-mismatch', 'error' as const]]),
+            };
+            const result = await svc.check(path, '0121', retiredOptions);
+            const mismatch = result.findings.filter(
+                (finding) => finding.code === FINDING_CODES.L4_ANCHOR_SUBJECT_MISMATCH,
+            );
+            expect(mismatch).toHaveLength(1);
+            expect(mismatch[0]?.severity).toBe('error');
+            expect(result.pass).toBe(false);
+        } finally {
+            cleanup();
+        }
     });
 
-    test('R2: baseline entry at warning does NOT cover an error finding', async () => {
+    test('strict mode still elevates an observed warning into a blocking error', async () => {
         const { fs, path, cleanup } = seedMismatchEnv();
-        const svc = new TaskCheckService(fs, matrix);
-
-        // Finding is error, but baseline entry is warning
-        const severityOverrides = { [FINDING_CODES.L4_ANCHOR_SUBJECT_MISMATCH]: 'error' as const };
-        const accepted = new Map([['task:0121:L4.anchor-subject-mismatch', 'warning' as const]]);
-
-        const result = await svc.check(path, '0121', { severityOverrides, accepted });
-        cleanup();
-
-        const mismatchFindings = result.findings.filter((f) => f.code === FINDING_CODES.L4_ANCHOR_SUBJECT_MISMATCH);
-        expect(mismatchFindings).toHaveLength(1);
-        expect(mismatchFindings[0]?.severity).toBe('error');
-        expect(result.pass).toBe(false);
-    });
-
-    test('R2: under strict mode, finding elevated to error is not covered by warning baseline', async () => {
-        const { fs, path, cleanup } = seedMismatchEnv();
-        const svc = new TaskCheckService(fs, matrix);
-
-        // Finding is warning by default, but strict: true elevates to error
-        const accepted = new Map([['task:0121:L4.anchor-subject-mismatch', 'warning' as const]]);
-
-        const result = await svc.check(path, '0121', { strict: true, accepted });
-        cleanup();
-
-        const mismatchFindings = result.findings.filter((f) => f.code === FINDING_CODES.L4_ANCHOR_SUBJECT_MISMATCH);
-        expect(mismatchFindings.length).toBeGreaterThanOrEqual(1);
-        expect(mismatchFindings.some((f) => f.severity === 'error')).toBe(true);
-        expect(result.pass).toBe(false);
-    });
-
-    test('R5: unbaselined mismatch fails the check', async () => {
-        const { fs, path, cleanup } = seedMismatchEnv();
-        const svc = new TaskCheckService(fs, matrix);
-
-        const severityOverrides = { [FINDING_CODES.L4_ANCHOR_SUBJECT_MISMATCH]: 'error' as const };
-        // Empty acceptance map
-        const accepted = new Map<string, 'error' | 'warning'>();
-
-        const result = await svc.check(path, '0121', { severityOverrides, accepted });
-        cleanup();
-
-        const mismatchFindings = result.findings.filter((f) => f.code === FINDING_CODES.L4_ANCHOR_SUBJECT_MISMATCH);
-        expect(mismatchFindings).toHaveLength(1);
-        expect(result.pass).toBe(false);
+        try {
+            const result = await new TaskCheckService(fs, matrix).check(path, '0121', { strict: true });
+            const mismatch = result.findings.filter(
+                (finding) => finding.code === FINDING_CODES.L4_ANCHOR_SUBJECT_MISMATCH,
+            );
+            expect(mismatch.some((finding) => finding.severity === 'error')).toBe(true);
+            expect(result.pass).toBe(false);
+        } finally {
+            cleanup();
+        }
     });
 });
 

@@ -115,3 +115,20 @@ describe('TaskFeatureLink.resolveFeatureAcBody', () => {
         expect(readFileSync(unlinked, 'utf8')).toContain('unlinked');
     });
 });
+
+test('1271 — AC lookup honors a nonsibling configured features directory', async () => {
+    const customDir = join(root, 'specification', 'features');
+    mkdirSync(customDir, { recursive: true });
+    const customFeature = join(customDir, 'A1_custom.md');
+    writeFileSync(
+        customFeature,
+        '---\nid: A1\nname: custom\nstatus: active\n---\n\n## Acceptance Criteria\n\n```gherkin\nFeature: custom\nScenario: configured\nGiven x\nThen y\n```\n',
+    );
+    const taskPath = join(tasksDir, '0001_linked.md');
+    writeFileSync(
+        taskPath,
+        '---\nname: linked\nfeature_id: A1\n---\n\n### Acceptance Criteria\n\n```gherkin\nFeature: task\nScenario: configured\nGiven x\nThen y\n```\n',
+    );
+    const configured = new TaskFeatureLink({ ...ctx, featuresDir: customDir }, ctx.writeService);
+    expect((await configured.resolveFeatureAcBody(taskPath))?.ac).toContain('Scenario: configured');
+});

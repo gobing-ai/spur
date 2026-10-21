@@ -184,10 +184,14 @@ const RECEIPT_LABELS: Record<
 };
 
 /** Map one request row (or its absence) onto the operator-facing state. */
-function receiptStateFor(row: { status: string; reason: string | null } | null, inFlight: boolean): ReceiptState {
+export function receiptStateFor(
+    row: { status: string; reason: string | null; runStatus?: string | null } | null,
+    inFlight: boolean,
+): ReceiptState {
     if (inFlight) return 'sending';
     if (row === null) return 'absent';
-    if (row.status === 'failed') return 'failed';
+    if (row.status === 'failed' || ['failed', 'errored', 'cancelled'].includes(row.runStatus ?? '')) return 'failed';
+    if (row.runStatus === 'running') return 'working';
     if (row.reason !== null && row.reason !== '') return row.status === 'delivered' ? 'unresolved' : 'working';
     if (row.status === 'delivered') return 'delivered';
     if (row.status === 'claimed') return 'working';
@@ -262,23 +266,44 @@ export default function GlobalAgentBar({ activeModule: _activeModule }: GlobalAg
     }, [commands]);
 
     const project = useProjectContext();
+    const submission = useRef({ path: project.path, generation: 0, inFlight: false });
+    if (submission.current.path !== project.path) {
+        submission.current = { path: project.path, generation: submission.current.generation + 1, inFlight: false };
+    }
+    useEffect(
+        () => () => {
+            submission.current.generation += 1;
+        },
+        [],
+    );
     const { draft, setText, persistPending, clearSubmitted } = useConversationDraft();
     const orchestratorInstanceId = project.fleet?.orchestrator?.instanceId;
     const unbound = orchestratorUnbound(project.fleet);
     // Receipts come from the typed contract feed, refetched whenever a `message.*` frame lands.
-    const [requests, setRequests] = useState<ReadonlyMap<string, { status: string; reason: string | null }>>(new Map());
+    const [receipt, setReceipt] = useState<{ status: string; reason: string | null; runStatus?: string | null } | null>(
+        null,
+    );
     const [feedFailed, setFeedFailed] = useState(false);
     const [sendError, setSendError] = useState<string | null>(null);
     const [feedTick, setFeedTick] = useState(0);
     useEffect(() => {
+        void project.path;
+        setInFlight(false);
+        setLastMessageId(null);
+        setReceipt(null);
+        setFeedFailed(false);
+        setSendError(null);
+    }, [project.path]);
+    useEffect(() => {
         void feedTick; // refetch trigger, bumped by the SSE effect below
-        if (orchestratorInstanceId === undefined) return;
+        if (lastMessageId === null) return;
         let cancelled = false;
         void (async () => {
             try {
-                const rows = await api.inbox.requests({});
+                const rows = await api.inbox.requests({ messageId: lastMessageId });
                 if (cancelled) return;
-                setRequests(new Map(rows.map((row) => [row.messageId, { status: row.status, reason: row.reason }])));
+                const row = rows.find((row) => row.messageId === lastMessageId);
+                if (row !== undefined) setReceipt({ status: row.status, reason: row.reason, runStatus: row.runStatus });
                 setFeedFailed(false);
             } catch {
                 if (!cancelled) setFeedFailed(true);
@@ -287,7 +312,7 @@ export default function GlobalAgentBar({ activeModule: _activeModule }: GlobalAg
         return () => {
             cancelled = true;
         };
-    }, [orchestratorInstanceId, feedTick]);
+    }, [lastMessageId, feedTick]);
     useEffect(() => {
         if (typeof EventSource === 'undefined') return;
         const stream = new EventSource(`${resolveApiUrl()}/events/planning`);
@@ -302,11 +327,19 @@ export default function GlobalAgentBar({ activeModule: _activeModule }: GlobalAg
         return () => stream.close();
     }, []);
 
-    const receipt = lastMessageId !== null ? (requests.get(lastMessageId) ?? null) : null;
     const receiptState = receiptStateFor(receipt, inFlight);
     const label = RECEIPT_LABELS[receiptState];
     const showReceipt = inFlight || lastMessageId !== null;
     const liveText = showReceipt ? `${label.label} — Next: ${label.action}` : '';
+
+    useEffect(() => {
+        if (lastMessageId === null || project.path === null || receipt === null) return;
+        if (['completed', 'exited', 'failed', 'errored', 'cancelled'].includes(receipt.runStatus ?? '')) return;
+        if (receipt.status !== 'queued' && receipt.status !== 'claimed' && receipt.runStatus !== 'running') return;
+        // CLI run exits need no inbox mutation, so only active receipts need this bounded live refresh.
+        const timer = setInterval(() => setFeedTick((tick) => tick + 1), 2000);
+        return () => clearInterval(timer);
+    }, [lastMessageId, project.path, receipt]);
 
     const roleMenuRef = useRef<HTMLDivElement>(null);
 
@@ -399,9 +432,12 @@ export default function GlobalAgentBar({ activeModule: _activeModule }: GlobalAg
     const handleSubmit = async () => {
         const path = project.path;
         const targetInstance = resolvedReceiver();
-        if (path === null || targetInstance === undefined || inFlight) return;
+        if (path === null || draft.path !== path || targetInstance === undefined || submission.current.inFlight) return;
+        const generation = ++submission.current.generation;
+        const isCurrent = () => submission.current.path === path && submission.current.generation === generation;
         const text = draft.text;
         if (text.trim().length === 0) return;
+        submission.current.inFlight = true;
         const submitted = { text, revision: draft.revision };
         const pending =
             draft.pending !== undefined &&
@@ -415,6 +451,7 @@ export default function GlobalAgentBar({ activeModule: _activeModule }: GlobalAg
         setSendError(null);
         setInFlight(true);
         setLastMessageId(null);
+        setReceipt(null);
         setPaletteDismissed(true);
         try {
             // G11 R2: the typed contract. No `from` (the server defaults to `operator`) and no body
@@ -426,15 +463,20 @@ export default function GlobalAgentBar({ activeModule: _activeModule }: GlobalAg
                 requestKey,
                 ...(path !== null ? { projectPath: path } : {}),
             });
+            if (!isCurrent()) return;
+            setReceipt({ status: sent.message.status, reason: null });
             setLastMessageId(sent.message.id);
-            clearSubmitted(submitted.revision);
+            clearSubmitted(submitted.revision, path);
         } catch (cause) {
             // The contract refuses a stale project (409) or an unknown recipient (400). Swallowing
             // that left the operator with a draft and no explanation, so the reason is surfaced in
             // the receipt slot; the draft and its pending key stay intact for a retry.
-            setSendError(cause instanceof Error ? cause.message : 'the message was not sent');
+            if (isCurrent()) setSendError(cause instanceof Error ? cause.message : 'the message was not sent');
         } finally {
-            setInFlight(false);
+            if (isCurrent()) {
+                submission.current.inFlight = false;
+                setInFlight(false);
+            }
         }
     };
 
@@ -667,7 +709,9 @@ export default function GlobalAgentBar({ activeModule: _activeModule }: GlobalAg
                         data-testid="agent-bar-role-tag"
                     >
                         <span className="text-spur-text-muted font-sans text-[11px]">to:</span>
-                        <span className="font-semibold">{selectedRole}</span>
+                        <span className="font-semibold">
+                            {availableRoleOptions.find((option) => option.id === selectedRole)?.label ?? selectedRole}
+                        </span>
                         <span className="text-spur-text-muted text-[10px] group-hover:text-spur-text transition-colors">
                             ▾
                         </span>
@@ -687,11 +731,11 @@ export default function GlobalAgentBar({ activeModule: _activeModule }: GlobalAg
                                     key={opt.id}
                                     type="button"
                                     onClick={() => {
-                                        setSelectedRole(opt.label);
+                                        setSelectedRole(opt.id);
                                         setRoleMenuOpen(false);
                                     }}
                                     className={`flex items-center justify-between px-2.5 py-1.5 rounded-lg text-left text-xs font-mono transition-colors ${
-                                        selectedRole === opt.label
+                                        selectedRole === opt.id
                                             ? 'bg-spur-accent/15 text-spur-accent font-semibold'
                                             : 'hover:bg-base-200 text-spur-text-muted hover:text-spur-text'
                                     }`}
@@ -700,7 +744,7 @@ export default function GlobalAgentBar({ activeModule: _activeModule }: GlobalAg
                                         <span className="font-medium text-spur-text">{opt.label}</span>
                                         <span className="text-[10px] text-spur-text-muted">{opt.desc}</span>
                                     </div>
-                                    {selectedRole === opt.label && <span className="text-[12px]">✓</span>}
+                                    {selectedRole === opt.id && <span className="text-[12px]">✓</span>}
                                 </button>
                             ))}
                         </div>

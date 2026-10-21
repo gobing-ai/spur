@@ -1,5 +1,5 @@
 import type { Command } from '@commander-js/extra-typings';
-import type { AgentQuotaEventBus, AgentRunDeps, SystemEventBus } from '@gobing-ai/spur-app';
+import type { AgentQuotaEventBus, AgentRunDeps, InboxClaim, SystemEventBus } from '@gobing-ai/spur-app';
 import { isAgentName } from '@gobing-ai/ts-ai-runner';
 import { EventBus } from '@gobing-ai/ts-infra';
 import { attachAgentQuotaPersistence } from '../../agent-quota-persistence';
@@ -105,7 +105,7 @@ export async function runAgentRun(
             invocationStarted = true;
         }
     });
-    let claimed: string[] = [];
+    let claimed: InboxClaim[] = [];
     try {
         // `--spec <id>` (canonical, 0542 R1) or the legacy `--agent <spec-id>`
         // names the occupant address; `--drain` is DB-backed, so it is resolved in
@@ -142,10 +142,7 @@ export async function runAgentRun(
             }
             return await svc.run(drained, rewritten, deps);
         }
-        // R3 (0536): reject a value that is neither a role, a configured executor,
-        // nor auto at the flag boundary — before any agent process spawns.
-        // Explicit `inline` is rejected here too (G5 / ADR-047 amendment): exit 2
-        // with the frozen headless-surface message, zero spawn, no fallback.
+        // Validate before spawning; headless inline uses tier substitution (0687 / ADR-087).
         const invalid = validateAgentSelector(flags, context);
         if (invalid !== null) {
             writeJsonError(context.output, jsonFlags(flags), invalid, 'VALIDATION_FAILED');

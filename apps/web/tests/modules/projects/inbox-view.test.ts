@@ -109,7 +109,7 @@ const stubApi = {
     },
 };
 
-const { cleanup, fireEvent, render, waitFor } = await import('@testing-library/react');
+const { act, cleanup, fireEvent, render, waitFor, within } = await import('@testing-library/react');
 const { resetFetchForTesting, setFetchForTesting } = await import('../../../src/lib/rpc-client');
 const { createElement } = await import('react');
 const { ProjectContext } = await import('../../../src/modules/projects/useProjectContext');
@@ -150,13 +150,11 @@ function type(field: HTMLTextAreaElement, value: string): void {
     fireEvent.keyUp(field);
 }
 
-function renderView() {
+function renderView(client: unknown = stubApi.inbox, context = projectValue) {
     // The component takes its client as a prop (no module mocking): the stub IS the transport.
     // `createElement` with a typed component needs the props interface named explicitly.
     const Tab = InboxView as unknown as (props: { client: unknown }) => ReturnType<typeof createElement>;
-    return render(
-        createElement(ProjectContext.Provider, { value: projectValue }, createElement(Tab, { client: stubApi.inbox })),
-    );
+    return render(createElement(ProjectContext.Provider, { value: context }, createElement(Tab, { client })));
 }
 
 describe('Projects Inbox tab (G11 R1)', () => {
@@ -192,6 +190,157 @@ describe('Projects Inbox tab (G11 R1)', () => {
 });
 
 describe('Projects Inbox tab actions reach the contract (G11 R1/R2)', () => {
+    test('declared members with no rows are selectable and receive their first message', async () => {
+        const view = renderView({ ...stubApi.inbox, members: async () => [] });
+        await waitFor(() => expect(view.getByRole('button', { name: /proj-coder/ })).toBeDefined());
+        const box = view.getByRole('textbox') as HTMLTextAreaElement;
+        type(box, 'first message');
+        fireEvent.submit(box.closest('form') as HTMLFormElement);
+        await waitFor(() => expect(sendCalls).toHaveLength(1));
+        expect(sendCalls[0]).toEqual({ to: 'proj-coder', projectPath: '/tmp/proj', body: 'first message' });
+    });
+
+    test('a delayed older page cannot contaminate another member or its cursor', async () => {
+        let finishOlder: (page: ReturnType<typeof newestPage>) => void = () => {};
+        const pendingOlder = new Promise<ReturnType<typeof newestPage>>((resolve) => {
+            finishOlder = resolve;
+        });
+        let olderCalls = 0;
+        const view = renderView({
+            ...stubApi.inbox,
+            list: async (input: { member: string; cursor?: string }) => {
+                if (input.cursor !== undefined) {
+                    olderCalls += 1;
+                    return pendingOlder;
+                }
+                if (input.member === 'operator') {
+                    return { messages: [{ ...olderRow, id: 'other', body: 'other member thread' }], nextCursor: null };
+                }
+                return { ...newestPage(), nextCursor: 'older-coder' };
+            },
+        });
+        await waitFor(() => expect(view.getByText('question')).toBeDefined());
+        const load = view.getByRole('button', { name: 'Load older' });
+        fireEvent.click(load);
+        fireEvent.click(load);
+        expect(olderCalls).toBe(1);
+        fireEvent.click(view.getByRole('button', { name: /^operator/ }));
+        await waitFor(() => expect(view.getByText('other member thread')).toBeDefined());
+        await act(async () => finishOlder({ messages: [olderRow], nextCursor: 'wrong-cursor' }));
+        expect(view.queryByText('older question')).toBeNull();
+        expect(view.queryByRole('button', { name: 'Load older' })).toBeNull();
+    });
+
+    test('a project switch clears old members and pages even when the member address is unchanged', async () => {
+        let projectPath = '/project/A';
+        let finishOlder: (page: ReturnType<typeof newestPage>) => void = () => {};
+        const older = new Promise<ReturnType<typeof newestPage>>((resolve) => {
+            finishOlder = resolve;
+        });
+        let finishSend: () => void = () => {};
+        const sending = new Promise<void>((resolve) => {
+            finishSend = resolve;
+        });
+        const client = {
+            ...stubApi.inbox,
+            members: async () => (projectPath === '/project/A' ? [{ id: 'only-A', queued: 0, unread: 0 }] : []),
+            send: async () => {
+                await sending;
+                return { message: { id: 'sent-A' }, replayed: false };
+            },
+            list: async (input: { cursor?: string }) =>
+                input.cursor !== undefined
+                    ? older
+                    : {
+                          messages: [{ ...olderRow, id: projectPath, body: `thread ${projectPath}` }],
+                          nextCursor: projectPath === '/project/A' ? 'A-older' : null,
+                      },
+        };
+        const Tab = InboxView as unknown as (props: { client: unknown }) => ReturnType<typeof createElement>;
+        const tree = () =>
+            createElement(
+                ProjectContext.Provider,
+                {
+                    value: {
+                        path: projectPath,
+                        name: projectPath,
+                        state: 'ready',
+                        fleet: { members: [{ instanceId: 'same-member' }], orchestrator: { state: 'bound-online' } },
+                    } as never,
+                },
+                createElement(Tab, { client }),
+            );
+        const view = render(tree());
+        await waitFor(() => expect(view.getByText('thread /project/A')).toBeDefined());
+        type(view.getByRole('textbox') as HTMLTextAreaElement, 'A note');
+        fireEvent.submit(view.getByRole('textbox').closest('form') as HTMLFormElement);
+        fireEvent.click(view.getByRole('button', { name: 'Load older' }));
+        projectPath = '/project/B';
+        view.rerender(tree());
+        await waitFor(() => expect(view.getByText('thread /project/B')).toBeDefined());
+        type(view.getByRole('textbox') as HTMLTextAreaElement, 'B note');
+        expect(view.queryByRole('button', { name: /only-A/ })).toBeNull();
+        await act(async () =>
+            finishOlder({ messages: [{ ...olderRow, body: 'A stale history' }], nextCursor: 'wrong' }),
+        );
+        await act(async () => finishSend());
+        expect(view.queryByText('A stale history')).toBeNull();
+        expect((view.getByRole('textbox') as HTMLTextAreaElement).value).toBe('B note');
+        expect(view.queryByRole('button', { name: 'Load older' })).toBeNull();
+    });
+
+    test('refresh updates retained older read states after marking an older message read', async () => {
+        let readAt: number | null = null;
+        const view = renderView({
+            ...stubApi.inbox,
+            list: async (input: { cursor?: string }) =>
+                input.cursor === undefined
+                    ? { ...newestPage(), nextCursor: 'older' }
+                    : {
+                          messages: [{ ...olderRow, fromId: 'proj-coder', toId: 'operator', readAt }],
+                          nextCursor: null,
+                      },
+            read: async () => {
+                readAt = 9;
+                return { readAt, transitioned: true };
+            },
+        });
+        await waitFor(() => expect(view.getByText('question')).toBeDefined());
+        fireEvent.click(view.getByRole('button', { name: 'Load older' }));
+        await waitFor(() => expect(view.getByText('older question')).toBeDefined());
+        const olderMessage = view.getByText('older question').parentElement as HTMLElement;
+        fireEvent.click(within(olderMessage).getByRole('button', { name: 'Mark read' }));
+        await waitFor(() => expect(view.getAllByRole('button', { name: 'Mark read' })).toHaveLength(1));
+        expect(view.getByText('older question')).toBeDefined();
+        expect(view.queryByRole('button', { name: 'Load older' })).toBeNull();
+    });
+
+    test('refresh invalidates older requests before they can restore stale rows', async () => {
+        let finishOlder: (page: ReturnType<typeof newestPage>) => void = () => {};
+        const pendingOlder = new Promise<ReturnType<typeof newestPage>>((resolve) => {
+            finishOlder = resolve;
+        });
+        let refreshed = false;
+        const client = {
+            ...stubApi.inbox,
+            list: async (input: { cursor?: string }) =>
+                input.cursor !== undefined
+                    ? pendingOlder
+                    : {
+                          messages: [{ ...olderRow, body: refreshed ? 'fresh row' : 'initial row' }],
+                          nextCursor: 'older',
+                      },
+        };
+        const view = renderView(client);
+        await waitFor(() => expect(view.getByText('initial row')).toBeDefined());
+        fireEvent.click(view.getByRole('button', { name: 'Load older' }));
+        refreshed = true;
+        fireEvent.click(view.getByRole('button', { name: 'Refresh' }));
+        await waitFor(() => expect(view.getByText('fresh row')).toBeDefined());
+        await act(async () => finishOlder({ messages: [{ ...olderRow, body: 'stale older row' }], nextCursor: null }));
+        expect(view.queryByText('stale older row')).toBeNull();
+    });
+
     test('typing and submitting sends to the selected member as operator, scoped to the project', async () => {
         const view = renderView();
         await waitFor(() => expect(view.getByText('question')).toBeDefined());
@@ -260,7 +409,7 @@ describe('Projects Inbox tab default wiring (G11 R1)', () => {
             );
             await waitFor(() => expect(view.getByText('Members')).toBeDefined());
             // A few frames of settling must not multiply the reads.
-            await new Promise((resolve) => setTimeout(resolve, 150));
+            await act(async () => new Promise((resolve) => setTimeout(resolve, 150)));
             expect(calls).toBeLessThan(5);
         } finally {
             resetFetchForTesting();

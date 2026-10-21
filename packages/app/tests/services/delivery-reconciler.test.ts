@@ -66,7 +66,7 @@ describe('0834 five-step classification precedence', () => {
     test('delivered run outcomes remain visible; only a verified receipt clears the hold', async () => {
         const id = await seedQueued();
         await claim();
-        await inbox.settle([id], 'accepted');
+        await inbox.settle([{ id, attempts: 1 }], 'accepted');
         await writeReceipt('delivered-run', [id], 'errored', [{ kind: 'log', path: '/tmp/failure.log' }], '0834');
         expect((await reconciler.classify('worker'))[0]).toMatchObject({
             messageId: id,
@@ -122,7 +122,7 @@ describe('0834 five-step classification precedence', () => {
     test('step 1: failed row → delivery-failed with its injectError', async () => {
         const id = await seedQueued();
         await claim();
-        await inbox.settle([id], 'not-started', 'invocation never started');
+        await inbox.settle([{ id, attempts: 1 }], 'not-started', 'invocation never started');
         const report = await reconciler.reconcile('worker');
         expect(reasons(report)).toEqual([[id, 'delivery-failed']]);
         const held = report.unresolved[0];
@@ -180,7 +180,7 @@ describe('0834 five-step classification precedence', () => {
         // then release (claimed→queued). No raw SQL seam is needed to reach the ceiling.
         for (let attempt = 0; attempt < MAX_DELIVERY_ATTEMPTS; attempt += 1) {
             await inbox.claim('worker', 10);
-            await inbox.release((await inbox.list('worker', 'in')).messages.map((row) => row.id));
+            await inbox.release((await inbox.list('worker', 'in')).messages);
         }
         const id = (await inbox.list('worker', 'in')).messages[0]?.id ?? '';
         const report = await reconciler.reconcile('worker');
@@ -202,7 +202,7 @@ describe('0834 five-step classification precedence', () => {
     test('delivered rows without a receipt remain outcome-unknown and are never replayed', async () => {
         const id = await seedQueued();
         await claim();
-        await inbox.settle([id], 'accepted');
+        await inbox.settle([{ id, attempts: 1 }], 'accepted');
         const report = await reconciler.reconcile('worker');
         expect(report.scanned).toBe(1);
         expect(reasons(report)).toEqual([[id, 'outcome-unknown']]);
@@ -304,7 +304,7 @@ describe('0844 classify(): steps 1/2/3/5 without the step-4 write', () => {
         // Settlement is guarded on `claimed` (G11 R4), so the fixture claims first — exactly
         // what a drain does before a run refuses to start.
         await inbox.claim('worker', 10);
-        await inbox.settle([failed], 'not-started', 'inject error');
+        await inbox.settle([{ id: failed, attempts: 1 }], 'not-started', 'inject error');
         const exitOnly = await seedQueued();
         await writeReceipt('r-exit', [exitOnly], 'run-exit-only', [], 'T-1');
         const errored = await seedQueued();
@@ -330,7 +330,7 @@ describe('0844 classify(): steps 1/2/3/5 without the step-4 write', () => {
         // Reach the budget boundary through the service: claim + release until the counter is spent.
         for (let attempt = 0; attempt < MAX_DELIVERY_ATTEMPTS; attempt += 1) {
             await inbox.claim('worker', 10);
-            await inbox.release((await inbox.list('worker', 'in')).messages.map((row) => row.id));
+            await inbox.release((await inbox.list('worker', 'in')).messages);
         }
 
         const classified = await reconciler.classify();

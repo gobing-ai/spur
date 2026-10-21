@@ -17,14 +17,15 @@ import { DEFAULT_TRACE_FOLLOW_TIMEOUT_MS, guestService, parseTimeout } from './s
 
 /**
  * `spur agent wait --inbox <id>` (G73 R4). The guest pull primitive: return 0 as soon as
- * queued work exists for the guest, heartbeating the lease on every tick and retiring
- * expired guests. Exit 1 on timeout or a guest that is gone — never a silent hang.
+ * queued work is handed off to the guest, heartbeating the lease on every tick. The returned
+ * messages are claimed and settled on handoff; inbox reads remain side-effect free.
  */
 export async function runAgentWaitInbox(
     context: CliContext,
     flags: { id: string; timeoutMs: number; json: boolean; enveloped?: boolean; pollMs?: number },
 ): Promise<number> {
     const service = guestService(context);
+    const inbox = new InboxService({ getDb: () => context.getDb() });
     const pollMs = flags.pollMs ?? 1000;
     const deadline = Date.now() + flags.timeoutMs;
     for (;;) {
@@ -58,13 +59,27 @@ export async function runAgentWaitInbox(
             }
             return 1;
         }
-        const pending = await service.pendingCount(flags.id);
-        if (pending > 0) {
-            if (flags.json) {
-                context.output.write(toEnvelopeJson({ id: flags.id, pending }, { enveloped: flags.enveloped }));
-            } else {
-                context.output.write(`guest ${flags.id}: ${pending} pending message(s)`);
+        // Match the Stop hook's bounded handoff; further queued work stays available for its next turn.
+        const messages = await inbox.claim(flags.id, 5);
+        if (messages.length > 0) {
+            try {
+                if (flags.json) {
+                    context.output.write(
+                        toEnvelopeJson(
+                            { id: flags.id, pending: messages.length, messages },
+                            { enveloped: flags.enveloped },
+                        ),
+                    );
+                } else {
+                    context.output.write(
+                        messages.map((message) => `[${message.id}] ${message.fromId}: ${message.body}`).join('\n'),
+                    );
+                }
+            } catch (error) {
+                await inbox.release(messages);
+                throw error;
             }
+            await inbox.settle(messages, 'accepted');
             return 0;
         }
         if (Date.now() >= deadline) {

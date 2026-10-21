@@ -19,6 +19,7 @@ import type { FileSystem } from '@gobing-ai/ts-runtime';
 import type { AgentRoleDefinition } from './agent-service';
 import { FleetService, mergeAgentSpecs, type ResolvedFleetMember } from './fleet-service';
 import {
+    type InboxClaim,
     type InboxMessage,
     type InboxMessageKind,
     type InboxMessageStatus,
@@ -328,10 +329,14 @@ export class AgentCoordinationService {
      * delivery budget. Unlike {@link getInbox} (non-consuming read), a second call returns
      * nothing — idempotent loop-safe (AC3).
      */
-    async drainPending(agentId: string, options?: { limit?: number }): Promise<InboxResult> {
+    async drainPending(agentId: string, options?: { limit?: number }): Promise<InboxResult & { claims: InboxClaim[] }> {
         validateAgentId(agentId);
         const rows = await (await this.inboxService()).claim(agentId, options?.limit ?? 100);
-        return { messages: rows.map(toInboxEntry), count: rows.length };
+        return {
+            messages: rows.map(toInboxEntry),
+            count: rows.length,
+            claims: rows.map(({ id, attempts }) => ({ id, attempts })),
+        };
     }
 
     /**
@@ -340,9 +345,9 @@ export class AgentCoordinationService {
      * twice is a no-op; `attempts` is left untouched — the claim counter
      * IS the bounded attempt budget (0831 R3). Returns the released count.
      */
-    async releasePending(msgIds: string[]): Promise<number> {
-        if (msgIds.length === 0) return 0;
-        return (await (await this.inboxService()).release(msgIds)).length;
+    async releasePending(claims: readonly InboxClaim[]): Promise<number> {
+        if (claims.length === 0) return 0;
+        return (await (await this.inboxService()).release(claims)).length;
     }
 
     /**
@@ -350,9 +355,9 @@ export class AgentCoordinationService {
      * Delivery state stays separate from run outcome: an accepted invocation
      * settles `delivered` regardless of the exit code (0831 Q&A).
      */
-    async settleDelivered(msgIds: string[]): Promise<void> {
-        if (msgIds.length === 0) return;
-        await (await this.inboxService()).settle(msgIds, 'accepted');
+    async settleDelivered(claims: readonly InboxClaim[]): Promise<void> {
+        if (claims.length === 0) return;
+        await (await this.inboxService()).settle(claims, 'accepted');
     }
 
     /**
@@ -360,9 +365,9 @@ export class AgentCoordinationService {
      * Reserved for budget exhaustion and unrecoverable delivery; a failing RUN
      * is never a message failure (0831 R2, task 0833 owns run receipts).
      */
-    async settleFailed(msgIds: string[], error: string): Promise<void> {
-        if (msgIds.length === 0) return;
-        await (await this.inboxService()).settle(msgIds, 'not-started', error);
+    async settleFailed(claims: readonly InboxClaim[], error: string): Promise<void> {
+        if (claims.length === 0) return;
+        await (await this.inboxService()).settle(claims, 'not-started', error);
     }
 
     /** Count pending (queued) messages for an agent — used by the drain loop to idle (0253). */

@@ -776,3 +776,17 @@ describe('resolveMemberExecutor disabled executors (0796)', () => {
         ).toThrow(/every tier-eligible executor for role "reviewer" .*is disabled \(retired\)/);
     });
 });
+
+test('1271 — drain carries the exact claim references its settlement wrappers require', async () => {
+    const { svc, cleanup } = await makeService();
+    try {
+        await svc.sendMessage('operator', 'agent-a', 'work');
+        const drained = await svc.drainPending('agent-a');
+        expect(drained.claims).toHaveLength(1);
+        expect(drained.claims[0]?.attempts).toBe(1);
+        await svc.settleDelivered(drained.claims);
+        expect((await svc.getMessage(drained.claims[0]?.id ?? ''))?.status).toBe('delivered');
+    } finally {
+        await cleanup();
+    }
+});

@@ -10,6 +10,7 @@ import {
     FleetDispatcher,
     FleetGuestService,
     FleetService,
+    type InboxClaim,
     InboxService,
     isPortLive,
     MAX_DELIVERY_ATTEMPTS,
@@ -359,7 +360,7 @@ export async function runAgentLifecycle(
  */
 export async function settleClaimedMessages(
     context: CliContext,
-    claimed: string[],
+    claimed: InboxClaim[],
     outcome: 'accepted' | 'not-started',
 ): Promise<void> {
     if (claimed.length === 0) return;
@@ -369,15 +370,15 @@ export async function settleClaimedMessages(
         return;
     }
     // Not started: release within the claim budget, else a queryable terminal failure.
-    const releasable: string[] = [];
-    const exhausted: string[] = [];
-    for (const id of claimed) {
-        const row = await inbox.get(id);
+    const releasable: InboxClaim[] = [];
+    const exhausted: InboxClaim[] = [];
+    for (const claim of claimed) {
+        const row = await inbox.get(claim.id);
         // Already settled on another path (e.g. the live stdin-injection delivery)
         // or gone — never re-settle someone else's row.
-        if (row?.status !== 'claimed') continue;
-        if (row.attempts >= MAX_DELIVERY_ATTEMPTS) exhausted.push(id);
-        else releasable.push(id);
+        if (row?.status !== 'claimed' || row.attempts !== claim.attempts) continue;
+        if (row.attempts >= MAX_DELIVERY_ATTEMPTS) exhausted.push(claim);
+        else releasable.push(claim);
     }
     if (releasable.length > 0) await inbox.release(releasable);
     if (exhausted.length > 0) {
@@ -411,7 +412,7 @@ export async function drainIntoPrompt(
 ): Promise<{
     prompt: string | undefined;
     flags: Record<string, string | boolean>;
-    claimed: string[];
+    claimed: InboxClaim[];
     /** Claimed rows' request keys (G71 R1) — a `fleet:task:*` key selects the keyed drain path. */
     requestKeys?: Array<string | null>;
 }> {
@@ -442,7 +443,7 @@ export async function drainIntoPrompt(
     const header = claimedRows.map((m) => `- ${m.fromId || 'operator'}: ${m.body}`).join('\n');
     const block = `Pending messages:\n${header}`;
     const merged = prompt === undefined ? block : `${block}\n\n${prompt}`;
-    const claimed = claimedRows.map((m) => m.id);
+    const claimed = claimedRows.map(({ id, attempts }) => ({ id, attempts }));
     // G71 R1: a claimed fleet dispatch names its task, so the run's completion receipt
     // (`coordination_runs.task_id`) is attributable and the strategy's freshness read
     // sees the attempt. A keyless drain leaves `task` untouched.
@@ -458,7 +459,7 @@ export async function drainIntoPrompt(
     // 0833: the same ids ride into executeRun as the requestMessage flag (comma-
     // joined, dual spelling per the sessionDir convention) so the exit sink can
     // persist the run↔message receipt.
-    const requestMessage = claimed.join(',');
+    const requestMessage = claimed.map((claim) => claim.id).join(',');
     // G71 R1: the loop decides between the stdin path and the run path from the batch's
     // request keys, so the claimed rows' keys ride out with the drain result.
     const requestKeys = claimedRows.map((message) => message.requestKey);

@@ -1,0 +1,215 @@
+--- a/dist/adapter.d.ts
++++ b/dist/adapter.d.ts
+@@ -26,6 +26,13 @@
+  * string-SQL methods are the sole raw escape, intended for DDL and dynamic
+  * identifiers and gated to DAO files by a consumer-side lint rule.
+  */
++/** Synchronous, transaction-scoped SQL; callbacks must not return a Promise. */
++export interface DbSyncTransaction {
++    run(sql: string, ...params: unknown[]): void;
++    queryFirst<T>(sql: string, ...params: unknown[]): T | undefined;
++    queryAll<T>(sql: string, ...params: unknown[]): T[];
++}
++
+ export interface DbAdapter {
+     /**
+      * The internal typed drizzle database. ts-db DAO layer only — not public API.
+@@ -50,6 +57,9 @@
+      * single-statement batch may execute directly (trivially atomic).
+      */
+     batch(operations: readonly DbBatchOp[]): Promise<void>;
++    /** Atomic synchronous callback; unsupported adapters reject before invoking it. */
++    transaction?<T>(fn: (tx: DbSyncTransaction) => T): Promise<T>;
++
+     /** Close the underlying connection. */
+     close(): void;
+ }
+--- a/dist/adapters/bun-sqlite.d.ts
++++ b/dist/adapters/bun-sqlite.d.ts
+@@ -1,5 +1,5 @@
+ import { type BunSQLiteDatabase } from 'drizzle-orm/bun-sqlite';
+-import type { DbAdapter, DbBatchOp, InternalDb } from '../adapter';
++import type { DbAdapter, DbBatchOp, DbSyncTransaction, InternalDb } from '../adapter';
+ import * as schema from '../schema/runtime';
+ /**
+  * Configuration options for the bun:sqlite adapter (path, pragmas).
+@@ -37,6 +37,7 @@
+     run(sql: string, ...params: unknown[]): Promise<void>;
+     queryFirst<T>(sql: string, ...params: unknown[]): Promise<T | undefined>;
+     queryAll<T>(sql: string, ...params: unknown[]): Promise<T[]>;
++    transaction<T>(fn: (tx: DbSyncTransaction) => T): Promise<T>;
+     batch(operations: readonly DbBatchOp[]): Promise<void>;
+     close(): void;
+ }
+--- a/dist/adapters/bun-sqlite.js
++++ b/dist/adapters/bun-sqlite.js
+@@ -72,6 +72,32 @@
+         const stmt = this.getStatement(sql);
+         return stmt.all(...params) ?? [];
+     }
++    async transaction(fn) {
++        return this.sqlite.transaction(() => {
++            let active = true;
++            const statement = (sql) => {
++                if (!active) throw new Error('Transaction handle is no longer active');
++                return this.getStatement(sql);
++            };
++            const tx = {
++                run: (sql, ...params) => { statement(sql).run(...params); },
++                queryFirst: (sql, ...params) => statement(sql).get(...params) ?? undefined,
++                queryAll: (sql, ...params) => statement(sql).all(...params),
++            };
++            try {
++                const result = fn(tx);
++                if (result !== null && (typeof result === 'object' || typeof result === 'function') &&
++                    typeof result.then === 'function') {
++                    void Promise.resolve(result).catch(() => undefined);
++                    throw new Error('Transaction callback must be synchronous');
++                }
++                return result;
++            } finally {
++                active = false;
++            }
++        })();
++    }
++
+     async batch(operations) {
+         if (operations.length === 0)
+             return;
+--- a/dist/adapters/d1.d.ts
++++ b/dist/adapters/d1.d.ts
+@@ -1,5 +1,5 @@
+ import { type DrizzleD1Database } from 'drizzle-orm/d1';
+-import type { DbAdapter, DbBatchOp, InternalDb } from '../adapter';
++import type { DbAdapter, DbBatchOp, DbSyncTransaction, InternalDb } from '../adapter';
+ import * as schema from '../schema/runtime';
+ /**
+  * Minimal D1 binding interface — avoids depending on @cloudflare/workers-types.
+@@ -55,6 +55,7 @@
+     run(sql: string, ...params: unknown[]): Promise<void>;
+     queryFirst<T>(sql: string, ...params: unknown[]): Promise<T | undefined>;
+     queryAll<T>(sql: string, ...params: unknown[]): Promise<T[]>;
++    transaction<T>(fn: (tx: DbSyncTransaction) => T): Promise<T>;
+     batch(operations: readonly DbBatchOp[]): Promise<void>;
+     close(): void;
+ }
+--- a/dist/adapters/d1.js
++++ b/dist/adapters/d1.js
+@@ -44,6 +44,10 @@
+         const result = await bound.all();
+         return result.results ?? [];
+     }
++    async transaction(_fn) {
++        throw new Error('Synchronous transactions are not supported by D1; use atomic batch');
++    }
++
+     async batch(operations) {
+         if (operations.length === 0)
+             return;
+--- a/dist/index.d.ts
++++ b/dist/index.d.ts
+@@ -1,4 +1,4 @@
+-export { createDbAdapter, type DbAdapter, type DbAdapterConfig, type DbBatchOp, type InternalDb } from './adapter';
++export { createDbAdapter, type DbAdapter, type DbSyncTransaction, type DbAdapterConfig, type DbBatchOp, type InternalDb } from './adapter';
+ export { BaseDao, type TxHandle } from './base-dao';
+ export { type EmbeddedMigration, embeddedMigrations } from './embedded-migrations';
+ export { type CursorListSpec, type DaoValidator, EntityDao, type EntityDaoOptions, type EntityListSpec, type EntityTable, type PKColumn, type PKValue, type SoftDeletableTable, } from './entity-dao';
+--- a/src/adapter.ts
++++ b/src/adapter.ts
+@@ -29,6 +29,13 @@
+  * string-SQL methods are the sole raw escape, intended for DDL and dynamic
+  * identifiers and gated to DAO files by a consumer-side lint rule.
+  */
++/** Synchronous, transaction-scoped SQL; callbacks must not return a Promise. */
++export interface DbSyncTransaction {
++    run(sql: string, ...params: unknown[]): void;
++    queryFirst<T>(sql: string, ...params: unknown[]): T | undefined;
++    queryAll<T>(sql: string, ...params: unknown[]): T[];
++}
++
+ export interface DbAdapter {
+     /**
+      * The internal typed drizzle database. ts-db DAO layer only — not public API.
+@@ -53,6 +60,9 @@
+      * single-statement batch may execute directly (trivially atomic).
+      */
+     batch(operations: readonly DbBatchOp[]): Promise<void>;
++    /** Atomic synchronous callback; unsupported adapters reject before invoking it. */
++    transaction?<T>(fn: (tx: DbSyncTransaction) => T): Promise<T>;
++
+     /** Close the underlying connection. */
+     close(): void;
+ }
+--- a/src/adapters/bun-sqlite.ts
++++ b/src/adapters/bun-sqlite.ts
+@@ -1,7 +1,7 @@
+ import { isAbsolutePath, resolvePath } from '@gobing-ai/ts-runtime';
+ import { Database } from '@gobing-ai/ts-runtime/bun-sqlite';
+ import { type BunSQLiteDatabase, drizzle } from 'drizzle-orm/bun-sqlite';
+-import type { DbAdapter, DbBatchOp, InternalDb } from '../adapter';
++import type { DbAdapter, DbBatchOp, DbSyncTransaction, InternalDb } from '../adapter';
+ import * as schema from '../schema/runtime';
+
+ type SqliteStatementLike = {
+@@ -113,6 +113,33 @@
+         return ((stmt as unknown as { all: (...p: unknown[]) => T[] }).all(...params) as T[]) ?? [];
+     }
+
++    async transaction<T>(fn: (tx: DbSyncTransaction) => T): Promise<T> {
++        return this.sqlite.transaction(() => {
++            let active = true;
++            const statement = (sql: string) => {
++                if (!active) throw new Error('Transaction handle is no longer active');
++                return this.getStatement(sql);
++            };
++            const tx: DbSyncTransaction = {
++                run: (sql, ...params) => { statement(sql).run(...params); },
++                queryFirst: <R>(sql: string, ...params: unknown[]) =>
++                    (statement(sql).get(...params) ?? undefined) as R | undefined,
++                queryAll: <R>(sql: string, ...params: unknown[]) => statement(sql).all(...params) as R[],
++            };
++            try {
++                const result = fn(tx);
++                if (result !== null && (typeof result === 'object' || typeof result === 'function') &&
++                    typeof (result as { then?: unknown }).then === 'function') {
++                    void Promise.resolve(result).catch(() => undefined);
++                    throw new Error('Transaction callback must be synchronous');
++                }
++                return result;
++            } finally {
++                active = false;
++            }
++        })();
++    }
++
+     async batch(operations: readonly DbBatchOp[]): Promise<void> {
+         if (operations.length === 0) return;
+         this.sqlite.transaction(() => {
+--- a/src/adapters/d1.ts
++++ b/src/adapters/d1.ts
+@@ -1,5 +1,5 @@
+ import { type DrizzleD1Database, drizzle } from 'drizzle-orm/d1';
+-import type { DbAdapter, DbBatchOp, InternalDb } from '../adapter';
++import type { DbAdapter, DbBatchOp, DbSyncTransaction, InternalDb } from '../adapter';
+ import * as schema from '../schema/runtime';
+
+ /**
+@@ -84,6 +84,10 @@
+         return result.results ?? [];
+     }
+
++    async transaction<T>(_fn: (tx: DbSyncTransaction) => T): Promise<T> {
++        throw new Error('Synchronous transactions are not supported by D1; use atomic batch');
++    }
++
+     async batch(operations: readonly DbBatchOp[]): Promise<void> {
+         if (operations.length === 0) return;
+         // A single statement is atomic on its own, so a binding without native
+--- a/src/index.ts
++++ b/src/index.ts
+@@ -1,4 +1,4 @@
+-export { createDbAdapter, type DbAdapter, type DbAdapterConfig, type DbBatchOp, type InternalDb } from './adapter';
++export { createDbAdapter, type DbAdapter, type DbSyncTransaction, type DbAdapterConfig, type DbBatchOp, type InternalDb } from './adapter';
+ export { BaseDao, type TxHandle } from './base-dao';
+
+ export { type EmbeddedMigration, embeddedMigrations } from './embedded-migrations';

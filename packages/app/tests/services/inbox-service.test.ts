@@ -66,13 +66,13 @@ describe('1266 R4 — guarded transitions write nothing on a miss', () => {
     test('a late settle cannot move a delivered row and writes no event', async () => {
         const { message } = await service.send({ from: OPERATOR, to: MEMBER, body: 'work' });
         await service.claim(MEMBER, 10);
-        await service.settle([message.id], 'accepted');
+        await service.settle([{ id: message.id, attempts: 1 }], 'accepted');
         const delivered = await service.get(message.id);
         expect(delivered?.status).toBe('delivered');
         const before = await eventCount();
 
-        await service.settle([message.id], 'not-started');
-        await service.release([message.id]);
+        await service.settle([{ id: message.id, attempts: 1 }], 'not-started');
+        await service.release([{ id: message.id, attempts: 1 }]);
 
         const after = await service.get(message.id);
         expect(after?.status).toBe('delivered');
@@ -84,11 +84,11 @@ describe('1266 R4 — guarded transitions write nothing on a miss', () => {
         await service.claim(MEMBER, 10);
         expect((await service.get(message.id))?.status).toBe('claimed');
 
-        await service.release([message.id]);
+        await service.release([{ id: message.id, attempts: 1 }]);
         expect((await service.get(message.id))?.status).toBe('queued');
         expect(await eventCount('message.requeued')).toBe(1);
 
-        await service.release([message.id]);
+        await service.release([{ id: message.id, attempts: 1 }]);
         expect((await service.get(message.id))?.status).toBe('queued');
         expect(await eventCount('message.requeued')).toBe(1);
     });
@@ -267,10 +267,7 @@ describe('1266 R8 — only requests are unresolved work', () => {
         await service.send({ from: PEER, to: MEMBER, body: 'chat' });
         await service.send({ from: SPUR, to: MEMBER, body: 'task', kind: 'request' });
         await service.claim(MEMBER, 10);
-        await service.settle(
-            (await service.list(MEMBER, 'in')).messages.map((row) => row.id),
-            'accepted',
-        );
+        await service.settle((await service.list(MEMBER, 'in')).messages, 'accepted');
 
         const requests = await service.requests(MEMBER);
         expect(requests).toHaveLength(1);
@@ -342,4 +339,66 @@ describe('1266 R9 — dispatch linkage columns', () => {
         expect(attempts.latest?.taskId).toBe('1266');
         expect(attempts.latest?.parentRunId).toBe('run-parent');
     });
+});
+
+describe('1271 — semantic request identity and safe reclaims', () => {
+    test('task and parent-run changes conflict while identical metadata replays', async () => {
+        const input = {
+            from: SPUR,
+            to: MEMBER,
+            body: 'work',
+            requestKey: 'metadata',
+            kind: 'request' as const,
+            taskId: '1271',
+            parentRunId: 'parent-1',
+        };
+        const first = await service.send(input);
+        expect((await service.send(input)).message.id).toBe(first.message.id);
+        for (const change of [
+            { taskId: '1272' },
+            { parentRunId: 'parent-2' },
+            { taskId: undefined },
+            { parentRunId: undefined },
+        ]) {
+            await expect(service.send({ ...input, ...change })).rejects.toThrow('different message');
+        }
+        expect(await eventCount('message.sent')).toBe(1);
+    });
+
+    test('an expired attempt cannot settle or release its replacement', async () => {
+        await service.send({ from: SPUR, to: MEMBER, body: 'work' });
+        const first = await service.claim(MEMBER, 1);
+        nowMs += 600_001;
+        await service.sweep();
+        const second = await service.claim(MEMBER, 1);
+        expect(second[0]?.attempts).toBe(2);
+        expect(await service.settle(first, 'not-started')).toEqual([]);
+        expect(await service.release(first)).toEqual([]);
+        expect((await service.get(second[0]?.id ?? ''))?.status).toBe('claimed');
+        expect(await service.settle(second, 'accepted')).toHaveLength(1);
+    });
+
+    test('reply refuses a blank sender before writing a message', async () => {
+        const { message } = await service.send({ from: OPERATOR, to: MEMBER, body: 'question' });
+        await expect(service.reply(message.id, '  ', 'answer')).rejects.toThrow('non-empty sender');
+        expect(await service.thread(message.id)).toHaveLength(1);
+    });
+});
+
+test('1271 — exact receipt lookup includes chat without broadening the request feed', async () => {
+    const { message } = await service.send({ from: OPERATOR, to: MEMBER, body: 'chat' });
+    expect(await service.requests()).toEqual([]);
+    expect((await service.requests(undefined, message.id)).map((row) => row.id)).toEqual([message.id]);
+    expect(await service.requests(PEER, message.id)).toEqual([]);
+});
+
+test('1271 — conflicting metadata cannot replay after a concurrent unique-key race', async () => {
+    const input = { from: SPUR, to: MEMBER, body: 'work', requestKey: 'concurrent-metadata', kind: 'request' as const };
+    const result = await Promise.allSettled([
+        service.send({ ...input, taskId: '1271' }),
+        service.send({ ...input, taskId: '1272' }),
+    ]);
+    expect(result.filter((row) => row.status === 'fulfilled')).toHaveLength(1);
+    expect(result.filter((row) => row.status === 'rejected')).toHaveLength(1);
+    expect(await eventCount('message.sent')).toBe(1);
 });

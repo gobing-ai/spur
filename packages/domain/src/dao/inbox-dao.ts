@@ -1,3 +1,4 @@
+import type { DbSyncTransaction } from '@gobing-ai/ts-db';
 import { BaseDao, type DbAdapter } from '@gobing-ai/ts-db';
 import { type CreateSystemEventInput, systemEventInsertSql } from './system-event-dao';
 
@@ -6,6 +7,12 @@ export type InboxMessageKind = 'chat' | 'request';
 
 /** The guarded transition ladder: `queued` → `claimed` → `delivered` | `failed`, with requeue. */
 export type InboxMessageStatus = 'queued' | 'claimed' | 'delivered' | 'failed';
+
+/** Exact delivery attempt; stale claimants cannot mutate a replacement claim. */
+export interface InboxClaim {
+    id: string;
+    attempts: number;
+}
 
 /**
  * One inbox message (G11, ADR-143 §13). A fleet member is addressed by
@@ -142,17 +149,6 @@ function toMessage(row: InboxRow): InboxMessage {
 }
 
 /**
- * Per-adapter transaction lock.
- *
- * The inbox runs on a single-connection Bun SQLite adapter, and two service instances over the
- * SAME connection (two consumers in one process) can interleave `BEGIN IMMEDIATE` — the second
- * call then fails with "cannot start a transaction within a transaction". Chaining on the adapter
- * serializes the transactions without changing their semantics: each still commits or rolls back
- * as a unit, and the guarded `RETURNING` statements keep their own atomicity.
- */
-const transactionLocks = new WeakMap<DbAdapter, Promise<unknown>>();
-
-/**
  * The only module that names `inbox_messages` (G11 R2, ADR-143). Every read and write of
  * the inbox plane lives here; `InboxService` is the only caller.
  *
@@ -166,42 +162,18 @@ export class InboxDao extends BaseDao {
         super(adapter);
     }
 
-    /**
-     * Run `fn` inside one interactive transaction.
-     *
-     * `shortcut:` an interactive transaction needs a single-connection adapter, which is the
-     * Bun SQLite path the inbox runs on (ADR-143). A D1 target would have to compose
-     * `DbAdapter.batch` instead; upgrade when the inbox plane leaves Bun.
-     */
-    private async withTransaction<T>(fn: () => Promise<T>): Promise<T> {
-        const previous = transactionLocks.get(this.adapter) ?? Promise.resolve();
-        const run = previous.then(async () => {
-            await this.adapter.exec('BEGIN IMMEDIATE');
-            try {
-                const result = await fn();
-                await this.adapter.exec('COMMIT');
-                return result;
-            } catch (error) {
-                await this.adapter.exec('ROLLBACK');
-                throw error;
-            }
-        });
-        // The chain must not stay rejected for the NEXT waiter; the caller still sees the error.
-        transactionLocks.set(
-            this.adapter,
-            run.then(
-                () => undefined,
-                () => undefined,
-            ),
-        );
-        return run;
+    private async withTransaction<T>(fn: (tx: DbSyncTransaction) => T): Promise<T> {
+        if (this.adapter.transaction === undefined) {
+            throw new Error('Inbox mutations require the atomic synchronous transaction capability');
+        }
+        return this.adapter.transaction(fn);
     }
 
     /** Write the event rows for `changed` inside the open transaction. */
-    private async writeEvents(toEvent: InboxEventFactory, changed: readonly InboxMessage[]): Promise<void> {
+    private writeEvents(tx: DbSyncTransaction, toEvent: InboxEventFactory, changed: readonly InboxMessage[]): void {
         for (const row of changed) {
             const statement = systemEventInsertSql(toEvent(row));
-            await this.adapter.run(statement.sql, ...statement.params);
+            tx.run(statement.sql, ...statement.params);
         }
     }
 
@@ -212,8 +184,8 @@ export class InboxDao extends BaseDao {
      * turns that into a replay, so the constraint stays the arbiter of concurrent sends.
      */
     async insert(input: NewInboxMessage, toEvent: InboxEventFactory): Promise<InboxMessage> {
-        return this.withTransaction(async () => {
-            const [row] = await this.adapter.queryAll<InboxRow>(
+        return this.withTransaction((tx) => {
+            const [row] = tx.queryAll<InboxRow>(
                 `INSERT INTO inbox_messages (${COLUMNS})
                  VALUES (?1, ?2, ?3, ?4, ?5, ?6, NULL, 0, NULL, NULL, NULL, ?7, ?8, ?9, ?10, ?11, ?12, ?13)
                  RETURNING ${COLUMNS}`,
@@ -233,7 +205,7 @@ export class InboxDao extends BaseDao {
             );
             if (row === undefined) throw new Error(`inbox insert returned no row for ${input.id}`);
             const message = toMessage(row);
-            await this.writeEvents(toEvent, [message]);
+            this.writeEvents(tx, toEvent, [message]);
             return message;
         });
     }
@@ -259,8 +231,8 @@ export class InboxDao extends BaseDao {
      * so a second claim returns only what is still unclaimed.
      */
     async claim(member: string, limit: number, now: number, toEvent: InboxEventFactory): Promise<InboxMessage[]> {
-        return this.withTransaction(async () => {
-            const rows = await this.adapter.queryAll<InboxRow>(
+        return this.withTransaction((tx) => {
+            const rows = tx.queryAll<InboxRow & { claim_order: number }>(
                 `UPDATE inbox_messages
                  SET status = 'claimed', claimed_at = ?2, attempts = attempts + 1, updated_at = ?2
                  WHERE id IN (
@@ -269,63 +241,65 @@ export class InboxDao extends BaseDao {
                      ORDER BY created_at ASC, rowid ASC
                      LIMIT ?3
                  )
-                 RETURNING ${COLUMNS}`,
+                 RETURNING ${COLUMNS}, rowid AS claim_order`,
                 member,
                 now,
                 Math.max(0, limit),
             );
-            const changed = rows.map(toMessage);
-            await this.writeEvents(toEvent, changed);
+            const changed = rows
+                .sort((a, b) => a.created_at - b.created_at || a.claim_order - b.claim_order)
+                .map(toMessage);
+            this.writeEvents(tx, toEvent, changed);
             return changed;
         });
     }
 
     /**
-     * Settle claimed messages as `delivered` or `failed`. Guarded on `status = 'claimed'`:
-     * a late settle after a requeue or delivery changes nothing and emits nothing.
+     * Settle claimed messages as `delivered` or `failed`, matching status and claim generation:
+     * a late settle after requeue or replacement changes nothing and emits nothing.
      * `delivered_at` is stamped only for a delivered row — a failure has no delivery time.
      */
     async settle(
-        ids: readonly string[],
+        claims: readonly InboxClaim[],
         to: 'delivered' | 'failed',
         now: number,
         toEvent: InboxEventFactory,
         error: string | null = null,
     ): Promise<InboxMessage[]> {
-        if (ids.length === 0) return [];
-        return this.withTransaction(async () => {
-            const rows = await this.adapter.queryAll<InboxRow>(
+        if (claims.length === 0) return [];
+        return this.withTransaction((tx) => {
+            const rows = tx.queryAll<InboxRow>(
                 `UPDATE inbox_messages
                  SET status = ?1, error = ?2,
                      delivered_at = CASE WHEN ?1 = 'delivered' THEN ?3 ELSE NULL END,
                      updated_at = ?3
-                 WHERE id IN (${placeholders(ids, 4)}) AND status = 'claimed'
+                 WHERE (${claimPredicate(claims, 4)}) AND status = 'claimed'
                  RETURNING ${COLUMNS}`,
                 to,
                 error,
                 now,
-                ...ids,
+                ...claims.flatMap((claim) => [claim.id, claim.attempts]),
             );
             const changed = rows.map(toMessage);
-            await this.writeEvents(toEvent, changed);
+            this.writeEvents(tx, toEvent, changed);
             return changed;
         });
     }
 
-    /** Release claimed messages back to `queued`. Guarded on `status = 'claimed'`. */
-    async release(ids: readonly string[], now: number, toEvent: InboxEventFactory): Promise<InboxMessage[]> {
-        if (ids.length === 0) return [];
-        return this.withTransaction(async () => {
-            const rows = await this.adapter.queryAll<InboxRow>(
+    /** Release only this generation's claimed messages back to `queued`. */
+    async release(claims: readonly InboxClaim[], now: number, toEvent: InboxEventFactory): Promise<InboxMessage[]> {
+        if (claims.length === 0) return [];
+        return this.withTransaction((tx) => {
+            const rows = tx.queryAll<InboxRow>(
                 `UPDATE inbox_messages
                  SET status = 'queued', claimed_at = NULL, updated_at = ?1
-                 WHERE id IN (${placeholders(ids, 2)}) AND status = 'claimed'
+                 WHERE (${claimPredicate(claims, 2)}) AND status = 'claimed'
                  RETURNING ${COLUMNS}`,
                 now,
-                ...ids,
+                ...claims.flatMap((claim) => [claim.id, claim.attempts]),
             );
             const changed = rows.map(toMessage);
-            await this.writeEvents(toEvent, changed);
+            this.writeEvents(tx, toEvent, changed);
             return changed;
         });
     }
@@ -340,8 +314,8 @@ export class InboxDao extends BaseDao {
         now: number,
         toEvent: InboxEventFactory,
     ): Promise<InboxReadReceipt | null> {
-        return this.withTransaction(async () => {
-            const [stamped] = await this.adapter.queryAll<InboxRow>(
+        return this.withTransaction((tx) => {
+            const [stamped] = tx.queryAll<InboxRow>(
                 `UPDATE inbox_messages SET read_at = ?3, updated_at = ?3
                  WHERE id = ?1 AND to_id = ?2 AND read_at IS NULL
                  RETURNING ${COLUMNS}`,
@@ -351,10 +325,10 @@ export class InboxDao extends BaseDao {
             );
             if (stamped !== undefined) {
                 const message = toMessage(stamped);
-                await this.writeEvents(toEvent, [message]);
+                this.writeEvents(tx, toEvent, [message]);
                 return { message, transitioned: true };
             }
-            const [existing] = await this.adapter.queryAll<InboxRow>(
+            const [existing] = tx.queryAll<InboxRow>(
                 `SELECT ${COLUMNS} FROM inbox_messages WHERE id = ?1 AND to_id = ?2`,
                 id,
                 reader,
@@ -419,15 +393,24 @@ export class InboxDao extends BaseDao {
     /**
      * Request rows, each with its newest run receipt in one LEFT JOIN.
      * `toIds` scopes to the given addresses; `undefined` scans every address (the CLI
-     * reconciler pass). Only `kind = 'request'` rows are considered: a chat message is
-     * never unresolved work.
+     * reconciler pass). The default feed includes only requests; an exact `messageId`
+     * also serves chat delivery receipts without classifying chat as unresolved work.
      */
-    async requests(toIds?: readonly string[]): Promise<InboxRequestRow[]> {
+    async requests(toIds?: readonly string[], messageId?: string): Promise<InboxRequestRow[]> {
         if (toIds !== undefined && toIds.length === 0) return [];
-        const scope =
-            toIds === undefined
-                ? `m.kind = 'request'`
-                : `m.kind = 'request' AND m.to_id IN (${placeholders(toIds, 1)})`;
+        const params: unknown[] = [];
+        const conditions: string[] = [];
+        if (messageId === undefined) conditions.push("m.kind = 'request'");
+        else {
+            params.push(messageId);
+            conditions.push(`m.id = ?${params.length}`);
+        }
+        if (toIds !== undefined) {
+            const start = params.length + 1;
+            params.push(...toIds);
+            conditions.push(`m.to_id IN (${placeholders(toIds, start)})`);
+        }
+        const scope = conditions.join(' AND ');
         const rows = await this.adapter.queryAll<InboxRequestDbRow>(
             `SELECT ${COLUMNS.split(',')
                 .map((column) => `m.${column.trim()}`)
@@ -443,7 +426,7 @@ export class InboxDao extends BaseDao {
              )
              WHERE ${scope}
              ORDER BY m.created_at DESC, m.rowid DESC`,
-            ...(toIds ?? []),
+            ...params,
         );
         return rows.map((row) => ({
             ...toMessage(row),
@@ -502,4 +485,11 @@ export class InboxDao extends BaseDao {
 /** `?start, ?start+1, …` for `values.length` bind positions. */
 function placeholders(values: readonly unknown[], start: number): string {
     return values.map((_, index) => `?${start + index}`).join(', ');
+}
+
+/** Bind both identity and generation for every claim mutation. */
+function claimPredicate(claims: readonly InboxClaim[], start: number): string {
+    return claims
+        .map((_, index) => `(id = ?${start + index * 2} AND attempts = ?${start + index * 2 + 1})`)
+        .join(' OR ');
 }

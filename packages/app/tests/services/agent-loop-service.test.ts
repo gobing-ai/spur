@@ -9,6 +9,7 @@ import { describe, expect, test, vi } from 'bun:test';
 import { mkdtempSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import type { InboxClaim } from '@gobing-ai/spur-domain';
 import {
     CoordinationRunDao,
     createMigratedDb,
@@ -124,8 +125,8 @@ function memberDeps(db: DbAdapter, overrides: Partial<AgentLoopDeps>): AgentLoop
             }) as unknown as StrategyRuntime,
         listAgentSpecs: async () => [{ id: 'member-1' }],
         reconciler: { reconcile: async () => ({ unresolved: [], exhausted: [], scanned: 0 }) },
-        drain: async () => ({ prompt: 'do work', flags: {}, claimed: ['m1'] }),
-        settle: async (_claimed: string[], outcome: 'accepted' | 'not-started') => {
+        drain: async () => ({ prompt: 'do work', flags: {}, claimed: [{ id: 'm1', attempts: 1 }] }),
+        settle: async (_claimed: InboxClaim[], outcome: 'accepted' | 'not-started') => {
             settled.push({ outcome });
         },
         attachLedger: async () => ({ flush: async () => {}, unsubscribe: () => {} }),
@@ -261,8 +262,8 @@ describe('G71 R1/R2/R3 — member drain, keyed run path, slot heartbeat, resume 
                 },
                 runTraced: async () => ({}),
             }),
-            settle: async (claimed: string[], outcome: string) => {
-                accepted.push(`${claimed.join(',')}:${outcome}`);
+            settle: async (claimed: InboxClaim[], outcome: string) => {
+                accepted.push(`${claimed.map((claim) => claim.id).join(',')}:${outcome}`);
             },
             memberSession: {
                 executors: [{ name: 'e1', agent: 'pi' }],
@@ -307,7 +308,7 @@ describe('G71 R1/R2/R3 — member drain, keyed run path, slot heartbeat, resume 
                 drain: async () => ({
                     prompt: 'dispatch: run the task',
                     flags: {},
-                    claimed: ['m-keyed'],
+                    claimed: [{ id: 'm-keyed', attempts: 1 }],
                     requestKeys: [requestKey],
                 }),
                 memberSession: {
@@ -351,7 +352,12 @@ describe('G71 R1/R2/R3 — member drain, keyed run path, slot heartbeat, resume 
                 },
                 runTraced: async () => ({}),
             }),
-            drain: async () => ({ prompt: 'hello there', flags: {}, claimed: ['m-chat'], requestKeys: [null] }),
+            drain: async () => ({
+                prompt: 'hello there',
+                flags: {},
+                claimed: [{ id: 'm-chat', attempts: 1 }],
+                requestKeys: [null],
+            }),
         });
         await runAgentLoopCore(deps, { recipient: 'member-1', pollMs: 10, flags: {}, runtime: { maxIterations: 1 } });
         // It ran (one-shot falls through to the run path) …
@@ -475,7 +481,7 @@ describe('G71 R1/R2/R3 — member drain, keyed run path, slot heartbeat, resume 
             } as unknown as FleetService,
             drain: async () => {
                 order.push('drain');
-                return { prompt: 'status?', flags: {}, claimed: ['m-status'] };
+                return { prompt: 'status?', flags: {}, claimed: [{ id: 'm-status', attempts: 1 }] };
             },
             agentService: () =>
                 ({

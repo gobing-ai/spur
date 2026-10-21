@@ -91,6 +91,7 @@ export default function InboxView({ client = INBOX_CLIENT }: { client?: InboxCli
     const [rows, setRows] = useState<InboxRow[] | null>(null);
     // The cursor of the oldest page loaded so far; null once the thread's first row is on screen.
     const [olderCursor, setOlderCursor] = useState<string | null>(null);
+    const [loadingOlder, setLoadingOlder] = useState(false);
     const [replyTo, setReplyTo] = useState<InboxRow | null>(null);
     const [draft, setDraft] = useState('');
     const [error, setError] = useState<string | null>(null);
@@ -105,9 +106,41 @@ export default function InboxView({ client = INBOX_CLIENT }: { client?: InboxCli
     const selectedRef = useRef(selected);
     selectedRef.current = selected;
     // Which member `rows` belongs to, and whether older pages were appended to it.
-    const paging = useRef<{ member: string | null; pagedOlder: boolean }>({ member: null, pagedOlder: false });
+    const paging = useRef<{ project: string | null; member: string | null; oldestId: string | null }>({
+        project: null,
+        member: null,
+        oldestId: null,
+    });
+    const threadVersion = useRef(0);
+    const olderRequest = useRef(false);
+    const projectRef = useRef(project.path);
+    if (projectRef.current !== project.path) {
+        projectRef.current = project.path;
+        threadVersion.current += 1;
+    }
+    const selection = useRef({ project: project.path, member: selected, generation: 0 });
+    if (selection.current.project !== project.path || selection.current.member !== selected) {
+        selection.current = { project: project.path, member: selected, generation: selection.current.generation + 1 };
+    }
+    useEffect(
+        () => () => {
+            selection.current.generation += 1;
+        },
+        [],
+    );
 
     const fleetIds = useMemo(() => (project.fleet?.members ?? []).map((member) => member.instanceId), [project.fleet]);
+
+    useEffect(() => {
+        void project.path;
+        setMembers(null);
+        setSelected(null);
+        setRows(null);
+        setOlderCursor(null);
+        setReplyTo(null);
+        setDraft('');
+        setError(null);
+    }, [project.path]);
 
     // ── live tail ──────────────────────────────────────────────────────────
     // `message.*` frames are metadata-only, so each one bumps the refetch keys it touches. There is deliberately
@@ -139,7 +172,6 @@ export default function InboxView({ client = INBOX_CLIENT }: { client?: InboxCli
                 const list = await client.members({});
                 if (cancelled) return;
                 setMembers(list);
-                setSelected((current) => current ?? list[0]?.id ?? null);
             } catch (cause) {
                 if (!cancelled) setError(cause instanceof Error ? cause.message : 'could not read the member list');
             }
@@ -149,48 +181,100 @@ export default function InboxView({ client = INBOX_CLIENT }: { client?: InboxCli
         };
     }, [client, project.path, membersTick]);
 
+    const ordered = useMemo(() => {
+        const addresses = new Map(fleetIds.map((id) => [id, { id, queued: 0, unread: 0 }]));
+        for (const member of members ?? []) addresses.set(member.id, member);
+        return [...addresses.values()].sort(
+            (a, b) => memberRank(a, fleetIds) - memberRank(b, fleetIds) || a.id.localeCompare(b.id),
+        );
+    }, [members, fleetIds]);
+
+    useEffect(() => {
+        setSelected((current) => current ?? ordered[0]?.id ?? null);
+    }, [ordered]);
+
     // ── selected member's thread ───────────────────────────────────────────
     useEffect(() => {
         void threadTick;
         if (project.path === null || selected === null) return;
         let cancelled = false;
+        threadVersion.current += 1;
+        olderRequest.current = true;
+        setLoadingOlder(true);
+        const sameMember = paging.current.project === project.path && paging.current.member === selected;
+        const oldestId = sameMember ? paging.current.oldestId : null;
+        if (!sameMember) {
+            setRows(null);
+            setOlderCursor(null);
+            setReplyTo(null);
+        }
         void (async () => {
             try {
-                const page = await client.list({ member: selected, direction: 'both' });
+                let page = await client.list({ member: selected, direction: 'both' });
+                const messages = [...page.messages];
+                // Refresh through the oldest loaded row so retained history gets live read/delivery states too.
+                while (oldestId !== null && page.nextCursor !== null && !messages.some((row) => row.id === oldestId)) {
+                    if (cancelled) return;
+                    page = await client.list({ member: selected, direction: 'both', cursor: page.nextCursor });
+                    messages.push(...page.messages);
+                }
                 if (!cancelled) {
-                    // Older pages the operator already loaded for THIS member stay on screen across
-                    // a live refetch, and their cursor keeps pointing past them. A member switch
-                    // starts over from the newest page.
-                    const sameMember = paging.current.member === selected;
-                    setRows((current) => (sameMember ? mergePages(page.messages, current ?? []) : page.messages));
-                    if (!sameMember || !paging.current.pagedOlder) setOlderCursor(page.nextCursor);
-                    if (!sameMember) paging.current = { member: selected, pagedOlder: false };
+                    setRows(messages);
+                    setOlderCursor(page.nextCursor);
+                    paging.current = { project: project.path, member: selected, oldestId };
                     setError(null);
                 }
             } catch (cause) {
                 if (!cancelled) setError(cause instanceof Error ? cause.message : 'could not read this thread');
+            } finally {
+                if (!cancelled) {
+                    olderRequest.current = false;
+                    setLoadingOlder(false);
+                }
             }
         })();
         return () => {
             cancelled = true;
+            threadVersion.current += 1;
         };
     }, [client, project.path, selected, threadTick]);
 
     const loadOlder = useCallback(async () => {
-        if (selected === null || olderCursor === null) return;
+        if (selected === null || olderCursor === null || olderRequest.current) return;
+        const version = threadVersion.current;
+        olderRequest.current = true;
+        setLoadingOlder(true);
         try {
             const page = await client.list({ member: selected, direction: 'both', cursor: olderCursor });
+            if (
+                version !== threadVersion.current ||
+                selectedRef.current !== selected ||
+                projectRef.current !== project.path
+            )
+                return;
             setRows((current) => mergePages(current ?? [], page.messages));
             setOlderCursor(page.nextCursor);
-            paging.current = { member: selected, pagedOlder: true };
+            paging.current = {
+                project: project.path,
+                member: selected,
+                oldestId: page.messages.at(-1)?.id ?? paging.current.oldestId,
+            };
         } catch (cause) {
-            setError(cause instanceof Error ? cause.message : 'could not read older messages');
+            if (version === threadVersion.current && selectedRef.current === selected) {
+                setError(cause instanceof Error ? cause.message : 'could not read older messages');
+            }
+        } finally {
+            if (version === threadVersion.current) {
+                olderRequest.current = false;
+                setLoadingOlder(false);
+            }
         }
-    }, [client, selected, olderCursor]);
+    }, [client, project.path, selected, olderCursor]);
 
     const send = useCallback(async () => {
         const body = draft.trim();
         if (body === '' || selected === null) return;
+        const generation = selection.current.generation;
         try {
             if (replyTo !== null) {
                 await client.reply({ id: replyTo.id, from: OPERATOR_ID, body });
@@ -201,32 +285,30 @@ export default function InboxView({ client = INBOX_CLIENT }: { client?: InboxCli
                     body,
                 });
             }
-            setDraft('');
-            setReplyTo(null);
+            if (selection.current.generation !== generation) return;
+            setDraft((current) => (current === draft ? '' : current));
+            setReplyTo((current) => (current?.id === replyTo?.id ? null : current));
             refresh();
         } catch (cause) {
-            setError(cause instanceof Error ? cause.message : 'the message was not sent');
+            if (selection.current.generation === generation)
+                setError(cause instanceof Error ? cause.message : 'the message was not sent');
         }
     }, [client, draft, replyTo, selected, project.path, refresh]);
 
     const markRead = useCallback(
         async (row: InboxRow) => {
+            const generation = selection.current.generation;
             try {
                 await client.read({ id: row.id, reader: OPERATOR_ID });
-                refresh();
+                if (selection.current.generation === generation) refresh();
             } catch (cause) {
-                setError(cause instanceof Error ? cause.message : 'could not mark this message read');
+                if (selection.current.generation === generation)
+                    setError(cause instanceof Error ? cause.message : 'could not mark this message read');
             }
         },
         [client, refresh],
     );
 
-    const ordered = useMemo(() => {
-        if (members === null) return [];
-        return [...members].sort(
-            (a, b) => memberRank(a, fleetIds) - memberRank(b, fleetIds) || a.id.localeCompare(b.id),
-        );
-    }, [members, fleetIds]);
     const threads = useMemo(() => groupThreads(rows ?? []), [rows]);
 
     return (
@@ -250,7 +332,11 @@ export default function InboxView({ client = INBOX_CLIENT }: { client?: InboxCli
                                     <button
                                         type="button"
                                         onClick={() => {
+                                            if (member.id === selected) return;
+                                            threadVersion.current += 1;
                                             setSelected(member.id);
+                                            setRows(null);
+                                            setOlderCursor(null);
                                             setReplyTo(null);
                                         }}
                                         aria-pressed={active}
@@ -285,7 +371,12 @@ export default function InboxView({ client = INBOX_CLIENT }: { client?: InboxCli
                     </p>
                 ) : null}
                 {selected !== null && olderCursor !== null ? (
-                    <button type="button" onClick={() => void loadOlder()} style={{ marginBottom: 8 }}>
+                    <button
+                        type="button"
+                        disabled={loadingOlder}
+                        onClick={() => void loadOlder()}
+                        style={{ marginBottom: 8 }}
+                    >
                         Load older
                     </button>
                 ) : null}

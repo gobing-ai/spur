@@ -2,6 +2,7 @@ import { atomicWriteAsync, MarkdownDocument, normalizeTaskStatus, type TaskStatu
 import { ValidationError } from '@gobing-ai/ts-utils';
 import type { TaskFiles } from './task-files';
 import type { TaskLocator } from './task-locator';
+import { taskMetadata } from './task-metadata';
 import { ROSTER_END, ROSTER_REGION_RE, ROSTER_START, renderRosterTable } from './task-roster-table';
 import type { TaskListFilters, TaskService, TaskServiceContext, TaskShowResult, TaskSummary } from './task-service';
 
@@ -23,18 +24,19 @@ export class TaskQueryOps {
         const raw = await this.ctx.fs.readFile(filePath);
         const doc = MarkdownDocument.parse(raw, 'task');
         const fm = doc.frontmatterData ?? {};
+        const { status, featureId } = taskMetadata(fm);
 
         return {
             wbs,
             name: (fm.name as string) ?? '',
-            status: (fm.status as string) ?? '',
+            status,
             filePath,
             // The same two promotions `list()` makes, so `task show --json` and
             // `task list --json` project the same shape (session review).
             dependencies: Array.isArray(fm.dependencies)
                 ? (fm.dependencies as unknown[]).filter((dep): dep is string => typeof dep === 'string')
                 : [],
-            feature_id: (fm.feature_id as string | null | undefined) ?? null,
+            feature_id: featureId,
             frontmatter: fm as Record<string, unknown>,
             content: doc.bodyWithoutFrontmatter,
         };
@@ -117,9 +119,8 @@ export class TaskQueryOps {
                 const raw = await this.ctx.fs.readFile(actualPath);
                 const doc = MarkdownDocument.parse(raw, 'task');
                 const fm = doc.frontmatterData ?? {};
-                const status = (fm.status as string) ?? '';
+                const { status, featureId } = taskMetadata(fm);
                 const parentWbs = (fm.parent_wbs as string | null) ?? undefined;
-                const featureId = (fm.feature_id as string | null) ?? undefined;
 
                 if (wantStatus !== undefined && wantStatus !== status) continue;
                 if (filters?.parentWbs !== undefined && filters.parentWbs !== parentWbs) continue;

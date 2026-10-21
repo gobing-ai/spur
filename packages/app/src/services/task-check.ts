@@ -18,7 +18,6 @@ import {
     WAYFINDER_MAP_TAG,
 } from '@gobing-ai/spur-domain';
 import type { FileSystem } from '@gobing-ai/ts-runtime';
-import type { CorpusSeverity } from './corpus-check';
 import { readVerdictArtifact } from './done-transition-guard';
 import { isFeatureFile } from './feature-check';
 import {
@@ -530,7 +529,6 @@ export class TaskCheckService extends PlanningCheckService {
              */
             asStatus?: string;
             severityOverrides?: Record<string, 'error' | 'warning' | 'off'>;
-            accepted?: ReadonlyMap<string, CorpusSeverity>;
             /** Repair structural findings (heading presence/level/order, R-item checkboxes) in place before validating (task 0619). */
             fix?: boolean;
             /**
@@ -573,7 +571,7 @@ export class TaskCheckService extends PlanningCheckService {
         if (doc === null) {
             return {
                 wbs,
-                ...this.summarizeWithStatus('', findings, strict, options?.severityOverrides, options?.accepted, wbs),
+                ...this.summarizeWithStatus('', findings, strict, options?.severityOverrides),
             };
         }
 
@@ -652,15 +650,7 @@ export class TaskCheckService extends PlanningCheckService {
 
         return {
             wbs,
-            ...this.summarizeWithStatus(
-                effectiveStatus,
-                findings,
-                strict,
-                options?.severityOverrides,
-                options?.accepted,
-                wbs,
-                entry?.required,
-            ),
+            ...this.summarizeWithStatus(effectiveStatus, findings, strict, options?.severityOverrides, entry?.required),
             repairs,
         };
     }
@@ -708,8 +698,6 @@ export class TaskCheckService extends PlanningCheckService {
             findings,
             options?.strict,
             options?.severityOverrides,
-            undefined,
-            wbs,
             entry?.required,
         );
         return { doc, findings: effectiveFindings, entry };

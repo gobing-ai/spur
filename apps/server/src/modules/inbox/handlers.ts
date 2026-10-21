@@ -234,12 +234,17 @@ export function createInboxHandlers(ctx: ServerContext) {
             // Degraded states are named values, never an error: no bound orchestrator means this
             // project has no request feed to show, not that the read failed.
             const orchestratorId = await orchestratorAddress(ctx);
-            if (orchestratorId === '') return [];
+            if (orchestratorId === '' && input.messageId === undefined) return [];
 
             const limit = input.limit ?? 50;
-            const rows = await ctx.inbox().requests(orchestratorId);
+            const rows = await ctx
+                .inbox()
+                .requests(input.messageId === undefined ? orchestratorId : undefined, input.messageId);
             const reconciler = new DeliveryReconciler({ getDb: () => ctx.getDb() });
-            const classified = await reconciler.classify(orchestratorId);
+            const classified = await reconciler.classify(
+                input.messageId === undefined ? orchestratorId : undefined,
+                input.messageId === undefined ? undefined : rows.filter((row) => row.kind === 'request'),
+            );
             const reasonByMessage = new Map(classified.map((item) => [item.messageId, item.reason]));
 
             // Strategy holds name why a dispatch is stuck; a failure to read them leaves `hold`
@@ -265,6 +270,7 @@ export function createInboxHandlers(ctx: ServerContext) {
                 attempts: row.attempts,
                 error: row.error,
                 runId: row.runId ?? null,
+                runStatus: row.runStatus ?? null,
                 taskId: row.runTaskId ?? row.taskId,
                 outcome: row.runOutcome ?? null,
                 reason: reasonByMessage.get(row.id) ?? null,

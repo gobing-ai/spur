@@ -37,7 +37,7 @@ export const GUEST_STOP_PROBE_MS = 2000;
 /** How many pending messages the delivered reason names. */
 export const GUEST_STOP_MAX_MESSAGES = 5;
 
-/** Characters of each message body the reason carries. */
+/** Preview length for legacy queued snapshots; an owned handoff carries the full body. */
 export const GUEST_STOP_BODY_CHARS = 140;
 
 /** Hard per-invocation timeout for a `spur` child the hook shells out to. */
@@ -108,20 +108,41 @@ export function stopDecisionFor(
     } catch {
         return null;
     }
-    const list = Array.isArray(rows) ? rows : undefined;
+    const payload = rows !== null && typeof rows === 'object' && 'data' in rows ? rows.data : rows;
+    const list = Array.isArray(payload)
+        ? payload
+        : payload !== null && typeof payload === 'object' && 'messages' in payload && Array.isArray(payload.messages)
+          ? payload.messages
+          : undefined;
     if (list === undefined) return null;
+    const handedOff = payload !== null && typeof payload === 'object' && 'pending' in payload;
     const pending = list
-        .map((row) => row as { from_id?: unknown; fromId?: unknown; body?: unknown; status?: unknown })
-        .filter((row) => row.body !== undefined && (row.status === undefined || row.status === 'queued'))
-        .slice(0, maxMessages);
+        .filter((row) => row !== null && typeof row === 'object')
+        .map((row) => row as { id?: unknown; from_id?: unknown; fromId?: unknown; body?: unknown; status?: unknown })
+        .filter(
+            (row) =>
+                typeof row.body === 'string' &&
+                (row.status === undefined ||
+                    (handedOff
+                        ? ['queued', 'claimed', 'delivered'].includes(String(row.status))
+                        : row.status === 'queued')),
+        )
+        .slice(0, handedOff ? undefined : maxMessages);
     if (pending.length === 0) return null;
     const lines = pending.map((row) => {
         const from =
             typeof row.from_id === 'string' ? row.from_id : typeof row.fromId === 'string' ? row.fromId : 'fleet';
-        const body = String(row.body ?? '')
-            .replace(/\s+/g, ' ')
-            .trim();
-        return `- ${from}: ${body.length > GUEST_STOP_BODY_CHARS ? `${body.slice(0, GUEST_STOP_BODY_CHARS)}…` : body}`;
+        const body = handedOff
+            ? String(row.body ?? '')
+            : String(row.body ?? '')
+                  .replace(/\s+/g, ' ')
+                  .trim();
+        const id = typeof row.id === 'string' ? ` [${row.id}]` : '';
+        const preview =
+            !handedOff && body.length > GUEST_STOP_BODY_CHARS
+                ? `${body.slice(0, GUEST_STOP_BODY_CHARS)}… (read the full message with spur message show ${String(row.id ?? '<msgId>')} --json)`
+                : body;
+        return `- ${from}${id}: ${preview}`;
     });
     const reason = `Pending fleet messages for ${guestId}:\n${lines.join('\n')}\n\nHandle them, then \`spur message reply <msgId> …\` and continue.`;
     return JSON.stringify({ decision: 'block', reason });
@@ -155,11 +176,10 @@ export function runFleetGuestStop(payload: GuestStopPayload, deps: GuestStopDeps
             guest.id,
             '--timeout',
             String(deps.probeMs ?? GUEST_STOP_PROBE_MS),
+            '--json',
         ]);
         if (probe.status !== 0) return null;
-        const inbox = cli(['message', 'inbox', '--agent', guest.id, '--json']);
-        if (inbox.status !== 0) return null;
-        return stopDecisionFor(guest.id, inbox.stdout, deps.maxMessages);
+        return stopDecisionFor(guest.id, probe.stdout, deps.maxMessages);
     } catch {
         return null;
     }

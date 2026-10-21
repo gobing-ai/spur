@@ -22,14 +22,6 @@ import { structuralFindings } from './structural-repair';
 
 export { ALL_FINDING_CODES, FINDING_CODES, type FindingCode, isFindingCode };
 
-/** Finding severity level in corpus / planning checks. */
-export type CorpusSeverity = 'error' | 'warning';
-
-/** `<kind>:<id>:<code>` — the identity a baseline entry and an observed error share. */
-export function key(e: { kind: string; id: string; code: string }): string {
-    return `${e.kind}:${e.id}:${e.code}`;
-}
-
 const REQUIRED_REFERENCE_CODES: ReadonlySet<FindingCode> = new Set([
     FINDING_CODES.L4_FEATURE_NOT_FOUND,
     FINDING_CODES.L4_PARENT_NOT_FOUND,
@@ -68,7 +60,7 @@ const COMPLETION_FINDING_CODES: ReadonlySet<FindingCode> = new Set([
 
 // R1 (D61 task 0765): the unsuppressible error set. These finding codes
 // represent structural / completion-integrity errors that cannot be downgraded
-// by `severityOverrides` or absorbed by `accepted`-map filtering. Defaults to
+// by `severityOverrides`. Defaults to
 // the same set the design contract freezes; callers MAY extend it for project-
 // specific essential errors but MUST NOT shrink it. Frozen at the planning-
 // check-base seam so the policy is shared by both TaskCheckService and
@@ -92,7 +84,7 @@ const REQUIRED_FINDING_CODES: ReadonlySet<FindingCode> = new Set<FindingCode>([
     ...COMPLETION_FINDING_CODES,
     // 1002 R1: the implement-readiness prechecks gate the pipeline's precheck→implement
     // transition exactly as the deleted plugin scripts did — fail closed, never droppable
-    // by severityOverrides or accepted-debt filtering.
+    // by severityOverrides.
     FINDING_CODES.PRECHECK_SIZE,
     FINDING_CODES.PRECHECK_EVIDENCE,
     // 1004 R1: the inventory-coverage gate replaces the deleted coverage-checker script
@@ -314,8 +306,8 @@ export abstract class PlanningCheckService {
      *
      * **Severity precedence (D61 task 0765 — R1/R3):** essential / required-error
      * codes (see {@link REQUIRED_FINDING_CODES}) have their severity ESTABLISHED at
-     * emit time and cannot be downgraded by `severityOverrides` or absorbed by
-     * `accepted`-map filtering. Overrides apply only to advisory warnings; an
+     * emit time and cannot be downgraded by `severityOverrides`. Overrides apply only
+     * to advisory warnings; an
      * override that targets an unsuppressible error is silently ignored (with a
      * stderr trace) so callers see the bypass attempt without changing the pass
      * gate. `--strict` elevation only walks warnings → errors; required errors
@@ -328,14 +320,11 @@ export abstract class PlanningCheckService {
         findings: CheckFindings[],
         strict?: boolean,
         overrides?: Record<string, 'error' | 'warning' | 'off'>,
-        accepted?: ReadonlyMap<string, CorpusSeverity>,
-        id?: string,
         requiredList?: readonly string[],
     ): CheckResultBase {
         // R1 (D61 task 0765): essential / required-error codes are unsuppressible.
         // Their severity was fixed at emit time, so overrides that drop or
-        // downgrade them are refused and the accepted-map cannot absorb them.
-        // Advisory findings keep the legacy override + accepted path.
+        // downgrade them are refused. Advisory findings retain config severity overrides.
         const effectiveFindings: CheckFindings[] = [];
         const notes: string[] = [];
         for (const f of findings) {
@@ -362,13 +351,6 @@ export abstract class PlanningCheckService {
             }
             if (strict && f.severity === 'warning') {
                 f.severity = 'error';
-            }
-            if (accepted && id && !unsuppressible) {
-                const k = key({ kind: this.docKind, id, code: f.code });
-                const acceptedSev = accepted.get(k);
-                if (acceptedSev !== undefined && acceptedSev === f.severity) {
-                    continue; // accepted debt at matching severity dropped after overrides & strict elevation (R1, R2)
-                }
             }
             effectiveFindings.push(f);
         }

@@ -93,8 +93,10 @@ describe('1266 R3/R4 — guarded transitions emit exactly the changed set', () =
     test('settle and release are no-ops on a row outside their prior status', async () => {
         const row = await seed();
         // queued → settle: guard miss, no write, no event.
-        expect(await dao.settle([row.id], 'delivered', 10, event('message.delivered'))).toEqual([]);
-        expect(await dao.release([row.id], 10, event('message.requeued'))).toEqual([]);
+        expect(await dao.settle([{ id: row.id, attempts: 1 }], 'delivered', 10, event('message.delivered'))).toEqual(
+            [],
+        );
+        expect(await dao.release([{ id: row.id, attempts: 1 }], 10, event('message.requeued'))).toEqual([]);
         expect(await new SystemEventDao(db).query({ prefix: 'message', limit: 10 })).toHaveLength(1);
     });
 
@@ -102,7 +104,13 @@ describe('1266 R3/R4 — guarded transitions emit exactly the changed set', () =
         const row = await seed();
         await dao.claim('proj-coder', 10, 100, event('message.claimed'));
 
-        const [failed] = await dao.settle([row.id], 'failed', 200, event('message.failed'), 'boom');
+        const [failed] = await dao.settle(
+            [{ id: row.id, attempts: 1 }],
+            'failed',
+            200,
+            event('message.failed'),
+            'boom',
+        );
         expect(failed?.status).toBe('failed');
         expect(failed?.error).toBe('boom');
         expect(failed?.deliveredAt).toBeNull();
@@ -199,4 +207,75 @@ describe('1266 R1 — transactions stay atomic under concurrent consumers', () =
         expect(claimed).toHaveLength(2);
         expect(new Set(claimed.map((row) => row.id)).size).toBe(2);
     });
+});
+
+describe('1271 — transaction isolation and claim ownership', () => {
+    test('a failed inbox transaction cannot absorb an unrelated concurrent write', async () => {
+        await db.exec('CREATE TABLE unrelated_write (id TEXT PRIMARY KEY)');
+        await db.exec(`CREATE TRIGGER fail_isolated_event BEFORE INSERT ON system_events
+            WHEN NEW.event_name = 'message.sent' BEGIN SELECT RAISE(ABORT, 'event failed'); END;`);
+        const failed = seed().catch((error: unknown) => error);
+        await Promise.resolve();
+        await db.run('INSERT INTO unrelated_write VALUES (?)', 'other-request');
+        expect(await failed).toBeInstanceOf(Error);
+        expect(await db.queryAll('SELECT id FROM unrelated_write')).toEqual([{ id: 'other-request' }]);
+        expect(await dao.list('proj-coder', 'in', 10)).toEqual([]);
+    });
+
+    test('the facade rejects asynchronous callbacks and expires their handle', async () => {
+        await db.exec('CREATE TABLE sync_transaction (id TEXT PRIMARY KEY)');
+        if (db.transaction === undefined) throw new Error('missing transaction capability');
+        let escaped: Parameters<Parameters<NonNullable<DbAdapter['transaction']>>[0]>[0] | undefined;
+        await expect(
+            db.transaction(async (tx) => {
+                escaped = tx;
+                tx.run('INSERT INTO sync_transaction VALUES (?)', 'rolled-back');
+            }),
+        ).rejects.toThrow('must be synchronous');
+        expect(await db.queryAll('SELECT id FROM sync_transaction')).toEqual([]);
+        expect(() => escaped?.run('INSERT INTO sync_transaction VALUES (?)', 'late')).toThrow('no longer active');
+    });
+
+    test('stale settlement and release never affect a replacement claim or emit events', async () => {
+        await seed();
+        const [first] = await dao.claim('proj-coder', 1, 100, event('message.claimed'));
+        if (first === undefined) throw new Error('missing claim');
+        await dao.release([first], 200, event('message.requeued'));
+        const [second] = await dao.claim('proj-coder', 1, 300, (row) => ({
+            ...event('message.claimed')(row),
+            id: `sev_claim_2_${row.id}`,
+        }));
+        expect(second?.attempts).toBe(2);
+        const before = (await new SystemEventDao(db).query({ prefix: 'message', limit: 20 })).length;
+        expect(await dao.settle([first], 'failed', 400, event('message.failed'))).toEqual([]);
+        expect(await dao.release([first], 400, event('message.requeued'))).toEqual([]);
+        expect((await dao.get(first.id))?.status).toBe('claimed');
+        expect((await new SystemEventDao(db).query({ prefix: 'message', limit: 20 })).length).toBe(before);
+    });
+
+    test('claim returns creation order even when timestamps differ from insertion order', async () => {
+        const later = await seed({ createdAt: 300 });
+        const first = await seed({ createdAt: 100 });
+        const tied = await seed({ createdAt: 100 });
+        expect((await dao.claim('proj-coder', 10, 500, event('message.claimed'))).map((row) => row.id)).toEqual([
+            first.id,
+            tied.id,
+            later.id,
+        ]);
+    });
+});
+
+test('1271 — an adapter without synchronous transactions fails before inbox writes', async () => {
+    const unsupported = new InboxDao(
+        new Proxy(db, {
+            get(target, property) {
+                if (property === 'transaction') return undefined;
+                const value = Reflect.get(target, property);
+                return typeof value === 'function' ? value.bind(target) : value;
+            },
+        }),
+    );
+    await expect(unsupported.claim('proj-coder', 1, 100, event('message.claimed'))).rejects.toThrow(
+        'require the atomic synchronous transaction capability',
+    );
 });

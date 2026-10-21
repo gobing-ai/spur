@@ -1,7 +1,7 @@
 import { mkdtemp } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { InboxService } from '@gobing-ai/spur-app';
+import { type InboxClaim, InboxService } from '@gobing-ai/spur-app';
 import { getEnvVars } from '@gobing-ai/spur-config';
 import type { CommandOutput } from '../src/output';
 
@@ -104,6 +104,12 @@ export async function runCli(
  */
 export function inboxFixture(db: import('@gobing-ai/spur-domain').DbAdapter) {
     const service = new InboxService({ getDb: async () => db });
+    const claims = new Map<string, InboxClaim>();
+    const claimed = (id: string): InboxClaim => {
+        const claim = claims.get(id);
+        if (claim === undefined) throw new Error(`fixture did not claim message ${id}`);
+        return claim;
+    };
     const taskIdOf = (requestKey: string) => /^fleet:task:([^:]+):/.exec(requestKey)?.[1];
     return {
         /** Seed a chat message; returns its id. */
@@ -124,16 +130,18 @@ export function inboxFixture(db: import('@gobing-ai/spur-domain').DbAdapter) {
             return { id: message.id, replayed };
         },
         async drainPending(member: string) {
-            return service.claim(member, 100);
+            const messages = await service.claim(member, 100);
+            for (const message of messages) claims.set(message.id, message);
+            return messages;
         },
         async release(ids: string[]) {
-            return service.release(ids);
+            return service.release(ids.map(claimed));
         },
         async markDelivered(id: string) {
-            return service.settle([id], 'accepted');
+            return service.settle([claimed(id)], 'accepted');
         },
         async markFailed(id: string, error: string) {
-            return service.settle([id], 'not-started', error);
+            return service.settle([claimed(id)], 'not-started', error);
         },
         async getById(id: string) {
             return service.get(id);
