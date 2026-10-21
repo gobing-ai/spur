@@ -155,11 +155,8 @@ export type {
     CoordinationEventBus,
     InboxEntry,
     InboxResult,
-    MessageEndpointIdentity,
     MessageEventBus,
     MessageEventPayload,
-    RecentMessageRow,
-    RecentMessagesResult,
     SendResult,
     TaskAssignedEventPayload,
 } from './services/agent-coordination-service';

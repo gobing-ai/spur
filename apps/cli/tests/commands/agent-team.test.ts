@@ -657,8 +657,8 @@ describe('G61 delivery settle regressions (0831)', () => {
     });
 
     test('regression (was 0828 probe 3, flipped by 0832): a repeated request key suppresses duplicate rows and duplicate deliveries', async () => {
-        // Boundary: AgentCoordinationService.sendMessage → InboxMessageDao.enqueueIdempotent
-        // (ts-db 0.4.65, partial unique index idx_inbox_messages_request_key).
+        // Boundary: AgentCoordinationService.sendMessage → InboxService.send → InboxDao.insert
+        // (G11; the partial unique index idx_inbox_messages_request_key arbitrates a repeated key).
         const { ctx, cleanup } = await makeCtx();
         try {
             const db = await ctx.getDb();
@@ -695,8 +695,8 @@ describe('G61 delivery settle regressions (0831)', () => {
 
     test('probe competing consumers: the same queued row is claimed at most once on the shared adapter', async () => {
         // Two AgentCoordinationService instances share one SQLite connection/db (two configs of
-        // the same consumer process). Boundary: InboxMessageDao.drainPending's
-        // conditional UPDATE ... WHERE status='queued' ... RETURNING (ts-db 0.4.62).
+        // the same consumer process). Boundary: InboxDao.claim's
+        // conditional UPDATE ... WHERE status='queued' ... RETURNING (G11).
         const db = await createMigratedDb({ url: ':memory:' });
         try {
             const dao = inboxFixture(db);

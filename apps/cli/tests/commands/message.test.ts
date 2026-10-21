@@ -1146,20 +1146,34 @@ describe('spur message send --json usage errors (0693 envelope adoption)', () =>
             const { cwd, out, dbUrl, cleanup } = await makeCtx();
             const db = await createMigratedDb({ url: dbUrl });
             try {
-                const service = new InboxService({ getDb: async () => db });
+                // Claimed in the past, so the lease has EXPIRED: exactly the row a sweep would
+                // requeue. A fresh claim would pass even if the listing ran the sweep.
+                const service = new InboxService({
+                    getDb: async () => db,
+                    now: () => Date.now() - CLAIM_LEASE_MS - 60_000,
+                });
                 const sent = await service.send({ from: 'operator', to: 'proj-coder', body: 'x', kind: 'request' });
                 await service.claim('proj-coder', 5);
                 const before = await db.queryAll<{ n: number }>('SELECT COUNT(*) AS n FROM system_events');
 
-                const code = await main(['message', 'inbox', '--agent', 'proj-coder', '--json'], {
-                    cwd,
-                    dbUrl,
-                    output: out,
-                });
-                expect(code).toBe(0);
+                for (const extra of [[], ['--unresolved']]) {
+                    const code = await main(['message', 'inbox', '--agent', 'proj-coder', '--json', ...extra], {
+                        cwd,
+                        dbUrl,
+                        output: out,
+                    });
+                    expect(code).toBe(0);
+                }
                 const after = await createMigratedDb({ url: dbUrl });
                 const rows = await after.queryAll<{ n: number }>('SELECT COUNT(*) AS n FROM system_events');
                 expect(rows[0]?.n).toBe(before[0]?.n);
+                const requeued = await after.queryAll<{ n: number }>(
+                    "SELECT COUNT(*) AS n FROM system_events WHERE event_name = 'message.requeued'",
+                );
+                expect(requeued[0]?.n).toBe(0);
+                expect((await new InboxService({ getDb: async () => after }).get(sent.message.id))?.status).toBe(
+                    'claimed',
+                );
                 after.close();
                 // The read still reports the request it was asked about.
                 expect(JSON.parse(out.messages.at(-1) ?? '{}').messages[0].id).toBe(sent.message.id);

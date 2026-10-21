@@ -18,7 +18,7 @@ describe('projectLifecycle (R6)', () => {
     test('latest agent.invoke.start → working', () => {
         const state = projectLifecycle({
             latestInvokeEvent: { eventName: 'agent.invoke.start', sequence: 3 },
-            pendingCount: 2,
+            queuedCount: 2,
         });
         expect(state).toBe('working');
     });
@@ -26,7 +26,7 @@ describe('projectLifecycle (R6)', () => {
     test('latest agent.invoke.exit + empty inbox → idle', () => {
         const state = projectLifecycle({
             latestInvokeEvent: { eventName: 'agent.invoke.exit', sequence: 4 },
-            pendingCount: 0,
+            queuedCount: 0,
         });
         expect(state).toBe('idle');
     });
@@ -34,21 +34,21 @@ describe('projectLifecycle (R6)', () => {
     test('latest agent.invoke.exit + pending inbox → unknown (will re-invoke)', () => {
         const state = projectLifecycle({
             latestInvokeEvent: { eventName: 'agent.invoke.exit', sequence: 4 },
-            pendingCount: 1,
+            queuedCount: 1,
         });
         expect(state).toBe('unknown');
     });
 
     test('no events → unknown', () => {
-        expect(projectLifecycle({ latestInvokeEvent: null, pendingCount: 0 })).toBe('unknown');
+        expect(projectLifecycle({ latestInvokeEvent: null, queuedCount: 0 })).toBe('unknown');
     });
 
     test('never returns blocked (no first-class signal in wave 2)', () => {
         const states = [
-            projectLifecycle({ latestInvokeEvent: null, pendingCount: 5 }),
+            projectLifecycle({ latestInvokeEvent: null, queuedCount: 5 }),
             projectLifecycle({
                 latestInvokeEvent: { eventName: 'agent.invoke.start', sequence: 1 },
-                pendingCount: 5,
+                queuedCount: 5,
             }),
         ];
         for (const s of states) expect(s).not.toBe('blocked');
@@ -95,7 +95,7 @@ function buildFakeDeps(opts: {
             tick++;
             return override === undefined ? opts.startOccupant : override;
         },
-        async countPending() {
+        async countQueued() {
             return opts.pending.n;
         },
         async latestInvokeEvent() {
@@ -268,7 +268,7 @@ describe('snapshotOccupant', () => {
             async getOccupant() {
                 return null;
             },
-            async countPending() {
+            async countQueued() {
                 return 0;
             },
             async latestInvokeEvent() {

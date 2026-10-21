@@ -164,7 +164,7 @@ async function runAgentWait(
                     {
                         getOccupant: (id) => agentService.getOccupant({ specId: id }),
                         // G11 R5: the queued count is the inbox service's, not a coordination wrapper.
-                        countPending: (id) => inbox.countQueued(id),
+                        countQueued: (id) => inbox.countQueued(id),
                         latestInvokeEvent: (r) => readLatestInvokeEvent(eventDao, r),
                         // Snapshot-then-follow over the shared ledger (G4 R8):
                         // only the pinned run's invoke events are followed.

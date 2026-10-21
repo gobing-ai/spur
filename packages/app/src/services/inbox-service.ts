@@ -408,19 +408,6 @@ export class InboxService {
         return new InboxDao(await this.deps.getDb()).listByTask(taskId);
     }
 
-    /**
-     * The newest messages across every address with their reply counts.
-     *
-     * `shortcut:` backs the pre-contract Board message list; task 1269 replaces it with the
-     * member-scoped contract read plus SSE. Delete it there instead of extending it.
-     */
-    async recent(limit = 50): Promise<{ messages: InboxMessage[]; replyCounts: Map<string, number> }> {
-        const dao = new InboxDao(await this.deps.getDb());
-        const messages = await dao.listRecent(limit);
-        const replyCounts = await dao.countReplies(messages.map((row) => row.id));
-        return { messages, replyCounts };
-    }
-
     /** Event factory for one catalog name: the DAO supplies the changed row, this supplies the payload. */
     private eventFactory(name: MessageEventName): InboxEventFactory {
         return (row) => ({

@@ -497,37 +497,6 @@ export class InboxDao extends BaseDao {
         );
         return rows.map(toMessage);
     }
-
-    /**
-     * The newest messages across every address, newest first.
-     *
-     * `shortcut:` this cross-address feed backs the pre-contract Board message list; task 1269
-     * replaces it with the member-scoped oRPC read plus SSE. Delete it there rather than
-     * growing it.
-     */
-    async listRecent(limit: number): Promise<InboxMessage[]> {
-        const rows = await this.adapter.queryAll<InboxRow>(
-            `SELECT ${COLUMNS} FROM inbox_messages
-             ORDER BY created_at DESC, rowid DESC
-             LIMIT ?1`,
-            Math.max(1, Math.min(limit, 500)),
-        );
-        return rows.map(toMessage);
-    }
-
-    /** Reply counts for the given parent ids; ids with no replies are absent from the map. */
-    async countReplies(ids: readonly string[]): Promise<Map<string, number>> {
-        const counts = new Map<string, number>();
-        if (ids.length === 0) return counts;
-        const rows = await this.adapter.queryAll<{ in_reply_to: string; n: number }>(
-            `SELECT in_reply_to, COUNT(*) AS n FROM inbox_messages
-             WHERE in_reply_to IN (${placeholders(ids, 1)})
-             GROUP BY in_reply_to`,
-            ...ids,
-        );
-        for (const row of rows) counts.set(row.in_reply_to, row.n);
-        return counts;
-    }
 }
 
 /** `?start, ?start+1, …` for `values.length` bind positions. */

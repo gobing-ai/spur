@@ -142,7 +142,7 @@ Another agent “reads output” by reading `artifactRefs[].path` (or a bounded 
 | State | Source (first-class only) |
 | --- | --- |
 | `working` | latest `agent.invoke.start` for this `runId` |
-| `idle` | latest `agent.invoke.exit` for this `runId` **and** `countPending(specId)===0` |
+| `idle` | latest `agent.invoke.exit` for this `runId` **and** `countQueued(specId)===0` |
 | `blocked` | First-class signal only: the highest-seq accepted `agent.lifecycle.changed` row for this member (`spur agent report --state blocked`, 1080). Absent signal ⇒ state is not `blocked` |
 | `done` | Out of v1. Herdr `done` is unseen-idle UI; do not invent an unseen bit here |
 
@@ -150,7 +150,7 @@ No screen-manifest detector. No OSC/spinner matching.
 
 > **Wave 2 (0530):** `projectLifecycle` in `packages/app/src/services/occupant-wait.ts` implements
 > this table as a pure function. `exit` + a non-empty queued inbox is `unknown` (will re-invoke), not
-> `idle`; `idle` requires exit **and** `countPending===0`.
+> `idle`; `idle` requires exit **and** `countQueued===0`.
 
 > **Blocked (1080):** the ledger row is first-class for dispatch and Board — `gtdStrategy` holds the
 > member with the `member-blocked` reason and the snapshot carries `lifecycle` to the `needs human`

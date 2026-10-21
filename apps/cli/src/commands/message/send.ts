@@ -286,7 +286,7 @@ async function runMessageSend(
                     const res = await waitForOccupant(
                         {
                             getOccupant: (id) => agentService.getOccupant({ specId: id }),
-                            countPending: (id) => inboxOf(context).countQueued(id),
+                            countQueued: (id) => inboxOf(context).countQueued(id),
                             latestInvokeEvent: (r) => readLatestInvokeEvent(eventDao, r),
                             // Snapshot-then-follow over the shared ledger (G4 R8):
                             // only the pinned run's invoke events are followed.

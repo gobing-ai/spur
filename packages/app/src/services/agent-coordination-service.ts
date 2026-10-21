@@ -194,39 +194,6 @@ export interface InboxResult {
     count: number;
 }
 
-/**
- * Resolved identity for a message endpoint (from/to). `agentId` is the raw
- * composed agent id; the remaining fields are best-effort joins
- * from the team roster. All identity fields are optional — when unresolved
- * (untethered agent, operator-originated, or stale row) the UI falls back to
- * the raw id (R8/R11).
- */
-export interface MessageEndpointIdentity {
-    agentId: string;
-    memberLabel?: string;
-    agentType?: string;
-}
-
-/**
- * A recent-message row with recipient + identity + reply signals for the
- * board's global message feed (R8/R11). Parents come from the `limit` window;
- * `replyCount` counts **all** children of those parents in `inbox_messages`
- * (not only children that also fall inside the window).
- */
-export interface RecentMessageRow extends InboxEntry {
-    toId: string;
-    from?: MessageEndpointIdentity;
-    to: MessageEndpointIdentity;
-    hasReply: boolean;
-    replyCount: number;
-}
-
-/** Result of listing recent messages across all agents. */
-export interface RecentMessagesResult {
-    messages: RecentMessageRow[];
-    count: number;
-}
-
 // ---------------------------------------------------------------------------
 // AgentCoordinationService
 // ---------------------------------------------------------------------------
@@ -402,59 +369,6 @@ export class AgentCoordinationService {
     async countPending(agentId: string): Promise<number> {
         validateAgentId(agentId);
         return (await this.inboxService()).countQueued(agentId);
-    }
-
-    /**
-     * List recent messages across ALL agents (newest first), for the board's
-     * global message feed. Differs from {@link getInbox} (one agent's queue) by
-     * spanning every recipient. Delegates to `InboxService.recent`, whose SQL lives in
-     * the domain `InboxDao` (G11), so this package stays raw-SQL-free per the
-     * `raw-sql-only-in-domain` rule.
-     *
-     * Identity join (R11): `fromId`/`toId` are composed ids. We resolve them
-     * against the agent specs on disk — the spec's name as the member label and
-     * its type as the agent type. Unresolved ids (operator-originated, stale)
-     * leave the identity optional fields unset — the UI falls back to the raw id.
-     * (0857/0860: the retired `team:<id>` tag is neither written nor read.)
-     *
-     * Reply signals (R11): parent rows are the newest `limit` messages;
-     * `countReplies` then counts **all** children of those parent ids in the
-     * table (global for those parents, not limited to children in the window).
-     */
-    async listRecent(limit = 50): Promise<RecentMessagesResult> {
-        const service = await this.inboxService();
-        const { messages: rows, replyCounts } = await service.recent(limit);
-        if (rows.length === 0) {
-            return { messages: [], count: 0 };
-        }
-
-        // Build the identity index once: agentId → { memberLabel, agentType }.
-        const specs = await this.listAgentSpecs();
-        const identityById = new Map<string, MessageEndpointIdentity>();
-        for (const spec of specs) {
-            identityById.set(spec.id, {
-                agentId: spec.id,
-                memberLabel: spec.name,
-                agentType: spec.type,
-            });
-        }
-
-        const resolveEndpoint = (agentId: string): MessageEndpointIdentity => identityById.get(agentId) ?? { agentId };
-
-        return {
-            messages: rows.map((row) => {
-                const replyCount = replyCounts.get(row.id) ?? 0;
-                return {
-                    ...toInboxEntry(row),
-                    toId: row.toId,
-                    from: resolveEndpoint(row.fromId),
-                    to: resolveEndpoint(row.toId),
-                    hasReply: replyCount > 0,
-                    replyCount,
-                };
-            }),
-            count: rows.length,
-        };
     }
 
     /**
