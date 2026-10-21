@@ -774,7 +774,7 @@ the shared claim TTL.
 
 <a id="spur-agent-wait-specid---role-name---run-runid---until-state---timeout-ms---json--spur-message-send---to-id--role-name-body---from-id---wait---until-injectedinvoke-exit---timeout-ms---json"></a>
 
-#### `spur agent wait [<specId>] [--role <name>] [--run <runId>] [--until <state>...] [--inbox <id>] [--timeout <ms>] [--json]` · `spur message send (--to <id>|--role <name>) <body> [--from <id>] [--wait] [--until injected|invoke-exit] [--timeout <ms>] [--json]`
+#### `spur agent wait [<specId>] [--role <name>] [--run <runId>] [--until <state>...] [--inbox <id>] [--timeout <ms>] [--json]` · `spur message send [--to <id>|--role <name>] <body> [--from <id>] [--wait] [--until injected|invoke-exit] [--timeout <ms>] [--json]`
 
 Identity-pinned wait on an occupant run (ADR-057 wave 2 / G4 R4–R5; role-addressed selector per the
 ADR-075 amendment, 0685). Addressing is by spec id **or** `--role` — never both: `--role` resolves
@@ -807,17 +807,26 @@ unchanged). No oRPC wait path.
 
 <a id="spur-message-send---to-id-body---from-id---wait---until-injectedinvoke-exit---timeout-ms---json--spur-message-inbox---agent-id---json--spur-message-reply-msg-id-body---json--spur-message-watch---agent-id---interval-ms---json"></a>
 
-#### `spur message send --to <id> <body> [--from <id>] [--wait] [--until injected|invoke-exit] [--timeout <ms>] [--json]` · `spur message inbox --agent <id> [--json]` · `spur message reply <msg-id> <body> [--json]` · `spur message watch --agent <id> [--interval <ms>] [--json]`
+#### `spur message send [--to <id>] <body> [--from <id>] [--wait] [--until injected|invoke-exit] [--timeout <ms>] [--json]` · `spur message inbox --agent <id> [--json]` · `spur message show <msg-id> [--json]` · `spur message read <msg-id> [--reader <id>] [--json]` · `spur message reply <msg-id> <body> [--json]` · `spur message watch --agent <id> [--interval <ms>] [--json]`
 
-Durable inter-agent messaging over the SQLite `inbox_messages` table (backed by `AgentCoordinationService` →
-`ts-db` `InboxMessageDao`).
+Durable inter-agent messaging over the SQLite `inbox_messages` table. Every verb goes through
+`InboxService` (`packages/app`) — the only reader and writer of the inbox plane — and never through the
+retired `AgentCoordinationService` message wrappers or the ts-db DAO.
 
-- `send` — enqueue a message; `--from` defaults to `operator`. Prints `queued <id> → <to>`.
-  `--wait` / `--until` / `--timeout` are documented with `agent wait` above.
-- `inbox` — list messages addressed to `--agent` (`<id> <status> <from> <body> <createdAt>`); reports
-  "No messages" when empty.
-- `reply` — look up the original message, address the reply back to its `from_id`, and thread it via
-  `in_reply_to`. Rejects an unknown id, or an operator-originated message (null sender) with no peer.
+- `send` — store a message and its `message.sent` event in one transaction. `--to` is optional: without
+  it the message goes to the project's orchestrator member, and a project with none exits 2 writing no
+  row. `--from` defaults to `operator`; both addresses are syntax-checked before the write. Prints
+  `queued <id> → <to>`, or `replayed <id> → <to>` for a repeated `--request-key`.
+  `--wait` / `--until` / `--timeout` are documented with `agent wait` above; `--until injected` is
+  satisfied when THIS message leaves `queued`, not when the recipient's inbox is empty.
+- `inbox` — list messages addressed to `--agent` (`<id> <status> <from> <body> <createdAt>`) and write
+  nothing: `--unresolved` classifies through the pure reconciler pass. Reports "No messages" when empty.
+- `show` — print the thread the id belongs to (root plus replies, oldest first, both directions); an
+  unknown id exits 1.
+- `read` — stamp the read receipt for `--reader` (default `operator`), idempotently: only the first mark
+  transitions and writes `message.read`. A missing or mis-addressed message exits 1.
+- `reply` — address the reply to the original sender and thread it via `in_reply_to`; an unknown id
+  exits 1.
 
 <a id="spur-agent-start-spec-id---server-url---json--spur-agent-stop-spec-id---server-url---json"></a>
 

@@ -6602,3 +6602,80 @@ Date: 2026-10-16 · Branch: sp/runall-l1-05cd · Tasks: 1218, 1219, 1220 (all do
   doubt**, so the executor never learns about catalogs and a failure to rescue is indistinguishable
   from not rescuing. Redact the full text, *then* tail it — the reverse order can slice a secret.
 
+## Learnings — G11 inbox module (2026-10-20), tasks 1266–1269
+
+### Schema and migration
+
+- A rebuild migration (`DROP TABLE IF EXISTS` + `CREATE`) needs no table-absence guard, and it is the
+  one declared exception to "populated DBs keep their rows": say so in the test that would otherwise
+  assert survival, or the next reader thinks the rebuild is a bug.
+- A new schema constant must not reuse a name a historical migration already exports. `INBOX_MESSAGES_SCHEMA_SQL`
+  was the frozen 0001 DDL; the rebuilt table needed its own name (`INBOX_MESSAGES_TABLE_SQL`).
+- Adding a step to the CLI migration list shifts every count assertion in `migrations.test.ts`
+  (`CLI_MIGRATIONS.length`, per-suite applied counts, journal sizes). Expect to touch ~6 numbers.
+
+### Transactions on Bun SQLite
+
+- `drizzle`'s `db.transaction()` did **not** roll back through the ts-db runtime adapter in a probe: the
+  write survived a thrown callback. An explicit `BEGIN IMMEDIATE` / `COMMIT` / `ROLLBACK` through
+  `adapter.exec()` does roll back, and is what the inbox DAO uses.
+- Two services over one adapter *will* interleave `BEGIN` and throw "cannot start a transaction within a
+  transaction". Serialize with a per-adapter promise chain (`WeakMap<DbAdapter, Promise>`), not a
+  per-DAO mutex — the DAOs are different instances over the same connection.
+
+### Idempotency
+
+- Checking `request_key` and then inserting is a TOCTOU race: the loser gets a raw
+  `UNIQUE constraint failed`. Catch the driver error (prefer the typed `SQLITE_CONSTRAINT_UNIQUE` code,
+  keep the text form as a fallback) and re-read the winner — otherwise a failed dispatch releases a
+  write-slot claim for work that actually went out.
+- Idempotency means the same *request*, not the same key: compare from/to/body/kind before replaying.
+
+### Relay and events
+
+- A bus-less service plus a ledger relay is coherent only if the tap skips the same prefix; otherwise
+  every transition is persisted twice.
+- A relayed row already **is** its v2 envelope, so the SSE handler must render it through
+  `projectStoredSystemEventEnvelope`. Re-building the presentation from its `data` silently strips the
+  summary and fields, and live then disagrees with history for the same row — a confusing bug to chase.
+- Boot snapshot `latestSequence()` before following, or pre-boot history is re-emitted as live.
+
+### CLI surface
+
+- A CLI `main` invocation **closes** its DB connection. A test that seeds and then runs the CLI must
+  share a file-backed `dbUrl`, not an in-memory handle.
+- `FleetService` never reads config from disk: constructed without `spurConfig` it reports `missing` for
+  every project, which turns any orchestrator branch into dead code. Pass `spurConfig` (and `roles`).
+- A test that accepts either outcome (`code === 0 || code === 2`) hides a dead branch. Assert the
+  resolved path and the refusal separately.
+- A wait keyed on "the queue is empty" is not the same as "this message was consumed"; another consumer
+  emptying a different row satisfies the first. Key on the row.
+- Splitting a noun into a folder makes the `require-corresponding-test` rule demand one test file per
+  module; the parity sweeps keep working because the reader concatenates the folder.
+
+### Web / React
+
+- A default prop of `api.inbox` is a **new proxy identity per property access** — as a dependency it
+  re-runs effects forever (measured 4757 requests in 400 ms). Bind the client to a module constant, and
+  test the **no-prop** wiring, which is the production path (`<Active />`).
+- `mock.module` on a relative specifier is forbidden by the repo's `no-leaky-mock-module` rule: add an
+  injectable prop instead of a module mock.
+- Driving a controlled `<textarea>` through `fireEvent.change`/`input` does not update React state under
+  happy-dom + React 19 here; assert structure and cover the calls at the contract layer.
+- A retired top-level route is inferred from `RETIRED_ROUTES`; making it a live tab means deleting the
+  redirect **and** regenerating `board-runtime.json` (`bun run build`), then updating the manifest test.
+
+### Pipeline and process
+
+- `spur task wrapup resolve --tasks` takes a **JSON array** string (`'["1266","1267"]'`), not a CSV.
+- The review stage consumes its answer file: a re-entered review needs the answer re-emitted before the
+  next `continue`, and the stability of `review.status` depends on that file existing at entry.
+- `commit-guard stage` refuses directory arguments: expand new folders to file paths, or the commit
+  silently omits them (this bit twice — `modules/inbox/` and `commands/message/`), and a broken commit
+  reaches the branch. Verify with `git show --stat` after every driver commit.
+- One gate run reported eight 20 s timeouts with 120–630 s wall times purely from machine load; all 105
+  tests passed in isolation and the next idle run was clean. Treat absurd wall times as load, not code.
+- Review as a separate actor pays: 13 real defects across four tasks, three of them invisible to the
+  tests that shipped with the change (a dead resolution branch, a tautological test, an unbounded
+  refetch loop).
+

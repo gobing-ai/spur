@@ -161,11 +161,11 @@ See [contract detail](design/cli-contracts.md#spur-agent-usage---dry-run---sourc
 
 See [contract detail](design/cli-contracts.md#spur-agent-report---state-workingidleblocked---seq-ns---spec-id---json--spur-agent-join---role-name---id-id---session-id-sid---pid-n---executor-name---json--spur-agent-leave-id---session-id-sid---json).
 
-#### `spur agent wait [<specId>] [--role <name>] [--run <runId>] [--until <state>...] [--inbox <id>] [--timeout <ms>] [--json]` · `spur message send (--to <id>|--role <name>) <body> [--from <id>] [--wait] [--until injected|invoke-exit] [--timeout <ms>] [--json]`
+#### `spur agent wait [<specId>] [--role <name>] [--run <runId>] [--until <state>...] [--inbox <id>] [--timeout <ms>] [--json]` · `spur message send [--to <id>|--role <name>] <body> [--from <id>] [--wait] [--until injected|invoke-exit] [--timeout <ms>] [--json]`
 
 See [contract detail](design/cli-contracts.md#spur-agent-wait-specid---role-name---run-runid---until-state---timeout-ms---json--spur-message-send---to-id--role-name-body---from-id---wait---until-injectedinvoke-exit---timeout-ms---json).
 
-#### `spur message send --to <id> <body> [--from <id>] [--wait] [--until injected|invoke-exit] [--timeout <ms>] [--json]` · `spur message inbox --agent <id> [--json]` · `spur message reply <msg-id> <body> [--json]` · `spur message watch --agent <id> [--interval <ms>] [--json]`
+#### `spur message send [--to <id>] <body> [--from <id>] [--wait] [--until injected|invoke-exit] [--timeout <ms>] [--json]` · `spur message inbox --agent <id> [--json]` · `spur message show <msg-id> [--json]` · `spur message read <msg-id> [--reader <id>] [--json]` · `spur message reply <msg-id> <body> [--json]` · `spur message watch --agent <id> [--interval <ms>] [--json]`
 
 See [contract detail](design/cli-contracts.md#spur-message-send---to-id-body---from-id---wait---until-injectedinvoke-exit---timeout-ms---json--spur-message-inbox---agent-id---json--spur-message-reply-msg-id-body---json--spur-message-watch---agent-id---interval-ms---json).
 
