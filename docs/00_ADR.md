@@ -2609,7 +2609,7 @@ has 11 fields, skill/agent output contracts carry no level, and `response.valida
 
 ## ADR-143: The Inbox Is a Spur-Owned Service With One Writer
 
-- **Status:** Proposed · **Date:** 2026-10-19 · **Feature:** G11 · **Amends:** ADR-057 (the inbox
+- **Status:** Accepted · **Date:** 2026-10-19 · **Feature:** G11 · **Amends:** ADR-057 (the inbox
   remains the only agent transport; this fixes its ownership and identity model)
 - **Decision:**
   - Each fleet member has exactly one inbox. A fleet member is one declared member slot in one project,

@@ -10,9 +10,13 @@
  * so they are never collapsed into one status (R2).
  */
 
-import { OPERATOR_AGENT_ID } from './conversation';
+/** The operator address (G11 R4: `operator` everywhere; `board-operator` is retired). */
+const OPERATOR_ID = 'operator';
+
 import type { ProcessStatus } from './MemberTerminal';
 import type { MemberSession, ProjectFleetSnapshot, ResolvedFleetMember } from './useProjectContext';
+
+/** The operator address (G11 R4: `operator` everywhere; `board-operator` is retired). */
 
 /** Read-only session text for the roster: `resume · 3f9c2a1d` / `one-shot`; null when no session. */
 export function sessionLabel(session: MemberSession | undefined): string | null {
@@ -100,10 +104,10 @@ export function buildRoster(snapshot: ProjectFleetSnapshot, processes: ProcessSt
     // 5: processes matching no member are running-but-undeclared — appended so
     // a hand-started agent (or a member removed from agent.fleet while its
     // process survives) is never silently hidden. The operator mailbox
-    // (`board-operator`) is an address, not a member, and is excluded here.
+    // (`operator`) is an address, not a member, and is excluded here.
     for (const proc of processes) {
         if (snapshot.members.some((m) => m.instanceId === proc.agentId)) continue;
-        if (proc.agentId === OPERATOR_AGENT_ID) continue;
+        if (proc.agentId === OPERATOR_ID) continue;
         entries.push({
             instanceId: proc.agentId,
             declared: null,

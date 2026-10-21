@@ -133,7 +133,9 @@ describe('board-runtime.json (R2)', () => {
             retired: true,
             redirectTo: '/board/projects',
         });
-        expect(runtime.reservedModules.find((mod) => mod.id === 'inbox')?.retired).toBeTrue();
+        // G11 R4: `inbox` is a live Projects tab now, not a retired top-level route, so it must
+        // NOT appear as a retired module (the redirect it used to have is gone).
+        expect(runtime.reservedModules.find((mod) => mod.id === 'inbox')).toBeUndefined();
         expect(runtime.reservedModules.find((mod) => mod.id === 'teams')?.retired).toBeTrue();
     });
 

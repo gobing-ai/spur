@@ -18,10 +18,9 @@ export function useProjectTab(): { activeTab: ProjectTabId; selectTab: (id: Proj
         const parts = location.pathname.split('/');
         const idx = parts.indexOf('projects');
         const rawSegment = idx >= 0 ? parts[idx + 1] : undefined;
-        let segment = rawSegment;
-        if (rawSegment === 'processes') segment = 'fleet';
-        if (rawSegment === 'conversation') segment = 'inbox';
-        return PROJECT_TABS.some((t) => t.id === segment) ? (segment as ProjectTabId) : DEFAULT_PROJECT_TAB;
+        // `processes`/`conversation` were retired tab ids (G11 R4): an old deep link falls back to
+        // the default tab rather than a redirect that no longer has a target.
+        return PROJECT_TABS.some((t) => t.id === rawSegment) ? (rawSegment as ProjectTabId) : DEFAULT_PROJECT_TAB;
     })();
 
     const selectTab = (id: ProjectTabId) => {

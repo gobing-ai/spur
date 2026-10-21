@@ -73,7 +73,6 @@ Root [DESIGN.md](../DESIGN.md) owns visual and interaction design;
 | Workflow consolidation — feature-lifecycle owns verification, wrapup/idea on D65 primitives, three workflows removed (feature D66) | [workflow-consolidation.md](design/workflow-consolidation.md) |
 | Decision catalogs and the `spur decision` noun — layered catalogs, CLI contract (`list`/`show`/`run`/`status`/`outcome`), per-decision maker config, `decisions.outcomeMap` accuracy scoring, staged workflow adoption (features P/P1, ADR-134) | [decision-catalog.md](design/decision-catalog.md) |
 | Decision lifecycle events, decision log table and Board Decisions tab, reliability report, workflow decision-point audit and staged adoption roadmap (feature P1) | [decision-observability-and-adoption.md](design/decision-observability-and-adoption.md) |
-| Inbox Board module — durable message plane — **superseded by ADR-116** (retired by 0849; message plane now in the Projects Conversation tab) | [inbox-board-module.md](design/inbox-board-module.md) |
 | Workflow run log (all-in-one per-run log) | [workflow-run-log.md](design/workflow-run-log.md) |
 | Brainstorm: Workflow observability, traceability, live output, and steering for `spur workflow run` | [brainstorm-workflow-observability-steering.md](design/brainstorm-workflow-observability-steering.md) |
 | Cross-process workflow steering control channel | [workflow-steering-control-channel.md](design/workflow-steering-control-channel.md) |

@@ -1,19 +1,21 @@
 import { useEffect, useRef, useState } from 'react';
-import { fetchWithTimeout, resolveApiUrl } from '../../lib/rpc-client';
+import { api, fetchWithTimeout, resolveApiUrl } from '../../lib/rpc-client';
 import { type ActivityRow, historyUrl, parseHistory } from './activity-history';
-import { type InboxMessage, parseInboxMessages } from './conversation';
+
 import MemberTerminal from './MemberTerminal';
 import { type RosterEntry, sessionLabel } from './roster';
 import { useProjectContext } from './useProjectContext';
 
-const inboxUrl = (agent: string) => `${resolveApiUrl()}/messages/inbox?agent=${encodeURIComponent(agent)}`;
 const lifecycleUrl = (id: string, verb: 'start' | 'stop') =>
     `${resolveApiUrl()}/agents/${encodeURIComponent(id)}/${verb}`;
 
+/** One inbox row as the contract returns it (this pane renders a read-only transcript). */
+type InboxMessageRow = Awaited<ReturnType<typeof api.inbox.list>>['messages'][number];
+
 /**
  * Member detail pane (0842 R3/R4/R6): mounts the EXISTING transports only —
- * terminal (MemberTerminal over the process stream), messages (non-consuming
- * `GET /api/messages/inbox`), activity (`GET /api/events/history`) — and the
+ * terminal (MemberTerminal over the process stream), messages (the typed
+ * `inbox.list` read), activity (`GET /api/events/history`) — and the
  * lifecycle verbs those transports already expose (start / stop / stdin via
  * the terminal input; R6 forbids inventing more). A pane, not a route, and
  * never a focus trap: Escape and the explicit close both route through
@@ -52,7 +54,8 @@ export default function MemberDetail({
     // Hoisted so the copy handler closes over a narrowed binding: TS resets property
     // narrowing (`activeSession?.id`) across a closure boundary.
     const activeSessionId = activeSession?.id;
-    const [messages, setMessages] = useState<InboxMessage[] | null>(null);
+    // The inbox row shape comes from the contract, so this panel cannot drift from it.
+    const [messages, setMessages] = useState<InboxMessageRow[] | null>(null);
     const [activity, setActivity] = useState<ActivityRow[] | null>(null);
     const [busy, setBusy] = useState(false);
     const [error, setError] = useState<string | null>(null);
@@ -92,10 +95,10 @@ export default function MemberDetail({
     useEffect(() => {
         let cancelled = false;
         setMessages(null);
-        fetchWithTimeout(new Request(inboxUrl(entry.instanceId)))
-            .then(async (res) => (res.ok ? parseInboxMessages(await res.json()) : []))
-            .then((rows) => {
-                if (!cancelled) setMessages(rows);
+        api.inbox
+            .list({ member: entry.instanceId, direction: 'in' })
+            .then((page) => {
+                if (!cancelled) setMessages(page.messages);
             })
             .catch(() => {
                 if (!cancelled) setMessages([]);

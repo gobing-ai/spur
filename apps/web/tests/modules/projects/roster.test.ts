@@ -90,8 +90,8 @@ describe('buildRoster declared⇄observed join (0842 R1/R2)', () => {
         expect(first(entries).observed.status).toBe('running');
     });
 
-    test('board-operator is a mailbox, not a member — excluded from the roster (step 5)', () => {
-        const entries = buildRoster(snapshot(), [proc('board-operator'), proc('a1')]);
+    test('operator is a mailbox, not a member — excluded from the roster (step 5; G11 renamed board-operator)', () => {
+        const entries = buildRoster(snapshot(), [proc('operator'), proc('a1')]);
         expect(entries.map((e) => e.instanceId)).toEqual(['a1']);
     });
 });

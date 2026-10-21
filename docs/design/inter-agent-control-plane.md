@@ -317,6 +317,13 @@ process, run or generation id. `InboxService` (`packages/app`) is the only reade
 transaction. The events are `message.sent`, `replied`, `claimed`, `delivered`, `failed`, `requeued`
 and `read`. Bus fan-out happens after commit, so a failed event insert rolls back the row.
 
+**Live updates (ledger relay).** `InboxService` persists `message.*` in the same transaction as the row
+it describes and holds no bus, so the server runs one relay per process: snapshot `latestSequence()` at
+boot, then follow `system_events` rows whose name starts with `message.` and re-emit each row's payload on
+the server bus, which `/api/events/planning` fans out to clients. That is the only channel that sees
+writes from agent CLI processes; rows written before boot stay history, and a relayed row renders through
+the same stored-envelope path as the history endpoint, so live and history agree.
+
 **Surfaces:**
 
 | Surface | Calls |
@@ -325,5 +332,5 @@ and `read`. Bus fan-out happens after commit, so a failed event insert rolls bac
 | CLI | `spur message send` (defaults to the orchestrator, sender `operator`), `inbox` (read-only), `show <id>`, `read <id>`, `reply`, `watch`. |
 | `spur agent run` | Claims its inbox into the prompt and settles via the service on exit. |
 | Board Projects → Inbox | Member list → two-direction thread → composer, with reply and mark-read. Updates come over SSE `message.*` events. |
-| Board global input | Sends from `operator` to the orchestrator. |
-| Member terminal | Writes stdin only, never the inbox. |
+| Board global input | Sends as `operator` to the orchestrator through `inbox.send` — no body envelope; receipts come from `inbox.requests`, refreshed on SSE. |
+| Member terminal | Writes stdin only, never the inbox: one keystroke must not arrive twice. |

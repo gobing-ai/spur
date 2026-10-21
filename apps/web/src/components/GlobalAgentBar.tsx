@@ -1,11 +1,10 @@
 import { type KeyboardEvent as ReactKeyboardEvent, useEffect, useMemo, useRef, useState } from 'react';
 import { Button, Textarea } from '@/ui';
-import { fetchWithTimeout, resolveApiUrl } from '../lib/rpc-client';
-import { encodeRequestEnvelope, OPERATOR_AGENT_ID } from '../modules/projects/conversation';
+import { api, fetchWithTimeout, resolveApiUrl } from '../lib/rpc-client';
 import { useConversationDraft } from '../modules/projects/drafts';
-import { classifyReceipt, RECEIPT_LABELS } from '../modules/projects/receipt';
+
 import { useProjectContext } from '../modules/projects/useProjectContext';
-import { useProjectRequests } from '../modules/projects/useProjectRequests';
+
 import type { WebModule } from '../modules/types';
 
 export interface GlobalAgentBarProps {
@@ -120,6 +119,81 @@ export const DEFAULT_SLASH_COMMANDS: readonly SlashCommandCandidate[] = [
 ];
 
 /** Predefined fallback roles when fleet members are not explicitly declared. */
+/**
+ * The global input's receipt states (G11 R2).
+ *
+ * Derived from the contract's own `inbox.requests` row — its `status` ladder and the reconciler's
+ * `reason` — never from a client-side message store. `inFlight` is the only local fact: the request
+ * has been submitted and no row has come back yet.
+ */
+type ReceiptState = 'sending' | 'queued' | 'working' | 'delivered' | 'failed' | 'unresolved' | 'absent';
+
+const RECEIPT_LABELS: Record<
+    ReceiptState,
+    { icon: string; label: string; meaning: string; action: string; tone: 'ok' | 'warn' | 'err' }
+> = {
+    sending: {
+        icon: '…',
+        label: 'Sending',
+        meaning: 'the request is being stored',
+        action: 'wait for the mailbox',
+        tone: 'warn',
+    },
+    queued: {
+        icon: '○',
+        label: 'Queued',
+        meaning: 'the orchestrator has not claimed it yet',
+        action: 'wait for the orchestrator',
+        tone: 'warn',
+    },
+    working: {
+        icon: '◐',
+        label: 'In progress',
+        meaning: 'a member claimed it',
+        action: 'wait for the run to finish',
+        tone: 'warn',
+    },
+    delivered: {
+        icon: '✓',
+        label: 'Delivered',
+        meaning: 'the member consumed the request',
+        action: 'read the reply in the Inbox tab',
+        tone: 'ok',
+    },
+    failed: {
+        icon: '✕',
+        label: 'Failed',
+        meaning: 'delivery did not start or the run errored',
+        action: 'resend, or read the error in the Inbox tab',
+        tone: 'err',
+    },
+    unresolved: {
+        icon: '!',
+        label: 'Unresolved',
+        meaning: 'the run left no verified outcome',
+        action: 'check the Inbox tab for the hold reason',
+        tone: 'warn',
+    },
+    absent: {
+        icon: '·',
+        label: 'No receipt',
+        meaning: 'the request did not reach an inbox',
+        action: 'check the project binding and resend',
+        tone: 'warn',
+    },
+};
+
+/** Map one request row (or its absence) onto the operator-facing state. */
+function receiptStateFor(row: { status: string; reason: string | null } | null, inFlight: boolean): ReceiptState {
+    if (inFlight) return 'sending';
+    if (row === null) return 'absent';
+    if (row.status === 'failed') return 'failed';
+    if (row.reason !== null && row.reason !== '') return row.status === 'delivered' ? 'unresolved' : 'working';
+    if (row.status === 'delivered') return 'delivered';
+    if (row.status === 'claimed') return 'working';
+    return 'queued';
+}
+
 const DEFAULT_ROLES = [
     { id: 'auto', label: 'auto', desc: 'Orchestrator auto-dispatch (default)' },
     { id: 'coder', label: 'coder', desc: 'Implementation & refactoring specialist' },
@@ -191,10 +265,45 @@ export default function GlobalAgentBar({ activeModule: _activeModule }: GlobalAg
     const { draft, setText, persistPending, clearSubmitted } = useConversationDraft();
     const orchestratorInstanceId = project.fleet?.orchestrator?.instanceId;
     const unbound = orchestratorUnbound(project.fleet);
-    const { requests, failed: feedFailed } = useProjectRequests(orchestratorInstanceId ?? null);
+    // Receipts come from the typed contract feed, refetched whenever a `message.*` frame lands.
+    const [requests, setRequests] = useState<ReadonlyMap<string, { status: string; reason: string | null }>>(new Map());
+    const [feedFailed, setFeedFailed] = useState(false);
+    const [sendError, setSendError] = useState<string | null>(null);
+    const [feedTick, setFeedTick] = useState(0);
+    useEffect(() => {
+        void feedTick; // refetch trigger, bumped by the SSE effect below
+        if (orchestratorInstanceId === undefined) return;
+        let cancelled = false;
+        void (async () => {
+            try {
+                const rows = await api.inbox.requests({});
+                if (cancelled) return;
+                setRequests(new Map(rows.map((row) => [row.messageId, { status: row.status, reason: row.reason }])));
+                setFeedFailed(false);
+            } catch {
+                if (!cancelled) setFeedFailed(true);
+            }
+        })();
+        return () => {
+            cancelled = true;
+        };
+    }, [orchestratorInstanceId, feedTick]);
+    useEffect(() => {
+        if (typeof EventSource === 'undefined') return;
+        const stream = new EventSource(`${resolveApiUrl()}/events/planning`);
+        stream.onmessage = (message) => {
+            try {
+                const name = (JSON.parse(message.data) as { eventName?: unknown }).eventName;
+                if (typeof name === 'string' && name.startsWith('message.')) setFeedTick((tick) => tick + 1);
+            } catch {
+                // A malformed frame is not worth a state update.
+            }
+        };
+        return () => stream.close();
+    }, []);
 
     const receipt = lastMessageId !== null ? (requests.get(lastMessageId) ?? null) : null;
-    const receiptState = classifyReceipt(receipt, project.fleet, inFlight);
+    const receiptState = receiptStateFor(receipt, inFlight);
     const label = RECEIPT_LABELS[receiptState];
     const showReceipt = inFlight || lastMessageId !== null;
     const liveText = showReceipt ? `${label.label} — Next: ${label.action}` : '';
@@ -303,30 +412,27 @@ export default function GlobalAgentBar({ activeModule: _activeModule }: GlobalAg
                 : undefined;
         const requestKey = pending !== undefined ? pending.requestKey : crypto.randomUUID();
         persistPending(requestKey);
+        setSendError(null);
         setInFlight(true);
         setLastMessageId(null);
         setPaletteDismissed(true);
         try {
-            const res = await fetchWithTimeout(
-                new Request(`${resolveApiUrl()}/messages`, {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({
-                        to: targetInstance,
-                        from: OPERATOR_AGENT_ID,
-                        body: encodeRequestEnvelope(submitted.text, submitted.refs),
-                        requestKey,
-                        projectPath: path,
-                    }),
-                }),
-            );
-            if (!res.ok) return;
-            const payload: unknown = await res.json().catch(() => null);
-            const msgId = (payload as { msgId?: unknown } | null)?.msgId;
-            setLastMessageId(typeof msgId === 'string' ? msgId : null);
+            // G11 R2: the typed contract. No `from` (the server defaults to `operator`) and no body
+            // envelope: the operator's text travels verbatim. The `SPUR-REQUEST/1` refs scheme is
+            // retired with the envelope (R4), so attached references no longer ride the body.
+            const sent = await api.inbox.send({
+                ...(targetInstance !== null ? { to: targetInstance } : {}),
+                body: submitted.text,
+                requestKey,
+                ...(path !== null ? { projectPath: path } : {}),
+            });
+            setLastMessageId(sent.message.id);
             clearSubmitted(submitted.revision);
-        } catch {
-            // Network failure — draft + pending intact
+        } catch (cause) {
+            // The contract refuses a stale project (409) or an unknown recipient (400). Swallowing
+            // that left the operator with a draft and no explanation, so the reason is surfaced in
+            // the receipt slot; the draft and its pending key stay intact for a retry.
+            setSendError(cause instanceof Error ? cause.message : 'the message was not sent');
         } finally {
             setInFlight(false);
         }
@@ -664,6 +770,12 @@ export default function GlobalAgentBar({ activeModule: _activeModule }: GlobalAg
                 >
                     Orchestrator unavailable — no orchestrator instance is bound to this project, so requests cannot be
                     delivered yet.
+                </div>
+            )}
+
+            {sendError !== null && (
+                <div role="alert" className="rounded-lg px-2.5 py-1 text-xs bg-spur-error/10 text-spur-error">
+                    Not sent: {sendError}
                 </div>
             )}
 

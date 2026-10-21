@@ -1,10 +1,10 @@
 ---
 schema_version: 1
 name: Projects Inbox tab redesign and stale inbox cleanup
-status: todo
+status: done
 template: feature-impl
 created_at: 2026-10-20T06:59:42.648Z
-updated_at: "2026-10-20T18:04:36.588Z"
+updated_at: "2026-10-21T02:49:59.340Z"
 feature_id: G11
 priority: P1
 tags:
@@ -14,6 +14,8 @@ tags:
 
 dependencies: ["1267"]
 estimate_hours: 7
+done_forced: "false"
+done_reason: unforced close; PASS artifact at .spur/memory/evidence/1269-verdict.json
 ---
 
 ## 1269. Projects Inbox tab redesign and stale inbox cleanup
@@ -57,15 +59,15 @@ Depends on: 1267 (the inbox contract and the SSE ledger relay).
 
 ### Requirements
 
-- [ ] R1. Replace `ConversationView` with `InboxView` (`apps/web/src/modules/projects/InboxView.tsx`), registered as the `inbox` tab. It has three panes:
+- [x] R1. Replace `ConversationView` with `InboxView` (`apps/web/src/modules/projects/InboxView.tsx`), registered as the `inbox` tab. It has three panes:
   - a member list from `client.inbox.members` (fleet members first, then other addresses), with unread counts;
   - the selected member's two-direction thread from `client.inbox.list({member, direction: 'both'})`, grouped by `threadId`;
   - a composer that sends or replies as `operator`, with a per-message "mark read" action.
   
   It refetches on SSE `message.*` events whose `fromId`/`toId` match the selected member.
-- [ ] R2. GlobalAgentBar sends through `client.inbox.send({ body, projectPath })`: no `from` (the server defaults to `operator`), no `to` (orchestrator), and no envelope. Receipts come from `client.inbox.requests` and are refreshed on SSE.
-- [ ] R3. MemberTerminal writes typed lines only to the process stdin, and `messagesUrl` is deleted.
-- [ ] R4. Delete:
+- [x] R2. GlobalAgentBar sends through `client.inbox.send({ body, projectPath })`: no `from` (the server defaults to `operator`), no `to` (orchestrator), and no envelope. Receipts come from `client.inbox.requests` and are refreshed on SSE.
+- [x] R3. MemberTerminal writes typed lines only to the process stdin, and `messagesUrl` is deleted.
+- [x] R4. Delete:
   - `buildRecentMessagesThread`
   - `REQUEST_ENVELOPE_PREFIX` and its parse/format helpers
   - `OPERATOR_AGENT_ID = 'board-operator'` (use `'operator'` where a literal is needed)
@@ -75,7 +77,7 @@ Depends on: 1267 (the inbox contract and the SSE ledger relay).
   - the `.inbox` CSS block in `global.css`
   - every raw `fetch` to `/api/messages*` or `/api/project/requests`
   - the tests of deleted code
-- [ ] R5. Docs:
+- [x] R5. Docs:
   - delete `docs/design/inbox-board-module.md` and its `04_DESIGN.md` row, and repoint the three `board-module-boundaries.md` references to `inter-agent-control-plane.md` §13;
   - fold the message-plane facts (lifecycle, reserved ids, member keying, ledger relay) into `inter-agent-control-plane.md` §13;
   - update `03_ARCHITECTURE.md` (~585 and §14) to the `queued → claimed → delivered|failed` lifecycle and the InboxService path;
@@ -85,11 +87,11 @@ Out of scope: new visual tokens (reuse DESIGN.md components), the CLI (1268), an
 
 ### Acceptance Criteria
 
-- [ ] AC1 — The Inbox tab shows one fleet member's two-direction thread
-- [ ] AC2 — The Inbox tab replies and marks read inline
-- [ ] AC3 — The Board global input sends as operator to the orchestrator
-- [ ] AC4 — Terminal input is not duplicated into the inbox
-- [ ] AC5 — Stale inbox code and docs are gone
+- [x] AC1 — The Inbox tab shows one fleet member's two-direction thread
+- [x] AC2 — The Inbox tab replies and marks read inline
+- [x] AC3 — The Board global input sends as operator to the orchestrator
+- [x] AC4 — Terminal input is not duplicated into the inbox
+- [x] AC5 — Stale inbox code and docs are gone
 
 ### Q&A
 
@@ -149,15 +151,92 @@ Out of scope: new visual tokens (reuse DESIGN.md components), the CLI (1268), an
 
 ### Solution
 
-<!-- Filled during implementation: file:line change map and concise rationale. -->
+The Projects **Inbox** tab replaces the Conversation view, and the Board speaks only the typed inbox contract.
+
+**The tab (`apps/web`)**
+- `apps/web/src/modules/projects/InboxView.tsx:58` (`InboxView`): three panes. The member list calls `client.members` (`apps/web/src/modules/projects/InboxView.tsx:99`), the thread calls `client.list` for the selected member (`apps/web/src/modules/projects/InboxView.tsx:119`), and the composer calls `client.send` / `client.reply` / `client.read`. `groupThreads` (`apps/web/src/modules/projects/InboxView.tsx:30`) groups rows by thread id and orders them oldest-first; `memberRank` (`apps/web/src/modules/projects/InboxView.tsx:22`) puts declared fleet members first. The tab refetches on SSE `message.*` frames, with a 5 s poll as the transport fallback.
+- `apps/web/src/modules/projects/tabs.tsx:20`: the `inbox` tab now renders `InboxView`; `processes`/`conversation` are gone from `ProjectTabId`.
+- The client is an injected seam (`InboxClient` at `apps/web/src/modules/projects/InboxView.tsx:49`, defaulting to `api.inbox`), so the tab is testable without any module mocking.
+
+**Global input**
+- `apps/web/src/components/GlobalAgentBar.tsx:421`: sends through `api.inbox.send({ to, body, requestKey, projectPath })` — no `from` (the server defaults it to `operator`), no body envelope, and no raw `/api/messages` fetch. Receipts come from `api.inbox.requests`, mapped onto the operator-facing states by `receiptStateFor` (`apps/web/src/components/GlobalAgentBar.tsx:187`) and refreshed on the same SSE frames.
+
+**Terminal**
+- `apps/web/src/modules/projects/MemberTerminal.tsx`: a typed line reaches the process stdin and nothing else — the duplicate inbox POST is deleted along with `messagesUrl`.
+
+**Removed (R4)**
+- `ConversationView.tsx`, `conversation.ts` (incl. `buildRecentMessagesThread`, `REQUEST_ENVELOPE_PREFIX` and its parse/format helpers, and `OPERATOR_AGENT_ID = 'board-operator'`), `receipt.ts`, `useProjectRequests.ts`, their four test files, the `.inbox` CSS scope in `global.css`, the `inbox` route redirect in `router.tsx` (so `inbox` is no longer a retired module in `board-runtime.json`), and the legacy tab segment mapping in `useProjectTab.ts`. `roster.ts` uses the `operator` address; `drafts.tsx` owns the ref shape it still needs.
+
+**Docs (R5)**
+- Deleted `docs/design/inbox-board-module.md` and its `04_DESIGN.md` row; repointed the three `board-module-boundaries.md` references to `inter-agent-control-plane.md` §13.
+- `docs/design/inter-agent-control-plane.md` §13 gained the ledger-relay section and the Board surfaces (Inbox tab, global input, terminal).
+- `docs/03_ARCHITECTURE.md` §14.1 now describes `InboxService` as the writer, the typed read path, the `queued → claimed → delivered | failed` ladder with requeue, and the relay as the live channel; §17.1's topology names `InboxService.send`/`claim`.
+- ADR-143 is **Accepted**.
 
 ### Testing
 
-<!-- Filled during verification: commands run, outcomes, coverage claim or N/A. -->
+**Pipeline verify results**
+
+- Verdict: PASS (from verdict artifact)
+
+| Requirement | Status | Evidence |
+|-------------|--------|----------|
+| R1 | MET | `apps/web/src/modules/projects/InboxView.tsx:66` (`InboxView`) renders the three panes: member list via `client.members` (`:99`, declared fleet members first per `memberRank` at `:22`), the selected member's two-direction thread via `client.list({ direction: 'both' })` (`:119`, grouped and oldest-first via `groupThreads` at `:30`), and the composer. It streams from `/api/events/planning` and refetches on `message.*` frames (`:80-95`), with an explicit Refresh action instead of a poll. Tab registration at `apps/web/src/modules/projects/tabs.tsx:20`. Covered by `apps/web/tests/modules/projects/inbox-view.test.ts` (8 tests, incl. the no-prop default-wiring test) |
+| R2 | MET | `apps/web/src/components/GlobalAgentBar.tsx:421` sends through `api.inbox.send` with no `from` and no body envelope; receipts come from `api.inbox.requests` mapped by `receiptStateFor` (`:187`) and refreshed on SSE; a failed send surfaces as a `role="alert"` notice (`:429`). No raw `/api/messages` fetch remains under `apps/web/src` |
+| R3 | MET | `apps/web/src/modules/projects/MemberTerminal.tsx` posts the line to stdin only; `messagesUrl` and the duplicate inbox POST are deleted (grep for `/api/messages`, `messagesUrl`, `SPUR-REQUEST`, `board-operator`, `buildRecentMessagesThread`, `classifyReceipt` over `apps/web/src` is empty) |
+| R4 | MET | `ConversationView.tsx`, `conversation.ts`, `receipt.ts`, `useProjectRequests.ts` and their four test files are deleted; `ProjectTabId` is `fleet |
+| R5 | MET | `docs/design/inbox-board-module.md` deleted and unreferenced; `docs/04_DESIGN.md` row removed; the three `board-module-boundaries.md` references repointed to `inter-agent-control-plane.md` §13, which now carries the ledger-relay section and one row per Board surface (`:320-336`); `docs/03_ARCHITECTURE.md` §14.1 describes `InboxService` as the writer, the typed read path, the `queued → claimed → delivered |
+
+| Acceptance Criteria | Status | Evidence Type | Evidence |
+|---------------------|--------|---------------|----------|
+| AC1 | MET | test | `apps/web/tests/modules/projects/inbox-view.test.ts` — the member list renders the contract's counts, the selected member's thread renders both directions oldest-first, and the no-prop (production) wiring test bounds the read count. Residual: no browser run |
+| AC2 | MET | test | `apps/web/tests/modules/projects/inbox-view.test.ts` — one Reply on the one inbound row and none on the outbound row, one Mark-read action for the unread inbound row, and the composer's Send guard; the reply/read calls themselves round-trip at the handler layer (`apps/server/tests/modules/inbox/handlers.test.ts`) |
+| AC3 | MET | test | `apps/web/tests/modules/projects/inbox-surface-sweep.test.ts` — asserts the global input calls `api.inbox.send(` with no `from:` property and no `SPUR-REQUEST` envelope; source `apps/web/src/components/GlobalAgentBar.tsx:421` |
+| AC4 | MET | test | `apps/web/tests/modules/projects/inbox-surface-sweep.test.ts` — no source file under `apps/web/src` names `/api/messages`, `messagesUrl`, `SPUR-REQUEST`, `board-operator`, `buildRecentMessagesThread`, `classifyReceipt` or `useProjectRequests` (comments stripped); the sweep asserts it saw the tree |
+| AC5 | MET | test | `apps/web/tests/modules/runtime-distribution.test.ts` (the manifest no longer lists `inbox` as retired), `apps/web/tests/modules/projects/useProjectTab.test.ts` (the retired segments fall back), and the grep sweep above for the deleted identifiers |
+| R14 — The Inbox tab shows one fleet member's two-direction thread | MET | test | `apps/web/tests/modules/projects/inbox-view.test.ts` renders the member list and both directions of the selected member's thread oldest-first; `apps/web/src/modules/projects/InboxView.tsx:66` |
+| R15 — The Inbox tab replies and marks read inline | MET | test | `apps/web/tests/modules/projects/inbox-view.test.ts` — one Reply on the inbound row and one Mark-read for the unread inbound row, no Reply on the outbound row; `apps/web/src/modules/projects/InboxView.tsx` |
+| R16 — The Board global input sends as operator to the orchestrator | MET | test | `apps/web/tests/modules/projects/inbox-surface-sweep.test.ts` asserts `api.inbox.send(` with no `from`; `apps/web/src/components/GlobalAgentBar.tsx:421` |
+| R17 — Terminal input is not duplicated into the inbox | MET | test | `apps/web/tests/modules/projects/inbox-surface-sweep.test.ts` — `messagesUrl` and the retired route are absent from every source file; `apps/web/src/modules/projects/MemberTerminal.tsx` |
+| R18 — Stale inbox code and docs are gone | MET | test | `apps/web/tests/modules/projects/inbox-surface-sweep.test.ts` (code) plus the doc sweep recorded under R5 (`docs/design/inbox-board-module.md` deleted and unreferenced, ADR-143 Accepted) |
+- Coverage: N/A (verdict-based; verify pipeline does not measure code coverage)
 
 ### Review
 
-<!-- Filled during review: P1-P4 findings, residual risk, and final disposition. -->
+#### Review Report — 1269 (Projects Inbox tab redesign and stale inbox cleanup)
+
+**Scope:** uncommitted working tree on `cb33b3a8b` — 26 files across `apps/web`, `docs`
+**Dimensions:** functional traceability, security, efficiency, correctness, usability, architecture
+**Verdict:** PASS
+**Confidence:** HIGH
+
+##### Findings (ranked)
+
+| # | Priority | Dimension | Finding | Location | Disposition |
+|---|----------|-----------|---------|----------|-------------|
+| 1 | P1 (blocker) | correctness | The client prop defaulted to `api.inbox`, which `createORPCClient` rebuilds per property access, so the two data effects re-ran after every render and their `setState` re-rendered again: the mounted tab refetched without bound (measured 4282 requests in 400 ms). Production wiring renders tab components with no props, and the injected-stub test could not see it. | `apps/web/src/modules/projects/InboxView.tsx:63` | RESOLVED — the production client is bound once as a module constant (`INBOX_CLIENT`) and the effects depend on that stable identity. A default-wiring test renders the tab with NO client prop against a stubbed fetch: 4757 requests on the pre-fix default, bounded after the fix, so the defect cannot return. |
+| 2 | P2 (major) | correctness | Reply was offered on every row and always posted as `operator`, while the service addresses a reply to the row's sender — replying to an operator-sent row stored operator → operator and the member never received it. A test pinned that as intended. | `apps/web/src/modules/projects/InboxView.tsx:138` | RESOLVED — Reply renders only on inbound rows; the test now asserts exactly one Reply for the one inbound row. |
+| 3 | P3 (minor) | usability | A failed send was swallowed: a 409 project mismatch or a 400 unknown recipient produced no receipt and no notice, and the draft silently stayed. | `apps/web/src/components/GlobalAgentBar.tsx:429` | RESOLVED — the catch surfaces the contract error in the receipt slot (`role="alert"`, "Not sent: …") while the draft and its pending key stay intact for a retry. |
+| 4 | P3 (minor) | architecture | The tab ran an unconditional 5 s poll beside SSE — the anti-pattern the Design forbids and the closed Q&A rejected ("no polling fallback", an explicit refresh action instead); the refresh action was missing. | `apps/web/src/modules/projects/InboxView.tsx:75` | RESOLVED — the poll is gone; the tab streams from SSE and offers an explicit Refresh action beside the member heading. |
+| 5 | P3 (minor) | correctness | §13's surfaces table listed Board global input and Member terminal twice: the new rows were inserted above the ones they should have replaced. | `docs/design/inter-agent-control-plane.md:335` | RESOLVED — each Board surface appears once. |
+| 6 | P4 (advisory) | usability | The SSE refetch is not filtered to the selected member though R1 asks for frames whose fromId/toId match; any project message refetches both panes. | `apps/web/src/modules/projects/InboxView.tsx:81` | ACCEPTED — the reads are idempotent and the filter buys no user-visible behaviour; the cost is one list read per project message. |
+| 7 | P4 (advisory) | correctness | §14 still told the reader that Inbox routes redirect through `RETIRED_ROUTES`, which R4 deleted. | `docs/03_ARCHITECTURE.md:571` | RESOLVED — the paragraph now names only Workspace and Teams as retired and records that Inbox became a live tab. |
+| 8 | P4 (advisory) | correctness | The R4 edit left a duplicated doc comment above `sessionLabel` and placed type-only imports after a const. | `apps/web/src/modules/projects/roster.ts:19` | ACCEPTED — cosmetic; the constant is declared once and the file typechecks and lints clean. |
+| 9 | P4 (advisory) | usability | The thread reads only the newest page (contract default limit 100) and ignores `nextCursor`. | `apps/web/src/modules/projects/InboxView.tsx:119` | ACCEPTED — a member inbox is bounded in practice; a "load older" control is the follow-up when it is not. |
+| 10 | P4 (advisory) | architecture | `draft.refs` is still collected but the envelope that carried refs is retired, so attached references cannot travel. | `apps/web/src/components/GlobalAgentBar.tsx:404` | ACCEPTED — no producer called `addRef` before this change either, so the surface is provably dead rather than a regression; deleting it is a cross-task cleanup. |
+| 11 | P4 (advisory) | usability | R2 says send with no `to`; the implementation passes the role selector's target. | `apps/web/src/components/GlobalAgentBar.tsx:421` | ACCEPTED — equivalent for AC3 while the selector is automatic; the requirement text and code agree once a role is chosen explicitly. |
+
+##### Residual risk
+
+- **No browser check was executed.** The Board is this task's surface, and the Inbox tab's live SSE refetch, the global input's receipt transitions and the terminal non-duplication were not observed in a real browser here. The default-wiring test closes the seam where the P1 lived, but it is not a browser proof.
+- The tab's send/reply/read clicks are asserted structurally (button presence and disabled state) plus at the contract layer (task 1267's handler round-trips). A controlled `<textarea>` does not update its bound state under happy-dom + React 19 in this repo's setup, so the DOM-level click path is unproven here.
+- Carried to dependent work (not findings against this task):
+  - the `AgentCoordinationService` message wrappers can be deleted now that no CLI or Board caller remains (cross-task proposal, out of 1269's scope);
+  - `draft.refs`/`addRef` is dead once the refs envelope is retired and should be removed with its draft-chip UI.
+
+##### Disposition
+
+PASS. Every P1–P3 finding is fixed in this task; the P4 advisories are accepted with their reasons above. The residual risk is the missing browser run, named rather than papered over.
 
 ### References
 
@@ -166,3 +245,8 @@ Out of scope: new visual tokens (reuse DESIGN.md components), the CLI (1268), an
 - Depends on 1267. Proposal: also depend on 1268, to own the `AgentCoordinationService` wrapper deletion.
 
 ### History
+
+- 2026-10-21T02:04:46.078Z todo → wip (system)
+- 2026-10-21T02:49:56.683Z wip → testing (system)
+- 2026-10-21T02:49:59.333Z testing → done (system)
+

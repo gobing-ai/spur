@@ -21,7 +21,7 @@ authority: derived (ADR wins on conflict)
 This doc answers one question: after `spur agent run` roles (M4/M5, both `done`) landed, what are
 Workspace, Inbox, and Teams each *for*, and which should still exist. It is a boundary
 specification, not a UI plan — no React ships and no files move from this ticket. It supersedes the
-per-module ownership fragments in `workspace-design.md` and `inbox-board-module.md` by naming the
+per-module ownership fragments in `workspace-design.md` and `inter-agent-control-plane.md` §13 by naming the
 one genuine overlap and its disposition, and leaves those docs intact as their module's detail.
 
 ## 1. What the feature history already decided (R4)
@@ -126,7 +126,7 @@ migration cost in §5 (extract one control/modal helper) rather than a module me
 
 - `apps/web/src/lib/process-stream.ts` (frame parse/append/backoff) is now consumed only by Teams —
   the header notes "Shared by the Teams member terminal and the Inbox agent timeline (0422 R9)" is
-  historical; task 0197 removed Inbox's frame streaming, and `inbox-board-module.md` §5/§9 records
+  historical; task 0197 removed Inbox's frame streaming, and `inter-agent-control-plane.md` §13 records
   Inbox renders no stdout/stderr.
 - Inbox's `AgentTab` opens no `EventSource` and renders no frames (`inbox/AgentTab.tsx` header: "It
   opens no process `EventSource` and renders no stdout/stderr rows — Teams exclusively owns the
@@ -218,7 +218,7 @@ no CLI surface change is made.
 
 - `docs/design/workspace-design.md` — Workspace = team-scoped composition (ADR-052); this doc narrows
   it by removing Overview and naming the roster overlap.
-- `docs/design/inbox-board-module.md` — Inbox message-plane contract; this doc confirms its §9 G3
+- `docs/design/inter-agent-control-plane.md` §13 — Inbox message-plane contract; this doc confirms its G3
   boundary holds post-role.
 - `docs/design/dev-spine-cost-and-drift.md`, `event-tracking.md`, `run-record-contract.md` — prior I6
   docs; no boundary is re-decided here, only the board-module ownership fragment.

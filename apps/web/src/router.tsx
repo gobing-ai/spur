@@ -15,7 +15,6 @@ import type { WebModule } from './modules/types';
  */
 export const RETIRED_ROUTES: ReadonlyArray<{ from: string; to: string }> = [
     { from: 'workspace', to: '/board/projects' },
-    { from: 'inbox', to: '/board/projects/inbox' },
     { from: 'teams', to: '/board/settings/agents' },
 ];
 

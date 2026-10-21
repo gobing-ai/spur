@@ -566,28 +566,31 @@ eagerly globs sibling directories that export a named `module: WebModule` (`id`,
 `sidebarLabel`, `order`, `component`). A new module needs **no registry edit** — discovery is
 automatic; `order` only places it in the sidebar. Current modules: `observability` (10), `history`
 (20), `features` (30), `task-kanban` id `tasks` (40), `projects` (45), plus shell-level pieces
-(sidebar, project switcher). Workspace, Inbox, and Teams were retired by task 0849 once the Projects
-module carried their capabilities; their routes redirect into Projects (`apps/web/src/router.tsx`
-`RETIRED_ROUTES`).
+(sidebar, project switcher). Workspace and Teams were retired by task 0849 once the Projects module
+carried their capabilities; their routes redirect into Projects (`apps/web/src/router.tsx`
+`RETIRED_ROUTES`). Inbox is no longer a retired route at all: G11 made it a live Projects tab, so its
+redirect was deleted.
 
 ### 14.1 Current shipped state: two channels, two panes
 
 Spur has **two independent channels** between the Board and a backend coding agent. They are never
 merged — not in storage, not in delivery, and no longer in a single display surface. The Projects
-module presents each channel where it is consumed: durable messages in the Conversation tab, process
-frames in the Agents tab's member terminal.
+module presents each channel where it is consumed: durable messages in the Projects **Inbox** tab
+(member list → two-direction thread → composer), process frames in the Agents tab's member terminal.
 
 | | Durable message queue | Process pipe |
 | --- | --- | --- |
-| Write path | `AgentCoordinationService.sendMessage` → DAO `enqueue` | `POST /api/processes/:id/stdin` |
-| Read path | `AgentCoordinationService.getInbox` / `listRecent` / `drainPending` | `GET /api/processes/:id/stream` (SSE) |
-| Delivery to agent | Undeclared projects use `agent loop` → `drainPending`; fleets use the dispatch gate below | written straight to `PipeProcess` stdin |
-| Storage | SQLite (`inbox_messages`), durable, `queued → injected` lifecycle | in-memory ring buffer, bounded (default 500), lost on restart |
+| Write path | `InboxService` (the only writer) → `InboxDao`; each mutation commits its row with one `system_events` row | `POST /api/processes/:id/stdin` |
+| Read path | `InboxService.list` / `thread` / `requests` (typed oRPC `inbox` namespace); `spur message inbox` | `GET /api/processes/:id/stream` (SSE) |
+| Delivery to agent | `InboxService.claim` in `agent loop` / `agent run`; fleets use the dispatch gate below | written straight to `PipeProcess` stdin |
+| Storage | SQLite (`inbox_messages`), durable, `queued → claimed → delivered \| failed` lifecycle with requeue | in-memory ring buffer, bounded (default 500), lost on restart |
+| Live to the Board | one server relay follows `system_events` rows with prefix `message` and re-emits them on the bus | the process stream itself |
 | Ordering cursor | `createdAt` | `seq` (monotonic) + `ts` |
 
-The Board surfaces of these two channels are separate by design: Conversation (0841) renders the
-request/response thread over the durable queue, and the Agents tab's `MemberDetail` (0842) mounts the
-member terminal over the process stream plus a read-only inbox and activity pane. The retired Inbox
+The Board surfaces of these two channels are separate by design: the Projects Inbox tab renders one
+member's two-direction thread over the durable queue (with reply and mark-read inline), and the Agents
+tab's `MemberDetail` (0842) mounts the member terminal over the process stream plus a read-only inbox
+and activity pane. A terminal line reaches the process stdin and never the inbox. The retired Inbox
 module's client-side `mergeTimeline` (a discriminated union of messages and frames in
 `apps/web/src/modules/inbox/timeline.ts`) went with that module; nothing replaced it, because each
 channel now has its own pane and a per-agent timeline was the only place the two ever met.
@@ -801,8 +804,8 @@ marker file, or extra transport. Surfaces: [CLI contracts](design/cli-contracts.
 ```text
 Agent A (spec reviewer)
   → spur message send --to implementer
-  → inbox_messages (queued)
-  → implementer agent loop drain
+  → InboxService.send → inbox_messages (queued)
+  → implementer agent loop claim
   → OccupantRef { specId, agentKind, processId, runId, generation }
   → CoordinationRun + artifact paths
 Agent A

@@ -14,8 +14,17 @@
  * needs it.
  */
 import { createContext, type ReactNode, useContext, useEffect, useMemo, useState } from 'react';
-import type { ConversationRef } from './conversation';
-import { sameRef } from './conversation';
+/** An explicitly attached reference: a task by WBS id, or a feature by id. */
+export type ConversationRef = { kind: 'task'; wbs: string } | { kind: 'feature'; id: string };
+
+/** Reference identity — the same kind and id name the same reference (draft dedupe). */
+export function sameRef(a: ConversationRef, b: ConversationRef): boolean {
+    return (
+        a.kind === b.kind &&
+        (a.kind === 'task' ? a.wbs === (b as { wbs: string }).wbs : a.id === (b as { id: string }).id)
+    );
+}
+
 import { useProjectContext } from './useProjectContext';
 
 export const DRAFT_STORAGE_KEY = 'spur.board.projects.draft.v1';
