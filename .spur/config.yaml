@@ -52,9 +52,12 @@ bootstrap:
       # republishes provenance (ADR-079), so a ready report costs no tokens.
       - name: history-daily-report
         cron: "0 5 * * *"
-        # Total child budget. The chain runs a full-corpus import and a model-driven
-        # twelve-section workflow: one hour is ~6x the observed healthy history-anatomy runtime.
-        timeoutMs: 3600000
+        # Total child budget. Measured 2026-10-19..21 on pi-dsv4.1-flash-volc: enrich alone
+        # runs 45-52 min (vs 5-15 min on the prior elected executors), so the old 1h bound
+        # SIGTERMed validate (exit 143) at exactly 3600s on both days. 1h45m covers enrich +
+        # a normal validate, stays under the server queue's 2h visibility timeout, and still
+        # finishes before the 07:00 history-refresh window.
+        timeoutMs: 6300000
         command: >-
           bun apps/cli/src/index.ts --no-logo history import --source all &&
           bun apps/cli/src/index.ts --no-logo workflow run config/workflows/history-anatomy.yaml --quiet

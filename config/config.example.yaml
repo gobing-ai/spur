@@ -58,6 +58,10 @@ bootstrap:
         command: >-
           spur --no-logo history import --source all &&
           spur --no-logo workflow run config/workflows/history-anatomy.yaml --quiet
+        # Without this the chain inherits the 10-minute scheduler default and dies mid-validate.
+        # 1h45m: enrich (45-52 min on a slow executor) + validate, still below the server
+        # queue's 2h visibility timeout.
+        timeoutMs: 6300000
 
 # ── Spur app section (validated by spurConfigSchema in
 # @gobing-ai/spur-config) ──
