@@ -3,7 +3,7 @@ kind: design
 title: "CLI grammar, initialization, agents, teams and rules"
 status: implemented
 created_at: 2026-09-09
-updated_at: 2026-10-16
+updated_at: 2026-10-21
 related: ["0822", "0850", "0856", "0857", "0860", "0861", "1064", "1080", "1081"]
 tags: [contract, cli, agent]
 ---
@@ -961,6 +961,13 @@ failure states that the worker may or may not be running. Both point at `spur wo
 `spur workflow trace <run-id>` and deliberately do **not** recommend an immediate replay. Confirmation
 — including a successful observation on the final allowed poll — keeps the unchanged `started`
 response, the plan-artifact stamp and exactly one dispatch.
+
+**Async worker launch (`run` and `continue`).** The launcher preserves the executable, optional
+runtime entrypoint and command arguments as separate argv elements, including paths with spaces.
+POSIX uses individually quoted arguments through `nohup`; Windows uses PowerShell `Start-Process`
+with the executable and a Windows-escaped argument line supplied through environment values.
+Percent signs, exclamation marks, JSON quotes and trailing backslashes do not pass through `cmd`
+expansion. Windows batch launchers (`.cmd` / `.bat`) and NUL-containing arguments are refused.
 
   Worked example — re-drive the publish tail of a completed daily run after fixing a credential:
 

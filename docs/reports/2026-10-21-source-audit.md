@@ -18,13 +18,28 @@ Companion to [the full feature audit](2026-10-21-feature-legacy-audit.md). Revie
 | Task scenario validation assumed sibling feature directories | Existing configured directory resolver used by validation; nonsibling-directory regression. |
 | Removed accepted-baseline policy retained suppression code | Delete unused accepted-map option/filter and helper; retain strict/severity behavior and observed finding identity tests. |
 
-Independent reviews traced sibling consumers and produced follow-up fixes for project-change send completion, draft identity, full guest instruction bodies and exact non-orchestrator request classification. Focused suites, workspace typechecks and script contract checks passed before integration. The task pipeline owns the final gate and certified requirement/acceptance evidence.
+Independent reviews traced sibling consumers and produced follow-up fixes for project-change send completion, draft identity, full guest instruction bodies and exact non-orchestrator request classification. Focused suites, workspace typechecks and script contract checks passed before integration. The integrated task gate passed: **11,557 tests, zero failures, 43,708 assertions across 742 files**, plus lint, all workspace typechecks and pre/post rules. All nine requirements and nine acceptance criteria are certified MET; residual blocking findings are zero. A review-table authoring error stopped the original pipeline close; the table/citation was corrected and normal guarded standalone recording completed without a waiver.
 
 The dependency patch includes source, runtime distribution and declarations and is registered in the lockfile. It remains pinned to ts-db 0.5.32 until an upstream release provides the facade. Unsupported adapters reject inbox mutations explicitly. No upstream package was published.
 
 ## Task 1272 — workflow and process lifecycle
 
-The independent review reproduced unbounded watchdog shutdown, first-attempt workflow status surviving a successful retry, hidden same-kind durable action rows, credential-bearing HTTP exception text, Windows launch argument loss, and follow timer/listener leakage. These findings and their regressions belong to task 1272; its final implementation and verification are recorded separately after task 1271 closes. Workflow cancellation's existing structured JSON success behavior was confirmed intentional and preserved.
+The independent review reproduced unbounded watchdog shutdown, first-attempt workflow status surviving a successful retry, hidden same-kind durable action rows, credential-bearing HTTP exception text, Windows launch argument loss, and follow timer/listener leakage. The fixes and regressions are integrated through task 1272:
+
+| Finding | Repair |
+| --- | --- |
+| TERM-resistant suite blocked its watchdog indefinitely | Independent one-second TERM-to-KILL escalation, owned process-group reaping; bounded Windows taskkill with owned-handle fallback. |
+| Successful retry retained its first failure as current status | Latest recorded attempt supplies current status; every attempt remains visible. |
+| Ambiguous same-kind action rows disappeared | Diagnostics name every candidate durable action row ID without inventing a mapping. |
+| HTTP exception exposed requested URL or header credentials | Existing URL sanitizer plus longest-first individual header-value redaction, including overlapping values. |
+| Async Windows worker argv lost bytes, including source paths with spaces | Existing resolveSpurArgv at both callers; data-only PowerShell Start-Process handoff and standard Windows argument escaping. |
+| Progress follow leaked resources and could not promptly abort a long poll | Finally cleanup for deadline/listener and abortable shared polling sleep; preserve configurable cadence. |
+
+Focused app/CLI/watchdog regressions and typechecks passed in the isolated implementation tree; the integrated task gate is the final authority. Workflow cancellation's existing structured JSON success behavior was confirmed intentional and preserved.
+
+## Unsuppressed corpus audit
+
+The required `bun run corpus-check` completed with **463 errors and 299 warnings, no suppressions**, in the isolated audit checkout. This includes unrecoverable historical verdict evidence, scenario-row identity mismatch, missing dogfood artifacts and other corpus diagnostics. Gitignored historical receipts are absent in this checkout; these counts are distinct from the original feature-check baseline in the companion report. The corpus audit is **not green**, and no legacy evidence was fabricated or waived.
 
 ## Limits
 

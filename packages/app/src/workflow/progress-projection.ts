@@ -525,7 +525,7 @@ export async function projectWorkflowProgress(
                 if (sameKindDefCount > 1 && candidateRows.length > 1 && candidateRows.length !== sameKindDefCount) {
                     diagnostics.push({
                         code: 'ambiguous-action',
-                        message: `Ambiguous mapping for action ${actionKey} (kind ${kind}) in state ${stateId}`,
+                        message: `Ambiguous mapping for action ${actionKey} (kind ${kind}) in state ${stateId}; action rows: ${candidateRows.map((row) => row.id).join(', ')}`,
                     });
                     actionStatus = 'ambiguous';
                 } else {
@@ -533,7 +533,7 @@ export async function projectWorkflowProgress(
                     // recorded rows as attempts — retries stay visible in recorded order instead
                     // of vanishing claimed-but-unsurfaced (1085 R4 residual). With several
                     // same-kind def actions, rows keep distributing one per action as before.
-                    const matchingRow = candidateRows[0];
+                    const matchingRow = sameKindDefCount === 1 ? candidateRows.at(-1) : candidateRows[0];
                     if (matchingRow) {
                         const rowsToMap = sameKindDefCount === 1 ? candidateRows : [matchingRow];
                         for (const row of rowsToMap) {
@@ -550,7 +550,7 @@ export async function projectWorkflowProgress(
                             });
                         }
 
-                        // Action status keeps today's semantics: the first recorded row decides.
+                        // Retries keep their history; the latest recorded attempt is the current status.
                         if (matchingRow.status === 'running') {
                             actionStatus = 'running';
                         } else if (matchingRow.status === 'passed') {

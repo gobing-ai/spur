@@ -37,6 +37,7 @@ import { availableParallelism, loadavg, tmpdir } from 'node:os';
 import { delimiter, dirname, join, resolve } from 'node:path';
 import { getEnvVar, getEnvVars } from '@gobing-ai/spur-config';
 import { certifyCanonicalRun, startCanonicalRun } from './coverage-certification';
+import { windowsTestSuiteTermination } from './test-suite-termination';
 
 // Internal launcher flag (task 1203): consumed BEFORE forwarding; never reaches Bun.
 const publishCoverage = Bun.argv.includes('--publish-coverage');
@@ -137,19 +138,38 @@ async function runSuiteChild(argv: string[]): Promise<number> {
     }, HEARTBEAT_MS);
     heartbeat.unref?.();
     let expired = false;
+    let childSettled = false;
+    let windowsKiller: ReturnType<typeof Bun.spawn> | undefined;
+    let killTimer: ReturnType<typeof setTimeout> | undefined;
     const timer =
         WATCHDOG_MS > 0
             ? setTimeout(() => {
+                  if (childSettled || child.exitCode !== null || child.signalCode !== null) return;
                   expired = true;
                   process.stderr.write(
                       `run-tests: suite exceeded the ${clock(WATCHDOG_MS)} watchdog — killing the child process group. ` +
                           'A blocked child cannot be interrupted by --timeout; raise SPUR_TEST_WATCHDOG_MS if the suite legitimately needs longer\n',
                   );
                   try {
-                      if (child.pid !== undefined) process.kill(-child.pid, 'SIGTERM');
+                      if (process.platform === 'win32') {
+                          windowsKiller = Bun.spawn(windowsTestSuiteTermination(child.pid));
+                      } else {
+                          process.kill(-child.pid, 'SIGTERM');
+                      }
                   } catch {
-                      // already gone — the exit path below reports the code
+                      // Missing taskkill still has the independently armed owned-child fallback below.
                   }
+                  // A TERM-resistant suite never resolves child.exited, so escalation cannot wait for finally.
+                  killTimer = setTimeout(() => {
+                      if (childSettled || child.exitCode !== null || child.signalCode !== null) return;
+                      try {
+                          if (process.platform === 'win32') child.kill('SIGKILL');
+                          else process.kill(-child.pid, 'SIGKILL');
+                      } catch {
+                          // The group already exited.
+                      }
+                  }, 1000);
+                  killTimer.unref?.();
               }, WATCHDOG_MS)
             : undefined;
     timer?.unref?.();
@@ -163,12 +183,19 @@ async function runSuiteChild(argv: string[]): Promise<number> {
         }
         return code ?? 1;
     } finally {
+        childSettled = true;
         clearInterval(heartbeat);
         if (timer !== undefined) clearTimeout(timer);
-        try {
-            if (child.pid !== undefined) process.kill(-child.pid, 'SIGKILL');
-        } catch {
-            // the child already exited; nothing to reap
+        if (killTimer !== undefined) clearTimeout(killTimer);
+        if (windowsKiller !== undefined) {
+            // Let the already-started tree cleanup finish; its own timeout bounds this wait.
+            await windowsKiller.exited;
+        } else if (process.platform !== 'win32') {
+            try {
+                process.kill(-child.pid, 'SIGKILL');
+            } catch {
+                // the child already exited; nothing to reap
+            }
         }
     }
 }

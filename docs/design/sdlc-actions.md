@@ -3,7 +3,7 @@ kind: design
 title: Stack-neutral SDLC actions — builder.actions, spur self exec, and script-structure consolidation
 status: implemented
 created_at: 2026-10-16
-updated_at: 2026-10-19
+updated_at: 2026-10-21
 related:
   - docs/features/A92_stack-neutral-sdlc-actions-builder-actions-spur-self-exec-and-script-structure-consolidation.md
   - docs/design/harness-surface-governance.md
@@ -238,6 +238,14 @@ and lands here in the same change.
 | `dependency-drift-check` | repo tool | `spur-dev.ts dependency-drift-check` (L3) |
 | `importer-schema-check` | repo tool | `spur self migrate` + `--check` |
 | `load-history` | repo tool | `spur history import` + `analyze` |
+
+The L2 `run-tests` launcher owns a suite watchdog independently of Bun's per-test timeout:
+`SPUR_TEST_WATCHDOG_MS` defaults to 60 minutes; `0` disables it. Expiry returns exit 124. On POSIX
+the owned process group receives `SIGTERM`, then `SIGKILL` after one second if still running;
+escalation does not wait for the suite to exit. On Windows the launcher attempts owned-tree
+termination with `taskkill /PID <pid> /T /F`, bounds that tool to one second, and independently
+kills its owned child handle after one second if needed. Completion clears watchdog and escalation
+timers, and callbacks check child exit state before targeting its pid.
 
 Duplicates and aliases: task 1226 removed the two exact duplicate aliases of `spur-check` /
 `spur-check:full` and of `check`, and folded the verbose rule aliases into `--verbose` passthrough

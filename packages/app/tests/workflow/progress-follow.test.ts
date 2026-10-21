@@ -1,4 +1,4 @@
-import { describe, expect, test } from 'bun:test';
+import { describe, expect, spyOn, test } from 'bun:test';
 import { applyCliMigrations, SystemEventDao } from '@gobing-ai/spur-domain';
 import { createDbAdapter } from '@gobing-ai/ts-db';
 import type { WorkflowDef } from '@gobing-ai/ts-dual-workflow-engine';
@@ -172,5 +172,113 @@ describe('followWorkflowProgress', () => {
         expect(preAbortedProjections.length).toBe(1);
 
         db.close();
+    });
+
+    test('completion and consumer return clear the deadline and detach the external abort listener (1272)', async () => {
+        const db = await setupDb();
+        const timers = spyOn(globalThis, 'setTimeout');
+        const clears = spyOn(globalThis, 'clearTimeout');
+        try {
+            for (const completed of [true, false]) {
+                const id = `cleanup-${completed}`;
+                await db.run(
+                    "INSERT INTO runs (id, workflow_name, status, started_at, metadata_json, created_at, updated_at) VALUES (?, 'test-stream-wf', 'running', '2026-08-19T00:00:00Z', '{}', 1, 1)",
+                    id,
+                );
+                const controller = new AbortController();
+                const add = spyOn(controller.signal, 'addEventListener');
+                const remove = spyOn(controller.signal, 'removeEventListener');
+                try {
+                    const stream = followWorkflowProgress(id, {
+                        db,
+                        workflowDef: testWorkflowDef,
+                        signal: controller.signal,
+                        timeoutMs: 12345,
+                    });
+                    await stream.next();
+                    if (completed) await db.run("UPDATE runs SET status = 'done' WHERE id = ?", id);
+                    await new SystemEventDao(db).insert({
+                        id: `event-${id}`,
+                        event_name: 'workflow.completed',
+                        run_id: id,
+                        occurred_at: new Date().toISOString(),
+                    });
+                    await stream.next();
+                    if (completed) expect((await stream.next()).done).toBe(true);
+                    else await stream.return(undefined);
+                    const timerIndex = timers.mock.calls.findLastIndex((call) => call[1] === 12345);
+                    expect(timerIndex).toBeGreaterThanOrEqual(0);
+                    expect(clears).toHaveBeenCalledWith(timers.mock.results[timerIndex]?.value);
+                    expect(remove).toHaveBeenCalledWith('abort', add.mock.calls[0]?.[1]);
+                } finally {
+                    add.mockRestore();
+                    remove.mockRestore();
+                }
+            }
+        } finally {
+            timers.mockRestore();
+            clears.mockRestore();
+            db.close();
+        }
+    });
+
+    test('honors the custom event polling cadence (1272)', async () => {
+        const db = await setupDb();
+        const timers = spyOn(globalThis, 'setTimeout');
+        try {
+            await db.run(
+                "INSERT INTO runs (id, workflow_name, status, started_at, metadata_json, created_at, updated_at) VALUES ('custom-poll', 'test-stream-wf', 'running', '2026-08-19T00:00:00Z', '{}', 1, 1)",
+            );
+            const controller = new AbortController();
+            const abort = setTimeout(() => controller.abort(), 5);
+            try {
+                for await (const _projection of followWorkflowProgress('custom-poll', {
+                    db,
+                    workflowDef: testWorkflowDef,
+                    signal: controller.signal,
+                    pollIntervalMs: 37,
+                })) {
+                    // The empty ledger must poll before observing cancellation.
+                }
+                expect(timers.mock.calls.some((call) => call[1] === 37)).toBe(true);
+            } finally {
+                clearTimeout(abort);
+            }
+        } finally {
+            timers.mockRestore();
+            db.close();
+        }
+    });
+
+    test('deadline and external abort interrupt a poll much longer than their budget (1272)', async () => {
+        const db = await setupDb();
+        try {
+            await db.run(
+                "INSERT INTO runs (id, workflow_name, status, started_at, metadata_json, created_at, updated_at) VALUES ('long-poll', 'test-stream-wf', 'running', '2026-08-19T00:00:00Z', '{}', 1, 1)",
+            );
+            for (const external of [false, true]) {
+                const controller = new AbortController();
+                const stream = followWorkflowProgress('long-poll', {
+                    db,
+                    workflowDef: testWorkflowDef,
+                    signal: controller.signal,
+                    pollIntervalMs: 60_000,
+                    ...(external ? {} : { timeoutMs: 10 }),
+                });
+                await stream.next();
+                const started = Date.now();
+                const abort = external ? setTimeout(() => controller.abort(), 10) : undefined;
+                try {
+                    expect((await stream.next()).done).toBe(true);
+                    expect(Date.now() - started).toBeLessThan(1000);
+                } finally {
+                    if (abort !== undefined) clearTimeout(abort);
+                    controller.abort();
+                    await stream.return(undefined);
+                }
+            }
+        } finally {
+            db.close();
+        }
     });
 });

@@ -550,6 +550,47 @@ describe('run-tests watchdog — a blocked child cannot hang the gate (task 1265
         }
     }, 20_000);
 
+    test('SIGTERM resistance still ends within the shutdown grace with no surviving worker (1272)', async () => {
+        if (process.platform === 'win32') return; // POSIX process-group proof; Windows launch is tested separately.
+        const dir = mkdtempSync(join(tmpdir(), 'spur-watchdog-resistant-'));
+        const pidFile = join(dir, 'pid');
+        writeFileSync(
+            join(dir, 'resistant.ts'),
+            `process.on('SIGTERM', () => console.error('SIGTERM_IGNORED'));
+await Bun.write(${JSON.stringify(pidFile)}, String(process.pid));
+setInterval(() => {}, 1000);
+`,
+        );
+        const started = Date.now();
+        const child = Bun.spawn([process.execPath, PRODUCER, join(dir, 'resistant.ts')], {
+            cwd: dir,
+            env: { ...getEnvVars(), SPUR_TEST_WATCHDOG_MS: '2000' },
+            stdout: 'pipe',
+            stderr: 'pipe',
+        });
+        const cleanup = setTimeout(() => {
+            if (existsSync(pidFile)) {
+                try {
+                    process.kill(-Number(readFileSync(pidFile, 'utf8')), 'SIGKILL');
+                } catch {
+                    // Already reaped by the watchdog.
+                }
+            }
+        }, 8000);
+        try {
+            const [exit, stderr] = await Promise.all([child.exited, new Response(child.stderr).text()]);
+            expect(exit).toBe(124);
+            expect(stderr).toContain('SIGTERM_IGNORED');
+            expect(Date.now() - started).toBeLessThan(7000);
+            expect(existsSync(pidFile)).toBe(true);
+            expect(() => process.kill(Number(readFileSync(pidFile, 'utf8')), 0)).toThrow();
+        } finally {
+            clearTimeout(cleanup);
+            child.kill();
+            rmSync(dir, { recursive: true, force: true });
+        }
+    }, 12_000);
+
     test('a healthy run is untouched by the watchdog and keeps its exit code', () => {
         const dir = mkdtempSync(join(tmpdir(), 'spur-watchdog-ok-'));
         try {

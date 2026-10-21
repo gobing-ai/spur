@@ -60,16 +60,16 @@ export async function* followWorkflowProgress(
     }
 
     const abortController = new AbortController();
+    const onAbort = () => abortController.abort();
     if (options.signal) {
         if (options.signal.aborted) {
             abortController.abort();
         } else {
-            options.signal.addEventListener('abort', () => abortController.abort(), { once: true });
+            options.signal.addEventListener('abort', onAbort, { once: true });
         }
     }
-    if (options.timeoutMs !== undefined && options.timeoutMs > 0) {
-        setTimeout(() => abortController.abort(), options.timeoutMs);
-    }
+    const timer =
+        options.timeoutMs !== undefined && options.timeoutMs > 0 ? setTimeout(onAbort, options.timeoutMs) : undefined;
 
     // 3. Follow system events strictly after the snapshot
     const eventStream = followSystemEventsAfter(getDb, {
@@ -77,22 +77,33 @@ export async function* followWorkflowProgress(
         match: (row) =>
             row.run_id === runId || (typeof row.payload_json === 'string' && row.payload_json.includes(runId)),
         signal: abortController.signal,
+        pollIntervalMs: options.pollIntervalMs,
     });
 
-    for await (const _event of eventStream) {
-        if (abortController.signal.aborted) break;
+    try {
+        for await (const _event of eventStream) {
+            if (abortController.signal.aborted) break;
 
-        // Wakeup re-reads persisted workflow rows (never trusts event payload for mutation)
-        const currentDb = await getDb();
-        const projection = await projectWorkflowProgress(runId, {
-            ...options,
-            db: currentDb,
-        });
+            // Wakeup re-reads persisted workflow rows (never trusts event payload for mutation)
+            const currentDb = await getDb();
+            const projection = await projectWorkflowProgress(runId, {
+                ...options,
+                db: currentDb,
+            });
 
-        yield projection;
+            yield projection;
 
-        if (projection.status === 'completed' || projection.status === 'failed' || projection.status === 'cancelled') {
-            break;
+            if (
+                projection.status === 'completed' ||
+                projection.status === 'failed' ||
+                projection.status === 'cancelled'
+            ) {
+                break;
+            }
         }
+    } finally {
+        if (timer !== undefined) clearTimeout(timer);
+        options.signal?.removeEventListener('abort', onAbort);
+        abortController.abort();
     }
 }

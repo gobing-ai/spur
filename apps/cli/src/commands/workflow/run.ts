@@ -43,7 +43,7 @@ import type { CliContext } from '../../context';
 import { maybeTriggerHistoryRefresh } from '../../history-refresh';
 import { toEnvelopeJson, toJson, writeJsonError } from '../../output';
 import { attachSystemEventLedger } from '../../system-event-ledger';
-import { resolveSpurBin } from '../../workflow/resolve-spur-bin';
+import { resolveSpurArgv, resolveSpurBin } from '../../workflow/resolve-spur-bin';
 import { SHARED_OPTIONS } from '../shared-options';
 import {
     asyncRegisterTimeoutMs,
@@ -492,10 +492,7 @@ export function registerWorkflowRunCommand(workflow: Command, context: CliContex
                     context.setExitCode(1);
                     return;
                 }
-                const spurParts = resolveSpurBin().split(' ');
-                const spurBin = spurParts[0] ?? process.execPath;
-                const spurArgs = spurParts.slice(1);
-                const cmd: string[] = [...spurArgs, 'workflow', 'run', file, '--run-id', runId];
+                const cmd: string[] = ['workflow', 'run', file, '--run-id', runId];
                 if (options.vars) {
                     cmd.push('--vars', options.vars);
                 }
@@ -560,7 +557,7 @@ export function registerWorkflowRunCommand(workflow: Command, context: CliContex
                     // Detached via ProcessExecutor + nohup (SPUR_ASYNC_WORKER set in env);
                     // the expected digest crosses the process boundary so the worker can
                     // verify its own resolution before acting (0768 R2).
-                    await spawnAsyncWorkflowWorker(spurBin, cmd, {
+                    await spawnAsyncWorkflowWorker(resolveSpurArgv(), cmd, {
                         SPUR_EXPECTED_DEFINITION_DIGEST: resolvedDefinition.digest,
                     });
                 } catch {
