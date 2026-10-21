@@ -4,7 +4,7 @@
  * The task's distribution evidence must come from a build made by the test, never from a
  * `dist/web` that happens to exist (the plan's step 0 precondition).
  */
-import { cpSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { cpSync, linkSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { mkdtemp, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -46,8 +46,19 @@ export interface BoardBuildOptions {
  * test-adapter injection window below is workspace-wide too, so every build of this root holds the
  * lock.
  */
-const BUILD_LOCK = join(tmpdir(), 'spur-board-0988-build.lock');
+export const BUILD_LOCK = join(tmpdir(), 'spur-board-0988-build.lock');
 const BUILD_LOCK_WAIT_MS = 600_000;
+
+/**
+ * Per-process staging name for the pid.
+ *
+ * The pid is written here first and then hard-linked onto {@link BUILD_LOCK}, so the lock name
+ * appears only once its content is on disk. Writing the lock directly (`flag: 'wx'`) publishes an
+ * empty file for the microseconds between `open` and `write`, and a reader that parsed that empty
+ * file as an abandoned lock deleted a live one — which let two builds share the workspace `.astro`
+ * prerender cache and fail with `Cannot find module … prerender-entry.<hash>.mjs`.
+ */
+const BUILD_LOCK_STAGING = `${BUILD_LOCK}.${process.pid}`;
 
 /** The file lock is not re-entrant; a process-local queue keeps a second caller from waiting on itself. */
 let buildQueue: Promise<unknown> = Promise.resolve();
@@ -61,14 +72,17 @@ function lockOwnerAlive(pid: number): boolean {
     }
 }
 
-async function acquireBuildLock(): Promise<void> {
+export async function acquireBuildLock(): Promise<void> {
     const deadline = Date.now() + BUILD_LOCK_WAIT_MS;
     for (;;) {
         try {
-            writeFileSync(BUILD_LOCK, String(process.pid), { flag: 'wx' });
+            writeFileSync(BUILD_LOCK_STAGING, String(process.pid));
+            linkSync(BUILD_LOCK_STAGING, BUILD_LOCK);
             return;
         } catch {
             // Held by another process — check whether its owner is still alive.
+        } finally {
+            rmSync(BUILD_LOCK_STAGING, { force: true });
         }
         let owner: number;
         try {
@@ -97,12 +111,17 @@ export async function buildBoardToTemp(options: BoardBuildOptions = {}): Promise
     return queued;
 }
 
+/** Release {@link acquireBuildLock}. Exported with it for the cross-process exclusion test. */
+export function releaseBuildLock(): void {
+    rmSync(BUILD_LOCK, { force: true });
+}
+
 async function buildBoardLocked(options: BoardBuildOptions): Promise<string> {
     await acquireBuildLock();
     try {
         return await buildBoardOnce(options);
     } finally {
-        rmSync(BUILD_LOCK, { force: true });
+        releaseBuildLock();
     }
 }
 
