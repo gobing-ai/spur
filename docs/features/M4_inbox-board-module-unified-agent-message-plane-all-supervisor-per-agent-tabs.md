@@ -2,11 +2,11 @@
 schema_version: 1
 id: "M4"
 name: "Inbox Board module: unified agent message plane (All / Supervisor / per-agent tabs)"
-status: done
+status: deprecated
 priority: P2
 tags: ["wayfinder-map"]
 created_at: "2026-08-03T23:00:42.623Z"
-updated_at: "2026-10-21T18:38:18.383Z"
+updated_at: "2026-10-21T20:05:27.204Z"
 ---
 
 # M4: Inbox Board module: unified agent message plane (All / Supervisor / per-agent tabs)
@@ -215,7 +215,12 @@ location is decided (see *Not yet specified* above). Task 0422 deliberately excl
 Gherkin ship set is R1–R7 and R9–R14 only. When the flag lands, re-add the R8 scenario and
 open a covering implement task.
 
+Deprecated 2026-10-21 (post-G11 legacy audit, docs/reports/2026-10-21-feature-legacy-audit.md; operator-confirmed): the standalone Inbox Board module was retired by G64, and G11 supplies the Projects Inbox and the new message plane. Task 0422 is deprecated with it; its implementation history is preserved as evidence.
+
 ## History
+
 - 2026-08-05T23:46:20.572Z backlog → active (system)
 - 2026-08-05T23:46:20.742Z active → verifying (system)
 - 2026-08-05T23:46:20.898Z verifying → done (system)
+- 2026-10-21T20:05:08.551Z done → deprecated (system)
+

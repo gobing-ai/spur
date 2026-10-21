@@ -2,11 +2,11 @@
 schema_version: 1
 id: "F61"
 name: "Corpus gate acceptance parity: the per-task gate honors accepted baseline debt"
-status: done
+status: deprecated
 priority: P2
 tags: []
 created_at: "2026-08-18T05:12:01.296Z"
-updated_at: "2026-08-26T00:37:46.759Z"
+updated_at: "2026-10-21T20:05:27.521Z"
 ---
 
 # F61: Corpus gate acceptance parity: the per-task gate honors accepted baseline debt
@@ -73,6 +73,8 @@ Feature: Corpus citation repair
 
 ## Notes
 
+Deprecated 2026-10-21 (post-G11 legacy audit; operator-confirmed): D61 task 0775 / ADR-108 retired accepted corpus-debt baselines, and task 1271 R9 removed the residual accepted-map suppression path. Tasks 0586 and 0670 are deprecated with it; historical measurements and F91 matcher ownership are preserved.
+
 ## History
 
 - 2026-08-18T06:21:20.972Z backlog → active (system)
@@ -81,3 +83,5 @@ Feature: Corpus citation repair
 - 2026-08-25T22:02:02.529Z done → active (system)
 - 2026-08-26T00:37:46.448Z active → verifying (system)
 - 2026-08-26T00:37:46.759Z verifying → done (system)
+- 2026-10-21T20:05:09.619Z done → deprecated (system)
+

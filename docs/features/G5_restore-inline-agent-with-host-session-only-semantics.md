@@ -2,11 +2,11 @@
 schema_version: 1
 id: "G5"
 name: "Restore inline --agent with host-session-only semantics"
-status: done
+status: deprecated
 priority: P2
 tags: []
 created_at: "2026-08-15T16:01:40.730Z"
-updated_at: "2026-08-15T18:01:46.205Z"
+updated_at: "2026-10-21T20:05:27.816Z"
 ---
 
 # G5: Restore inline --agent with host-session-only semantics
@@ -78,9 +78,13 @@ Feature: Restore inline --agent with host-session-only semantics
 
 ## Notes
 
+Deprecated 2026-10-21 (post-G11 legacy audit; operator-confirmed): the strict zero-dispatch inline / headless-rejection contract was replaced by task 0687 / ADR-087's executor-selector contract, which current code implements. Tasks 0565 and 0566 are deprecated with it as historical record.
+
 ## History
 
 - 2026-08-15T16:17:20.013Z moved L → G5 (system)
 - 2026-08-15T17:22:32.480Z backlog → active (system)
 - 2026-08-15T17:58:52.858Z active → verifying (system)
 - 2026-08-15T18:01:46.205Z verifying → done (system)
+- 2026-10-21T20:05:11.140Z done → deprecated (system)
+

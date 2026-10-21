@@ -1,10 +1,10 @@
 ---
 schema_version: 1
 name: "Reconcile the corpus-baseline backlog: 77 unbaselined findings and the anchor-citation class"
-status: done
+status: deprecated
 template: issue
 created_at: 2026-08-25T17:28:11.217Z
-updated_at: "2026-08-26T02:49:33.912Z"
+updated_at: "2026-10-21T20:05:10.632Z"
 ac_altitude: task-local
 feature_id: F61
 ---
@@ -514,3 +514,7 @@ depends on F93 landing and on this checkout being clean of other writers' in-fli
 - 2026-08-26T00:07:59.880Z todo → wip (system)
 - 2026-08-26T00:28:05.905Z wip → testing (system)
 - 2026-08-26T00:36:43.972Z testing → done (system)
+
+- 2026-10-21 deprecated with feature F61 (operator-confirmed post-G11 legacy audit). Implementation history retained as evidence.
+- 2026-10-21T20:05:10.632Z done → deprecated (system)
+

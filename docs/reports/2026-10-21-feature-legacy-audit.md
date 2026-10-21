@@ -2,8 +2,8 @@
 title: Post-G11 feature legacy and integrity audit
 created_at: 2026-10-21
 updated_at: 2026-10-21
-status: review-complete-deprecation-pending
-related: [G11, '1270', '1271']
+status: review-complete-deprecations-applied
+related: [G11, '1270', '1271', '1272']
 tags: [audit, docs, planning]
 ---
 
@@ -19,7 +19,7 @@ Reviewed all **195 feature records** and enumerated **1,267 tasks** through the 
 | G5 | 0565, 0566 | B task 0687 / ADR-087 replaces strict zero-dispatch inline and headless rejection. |
 | F61 | 0586, 0670 | D61 task 0775 / ADR-108 retired accepted corpus baselines. |
 
-**Confirmation is pending. No feature/task lifecycle state has been changed by this audit.** Robin’s “continue” authorizes continuing the review; it is not interpreted as approval of an unasked deprecation set. Preserve historical implementation and measurement evidence when a record is later frozen.
+**Confirmed by Robin 2026-10-21, including conditional B3 + 0572.** M4, G5, F61 and B3 and tasks 0422, 0565, 0566, 0586, 0670 and 0572 were moved to `deprecated` through the CLI with a dated Notes/History entry; no live task depended on them. Robin’s “continue” authorizes continuing the review; it is not interpreted as approval of an unasked deprecation set. Preserve historical implementation and measurement evidence when a record is later frozen.
 
 **Keep M5**: role-only resolution and role/executor attribution remain in FleetService, config and agent list. Annotate the retired Teams carrier and link G65/G71 rather than freeze the live behavior. B3 is likewise retained with an ADR-078/A4 supersession note because parts remain live. H82/H83, G1/G2/G61–G65, D2 and older workflow features contain mixed current/historical contracts; do not blanket-deprecate their tasks.
 

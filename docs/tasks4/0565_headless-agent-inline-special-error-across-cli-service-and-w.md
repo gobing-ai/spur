@@ -3,7 +3,7 @@ template: feature-impl
 schema_version: 1
 name: "Headless --agent inline special error across CLI, service, and workflow action"
 description: ""
-status: done
+status: deprecated
 type: task
 profile: standard
 feature_id: G5
@@ -13,7 +13,7 @@ tags: ["agent", "cli-surface", "adr-047"]
 dependencies: []
 ac_numbering: task-local
 created_at: "2026-08-15T16:12:04.361Z"
-updated_at: "2026-08-15T21:43:35.616Z"
+updated_at: "2026-10-21T20:05:11.657Z"
 ---
 
 ## 0565. Headless --agent inline special error across CLI, service, and workflow action
@@ -253,6 +253,11 @@ L
 <!-- Links to the parent feature, design docs, related tasks, or external references. -->
 
 ### History
+
 - 2026-08-15T17:09:19.769Z todo → wip (system)
 - 2026-08-15T17:22:27.045Z wip → testing (system)
 - 2026-08-15T17:22:44.800Z testing → done (system)
+
+- 2026-10-21 deprecated with feature G5 (operator-confirmed post-G11 legacy audit). Implementation history retained as evidence.
+- 2026-10-21T20:05:11.657Z done → deprecated (system)
+

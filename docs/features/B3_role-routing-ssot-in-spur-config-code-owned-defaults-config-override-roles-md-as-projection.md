@@ -2,11 +2,11 @@
 schema_version: 1
 id: "B3"
 name: "Role routing SSOT in spur config: code-owned defaults, config override, roles.md as projection"
-status: verifying
+status: deprecated
 priority: P2
 tags: []
 created_at: "2026-08-16T18:40:58.950Z"
-updated_at: "2026-10-21T18:35:02.618Z"
+updated_at: "2026-10-21T20:05:28.099Z"
 ---
 
 # B3: Role routing SSOT in spur config: code-owned defaults, config override, roles.md as projection
@@ -86,6 +86,11 @@ Feature: Role routing SSOT in spur config
 
 ADR-078 / A4 superseded ADR-061’s code-owned configuration SSOT. Role overrides, fallback resolution and roles.md projection remain live; retain this record as the original implementation history rather than treating the superseded SSOT claim as current.
 
+Deprecated 2026-10-21 (post-G11 legacy audit; operator-confirmed): the code-owned role-routing SSOT is superseded by A4 / ADR-078. Surviving behavior (role overrides, fallback resolution, roles.md projection) is owned by A4. Task 0572 is deprecated with it as historical record.
+
 ## History
+
 - 2026-08-16T22:33:54.207Z backlog → active (system)
 - 2026-08-24T17:41:04.939Z active → verifying (system)
+- 2026-10-21T20:05:12.830Z verifying → deprecated (system)
+
