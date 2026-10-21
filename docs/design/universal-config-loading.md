@@ -106,12 +106,12 @@ Newly conforming failure sites:
 | Composition-root config-load failure (`main()`) | `config` |
 | `agent doctor <role>` unresolvable role / no eligible executor (`agent-service` `resolveRole` failure) | `agent-resolution` |
 | `agent run` dispatch failure (`agent-service` `run` outcome) under `--json` | `agent-resolution` |
-| `message send` argument/usage failures (`message.ts`) under `--json` | `usage` |
+| `message send` argument/usage failures (`message/send.ts`) under `--json` | `usage` |
 
 `toJson` stays CLI-owned; `packages/app` services emit the same envelope shape through the injected
 `output.write` when their `json` flag is set (doctor already receives `args.json`; `run` reads
 `flags.json`), otherwise `output.error(message)`. Exit codes are unchanged. Existing envelope sites
-(`agent/wait.ts` waitFail, `message.ts` sendWaitFail, builder/projects) are untouched.
+(`agent/wait.ts` waitFail, `message/shared.ts` sendWaitFail, builder/projects) are untouched.
 
 **Surface-change record:** this is a behavior-only output change on existing verbs (ADR-051 gate per
 the 2026-08-16 lesson); consent is recorded by the A5 design-review approval of this satellite.

@@ -2,7 +2,7 @@ import { describe, expect, test } from 'bun:test';
 import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { AgentCoordinationService, CLAIM_LEASE_MS, MAX_DELIVERY_ATTEMPTS } from '@gobing-ai/spur-app';
+import { AgentCoordinationService, CLAIM_LEASE_MS, InboxService, MAX_DELIVERY_ATTEMPTS } from '@gobing-ai/spur-app';
 import { CoordinationRunDao, createMigratedDb, SystemEventDao } from '@gobing-ai/spur-domain';
 import { createNodeFileSystem } from '@gobing-ai/ts-runtime';
 import { defaultSleep, parseInterval, runMessageWatch } from '../../src/commands/message';
@@ -360,6 +360,7 @@ describe('spur message dispatch', () => {
 /** Build a AgentCoordinationService over a temp project dir + in-memory DB for watch tests. */
 async function makeWatchService(): Promise<{
     svc: AgentCoordinationService;
+    service: InboxService;
     cleanup: () => Promise<void>;
 }> {
     const cwd = await mkdtemp(join(tmpdir(), 'spur-watch-'));
@@ -372,6 +373,8 @@ async function makeWatchService(): Promise<{
     });
     return {
         svc,
+        // The watch loop talks to the inbox plane directly (G11 R5).
+        service: new InboxService({ getDb: async () => db }),
         cleanup: async () => {
             db.close();
             await rm(cwd, { recursive: true, force: true });
@@ -381,13 +384,13 @@ async function makeWatchService(): Promise<{
 
 describe('spur message watch', () => {
     test('surfaces a new message within one poll tick (no real sleep)', async () => {
-        const { svc, cleanup } = await makeWatchService();
+        const { svc, service, cleanup } = await makeWatchService();
         const out = createCapturedOutput();
         try {
             // Pre-seed one message; watch starts, sees it on tick 1, then exits at maxIterations.
             await svc.sendMessage('coder', 'planner', 'first message');
             await runMessageWatch(
-                svc,
+                service,
                 out,
                 { agent: 'planner', intervalMs: 1000, json: false },
                 { maxIterations: 1, sleep: async () => {} },
@@ -400,7 +403,7 @@ describe('spur message watch', () => {
     });
 
     test('surfaces messages added between polls; each exactly once', async () => {
-        const { svc, cleanup } = await makeWatchService();
+        const { svc, service, cleanup } = await makeWatchService();
         const out = createCapturedOutput();
         try {
             // First tick: nothing. Between tick 1 and 2, drop two new messages.
@@ -414,7 +417,7 @@ describe('spur message watch', () => {
                 }
             };
             await runMessageWatch(
-                svc,
+                service,
                 out,
                 { agent: 'planner', intervalMs: 1, json: false },
                 { maxIterations: 3, sleep },
@@ -431,12 +434,12 @@ describe('spur message watch', () => {
     });
 
     test('--json emits one JSON object per new message line', async () => {
-        const { svc, cleanup } = await makeWatchService();
+        const { svc, service, cleanup } = await makeWatchService();
         const out = createCapturedOutput();
         try {
             await svc.sendMessage('coder', 'planner', 'json-payload');
             await runMessageWatch(
-                svc,
+                service,
                 out,
                 { agent: 'planner', intervalMs: 1, json: true },
                 { maxIterations: 1, sleep: async () => {} },
@@ -453,12 +456,12 @@ describe('spur message watch', () => {
     });
 
     test('never marks messages read (SURFACES, never CONSUMES)', async () => {
-        const { svc, cleanup } = await makeWatchService();
+        const { svc, service, cleanup } = await makeWatchService();
         const out = createCapturedOutput();
         try {
             await svc.sendMessage('coder', 'planner', 'watched');
             await runMessageWatch(
-                svc,
+                service,
                 out,
                 { agent: 'planner', intervalMs: 1, json: true },
                 { maxIterations: 2, sleep: async () => {} },
@@ -473,14 +476,14 @@ describe('spur message watch', () => {
     });
 
     test('aborts cleanly on signal', async () => {
-        const { svc, cleanup } = await makeWatchService();
+        const { service, cleanup } = await makeWatchService();
         const out = createCapturedOutput();
         const controller = new AbortController();
         try {
             // Abort after the first poll — no maxIterations, so the signal is the only exit.
             const sleep = async () => controller.abort();
             await runMessageWatch(
-                svc,
+                service,
                 out,
                 { agent: 'planner', intervalMs: 1, json: false },
                 { signal: controller.signal, sleep },
@@ -961,13 +964,15 @@ describe('spur message send --json usage errors (0693 envelope adoption)', () =>
         }
     });
 
-    test('--json with empty --to emits the usage error (exit 2)', async () => {
+    test('--json with empty --to and no orchestrator emits the usage error (exit 2)', async () => {
         const { cwd, out, dbUrl, cleanup } = await makeCtx();
         try {
             const code = await main(['message', 'send', '--json', '--to', '', 'hi'], { cwd, output: out, dbUrl });
             expect(code).toBe(2);
             const parsed = JSON.parse(out.messages[0] ?? '{}');
-            expect(parsed.error.message).toBe('message send requires --to <id> or --role <name>');
+            // G11 R1 changed the meaning of an empty `--to`: it now means "the orchestrator", so
+            // this project (which has none) gets the no-orchestrator usage error instead.
+            expect(parsed.error.message).toContain('no orchestrator member');
         } finally {
             await cleanup();
         }
@@ -989,5 +994,206 @@ describe('spur message send --json usage errors (0693 envelope adoption)', () =>
         } finally {
             await cleanup();
         }
+    });
+
+    describe('G11 1268 — the operator surface', () => {
+        test('send with no --to addresses the bound orchestrator as operator', async () => {
+            const { cwd, out, dbUrl, cleanup } = await makeCtx();
+            try {
+                // A declared orchestrator: the planner-role member carrying `purpose: orchestrator`,
+                // named by the `agent.fleet.orchestrator` pointer (0836). This is the ONLY branch that
+                // proves R1 — an earlier version of this test accepted exit 2 as a pass, which kept a
+                // dead resolution path green.
+                await mkdir(join(cwd, '.spur'), { recursive: true });
+                await writeFile(
+                    join(cwd, '.spur', 'config.yaml'),
+                    [
+                        'agent:',
+                        '  fleet:',
+                        '    enabled: true',
+                        '    orchestrator: orch',
+                        '    members:',
+                        '      - id: orch',
+                        '        role: planner',
+                        '        purpose: orchestrator',
+                        '        executor: claude',
+                        '',
+                    ].join('\n'),
+                );
+
+                const code = await main(['message', 'send', '--json', 'hello orchestrator'], {
+                    cwd,
+                    dbUrl,
+                    output: out,
+                    env: { SPUR_SKIP_GLOBAL_CONFIG: 'true' },
+                });
+                expect(code).toBe(0);
+                const payload = JSON.parse(out.messages.at(-1) ?? '{}');
+                // The address is the orchestrator's member instance id, and the sender is the operator.
+                expect(payload.toId).toContain('orch');
+                expect(payload.status).toBe('queued');
+
+                const db = await createMigratedDb({ url: dbUrl });
+                const rows = await new InboxService({ getDb: async () => db }).list(payload.toId, 'in');
+                expect(rows.messages).toHaveLength(1);
+                expect(rows.messages[0]?.fromId).toBe('operator');
+                db.close();
+            } finally {
+                await cleanup();
+            }
+        });
+
+        test('send with no --to and no declared orchestrator writes nothing', async () => {
+            const { cwd, out, dbUrl, cleanup } = await makeCtx();
+            try {
+                const code = await main(['message', 'send', '--json', 'nowhere to go'], { cwd, dbUrl, output: out });
+                expect(code).toBe(2);
+                expect(JSON.parse(out.messages.at(-1) ?? '{}').error.message).toContain('no orchestrator member');
+                const db = await createMigratedDb({ url: dbUrl });
+                expect(await db.queryAll('SELECT id FROM inbox_messages')).toEqual([]);
+                db.close();
+            } finally {
+                await cleanup();
+            }
+        });
+
+        test('show prints both directions of a thread, oldest first', async () => {
+            const { cwd, out, dbUrl, cleanup } = await makeCtx();
+            try {
+                // A file-backed DB: `main` owns and closes its own connection, so a test that seeds
+                // and then runs the CLI has to share the file, not an in-memory handle.
+                const db = await createMigratedDb({ url: dbUrl });
+                const service = new InboxService({ getDb: async () => db });
+                const root = await service.send({ from: 'operator', to: 'proj-coder', body: 'question' });
+                await service.reply(root.message.id, 'proj-coder', 'answer');
+                db.close();
+
+                const code = await main(['message', 'show', root.message.id, '--json'], { cwd, dbUrl, output: out });
+                expect(code).toBe(0);
+                const payload = JSON.parse(out.messages.at(-1) ?? '{}');
+                expect(payload.count).toBe(2);
+                expect(payload.messages.map((m: { body: string }) => m.body)).toEqual(['question', 'answer']);
+                expect(payload.messages[0].threadId).toBe(root.message.id);
+            } finally {
+                await cleanup();
+            }
+        });
+
+        test('show on an unknown id exits 1', async () => {
+            const { cwd, out, dbUrl, cleanup } = await makeCtx();
+            try {
+                const code = await main(['message', 'show', 'msg_missing', '--json'], { cwd, dbUrl, output: out });
+                expect(code).toBe(1);
+            } finally {
+                await cleanup();
+            }
+        });
+
+        test('read stamps the receipt once, and a second read reports the repeat', async () => {
+            const { cwd, out, dbUrl, cleanup } = await makeCtx();
+            try {
+                const db = await createMigratedDb({ url: dbUrl });
+                const sent = await new InboxService({ getDb: async () => db }).send({
+                    from: 'proj-coder',
+                    to: 'operator',
+                    body: 'hi',
+                });
+                db.close();
+
+                const first = await main(['message', 'read', sent.message.id, '--json'], { cwd, dbUrl, output: out });
+                expect(first).toBe(0);
+                expect(JSON.parse(out.messages.at(-1) ?? '{}').transitioned).toBe(true);
+
+                const again = await main(['message', 'read', sent.message.id, '--json'], { cwd, dbUrl, output: out });
+                expect(again).toBe(0);
+                expect(JSON.parse(out.messages.at(-1) ?? '{}').transitioned).toBe(false);
+
+                // Only the first mark wrote a `message.read` ledger row.
+                const after = await createMigratedDb({ url: dbUrl });
+                expect(await new SystemEventDao(after).query({ name: 'message.read', limit: 5 })).toHaveLength(1);
+                after.close();
+            } finally {
+                await cleanup();
+            }
+        });
+
+        test('read by a non-recipient exits 1 and writes no event', async () => {
+            const { cwd, out, dbUrl, cleanup } = await makeCtx();
+            try {
+                const db = await createMigratedDb({ url: dbUrl });
+                const sent = await new InboxService({ getDb: async () => db }).send({
+                    from: 'proj-coder',
+                    to: 'operator',
+                    body: 'hi',
+                });
+                db.close();
+
+                const code = await main(['message', 'read', sent.message.id, '--reader', 'someone-else', '--json'], {
+                    cwd,
+                    dbUrl,
+                    output: out,
+                });
+                expect(code).toBe(1);
+                const after = await createMigratedDb({ url: dbUrl });
+                expect(await new SystemEventDao(after).query({ name: 'message.read', limit: 5 })).toHaveLength(0);
+                after.close();
+            } finally {
+                await cleanup();
+            }
+        });
+
+        test('inbox --json writes nothing (G11 R3)', async () => {
+            const { cwd, out, dbUrl, cleanup } = await makeCtx();
+            const db = await createMigratedDb({ url: dbUrl });
+            try {
+                const service = new InboxService({ getDb: async () => db });
+                const sent = await service.send({ from: 'operator', to: 'proj-coder', body: 'x', kind: 'request' });
+                await service.claim('proj-coder', 5);
+                const before = await db.queryAll<{ n: number }>('SELECT COUNT(*) AS n FROM system_events');
+
+                const code = await main(['message', 'inbox', '--agent', 'proj-coder', '--json'], {
+                    cwd,
+                    dbUrl,
+                    output: out,
+                });
+                expect(code).toBe(0);
+                const after = await createMigratedDb({ url: dbUrl });
+                const rows = await after.queryAll<{ n: number }>('SELECT COUNT(*) AS n FROM system_events');
+                expect(rows[0]?.n).toBe(before[0]?.n);
+                after.close();
+                // The read still reports the request it was asked about.
+                expect(JSON.parse(out.messages.at(-1) ?? '{}').messages[0].id).toBe(sent.message.id);
+            } finally {
+                db.close();
+                await cleanup();
+            }
+        });
+
+        test('--wait --until injected resolves when the sent row is claimed (G11 R2)', async () => {
+            const { cwd, out, dbUrl, cleanup } = await makeCtx();
+            try {
+                await seedSendOccupant({ dbUrl, specId: 'proj-coder', runId: 'run-until' });
+                // A consumer on its own connection claims the row shortly after the send. R2's point is
+                // that the wait keys on THIS row leaving `queued` — not on the inbox being empty, which
+                // another consumer emptying a different row would also satisfy.
+                const claimer = setTimeout(() => {
+                    void (async () => {
+                        const db = await createMigratedDb({ url: dbUrl });
+                        await new InboxService({ getDb: async () => db }).claim('proj-coder', 5);
+                        db.close();
+                    })();
+                }, 150);
+
+                const code = await main(
+                    ['message', 'send', '--json', '--to', 'proj-coder', '--wait', '--until', 'injected', 'work'],
+                    { cwd, dbUrl, output: out },
+                );
+                clearTimeout(claimer);
+                expect(code).toBe(0);
+                expect(JSON.parse(out.messages.at(-1) ?? '{}').wait.satisfied).toBe('injected');
+            } finally {
+                await cleanup();
+            }
+        });
     });
 });

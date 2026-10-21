@@ -42,10 +42,12 @@ spur message send "Build the report" --to builder --wait --timeout 60000
 > (`spur agent start`) for actual dispatch. `--wait --until injected` returns once the message is
 > folded into a run; `invoke-exit` waits for the run to exit.
 
-## spur message inbox / reply / watch
+## spur message inbox / show / read / reply / watch
 
 ```bash
 spur message inbox --agent <id> [--unresolved] [--json]
+spur message show <msg-id> [--json]
+spur message read <msg-id> [--reader <id>] [--json]
 spur message reply <msg-id> <body> [--json]
 spur message watch --agent <id> [--interval <ms>] [--json]
 ```

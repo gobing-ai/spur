@@ -19,8 +19,10 @@ use it well*.
 
 | Verb | Purpose | Key flags |
 | ---- | ------- | --------- |
-| `send <body>` | Enqueue a message for an agent | `--to <id>` `--role <name>` `--from <id>` `--request-key <key>` `--wait` `--until <state>` `--timeout <ms>` `--json` |
-| `inbox` | List messages addressed to an agent | `--agent <id>` `--unresolved` `--json` |
+| `send <body>` | Send to a member inbox; `--to` defaults to the orchestrator | `--to <id>` `--role <name>` `--from <id>` `--request-key <key>` `--wait` `--until <state>` `--timeout <ms>` `--json` |
+| `inbox` | List messages addressed to an agent (writes nothing) | `--agent <id>` `--unresolved` `--json` |
+| `show <msg-id>` | Print one thread, root plus replies, oldest first, both directions | `--json` |
+| `read <msg-id>` | Mark a message read (`--reader`, default `operator`); idempotent | `--reader <id>` `--json` |
 | `reply <msg-id> <body>` | Thread a reply to a message | `--json` |
 | `watch` | Follow an agent inbox - surface new messages as they arrive | `--agent <id>` `--interval <ms>` `--json` |
 
@@ -49,14 +51,14 @@ wait; enqueue is **not** rolled back if the wait later fails.
 
 | Flag | Purpose |
 | ------ | --------- |
-| `--to <id>` | Recipient agent id. Mutually exclusive with `--role`; exactly one of the two is required. |
+| `--to <id>` | Recipient address. Mutually exclusive with `--role`. Omitted = the project's orchestrator member (`FleetService.resolveOrchestrator`); with none bound the verb exits 2 and writes no row. |
 | `--role <name>` | Address by Layer-1 role or executor name. Must resolve to exactly one materialized instance; zero (`count=0`, candidates `none`) or multi (`count=N` + candidates) matches are hard errors (exit 1); unknown name exits 2 naming the accepted vocabulary (`AGENT_ROLE_NAMES` ∪ executor names). Resolution yields the same spec-id path as `--to`; `--wait` snapshots that occupant pin. (0685 R6 / ADR-075 amendment) |
 | `--from <id>` | Sender id (default: `operator`). |
 | `--request-key <key>` | Caller-minted idempotency key. The same key with the same body + recipient replays the original receipt (`replayed: true`, no second row/delivery); the same key with a different payload fails with a request-key-conflict error (0832). |
 | `replayed` receipt field | Present on keyed sends: `true` when this submission was a replay of an earlier accepted send. |
 | `requestKey` receipt field | Present on keyed sends, including replays; echoes the accepted key. Blank keys are rejected. |
 | `--wait` | Block until the recipient reaches `--until` (snapshots occupant before send). |
-| `--until <state>` | Wait target: `injected` \| `invoke-exit` (repeatable OR). Default `invoke-exit`. |
+| `--until <state>` | Wait target: `injected` \| `invoke-exit` (repeatable OR). Default `invoke-exit`. `injected` is satisfied when THIS message leaves `queued` — claimed, delivered or failed — not when the recipient's inbox is empty. |
 | `--timeout <ms>` | Caller deadline in milliseconds. |
 | `--json` | Output machine-readable JSON (`{ msgId, toId, status, wait: { satisfied } }`). |
 

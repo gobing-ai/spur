@@ -2,6 +2,7 @@ import type { Command } from '@commander-js/extra-typings';
 import {
     AgentCoordinationService,
     followSystemEventsAfter,
+    InboxService,
     loopSleep,
     resolveAgentSelector,
     WaitError,
@@ -133,7 +134,7 @@ async function runAgentWait(
     }
 
     const agentService = context.agentService();
-    const coordination = new AgentCoordinationService(context);
+    const inbox = new InboxService({ getDb: () => context.getDb() });
     const eventDao = new SystemEventDao(await context.getDb());
 
     const controller = new AbortController();
@@ -162,7 +163,8 @@ async function runAgentWait(
                 result = await waitForOccupant(
                     {
                         getOccupant: (id) => agentService.getOccupant({ specId: id }),
-                        countPending: (id) => coordination.countPending(id),
+                        // G11 R5: the queued count is the inbox service's, not a coordination wrapper.
+                        countPending: (id) => inbox.countQueued(id),
                         latestInvokeEvent: (r) => readLatestInvokeEvent(eventDao, r),
                         // Snapshot-then-follow over the shared ledger (G4 R8):
                         // only the pinned run's invoke events are followed.

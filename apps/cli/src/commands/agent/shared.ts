@@ -431,24 +431,29 @@ export async function drainIntoPrompt(
     // `--spec` without `--drain`: address the occupant, leave the inbox alone.
     if (flags.drain !== true) return { prompt, flags: flagsOut, claimed: [] };
 
-    const inbox = await coordination.drainPending(recipient, flags.singleMessage === true ? { limit: 1 } : undefined);
-    if (inbox.count === 0) return { prompt, flags: flagsOut, claimed: [] };
+    // G11 R5/R10: the drain claims through InboxService — the single writer charges the delivery
+    // budget and writes each row's `message.claimed` event in the same transaction.
+    const claimedRows = await new InboxService({ getDb: () => context.getDb() }).claim(
+        recipient,
+        flags.singleMessage === true ? 1 : 100,
+    );
+    if (claimedRows.length === 0) return { prompt, flags: flagsOut, claimed: [] };
 
-    const header = inbox.messages.map((m) => `- ${m.fromId ?? 'operator'}: ${m.body}`).join('\n');
+    const header = claimedRows.map((m) => `- ${m.fromId || 'operator'}: ${m.body}`).join('\n');
     const block = `Pending messages:\n${header}`;
     const merged = prompt === undefined ? block : `${block}\n\n${prompt}`;
-    const claimed = inbox.messages.map((m) => m.id);
+    const claimed = claimedRows.map((m) => m.id);
     // G71 R1: a claimed fleet dispatch names its task, so the run's completion receipt
     // (`coordination_runs.task_id`) is attributable and the strategy's freshness read
     // sees the attempt. A keyless drain leaves `task` untouched.
-    const fleetTask = inbox.messages
-        .map((message) => /^fleet:task:([^:]+):[1-9][0-9]*$/.exec(message.requestKey ?? '')?.[1])
+    const fleetTask = claimedRows
+        .map((message) => message.taskId ?? /^fleet:task:([^:]+):[1-9][0-9]*$/.exec(message.requestKey ?? '')?.[1])
         .find((wbs) => wbs !== undefined);
     // 1076 R3 (ADR-132): a workflow dispatch key `<runId>/<state>` names the run that dispatched
     // this turn, which is the lineage edge `spur agent trace` walks. The fleet's own
     // `fleet:task:<wbs>:<n>` keys are retry attempts, not lineage, so they are excluded.
-    const parentRunId = inbox.messages
-        .map((message) => /^([^:/][^/]*)\/[^/]+$/.exec(message.requestKey ?? '')?.[1])
+    const parentRunId = claimedRows
+        .map((message) => message.parentRunId ?? /^([^:/][^/]*)\/[^/]+$/.exec(message.requestKey ?? '')?.[1])
         .find((runId) => runId !== undefined);
     // 0833: the same ids ride into executeRun as the requestMessage flag (comma-
     // joined, dual spelling per the sessionDir convention) so the exit sink can
@@ -456,7 +461,7 @@ export async function drainIntoPrompt(
     const requestMessage = claimed.join(',');
     // G71 R1: the loop decides between the stdin path and the run path from the batch's
     // request keys, so the claimed rows' keys ride out with the drain result.
-    const requestKeys = inbox.messages.map((message) => message.requestKey ?? null);
+    const requestKeys = claimedRows.map((message) => message.requestKey);
     return {
         prompt: merged,
         flags: {
