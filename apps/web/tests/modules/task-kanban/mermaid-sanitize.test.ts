@@ -1,13 +1,22 @@
+import { installDompurifyShims } from '../../dompurify-happy-dom';
 import { registerHappyDom, teardownHappyDom } from '../../happy-dom';
 
 registerHappyDom();
+const restoreDompurifyShims = installDompurifyShims();
 
 import { afterAll, describe, expect, test } from 'bun:test';
 
 // Real DOMPurify (markdown-body.test.tsx mocks it as identity for routing tests).
-const { sanitizeMermaidSvg } = await import('../../../src/modules/task-kanban/MarkdownBody');
+const { MERMAID_SANITIZE_CONFIG, sanitizeMermaidSvg } = await import('../../../src/modules/task-kanban/MarkdownBody');
+const DOMPurify = (await import('dompurify')).default;
 
-afterAll(teardownHappyDom);
+afterAll(async () => {
+    restoreDompurifyShims();
+    await teardownHappyDom();
+});
+
+const SVG_NS = 'http://www.w3.org/2000/svg';
+const XHTML_NS = 'http://www.w3.org/1999/xhtml';
 
 describe('sanitizeMermaidSvg', () => {
     test('strips script, event handlers and javascript: links from untrusted diagram output', () => {
@@ -21,11 +30,25 @@ describe('sanitizeMermaidSvg', () => {
         expect(out).not.toContain('javascript:');
     });
 
-    test('keeps native <text> and foreignObject HTML labels visible', () => {
-        const out = sanitizeMermaidSvg(
-            '<svg><g><text>Plain label</text><foreignObject><div><span class="nodeLabel">Html label</span></div></foreignObject></g></svg>',
-        );
+    test('keeps native <text> labels visible', () => {
+        const out = sanitizeMermaidSvg('<svg><g><text>Plain label</text></g></svg>');
         expect(out).toContain('Plain label');
+    });
+
+    test('keeps foreignObject HTML labels visible', () => {
+        // happy-dom does not implement the foreignObject HTML integration point: its parser puts
+        // every label child in the SVG namespace, and DOMPurify then drops it as a non-SVG tag in
+        // SVG. So the browser-faithful namespaces are built here rather than parsed from a string.
+        const doc = document.implementation.createHTMLDocument('');
+        const svg = doc.createElementNS(SVG_NS, 'svg');
+        const foreignObject = doc.createElementNS(SVG_NS, 'foreignObject');
+        const label = doc.createElementNS(XHTML_NS, 'span');
+        label.setAttribute('class', 'nodeLabel');
+        label.textContent = 'Html label';
+        foreignObject.appendChild(label);
+        svg.appendChild(foreignObject);
+
+        const out = DOMPurify(window).sanitize(svg, MERMAID_SANITIZE_CONFIG);
         expect(out).toContain('Html label');
     });
 });

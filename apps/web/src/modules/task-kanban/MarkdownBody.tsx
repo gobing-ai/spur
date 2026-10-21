@@ -1,4 +1,4 @@
-import DOMPurify from 'dompurify';
+import DOMPurify, { type Config } from 'dompurify';
 import { useEffect, useId, useRef, useState } from 'react';
 import { MDEditor } from '@/ui';
 import { markdownPreviewSafety } from '../../lib/markdown-safety';
@@ -16,16 +16,23 @@ import { markdownPreviewSafety } from '../../lib/markdown-safety';
  * SVG always passes through `sanitizeMermaidSvg` before injection.
  */
 /**
+ * The Mermaid sanitize config. Exported so the test can sanitize a browser-faithful node tree:
+ * happy-dom does not implement the `foreignObject` HTML integration point, so its parser always
+ * puts HTML labels in the SVG namespace and a string input cannot reach this path.
+ */
+export const MERMAID_SANITIZE_CONFIG: Config = {
+    USE_PROFILES: { svg: true, svgFilters: true, html: true },
+    ADD_TAGS: ['foreignObject'],
+    HTML_INTEGRATION_POINTS: { foreignobject: true },
+};
+
+/**
  * Strip script, event handlers and `javascript:` URLs from Mermaid output. The html profile
  * plus `foreignObject` keeps HTML labels (other diagram types still emit them) visible.
  */
 export function sanitizeMermaidSvg(svg: string): string {
     // Bind to the live window: the module-level instance is inert if imported before a DOM exists.
-    return DOMPurify(window).sanitize(svg, {
-        USE_PROFILES: { svg: true, svgFilters: true, html: true },
-        ADD_TAGS: ['foreignObject'],
-        HTML_INTEGRATION_POINTS: { foreignobject: true },
-    });
+    return DOMPurify(window).sanitize(svg, MERMAID_SANITIZE_CONFIG);
 }
 
 export function MermaidBlock({ code }: { code: string }) {
