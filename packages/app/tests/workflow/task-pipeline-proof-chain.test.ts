@@ -564,6 +564,79 @@ describe('task-pipeline evidence chain — review certifies (D65 R2)', () => {
         }
     }, 60000);
 
+    test('behavioral: a re-entered review keeps a PASS whose answer file was already consumed', () => {
+        // The review state consumes its answer file as a stage input, so a second visit has nothing
+        // to re-judge and the typed verdict rewrites its run-scoped status to FAIL. Without the
+        // idempotent fold that FAIL overwrote a PASS and closed the task's run as `failed` (observed
+        // twice in the G11 batch, tasks 1267 and 1268).
+        const staged = stage();
+        try {
+            setSection(staged.dir, staged.wbs, 'Requirements', '- [ ] R1. Do the thing.\n');
+            setSection(
+                staged.dir,
+                staged.wbs,
+                'Review',
+                `${REVIEW_HEAD}| P4 (advisory) | Note | src/index.ts:1 | ACCEPTED |\n\nVerdict: PASS\nConfidence: MEDIUM\n`,
+            );
+            const vars = { wbs: staged.wbs, __runId: 'run-reentry', spurBin: SPUR_BIN, profile: 'auto' };
+            const fold = cmdOf('review', '-review.status');
+            const statusNow = (): string =>
+                readFileSync(join(staged.dir, '.spur/run', `${staged.wbs}-review.status`), 'utf8').trim();
+            const answerPath = writeReviewAnswer(
+                staged.dir,
+                'run-reentry',
+                'Verdict: PASS\n\n| Req | Status | Evidence |\n| --- | --- | --- |\n' +
+                    '| R1 | MET | `src/index.ts:1` does the thing |\n\nConfidence: HIGH\n',
+            );
+            expect(
+                runTypedGate(
+                    staged.dir,
+                    '.spur/run/run-reentry-review-verdict.status',
+                    ['task', 'verdict', staged.wbs, '--from-answer', '.spur/run/run-reentry-review-answer.txt'],
+                    vars,
+                ),
+            ).toBe('PASS');
+            expect(runSh(fold, staged.dir, vars).code).toBe(0);
+            expect(statusNow()).toBe('PASS');
+            // `review → done` also needs the approval token; the fold is what decides the status.
+            writeFileSync(join(staged.dir, '.spur/run', `${staged.wbs}-approval.status`), 'APPROVED\n');
+            expect(firstPassingEdge('review', staged.dir, vars)).toBe('done');
+
+            // Re-entry: the answer is gone and the run-scoped status is now FAIL. The durable
+            // artifact is still PASS and the residual gate is clean, so the fold keeps PASS.
+            rmSync(answerPath);
+            writeFileSync(join(staged.dir, '.spur/run', 'run-reentry-review-verdict.status'), 'FAIL\n');
+            expect(runSh(fold, staged.dir, vars).code).toBe(0);
+            expect(statusNow()).toBe('PASS');
+            expect(firstPassingEdge('review', staged.dir, vars)).toBe('done');
+
+            // A fresh pass is still judged on its own evidence: an answer present with the typed
+            // verdict FAIL cannot certify, even though the artifact still reads PASS.
+            writeReviewAnswer(staged.dir, 'run-reentry', 'Verdict: FAIL\n');
+            expect(
+                runTypedGate(
+                    staged.dir,
+                    '.spur/run/run-reentry-review-verdict.status',
+                    ['task', 'verdict', staged.wbs, '--from-answer', '.spur/run/run-reentry-review-answer.txt'],
+                    vars,
+                ),
+            ).toBe('FAIL');
+            expect(runSh(fold, staged.dir, vars).code).toBe(0);
+            expect(statusNow()).toBe('FAIL');
+
+            // And a downgraded artifact blocks the close even with no answer to re-judge.
+            rmSync(join(staged.dir, '.spur/run', 'run-reentry-review-answer.txt'));
+            writeFileSync(
+                join(staged.dir, '.spur/run', `${staged.wbs}-verdict.json`),
+                `${JSON.stringify({ verdict: 'PARTIAL' })}\n`,
+            );
+            expect(runSh(fold, staged.dir, vars).code).toBe(0);
+            expect(statusNow()).toBe('FAIL');
+        } finally {
+            staged.cleanup();
+        }
+    }, 60000);
+
     test('behavioral: the close re-asserts the certified verdict after the residual fold', () => {
         const dir = mkdtempSync(join(tmpdir(), 'tp-close-verdict-'));
         try {

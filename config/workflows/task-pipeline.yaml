@@ -701,10 +701,15 @@ states:
           # PASS, and a clean review gate (open P1-P3 finding or an uncited claim blocks it).
           # Fail-closed: any missing/corrupt input leaves FAIL, so the transitions can route a
           # non-PASS review into remediation instead of dead-ending the run.
+          # Idempotent re-entry: the answer file is consumed as a stage input, so a second visit to
+          # this state has no answer to re-judge. An ABSENT answer is not new evidence against a
+          # PASS — the durable `<wbs>-verdict.json` and the residual gate still have to pass — so the
+          # run-scoped verdict status is consulted only when an answer is actually present (without
+          # this, re-entry overwrote a PASS with FAIL and closed the task's run as `failed`).
           - kind: shell
             options:
                 command: >-
-                    mkdir -p .spur/run; S=FAIL; if [ "$(cat ".spur/run/$__runId-review-verdict.status" 2>/dev/null)" = PASS ] && [ "$(jq -r '.verdict // empty' ".spur/run/$wbs-verdict.json" 2>/dev/null)" = PASS ] && $spurBin task residual "$wbs" review-gate --no-logo >&2; then S=PASS; fi; printf '%s\n' "$S" > ".spur/run/$wbs-review.status"; exit 0
+                    mkdir -p .spur/run; S=FAIL; if [ ! -f ".spur/run/$__runId-review-answer.txt" -o "$(cat ".spur/run/$__runId-review-verdict.status" 2>/dev/null)" = PASS ]; then [ "$(jq -r '.verdict // empty' ".spur/run/$wbs-verdict.json" 2>/dev/null)" = PASS ] && $spurBin task residual "$wbs" review-gate --no-logo >&2 && S=PASS; fi; printf '%s\n' "$S" > ".spur/run/$wbs-review.status"; exit 0
           # (d) record the review severity as the lane decision's outcome (1263 R3b): the
           # question `task-semantic-risk` answered is "is this risky?", and the Review table's
           # worst finding is the answer as observed. Resolved rows count (a fixed P2 was still
