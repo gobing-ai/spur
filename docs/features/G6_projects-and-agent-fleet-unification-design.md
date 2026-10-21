@@ -6,7 +6,7 @@ status: done
 priority: P2
 tags: ["wayfinder-map"]
 created_at: "2026-09-11T18:03:00.037Z"
-updated_at: "2026-09-12T00:27:39.098Z"
+updated_at: "2026-10-21T18:35:09.970Z"
 ---
 
 # G6: Projects and agent fleet unification design
@@ -37,6 +37,12 @@ This is a wayfinder design map, not a shippable implementation feature. Its inve
 <!-- END AUTO-GENERATED -->
 
 ## Notes
+
+### Current reading — 2026-10-21
+
+Investigation tasks 0828–0830 and implementation G61–G64 are complete; G64 records the 2026-09-14 cutover. Frontier/open-cutover instructions below are historical design-map evidence.
+
+### Historical notes
 
 Design proposal: [Projects and agent fleet unification](../plans/2026-09-11-project-agent-fleet-brainstorm.md). Robin approved the design direction and recommended defaults on 2026-09-11. Existing ADRs remain authoritative until the implementation design records their supersession.
 

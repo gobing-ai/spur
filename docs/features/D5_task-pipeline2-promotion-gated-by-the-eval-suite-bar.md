@@ -6,7 +6,7 @@ status: done
 priority: P2
 tags: []
 created_at: "2026-08-19T05:34:31.735Z"
-updated_at: "2026-08-20T21:53:34.988Z"
+updated_at: "2026-10-21T18:35:04.297Z"
 ---
 
 # D5: Workflow pipeline contract, progress projection, and staged consolidation
@@ -152,6 +152,12 @@ Feature: Workflow pipeline contract, progress projection, and staged consolidati
 <!-- END AUTO-GENERATED -->
 
 ## Notes
+
+### Current reading — 2026-10-21
+
+D65 / ADR-140 and D66 supersede the old workflow-interpreter, proof-chain and pipeline graph slices. Preserve historical promotion/evaluation evidence; current workflows and their owning features govern execution.
+
+### Historical notes
 
 ### Chosen architecture
 

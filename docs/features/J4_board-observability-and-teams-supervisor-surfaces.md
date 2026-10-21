@@ -6,7 +6,7 @@ status: done
 priority: P2
 tags: []
 created_at: "2026-07-29T00:09:34.646Z"
-updated_at: "2026-07-29T21:14:22.293Z"
+updated_at: "2026-10-21T18:39:50.003Z"
 ---
 
 # J4: Board observability and Teams supervisor surfaces
@@ -263,6 +263,10 @@ Feature: Board observability and Teams supervisor surfaces
 <!-- END AUTO-GENERATED -->
 
 ## Notes
+
+### Current reading — 2026-10-21
+
+G64 owns the Teams supervisor surface retirement and its recorded operator-accepted reductions. The remaining observability capabilities are live; the original Teams-specific layout and controls below are historical.
 
 ## History
 - 2026-07-29T17:13:35.595Z backlog → active (system)

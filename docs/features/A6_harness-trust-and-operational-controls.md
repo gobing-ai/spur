@@ -6,7 +6,7 @@ status: done
 priority: P0
 tags: []
 created_at: "2026-08-28T23:07:08.583Z"
-updated_at: "2026-08-30T06:46:01.192Z"
+updated_at: "2026-10-21T18:35:01.144Z"
 
 ---
 
@@ -127,6 +127,12 @@ Feature: Harness trust and operational controls
 
 ## Notes
 
+### Current reading — 2026-10-21
+
+D65 / ADR-140 retired the proof-chain machinery. Trust controls that remain implemented retain their ownership here; historical proofDigest/fingerprint requirements below describe the former mechanism.
+
+### Historical notes
+
 This feature is the traceability umbrella for the implementation lane approved in
 `docs/plans/2026-08-28-harness-documentation-immediate-enhancement.md`. Its ten tasks intentionally split the five
 roadmap workstreams at code-owner and commit boundaries. Cross-task dependencies encode the proof/capability/usage
@@ -135,6 +141,7 @@ prerequisites; no task may bypass its own verify/review gate merely because the 
 Implementation should preserve the comparison report's adaptation rule: reuse Spur's existing workflow actions,
 executor registry, event ledger, artifact ownership, cleanup surface, and history plane. The PDF is an external design
 input, not source code or an authority to reproduce.
+
 ## History
 - 2026-08-30T06:27:38.149Z backlog → active (system)
 - 2026-08-30T06:27:38.475Z active → verifying (system)

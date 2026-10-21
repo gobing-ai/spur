@@ -6,7 +6,7 @@ status: done
 priority: P2
 tags: ["wayfinder-map"]
 created_at: "2026-10-07T05:39:04.812Z"
-updated_at: "2026-10-07T18:02:18.459Z"
+updated_at: "2026-10-21T18:35:11.915Z"
 ---
 
 # I13: Two-layer plan and progress visibility for dev workflows
@@ -81,11 +81,11 @@ Skills to consult: `sp:spur-dev` (inline-pipeline-driver, cross-cutting, executi
   >24 tasks split into waves, each its own `A`–`Z` plan. **Letters first** (operator, 2026-10-06): publish task letters up front and add a
   task's phase digits when it starts, so a 24-task wave publishes 26 items rather than 126.
 - Cap is hard: fold/wave deterministically, never emit `AA` or `A10`; a definition that cannot fit fails validation at authoring time.
-- [1101 Audit native todo adoption: host capability matrix and observed behavior of recent dev runs](docs/tasks5/1101_audit-native-todo-adoption-host-capability-matrix-and-observ.md) —
+- [1101 Audit native todo adoption: host capability matrix and observed behavior of recent dev runs](../tasks5/1101_audit-native-todo-adoption-host-capability-matrix-and-observ.md) —
   across 24 runs the list appears late (median ~40 calls in), workflow plan shown in 1/16, 0 two-layer labels; the root cause is a
   hand-written prose contract (C1–C7 in `docs/analysis/2026-10-native-todo-adoption-audit.md`). Labels go in item text (only omp
   nests); the parent host owns the list, since Claude Code subagents cannot hold task tools. Per-host rendering graduated to 1102 R6.
-- [1102 Prototype the two-layer A-Z/1-9 plan projection for single-task and batch runs](docs/tasks5/1102_prototype-the-two-layer-a-z-1-9-plan-projection-for-single-t.md) —
+- [1102 Prototype the two-layer A-Z/1-9 plan projection for single-task and batch runs](../tasks5/1102_prototype-the-two-layer-a-z-1-9-plan-projection-for-single-t.md) —
   the prototype (`docs/analysis/2026-10-plan-projection-prototype.ts`, 37 asserts) derives the plan from `workflow show --format todo`
   plus one phase side table: task-pipeline has 16 states and 15 plan items, E71 renders 51 items, D62 renders 2 waves. The cap
   holds through validation (≤ 9 states per phase, ≤ 25 phases) and re-entry, which reuses the label with an `attempt N` note.

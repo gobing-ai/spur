@@ -6,7 +6,7 @@ status: done
 priority: P2
 tags: []
 created_at: "2026-07-25T00:27:36.676Z"
-updated_at: "2026-08-28T05:20:10.931Z"
+updated_at: "2026-10-21T18:35:07.732Z"
 ---
 
 # R1: Feature status sync: derivation engine, refresh command, hook wiring
@@ -43,6 +43,10 @@ R5 @edge — after the backfill run, no linked done task sits under a feature st
 <!-- END AUTO-GENERATED -->
 
 ## Notes
+
+### Current reading — 2026-10-21
+
+D66 owns the current lifecycle verification and sync placement; the old wrapup/pipeline hook positions below describe the original implementation. Sync derivation remains live.
 
 ## History
 - 2026-07-25T21:37:45.001Z backlog → active (system)

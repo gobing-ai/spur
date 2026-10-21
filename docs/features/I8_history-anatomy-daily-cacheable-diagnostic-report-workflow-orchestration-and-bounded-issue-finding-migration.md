@@ -6,7 +6,7 @@ status: done
 priority: P2
 tags: []
 created_at: "2026-08-25T04:01:01.272Z"
-updated_at: "2026-08-26T00:20:50.014Z"
+updated_at: "2026-10-21T18:39:49.030Z"
 ---
 
 # I8: History anatomy: daily cacheable diagnostic report, workflow orchestration, and bounded issue-finding migration
@@ -435,6 +435,10 @@ Feature: History anatomy: daily cacheable diagnostic report, workflow orchestrat
 <!-- END AUTO-GENERATED -->
 
 ## Notes
+
+### Current reading — 2026-10-21
+
+The legacy issue-finding coexistence gate remains an explicit follow-up: no parity/adoption evidence or operator approval to retire it was established by this audit. Keep the packaged legacy path until that gate is satisfied; do not infer indefinite approval from its continued presence.
 
 ## History
 

@@ -6,7 +6,7 @@ status: done
 priority: P2
 tags: ["wayfinder-map"]
 created_at: "2026-08-18T21:59:52.680Z"
-updated_at: "2026-08-19T05:37:09.107Z"
+updated_at: "2026-10-21T18:39:48.688Z"
 ---
 
 # I6: Spur harness self-improvement program: dev-* spine cost, event 5W1H SSOT, run-record consolidation, and board module boundaries
@@ -45,6 +45,13 @@ in-scope item has either a child `spur feature` with a decided approach or a lin
 <!-- END AUTO-GENERATED -->
 
 ## Notes
+
+### Current reading — 2026-10-21
+
+G64 superseded the original keep-three Workspace/Inbox/Teams recommendation after the approved cutover; G11 now owns member inbox interaction. Preserve the investigation’s observations and decisions as history rather than treating old module recommendations as current.
+
+### Historical notes
+
 ### Destination
 
 A ratified, sequenced program plan in which each of the ten harness self-improvement items is either
@@ -224,6 +231,7 @@ All six investigation tickets are `done`. No further I6 tickets.
 | 0597 | Event 5W1H audit + the event-tracking SSOT design doc | research | — (done) |
 | 0598 | Run-record consolidation + the Observability read plane (no new module) | research | — (done) |
 | 0599 | Workspace / Inbox / Teams responsibility boundary under the role mechanism | research | — (done) |
+
 ## History
 
 - 2026-08-18T22:20:29.866Z moved L → I6 (system)

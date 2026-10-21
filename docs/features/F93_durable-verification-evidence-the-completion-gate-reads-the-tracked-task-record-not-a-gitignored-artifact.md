@@ -6,7 +6,7 @@ status: done
 priority: P2
 tags: []
 created_at: "2026-08-25T18:02:33.790Z"
-updated_at: "2026-08-25T22:38:26.224Z"
+updated_at: "2026-10-21T18:35:08.275Z"
 ---
 
 # F93: Durable verification evidence: the completion gate reads the tracked task record, not a gitignored artifact
@@ -193,6 +193,10 @@ Feature: Durable verification evidence — the completion gate reads the tracked
 <!-- END AUTO-GENERATED -->
 
 ## Notes
+
+### Current reading — 2026-10-21
+
+E71 owns portable durable evidence storage, and D61 retired corpus-baseline acceptance. Durable tracked Testing evidence remains current; old scratch/baseline details are historical.
 
 ## History
 - 2026-08-25T19:30:34.261Z backlog → active (system)

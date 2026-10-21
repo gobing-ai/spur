@@ -6,7 +6,7 @@ status: done
 priority: P2
 tags: []
 created_at: "2026-08-24T06:17:40.546Z"
-updated_at: "2026-08-25T00:41:34.374Z"
+updated_at: "2026-10-21T18:39:50.550Z"
 ---
 
 # J92: Observability frontend enhancement: unified header, customizable table, and tab consolidation
@@ -112,6 +112,10 @@ Feature: Observability frontend enhancement: unified header, customizable table,
 <!-- END AUTO-GENERATED -->
 
 ## Notes
+
+### Current reading — 2026-10-21
+
+J93 owns the current Summary/Jobs/schedule organization and range defaults. Table customization remains implemented; the earlier header/tab/default details below are historical.
 
 ## History
 - 2026-08-24T16:05:26.533Z backlog → active (system)

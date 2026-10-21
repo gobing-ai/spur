@@ -6,7 +6,7 @@ status: verifying
 priority: P2
 tags: [group, rd3-migration]
 created_at: 2026-06-12T23:45:00.000Z
-updated_at: "2026-08-24T17:41:12.266Z"
+updated_at: "2026-10-21T18:38:16.915Z"
 ---
 
 # F: Planning
@@ -37,6 +37,12 @@ section matrix, templates, lifecycles, events, corpus migration, kanban/INDEX vi
 <!-- END AUTO-GENERATED -->
 
 ## Notes
+
+### Current reading — 2026-10-21
+
+The planning layer now includes the task/feature API and Board capabilities delivered by F7/F8. The original UI/API exclusion below describes the bootstrap boundary, not the current feature group.
+
+### Historical notes
 
 The rd3-migration core. Children F1–F6 map to design waves W0–W2 + the migration tool.
 Authoritative design: `docs/design/rd3-migration-design.md` (Accepted 2026-06-12).

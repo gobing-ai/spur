@@ -6,7 +6,7 @@ status: verifying
 priority: P0
 tags: [rd3-migration, wave-0]
 created_at: 2026-06-12T23:45:00.000Z
-updated_at: "2026-08-24T17:41:21.794Z"
+updated_at: "2026-10-21T18:35:06.559Z"
 ---
 
 # F1: Planning foundation
@@ -66,6 +66,12 @@ Feature: Planning foundation
 <!-- END AUTO-GENERATED -->
 
 ## Notes
+
+### Current reading — 2026-10-21
+
+The planning substrate is implemented. Active-P0/manual-roster statements below are historical bootstrap notes; generated rosters are maintained by spur feature refresh.
+
+### Historical notes
 
 **The active P0 goal** (one-active-goal rule). Design: rd3-migration-design.md §2 (data), §3.3
 (BDD), §4.2 (locks), §13 (consolidation). Tasks table hand-seeded until `spur feature refresh`

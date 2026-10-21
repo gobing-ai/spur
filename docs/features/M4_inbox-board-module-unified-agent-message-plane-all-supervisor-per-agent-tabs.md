@@ -6,7 +6,7 @@ status: done
 priority: P2
 tags: ["wayfinder-map"]
 created_at: "2026-08-03T23:00:42.623Z"
-updated_at: "2026-08-05T23:46:20.898Z"
+updated_at: "2026-10-21T18:38:18.383Z"
 ---
 
 # M4: Inbox Board module: unified agent message plane (All / Supervisor / per-agent tabs)
@@ -144,6 +144,13 @@ Feature: Inbox Board module — unified agent message plane
 <!-- END AUTO-GENERATED -->
 
 ## Notes
+
+### Current reading — 2026-10-21
+
+G64 retired the standalone Inbox module, and G11 replaced its layout, identity and API with Projects → Inbox over InboxService. This is a deprecation candidate together with task 0422; lifecycle changes await Robin’s explicit confirmation. Preserve its original design and delivery evidence.
+
+### Historical notes
+
 This feature is a **wayfinder map** (`sp:wayfinder`). Sessions orient to the Destination in `## Goal`,
 resolve **one** ticket, record the answer here, then stop.
 

@@ -6,7 +6,7 @@ status: done
 priority: P1
 tags: []
 created_at: "2026-09-30T20:10:43.892Z"
-updated_at: "2026-10-03T21:54:50.310Z"
+updated_at: "2026-10-21T18:35:06.309Z"
 ---
 
 # E93: History capability detection for commands subagents and skills
@@ -133,6 +133,12 @@ Feature: History capability detection for commands subagents and skills
 <!-- END AUTO-GENERATED -->
 
 ## Notes
+
+### Current reading — 2026-10-21
+
+Capability extraction is implemented by the linked completed tasks. Planning-only language below records the pre-implementation baseline.
+
+### Historical notes
 
 Planning run: idea-fab66c82-1761-4bf7-8124-143f1f9222b1.
 The operator accepted the discovery direction and system design, then explicitly required proper per-agent history formats and authorized necessary upstream enhancement in /Users/robin/xprojects/ts-libs.

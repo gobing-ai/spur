@@ -6,7 +6,7 @@ status: done
 priority: P2
 tags: []
 created_at: "2026-09-07T16:18:52.158Z"
-updated_at: "2026-09-08T04:10:23.608Z"
+updated_at: "2026-10-21T18:35:02.924Z"
 ---
 
 # B5: Executor availability and quota-driven disabling
@@ -137,6 +137,12 @@ Feature: Executor availability and quota-driven disabling
 <!-- END AUTO-GENERATED -->
 
 ## Notes
+
+### Current reading — 2026-10-21
+
+This feature and its linked implementation tasks are done. The proposed/awaiting-approval language below is historical; B6 and B61 extend availability persistence, recovery and conservative decision behavior.
+
+### Historical notes
 
 Approved evaluation: [executor availability evaluation](../plans/2026-09-07-agent-executor-disabled-brainstorm.md).
 

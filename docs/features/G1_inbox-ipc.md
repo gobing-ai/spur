@@ -6,7 +6,7 @@ status: active
 priority: P2
 tags: []
 created_at: "2026-07-03T23:28:33.480Z"
-updated_at: "2026-10-10T07:30:38.334Z"
+updated_at: "2026-10-21T18:35:09.266Z"
 ---
 
 # G1: Inbox IPC
@@ -67,9 +67,17 @@ Feature: Inbox IPC
 | 0204 | Message bus events, server send/reply API, SSE inclusion (0193 wave A) | done |
 | 0205 | spur message watch verb (0193 wave B) | done |
 | 0206 | Live board inbox tab: message events live tail (0193 wave C) | done |
+| 1164 | Allow inbox offsets beyond the page-size ceiling | done |
+| 1168 | Restore live message updates in the board conversation view | done |
 <!-- END AUTO-GENERATED -->
 
 ## Notes
+
+### Current reading — 2026-10-21
+
+G11 replaces TeamService/MessageService and /api/messages with InboxService and the typed inbox API. Projects → Inbox replaces the old Observability Inbox. Events, watch and threading remain live; the earlier transport/UI references below are historical.
+
+### Historical notes
 
 Authority retained, not forked: G61–G64 (project agent fleet program) consume this feature's message events, server message API, and `spur message watch`; recorded by G64's reconciliation (task 0851, 2026-09-13).
 

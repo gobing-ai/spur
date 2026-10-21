@@ -56,6 +56,8 @@ Feature: Repo release-tooling integrity
 | 0973 | Gate plugins/sp under strict typecheck and clear its 216 errors | done |
 | 1044 | Make build:bundle byte-identical with the authoritative bundle-plugin-lib test bundler | done |
 | 1120 | superskill install sp does not refresh the installed lib/inline-run.generated.mjs | done |
+| 1143 | Assert the publish trigger after a ts-libs release tag push | done |
+| 1185 | Name the consumer that requires a retired inline-run bundle export instead of a bare guard denial | done |
 <!-- END AUTO-GENERATED -->
 
 ## Notes

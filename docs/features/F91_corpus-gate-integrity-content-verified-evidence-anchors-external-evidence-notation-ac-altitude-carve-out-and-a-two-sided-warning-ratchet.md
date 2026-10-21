@@ -6,7 +6,7 @@ status: active
 priority: P2
 tags: []
 created_at: "2026-08-17T22:15:08.187Z"
-updated_at: "2026-10-10T05:04:29.578Z"
+updated_at: "2026-10-21T18:35:07.975Z"
 ---
 
 # F91: Corpus gate integrity: content-verified evidence anchors, external-evidence notation, AC-altitude carve-out, and a two-sided warning ratchet
@@ -117,10 +117,17 @@ Feature: Corpus gate integrity
 | 1042 | Reject foreign-task verdict artifacts in shared completion and feature gates | done |
 | 1112 | Narrow gate-language checker vocabulary against composition prose false positives | done |
 | 1118 | verify-answer-lint cannot match an AC title that contains a colon | done |
-| 1153 | Feature check: exempt home-node AC scenarios and honour ac_altitude in the feature-side orphan sweep | todo |
+| 1153 | Feature check: exempt home-node AC scenarios and honour ac_altitude in the feature-side orphan sweep | done |
+| 1254 | Align the review answer contract with the spur task verdict vocabulary | done |
 <!-- END AUTO-GENERATED -->
 
 ## Notes
+
+### Current reading — 2026-10-21
+
+D61 / ADR-108 retired accepted-debt corpus baselines and warning-ratchet snapshots. Evidence-anchor validation, external-evidence notation and AC altitude remain live; baseline/ratchet claims below are historical.
+
+### Historical notes
 
 **Reopened 2026-08-27 — slice 2: the matcher decision ADR-083 routed here.**
 

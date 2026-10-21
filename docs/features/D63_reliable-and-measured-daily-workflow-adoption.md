@@ -6,7 +6,7 @@ status: done
 priority: P2
 tags: []
 created_at: "2026-09-22T02:55:20.144Z"
-updated_at: "2026-10-03T03:36:12.297Z"
+updated_at: "2026-10-21T18:35:04.862Z"
 ---
 
 # D63: Reliable and measured daily-workflow adoption
@@ -124,6 +124,12 @@ Feature: Reliable and measured daily-workflow adoption
 <!-- END AUTO-GENERATED -->
 
 ## Notes
+
+### Current reading — 2026-10-21
+
+The linked rollout tasks are complete. Todo/blocked frontier descriptions below capture the planning baseline rather than current task states; D65/D66 own the later workflow consolidation.
+
+### Historical notes
 
 Architecture and eight-task breakdown accepted by Robin on 2026-09-21. Planning authority: docs/plans/2026-09-21-next-generation-spur-workflows.md. Registration itself did not execute the refactoring.
 

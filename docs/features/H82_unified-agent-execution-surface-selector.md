@@ -6,7 +6,7 @@ status: done
 priority: P2
 tags: []
 created_at: "2026-08-02T05:50:05.816Z"
-updated_at: "2026-08-05T22:38:20.340Z"
+updated_at: "2026-10-21T18:38:17.692Z"
 ---
 
 # H82: Unified --agent execution-surface selector
@@ -136,6 +136,10 @@ Feature: Unified --agent execution-surface selector
 <!-- END AUTO-GENERATED -->
 
 ## Notes
+
+### Current reading — 2026-10-21
+
+The single --agent selector, reserved values, named profiles, glossary forwarding and tier fallback remain live. B/0687 and the current cross-cutting selector contract supersede the original surface rules: inline can use eligible native subagents, headless inline tier-resolves with a warning, and named selectors resolving to the current agent can stay in-session. The one-release alias prose below was replaced by the recorded glossary-only amendment.
 
 ## History
 - 2026-08-05T22:35:32.361Z backlog → active (system)

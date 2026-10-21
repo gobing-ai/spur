@@ -6,7 +6,7 @@ status: done
 priority: P2
 tags: ["g6-program"]
 created_at: "2026-09-12T04:42:44.350Z"
-updated_at: "2026-09-15T06:34:48.115Z"
+updated_at: "2026-10-21T18:35:10.921Z"
 ---
 
 # G64: Retire Workspace, Inbox, Teams, and spur team
@@ -131,6 +131,12 @@ Feature: Retire Workspace, Inbox, Teams, and spur team
 <!-- END AUTO-GENERATED -->
 
 ## Notes
+
+### Current reading — 2026-10-21
+
+The staging reconciliation below is historical: cutover and noun removal shipped. Tasks 0846–0855 are all done, including the former backlog owners 0852/0853. G65 later removed the migration converter and team config; G72 later removed materialized fleet specs. Retain this feature’s retirement outcome and original cutover decisions.
+
+### Historical notes
 
 Last slice of the G6 program — runs only after G61, G62, and G63 have functionally replaced what is
 being retired. Design authority: [Projects and agent fleet unification](../plans/2026-09-11-project-agent-fleet-brainstorm.md)

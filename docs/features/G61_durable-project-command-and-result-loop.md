@@ -6,7 +6,7 @@ status: done
 priority: P1
 tags: ["g6-program"]
 created_at: "2026-09-12T04:42:40.654Z"
-updated_at: "2026-09-13T07:02:13.601Z"
+updated_at: "2026-10-21T18:35:10.196Z"
 ---
 
 # G61: Durable project command and result loop
@@ -161,6 +161,12 @@ Feature: Durable project command and result loop
 <!-- END AUTO-GENERATED -->
 
 ## Notes
+
+### Current reading — 2026-10-21
+
+G11 / ADR-143 makes inbox_messages Spur-owned with InboxDao/InboxService and migration 0054. The ts-db InboxMessageDao ownership and stdin-injection references below describe the earlier implementation. Idempotency, delivery safety and durable run receipts remain live.
+
+### Historical notes
 
 Design authority: [Projects and agent fleet unification](../plans/2026-09-11-project-agent-fleet-brainstorm.md)
 (approved 2026-09-11). Evidence: [runtime inventory](../reports/g6-runtime-inventory.md) §3/§5,

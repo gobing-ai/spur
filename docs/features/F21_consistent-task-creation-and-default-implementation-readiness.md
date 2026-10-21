@@ -6,7 +6,7 @@ status: active
 priority: P1
 tags: []
 created_at: "2026-09-06T19:44:10.927Z"
-updated_at: "2026-10-08T19:11:24.570Z"
+updated_at: "2026-10-21T18:35:06.782Z"
 ---
 
 # F21: Consistent task creation and default implementation readiness
@@ -86,12 +86,22 @@ Feature: Consistent task creation and default implementation readiness
 | --- | ---- | ------ |
 | 0787 | Make task creation and checking agree on valid persisted content | done |
 | 0788 | Deliver ready-by-default task creation across CLI and planning | done |
+| 1132 | Write-time task normalization, parent-status link guard, and auto-fix-first batch preflight | done |
+| 1137 | Feature status writes must not degrade to an unguarded mutation (feature-check fallback and the lifecycle-less server write service) | done |
 <!-- END AUTO-GENERATED -->
 
 ## Notes
+
+### Current reading — 2026-10-21
+
+The linked creation/readiness tasks are complete. Planned/unimplemented statements below are the original planning baseline, not current behavior.
+
+### Historical notes
+
 Delivery is scheduled after the D6 workflow repair batch ending at 0786. Two tasks only: 0787 fixes deterministic creation/check correctness including serialization and machine errors; 0788 delivers ready-by-default creation across CLI, batch and planning handoff. Tests, documentation and recovery stay in the owning task.
 
 Approved design: docs/design/task-creation-readiness.md; decision ADR-109. The operator approved the direction and design gate on 2026-09-06 and explicitly asked to avoid overly small tasks. This feature is planned, not implemented.
+
 ## History
 
 - 2026-09-06T23:24:57.309Z backlog → active (system)

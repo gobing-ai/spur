@@ -6,7 +6,7 @@ status: active
 priority: P2
 tags: ["g6-program"]
 created_at: "2026-09-12T04:42:44.189Z"
-updated_at: "2026-10-10T07:30:31.927Z"
+updated_at: "2026-10-21T18:35:10.687Z"
 ---
 
 # G63: Projects board module and global input wiring
@@ -237,6 +237,12 @@ Feature: Projects board module and global input wiring
 <!-- END AUTO-GENERATED -->
 
 ## Notes
+
+### Current reading — 2026-10-21
+
+The global input is implemented. G11 now owns Projects → Inbox and its typed inbox API; later Projects changes replace the original Conversation/Agents/Work layout. Draft safety and project identity remain live; stub claims, /api/messages and old tab/route examples below are historical.
+
+### Historical notes
 
 Reviewable prototype for this module already exists and should be the implementation reference:
 `docs/prototypes/g6-projects/index.html` with 19 happy-dom regression tests

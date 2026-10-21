@@ -6,7 +6,7 @@ status: done
 priority: P1
 tags: [rd3-migration, wave-3]
 created_at: 2026-06-12T23:45:00.000Z
-updated_at: "2026-08-05T22:48:32.382Z"
+updated_at: "2026-10-21T18:39:47.366Z"
 ---
 
 # H2: Companion skills and write guard
@@ -66,6 +66,12 @@ Feature: Companions and write guard
 <!-- END AUTO-GENERATED -->
 
 ## Notes
+
+### Current reading — 2026-10-21
+
+The original companion names and packaging describe the earlier integration. H1 and the current spur-cli facade own the live planning/execution operations; write-guard behavior and historical integration evidence remain retained.
+
+### Historical notes
 
 Task 0067 settles the delivery-doc §1.3 TBD (`info` verbs vs resolve+show composition) and syncs
 the delivery doc with the decision.

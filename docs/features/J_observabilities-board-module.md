@@ -6,7 +6,7 @@ status: verifying
 priority: P2
 tags: []
 created_at: "2026-07-03T23:28:28.509Z"
-updated_at: "2026-08-24T17:41:18.267Z"
+updated_at: "2026-10-21T18:39:49.351Z"
 ---
 
 # J: Observabilities board module
@@ -137,6 +137,10 @@ Feature: Observabilities board module
 <!-- END AUTO-GENERATED -->
 
 ## Notes
+
+### Current reading — 2026-10-21
+
+G64 retired the standalone Inbox/Teams module composition; G11 owns Projects → Inbox and its typed message plane. Observability events, traces and job surfaces remain live; the original Inbox-tab scope below is historical.
 
 ## History
 - 2026-07-13T23:29:36.969Z backlog → active (system)

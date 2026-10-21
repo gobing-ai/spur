@@ -6,7 +6,7 @@ status: verifying
 priority: P2
 tags: []
 created_at: "2026-08-16T18:40:58.950Z"
-updated_at: "2026-08-24T17:41:04.939Z"
+updated_at: "2026-10-21T18:35:02.618Z"
 ---
 
 # B3: Role routing SSOT in spur config: code-owned defaults, config override, roles.md as projection
@@ -81,6 +81,10 @@ Feature: Role routing SSOT in spur config
 <!-- END AUTO-GENERATED -->
 
 ## Notes
+
+### Current reading — 2026-10-21
+
+ADR-078 / A4 superseded ADR-061’s code-owned configuration SSOT. Role overrides, fallback resolution and roles.md projection remain live; retain this record as the original implementation history rather than treating the superseded SSOT claim as current.
 
 ## History
 - 2026-08-16T22:33:54.207Z backlog → active (system)

@@ -75,6 +75,7 @@ Acceptance criteria for the _implementation_ live on those task files, not here.
 | 0491 | Report mode spike: reproduce the omp forensics report through report --mode forensics | done |
 | 0492 | dev-find-issue rewrite contract: what the command becomes when the CLI does the extraction | done |
 | 0570 | Update dev-find-issue command docs: latest source list, template default parity, history-load preflight pointer | done |
+| 1144 | Bound the history import scope for single-session evidence | done |
 <!-- END AUTO-GENERATED -->
 
 ## Notes

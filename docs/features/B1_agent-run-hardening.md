@@ -6,7 +6,7 @@ status: verifying
 priority: P1
 tags: [rd3-migration, wave-3]
 created_at: 2026-06-12T23:45:00.000Z
-updated_at: "2026-10-03T05:05:59.748Z"
+updated_at: "2026-10-21T18:35:01.920Z"
 ---
 
 # B1: Agent run hardening
@@ -47,6 +47,12 @@ already-supported agents.
 <!-- END AUTO-GENERATED -->
 
 ## Notes
+
+### Current reading — 2026-10-21
+
+D65 / ADR-140 now owns host/subprocess/fleet execution boundaries. The original single-dispatch-surface description is historical; run hardening remains implemented.
+
+### Historical notes
 
 Checklist-tier AC (verification work, not new behavior — two-tier rule, design §3.1). ACP
 interaction patterns worth keeping surface in cc-agents task 0405 (acpx-query archival).

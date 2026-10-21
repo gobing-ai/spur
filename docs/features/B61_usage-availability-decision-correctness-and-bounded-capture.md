@@ -6,7 +6,7 @@ status: done
 priority: P1
 tags: []
 created_at: "2026-09-20T15:45:54.870Z"
-updated_at: "2026-09-20T20:12:08.310Z"
+updated_at: "2026-10-21T18:35:03.396Z"
 ---
 
 # B61: Usage availability decision correctness and bounded capture
@@ -61,6 +61,12 @@ Feature: Make the existing run-once usage refresh conservative, truthful and bou
 <!-- END AUTO-GENERATED -->
 
 ## Notes
+
+### Current reading — 2026-10-21
+
+The bounded-capture and conservative availability corrections are implemented by the linked completed tasks. Any statement below that no production fix is proposed describes the planning baseline.
+
+### Historical notes
 
 Graduated from I31 reports 0903/0904. Planning authorization: operator "okay, goahead" after the I31 implementation-readiness and next-batch proposal. Source reports are leads; implementation must establish executable regressions. No production fix is claimed by this planning change.
 

@@ -6,7 +6,7 @@ status: done
 priority: P2
 tags: [group]
 created_at: 2026-06-12T23:45:00.000Z
-updated_at: "2026-08-11T07:48:15.942Z"
+updated_at: "2026-10-21T18:38:16.566Z"
 ---
 
 # E: History
@@ -42,6 +42,12 @@ Agent-session history import and analytics — `spur history` over the JSONL imp
 <!-- END AUTO-GENERATED -->
 
 ## Notes
+
+### Current reading — 2026-10-21
+
+History import/analyze/report/daily and history-anatomy reports are implemented. The deferred report TODO and --use-history bridge below are historical; I8/I81 and the current history CLI own diagnostic report behavior.
+
+### Historical notes
 
 Feature group. No rd3-migration batch items; `history report` remains a deferred TODO marker.
 

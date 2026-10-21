@@ -6,7 +6,7 @@ status: done
 priority: P2
 tags: ["wayfinder-map"]
 created_at: "2026-08-23T20:50:24.035Z"
-updated_at: "2026-08-24T21:06:53.376Z"
+updated_at: "2026-10-21T18:35:00.876Z"
 ---
 
 # A4: Spur config 1.2: global + project layered configuration
@@ -70,6 +70,13 @@ in each child task.
 <!-- END AUTO-GENERATED -->
 
 ## Notes
+
+### Current reading — 2026-10-21
+
+The layered configuration implementation is delivered. Open questions and implementation directions below record the original planning baseline; ADR-078 and the current config contract own present configuration behavior.
+
+### Historical notes
+
 ### Verified terrain (2026-08-23)
 
 Read before proposing anything — most of the original intake is already built.
@@ -188,6 +195,7 @@ All four tasks done; `bun run spur-check` green throughout.
 - **0640** — layered loader shipped: two-file load, deep merge per 0639, single merged validation, provenance-labeled errors, dual-mtime cache; schema top-level `required` dropped. Coverage recovered via exported pure helpers.
 - **0641** — init seeding audit: safe drop set (natural-path `templates/task` copies, 5 top-level JSON baselines, `plugins/**` placeholders, `templates/feature`); keep set (`rules/**` operator-ruled, `templates/bdd` skill-consumed, `config.yaml`); `config.global.yaml` spec (moves `agent.default`/`executors`/`roles`/`workflows`; strips `bootstrap`/`rules`/`redaction`/`team`/`name`/`tasks`/`features`); minimal project config = `$schema`+`version`+`name`+project-shaped `bootstrap`. Answers two map open questions: near-empty init config (yes) and `bootstrap` (stays project).
 - **0642** — **ADR-078** appended (supersedes ADR-061): role→tier SSOT moves to the config layer; `DEFAULT_AGENT_ROLES` demotes to a byte-identical fallback; R9 parity gate retargets to three-way. Layer-provenance open question resolved by 0640 (provenance-labeled validation errors).
+
 ## History
 - 2026-08-23T20:53:44.170Z backlog → active (system)
 - 2026-08-23T23:04:25.768Z active → verifying (system)

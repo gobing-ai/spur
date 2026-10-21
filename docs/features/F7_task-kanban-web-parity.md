@@ -6,7 +6,7 @@ status: active
 priority: P2
 tags: []
 created_at: "2026-06-20T05:06:06.393Z"
-updated_at: "2026-10-10T07:30:27.693Z"
+updated_at: "2026-10-21T18:35:07.273Z"
 ---
 
 # F7: Task Kanban web parity
@@ -113,9 +113,14 @@ Feature: Task Kanban web parity
 | 0203 | Kanban gap 3: task.action contract, server action table, channel modal (0191 wave B) | done |
 | 0218 | FeatureDetail right panel redesign: converge on TaskDetail architecture (MDEditor + metadata + action buttons) | done |
 | 0219 | Tasks module button group: replace FSM-transition buttons with workflow-action buttons | done |
+| 1162 | Sanitize raw HTML across Board Markdown previews | done |
 <!-- END AUTO-GENERATED -->
 
 ## Notes
+
+### Current reading — 2026-10-21
+
+The original gap inventory is historical. Current implementation and any outstanding verification are represented by the linked tasks and feature receipt, not the old missing-feature list.
 
 ## History
 

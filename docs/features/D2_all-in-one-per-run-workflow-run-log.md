@@ -6,7 +6,7 @@ status: done
 priority: P2
 tags: []
 created_at: "2026-08-04T17:15:08.512Z"
-updated_at: "2026-08-04T23:46:11.806Z"
+updated_at: "2026-10-21T18:35:04.024Z"
 ---
 
 # D2: All-in-one per-run workflow run log
@@ -144,6 +144,13 @@ Feature: All-in-one per-run workflow run log
 <!-- END AUTO-GENERATED -->
 
 ## Notes
+
+### Current reading — 2026-10-21
+
+E7 owns the current two-file run record, and E71 owns durable evidence versus disposable scratch. The original canonical .log layout below is historical; legacy reads, no-log and retention behavior remain supported.
+
+### Historical notes
+
 **Settled operator decisions (2026-08-04) — binding scope, do not re-litigate**
 
 1. **Follow surface:** extend `spur workflow trace RUNID --follow` with a log-streaming source. No `monitor` verb.
@@ -171,6 +178,7 @@ Feature: All-in-one per-run workflow run log
 - docs/design/workflow-observability.md
 - ADR-035 (control-plane boundary)
 - tasks 0114, 0310, 0365, 0414
+
 ## History
 - 2026-08-04T23:30:07.882Z backlog → active (system)
 - 2026-08-04T23:30:08.122Z active → verifying (system)

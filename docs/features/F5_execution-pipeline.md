@@ -6,7 +6,7 @@ status: done
 priority: P1
 tags: [rd3-migration, wave-3]
 created_at: 2026-06-12T23:45:00.000Z
-updated_at: "2026-08-04T18:08:59.025Z"
+updated_at: "2026-10-21T18:35:07.006Z"
 ---
 
 # F5: Execution pipeline
@@ -70,6 +70,13 @@ Feature: Execution pipeline
 <!-- END AUTO-GENERATED -->
 
 ## Notes
+
+### Current reading — 2026-10-21
+
+D65 / ADR-140 owns the current precheck → implement → gate/remediate → review → done task pipeline. The former multi-stage graph below is historical; task execution remains live.
+
+### Historical notes
+
 0063 gated by ts-libs 0035 (E3 pause/resume). The `approve` step is skippable via run profile
 var, not a YAML fork.
 
@@ -80,6 +87,7 @@ var, not a YAML fork.
 Those scenarios remain product behaviour and are owned by the task-pipeline + workflow continue
 surface. They are recorded here rather than as open Gherkin rows so `spur feature check F5`
 shippable evaluation tracks the open 0424 slice with PASS+MET verdict rows.
+
 ## History
 
 - 2026-06-12 — created (rd3-migration feature finalizing)
