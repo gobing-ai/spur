@@ -4,7 +4,7 @@ name: Fenced declared-member binding via agent join --member
 status: todo
 template: feature-impl
 created_at: 2026-10-22T07:00:38.145Z
-updated_at: "2026-10-22T07:02:20.349Z"
+updated_at: "2026-10-22T07:18:15.369Z"
 feature_id: G75
 priority: P2
 tags:
@@ -19,7 +19,7 @@ dependencies: ["1279"]
 ### Background
 
 Implements: R3 — A capable live session binds one declared member without changing guest defaults.
-Work package B3. Additive public flag on the existing spur agent join: public-surface consent is recorded in this task before the flag ships (AGENTS.md public-surface rule). Runs after the lease renewal task.
+Work package B3. Additive public flag on the existing spur agent join. Public-surface consent: given by the operator (Robin) on 2026-10-22 for the additive `--member` flag only — no new noun or verb (AGENTS.md public-surface rule). Runs after the lease renewal task.
 Rubric: E8 D1 L3 C1 R2 = 15 → own task (force: R=high).
 
 ### Requirements
