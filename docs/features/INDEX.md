@@ -123,7 +123,7 @@
         ├── [done] **G72**: Fleet team-residue cleanup ([G72_fleet-team-residue-cleanup.md](./G72_fleet-team-residue-cleanup.md))
         ├── [done] **G73**: Cooperative fleet participation: hook lifecycle and guest join ([G73_cooperative-fleet-participation-hook-lifecycle-and-guest-join.md](./G73_cooperative-fleet-participation-hook-lifecycle-and-guest-join.md))
         ├── [backlog] **G74**: Faster fleet task execution with correlated warm turns ([G74_faster-fleet-task-execution-with-correlated-warm-turns.md](./G74_faster-fleet-task-execution-with-correlated-warm-turns.md))
-        └── [backlog] **G75**: Verified live-session fleet participation ([G75_verified-live-session-fleet-participation.md](./G75_verified-live-session-fleet-participation.md))
+        └── [active] **G75**: Verified live-session fleet participation ([G75_verified-live-session-fleet-participation.md](./G75_verified-live-session-fleet-participation.md))
 [done] **H**: Agent integration ([H_agent-integration.md](./H_agent-integration.md))
     ├── [done] **H1**: spur-dev umbrella skill ([H1_spur-dev-skill.md](./H1_spur-dev-skill.md))
         ├── [verifying] **H11**: Semantic conflict finder: authority-aware indexed audit and confirmed remediation ([H11_semantic-conflict-finder-authority-aware-indexed-audit-and-confirmed-remediation.md](./H11_semantic-conflict-finder-authority-aware-indexed-audit-and-confirmed-remediation.md))
