@@ -785,6 +785,17 @@ declaration: role resolution counts declared members only and a guest is refused
 `spur agent leave` or lease expiry releases the claim and returns claimed messages to `queued`.
 Shapes: [inter-agent control plane](design/inter-agent-control-plane.md) §12.
 
+Renewal and binding (tasks 1279/1281, feature G75). The lease no longer depends on a pull: `join`
+records the **agent** process (pid + `ps lstart` birth time + executable, from a bounded ancestor
+walk) rather than the joining CLI, and spawns one detached copy of itself under
+`SPUR_GUEST_RENEWER=<guest-id>` that heartbeats at `TTL / 3` and stops on a missing record, a dead or
+reused pid, a lost fence or a 12-hour cap — no daemon, no new verb. `join --member <id>` binds one
+**declared** member instead of registering a guest: the roster validates role and executor, a
+capability proof gates the binding, and it takes the member's occupancy generation (`max + 1`) plus
+the `guest:<member-id>` claim, so the strategy's existing `hasRunning` check sees the member busy and
+the record id is the member's inbox address. Every fenced operation (renew, claim, release) refuses a
+superseded generation, so a stale binder cannot renew, claim or release the current owner's lease.
+
 **Project-owned supervision (task 1088, feature G67).** A project's loops are reached through the
 serve that owns the project, and a loop never outlives that serve. *Discovery:* the
 `agent status|stop|start` and `agent list --specs` default server URL comes from the cwd's project
