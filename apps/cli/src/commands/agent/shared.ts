@@ -1,11 +1,13 @@
-import { dirname, resolve } from 'node:path';
+import { dirname, join, resolve } from 'node:path';
 import {
     AgentCoordinationService,
     type AgentLoopDeps,
     type AgentLoopRuntime,
     type AgentRunDeps,
+    capabilityDiagnostic,
     DEFAULT_LOOP_POLL_MS,
     DeliveryReconciler,
+    evaluateCapabilities,
     FINDING_CODES,
     FleetDispatcher,
     FleetGuestService,
@@ -14,6 +16,7 @@ import {
     InboxService,
     isPortLive,
     MAX_DELIVERY_ATTEMPTS,
+    MEMBER_BINDING_CAPABILITIES,
     normalizeProjectPath,
     ProjectRegistry,
     resolvePlanningFolders,
@@ -147,6 +150,42 @@ export function guestService(context: CliContext): FleetGuestService {
         getDb: () => context.getDb(),
         declaredMemberIds: async () =>
             (await new AgentCoordinationService(context).listFleetMembers()).map((m) => m.instanceId),
+        resolveDeclaredMember: async (memberId) => {
+            const member = (await new AgentCoordinationService(context).listFleetMembers()).find(
+                (entry) => entry.instanceId === memberId,
+            );
+            if (member === undefined) return null;
+            return {
+                instanceId: member.instanceId,
+                ...(member.role !== undefined ? { role: member.role } : {}),
+                executor: member.executor,
+                enabled: member.enabled,
+            };
+        },
+        // R1 proof: the declared executor must attest the stage axes. Missing attestation is
+        // `unknown`, which never satisfies a requirement (0706 R5) — refuse, don't downgrade.
+        attestMemberCapabilities: async (member) => {
+            const config = await context.loadAgentConfig(context.cwd);
+            const profile = config?.agent?.executors?.find((entry) => entry.name === member.executor);
+            const evaluation = evaluateCapabilities(MEMBER_BINDING_CAPABILITIES, profile);
+            return evaluation.ok
+                ? { ok: true, detail: 'all stage axes attested' }
+                : { ok: false, detail: capabilityDiagnostic(member.executor, evaluation) };
+        },
+        // Stage eligibility comes from 1280's installed-host report: a `pull-only` host may bind
+        // for messages but can never be handed a stage.
+        hostWake: async (executor) => {
+            const report = join(context.cwd, 'docs', 'reports', 'fleet-host-capabilities.json');
+            try {
+                const parsed = JSON.parse(await context.fs.readFile(report)) as {
+                    hosts?: Array<{ agent?: string; mode?: string; wake?: string }>;
+                };
+                const row = parsed.hosts?.find((entry) => entry.agent === executor && entry.mode === 'interactive');
+                return row?.wake ?? null;
+            } catch {
+                return null;
+            }
+        },
     });
 }
 

@@ -149,7 +149,7 @@ ledger row; a stale report is ignored and prints `ignored stale report`.
 ## spur agent join
 
 ```
-spur agent join --role <name> [--id <id>] [--session-id <sid>] [--pid <n>] [--executor <name>]
+spur agent join --role <name> [--id <id>] [--member <id>] [--session-id <sid>] [--pid <n>] [--executor <name>]
 ```
 
 A **guest occupant** is a live interactive session that joins the fleet to pull work instead of
@@ -160,8 +160,9 @@ being driven by it: it is never supervised, never restarted, and never a stage t
 | `--role <name>` | Layer-1 role the guest occupies (`scribe` \| `coder` \| `reviewer` \| `planner`) |
 | `--id <id>` | Guest id (defaults to `<role>-g<n>`); a collision with a declared member or a joined guest exits 2, except that the same host session rejoining its own live guest renews the lease |
 | `--session-id <sid>` | Host session id (defaults to `CLAUDE_CODE_SESSION_ID`); the Stop hook matches on it |
-| `--pid <n>` | Process id to record (defaults to this process) |
+| `--pid <n>` | Agent process id to record (defaults to the matching agent ancestor) |
 | `--executor <name>` | Executor name to record (informational — a guest is never dispatched to) |
+| `--member <id>` | Bind a **declared member** instead of joining as a guest (G75 R3): fenced by occupancy generation + claim epoch, refuses an unknown/disabled member, a role mismatch, an unattested executor, a live occupant or a concurrent binder (exit 2 each). The record id becomes the member id, so `wait --inbox <member-id>` addresses the member's inbox |
 | `--json` | Output machine-readable JSON |
 | `--json-envelope` | Wrap the JSON in the standard output envelope |
 
