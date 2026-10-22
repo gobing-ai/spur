@@ -104,6 +104,7 @@ Feature: Faster fleet task execution
 | 1276 | Claude Code warm task-turn adapter | todo |
 | 1277 | Pi RPC warm task-turn adapter | todo |
 | 1278 | Codex App Server warm task-turn adapter | todo |
+| 1284 | ts-ai-runner correlated warm-turn session facade (upstream release) | todo |
 <!-- END AUTO-GENERATED -->
 
 ## Notes
