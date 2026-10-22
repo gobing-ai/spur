@@ -2688,3 +2688,53 @@ has 11 fields, skill/agent output contracts carry no level, and `response.valida
   rejections and owner module unchanged.
 - **Detail:** `repo-wide-tests/changelog-confidence.test.ts`;
   `plugins/sp/skills/spur-dev/references/dev-operations.md` §8 step 7.
+
+## ADR-145: Keyed Fleet Work Runs as Correlated Turns Behind the Existing Traced Action
+
+- **Status:** Proposed · **Date:** 2026-10-21 · **Feature:** G74 · **Extends:** ADR-140, ADR-143
+- **Decision:**
+  - The orchestrator's scheduling tick is independent of its conversation consumer: a held model
+    response never blocks wake/reconcile/select/enqueue. One fenced scheduling owner remains.
+  - Keyed requests may execute as correlated turns in a warm, policy-compatible worker process. The
+    turn is dispatched through `AgentRunActionRunner` / `runFleetWorkItem`; the existing artifact,
+    action-contract, permission and receipt checks remain the only success authority.
+  - Transport acceptance, native terminal result and validated completion are distinct records.
+    Outcomes normalize to success, failure, interrupted, not-started or outcome-unknown; an unknown
+    writing turn is reconciled before any replacement and is never replayed automatically.
+  - Reusable process/protocol mechanics belong to a released ts-ai-runner facade; Spur adds no
+    duplicate transport. Unsupported persistence falls back, before acceptance, to resume then one-shot.
+  - Process reuse never implies conversation reuse: independent review starts a fresh conversation.
+- **Why:** keyed work bypasses persistent stdin to keep its durable receipt, so a warm member did not
+  give warm task execution, and a stdin write proves acceptance only. A second persistent executor would
+  duplicate validation and recovery; extending the traced seam serves both supervised and attached
+  (ADR-146) occupants.
+- **Retains:** ADR-143 inbox ownership; one active turn per worker; one writer per worktree; reviewer
+  independence and required gates.
+- **Consequence:** first batch Codex (App Server), Claude Code (stream-json) and Pi (RPC), each behind an
+  exact-version qualification; Grok Build and Antigravity CLI are batch 2. Gains are claimed only from
+  the shared measurement receipt.
+- **Detail:** [fleet task turns](design/fleet-task-turn-execution.md);
+  [measurement contract](plans/2026-10-21-fleet-performance-measurement.md).
+
+## ADR-146: Verified Live Sessions Occupy Declared Members; Guests Stay Message-Only
+
+- **Status:** Proposed · **Date:** 2026-10-21 · **Feature:** G75 · **Extends:** ADR-121, ADR-143, ADR-145
+- **Decision:**
+  - A cooperating live session may bind to one enabled declared member (`spur agent join --member`)
+    only after project, session, process, executor-policy and capability proof; binding is fenced by
+    occupancy generation and lease epoch. Without `--member`, join stays guest-only.
+  - Guests remain concrete-address message participants and never enter role selection or satisfy
+    `requiresCapabilities`.
+  - Readiness (ready/busy/blocked/draining) is explicit; human work keeps priority and fleet turns
+    start only at a safe yield. Detach drains, never kills the human-owned process, and leaves
+    possibly executed work outcome-unknown until reconciled.
+  - Attached stage work uses the ADR-145 turn contract; a delivered message never completes a stage.
+  - Guest leases renew independently of inbox waits, so long work keeps its identity.
+- **Why:** PID registration alone exposes no prompt or completion channel, so universal PID takeover
+  is rejected; binding to existing declarations reuses role selection, inbox and G74 validation
+  instead of a second scheduler.
+- **Retains:** ADR-057 terminal-write ban; ADR-121 guest occupancy defaults; ADR-143 one inbox per member.
+- **Consequence:** an additive `--member` flag on the existing `agent join` (public-surface consent
+  required at task refinement); portable pull is the baseline for Codex, Claude Code and Pi; native
+  wake channels are optional per-version adapters.
+- **Detail:** [verified attached occupants](design/fleet-attached-occupants.md).
