@@ -11,7 +11,13 @@
 import { mkdir } from 'node:fs/promises';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { patchTsRuntimeImport, UNUSED_LAYA_PEER } from './build-cli';
+import {
+    LAYA_MLX_PACKAGE,
+    layaMlxInstalled,
+    patchLayaMlxSourceImport,
+    patchTsRuntimeImport,
+    UNUSED_LAYA_PEER,
+} from './build-cli';
 
 const CLI_ENTRY = fileURLToPath(new URL('../../apps/cli/src/index.ts', import.meta.url));
 const OUT_DIR = fileURLToPath(new URL('../../dist/cli', import.meta.url));
@@ -50,31 +56,27 @@ export async function buildBinaries(): Promise<void> {
     await mkdir(OUT_DIR, { recursive: true });
 
     const restore = patchTsRuntimeImport();
+    // Same conditional as buildCompiledBinary (see build-cli.ts): externalize the darwin-only
+    // laya package on hosts where bun install skipped it. NOTE: cross-compiled darwin assets
+    // built on such a host resolve laya at runtime instead of bundling it — release hosts that
+    // ship working laya-local must install with `bun install --os='*'` (publish.yml does).
+    const restoreLaya = layaMlxInstalled() ? patchLayaMlxSourceImport() : undefined;
     let failed = false;
     try {
         for (const [suffix, target] of Object.entries(TARGETS)) {
             const outfile = `${OUT_DIR}/${binaryAssetName(suffix)}`;
             console.log(`Compiling ${target} -> ${outfile}`);
-            const result = Bun.spawnSync(
-                [
-                    'bun',
-                    'build',
-                    CLI_ENTRY,
-                    '--compile',
-                    `--target=${target}`,
-                    '--external',
-                    UNUSED_LAYA_PEER,
-                    '--outfile',
-                    outfile,
-                ],
-                { stdio: ['ignore', 'inherit', 'inherit'] },
-            );
+            const args = ['bun', 'build', CLI_ENTRY, '--compile', `--target=${target}`, '--external', UNUSED_LAYA_PEER];
+            if (restoreLaya === undefined) args.push('--external', LAYA_MLX_PACKAGE);
+            args.push('--outfile', outfile);
+            const result = Bun.spawnSync(args, { stdio: ['ignore', 'inherit', 'inherit'] });
             if (result.exitCode !== 0) {
                 console.error(`  failed: ${target}`);
                 failed = true;
             }
         }
     } finally {
+        restoreLaya?.();
         restore();
     }
 
