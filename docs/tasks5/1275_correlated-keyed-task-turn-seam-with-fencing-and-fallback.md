@@ -1,10 +1,10 @@
 ---
 schema_version: 1
 name: Correlated keyed task-turn seam with fencing and fallback
-status: todo
+status: blocked
 template: feature-impl
 created_at: 2026-10-22T07:00:34.912Z
-updated_at: "2026-10-22T16:26:15.464Z"
+updated_at: "2026-10-22T22:16:28.840Z"
 feature_id: G74
 priority: P1
 tags:
@@ -84,6 +84,10 @@ Scenario: AC5 — Pre-acceptance fallback is named and single (req: R5)
 - **Q: Retry outcome-unknown read-only work?** CLOSED — no auto retry in this task for any role; reconciliation uses the existing `DeliveryReconciler` + strategy hold. Read-only auto-retry is deferred until 1273 shows it matters.
 - **Q: Unkeyed persistent-stdin messages?** CLOSED — unchanged (`agent-loop-service.ts:486`, "acceptance is delivery", 0831).
 
+#### Q&A entry — 2026-10-22T23:16Z (batch run block)
+
+- **Q: Can the task start?** BLOCKED — Plan step 0 fails: `npm view @gobing-ai/ts-ai-runner version` returns **0.5.33**; 0.6.0 is not published. Per the closed Q&A decision (2026-10-22T16:25:38Z): if 0.6.0 is not on npm, the task is blocked — no vendoring, no local linking. Unblocking action (Robin): publish ts-libs 0.6.0 from `/Users/robin/xprojects/ts-libs` (committed, gate-green, untagged), then re-run this task plus 1276–1278 (which depend on it).
+
 ### Design
 
 **Seam (frozen):** `AgentExecutionOptions.dispatchTurn?: (req: WarmTurnRequest) => Promise<WarmTurnDispatch>` in `packages/app/src/observability/agent-execution.ts:146`.
@@ -136,3 +140,6 @@ At `agent-run-executor.ts:613`: if `options.dispatchTurn` is set, call it; `warm
 - Anchors: `agent-run-executor.ts:243,599,613`; `agent-execution.ts:146`; `agent-run.ts:237,477,1147`; `fleet-work-item.ts:63`; `fleet-dispatch.ts:70,105`; `receipt.ts:42`; `delivery-reconciler.ts:9,51`; `strategy-runtime.ts:668`; `member-session.ts:31,40,75,181`; `agent-loop-service.ts:480,486,512,627`.
 
 ### History
+
+- 2026-10-22T22:16:10.819Z todo → blocked (system)
+

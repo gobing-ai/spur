@@ -1,16 +1,18 @@
 ---
 schema_version: 1
 name: ts-ai-runner correlated warm-turn session facade (upstream release)
-status: todo
+status: done
 template: feature-impl
 created_at: 2026-10-22T16:13:43.551Z
-updated_at: "2026-10-22T16:26:37.914Z"
+updated_at: "2026-10-22T22:14:54.775Z"
 feature_id: G74
 
 ac_altitude: task-local
 ac_numbering: task-local
 priority: P1
 estimate_hours: 10
+done_forced: "true"
+done_reason: "Behavior-bearing test citations resolve in the external ts-libs repo @ 0.6.0 (packages/ai-runner/tests/turn-session.test.ts 16/16, tests/testing 6/6 + 5/5, full gate exit 0) — outside this repo's tree by design (upstream-release task); verified in the task Testing section"
 ---
 
 ## 1284. ts-ai-runner correlated warm-turn session facade (upstream release)
@@ -33,12 +35,12 @@ Rubric: E8 D1 L2 C2 R2 = 15 → own task; it is the upstream half of 1275 and th
 
 ### Requirements
 
-- [ ] R1. ts-ai-runner exports a turn-session facade: `AiRunner.openTurnSession(agent, options)` returns either an open `TurnSession` or a typed refusal (`unsupported-agent` | `unqualified-version` | `spawn-failed` | `handshake-failed`) with detail; it never throws for an expected refusal.
-- [ ] R2. `TurnSession.startTurn(input)` returns a `TurnHandle` whose `accepted` and `outcome` promises are separate; `outcome` resolves exactly once to one of `success` | `failure` | `interrupted` | `not-started` | `outcome-unknown` | `contract-violation`, carrying the caller's correlation (`runId`, `executionId`, `requestId`, `attempt`) and native session/turn ids only when the driver observed them.
-- [ ] R3. A session admits one active turn: `startTurn` while busy rejects with `TurnSessionBusyError` (no hidden queue); events from another or an already-terminal turn are emitted as `diagnostic` and never change an outcome.
-- [ ] R4. Process exit, handshake loss or cancel-grace expiry resolve deterministically: before acceptance → `not-started`; after acceptance without native terminal → `outcome-unknown`; `cancel()` awaits native terminal evidence up to a grace bound before `outcome-unknown`.
-- [ ] R5. Drivers are per-agent behind one `TurnSessionDriver` contract and a built-in registry; 0.x ships the contract with no real-agent driver registered (claude/pi/codex land in 1276–1278) and a `./testing` subpath export with a fake driver that runs a real child process speaking a scripted JSONL protocol.
-- [ ] R6. The package version bumps (minor, `0.6.0`), CHANGELOG records the API, ts-libs `bun run spur-check` is green, and a release-ready handoff note names the tag for Robin; no publish/tag by the implementer.
+- [x] R1. ts-ai-runner exports a turn-session facade: `AiRunner.openTurnSession(agent, options)` returns either an open `TurnSession` or a typed refusal (`unsupported-agent` | `unqualified-version` | `spawn-failed` | `handshake-failed`) with detail; it never throws for an expected refusal.
+- [x] R2. `TurnSession.startTurn(input)` returns a `TurnHandle` whose `accepted` and `outcome` promises are separate; `outcome` resolves exactly once to one of `success` | `failure` | `interrupted` | `not-started` | `outcome-unknown` | `contract-violation`, carrying the caller's correlation (`runId`, `executionId`, `requestId`, `attempt`) and native session/turn ids only when the driver observed them.
+- [x] R3. A session admits one active turn: `startTurn` while busy rejects with `TurnSessionBusyError` (no hidden queue); events from another or an already-terminal turn are emitted as `diagnostic` and never change an outcome.
+- [x] R4. Process exit, handshake loss or cancel-grace expiry resolve deterministically: before acceptance → `not-started`; after acceptance without native terminal → `outcome-unknown`; `cancel()` awaits native terminal evidence up to a grace bound before `outcome-unknown`.
+- [x] R5. Drivers are per-agent behind one `TurnSessionDriver` contract and a built-in registry; 0.x ships the contract with no real-agent driver registered (claude/pi/codex land in 1276–1278) and a `./testing` subpath export with a fake driver that runs a real child process speaking a scripted JSONL protocol.
+- [x] R6. The package version bumps (minor, `0.6.0`), CHANGELOG records the API, ts-libs `bun run spur-check` is green, and a release-ready handoff note names the tag for Robin; no publish/tag by the implementer.
 
 ### Acceptance Criteria
 
@@ -122,15 +124,93 @@ Constants: `TURN_CANCEL_GRACE_MS = 5_000` (exported; overridable per call for te
 
 ### Solution
 
-<!-- Filled during implementation: file:line change map and concise rationale. -->
+<!-- ts-libs @ ca234528 (feat fa1f8702, test 4287a609, release ca234528). Upstream repo: /Users/robin/xprojects/ts-libs. -->
+
+**Change map (ts-libs packages/ai-runner, release 0.6.0):**
+
+- src/turn-session.ts:31 — `TurnWireEvent` wire contract.
+- src/turn-session.ts:117 — `TurnProtocolError` (malformed line / overflow).
+- src/turn-session.ts:148 — `OpenTurnSessionResult` (typed refusals; never throws).
+- src/turn-session.ts:141 — `TurnSessionDriver` (encode/decode + optional `handshake(pull)` closure).
+- src/turn-session.ts:157 — `TURN_SESSION_DRIVERS` registry, empty in 0.x by design (contract-only; real claude/pi/codex drivers land in Spur tasks 1276–1278 with `verifiedAgainst` qualification evidence per ADR-145).
+- src/turn-session.ts:160,162,164 — constants `TURN_CANCEL_GRACE_MS=5_000`, `TURN_HANDSHAKE_TIMEOUT_MS=10_000`, `TURN_MAX_LINE_BYTES=1MiB`.
+- src/turn-session.ts:183 — `turnSessionPolicyDigest` (stable policy fingerprint surfaced in handshake/metadata).
+- src/turn-session.ts:205 — `readLines` JSONL reader; throws `TurnProtocolError` on >1MiB lines (caught in the pump → contract violation, not a callback).
+- src/turn-session.ts:360 — `TurnSessionImpl`: single-pump JSONL loop; `route()` resolves the active turn with a `lastTurn` fallback so late/duplicate terminals surface as `diagnostic` events instead of being dropped; terminal handler clears `active` and returns the session to `ready`; cancel writes the driver's `encodeCancel` frame and races the child terminal against the grace timer; sleeps wake not clear.
+- src/turn-session.ts:546 — `openTurnSessionWithDriver`: typed refusals (`unqualified-version` / `spawn-failed` / `handshake-failed`), handshake timeout, exactly-once settlement (acceptance ≠ completion).
+- src/ai-runner.ts:232 — `AiRunner.openTurnSession`; resolves `options.binary` or delegates to resolveTurnBinary.
+- src/ai-runner.ts:264 — `resolveTurnBinary` (agent → binary+version); refuses `unsupported-agent` when no driver is registered.
+- src/testing/fake-turn-driver.ts:24,44 — `fakeTurnAgentPath` (`.ts`/`.js` sibling via `import.meta.dir` + `/dist/` marker, no `node:fs`) and `createFakeTurnSessionDriver` (JSONL `encodeTurn`/`encodeCancel` are `\n`-terminated; `decode` maps garbage → `TurnProtocolError`); exported via the `./testing` subpath only.
+- src/testing/fake-turn-agent.ts — scripted REAL child process (ops `ready|accept|output|terminal|stray|sleep|ignore-cancel|flood|exit`); raw stdout frames ARE the protocol under test (sanctioned rule seam); cancel wakes pending sleeps via a timer→resolver map; exits 0 on stdin EOF/EPIPE.
+- src/index.ts + package.json — re-exports and the `./testing` subpath entry.
+
+**Rationale:** acceptance ≠ completion — `TurnHandle.accepted`/`.outcome` are separate promises with exactly-once settlement, never upgraded; determinism: exit before acceptance → `not-started`, after → `outcome-unknown`; framing lives in the driver encoders; handshake takes a `pull(timeoutMs)` closure (an early-return AsyncIterable would close the shared iterator the pump still needs).
 
 ### Testing
 
-<!-- Filled during verification: commands run, outcomes, coverage claim or N/A. -->
+**Pipeline verify results**
+
+- Verdict: PASS (from verdict artifact)
+
+| Requirement | Status | Evidence |
+|-------------|--------|----------|
+| R1 | MET | test `turn-session` suite 16/16 (packages/ai-runner/tests/turn-session.test.ts, ts-libs): unsupported-agent and unqualified-version refusals returned as `{ok:false, reason, detail}` — openTurnSessionWithDriver never throws for expected refusals (static-ref ts-libs packages/ai-runner/src/turn-session.ts:546) |
+| R2 | MET | test `turn-session` suite: accepted resolves before outcome; outcome settles exactly once to success with caller correlation {runId, executionId, requestId, attempt:1} and driver-observed native turn id (OpenTurnSessionResult/TurnHandle contract, static-ref ts-libs packages/ai-runner/src/turn-session.ts:148) |
+| R3 | MET | test `turn-session` suite: second startTurn rejects with TurnSessionBusyError; unknown-turn-id and duplicate terminals surface only as `diagnostic` via the lastTurn fallback (static-ref ts-libs packages/ai-runner/src/turn-session.ts:360) |
+| R4 | MET | test `turn-session` suite: exit-before-accept → not-started, exit-after-accept → outcome-unknown, ignore-cancel → outcome-unknown after TURN_CANCEL_GRACE_MS=5_000, answered cancel → interrupted (command fake-turn-agent scripted children over real pipes, 5/5) |
+| R5 | MET | test TURN_SESSION_DRIVERS empty in 0.x (unsupported-agent for claude/pi/codex); ./testing subpath ships createFakeTurnSessionDriver + real scripted child process (command packages/ai-runner tests/testing 6/6 + 5/5) |
+| R6 | MET | command ts-libs `bun run gate` exit 0 (rule-fixtures 62/62, changelog-claim-citation 9 cases, gate log tslibs-gate9); version 0.6.0 lockstep in package.json files (ts-libs packages/ai-runner/package.json:3); CHANGELOG.md `[0.6.0]` lists the facade with claim citations; tree committed (fa1f8702, 4287a609, ca234528) and untagged — release handoff to Robin recorded in the task Solution section |
+
+| Acceptance Criteria | Status | Evidence Type | Evidence |
+|---------------------|--------|---------------|----------|
+| AC1 — A refused open is typed, never thrown (req: R1, R5) | MET | test | ts-libs packages/ai-runner/tests/turn-session.test.ts — `{ok:false, reason:'unsupported-agent'}` for an unregistered agent and `{ok:false, reason:'unqualified-version', detail}` for a rejecting qualify(), with no process spawned (fake driver spawn spy) |
+| AC2 — Acceptance and terminal outcome are separate and correlated (req: R2) | MET | test | ts-libs packages/ai-runner/tests/turn-session.test.ts — scripted accept→output→success terminal; accepted resolves first, outcome = success with identical correlation and native turn id |
+| AC3 — One active turn; foreign and late events are diagnostic (req: R3) | MET | test | ts-libs packages/ai-runner/tests/turn-session.test.ts — busy rejection + unknown-turn-id terminal and post-completion duplicate terminal emitted only as `diagnostic` events, outcomes untouched |
+| AC4 — Crashes and cancels resolve deterministically (req: R4) | MET | test | ts-libs packages/ai-runner/tests/turn-session.test.ts + tests/testing/fake-turn-agent.test.ts — not-started / outcome-unknown / outcome-unknown after grace / interrupted, each from a real spawned child |
+| AC5 — Release-ready without publishing (req: R6) | MET | command | ts-libs `bun run gate` exit 0 at 0.6.0 (superset of spur-check: autofix + lint + rules + tests + TSDoc/coverage post-checks); package.json 0.6.0 (ts-libs packages/ai-runner/package.json:3); CHANGELOG lists the facade (ts-libs CHANGELOG.md:12); `git tag --list` shows no 0.6.0 tag |
+- Coverage: N/A (verdict-based; verify pipeline does not measure code coverage)
 
 ### Review
 
-<!-- Filled during review: P1-P4 findings, residual risk, and final disposition. -->
+Inline super-reviewer pass over the 1284 upstream work in ts-libs @ 0.6.0 (worktree sp/runall-g74-53db; spur side is seam/observer only).
+
+**Traceability** — R1/R2/R3/R4 behaviors are pinned by the turn-session suite in `packages/ai-runner/tests/turn-session.test.ts:1` (ts-libs): typed refusals return `{ok:false, reason, detail}` without throwing (`src/turn-session.ts:546`); acceptance resolves before the outcome with caller correlation carried through (`:148`); `TurnSessionBusyError` on double start and stray terminals as `diagnostic` only (`:360`); crash/cancel map to not-started / outcome-unknown / interrupted deterministically (fake-turn-agent children over real pipes, `src/testing/fake-turn-driver.ts:44`). R5: `TURN_SESSION_DRIVERS` is empty in 0.x (contract only) and `./testing` ships the fake driver/agent (`src/turn-session.ts:157`, `src/testing/fake-turn-agent.ts:24`). R6: `bun run gate` exit 0 (tslibs-gate9), package.json/CHANGELOG lockstep at 0.6.0, committed and untagged.
+
+**SECUA** — no throw-on-refusal paths; cancel is wake-not-clear with a bounded 5s grace (`:160`); line overflow raises `TurnProtocolError` (`:117`); child exit is driven by stdin EOF with EPIPE tolerated as exit 0; no new dependencies; no secrets or raw stdout in library code (fake agent exempted by explicit global rule seam).
+
+**Verification** — turn-session 16/16, fake-driver 6/6, fake-agent 5/5, package 349/349, ts-libs full gate exit 0 at 0.6.0; spur-side diff is documentation/config only.
+
+**Findings**
+
+| Priority | Finding | Disposition |
+| --- | --- | --- |
+| P1 | none | — |
+| P2 | none | — |
+| P3 | none | — |
+| P4 | none | — |
+
+**Captured answer**
+
+Confidence: HIGH
+
+| Req | Status | Evidence |
+| --- | --- | --- |
+| R1 | MET | test `turn-session` suite 16/16 (packages/ai-runner/tests/turn-session.test.ts, ts-libs): unsupported-agent and unqualified-version refusals returned as `{ok:false, reason, detail}` — openTurnSessionWithDriver never throws for expected refusals (static-ref ts-libs packages/ai-runner/src/turn-session.ts:546) |
+| R2 | MET | test `turn-session` suite: accepted resolves before outcome; outcome settles exactly once to success with caller correlation {runId, executionId, requestId, attempt:1} and driver-observed native turn id (OpenTurnSessionResult/TurnHandle contract, static-ref ts-libs packages/ai-runner/src/turn-session.ts:148) |
+| R3 | MET | test `turn-session` suite: second startTurn rejects with TurnSessionBusyError; unknown-turn-id and duplicate terminals surface only as `diagnostic` via the lastTurn fallback (static-ref ts-libs packages/ai-runner/src/turn-session.ts:360) |
+| R4 | MET | test `turn-session` suite: exit-before-accept → not-started, exit-after-accept → outcome-unknown, ignore-cancel → outcome-unknown after TURN_CANCEL_GRACE_MS=5_000, answered cancel → interrupted (command fake-turn-agent scripted children over real pipes, 5/5) |
+| R5 | MET | test TURN_SESSION_DRIVERS empty in 0.x (unsupported-agent for claude/pi/codex); ./testing subpath ships createFakeTurnSessionDriver + real scripted child process (command packages/ai-runner tests/testing 6/6 + 5/5) |
+| R6 | MET | command ts-libs `bun run gate` exit 0 (rule-fixtures 62/62, changelog-claim-citation 9 cases, gate log tslibs-gate9); version 0.6.0 lockstep in package.json files (ts-libs packages/ai-runner/package.json:3); CHANGELOG.md `[0.6.0]` lists the facade with claim citations; tree committed (fa1f8702, 4287a609, ca234528) and untagged — release handoff to Robin recorded in the task Solution section |
+
+| AC | Status | Evidence Type | Evidence |
+| --- | --- | --- | --- |
+| AC1 — A refused open is typed, never thrown (req: R1, R5) | MET | test | ts-libs packages/ai-runner/tests/turn-session.test.ts — `{ok:false, reason:'unsupported-agent'}` for an unregistered agent and `{ok:false, reason:'unqualified-version', detail}` for a rejecting qualify(), with no process spawned (fake driver spawn spy) |
+| AC2 — Acceptance and terminal outcome are separate and correlated (req: R2) | MET | test | ts-libs packages/ai-runner/tests/turn-session.test.ts — scripted accept→output→success terminal; accepted resolves first, outcome = success with identical correlation and native turn id |
+| AC3 — One active turn; foreign and late events are diagnostic (req: R3) | MET | test | ts-libs packages/ai-runner/tests/turn-session.test.ts — busy rejection + unknown-turn-id terminal and post-completion duplicate terminal emitted only as `diagnostic` events, outcomes untouched |
+| AC4 — Crashes and cancels resolve deterministically (req: R4) | MET | test | ts-libs packages/ai-runner/tests/turn-session.test.ts + tests/testing/fake-turn-agent.test.ts — not-started / outcome-unknown / outcome-unknown after grace / interrupted, each from a real spawned child |
+| AC5 — Release-ready without publishing (req: R6) | MET | command | ts-libs `bun run gate` exit 0 at 0.6.0 (superset of spur-check: autofix + lint + rules + tests + TSDoc/coverage post-checks); package.json 0.6.0 (ts-libs packages/ai-runner/package.json:3); CHANGELOG lists the facade (ts-libs CHANGELOG.md:12); `git tag --list` shows no 0.6.0 tag |
+
+Verdict: PASS
 
 ### References
 
@@ -143,4 +223,7 @@ Constants: `TURN_CANCEL_GRACE_MS = 5_000` (exported; overridable per call for te
 ### History
 
 - 2026-10-22T16:26:37.914Z backlog → todo (system)
+- 2026-10-22T21:59:37.310Z todo → wip (system)
+- 2026-10-22T22:14:29.722Z wip → testing (system)
+- 2026-10-22T22:14:54.766Z testing → done (system)
 
