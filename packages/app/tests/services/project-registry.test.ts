@@ -100,6 +100,44 @@ describe('ProjectRegistry', () => {
         expect(res).toBe(false);
     });
 
+    // A local `spur serve` shutdown deregisters with setPort(path, 0). When the
+    // same path is also registered for a remote host, a path-only match zeroed
+    // the REMOTE entry (the live 3003 serve) and reported it as stopped
+    // (observed 2026-10-22 on knowledge-kit @192.168.87.27).
+    it('should clear only the local entry when the same path exists for a remote host', async () => {
+        await registry.upsert({ name: 'Shared', path: tempDir, port: 3003, host: '192.168.87.27' });
+        await registry.upsert({ name: 'Shared', path: tempDir, port: 3005, host: 'localhost' });
+
+        expect(await registry.setPort(tempDir, 0)).toBe(true);
+
+        const entries = registry.readRaw().projects;
+        expect(entries.find((p) => p.host === '192.168.87.27')?.port).toBe(3003);
+        expect(entries.find((p) => p.host === 'localhost')?.port).toBe(0);
+    });
+
+    it('should target the named host when setPort receives one', async () => {
+        await registry.upsert({ name: 'Shared', path: tempDir, port: 3003, host: '192.168.87.27' });
+        await registry.upsert({ name: 'Shared', path: tempDir, port: 3005, host: 'localhost' });
+
+        expect(await registry.setPort(tempDir, 0, '192.168.87.27')).toBe(true);
+
+        const entries = registry.readRaw().projects;
+        expect(entries.find((p) => p.host === '192.168.87.27')?.port).toBe(0);
+        expect(entries.find((p) => p.host === 'localhost')?.port).toBe(3005);
+    });
+
+    it('should remove only the entry for the requested host', async () => {
+        await registry.upsert({ name: 'Shared', path: tempDir, port: 3003, host: '192.168.87.27' });
+        await registry.upsert({ name: 'Shared', path: tempDir, port: 0, host: 'localhost' });
+
+        expect(await registry.remove('Shared', 'localhost')).toBe(true);
+
+        const entries = registry.readRaw().projects;
+        expect(entries).toHaveLength(1);
+        expect(entries[0]?.host).toBe('192.168.87.27');
+        expect(entries[0]?.port).toBe(3003);
+    });
+
     it('should remove a project entry by name or path', async () => {
         await registry.upsert({ name: 'Project A', path: tempDir });
         const removed = await registry.remove('Project A');
@@ -929,7 +967,7 @@ describe('ProjectRegistry', () => {
             }
         });
 
-        it('skips folder existence checking for remote project and resets port when inaccessible', async () => {
+        it('skips folder existence checking and keeps the port for an unreachable remote project', async () => {
             const remotePath = '/non/existent/remote/path';
             await registry.upsert({
                 name: 'Remote Inaccessible',
@@ -938,25 +976,19 @@ describe('ProjectRegistry', () => {
                 host: 'remote.cloud.internal',
             });
 
-            // Port 4567 is not accessible
-            setPortProbeForTests(async (port, host) => {
-                if (host === 'remote.cloud.internal' && port === 4567) {
-                    return 'available';
-                }
-                return 'available';
-            });
+            // Nothing answers on the remote host.
+            setPortProbeForTests(async () => 'available');
 
             const result = await registry.refreshProjects();
-            // Remote project must NOT be purged
+            // Remote project must NOT be purged, and a failed probe must NOT erase the
+            // port: another machine being unreachable is not proof its serve is gone.
             expect(result.removed).toHaveLength(0);
-            expect(result.resetPorts).toHaveLength(1);
-            expect(result.resetPorts[0]?.name).toBe('Remote Inaccessible');
-            expect(result.resetPorts[0]?.host).toBe('remote.cloud.internal');
+            expect(result.resetPorts).toHaveLength(0);
 
             const projects = await registry.list();
             const remoteEntry = projects.find((p) => p.name === 'Remote Inaccessible');
             expect(remoteEntry).toBeDefined();
-            expect(remoteEntry?.port).toBe(0);
+            expect(remoteEntry?.port).toBe(4567);
             expect(remoteEntry?.host).toBe('remote.cloud.internal');
         });
 

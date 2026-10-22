@@ -24,6 +24,31 @@ import {
 
 export * from './project-process';
 
+/** Resolve the effective host recorded for an entry (default: 'localhost'). */
+function entryHost(entry: { host?: string | null }): string {
+    const host = entry.host?.trim();
+    return host && host !== '' ? host : 'localhost';
+}
+
+/**
+ * Index of the entry identified by path + host — the identity `upsert` writes on.
+ *
+ * Matching is host-scoped: the same path can be registered for a remote host AND for
+ * localhost, so a path-only match let a local write land on the remote entry (a local
+ * `spur serve` shutdown cleared knowledge-kit's live 192.168.87.27:3003 to 0).
+ */
+function findProjectIndex(projects: ProjectEntry[], pathInput: string, hostInput?: string): number {
+    const host = hostInput?.trim() ?? '';
+    const isLocal = isLocalHost(host);
+    const normalized = normalizeProjectPath(pathInput);
+    return projects.findIndex((p) => {
+        if (isLocal) {
+            return isLocalHost(p.host) && normalizeProjectPath(p.path) === normalized;
+        }
+        return entryHost(p).toLowerCase() === host.toLowerCase() && p.path === pathInput;
+    });
+}
+
 /** Result of refreshing project entries. */
 export interface RefreshProjectsResult {
     /** Project entries removed because their directory does not exist. */
@@ -284,13 +309,7 @@ export class ProjectRegistry {
             const host = entry.host && entry.host.trim() !== '' ? entry.host.trim() : 'localhost';
             const isLocal = isLocalHost(host);
             const normalizedPath = isLocal ? normalizeProjectPath(entry.path) : entry.path;
-            const index = currentData.projects.findIndex((p) => {
-                const pHost = p.host && p.host.trim() !== '' ? p.host.trim() : 'localhost';
-                if (isLocal) {
-                    return isLocalHost(pHost) && normalizeProjectPath(p.path) === normalizedPath;
-                }
-                return pHost.toLowerCase() === host.toLowerCase() && p.path === normalizedPath;
-            });
+            const index = findProjectIndex(currentData.projects, normalizedPath, host);
 
             const newEntry: ProjectEntry = {
                 name: entry.name,
@@ -312,13 +331,7 @@ export class ProjectRegistry {
             }
 
             this.writeRaw(currentData);
-            const res = currentData.projects.find((p) => {
-                const pHost = p.host && p.host.trim() !== '' ? p.host.trim() : 'localhost';
-                if (isLocal) {
-                    return isLocalHost(pHost) && normalizeProjectPath(p.path) === normalizedPath;
-                }
-                return pHost.toLowerCase() === host.toLowerCase() && p.path === normalizedPath;
-            });
+            const res = currentData.projects[findProjectIndex(currentData.projects, normalizedPath, host)];
             if (!res) {
                 throw new Error(`Failed to upsert project: ${normalizedPath}`);
             }
@@ -326,14 +339,28 @@ export class ProjectRegistry {
         });
     }
 
-    /** Remove a project entry by display name or path. */
-    async remove(nameOrPath: string): Promise<boolean> {
+    /**
+     * Remove a project entry by display name or path.
+     *
+     * `host` scopes the removal to one host's entry, so a duplicate registration of the
+     * same name/path (e.g. a stale localhost row next to the remote one) can be dropped
+     * without deleting the entry that still holds a live port.
+     */
+    async remove(nameOrPath: string, host?: string): Promise<boolean> {
         return this.withLock(async () => {
             const currentData = this.readRaw();
             const normalized = normalizeProjectPath(nameOrPath);
+            const hostScope = host?.trim() ?? '';
+            const scoped = hostScope !== '';
             const initialLen = currentData.projects.length;
 
             currentData.projects = currentData.projects.filter((p) => {
+                if (scoped) {
+                    const hostMatches = isLocalHost(hostScope)
+                        ? isLocalHost(p.host)
+                        : entryHost(p).toLowerCase() === hostScope.toLowerCase();
+                    if (!hostMatches) return true;
+                }
                 const pNorm = isLocalHost(p.host) ? normalizeProjectPath(p.path) : p.path;
                 const pathMatch = pNorm === normalized || p.path === nameOrPath;
                 const nameMatch = p.name.toLowerCase() === nameOrPath.trim().toLowerCase();
@@ -348,15 +375,17 @@ export class ProjectRegistry {
         });
     }
 
-    /** Update port for a project by path. */
-    async setPort(pathInput: string, port: number): Promise<boolean> {
+    /**
+     * Update port for a project by path.
+     *
+     * Host-scoped like {@link upsert} (default: localhost): a path-only match let a local
+     * serve deregistering itself (`setPort(path, 0)`) clear the live *remote* entry that
+     * happens to share the path, leaving the remote port 0 while its serve kept listening.
+     */
+    async setPort(pathInput: string, port: number, host?: string): Promise<boolean> {
         return this.withLock(async () => {
             const currentData = this.readRaw();
-            const normalized = normalizeProjectPath(pathInput);
-            const project = currentData.projects.find((p) => {
-                const pNorm = isLocalHost(p.host) ? normalizeProjectPath(p.path) : p.path;
-                return pNorm === normalized || p.path === pathInput;
-            });
+            const project = currentData.projects[findProjectIndex(currentData.projects, pathInput, host)];
 
             if (project) {
                 project.port = port;
@@ -408,8 +437,14 @@ export class ProjectRegistry {
     }
 
     /**
-     * Stale-heal: check any project with port > 0 (local or remote);
-     * if the port is closed / not accessible, reset to 0. Returns entries whose port was reset.
+     * Stale-heal: check any **local** project with port > 0; if the port is closed, reset to 0.
+     * Returns entries whose port was reset.
+     *
+     * Remote entries are never reset here: a probe of another machine cannot separate
+     * "serve is gone" from "host asleep / network hiccup", and zeroing it destroys the only
+     * record of where that serve runs — knowledge-kit's live 192.168.87.27:3003 was reset to 0
+     * this way while the serve kept answering. `list()`/`/api/projects` report remote liveness
+     * from a live per-request probe, so the stored port stays a routing hint, not a liveness claim.
      */
     async healStale(): Promise<ProjectEntry[]> {
         return this.withLock(async () => {
@@ -418,9 +453,8 @@ export class ProjectRegistry {
             const resetProjects: ProjectEntry[] = [];
 
             for (const project of data.projects) {
-                if (project.port > 0) {
-                    const host = project.host ?? 'localhost';
-                    const live = await isPortLive(project.port, 200, host);
+                if (project.port > 0 && isLocalHost(project.host)) {
+                    const live = await isPortLive(project.port, 200);
                     if (!live) {
                         resetProjects.push({ ...project });
                         project.port = 0;
@@ -443,7 +477,7 @@ export class ProjectRegistry {
      * the shared ownership-verified stop (1156): only a proven Spur server serving
      * this exact project path is signaled, and a terminated record is reported
      * only after the original listener is observed gone.
-     * Closed/inaccessible ports on remaining local and remote projects are reset to 0.
+     * Closed ports on remaining local projects are reset to 0; remote ports are kept.
      *
      * Lock scope (1167): the registry lock covers only the purge decision and the
      * write. HTTP identity probes (up to 4×requestTimeoutMs) and kill waits
@@ -498,7 +532,7 @@ export class ProjectRegistry {
             }
         }
 
-        // Port sweep: reset closed / inaccessible ports to 0 for remaining local and remote projects
+        // Port sweep: reset closed local ports to 0 (remote ports are hints, never healed — see healStale)
         const resetPorts = await this.healStale();
 
         return {
