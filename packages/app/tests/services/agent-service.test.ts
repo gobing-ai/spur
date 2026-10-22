@@ -1740,6 +1740,7 @@ describe('AgentService.runTraced', () => {
         );
 
         await service.run('direct prompt', { agent: 'pi', 'run-id': 'direct-run' }, deps);
+        // Task 1273: phase marks ride `fleet.phase.*`, never the `agent.execution` stream.
         expect(directEvents.map((event) => event.kind)).toEqual(['started', 'output', 'finished']);
         expect(directEvents.every((event) => event.runId === 'direct-run')).toBe(true);
         expect(JSON.stringify(directEvents)).not.toContain('configured-secret');
@@ -1750,7 +1751,11 @@ describe('AgentService.runTraced', () => {
             observer: (event) => workflowEvents.push(event),
             heartbeatMs: 0,
         });
-        expect(workflowEvents.map((event) => event.kind)).toEqual(['started', 'output', 'finished']);
+        // Task 1273: the workflow observer additionally receives the lifecycle phase marks.
+        // The mock publishes no pid, so process-ready is absent here; first-output precedes
+        // the delivered output event (the mark fires at first enqueue) and terminal lands
+        // just before the finished outcome.
+        expect(workflowEvents.map((event) => event.kind)).toEqual(['started', 'phase', 'output', 'phase', 'finished']);
         expect(workflowEvents.every((event) => event.actionId === 'action-1')).toBe(true);
     });
 

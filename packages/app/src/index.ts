@@ -1061,6 +1061,7 @@ export {
     type FeatureVerificationRunResult,
     runFeatureVerification,
 } from './workflow/feature-verification-run';
+export { type FleetPhaseEmit, runFleetWorkItem } from './workflow/fleet-work-item';
 export {
     type FinalizeIdeaHandoffOptions,
     type FinalizeIdeaHandoffResult,

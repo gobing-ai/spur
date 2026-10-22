@@ -310,6 +310,8 @@ export interface StrategyRuntimeContext {
      * then dispatches nothing and says so instead of faking a decision.
      */
     dispatcher?: Pick<FleetDispatcher, 'enqueue' | 'receipt'>;
+    /** Fleet phase marks (task 1273); absent where no bus is wired. */
+    emitPhase?: import('../workflow/fleet-work-item').FleetPhaseEmit;
     /**
      * Guest-lease expiry (G11 R3). Runs on the WRITE side of {@link StrategyRuntime.resume},
      * never inside a read: the Board's requests view must not terminate a live guest. Absent
@@ -497,7 +499,7 @@ export class StrategyRuntime {
             try {
                 const attempts = await this.readAttempts(inbox, wbs);
                 const attempt = attempts.count + 1;
-                await dispatcher.enqueue({
+                const { messageId } = await dispatcher.enqueue({
                     member: decision.instanceId,
                     fromId: opts.orchestratorId,
                     // G71 R1: interrupted work resumes. A wip task, or one that already has a
@@ -505,6 +507,14 @@ export class StrategyRuntime {
                     // partial work up instead of starting over.
                     body: `/sp:dev-run ${wbs} --auto${resumeHint ? ' --continue' : ''}`,
                     requestKey: `${fleetTaskKeyPrefix(wbs)}${attempt}`,
+                    taskId: wbs,
+                });
+                this.ctx.emitPhase?.('enqueue', {
+                    phase: 'enqueue',
+                    at: new Date().toISOString(),
+                    key: `${fleetTaskKeyPrefix(wbs)}${attempt}`,
+                    messageId,
+                    member: decision.instanceId,
                     taskId: wbs,
                 });
                 dispatched.push(decision);

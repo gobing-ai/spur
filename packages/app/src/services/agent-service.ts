@@ -588,14 +588,23 @@ export class AgentService {
 
     private defaultExecutionOptions(flags: Record<string, string | boolean>): AgentExecutionOptions {
         const runId = stringFlag(flags, 'run-id', '') || crypto.randomUUID();
+        // Task 1273: a keyed fleet run pins one execution identity across all its
+        // phase marks, so every phase row joins by the same (runId, executionId).
+        const executionId = stringFlag(flags, 'execution-id', '') || crypto.randomUUID();
         const observer =
             this.ctx.events === undefined
                 ? undefined
                 : (event: import('../observability/agent-execution').AgentExecutionEvent) => {
+                      // Phase marks ride their own `fleet.phase.*` name (task 1273) so the
+                      // KPI driver selects them without decoding `agent.execution` payloads.
+                      if (event.kind === 'phase') {
+                          void this.ctx.events?.emit(`fleet.phase.${event.phase}`, event);
+                          return;
+                      }
                       void this.ctx.events?.emit('agent.execution', event);
                   };
         return {
-            correlation: { runId, executionId: crypto.randomUUID() },
+            correlation: { runId, executionId },
             ...(observer !== undefined ? { observer } : {}),
         };
     }

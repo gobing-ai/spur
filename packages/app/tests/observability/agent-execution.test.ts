@@ -31,9 +31,11 @@ describe('AgentExecutionLifecycle', () => {
         });
         lifecycle.finish({ exitCode: 0, durationMs: 12 });
 
-        expect(events.map((event) => event.kind)).toEqual(['started', 'output', 'finished']);
+        // Task 1273: first-output and terminal phase marks ride between the facts;
+        // process-ready is absent (no pid observed in this test).
+        expect(events.map((event) => event.kind)).toEqual(['started', 'phase', 'output', 'phase', 'finished']);
         expect(events.every((event) => event.runId === 'run-1' && event.actionId === 'action-1')).toBe(true);
-        expect(events.map((event) => event.sequence)).toEqual([1, 2, 3]);
+        expect(events.map((event) => event.sequence)).toEqual([1, 2, 3, 4, 5]);
         expect(JSON.stringify(events)).not.toContain('known-secret');
         const output = events.find((event) => event.kind === 'output');
         expect(output?.kind === 'output' ? output.chunk.length : 0).toBeLessThanOrEqual(4097);

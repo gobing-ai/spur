@@ -9,6 +9,7 @@ import {
 import type { AgentProcessOptions, AgentSpec } from '@gobing-ai/ts-ai-runner';
 import { EventBus } from '@gobing-ai/ts-infra';
 import type { WorkflowAgentService } from '../workflow/actions/agent-run';
+import type { FleetPhaseEmit } from '../workflow/fleet-work-item';
 import { runFleetWorkItem } from '../workflow/fleet-work-item';
 import type { AgentRunDeps, AgentService } from './agent-service';
 import type { DeliveryReconciler } from './delivery-reconciler';
@@ -99,8 +100,9 @@ export interface AgentLoopDeps {
     /** Per-loop bus-bound agent service. */
     agentService(bus: SystemEventBus): WorkflowAgentService & Pick<AgentService, 'run'>;
     fleet: FleetService;
-    /** Strategy runtime factory (the CLI builds one bound to its `./task` services). */
-    makeStrategyRuntime(): Promise<StrategyRuntime>;
+    /** Strategy runtime factory (the CLI builds one bound to its `./task` services). The
+     * emitter argument carries the loop's bus so strategy enqueues leave phase marks. */
+    makeStrategyRuntime(emitPhase?: FleetPhaseEmit): Promise<StrategyRuntime>;
     /** The recipient's agent spec listing. */
     listAgentSpecs(): Promise<AgentSpec[]>;
     reconciler: Pick<DeliveryReconciler, 'reconcile'>;
@@ -313,6 +315,11 @@ export async function runAgentLoopCore(deps: AgentLoopDeps, input: AgentLoopRunI
     // `agent.invoke.start` (via the agent runner) marks the invocation accepted.
     const bus = new EventBus() as SystemEventBus;
     const svc = deps.agentService(bus);
+    // Task 1273: one emitter for every fleet phase mark this loop process owns —
+    // strategy enqueue, member claim, work-item boundaries.
+    const emitPhase: FleetPhaseEmit = (phase, payload) => {
+        void bus.emit(`fleet.phase.${phase}`, payload);
+    };
 
     const fleet = deps.fleet;
     const declaration = await fleet.load(deps.cwd);
@@ -412,7 +419,7 @@ export async function runAgentLoopCore(deps: AgentLoopDeps, input: AgentLoopRunI
         const report = await deps.reconciler.reconcile(recipient);
         deps.write(formatReconcileReport(report));
         if (owner) {
-            strategyRuntime = await deps.makeStrategyRuntime();
+            strategyRuntime = await deps.makeStrategyRuntime(emitPhase);
             await strategyRuntime.resume(projectPath);
         }
 
@@ -516,11 +523,30 @@ export async function runAgentLoopCore(deps: AgentLoopDeps, input: AgentLoopRunI
                     // same id for as long as the run is live.
                     const runId = keyed ? randomUUID() : undefined;
                     if (runId !== undefined) deps.setSupervisorRun?.(recipient, runId);
+                    // Task 1273: one execution identity per keyed run — every phase mark
+                    // (claim → lifecycle → contract) joins by the same (runId, executionId).
+                    const executionId = keyed ? randomUUID() : undefined;
+                    if (runId !== undefined && executionId !== undefined) {
+                        emitPhase('claim', {
+                            phase: 'claim',
+                            runId,
+                            executionId,
+                            at: new Date().toISOString(),
+                            member: recipient,
+                            // Task 1273: singular first key (metadata-only retention has no arrays) —
+                            // the KPI driver attributes the trial by matching the wbs in this key.
+                            key: requestKeys?.[0],
+                        });
+                    }
                     try {
                         // G66 R1: resume mode re-opens the previous drain's session;
                         // one-shot keeps today's fresh process (R3's warning already
                         // fired once at loop start).
-                        const baseFlags = { ...rewritten, ...(runId !== undefined ? { 'run-id': runId } : {}) };
+                        const baseFlags = {
+                            ...rewritten,
+                            ...(runId !== undefined ? { 'run-id': runId } : {}),
+                            ...(executionId !== undefined ? { 'execution-id': executionId } : {}),
+                        };
                         const drainFlags =
                             memberSession.mode === 'resume' && memberSession.id !== undefined
                                 ? { ...baseFlags, 'session-id': memberSession.id }
@@ -536,6 +562,7 @@ export async function runAgentLoopCore(deps: AgentLoopDeps, input: AgentLoopRunI
                                       service: svc,
                                       runDeps,
                                       getDb: deps.getDb,
+                                      emitPhase,
                                   })
                                 : null;
                         if (workResult !== null) {
@@ -573,7 +600,7 @@ export async function runAgentLoopCore(deps: AgentLoopDeps, input: AgentLoopRunI
             if (runtime.signal?.aborted) break;
             const fleetDeclared = (await fleet.load(deps.cwd)) !== null;
             if (fleetDeclared && owner !== null) {
-                strategyRuntime ??= await deps.makeStrategyRuntime();
+                strategyRuntime ??= await deps.makeStrategyRuntime(emitPhase);
                 const ledger = await deps.attachLedger(bus);
                 try {
                     // G71 R4: the orchestrator converses before it dispatches. Its own drain

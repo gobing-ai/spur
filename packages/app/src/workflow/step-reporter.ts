@@ -95,6 +95,9 @@ export function renderStepLine(event: StepEvent, options: StepRenderOptions = {}
             const full = detail === 'full' ? ` · execution=${event.executionId}` : '';
             return `${pfx}  agent=${event.agent}${model} => ${event.invocation}${pidPart}${full}`;
         }
+        if (event.kind === 'phase') {
+            return detail === 'minimal' ? null : `${pfx}  … agent phase · ${event.phase}`;
+        }
         const mark = event.outcome === 'done' ? '✓' : '✗';
         const full = detail === 'full' ? ` · execution=${event.executionId}` : '';
         const exitPart = event.exitCode !== null && event.exitCode !== undefined ? ` · exit ${event.exitCode}` : '';

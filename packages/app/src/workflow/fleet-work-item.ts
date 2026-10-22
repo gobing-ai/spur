@@ -18,6 +18,11 @@ function paths(cwd: string, key: string): { input: string; result: string; state
     return { input: `${base}.execution.json`, result: `${base}.result.json`, state: match[2] as string };
 }
 
+/** Read a flag value as a string id, or undefined when absent/empty. */
+function stringOrUndefined(value: unknown): string | undefined {
+    return typeof value === 'string' && value.length > 0 ? value : undefined;
+}
+
 function bindingVars(vars: Record<string, unknown>): Record<string, string> {
     return Object.fromEntries(
         Object.entries(vars).filter(
@@ -59,6 +64,24 @@ export async function readFleetWorkItemResult(cwd: string, runId: string, state:
     }
 }
 
+/** Fleet phase-mark emitter (task 1273): a boundary name plus bounded identity payload. */
+export type FleetPhaseEmit = (phase: string, payload: Record<string, unknown>) => void;
+
+/** Build a phase payload with the correlation ids a keyed run owns. */
+function phasePayload(
+    phase: string,
+    ids: { runId?: string; executionId?: string },
+    extra: Record<string, unknown> = {},
+): Record<string, unknown> {
+    return {
+        phase,
+        ...(ids.runId !== undefined ? { runId: ids.runId } : {}),
+        ...(ids.executionId !== undefined ? { executionId: ids.executionId } : {}),
+        at: new Date().toISOString(),
+        ...extra,
+    };
+}
+
 /** The member runs the shared action contract before publishing its completion receipt. */
 export async function runFleetWorkItem(input: {
     cwd: string;
@@ -69,10 +92,20 @@ export async function runFleetWorkItem(input: {
     service: WorkflowAgentService;
     runDeps?: AgentRunDeps;
     getDb(): Promise<DbAdapter>;
+    /** Phase marks (task 1273); absent where no bus is wired. */
+    emitPhase?: FleetPhaseEmit;
 }): Promise<ActionResult | null> {
     const file = paths(input.cwd, input.key);
     const fs = createNodeFileSystem(input.cwd);
     if (file === null || !(await fs.exists(file.input))) return null;
+    input.emitPhase?.(
+        'preflight',
+        phasePayload(
+            'preflight',
+            { runId: stringOrUndefined(input.flags['run-id']) },
+            { key: input.key, messageId: input.messageId, member: input.recipient },
+        ),
+    );
     const work = JSON.parse(await fs.readFile(file.input)) as FleetWorkItem;
     if (
         work === null ||
@@ -90,6 +123,11 @@ export async function runFleetWorkItem(input: {
     delete flags.requestMessage;
     delete flags['request-message'];
     const runId = String(flags['run-id'] ?? crypto.randomUUID());
+    const ids = { runId, executionId: stringOrUndefined(flags['execution-id']) };
+    input.emitPhase?.(
+        'accepted',
+        phasePayload('accepted', ids, { key: input.key, messageId: input.messageId, member: input.recipient }),
+    );
     const runner = new AgentRunActionRunner(input.service, undefined, undefined, { excludeGlobs: work.excludeGlobs });
     const result = await runner.execute(
         { ...work.options, agent: flags.agent, cwd: input.cwd },
@@ -102,6 +140,7 @@ export async function runFleetWorkItem(input: {
         },
         { flags, deps: input.runDeps },
     );
+    input.emitPhase?.('contract-validated', phasePayload('contract-validated', ids, { ok: result.ok }));
     // Answers stay in their declared artifact; the transport receipt carries only contract metadata.
     const projected: ActionResult = {
         ok: result.ok,

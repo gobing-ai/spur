@@ -319,6 +319,14 @@ The following matrix fixes summary behavior, retained facts, and outcome support
 | `agent.lifecycle.changed` | `member`, `state`, `seq` | `[agent] {member} · {state}` | `state` |
 | `strategy.changed` | `projectPath`, `strategy`, `version` | `[strategy] {strategy} (v{version})` | — |
 | `fleet.capacity.changed` | `projectPath`, `change`, `holderId` | `[fleet] write slot {change} — {holderId}` | — |
+| `fleet.phase.enqueue` | `phase`, `key`, `taskId`, `member`, `monotonicMs` | `[fleet] phase enqueue {key}` | — |
+| `fleet.phase.claim` | `phase`, `key`, `member`, `runId`, `executionId` | `[fleet] phase claim {key}` | — |
+| `fleet.phase.preflight` | `phase`, `key`, `member` | `[fleet] phase preflight {key}` | — |
+| `fleet.phase.accepted` | `phase`, `key`, `member` | `[fleet] phase accepted {key}` | — |
+| `fleet.phase.contract-validated` | `phase`, `key`, `ok` | `[fleet] phase contract-validated {key}` | — |
+| `fleet.phase.process-ready` | `phase`, `monotonicMs`, `runId`, `executionId` | `[fleet] phase process-ready` | — |
+| `fleet.phase.first-output` | `phase`, `monotonicMs`, `runId`, `executionId` | `[fleet] phase first-output` | — |
+| `fleet.phase.terminal` | `phase`, `monotonicMs`, `runId`, `executionId` | `[fleet] phase terminal` | — |
 | `task.assigned` | member/type/task, `outcome` | `[task] {taskId} assigned to {memberId}` | `outcome` |
 | `history.import.completed` | source(s), files/messages, duration, exit code, artifact, `coverage`; + `trigger`/window/`importMode` when a refresh context is present | `[history] import · {source | sources}` | `exitCode` |
 | `history.analyze.completed` | source(s), duration, exit code, artifact; + `trigger`/window/`importMode` when a refresh context is present | `[history] analyze · {source | sources}` | `exitCode` |

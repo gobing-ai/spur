@@ -531,7 +531,10 @@ export function parseTimeout(raw: string | boolean | undefined): number | undefi
 }
 
 /** Build the fleet strategy runtime (coordination + delivery seams) over this CLI context. */
-export async function makeFleetRuntime(context: CliContext): Promise<StrategyRuntime> {
+export async function makeFleetRuntime(
+    context: CliContext,
+    emitPhase?: import('@gobing-ai/spur-app').FleetPhaseEmit,
+): Promise<StrategyRuntime> {
     const coordination = new AgentCoordinationService(context);
     return new StrategyRuntime({
         openDb: () => context.getDb(),
@@ -551,6 +554,7 @@ export async function makeFleetRuntime(context: CliContext): Promise<StrategyRun
                     new CoordinationRunDao(await context.getDb()).listByMessageId(messageId),
             },
         }),
+        ...(emitPhase ? { emitPhase } : {}),
         ready: async (candidate) => {
             const check = await makeCheckService(context);
             const result = await check.check(candidate.filePath, candidate.wbs, { asStatus: 'wip', strict: true });
@@ -602,7 +606,7 @@ export async function runAgentLoop(
         fleet,
         // 1076 R2: a supervised loop is a child process, so the run tag crosses as a stdout control line.
         setSupervisorRun: (_agentId, runId) => context.output.write(`${SUPERVISOR_RUN_MARKER}${runId ?? ''}`),
-        makeStrategyRuntime: () => makeFleetRuntime(context),
+        makeStrategyRuntime: (emitPhase) => makeFleetRuntime(context, emitPhase),
         listAgentSpecs: () => new AgentCoordinationService(context).listAgentSpecs(),
         reconciler: new DeliveryReconciler(context),
         drain: (drainFlags) => drainIntoPrompt(undefined, context, { ...drainFlags, drain: true }),
