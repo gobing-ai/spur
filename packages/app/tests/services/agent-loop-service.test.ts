@@ -468,7 +468,7 @@ describe('G71 R1/R2/R3 — member drain, keyed run path, slot heartbeat, resume 
         expect(await runs.hasRunning('member-1')).toBe(false);
     });
 
-    test('R4: the orchestrator answers its inbox with the reply instruction BEFORE the strategy observes and ticks', async () => {
+    test('R4: the orchestrator answers its inbox with the reply instruction; the drain starts first but never gates the tick (1274)', async () => {
         const db = await memDb();
         const order: string[] = [];
         let runBody = '';
@@ -513,7 +513,11 @@ describe('G71 R1/R2/R3 — member drain, keyed run path, slot heartbeat, resume 
             runtime: { maxIterations: 1 },
         });
         expect(code).toBe(0);
-        expect(order.slice(0, 4)).toEqual(['drain', 'run', 'observe', 'tick']);
+        // 1274: the conversation is started before selection but not awaited — `run` may land
+        // after observe/tick; all four still happen in the one wake.
+        expect(order[0]).toBe('drain');
+        expect([...order].sort()).toEqual(['drain', 'observe', 'run', 'tick']);
+        expect(order.indexOf('observe')).toBeLessThan(order.indexOf('tick'));
         expect(runBody.startsWith('status?')).toBe(true);
         expect(runBody.endsWith(ORCHESTRATOR_REPLY_INSTRUCTION)).toBe(true);
     });

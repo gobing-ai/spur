@@ -83,7 +83,16 @@ export interface AgentLoopRuntime {
      * runner's process class directly.
      */
     memberProcessFactory?: (options: AgentProcessOptions) => MemberAgentProcess;
+    /** 1274 test seam: overrides {@link ORCHESTRATOR_CONVERSATION_SHUTDOWN_GRACE_MS}. */
+    conversationShutdownGraceMs?: number;
 }
+
+/**
+ * 1274 R3: how long loop shutdown waits for an in-flight orchestrator conversation to settle its
+ * claimed rows before releasing ownership anyway. A third of the claim TTL, like the renewal
+ * cadence, so a successor never waits on a hung chat for longer than one renewal interval.
+ */
+export const ORCHESTRATOR_CONVERSATION_SHUTDOWN_GRACE_MS = CLAIM_TTL_MS / 3;
 
 /**
  * Structural collaborator set for the loop (task 0968 R2). Every CLI-only
@@ -369,6 +378,14 @@ export async function runAgentLoopCore(deps: AgentLoopDeps, input: AgentLoopRunI
     // standby write-slot heartbeat, so re-creating it per wake would leak a timer per
     // iteration and leave the lease unheartbeated between them.
     let strategyRuntime: StrategyRuntime | undefined;
+    // 1274 (G74 R2): the orchestrator's own conversation runs BESIDE the scheduling tick, never
+    // in front of it — a long chat turn used to hold every dispatch until it ended. At most one
+    // conversation is in flight; ticks stay serialized by this loop alone. A wake that lands
+    // while the chat is held is recorded, and the chat's end re-wakes the loop at once so the
+    // queued inbox drains without waiting for the `--poll` backstop.
+    let conversation: Promise<void> | undefined;
+    let wokeDuringConversation = false;
+    let wakeNow = new AbortController();
     const memberSession = new MemberSession(
         {
             ...deps.memberSession,
@@ -595,7 +612,10 @@ export async function runAgentLoopCore(deps: AgentLoopDeps, input: AgentLoopRunI
             !runtime.signal?.aborted &&
             (runtime.maxIterations === undefined || iteration < runtime.maxIterations)
         ) {
-            const wake = await waitForWake(wakeDao, cursor, pollMs, runtime.signal);
+            const waitSignal =
+                runtime.signal === undefined ? wakeNow.signal : AbortSignal.any([runtime.signal, wakeNow.signal]);
+            const wake = await waitForWake(wakeDao, cursor, pollMs, waitSignal);
+            if (wakeNow.signal.aborted) wakeNow = new AbortController();
             cursor = wake.sequence;
             if (runtime.signal?.aborted) break;
             const fleetDeclared = (await fleet.load(deps.cwd)) !== null;
@@ -603,20 +623,30 @@ export async function runAgentLoopCore(deps: AgentLoopDeps, input: AgentLoopRunI
                 strategyRuntime ??= await deps.makeStrategyRuntime(emitPhase);
                 const ledger = await deps.attachLedger(bus);
                 try {
-                    // G71 R4: the orchestrator converses before it dispatches. Its own drain
-                    // runs the same path as a member's — answer through the inbox, then the
-                    // DETERMINISTIC strategy tick decides dispatch (D2: the LLM never does).
+                    // G71 R4: the orchestrator answers its inbox on the same path as a member's
+                    // drain; the DETERMINISTIC strategy tick decides dispatch (D2: the LLM never
+                    // does). 1274: the drain starts here but is not awaited (see `conversation`).
                     //
-                    // A throwing drain (inbox DB error) must not take the orchestrator down:
-                    // before this drain existed the owner branch could not fail here, and an
+                    // A throwing drain (inbox DB error) must not take the orchestrator down: an
                     // orchestrator outage stops dispatch for the whole project. Log and keep the
                     // wake loop alive — the tick still runs, and the next wake retries the drain.
-                    try {
-                        await runDrain({ replyInstruction: true });
-                    } catch (error) {
-                        deps.error(
-                            `orchestrator drain failed: ${error instanceof Error ? error.message : String(error)}`,
-                        );
+                    if (conversation === undefined) {
+                        wokeDuringConversation = false;
+                        conversation = runDrain({ replyInstruction: true })
+                            .then(
+                                () => undefined,
+                                (error: unknown) => {
+                                    deps.error(
+                                        `orchestrator drain failed: ${error instanceof Error ? error.message : String(error)}`,
+                                    );
+                                },
+                            )
+                            .finally(() => {
+                                conversation = undefined;
+                                if (wokeDuringConversation) wakeNow.abort();
+                            });
+                    } else {
+                        wokeDuringConversation = true;
                     }
                     // G71 R1/R3: settle, then dispatch — both non-blocking. Member work
                     // never runs in the orchestrator process; the receipt is completion.
@@ -647,6 +677,24 @@ export async function runAgentLoopCore(deps: AgentLoopDeps, input: AgentLoopRunI
         }
         return ownershipLost ? 2 : 0;
     } finally {
+        // 1274 R3: shutdown bounds the in-flight conversation too — wait for it to settle its
+        // claimed rows, but never let a hung chat turn hold the owner claim past the grace.
+        if (conversation !== undefined) {
+            const graceMs = runtime.conversationShutdownGraceMs ?? ORCHESTRATOR_CONVERSATION_SHUTDOWN_GRACE_MS;
+            let timer: ReturnType<typeof setTimeout> | undefined;
+            const settled = await Promise.race([
+                conversation.then(() => true),
+                new Promise<false>((resolve) => {
+                    timer = setTimeout(() => resolve(false), graceMs);
+                }),
+            ]);
+            clearTimeout(timer);
+            if (!settled) {
+                deps.error(
+                    `orchestrator conversation still running after ${graceMs}ms at shutdown; releasing ownership`,
+                );
+            }
+        }
         // G66 R4 / G71 R3: a persistent member's process IS its session, so loop shutdown
         // resets it (the next start opens a fresh one). A RESUME member keeps its id — the
         // whole point of `resume` is that a restart re-opens the same conversation, and the
