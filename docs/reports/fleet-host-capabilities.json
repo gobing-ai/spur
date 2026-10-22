@@ -1,0 +1,90 @@
+{
+    "schemaVersion": 1,
+    "generatedAt": "2026-10-22T20:06:39.973Z",
+    "hosts": [
+        {
+            "agent": "codex",
+            "mode": "interactive",
+            "binary": {
+                "path": "/opt/homebrew/bin/codex",
+                "version": "codex-cli 0.163.0"
+            },
+            "wake": "app-server",
+            "evidence": {
+                "command": "codex --help",
+                "output": "agents Browse all agent sessions on the shared local app-server daemon"
+            },
+            "e2e": {
+                "status": "passed",
+                "detail": "fixture-lane (hooks absent): probe-codex joined → wait --inbox pulled msg_94c63048-939e-4cfc-a05a-7230f16c518a → replied msg_4eda9366-00c3-4a50-8054-fb69db71d956 → left"
+            }
+        },
+        {
+            "agent": "codex",
+            "mode": "headless",
+            "binary": {
+                "path": "/opt/homebrew/bin/codex",
+                "version": "codex-cli 0.163.0"
+            },
+            "wake": "pull-only",
+            "evidence": null,
+            "reason": "headless mode has no host callback channel — the durable inbox pull loop is the delivery path"
+        },
+        {
+            "agent": "claude",
+            "mode": "interactive",
+            "binary": {
+                "path": "/opt/homebrew/bin/claude",
+                "version": "2.1.308 (Claude Code)"
+            },
+            "wake": "hook",
+            "evidence": {
+                "command": "claude --help",
+                "output": "filtering (e.g., --debug=hooks,mcp or"
+            },
+            "e2e": {
+                "status": "passed",
+                "detail": "fixture-lane (hooks absent): probe-claude joined → wait --inbox pulled msg_39a10375-523f-472e-bdd1-6ce9014c3457 → replied msg_4ce2321d-b899-4d6e-b3f0-e148566d9548 → left"
+            }
+        },
+        {
+            "agent": "claude",
+            "mode": "headless",
+            "binary": {
+                "path": "/opt/homebrew/bin/claude",
+                "version": "2.1.308 (Claude Code)"
+            },
+            "wake": "pull-only",
+            "evidence": null,
+            "reason": "headless mode has no host callback channel — the durable inbox pull loop is the delivery path"
+        },
+        {
+            "agent": "pi",
+            "mode": "interactive",
+            "binary": {
+                "path": "~/xprojects/spur-new-dev-runall-g75-ad0c007/node_modules/.bin/pi",
+                "version": "0.87.1"
+            },
+            "wake": "rpc",
+            "evidence": {
+                "command": "pi --help",
+                "output": "--mode <mode> Output mode: text (default), json, or rpc"
+            },
+            "e2e": {
+                "status": "passed",
+                "detail": "fixture-lane (hooks absent): probe-pi joined → wait --inbox pulled msg_87a2a334-d252-4a0e-8e34-86666531c80a → replied msg_4e58dd34-4599-4ae7-9cb5-699641a2437f → left"
+            }
+        },
+        {
+            "agent": "pi",
+            "mode": "headless",
+            "binary": {
+                "path": "~/xprojects/spur-new-dev-runall-g75-ad0c007/node_modules/.bin/pi",
+                "version": "0.87.1"
+            },
+            "wake": "pull-only",
+            "evidence": null,
+            "reason": "headless mode has no host callback channel — the durable inbox pull loop is the delivery path"
+        }
+    ]
+}

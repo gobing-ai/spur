@@ -713,17 +713,45 @@ function parseArgs(args: string[]): {
     keep: boolean;
     guestJoinFixture: boolean;
     matrix: boolean;
+    hostProbe: boolean;
+    realHosts: boolean;
+    agents: string[] | undefined;
 } {
     let injectFailure: StepName | null = null;
     let keep = false;
     let guestJoinFixture = false;
     let matrix = false;
+    let hostProbe = false;
+    let realHosts = false;
+    let agents: string[] | undefined;
     for (let index = 0; index < args.length; index++) {
         const arg = args[index];
         if (arg === '--matrix') {
             // Task 1238 R3: the executor matrix is a MODE of this harness, not a second script —
             // it reuses the scratch project, the stub model and the fleet scaffolding below.
             matrix = true;
+            continue;
+        }
+        if (arg === '--host-probe') {
+            // Task 1280 R1/R2: probe installed hosts and prove the portable loop with hooks absent.
+            hostProbe = true;
+            continue;
+        }
+        if (arg === '--real-hosts') {
+            // AC3: strictly opt-in. The default lane never launches a real host.
+            realHosts = true;
+            continue;
+        }
+        if (arg === '--agents') {
+            const value = args[index + 1];
+            if (value === undefined || value.trim() === '') {
+                throw new Error(`--agents expects a comma-separated list of: ${HOST_PROBE_AGENTS.join(', ')}`);
+            }
+            agents = value
+                .split(',')
+                .map((entry) => entry.trim())
+                .filter((entry) => entry !== '');
+            index++;
             continue;
         }
         if (arg === '--guest-join-fixture') {
@@ -747,10 +775,10 @@ function parseArgs(args: string[]): {
             continue;
         }
         throw new Error(
-            `unknown argument "${arg}" (usage: fleet-e2e [--inject-failure <step>] [--guest-join-fixture] [--keep] | --matrix)`,
+            `unknown argument "${arg}" (usage: fleet-e2e [--inject-failure <step>] [--guest-join-fixture] [--keep] | --matrix | --host-probe [--real-hosts] [--agents <csv>])`,
         );
     }
-    return { injectFailure, keep, guestJoinFixture, matrix };
+    return { injectFailure, keep, guestJoinFixture, matrix, hostProbe, realHosts, agents };
 }
 
 interface AgentCommandProbe {
@@ -1291,6 +1319,470 @@ function matrixRunState(scratch: string, binDir: string): RunState {
     };
 }
 
+// ── Host capability probe (G75 R2, task 1280) ─────────────────────────────────────
+//
+// Reports what each host can PROVE on this machine, never what it might support: a wake value
+// must cite the probe command and the observed output that produced it, and anything unproven is
+// `pull-only` with an actionable reason. The default lane never launches a real host — it probes
+// binaries and runs scripted fixture hosts through the durable inbox with hooks absent.
+
+/** Where the capability report lands (the task's artifact, AC1). */
+export const HOST_PROBE_REPORT_PATH = join(REPO_ROOT, 'docs/reports/fleet-host-capabilities.json');
+
+/** Hosts the probe reports on: one row each per mode. */
+export const HOST_PROBE_AGENTS = ['codex', 'claude', 'pi'] as const;
+
+/** The two modes a host is probed in; they have different wake surfaces. */
+export const HOST_PROBE_MODES = ['interactive', 'headless'] as const;
+
+/** One fixture host, spawned as a real child process (hooks absent). */
+const HOST_PROBE_FIXTURE = join(REPO_ROOT, 'scripts/commands/fixtures/fleet-host-fixture.ts');
+
+/** How a host can be woken; `pull-only` is the always-supported fallback. */
+export type HostWake = 'hook' | 'rpc' | 'app-server' | 'pull-only';
+
+/** Host mode the row describes. */
+export type HostMode = (typeof HOST_PROBE_MODES)[number];
+
+/** One host×mode capability row. */
+export interface HostCapabilityRow {
+    agent: string;
+    mode: HostMode;
+    binary: { path: string; version: string } | 'absent';
+    wake: HostWake;
+    evidence: { command: string; output: string } | null;
+    reason?: string;
+    e2e?: { status: 'passed' | 'failed'; detail: string };
+}
+
+/** The tracked capability report (AC1). */
+export interface HostCapabilityReport {
+    schemaVersion: 1;
+    generatedAt: string;
+    hosts: HostCapabilityRow[];
+}
+
+/** Redact secrets and the operator's home prefix from verbatim probe output. */
+export function redactProbeOutput(text: string): string {
+    const home = getEnvVar('HOME');
+    return text
+        .replace(/(sk-|ghp_|gho_|xox[bp]-|AKIA)[A-Za-z0-9_-]{8,}/g, '[redacted]')
+        .split(home !== undefined && home !== '' ? home : '\u0000')
+        .join('~');
+}
+
+/**
+ * Classify a host's wake channel from its installed `--help` surface. Headless mode never has a
+ * host callback channel, so it is `pull-only` regardless of what the binary advertises.
+ */
+export function classifyHostWake(input: { mode: HostMode; helpText: string }): {
+    wake: HostWake;
+    reason?: string;
+} {
+    if (input.mode === 'headless') {
+        return {
+            wake: 'pull-only',
+            reason: 'headless mode has no host callback channel — the durable inbox pull loop is the delivery path',
+        };
+    }
+    const text = input.helpText.toLowerCase();
+    // Precedence is specificity, not wording: a host that exposes a long-lived server endpoint can
+    // be woken by a connection, which is a stronger channel than a flag that merely names hooks
+    // (Codex advertises `--dangerously-bypass-hook-trust` while its wake channel is the App Server).
+    if (/app[- ]server/.test(text)) return { wake: 'app-server' };
+    if (/\bhooks?\b/.test(text)) return { wake: 'hook' };
+    if (/\brpc\b/.test(text)) return { wake: 'rpc' };
+    return {
+        wake: 'pull-only',
+        reason: 'installed help text names no hook, RPC or App Server surface',
+    };
+}
+
+/**
+ * Build one row. Two invariants live here rather than in prose: an absent binary can never claim a
+ * wake channel, and a non-`pull-only` wake without recorded evidence is downgraded — an unprovable
+ * capability is not a capability (R3).
+ */
+export function buildHostRow(input: {
+    agent: string;
+    mode: HostMode;
+    binary: { path: string; version: string } | null;
+    helpText: string;
+    evidence: { command: string; output: string } | null;
+    e2e?: { status: 'passed' | 'failed'; detail: string };
+}): HostCapabilityRow {
+    const e2e = input.e2e === undefined ? {} : { e2e: input.e2e };
+    if (input.binary === null) {
+        return {
+            agent: input.agent,
+            mode: input.mode,
+            binary: 'absent',
+            wake: 'pull-only',
+            evidence: null,
+            reason: `${input.agent} is not installed on PATH — pull-only until the binary is present`,
+            ...e2e,
+        };
+    }
+    const binary = { path: redactProbeOutput(input.binary.path), version: redactProbeOutput(input.binary.version) };
+    const classified = classifyHostWake({ mode: input.mode, helpText: input.helpText });
+    const evidence =
+        input.evidence === null
+            ? null
+            : { command: redactProbeOutput(input.evidence.command), output: redactProbeOutput(input.evidence.output) };
+    if (classified.wake !== 'pull-only' && evidence === null) {
+        return {
+            agent: input.agent,
+            mode: input.mode,
+            binary,
+            wake: 'pull-only',
+            evidence: null,
+            reason: `help text suggests ${classified.wake} but no probe evidence was recorded — unproven, so pull-only`,
+            ...e2e,
+        };
+    }
+    return {
+        agent: input.agent,
+        mode: input.mode,
+        binary,
+        wake: classified.wake,
+        evidence,
+        ...(classified.reason === undefined ? {} : { reason: classified.reason }),
+        ...e2e,
+    };
+}
+
+/** Contract check over the whole report; returns the violations, empty when it holds. */
+export function hostReportViolations(report: HostCapabilityReport): string[] {
+    const violations: string[] = [];
+    if (report.schemaVersion !== 1) violations.push('schemaVersion must be 1');
+    const seen = new Set<string>();
+    for (const row of report.hosts) {
+        const key = `${row.agent}:${row.mode}`;
+        if (seen.has(key)) violations.push(`duplicate row for ${key}`);
+        seen.add(key);
+        if (!(HOST_PROBE_AGENTS as readonly string[]).includes(row.agent))
+            violations.push(`unknown agent "${row.agent}"`);
+        if (!(HOST_PROBE_MODES as readonly string[]).includes(row.mode)) violations.push(`unknown mode "${row.mode}"`);
+        if (row.wake !== 'pull-only' && row.evidence === null) {
+            violations.push(`${key}: wake "${row.wake}" cites no probe evidence`);
+        }
+        if (row.binary === 'absent' && row.wake !== 'pull-only') {
+            violations.push(`${key}: absent binary cannot advertise wake "${row.wake}"`);
+        }
+        if (row.binary === 'absent' && row.evidence !== null) {
+            violations.push(`${key}: absent binary carries evidence`);
+        }
+        if (row.wake === 'pull-only' && row.binary !== 'absent' && row.reason === undefined) {
+            violations.push(`${key}: pull-only needs an actionable reason`);
+        }
+    }
+    for (const agent of HOST_PROBE_AGENTS) {
+        for (const mode of HOST_PROBE_MODES) {
+            if (!seen.has(`${agent}:${mode}`)) violations.push(`missing row for ${agent}:${mode}`);
+        }
+    }
+    return violations;
+}
+
+/** Run one host binary with a bounded budget; a missing or failing binary reads as empty output. */
+function runHostBinary(path: string, args: string[]): { exitCode: number; output: string } {
+    try {
+        const proc = Bun.spawnSync([path, ...args], { stdout: 'pipe', stderr: 'pipe', timeout: 20_000 });
+        const stdout = proc.stdout?.toString() ?? '';
+        const stderr = proc.stderr?.toString() ?? '';
+        // Full text: the capability line can sit anywhere in a 200-line `--help`. The REPORT
+        // records only the matched line, so this is not a size risk in the artifact.
+        return { exitCode: proc.exitCode ?? 1, output: `${stdout}\n${stderr}` };
+    } catch (error) {
+        return { exitCode: 1, output: trimmed(errorMessage(error), 200) };
+    }
+}
+
+/**
+ * The `--help` line that proves a wake channel, or null. The report cites this one line — the
+ * observation a reader can re-run — instead of a truncated help dump.
+ */
+export function wakeEvidenceLine(helpText: string, wake: HostWake): string | null {
+    const pattern =
+        wake === 'hook' ? /\bhooks?\b/i : wake === 'rpc' ? /\brpc\b/i : wake === 'app-server' ? /app[- ]server/i : null;
+    if (pattern === null) return null;
+    const matches = helpText.split('\n').filter((line) => pattern.test(line));
+    // Prefer a line that documents the surface over one that disables or bypasses it — `--bare
+    // Minimal mode: skip hooks` proves hooks exist but says nothing about a wake channel.
+    const positive = matches.find((line) => !/skip|bypass|disable|without|no-?hooks/i.test(line));
+    const chosen = positive ?? matches[0];
+    return chosen === undefined ? null : trimmed(chosen, 300);
+}
+
+/** Probe one installed binary: path, version line, and the help text the wake class comes from. */
+function probeHostBinary(agent: string): {
+    binary: { path: string; version: string } | null;
+    helpText: string;
+    helpCommand: string;
+} {
+    const path = Bun.which(agent);
+    if (path === null) return { binary: null, helpText: '', helpCommand: `${agent} --help` };
+    const version = runHostBinary(path, ['--version']);
+    const help = runHostBinary(path, ['--help']);
+    const versionLine = version.output.split('\n')[0]?.trim() ?? '';
+    return {
+        binary: { path, version: versionLine === '' ? 'unknown' : versionLine },
+        helpText: help.exitCode === 0 ? help.output : '',
+        helpCommand: `${agent} --help`,
+    };
+}
+
+/** Evidence for one host×mode row: the matched help line, or null when nothing proves a channel. */
+function probeEvidence(
+    probe: ReturnType<typeof probeHostBinary>,
+    mode: HostMode,
+): { command: string; output: string } | null {
+    const { wake } = classifyHostWake({ mode, helpText: probe.helpText });
+    const line = wakeEvidenceLine(probe.helpText, wake);
+    return line === null ? null : { command: probe.helpCommand, output: line };
+}
+
+/**
+ * Run one scripted fixture host through the portable loop with hooks absent (AC2): the child
+ * process joins, the harness sends a bounded request, the child pulls it with `wait --inbox`,
+ * replies and leaves, and the operator inbox must show the reply linked to that request.
+ */
+async function runFixtureHost(
+    scratch: string,
+    agent: string,
+    env: Record<string, string>,
+): Promise<{ status: 'passed' | 'failed'; detail: string }> {
+    const guestId = `probe-${agent}`;
+    const resultPath = join(scratch, `host-${agent}.json`);
+    const child = Bun.spawn([process.execPath, 'run', HOST_PROBE_FIXTURE], {
+        cwd: scratch,
+        env: {
+            ...getEnvVars(),
+            ...env,
+            SPUR_E2E_CLI: CLI_ENTRY,
+            SPUR_E2E_PROJECT: scratch,
+            SPUR_E2E_HOST_AGENT: agent,
+            SPUR_E2E_GUEST_ID: guestId,
+            SPUR_E2E_RESULT: resultPath,
+        },
+        stdout: 'pipe',
+        stderr: 'pipe',
+    });
+    try {
+        // The request must arrive while the guest is waiting, so wait for the record it writes first.
+        await pollUntil(
+            `the ${agent} fixture guest record`,
+            async () => (existsSync(join(scratch, '.spur/run/guests', `${guestId}.json`)) ? true : undefined),
+            30_000,
+        );
+        const request = jsonOk<{ msgId: string }>(
+            ['message', 'send', '--to', guestId, `host probe request: ${agent}`, '--json'],
+            scratch,
+            { env },
+        );
+        await child.exited;
+        if (!existsSync(resultPath)) return { status: 'failed', detail: `fixture ${agent} wrote no result file` };
+        const result = JSON.parse(readFileSync(resultPath, 'utf8')) as {
+            ok?: boolean;
+            error?: string;
+            steps?: Array<{ command: string; exitCode: number }>;
+        };
+        if (result.ok !== true) {
+            return { status: 'failed', detail: `fixture-lane: ${result.error ?? 'fixture failed'}` };
+        }
+        const inbox = jsonOk<{ messages: Array<{ id: string; inReplyTo: string | null }> }>(
+            ['message', 'inbox', '--agent', 'operator', '--json'],
+            scratch,
+            { env },
+        );
+        const linked = inbox.messages.find((message) => message.inReplyTo === request.msgId);
+        if (linked === undefined) {
+            return { status: 'failed', detail: `fixture-lane: no reply linked to request ${request.msgId}` };
+        }
+        return {
+            status: 'passed',
+            detail: `fixture-lane (hooks absent): ${guestId} joined → wait --inbox pulled ${request.msgId} → replied ${linked.id} → left`,
+        };
+    } finally {
+        child.kill();
+    }
+}
+
+/** The prompt a real host receives in the opt-in `--real-hosts` lane. */
+function realHostPrompt(guestId: string, agent: string): string {
+    return [
+        'You are joining a local agent fleet as a guest. Run these commands in order with this shell:',
+        `1. spur agent join --role reviewer --id ${guestId} --json`,
+        `2. spur agent wait --inbox ${guestId} --timeout 30000 --json`,
+        '3. spur message reply <msgId> "<one line result>" --json',
+        `4. spur agent leave ${guestId} --json`,
+        `Then print the single word DONE. You are the ${agent} host; no hooks are installed.`,
+    ].join('\n');
+}
+
+/** Non-interactive prompt flags per host, used only by the opt-in real-host lane. */
+const REAL_HOST_ARGV: Record<string, (prompt: string) => string[]> = {
+    claude: (prompt) => ['-p', prompt],
+    codex: (prompt) => ['exec', prompt],
+    pi: (prompt) => ['-p', prompt],
+};
+
+/**
+ * The opt-in real-host lane (AC3): launch each installed host in its non-interactive mode and
+ * record either the end-to-end result or the exact failure. Never reached without `--real-hosts`.
+ */
+async function runRealHost(
+    scratch: string,
+    agent: string,
+    path: string,
+    env: Record<string, string>,
+): Promise<{ status: 'passed' | 'failed'; detail: string }> {
+    const argv = REAL_HOST_ARGV[agent];
+    if (argv === undefined) {
+        return { status: 'failed', detail: `real-host: no non-interactive invocation is known for ${agent}` };
+    }
+    const guestId = `real-${agent}`;
+    const child = Bun.spawn([path, ...argv(realHostPrompt(guestId, agent))], {
+        cwd: scratch,
+        env: { ...getEnvVars(), ...env },
+        stdout: 'pipe',
+        stderr: 'pipe',
+    });
+    try {
+        const joined = await pollUntil(
+            `the ${agent} real-host guest record`,
+            async () => (existsSync(join(scratch, '.spur/run/guests', `${guestId}.json`)) ? true : undefined),
+            90_000,
+        ).catch(() => undefined);
+        if (joined === undefined) {
+            const stderr = trimmed(await new Response(child.stderr as ReadableStream).text().catch(() => ''), 200);
+            child.kill();
+            return {
+                status: 'failed',
+                detail: `real-host: ${agent} never joined the fleet${stderr === '' ? '' : ` — ${stderr}`}`,
+            };
+        }
+        const request = jsonOk<{ msgId: string }>(
+            ['message', 'send', '--to', guestId, `real host probe: ${agent}`, '--json'],
+            scratch,
+            { env },
+        );
+        const inbox = await pollUntil(
+            `the ${agent} real-host reply`,
+            async () => {
+                const rows = jsonOk<{ messages: Array<{ id: string; inReplyTo: string | null }> }>(
+                    ['message', 'inbox', '--agent', 'operator', '--json'],
+                    scratch,
+                    { env },
+                );
+                return rows.messages.find((message) => message.inReplyTo === request.msgId);
+            },
+            120_000,
+        );
+        return {
+            status: 'passed',
+            detail: `real-host: ${agent} joined, pulled ${request.msgId} and replied ${inbox.id}`,
+        };
+    } catch (error) {
+        return { status: 'failed', detail: `real-host: ${trimmed(errorMessage(error), 200)}` };
+    } finally {
+        child.kill();
+    }
+}
+
+/**
+ * `fleet-e2e --host-probe [--real-hosts] [--agents <csv>]` (task 1280).
+ *
+ * Writes `docs/reports/fleet-host-capabilities.json` — one row per host×mode — and proves the
+ * portable loop with hooks absent through one scripted fixture host per executor. The real-host
+ * lane is strictly opt-in and records the exact failure rather than manufacturing a pass.
+ */
+export async function runHostProbe(
+    options: { realHosts?: boolean; agents?: string[]; keep?: boolean } = {},
+): Promise<number> {
+    const agents = options.agents ?? [...HOST_PROBE_AGENTS];
+    const unknown = agents.filter((agent) => !(HOST_PROBE_AGENTS as readonly string[]).includes(agent));
+    if (unknown.length > 0) {
+        console.error(
+            `fleet-e2e: unknown --agents entries: ${unknown.join(', ')} (known: ${HOST_PROBE_AGENTS.join(', ')})`,
+        );
+        return 2;
+    }
+    const scratch = join(realpathSync(tmpdir()), `spur-host-probe-${Date.now()}`);
+    const env = {
+        PATH: getEnvVar('PATH') ?? '',
+        SPUR_PROJECTS_FILE: join(scratch, 'projects.json'),
+        SPUR_SLASH_COMMANDS_FILE: join(scratch, 'slash_commands.json'),
+    };
+    const rows: HostCapabilityRow[] = [];
+    try {
+        rmSync(scratch, { recursive: true, force: true });
+        mkdirSync(scratch, { recursive: true });
+        Bun.spawnSync(['git', 'init', '-q', '.'], { cwd: scratch });
+        cliOk(['self', 'init', '--json'], scratch, { env });
+
+        const e2eByAgent = new Map<string, { status: 'passed' | 'failed'; detail: string }>();
+        for (const agent of agents) {
+            // Only the requested agents run e2e; the unrequested ones still get rows (AC1's
+            // "one row per host×mode"), with the absence recorded rather than invented.
+            if (options.realHosts === true) {
+                const probe = probeHostBinary(agent);
+                e2eByAgent.set(
+                    agent,
+                    probe.binary === null
+                        ? { status: 'failed', detail: `real-host: ${agent} is not installed on PATH` }
+                        : await runRealHost(scratch, agent, probe.binary.path, env),
+                );
+            } else {
+                e2eByAgent.set(agent, await runFixtureHost(scratch, agent, env));
+            }
+        }
+
+        for (const agent of HOST_PROBE_AGENTS) {
+            const probe = probeHostBinary(agent);
+            const e2e = e2eByAgent.get(agent);
+            for (const mode of HOST_PROBE_MODES) {
+                rows.push(
+                    buildHostRow({
+                        agent,
+                        mode,
+                        binary: probe.binary,
+                        helpText: probe.helpText,
+                        evidence: probeEvidence(probe, mode),
+                        ...(e2e === undefined || mode !== 'interactive' ? {} : { e2e }),
+                    }),
+                );
+            }
+        }
+
+        const report: HostCapabilityReport = {
+            schemaVersion: 1,
+            generatedAt: nowLabel(),
+            hosts: rows,
+        };
+        const violations = hostReportViolations(report);
+        if (violations.length > 0) {
+            console.error(`fleet-e2e: host report violates its contract: ${violations.join('; ')}`);
+            return 1;
+        }
+        mkdirSync(dirname(HOST_PROBE_REPORT_PATH), { recursive: true });
+        writeFileSync(HOST_PROBE_REPORT_PATH, `${JSON.stringify(report, null, 4)}\n`);
+        console.log(`fleet-e2e host probe: ${HOST_PROBE_REPORT_PATH}`);
+        for (const row of report.hosts) {
+            const binary = row.binary === 'absent' ? 'absent' : row.binary.version;
+            console.log(`  ${row.agent}/${row.mode}: wake=${row.wake} binary=${trimmed(binary, 40)}`);
+        }
+        const failed = report.hosts.filter((row) => row.e2e?.status === 'failed');
+        if (failed.length > 0) {
+            for (const row of failed) console.error(`  FAIL ${row.agent}: ${row.e2e?.detail ?? ''}`);
+            return 1;
+        }
+        return 0;
+    } finally {
+        if (options.keep !== true) rmSync(scratch, { recursive: true, force: true });
+    }
+}
+
 /**
  * The E2E. Execution order is NOT the receipt's row order: the strategy wedge recorded under
  * `strategy-retry-unreachable` allows exactly ONE strategy dispatch per project, so the
@@ -1298,7 +1790,10 @@ function matrixRunState(scratch: string, binDir: string): RunState {
  * task closing. Rows are still reported in the design's order.
  */
 export async function runFleetE2e(args: string[]): Promise<number> {
-    const { injectFailure, keep, guestJoinFixture, matrix } = parseArgs(args);
+    const { injectFailure, keep, guestJoinFixture, matrix, hostProbe, realHosts, agents } = parseArgs(args);
+    if (hostProbe) {
+        return await runHostProbe({ realHosts, keep, ...(agents === undefined ? {} : { agents }) });
+    }
     if (matrix) return await runExecutorMatrix({ keep });
     // Canonical scratch root: on macOS `os.tmpdir()` is a symlinked path, and the fleet
     // normalizes project paths (`normalizeProjectPath`), so a raw `/var/...` path would never
