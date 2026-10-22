@@ -4,7 +4,7 @@ name: Fenced declared-member binding via agent join --member
 status: todo
 template: feature-impl
 created_at: 2026-10-22T07:00:38.145Z
-updated_at: "2026-10-22T16:26:11.930Z"
+updated_at: "2026-10-22T16:36:56.964Z"
 feature_id: G75
 priority: P2
 tags:
@@ -41,7 +41,7 @@ Rubric: E8 D1 L3 C1 R2 = 15 → own task (force: R=high).
 ### Acceptance Criteria
 
 ```gherkin
-Scenario: AC1 — A valid binder binds one declared member (req: R1, R2)
+Scenario: AC1 — R3 — A capable live session binds one declared member without changing guest defaults (req: R1, R2)
   Given an enabled declared member `coder-1` whose executor attests the stage's required capabilities and no live occupant
   When `spur agent join --role coder --member coder-1 --json` runs from a verified agent process
   Then it exits 0, the record carries `memberBinding {memberId, occupancyGeneration, ownerEpoch, version:1}`, and the strategy idle set treats `coder-1` as occupied

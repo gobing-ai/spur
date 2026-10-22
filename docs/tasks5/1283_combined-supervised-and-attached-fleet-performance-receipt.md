@@ -4,7 +4,7 @@ name: Combined supervised and attached fleet performance receipt
 status: todo
 template: feature-impl
 created_at: 2026-10-22T07:00:38.146Z
-updated_at: "2026-10-22T16:26:15.866Z"
+updated_at: "2026-10-22T16:36:59.205Z"
 feature_id: G75
 priority: P3
 tags:
@@ -38,7 +38,7 @@ Rubric: E5 D1 L1 C1 R1 = 9 → own task.
 ### Acceptance Criteria
 
 ```gherkin
-Scenario: AC1 — Identical workloads across three occupancy modes (req: R1)
+Scenario: AC1 — R6 — A combined fleet receipt distinguishes participation gains from convenience (req: R1)
   Given `bun run fleet-e2e --perf --modes attached-ready,supervised-cold,supervised-warm`
   When the deterministic lane runs
   Then every mode runs the same workload digest, and busy waits, attach overhead and failures appear as phases or trial statuses

@@ -4,7 +4,7 @@ name: Attached stage execution with human arbitration and safe detach
 status: todo
 template: feature-impl
 created_at: 2026-10-22T07:00:38.146Z
-updated_at: "2026-10-22T16:26:12.545Z"
+updated_at: "2026-10-22T16:36:57.825Z"
 feature_id: G75
 priority: P2
 tags:
@@ -40,7 +40,7 @@ Rubric: E10 D1 L3 C2 R2 = 18 → own task (force: R=high).
 ### Acceptance Criteria
 
 ```gherkin
-Scenario: AC1 — Busy human work is never interrupted (req: R1, R2)
+Scenario: AC1 — R4 — Human work retains session ownership until an explicit safe yield (req: R1, R2)
   Given a bound occupant that reported `working` (human turn) and a runnable keyed task for its member
   When the strategy ticks
   Then the task stays queued with hold reason naming the busy member, and nothing is delivered to the occupant
@@ -50,7 +50,7 @@ Scenario: AC2 — Ready requires yield plus handshake (req: R1)
   When the strategy ticks
   Then it is not selectable; after the handshake completes, it is
 
-Scenario: AC3 — Attached stages validate like supervised ones (req: R3)
+Scenario: AC3 — R5 — Attached stages produce the same validated receipts as supervised stages (req: R3)
   Given a ready attached occupant and a keyed stage
   When the stage runs through the attached turn contract and the occupant replies with a message but no correlated terminal
   Then the stage is not complete; when the correlated terminal arrives with a valid artifact, the receipt matches a supervised receipt's fields plus `occupant: attached`

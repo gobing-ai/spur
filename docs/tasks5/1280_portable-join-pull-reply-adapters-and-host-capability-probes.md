@@ -4,7 +4,7 @@ name: Portable join/pull/reply adapters and host capability probes
 status: todo
 template: feature-impl
 created_at: 2026-10-22T07:00:38.144Z
-updated_at: "2026-10-22T16:26:11.334Z"
+updated_at: "2026-10-22T16:36:56.082Z"
 feature_id: G75
 priority: P2
 tags:
@@ -40,7 +40,7 @@ Rubric: E6 D1 L2 C1 R1 = 11 → own task (plugin surface, distinct review).
 ### Acceptance Criteria
 
 ```gherkin
-Scenario: AC1 — Host capability rows are evidence-backed (req: R1, R3)
+Scenario: AC1 — R2 — Codex Claude Code and Pi participate through portable inbox adapters (req: R1, R3)
   Given `bun run fleet-e2e --host-probe`
   When it runs on a host with some agents absent
   Then `docs/reports/fleet-host-capabilities.json` has one row per host×mode with binary path/version or `absent`, a `wake` value of `hook`|`rpc`|`app-server`|`pull-only`, and every non-`pull-only` value cites the probe command and observed output

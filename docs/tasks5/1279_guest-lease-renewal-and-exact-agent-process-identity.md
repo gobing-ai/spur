@@ -4,7 +4,7 @@ name: Guest lease renewal and exact agent process identity
 status: todo
 template: feature-impl
 created_at: 2026-10-22T07:00:38.139Z
-updated_at: "2026-10-22T16:26:10.471Z"
+updated_at: "2026-10-22T16:36:42.405Z"
 feature_id: G75
 priority: P1
 tags:
@@ -41,7 +41,7 @@ Rubric: E6 D1 L2 C1 R1 = 11 → own task.
 ### Acceptance Criteria
 
 ```gherkin
-Scenario: AC1 — The lease survives 90 seconds of work without a wait (req: R1)
+Scenario: AC1 — R1 — A live session keeps exact identity and its lease throughout active work (req: R1)
   Given a guest joined from a long-lived fixture "agent" process with renewal enabled (TTL shortened via test seam to keep the run fast, same ratios)
   When 3× TTL elapses with no `wait --inbox` and no Stop hook
   Then the `guest:<id>` claim is still live with the same owner epoch and `expire()` does not retire it
