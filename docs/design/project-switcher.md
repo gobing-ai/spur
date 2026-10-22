@@ -199,11 +199,22 @@ Registration preserves an existing project name because fleet mailbox IDs use th
 
 | Verb | Behavior |
 | --- | --- |
-| `add <path> [--name]` | Upsert entry with `port: 0`; require valid Spur project root (`.spur/` or monorepo signal) |
-| `remove <name\|path>` | Drop entry (does not kill a running process — warn if port > 0) |
+| `add <path> [--name] [--host]` | Upsert entry by path **+ host**, preserving a port already recorded for that entry (re-adding must not wipe a live port); require a valid local Spur project root for local hosts |
+| `remove <name\|path> [--host]` | Drop entry (does not kill a running process — warn if port > 0); `--host` scopes the removal to one host's entry, since one path can be registered for a remote host and for `localhost` |
 | `list [--json] [--fleet]` | Table / JSON of name, path, port, running; `--fleet` (0835/0836/0858) also resolves each project's `agent.fleet` declaration, orchestrator binding and capacity under the same verb |
 | `start <name\|path> [--port]` | Spawn `spur serve` in project path (detached child); wait until health OK; update registry |
-| `stop <name\|path>` | Ownership-verified stop (1156): SIGTERM the registered port's listener only after it proves `service:spur` and the exact project path over loopback HTTP with a stable PID; refuse (exit 1, port preserved, never `Stopped`) for foreign/unverified listeners; an absent listener is an idempotent success that sets port 0 |
+| `stop <name\|path>` | Ownership-verified stop (1156): SIGTERM the registered port's listener only after it proves `service:spur` and the exact project path over loopback HTTP with a stable PID; refuse (exit 1, port preserved, never `Stopped`) for foreign/unverified listeners and for remote-host entries (another machine's serve — this CLI cannot verify or signal it); an absent listener is an idempotent success that sets port 0 |
+
+**Host is part of an entry's identity.** `upsert`, `setPort`, and `remove` all key on path **+ host**,
+so one path registered for a remote host and for `localhost` stays two independent entries. A
+path-only write let a local `spur serve` shutdown deregister (`setPort(path, 0)`) clear the live
+remote entry sharing that path, and `projects stop <remote-name>` reported `Stopped` while zeroing a
+port whose serve kept listening (2026-10-22, `knowledge-kit` @ `192.168.87.27:3003`).
+
+**Remote ports are hints, never healed.** `healStale` only clears a port it can disprove locally
+(loopback); a probe of another machine cannot separate "serve is gone" from "host asleep", and
+zeroing it destroys the only record of where that serve runs. Remote liveness is reported per
+request by `list` / `/api/projects`, which probe the entry's own host.
 
 `--json` on list/start/stop for machine use. Noun name **`projects`** (plural) matches multi-entry
 resource; keep `spur serve` as the low-level launcher.
