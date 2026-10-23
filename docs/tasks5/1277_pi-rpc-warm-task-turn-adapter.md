@@ -1,10 +1,10 @@
 ---
 schema_version: 1
 name: Pi RPC warm task-turn adapter
-status: todo
+status: wip
 template: feature-impl
 created_at: 2026-10-22T07:00:34.914Z
-updated_at: "2026-10-22T16:26:09.202Z"
+updated_at: "2026-10-23T17:16:46.163Z"
 feature_id: G74
 priority: P2
 tags:
@@ -108,3 +108,6 @@ Scenario: AC4 — Unqualified Pi falls back by name (req: R4)
 - ts-libs anchors: `packages/ai-runner/src/agents/shims.ts:533` (capability rows), `:248`/`:374` (`piRpcFrame`).
 
 ### History
+
+- 2026-10-23T16:55:58.260Z todo → wip (system)
+
