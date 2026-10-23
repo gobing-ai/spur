@@ -4883,7 +4883,7 @@ describe('AgentService.doctor session capability surface (B8 / task 0889)', () =
         // Regression: pre-0899 exact compare false-positived on every real install
         // (`2.1.274 (Claude Code)`, `codex-cli 0.154.0`, `OpenClaw 2026.6.11 (e085fa1)`).
         const cases = [
-            { name: 'claude-exec', agent: 'claude', version: '2.1.278 (Claude Code)' },
+            { name: 'claude-exec', agent: 'claude', version: '2.1.308 (Claude Code)' },
             { name: 'codex-exec', agent: 'codex', version: 'codex-cli 0.155.1' },
             { name: 'omp-exec', agent: 'omp', version: 'omp/18.2.3' },
             { name: 'openclaw-exec', agent: 'openclaw', version: 'OpenClaw 2026.6.11 (e085fa1)' },

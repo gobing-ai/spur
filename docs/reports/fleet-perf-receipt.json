@@ -1,11 +1,11 @@
 {
     "schemaVersion": 1,
-    "generatedAt": "2026-10-22T19:56:45.872Z",
-    "repeatCommand": "bun run scripts/commands/fleet-e2e.ts --perf --trials 2",
+    "generatedAt": "2026-10-23T04:01:37.546Z",
+    "repeatCommand": "bun run scripts/commands/fleet-e2e.ts --perf --trials 3",
     "workloadDigest": "sha256:a851ae35a1798abecb2241aecd1442fa70acaf5f077c22a8f1d75703cf5239ea",
     "targets": {
         "provisional": true,
-        "note": "deterministic stub lane — same binary everywhere; comparisons are provisional until the real-agent lane (1276–1278)",
+        "note": "deterministic stub lane — same binary everywhere; comparisons are provisional. Warm rows record qualification of the INSTALLED binary (tasks 1276-1278) and carry no latency",
         "agents": ["claude", "codex", "pi"]
     },
     "trials": [
@@ -13,45 +13,45 @@
             "agent": "claude",
             "mode": "cold",
             "status": "validated",
-            "durationMs": 3510,
+            "durationMs": 5229,
             "phases": [
                 {
                     "phase": "enqueue",
-                    "at": "2026-10-22T19:55:39.032Z"
+                    "at": "2026-10-23T04:00:01.889Z"
                 },
                 {
                     "phase": "claim",
-                    "at": "2026-10-22T19:55:39.082Z",
-                    "executionId": "527a75a5-cd8f-4210-a34c-2ba3583ed494"
+                    "at": "2026-10-23T04:00:01.968Z",
+                    "executionId": "b25f4061-4bc7-4f7d-8145-b478c8ad3bfa"
                 },
                 {
                     "phase": "process-ready",
-                    "at": "2026-10-22T19:55:39.328Z",
-                    "executionId": "527a75a5-cd8f-4210-a34c-2ba3583ed494"
+                    "at": "2026-10-23T04:00:02.408Z",
+                    "executionId": "b25f4061-4bc7-4f7d-8145-b478c8ad3bfa"
                 },
                 {
                     "phase": "process-ready",
-                    "at": "2026-10-22T19:55:39.521Z",
+                    "at": "2026-10-23T04:00:02.683Z",
                     "monotonicMs": 2,
-                    "executionId": "527a75a5-cd8f-4210-a34c-2ba3583ed494"
+                    "executionId": "b25f4061-4bc7-4f7d-8145-b478c8ad3bfa"
                 },
                 {
                     "phase": "first-output",
-                    "at": "2026-10-22T19:55:42.536Z",
-                    "monotonicMs": 3017,
-                    "executionId": "527a75a5-cd8f-4210-a34c-2ba3583ed494"
+                    "at": "2026-10-23T04:00:07.113Z",
+                    "monotonicMs": 4431,
+                    "executionId": "b25f4061-4bc7-4f7d-8145-b478c8ad3bfa"
                 },
                 {
                     "phase": "terminal",
-                    "at": "2026-10-22T19:55:42.542Z",
-                    "monotonicMs": 3022,
-                    "executionId": "527a75a5-cd8f-4210-a34c-2ba3583ed494"
+                    "at": "2026-10-23T04:00:07.118Z",
+                    "monotonicMs": 4436,
+                    "executionId": "b25f4061-4bc7-4f7d-8145-b478c8ad3bfa"
                 }
             ],
-            "runId": "86fe3682-88f0-4484-bfe0-9e92ad11ff40",
+            "runId": "939ab077-90da-4ef2-853d-44aca7d75e5a",
             "key": "fleet:task:0001:1",
             "binary": {
-                "path": "/private/var/folders/2g/398pfv8j1tj_zt78g_ty2r740000gn/T/spur-fleet-perf-claude-1792698931841/bin/claude",
+                "path": "/private/var/folders/2g/398pfv8j1tj_zt78g_ty2r740000gn/T/spur-fleet-perf-claude-1792727994780/bin/claude",
                 "version": "fleet-e2e-stub 1.0.0"
             },
             "hostBinaryVersion": "2.1.308 (Claude Code)"
@@ -60,45 +60,92 @@
             "agent": "claude",
             "mode": "resume",
             "status": "validated",
-            "durationMs": 3783,
+            "durationMs": 4088,
             "phases": [
                 {
                     "phase": "enqueue",
-                    "at": "2026-10-22T19:55:48.959Z"
+                    "at": "2026-10-23T04:00:13.225Z"
                 },
                 {
                     "phase": "claim",
-                    "at": "2026-10-22T19:55:49.034Z",
-                    "executionId": "42552ba2-b2c3-4b80-b834-fad90a94e09b"
+                    "at": "2026-10-23T04:00:13.346Z",
+                    "executionId": "e9a29079-82f8-4b65-9f23-346e3d3f83bc"
                 },
                 {
                     "phase": "process-ready",
-                    "at": "2026-10-22T19:55:49.297Z",
-                    "executionId": "42552ba2-b2c3-4b80-b834-fad90a94e09b"
+                    "at": "2026-10-23T04:00:13.587Z",
+                    "executionId": "e9a29079-82f8-4b65-9f23-346e3d3f83bc"
                 },
                 {
                     "phase": "process-ready",
-                    "at": "2026-10-22T19:55:49.511Z",
-                    "monotonicMs": 2,
-                    "executionId": "42552ba2-b2c3-4b80-b834-fad90a94e09b"
+                    "at": "2026-10-23T04:00:13.816Z",
+                    "monotonicMs": 1,
+                    "executionId": "e9a29079-82f8-4b65-9f23-346e3d3f83bc"
                 },
                 {
                     "phase": "first-output",
-                    "at": "2026-10-22T19:55:52.739Z",
-                    "monotonicMs": 3230,
-                    "executionId": "42552ba2-b2c3-4b80-b834-fad90a94e09b"
+                    "at": "2026-10-23T04:00:17.310Z",
+                    "monotonicMs": 3495,
+                    "executionId": "e9a29079-82f8-4b65-9f23-346e3d3f83bc"
                 },
                 {
                     "phase": "terminal",
-                    "at": "2026-10-22T19:55:52.742Z",
-                    "monotonicMs": 3233,
-                    "executionId": "42552ba2-b2c3-4b80-b834-fad90a94e09b"
+                    "at": "2026-10-23T04:00:17.313Z",
+                    "monotonicMs": 3498,
+                    "executionId": "e9a29079-82f8-4b65-9f23-346e3d3f83bc"
                 }
             ],
-            "runId": "b55b1dbc-1452-4886-858e-f821a1192afb",
+            "runId": "23d29aca-f315-4354-b5ed-0723fedd9fff",
             "key": "fleet:task:0002:1",
             "binary": {
-                "path": "/private/var/folders/2g/398pfv8j1tj_zt78g_ty2r740000gn/T/spur-fleet-perf-claude-1792698931841/bin/claude",
+                "path": "/private/var/folders/2g/398pfv8j1tj_zt78g_ty2r740000gn/T/spur-fleet-perf-claude-1792727994780/bin/claude",
+                "version": "fleet-e2e-stub 1.0.0"
+            },
+            "hostBinaryVersion": "2.1.308 (Claude Code)"
+        },
+        {
+            "agent": "claude",
+            "mode": "resume",
+            "status": "validated",
+            "durationMs": 3747,
+            "phases": [
+                {
+                    "phase": "enqueue",
+                    "at": "2026-10-23T04:00:23.512Z"
+                },
+                {
+                    "phase": "claim",
+                    "at": "2026-10-23T04:00:23.598Z",
+                    "executionId": "87749470-ca9a-4771-b1c1-432238893b33"
+                },
+                {
+                    "phase": "process-ready",
+                    "at": "2026-10-23T04:00:23.824Z",
+                    "executionId": "87749470-ca9a-4771-b1c1-432238893b33"
+                },
+                {
+                    "phase": "process-ready",
+                    "at": "2026-10-23T04:00:24.055Z",
+                    "monotonicMs": 1,
+                    "executionId": "87749470-ca9a-4771-b1c1-432238893b33"
+                },
+                {
+                    "phase": "first-output",
+                    "at": "2026-10-23T04:00:27.257Z",
+                    "monotonicMs": 3204,
+                    "executionId": "87749470-ca9a-4771-b1c1-432238893b33"
+                },
+                {
+                    "phase": "terminal",
+                    "at": "2026-10-23T04:00:27.259Z",
+                    "monotonicMs": 3206,
+                    "executionId": "87749470-ca9a-4771-b1c1-432238893b33"
+                }
+            ],
+            "runId": "b030224f-1a20-4b6b-be94-19b6046dd363",
+            "key": "fleet:task:0003:1",
+            "binary": {
+                "path": "/private/var/folders/2g/398pfv8j1tj_zt78g_ty2r740000gn/T/spur-fleet-perf-claude-1792727994780/bin/claude",
                 "version": "fleet-e2e-stub 1.0.0"
             },
             "hostBinaryVersion": "2.1.308 (Claude Code)"
@@ -107,45 +154,45 @@
             "agent": "codex",
             "mode": "cold",
             "status": "validated",
-            "durationMs": 3693,
+            "durationMs": 3816,
             "phases": [
                 {
                     "phase": "enqueue",
-                    "at": "2026-10-22T19:56:01.883Z"
+                    "at": "2026-10-23T04:00:35.725Z"
                 },
                 {
                     "phase": "claim",
-                    "at": "2026-10-22T19:56:01.964Z",
-                    "executionId": "3806fc2f-11ae-42a8-86d8-333df822b23a"
+                    "at": "2026-10-23T04:00:35.812Z",
+                    "executionId": "b1d701e8-07e0-44e6-b44f-7b5baff152b0"
                 },
                 {
                     "phase": "process-ready",
-                    "at": "2026-10-22T19:56:02.205Z",
-                    "executionId": "3806fc2f-11ae-42a8-86d8-333df822b23a"
+                    "at": "2026-10-23T04:00:36.063Z",
+                    "executionId": "b1d701e8-07e0-44e6-b44f-7b5baff152b0"
                 },
                 {
                     "phase": "process-ready",
-                    "at": "2026-10-22T19:56:02.405Z",
+                    "at": "2026-10-23T04:00:36.281Z",
                     "monotonicMs": 1,
-                    "executionId": "3806fc2f-11ae-42a8-86d8-333df822b23a"
+                    "executionId": "b1d701e8-07e0-44e6-b44f-7b5baff152b0"
                 },
                 {
                     "phase": "first-output",
-                    "at": "2026-10-22T19:56:05.573Z",
-                    "monotonicMs": 3170,
-                    "executionId": "3806fc2f-11ae-42a8-86d8-333df822b23a"
+                    "at": "2026-10-23T04:00:39.538Z",
+                    "monotonicMs": 3258,
+                    "executionId": "b1d701e8-07e0-44e6-b44f-7b5baff152b0"
                 },
                 {
                     "phase": "terminal",
-                    "at": "2026-10-22T19:56:05.576Z",
-                    "monotonicMs": 3173,
-                    "executionId": "3806fc2f-11ae-42a8-86d8-333df822b23a"
+                    "at": "2026-10-23T04:00:39.541Z",
+                    "monotonicMs": 3262,
+                    "executionId": "b1d701e8-07e0-44e6-b44f-7b5baff152b0"
                 }
             ],
-            "runId": "cc9a1b1b-42b1-46fa-988f-978306afc091",
+            "runId": "33030109-e200-41b7-8b87-4115ce5ce745",
             "key": "fleet:task:0001:1",
             "binary": {
-                "path": "/private/var/folders/2g/398pfv8j1tj_zt78g_ty2r740000gn/T/spur-fleet-perf-codex-1792698954958/bin/claude",
+                "path": "/private/var/folders/2g/398pfv8j1tj_zt78g_ty2r740000gn/T/spur-fleet-perf-codex-1792728029270/bin/claude",
                 "version": "fleet-e2e-stub 1.0.0"
             },
             "hostBinaryVersion": "codex-cli 0.163.0"
@@ -154,45 +201,92 @@
             "agent": "codex",
             "mode": "resume",
             "status": "validated",
-            "durationMs": 4029,
+            "durationMs": 3944,
             "phases": [
                 {
                     "phase": "enqueue",
-                    "at": "2026-10-22T19:56:11.523Z"
+                    "at": "2026-10-23T04:00:45.382Z"
                 },
                 {
                     "phase": "claim",
-                    "at": "2026-10-22T19:56:11.580Z",
-                    "executionId": "204babdd-3d4d-4d1f-b033-e54eb4bb99c0"
+                    "at": "2026-10-23T04:00:45.405Z",
+                    "executionId": "74deb188-38a1-47b6-91af-219843fb5524"
                 },
                 {
                     "phase": "process-ready",
-                    "at": "2026-10-22T19:56:11.799Z",
-                    "executionId": "204babdd-3d4d-4d1f-b033-e54eb4bb99c0"
+                    "at": "2026-10-23T04:00:45.660Z",
+                    "executionId": "74deb188-38a1-47b6-91af-219843fb5524"
                 },
                 {
                     "phase": "process-ready",
-                    "at": "2026-10-22T19:56:12.012Z",
-                    "monotonicMs": 2,
-                    "executionId": "204babdd-3d4d-4d1f-b033-e54eb4bb99c0"
+                    "at": "2026-10-23T04:00:45.934Z",
+                    "monotonicMs": 1,
+                    "executionId": "74deb188-38a1-47b6-91af-219843fb5524"
                 },
                 {
                     "phase": "first-output",
-                    "at": "2026-10-22T19:56:15.549Z",
-                    "monotonicMs": 3540,
-                    "executionId": "204babdd-3d4d-4d1f-b033-e54eb4bb99c0"
+                    "at": "2026-10-23T04:00:49.322Z",
+                    "monotonicMs": 3390,
+                    "executionId": "74deb188-38a1-47b6-91af-219843fb5524"
                 },
                 {
                     "phase": "terminal",
-                    "at": "2026-10-22T19:56:15.552Z",
-                    "monotonicMs": 3543,
-                    "executionId": "204babdd-3d4d-4d1f-b033-e54eb4bb99c0"
+                    "at": "2026-10-23T04:00:49.326Z",
+                    "monotonicMs": 3393,
+                    "executionId": "74deb188-38a1-47b6-91af-219843fb5524"
                 }
             ],
-            "runId": "d65cfbe5-2f4a-410f-b516-b7deb632c8af",
+            "runId": "763a63e5-561a-4493-9da6-ac0bb55d3550",
             "key": "fleet:task:0002:1",
             "binary": {
-                "path": "/private/var/folders/2g/398pfv8j1tj_zt78g_ty2r740000gn/T/spur-fleet-perf-codex-1792698954958/bin/claude",
+                "path": "/private/var/folders/2g/398pfv8j1tj_zt78g_ty2r740000gn/T/spur-fleet-perf-codex-1792728029270/bin/claude",
+                "version": "fleet-e2e-stub 1.0.0"
+            },
+            "hostBinaryVersion": "codex-cli 0.163.0"
+        },
+        {
+            "agent": "codex",
+            "mode": "resume",
+            "status": "validated",
+            "durationMs": 4474,
+            "phases": [
+                {
+                    "phase": "enqueue",
+                    "at": "2026-10-23T04:00:56.161Z"
+                },
+                {
+                    "phase": "claim",
+                    "at": "2026-10-23T04:00:56.245Z",
+                    "executionId": "47c60887-d210-4be5-a722-473f65a1725b"
+                },
+                {
+                    "phase": "process-ready",
+                    "at": "2026-10-23T04:00:56.494Z",
+                    "executionId": "47c60887-d210-4be5-a722-473f65a1725b"
+                },
+                {
+                    "phase": "process-ready",
+                    "at": "2026-10-23T04:00:56.746Z",
+                    "monotonicMs": 1,
+                    "executionId": "47c60887-d210-4be5-a722-473f65a1725b"
+                },
+                {
+                    "phase": "first-output",
+                    "at": "2026-10-23T04:01:00.631Z",
+                    "monotonicMs": 3887,
+                    "executionId": "47c60887-d210-4be5-a722-473f65a1725b"
+                },
+                {
+                    "phase": "terminal",
+                    "at": "2026-10-23T04:01:00.635Z",
+                    "monotonicMs": 3890,
+                    "executionId": "47c60887-d210-4be5-a722-473f65a1725b"
+                }
+            ],
+            "runId": "effa1288-49de-4548-a468-be419102c6c9",
+            "key": "fleet:task:0003:1",
+            "binary": {
+                "path": "/private/var/folders/2g/398pfv8j1tj_zt78g_ty2r740000gn/T/spur-fleet-perf-codex-1792728029270/bin/claude",
                 "version": "fleet-e2e-stub 1.0.0"
             },
             "hostBinaryVersion": "codex-cli 0.163.0"
@@ -201,150 +295,217 @@
             "agent": "pi",
             "mode": "cold",
             "status": "validated",
-            "durationMs": 6547,
+            "durationMs": 4257,
             "phases": [
                 {
                     "phase": "enqueue",
-                    "at": "2026-10-22T19:56:25.615Z"
+                    "at": "2026-10-23T04:01:10.599Z"
                 },
                 {
                     "phase": "claim",
-                    "at": "2026-10-22T19:56:25.728Z",
-                    "executionId": "a68f9322-b0ad-4ca7-b02d-c6e528fd1ffa"
+                    "at": "2026-10-23T04:01:10.650Z",
+                    "executionId": "36f1dc96-d08c-4313-bc30-ebf351691f9b"
                 },
                 {
                     "phase": "process-ready",
-                    "at": "2026-10-22T19:56:26.001Z",
-                    "executionId": "a68f9322-b0ad-4ca7-b02d-c6e528fd1ffa"
+                    "at": "2026-10-23T04:01:10.957Z",
+                    "executionId": "36f1dc96-d08c-4313-bc30-ebf351691f9b"
                 },
                 {
                     "phase": "process-ready",
-                    "at": "2026-10-22T19:56:26.281Z",
-                    "monotonicMs": 1,
-                    "executionId": "a68f9322-b0ad-4ca7-b02d-c6e528fd1ffa"
+                    "at": "2026-10-23T04:01:11.222Z",
+                    "monotonicMs": 2,
+                    "executionId": "36f1dc96-d08c-4313-bc30-ebf351691f9b"
                 },
                 {
                     "phase": "first-output",
-                    "at": "2026-10-22T19:56:32.156Z",
-                    "monotonicMs": 5877,
-                    "executionId": "a68f9322-b0ad-4ca7-b02d-c6e528fd1ffa"
+                    "at": "2026-10-23T04:01:14.851Z",
+                    "monotonicMs": 3631,
+                    "executionId": "36f1dc96-d08c-4313-bc30-ebf351691f9b"
                 },
                 {
                     "phase": "terminal",
-                    "at": "2026-10-22T19:56:32.162Z",
-                    "monotonicMs": 5883,
-                    "executionId": "a68f9322-b0ad-4ca7-b02d-c6e528fd1ffa"
+                    "at": "2026-10-23T04:01:14.856Z",
+                    "monotonicMs": 3636,
+                    "executionId": "36f1dc96-d08c-4313-bc30-ebf351691f9b"
                 }
             ],
-            "runId": "9c1bd5b9-d8e0-4ee2-8cdc-5799abc45c17",
+            "runId": "80fe9270-cbb0-4437-b37b-7814c6c53bcb",
             "key": "fleet:task:0001:1",
             "binary": {
-                "path": "/private/var/folders/2g/398pfv8j1tj_zt78g_ty2r740000gn/T/spur-fleet-perf-pi-1792698977485/bin/claude",
+                "path": "/private/var/folders/2g/398pfv8j1tj_zt78g_ty2r740000gn/T/spur-fleet-perf-pi-1792728062660/bin/claude",
                 "version": "fleet-e2e-stub 1.0.0"
             },
-            "hostBinaryVersion": "1.4.0"
+            "hostBinaryVersion": "0.87.1"
         },
         {
             "agent": "pi",
             "mode": "resume",
             "status": "validated",
-            "durationMs": 4336,
+            "durationMs": 4289,
             "phases": [
                 {
                     "phase": "enqueue",
-                    "at": "2026-10-22T19:56:39.643Z"
+                    "at": "2026-10-23T04:01:21.283Z"
                 },
                 {
                     "phase": "claim",
-                    "at": "2026-10-22T19:56:39.739Z",
-                    "executionId": "1b2f104b-a19c-4798-9c75-c76262f8f41b"
+                    "at": "2026-10-23T04:01:21.317Z",
+                    "executionId": "6fc07cd0-fc7a-41f1-9847-6c48cbf93e26"
                 },
                 {
                     "phase": "process-ready",
-                    "at": "2026-10-22T19:56:39.983Z",
-                    "executionId": "1b2f104b-a19c-4798-9c75-c76262f8f41b"
+                    "at": "2026-10-23T04:01:21.574Z",
+                    "executionId": "6fc07cd0-fc7a-41f1-9847-6c48cbf93e26"
                 },
                 {
                     "phase": "process-ready",
-                    "at": "2026-10-22T19:56:40.219Z",
-                    "monotonicMs": 3,
-                    "executionId": "1b2f104b-a19c-4798-9c75-c76262f8f41b"
+                    "at": "2026-10-23T04:01:21.829Z",
+                    "monotonicMs": 1,
+                    "executionId": "6fc07cd0-fc7a-41f1-9847-6c48cbf93e26"
                 },
                 {
                     "phase": "first-output",
-                    "at": "2026-10-22T19:56:43.977Z",
-                    "monotonicMs": 3761,
-                    "executionId": "1b2f104b-a19c-4798-9c75-c76262f8f41b"
+                    "at": "2026-10-23T04:01:25.569Z",
+                    "monotonicMs": 3741,
+                    "executionId": "6fc07cd0-fc7a-41f1-9847-6c48cbf93e26"
                 },
                 {
                     "phase": "terminal",
-                    "at": "2026-10-22T19:56:43.979Z",
-                    "monotonicMs": 3764,
-                    "executionId": "1b2f104b-a19c-4798-9c75-c76262f8f41b"
+                    "at": "2026-10-23T04:01:25.572Z",
+                    "monotonicMs": 3744,
+                    "executionId": "6fc07cd0-fc7a-41f1-9847-6c48cbf93e26"
                 }
             ],
-            "runId": "5d2f92a6-d6be-4e8b-9bd3-465bab39682c",
+            "runId": "bb0566db-74c7-4010-8d44-9906c118e20a",
             "key": "fleet:task:0002:1",
             "binary": {
-                "path": "/private/var/folders/2g/398pfv8j1tj_zt78g_ty2r740000gn/T/spur-fleet-perf-pi-1792698977485/bin/claude",
+                "path": "/private/var/folders/2g/398pfv8j1tj_zt78g_ty2r740000gn/T/spur-fleet-perf-pi-1792728062660/bin/claude",
                 "version": "fleet-e2e-stub 1.0.0"
             },
-            "hostBinaryVersion": "1.4.0"
+            "hostBinaryVersion": "0.87.1"
+        },
+        {
+            "agent": "pi",
+            "mode": "resume",
+            "status": "validated",
+            "durationMs": 3932,
+            "phases": [
+                {
+                    "phase": "enqueue",
+                    "at": "2026-10-23T04:01:31.538Z"
+                },
+                {
+                    "phase": "claim",
+                    "at": "2026-10-23T04:01:31.571Z",
+                    "executionId": "d4422f8c-8029-433f-aefa-660f5464e4a4"
+                },
+                {
+                    "phase": "process-ready",
+                    "at": "2026-10-23T04:01:31.819Z",
+                    "executionId": "d4422f8c-8029-433f-aefa-660f5464e4a4"
+                },
+                {
+                    "phase": "process-ready",
+                    "at": "2026-10-23T04:01:32.060Z",
+                    "monotonicMs": 1,
+                    "executionId": "d4422f8c-8029-433f-aefa-660f5464e4a4"
+                },
+                {
+                    "phase": "first-output",
+                    "at": "2026-10-23T04:01:35.467Z",
+                    "monotonicMs": 3408,
+                    "executionId": "d4422f8c-8029-433f-aefa-660f5464e4a4"
+                },
+                {
+                    "phase": "terminal",
+                    "at": "2026-10-23T04:01:35.470Z",
+                    "monotonicMs": 3411,
+                    "executionId": "d4422f8c-8029-433f-aefa-660f5464e4a4"
+                }
+            ],
+            "runId": "bf2e4071-5968-462c-a479-a1e701a75e09",
+            "key": "fleet:task:0003:1",
+            "binary": {
+                "path": "/private/var/folders/2g/398pfv8j1tj_zt78g_ty2r740000gn/T/spur-fleet-perf-pi-1792728062660/bin/claude",
+                "version": "fleet-e2e-stub 1.0.0"
+            },
+            "hostBinaryVersion": "0.87.1"
         }
     ],
     "measured": {
         "claude": {
             "cold": {
-                "p50Ms": 3510,
-                "p95Ms": 3510,
+                "p50Ms": 5229,
+                "p95Ms": 5229,
                 "completionRate": 1,
-                "validatedPerHour": 1025.641
+                "validatedPerHour": 688.468
             },
             "resume": {
-                "p50Ms": 3783,
-                "p95Ms": 3783,
+                "p50Ms": 3747,
+                "p95Ms": 4088,
                 "completionRate": 1,
-                "validatedPerHour": 951.626
+                "validatedPerHour": 918.953
             },
             "warm": {
-                "status": "unsupported",
-                "reason": "warm task-turn adapters land with tasks 1276–1278; recorded unsupported until then"
+                "binary": {
+                    "path": "/opt/homebrew/bin/claude",
+                    "version": "2.1.308"
+                },
+                "driver": "claude",
+                "verifiedVersion": "2.1.308",
+                "status": "qualified",
+                "qualified": true
             }
         },
         "codex": {
             "cold": {
-                "p50Ms": 3693,
-                "p95Ms": 3693,
+                "p50Ms": 3816,
+                "p95Ms": 3816,
                 "completionRate": 1,
-                "validatedPerHour": 974.817
+                "validatedPerHour": 943.396
             },
             "resume": {
-                "p50Ms": 4029,
-                "p95Ms": 4029,
+                "p50Ms": 3944,
+                "p95Ms": 4474,
                 "completionRate": 1,
-                "validatedPerHour": 893.522
+                "validatedPerHour": 855.31
             },
             "warm": {
+                "binary": {
+                    "path": "/opt/homebrew/bin/codex",
+                    "version": "0.163.0"
+                },
+                "driver": null,
+                "verifiedVersion": "0.155.1",
                 "status": "unsupported",
-                "reason": "warm task-turn adapters land with tasks 1276–1278; recorded unsupported until then"
+                "qualified": false,
+                "reason": "no turn-session driver registered for agent 'codex'"
             }
         },
         "pi": {
             "cold": {
-                "p50Ms": 6547,
-                "p95Ms": 6547,
+                "p50Ms": 4257,
+                "p95Ms": 4257,
                 "completionRate": 1,
-                "validatedPerHour": 549.87
+                "validatedPerHour": 845.666
             },
             "resume": {
-                "p50Ms": 4336,
-                "p95Ms": 4336,
+                "p50Ms": 3932,
+                "p95Ms": 4289,
                 "completionRate": 1,
-                "validatedPerHour": 830.258
+                "validatedPerHour": 875.806
             },
             "warm": {
+                "binary": {
+                    "path": "node_modules/.bin/pi",
+                    "version": "0.87.1"
+                },
+                "driver": null,
+                "verifiedVersion": "0.87.0",
                 "status": "unsupported",
-                "reason": "warm task-turn adapters land with tasks 1276–1278; recorded unsupported until then"
+                "qualified": false,
+                "reason": "no turn-session driver registered for agent 'pi'"
             }
         }
     }
