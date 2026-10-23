@@ -3,6 +3,7 @@ import { CoordinationRunDao, type DbAdapter } from '@gobing-ai/spur-domain';
 import type { ActionResult } from '@gobing-ai/ts-dual-workflow-engine';
 import { createNodeFileSystem } from '@gobing-ai/ts-runtime';
 import type { AgentRunDeps } from '../services/agent-service';
+import type { WarmTurnDispatcher } from '../services/warm-turn-dispatch';
 import type { WorkflowAgentService } from './actions/agent-run';
 
 interface FleetWorkItem {
@@ -94,6 +95,12 @@ export async function runFleetWorkItem(input: {
     getDb(): Promise<DbAdapter>;
     /** Phase marks (task 1273); absent where no bus is wired. */
     emitPhase?: FleetPhaseEmit;
+    /**
+     * Correlated warm-turn dispatcher for THIS keyed request (task 1275). Absent → today's
+     * fresh-process path. The turn receipt it records is projected onto the completion receipt
+     * separately from the action-contract verdict, never merged into it.
+     */
+    turn?: WarmTurnDispatcher;
 }): Promise<ActionResult | null> {
     const file = paths(input.cwd, input.key);
     const fs = createNodeFileSystem(input.cwd);
@@ -122,6 +129,9 @@ export async function runFleetWorkItem(input: {
     const flags = { ...input.flags };
     delete flags.requestMessage;
     delete flags['request-message'];
+    // Task 1275 R2: the turn correlation's requestId is the inbox message that asked for this
+    // run, so the executor can compose it without reaching back into loop state.
+    flags['message-id'] = input.messageId;
     const runId = String(flags['run-id'] ?? crypto.randomUUID());
     const ids = { runId, executionId: stringOrUndefined(flags['execution-id']) };
     input.emitPhase?.(
@@ -138,17 +148,26 @@ export async function runFleetWorkItem(input: {
             vars: bindingVars(work.vars),
             env: {},
         },
-        { flags, deps: input.runDeps },
+        {
+            flags,
+            deps:
+                input.turn === undefined ? input.runDeps : { ...input.runDeps, dispatchTurn: input.turn.dispatchTurn },
+        },
     );
     input.emitPhase?.('contract-validated', phasePayload('contract-validated', ids, { ok: result.ok }));
+    // Task 1275 R2: the turn receipt (acceptance, native terminal, correlation) is recorded
+    // SEPARATELY from the action-contract verdict above — a native success that missed its
+    // artifact is still a contract violation, and the reader can see both.
+    const turn = input.turn?.lastTurn();
+    if (turn !== undefined) input.emitPhase?.('turn-settled', phasePayload('turn-settled', ids, { turn }));
     // Answers stay in their declared artifact; the transport receipt carries only contract metadata.
     const projected: ActionResult = {
         ok: result.ok,
         ...(result.ok ? {} : { error: `Fleet work-item contract failed; inspect member run ${runId}` }),
         ...(result.setVars ? { setVars: bindingVars(result.setVars) } : {}),
         data: Object.fromEntries(
-            Object.entries(result.data ?? {}).filter(([key]) =>
-                ['outcome', 'contract', 'observed', 'escalated'].includes(key),
+            Object.entries({ ...result.data, ...(turn !== undefined ? { turn } : {}) }).filter(([key]) =>
+                ['outcome', 'contract', 'observed', 'escalated', 'turn'].includes(key),
             ),
         ),
     };

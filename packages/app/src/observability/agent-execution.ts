@@ -1,4 +1,4 @@
-import type { AgentRunCorrelation } from '@gobing-ai/ts-ai-runner';
+import type { AgentRunCorrelation, TurnCorrelation, TurnOutcome } from '@gobing-ai/ts-ai-runner';
 import type { ProcessOutputChunk } from '@gobing-ai/ts-runtime';
 import { type NormalizedAgentUsage, unavailableAgentUsage } from '../services/agent-usage';
 
@@ -155,10 +155,49 @@ export interface DispatchAttemptIdentity {
     model?: string;
 }
 
+/**
+ * What one executor knows about the dispatch it is about to start (task 1275). The warm-turn
+ * dispatcher pins the rest (member, owner epoch, occupant generation) when the loop builds it —
+ * those are loop-lifetime facts the executor never owns.
+ */
+export interface WarmTurnContext {
+    agent: string;
+    prompt: string;
+    cwd: string;
+    /** The resolved role for THIS attempt; a role in `FRESH_SESSION_ROLES` never reuses a worker. */
+    role: string;
+    model?: string;
+    correlation: TurnCorrelation;
+    signal?: AbortSignal;
+    onOutput?: (chunk: string) => void;
+}
+
+/**
+ * Why a keyed request fell back to resume/one-shot BEFORE acceptance (G74 R5). After acceptance
+ * there is no fallback: the outcome is either certified or left uncertain.
+ */
+export type WarmFallbackReason =
+    | 'unsupported-agent'
+    | 'unqualified-version'
+    | 'spawn-failed'
+    | 'handshake-failed'
+    | 'fresh-role'
+    | 'not-started';
+
+/** One turn's result: a warm outcome to map, or a named pre-acceptance fallback. */
+export type WarmTurnDispatch =
+    | { kind: 'warm'; outcome: TurnOutcome }
+    | { kind: 'fallback'; reason: WarmFallbackReason; detail?: string };
+
 /** Optional correlation, cancellation, observation, and heartbeat controls for one dispatch. */
 export interface AgentExecutionOptions {
     /** Recheck dispatch authority after resolution/probes and before each subprocess starts. */
     beforeDispatch?: (attempt: DispatchAttemptIdentity) => Promise<void>;
+    /**
+     * Correlated warm-turn dispatch (task 1275): when present, an eligible keyed request runs its
+     * turn on a reused worker instead of spawning a fresh process. Absent → today's path exactly.
+     */
+    readonly dispatchTurn?: (context: WarmTurnContext) => Promise<WarmTurnDispatch>;
     readonly correlation?: AgentRunCorrelation;
     readonly signal?: AbortSignal;
     readonly observer?: AgentExecutionObserver;

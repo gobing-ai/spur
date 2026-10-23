@@ -6,9 +6,10 @@ import {
     ProjectClaimDao,
     SystemEventDao,
 } from '@gobing-ai/spur-domain';
-import type { AgentProcessOptions, AgentSpec } from '@gobing-ai/ts-ai-runner';
+import type { AgentName, AgentProcessOptions, AgentSpec } from '@gobing-ai/ts-ai-runner';
 import { EventBus } from '@gobing-ai/ts-infra';
 import type { WorkflowAgentService } from '../workflow/actions/agent-run';
+import { FRESH_SESSION_ROLES } from '../workflow/fleet-dispatch';
 import type { FleetPhaseEmit } from '../workflow/fleet-work-item';
 import { runFleetWorkItem } from '../workflow/fleet-work-item';
 import type { AgentRunDeps, AgentService } from './agent-service';
@@ -20,6 +21,7 @@ import { normalizeProjectPath } from './project-registry';
 import type { StrategyRuntime } from './strategy-runtime';
 import { FOLLOW_POLL_INTERVAL_MS } from './system-event-follow';
 import type { SystemEventBus } from './system-event-tap';
+import { createWarmTurnDispatcher } from './warm-turn-dispatch';
 import { WRITE_SLOT_TTL_MS } from './write-slot-service';
 
 /**
@@ -394,6 +396,10 @@ export async function runAgentLoopCore(deps: AgentLoopDeps, input: AgentLoopRunI
         recipient,
     );
     try {
+        // Task 1275: the occupant generation THIS loop pins on warm-turn receipts. Read once so
+        // the binding stays loop-lifetime — each keyed run bumps the per-run generation, so a
+        // per-drain read would retire the warm session after every drain.
+        const turnGeneration = ((await new CoordinationRunDao(await deps.getDb()).maxGeneration(recipient)) ?? 0) + 1;
         // G71 R2 (1091): finalize this spec's orphaned runs BEFORE the first drain — and before
         // the reconcile below reads them — so a killed turn has a definite receipt instead of
         // staying `running` forever. A loop that died ungracefully (SIGKILL/OOM/crash) never
@@ -568,6 +574,54 @@ export async function runAgentLoopCore(deps: AgentLoopDeps, input: AgentLoopRunI
                             memberSession.mode === 'resume' && memberSession.id !== undefined
                                 ? { ...baseFlags, 'session-id': memberSession.id }
                                 : baseFlags;
+                        // Task 1275: the per-drain warm-turn dispatcher. The SESSION is
+                        // loop-lifetime (held by `memberSession`); this object is fresh per drain
+                        // and only reads the slot. Drivers ship empty in 0.x, so openTurnSession
+                        // refuses `unsupported-agent` and every keyed run falls back by name —
+                        // until 1276–1278 register qualified drivers nothing changes here.
+                        const turn =
+                            runId !== undefined
+                                ? createWarmTurnDispatcher({
+                                      openSession: (agent, policy) => {
+                                          const runner = runDeps?.runner;
+                                          if (runner === undefined) {
+                                              return Promise.resolve({
+                                                  ok: false as const,
+                                                  reason: 'unsupported-agent' as const,
+                                                  detail: 'no AiRunner in run deps',
+                                              });
+                                          }
+                                          // SAFETY: eligibility (fresh-roles + driver qualification)
+                                          // already ran on this agent; ts-ai-runner's AgentName is a
+                                          // template-literal refinement of the same runtime string.
+                                          return runner.openTurnSession(agent as AgentName, { policy });
+                                      },
+                                      holder: memberSession,
+                                      binding: {
+                                          memberId: recipient,
+                                          ownerEpoch: owner?.ownerEpoch ?? 0,
+                                          occupantGeneration: turnGeneration,
+                                      },
+                                      freshRoles: FRESH_SESSION_ROLES,
+                                      diagnose: ({ event, reason, turn: receipt }) => {
+                                          // Diagnostic evidence is best-effort; a failed insert
+                                          // must never fail the drain (R4: evidence, never gate).
+                                          void (async () => {
+                                              try {
+                                                  await new SystemEventDao(await deps.getDb()).insert({
+                                                      id: randomUUID(),
+                                                      event_name: event,
+                                                      occurred_at: new Date().toISOString(),
+                                                      actor: recipient,
+                                                      payload_json: JSON.stringify({ reason, turn: receipt }),
+                                                  });
+                                              } catch {
+                                                  /* stale-turn evidence is dropped, never promoted */
+                                              }
+                                          })();
+                                      },
+                                  })
+                                : undefined;
                         const workResult =
                             claimed.length === 1 && requestKeys?.length === 1 && requestKeys[0]
                                 ? await runFleetWorkItem({
@@ -580,6 +634,7 @@ export async function runAgentLoopCore(deps: AgentLoopDeps, input: AgentLoopRunI
                                       runDeps,
                                       getDb: deps.getDb,
                                       emitPhase,
+                                      ...(turn !== undefined ? { turn } : {}),
                                   })
                                 : null;
                         if (workResult !== null) {
@@ -702,6 +757,9 @@ export async function runAgentLoopCore(deps: AgentLoopDeps, input: AgentLoopRunI
         if (memberSession.mode === 'persistent' && memberSession.hasLiveState()) {
             await memberSession.reset('operator').catch(() => undefined);
         }
+        // Task 1275: the warm turn session is loop-lifetime and dies with the loop in ANY mode —
+        // a resume member keeps its id but never its warm worker. `closeTurnSession` never throws.
+        await memberSession.closeTurnSession();
         // G71 R1: no orphan standby heartbeat outlives the loop that owns the lease.
         strategyRuntime?.stop();
         if (ownerTimer !== undefined) clearInterval(ownerTimer);

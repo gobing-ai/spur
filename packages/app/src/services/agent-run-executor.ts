@@ -20,9 +20,17 @@ import {
     type PromptOptions,
     resolveAgentName,
     TIER2_AGENTS,
+    type TurnOutcome,
     translateSlashCommand,
 } from '@gobing-ai/ts-ai-runner';
-import { NodeProcessExecutor, type OutputPolicy, type ProcessOptions, type ProcessResult } from '@gobing-ai/ts-runtime';
+import type { EventBus } from '@gobing-ai/ts-infra';
+import {
+    NodeProcessExecutor,
+    type OutputPolicy,
+    type ProcessEvents,
+    type ProcessOptions,
+    type ProcessResult,
+} from '@gobing-ai/ts-runtime';
 import {
     AgentExecutionLifecycle,
     type AgentExecutionOptions,
@@ -50,6 +58,32 @@ import { bridgeEventBus, withInvokeRouting } from './event-bridge';
 import { permissionFailureEvidence } from './failure-classification';
 import { RunSessionObserver, type RunSessionOverlapRegistry } from './run-session-observer';
 import { resolveRunRecordDir } from './run-storage';
+
+/**
+ * Signal marker for a warm turn that ended `outcome-unknown` (task 1275, G74 R4). The exit code
+ * alone cannot distinguish "the agent failed" from "we could not establish the terminal state",
+ * and those must never conflate: R4 keeps uncertain writing work uncertain rather than failed.
+ */
+export const TURN_OUTCOME_UNKNOWN_SIGNAL = 'TURN_OUTCOME_UNKNOWN';
+
+/**
+ * Map one warm turn's normalized terminal onto the executor's process-result shape (design
+ * `fleet-task-turn-execution` §4). A native `success` becomes exit 0 precisely so that the action
+ * contract below (expectFile/answerFile) remains the sole success authority; a `success` that
+ * missed its artifact therefore still ends `contract-violation`.
+ */
+function warmResult(outcome: TurnOutcome, startedAt: number): AgentRunResult {
+    const durationMs = Date.now() - startedAt;
+    const stdout = outcome.finalText ?? '';
+    if (outcome.kind === 'success') return { exitCode: 0, stdout, stderr: '', durationMs };
+    if (outcome.kind === 'outcome-unknown') {
+        return { exitCode: 3, stdout, stderr: '', durationMs, signal: TURN_OUTCOME_UNKNOWN_SIGNAL };
+    }
+    if (outcome.kind === 'interrupted') {
+        return { exitCode: 3, stdout, stderr: '', durationMs, signal: 'interrupted' };
+    }
+    return { exitCode: 3, stdout, stderr: '', durationMs };
+}
 
 /**
  * Process executor that reports each dispatched subprocess's OS pid.
@@ -252,7 +286,13 @@ export class AgentRunExecutor {
                           ),
                       }
                     : {}),
-                ...(invokeBridge !== undefined ? { processEvents: invokeBridge } : {}),
+                ...(invokeBridge !== undefined
+                    ? {
+                          // SAFETY: the application bus is EventMap-wide; 0.6.0 narrowed the
+                          // runner's processEvents parameter to the process-event slice it emits.
+                          processEvents: invokeBridge as unknown as EventBus<ProcessEvents>,
+                      }
+                    : {}),
             });
 
         const detector = deps?.detector ?? new AgentDetector({ runner });
@@ -608,32 +648,64 @@ export class AgentRunExecutor {
                     return { ok: false, exitCode: 2, message };
                 }
 
-                // Dispatch
-                try {
-                    result = await runner.runPromptCommand(agent, promptOptions, {
-                        cwd: cwd || undefined,
-                        ...(timeoutMs !== undefined ? { timeout: timeoutMs } : {}),
+                // Dispatch — task 1275: an eligible keyed request runs its turn on a reused warm
+                // worker instead of spawning a fresh process. A `fallback` names why and continues
+                // on today's path EXACTLY ONCE (R5); after acceptance there is no fallback at all.
+                // A warm terminal only decides the process outcome — the action contract below
+                // (expectFile/answerFile) stays the sole success authority.
+                const dispatchTurn = options.execution?.dispatchTurn;
+                let warmOutcome: TurnOutcome | undefined;
+                if (dispatchTurn !== undefined && prompt !== undefined) {
+                    const dispatched = await dispatchTurn({
+                        agent,
+                        prompt,
+                        cwd,
+                        role: currentRole ?? '',
+                        ...(model !== undefined ? { model } : {}),
+                        correlation: {
+                            runId: lifecycle.identity.runId,
+                            executionId: lifecycle.identity.executionId,
+                            requestId: stringFlag(flags, 'message-id', '') || lifecycle.identity.runId,
+                            attempt,
+                        },
                         signal: controller.signal,
-                        correlation: lifecycle.identity,
-                        // 0799 R1: exact attribution rides every dispatch so the
-                        // runner's quota events name this project + executor verbatim.
-                        ...(currentExecutor !== undefined
-                            ? {
-                                  quotaContext: {
-                                      projectId: this.ctx.cwd,
-                                      executor: currentExecutor,
-                                      agent,
-                                      ...(model !== undefined ? { model } : {}),
-                                  },
-                              }
-                            : {}),
-                        onOutput: (output) => {
-                            lifecycle.observe(output);
-                            // 1076 R1: the same frame that reaches the live observer is the
-                            // one persisted — redacted and byte-capped at the boundary.
-                            agentLog.append(output.stream, output.chunk);
+                        onOutput: (chunk) => {
+                            lifecycle.observe({ stream: 'stdout', chunk, timestamp: new Date().toISOString() });
+                            agentLog.append('stdout', chunk);
                         },
                     });
+                    if (dispatched.kind === 'warm') warmOutcome = dispatched.outcome;
+                }
+
+                // Dispatch
+                try {
+                    result =
+                        warmOutcome !== undefined
+                            ? warmResult(warmOutcome, dispatchStartedAt)
+                            : await runner.runPromptCommand(agent, promptOptions, {
+                                  cwd: cwd || undefined,
+                                  ...(timeoutMs !== undefined ? { timeout: timeoutMs } : {}),
+                                  signal: controller.signal,
+                                  correlation: lifecycle.identity,
+                                  // 0799 R1: exact attribution rides every dispatch so the
+                                  // runner's quota events name this project + executor verbatim.
+                                  ...(currentExecutor !== undefined
+                                      ? {
+                                            quotaContext: {
+                                                projectId: this.ctx.cwd,
+                                                executor: currentExecutor,
+                                                agent,
+                                                ...(model !== undefined ? { model } : {}),
+                                            },
+                                        }
+                                      : {}),
+                                  onOutput: (output) => {
+                                      lifecycle.observe(output);
+                                      // 1076 R1: the same frame that reaches the live observer is the
+                                      // one persisted — redacted and byte-capped at the boundary.
+                                      agentLog.append(output.stream, output.chunk);
+                                  },
+                              });
                 } catch (error) {
                     if (attempt === 0) {
                         lifecycle.finish({

@@ -324,6 +324,8 @@ The following matrix fixes summary behavior, retained facts, and outcome support
 | `fleet.phase.preflight` | `phase`, `key`, `member` | `[fleet] phase preflight {key}` | — |
 | `fleet.phase.accepted` | `phase`, `key`, `member` | `[fleet] phase accepted {key}` | — |
 | `fleet.phase.contract-validated` | `phase`, `key`, `ok` | `[fleet] phase contract-validated {key}` | — |
+| `fleet.phase.turn-settled` | `phase`, `key`, `turn.mode`, `turn.nativeOutcome`, `turn.requestId`, `turn.attempt` | `[fleet] turn settled (turn-mode={mode}, outcome={nativeOutcome}, req={requestId}, attempt={attempt})` | — |
+| `fleet.turn.stale` | `reason`, `turn.memberId`, `turn.requestId`, `turn.attempt` | `[fleet] stale turn evidence: {reason}` | — |
 | `fleet.phase.process-ready` | `phase`, `monotonicMs`, `runId`, `executionId` | `[fleet] phase process-ready` | — |
 | `fleet.phase.first-output` | `phase`, `monotonicMs`, `runId`, `executionId` | `[fleet] phase first-output` | — |
 | `fleet.phase.terminal` | `phase`, `monotonicMs`, `runId`, `executionId` | `[fleet] phase terminal` | — |
