@@ -117,7 +117,7 @@ function makeDispatcher(
         diagnose,
     });
     const base: WarmTurnContext = {
-        agent: 'pi',
+        agent: options.withDriver === false ? 'gemini' : 'pi',
         prompt: 'implement the task',
         cwd: workspace(),
         role: options.role ?? 'build',

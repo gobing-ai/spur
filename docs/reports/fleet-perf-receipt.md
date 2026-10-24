@@ -1,6 +1,6 @@
 # Fleet performance receipt (task 1273)
 
-Generated: 2026-10-23T04:01:37.546Z
+Generated: 2026-10-23T23:40:39.911Z
 Repeat: `bun run scripts/commands/fleet-e2e.ts --perf --trials 3`
 Workload digest: sha256:a851ae35a1798abecb2241aecd1442fa70acaf5f077c22a8f1d75703cf5239ea
 
@@ -11,29 +11,38 @@ Workload digest: sha256:a851ae35a1798abecb2241aecd1442fa70acaf5f077c22a8f1d75703
 
 | agent | mode | status | durationMs | phases observed | reason |
 | ----- | ---- | ------ | ---------- | --------------- | ------ |
-| claude | cold | validated | 5229 | enqueue→claim→process-ready→process-ready→first-output→terminal |  |
-| claude | resume | validated | 4088 | enqueue→claim→process-ready→process-ready→first-output→terminal |  |
-| claude | resume | validated | 3747 | enqueue→claim→process-ready→process-ready→first-output→terminal |  |
-| codex | cold | validated | 3816 | enqueue→claim→process-ready→process-ready→first-output→terminal |  |
-| codex | resume | validated | 3944 | enqueue→claim→process-ready→process-ready→first-output→terminal |  |
-| codex | resume | validated | 4474 | enqueue→claim→process-ready→process-ready→first-output→terminal |  |
-| pi | cold | validated | 4257 | enqueue→claim→process-ready→process-ready→first-output→terminal |  |
-| pi | resume | validated | 4289 | enqueue→claim→process-ready→process-ready→first-output→terminal |  |
-| pi | resume | validated | 3932 | enqueue→claim→process-ready→process-ready→first-output→terminal |  |
+| claude | cold | validated | 2017 | enqueue→claim→process-ready→process-ready→first-output→terminal |  |
+| claude | resume | validated | 1643 | enqueue→claim→process-ready→process-ready→first-output→terminal |  |
+| claude | resume | validated | 1655 | enqueue→claim→process-ready→process-ready→first-output→terminal |  |
+| codex | cold | validated | 1767 | enqueue→claim→process-ready→process-ready→first-output→terminal |  |
+| codex | resume | validated | 2077 | enqueue→claim→process-ready→process-ready→first-output→terminal |  |
+| codex | resume | validated | 1898 | enqueue→claim→process-ready→process-ready→first-output→terminal |  |
+| pi | cold | validated | 1881 | enqueue→claim→process-ready→process-ready→first-output→terminal |  |
+| pi | resume | validated | 1644 | enqueue→claim→process-ready→process-ready→first-output→terminal |  |
+| pi | resume | validated | 1719 | enqueue→claim→process-ready→process-ready→first-output→terminal |  |
 
 ## Measured (p50/p95 of enqueue→validated, UTC wall clock, one host)
 
 | agent | mode | p50Ms | p95Ms | completionRate | validatedPerHour |
 | ----- | ---- | ----- | ----- | -------------- | ---------------- |
-| claude | cold | 5229 | 5229 | 1 | 688.468 |
-| claude | resume | 3747 | 4088 | 1 | 918.953 |
-| claude | warm | — | — | — | — (qualified: /opt/homebrew/bin/claude 2.1.308, driver claude, verifiedAgainst 2.1.308) |
-| codex | cold | 3816 | 3816 | 1 | 943.396 |
-| codex | resume | 3944 | 4474 | 1 | 855.31 |
+| claude | cold | 2017 | 2017 | 1 | 1784.829 |
+| claude | resume | 1643 | 1655 | 1 | 2183.141 |
+| claude | warm | — | — | — | — (claude 2.1.309 is not the qualified stream-json version 2.1.308) |
+| codex | cold | 1767 | 1767 | 1 | 2037.351 |
+| codex | resume | 1898 | 2077 | 1 | 1811.321 |
 | codex | warm | — | — | — | — (no turn-session driver registered for agent 'codex') |
-| pi | cold | 4257 | 4257 | 1 | 845.666 |
-| pi | resume | 3932 | 4289 | 1 | 875.806 |
-| pi | warm | — | — | — | — (no turn-session driver registered for agent 'pi') |
+| pi | cold | 1881 | 1881 | 1 | 1913.876 |
+| pi | resume | 1644 | 1719 | 1 | 2140.946 |
+| pi | warm | — | — | — | — (qualified: node_modules/.bin/pi 0.87.1, driver pi, verifiedAgainst 0.87.1) |
+
+## Pi executable provenance
+
+| install | path | version |
+| ------- | ---- | ------- |
+| host | /Users/robin/node_modules/.bin/pi | 1.4.0 |
+| repository | node_modules/.bin/pi | 0.87.1 |
+
+The warm row qualifies the selected binary only; the other installation is provenance.
 
 Notes: durations use UTC wall clock across processes (one host clock domain);
 per-phase `monotonicMs` stays in-process. `gates` has no observable in the stub lane

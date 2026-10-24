@@ -120,11 +120,22 @@ export function createWarmTurnDispatcher(deps: WarmTurnDispatcherDeps): WarmTurn
     };
 
     /** A fallback is named once and never retried here (R5: exactly one fallback attempt). */
-    const fallback = (context: WarmTurnContext, reason: WarmFallbackReason, detail?: string): WarmTurnDispatch => {
+    const fallback = (
+        context: WarmTurnContext,
+        reason: WarmFallbackReason,
+        detail?: string,
+        nativeOutcome?: TurnOutcome['kind'],
+    ): WarmTurnDispatch => {
         // The executor continues on resume when the member has a session id, else one-shot;
         // the receipt names that path so R2's evidence is not a guess.
         const mode: TurnReceipt['mode'] = deps.holder.resumeId?.() !== undefined ? 'resume' : 'one-shot';
-        record(context, { mode, fallbackReason: reason });
+        record(context, {
+            mode,
+            fallbackReason: reason,
+            // A fallback replaces the warm receipt; retain its native outcome separately from
+            // the fallback's eventual action-contract result.
+            ...(nativeOutcome !== undefined ? { nativeOutcome } : {}),
+        });
         return { kind: 'fallback', reason, ...(detail !== undefined ? { detail } : {}) };
     };
 
@@ -216,7 +227,7 @@ export function createWarmTurnDispatcher(deps: WarmTurnDispatcherDeps): WarmTurn
         // A turn that never started is the one post-`startTurn` fallback the contract allows (R5):
         // nothing was accepted, so resume/one-shot cannot double-execute.
         if (outcome.kind === 'not-started') {
-            return fallback(context, 'not-started', outcome.reason);
+            return fallback(context, 'not-started', outcome.reason, outcome.kind);
         }
         // Everything else — including outcome-unknown and contract-violation — is this turn's
         // answer; there is no fallback after acceptance.

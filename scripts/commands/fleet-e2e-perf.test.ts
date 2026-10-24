@@ -11,11 +11,12 @@
  * executable and use the installed driver — no host agent binary, no network, no paid run.
  */
 import { describe, expect, spyOn, test } from 'bun:test';
-import { chmodSync, mkdtempSync, rmdirSync, unlinkSync, writeFileSync } from 'node:fs';
+import { chmodSync, mkdtempSync, readFileSync, rmdirSync, rmSync, unlinkSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
+import { getEnvVar, setEnvVar } from '@gobing-ai/spur-config';
 import { getAgentShim, type TurnSessionDriver } from '@gobing-ai/ts-ai-runner';
-import { parsePerfArgs, probeWarm, warmRow } from './fleet-e2e';
+import { parsePerfArgs, probeWarm, scaffoldPerfProject, warmRow } from './fleet-e2e';
 
 /** A driver that refuses every binary — the shape `TURN_SESSION_DRIVERS` has for 1277/1278. */
 function refusingDriver(reason: string): TurnSessionDriver {
@@ -167,4 +168,52 @@ describe('1273 R4: the real-agent lane is opt-in and --agents narrows the column
         const parsed = parsePerfArgs(['--perf', '--real-agents', '--agents', 'claude', '--trials', '2', '--keep']);
         expect(parsed).toMatchObject({ realAgents: true, agents: ['claude'], trials: 2, keep: true });
     });
+});
+
+describe('1277 AC1: Pi executable provenance and actual perf executor', () => {
+    test('host and repository Pi identities survive a refusal of the selected executable', () => {
+        const directory = mkdtempSync(join(tmpdir(), 'spur-pi-probe-'));
+        const hostPi = join(directory, 'pi');
+        const command = spyOn(getAgentShim('pi'), 'getVersionCommand');
+        const originalWhich = Bun.which;
+        const which = spyOn(Bun, 'which');
+        try {
+            writeFileSync(hostPi, "#!/bin/sh\nprintf '1.4.0\\n'\n");
+            chmodSync(hostPi, 0o755);
+            command.mockReturnValue({ command: hostPi, args: ['--version'] });
+            which.mockImplementation((name, options) => (name === 'pi' ? hostPi : originalWhich(name, options)));
+            const row = warmRow('pi', probeWarm('pi'));
+            expect(row.qualified).toBe(false);
+            expect(row.binary).toEqual({ path: hostPi, version: '1.4.0' });
+            expect(row.verifiedVersion).toBe('0.87.1');
+            expect(row.provenance).toEqual({
+                host: { path: hostPi, version: '1.4.0' },
+                repository: { path: 'node_modules/.bin/pi', version: '0.87.1' },
+            });
+        } finally {
+            command.mockRestore();
+            which.mockRestore();
+            rmSync(directory, { recursive: true, force: true });
+        }
+    });
+
+    test('a real Pi column configures Pi and leaves no Claude stub', async () => {
+        const skip = getEnvVar('SPUR_SKIP_PROJECT_CONFIG');
+        let project: Awaited<ReturnType<typeof scaffoldPerfProject>> | undefined;
+        try {
+            // The scratch project's declared fleet is the input under test; global config stays off.
+            setEnvVar('SPUR_SKIP_PROJECT_CONFIG', 'false');
+            project = await scaffoldPerfProject('pi', { realAgents: true });
+            const config = readFileSync(join(project.scratch, '.spur/config.yaml'), 'utf8');
+            expect(config).toContain('      agent: pi\n');
+            expect(config).not.toContain('      agent: claude\n');
+            expect(Bun.file(project.stubPath).size).toBe(0);
+        } finally {
+            setEnvVar('SPUR_SKIP_PROJECT_CONFIG', skip ?? 'true');
+            if (project !== undefined) {
+                (await project.openDb()).close();
+                rmSync(project.scratch, { recursive: true, force: true });
+            }
+        }
+    }, 20_000);
 });

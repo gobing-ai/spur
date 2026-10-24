@@ -339,14 +339,14 @@ describe('G71 R1/R2/R3 — member drain, keyed run path, slot heartbeat, resume 
         },
     );
 
-    test('1275 R1: a keyed drain threads the warm dispatcher — 0.x empty registry falls back by name', async () => {
+    test('1275 R1: a keyed drain threads the warm dispatcher — an unregistered agent falls back by name', async () => {
         const db = await memDb();
         const cwd = mkdtempSync(join(tmpdir(), 'loop-warm-'));
         await writeFleetWorkItem(cwd, 'run-1', 'work', { role: 'coder', input: 'Implement the task' }, {});
         const deps = memberOnlyDeps(db, {
             cwd,
             listAgentSpecs: async () => [
-                { id: 'member-1', type: 'pi', executor: 'e1', config: {}, purpose: 'coder', workspace: '/tmp' },
+                { id: 'member-1', type: 'gemini', executor: 'e1', config: {}, purpose: 'coder', workspace: '/tmp' },
             ],
             agentService: () => ({
                 run: async () => 0,
@@ -359,7 +359,7 @@ describe('G71 R1/R2/R3 — member drain, keyed run path, slot heartbeat, resume 
                 ) => {
                     if (deps?.dispatchTurn !== undefined) {
                         await deps.dispatchTurn({
-                            agent: 'pi',
+                            agent: 'gemini',
                             prompt: 'Implement the task',
                             cwd,
                             role: 'coder',
@@ -375,9 +375,9 @@ describe('G71 R1/R2/R3 — member drain, keyed run path, slot heartbeat, resume 
                         exitCode: 0,
                         stdout: 'ok',
                         invocation: {
-                            agent: 'pi',
+                            agent: 'gemini',
                             source: 'default',
-                            command: 'pi',
+                            command: 'gemini',
                             argv: [],
                             cwd,
                             mode: 'text',
@@ -388,7 +388,7 @@ describe('G71 R1/R2/R3 — member drain, keyed run path, slot heartbeat, resume 
                     };
                 },
             }),
-            // A real runner whose driver registry is empty (0.x ships none): openTurnSession
+            // A real runner with no registered Gemini driver: openTurnSession
             // must refuse unsupported-agent and the keyed run must still complete one-shot.
             runDeps: { runner: new AiRunner({ processExecutor: new NodeProcessExecutor() }) } as never,
             drain: async () => ({
@@ -398,7 +398,7 @@ describe('G71 R1/R2/R3 — member drain, keyed run path, slot heartbeat, resume 
                 requestKeys: ['run-1/work'],
             }),
             memberSession: {
-                executors: [{ name: 'e1', agent: 'pi' }],
+                executors: [{ name: 'e1', agent: 'gemini' }],
                 env: {},
                 getDb: async () => db,
                 warn: () => {},

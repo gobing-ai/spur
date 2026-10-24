@@ -4867,7 +4867,7 @@ describe('AgentService.doctor session capability surface (B8 / task 0889)', () =
             executors: [{ name: 'pi-exec', agent: 'pi', disabled: false }],
         } as AgentConfig);
         const doctorRunner = {
-            runAll: mock(() => Promise.resolve([mockDoctorResult({ agent: 'pi-exec', version: '0.87.0' })])),
+            runAll: mock(() => Promise.resolve([mockDoctorResult({ agent: 'pi-exec', version: '0.87.1' })])),
             runOne: mock(() => Promise.resolve(mockDoctorResult())),
         } as unknown as AgentRunDeps['doctorRunner'];
 

@@ -618,7 +618,7 @@ process.exit(1);
 }
 
 /** `agent.fleet` for the scratch project: a planner orchestrator and one stub-executor coder. */
-function fleetConfigSection(): string {
+function fleetConfigSection(agent = AGENT_TYPE): string {
     return [
         '',
         'agent:',
@@ -631,7 +631,7 @@ function fleetConfigSection(): string {
         `      - { id: ${CODER_LOCAL_ID}, role: coder, executor: ${EXECUTOR_NAME} }`,
         '  executors:',
         `    - name: ${EXECUTOR_NAME}`,
-        `      agent: ${AGENT_TYPE}`,
+        `      agent: ${agent}`,
         '      tier: standard',
         '      # fsWrite attestation: GTD only allocates a write-capable member (fleet-service.ts:512).',
         '      executionCapabilities:',
@@ -1435,7 +1435,14 @@ export interface PerfWarm {
     driver: string | null;
     /** `AGENT_SESSION_CAPABILITY.<agent>.verifiedAgainst` — what the driver was verified against. */
     verifiedVersion: string | null;
+    /** Pi's host PATH install and pinned repository dependency are distinct qualification inputs. */
+    provenance?: PiProvenance;
     reason?: string;
+}
+
+interface PiProvenance {
+    host: WarmProbe['binary'];
+    repository: WarmProbe['binary'];
 }
 
 /** What {@link warmRow} needs: the registered driver plus the probed binary identity. */
@@ -1443,6 +1450,7 @@ export interface WarmProbe {
     driver: TurnSessionDriver | null;
     binary: { path: string; version: string | null } | null;
     verifiedVersion: string | null;
+    provenance?: PiProvenance;
 }
 
 /**
@@ -1453,12 +1461,19 @@ export interface WarmProbe {
  */
 export function warmRow(agent: string, probe: WarmProbe): PerfWarm {
     // Persist local binary identities relative to the checkout; qualify the original probe below.
-    const binary = probe.binary === null ? null : { ...probe.binary };
-    if (binary?.path.startsWith(`${resolve(REPO_ROOT)}/`)) binary.path = relative(REPO_ROOT, binary.path);
+    const binary = receiptBinary(probe.binary);
     const base = {
         binary,
         driver: probe.driver?.agent ?? null,
         verifiedVersion: probe.verifiedVersion,
+        ...(probe.provenance === undefined
+            ? {}
+            : {
+                  provenance: {
+                      host: receiptBinary(probe.provenance.host),
+                      repository: receiptBinary(probe.provenance.repository),
+                  },
+              }),
     };
     if (probe.driver === null) {
         return {
@@ -1486,6 +1501,33 @@ export function warmRow(agent: string, probe: WarmProbe): PerfWarm {
     return { ...base, status: 'qualified', qualified: true };
 }
 
+function receiptBinary(binary: WarmProbe['binary']): WarmProbe['binary'] {
+    if (binary === null) return null;
+    return {
+        ...binary,
+        path: binary.path.startsWith(`${resolve(REPO_ROOT)}/`) ? relative(REPO_ROOT, binary.path) : binary.path,
+    };
+}
+
+/** Bound every provenance probe too; a failed/hung version command supplies no qualified version. */
+function probeVersion(command: { command: string; args: string[] }, timeoutMs: number): WarmProbe['binary'] {
+    try {
+        const proc = Bun.spawnSync([command.command, ...command.args], {
+            stdout: 'pipe',
+            stderr: 'pipe',
+            timeout: timeoutMs,
+            killSignal: 'SIGKILL',
+        });
+        return {
+            path: Bun.which(command.command) ?? command.command,
+            version:
+                proc.exitCode === 0 ? (/[0-9]+\.[0-9]+\.[0-9]+[^\s]*/.exec(proc.stdout.toString())?.[0] ?? null) : null,
+        };
+    } catch {
+        return null;
+    }
+}
+
 /**
  * Probe the installed binary for the warm lane. Version parsing mirrors the runner's own
  * `resolveTurnBinary` (first `x.y.z` token on stdout), so the row qualifies exactly the binary a
@@ -1503,23 +1545,28 @@ export function probeWarm(agent: string, timeoutMs = 5_000): WarmProbe {
     }
     let binary: WarmProbe['binary'] = null;
     try {
-        const command = getAgentShim(agent as AgentName).getVersionCommand();
-        const proc = Bun.spawnSync([command.command, ...command.args], {
-            stdout: 'pipe',
-            stderr: 'pipe',
-            timeout: timeoutMs,
-            // A version probe must settle even if the binary ignores SIGTERM.
-            killSignal: 'SIGKILL',
-        });
-        const stdout = proc.exitCode === 0 ? proc.stdout.toString() : '';
-        binary = {
-            path: Bun.which(command.command) ?? command.command,
-            version: /[0-9]+\.[0-9]+\.[0-9]+[^\s]*/.exec(stdout)?.[0] ?? null,
-        };
+        binary = probeVersion(getAgentShim(agent as AgentName).getVersionCommand(), timeoutMs);
     } catch {
         binary = null;
     }
-    return { driver, binary, verifiedVersion };
+    if (agent !== 'pi') return { driver, binary, verifiedVersion };
+    // `bun run` prepends the repository bin directory. Remove only that directory to identify
+    // the separate host installation; never substitute it for the executable actually selected.
+    const repositoryBin = resolve(REPO_ROOT, 'node_modules/.bin');
+    const hostPath = (getEnvVar('PATH') ?? '')
+        .split(':')
+        .filter((path) => resolve(path) !== repositoryBin)
+        .join(':');
+    const hostPi = Bun.which('pi', { PATH: hostPath });
+    return {
+        driver,
+        binary,
+        verifiedVersion,
+        provenance: {
+            host: hostPi === null ? null : probeVersion({ command: hostPi, args: ['--version'] }, timeoutMs),
+            repository: probeVersion({ command: join(repositoryBin, 'pi'), args: ['--version'] }, timeoutMs),
+        },
+    };
 }
 
 export interface PerfReceipt {
@@ -1540,7 +1587,7 @@ function hostBinaryVersion(bin: string): string | undefined {
 }
 
 /** One agent column's scratch project: the E2E leg-1 scaffold, verbatim primitives. */
-async function scaffoldPerfProject(
+export async function scaffoldPerfProject(
     agent: string,
     options: { realAgents: boolean } = { realAgents: false },
 ): Promise<{
@@ -1566,7 +1613,7 @@ async function scaffoldPerfProject(
     mkdirSync(join(scratch, 'docs/tasks'), { recursive: true });
     writeFileSync(
         join(scratch, '.spur/config.yaml'),
-        `${readFileSync(join(scratch, '.spur/config.yaml'), 'utf8')}${fleetConfigSection()}`,
+        `${readFileSync(join(scratch, '.spur/config.yaml'), 'utf8')}${fleetConfigSection(options.realAgents ? agent : AGENT_TYPE)}`,
     );
     // The real-agent lane must NOT leave a fake binary named after the agent in the scratch tree:
     // the member resolves `claude` from PATH, and a stray stub would shadow the installed binary
@@ -1751,6 +1798,20 @@ function writePerfReceipts(receipt: PerfReceipt, repeatCommand: string): void {
                     : `| ${agent} | ${mode} | ${measuredRow.p50Ms ?? ''} | ${measuredRow.p95Ms ?? ''} | ${measuredRow.completionRate ?? ''} | ${measuredRow.validatedPerHour ?? ''} |`,
             );
         }
+    }
+    const piProvenance = receipt.measured.pi?.warm.provenance;
+    if (piProvenance !== undefined) {
+        lines.push(
+            '',
+            '## Pi executable provenance',
+            '',
+            '| install | path | version |',
+            '| ------- | ---- | ------- |',
+        );
+        for (const [install, binary] of Object.entries(piProvenance)) {
+            lines.push(`| ${install} | ${binary?.path ?? 'absent'} | ${binary?.version ?? 'unprobed'} |`);
+        }
+        lines.push('', 'The warm row qualifies the selected binary only; the other installation is provenance.');
     }
     lines.push(
         '',

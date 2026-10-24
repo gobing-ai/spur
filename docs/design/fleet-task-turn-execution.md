@@ -3,7 +3,7 @@ kind: design
 title: Fleet task turns and measured warm execution
 status: proposed
 created_at: 2026-10-21
-updated_at: 2026-10-21
+updated_at: 2026-10-23
 related: [G74, G75]
 tags: [contract, G74, agent, workflow]
 ---
@@ -110,6 +110,17 @@ Official sources verified 2026-10-21:
 Each installed binary still needs a version/mode-specific qualification; documentation is not a
 local runtime proof. No new SDK dependency is assumed.
 
+Pi's released RPC driver qualifies the repository dependency 0.87.1. The performance receipt
+records the selected executable plus separate host PATH and repository Pi paths/versions; a
+different host version remains unqualified. The real-agent lane uses the requested agent in its
+scratch fleet; the deterministic lane keeps the common stub. Warm rows record qualification,
+without claiming model latency. Prompt acceptance and `agent_end` do not certify completion:
+the registered driver waits for `agent_settled`, then Spur validates the declared artifacts.
+Pre-acceptance rejection settles `not-started` and permits one named fallback; the fallback
+receipt retains that native outcome separately from the fallback's validated result.
+The runner 0.6.4 Pi driver supplies no `finalText`; file-writing work can use `expectFile`, while
+`answerFile` capture remains unsatisfied. Protocol decoding stays entirely in ts-ai-runner.
+
 Reuse requires the same effective policy and workspace. Related coder remediation may resume;
 independent review starts fresh. Prefer a fresh native conversation in the same process only when
 that operation is supported and qualified; otherwise use the existing fresh-process path.
@@ -120,8 +131,9 @@ named reason. After ambiguous acceptance, reconcile first: never use fallback as
 of possibly executed writes. On recovery, query native/durable outcomes where supported, keep the
 task uncertain otherwise, and require an explicit resolved recovery decision before replacement.
 
-The installed runner exposes send acceptance but no proved full correlated task facade here.
-Integration tasks must first inspect the current released package. If insufficient, record the exact
+The released runner exposes correlated task sessions through its driver registry. Driver presence
+and version qualification do not certify every outcome or artifact contract. Integration tasks must
+first inspect the current released package. If insufficient, record the exact
 upstream contract/release prerequisite and leave that task blocked; do not fabricate availability or
 edit ts-libs without separate authorization. Baseline and scheduling work can proceed independently.
 
