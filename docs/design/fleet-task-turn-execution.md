@@ -121,6 +121,15 @@ receipt retains that native outcome separately from the fallback's validated res
 The runner 0.6.4 Pi driver supplies no `finalText`; file-writing work can use `expectFile`, while
 `answerFile` capture remains unsatisfied. Protocol decoding stays entirely in ts-ai-runner.
 
+Codex's released App Server driver qualifies `codex-cli` 0.164.0 (`@gobing-ai/ts-ai-runner` 0.7.1).
+The handshake is `initialize`, an `initialized` notification, then `thread/start`. Each `turn/start`
+response (`status: inProgress`) is acceptance. The only turn terminal is `turn/completed`, whose
+status is `completed` → success, `failed` → failure, or `interrupted` → interrupted. A caller cancel
+sends `turn/interrupt` and waits for that native completion, or `outcome-unknown` when the grace
+expires. Receipts record the observed thread id and the distinct turn id. A version outside
+`verifiedAgainst` falls back once with reason `unqualified-version`. The performance receipt's warm
+row is qualification evidence only.
+
 Reuse requires the same effective policy and workspace. Related coder remediation may resume;
 independent review starts fresh. Prefer a fresh native conversation in the same process only when
 that operation is supported and qualified; otherwise use the existing fresh-process path.

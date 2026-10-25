@@ -1,6 +1,6 @@
 # Fleet performance receipt (task 1273)
 
-Generated: 2026-10-23T23:40:39.911Z
+Generated: 2026-10-25T01:14:18.324Z
 Repeat: `bun run scripts/commands/fleet-e2e.ts --perf --trials 3`
 Workload digest: sha256:a851ae35a1798abecb2241aecd1442fa70acaf5f077c22a8f1d75703cf5239ea
 
@@ -11,28 +11,28 @@ Workload digest: sha256:a851ae35a1798abecb2241aecd1442fa70acaf5f077c22a8f1d75703
 
 | agent | mode | status | durationMs | phases observed | reason |
 | ----- | ---- | ------ | ---------- | --------------- | ------ |
-| claude | cold | validated | 2017 | enqueue→claim→process-ready→process-ready→first-output→terminal |  |
-| claude | resume | validated | 1643 | enqueue→claim→process-ready→process-ready→first-output→terminal |  |
-| claude | resume | validated | 1655 | enqueue→claim→process-ready→process-ready→first-output→terminal |  |
-| codex | cold | validated | 1767 | enqueue→claim→process-ready→process-ready→first-output→terminal |  |
-| codex | resume | validated | 2077 | enqueue→claim→process-ready→process-ready→first-output→terminal |  |
-| codex | resume | validated | 1898 | enqueue→claim→process-ready→process-ready→first-output→terminal |  |
-| pi | cold | validated | 1881 | enqueue→claim→process-ready→process-ready→first-output→terminal |  |
-| pi | resume | validated | 1644 | enqueue→claim→process-ready→process-ready→first-output→terminal |  |
-| pi | resume | validated | 1719 | enqueue→claim→process-ready→process-ready→first-output→terminal |  |
+| claude | cold | validated | 4710 | enqueue→claim→process-ready→process-ready→first-output→terminal |  |
+| claude | resume | validated | 3505 | enqueue→claim→process-ready→process-ready→first-output→terminal |  |
+| claude | resume | validated | 3881 | enqueue→claim→process-ready→process-ready→first-output→terminal |  |
+| codex | cold | validated | 3815 | enqueue→claim→process-ready→process-ready→first-output→terminal |  |
+| codex | resume | validated | 3630 | enqueue→claim→process-ready→process-ready→first-output→terminal |  |
+| codex | resume | validated | 3695 | enqueue→claim→process-ready→process-ready→first-output→terminal |  |
+| pi | cold | validated | 3893 | enqueue→claim→process-ready→process-ready→first-output→terminal |  |
+| pi | resume | validated | 3654 | enqueue→claim→process-ready→process-ready→first-output→terminal |  |
+| pi | resume | validated | 3685 | enqueue→claim→process-ready→process-ready→first-output→terminal |  |
 
 ## Measured (p50/p95 of enqueue→validated, UTC wall clock, one host)
 
 | agent | mode | p50Ms | p95Ms | completionRate | validatedPerHour |
 | ----- | ---- | ----- | ----- | -------------- | ---------------- |
-| claude | cold | 2017 | 2017 | 1 | 1784.829 |
-| claude | resume | 1643 | 1655 | 1 | 2183.141 |
+| claude | cold | 4710 | 4710 | 1 | 764.331 |
+| claude | resume | 3505 | 3881 | 1 | 974.817 |
 | claude | warm | — | — | — | — (claude 2.1.309 is not the qualified stream-json version 2.1.308) |
-| codex | cold | 1767 | 1767 | 1 | 2037.351 |
-| codex | resume | 1898 | 2077 | 1 | 1811.321 |
-| codex | warm | — | — | — | — (no turn-session driver registered for agent 'codex') |
-| pi | cold | 1881 | 1881 | 1 | 1913.876 |
-| pi | resume | 1644 | 1719 | 1 | 2140.946 |
+| codex | cold | 3815 | 3815 | 1 | 943.644 |
+| codex | resume | 3630 | 3695 | 1 | 982.935 |
+| codex | warm | — | — | — | — (qualified: /opt/homebrew/bin/codex 0.164.0, driver codex, verifiedAgainst 0.164.0) |
+| pi | cold | 3893 | 3893 | 1 | 924.737 |
+| pi | resume | 3654 | 3685 | 1 | 981.06 |
 | pi | warm | — | — | — | — (qualified: node_modules/.bin/pi 0.87.1, driver pi, verifiedAgainst 0.87.1) |
 
 ## Pi executable provenance

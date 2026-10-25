@@ -577,8 +577,8 @@ export async function runAgentLoopCore(deps: AgentLoopDeps, input: AgentLoopRunI
                         // Task 1275: the per-drain warm-turn dispatcher. The SESSION is
                         // loop-lifetime (held by `memberSession`); this object is fresh per drain
                         // and only reads the slot. `TURN_SESSION_DRIVERS` now registers claude
-                        // (1276) and pi (1277); any other agent still gets `unsupported-agent`
-                        // from openTurnSession and every keyed run falls back by name.
+                        // (1276), pi (1277) and codex (1278); any other agent still gets
+                        // `unsupported-agent` from openTurnSession and every keyed run falls back by name.
                         const turn =
                             runId !== undefined
                                 ? createWarmTurnDispatcher({
