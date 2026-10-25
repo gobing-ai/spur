@@ -6,9 +6,11 @@ import {
     ProjectClaimDao,
     SystemEventDao,
 } from '@gobing-ai/spur-domain';
-import type { AgentProcessOptions, AgentSpec } from '@gobing-ai/ts-ai-runner';
+import type { AgentName, AgentProcessOptions, AgentSpec } from '@gobing-ai/ts-ai-runner';
 import { EventBus } from '@gobing-ai/ts-infra';
 import type { WorkflowAgentService } from '../workflow/actions/agent-run';
+import { FRESH_SESSION_ROLES } from '../workflow/fleet-dispatch';
+import type { FleetPhaseEmit } from '../workflow/fleet-work-item';
 import { runFleetWorkItem } from '../workflow/fleet-work-item';
 import type { AgentRunDeps, AgentService } from './agent-service';
 import type { DeliveryReconciler } from './delivery-reconciler';
@@ -19,6 +21,7 @@ import { normalizeProjectPath } from './project-registry';
 import type { StrategyRuntime } from './strategy-runtime';
 import { FOLLOW_POLL_INTERVAL_MS } from './system-event-follow';
 import type { SystemEventBus } from './system-event-tap';
+import { createWarmTurnDispatcher } from './warm-turn-dispatch';
 import { WRITE_SLOT_TTL_MS } from './write-slot-service';
 
 /**
@@ -82,7 +85,16 @@ export interface AgentLoopRuntime {
      * runner's process class directly.
      */
     memberProcessFactory?: (options: AgentProcessOptions) => MemberAgentProcess;
+    /** 1274 test seam: overrides {@link ORCHESTRATOR_CONVERSATION_SHUTDOWN_GRACE_MS}. */
+    conversationShutdownGraceMs?: number;
 }
+
+/**
+ * 1274 R3: how long loop shutdown waits for an in-flight orchestrator conversation to settle its
+ * claimed rows before releasing ownership anyway. A third of the claim TTL, like the renewal
+ * cadence, so a successor never waits on a hung chat for longer than one renewal interval.
+ */
+export const ORCHESTRATOR_CONVERSATION_SHUTDOWN_GRACE_MS = CLAIM_TTL_MS / 3;
 
 /**
  * Structural collaborator set for the loop (task 0968 R2). Every CLI-only
@@ -99,8 +111,9 @@ export interface AgentLoopDeps {
     /** Per-loop bus-bound agent service. */
     agentService(bus: SystemEventBus): WorkflowAgentService & Pick<AgentService, 'run'>;
     fleet: FleetService;
-    /** Strategy runtime factory (the CLI builds one bound to its `./task` services). */
-    makeStrategyRuntime(): Promise<StrategyRuntime>;
+    /** Strategy runtime factory (the CLI builds one bound to its `./task` services). The
+     * emitter argument carries the loop's bus so strategy enqueues leave phase marks. */
+    makeStrategyRuntime(emitPhase?: FleetPhaseEmit): Promise<StrategyRuntime>;
     /** The recipient's agent spec listing. */
     listAgentSpecs(): Promise<AgentSpec[]>;
     reconciler: Pick<DeliveryReconciler, 'reconcile'>;
@@ -313,6 +326,11 @@ export async function runAgentLoopCore(deps: AgentLoopDeps, input: AgentLoopRunI
     // `agent.invoke.start` (via the agent runner) marks the invocation accepted.
     const bus = new EventBus() as SystemEventBus;
     const svc = deps.agentService(bus);
+    // Task 1273: one emitter for every fleet phase mark this loop process owns —
+    // strategy enqueue, member claim, work-item boundaries.
+    const emitPhase: FleetPhaseEmit = (phase, payload) => {
+        void bus.emit(`fleet.phase.${phase}`, payload);
+    };
 
     const fleet = deps.fleet;
     const declaration = await fleet.load(deps.cwd);
@@ -362,6 +380,14 @@ export async function runAgentLoopCore(deps: AgentLoopDeps, input: AgentLoopRunI
     // standby write-slot heartbeat, so re-creating it per wake would leak a timer per
     // iteration and leave the lease unheartbeated between them.
     let strategyRuntime: StrategyRuntime | undefined;
+    // 1274 (G74 R2): the orchestrator's own conversation runs BESIDE the scheduling tick, never
+    // in front of it — a long chat turn used to hold every dispatch until it ended. At most one
+    // conversation is in flight; ticks stay serialized by this loop alone. A wake that lands
+    // while the chat is held is recorded, and the chat's end re-wakes the loop at once so the
+    // queued inbox drains without waiting for the `--poll` backstop.
+    let conversation: Promise<void> | undefined;
+    let wokeDuringConversation = false;
+    let wakeNow = new AbortController();
     const memberSession = new MemberSession(
         {
             ...deps.memberSession,
@@ -370,6 +396,10 @@ export async function runAgentLoopCore(deps: AgentLoopDeps, input: AgentLoopRunI
         recipient,
     );
     try {
+        // Task 1275: the occupant generation THIS loop pins on warm-turn receipts. Read once so
+        // the binding stays loop-lifetime — each keyed run bumps the per-run generation, so a
+        // per-drain read would retire the warm session after every drain.
+        const turnGeneration = ((await new CoordinationRunDao(await deps.getDb()).maxGeneration(recipient)) ?? 0) + 1;
         // G71 R2 (1091): finalize this spec's orphaned runs BEFORE the first drain — and before
         // the reconcile below reads them — so a killed turn has a definite receipt instead of
         // staying `running` forever. A loop that died ungracefully (SIGKILL/OOM/crash) never
@@ -412,7 +442,7 @@ export async function runAgentLoopCore(deps: AgentLoopDeps, input: AgentLoopRunI
         const report = await deps.reconciler.reconcile(recipient);
         deps.write(formatReconcileReport(report));
         if (owner) {
-            strategyRuntime = await deps.makeStrategyRuntime();
+            strategyRuntime = await deps.makeStrategyRuntime(emitPhase);
             await strategyRuntime.resume(projectPath);
         }
 
@@ -516,15 +546,82 @@ export async function runAgentLoopCore(deps: AgentLoopDeps, input: AgentLoopRunI
                     // same id for as long as the run is live.
                     const runId = keyed ? randomUUID() : undefined;
                     if (runId !== undefined) deps.setSupervisorRun?.(recipient, runId);
+                    // Task 1273: one execution identity per keyed run — every phase mark
+                    // (claim → lifecycle → contract) joins by the same (runId, executionId).
+                    const executionId = keyed ? randomUUID() : undefined;
+                    if (runId !== undefined && executionId !== undefined) {
+                        emitPhase('claim', {
+                            phase: 'claim',
+                            runId,
+                            executionId,
+                            at: new Date().toISOString(),
+                            member: recipient,
+                            // Task 1273: singular first key (metadata-only retention has no arrays) —
+                            // the KPI driver attributes the trial by matching the wbs in this key.
+                            key: requestKeys?.[0],
+                        });
+                    }
                     try {
                         // G66 R1: resume mode re-opens the previous drain's session;
                         // one-shot keeps today's fresh process (R3's warning already
                         // fired once at loop start).
-                        const baseFlags = { ...rewritten, ...(runId !== undefined ? { 'run-id': runId } : {}) };
+                        const baseFlags = {
+                            ...rewritten,
+                            ...(runId !== undefined ? { 'run-id': runId } : {}),
+                            ...(executionId !== undefined ? { 'execution-id': executionId } : {}),
+                        };
                         const drainFlags =
                             memberSession.mode === 'resume' && memberSession.id !== undefined
                                 ? { ...baseFlags, 'session-id': memberSession.id }
                                 : baseFlags;
+                        // Task 1275: the per-drain warm-turn dispatcher. The SESSION is
+                        // loop-lifetime (held by `memberSession`); this object is fresh per drain
+                        // and only reads the slot. `TURN_SESSION_DRIVERS` now registers claude
+                        // (1276), pi (1277) and codex (1278); any other agent still gets
+                        // `unsupported-agent` from openTurnSession and every keyed run falls back by name.
+                        const turn =
+                            runId !== undefined
+                                ? createWarmTurnDispatcher({
+                                      openSession: (agent, policy) => {
+                                          const runner = runDeps?.runner;
+                                          if (runner === undefined) {
+                                              return Promise.resolve({
+                                                  ok: false as const,
+                                                  reason: 'unsupported-agent' as const,
+                                                  detail: 'no AiRunner in run deps',
+                                              });
+                                          }
+                                          // SAFETY: eligibility (fresh-roles + driver qualification)
+                                          // already ran on this agent; ts-ai-runner's AgentName is a
+                                          // template-literal refinement of the same runtime string.
+                                          return runner.openTurnSession(agent as AgentName, { policy });
+                                      },
+                                      holder: memberSession,
+                                      binding: {
+                                          memberId: recipient,
+                                          ownerEpoch: owner?.ownerEpoch ?? 0,
+                                          occupantGeneration: turnGeneration,
+                                      },
+                                      freshRoles: FRESH_SESSION_ROLES,
+                                      diagnose: ({ event, reason, turn: receipt }) => {
+                                          // Diagnostic evidence is best-effort; a failed insert
+                                          // must never fail the drain (R4: evidence, never gate).
+                                          void (async () => {
+                                              try {
+                                                  await new SystemEventDao(await deps.getDb()).insert({
+                                                      id: randomUUID(),
+                                                      event_name: event,
+                                                      occurred_at: new Date().toISOString(),
+                                                      actor: recipient,
+                                                      payload_json: JSON.stringify({ reason, turn: receipt }),
+                                                  });
+                                              } catch {
+                                                  /* stale-turn evidence is dropped, never promoted */
+                                              }
+                                          })();
+                                      },
+                                  })
+                                : undefined;
                         const workResult =
                             claimed.length === 1 && requestKeys?.length === 1 && requestKeys[0]
                                 ? await runFleetWorkItem({
@@ -536,6 +633,8 @@ export async function runAgentLoopCore(deps: AgentLoopDeps, input: AgentLoopRunI
                                       service: svc,
                                       runDeps,
                                       getDb: deps.getDb,
+                                      emitPhase,
+                                      ...(turn !== undefined ? { turn } : {}),
                                   })
                                 : null;
                         if (workResult !== null) {
@@ -568,28 +667,41 @@ export async function runAgentLoopCore(deps: AgentLoopDeps, input: AgentLoopRunI
             !runtime.signal?.aborted &&
             (runtime.maxIterations === undefined || iteration < runtime.maxIterations)
         ) {
-            const wake = await waitForWake(wakeDao, cursor, pollMs, runtime.signal);
+            const waitSignal =
+                runtime.signal === undefined ? wakeNow.signal : AbortSignal.any([runtime.signal, wakeNow.signal]);
+            const wake = await waitForWake(wakeDao, cursor, pollMs, waitSignal);
+            if (wakeNow.signal.aborted) wakeNow = new AbortController();
             cursor = wake.sequence;
             if (runtime.signal?.aborted) break;
             const fleetDeclared = (await fleet.load(deps.cwd)) !== null;
             if (fleetDeclared && owner !== null) {
-                strategyRuntime ??= await deps.makeStrategyRuntime();
+                strategyRuntime ??= await deps.makeStrategyRuntime(emitPhase);
                 const ledger = await deps.attachLedger(bus);
                 try {
-                    // G71 R4: the orchestrator converses before it dispatches. Its own drain
-                    // runs the same path as a member's — answer through the inbox, then the
-                    // DETERMINISTIC strategy tick decides dispatch (D2: the LLM never does).
+                    // G71 R4: the orchestrator answers its inbox on the same path as a member's
+                    // drain; the DETERMINISTIC strategy tick decides dispatch (D2: the LLM never
+                    // does). 1274: the drain starts here but is not awaited (see `conversation`).
                     //
-                    // A throwing drain (inbox DB error) must not take the orchestrator down:
-                    // before this drain existed the owner branch could not fail here, and an
+                    // A throwing drain (inbox DB error) must not take the orchestrator down: an
                     // orchestrator outage stops dispatch for the whole project. Log and keep the
                     // wake loop alive — the tick still runs, and the next wake retries the drain.
-                    try {
-                        await runDrain({ replyInstruction: true });
-                    } catch (error) {
-                        deps.error(
-                            `orchestrator drain failed: ${error instanceof Error ? error.message : String(error)}`,
-                        );
+                    if (conversation === undefined) {
+                        wokeDuringConversation = false;
+                        conversation = runDrain({ replyInstruction: true })
+                            .then(
+                                () => undefined,
+                                (error: unknown) => {
+                                    deps.error(
+                                        `orchestrator drain failed: ${error instanceof Error ? error.message : String(error)}`,
+                                    );
+                                },
+                            )
+                            .finally(() => {
+                                conversation = undefined;
+                                if (wokeDuringConversation) wakeNow.abort();
+                            });
+                    } else {
+                        wokeDuringConversation = true;
                     }
                     // G71 R1/R3: settle, then dispatch — both non-blocking. Member work
                     // never runs in the orchestrator process; the receipt is completion.
@@ -620,6 +732,24 @@ export async function runAgentLoopCore(deps: AgentLoopDeps, input: AgentLoopRunI
         }
         return ownershipLost ? 2 : 0;
     } finally {
+        // 1274 R3: shutdown bounds the in-flight conversation too — wait for it to settle its
+        // claimed rows, but never let a hung chat turn hold the owner claim past the grace.
+        if (conversation !== undefined) {
+            const graceMs = runtime.conversationShutdownGraceMs ?? ORCHESTRATOR_CONVERSATION_SHUTDOWN_GRACE_MS;
+            let timer: ReturnType<typeof setTimeout> | undefined;
+            const settled = await Promise.race([
+                conversation.then(() => true),
+                new Promise<false>((resolve) => {
+                    timer = setTimeout(() => resolve(false), graceMs);
+                }),
+            ]);
+            clearTimeout(timer);
+            if (!settled) {
+                deps.error(
+                    `orchestrator conversation still running after ${graceMs}ms at shutdown; releasing ownership`,
+                );
+            }
+        }
         // G66 R4 / G71 R3: a persistent member's process IS its session, so loop shutdown
         // resets it (the next start opens a fresh one). A RESUME member keeps its id — the
         // whole point of `resume` is that a restart re-opens the same conversation, and the
@@ -627,6 +757,9 @@ export async function runAgentLoopCore(deps: AgentLoopDeps, input: AgentLoopRunI
         if (memberSession.mode === 'persistent' && memberSession.hasLiveState()) {
             await memberSession.reset('operator').catch(() => undefined);
         }
+        // Task 1275: the warm turn session is loop-lifetime and dies with the loop in ANY mode —
+        // a resume member keeps its id but never its warm worker. `closeTurnSession` never throws.
+        await memberSession.closeTurnSession();
         // G71 R1: no orphan standby heartbeat outlives the loop that owns the lease.
         strategyRuntime?.stop();
         if (ownerTimer !== undefined) clearInterval(ownerTimer);

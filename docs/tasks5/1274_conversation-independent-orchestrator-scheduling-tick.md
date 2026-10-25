@@ -1,10 +1,10 @@
 ---
 schema_version: 1
 name: Conversation-independent orchestrator scheduling tick
-status: todo
+status: done
 template: feature-impl
 created_at: 2026-10-22T07:00:34.912Z
-updated_at: "2026-10-22T16:26:14.450Z"
+updated_at: "2026-10-22T20:28:11.698Z"
 feature_id: G74
 priority: P1
 tags:
@@ -14,6 +14,8 @@ tags:
 ac_altitude: task-local
 ac_numbering: task-local
 estimate_hours: 3
+done_forced: "false"
+done_reason: unforced close; PASS artifact at .spur/memory/evidence/1274-verdict.json
 ---
 
 ## 1274. Conversation-independent orchestrator scheduling tick
@@ -32,10 +34,10 @@ Rubric: E5 D1 L1 C1 R1 = 9 → own task.
 
 ### Requirements
 
-- [ ] R1. The orchestrator conversation drain runs with its own in-flight state and never blocks the observe/tick loop.
-- [ ] R2. Wakes arriving during a held conversation coalesce and rerun selection after the current tick; no concurrent ticks, no lost arrivals.
-- [ ] R3. One fenced scheduling owner (owner epoch) remains; shutdown bounds both consumers (conversation grace = CLAIM_TTL_MS/3).
-- [ ] R4. Deterministic E2E: a 30-second held conversation with a newly runnable task dispatches it with p95 at most 1 second and no duplicate dispatch.
+- [x] R1. The orchestrator conversation drain runs with its own in-flight state and never blocks the observe/tick loop.
+- [x] R2. Wakes arriving during a held conversation coalesce and rerun selection after the current tick; no concurrent ticks, no lost arrivals.
+- [x] R3. One fenced scheduling owner (owner epoch) remains; shutdown bounds both consumers (conversation grace = CLAIM_TTL_MS/3).
+- [x] R4. Deterministic E2E: a 30-second held conversation with a newly runnable task dispatches it with p95 at most 1 second and no duplicate dispatch.
 
 ### Acceptance Criteria
 
@@ -96,15 +98,73 @@ Scenario: AC4 — Existing loop contracts are unchanged (req: R1, R3)
 
 ### Solution
 
-<!-- Filled during implementation: file:line change map and concise rationale. -->
+- `packages/app/src/services/agent-loop-service.ts:92-97` — `runtime.conversationShutdownGraceMs` test seam; `ORCHESTRATOR_CONVERSATION_SHUTDOWN_GRACE_MS = CLAIM_TTL_MS / 3` (R3).
+- `:381-389` — per-loop `conversation` promise slot, `wokeDuringConversation` flag, `wakeNow` AbortController (R1/R2).
+- `:615-618` — `waitForWake` now waits on `AbortSignal.any([runtime.signal, wakeNow.signal])`, and a fired `wakeNow` is replaced before the next pass (R2: chat-end re-wake without losing the poll cursor).
+- `:626-649` — the orchestrator drain starts but is NOT awaited: at most one in flight; wakes arriving during it only set the flag; the drain's `finally` clears the slot and aborts `wakeNow` so the queued inbox drains immediately; drain errors still log, never kill the loop (G71 R4 behavior preserved).
+- `:680-697` — shutdown races the in-flight conversation against the grace timer, logs and releases ownership on timeout, then the existing persistent shutdown continues.
+- Ticks remain serialized in the single loop body — no second scheduler, no concurrent ticks.
+- Tests: `packages/app/tests/services/agent-loop-orchestrator-tick.test.ts` (new; AC1–AC3 incl. the 30 s held-conversation p95 case), and the G71 R4 case in `agent-loop-service.test.ts` updated to the non-blocking order (drain starts first; all four events happen in one wake; observe precedes tick).
 
 ### Testing
 
-<!-- Filled during verification: commands run, outcomes, coverage claim or N/A. -->
+**Pipeline verify results**
+
+- Verdict: PASS (from verdict artifact)
+
+| Requirement | Status | Evidence |
+|-------------|--------|----------|
+| R1 | MET | test packages/app/tests/services/agent-loop-orchestrator-tick.test.ts:179 — held chat, dispatch still runs (drain not awaited, packages/app/src/services/agent-loop-service.ts:632) |
+| R2 | MET | test packages/app/tests/services/agent-loop-orchestrator-tick.test.ts:179 (burst wake, maxConcurrentTicks=1) and :231 (arrival during held chat drains at chat end) |
+| R3 | MET | test packages/app/tests/services/agent-loop-orchestrator-tick.test.ts:263 (bounded shutdown, grace seam 50ms) and :292 (owner lost stops ticks, exit 2); grace = CLAIM_TTL_MS/3 at packages/app/src/services/agent-loop-service.ts:97 |
+| R4 | MET | test packages/app/tests/services/agent-loop-orchestrator-tick.test.ts:224 (p95 of 20 iterations ≤ 1s), :229 (exactly-once, 21/21) |
+
+| Acceptance Criteria | Status | Evidence Type | Evidence |
+|---------------------|--------|---------------|----------|
+| AC1 — The tick runs while a conversation is held (req: R1, R4) | MET | test | packages/app/tests/services/agent-loop-orchestrator-tick.test.ts:179 — 60s backstop poll, wake-driven dispatch, p95 ≤ 1s (:224), no duplicates (:229) |
+| AC2 — Wakes during a tick coalesce without loss (req: R2) | MET | test | packages/app/tests/services/agent-loop-orchestrator-tick.test.ts:179 (burst) + :231 (post-chat drain) — every arrival considered, one follow-up pass, no overlap |
+| AC3 — Ownership and shutdown stay bounded (req: R3) | MET | test | packages/app/tests/services/agent-loop-orchestrator-tick.test.ts:263 (shutdown returns within grace, claim released) + :292 (epoch loss → exit 2, no unowned tick) |
+| AC4 — Existing loop contracts are unchanged (req: R1, R3) | MET | test | packages/app/tests/services/agent-loop-service.test.ts:516 (G71 R4 updated to non-blocking order) + command (cd packages/app && bun test …) 20/20, (cd apps/cli && bun test tests/commands/agent) 189/189 |
+- Coverage: N/A (verdict-based; verify pipeline does not measure code coverage)
 
 ### Review
 
-<!-- Filled during review: P1-P4 findings, residual risk, and final disposition. -->
+Inline super-reviewer pass over the 1274 diff (applied reference stash 6202ee39; worktree sp/runall-g74-53db).
+
+**Traceability** — the orchestrator drain starts but is never awaited (`packages/app/src/services/agent-loop-service.ts:632`); at most one conversation in flight, wakes during it only record `wokeDuringConversation`; `waitForWake` observes `AbortSignal.any([stop, wakeNow])` (`:615`) so the chat's end re-wakes the loop immediately; ticks stay serialized in the single loop body; shutdown races the conversation against `ORCHESTRATOR_CONVERSATION_SHUTDOWN_GRACE_MS = CLAIM_TTL_MS / 3` with the `runtime.conversationShutdownGraceMs` seam (`:92-97`, `:680-697`). The G71 R4 case is updated to the new non-blocking order (`packages/app/tests/services/agent-loop-service.test.ts:516`).
+
+**SECUA** — drain errors keep the loop alive (logged, never thrown); no new dependencies; the grace timer is always cleared; the flag/abort handshake has no unhandled rejection path (`.then(undefined, handler)`). Invariants preserved: single owner timer, strategy epochs, ledger flush per pass.
+
+**Verification** — focused 20/20 (new file + loop suite), cli agent 189/189, full gate 11577/0 + coverage-provenance/post-check rules pass.
+
+**Findings**
+
+| Priority | Finding | Disposition |
+| --- | --- | --- |
+| P1 | none | — |
+| P2 | none | — |
+| P3 | none | — |
+| P4 | stale anchors in the task Background (`:587`/`:589` vs actual `:588`) | RESOLVED in the task's refine corrections; no code impact |
+
+**Captured answer**
+
+Confidence: HIGH
+
+| Req | Status | Evidence |
+| --- | --- | --- |
+| R1 | MET | test packages/app/tests/services/agent-loop-orchestrator-tick.test.ts:179 — held chat, dispatch still runs (drain not awaited, packages/app/src/services/agent-loop-service.ts:632) |
+| R2 | MET | test packages/app/tests/services/agent-loop-orchestrator-tick.test.ts:179 (burst wake, maxConcurrentTicks=1) and :231 (arrival during held chat drains at chat end) |
+| R3 | MET | test packages/app/tests/services/agent-loop-orchestrator-tick.test.ts:263 (bounded shutdown, grace seam 50ms) and :292 (owner lost stops ticks, exit 2); grace = CLAIM_TTL_MS/3 at packages/app/src/services/agent-loop-service.ts:97 |
+| R4 | MET | test packages/app/tests/services/agent-loop-orchestrator-tick.test.ts:224 (p95 of 20 iterations ≤ 1s), :229 (exactly-once, 21/21) |
+
+| AC | Status | Evidence Type | Evidence |
+| --- | --- | --- | --- |
+| AC1 — The tick runs while a conversation is held (req: R1, R4) | MET | test | packages/app/tests/services/agent-loop-orchestrator-tick.test.ts:179 — 60s backstop poll, wake-driven dispatch, p95 ≤ 1s (:224), no duplicates (:229) |
+| AC2 — Wakes during a tick coalesce without loss (req: R2) | MET | test | packages/app/tests/services/agent-loop-orchestrator-tick.test.ts:179 (burst) + :231 (post-chat drain) — every arrival considered, one follow-up pass, no overlap |
+| AC3 — Ownership and shutdown stay bounded (req: R3) | MET | test | packages/app/tests/services/agent-loop-orchestrator-tick.test.ts:263 (shutdown returns within grace, claim released) + :292 (epoch loss → exit 2, no unowned tick) |
+| AC4 — Existing loop contracts are unchanged (req: R1, R3) | MET | test | packages/app/tests/services/agent-loop-service.test.ts:516 (G71 R4 updated to non-blocking order) + command (cd packages/app && bun test …) 20/20, (cd apps/cli && bun test tests/commands/agent) 189/189 |
+
+Verdict: PASS
 
 ### References
 
@@ -113,3 +173,8 @@ Scenario: AC4 — Existing loop contracts are unchanged (req: R1, R3)
 - Anchors: `packages/app/src/services/agent-loop-service.ts:335,356,469,480,486,571,588,596,597,627`.
 
 ### History
+
+- 2026-10-22T20:18:32.253Z todo → wip (system)
+- 2026-10-22T20:28:07.691Z wip → testing (system)
+- 2026-10-22T20:28:11.689Z testing → done (system)
+

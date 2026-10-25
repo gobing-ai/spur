@@ -568,7 +568,10 @@ describe('G61 delivery settle regressions (0831)', () => {
         const { ctx, out, cleanup } = await makeCtx();
         try {
             const team = new AgentCoordinationService(ctx);
-            await team.createAgentSpec({ id: 'planner', type: 'codex', executor: 'codex' }); // resume path — no persistent-stdin claim
+            // grok is resume-by-id with no persistent-stdin claim. Codex's released
+            // row vouches for app-server persistent stdin and degrades loudly
+            // (member-persistent-stdin-unwired) because the exec shim is one-shot.
+            await team.createAgentSpec({ id: 'planner', type: 'grok', executor: 'grok' });
             await team.sendMessage('operator', 'planner', 'will never start');
             const db = await ctx.getDb();
 

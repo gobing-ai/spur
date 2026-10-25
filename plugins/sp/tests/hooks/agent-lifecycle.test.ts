@@ -127,8 +127,15 @@ describe('agent lifecycle hook (1080 R4)', () => {
             const outcome = reportLifecycleHook({ hook_event_name: 'UserPromptSubmit' }, { seq: '42' });
             // The call returning at all is the unref/no-await property; the shim lands shortly after.
             expect(outcome).toEqual({ reported: true, state: 'working' });
-            for (let i = 0; i < 40 && !existsSync(record); i++) await new Promise((r) => setTimeout(r, 50));
-            expect(readFileSync(record, 'utf-8')).toBe('agent report --state working --seq 42 ');
+            // Poll the content, not existsSync: the shim's `>` redirect creates the file before
+            // printf writes it, so existence alone reads back empty under load.
+            const expected = 'agent report --state working --seq 42 ';
+            let argv = '';
+            for (let i = 0; i < 40 && argv !== expected; i++) {
+                await new Promise((r) => setTimeout(r, 50));
+                argv = existsSync(record) ? readFileSync(record, 'utf-8') : '';
+            }
+            expect(argv).toBe(expected);
         } finally {
             if (previousPath === undefined) removeEnvVar('PATH');
             else setEnvVar('PATH', previousPath);

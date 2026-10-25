@@ -168,4 +168,16 @@ agent:
     members:
       - { role: planner, purpose: orchestrator }  # planner-1
       - { role: coder, executor: pi-k3, id: coder-1 } # coder-1 (volc + zai standard quotas exhausted 2026-10-03; id pinned per ADR-126 A4 rename guard)
-      - { role: reviewer }                        # reviewer-1
+      - { role: reviewer, executor: agy-opus-5.5 } # reviewer-1 (agy-gemini flash-high burned its turn budget on 1276's large diff and exited 0 with an empty answer file — 2026-10-22; pin per the role-only escape hatch above)
+
+  # Routing-ladder kill-switch (111 R1) — merges into the global agent.executors entry by
+  # name: the agy-gemini flash-high reviewer burned its turn budget on 1276's large diff
+  # twice on 2026-10-22 (exit 0 with an EMPTY answer file, 8.7 min then 2.4 min); the
+  # reviewer ladder falls through to agy-opus-5.5. Flip back when the model holds a full
+  # review turn again.
+  executors:
+    - name: agy-gemini
+      agent: antigravity-cli
+      model: gemini-3.8-flash-high
+      tier: capable-1
+      disabled: true

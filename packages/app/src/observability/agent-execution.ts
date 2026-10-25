@@ -1,4 +1,4 @@
-import type { AgentRunCorrelation } from '@gobing-ai/ts-ai-runner';
+import type { AgentRunCorrelation, TurnCorrelation, TurnOutcome } from '@gobing-ai/ts-ai-runner';
 import type { ProcessOutputChunk } from '@gobing-ai/ts-runtime';
 import { type NormalizedAgentUsage, unavailableAgentUsage } from '../services/agent-usage';
 
@@ -89,6 +89,18 @@ export interface AgentExecutionDroppedEvent extends AgentExecutionBase {
     readonly chunks: number;
 }
 
+/**
+ * Named phase mark inside one dispatch (task 1273). Phases are boundary marks
+ * (`process-ready`, `first-output`, `terminal`), not state — the KPI driver
+ * joins them by run/execution identity and never infers a state machine.
+ */
+export interface AgentExecutionPhaseEvent extends AgentExecutionBase {
+    readonly kind: 'phase';
+    readonly phase: string;
+    /** In-process monotonic offset from dispatch start (ms); absent before start. */
+    readonly monotonicMs?: number;
+}
+
 /** Terminal execution outcome with timing, signal, and explicit usage availability. */
 export interface AgentExecutionFinishedEvent extends AgentExecutionBase {
     readonly kind: 'finished';
@@ -111,6 +123,7 @@ export type AgentExecutionEvent =
     | AgentExecutionOutputEvent
     | AgentExecutionHeartbeatEvent
     | AgentExecutionDroppedEvent
+    | AgentExecutionPhaseEvent
     | AgentExecutionFinishedEvent;
 
 function executionSeverity(detail: {
@@ -142,10 +155,49 @@ export interface DispatchAttemptIdentity {
     model?: string;
 }
 
+/**
+ * What one executor knows about the dispatch it is about to start (task 1275). The warm-turn
+ * dispatcher pins the rest (member, owner epoch, occupant generation) when the loop builds it —
+ * those are loop-lifetime facts the executor never owns.
+ */
+export interface WarmTurnContext {
+    agent: string;
+    prompt: string;
+    cwd: string;
+    /** The resolved role for THIS attempt; a role in `FRESH_SESSION_ROLES` never reuses a worker. */
+    role: string;
+    model?: string;
+    correlation: TurnCorrelation;
+    signal?: AbortSignal;
+    onOutput?: (chunk: string) => void;
+}
+
+/**
+ * Why a keyed request fell back to resume/one-shot BEFORE acceptance (G74 R5). After acceptance
+ * there is no fallback: the outcome is either certified or left uncertain.
+ */
+export type WarmFallbackReason =
+    | 'unsupported-agent'
+    | 'unqualified-version'
+    | 'spawn-failed'
+    | 'handshake-failed'
+    | 'fresh-role'
+    | 'not-started';
+
+/** One turn's result: a warm outcome to map, or a named pre-acceptance fallback. */
+export type WarmTurnDispatch =
+    | { kind: 'warm'; outcome: TurnOutcome }
+    | { kind: 'fallback'; reason: WarmFallbackReason; detail?: string };
+
 /** Optional correlation, cancellation, observation, and heartbeat controls for one dispatch. */
 export interface AgentExecutionOptions {
     /** Recheck dispatch authority after resolution/probes and before each subprocess starts. */
     beforeDispatch?: (attempt: DispatchAttemptIdentity) => Promise<void>;
+    /**
+     * Correlated warm-turn dispatch (task 1275): when present, an eligible keyed request runs its
+     * turn on a reused worker instead of spawning a fresh process. Absent → today's path exactly.
+     */
+    readonly dispatchTurn?: (context: WarmTurnContext) => Promise<WarmTurnDispatch>;
     readonly correlation?: AgentRunCorrelation;
     readonly signal?: AbortSignal;
     readonly observer?: AgentExecutionObserver;
@@ -184,6 +236,8 @@ export class AgentExecutionLifecycle {
     private dropped = 0;
     private heartbeat: ReturnType<typeof setInterval> | undefined;
     private startedAt = 0;
+    private startedMonotonic = 0;
+    private firstOutputAt: number | undefined;
     private timeoutMs: number | undefined;
     private pid: number | undefined;
     private readonly outputCarry: Record<ProcessOutputChunk['stream'], string> = { stdout: '', stderr: '' };
@@ -211,11 +265,32 @@ export class AgentExecutionLifecycle {
      * dispatches that never report one, which keeps `pid` genuinely optional.
      */
     setPid(pid: number): void {
-        if (Number.isInteger(pid) && pid > 0) this.pid = pid;
+        if (Number.isInteger(pid) && pid > 0) {
+            if (this.pid === pid) return;
+            this.pid = pid;
+            // Task 1273: the dispatch is on the wire — first spawn of this execution.
+            this.phase('process-ready');
+        }
+    }
+
+    /**
+     * Emit a named phase mark (task 1273). Monotonic offsets are only defined
+     * after `start` — durations stay inside one clock domain, never mixed with
+     * wall-clock UTC stamps from other processes.
+     */
+    phase(name: string): void {
+        this.emit({
+            kind: 'phase',
+            phase: name,
+            ...(this.startedMonotonic > 0
+                ? { monotonicMs: Math.max(0, Math.round(performance.now() - this.startedMonotonic)) }
+                : {}),
+        });
     }
 
     start(detail: LifecycleStart): void {
         this.startedAt = Date.now();
+        this.startedMonotonic = performance.now();
         this.timeoutMs = detail.timeoutMs;
         this.emit({
             kind: 'started',
@@ -262,6 +337,9 @@ export class AgentExecutionLifecycle {
             this.emit({ kind: 'dropped', chunks: this.dropped });
             this.dropped = 0;
         }
+        // Task 1273: terminal phase precedes the finished outcome event so the
+        // KPI driver can close a trial on the phase name alone.
+        this.phase('terminal');
         const cancelled = detail.signal !== undefined || detail.reason === 'cancelled';
         this.emit({
             kind: 'finished',
@@ -275,6 +353,11 @@ export class AgentExecutionLifecycle {
     }
 
     private enqueueOutput(stream: ProcessOutputChunk['stream'], chunk: string): void {
+        if (this.firstOutputAt === undefined) {
+            // Task 1273: the first delivered output chunk — model-to-stream latency mark.
+            this.firstOutputAt = Date.now();
+            this.phase('first-output');
+        }
         if (this.queue.length >= MAX_PENDING_CHUNKS) {
             this.dropped += 1;
             return;
@@ -306,8 +389,10 @@ export class AgentExecutionLifecycle {
     private emit(
         detail:
             | Omit<AgentExecutionStartedEvent, keyof AgentExecutionBase>
+            | Omit<AgentExecutionOutputEvent, keyof AgentExecutionBase>
             | Omit<AgentExecutionHeartbeatEvent, keyof AgentExecutionBase>
             | Omit<AgentExecutionDroppedEvent, keyof AgentExecutionBase>
+            | Omit<AgentExecutionPhaseEvent, keyof AgentExecutionBase>
             | Omit<AgentExecutionFinishedEvent, keyof AgentExecutionBase>,
     ): void {
         this.deliver(this.makeEvent(detail) as AgentExecutionEvent);

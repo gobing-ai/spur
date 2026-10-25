@@ -6,7 +6,7 @@
  * ownership loss.
  */
 import { describe, expect, test, vi } from 'bun:test';
-import { mkdtempSync } from 'node:fs';
+import { mkdtempSync, readFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import type { InboxClaim } from '@gobing-ai/spur-domain';
@@ -17,7 +17,9 @@ import {
     ProjectClaimDao,
     SystemEventDao,
 } from '@gobing-ai/spur-domain';
+import { AiRunner } from '@gobing-ai/ts-ai-runner';
 import { EventBus } from '@gobing-ai/ts-infra';
+import { NodeProcessExecutor } from '@gobing-ai/ts-runtime';
 import type { AgentLoopDeps } from '../../src/services/agent-loop-service';
 import {
     createWriteSlotHeartbeat,
@@ -29,6 +31,7 @@ import {
 import type { FleetService } from '../../src/services/fleet-service';
 import { normalizeProjectPath } from '../../src/services/project-registry';
 import type { StrategyRuntime } from '../../src/services/strategy-runtime';
+import { writeFleetWorkItem } from '../../src/workflow/fleet-work-item';
 
 async function memDb(): Promise<DbAdapter> {
     return createMigratedDb({ url: ':memory:' });
@@ -336,6 +339,91 @@ describe('G71 R1/R2/R3 — member drain, keyed run path, slot heartbeat, resume 
         },
     );
 
+    test('1275 R1: a keyed drain threads the warm dispatcher — an unregistered agent falls back by name', async () => {
+        const db = await memDb();
+        const cwd = mkdtempSync(join(tmpdir(), 'loop-warm-'));
+        await writeFleetWorkItem(cwd, 'run-1', 'work', { role: 'coder', input: 'Implement the task' }, {});
+        const deps = memberOnlyDeps(db, {
+            cwd,
+            listAgentSpecs: async () => [
+                { id: 'member-1', type: 'gemini', executor: 'e1', config: {}, purpose: 'coder', workspace: '/tmp' },
+            ],
+            agentService: () => ({
+                run: async () => 0,
+                // Minimal stand-in for the real executor branch (covered directly in
+                // agent-run-executor tests): consult the threaded dispatcher, then run one-shot.
+                runTraced: async (
+                    _input: string,
+                    _flags: unknown,
+                    deps: { dispatchTurn?: (context: unknown) => Promise<{ kind: string }> },
+                ) => {
+                    if (deps?.dispatchTurn !== undefined) {
+                        await deps.dispatchTurn({
+                            agent: 'gemini',
+                            prompt: 'Implement the task',
+                            cwd,
+                            role: 'coder',
+                            correlation: {
+                                runId: 'run-loop',
+                                executionId: 'exec-loop',
+                                requestId: 'msg-m-warm',
+                                attempt: 1,
+                            },
+                        });
+                    }
+                    return {
+                        exitCode: 0,
+                        stdout: 'ok',
+                        invocation: {
+                            agent: 'gemini',
+                            source: 'default',
+                            command: 'gemini',
+                            argv: [],
+                            cwd,
+                            mode: 'text',
+                            outputMode: 'buffered',
+                            continue: false,
+                            stdinInteractive: false,
+                        },
+                    };
+                },
+            }),
+            // A real runner with no registered Gemini driver: openTurnSession
+            // must refuse unsupported-agent and the keyed run must still complete one-shot.
+            runDeps: { runner: new AiRunner({ processExecutor: new NodeProcessExecutor() }) } as never,
+            drain: async () => ({
+                prompt: 'dispatch: run the task',
+                flags: {},
+                claimed: [{ id: 'm-warm', attempts: 1 }],
+                requestKeys: ['run-1/work'],
+            }),
+            memberSession: {
+                executors: [{ name: 'e1', agent: 'gemini' }],
+                env: {},
+                getDb: async () => db,
+                warn: () => {},
+                processFactory: () =>
+                    fakeProcess(async () => {
+                        throw new Error('the keyed run must never touch the persistent stdin');
+                    }),
+                sessionCapability: () => ({ supportsPersistentStdin: true, supportsResumeById: false }) as never,
+            },
+        });
+        const code = await runAgentLoopCore(deps, {
+            recipient: 'member-1',
+            pollMs: 10,
+            flags: {},
+            runtime: { maxIterations: 1 },
+        });
+        expect(code).toBe(0);
+        // The work-item result carries the turn receipt: the warm path refused by NAME and the
+        // one-shot fallback completed the run — never an unnamed silent degrade.
+        const result = JSON.parse(readFileSync(join(cwd, '.spur/run/run-1/prompts/work.result.json'), 'utf8')) as {
+            data?: { turn?: Record<string, unknown> };
+        };
+        expect(result.data?.turn).toMatchObject({ mode: 'one-shot', fallbackReason: 'unsupported-agent' });
+    });
+
     test('R1: an unkeyed conversational batch claims and renews no write slot', async () => {
         const db = await memDb();
         const cwd = mkdtempSync(join(tmpdir(), 'loop-unkeyed-'));
@@ -468,7 +556,7 @@ describe('G71 R1/R2/R3 — member drain, keyed run path, slot heartbeat, resume 
         expect(await runs.hasRunning('member-1')).toBe(false);
     });
 
-    test('R4: the orchestrator answers its inbox with the reply instruction BEFORE the strategy observes and ticks', async () => {
+    test('R4: the orchestrator answers its inbox with the reply instruction; the drain starts first but never gates the tick (1274)', async () => {
         const db = await memDb();
         const order: string[] = [];
         let runBody = '';
@@ -513,7 +601,11 @@ describe('G71 R1/R2/R3 — member drain, keyed run path, slot heartbeat, resume 
             runtime: { maxIterations: 1 },
         });
         expect(code).toBe(0);
-        expect(order.slice(0, 4)).toEqual(['drain', 'run', 'observe', 'tick']);
+        // 1274: the conversation is started before selection but not awaited — `run` may land
+        // after observe/tick; all four still happen in the one wake.
+        expect(order[0]).toBe('drain');
+        expect([...order].sort()).toEqual(['drain', 'observe', 'run', 'tick']);
+        expect(order.indexOf('observe')).toBeLessThan(order.indexOf('tick'));
         expect(runBody.startsWith('status?')).toBe(true);
         expect(runBody.endsWith(ORCHESTRATOR_REPLY_INSTRUCTION)).toBe(true);
     });

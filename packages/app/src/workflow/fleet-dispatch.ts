@@ -67,7 +67,7 @@ export type FleetDispatchResult =
  * reviewer judging work must not share the session that produced it. Verify
  * stages declare `role: reviewer`, so this one name covers both.
  */
-const FRESH_SESSION_ROLES: readonly string[] = ['reviewer'];
+export const FRESH_SESSION_ROLES: readonly string[] = ['reviewer'];
 
 function hasReusableSession(member: ResolvedFleetMember): boolean {
     return member.session !== undefined && member.session.mode !== 'one-shot';

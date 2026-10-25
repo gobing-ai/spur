@@ -1,7 +1,12 @@
 import { afterEach, describe, expect, mock, test } from 'bun:test';
+import type { TurnOutcome } from '@gobing-ai/ts-ai-runner';
 import { NodeProcessExecutor, type ProcessOptions, type ProcessResult } from '@gobing-ai/ts-runtime';
 import { type AgentExecutionEvent, type AgentRunDeps, AgentService } from '../../src/index';
-import { PidObservingProcessExecutor, RolePropagatingProcessExecutor } from '../../src/services/agent-run-executor';
+import {
+    PidObservingProcessExecutor,
+    RolePropagatingProcessExecutor,
+    TURN_OUTCOME_UNKNOWN_SIGNAL,
+} from '../../src/services/agent-run-executor';
 
 // AgentRunExecutor (the `spur agent run` dispatch core) and the two process executors it dispatches
 // through. The executor tests run real (tiny) subprocesses: the behaviour under test is the spawn
@@ -138,5 +143,71 @@ describe('AgentRunExecutor dispatch wiring', () => {
         expect(seen).toHaveLength(1);
         expect(traced.exitCode).toBe(2);
         expect(events.find((event) => event.kind === 'finished')?.outcome).toBe('cancelled');
+    });
+
+    test('1275 R5: a named fallback spawns the one-shot path exactly once', async () => {
+        const seen = stubSpawn(async (options) => ok(options, 'one-shot work'));
+        const svc = new AgentService({ cwd: '/tmp', env: {}, output: { write: () => {}, error: () => {} } });
+        let dispatches = 0;
+        const traced = await svc.runTraced('work', { agent: 'pi' }, resolutionDeps(), {
+            dispatchTurn: async () => {
+                dispatches++;
+                return { kind: 'fallback', reason: 'unsupported-agent' } as const;
+            },
+            heartbeatMs: 0,
+        });
+        expect(traced.exitCode).toBe(0);
+        expect(dispatches).toBe(1);
+        // The fallback continued on today's path — exactly one fresh spawn, no warm shortcut.
+        expect(seen).toHaveLength(1);
+    });
+
+    test('1275 R1: a warm outcome decides the process outcome without spawning', async () => {
+        const seen = stubSpawn(async () => {
+            throw new Error('a warm terminal must never spawn a fresh process');
+        });
+        const svc = new AgentService({ cwd: '/tmp', env: {}, output: { write: () => {}, error: () => {} } });
+        const warm: TurnOutcome = {
+            kind: 'success',
+            turnId: 'turn-1',
+            correlation: { runId: 'run-1', executionId: 'exec-1', requestId: 'req-1', attempt: 1 },
+            startedAt: new Date().toISOString(),
+            terminalAt: new Date().toISOString(),
+            finalText: 'done',
+        };
+        const traced = await svc.runTraced('work', { agent: 'pi' }, resolutionDeps(), {
+            dispatchTurn: async (context) => {
+                // Warm stdout streams through the same lifecycle observer as a spawn.
+                context.onOutput?.('warm stdout chunk\n');
+                return { kind: 'warm', outcome: warm };
+            },
+            heartbeatMs: 0,
+        });
+        // Native success maps to exit 0; the action contract above stays the sole success authority.
+        expect(traced.exitCode).toBe(0);
+        expect(seen).toHaveLength(0);
+    });
+
+    test('1275 R4: a warm outcome-unknown stays uncertain — exit 3 with the reconcile marker, never a respawn', async () => {
+        const seen = stubSpawn(async () => {
+            throw new Error('an uncertain turn must never respawn');
+        });
+        const svc = new AgentService({ cwd: '/tmp', env: {}, output: { write: () => {}, error: () => {} } });
+        const unknown: TurnOutcome = {
+            kind: 'outcome-unknown',
+            turnId: 'turn-2',
+            correlation: { runId: 'run-1', executionId: 'exec-1', requestId: 'req-1', attempt: 1 },
+            reason: 'child died after acceptance',
+            startedAt: new Date().toISOString(),
+            terminalAt: new Date().toISOString(),
+        };
+        const traced = await svc.runTraced('work', { agent: 'pi' }, resolutionDeps(), {
+            dispatchTurn: async () => ({ kind: 'warm', outcome: unknown }),
+            heartbeatMs: 0,
+        });
+        // No retry: the work is uncertain, not failed (R4). The marker is what tells the two apart.
+        expect(seen).toHaveLength(0);
+        expect(traced.exitCode).toBe(3);
+        expect(traced.signal).toBe(TURN_OUTCOME_UNKNOWN_SIGNAL);
     });
 });

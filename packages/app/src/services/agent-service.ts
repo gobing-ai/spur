@@ -13,7 +13,7 @@ import type { EventBus } from '@gobing-ai/ts-infra';
 import type { FileSystem } from '@gobing-ai/ts-runtime';
 import { NodeProcessExecutor, type OutputPolicy, type ProcessRegistry } from '@gobing-ai/ts-runtime';
 import type { DecisionCorrelation } from '../decision/decision-events';
-import type { AgentExecutionOptions } from '../observability/agent-execution';
+import type { AgentExecutionOptions, WarmTurnContext, WarmTurnDispatch } from '../observability/agent-execution';
 import { toEnvelopeJson } from '../output/envelope';
 import { parseArtifactRefs } from './agent-invocation-sanitize';
 import { AgentResolver } from './agent-resolver';
@@ -41,6 +41,13 @@ export type { AgentExecutorConfig } from './executor-tier';
 /** Runtime dependencies injectable for tests. */
 export interface AgentRunDeps {
     runner?: AiRunner;
+    /**
+     * Correlated warm-turn seam (task 1275): the per-dispatch dispatcher a keyed fleet drain
+     * built. The executor reads it off this deps bag because it is the one value that reaches
+     * `executeRun` unchanged from the loop; `AgentRunActionRunner` forwards it onto the
+     * `AgentExecutionOptions.dispatchTurn` field the executor branches on.
+     */
+    dispatchTurn?: (context: WarmTurnContext) => Promise<WarmTurnDispatch>;
     detector?: AgentDetector;
     doctorRunner?: DoctorRunner;
     /** Test seam (B4/0683 Q1): filesystem for the detection cache; defaults to the context cwd. */
@@ -588,14 +595,23 @@ export class AgentService {
 
     private defaultExecutionOptions(flags: Record<string, string | boolean>): AgentExecutionOptions {
         const runId = stringFlag(flags, 'run-id', '') || crypto.randomUUID();
+        // Task 1273: a keyed fleet run pins one execution identity across all its
+        // phase marks, so every phase row joins by the same (runId, executionId).
+        const executionId = stringFlag(flags, 'execution-id', '') || crypto.randomUUID();
         const observer =
             this.ctx.events === undefined
                 ? undefined
                 : (event: import('../observability/agent-execution').AgentExecutionEvent) => {
+                      // Phase marks ride their own `fleet.phase.*` name (task 1273) so the
+                      // KPI driver selects them without decoding `agent.execution` payloads.
+                      if (event.kind === 'phase') {
+                          void this.ctx.events?.emit(`fleet.phase.${event.phase}`, event);
+                          return;
+                      }
                       void this.ctx.events?.emit('agent.execution', event);
                   };
         return {
-            correlation: { runId, executionId: crypto.randomUUID() },
+            correlation: { runId, executionId },
             ...(observer !== undefined ? { observer } : {}),
         };
     }

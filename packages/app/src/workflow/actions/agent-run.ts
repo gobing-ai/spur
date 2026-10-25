@@ -1145,6 +1145,11 @@ export class AgentRunActionRunner implements ActionRunner {
                     try {
                         traced = await this.agentService.runTraced(dispatchInput, flags, execution?.deps, {
                             beforeDispatch: independenceHook,
+                            // Task 1275: the per-drain warm-turn dispatcher the keyed drain built
+                            // rides the deps bag; the executor branches on it at its dispatch point.
+                            ...(execution?.deps?.dispatchTurn !== undefined
+                                ? { dispatchTurn: execution.deps.dispatchTurn }
+                                : {}),
                             correlation: {
                                 runId: context.runId,
                                 executionId: crypto.randomUUID(),

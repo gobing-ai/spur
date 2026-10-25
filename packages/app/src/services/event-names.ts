@@ -322,6 +322,49 @@ const BASE_CATALOG = [
         package: 'spur',
         subsystem: 'write-slot',
     }),
+    // Task 1273: fleet execution phase marks (task 1273). One boundary mark per name so the
+    // KPI driver joins dispatch→claim→turn→terminal by (run, execution) identity; the
+    // metadata-only policy retains the phase's own bounded fields (key/taskId/monotonicMs…).
+    baseEvent('fleet.phase.enqueue', 'agent', 'agent', 'metadata-only', 'default', {
+        package: 'spur',
+        subsystem: 'fleet-strategy',
+    }),
+    baseEvent('fleet.phase.claim', 'agent', 'agent', 'metadata-only', 'default', {
+        package: 'spur',
+        subsystem: 'fleet-member',
+    }),
+    baseEvent('fleet.phase.preflight', 'agent', 'agent', 'metadata-only', 'default', {
+        package: 'spur',
+        subsystem: 'fleet-work-item',
+    }),
+    baseEvent('fleet.phase.accepted', 'agent', 'agent', 'metadata-only', 'default', {
+        package: 'spur',
+        subsystem: 'fleet-work-item',
+    }),
+    baseEvent('fleet.phase.contract-validated', 'agent', 'agent', 'metadata-only', 'default', {
+        package: 'spur',
+        subsystem: 'fleet-work-item',
+    }),
+    baseEvent('fleet.phase.turn-settled', 'agent', 'agent', 'metadata-only', 'default', {
+        package: 'spur',
+        subsystem: 'fleet-work-item',
+    }),
+    baseEvent('fleet.turn.stale', 'agent', 'agent', 'metadata-only', 'default', {
+        package: 'spur',
+        subsystem: 'fleet-member',
+    }),
+    baseEvent('fleet.phase.process-ready', 'agent', 'agent', 'metadata-only', 'default', {
+        package: 'spur',
+        subsystem: 'agent-execution',
+    }),
+    baseEvent('fleet.phase.first-output', 'agent', 'agent', 'metadata-only', 'default', {
+        package: 'spur',
+        subsystem: 'agent-execution',
+    }),
+    baseEvent('fleet.phase.terminal', 'agent', 'agent', 'metadata-only', 'default', {
+        package: 'spur',
+        subsystem: 'agent-execution',
+    }),
 
     // 0860 R2: assignment is a task fact, so it lives under the task noun. The
     // retired member-scoped started/stopped pair duplicated agent.started|stopped
@@ -394,6 +437,38 @@ export type SystemEventName = (typeof BASE_CATALOG)[number]['name'];
  * Outcome derivation returns `undefined` for legacy rows lacking the source fact.
  */
 export const SYSTEM_EVENT_PRESENTERS: Record<SystemEventName, SystemEventPresenterSpec> = {
+    ...(Object.fromEntries(
+        (
+            [
+                'enqueue',
+                'claim',
+                'preflight',
+                'accepted',
+                'contract-validated',
+                'turn-settled',
+                'process-ready',
+                'first-output',
+                'terminal',
+            ] as const
+        ).map((phase): [SystemEventName, SystemEventPresenterSpec] => [
+            `fleet.phase.${phase}` as SystemEventName,
+            {
+                description: `Fleet execution phase mark (task 1273): ${phase} — lets the KPI driver join dispatch→claim→turn→terminal by (run, execution) identity.`,
+                fields: [
+                    field('phase', 'Phase'),
+                    field('key', 'Key'),
+                    field('taskId', 'Task'),
+                    field('member', 'Member'),
+                    field('monotonicMs', 'Monotonic (ms)'),
+                ],
+                summary: ({ data }) => {
+                    const key = s(data, 'data.key');
+                    return `[fleet] phase ${phase}${key !== undefined ? ` ${key}` : ''}`;
+                },
+                outcome: unsupported,
+            },
+        ]),
+    ) as Record<SystemEventName, SystemEventPresenterSpec>),
     // ── planning ──────────────────────────────────────────────────────────
     'task.created': {
         description: 'A task file was created with a new WBS id.',
@@ -930,6 +1005,34 @@ export const SYSTEM_EVENT_PRESENTERS: Record<SystemEventName, SystemEventPresent
             const holder = s(data, 'data.holderId');
             return `[fleet] write slot ${change ?? 'changed'}${holder !== undefined ? ` — ${holder}` : ''}`;
         },
+        outcome: unsupported,
+    },
+    'fleet.phase.turn-settled': {
+        description:
+            "A keyed work item's warm turn settled (task 1275): the turn receipt (acceptance, native terminal, correlation) is recorded separately from the action-contract verdict.",
+        fields: [
+            field('turn.mode', 'Mode'),
+            field('turn.nativeOutcome', 'Native outcome'),
+            field('turn.requestId', 'Request'),
+            field('turn.attempt', 'Attempt'),
+        ],
+        summary: ({ data }) => {
+            const mode = s(data, 'turn.mode');
+            const outcome = s(data, 'turn.nativeOutcome');
+            return `[fleet] turn settled (${mode ?? 'unknown'}${outcome !== undefined ? `, ${outcome}` : ''})`;
+        },
+        outcome: unsupported,
+    },
+    'fleet.turn.stale': {
+        description:
+            'Stale or foreign warm-turn evidence (task 1275): a terminal tagged with another request, attempt or occupant identity is diagnostic only and never certifies a turn.',
+        fields: [
+            field('reason', 'Reason'),
+            field('turn.requestId', 'Request'),
+            field('turn.attempt', 'Attempt'),
+            field('turn.memberId', 'Member'),
+        ],
+        summary: ({ data }) => `[fleet] stale turn evidence: ${s(data, 'reason') ?? 'unattributable'}`,
         outcome: unsupported,
     },
     'agent.lifecycle.changed': {

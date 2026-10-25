@@ -15,8 +15,10 @@ import {
     getAgentShim,
     resolveAgentName,
     TeamAgentProcess,
+    type TurnSession,
 } from '@gobing-ai/ts-ai-runner';
 import type { SessionCapabilityRecord } from './capability-attestation';
+import type { TurnSessionBinding, WarmTurnSessionHolder } from './warm-turn-dispatch';
 
 // ── Member session state (G66 / task 0896, design §6) ───────────────────────────
 
@@ -177,13 +179,22 @@ async function drainedSessionId(db: DbAdapter, runId: string): Promise<string | 
  * instance; every deliberate reset writes one
  * `fleet.member-session-reset` ledger row naming the reason, and the stderr
  * line is `member session: reset for <recipient> (reason: <reason>)`.
+ *
+ * Task 1275: it also owns the WARM TURN SESSION lifetime (design
+ * `fleet-task-turn-execution` §4). The session is opened by
+ * `createWarmTurnDispatcher` on the first eligible keyed drain and lives until a
+ * policy change, an occupant-generation/owner-epoch transfer, a deliberate reset or
+ * loop shutdown closes it. Eligibility itself stays in `warm-turn-dispatch`.
  */
-export class MemberSession {
+export class MemberSession implements WarmTurnSessionHolder {
     mode: MemberSessionMode = 'one-shot';
     /** Resume mode: the previous drain's session id (undefined until one is observed). */
     id?: string;
     /** Persistent mode: the member's agent process (undefined until the first drained prompt). */
     process?: MemberAgentProcess;
+    /** Warm-turn mode: the open correlated session and the identity it was opened for. */
+    private warmSession?: TurnSession;
+    private warmBinding?: TurnSessionBinding;
     /** Consecutive failed drains since the last success/reset (G66 R4/R7). */
     private failedDrains = 0;
 
@@ -295,8 +306,9 @@ export class MemberSession {
 
     /**
      * Deliberately reset the member session (G66 R4): stop a still-running
-     * persistent process, clear the resume id, and write the run record — one
-     * `fleet.member-session-reset` ledger row naming the reset reason.
+     * persistent process, close an open warm turn session, clear the resume id,
+     * and write the run record — one `fleet.member-session-reset` ledger row naming
+     * the reset reason.
      */
     async reset(reason: MemberSessionResetReason, detail: Record<string, unknown> = {}): Promise<void> {
         const process = this.process;
@@ -305,6 +317,9 @@ export class MemberSession {
         }
         this.process = undefined;
         this.id = undefined;
+        // A reset invalidates the warm worker too: the session must never outlive the
+        // evidence that pinned it (task 1275, design §4 close/reset).
+        await this.closeTurnSession();
         await new SystemEventDao(await this.deps.getDb()).insert({
             id: randomUUID(),
             event_name: MEMBER_SESSION_RESET_EVENT,
@@ -341,6 +356,35 @@ export class MemberSession {
 
     /** Whether the session carries live state the loop shutdown must name a reset for (G66 R4). */
     hasLiveState(): boolean {
-        return this.process !== undefined || this.id !== undefined;
+        return this.process !== undefined || this.id !== undefined || this.warmSession !== undefined;
+    }
+
+    // ── Warm turn session lifetime (task 1275) ──────────────────────────────────
+
+    turnSession(): TurnSession | undefined {
+        return this.warmSession;
+    }
+
+    turnBinding(): TurnSessionBinding | undefined {
+        return this.warmBinding;
+    }
+
+    adoptTurnSession(session: TurnSession, binding: TurnSessionBinding): void {
+        this.warmSession = session;
+        this.warmBinding = binding;
+    }
+
+    /** The resume id the keyed drain passes as `session-id` — same condition, one source (R2). */
+    resumeId(): string | undefined {
+        return this.mode === 'resume' ? this.id : undefined;
+    }
+
+    /** Close and forget the open warm session; a dead process must not fail the caller's drain. */
+    async closeTurnSession(): Promise<void> {
+        const session = this.warmSession;
+        this.warmSession = undefined;
+        this.warmBinding = undefined;
+        if (session === undefined) return;
+        await session.close().catch(() => undefined);
     }
 }
