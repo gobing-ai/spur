@@ -3,7 +3,7 @@ kind: design
 title: "CLI grammar, initialization, agents, teams and rules"
 status: implemented
 created_at: 2026-09-09
-updated_at: 2026-10-21
+updated_at: 2026-10-24
 related: ["0822", "0850", "0856", "0857", "0860", "0861", "1064", "1080", "1081"]
 tags: [contract, cli, agent]
 ---
@@ -72,6 +72,11 @@ The CLI surface is built on `commander` + `@commander-js/extra-typings`. Each no
 noun requires writing its registration function and importing it in `apps/cli/src/index.ts`.
 Commander handles option parsing, `--help` rendering, and subcommand dispatch — no custom
 help rendering overrides remain.
+
+`spur task gate` dispatches before project database/bootstrap initialization. Its file and Git
+checks still receive the merged builder configuration; `status`, `light`, `deferred`, `run` and
+`recheck` do not create or migrate a database merely to inspect or record a gate receipt. The
+full modes retain the host-wide lock; light/status remain lock-free.
 
 <a id="101-shared-option-registry-0618"></a>
 

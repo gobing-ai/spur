@@ -35,6 +35,7 @@ import { registerSelfCommand } from './commands/self';
 import { registerServeCommand } from './commands/serve';
 import { registerStatusCommand } from './commands/status';
 import { registerTaskCommand } from './commands/task';
+import { registerTaskGateCommand } from './commands/task/gate';
 import { registerWorkflowCommand } from './commands/workflow';
 import { CLI_CONFIG } from './config';
 import { EMBEDDED_SPUR_SCHEMAS } from './config/embedded-schemas';
@@ -92,10 +93,11 @@ export async function main(argv = process.argv.slice(2), options: MainOptions = 
     const migrationCheck =
         (commandTokens[0] === 'migrate' || (commandTokens[0] === 'self' && commandTokens[1] === 'migrate')) &&
         argv.includes('--check');
+    const taskGate = commandTokens[0] === 'task' && commandTokens[1] === 'gate';
     // `workflow commit-guard|persist-*` are boot-free transports (script-absorption PR-4): like the
     // plugin scripts they replace, they never create a database in the cwd. Migration checks must also
     // bypass boot, which would create or repair the database being checked.
-    if (isWorkflowTransportInvocation(argv) || migrationCheck) {
+    if (isWorkflowTransportInvocation(argv) || migrationCheck || taskGate) {
         const program = new Command().name('spur').exitOverride();
         program.option('--no-logo').option('-v, --cli-verbose');
         program.configureOutput({ writeOut: (str) => output.write(str), writeErr: (str) => output.error(str) });
@@ -107,14 +109,18 @@ export async function main(argv = process.argv.slice(2), options: MainOptions = 
                 exitCode = code;
             },
         };
-        if (migrationCheck) {
-            const migrationContext = createCliContext(context);
-            registerMigrateCommand(program, migrationContext, { hidden: true });
-            registerMigrateCommand(program.command('self'), migrationContext);
-        } else {
-            registerWorkflowTransportCommands(program.command('workflow'), context);
-        }
         try {
+            if (taskGate) {
+                // Gate receipts and checks use files and Git; booting the project DB adds unrelated latency.
+                const spurConfig = await loadSpurConfig(options.cwd, { embeddedSchemas: EMBEDDED_SPUR_SCHEMAS });
+                registerTaskGateCommand(program.command('task'), createCliContext({ ...context, spurConfig }));
+            } else if (migrationCheck) {
+                const migrationContext = createCliContext(context);
+                registerMigrateCommand(program, migrationContext, { hidden: true });
+                registerMigrateCommand(program.command('self'), migrationContext);
+            } else {
+                registerWorkflowTransportCommands(program.command('workflow'), context);
+            }
             await program.parseAsync(argv, { from: 'user' });
             return exitCode;
         } catch (error) {
