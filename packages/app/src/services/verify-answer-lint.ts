@@ -119,15 +119,14 @@ export function lintVerifyAnswer(
             else {
                 // 1091: name the declared identities so the author can re-key without reading
                 // buildAcIdentityIndex — the bare list of accepted forms is not actionable.
+                // Titles are quoted IN FULL here: truncating them hid the trailing `(req: Rn)` that
+                // is part of the declared identity, so a copy-from-the-error retry kept failing.
                 const declared = [...new Set(acIndex.byTitle.values())];
-                const sample = declared
-                    .slice(0, 5)
-                    .map((s) => `"${s.slice(0, 60)}"`)
-                    .join(', ');
+                const sample = declared.map((s) => `"${s}"`).join(', ');
                 add(
                     row.line,
                     'ac-identity',
-                    `AC ID "${row.id.slice(0, 60)}" matches no task AC checklist label or scenario title ` +
+                    `AC ID "${row.id}" matches no task AC checklist label or scenario title ` +
                         "(accepted forms: exact title, bare title, a criterion bullet's bold head or full bold span, " +
                         '`Scenario:` prefix, bracket tags, declared AC-N alias)' +
                         (declared.length > 0

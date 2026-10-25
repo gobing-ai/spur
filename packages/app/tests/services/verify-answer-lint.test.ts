@@ -172,6 +172,18 @@ describe('lintVerifyAnswer (task 1003 R1)', () => {
         expect(finding?.message).toContain('"Guard rejects unsafe input"');
     });
 
+    test('a declared identity longer than 60 chars is quoted in full, not truncated (G74 batch)', () => {
+        // The truncated form hid the trailing `(req: Rn)`, which the lint matches as part of the
+        // identity — copying the quoted value out of the error kept failing.
+        const task = TASK.replace(
+            '- [ ] AC1 (R1): the guard rejects an unsafe input.',
+            '- [ ] AC1 — The guard rejects an unsafe input derived from an untrusted body (req: R1)',
+        );
+        const findings = lintVerifyAnswer(answer(CLEAN_REQS, ['| AC9 | MET | test | `t.ts:1` |']), task, null);
+        const message = findings.find((f) => f.rule === 'ac-identity')?.message ?? '';
+        expect(message).toContain('(req: R1)"');
+    });
+
     test('a scenario title from the linked feature is a valid AC identity', () => {
         const findings = lintVerifyAnswer(
             answer(CLEAN_REQS, ['| Scenario: Guard rejects unsafe input | MET | test | `tests/guard.test.ts:9` |']),

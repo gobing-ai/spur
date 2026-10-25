@@ -461,7 +461,18 @@ describe('task-pipeline evidence chain — review certifies (D65 R2)', () => {
         // 1262 R6 retired the `review-failure-class` decide: the review status file plus the
         // attempt cap is the whole remediation signal, so the state carries no model call.
         // 1263 R3b adds the outcome-recording shell between the status write and the approval.
-        expect(kindsOf('review')).toEqual(['agent.run', 'command.gate', 'shell', 'shell', 'hitl.confirm', 'shell']);
+        // G74 batch (2026-10-24) adds the pre-verdict shell that materialises the agent-written
+        // `-review-cert.md` (falling back to the captured answer), so the verdict lint reads what
+        // the reviewer WROTE rather than its final chat line.
+        expect(kindsOf('review')).toEqual([
+            'agent.run',
+            'shell',
+            'command.gate',
+            'shell',
+            'shell',
+            'hitl.confirm',
+            'shell',
+        ]);
         const options = actionOf('review', 'agent.run')?.options as Record<string, unknown> | undefined;
         expect(String(options?.input)).toContain(`/sp:dev-review --tasks ${VAR('wbs')} --auto`);
         // 0943 R1/R2: the resolved lane sets the review depth (fast  functional-only).
@@ -475,7 +486,9 @@ describe('task-pipeline evidence chain — review certifies (D65 R2)', () => {
             'verdict',
             VAR('wbs'),
             '--from-answer',
-            `.spur/run/${VAR('__runId')}-review-answer.txt`,
+            // The cert file the reviewer writes itself; the shell above falls back to the captured
+            // answer, so the lint no longer reads a narration-shaped stdout as the certification.
+            `.spur/run/${VAR('__runId')}-review-cert.md`,
         ]);
         expect(verdict?.softFail).toBe(true);
     });

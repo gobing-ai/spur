@@ -358,14 +358,17 @@ esac`,
         const verdictArgs = JSON.stringify((verdictGate?.options as { args?: string[] })?.args ?? []);
         expect(verdictArgs).toContain('"verdict"');
         expect(verdictArgs).toContain('--from-answer');
-        // The answer file the agent.run captured is the verdict input — the certification is
-        // the reviewer's own evidence, not a re-captured digest.
+        // The answer file the agent.run captured is the verdict input — the certification is the
+        // reviewer's own evidence, not a re-captured digest. Since the G74 batch (2026-10-24) the
+        // verdict reads the cert file the reviewer WRITES, which the pre-verdict shell seeds from
+        // that same captured answer when the agent did not write one.
         const dispatch = (PIPELINE.states.find((s) => s.id === 'review')?.onEnter ?? []).find(
             (a) => a.kind === 'agent.run',
         );
         const answerFile = String((dispatch?.options as { answerFile?: string })?.answerFile ?? '');
         expect(answerFile).toContain('-review-answer.txt');
-        expect(verdictArgs).toContain(answerFile);
+        expect(verdictArgs).toContain('-review-cert.md');
+        expect(cmds.some((c) => c.includes('review-answer.txt') && c.includes('review-cert.md'))).toBe(true);
         // The 1122 review-gate residual CHECK is not the sweep: no scan/fold may run here (a
         // pre-record sweep folds unticked-but-proven boxes and makes the close unreachable).
         expect(cmds.find((c) => c.includes('task residual') && / (scan|fold)\b/.test(c))).toBeUndefined();
