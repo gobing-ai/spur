@@ -39,6 +39,7 @@ import {
     configuredSecretValues,
 } from '../observability/agent-execution';
 import { AgentRunLog } from '../observability/agent-run-log';
+import { FRESH_SESSION_ROLES } from '../workflow/fleet-dispatch';
 import { readWorkflowRunRecord } from '../workflow/run-record';
 import { sanitizeInvocationArgv, traceSafePrompt } from './agent-invocation-sanitize';
 import type { AgentResolver } from './agent-resolver';
@@ -363,8 +364,14 @@ export class AgentRunExecutor {
         const tags = parseTagsFlag(flags);
         const systemPrompt = stringFlag(flags, 'system-prompt', '') || undefined;
         const taskId = stringFlag(flags, 'task', '') || undefined;
-        const sessionDir = stringFlag(flags, 'session-dir', '') || stringFlag(flags, 'sessionDir', '') || undefined;
-        const sessionId = stringFlag(flags, 'session-id', '') || stringFlag(flags, 'sessionId', '') || undefined;
+        const freshRole =
+            options.execution?.dispatchTurn !== undefined && FRESH_SESSION_ROLES.includes(currentRole ?? '');
+        const sessionDir = freshRole
+            ? undefined
+            : stringFlag(flags, 'session-dir', '') || stringFlag(flags, 'sessionDir', '') || undefined;
+        const sessionId = freshRole
+            ? undefined
+            : stringFlag(flags, 'session-id', '') || stringFlag(flags, 'sessionId', '') || undefined;
         // Capability gate input (0706 R4): parsed+validated once here; invalid shapes fail
         // closed (exit 2) before any resolution/spawn.
         const capabilityFlag = parseRequiresCapabilitiesFlag(flags);
@@ -548,7 +555,7 @@ export class AgentRunExecutor {
 
                 const promptOptions: PromptOptions = {
                     input,
-                    continue: continueFlag || undefined,
+                    continue: (!freshRole && continueFlag) || undefined,
                     model,
                     mode: mode as 'text' | 'json',
                     ...(purpose !== undefined ? { purpose } : {}),
@@ -605,7 +612,7 @@ export class AgentRunExecutor {
                     mode: mode as 'text' | 'json',
                     outputMode,
                     ...(timeoutMs !== undefined ? { timeoutMs } : {}),
-                    continue: continueFlag,
+                    continue: !freshRole && continueFlag,
                     stdinInteractive: false,
                     ...(model !== undefined ? { model } : {}),
                     ...(sessionId !== undefined ? { sessionId } : {}),

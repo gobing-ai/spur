@@ -162,6 +162,22 @@ describe('AgentRunExecutor dispatch wiring', () => {
         expect(seen).toHaveLength(1);
     });
 
+    test('1275 R3: a fresh-role fallback discards implementation resume flags', async () => {
+        const seen = stubSpawn(async (options) => ok(options, 'independent review'));
+        const svc = new AgentService({ cwd: '/tmp', env: {}, output: { write: () => {}, error: () => {} } });
+        const traced = await svc.runTraced(
+            'review',
+            { agent: 'pi', role: 'reviewer', 'session-id': 'implementation-session', continue: true },
+            resolutionDeps(),
+            { dispatchTurn: async () => ({ kind: 'fallback', reason: 'fresh-role' }), heartbeatMs: 0 },
+        );
+        expect(traced.exitCode).toBe(0);
+        expect(seen).toHaveLength(1);
+        expect(seen[0]?.args).not.toContain('implementation-session');
+        expect(seen[0]?.args).not.toContain('--continue');
+        expect(seen[0]?.args).not.toContain('-c');
+    });
+
     test('1275 R1: a warm outcome decides the process outcome without spawning', async () => {
         const seen = stubSpawn(async () => {
             throw new Error('a warm terminal must never spawn a fresh process');

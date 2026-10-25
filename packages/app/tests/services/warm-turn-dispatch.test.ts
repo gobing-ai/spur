@@ -136,6 +136,13 @@ describe('warm-turn-dispatch (task 1275)', () => {
         expect(rig.dispatcher.lastTurn()).toMatchObject({ mode: 'one-shot', fallbackReason: 'fresh-role' });
     });
 
+    test('R3: a fresh-session role never inherits the member resume id', async () => {
+        const holder = { ...fakeHolder(), resumeId: () => 'implementation-session' };
+        const rig = makeDispatcher([{ op: 'exit', code: 0 }], { holder, role: FRESH_SESSION_ROLES[0] });
+        expect(await rig.dispatch()).toMatchObject({ kind: 'fallback', reason: 'fresh-role' });
+        expect(rig.dispatcher.lastTurn()?.mode).toBe('one-shot');
+    });
+
     test('unsupported agent → named fallback, nothing adopted', async () => {
         const rig = makeDispatcher([{ op: 'exit', code: 0 }], { withDriver: false });
         const result = await rig.dispatch();
@@ -235,6 +242,62 @@ describe('warm-turn-dispatch (task 1275)', () => {
         expect(rig.openCalls).toBe(2);
         expect(rig.holder.closed).toBe(1);
         expect(rig.dispatcher.lastTurn()?.occupantGeneration).toBe(7);
+    });
+
+    test('R3: changing agents never reuses the previous agent process', async () => {
+        const rig = makeDispatcher([{ op: 'accept' }, { op: 'terminal', kind: 'success', finalText: 'done' }]);
+        await rig.dispatch();
+        await rig.dispatch({ agent: 'codex' });
+        expect(rig.openCalls).toBe(2);
+        expect(rig.holder.closed).toBe(1);
+        expect(rig.holder.turnSession()?.agent).toBe('codex');
+    });
+
+    test('R4: a generation change while accepted work is running cannot certify its terminal', async () => {
+        const rig = makeDispatcher([
+            { op: 'accept' },
+            { op: 'sleep', ms: 200 },
+            { op: 'terminal', kind: 'success', finalText: 'stale answer' },
+        ]);
+        const pending = rig.dispatch();
+        const deadline = Date.now() + 2_000;
+        while (rig.holder.turnSession()?.state !== 'busy' && Date.now() < deadline) {
+            await new Promise((resolve) => setTimeout(resolve, 5));
+        }
+        const active = rig.holder.turnSession();
+        expect(active?.state).toBe('busy');
+        if (active === undefined) throw new Error('turn did not start');
+        rig.holder.adoptTurnSession(active, { memberId: 'member', ownerEpoch: 1, occupantGeneration: 8 });
+        const result = await pending;
+        expect(result).toMatchObject({ kind: 'warm', outcome: { kind: 'outcome-unknown' } });
+        if (result.kind === 'warm') expect(result.outcome.finalText).toBeUndefined();
+        expect(rig.diagnostics.some((detail) => detail.event === 'fleet.turn.stale')).toBe(true);
+        expect(rig.openCalls).toBe(1);
+    });
+
+    test('R4: a foreign terminal correlation cannot return success or its answer', async () => {
+        const rig = makeDispatcher([{ op: 'accept' }, { op: 'terminal', kind: 'success', finalText: 'done' }]);
+        await rig.dispatch();
+        const active = rig.holder.turnSession();
+        if (active === undefined) throw new Error('session did not open');
+        const startTurn = active.startTurn.bind(active);
+        active.startTurn = (input) => {
+            const handle = startTurn(input);
+            return {
+                ...handle,
+                outcome: handle.outcome.then((outcome) => ({
+                    ...outcome,
+                    correlation: { ...outcome.correlation, requestId: 'foreign-request' },
+                })),
+            };
+        };
+        const result = await rig.dispatch();
+        expect(result).toMatchObject({ kind: 'warm', outcome: { kind: 'outcome-unknown' } });
+        if (result.kind === 'warm') {
+            expect(result.outcome.finalText).toBeUndefined();
+            expect(result.outcome.correlation.requestId).toBe('req-1');
+        }
+        expect(rig.diagnostics.some((detail) => detail.event === 'fleet.turn.stale')).toBe(true);
     });
 
     test('R4: a busy worker never replays a write — the new request is outcome-unknown', async () => {

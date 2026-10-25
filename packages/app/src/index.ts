@@ -928,6 +928,7 @@ export type {
 export { TokenLedgerWatcher } from './services/token-ledger-watcher';
 export type { AnswerLintFinding } from './services/verify-answer-lint';
 export { ANSWER_LINT_MAX_FINDINGS, lintVerifyAnswer } from './services/verify-answer-lint';
+export { createWarmTurnDispatcher, type TurnSessionBinding } from './services/warm-turn-dispatch';
 export type {
     CleanedRun,
     PausedRun,
@@ -1091,7 +1092,8 @@ export {
     type FeatureVerificationRunResult,
     runFeatureVerification,
 } from './workflow/feature-verification-run';
-export { type FleetPhaseEmit, runFleetWorkItem } from './workflow/fleet-work-item';
+export { FRESH_SESSION_ROLES } from './workflow/fleet-dispatch';
+export { type FleetPhaseEmit, runFleetWorkItem, writeFleetWorkItem } from './workflow/fleet-work-item';
 export {
     type FinalizeIdeaHandoffOptions,
     type FinalizeIdeaHandoffResult,

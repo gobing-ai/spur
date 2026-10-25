@@ -128,7 +128,8 @@ export function createWarmTurnDispatcher(deps: WarmTurnDispatcherDeps): WarmTurn
     ): WarmTurnDispatch => {
         // The executor continues on resume when the member has a session id, else one-shot;
         // the receipt names that path so R2's evidence is not a guess.
-        const mode: TurnReceipt['mode'] = deps.holder.resumeId?.() !== undefined ? 'resume' : 'one-shot';
+        const mode: TurnReceipt['mode'] =
+            reason !== 'fresh-role' && deps.holder.resumeId?.() !== undefined ? 'resume' : 'one-shot';
         record(context, {
             mode,
             fallbackReason: reason,
@@ -143,14 +144,24 @@ export function createWarmTurnDispatcher(deps: WarmTurnDispatcherDeps): WarmTurn
      * Fence a value against the current turn identity (R2/R4): a superseded attempt or a foreign
      * request is diagnostic evidence only, never certification.
      */
-    const fence = (turn: TurnReceipt, correlation: { requestId: string; attempt: number }): boolean => {
-        if (correlation.requestId === turn.requestId && correlation.attempt === turn.attempt) return false;
+    const fence = (
+        turn: TurnReceipt,
+        correlation: WarmTurnContext['correlation'],
+        expected: WarmTurnContext['correlation'],
+    ): boolean => {
+        if (
+            correlation.runId === expected.runId &&
+            correlation.executionId === expected.executionId &&
+            correlation.requestId === expected.requestId &&
+            correlation.attempt === expected.attempt
+        )
+            return false;
         deps.diagnose?.({
             event: 'fleet.turn.stale',
             reason:
                 correlation.requestId !== turn.requestId
                     ? `foreign requestId ${correlation.requestId}`
-                    : `superseded attempt ${correlation.attempt}`,
+                    : 'superseded run, execution or attempt',
             turn,
         });
         return true;
@@ -165,10 +176,13 @@ export function createWarmTurnDispatcher(deps: WarmTurnDispatcherDeps): WarmTurn
         const adopted = deps.holder.turnBinding();
         const transferred =
             adopted !== undefined &&
-            (adopted.ownerEpoch !== deps.binding.ownerEpoch ||
+            (adopted.memberId !== deps.binding.memberId ||
+                adopted.ownerEpoch !== deps.binding.ownerEpoch ||
                 adopted.occupantGeneration !== deps.binding.occupantGeneration);
         // R3: reuse needs the SAME policy (model/provider/reasoning/tools/permissions/workspace/role).
-        const policyChanged = session !== undefined && session.policyDigest !== turnSessionPolicyDigest(policy);
+        const policyChanged =
+            session !== undefined &&
+            (session.agent !== context.agent || session.policyDigest !== turnSessionPolicyDigest(policy));
         if (session !== undefined && (transferred || policyChanged || session.state === 'closed')) {
             // An occupant transfer or a changed policy retires the old conversation; the NEW one
             // still runs warm, so this is a reset, not a fallback.
@@ -222,7 +236,32 @@ export function createWarmTurnDispatcher(deps: WarmTurnDispatcherDeps): WarmTurn
         if (outcome.nativeTurnId !== undefined) turn.nativeTurnId = outcome.nativeTurnId;
         // The terminal is tagged with the correlation the turn was started under; a mismatched
         // tag means the answer belongs to another attempt, so the turn stays uncertified.
-        fence(turn, outcome.correlation);
+        const foreign = fence(turn, outcome.correlation, context.correlation);
+        const currentBinding = deps.holder.turnBinding();
+        const superseded =
+            deps.holder.turnSession() !== active ||
+            currentBinding?.memberId !== deps.binding.memberId ||
+            currentBinding?.ownerEpoch !== deps.binding.ownerEpoch ||
+            currentBinding?.occupantGeneration !== deps.binding.occupantGeneration;
+        if (foreign || superseded) {
+            if (superseded) {
+                deps.diagnose?.({ event: 'fleet.turn.stale', reason: 'worker binding changed during the turn', turn });
+            }
+            if (deps.holder.turnSession() === active) await deps.holder.closeTurnSession();
+            else await active.close();
+            return {
+                kind: 'warm',
+                outcome: {
+                    kind: 'outcome-unknown',
+                    turnId: handle.turnId,
+                    correlation: context.correlation,
+                    startedAt: outcome.startedAt,
+                    ...(outcome.acceptedAt !== undefined ? { acceptedAt: outcome.acceptedAt } : {}),
+                    terminalAt: outcome.terminalAt,
+                    reason: 'warm turn identity changed before terminal settlement',
+                },
+            };
+        }
 
         // A turn that never started is the one post-`startTurn` fallback the contract allows (R5):
         // nothing was accepted, so resume/one-shot cannot double-execute.
