@@ -1434,10 +1434,16 @@ export interface HostCapabilityReport {
 /** Redact secrets and the operator's home prefix from verbatim probe output. */
 export function redactProbeOutput(text: string): string {
     const home = getEnvVar('HOME');
-    return text
-        .replace(/(sk-|ghp_|gho_|xox[bp]-|AKIA)[A-Za-z0-9_-]{8,}/g, '[redacted]')
-        .split(home !== undefined && home !== '' ? home : '\u0000')
-        .join('~');
+    return (
+        text
+            .replace(/(sk-|ghp_|gho_|xox[bp]-|AKIA)[A-Za-z0-9_-]{8,}/g, '[redacted]')
+            // Home prefixes leak the operator identity on any POSIX machine, not just this runner's $HOME
+            // (a mac-authored path survives a Linux runner whose HOME is /home/runner). Generic pattern
+            // first so a longer neighbour name (/Users/robinathan) is not mangled by the $HOME split.
+            .replace(/\/(?:Users|home)\/[A-Za-z0-9._-]+/g, '~')
+            .split(home !== undefined && home !== '' ? home : '\u0000')
+            .join('~')
+    );
 }
 
 /**
