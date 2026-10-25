@@ -4,7 +4,7 @@ name: Conversation-independent orchestrator scheduling tick
 status: done
 template: feature-impl
 created_at: 2026-10-22T07:00:34.912Z
-updated_at: "2026-10-22T20:28:11.698Z"
+updated_at: "2026-10-25T03:02:11.514Z"
 feature_id: G74
 priority: P1
 tags:
@@ -63,6 +63,10 @@ Scenario: AC4 — Existing loop contracts are unchanged (req: R1, R3)
   Then it passes, with the G71 R4 assertion updated only to the new non-blocking order
 ```
 
+Feature scenario coverage (the detailed task-local scenarios above remain the behavior contract):
+
+- [x] R2 — Task dispatch progresses during an orchestrator conversation
+
 ### Q&A
 
 <!-- CLOSED decisions from refinement: what was chosen and why, what was deferred and on what
@@ -114,17 +118,18 @@ Scenario: AC4 — Existing loop contracts are unchanged (req: R1, R3)
 
 | Requirement | Status | Evidence |
 |-------------|--------|----------|
-| R1 | MET | test packages/app/tests/services/agent-loop-orchestrator-tick.test.ts:179 — held chat, dispatch still runs (drain not awaited, packages/app/src/services/agent-loop-service.ts:632) |
-| R2 | MET | test packages/app/tests/services/agent-loop-orchestrator-tick.test.ts:179 (burst wake, maxConcurrentTicks=1) and :231 (arrival during held chat drains at chat end) |
-| R3 | MET | test packages/app/tests/services/agent-loop-orchestrator-tick.test.ts:263 (bounded shutdown, grace seam 50ms) and :292 (owner lost stops ticks, exit 2); grace = CLAIM_TTL_MS/3 at packages/app/src/services/agent-loop-service.ts:97 |
-| R4 | MET | test packages/app/tests/services/agent-loop-orchestrator-tick.test.ts:224 (p95 of 20 iterations ≤ 1s), :229 (exactly-once, 21/21) |
+| R1 | MET | `packages/app/src/services/agent-loop-service.ts:690`; `packages/app/tests/services/agent-loop-orchestrator-tick.test.ts:179`; fresh 30-second scheduler proof: held 30001 ms, p95 dispatch 102 ms, 21 dispatches, one concurrent tick. Command (cwd packages/app): bun test ../../.spur/run/verifyall-G74-20261024/scheduler-30s-proof.test.ts --timeout 60000; exit 0, 4 pass. Re-audit artifact writes: .spur/run/1274-verify-answer.txt:1-38; .spur/run/1274-verdict.json:1-92. |
+| R2 | MET | `packages/app/src/services/agent-loop-service.ts:690`; `packages/app/tests/services/agent-loop-orchestrator-tick.test.ts:179`; fresh scheduler suite verifies coalesced wakes and the queued second conversation; 4 pass, 0 fail. Command (cwd packages/app): bun test ../../.spur/run/verifyall-G74-20261024/scheduler-30s-proof.test.ts --timeout 60000; exit 0, 4 pass. |
+| R3 | MET | `packages/app/tests/services/agent-loop-orchestrator-tick.test.ts:263`; `packages/app/tests/services/agent-loop-orchestrator-tick.test.ts:292`; fresh scheduler suite verifies bounded shutdown, owner release and exit 2 after ownership loss. Command (cwd packages/app): bun test ../../.spur/run/verifyall-G74-20261024/scheduler-30s-proof.test.ts --timeout 60000; exit 0, 4 pass. |
+| R4 | MET | `packages/app/tests/services/agent-loop-orchestrator-tick.test.ts:179`; fresh 30-second proof: p95 102 ms (budget 1000 ms), 21 distinct task dispatches without duplicates; all four cases pass. Command (cwd packages/app): bun test ../../.spur/run/verifyall-G74-20261024/scheduler-30s-proof.test.ts --timeout 60000; exit 0, 4 pass. |
 
 | Acceptance Criteria | Status | Evidence Type | Evidence |
 |---------------------|--------|---------------|----------|
-| AC1 — The tick runs while a conversation is held (req: R1, R4) | MET | test | packages/app/tests/services/agent-loop-orchestrator-tick.test.ts:179 — 60s backstop poll, wake-driven dispatch, p95 ≤ 1s (:224), no duplicates (:229) |
-| AC2 — Wakes during a tick coalesce without loss (req: R2) | MET | test | packages/app/tests/services/agent-loop-orchestrator-tick.test.ts:179 (burst) + :231 (post-chat drain) — every arrival considered, one follow-up pass, no overlap |
-| AC3 — Ownership and shutdown stay bounded (req: R3) | MET | test | packages/app/tests/services/agent-loop-orchestrator-tick.test.ts:263 (shutdown returns within grace, claim released) + :292 (epoch loss → exit 2, no unowned tick) |
-| AC4 — Existing loop contracts are unchanged (req: R1, R3) | MET | test | packages/app/tests/services/agent-loop-service.test.ts:516 (G71 R4 updated to non-blocking order) + command (cd packages/app && bun test …) 20/20, (cd apps/cli && bun test tests/commands/agent) 189/189 |
+| Scenario: AC1 — The tick runs while a conversation is held (req: R1, R4) | MET | test | `packages/app/src/services/agent-loop-service.ts:690`; `packages/app/tests/services/agent-loop-orchestrator-tick.test.ts:179`; fresh 30-second scheduler proof: held 30001 ms, p95 dispatch 102 ms, 21 dispatches, one concurrent tick. `packages/app/tests/services/agent-loop-orchestrator-tick.test.ts:179`; fresh 30-second proof: p95 102 ms (budget 1000 ms), 21 distinct task dispatches without duplicates; all four cases pass. Command (cwd packages/app): bun test ../../.spur/run/verifyall-G74-20261024/scheduler-30s-proof.test.ts --timeout 60000; exit 0, 4 pass. |
+| Scenario: AC2 — Wakes during a tick coalesce without loss (req: R2) | MET | test | `packages/app/src/services/agent-loop-service.ts:690`; `packages/app/tests/services/agent-loop-orchestrator-tick.test.ts:179`; fresh scheduler suite verifies coalesced wakes and the queued second conversation; 4 pass, 0 fail. Command (cwd packages/app): bun test ../../.spur/run/verifyall-G74-20261024/scheduler-30s-proof.test.ts --timeout 60000; exit 0, 4 pass. |
+| Scenario: AC3 — Ownership and shutdown stay bounded (req: R3) | MET | test | `packages/app/tests/services/agent-loop-orchestrator-tick.test.ts:263`; `packages/app/tests/services/agent-loop-orchestrator-tick.test.ts:292`; fresh scheduler suite verifies bounded shutdown, owner release and exit 2 after ownership loss. Command (cwd packages/app): bun test ../../.spur/run/verifyall-G74-20261024/scheduler-30s-proof.test.ts --timeout 60000; exit 0, 4 pass. |
+| Scenario: AC4 — Existing loop contracts are unchanged (req: R1, R3) | MET | test | `packages/app/src/services/agent-loop-service.ts:690`; `packages/app/tests/services/agent-loop-orchestrator-tick.test.ts:179`; fresh 30-second scheduler proof: held 30001 ms, p95 dispatch 102 ms, 21 dispatches, one concurrent tick. `packages/app/tests/services/agent-loop-orchestrator-tick.test.ts:263`; `packages/app/tests/services/agent-loop-orchestrator-tick.test.ts:292`; fresh scheduler suite verifies bounded shutdown, owner release and exit 2 after ownership loss. Command (cwd packages/app): bun test ../../.spur/run/verifyall-G74-20261024/scheduler-30s-proof.test.ts --timeout 60000; exit 0, 4 pass. |
+| R2 — Task dispatch progresses during an orchestrator conversation | MET | test | `packages/app/src/services/agent-loop-service.ts:690`; `packages/app/tests/services/agent-loop-orchestrator-tick.test.ts:179`; fresh scheduler suite verifies coalesced wakes and the queued second conversation; 4 pass, 0 fail. Command (cwd packages/app): bun test ../../.spur/run/verifyall-G74-20261024/scheduler-30s-proof.test.ts --timeout 60000; exit 0, 4 pass. |
 - Coverage: N/A (verdict-based; verify pipeline does not measure code coverage)
 
 ### Review

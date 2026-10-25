@@ -323,3 +323,12 @@ Chain state for the remaining work to 1077: 1079 (G72) -> 1080 (G73) -> 1081 (G7
 - Run id `84ba2184-7942-4b91-8521-df988c68b306`; worktree `../spur-new-run-1143-9d38` FF-merged as
   `df4d8b847`, branch deleted, marker `merged`. Wrap run `99860791-7a21-46e1-9e4b-7f557efaf986` reached
   done with `doc-sync` narration-only (`invalid-learnings-shape`) — learnings appended manually above.
+
+
+## 2026-10-24 — G74 verifyall strict-preflight abort
+- Authorized invocation: --feature G74 --auto --agent inline --next --force --focus all --fix all; inline re-audit with fixes and next.
+- Baseline: main d5b012f1d2cdfc217d9f06f27a4b81ef11d1ab2b, clean tracked tree.
+- Automatic feature repairs: zero. Strict feature check + CLI classifier: 8 uncovered G74 scenario errors and missing dogfood artifact; shouldAbort:true.
+- Governing execution-batch.md:103-114 requires abort before task verification. Zero attempted; no verdict/status/source/task changes.
+- Evidence: .spur/run/verifyall-G74-20261024/batch-report.md and batch-report.json; strict findings and classifier JSON beside them.
+- Next: repair task-to-feature AC traceability through task CLI and run real G74 dogfood evidence; rerun authorized invocation. Do not report G74 shippable or use past PASS verdicts as fresh verification.
