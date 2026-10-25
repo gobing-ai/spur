@@ -1,4 +1,5 @@
 import { join } from 'node:path';
+import type { RequiresCapabilities } from '@gobing-ai/spur-config';
 import {
     CLAIM_TTL_MS,
     type ClaimSlot,
@@ -8,6 +9,7 @@ import {
 } from '@gobing-ai/spur-domain';
 import type { FileSystem } from '@gobing-ai/ts-runtime';
 import { InboxService, isReservedInboxId } from './inbox-service';
+import { normalizeProjectPath } from './project-process';
 
 // ---------------------------------------------------------------------------
 // Fleet guest occupants (G73 R2/R5, task 1081)
@@ -36,7 +38,10 @@ export interface GuestRecord {
     role: string;
     /** Host session id the guest belongs to (`CLAUDE_CODE_SESSION_ID` by default). */
     sessionId: string | null;
-    /** The joining process, best-effort — guests are never supervised or restarted. */
+    /**
+     * The guest's **agent** process — never the short-lived joining CLI (G75 R2). `null`
+     * when identity could not be verified, in which case the record makes no liveness claim.
+     */
     pid: number | null;
     /** Executor the guest runs as; informational, never dispatched to. */
     executor: string;
@@ -45,15 +50,57 @@ export interface GuestRecord {
     /** The `coordination_runs` row that makes the guest addressable as an occupant. */
     runId: string;
     joinedAt: string;
+    /** Whether {@link GuestRecord.pid} is a verified agent-process fingerprint (G75 R2). */
+    identity: GuestIdentityState;
+    /** `ps` `lstart` birth time of the agent process; the PID-reuse anchor. */
+    processStartedAt?: string;
+    /** Executable path of the agent process (`ps` `comm`). */
+    executable?: string;
+    /** The live lease renewer, so a rejoin spawns one owner, not two (G75 R1/R4). */
+    renewerPid: number | null;
+    /** Birth time of the renewer process, for the same PID-reuse check. */
+    renewerStartedAt?: string;
+    /**
+     * Present when this occupant bound a **declared member** instead of joining as a plain
+     * guest (G75 R3, task 1281). The record id is then the member id, so `wait --inbox
+     * <member-id>` addresses the declared member's inbox.
+     */
+    memberBinding?: MemberBinding;
 }
+
+/** One fenced binding of a live session to a declared member (G75 R3, task 1281). */
+export interface MemberBinding {
+    memberId: string;
+    /** `coordination_runs` generation this binder owns; a later generation makes it stale. */
+    occupancyGeneration: number;
+    /** The `guest:<memberId>` claim epoch at bind time. */
+    ownerEpoch: number;
+    /** Additive record version — the only shape this build writes. */
+    version: 1;
+    /**
+     * Whether this occupant may run stages: false when the binder's host has only the
+     * `pull-only` wake channel (1280's capability report) — it may still receive messages.
+     */
+    stageEligible: boolean;
+}
+
+/** Whether a guest's process identity was proven against the host process table. */
+export type GuestIdentityState = 'verified' | 'unverified';
 
 /** Input for {@link FleetGuestService.join}. */
 export interface GuestJoinInput {
     role: string;
     id?: string;
     sessionId?: string;
+    /** Verified agent-process pid; omit when identity is unverified. */
     pid?: number;
     executor?: string;
+    /** `ps` `lstart` of {@link GuestJoinInput.pid}. */
+    processStartedAt?: string;
+    /** Executable path of {@link GuestJoinInput.pid}. */
+    executable?: string;
+    /** Defaults to `unverified` — only a proven fingerprint may claim `verified`. */
+    identity?: GuestIdentityState;
 }
 
 /** Why a join was refused. Both are operator errors → the CLI exits 2. */
@@ -76,11 +123,61 @@ export interface FleetGuestServiceContext {
      * needs the ledger alone.
      */
     declaredMemberIds?(): Promise<string[]>;
+    /** Resolve one declared member for a `--member` binding (roster view, never a guest). */
+    resolveDeclaredMember?(memberId: string): Promise<DeclaredMemberView | null>;
+    /** Capability proof for the member's declared executor; the app owns attestation. */
+    attestMemberCapabilities?(member: DeclaredMemberView): Promise<{ ok: boolean; detail: string }>;
+    /** The binder host's wake channel (1280's report); `pull-only` binds but is not stage-eligible. */
+    hostWake?(executor: string): Promise<string | null>;
     /** Role vocabulary; defaults to {@link GUEST_ROLES}. */
     roles?: readonly string[];
+    /** Lease TTL override — the test seam for renewal ratios; defaults to the real TTL. */
+    leaseTtlMs?: number;
 }
 
 const GUEST_CLAIM_PREFIX = 'guest:';
+
+/** The declared-member view a binding validates against — never a guest (G75 R3). */
+export interface DeclaredMemberView {
+    /** `<projectSlug>-<memberLocalId>`: the spec id and the inbox address. */
+    instanceId: string;
+    role?: string;
+    /** Declared executor; `''` when the member is disabled and never resolved. */
+    executor: string;
+    enabled: boolean;
+}
+
+/**
+ * Capability axes a stage-eligible binding must attest. A binding that cannot prove them is
+ * refused rather than bound-and-disabled: an unverified stage capability is exactly what R3
+ * forbids promising (0706 R5 — unknown never satisfies a requirement).
+ */
+export const MEMBER_BINDING_CAPABILITIES: Partial<RequiresCapabilities> = {
+    fsRead: 'available',
+    fsWrite: 'available',
+    processSpawn: 'available',
+};
+
+/** Why a member binding was refused. Every code is an operator error → the CLI exits 2. */
+export type GuestBindFailureCode =
+    | 'unknown-role'
+    | 'unknown-member'
+    | 'disabled-member'
+    | 'role-mismatch'
+    | 'capability-unattested'
+    | 'live-occupant'
+    | 'collision';
+
+/** Input for {@link FleetGuestService.bindMember}. */
+export interface GuestBindInput extends GuestJoinInput {
+    /** Declared member instance id to bind. */
+    memberId: string;
+}
+
+/** Result of {@link FleetGuestService.bindMember}. */
+export type GuestBindResult =
+    | { ok: true; guest: GuestRecord }
+    | { ok: false; code: GuestBindFailureCode; message: string };
 
 /**
  * Guest occupancy: a live interactive session that joins the fleet to pull work
@@ -129,6 +226,14 @@ export class FleetGuestService {
                 ownerEpoch: typeof parsed.ownerEpoch === 'number' ? parsed.ownerEpoch : 0,
                 runId: typeof parsed.runId === 'string' ? parsed.runId : '',
                 joinedAt: typeof parsed.joinedAt === 'string' ? parsed.joinedAt : '',
+                // A record written before G75 has no identity field: it never claimed a
+                // verified agent process, so it reads as unverified rather than defaulting up.
+                identity: parsed.identity === 'verified' ? 'verified' : 'unverified',
+                ...(typeof parsed.processStartedAt === 'string' ? { processStartedAt: parsed.processStartedAt } : {}),
+                ...(typeof parsed.executable === 'string' ? { executable: parsed.executable } : {}),
+                renewerPid: typeof parsed.renewerPid === 'number' ? parsed.renewerPid : null,
+                ...(typeof parsed.renewerStartedAt === 'string' ? { renewerStartedAt: parsed.renewerStartedAt } : {}),
+                ...(isMemberBinding(parsed.memberBinding) ? { memberBinding: parsed.memberBinding } : {}),
             };
         } catch {
             return null;
@@ -182,7 +287,7 @@ export class FleetGuestService {
         const db = await this.ctx.getDb();
         // Claim before inserting the occupant row: a refused claim must not leave a
         // `running` occupant behind that nothing will ever retire.
-        const claim = await new ProjectClaimDao(db).claim(this.ctx.cwd, this.slot(id), id, GUEST_LEASE_TTL_MS);
+        const claim = await new ProjectClaimDao(db).claim(this.projectPath(), this.slot(id), id, this.ttlMs());
         if (claim === null) {
             return {
                 ok: false,
@@ -209,21 +314,188 @@ export class FleetGuestService {
             ownerEpoch: claim.ownerEpoch,
             runId,
             joinedAt: new Date().toISOString(),
+            // `verified` is only ever set alongside a pid: an identity with no process to
+            // re-check is not a proof, and the renewer must not renew on it.
+            identity: input.identity === 'verified' && input.pid !== undefined ? 'verified' : 'unverified',
+            ...(input.processStartedAt !== undefined ? { processStartedAt: input.processStartedAt } : {}),
+            ...(input.executable !== undefined ? { executable: input.executable } : {}),
+            renewerPid: null,
         };
         await this.ctx.fs.ensureDir(this.dir());
         await this.ctx.fs.writeFile(join(this.dir(), `${id}.json`), `${JSON.stringify(record, null, 4)}\n`);
         return { ok: true, guest: record };
     }
 
+    /**
+     * Bind a live session to a **declared member** (G75 R3, task 1281) instead of joining as a
+     * plain guest. Validation is fail-closed and ordered so a refusal leaves nothing behind:
+     * member exists → enabled → role matches → executor attested → no live occupant → claim →
+     * occupant row (generation + 1) → record. A failure after the claim releases it; a failure
+     * after the occupant row marks that row exited.
+     *
+     * The record id IS the member id: `wait --inbox <member-id>` then addresses the declared
+     * member's inbox, and a supervised spawn sees the member busy through `hasRunning`.
+     */
+    async bindMember(input: GuestBindInput): Promise<GuestBindResult> {
+        const roles = this.ctx.roles ?? GUEST_ROLES;
+        const role = input.role.trim();
+        if (!roles.includes(role)) {
+            return {
+                ok: false,
+                code: 'unknown-role',
+                message: `--role "${input.role}" is not a Layer-1 role (accepted: ${roles.join(', ')})`,
+            };
+        }
+        const memberId = input.memberId.trim();
+        if (memberId === '' || isReservedInboxId(memberId)) {
+            return { ok: false, code: 'unknown-member', message: `"${input.memberId}" is not a bindable member id` };
+        }
+        const resolve = this.ctx.resolveDeclaredMember;
+        if (resolve === undefined) {
+            return {
+                ok: false,
+                code: 'unknown-member',
+                message: 'this caller has no roster seam, so `--member` cannot resolve a declared member',
+            };
+        }
+        const member = await resolve(memberId);
+        if (member === null) {
+            return { ok: false, code: 'unknown-member', message: `"${memberId}" is not a declared member` };
+        }
+        if (!member.enabled) {
+            return { ok: false, code: 'disabled-member', message: `member "${memberId}" is disabled` };
+        }
+        if (member.role !== undefined && member.role !== role) {
+            return {
+                ok: false,
+                code: 'role-mismatch',
+                message: `member "${memberId}" declares role "${member.role}", not "${role}"`,
+            };
+        }
+        const attest = this.ctx.attestMemberCapabilities;
+        const proof =
+            attest === undefined ? { ok: false, detail: 'no capability attestation seam' } : await attest(member);
+        if (!proof.ok) {
+            return {
+                ok: false,
+                code: 'capability-unattested',
+                message: `executor "${member.executor}" cannot attest the stage capabilities: ${proof.detail}`,
+            };
+        }
+        // A plain guest already joined under this id is a collision, not an upgrade.
+        const existing = await this.read(memberId);
+        if (existing !== null && existing.memberBinding === undefined) {
+            return {
+                ok: false,
+                code: 'collision',
+                message: `"${memberId}" already belongs to a joined guest — leave it first`,
+            };
+        }
+        const db = await this.ctx.getDb();
+        if (await new CoordinationRunDao(db).hasRunning(memberId)) {
+            return {
+                ok: false,
+                code: 'live-occupant',
+                message: `member "${memberId}" already has a live occupant (a running agent or loop)`,
+            };
+        }
+        const claim = await new ProjectClaimDao(db).claim(
+            this.projectPath(),
+            this.slot(memberId),
+            memberId,
+            this.ttlMs(),
+        );
+        if (claim === null) {
+            return {
+                ok: false,
+                code: 'collision',
+                message: `member "${memberId}" is already bound — leave the current binder first`,
+            };
+        }
+        const runId = crypto.randomUUID();
+        const occupancyGeneration = ((await new CoordinationRunDao(db).maxGeneration(memberId)) ?? 0) + 1;
+        try {
+            await new CoordinationRunDao(db).insertStart({
+                specId: memberId,
+                agentKind: input.executor ?? member.executor,
+                processId: input.pid !== undefined ? String(input.pid) : null,
+                runId,
+                generation: occupancyGeneration,
+                startedAt: new Date().toISOString(),
+            });
+        } catch (error) {
+            await new ProjectClaimDao(db).release(this.projectPath(), this.slot(memberId), memberId, claim.ownerEpoch);
+            return { ok: false, code: 'collision', message: `could not take the occupant row: ${String(error)}` };
+        }
+        const wake = this.ctx.hostWake === undefined ? null : await this.ctx.hostWake(member.executor);
+        const record: GuestRecord = {
+            id: memberId,
+            role,
+            sessionId: input.sessionId ?? null,
+            pid: input.pid ?? null,
+            executor: input.executor ?? member.executor,
+            ownerEpoch: claim.ownerEpoch,
+            runId,
+            joinedAt: new Date().toISOString(),
+            identity: input.identity === 'verified' && input.pid !== undefined ? 'verified' : 'unverified',
+            ...(input.processStartedAt !== undefined ? { processStartedAt: input.processStartedAt } : {}),
+            ...(input.executable !== undefined ? { executable: input.executable } : {}),
+            renewerPid: null,
+            memberBinding: {
+                memberId,
+                occupancyGeneration,
+                ownerEpoch: claim.ownerEpoch,
+                version: 1,
+                stageEligible: wake !== null && wake !== 'pull-only',
+            },
+        };
+        try {
+            await this.ctx.fs.ensureDir(this.dir());
+            await this.ctx.fs.writeFile(join(this.dir(), `${memberId}.json`), `${JSON.stringify(record, null, 4)}\n`);
+        } catch (error) {
+            await new CoordinationRunDao(db).updateExit(runId, 'exited', new Date().toISOString(), '[]', {
+                messageIds: [],
+                outcome: 'run-exit-only',
+            });
+            await new ProjectClaimDao(db).release(this.projectPath(), this.slot(memberId), memberId, claim.ownerEpoch);
+            return { ok: false, code: 'collision', message: `could not write the record: ${String(error)}` };
+        }
+        return { ok: true, guest: record };
+    }
+
+    /**
+     * Record the live lease renewer for a guest (G75 R4). A no-op when the record is gone:
+     * the caller's renewer then stops itself on the next tick.
+     */
+    async attachRenewer(id: string, renewer: { pid: number; startedAt: string }): Promise<void> {
+        const record = await this.read(id);
+        if (record === null) return;
+        const next: GuestRecord = {
+            ...record,
+            renewerPid: renewer.pid,
+            renewerStartedAt: renewer.startedAt,
+        };
+        await this.ctx.fs.ensureDir(this.dir());
+        await this.ctx.fs.writeFile(join(this.dir(), `${id}.json`), `${JSON.stringify(next, null, 4)}\n`);
+    }
+
     /** Extend the lease (R5). False means the guest is gone or its lease was taken over. */
     async heartbeat(id: string): Promise<boolean> {
         const record = await this.read(id);
         if (record === null) return false;
-        const alive = await new ProjectClaimDao(await this.ctx.getDb()).heartbeat(
-            this.ctx.cwd,
+        const db = await this.ctx.getDb();
+        // A bound occupant is fenced twice: the claim epoch (below) and its occupancy
+        // generation. A later generation means another binder took the member over, so every
+        // renew — and therefore every claim/accept that follows a renew — is refused as stale.
+        if (record.memberBinding !== undefined) {
+            const generation = (await new CoordinationRunDao(db).maxGeneration(record.memberBinding.memberId)) ?? 0;
+            if (generation > record.memberBinding.occupancyGeneration) return false;
+        }
+        const alive = await new ProjectClaimDao(db).heartbeat(
+            this.projectPath(),
             this.slot(id),
             id,
-            GUEST_LEASE_TTL_MS,
+            this.ttlMs(),
             record.ownerEpoch,
         );
         return alive;
@@ -246,7 +518,7 @@ export class FleetGuestService {
         const expired: string[] = [];
         const db = await this.ctx.getDb();
         for (const record of await this.list()) {
-            const claim = await new ProjectClaimDao(db).get(this.ctx.cwd, this.slot(record.id));
+            const claim = await new ProjectClaimDao(db).get(this.projectPath(), this.slot(record.id));
             if (claim !== null && claim.expiresAt > Date.now()) continue;
             await this.retire(record);
             expired.push(record.id);
@@ -266,9 +538,21 @@ export class FleetGuestService {
     /** Release the lease, retire the occupant row and drop the record. Shared by leave/expire. */
     private async retire(record: GuestRecord): Promise<void> {
         const db = await this.ctx.getDb();
-        const claim = await new ProjectClaimDao(db).get(this.ctx.cwd, this.slot(record.id));
-        if (claim !== null) {
-            await new ProjectClaimDao(db).release(this.ctx.cwd, this.slot(record.id), record.id, claim.ownerEpoch);
+        // A stale record must never release the CURRENT owner's resources (G75 R3, task 1281):
+        // the claim is released only at the epoch this record held, and a bound occupant whose
+        // generation was taken over owns neither the occupant row nor the claimed messages.
+        if (record.memberBinding !== undefined) {
+            const generation = (await new CoordinationRunDao(db).maxGeneration(record.memberBinding.memberId)) ?? 0;
+            if (generation > record.memberBinding.occupancyGeneration) return;
+        }
+        const claim = await new ProjectClaimDao(db).get(this.projectPath(), this.slot(record.id));
+        if (claim !== null && claim.ownerEpoch === record.ownerEpoch) {
+            await new ProjectClaimDao(db).release(
+                this.projectPath(),
+                this.slot(record.id),
+                record.id,
+                record.ownerEpoch,
+            );
         }
         // A guest that dies mid-delivery must not strand its claimed messages: every claimed
         // row returns to `queued` through the service (G11 R10), so the next drain (or another
@@ -303,7 +587,36 @@ export class FleetGuestService {
         return `${GUEST_CLAIM_PREFIX}${id}` as ClaimSlot;
     }
 
+    /**
+     * The claim key: the **physical** project path. A guest's lease is renewed by a separate
+     * process (G75 R1) whose cwd the OS reports physically, so keying on the caller's possibly
+     * symlinked cwd (`/tmp/x` vs `/private/tmp/x` on macOS) would fence the renewer out of its
+     * own claim.
+     */
+    private projectPath(): string {
+        return normalizeProjectPath(this.ctx.cwd);
+    }
+
+    /** The lease TTL in force for this service — the injected test seam, else the real TTL. */
+    private ttlMs(): number {
+        return this.ctx.leaseTtlMs ?? GUEST_LEASE_TTL_MS;
+    }
+
     private dir(): string {
         return join(this.ctx.cwd, GUEST_RECORD_DIR);
     }
+}
+
+/** Whether a parsed record carries a well-formed member binding (G75 R3, task 1281). */
+function isMemberBinding(value: unknown): value is MemberBinding {
+    if (value === null || typeof value !== 'object') return false;
+    const binding = value as Partial<MemberBinding>;
+    return (
+        binding.version === 1 &&
+        typeof binding.memberId === 'string' &&
+        binding.memberId !== '' &&
+        typeof binding.occupancyGeneration === 'number' &&
+        typeof binding.ownerEpoch === 'number' &&
+        typeof binding.stageEligible === 'boolean'
+    );
 }

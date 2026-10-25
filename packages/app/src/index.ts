@@ -261,6 +261,11 @@ export {
     runBoundedChild,
     terminateJobChildren,
 } from './services/bounded-child-run';
+export {
+    type CapabilityEvaluation,
+    capabilityDiagnostic,
+    evaluateCapabilities,
+} from './services/capability-attestation';
 export type { CorpusSeverity } from './services/corpus-check';
 export { resolveFogRange, runCorpusCheck } from './services/corpus-check';
 export type {
@@ -362,13 +367,20 @@ export {
     RECEIPT_POLL_INTERVAL_MS,
 } from './services/fleet-dispatcher';
 export {
+    type DeclaredMemberView,
     FleetGuestService,
     GUEST_LEASE_TTL_MS,
     GUEST_RECORD_DIR,
     GUEST_ROLES,
+    type GuestBindFailureCode,
+    type GuestBindInput,
+    type GuestBindResult,
+    type GuestIdentityState,
     type GuestJoinInput,
     type GuestJoinResult,
     type GuestRecord,
+    MEMBER_BINDING_CAPABILITIES,
+    type MemberBinding,
 } from './services/fleet-guest-service';
 export {
     type FleetMemberLister,
@@ -390,6 +402,12 @@ export type {
 } from './services/fleet-service';
 // Project fleet declaration (0835) + orchestrator binding (0836)
 export { FleetService, materializeRoster, mergeAgentSpecs, resolveMemberExecutor } from './services/fleet-service';
+export {
+    DEFAULT_RENEWER_MAX_LIFETIME_MS,
+    GuestLeaseRenewer,
+    type GuestLeaseRenewerContext,
+    type GuestRenewalStopReason,
+} from './services/guest-lease-renewer';
 export {
     type HistoryRollupRefreshResult,
     refreshHistoryRollups,
@@ -536,6 +554,17 @@ export type {
 } from './services/planning-write-service';
 export { PlanningWriteService } from './services/planning-write-service';
 export { type PluginListEntry, PluginService } from './services/plugin-service';
+export {
+    AGENT_ANCESTOR_MAX_HOPS,
+    AGENT_EXECUTABLE_NAMES,
+    createPsProcessIdentityReader,
+    findAgentAncestor,
+    type ProcessFingerprint,
+    type ProcessIdentity,
+    type ProcessIdentityReader,
+    parseProcessIdentity,
+    sameProcess,
+} from './services/process-identity';
 export type {
     OsProcessRow,
     ProcessInspector,
@@ -669,6 +698,7 @@ export {
 } from './services/scheduler-custom-job-service';
 export type { LoadSectionMatrixOptions } from './services/section-matrix-loader';
 export { loadSectionMatrix } from './services/section-matrix-loader';
+export { shQuote } from './services/shell-quote';
 export {
     BUILTIN_CLAUDE_COMMANDS,
     type DiscoveredPlugin,

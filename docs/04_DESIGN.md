@@ -83,7 +83,7 @@ Root [DESIGN.md](../DESIGN.md) owns visual and interaction design;
 | System Events human table projection | [system-events-human-table.md](design/system-events-human-table.md) |
 | Inter-agent control plane | [inter-agent-control-plane.md](design/inter-agent-control-plane.md) |
 | Fleet task turns and measured warm execution (G74, ADR-145; proposed) | [fleet-task-turn-execution.md](design/fleet-task-turn-execution.md) |
-| Verified attached fleet occupants (G75, ADR-146; proposed) | [fleet-attached-occupants.md](design/fleet-attached-occupants.md) |
+| Verified attached fleet occupants (G75, ADR-146; §3 guest renewal + §4 `join --member` implemented by 1279/1281, probe report `docs/reports/fleet-host-capabilities.json` by 1280) | [fleet-attached-occupants.md](design/fleet-attached-occupants.md) |
 | Historical spine cost/drift measurement — analysis only | [dev-spine-cost-and-drift.md](design/dev-spine-cost-and-drift.md) |
 | Event tracking — System Event 5W1H SSOT | [event-tracking.md](design/event-tracking.md) |
 | E7 run-record contract — implemented (two-file pair, terminal state projection, inline driver setup); Feature E72 Trace tab + run progress route — implemented (2026-10-04) | [run-record-contract.md](design/run-record-contract.md) |

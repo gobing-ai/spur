@@ -26,7 +26,7 @@ that before using `run` for fan-out dispatch.
 | `trace <runId>` | Print one execution record's lineage — the run, its dispatch parents, agent session ids and streams (1076 R4, ADR-132) | `--follow` `--timeout <ms>` `--json` |
 | `list` | List detected coding agents, or agent specs with `--specs` (live run status + member session merged from `spur self serve`) | `--specs` `--server <url>` `--json` |
 | `report` | Report a fleet member lifecycle state (`working`/`idle`/`blocked`) from a host hook (G73 R1/R2, task 1080) | `--state <state>` `--seq <ns>` `--spec <id>` `--json` |
-| `join` | Join the fleet as a guest occupant — a live session that pulls its own work (G73 R2, task 1081) | `--role <name>` `--id <id>` `--session-id <sid>` `--pid <n>` `--executor <name>` `--json` |
+| `join` | Join the fleet as a guest occupant — a live session that pulls its own work (G73 R2, task 1081); `--member` binds a declared member instead (G75 R3, task 1281) | `--role <name>` `--id <id>` `--member <id>` `--session-id <sid>` `--pid <n>` `--executor <name>` `--json` |
 | `leave` | Leave the fleet: release the guest lease, retire the occupant, return claimed messages to `queued` | `[id]` `--session-id <sid>` `--json` |
 | `status` | Agent specs with live process status and member session (requires `spur self serve`) | `--server <url>` `--json` |
 | `doctor [agent]` | Check agent readiness | `--json` `--probe-health` `--force-refresh` |
@@ -228,10 +228,18 @@ returns its claimed messages to `queued` and removes the record.
 | `--session-id <sid>` | Host session id (defaults to `CLAUDE_CODE_SESSION_ID`) |
 | `--pid <n>` | Process id to record |
 | `--executor <name>` | Executor name to record (informational — a guest is never dispatched to) |
+| `--member <id>` | Bind a **declared member** instead of joining as a guest (G75 R3, task 1281): resolves the enabled member, checks role/executor, requires a capability proof, and takes the fenced occupant of `guest:<member-id>`. The record id becomes the member id, so `wait --inbox <member-id>` addresses the declared member's inbox. Exits 2 with `unknown-member`, `disabled-member`, `role-mismatch`, `capability-unattested`, `live-occupant` or `collision`. Without it, `join` is unchanged |
 | `--json` | Machine-readable result |
 
 A guest carrying no executor attestation is never a stage target: `spur agent run --spec <guest-id>`
 is refused (R3), and `requiresCapabilities` stages therefore can never reach one.
+
+`--member <id>` inverts that for exactly one declared id: the binding takes the member's occupant row
+at generation `max+1` and the `guest:<member-id>` claim, so a supervised spawn or strategy dispatch
+sees the member busy through the same `hasRunning` check it already uses — no dual writers. Every
+renew re-checks both the claim epoch and that generation, so a taken-over member refuses the stale
+binder's claim/accept. `memberBinding.stageEligible` is `false` when the binder's host has only the
+`pull-only` wake channel (`bun run fleet-e2e --host-probe`), i.e. it may receive messages but no stage.
 
 ## `wait --inbox <id>` - the guest pull primitive (G73 R4)
 

@@ -34,7 +34,7 @@ capability attestation, occupancy generation and lease owner epoch. A PID alone 
 session cooperation and process birth/executable identity when the host exposes it. If identity
 cannot be proved, retain explicit guest messaging and refuse automatic stages.
 
-Do not change `resolveAgentSelector` to mix guests into role candidates. A verified attachment
+Do not change `resolveMember` (`packages/app/src/workflow/fleet-dispatch.ts`) to mix guests into role candidates. A verified attachment
 occupies an existing enabled declaration; the declaration still determines role selection.
 No unverified guest can satisfy `requiresCapabilities`.
 
@@ -49,6 +49,15 @@ parent-watched helper. Use the current lease DAO with its epoch fence; avoid a n
 Renew at a bounded interval below the TTL, including during 90-second work with no inbox wait.
 Stop renewal when session/process identity is lost, lease fencing fails or the operator leaves.
 
+Mechanism (implemented, task 1279): `spur agent join` walks at most eight ancestors from its own
+parent for the executor executable (`ps -o ppid=,lstart=,comm=`), records that fingerprint
+(`pid`, `processStartedAt`, `executable`, `identity`) and — when the identity is verified — spawns a
+detached copy of itself (`SPUR_GUEST_RENEWER=<guest-id>`) that runs `GuestLeaseRenewer` at
+`TTL / 3`. The renewer stops on a missing record, a dead or reused agent pid, a lost fence, or a
+12-hour lifetime cap. No new verb, flag, daemon or table: one extra optional record field set and
+one detached process bounded by the agent's own lifetime. A transient ledger error skips a tick
+rather than ending renewal.
+
 Preserve existing guest join, wait and leave defaults. Record the actual agent process when supplied;
 the short-lived CLI PID must not imply persistent agent liveness. Validate supplied identity; never
 kill or take over an unrelated PID. Rejoin the same proven session idempotently; refuse collisions
@@ -60,11 +69,11 @@ poll by starting repeated model turns or terminal commands while the session is 
 
 ## 4. Binding contract on existing surfaces
 
-The planned additive surface is `spur agent join --member <declared-member-id>`, alongside the
-existing required role and optional session/PID/executor fields. Without `--member`, behavior stays
-guest-only. No new public noun or verb is introduced; implementation must include the CLI flag,
-validation/help, skill and generated adapter contract together. This is a proposed flag, not a
-currently supported command.
+The additive surface is `spur agent join --member <declared-member-id>`, alongside the existing
+required role and optional session/PID/executor fields (implemented, task 1281; operator consent for
+this one flag, no new noun or verb). Without `--member`, behavior stays guest-only. The binding is
+fenced by occupancy generation + claim epoch, and `memberBinding.stageEligible` carries the binder's
+host wake evidence from `bun run fleet-e2e --host-probe`.
 
 Join with a member:
 1. Resolve that enabled declared member in the current normalized project.

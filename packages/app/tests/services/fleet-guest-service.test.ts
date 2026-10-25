@@ -7,7 +7,7 @@
  *   - a guest that leaves/heartbeats stops owning its lease
  */
 import { describe, expect, test } from 'bun:test';
-import { mkdtemp, rm } from 'node:fs/promises';
+import { mkdtemp, realpath, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { CoordinationRunDao, createMigratedDb, ProjectClaimDao } from '@gobing-ai/spur-domain';
@@ -20,7 +20,8 @@ async function makeGuestService(declared: string[] = []): Promise<{
     cwd: string;
     cleanup: () => Promise<void>;
 }> {
-    const cwd = await mkdtemp(join(tmpdir(), 'spur-guests-'));
+    // Physical path: claims are keyed on the resolved project path (see FleetGuestService.projectPath).
+    const cwd = await realpath(await mkdtemp(join(tmpdir(), 'spur-guests-')));
     const db = await createMigratedDb({ url: ':memory:' });
     const service = new FleetGuestService({
         cwd,
