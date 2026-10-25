@@ -2,11 +2,11 @@
 schema_version: 1
 id: "G74"
 name: "Faster fleet task execution with correlated warm turns"
-status: verifying
+status: done
 priority: P2
 tags: []
 created_at: "2026-10-22T06:44:56.676Z"
-updated_at: "2026-10-25T01:55:56.240Z"
+updated_at: "2026-10-25T03:37:26.943Z"
 ---
 
 # G74: Faster fleet task execution with correlated warm turns
@@ -113,4 +113,5 @@ Feature: Faster fleet task execution
 
 - 2026-10-22T19:34:57.719Z backlog → active (system)
 - 2026-10-25T01:55:56.240Z active → verifying (system)
+- 2026-10-25T03:37:26.943Z verifying → done (system)
 
