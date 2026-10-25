@@ -29,18 +29,18 @@
             "packages/*"
         ],
         "catalog": {
-            "@gobing-ai/ts-ai-runner": "^0.6.4",
-            "@gobing-ai/ts-ai-decision": "^0.6.4",
-            "@gobing-ai/ts-decision-clef": "^0.6.4",
-            "@gobing-ai/ts-decision-fm": "^0.6.4",
-            "@gobing-ai/ts-laya-mlx": "^0.6.4",
-            "@gobing-ai/ts-db": "^0.6.4",
-            "@gobing-ai/ts-dual-workflow-engine": "^0.6.4",
-            "@gobing-ai/ts-infra": "^0.6.4",
-            "@gobing-ai/ts-llm-jsonl-importer": "^0.6.4",
-            "@gobing-ai/ts-rule-engine": "^0.6.4",
-            "@gobing-ai/ts-runtime": "^0.6.4",
-            "@gobing-ai/ts-utils": "^0.6.4",
+            "@gobing-ai/ts-ai-runner": "^0.7.0",
+            "@gobing-ai/ts-ai-decision": "^0.7.0",
+            "@gobing-ai/ts-decision-clef": "^0.7.0",
+            "@gobing-ai/ts-decision-fm": "^0.7.0",
+            "@gobing-ai/ts-laya-mlx": "^0.7.0",
+            "@gobing-ai/ts-db": "^0.7.0",
+            "@gobing-ai/ts-dual-workflow-engine": "^0.7.0",
+            "@gobing-ai/ts-infra": "^0.7.0",
+            "@gobing-ai/ts-llm-jsonl-importer": "^0.7.0",
+            "@gobing-ai/ts-rule-engine": "^0.7.0",
+            "@gobing-ai/ts-runtime": "^0.7.0",
+            "@gobing-ai/ts-utils": "^0.7.0",
             "@gobing-ai/superskill": "0.3.44",
             "@orpc/client": "1.14.4",
             "@orpc/contract": "1.14.4",
@@ -142,6 +142,6 @@
         "zod": "4.4.3"
     },
     "patchedDependencies": {
-        "@gobing-ai/ts-db@0.6.4": "patches/@gobing-ai%2Fts-db@0.6.4.patch"
+        "@gobing-ai/ts-db@0.7.0": "patches/@gobing-ai%2Fts-db@0.7.0.patch"
     }
 }
