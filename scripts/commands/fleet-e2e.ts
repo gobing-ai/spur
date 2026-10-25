@@ -68,6 +68,7 @@ import {
     type TurnBinary,
     type TurnSessionDriver,
 } from '@gobing-ai/ts-ai-runner';
+import { type PerfMeasured, perfMeasured, runPairedTurnPerf, type TurnPerfComparison } from './fleet-e2e-turn-perf';
 
 const REPO_ROOT = fileURLToPath(new URL('../../', import.meta.url));
 /** The source-local CLI entry (this repo's own transport, never an installed binary). */
@@ -1887,7 +1888,12 @@ export interface PerfPhaseMark {
 
 export interface PerfTrial {
     agent: string;
-    mode: 'cold' | 'resume';
+    mode: 'cold' | 'resume' | 'warm';
+    model: string;
+    provider: string;
+    reasoning: string;
+    tokens: 'unavailable';
+    resources: 'unavailable';
     status: PerfTrialStatus;
     /** enqueue → contract-validated, UTC wall clock on one host (same clock domain). */
     durationMs?: number;
@@ -1901,15 +1907,7 @@ export interface PerfTrial {
     reason?: string;
 }
 
-export interface PerfMeasured {
-    p50Ms?: number;
-    p95Ms?: number;
-    completionRate?: number;
-    /** Successful validated tasks/hour derived from the mean validated duration. */
-    validatedPerHour?: number;
-    status?: 'unsupported';
-    reason?: string;
-}
+export type { PerfMeasured } from './fleet-e2e-turn-perf';
 
 /**
  * The warm-lane row (task 1276, G74 R1/AC1). Unlike `cold`/`resume` this row is QUALIFICATION
@@ -2065,11 +2063,13 @@ export function probeWarm(agent: string, timeoutMs = 5_000): WarmProbe {
 export interface PerfReceipt {
     schemaVersion: 1;
     generatedAt: string;
+    revision: string;
     repeatCommand: string;
     workloadDigest: string;
     targets: { provisional: true; note: string; agents: readonly string[] };
     trials: PerfTrial[];
     measured: Record<string, { cold: PerfMeasured; resume: PerfMeasured; warm: PerfWarm }>;
+    turnComparison: TurnPerfComparison;
 }
 
 /** `--version` of the real host binary (probe targets), or null when absent. */
@@ -2210,30 +2210,6 @@ async function readPerfPhaseRows(
         });
 }
 
-/** Nearest-rank percentile over a copied sorted array. */
-function percentile(sorted: number[], p: number): number | undefined {
-    if (sorted.length === 0) return undefined;
-    const index = Math.max(0, Math.ceil((p / 100) * sorted.length) - 1);
-    return sorted[Math.min(index, sorted.length - 1)];
-}
-
-function perfMeasured(trials: PerfTrial[], mode: 'cold' | 'resume'): PerfMeasured {
-    const durations = trials
-        .filter((trial) => trial.agent !== '' && trial.mode === mode && trial.status === 'validated')
-        .map((trial) => trial.durationMs ?? Number.NaN)
-        .filter((ms) => Number.isFinite(ms))
-        .sort((a, b) => a - b);
-    const total = trials.filter((trial) => trial.mode === mode).length;
-    if (durations.length === 0) return {};
-    const mean = durations.reduce((sum, ms) => sum + ms, 0) / durations.length;
-    return {
-        p50Ms: percentile(durations, 50),
-        p95Ms: percentile(durations, 95),
-        completionRate: total === 0 ? undefined : durations.length / total,
-        validatedPerHour: mean > 0 ? Math.round((3_600_000 / mean) * 1000) / 1000 : undefined,
-    };
-}
-
 // Biome format check is content-sensitive on JSON (short-array collapse at lineWidth 120), so
 // hand-rolled stringify intermittently fails the repo gate; route the receipt through the repo's
 // own formatter. shortcut: requires biome on PATH (repo devDependency); raw JSON if absent.
@@ -2250,8 +2226,10 @@ function writePerfReceipts(receipt: PerfReceipt, repeatCommand: string): void {
         '# Fleet performance receipt (task 1273)',
         '',
         `Generated: ${receipt.generatedAt}`,
+        `Revision: ${receipt.revision}`,
         `Repeat: \`${repeatCommand}\``,
         `Workload digest: ${receipt.workloadDigest}`,
+        'Executor settings: not applicable for deterministic stubs; real-agent defaults are unobserved. Token and resource usage: unavailable.',
         '',
         '> Provisional: the deterministic lane drives the SAME stub everywhere; host binaries are',
         '> provenance only. Deltas across agents mean nothing until the real-agent lane lands (1276–1278).',
@@ -2308,11 +2286,31 @@ function writePerfReceipts(receipt: PerfReceipt, repeatCommand: string): void {
     }
     lines.push(
         '',
+        '## Paired keyed task-turn measurements (deterministic fixtures)',
+        '',
+        `Workload: ${receipt.turnComparison.workloadDigest}`,
+        `Pinned settings: ${JSON.stringify(receipt.turnComparison.settings)}`,
+        'Every mode uses the same bounded response and artifact contract. Pair order alternates.',
+        'These measurements cover the real process/action-contract path with a local model fixture; they make no paid-model speed claim.',
+        '',
+        '| agent | mode | p50Ms | p95Ms | completionRate | validatedPerHour | child processes |',
+        '| --- | --- | --- | --- | --- | --- | --- |',
+    );
+    for (const [agent, modes] of Object.entries(receipt.turnComparison.measured)) {
+        for (const [mode, row] of Object.entries(modes)) {
+            lines.push(
+                `| ${agent} | ${mode} | ${row.p50Ms ?? ''} | ${row.p95Ms ?? ''} | ${row.completionRate ?? 0} | ${row.validatedPerHour ?? ''} | ${receipt.turnComparison.processes[agent]?.[mode as PerfTrial['mode']] ?? ''} |`,
+            );
+        }
+    }
+    lines.push(
+        '',
         'Notes: durations use UTC wall clock across processes (one host clock domain);',
         'per-phase `monotonicMs` stays in-process. `gates` has no observable in the stub lane',
         '(the stub closes tasks without running quality gates) and is recorded absent.',
         'Warm rows (tasks 1276-1278) record QUALIFICATION of the installed binary — driver verdict,',
-        'binary path and version. They carry no latency: the lane runs cold/resume trials only.',
+        'binary path and version. The separate paired comparison measures cold/resume/warm task turns',
+        'against one local fixture workload; its samples are not mixed with the fleet-task baseline.',
         'Repository-local binary paths are relative to the repository root; external paths stay absolute.',
         '',
     );
@@ -2338,10 +2336,20 @@ export async function runFleetPerf(options: {
     realAgents: boolean;
     agents: readonly string[];
 }): Promise<number> {
+    const revision = Bun.spawnSync(['git', 'rev-parse', 'HEAD'], { cwd: REPO_ROOT });
+    if (revision.exitCode !== 0) throw new Error('fleet-perf: cannot record the repository revision');
+    const setting = options.realAgents ? 'unavailable (agent default)' : 'not-applicable (deterministic stub)';
+    const trialContext = {
+        model: setting,
+        provider: setting,
+        reasoning: setting,
+        tokens: 'unavailable' as const,
+        resources: 'unavailable' as const,
+    };
     const targets = PERF_AGENTS.filter((agent) => options.agents.includes(agent));
     const warmProbes = new Map<string, WarmProbe>();
     for (const agent of targets) warmProbes.set(agent, probeWarm(agent));
-    const repeatCommand = `bun run scripts/commands/fleet-e2e.ts --perf --trials ${options.trials}${options.realAgents ? ' --real-agents' : ''}${options.agents.length === PERF_AGENTS.length ? '' : ` --agents ${options.agents.join(',')}`}${options.injectFailure !== null ? ` --inject-failure ${options.injectFailure}` : ''}${options.keep ? ' --keep' : ''}`;
+    const repeatCommand = `bun run fleet-e2e --perf --trials ${options.trials}${options.realAgents ? ' --real-agents' : ''}${options.agents.length === PERF_AGENTS.length ? '' : ` --agents ${options.agents.join(',')}`}${options.injectFailure !== null ? ` --inject-failure ${options.injectFailure}` : ''}${options.keep ? ' --keep' : ''}`;
     const workloadDigest = `sha256:${createHash('sha256')
         .update(`${PERF_WORKLOAD.title}\n${PERF_WORKLOAD.ac}${PERF_WORKLOAD.design}`)
         .digest('hex')}`;
@@ -2448,6 +2456,7 @@ export async function runFleetPerf(options: {
                         typeof claimRow?.payload.executionId === 'string' ? claimRow.payload.executionId : undefined;
                     if (hang) {
                         trials.push({
+                            ...trialContext,
                             agent,
                             mode,
                             status: 'timed-out',
@@ -2456,7 +2465,7 @@ export async function runFleetPerf(options: {
                             ...(key !== undefined ? { key } : {}),
                             binary: binaryRow,
                             ...(hostVersion !== undefined ? { hostBinaryVersion: hostVersion } : {}),
-                            reason: `--inject-failure ${options.injectFailure}: hang-tagged trial hit the ${PERF_TRIAL_TIMEOUT_MS}ms deadline; stays in the denominator`,
+                            reason: `--inject-failure ${options.injectFailure}: synthetic timeout for a hang-tagged trial; stays in the denominator`,
                         });
                         return;
                     }
@@ -2471,6 +2480,7 @@ export async function runFleetPerf(options: {
                     const done = jsonOk<{ status: string }>(['task', 'show', wbs, '--json'], p.scratch);
                     if (enqueue === undefined || validatedAt === undefined || done.status !== 'done') {
                         trials.push({
+                            ...trialContext,
                             agent,
                             mode,
                             status: 'failed',
@@ -2486,6 +2496,7 @@ export async function runFleetPerf(options: {
                     }
                     const durationMs = new Date(validatedAt).getTime() - new Date(enqueue.at).getTime();
                     trials.push({
+                        ...trialContext,
                         agent,
                         mode,
                         status: 'validated',
@@ -2500,6 +2511,7 @@ export async function runFleetPerf(options: {
                     // Deadline hit (hang arm) or an infrastructure error — the row records which.
                     const timedOut = errorMessage(error).includes('timed out');
                     trials.push({
+                        ...trialContext,
                         agent,
                         mode,
                         status: hang ? 'timed-out' : timedOut ? 'timed-out' : 'failed',
@@ -2574,9 +2586,15 @@ export async function runFleetPerf(options: {
             warm: warmRow(agent, warmProbes.get(agent) ?? { driver: null, binary: null, verifiedVersion: null }),
         };
     }
+    const turnComparison = await runPairedTurnPerf(targets, options.trials, options.injectFailure !== null);
+    for (const trial of turnComparison.trials) {
+        if (trial.status !== 'validated' && !trial.injected)
+            failures.push(`${trial.agent} ${trial.mode}: ${trial.reason}`);
+    }
     const receipt: PerfReceipt = {
         schemaVersion: 1,
         generatedAt: new Date().toISOString(),
+        revision: revision.stdout.toString().trim(),
         repeatCommand,
         workloadDigest,
         targets: {
@@ -2588,6 +2606,7 @@ export async function runFleetPerf(options: {
         },
         trials,
         measured,
+        turnComparison,
     };
     writePerfReceipts(receipt, repeatCommand);
     if (failures.length > 0) {

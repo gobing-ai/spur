@@ -11,7 +11,16 @@
  * executable and use the installed driver — no host agent binary, no network, no paid run.
  */
 import { describe, expect, spyOn, test } from 'bun:test';
-import { chmodSync, mkdtempSync, readFileSync, rmdirSync, rmSync, unlinkSync, writeFileSync } from 'node:fs';
+import {
+    chmodSync,
+    existsSync,
+    mkdtempSync,
+    readFileSync,
+    rmdirSync,
+    rmSync,
+    unlinkSync,
+    writeFileSync,
+} from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import { getEnvVar, setEnvVar } from '@gobing-ai/spur-config';
@@ -207,7 +216,8 @@ describe('1277 AC1: Pi executable provenance and actual perf executor', () => {
             const config = readFileSync(join(project.scratch, '.spur/config.yaml'), 'utf8');
             expect(config).toContain('      agent: pi\n');
             expect(config).not.toContain('      agent: claude\n');
-            expect(Bun.file(project.stubPath).size).toBe(0);
+            // `Bun.file(...).size` is 0 for a MISSING path too, so the old assertion proved nothing.
+            expect(existsSync(project.stubPath)).toBe(false);
         } finally {
             setEnvVar('SPUR_SKIP_PROJECT_CONFIG', skip ?? 'true');
             if (project !== undefined) {

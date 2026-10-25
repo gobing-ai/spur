@@ -1,9 +1,9 @@
 ---
 kind: design
 title: Fleet task turns and measured warm execution
-status: proposed
+status: implemented
 created_at: 2026-10-21
-updated_at: 2026-10-23
+updated_at: 2026-10-24
 related: [G74, G75]
 tags: [contract, G74, agent, workflow]
 ---
@@ -14,16 +14,16 @@ tags: [contract, G74, agent, workflow]
 
 G74 selects A2: keep deterministic scheduling responsive and run keyed tasks in warm Codex, Claude
 Code and Pi processes without losing completion evidence. G75 consumes the same turn contract.
-This is an accepted direction with proposed, unimplemented details; current behavior remains
-documented by [session-pinned dispatch](session-pinned-dispatch.md) and
+Related session and coordination behavior is documented by
+[session-pinned dispatch](session-pinned-dispatch.md) and
 [inter-agent control](inter-agent-control-plane.md).
 The [measurement contract](../plans/2026-10-21-fleet-performance-measurement.md) owns KPI definitions,
 trial controls and provisional performance targets.
 
-Observed: keyed requests use the run service while persistent stdin handles unkeyed traffic
-(`packages/app/src/services/agent-loop-service.ts:464,486`). The orchestrator awaits chat before
-its scheduling tick (`agent-loop-service.ts:587`). Sending stdin establishes acceptance only
-(`node_modules/@gobing-ai/ts-ai-runner/src/team-agent-process.ts:122`).
+Keyed requests retain the traced run/action contract and may reuse a qualified correlated worker.
+The orchestrator conversation has separate in-flight state from its serialized scheduling tick.
+Sending input establishes acceptance only; native terminal evidence and artifact validation are
+separate completion boundaries.
 
 ## 2. Ownership and boundaries
 
@@ -68,10 +68,10 @@ Transport acceptance and message delivery stay distinct from task success. Exist
 receipts remain the stage completion shape; normalized native events are input evidence, not a
 replacement workflow or an independent success authority.
 
-## 4. Proposed runner-facing contract
+## 4. Released runner-facing contract
 
-This is a behavioral facade requirement, not a claim that these API names exist in the installed
-package. Verify a released facade against it before implementation imports.
+The released `AiRunner.openTurnSession` facade supplies this lifecycle. Spur consumes the facade
+and its qualified driver registry; it does not implement the native transports.
 
 | Operation | Required behavior |
 | --- | --- |
@@ -152,6 +152,17 @@ Extend the existing fleet E2E driver; reuse trace/output observers rather than a
 Record queue/capacity wait separately from preparation, first useful output, agent work, required
 checks and completion. Pin policy, trials and resource conditions. Keep failure denominators and
 unknown phases explicit. See the measurement contract for trial counts and candidate thresholds.
+
+`fleet-e2e --perf` keeps the fleet-task baseline and native-binary qualification rows, and adds a
+separate `turnComparison` over paired cold, resumed and warm keyed work. This deterministic lane
+pins its Bun child, fixture model/provider/reasoning, workload digest and correlation identities.
+Every mode runs the same bounded response through `runFleetWorkItem` and its artifact validator.
+Cold/resume samples launch separate children; resume restores the fixture's persisted state;
+warm samples use the released correlated-session facade and retain one child per agent. Pair
+order alternates, and injected artifact failures remain in the completion-rate denominator.
+The JSON records all samples and per-mode p50/p95, completion rate and useful throughput; Markdown
+projects those comparisons. Fixture transport measurements never claim native model speed or
+provider-cache behavior. Opt-in real-agent task rows remain separate from these fixture samples.
 
 Before each implementation, write failure cases and E2E fixtures first. Required scenarios include
 duplicate/late events, native failure, dropped connection after acceptance, changed policy,
