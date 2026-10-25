@@ -3,7 +3,7 @@ kind: design
 title: "Task residual sweep"
 status: implemented
 created_at: 2026-09-24
-updated_at: 2026-10-14
+updated_at: 2026-10-24
 related: [F96, F51]
 tags: [system, F96, planning]
 adr: ADR-071, ADR-076
@@ -84,7 +84,7 @@ service instead of shelling `spur task show|create|update`.
 
 | Category | Source | Default class |
 | --- | --- | --- |
-| `review-finding` | Rows of any `### Review` table whose header has a `Priority` column, priority cell matching `^P[1-4]` and a finding other than `none`/`—` (the current Review; `review` rewrites it on every pass) | P1/P2/P3 `blocking`; P4 `advisory` |
+| `review-finding` | Rows of any `### Review` table whose header has a `Priority` column, priority cell matching `^P[1-4]` and a substantive finding. Exact clean placeholders such as `none`, `none found`, `none open` and `—` (optionally followed by a parenthesized note) are ignored; longer findings beginning with those words remain active (the current Review; `review` rewrites it on every pass) | P1/P2/P3 `blocking`; P4 `advisory` |
 | `diff-marker` | `TODO\|FIXME\|XXX\|HACK` on lines **added** in `git diff $(cat <wbs>-base.sha)` (committed and uncommitted), excluding `docs/tasks*/` | `blocking` |
 | `unchecked-box` | `- [ ]` lines in the task file | `blocking` |
 | `staging-residue` | files matching `/tmp/<wbs>-*` | `housekeeping` |
