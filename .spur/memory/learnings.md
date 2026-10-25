@@ -6679,3 +6679,54 @@ Date: 2026-10-16 · Branch: sp/runall-l1-05cd · Tasks: 1218, 1219, 1220 (all do
   tests that shipped with the change (a dead resolution branch, a tautological test, an unbounded
   refetch loop).
 
+## 2026-10-22 — G75 (tasks 1279, 1280, 1281)
+
+### Renewal / process identity (1279)
+- A worktree's shell reports its cwd physically (`/private/var/...`) while a test's `mkdtemp` path is
+  the symlinked form (`/var/...`). Any claim keyed on a caller-supplied cwd therefore fences the
+  *same* process out of its own lease when the caller is a detached child. Fix: key project claims on
+  `normalizeProjectPath(cwd)` (`FleetGuestService.projectPath`), and `realpath` fixtures that assert
+  claim rows. Symptom to recognize: the detached worker exits in <1s with `fence-lost`.
+- `ps -o lstart=` is a stable birth time; `etime` is a duration that drifts between two reads of the
+  same live pid. PID-reuse detection must compare the birth time, never the pid alone.
+- `ps -o comm=` is the LAST column and may contain spaces, while `lstart` is exactly five tokens.
+  Parse positionally from the left (ppid, 5 timestamp tokens, rest = executable); parsing from the
+  right silently mis-slices an executable whose path has spaces.
+- A transient ledger error (`SQLITE_BUSY`) must not end a renewal loop: skip the tick and let the
+  next one re-check identity, record and fence. A renewer that dies on one locked write is worthless.
+- `bun test` runs with a file-backed DB per `main()` call: a detached child reaches the same lease
+  rows only if the test uses a file-backed `dbUrl`. In-memory looks like an immediate fence loss.
+- Commit-msg hooks in a fresh git worktree fail with proto's "untrusted plugin" because trust is keyed
+  by absolute path. Prefixing `PATH=~/.proto/bin:$PATH` lets the real `cog` binary satisfy the hook —
+  do not reach for `--no-verify`.
+
+### Host capability probing (1280)
+- Truncating a `--help` capture before classification turns a hook-capable host into `pull-only`.
+  Classify on the FULL text; record only the one matched line as evidence.
+- Wake-channel precedence is specificity, not wording: a host exposing an App Server endpoint outranks
+  one that merely has a flag with "hook" in its name (Codex advertises
+  `--dangerously-bypass-hook-trust` while its channel is the app server).
+- Evidence lines must be the *positive* documentation of a surface, not the flag that disables it
+  (`--bare Minimal mode: skip hooks` proves hooks exist, not that they can wake a guest).
+- Direct `env-var-hygiene` rule: scripts and fixtures read env through `getEnvVar`/`getEnvVars`, never
+  `process.env` — the rule gate fails the whole task otherwise.
+- A full-gate run alongside another tree's heavy suite can blow a 20s per-test timeout on an unrelated
+  file (`script-absorption PR-9 … budget from db`) and exhaust the remediation budget. Check for a
+  concurrent suite before re-running, and re-run the pipeline rather than widening timeouts.
+
+### Member binding (1281)
+- Fencing one operation is not fencing the resource: the heartbeat fence stopped stale renew/claim, but
+  `retire` still released the *current* owner's claim by record id. Fence the release path too —
+  compare the epoch you still hold, and return early on a superseded occupancy generation.
+- A capability proof that fails closed on `unknown` makes `--member` require an attested executor
+  profile; that is the 0706 R5 contract, not a bug. Document it on the surface where operators meet it.
+- The help-docs parity gates (`apps/cli/tests/help-doc-parity.test.ts`,
+  `plugins/sp/tests/help-docs-parity.test.ts`) enumerate every live CLI flag: a new flag needs a row in
+  `docs/help/` AND `docs/help2/` in the same change, or the gate fails the task.
+- `spur task verdict --from-answer` requires requirement rows keyed by the BARE requirement id (`| R1 |`),
+  not a descriptive label; a descriptive label reads as an unknown id plus a missing row.
+- `spur task residual <wbs> review-gate` reads the `## Review` findings table: an ad-hoc `Severity`
+  column makes every row undecidable and reports a blocking contract violation. Use the super-reviewer
+  shape (`| # | Priority | Dimension | Finding | Location | Disposition |`) and let the dispositions
+  derive the stated `Confidence`.
+
