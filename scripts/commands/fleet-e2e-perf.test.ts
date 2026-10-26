@@ -25,7 +25,7 @@ import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import { getEnvVar, setEnvVar } from '@gobing-ai/spur-config';
 import { getAgentShim, type TurnSessionDriver } from '@gobing-ai/ts-ai-runner';
-import { parsePerfArgs, probeWarm, scaffoldPerfProject, warmRow } from './fleet-e2e';
+import { modeGainVerdict, parsePerfArgs, perfModesOf, probeWarm, scaffoldPerfProject, warmRow } from './fleet-e2e';
 
 /** A driver that refuses every binary — the shape `TURN_SESSION_DRIVERS` has for 1277/1278. */
 function refusingDriver(reason: string): TurnSessionDriver {
@@ -89,6 +89,39 @@ describe('1276 R1: an unsupported warm lane is named, never silently qualified',
         const row = warmRow('claude', { driver: qualifyingDriver(), binary: null, verifiedVersion: '2.1.308' });
         expect(row.status).toBe('unsupported');
         expect(row.binary).toBeNull();
+    });
+});
+
+describe('1283: --modes selects measured lanes and fails loudly on a typo', () => {
+    test('an absent --modes measures every lane, in the documented order', () => {
+        expect(parsePerfArgs(['--perf']).modes).toEqual(['supervised-cold', 'supervised-warm', 'attached-ready']);
+        expect(perfModesOf(undefined)).toEqual(['supervised-cold', 'supervised-warm', 'attached-ready']);
+    });
+
+    test('an unknown mode is a usage error, never a silently skipped lane', () => {
+        expect(() => perfModesOf(['attached-ready', 'atached'])).toThrow(/--modes expects a csv of/);
+        expect(perfModesOf(['attached-ready'])).toEqual(['attached-ready']);
+        expect(parsePerfArgs(['--perf', '--modes', 'supervised-warm,attached-ready']).modes).toEqual([
+            'supervised-warm',
+            'attached-ready',
+        ]);
+    });
+});
+
+describe('1283: modeGainVerdict applies the provisional materiality thresholds', () => {
+    test('both thresholds met is a material gain', () => {
+        // p50 20% lower AND p95 15% lower — clears 15%/10%.
+        expect(modeGainVerdict({ p50Ms: 800, p95Ms: 850 }, { p50Ms: 1000, p95Ms: 1000 })).toBe('material-gain');
+    });
+
+    test('faster p50 under the 15% bar is convenience-only, not a speed win', () => {
+        expect(modeGainVerdict({ p50Ms: 900, p95Ms: 950 }, { p50Ms: 1000, p95Ms: 1000 })).toBe('convenience-only');
+    });
+
+    test('a slower attached lane is no-gain, and missing warm evidence is inconclusive', () => {
+        expect(modeGainVerdict({ p50Ms: 1200, p95Ms: 1300 }, { p50Ms: 1000, p95Ms: 1000 })).toBe('no-gain');
+        expect(modeGainVerdict({ p50Ms: 800, p95Ms: undefined }, { p50Ms: 1000, p95Ms: 1000 })).toBe('inconclusive');
+        expect(modeGainVerdict({ p50Ms: 800, p95Ms: 850 }, { p50Ms: 1000, p95Ms: undefined })).toBe('inconclusive');
     });
 });
 

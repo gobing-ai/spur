@@ -4,7 +4,7 @@
  *
  * Usage: bun scripts/spur-dev.ts fleet-e2e [--inject-failure <step>] [--guest-join-fixture] [--keep]
  *        bun scripts/spur-dev.ts fleet-e2e --matrix
- *        bun scripts/spur-dev.ts fleet-e2e --perf [--trials <n>] [--real-agents] [--agents <csv>] [--keep]
+ *        bun scripts/spur-dev.ts fleet-e2e --perf [--trials <n>] [--real-agents] [--agents <csv>] [--modes <csv>] [--keep]
  *
  * `--matrix` runs the EXECUTOR MATRIX instead of the fleet E2E (task 1238 R2/R3, feature D65): the
  * tracked fixture `packages/app/tests/fixtures/1238/executor-matrix-fixture.yaml` — one `agent.run`
@@ -51,7 +51,13 @@ import {
 import { tmpdir } from 'node:os';
 import { dirname, join, relative, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { InboxService, StrategyRuntime } from '@gobing-ai/spur-app';
+import {
+    type AgentCoordinationService,
+    createAttachedTurnDispatcher,
+    FleetDispatcher,
+    InboxService,
+    StrategyRuntime,
+} from '@gobing-ai/spur-app';
 import { getEnvVar, getEnvVars } from '@gobing-ai/spur-config';
 import {
     CoordinationRunDao,
@@ -635,10 +641,19 @@ function fleetConfigSection(agent = AGENT_TYPE): string {
         `      agent: ${agent}`,
         '      tier: standard',
         '      # fsWrite attestation: GTD only allocates a write-capable member (fleet-service.ts:512).',
+        '      # fsRead/processSpawn: member BINDING (G75 R3) requires the full',
+        '      # MEMBER_BINDING_CAPABILITIES set (fleet-guest-service.ts:189) — the attached perf',
+        '      # lane binds the coder member as its fixture occupant.',
         '      executionCapabilities:',
         '        version: 1',
         '        axes:',
+        '          fsRead:',
+        '            state: available',
+        '            provenance: native-known',
         '          fsWrite:',
+        '            state: available',
+        '            provenance: native-known',
+        '          processSpawn:',
         '            state: available',
         '            provenance: native-known',
         '',
@@ -736,6 +751,8 @@ function parseArgs(args: string[]): {
      * legitimate columns (G74 perf lane + G75 probe lane, merged 2026-10-24).
      */
     agents: string[] | undefined;
+    /** `--modes <csv>` as written, or `undefined` when absent (perf lane validates + defaults). */
+    modes: string[] | undefined;
 } {
     let injectFailure: StepName | null = null;
     let keep = false;
@@ -747,6 +764,7 @@ function parseArgs(args: string[]): {
     let hostProbe = false;
     let realHosts = false;
     let agents: string[] | undefined;
+    let modes: string[] | undefined;
     for (let index = 0; index < args.length; index++) {
         const arg = args[index];
         if (arg === '--matrix') {
@@ -807,6 +825,17 @@ function parseArgs(args: string[]): {
             guestJoinFixture = true;
             continue;
         }
+        if (arg === '--modes') {
+            // Task 1283: select which perf modes run. Validation (and the default set) belongs
+            // to the perf lane — `--host-probe` shares the generic parser, not the contract.
+            const value = args[index + 1];
+            modes = (value ?? '')
+                .split(',')
+                .map((entry) => entry.trim())
+                .filter((entry) => entry !== '');
+            index++;
+            continue;
+        }
         if (arg === '--keep') {
             // Diagnostics keep the scratch project after the run: teardown normally removes it,
             // which used to destroy the only evidence a failed step had (stub prompts, DB rows).
@@ -823,10 +852,22 @@ function parseArgs(args: string[]): {
             continue;
         }
         throw new Error(
-            `unknown argument "${arg}" (usage: fleet-e2e [--inject-failure <step>] [--guest-join-fixture] [--keep] | --matrix | --perf [--trials <n>] [--real-agents] [--agents <csv>] | --host-probe [--real-hosts] [--agents <csv>])`,
+            `unknown argument "${arg}" (usage: fleet-e2e [--inject-failure <step>] [--guest-join-fixture] [--keep] | --matrix | --perf [--trials <n>] [--real-agents] [--agents <csv>] [--modes <csv>] | --host-probe [--real-hosts] [--agents <csv>])`,
         );
     }
-    return { injectFailure, keep, guestJoinFixture, matrix, perf, trials, realAgents, hostProbe, realHosts, agents };
+    return {
+        injectFailure,
+        keep,
+        guestJoinFixture,
+        matrix,
+        perf,
+        trials,
+        realAgents,
+        hostProbe,
+        realHosts,
+        agents,
+        modes,
+    };
 }
 
 /**
@@ -838,6 +879,7 @@ export function parsePerfArgs(args: string[]): {
     trials: number;
     realAgents: boolean;
     agents: readonly string[];
+    modes: readonly PerfMode[];
     keep: boolean;
 } {
     const parsed = parseArgs(args);
@@ -847,7 +889,24 @@ export function parsePerfArgs(args: string[]): {
     const agents = parsed.agents ?? PERF_AGENTS;
     const unknown = agents.filter((name) => !(PERF_AGENTS as readonly string[]).includes(name));
     if (unknown.length > 0) throw new Error(`--agents expects a csv of: ${PERF_AGENTS.join(', ')}`);
-    return { trials: parsed.trials, realAgents: parsed.realAgents, agents, keep: parsed.keep };
+    return {
+        trials: parsed.trials,
+        realAgents: parsed.realAgents,
+        agents,
+        modes: perfModesOf(parsed.modes),
+        keep: parsed.keep,
+    };
+}
+
+/**
+ * Validate `--modes` (task 1283): absent means every mode; unknown names fail loudly instead of
+ * silently measuring a subset. Shared by `parsePerfArgs` and the direct `runFleetE2e` entry.
+ */
+export function perfModesOf(csv: string[] | undefined): readonly PerfMode[] {
+    const modes = csv ?? ALL_PERF_MODES;
+    const unknown = modes.filter((mode) => !ALL_PERF_MODES.includes(mode as PerfMode));
+    if (unknown.length > 0) throw new Error(`--modes expects a csv of: ${ALL_PERF_MODES.join(', ')}`);
+    return modes as readonly PerfMode[];
 }
 
 interface AgentCommandProbe {
@@ -1871,8 +1930,20 @@ const PERF_RECEIPT_JSON = join(REPO_ROOT, 'docs/reports/fleet-perf-receipt.json'
 const PERF_RECEIPT_MD = join(REPO_ROOT, 'docs/reports/fleet-perf-receipt.md');
 /** The KPI target matrix (task Q&A): the agents the fleet measures. */
 const PERF_AGENTS = ['claude', 'codex', 'pi'] as const;
+
+/**
+ * The perf modes (task 1283): `supervised-cold`/`supervised-warm` are 1273/1276's keyed task-turn
+ * lanes; `attached-ready` runs the SAME first-batch workload through 1282's attached-turn
+ * dispatcher against a bound fixture occupant. `--modes` selects the subset to run.
+ */
+const ALL_PERF_MODES = ['supervised-cold', 'supervised-warm', 'attached-ready'] as const;
+export type PerfMode = (typeof ALL_PERF_MODES)[number];
 /** One trial's deadline. The stub lane settles in seconds; this only bounds a genuinely hung turn. */
 const PERF_TRIAL_TIMEOUT_MS = 90_000;
+/** The busy wait the attached fixture occupant performs on its first trial (AC1: a visible phase). */
+const PERF_ATTACH_BUSY_MS = 250;
+/** How long the injected-failure attached trial waits before the abort ends it `outcome-unknown`. */
+const PERF_ATTACH_FAIL_MS = 2_000;
 /** The fixed workload every trial runs — identical text, so the digest pins what was measured. */
 const PERF_WORKLOAD = {
     title: 'Fleet perf trial task',
@@ -1892,9 +1963,14 @@ export interface PerfPhaseMark {
     executionId?: string;
 }
 
+/**
+ * The perf modes a trial ran under (task 1283). `attached-ready` is the new transport: the
+ * workload, model/provider/reasoning columns and trial-status vocabulary stay identical to the
+ * supervised lanes so the rows remain comparable (AC1).
+ */
 export interface PerfTrial {
     agent: string;
-    mode: 'cold' | 'resume' | 'warm';
+    mode: 'cold' | 'resume' | 'warm' | 'attached-ready';
     model: string;
     provider: string;
     reasoning: string;
@@ -2066,6 +2142,57 @@ export function probeWarm(agent: string, timeoutMs = 5_000): WarmProbe {
     };
 }
 
+/**
+ * Second-batch probe rows (task 1283 AC3): agents named by R3 that have no turn-session driver
+ * yet. Each row reuses {@link PerfWarm} — QUALIFICATION evidence (driver verdict + probed binary),
+ * never a latency — and stays OUT of every gain computation.
+ */
+const PERF_BATCH2_AGENTS = [
+    ['grok-build', 'grok'],
+    ['antigravity-cli', 'antigravity'],
+] as const;
+
+/**
+ * The attached-vs-supervised-warm verdict per agent (task 1283 AC2). `materiality` names the
+ * plan's provisional thresholds (p50 ≥15% lower AND p95 ≥10% lower); anything under them is
+ * reported as convenience, never as a measured speed win.
+ */
+export interface PerfModeComparison {
+    materiality: { p50PctLower: number; p95PctLower: number; source: string };
+    rows: Array<{
+        agent: string;
+        attachedP50Ms?: number;
+        attachedP95Ms?: number;
+        warmP50Ms?: number;
+        warmP95Ms?: number;
+        verdict: 'material-gain' | 'convenience-only' | 'no-gain' | 'inconclusive';
+    }>;
+}
+
+/**
+ * Verdict for one agent's attached-ready vs supervised-warm pair (task 1283 AC2). Missing
+ * measurements on either side are `inconclusive` — never folded into a gain. Under the plan's
+ * provisional materiality thresholds the gain is convenience only, and a slower attached lane
+ * is `no-gain`.
+ */
+export function modeGainVerdict(
+    attached: PerfMeasured,
+    warm: PerfMeasured,
+): 'material-gain' | 'convenience-only' | 'no-gain' | 'inconclusive' {
+    if (
+        attached.p50Ms === undefined ||
+        attached.p95Ms === undefined ||
+        warm.p50Ms === undefined ||
+        warm.p95Ms === undefined
+    ) {
+        return 'inconclusive';
+    }
+    const p50Gain = (warm.p50Ms - attached.p50Ms) / warm.p50Ms;
+    const p95Gain = (warm.p95Ms - attached.p95Ms) / warm.p95Ms;
+    if (p50Gain >= 0.15 && p95Gain >= 0.1) return 'material-gain';
+    return p50Gain > 0 || p95Gain > 0 ? 'convenience-only' : 'no-gain';
+}
+
 export interface PerfReceipt {
     schemaVersion: 1;
     generatedAt: string;
@@ -2073,9 +2200,16 @@ export interface PerfReceipt {
     repeatCommand: string;
     workloadDigest: string;
     targets: { provisional: true; note: string; agents: readonly string[] };
+    /** The modes this run selected (`--modes`; the full set when absent). */
+    modes: readonly PerfMode[];
     trials: PerfTrial[];
-    measured: Record<string, { cold: PerfMeasured; resume: PerfMeasured; warm: PerfWarm }>;
-    turnComparison: TurnPerfComparison;
+    measured: Record<string, { cold: PerfMeasured; resume: PerfMeasured; warm: PerfWarm; attached?: PerfMeasured }>;
+    /** The paired deterministic lane; absent when neither supervised mode was selected. */
+    turnComparison?: TurnPerfComparison;
+    /** R3 second-batch probes — qualification rows only, excluded from gains. */
+    batch2Probes: Array<{ agent: string } & PerfWarm>;
+    /** AC2 attached-ready vs supervised-warm verdict; present when both sides were measured. */
+    attachedComparison?: PerfModeComparison;
 }
 
 /** `--version` of the real host binary (probe targets), or null when absent. */
@@ -2290,24 +2424,79 @@ function writePerfReceipts(receipt: PerfReceipt, repeatCommand: string): void {
         }
         lines.push('', 'The warm row qualifies the selected binary only; the other installation is provenance.');
     }
-    lines.push(
-        '',
-        '## Paired keyed task-turn measurements (deterministic fixtures)',
-        '',
-        `Workload: ${receipt.turnComparison.workloadDigest}`,
-        `Pinned settings: ${JSON.stringify(receipt.turnComparison.settings)}`,
-        'Every mode uses the same bounded response and artifact contract. Pair order alternates.',
-        'These measurements cover the real process/action-contract path with a local model fixture; they make no paid-model speed claim.',
-        '',
-        '| agent | mode | p50Ms | p95Ms | completionRate | validatedPerHour | child processes |',
-        '| --- | --- | --- | --- | --- | --- | --- |',
-    );
-    for (const [agent, modes] of Object.entries(receipt.turnComparison.measured)) {
-        for (const [mode, row] of Object.entries(modes)) {
+    if (receipt.turnComparison !== undefined) {
+        lines.push(
+            '',
+            '## Paired keyed task-turn measurements (deterministic fixtures)',
+            '',
+            `Workload: ${receipt.turnComparison.workloadDigest}`,
+            `Pinned settings: ${JSON.stringify(receipt.turnComparison.settings)}`,
+            'Every mode uses the same bounded response and artifact contract. Pair order alternates.',
+            'These measurements cover the real process/action-contract path with a local model fixture; they make no paid-model speed claim.',
+            '',
+            '| agent | mode | p50Ms | p95Ms | completionRate | validatedPerHour | child processes |',
+            '| --- | --- | --- | --- | --- | --- | --- |',
+        );
+        for (const [agent, modes] of Object.entries(receipt.turnComparison.measured)) {
+            for (const [mode, row] of Object.entries(modes)) {
+                lines.push(
+                    `| ${agent} | ${mode} | ${row.p50Ms ?? ''} | ${row.p95Ms ?? ''} | ${row.completionRate ?? 0} | ${row.validatedPerHour ?? ''} | ${receipt.turnComparison.processes[agent]?.[mode as PerfTrial['mode']] ?? ''} |`,
+                );
+            }
+        }
+    }
+    if (receipt.batch2Probes.length > 0) {
+        // Task 1283 AC3: second-batch probes are rows, never gains.
+        lines.push(
+            '',
+            '## Batch-2 probes (R3)',
+            '',
+            '| agent | status | driver | binary | version | reason |',
+            '| ----- | ------ | ------ | ------ | ------- | ------ |',
+        );
+        for (const probe of receipt.batch2Probes) {
             lines.push(
-                `| ${agent} | ${mode} | ${row.p50Ms ?? ''} | ${row.p95Ms ?? ''} | ${row.completionRate ?? 0} | ${row.validatedPerHour ?? ''} | ${receipt.turnComparison.processes[agent]?.[mode as PerfTrial['mode']] ?? ''} |`,
+                `| ${probe.agent} | unsupported | ${probe.driver ?? 'none'} | ${probe.binary?.path ?? 'absent'} | ${probe.binary?.version ?? '—'} | ${probe.reason ?? ''} |`,
             );
         }
+        lines.push(
+            '',
+            'These agents have no turn-session driver yet; their rows are excluded from every gain computation.',
+        );
+    }
+    if (receipt.attachedComparison !== undefined) {
+        const materiality = receipt.attachedComparison.materiality;
+        lines.push(
+            '',
+            '## Mode comparison — attached-ready vs supervised-warm (task 1283)',
+            '',
+            `Materiality: attached p50 ≥ ${materiality.p50PctLower}% lower AND p95 ≥ ${materiality.p95PctLower}% lower (${materiality.source});`,
+            'anything under the thresholds is CONVENIENCE, not a measured speed win.',
+            '',
+            '| agent | attached p50Ms | attached p95Ms | warm p50Ms | warm p95Ms | verdict |',
+            '| ----- | -------------- | -------------- | ---------- | ---------- | ------- |',
+        );
+        for (const row of receipt.attachedComparison.rows) {
+            lines.push(
+                `| ${row.agent} | ${row.attachedP50Ms ?? ''} | ${row.attachedP95Ms ?? ''} | ${row.warmP50Ms ?? ''} | ${row.warmP95Ms ?? ''} | ${row.verdict} |`,
+            );
+        }
+        const convenience = receipt.attachedComparison.rows
+            .filter((row) => row.verdict === 'convenience-only')
+            .map((row) => row.agent);
+        if (convenience.length > 0) {
+            lines.push(
+                '',
+                `Convenience-only (under materiality): ${convenience.join(', ')} — attached-ready gains ergonomics, not speed.`,
+            );
+        }
+        // The warm column is the turn-fixture lane, the attached column the fleet-task lane; saying
+        // so here keeps the verdict from reading as a like-for-like paid-model speed delta.
+        lines.push(
+            '',
+            'Caveat: the attached column is the fleet-task lane and the warm column is the paired turn-fixture lane',
+            '(task turns against a local model fixture) — different layers, so a verdict compares ergonomics across layers.',
+        );
     }
     lines.push(
         '',
@@ -2316,11 +2505,293 @@ function writePerfReceipts(receipt: PerfReceipt, repeatCommand: string): void {
         '(the stub closes tasks without running quality gates) and is recorded absent.',
         'Warm rows (tasks 1276-1278) record QUALIFICATION of the installed binary — driver verdict,',
         'binary path and version. The separate paired comparison measures cold/resume/warm task turns',
-        'against one local fixture workload; its samples are not mixed with the fleet-task baseline.',
+        'against one local fixture workload; the Measured table above keeps the two lanes apart, while the',
+        'Mode comparison reads its warm column — that pairing spans layers, as its own caveat says.',
         'Repository-local binary paths are relative to the repository root; external paths stay absolute.',
         '',
     );
     writeFileSync(PERF_RECEIPT_MD, `${lines.join('\n')}\n`);
+}
+
+/**
+ * The `attached-ready` lane (task 1283): the SAME first-batch workload (`createPerfTask`) driven
+ * through 1282's `createAttachedTurnDispatcher` instead of the member's pull loop. A bound fixture
+ * occupant answers the keyed dispatch in-process with the correlated reply, so the turn resolves
+ * on the reply — exactly the production contract — while the receipt keeps the supervised rows'
+ * columns. Busy waits, attach overhead and the injected failure surface as phases or trial
+ * statuses (AC1); the responder is deterministic, so samples stay comparable across modes.
+ */
+async function runAttachedTrials(
+    p: Awaited<ReturnType<typeof scaffoldPerfProject>>,
+    context: Pick<PerfTrial, 'model' | 'provider' | 'reasoning' | 'tokens' | 'resources'>,
+    options: {
+        agent: string;
+        trials: number;
+        injectFailure: boolean;
+        binary: { path: string; version: string | null } | null;
+        hostVersion?: string;
+    },
+): Promise<PerfTrial[]> {
+    const inbox = new InboxService({ getDb: async () => await p.openDb() });
+    // Bind the fixture occupant to the roster member (G75 R3) and complete the report handshake —
+    // the attach overhead this lane measures. The binding pin arrives in the join output.
+    const attachStartedAt = Date.now();
+    const joined = jsonOk<{
+        guest: { id: string; memberBinding?: { memberId: string; ownerEpoch: number; occupancyGeneration: number } };
+    }>(['agent', 'join', '--role', 'coder', '--member', p.coderId, '--json'], p.scratch);
+    const binding = joined.guest.memberBinding;
+    if (binding === undefined) {
+        throw new Error(`attached lane: join did not bind member ${p.coderId} (guest ${joined.guest.id})`);
+    }
+    const pin = `${binding.ownerEpoch}:${binding.occupancyGeneration}`;
+    const report = jsonOk<{ accepted: boolean }>(
+        [
+            'agent',
+            'report',
+            '--state',
+            'working',
+            '--seq',
+            String(process.hrtime.bigint()),
+            '--spec',
+            p.coderId,
+            '--pin',
+            pin,
+            '--json',
+        ],
+        p.scratch,
+    );
+    if (!report.accepted) throw new Error(`attached lane: the working report was not accepted for ${p.coderId}`);
+    const attachMs = Date.now() - attachStartedAt;
+    const attachMark: PerfPhaseMark = { phase: 'attach', at: new Date().toISOString(), monotonicMs: attachMs };
+
+    // The single enqueue path (R5): the attached dispatcher's keyed send rides FleetDispatcher,
+    // adapted onto the scratch project's inbox service (the deps are structural picks).
+    const fleetDispatcher = new FleetDispatcher({
+        coordination: {
+            // Forward the keyed columns: the fixture occupant finds its request BY requestKey,
+            // and dropping the extra bag would strand the dispatch as an unkeyed chat message.
+            sendMessage: async (
+                fromId: string | null,
+                toId: string,
+                body: string,
+                replyTo: string | undefined,
+                requestKey: string | undefined,
+                extra: { kind?: string; taskId?: string; parentRunId?: string } | undefined,
+            ) => {
+                const sent = await inbox.send({
+                    from: fromId ?? 'human',
+                    to: toId,
+                    body,
+                    ...(replyTo !== undefined ? { replyTo } : {}),
+                    ...(requestKey !== undefined ? { requestKey } : {}),
+                    ...(extra?.kind !== undefined ? { kind: extra.kind as never } : {}),
+                    ...(extra?.taskId !== undefined ? { taskId: extra.taskId } : {}),
+                    ...(extra?.parentRunId !== undefined ? { parentRunId: extra.parentRunId } : {}),
+                });
+                return { msgId: sent.message.id, toId, status: sent.message.status, injected: false };
+            },
+            getMessage: async (id: string) => await inbox.get(id),
+        } as unknown as Pick<AgentCoordinationService, 'sendMessage' | 'getMessage'>,
+        // The attached dispatcher reads REPLIES, never coordination_runs rows.
+        runs: { listByMessageId: async () => [] },
+    });
+
+    const trials: PerfTrial[] = [];
+    for (let index = 0; index < options.trials + (options.injectFailure ? 1 : 0); index++) {
+        const failArm = options.injectFailure && index === options.trials; // failure runs LAST (1273 rule)
+        const busyArm = index === 0; // the first trial carries the busy wait (AC1)
+        const wbs = createPerfTask(p.scratch, false);
+        const requestId = `perf-attached-${wbs}`;
+        const correlation = {
+            runId: `perf-attached-${Date.now()}`,
+            executionId: `exec-${requestId}`,
+            requestId,
+            attempt: 1,
+        };
+        const requestKey = `fleet:task:${requestId}:1`;
+        const phases: PerfPhaseMark[] = [attachMark];
+        const dispatcher = createAttachedTurnDispatcher({
+            dispatcher: fleetDispatcher,
+            replies: async (messageId) =>
+                (await inbox.list(p.coderId, 'out', { limit: 500 })).messages.filter(
+                    (message) => message.inReplyTo === messageId,
+                ),
+            binding: {
+                memberId: p.coderId,
+                ownerEpoch: binding.ownerEpoch,
+                occupantGeneration: binding.occupancyGeneration,
+            },
+            pollMs: 50,
+        });
+
+        // The fixture occupant: read the keyed dispatch, (optionally) sit busy, close the task
+        // through the source-local CLI exactly like the stub lane, then answer with the
+        // correlation + pin. The injected failure never answers; the abort ends the wait. The
+        // loop is bounded so a dispatch that never lands cannot hang the whole perf run.
+        const respondDeadline = Date.now() + PERF_TRIAL_TIMEOUT_MS;
+        let respondError: unknown;
+        const respond = (async () => {
+            for (;;) {
+                if (Date.now() > respondDeadline) return; // the dispatch turn will report its own deadline
+                const queued = (await inbox.list(p.coderId, 'in', { limit: 500 })).messages.find(
+                    (message) => message.requestKey === requestKey && message.status === 'queued',
+                );
+                if (queued !== undefined) {
+                    if (busyArm) {
+                        const busyStart = Date.now();
+                        await sleep(PERF_ATTACH_BUSY_MS);
+                        phases.push({
+                            phase: 'busy-wait',
+                            at: new Date().toISOString(),
+                            monotonicMs: Date.now() - busyStart,
+                        });
+                    }
+                    if (failArm) return; // no reply: the dispatcher's abort ends the turn unknown
+                    cliOk(['task', 'update', wbs, 'wip', '--no-lifecycle'], p.scratch);
+                    cliOk(
+                        ['task', 'update', wbs, '--section', 'Solution', '--from-file', '/dev/stdin', '--no-lifecycle'],
+                        p.scratch,
+                        {
+                            input: 'scripts/commands/fleet-e2e.ts:1 — the attached fixture occupant closed this trial task.\n',
+                        },
+                    );
+                    cliOk(
+                        ['task', 'update', wbs, '--section', 'Testing', '--from-file', '/dev/stdin', '--no-lifecycle'],
+                        p.scratch,
+                        {
+                            input:
+                                'The attached fixture occupant drove ' +
+                                wbs +
+                                ' through the source-local CLI (todo -> wip -> testing -> done).\n',
+                        },
+                    );
+                    cliOk(['task', 'update', wbs, 'testing', '--no-lifecycle'], p.scratch);
+                    cliOk(
+                        [
+                            'task',
+                            'update',
+                            wbs,
+                            'done',
+                            '--force-done',
+                            '--reason',
+                            'fleet-e2e attached fixture',
+                            '--no-lifecycle',
+                            '--json',
+                        ],
+                        p.scratch,
+                    );
+                    await inbox.reply(
+                        queued.id,
+                        p.coderId,
+                        JSON.stringify({
+                            requestId,
+                            attempt: 1,
+                            ownerEpoch: binding.ownerEpoch,
+                            occupancyGeneration: binding.occupancyGeneration,
+                            artifact: 'scripts/commands/fleet-e2e.ts:1',
+                        }),
+                    );
+                    return;
+                }
+                await sleep(50);
+            }
+        })().catch((error: unknown) => {
+            // A crashed responder must surface in the trial's reason, not vanish as an
+            // unhandled rejection while the dispatch polls on.
+            respondError = error;
+        });
+
+        const abort = new AbortController();
+        // Every trial is bounded by the lane's own timeout: the dispatcher's built-in deadline
+        // is one hour (production contract), far past what a perf sample may wait. Abort ends
+        // the turn outcome-unknown (1282), keeping the trial resumable rather than force-failed.
+        const deadlineTimer = setTimeout(() => abort.abort(), PERF_TRIAL_TIMEOUT_MS);
+        const failTimer = failArm ? setTimeout(() => abort.abort(), PERF_ATTACH_FAIL_MS) : undefined;
+        const describe = (base: string): string =>
+            respondError === undefined ? base : `${base}; fixture responder failed: ${errorMessage(respondError)}`;
+        try {
+            const dispatchStartedAt = Date.now();
+            const result = await dispatcher.dispatchTurn({
+                agent: options.agent,
+                prompt: `/sp:dev-run ${wbs} --auto`,
+                cwd: p.scratch,
+                role: 'coder',
+                correlation,
+                signal: abort.signal,
+            });
+            const durationMs = Date.now() - dispatchStartedAt;
+            await respond;
+            if (result.kind !== 'warm') {
+                trials.push({
+                    ...context,
+                    agent: options.agent,
+                    mode: 'attached-ready',
+                    status: 'failed',
+                    phases,
+                    binary: options.binary,
+                    ...(options.hostVersion !== undefined ? { hostBinaryVersion: options.hostVersion } : {}),
+                    reason: `attached dispatch returned ${result.kind}, expected a warm turn`,
+                });
+                continue;
+            }
+            phases.push({
+                phase: result.outcome.kind === 'success' ? 'terminal' : 'deadline',
+                at: result.outcome.terminalAt,
+                monotonicMs: durationMs,
+            });
+            if (result.outcome.kind !== 'success') {
+                trials.push({
+                    ...context,
+                    agent: options.agent,
+                    mode: 'attached-ready',
+                    status: failArm ? 'timed-out' : 'failed',
+                    // The aborted wait still OCCUPIED the member for its wall time, so the
+                    // throughput denominator sees it (same convention as the paired lane's
+                    // injected-failure row).
+                    durationMs,
+                    phases,
+                    binary: options.binary,
+                    ...(options.hostVersion !== undefined ? { hostBinaryVersion: options.hostVersion } : {}),
+                    reason: failArm
+                        ? describe(
+                              `--inject-failure: the occupant never replied; aborted after ${PERF_ATTACH_FAIL_MS}ms; outcome-unknown stays in the denominator`,
+                          )
+                        : describe(`attached turn ended ${result.outcome.kind}: ${result.outcome.reason}`),
+                });
+                continue;
+            }
+            const done = jsonOk<{ status: string }>(['task', 'show', wbs, '--json'], p.scratch);
+            trials.push({
+                ...context,
+                agent: options.agent,
+                mode: 'attached-ready',
+                status: done.status === 'done' ? 'validated' : 'failed',
+                ...(done.status === 'done' ? { durationMs } : {}),
+                phases,
+                binary: options.binary,
+                ...(options.hostVersion !== undefined ? { hostBinaryVersion: options.hostVersion } : {}),
+                ...(done.status !== 'done'
+                    ? { reason: describe(`correlated reply arrived but task status=${done.status}`) }
+                    : {}),
+            });
+        } catch (error) {
+            await respond.catch(() => {});
+            trials.push({
+                ...context,
+                agent: options.agent,
+                mode: 'attached-ready',
+                status: 'failed',
+                phases,
+                binary: options.binary,
+                ...(options.hostVersion !== undefined ? { hostBinaryVersion: options.hostVersion } : {}),
+                reason: describe(errorMessage(error)),
+            });
+        } finally {
+            if (failTimer !== undefined) clearTimeout(failTimer);
+            clearTimeout(deadlineTimer);
+        }
+    }
+    return trials;
 }
 
 /**
@@ -2341,7 +2812,15 @@ export async function runFleetPerf(options: {
     injectFailure: StepName | null;
     realAgents: boolean;
     agents: readonly string[];
+    modes: readonly PerfMode[];
 }): Promise<number> {
+    // Mode selection (task 1283): the supervised lanes keep 1273's structure; `attached-ready`
+    // adds the 1282 dispatcher lane per agent. The warm QUALIFICATION row is cheap provenance and
+    // stays in every run so the receipt's measured record keeps its shape.
+    const modes = options.modes;
+    const supervisedCold = modes.includes('supervised-cold');
+    const supervisedWarm = modes.includes('supervised-warm');
+    const attachedReady = modes.includes('attached-ready');
     const revision = Bun.spawnSync(['git', 'rev-parse', 'HEAD'], { cwd: REPO_ROOT });
     if (revision.exitCode !== 0) throw new Error('fleet-perf: cannot record the repository revision');
     const setting = options.realAgents ? 'unavailable (agent default)' : 'not-applicable (deterministic stub)';
@@ -2355,7 +2834,7 @@ export async function runFleetPerf(options: {
     const targets = PERF_AGENTS.filter((agent) => options.agents.includes(agent));
     const warmProbes = new Map<string, WarmProbe>();
     for (const agent of targets) warmProbes.set(agent, probeWarm(agent));
-    const repeatCommand = `bun run fleet-e2e --perf --trials ${options.trials}${options.realAgents ? ' --real-agents' : ''}${options.agents.length === PERF_AGENTS.length ? '' : ` --agents ${options.agents.join(',')}`}${options.injectFailure !== null ? ` --inject-failure ${options.injectFailure}` : ''}${options.keep ? ' --keep' : ''}`;
+    const repeatCommand = `bun run fleet-e2e --perf --trials ${options.trials}${options.realAgents ? ' --real-agents' : ''}${options.agents.length === PERF_AGENTS.length ? '' : ` --agents ${options.agents.join(',')}`}${modes.length === ALL_PERF_MODES.length ? '' : ` --modes ${modes.join(',')}`}${options.injectFailure !== null ? ` --inject-failure ${options.injectFailure}` : ''}${options.keep ? ' --keep' : ''}`;
     const workloadDigest = `sha256:${createHash('sha256')
         .update(`${PERF_WORKLOAD.title}\n${PERF_WORKLOAD.ac}${PERF_WORKLOAD.design}`)
         .digest('hex')}`;
@@ -2378,21 +2857,31 @@ export async function runFleetPerf(options: {
             const dao = new SystemEventDao(await p.openDb());
             const runs = new CoordinationRunDao(await p.openDb());
             const inbox = new InboxService({ getDb: async () => await p.openDb() });
-            for (const specId of [project.plannerId, project.coderId]) {
-                p.loopPids.push(
-                    spawnLoop(p.scratch, { binDir: options.realAgents ? '' : p.binDir, stubLog: p.stubLog }, specId),
+            // The supervised lanes dispatch through the member's pull loop, so the loops only
+            // exist when `supervised-cold` runs. `attached-ready` binds a fixture occupant whose
+            // in-process responder answers the keyed dispatch — a live loop would claim the
+            // request message first, so it is killed before the attached trials start.
+            if (supervisedCold) {
+                for (const specId of [project.plannerId, project.coderId]) {
+                    p.loopPids.push(
+                        spawnLoop(
+                            p.scratch,
+                            { binDir: options.realAgents ? '' : p.binDir, stubLog: p.stubLog },
+                            specId,
+                        ),
+                    );
+                }
+                // Wait for the orchestrator claim so the first trial's dispatch has an owner.
+                const claims = new ProjectClaimDao(await project.openDb());
+                await pollUntil(
+                    `${agent}: the planner orchestrator claim`,
+                    async () => {
+                        const claim = await claims.get(p.scratch, 'orchestrator');
+                        return claim !== null && claim.expiresAt > Date.now() ? claim : undefined;
+                    },
+                    BOUNDS.loops,
                 );
             }
-            // Wait for the orchestrator claim so the first trial's dispatch has an owner.
-            const claims = new ProjectClaimDao(await project.openDb());
-            await pollUntil(
-                `${agent}: the planner orchestrator claim`,
-                async () => {
-                    const claim = await claims.get(p.scratch, 'orchestrator');
-                    return claim !== null && claim.expiresAt > Date.now() ? claim : undefined;
-                },
-                BOUNDS.loops,
-            );
 
             const driveTrial = async (index: number, hang: boolean): Promise<void> => {
                 const mode: 'cold' | 'resume' = index === 0 ? 'cold' : 'resume';
@@ -2530,7 +3019,7 @@ export async function runFleetPerf(options: {
                 }
             };
 
-            for (let index = 0; index < options.trials; index++) {
+            for (let index = 0; index < (supervisedCold ? options.trials : 0); index++) {
                 await driveTrial(index, false);
                 // Between trials: the coder must be fully quiet so the next task's turn is clean.
                 if (index < options.trials - 1) {
@@ -2549,8 +3038,30 @@ export async function runFleetPerf(options: {
             }
             // The armed failure runs LAST in the first agent's project only — a hung turn holds
             // the write slot and would block every later trial.
-            if (options.injectFailure !== null && agent === PERF_AGENTS[0]) {
+            if (options.injectFailure !== null && supervisedCold && agent === PERF_AGENTS[0]) {
                 await driveTrial(options.trials, true);
+            }
+            if (attachedReady) {
+                // No loops on the member now: the attached occupant replaces the pull loop as
+                // the executor for this lane (the finally below reaps anything supervised left).
+                for (const pid of p.loopPids) {
+                    try {
+                        process.kill(pid, 'SIGTERM');
+                    } catch {
+                        /* already gone */
+                    }
+                }
+                p.loopPids = [];
+                await sleep(1_000);
+                trials.push(
+                    ...(await runAttachedTrials(p, trialContext, {
+                        agent,
+                        trials: options.trials,
+                        injectFailure: options.injectFailure !== null && agent === PERF_AGENTS[0],
+                        binary: binaryRow,
+                        ...(hostVersion !== undefined ? { hostVersion } : {}),
+                    })),
+                );
             }
         } catch (error) {
             failures.push(
@@ -2590,13 +3101,56 @@ export async function runFleetPerf(options: {
             cold,
             resume,
             warm: warmRow(agent, warmProbes.get(agent) ?? { driver: null, binary: null, verifiedVersion: null }),
+            ...(attachedReady ? { attached: perfMeasured(agentTrials, 'attached-ready') } : {}),
         };
     }
-    const turnComparison = await runPairedTurnPerf(targets, options.trials, options.injectFailure !== null);
-    for (const trial of turnComparison.trials) {
+    // The paired deterministic lane belongs to the supervised modes; an attached-only run skips it.
+    const turnComparison =
+        supervisedCold || supervisedWarm
+            ? await runPairedTurnPerf(targets, options.trials, options.injectFailure !== null)
+            : undefined;
+    for (const trial of turnComparison?.trials ?? []) {
         if (trial.status !== 'validated' && !trial.injected)
             failures.push(`${trial.agent} ${trial.mode}: ${trial.reason}`);
     }
+    // R3 second-batch probes: qualification rows only — no driver, no latency, excluded from gains.
+    // The binary column is PATH provenance (`which`), so a later driver lands against evidence.
+    const batch2Probes = PERF_BATCH2_AGENTS.map(([agent, bin]) => ({
+        agent,
+        ...warmRow(agent, {
+            driver: null,
+            binary:
+                Bun.which(bin) !== null
+                    ? { path: Bun.which(bin) as string, version: hostBinaryVersion(bin) ?? null }
+                    : null,
+            verifiedVersion: null,
+        }),
+    }));
+    // AC2: attach the mode verdict when both sides of the comparison were measured.
+    const attachedComparison: PerfModeComparison | undefined = attachedReady
+        ? {
+              materiality: {
+                  p50PctLower: 15,
+                  p95PctLower: 10,
+                  source: 'docs/plans/2026-10-21-fleet-performance-measurement.md (provisional targets)',
+              },
+              rows: targets.map((agent) => {
+                  const attached = measured[agent]?.attached;
+                  const warm = turnComparison?.measured[agent]?.warm;
+                  return {
+                      agent,
+                      ...(attached?.p50Ms !== undefined ? { attachedP50Ms: attached.p50Ms } : {}),
+                      ...(attached?.p95Ms !== undefined ? { attachedP95Ms: attached.p95Ms } : {}),
+                      ...(warm?.p50Ms !== undefined ? { warmP50Ms: warm.p50Ms } : {}),
+                      ...(warm?.p95Ms !== undefined ? { warmP95Ms: warm.p95Ms } : {}),
+                      verdict:
+                          attached === undefined || warm === undefined
+                              ? ('inconclusive' as const)
+                              : modeGainVerdict(attached, warm),
+                  };
+              }),
+          }
+        : undefined;
     const receipt: PerfReceipt = {
         schemaVersion: 1,
         generatedAt: new Date().toISOString(),
@@ -2610,9 +3164,13 @@ export async function runFleetPerf(options: {
                 : 'deterministic stub lane — same binary everywhere; comparisons are provisional. Warm rows record qualification of the INSTALLED binary (tasks 1276-1278) and carry no latency',
             agents: targets,
         },
+        /** The modes this run selected (`--modes`; the full set when absent). */
+        modes,
         trials,
         measured,
-        turnComparison,
+        ...(turnComparison !== undefined ? { turnComparison } : {}),
+        batch2Probes,
+        ...(attachedComparison !== undefined ? { attachedComparison } : {}),
     };
     writePerfReceipts(receipt, repeatCommand);
     if (failures.length > 0) {
@@ -2628,14 +3186,33 @@ export async function runFleetPerf(options: {
 }
 
 export async function runFleetE2e(args: string[]): Promise<number> {
-    const { injectFailure, keep, guestJoinFixture, matrix, perf, trials, realAgents, hostProbe, realHosts, agents } =
-        parseArgs(args);
+    const {
+        injectFailure,
+        keep,
+        guestJoinFixture,
+        matrix,
+        perf,
+        trials,
+        realAgents,
+        hostProbe,
+        realHosts,
+        agents,
+        modes,
+    } = parseArgs(args);
     if (hostProbe) {
         return await runHostProbe({ realHosts, keep, ...(agents === undefined ? {} : { agents }) });
     }
     if (matrix) return await runExecutorMatrix({ keep });
     // The perf lane owns its own default: absent `--agents` means every target (1273 R4).
-    if (perf) return await runFleetPerf({ trials, keep, injectFailure, realAgents, agents: agents ?? PERF_AGENTS });
+    if (perf)
+        return await runFleetPerf({
+            trials,
+            keep,
+            injectFailure,
+            realAgents,
+            agents: agents ?? PERF_AGENTS,
+            modes: perfModesOf(modes),
+        });
     // Canonical scratch root: on macOS `os.tmpdir()` is a symlinked path, and the fleet
     // normalizes project paths (`normalizeProjectPath`), so a raw `/var/...` path would never
     // match the claim/session rows the loops write under `/private/var/...`.

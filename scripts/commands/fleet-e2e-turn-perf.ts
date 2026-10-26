@@ -71,8 +71,8 @@ export interface TurnPerfComparison {
     workloadDigest: string;
     settings: { model: string; provider: string; reasoning: string };
     trials: TurnPerfTrial[];
-    processes: Record<string, Record<PerfTrial['mode'], number>>;
-    measured: Record<string, Record<PerfTrial['mode'], PerfMeasured>>;
+    processes: Record<string, Partial<Record<PerfTrial['mode'], number>>>;
+    measured: Record<string, Partial<Record<PerfTrial['mode'], PerfMeasured>>>;
 }
 
 const RESPONSE = 'fixture-ok';

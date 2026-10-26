@@ -12,9 +12,10 @@ test('G74 R1: paired cold, resume and warm work validates one workload and retai
     for (const agent of ['claude', 'codex', 'pi']) {
         const rows = result.trials.filter((row) => row.agent === agent);
         expect(new Set(rows.map((row) => row.mode))).toEqual(new Set(['cold', 'resume', 'warm']));
-        expect(result.processes[agent]).toEqual({ cold: 2, resume: 2, warm: 1 });
-        expect(result.measured[agent]?.warm.p95Ms).toBeGreaterThan(0);
-        expect(result.measured[agent]?.warm.validatedPerHour).toBeGreaterThan(0);
+        const processes = result.processes[agent];
+        expect(processes).toEqual({ cold: 2, resume: 2, warm: 1 });
+        expect(result.measured[agent]?.warm?.p95Ms).toBeGreaterThan(0);
+        expect(result.measured[agent]?.warm?.validatedPerHour).toBeGreaterThan(0);
         for (const row of rows) {
             expect(row.model).toBe('fixture-v1');
             expect(row.provider).toBe('local-fixture');
@@ -33,8 +34,8 @@ test('G74 R1: paired cold, resume and warm work validates one workload and retai
     const rejected = result.trials.filter((row) => row.status === 'failed');
     expect(rejected).toHaveLength(1);
     expect(rejected[0]).toMatchObject({ agent: 'claude', mode: 'warm', injected: true, contractValidated: false });
-    expect(result.measured.claude?.warm.completionRate).toBeCloseTo(2 / 3);
+    expect(result.measured.claude?.warm?.completionRate).toBeCloseTo(2 / 3);
     const warmRows = result.trials.filter((row) => row.agent === 'claude' && row.mode === 'warm');
     const occupiedMs = warmRows.reduce((sum, row) => sum + (row.durationMs ?? 0), 0);
-    expect(result.measured.claude?.warm.validatedPerHour).toBeCloseTo((2 * 3_600_000) / occupiedMs, 2);
+    expect(result.measured.claude?.warm?.validatedPerHour).toBeCloseTo((2 * 3_600_000) / occupiedMs, 2);
 }, 30_000);
