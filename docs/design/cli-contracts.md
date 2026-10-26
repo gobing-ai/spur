@@ -3,7 +3,7 @@ kind: design
 title: "CLI grammar, initialization, agents, teams and rules"
 status: implemented
 created_at: 2026-09-09
-updated_at: 2026-10-24
+updated_at: 2026-10-26
 related: ["0822", "0850", "0856", "0857", "0860", "0861", "1064", "1080", "1081"]
 tags: [contract, cli, agent]
 ---
@@ -760,11 +760,18 @@ sees a member waiting on a human and the Board can show `needs human`.
 - An accepted report writes the `agent.lifecycle.changed` ledger row (`system_events`, no new table);
   the highest-seq accepted row for the actor (racing reports cannot regress it) is the member's current state. `--json` returns
   `{ member, state, seq, accepted, observation }`.
+- A **bound** member's report (task 1282) requires `--pin <ownerEpoch>:<occupancyGeneration>`: a
+  pinless or malformed pin and a stale pin are both exit 2 before any lifecycle write. The first
+  matching report writes `handshakeAt` once (earliest kept) and sets `stageEligible`, completing the
+  attached handshake. A plain guest's report path is unchanged.
 
 `agent join` makes a live interactive session a **guest occupant** that pulls its own work instead of
 being dispatched to; `agent leave` retires it. Identity is a `coordination_runs` row plus a
 `.spur/run/guests/<id>.json` record; the lease is a `ProjectClaimDao` claim on slot `guest:<id>` with
-the shared claim TTL.
+the shared claim TTL. `join --member <id>` binds a **declared** member instead of registering a plain
+guest (task 1281): the roster validates role and executor, a capability proof gates the binding, and
+it takes the member's occupancy generation plus the `guest:<member-id>` claim, so the record id is the
+member's inbox address. Boundary shapes: [verified attached occupants](fleet-attached-occupants.md) §4.
 
 - `join` validates a known Layer-1 role (`scribe | coder | reviewer | planner`), allocates
   `<role>-g<n>` when `--id` is absent, and runs an expiry sweep first. An id colliding with a declared
@@ -772,6 +779,10 @@ the shared claim TTL.
 - `leave` defaults to the guest whose record matches `CLAUDE_CODE_SESSION_ID` / `--session-id`; no
   match or an unknown id exits 2. Leaving releases the lease, returns claimed messages to `queued`,
   marks the occupant `exited`, then deletes the record.
+- A bound member's leave drains first (task 1282): it stops new assignment and waits up to
+  `--drain-timeout <ms>` (default `ATTACHED_DRAIN_GRACE_MS`, one claim TTL = 30 s) for the in-flight
+  turn to settle, then retires the occupant; `--json` adds `drained`. An unsettled turn stays
+  resumable, and no process is ever signalled.
 - A guest is never supervised and never a stage target: role resolution counts declared members only,
   and `spur agent run --spec <guest>` is refused (no executor attestation for a `requiresCapabilities`
   stage). Guests are addressed by message (`--to <guest-id>`); the `fleet-join` skill loops

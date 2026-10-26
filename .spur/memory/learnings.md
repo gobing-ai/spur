@@ -6730,3 +6730,137 @@ Date: 2026-10-16 · Branch: sp/runall-l1-05cd · Tasks: 1218, 1219, 1220 (all do
   shape (`| # | Priority | Dimension | Finding | Location | Disposition |`) and let the dispositions
   derive the stated `Confidence`.
 
+**Drift repaired** (6 files, all under `docs/`; no task/feature corpus touched, no missing `04` row re-added):
+
+| Doc | Drift (code says / doc said) | Repair |
+| --- | --- | --- |
+| `docs/design/fleet-attached-occupants.md` | `stageEligible` set by bind-time wake probe / doc claimed probe was authoritative; `status: proposed`, "unimplemented"; no `--pin`, `--drain-timeout`, reply-body, deadline, or failure-suite facts | Handshake semantics (`fleet-guest-service.ts:640`), implemented status per §3/§4/§5 (1279/1281/1282), pin exit-2 + handshake-once, attached dispatcher reply contract + 1 h `outcome-unknown` deadline, drain bound + `drained`, task-1282 failure matrix |
+| `docs/design/fleet-task-turn-execution.md` | §6 described `--perf` without the mode selector, gain verdicts or batch-2 probes | Added `--modes` lanes, `attachedComparison` thresholds (`modeGainVerdict`), cross-layer caveat, `batch2Probes` exclusion |
+| `docs/design/cli-contracts.md` | `agent report`/`leave`/`join` signatures documented without `--pin`, `--drain-timeout`, `--member` (1281/1282 CLI surface) | Signature bullets + exit codes + `drained` envelope, `join --member` binding paragraph, pointer to satellite §4 |
+| `docs/04_DESIGN.md` | both fleet rows labelled "proposed" / only §3+§4 implemented | Implemented labels, §5 by 1282, `--modes` lane note — pointers only, no new rows |
+| `docs/03_ARCHITECTURE.md` | fleet binding paragraph stopped at 1281 | `memberAttachments` fail-closed hold, `member-busy`, attached dispatcher over ADR-145 contract, drain + `outcome-unknown` |
+| `docs/00_ADR.md` | ADR-145/146 `Status: Proposed` after full implementation (1273–1283) | `Accepted (implemented 2026-10-26)`; decision text, IDs and dates untouched |
+
+Verification: `spur rule run` 51 rules → 0 findings; `repo-wide-tests/adr-supersession` + workflow-consolidation-absence → 15 pass; help-doc parity (`apps/cli`, `plugins/sp`) → 5 pass; every relative link target in the changed docs resolves; `spur-dev link-check` OK. Not run: full `spur-check-feature` (docs-only change, biome ignores `*.md`).
+
+Skipped: `docs/01_PRD.md`/`02_ROADMAP.md` (no G75/attached references — grep-verified, nothing to sync). Risk: flipping ADR status is a metadata correction, not an amendment — if the operator intends "Proposed" to mean "feature not yet exit-complete", revert those two lines only.
+
+# Working learnings — wrap 1282, 1283
+
+Batch: G75 attached occupants. Tasks captured at
+`.spur/run/e9e66340-b3b0-44ad-b08c-569f1d69365b-wrapup-tasks.json` → `["1282","1283"]`.
+
+## 2026-10-26 — 1282 (attached stage execution, human arbitration, safe detach)
+
+### Handshake beats a bind-time probe
+The written design set `stageEligible` from the binder's host wake probe
+(`bun run fleet-e2e --host-probe`). E2E showed probe-less hosts bound `pull-only` and stayed
+ineligible forever. Fix: keep the probe as a hint (`stageEligible = wake !== null && wake !== 'pull-only'`
+at bind) and let the **first pin-matched lifecycle report** set `handshakeAt` + `stageEligible = true` —
+a session that reports with the binding pin has proven it reads its inbox, which is the only liveness
+fact stages need (`packages/app/src/services/fleet-guest-service.ts:640`). Lesson: a capability probe
+captured once at bind time is a guess; an in-band proof from the live session is the invariant.
+
+### Reuse the existing readiness enum instead of extending it
+Readiness mapped onto `agent report working|idle|blocked` → `recordLifecycle` → `MemberLifecycleState`.
+A `draining` report value was rejected: it is a new public enum value needing consent, and drain is
+internal to `leave`. `draining` lives on the binding record only. Before adding an enum member, check
+whether the state is observable by an existing surface and whether the new value is really a
+transition-local flag.
+
+### Fence before write, write the handshake once
+`agent report` on a bound member refuses a pinless/malformed pin and a stale pin with exit 2 **before**
+any lifecycle write, and `fenceMemberPin` writes `handshakeAt` only if absent (earliest kept). A late
+or racing report must not move the fence timestamp or leak a lifecycle observation from a superseded
+generation (`apps/cli/src/commands/agent/report.ts:55`, `fleet-guest-service.ts:621`).
+
+### Correlated-only completion is the whole safety property
+Only the inbox reply whose `inReplyTo` links the dispatch request and whose body parses as
+`{requestId, attempt, ownerEpoch, occupancyGeneration, artifact?}` certifies a stage. Unlinked, foreign,
+stale or unparseable replies are diagnostic events, never completion — this is exactly the "a delivered
+message is not completed work" invariant, and it needs tests per rejection class (8 unit cases in
+`packages/app/tests/services/attached-turn-dispatch.test.ts`).
+
+### Attached turns have no process to time out
+A human turn has no child process, so the dispatcher deadline bounds only the wait: expiry is
+`outcome-unknown` (resumable), never `failure` (one hour, matching a long human turn). Do not reuse
+supervised-trial semantics where "deadline passed" meant failure.
+
+### Derive the drain bound, then expose it
+`ATTACHED_DRAIN_GRACE_MS = CLAIM_TTL_MS` (30 s) reuses one claim cycle instead of a new magic number,
+and `leave --drain-timeout <ms>` bounds the wait for operators and tests while the default stays the
+design value. Unsettled ⇒ retire anyway, keep the turn resumable, never signal the human-owned process.
+
+### Fail closed on the seam, and wire it for real
+`StrategyContext.memberAttachments` is optional; a read error treats every occupant as un-handshook and
+warns. And the seam had to be supplied by `makeFleetRuntime` — otherwise AC1/AC2 would have been true
+only in tests. Any new optional strategy seam needs a production supplier in the same change.
+
+### Retire fence protects the current owner
+`retire` compares the member's `maxGeneration` and returns early when the record's generation is
+superseded, so a stale binder releases neither the occupant row nor claimed messages.
+
+### Pipeline gotcha (recurring)
+Remediate re-entry clears the run's `-review-answer.txt`, so a resumed task needs a re-touch before the
+review gate re-reads a verdict. Bookkeeping only, no code impact, but it costs a cycle each time.
+
+### Test layout that paid off
+App-level unit matrix for the dispatcher (rejection classes) plus a CLI-level E2E with a fixture occupant
+child process driving `join → report --pin → drain` (6 cases). The E2E is what caught both design
+deviations; unit tests alone would have passed the wrong design.
+
+## 2026-10-26 — 1283 (combined supervised + attached perf receipt)
+
+### Extend the existing receipt driver, never add a harness
+`--modes <csv>` selects `supervised-cold|supervised-warm|attached-ready` inside `fleet-e2e --perf`;
+absent = all, unknown name throws. The receipt schema gained `modes`, `attachedComparison`,
+`batch2Probes` and an optional `attached` measurement. Reuse kept one workload digest across lanes.
+
+### Validate the selector in every entry path
+`perfModesOf` is shared by `parsePerfArgs` and the direct `runFleetE2e` entry — validating only the
+parsed-args path leaves the programmatic entry unguarded.
+
+### Never manufacture a gain
+`modeGainVerdict`: missing measurement ⇒ `inconclusive`; p50 <15% or p95 <10% improvement ⇒
+`convenience-only`; slower ⇒ `no-gain`; only both thresholds ⇒ `material-gain`. Thresholds are labelled
+with the plan as their source because they are provisional. Splitting the under-threshold band into
+`convenience-only` vs `no-gain` is stricter than the AC wording and was accepted as such.
+
+### Say which layers a comparison pairs
+The attached column measures the fleet-task lane; the warm column measures the turn fixture. A verdict
+therefore compares ergonomics across layers and cannot claim a paid-model delta. The pre-existing
+receipt note claiming the lanes were "never mixed" was false and was corrected in the same change —
+when a comparison is cross-layer, the caveat belongs next to the number.
+
+### Batch-2 hosts are qualification rows, not measurements
+`PERF_BATCH2_AGENTS` (grok-build, antigravity-cli) feeds `batch2Probes` only, renders `unsupported` with
+a reason, and is excluded from every gain computation. Keep probe records disjoint from `measured` so
+exclusion is structural, not a filter someone can forget.
+
+### Failure denominators survive the happy path
+The injected-failure trial never answers, aborts at `PERF_ATTACH_FAIL_MS`, records `timed-out` **and
+keeps its duration** in the completion-rate denominator.
+
+### Scope-allowlist gotcha
+`docs/reports/fleet-perf-receipt.{json,md}` brace form parses as a dead prefix in the implement scope
+allowlist; name generated files individually in the task Design.
+
+### Record deferrals instead of silently fixing or hiding them
+Deferred: `--modes ""`/duplicates run zero or doubled lanes and still write an empty receipt exiting 0
+(selector-owned semantics). Accepted as advisory: hardcoded `unsupported` batch-2 status cell, one
+attach timestamp copied into every trial row (per-trial attach overhead not separable), and `attached`
+vs `attached-ready` lane-key naming. Widening the shared measured/processes record to `Partial` was the
+cheap fix for an absent lane.
+
+## Docs wrap conventions applied (both tasks)
+
+- New CLI flags land in `docs/design/cli-contracts.md` (signature + exit codes + JSON additions) **and**
+  in the feature satellite (boundary behavior). 1282 updated `docs/help/*` only — those are covered by
+  help-doc parity tests, while `docs/design/*` are not, so a stale satellite passes CI silently.
+- Satellite metadata must move with content: `fleet-attached-occupants.md` still said
+  `status: proposed` / "unimplemented" and `fleet-task-turn-execution.md` claimed "proposed" in the `04`
+  index row long after the mechanisms shipped.
+- ADR status flip for an implemented decision uses the repo convention
+  `Accepted (implemented YYYY-MM-DD)`, changing no decision text, date, or ID.
+- Do not re-churn `cli-contracts.md` heading anchors: the manual `<a id>` slugs and the `04` links
+  already disagree, and a heading edit multiplies the mismatch.

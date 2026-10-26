@@ -1,9 +1,9 @@
 ---
 kind: design
 title: Verified attached fleet occupants
-status: proposed
+status: implemented
 created_at: 2026-10-21
-updated_at: 2026-10-21
+updated_at: 2026-10-26
 related: [G75, G74]
 tags: [contract, G75, agent, workflow]
 ---
@@ -13,7 +13,9 @@ tags: [contract, G75, agent, workflow]
 ## 1. Issue and scope
 
 G75 selects B2: reliable cooperative guests first, then verified live-session capacity bound to
-declared members. This proposed extension is unimplemented. Existing guests and hook behavior remain
+declared members. Guest renewal (§3), fenced binding (§4) and attached stage execution with drain
+(§5) are implemented by tasks 1279, 1281 and 1282; the optional per-version wake acceleration and
+the batch-2 hosts in §6 stay unqualified. Existing guests and hook behavior remain
 owned by [inter-agent control](inter-agent-control-plane.md).
 Automatic task participation consumes [G74 task-turn execution](fleet-task-turn-execution.md);
 the [shared measurement contract](../plans/2026-10-21-fleet-performance-measurement.md) owns KPIs.
@@ -72,8 +74,10 @@ poll by starting repeated model turns or terminal commands while the session is 
 The additive surface is `spur agent join --member <declared-member-id>`, alongside the existing
 required role and optional session/PID/executor fields (implemented, task 1281; operator consent for
 this one flag, no new noun or verb). Without `--member`, behavior stays guest-only. The binding is
-fenced by occupancy generation + claim epoch, and `memberBinding.stageEligible` carries the binder's
-host wake evidence from `bun run fleet-e2e --host-probe`.
+fenced by occupancy generation + claim epoch. `memberBinding.stageEligible` starts from the binder's
+host wake evidence (`bun run fleet-e2e --host-probe`; absent or `pull-only` binds non-stage-eligible)
+and stays a hint: the handshake below lifts the pull-only default, because a pin-matched report proves
+the session reads its inbox.
 
 Join with a member:
 1. Resolve that enabled declared member in the current normalized project.
@@ -85,7 +89,10 @@ Join with a member:
 
 Bound pull resolves the caller's binding to the declared member inbox and validates the epoch on
 claim, acceptance, completion and renewal. Guest-only pull still addresses its concrete guest ID.
-`agent report` may update the member only when the host binding pin matches. Existing message
+`agent report --pin <ownerEpoch>:<occupancyGeneration>` updates a bound member only when both pin
+halves match (task 1282): a pinless or malformed report and a stale pin both exit 2 before any
+lifecycle write, the first matching report writes `handshakeAt` once (earliest kept) and sets
+`stageEligible`, and a plain guest's report path is unchanged. Existing message
 commands and InboxService remain the coordination path; add no private alternate broker.
 
 Reuse FleetGuestService/coordination ownership where cohesive. If a separate binding service is
@@ -99,13 +106,24 @@ A ready attached occupant claims one keyed request and starts G74's correlated t
 pin. Preserve native acceptance, progress, validated terminal result and durable receipt separately.
 A returned inbox batch is not completed stage work.
 
+The attached transport is `createAttachedTurnDispatcher`
+(`packages/app/src/services/attached-turn-dispatch.ts`, task 1282): it enqueues through the single
+`FleetDispatcher.enqueue` path and resolves only on the inbox reply whose `inReplyTo` links the request
+and whose body parses as `{requestId, attempt, ownerEpoch, occupancyGeneration, artifact?}`. An
+unlinked, foreign, stale or unparseable reply is diagnostic evidence and certifies nothing. Its receipt
+carries `mode: attached` and `occupant: attached` over the supervised receipt fields; a one-hour
+deadline bounds the wait only, expiring as `outcome-unknown` rather than a definite failure.
+
 Human work and operator-answer waits take priority: advertise busy/blocked, keep new tasks queued,
 and never inject fleet work mid-turn. Native steering can only implement an explicitly requested
 interruption under the current task policy. Ordinary message arrival never authorizes interrupting
 human work or discarding its context.
 
 Graceful leave enters draining, stops new assignment and waits for or explicitly interrupts the
-active fleet turn. A disconnect leaves possibly executed work outcome-unknown. Fence the old owner
+active fleet turn. `spur agent leave` on a bound member starts that drain and waits up to
+`--drain-timeout <ms>` (default `ATTACHED_DRAIN_GRACE_MS`, one claim cycle = 30 s) for claimed inbox
+rows to settle, then retires the occupant; the JSON envelope adds `drained`, and an unsettled turn
+stays resumable. A disconnect leaves possibly executed work outcome-unknown. Fence the old owner
 and reconcile evidence before replacement. Detach never terminates a human-owned process.
 A late completion from an old generation cannot release a new write lease or certify its task.
 
@@ -139,10 +157,15 @@ asserting automatic task eligibility.
 
 ## 7. Verification, tradeoffs and compatibility
 
-Before implementation, enumerate failure cases and add repeatable E2E scenarios for work beyond TTL,
+Failure cases are enumerated before implementation and held as repeatable scenarios: work beyond TTL,
 PID reuse, foreign identity, competing binders, stale completion, crash after acceptance,
-missing hooks, busy human work, blocked input and detach. Include both supervised and attached
-occupants in the same receipt driver and compare against supervised-warm, not only cold startup.
+missing hooks, busy human work, blocked input and detach. The task-1282 matrix covers the attached
+half — busy occupant, blocked input, idle without handshake, reply without a correlated terminal,
+disconnect after acceptance, late completion after generation transfer and detach during work
+(`packages/app/tests/services/attached-turn-dispatch.test.ts`,
+`apps/cli/tests/commands/agent/attached-stage.test.ts`). Both attachment kinds run in the same
+receipt driver and compare against supervised-warm, not only cold startup (§6 of
+[fleet task turns](fleet-task-turn-execution.md)).
 
 B1-only guests cost less but do not supply automatic member capacity. Universal PID takeover is
 rejected: identity does not expose a prompt/completion channel. B2 shares current declaration,

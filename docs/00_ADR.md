@@ -2,9 +2,9 @@
 doc: 00_ADR
 owns: WHY — lasting architectural choices, context and tradeoffs
 authority: authoritative
-version: 1.71.0
+version: 1.72.0
 owner: Robin Min
-updated_at: 2026-10-16
+updated_at: 2026-10-26
 read_before: any structural change; before diverging from a decision
 edit_rules: 99 §6.1
 sync: [T1, T2]
@@ -2691,7 +2691,7 @@ has 11 fields, skill/agent output contracts carry no level, and `response.valida
 
 ## ADR-145: Keyed Fleet Work Runs as Correlated Turns Behind the Existing Traced Action
 
-- **Status:** Proposed · **Date:** 2026-10-21 · **Feature:** G74 · **Extends:** ADR-140, ADR-143
+- **Status:** Accepted (implemented 2026-10-26) · **Date:** 2026-10-21 · **Feature:** G74 · **Extends:** ADR-140, ADR-143
 - **Decision:**
   - The orchestrator's scheduling tick is independent of its conversation consumer: a held model
     response never blocks wake/reconcile/select/enqueue. One fenced scheduling owner remains.
@@ -2718,7 +2718,7 @@ has 11 fields, skill/agent output contracts carry no level, and `response.valida
 
 ## ADR-146: Verified Live Sessions Occupy Declared Members; Guests Stay Message-Only
 
-- **Status:** Proposed · **Date:** 2026-10-21 · **Feature:** G75 · **Extends:** ADR-121, ADR-143, ADR-145
+- **Status:** Accepted (implemented 2026-10-26) · **Date:** 2026-10-21 · **Feature:** G75 · **Extends:** ADR-121, ADR-143, ADR-145
 - **Decision:**
   - A cooperating live session may bind to one enabled declared member (`spur agent join --member`)
     only after project, session, process, executor-policy and capability proof; binding is fenced by

@@ -3,7 +3,7 @@ kind: design
 title: Fleet task turns and measured warm execution
 status: implemented
 created_at: 2026-10-21
-updated_at: 2026-10-24
+updated_at: 2026-10-26
 related: [G74, G75]
 tags: [contract, G74, agent, workflow]
 ---
@@ -163,6 +163,18 @@ order alternates, and injected artifact failures remain in the completion-rate d
 The JSON records all samples and per-mode p50/p95, completion rate and useful throughput; Markdown
 projects those comparisons. Fixture transport measurements never claim native model speed or
 provider-cache behavior. Opt-in real-agent task rows remain separate from these fixture samples.
+
+`--modes <csv>` selects the perf lanes — `supervised-cold`, `supervised-warm`, `attached-ready`;
+absent means all three and an unknown name fails loudly (task 1283). The `attached-ready` lane drives
+a bound occupant through the ADR-146 attached transport on the same workload digest as the supervised
+lanes, marks `attach`, busy-wait and terminal phases, and keeps an unanswered injected failure in the
+completion-rate denominator. `attachedComparison` pairs it with supervised-warm per agent:
+`material-gain` only when p50 drops ≥15% and p95 ≥10% (the plan's provisional thresholds),
+`convenience-only` for a positive under-threshold delta, `no-gain` when attached is slower and
+`inconclusive` when either side is unmeasured. The attached column measures the fleet-task lane while
+the warm column measures the turn fixture, so a verdict compares ergonomics across layers and never
+claims a like-for-like paid-model delta. `batch2Probes` rows (Grok Build, Antigravity CLI) carry
+qualification evidence only — `unsupported` with a reason — and never enter a gain.
 
 Before each implementation, write failure cases and E2E fixtures first. Required scenarios include
 duplicate/late events, native failure, dropped connection after acceptance, changed policy,

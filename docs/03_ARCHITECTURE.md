@@ -2,10 +2,10 @@
 doc: 03_ARCHITECTURE
 owns: HOW — module boundaries, data flow, runtime model, invariants
 authority: derived
-version: 1.74.0
+version: 1.75.0
 derived_from: [01_PRD, 00_ADR]
 owner: Robin Min
-updated_at: 2026-10-15
+updated_at: 2026-10-26
 read_before: cross-module, seam, or schema work
 edit_rules: 99 §6.4
 sync: [T1]
@@ -795,6 +795,15 @@ capability proof gates the binding, and it takes the member's occupancy generati
 the `guest:<member-id>` claim, so the strategy's existing `hasRunning` check sees the member busy and
 the record id is the member's inbox address. Every fenced operation (renew, claim, release) refuses a
 superseded generation, so a stale binder cannot renew, claim or release the current owner's lease.
+
+Attached stage execution (task 1282) reuses that binding. `StrategyRuntime`'s `memberAttachments`
+seam holds a bound occupant out of role selection with the `member-busy` hold reason while it reports
+`working`, before its handshake, while draining, or on a `pull-only` host, and a failed read fails
+closed (every occupant treated as un-handshook). A selectable occupant runs its keyed stage through
+`createAttachedTurnDispatcher` (`packages/app/src/services/attached-turn-dispatch.ts`) on the
+ADR-145 turn contract over the member's inbox, certifying only the reply that links the request and
+matches the binding pin. `agent leave` on a bound member drains within `ATTACHED_DRAIN_GRACE_MS` and
+never signals the human-owned process; an unsettled turn stays `outcome-unknown`.
 
 **Project-owned supervision (task 1088, feature G67).** A project's loops are reached through the
 serve that owns the project, and a loop never outlives that serve. *Discovery:* the
