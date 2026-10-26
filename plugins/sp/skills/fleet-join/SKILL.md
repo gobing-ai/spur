@@ -47,6 +47,18 @@ with a named reason for an unknown/disabled member, a role mismatch, an executor
 the stage capabilities, a live occupant, or a concurrent binder that lost the race. Guests without
 `--member` are unchanged — and still excluded from role selection.
 
+### Attached lifecycle reports carry the binding pin (task 1282)
+
+A bound occupant's lifecycle reports must present the host binding pin or they are refused (exit 2):
+
+```bash
+spur agent report --state working --seq <ns> --pin <ownerEpoch>:<occupancyGeneration> --json
+```
+
+The first pin-matched report completes the handshake (the host's strategy then treats this member as
+stage-visible); later reports never move it. A pin mismatch means the occupant generation moved —
+re-read `spur agent list --specs --json` instead of retrying. Plain guests keep reporting without a pin.
+
 ## Pull loop (the default path — hooks are acceleration only)
 
 The durable inbox loop below is what makes a guest work on **every** host, hooks installed or not.
@@ -64,7 +76,13 @@ the work is done.
 2. Read the returned messages, including their IDs. `spur message show <id> --json` can reread one;
    `spur message inbox --agent <id> --json` is a non-consuming historical view.
 3. Do the work the message asks for.
-4. `spur message reply <msgId> "<result>"` → reply to each one.
+4. `spur message reply <msgId> "<result>"` → reply to each one. A bound occupant answering a **stage
+   request** (a `fleet:task:<requestId>:<attempt>` keyed message) MUST make the reply body the JSON
+   correlation payload — `{ "requestId": …, "attempt": …, "ownerEpoch": …, "occupancyGeneration": …,
+   "artifact": "<path or summary>" }` — with the values from the request and its own binding. The
+   host certifies the turn on that payload alone; a plain-text reply never completes a stage and the
+   request is retried to someone else. Do not answer stage requests for a binding you no longer hold:
+   a stale epoch/generation in the payload is fenced off, not promoted.
 5. Re-arm: go back to step 1 while the operator wants this session in the fleet.
 
 ## Leave
@@ -74,8 +92,12 @@ spur agent leave --json                     # the guest joined by this session
 spur agent leave my-session --json           # an explicit id
 ```
 
-Leaving releases the lease immediately. If the session dies without leaving, the lease expires and
-the reconciler pass retires the guest — pending work is never lost, it returns to `queued`.
+Leaving releases the lease immediately. A **bound** occupant's leave drains first: it stops new
+assignment, waits up to the drain grace (default 30s, `--drain-timeout <ms>` to bound it) for the
+in-flight turn to settle, then retires the record. A turn that does not settle in time is never
+failed by the leave — it stays outcome-unknown and resumable; nothing is killed. If the session dies
+without leaving, the lease expires and the reconciler pass retires the guest — pending work is never
+lost, it returns to `queued`.
 
 ## Host capabilities (probed, not assumed)
 

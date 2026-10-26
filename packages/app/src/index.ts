@@ -243,6 +243,15 @@ export {
     qualifySectionBody,
     resolveConfiguredTaskDirs,
 } from './services/anchor-qualifier';
+export {
+    type AttachedTurnBinding,
+    type AttachedTurnDiagnostic,
+    type AttachedTurnDispatcher,
+    type AttachedTurnDispatcherDeps,
+    type AttachedTurnReceipt,
+    type AttachedTurnReply,
+    createAttachedTurnDispatcher,
+} from './services/attached-turn-dispatch';
 // Project Board module catalog preparation (0989 R3/R4/R6)
 export {
     type BoardModuleAssetRoot,
@@ -367,6 +376,7 @@ export {
     RECEIPT_POLL_INTERVAL_MS,
 } from './services/fleet-dispatcher';
 export {
+    ATTACHED_DRAIN_GRACE_MS,
     type DeclaredMemberView,
     FleetGuestService,
     GUEST_LEASE_TTL_MS,
@@ -381,6 +391,9 @@ export {
     type GuestRecord,
     MEMBER_BINDING_CAPABILITIES,
     type MemberBinding,
+    type MemberPin,
+    type MemberPinFailureCode,
+    type MemberPinResult,
 } from './services/fleet-guest-service';
 export {
     type FleetMemberLister,
@@ -725,6 +738,7 @@ export {
     type DispatchHoldReason,
     FLEET_AUTO_TAG,
     gtdStrategy,
+    type MemberAttachmentState,
     type ResumeReport,
     restStrategy,
     STRATEGIES,

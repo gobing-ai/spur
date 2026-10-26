@@ -77,11 +77,13 @@ spur agent report [options]
 | `--state <state>` | Lifecycle state: `working`, `idle`, or `blocked` (required) |
 | `--seq <ns>` | Monotonic report sequence in nanoseconds; not greater than the last accepted one → ignored (required) |
 | `--spec <id>` | Member spec id (defaults to `SPUR_SPEC_ID`) |
+| `--pin <epoch:generation>` | Required for a **bound member**: `<ownerEpoch>:<occupancyGeneration>` from the binding record; pinless/stale on a bound member exits 2, first match completes the handshake. Plain guests omit it |
 | `--json` | Output machine-readable JSON |
 
 An accepted report writes the `agent.lifecycle.changed` ledger row that is the member's current
 state: the dispatch strategy treats `blocked` as unavailable, and the Board shows `needs human`.
-Exit `2` when a required flag is missing or malformed, or when no member id resolves. The `sp`
+Exit `2` when a required flag is missing or malformed, when no member id resolves, or when a
+bound member's report lacks/stales `--pin`. The `sp`
 plugin's host hooks call this in the background; outside a fleet they make no call.
 
 ## spur agent join
@@ -110,12 +112,15 @@ spur agent leave [id] [--session-id <sid>]
 | --- | --- |
 | `[id]` | Guest id (defaults to the guest joined by this host session) |
 | `--session-id <sid>` | Host session id (defaults to `CLAUDE_CODE_SESSION_ID`) |
+| `--drain-timeout <ms>` | Bound member only: cap on the drain wait for an in-flight turn to settle before retiring (default 30s `ATTACHED_DRAIN_GRACE_MS`); an unsettled turn stays resumable — nothing is killed |
 | `--json` | Output machine-readable JSON |
 
 A guest is a session that **pulls** work: never supervised, never restarted, addressable by concrete
 id only. `join` writes an occupant row, claims a `guest:<id>` lease and records
 `.spur/run/guests/<id>.json`; `leave` (or lease expiry) releases the lease, marks the occupant
-exited, returns its claimed messages to `pending` and removes the record.
+exited, returns its claimed messages to `pending` and removes the record. A **bound** member
+drains first: assignment stops and the leave waits for the in-flight turn within `--drain-timeout`
+before retiring.
 
 ## spur agent status
 

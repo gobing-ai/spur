@@ -4,6 +4,7 @@ import { MEMBER_LIFECYCLE_STATES, type MemberLifecycleState } from '@gobing-ai/s
 import type { CliContext } from '../../context';
 import { toEnvelopeJson } from '../../output';
 import { SHARED_OPTIONS } from '../shared-options';
+import { guestService } from './shared';
 
 /**
  * Run `spur agent report` (G73 R1, task 1080) — the host hooks' only CLI call.
@@ -19,6 +20,7 @@ export async function runAgentReport(
         state?: string;
         seq?: string;
         spec?: string;
+        pin?: string;
         json: boolean;
         enveloped?: boolean;
     },
@@ -43,6 +45,30 @@ export async function runAgentReport(
     if (memberId === undefined || memberId === '') {
         return agentReportUsageError(context, flags, 'no member id (set SPUR_SPEC_ID or --spec)');
     }
+    // Task 1282 (design §4): a lifecycle report may update a BOUND member only when the
+    // caller presents the host binding pin (`--pin <ownerEpoch>:<occupancyGeneration>`).
+    // The first matching report completes the attached handshake. Plain guests and declared
+    // members without an occupant record take the unchanged path below.
+    const record = await guestService(context).read(memberId);
+    if (record?.memberBinding !== undefined) {
+        const binding = record.memberBinding;
+        const pin = parseBindingPin(flags.pin);
+        if (pin === null) {
+            return agentReportUsageError(
+                context,
+                flags,
+                `member "${memberId}" is bound — reports need --pin <ownerEpoch>:<occupancyGeneration>`,
+            );
+        }
+        if (pin.ownerEpoch !== binding.ownerEpoch || pin.occupancyGeneration !== binding.occupancyGeneration) {
+            return agentReportUsageError(
+                context,
+                flags,
+                `binding pin mismatch for "${memberId}" — the occupant generation moved`,
+            );
+        }
+        await guestService(context).fenceMemberReport(memberId, pin);
+    }
     const result = await new AgentCoordinationService(context).reportLifecycle(
         memberId,
         state as MemberLifecycleState,
@@ -63,6 +89,26 @@ export async function runAgentReport(
         );
     }
     return 0;
+}
+
+/** Parse `--pin <ownerEpoch>:<occupancyGeneration>`; null when absent or malformed. */
+function parseBindingPin(raw: string | undefined): { ownerEpoch: number; occupancyGeneration: number } | null {
+    if (raw === undefined) return null;
+    const [epoch, generation, extra] = raw.split(':');
+    const ownerEpoch = Number(epoch);
+    const occupancyGeneration = Number(generation);
+    if (
+        extra !== undefined ||
+        epoch === undefined ||
+        generation === undefined ||
+        !Number.isInteger(ownerEpoch) ||
+        ownerEpoch < 0 ||
+        !Number.isInteger(occupancyGeneration) ||
+        occupancyGeneration < 1
+    ) {
+        return null;
+    }
+    return { ownerEpoch, occupancyGeneration };
 }
 
 /** Shared usage-error shape for `agent report` — exit 2, JSON or plain. */
@@ -95,6 +141,10 @@ export function registerAgentReportCommand(agent: Command, context: CliContext):
         .requiredOption('--state <state>', 'Lifecycle state: working, idle, or blocked')
         .requiredOption('--seq <ns>', 'Monotonic report sequence (wall-clock nanoseconds); must increase')
         .option('--spec <id>', 'Member spec id (defaults to SPUR_SPEC_ID)')
+        .option(
+            '--pin <epoch:generation>',
+            'Host binding pin for a bound member (ownerEpoch:occupancyGeneration; completes the handshake)',
+        )
         .option(...SHARED_OPTIONS.json)
         .option(...SHARED_OPTIONS.jsonEnvelope)
         .action(async (options) => {
@@ -102,6 +152,7 @@ export function registerAgentReportCommand(agent: Command, context: CliContext):
                 state: options.state,
                 seq: options.seq,
                 ...(options.spec !== undefined ? { spec: options.spec } : {}),
+                ...(options.pin !== undefined ? { pin: options.pin } : {}),
                 json: options.json === true,
                 enveloped: options.jsonEnvelope,
             });

@@ -17,6 +17,7 @@ import {
     isPortLive,
     MAX_DELIVERY_ATTEMPTS,
     MEMBER_BINDING_CAPABILITIES,
+    type MemberAttachmentState,
     normalizeProjectPath,
     ProjectRegistry,
     resolvePlanningFolders,
@@ -609,6 +610,26 @@ export async function makeFleetRuntime(
         // G11 R3: guest leases expire on the write side of the tick, beside the reconcile. The
         // requests read no longer terminates a guest, so this is the one owner of that write.
         guestExpiry: async () => await guestService(context).expire(),
+        // Task 1282 (design §5): attached-occupant binding facts ride every tick — a bound
+        // occupant mid-human-turn, never handshook, or draining is never dispatched to.
+        memberAttachments: async (instanceIds) => {
+            const guests = guestService(context);
+            const map = new Map<string, MemberAttachmentState | null>();
+            for (const id of instanceIds) {
+                const binding = (await guests.read(id))?.memberBinding;
+                map.set(
+                    id,
+                    binding === undefined
+                        ? null
+                        : {
+                              handshake: binding.handshakeAt !== undefined,
+                              draining: binding.draining === true,
+                              stageEligible: binding.stageEligible,
+                          },
+                );
+            }
+            return map;
+        },
     });
 }
 

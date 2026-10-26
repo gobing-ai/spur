@@ -66,6 +66,12 @@ export type DispatchHoldReason =
      * waiting on a human, so dispatch would queue work behind an operator prompt.
      */
     | 'member-blocked'
+    /**
+     * The member is a bound attached occupant that cannot take fleet stages right now
+     * (task 1282, design §5): mid-human-turn (`working`), never handshook, draining, or
+     * a pull-only host. The detail names the member and the readiness gap.
+     */
+    | 'member-busy'
     | 'rest-after-drain'
     /**
      * A keyed dispatch has no definite receipt yet (G71 R1): the member may still be
@@ -91,6 +97,16 @@ export interface DispatchHold {
     detail?: string;
 }
 
+/** Binding facts of one attached occupant (task 1282, design §5). */
+export interface MemberAttachmentState {
+    /** The attached handshake completed: the binder proved its host binding pin (§4). */
+    handshake: boolean;
+    /** Graceful `leave` marked the record draining — no new assignment. */
+    draining: boolean;
+    /** The binder's host attested the stage capabilities (1281). */
+    stageEligible: boolean;
+}
+
 /** Everything a strategy sees — assembled by {@link StrategyRuntime.selectNext}, never the strategy. */
 export interface StrategyContext {
     projectPath: string;
@@ -104,7 +120,12 @@ export interface StrategyContext {
      * allocated; the strategy stays pure and does no I/O for this map.
      */
     memberLifecycle: ReadonlyMap<string, MemberLifecycleState>;
-    /** `TaskService.list` todo + wip candidates — G71 R1: a wip task carries resumed work. */
+    /**
+     * Attached-occupant binding facts per member instanceId (task 1282 §5) — bound members
+     * only; a plain member is absent. A human turn (`working`), a missing handshake, or a
+     * drain makes the occupant unselectable; the strategy never reads guest records itself.
+     */
+    memberAttachments?: ReadonlyMap<string, MemberAttachmentState>;
     candidates: TaskSummary[];
     /** Enabled fleet members (0835) not currently holding a run (the live write-slot holder). */
     idleInstances: ResolvedFleetMember[];
@@ -188,7 +209,26 @@ export const gtdStrategy: Strategy = {
         const blockedIdle = ctx.idleInstances.filter(
             (member) => ctx.memberLifecycle.get(member.instanceId) === 'blocked',
         );
-        const idle = ctx.idleInstances.filter((member) => ctx.memberLifecycle.get(member.instanceId) !== 'blocked');
+        // G75 §5 (task 1282): a bound occupant mid-human-turn (or never handshook, or
+        // draining) is never dispatched to — its session belongs to the human. The gap
+        // is named in the hold; nothing is silently skipped.
+        const attachedGap = (member: ResolvedFleetMember): string | null => {
+            const attachment = ctx.memberAttachments?.get(member.instanceId);
+            if (attachment === undefined) return null; // A plain member, not an occupant.
+            const lifecycle = ctx.memberLifecycle.get(member.instanceId);
+            if (lifecycle === 'working') return 'reported working (human turn)';
+            if (attachment.draining) return 'draining';
+            if (!attachment.handshake) return 'handshake pending';
+            if (!attachment.stageEligible) return 'host is pull-only';
+            if (lifecycle !== 'idle') return `lifecycle ${lifecycle ?? 'unreported'}`;
+            return null;
+        };
+        const idle = ctx.idleInstances.filter(
+            (member) => ctx.memberLifecycle.get(member.instanceId) !== 'blocked' && attachedGap(member) === null,
+        );
+        const busyAttached = ctx.idleInstances.filter(
+            (member) => ctx.memberLifecycle.get(member.instanceId) !== 'blocked' && attachedGap(member) !== null,
+        );
         const accepts = (member: ResolvedFleetMember, candidate: TaskSummary): boolean => {
             const assignee = candidate.frontmatter.assignee;
             return typeof assignee === 'string' && assignee !== ''
@@ -257,6 +297,11 @@ export const gtdStrategy: Strategy = {
                     hold('member-blocked', `${blocked.instanceId} reported blocked (waiting on a human)`);
                     continue;
                 }
+                const busy = busyAttached.find((candidateMember) => accepts(candidateMember, candidate));
+                if (busy !== undefined) {
+                    hold('member-busy', `${busy.instanceId} is unavailable for fleet stages (${attachedGap(busy)})`);
+                    continue;
+                }
                 hold('no-idle-instance');
                 continue;
             }
@@ -318,6 +363,11 @@ export interface StrategyRuntimeContext {
      * means this host owns no guests (tests, read-only views).
      */
     guestExpiry?: () => Promise<string[]>;
+    /**
+     * Attached-occupant binding facts (task 1282 §5): bound members only, `null` = a plain
+     * member. Absent seam = this host tracks no guest records (tests, read-only views).
+     */
+    memberAttachments?: (instanceIds: string[]) => Promise<ReadonlyMap<string, MemberAttachmentState | null>>;
     /** Warn sink for housekeeping failures that must not fail a tick. */
     logger?: { warn(message: string, meta?: Record<string, unknown>): void };
 }
@@ -737,6 +787,33 @@ export class StrategyRuntime {
                 // Degrade: unreadable ledger — no member is treated as blocked.
             }
         }
+        // G75 §5 (task 1282): bound attached occupants ride the same snapshot. A read
+        // failure degrades CLOSED — an unknown attachment state must never deliver fleet
+        // work into a busy human session — so every idle member reads as un-handshook.
+        const memberAttachments = new Map<string, MemberAttachmentState>();
+        if (idleInstances.length > 0) {
+            const readAttachments = this.ctx.memberAttachments;
+            if (readAttachments !== undefined) {
+                try {
+                    for (const [instanceId, state] of await readAttachments(
+                        idleInstances.map((member) => member.instanceId),
+                    )) {
+                        if (state !== null) memberAttachments.set(instanceId, state);
+                    }
+                } catch (error) {
+                    for (const member of idleInstances) {
+                        memberAttachments.set(member.instanceId, {
+                            handshake: false,
+                            draining: false,
+                            stageEligible: false,
+                        });
+                    }
+                    this.ctx.logger?.warn('member attachment read failed; degrading closed', {
+                        error: String(error),
+                    });
+                }
+            }
+        }
         const dispatchAttempts = new Map<string, DispatchAttemptState>();
         const ready = new Map<string, boolean>();
         const blocked = new Map<string, string | null>();
@@ -784,6 +861,7 @@ export class StrategyRuntime {
             candidates,
             idleInstances,
             memberLifecycle,
+            ...(memberAttachments.size > 0 ? { memberAttachments } : {}),
             dependencyBlocked: (wbs) => blocked.get(wbs) ?? null,
             ready: (wbs) => ready.get(wbs) === true,
             dispatchAttempts,

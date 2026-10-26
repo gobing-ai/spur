@@ -82,7 +82,27 @@ export interface MemberBinding {
      * `pull-only` wake channel (1280's capability report) — it may still receive messages.
      */
     stageEligible: boolean;
+    /**
+     * When the attached handshake completed (task 1282): the first lifecycle report this
+     * binder sent with a matching host binding pin (§4). Absent = never handshook — the
+     * occupant is not stage-selectable even when it reports `idle`.
+     */
+    handshakeAt?: string;
+    /**
+     * Set by graceful `leave` on a bound member (task 1282): stop new assignment, let the
+     * in-flight turn settle (outcome-unknown work stays resumable), then retire.
+     */
+    draining?: true;
+    /** When draining began; the grace budget starts here. */
+    drainingAt?: string;
 }
+
+/**
+ * Grace window a draining bound occupant gets to settle its in-flight turn (task 1282).
+ * Same granularity as the lease: one claim cycle. After the window the leave proceeds —
+ * an unsettled turn stays outcome-unknown and resumable, never force-failed.
+ */
+export const ATTACHED_DRAIN_GRACE_MS = CLAIM_TTL_MS;
 
 /** Whether a guest's process identity was proven against the host process table. */
 export type GuestIdentityState = 'verified' | 'unverified';
@@ -105,6 +125,20 @@ export interface GuestJoinInput {
 
 /** Why a join was refused. Both are operator errors → the CLI exits 2. */
 export type GuestJoinFailureCode = 'unknown-role' | 'collision';
+
+/** The host binding pin a bound occupant must present (design §4, task 1282). */
+export interface MemberPin {
+    ownerEpoch: number;
+    occupancyGeneration: number;
+}
+
+/** Why a pin-fenced member operation was refused. Operator errors → the CLI exits 2. */
+export type MemberPinFailureCode = 'unknown-guest' | 'not-bound' | 'stale-pin';
+
+/** Result of the pin-fenced member operations ({@link FleetGuestService.fenceMemberReport}). */
+export type MemberPinResult =
+    | { ok: true; binding: MemberBinding }
+    | { ok: false; code: MemberPinFailureCode; message: string };
 
 /** Result of {@link FleetGuestService.join}. */
 export type GuestJoinResult =
@@ -501,6 +535,54 @@ export class FleetGuestService {
         return alive;
     }
 
+    /**
+     * Fence a bound occupant's lifecycle report (task 1282, design §4): the report may
+     * update the member only when the presented pin matches the record's binding. The first
+     * matching report completes the attached handshake — after it, a yielded occupant is
+     * stage-selectable; before it, never (AC2). Plain guests pass through untouched.
+     */
+    async fenceMemberReport(id: string, pin: MemberPin): Promise<MemberPinResult> {
+        return await this.fenceMemberPin(id, pin);
+    }
+
+    /**
+     * Begin the graceful drain for a bound member (task 1282): mark the record draining so
+     * selection stops assigning new stages, fence on the pin like every member write.
+     * The caller then waits {@link memberDrainSettled} within {@link ATTACHED_DRAIN_GRACE_MS}.
+     */
+    async beginMemberDrain(id: string, pin: MemberPin): Promise<MemberPinResult> {
+        const fenced = await this.fenceMemberPin(id, pin);
+        if (!fenced.ok) return fenced;
+        if (fenced.binding.draining === true) return fenced; // Idempotent re-entry.
+        const record = await this.read(id);
+        if (record === null || record.memberBinding === undefined) {
+            return { ok: false, code: 'unknown-guest', message: `no bound record for "${id}"` };
+        }
+        const next: GuestRecord = {
+            ...record,
+            memberBinding: {
+                ...record.memberBinding,
+                draining: true,
+                drainingAt: new Date().toISOString(),
+            },
+        };
+        await this.ctx.fs.ensureDir(this.dir());
+        await this.ctx.fs.writeFile(join(this.dir(), `${id}.json`), `${JSON.stringify(next, null, 4)}\n`);
+        return fenced;
+    }
+
+    /**
+     * Whether a bound member has no in-flight turn: no claimed (accepted, unfinished) inbox
+     * request remains. Draining waits on this; an unsettled turn past the grace window stays
+     * outcome-unknown and resumable — never force-failed (task 1282 R5).
+     */
+    async memberDrainSettled(id: string): Promise<boolean> {
+        const claimed = (await this.inbox().list(id, 'in', { limit: 1 })).messages.filter(
+            (row) => row.status === 'claimed',
+        );
+        return claimed.length === 0;
+    }
+
     /** Release the lease and retire the occupant. True when a record existed. */
     async leave(id: string): Promise<boolean> {
         const record = await this.read(id);
@@ -533,6 +615,36 @@ export class FleetGuestService {
 
     private inbox(): InboxService {
         return new InboxService({ getDb: () => this.ctx.getDb() });
+    }
+
+    /** Shared pin fence: bound record must exist and match both pin halves (§4). */
+    private async fenceMemberPin(id: string, pin: MemberPin): Promise<MemberPinResult> {
+        const record = await this.read(id);
+        if (record === null) {
+            return { ok: false, code: 'unknown-guest', message: `no occupant record for "${id}"` };
+        }
+        const binding = record.memberBinding;
+        if (binding === undefined) {
+            return { ok: false, code: 'not-bound', message: `"${id}" is a plain guest, not a bound member` };
+        }
+        if (binding.ownerEpoch !== pin.ownerEpoch || binding.occupancyGeneration !== pin.occupancyGeneration) {
+            return {
+                ok: false,
+                code: 'stale-pin',
+                message: `binding pin mismatch for "${id}" — the occupant generation moved`,
+            };
+        }
+        // The handshake completes on the first matched report: write it once, keep the earliest.
+        // A pin-matched report proves the attached session is live and reads its inbox, so stage
+        // work can reach it through the pull loop — the bind-time wake probe is only a hint.
+        if (binding.handshakeAt === undefined) {
+            const nextBinding = { ...binding, handshakeAt: new Date().toISOString(), stageEligible: true };
+            const next: GuestRecord = { ...record, memberBinding: nextBinding };
+            await this.ctx.fs.ensureDir(this.dir());
+            await this.ctx.fs.writeFile(join(this.dir(), `${id}.json`), `${JSON.stringify(next, null, 4)}\n`);
+            return { ok: true, binding: nextBinding };
+        }
+        return { ok: true, binding };
     }
 
     /** Release the lease, retire the occupant row and drop the record. Shared by leave/expire. */
@@ -617,6 +729,9 @@ function isMemberBinding(value: unknown): value is MemberBinding {
         binding.memberId !== '' &&
         typeof binding.occupancyGeneration === 'number' &&
         typeof binding.ownerEpoch === 'number' &&
-        typeof binding.stageEligible === 'boolean'
+        typeof binding.stageEligible === 'boolean' &&
+        (binding.handshakeAt === undefined || typeof binding.handshakeAt === 'string') &&
+        ((binding.draining === undefined && binding.drainingAt === undefined) ||
+            (binding.draining === true && typeof binding.drainingAt === 'string'))
     );
 }
