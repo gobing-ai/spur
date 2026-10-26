@@ -2,11 +2,11 @@
 schema_version: 1
 id: "G75"
 name: "Verified live-session fleet participation"
-status: active
+status: verifying
 priority: P2
 tags: []
 created_at: "2026-10-22T06:44:57.242Z"
-updated_at: "2026-10-22T19:42:22.459Z"
+updated_at: "2026-10-26T03:12:53.561Z"
 ---
 
 # G75: Verified live-session fleet participation
@@ -85,8 +85,8 @@ Feature: Verified live-session fleet participation
 | 1279 | Guest lease renewal and exact agent process identity | done |
 | 1280 | Portable join/pull/reply adapters and host capability probes | done |
 | 1281 | Fenced declared-member binding via agent join --member | done |
-| 1282 | Attached stage execution with human arbitration and safe detach | todo |
-| 1283 | Combined supervised and attached fleet performance receipt | todo |
+| 1282 | Attached stage execution with human arbitration and safe detach | done |
+| 1283 | Combined supervised and attached fleet performance receipt | done |
 <!-- END AUTO-GENERATED -->
 
 ## Notes
@@ -94,4 +94,5 @@ Feature: Verified live-session fleet participation
 ## History
 
 - 2026-10-22T19:42:22.459Z backlog → active (system)
+- 2026-10-26T03:12:53.561Z active → verifying (system)
 
