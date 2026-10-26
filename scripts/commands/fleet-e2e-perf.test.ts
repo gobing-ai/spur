@@ -98,6 +98,21 @@ describe('1283: --modes selects measured lanes and fails loudly on a typo', () =
         expect(perfModesOf(undefined)).toEqual(['supervised-cold', 'supervised-warm', 'attached-ready']);
     });
 
+    test('a present-but-empty --modes is a usage error, never an empty receipt (1285)', () => {
+        // An unset $MODES or a whitespace value would measure nothing yet still emit a receipt.
+        expect(() => perfModesOf([])).toThrow(/--modes expects a csv of/);
+        expect(() => parsePerfArgs(['--perf', '--modes', ''])).toThrow(/--modes expects a csv of/);
+        expect(() => parsePerfArgs(['--perf', '--modes', '   '])).toThrow(/--modes expects a csv of/);
+    });
+
+    test('a repeated lane name dedupes instead of double-running its samples (1285)', () => {
+        expect(perfModesOf(['attached-ready', 'attached-ready'])).toEqual(['attached-ready']);
+        expect(parsePerfArgs(['--perf', '--modes', 'supervised-cold,supervised-cold,attached-ready']).modes).toEqual([
+            'supervised-cold',
+            'attached-ready',
+        ]);
+    });
+
     test('an unknown mode is a usage error, never a silently skipped lane', () => {
         expect(() => perfModesOf(['attached-ready', 'atached'])).toThrow(/--modes expects a csv of/);
         expect(perfModesOf(['attached-ready'])).toEqual(['attached-ready']);

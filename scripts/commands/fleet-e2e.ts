@@ -900,13 +900,18 @@ export function parsePerfArgs(args: string[]): {
 
 /**
  * Validate `--modes` (task 1283): absent means every mode; unknown names fail loudly instead of
- * silently measuring a subset. Shared by `parsePerfArgs` and the direct `runFleetE2e` entry.
+ * silently measuring a subset. Present-but-empty (e.g. an unset `$MODES`) fails the same way —
+ * it would measure nothing yet still emit a receipt — and duplicates dedupe so a repeated name
+ * cannot double-run a lane's samples (task 1285). Shared by `parsePerfArgs` and the direct
+ * `runFleetE2e` entry.
  */
 export function perfModesOf(csv: string[] | undefined): readonly PerfMode[] {
-    const modes = csv ?? ALL_PERF_MODES;
-    const unknown = modes.filter((mode) => !ALL_PERF_MODES.includes(mode as PerfMode));
+    if (csv !== undefined && csv.length === 0)
+        throw new Error(`--modes expects a csv of: ${ALL_PERF_MODES.join(', ')}`);
+    const deduped = [...new Set(csv ?? ALL_PERF_MODES)];
+    const unknown = deduped.filter((mode) => !ALL_PERF_MODES.includes(mode as PerfMode));
     if (unknown.length > 0) throw new Error(`--modes expects a csv of: ${ALL_PERF_MODES.join(', ')}`);
-    return modes as readonly PerfMode[];
+    return deduped as readonly PerfMode[];
 }
 
 interface AgentCommandProbe {
