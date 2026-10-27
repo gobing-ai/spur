@@ -456,7 +456,12 @@ export class AgentService {
     ): Promise<number> {
         const outcome = await this.runExecutor.executeRun(prompt, flags, deps, {
             silent: false,
-            execution: this.defaultExecutionOptions(flags),
+            // A keyed loop drain that is not a fleet work item still carries the per-drain
+            // warm dispatcher on its deps; the executor only branches on the execution field.
+            execution: {
+                ...this.defaultExecutionOptions(flags),
+                ...(deps?.dispatchTurn !== undefined ? { dispatchTurn: deps.dispatchTurn } : {}),
+            },
         });
         // agent.ts restores Commander's tri-state value under `jsonEnvelope` after the
         // generic camelCase-to-kebab conversion; absence still defers to the env.

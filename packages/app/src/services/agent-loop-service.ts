@@ -6,7 +6,7 @@ import {
     ProjectClaimDao,
     SystemEventDao,
 } from '@gobing-ai/spur-domain';
-import type { AgentName, AgentProcessOptions, AgentSpec } from '@gobing-ai/ts-ai-runner';
+import { type AgentName, type AgentProcessOptions, type AgentSpec, AiRunner } from '@gobing-ai/ts-ai-runner';
 import { EventBus } from '@gobing-ai/ts-infra';
 import type { WorkflowAgentService } from '../workflow/actions/agent-run';
 import { FRESH_SESSION_ROLES } from '../workflow/fleet-dispatch';
@@ -583,14 +583,9 @@ export async function runAgentLoopCore(deps: AgentLoopDeps, input: AgentLoopRunI
                             runId !== undefined
                                 ? createWarmTurnDispatcher({
                                       openSession: (agent, policy) => {
-                                          const runner = runDeps?.runner;
-                                          if (runner === undefined) {
-                                              return Promise.resolve({
-                                                  ok: false as const,
-                                                  reason: 'unsupported-agent' as const,
-                                                  detail: 'no AiRunner in run deps',
-                                              });
-                                          }
+                                          // The CLI loop injects no run deps; a default runner is what the
+                                          // executor would build too, so the warm path is reachable there.
+                                          const runner = runDeps?.runner ?? new AiRunner();
                                           // SAFETY: eligibility (fresh-roles + driver qualification)
                                           // already ran on this agent; ts-ai-runner's AgentName is a
                                           // template-literal refinement of the same runtime string.
@@ -641,7 +636,30 @@ export async function runAgentLoopCore(deps: AgentLoopDeps, input: AgentLoopRunI
                             invocationStarted = true;
                             drainFailed = !workResult.ok;
                         } else {
-                            const exitCode = await svc.run(body, drainFlags, runDeps);
+                            let exitCode: number | undefined;
+                            try {
+                                exitCode = await svc.run(
+                                    body,
+                                    drainFlags,
+                                    turn !== undefined ? { ...runDeps, dispatchTurn: turn.dispatchTurn } : runDeps,
+                                );
+                            } finally {
+                                // Same turn receipt a work-item drain records (fleet-work-item.ts), so a
+                                // plain keyed task turn is provably warm or names its fallback.
+                                const settled = turn?.lastTurn();
+                                // A warm turn spawns nothing, so no `agent.invoke.start` marks it; it
+                                // reached the worker, and releasing the claim would replay its writes.
+                                if (settled?.mode === 'warm') invocationStarted = true;
+                                if (settled !== undefined && runId !== undefined) {
+                                    emitPhase('turn-settled', {
+                                        phase: 'turn-settled',
+                                        runId,
+                                        ...(executionId !== undefined ? { executionId } : {}),
+                                        at: new Date().toISOString(),
+                                        turn: settled,
+                                    });
+                                }
+                            }
                             drainFailed = exitCode !== 0 || !invocationStarted;
                         }
                     } finally {

@@ -128,6 +128,8 @@ const PLANNER_LOCAL_ID = 'planner-1';
 const CODER_LOCAL_ID = 'coder-1';
 const TASK_TITLE = 'E2E inbox-only fleet task';
 const HANG_TAG = 'e2e:hang';
+/** The version the warm stub reports: the claude driver's own qualification pin, never a literal. */
+const STUB_WARM_VERSION = getAgentSessionCapability(AGENT_TYPE as AgentName).verifiedAgainst;
 const LOOP_POLL_MS = 1_000; // wake backstop: a prompt tick keeps dispatch latency far below the poll budgets below (G71 1077 R3).
 
 /** Bounded waits. Generous enough for a cold `bun run` CLI start, never a wall-clock assertion. */
@@ -427,18 +429,46 @@ import { appendFileSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs'
 import { dirname } from 'node:path';
 
 const argv = process.argv.slice(2);
+const GATEWAY = ${JSON.stringify(join(REPO_ROOT, 'packages/config/src/index.ts'))};
+const { getEnvVars } = await import(GATEWAY);
+const env = getEnvVars();
+// Task 1283 supervised-warm: with SPUR_E2E_STUB_WARM=1 the stub reports the version the claude
+// stream-json driver is qualified against, so the member loop's REAL warm-turn dispatcher opens a
+// session on it. Without the flag the version stays unqualified and every keyed turn falls back.
+const warm = env.SPUR_E2E_STUB_WARM === '1';
 if (argv.includes('--version')) {
-    console.log('fleet-e2e-stub 1.0.0');
+    console.log(warm ? ${JSON.stringify(`${STUB_WARM_VERSION} (fleet-e2e-stub)`)} : 'fleet-e2e-stub 1.0.0');
     process.exit(0);
 }
 if (argv.includes('--help')) {
     console.log('fleet-e2e-stub — the stubbed model for the inbox-only fleet E2E');
     process.exit(0);
 }
+// The warm session: ONE long-lived process speaking claude stream-json (init → assistant → result
+// per turn). Each turn's work is the one-shot stub run on the turn's prompt — the stubbed model —
+// so cold and warm differ only in the member-side transport, which is what the lane measures.
+if (warm && argv.includes('--input-format') && argv.includes('stream-json')) {
+    const session = 'fleet-e2e-stub-' + process.pid;
+    const emit = (record) => process.stdout.write(JSON.stringify({ session_id: session, ...record }) + '\\n');
+    emit({ type: 'system', subtype: 'init' });
+    for await (const line of console) {
+        let frame;
+        try { frame = JSON.parse(line); } catch { continue; }
+        if (frame.type !== 'user') continue;
+        const text = (frame.message?.content ?? []).map((part) => part.text ?? '').join('');
+        emit({ type: 'system', subtype: 'init' });
+        const turn = Bun.spawnSync([process.execPath, import.meta.path, text], {
+            env: { ...env, SPUR_E2E_STUB_WARM: '' },
+            stdout: 'pipe',
+            stderr: 'pipe',
+        });
+        const out = turn.stdout.toString();
+        emit({ type: 'assistant', message: { content: [{ type: 'text', text: out }] } });
+        emit({ type: 'result', subtype: 'success', is_error: turn.exitCode !== 0, result: out });
+    }
+    process.exit(0);
+}
 
-const GATEWAY = ${JSON.stringify(join(REPO_ROOT, 'packages/config/src/index.ts'))};
-const { getEnvVars } = await import(GATEWAY);
-const env = getEnvVars();
 const cli = env.SPUR_E2E_CLI ?? '';
 const project = env.SPUR_E2E_PROJECT ?? process.cwd();
 const logPath = env.SPUR_E2E_STUB_LOG ?? project + '/stub-prompts.jsonl';
@@ -2083,7 +2113,10 @@ function receiptBinary(binary: WarmProbe['binary']): WarmProbe['binary'] {
     if (binary === null) return null;
     return {
         ...binary,
-        path: binary.path.startsWith(`${resolve(REPO_ROOT)}/`) ? relative(REPO_ROOT, binary.path) : binary.path,
+        // External paths are tracked receipt content: never publish the operator's home directory.
+        path: binary.path.startsWith(`${resolve(REPO_ROOT)}/`)
+            ? relative(REPO_ROOT, binary.path)
+            : redactProbeOutput(binary.path),
     };
 }
 
@@ -2208,7 +2241,11 @@ export interface PerfReceipt {
     /** The modes this run selected (`--modes`; the full set when absent). */
     modes: readonly PerfMode[];
     trials: PerfTrial[];
-    measured: Record<string, { cold: PerfMeasured; resume: PerfMeasured; warm: PerfWarm; attached?: PerfMeasured }>;
+    /** `warmTurns` measures supervised-warm on the shared workload; `warm` stays the qualification row. */
+    measured: Record<
+        string,
+        { cold: PerfMeasured; resume: PerfMeasured; warm: PerfWarm; warmTurns?: PerfMeasured; attached?: PerfMeasured }
+    >;
     /** The paired deterministic lane; absent when neither supervised mode was selected. */
     turnComparison?: TurnPerfComparison;
     /** R3 second-batch probes — qualification rows only, excluded from gains. */
@@ -2329,6 +2366,8 @@ interface PerfPhaseRowPayload {
     key?: string;
     ok?: boolean;
     monotonicMs?: number;
+    /** `turn-settled` only: the warm-turn receipt — `mode` says whether the turn really ran warm. */
+    turn?: { mode?: string; fallbackReason?: string };
 }
 
 /** Every `fleet.phase.*` row in this scratch project, payload decoded. */
@@ -2495,12 +2534,11 @@ function writePerfReceipts(receipt: PerfReceipt, repeatCommand: string): void {
                 `Convenience-only (under materiality): ${convenience.join(', ')} — attached-ready gains ergonomics, not speed.`,
             );
         }
-        // The warm column is the turn-fixture lane, the attached column the fleet-task lane; saying
-        // so here keeps the verdict from reading as a like-for-like paid-model speed delta.
         lines.push(
             '',
-            'Caveat: the attached column is the fleet-task lane and the warm column is the paired turn-fixture lane',
-            '(task turns against a local model fixture) — different layers, so a verdict compares ergonomics across layers.',
+            'Both columns run the shared fleet workload (one digest above): attached-ready through the bound',
+            'occupant, supervised-warm through the member loop holding one warm turn session. In the stub lane the',
+            'stub speaks the qualified claude stream-json protocol, so the delta is transport, not model speed.',
         );
     }
     lines.push(
@@ -2509,10 +2547,10 @@ function writePerfReceipts(receipt: PerfReceipt, repeatCommand: string): void {
         'per-phase `monotonicMs` stays in-process. `gates` has no observable in the stub lane',
         '(the stub closes tasks without running quality gates) and is recorded absent.',
         'Warm rows (tasks 1276-1278) record QUALIFICATION of the installed binary — driver verdict,',
-        'binary path and version. The separate paired comparison measures cold/resume/warm task turns',
-        'against one local fixture workload; the Measured table above keeps the two lanes apart, while the',
-        'Mode comparison reads its warm column — that pairing spans layers, as its own caveat says.',
-        'Repository-local binary paths are relative to the repository root; external paths stay absolute.',
+        'binary path and version; `warmTurns` rows measure supervised-warm trials on the shared workload, and a',
+        'trial counts only when its turn receipt says it ran warm. The separate paired comparison measures',
+        'cold/resume/warm task turns against one local fixture workload and feeds no Mode-comparison verdict.',
+        'Repository-local binary paths are relative to the repository root; external home paths are redacted to `~`.',
         '',
     );
     writeFileSync(PERF_RECEIPT_MD, `${lines.join('\n')}\n`);
@@ -2859,25 +2897,30 @@ export async function runFleetPerf(options: {
                 (options.realAgents
                     ? (warmProbes.get(agent)?.binary ?? null)
                     : { path: p.stubPath, version: 'fleet-e2e-stub 1.0.0' }) ?? null;
+            const warmBinary = options.realAgents
+                ? binaryRow
+                : { path: p.stubPath, version: `${STUB_WARM_VERSION} (fleet-e2e-stub)` };
             const dao = new SystemEventDao(await p.openDb());
             const runs = new CoordinationRunDao(await p.openDb());
             const inbox = new InboxService({ getDb: async () => await p.openDb() });
             // The supervised lanes dispatch through the member's pull loop, so the loops only
-            // exist when `supervised-cold` runs. `attached-ready` binds a fixture occupant whose
+            // exist while a supervised lane runs. `attached-ready` binds a fixture occupant whose
             // in-process responder answers the keyed dispatch — a live loop would claim the
             // request message first, so it is killed before the attached trials start.
-            if (supervisedCold) {
-                for (const specId of [project.plannerId, project.coderId]) {
+            const startLoops = async (suffix: string, env: Record<string, string>): Promise<void> => {
+                for (const specId of [p.plannerId, p.coderId]) {
                     p.loopPids.push(
                         spawnLoop(
                             p.scratch,
                             { binDir: options.realAgents ? '' : p.binDir, stubLog: p.stubLog },
                             specId,
+                            suffix,
+                            env,
                         ),
                     );
                 }
                 // Wait for the orchestrator claim so the first trial's dispatch has an owner.
-                const claims = new ProjectClaimDao(await project.openDb());
+                const claims = new ProjectClaimDao(await p.openDb());
                 await pollUntil(
                     `${agent}: the planner orchestrator claim`,
                     async () => {
@@ -2886,10 +2929,22 @@ export async function runFleetPerf(options: {
                     },
                     BOUNDS.loops,
                 );
-            }
+            };
+            const stopLoops = async (): Promise<void> => {
+                for (const pid of p.loopPids) {
+                    try {
+                        process.kill(pid, 'SIGTERM');
+                    } catch {
+                        /* already gone */
+                    }
+                }
+                p.loopPids = [];
+                await sleep(1_000);
+            };
+            if (supervisedCold) await startLoops('', {});
 
-            const driveTrial = async (index: number, hang: boolean): Promise<void> => {
-                const mode: 'cold' | 'resume' = index === 0 ? 'cold' : 'resume';
+            const driveTrial = async (index: number, hang: boolean, lane: 'cold' | 'warm' = 'cold'): Promise<void> => {
+                const mode: PerfTrial['mode'] = lane === 'warm' ? 'warm' : index === 0 ? 'cold' : 'resume';
                 const wbs = createPerfTask(p.scratch, hang);
                 let runId: string | undefined;
                 let key: string | undefined;
@@ -2915,6 +2970,14 @@ export async function runFleetPerf(options: {
                             if (run === undefined) return undefined;
                             runId = run.run_id;
                             key = attempt.requestKey ?? undefined;
+                            // The loop records the turn receipt only after the run returns, which is
+                            // after the task already reads `done`; judging warmth earlier races it.
+                            if (lane === 'warm') {
+                                const rows = await readPerfPhaseRows(dao);
+                                if (!rows.some((row) => row.name === 'turn-settled' && row.payload.runId === runId)) {
+                                    return undefined;
+                                }
+                            }
                             return true;
                         },
                         PERF_TRIAL_TIMEOUT_MS,
@@ -2963,7 +3026,7 @@ export async function runFleetPerf(options: {
                             phases,
                             ...(runId !== undefined ? { runId } : {}),
                             ...(key !== undefined ? { key } : {}),
-                            binary: binaryRow,
+                            binary: lane === 'warm' ? warmBinary : binaryRow,
                             ...(hostVersion !== undefined ? { hostBinaryVersion: hostVersion } : {}),
                             reason: `--inject-failure ${options.injectFailure}: synthetic timeout for a hang-tagged trial; stays in the denominator`,
                         });
@@ -2978,6 +3041,27 @@ export async function runFleetPerf(options: {
                         .at(-1)?.at;
                     const validatedAt = phases.find((mark) => mark.phase === 'contract-validated')?.at ?? terminalAt;
                     const done = jsonOk<{ status: string }>(['task', 'show', wbs, '--json'], p.scratch);
+                    // A warm-lane trial counts only when the member's receipt says the turn ran warm;
+                    // a fallback is a cold turn wearing a warm label (task 1276 AC1's overclaim).
+                    const settledTurn = allRows.find(
+                        (row) => row.name === 'turn-settled' && runId !== undefined && row.payload.runId === runId,
+                    )?.payload.turn;
+                    if (lane === 'warm' && settledTurn?.mode !== 'warm') {
+                        trials.push({
+                            ...trialContext,
+                            agent,
+                            mode,
+                            status: 'failed',
+                            phases,
+                            ...(runId !== undefined ? { runId } : {}),
+                            ...(key !== undefined ? { key } : {}),
+                            binary: lane === 'warm' ? warmBinary : binaryRow,
+                            ...(hostVersion !== undefined ? { hostBinaryVersion: hostVersion } : {}),
+                            reason: `turn did not run warm: ${settledTurn === undefined ? 'no turn-settled receipt' : `${settledTurn.mode} (${settledTurn.fallbackReason ?? 'no reason'})`}`,
+                        });
+                        failures.push(`${agent} warm trial ${index}: not warm`);
+                        return;
+                    }
                     if (enqueue === undefined || validatedAt === undefined || done.status !== 'done') {
                         trials.push({
                             ...trialContext,
@@ -2987,7 +3071,7 @@ export async function runFleetPerf(options: {
                             phases,
                             ...(runId !== undefined ? { runId } : {}),
                             ...(key !== undefined ? { key } : {}),
-                            binary: binaryRow,
+                            binary: lane === 'warm' ? warmBinary : binaryRow,
                             ...(hostVersion !== undefined ? { hostBinaryVersion: hostVersion } : {}),
                             reason: `missing ${enqueue === undefined ? 'enqueue' : executionId === undefined ? 'claim/executionId' : 'terminal'} phase or task status=${done.status}`,
                         });
@@ -3004,7 +3088,7 @@ export async function runFleetPerf(options: {
                         phases,
                         ...(runId !== undefined ? { runId } : {}),
                         ...(key !== undefined ? { key } : {}),
-                        binary: binaryRow,
+                        binary: lane === 'warm' ? warmBinary : binaryRow,
                         ...(hostVersion !== undefined ? { hostBinaryVersion: hostVersion } : {}),
                     });
                 } catch (error) {
@@ -3016,7 +3100,7 @@ export async function runFleetPerf(options: {
                         mode,
                         status: hang ? 'timed-out' : timedOut ? 'timed-out' : 'failed',
                         phases: [],
-                        binary: binaryRow,
+                        binary: lane === 'warm' ? warmBinary : binaryRow,
                         ...(hostVersion !== undefined ? { hostBinaryVersion: hostVersion } : {}),
                         reason: errorMessage(error),
                     });
@@ -3024,45 +3108,51 @@ export async function runFleetPerf(options: {
                 }
             };
 
+            const quietBetweenTrials = async (): Promise<void> => {
+                // The coder must be fully quiet so the next task's turn is clean.
+                await pollUntil(
+                    `${agent}: the coder to be quiet between trials`,
+                    async () => {
+                        if (await runs.hasRunning(p.coderId)) return undefined;
+                        const queued = (await inbox.list(p.coderId, 'in', { limit: 500 })).messages.filter(
+                            (row) => row.status === 'queued' || row.status === 'claimed',
+                        );
+                        return queued.length === 0 ? true : undefined;
+                    },
+                    BOUNDS.done,
+                );
+            };
             for (let index = 0; index < (supervisedCold ? options.trials : 0); index++) {
                 await driveTrial(index, false);
-                // Between trials: the coder must be fully quiet so the next task's turn is clean.
-                if (index < options.trials - 1) {
-                    await pollUntil(
-                        `${agent}: the coder to be quiet between trials`,
-                        async () => {
-                            if (await runs.hasRunning(p.coderId)) return undefined;
-                            const queued = (await inbox.list(p.coderId, 'in', { limit: 500 })).messages.filter(
-                                (row) => row.status === 'queued' || row.status === 'claimed',
-                            );
-                            return queued.length === 0 ? true : undefined;
-                        },
-                        BOUNDS.done,
-                    );
-                }
+                if (index < options.trials - 1) await quietBetweenTrials();
             }
-            // The armed failure runs LAST in the first agent's project only — a hung turn holds
-            // the write slot and would block every later trial.
-            if (options.injectFailure !== null && supervisedCold && agent === PERF_AGENTS[0]) {
+            // The armed failure runs LAST in the first SELECTED agent's project only — a hung turn
+            // holds the write slot and would block every later trial. Keyed on `targets`, not the
+            // full roster, so a narrowed `--agents pi` run still arms it.
+            if (options.injectFailure !== null && supervisedCold && agent === targets[0]) {
                 await driveTrial(options.trials, true);
+            }
+            if (supervisedWarm) {
+                // Fresh loops whose member holds ONE warm turn session across every trial on the
+                // shared workload: same task shape, same dispatch, only the transport differs.
+                // The stub lane opts the stub into the qualified protocol; real agents qualify on
+                // their own binary.
+                await stopLoops();
+                await startLoops('-warm', options.realAgents ? {} : { SPUR_E2E_STUB_WARM: '1' });
+                for (let index = 0; index < options.trials; index++) {
+                    await driveTrial(index, false, 'warm');
+                    if (index < options.trials - 1) await quietBetweenTrials();
+                }
             }
             if (attachedReady) {
                 // No loops on the member now: the attached occupant replaces the pull loop as
                 // the executor for this lane (the finally below reaps anything supervised left).
-                for (const pid of p.loopPids) {
-                    try {
-                        process.kill(pid, 'SIGTERM');
-                    } catch {
-                        /* already gone */
-                    }
-                }
-                p.loopPids = [];
-                await sleep(1_000);
+                await stopLoops();
                 trials.push(
                     ...(await runAttachedTrials(p, trialContext, {
                         agent,
                         trials: options.trials,
-                        injectFailure: options.injectFailure !== null && agent === PERF_AGENTS[0],
+                        injectFailure: options.injectFailure !== null && agent === targets[0],
                         binary: binaryRow,
                         ...(hostVersion !== undefined ? { hostVersion } : {}),
                     })),
@@ -3106,6 +3196,7 @@ export async function runFleetPerf(options: {
             cold,
             resume,
             warm: warmRow(agent, warmProbes.get(agent) ?? { driver: null, binary: null, verifiedVersion: null }),
+            ...(supervisedWarm ? { warmTurns: perfMeasured(agentTrials, 'warm') } : {}),
             ...(attachedReady ? { attached: perfMeasured(agentTrials, 'attached-ready') } : {}),
         };
     }
@@ -3141,7 +3232,8 @@ export async function runFleetPerf(options: {
               },
               rows: targets.map((agent) => {
                   const attached = measured[agent]?.attached;
-                  const warm = turnComparison?.measured[agent]?.warm;
+                  // Same workload, same digest: the supervised-warm lane above, never the turn fixture.
+                  const warm = measured[agent]?.warmTurns;
                   return {
                       agent,
                       ...(attached?.p50Ms !== undefined ? { attachedP50Ms: attached.p50Ms } : {}),

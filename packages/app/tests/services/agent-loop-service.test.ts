@@ -17,7 +17,8 @@ import {
     ProjectClaimDao,
     SystemEventDao,
 } from '@gobing-ai/spur-domain';
-import { AiRunner } from '@gobing-ai/ts-ai-runner';
+import { type AgentName, AiRunner } from '@gobing-ai/ts-ai-runner';
+import { createFakeTurnSessionDriver } from '@gobing-ai/ts-ai-runner/testing';
 import { EventBus } from '@gobing-ai/ts-infra';
 import { NodeProcessExecutor } from '@gobing-ai/ts-runtime';
 import type { AgentLoopDeps } from '../../src/services/agent-loop-service';
@@ -422,6 +423,162 @@ describe('G71 R1/R2/R3 — member drain, keyed run path, slot heartbeat, resume 
             data?: { turn?: Record<string, unknown> };
         };
         expect(result.data?.turn).toMatchObject({ mode: 'one-shot', fallbackReason: 'unsupported-agent' });
+    });
+
+    test('1283: a keyed task drain with no work item still threads the warm dispatcher and records turn-settled', async () => {
+        const db = await memDb();
+        const cwd = mkdtempSync(join(tmpdir(), 'loop-warm-task-'));
+        const settled: Record<string, unknown>[] = [];
+        const deps = memberOnlyDeps(db, {
+            cwd,
+            listAgentSpecs: async () => [
+                { id: 'member-1', type: 'gemini', executor: 'e1', config: {}, purpose: 'coder', workspace: '/tmp' },
+            ],
+            agentService: (bus: Parameters<AgentLoopDeps['agentService']>[0]) => {
+                bus.on('fleet.phase.turn-settled', (payload) => {
+                    settled.push(payload as Record<string, unknown>);
+                });
+                return {
+                    // The plain path: no work-item file, so the drain runs `svc.run` — which must
+                    // still receive the per-drain dispatcher (before 1283 it never did).
+                    run: async (
+                        _input: string,
+                        flags: Record<string, unknown>,
+                        runDeps?: { dispatchTurn?: (context: unknown) => Promise<{ kind: string }> },
+                    ) => {
+                        expect(runDeps?.dispatchTurn).toBeDefined();
+                        await runDeps?.dispatchTurn?.({
+                            agent: 'gemini',
+                            prompt: 'run the task',
+                            cwd,
+                            role: 'coder',
+                            correlation: {
+                                runId: String(flags['run-id']),
+                                executionId: String(flags['execution-id']),
+                                requestId: String(flags['run-id']),
+                                attempt: 1,
+                            },
+                        });
+                        return 0;
+                    },
+                    runTraced: async () => ({}),
+                };
+            },
+            runDeps: { runner: new AiRunner({ processExecutor: new NodeProcessExecutor() }) } as never,
+            drain: async () => ({
+                prompt: 'dispatch: run the task',
+                flags: {},
+                claimed: [{ id: 'm-task', attempts: 1 }],
+                requestKeys: ['0001'],
+            }),
+            memberSession: {
+                executors: [{ name: 'e1', agent: 'gemini' }],
+                env: {},
+                getDb: async () => db,
+                warn: () => {},
+                processFactory: () =>
+                    fakeProcess(async () => {
+                        throw new Error('the keyed run must never touch the persistent stdin');
+                    }),
+                sessionCapability: () => ({ supportsPersistentStdin: true, supportsResumeById: false }) as never,
+            },
+        });
+        const code = await runAgentLoopCore(deps, {
+            recipient: 'member-1',
+            pollMs: 10,
+            flags: {},
+            runtime: { maxIterations: 1 },
+        });
+        expect(code).toBe(0);
+        expect(settled).toHaveLength(1);
+        expect(settled[0]?.runId).toEqual(expect.any(String));
+        expect(settled[0]?.turn).toMatchObject({ mode: 'one-shot', fallbackReason: 'unsupported-agent' });
+    });
+
+    test('1283: a warm plain task turn settles accepted — never released for a replaying redelivery', async () => {
+        const db = await memDb();
+        const cwd = mkdtempSync(join(tmpdir(), 'loop-warm-accept-'));
+        const outcomes: string[] = [];
+        const settled: Record<string, unknown>[] = [];
+        const real = new AiRunner({ processExecutor: new NodeProcessExecutor() });
+        const driver = createFakeTurnSessionDriver(
+            [{ op: 'accept' }, { op: 'terminal', kind: 'success', finalText: 'ok' }],
+            { qualify: () => ({ qualified: true }) },
+        );
+        const deps = memberOnlyDeps(db, {
+            cwd,
+            listAgentSpecs: async () => [
+                { id: 'member-1', type: 'pi', executor: 'e1', config: {}, purpose: 'coder', workspace: '/tmp' },
+            ],
+            agentService: (bus: Parameters<AgentLoopDeps['agentService']>[0]) => {
+                bus.on('fleet.phase.turn-settled', (payload) => {
+                    settled.push(payload as Record<string, unknown>);
+                });
+                return {
+                    // Emits no `agent.invoke.start`: a warm turn spawns nothing.
+                    run: async (
+                        _input: string,
+                        flags: Record<string, unknown>,
+                        runDeps?: { dispatchTurn?: (context: unknown) => Promise<{ kind: string }> },
+                    ) => {
+                        const dispatched = await runDeps?.dispatchTurn?.({
+                            agent: 'pi',
+                            prompt: 'run the task',
+                            cwd,
+                            role: 'coder',
+                            correlation: {
+                                runId: String(flags['run-id']),
+                                executionId: String(flags['execution-id']),
+                                requestId: String(flags['run-id']),
+                                attempt: 0,
+                            },
+                        });
+                        return dispatched?.kind === 'warm' ? 0 : 3;
+                    },
+                    runTraced: async () => ({}),
+                };
+            },
+            drain: async () => ({
+                prompt: 'dispatch: run the task',
+                flags: {},
+                claimed: [{ id: 'm-task', attempts: 1 }],
+                requestKeys: ['0001'],
+            }),
+            settle: async (_claimed: InboxClaim[], outcome: string) => {
+                outcomes.push(outcome);
+            },
+            memberSession: {
+                executors: [{ name: 'e1', agent: 'pi' }],
+                env: {},
+                getDb: async () => db,
+                warn: () => {},
+                processFactory: () =>
+                    fakeProcess(async () => {
+                        throw new Error('the keyed run must never touch the persistent stdin');
+                    }),
+                sessionCapability: () => ({ supportsPersistentStdin: true, supportsResumeById: false }) as never,
+            },
+        });
+        const code = await runAgentLoopCore(deps, {
+            recipient: 'member-1',
+            pollMs: 10,
+            flags: {},
+            runtime: { maxIterations: 1 },
+            runDeps: {
+                runner: {
+                    openTurnSession: (agent: AgentName, options: { policy: never }) =>
+                        real.openTurnSession(agent, {
+                            ...options,
+                            driver,
+                            binary: { path: '/fake/bin/pi', version: '9.9.9-fake' },
+                            handshakeTimeoutMs: 2_000,
+                        }),
+                },
+            } as never,
+        });
+        expect(code).toBe(0);
+        expect(settled[0]?.turn).toMatchObject({ mode: 'warm', nativeOutcome: 'success' });
+        expect(outcomes).toEqual(['accepted']);
     });
 
     test('R1: an unkeyed conversational batch claims and renews no write slot', async () => {

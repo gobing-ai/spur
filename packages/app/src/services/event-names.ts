@@ -1009,9 +1009,10 @@ export const SYSTEM_EVENT_PRESENTERS: Record<SystemEventName, SystemEventPresent
     },
     'fleet.phase.turn-settled': {
         description:
-            "A keyed work item's warm turn settled (task 1275): the turn receipt (acceptance, native terminal, correlation) is recorded separately from the action-contract verdict.",
+            "A keyed run's warm turn settled (task 1275; plain task drains since 1283): the turn receipt (acceptance, native terminal, correlation) is recorded separately from the action-contract verdict.",
         fields: [
             field('turn.mode', 'Mode'),
+            field('turn.fallbackReason', 'Fallback reason'),
             field('turn.nativeOutcome', 'Native outcome'),
             field('turn.requestId', 'Request'),
             field('turn.attempt', 'Attempt'),

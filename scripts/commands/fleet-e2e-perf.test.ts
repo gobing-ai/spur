@@ -22,10 +22,18 @@ import {
     writeFileSync,
 } from 'node:fs';
 import { tmpdir } from 'node:os';
-import { join, resolve } from 'node:path';
+import { basename, join, resolve } from 'node:path';
 import { getEnvVar, setEnvVar } from '@gobing-ai/spur-config';
 import { getAgentShim, type TurnSessionDriver } from '@gobing-ai/ts-ai-runner';
-import { modeGainVerdict, parsePerfArgs, perfModesOf, probeWarm, scaffoldPerfProject, warmRow } from './fleet-e2e';
+import {
+    modeGainVerdict,
+    parsePerfArgs,
+    perfModesOf,
+    probeWarm,
+    redactProbeOutput,
+    scaffoldPerfProject,
+    warmRow,
+} from './fleet-e2e';
 
 /** A driver that refuses every binary — the shape `TURN_SESSION_DRIVERS` has for 1277/1278. */
 function refusingDriver(reason: string): TurnSessionDriver {
@@ -197,10 +205,22 @@ describe('1276 real version probe and portable receipt evidence', () => {
         expect(binary.path).toBe(resolve(import.meta.dir, '../../node_modules/.bin/pi'));
     });
 
-    test('a sibling directory sharing the repository prefix keeps its absolute binary path', () => {
+    test('a sibling directory sharing the repository prefix is not relativized (home prefix redacted)', () => {
         const path = `${resolve(import.meta.dir, '../..')}-other/node_modules/.bin/pi`;
         const row = warmRow('pi', { driver: null, binary: { path, version: '0.87.1' }, verifiedVersion: null });
-        expect(row.binary?.path).toBe(path);
+        expect(row.binary?.path).toBe(redactProbeOutput(path));
+        expect(
+            row.binary?.path.endsWith(`${basename(resolve(import.meta.dir, '../..'))}-other/node_modules/.bin/pi`),
+        ).toBe(true);
+    });
+
+    test('1283 P3: an external binary under a home directory never leaks the operator name', () => {
+        const row = warmRow('grok', {
+            driver: null,
+            binary: { path: '/Users/alice/.local/bin/grok', version: '1.0.0' },
+            verifiedVersion: null,
+        });
+        expect(row.binary).toEqual({ path: '~/.local/bin/grok', version: '1.0.0' });
     });
 });
 
