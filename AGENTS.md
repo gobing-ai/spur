@@ -170,7 +170,8 @@ git status --short
 
 `spur-check-feature` is the
 feature-scoped repo-wide pass run once per feature (task 0872); it is not part of the per-task
-pipeline. `bun run corpus-check` is the explicit unsuppressed
+pipeline. It records no evidence: the `feature check --as done` receipt comes only from
+`spur feature verify <id>`, which runs the same pass. `bun run corpus-check` is the explicit unsuppressed
 audit for checker-policy changes (T10); ordinary corpus edits check affected inputs (T11).
 Do not bypass hooks or suppress findings to force green.
 
