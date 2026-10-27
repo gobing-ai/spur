@@ -4,7 +4,7 @@ name: Combined supervised and attached fleet performance receipt
 status: done
 template: feature-impl
 created_at: 2026-10-22T07:00:38.146Z
-updated_at: "2026-10-26T02:46:18.581Z"
+updated_at: "2026-10-27T00:34:38.853Z"
 feature_id: G75
 priority: P3
 tags:
@@ -98,15 +98,15 @@ Scenario: AC3 — Batch-2 hosts never count as gains (req: R3)
 
 | Requirement | Status | Evidence |
 |-------------|--------|----------|
-| R1 | MET | `scripts/commands/fleet-e2e.ts:2524` `runAttachedTrials` reuses `createPerfTask`, so attached and supervised lanes run the same workload; `docs/reports/fleet-perf-receipt.md:14-17` shows both lanes under one digest (`docs/reports/fleet-perf-receipt.md:6`) with the attached row phases `attach→busy-wait→terminal`; injected-failure arm aborts after `PERF_ATTACH_FAIL_MS` and records `timed-out` while keeping the duration (`scripts/commands/fleet-e2e.ts:2709`, `scripts/commands/fleet-e2e.ts:2747`) |
-| R2 | MET | `scripts/commands/fleet-e2e.ts:2178` `modeGainVerdict`; `scripts/commands/fleet-e2e-turn-perf.ts:35` `perfMeasured` emits p50/p95/completionRate/validatedPerHour per mode; `docs/reports/fleet-perf-receipt.md:22-26` renders them per mode and `docs/reports/fleet-perf-receipt.md:59-72` states the provisional materiality thresholds, the verdict and the cross-layer caveat |
-| R3 | MET | `scripts/commands/fleet-e2e.ts:2150` `PERF_BATCH2_AGENTS` (grok-build, antigravity-cli) feeds only `batch2Probes` (`scripts/commands/fleet-e2e.ts:3118`), rendered at `docs/reports/fleet-perf-receipt.md:50-57` with status `unsupported` and a reason per row; `attachedComparison`/`measured` never read those rows (`scripts/commands/fleet-e2e.ts:3130`) |
+| R1 | MET | Three lanes on one workload digest `scripts/commands/fleet-e2e.ts:1974`, busy-wait phase `scripts/commands/fleet-e2e.ts:2687`, injected attach failure kept in denominator `scripts/commands/fleet-e2e.ts:2800`; receipt `docs/reports/fleet-perf-receipt.md:6` (digest) and `docs/reports/fleet-perf-receipt.md:16` (9/9 validated trials with phases) |
+| R2 | MET | p50/p95/completionRate/validatedPerHour per mode `docs/reports/fleet-perf-receipt.md:28`; materiality verdict `scripts/commands/fleet-e2e.ts:2216`; tests `scripts/commands/fleet-e2e-perf.test.ts:134` |
+| R3 | MET | Batch-2 probe rows built without driver and excluded from gains `scripts/commands/fleet-e2e.ts:3212`; receipt rows `docs/reports/fleet-perf-receipt.md:62` |
 
 | Acceptance Criteria | Status | Evidence Type | Evidence |
 |---------------------|--------|---------------|----------|
-| AC1 — R6 — A combined fleet receipt distinguishes participation gains from convenience (req: R1) | MET | test | `scripts/commands/fleet-e2e-perf.test.ts:95` (absent `--modes` selects all three lanes, unknown lane fails loudly); `docs/reports/fleet-perf-receipt.md:14-17` — one `workloadDigest` for both lanes, attached row phases `attach→busy-wait→terminal`; failure status path `scripts/commands/fleet-e2e.ts:2709` and `scripts/commands/fleet-e2e.ts:2747` |
-| AC2 — Gains are reported with guardrails (req: R2) | MET | test | `scripts/commands/fleet-e2e-perf.test.ts:111` (material-gain, convenience-only, no-gain, inconclusive); `docs/reports/fleet-perf-receipt.md:22-26` per-mode p50/p95/completionRate/validatedPerHour; `docs/reports/fleet-perf-receipt.md:61-72` materiality line, verdict row and caveat |
-| AC3 — Batch-2 hosts never count as gains (req: R3) | MET | command | `docs/reports/fleet-perf-receipt.md:50-57` — grok-build and antigravity-cli rows read `unsupported` with a reason; exclusion from gains at `scripts/commands/fleet-e2e.ts:3118` (probe-only record) against `scripts/commands/fleet-e2e.ts:3130` (comparison reads `measured`) |
+| AC1 — R6 — A combined fleet receipt distinguishes participation gains from convenience (req: R1) | MET | command | `bun run fleet-e2e --perf --trials 3 --agents pi` → 9/9 validated, one digest `docs/reports/fleet-perf-receipt.md:6`, busy-wait/attach phases `docs/reports/fleet-perf-receipt.md:22`; warm-turn claim/redelivery tests `packages/app/tests/services/agent-loop-service.test.ts:428`, `packages/app/tests/services/agent-loop-service.test.ts:498` (19 pass) |
+| AC2 — Gains are reported with guardrails (req: R2) | MET | test | `scripts/commands/fleet-e2e-perf.test.ts:140` convenience-only under threshold (23 pass); receipt comparison `docs/reports/fleet-perf-receipt.md:69` |
+| AC3 — Batch-2 hosts never count as gains (req: R3) | MET | command | `docs/reports/fleet-perf-receipt.md:62` grok-build/antigravity-cli `unsupported` with reasons; gain rows iterate measured targets only `scripts/commands/fleet-e2e.ts:3233` |
 - Coverage: N/A (verdict-based; verify pipeline does not measure code coverage)
 
 ### Review

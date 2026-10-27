@@ -4,7 +4,7 @@ name: Portable join/pull/reply adapters and host capability probes
 status: done
 template: feature-impl
 created_at: 2026-10-22T07:00:38.144Z
-updated_at: "2026-10-22T20:35:34.696Z"
+updated_at: "2026-10-26T23:48:25.321Z"
 feature_id: G75
 priority: P2
 tags:
@@ -109,15 +109,15 @@ Scenario: AC3 — Real hosts are opt-in (req: R2)
 
 | Requirement | Status | Evidence |
 |-------------|--------|----------|
-| R1 | MET | `scripts/commands/fleet-e2e.ts:1407` builds each row from installed evidence only; `docs/reports/fleet-host-capabilities.json:6` records path/version, wake and the matching `--help` line for codex, claude and pi in both modes |
-| R2 | MET | `scripts/commands/fixtures/fleet-host-fixture.ts:1` drives join → wait --inbox → message reply → agent leave as a real child process; `scripts/commands/fleet-e2e.ts:1547` sends the bounded request and requires the operator inbox to show the reply linked to it |
-| R3 | MET | `scripts/commands/fleet-e2e.ts:1379` returns pull-only with a reason for headless mode and for any unproven surface; `scripts/commands/fleet-e2e.ts:1407` downgrades a help-only claim to pull-only with a reason |
+| R1 | MET | `scripts/commands/fleet-e2e.ts:1545` `buildHostRow` builds each host×mode row from installed evidence only (absent binary → no wake channel); `docs/reports/fleet-host-capabilities.json:6` records codex/claude/pi path, version, wake and the probe command + observed output; `scripts/commands/fleet-e2e-host-probe.test.ts:123` pins one row per host×mode, evidence-or-nothing (re-run 2026-10-26: 56 pass / 0 fail) |
+| R2 | MET | `scripts/commands/fixtures/fleet-host-fixture.ts:1` real child process drives join → wait --inbox → message reply → leave with no hooks; `scripts/commands/fleet-e2e.ts:1737` requires the operator inbox to show a reply linked to the request; `scripts/commands/fleet-e2e-host-probe.test.ts:170` pins the verb order |
+| R3 | MET | `scripts/commands/fleet-e2e.ts:1514` headless mode is `pull-only` with a reason; `scripts/commands/fleet-e2e.ts:1571` downgrades an unproven help-text claim to `pull-only` with an actionable reason; `scripts/commands/fleet-e2e-host-probe.test.ts:75` covers the downgrade |
 
 | Acceptance Criteria | Status | Evidence Type | Evidence |
 |---------------------|--------|---------------|----------|
-| AC1 — R2 — Codex Claude Code and Pi participate through portable inbox adapters (req: R1, R3) | MET | test | `bun run fleet-e2e --host-probe` exit 0 with 6 rows in `docs/reports/fleet-host-capabilities.json:6`; contract pinned at `scripts/commands/fleet-e2e-host-probe.test.ts:120` |
-| AC2 — The portable loop works with hooks absent (req: R2) | MET | test | `scripts/commands/fleet-e2e-host-probe.test.ts:155` pins the fixture's verb order; the fixture lane passes for all three hosts in the report's `e2e` rows |
-| AC3 — Real hosts are opt-in (req: R2) | MET | test | `scripts/commands/fleet-e2e-host-probe.test.ts:150` refuses an unknown `--agents` entry before any host work; `scripts/commands/fleet-e2e.ts:1691` reaches the real-host lane only when `realHosts` is set |
+| AC1 — R2 — Codex Claude Code and Pi participate through portable inbox adapters (req: R1, R3) | MET | test | `scripts/commands/fleet-e2e-host-probe.test.ts:123` report contract (one row per host×mode, non-pull-only wake needs probe evidence) passes this run; generated report `docs/reports/fleet-host-capabilities.json:6` carries 6 rows with `e2e` fixture-lane results |
+| AC2 — The portable loop works with hooks absent (req: R2) | MET | test | `scripts/commands/fleet-e2e-host-probe.test.ts:170` fixture verb order passes this run; `scripts/commands/fleet-e2e.ts:1737` linked-reply check |
+| AC3 — Real hosts are opt-in (req: R2) | MET | test | `scripts/commands/fleet-e2e-host-probe.test.ts:165` unknown `--agents` entry refused before host work; `scripts/commands/fleet-e2e.ts:1867` real-host lane only when `realHosts === true` |
 - Coverage: N/A (verdict-based; verify pipeline does not measure code coverage)
 
 ### Review

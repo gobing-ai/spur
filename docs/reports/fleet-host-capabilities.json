@@ -1,13 +1,13 @@
 {
     "schemaVersion": 1,
-    "generatedAt": "2026-10-22T20:06:39.973Z",
+    "generatedAt": "2026-10-27T00:25:59.712Z",
     "hosts": [
         {
             "agent": "codex",
             "mode": "interactive",
             "binary": {
                 "path": "/opt/homebrew/bin/codex",
-                "version": "codex-cli 0.163.0"
+                "version": "codex-cli 0.164.0"
             },
             "wake": "app-server",
             "evidence": {
@@ -16,7 +16,7 @@
             },
             "e2e": {
                 "status": "passed",
-                "detail": "fixture-lane (hooks absent): probe-codex joined → wait --inbox pulled msg_94c63048-939e-4cfc-a05a-7230f16c518a → replied msg_4eda9366-00c3-4a50-8054-fb69db71d956 → left"
+                "detail": "fixture-lane (hooks absent): probe-codex joined → wait --inbox pulled msg_06718db0-1bfe-460d-97df-adad7d4d11ba → replied msg_c7adf1d2-210d-4060-be6e-1a1dc6e275b6 → left"
             }
         },
         {
@@ -24,7 +24,7 @@
             "mode": "headless",
             "binary": {
                 "path": "/opt/homebrew/bin/codex",
-                "version": "codex-cli 0.163.0"
+                "version": "codex-cli 0.164.0"
             },
             "wake": "pull-only",
             "evidence": null,
@@ -35,7 +35,7 @@
             "mode": "interactive",
             "binary": {
                 "path": "/opt/homebrew/bin/claude",
-                "version": "2.1.308 (Claude Code)"
+                "version": "2.1.309 (Claude Code)"
             },
             "wake": "hook",
             "evidence": {
@@ -44,7 +44,7 @@
             },
             "e2e": {
                 "status": "passed",
-                "detail": "fixture-lane (hooks absent): probe-claude joined → wait --inbox pulled msg_39a10375-523f-472e-bdd1-6ce9014c3457 → replied msg_4ce2321d-b899-4d6e-b3f0-e148566d9548 → left"
+                "detail": "fixture-lane (hooks absent): probe-claude joined → wait --inbox pulled msg_94ff2232-c355-432d-86b2-f372f5218c90 → replied msg_d7e0f9a4-5b53-4a79-a0a2-219cfd5051b1 → left"
             }
         },
         {
@@ -52,7 +52,7 @@
             "mode": "headless",
             "binary": {
                 "path": "/opt/homebrew/bin/claude",
-                "version": "2.1.308 (Claude Code)"
+                "version": "2.1.309 (Claude Code)"
             },
             "wake": "pull-only",
             "evidence": null,
@@ -62,7 +62,7 @@
             "agent": "pi",
             "mode": "interactive",
             "binary": {
-                "path": "~/xprojects/spur-new-dev-runall-g75-ad0c007/node_modules/.bin/pi",
+                "path": "~/xprojects/spur-new/node_modules/.bin/pi",
                 "version": "0.87.1"
             },
             "wake": "rpc",
@@ -72,14 +72,14 @@
             },
             "e2e": {
                 "status": "passed",
-                "detail": "fixture-lane (hooks absent): probe-pi joined → wait --inbox pulled msg_87a2a334-d252-4a0e-8e34-86666531c80a → replied msg_4e58dd34-4599-4ae7-9cb5-699641a2437f → left"
+                "detail": "fixture-lane (hooks absent): probe-pi joined → wait --inbox pulled msg_54cf1d77-e8f4-4aff-b602-73c7b5bdbc5c → replied msg_3261e899-7215-43be-a53e-e8ec2264c65b → left"
             }
         },
         {
             "agent": "pi",
             "mode": "headless",
             "binary": {
-                "path": "~/xprojects/spur-new-dev-runall-g75-ad0c007/node_modules/.bin/pi",
+                "path": "~/xprojects/spur-new/node_modules/.bin/pi",
                 "version": "0.87.1"
             },
             "wake": "pull-only",

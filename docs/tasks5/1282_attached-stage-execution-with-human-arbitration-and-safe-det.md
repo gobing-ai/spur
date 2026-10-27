@@ -4,7 +4,7 @@ name: Attached stage execution with human arbitration and safe detach
 status: done
 template: feature-impl
 created_at: 2026-10-22T07:00:38.146Z
-updated_at: "2026-10-26T00:15:53.676Z"
+updated_at: "2026-10-26T23:48:26.710Z"
 feature_id: G75
 priority: P2
 tags:
@@ -121,17 +121,17 @@ Tests (failure-matrix first):
 
 | Requirement | Status | Evidence |
 |-------------|--------|----------|
-| R1 | MET | fleet-guest-service.ts:641 sets handshakeAt once + stageEligible at pin-matched report; E2E apps/cli/tests/commands/agent/attached-stage.test.ts:202 (report → handshake → attachmentsFrom {handshake,draining,stageEligible}) |
-| R2 | MET | strategy-runtime.ts:216 fences selection on memberAttachments; member-busy hold reason strategy-runtime.ts:74; tests: attached-stage drain/hold suite 8 pass, app strategy suite green |
-| R3 | MET | attached-turn-dispatch.ts:92 parseReply, :165-198 correlated-only completion with replyMessageId receipt (occupant: attached); 10 unit tests incl. stale-pin/foreign-request/stale-attempt + receipt match |
-| R4 | MET | apps/cli/src/commands/agent/leave.ts:43-55 beginMemberDrain + bounded --drain-timeout, never signals the process; fleet-guest-service.ts:553-559 drain with unknown-guest fallback; late replies after leave are stale-pin diagnostics only (attached-turn-dispatch.test.ts stale occupancy generation case) |
+| R1 | MET | `packages/app/src/services/fleet-guest-service.ts:640` sets `handshakeAt` once and `stageEligible` only on a pin-matched report; `apps/cli/tests/commands/agent/attached-stage.test.ts:160` refuses pinless/stale-pin reports then handshakes once (re-run 2026-10-26: CLI agent suites green for 1282) |
+| R2 | MET | `packages/app/src/services/strategy-runtime.ts:216` fences selection on `memberAttachments`; `packages/app/src/services/strategy-runtime.ts:302` holds with `member-busy`; `apps/cli/tests/commands/agent/attached-stage.test.ts:229` proves the hold until handshake |
+| R3 | MET | `packages/app/src/services/attached-turn-dispatch.ts:92` `parseReply`; `packages/app/src/services/attached-turn-dispatch.ts:170` foreign-request, stale-attempt and stale-pin replies are diagnostics only; success with `replyMessageId` receipt only on a correlated reply; `packages/app/tests/services/attached-turn-dispatch.test.ts:108` suite (re-run 2026-10-26: pass) |
+| R4 | MET | `apps/cli/src/commands/agent/leave.ts:38` drain never signals the process, `--drain-timeout` bound at `apps/cli/src/commands/agent/leave.ts:47`; `packages/app/src/services/fleet-guest-service.ts:553` `beginMemberDrain` (idempotent, `unknown-guest` fallback); `apps/cli/tests/commands/agent/attached-stage.test.ts:283` in-flight claim stays outcome-unknown; `packages/app/tests/services/attached-turn-dispatch.test.ts:198` late reply from a stale generation is diagnostic only |
 
 | Acceptance Criteria | Status | Evidence Type | Evidence |
 |---------------------|--------|---------------|----------|
-| AC1 — R4 — Human work retains session ownership until an explicit safe yield (req: R1, R2) | MET | test | apps/cli/tests/commands/agent/attached-stage.test.ts — busy claim survives drain timeout, stays outcome-unknown/resumable (R5 guard) |
-| AC2 — Ready requires yield plus handshake (req: R1) | MET | test | apps/cli/tests/commands/agent/attached-stage.test.ts:202 — idle-without-handshake not stage-eligible; after pin-matched report, stageEligible true |
-| AC3 — R5 — Attached stages produce the same validated receipts as supervised stages (req: R3) | MET | test | packages/app/tests/services/attached-turn-dispatch.test.ts — only a correlated valid-pin reply certifies; receipt = supervised fields + occupant: attached (10 pass) |
-| AC4 — Detach drains and preserves uncertainty (req: R4) | MET | test | apps/cli/tests/commands/agent/attached-stage.test.ts drain tests — no new work, turn stays outcome-unknown, no signal, drain settles via leave --drain-timeout |
+| AC1 — R4 — Human work retains session ownership until an explicit safe yield (req: R1, R2) | MET | test | `apps/cli/tests/commands/agent/attached-stage.test.ts:229` un-handshook bound member holds `member-busy`, nothing delivered |
+| AC2 — Ready requires yield plus handshake (req: R1) | MET | test | `apps/cli/tests/commands/agent/attached-stage.test.ts:160` idle without handshake is not stage-eligible; pin-matched report makes it eligible |
+| AC3 — R5 — Attached stages produce the same validated receipts as supervised stages (req: R3) | MET | test | `packages/app/tests/services/attached-turn-dispatch.test.ts:109` correlated valid-pin reply certifies with `occupant: attached` receipt; `packages/app/tests/services/attached-turn-dispatch.test.ts:228` a delivered unrelated message never completes the stage |
+| AC4 — Detach drains and preserves uncertainty (req: R4) | MET | test | `apps/cli/tests/commands/agent/attached-stage.test.ts:283` drain times out without force-failing (outcome-unknown, no signal); `packages/app/tests/services/attached-turn-dispatch.test.ts:198` stale-generation completion is diagnostic only |
 - Coverage: N/A (verdict-based; verify pipeline does not measure code coverage)
 
 ### Review

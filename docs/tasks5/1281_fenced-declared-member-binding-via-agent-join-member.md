@@ -4,7 +4,7 @@ name: Fenced declared-member binding via agent join --member
 status: done
 template: feature-impl
 created_at: 2026-10-22T07:00:38.145Z
-updated_at: "2026-10-22T22:30:04.408Z"
+updated_at: "2026-10-26T23:48:26.074Z"
 feature_id: G75
 priority: P2
 tags:
@@ -122,17 +122,17 @@ Scenario: AC4 — Guest defaults are unchanged (req: R4)
 
 | Requirement | Status | Evidence |
 |-------------|--------|----------|
-| R1 | MET | `packages/app/src/services/fleet-guest-service.ts:339` resolves and validates the declared member (enabled, role, executor) and requires a capability proof before any claim; refusals exit 2 with named codes through `apps/cli/src/commands/agent/join.ts:85`, proven at `apps/cli/tests/commands/agent/join-member.test.ts:105` and `:122` |
-| R2 | MET | one fenced occupant per member: generation `max+1` plus claim epoch at `packages/app/src/services/fleet-guest-service.ts:339`, with no orphan claim/row/record on any refusal — `packages/app/tests/services/fleet-guest-bind-member.test.ts:67` through `:190` covers every refusal, the two-binder race, and the stale-`leave` fence |
-| R3 | MET | the record id is the member id, so `wait --inbox <member-id>` addresses the member inbox (`packages/app/tests/services/fleet-guest-bind-member.test.ts:192`); a takeover refuses claim/accept/renew through the generation fence at `packages/app/src/services/fleet-guest-service.ts:490` and `:544` (`:280`) |
-| R4 | MET | guest defaults unchanged: `join` without `--member` takes the untouched path and `resolveMember` is not modified — `apps/cli/tests/commands/agent/join-member.test.ts:145` performs a plain guest join in the same project after a binding |
+| R1 | MET | `packages/app/src/services/fleet-guest-service.ts:373` `bindMember` validates role, declared/enabled member and executor; `packages/app/src/services/fleet-guest-service.ts:409` requires a capability attestation before any claim (`capability-unattested`); CLI routes `--member` at `apps/cli/src/commands/agent/join.ts:85`; refusals proven at `apps/cli/tests/commands/agent/join-member.test.ts:105` (re-run 2026-10-26: CLI agent suites pass for 1281) |
+| R2 | MET | generation `max+1` at `packages/app/src/services/fleet-guest-service.ts:450` plus the claim epoch; `packages/app/tests/services/fleet-guest-bind-member.test.ts:67` through `:136` cover every refusal leaving nothing behind, `:166` the two-binder race (re-run 2026-10-26: 22 pass / 0 fail with attached-turn suite) |
+| R3 | MET | bound record id is the member id so `wait --inbox <member-id>` addresses the member inbox (`packages/app/tests/services/fleet-guest-bind-member.test.ts:192`); `packages/app/src/services/fleet-guest-service.ts:526` refuses renew (hence claim/accept) for a superseded generation, proven at `packages/app/tests/services/fleet-guest-bind-member.test.ts:280` |
+| R4 | MET | `apps/cli/tests/commands/agent/join-member.test.ts:145` plain guest join after a binding carries no `memberBinding`; unchanged `apps/cli/tests/commands/agent/join.test.ts`, `leave.test.ts`, `wait.test.ts` pass this run |
 
 | Acceptance Criteria | Status | Evidence Type | Evidence |
 |---------------------|--------|---------------|----------|
-| AC1 — R3 — A capable live session binds one declared member without changing guest defaults (req: R1, R2) | MET | test | `apps/cli/tests/commands/agent/join-member.test.ts:145` (exit 0, `memberBinding` in the record and the JSON output) and `packages/app/tests/services/fleet-guest-bind-member.test.ts:192` (occupant row makes the member busy) |
-| AC2 — Invalid binders are refused cleanly (req: R1, R2) | MET | test | `packages/app/tests/services/fleet-guest-bind-member.test.ts:67` (unknown, disabled, role mismatch, unattested, live occupant, plain-guest collision) and `:166` (two concurrent binders, loser leaves nothing) |
-| AC3 — Bound pull is epoch-fenced (req: R3) | MET | test | `packages/app/tests/services/fleet-guest-bind-member.test.ts:280` (a newer generation refuses the old binder's renew, hence claim/accept) and `:238` (a superseded `leave` cannot release the current owner) |
-| AC4 — Guest defaults are unchanged (req: R4) | MET | test | `apps/cli/tests/commands/agent/join-member.test.ts:145` (plain guest join after a binding, no `memberBinding`) and the unchanged `apps/cli/tests/commands/agent/join.test.ts` / `leave.test.ts` / `wait.test.ts` suites |
+| AC1 — R3 — A capable live session binds one declared member without changing guest defaults (req: R1, R2) | MET | test | `apps/cli/tests/commands/agent/join-member.test.ts:145` (exit 0, `memberBinding` in record and JSON) and `packages/app/tests/services/fleet-guest-bind-member.test.ts:192` (occupant row makes the member busy) |
+| AC2 — Invalid binders are refused cleanly (req: R1, R2) | MET | test | `packages/app/tests/services/fleet-guest-bind-member.test.ts:67` (unknown), `:78` (disabled), `:89` (role), `:101` (unattested), `:115` (live occupant), `:166` (concurrent binders, loser leaves nothing) |
+| AC3 — Bound pull is epoch-fenced (req: R3) | MET | test | `packages/app/tests/services/fleet-guest-bind-member.test.ts:280` (newer generation refuses old binder) and `:238` (superseded leave cannot release the current owner) |
+| AC4 — Guest defaults are unchanged (req: R4) | MET | test | `apps/cli/tests/commands/agent/join-member.test.ts:145` plus unchanged `apps/cli/tests/commands/agent/join.test.ts` / `leave.test.ts` / `wait.test.ts` suites |
 - Coverage: N/A (verdict-based; verify pipeline does not measure code coverage)
 
 ### Review

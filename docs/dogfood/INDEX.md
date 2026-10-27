@@ -17,6 +17,7 @@ git ls-files docs/dogfood | grep -Ev '(README|INDEX)\.md$'
 
 ## Reports
 
+- `2026-10-26-G75-fleet-participation-dogfood.md`
 - `2026-10-24-G74-fleet-perf-dogfood.md`
 - `2026-10-20-I3-surface-drift-inventory-dogfood.md`
 - `2026-10-19-E5-retention-bounded-purge-dogfood.md`

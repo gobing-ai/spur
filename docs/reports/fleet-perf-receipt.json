@@ -1,15 +1,15 @@
 {
     "schemaVersion": 1,
-    "generatedAt": "2026-10-26T02:15:37.284Z",
-    "revision": "bbd541987a5ae08f79a6382175ff857713c766af",
-    "repeatCommand": "bun run fleet-e2e --perf --trials 1 --agents pi --modes supervised-cold,attached-ready",
+    "generatedAt": "2026-10-27T00:20:26.657Z",
+    "revision": "3ebd9bcd9c222a673bb5cd9e839199bcc7345abe",
+    "repeatCommand": "bun run fleet-e2e --perf --trials 3 --agents pi",
     "workloadDigest": "sha256:a851ae35a1798abecb2241aecd1442fa70acaf5f077c22a8f1d75703cf5239ea",
     "targets": {
         "provisional": true,
         "note": "deterministic stub lane — same binary everywhere; comparisons are provisional. Warm rows record qualification of the INSTALLED binary (tasks 1276-1278) and carry no latency",
         "agents": ["pi"]
     },
-    "modes": ["supervised-cold", "attached-ready"],
+    "modes": ["supervised-cold", "supervised-warm", "attached-ready"],
     "trials": [
         {
             "model": "not-applicable (deterministic stub)",
@@ -20,45 +20,332 @@
             "agent": "pi",
             "mode": "cold",
             "status": "validated",
-            "durationMs": 4095,
+            "durationMs": 2634,
             "phases": [
                 {
                     "phase": "enqueue",
-                    "at": "2026-10-26T02:15:21.870Z"
+                    "at": "2026-10-27T00:19:31.851Z"
                 },
                 {
                     "phase": "claim",
-                    "at": "2026-10-26T02:15:21.951Z",
-                    "executionId": "4933cc12-c5df-431f-874b-2af6b89acce4"
+                    "at": "2026-10-27T00:19:31.909Z",
+                    "executionId": "925c4fcc-3a15-4d25-9d5f-e332f4838142"
                 },
                 {
                     "phase": "process-ready",
-                    "at": "2026-10-26T02:15:22.583Z",
-                    "executionId": "4933cc12-c5df-431f-874b-2af6b89acce4"
+                    "at": "2026-10-27T00:19:32.400Z",
+                    "executionId": "925c4fcc-3a15-4d25-9d5f-e332f4838142"
                 },
                 {
                     "phase": "process-ready",
-                    "at": "2026-10-26T02:15:22.963Z",
-                    "monotonicMs": 1,
-                    "executionId": "4933cc12-c5df-431f-874b-2af6b89acce4"
+                    "at": "2026-10-27T00:19:32.451Z",
+                    "monotonicMs": 26,
+                    "executionId": "925c4fcc-3a15-4d25-9d5f-e332f4838142"
                 },
                 {
                     "phase": "first-output",
-                    "at": "2026-10-26T02:15:25.962Z",
-                    "monotonicMs": 3001,
-                    "executionId": "4933cc12-c5df-431f-874b-2af6b89acce4"
+                    "at": "2026-10-27T00:19:34.482Z",
+                    "monotonicMs": 2057,
+                    "executionId": "925c4fcc-3a15-4d25-9d5f-e332f4838142"
                 },
                 {
                     "phase": "terminal",
-                    "at": "2026-10-26T02:15:25.965Z",
-                    "monotonicMs": 3003,
-                    "executionId": "4933cc12-c5df-431f-874b-2af6b89acce4"
+                    "at": "2026-10-27T00:19:34.485Z",
+                    "monotonicMs": 2060,
+                    "executionId": "925c4fcc-3a15-4d25-9d5f-e332f4838142"
+                },
+                {
+                    "phase": "turn-settled",
+                    "at": "2026-10-27T00:19:34.499Z",
+                    "executionId": "925c4fcc-3a15-4d25-9d5f-e332f4838142"
                 }
             ],
-            "runId": "e322cbd1-83d1-4160-82b3-72615f9ac0f7",
+            "runId": "d0da818b-af11-43a2-89eb-e44a4f98e14e",
             "key": "fleet:task:0001:1",
             "binary": {
-                "path": "/private/var/folders/2g/398pfv8j1tj_zt78g_ty2r740000gn/T/spur-fleet-perf-pi-1792980915141/bin/claude",
+                "path": "/private/tmp/claude-501/spur-fleet-perf-pi-1793060366397/bin/claude",
+                "version": "fleet-e2e-stub 1.0.0"
+            },
+            "hostBinaryVersion": "0.87.1"
+        },
+        {
+            "model": "not-applicable (deterministic stub)",
+            "provider": "not-applicable (deterministic stub)",
+            "reasoning": "not-applicable (deterministic stub)",
+            "tokens": "unavailable",
+            "resources": "unavailable",
+            "agent": "pi",
+            "mode": "resume",
+            "status": "validated",
+            "durationMs": 1810,
+            "phases": [
+                {
+                    "phase": "enqueue",
+                    "at": "2026-10-27T00:19:39.340Z"
+                },
+                {
+                    "phase": "claim",
+                    "at": "2026-10-27T00:19:39.384Z",
+                    "executionId": "d8d14dda-9345-49d1-a39b-1084e98bd519"
+                },
+                {
+                    "phase": "process-ready",
+                    "at": "2026-10-27T00:19:39.411Z",
+                    "executionId": "d8d14dda-9345-49d1-a39b-1084e98bd519"
+                },
+                {
+                    "phase": "process-ready",
+                    "at": "2026-10-27T00:19:39.446Z",
+                    "monotonicMs": 18,
+                    "executionId": "d8d14dda-9345-49d1-a39b-1084e98bd519"
+                },
+                {
+                    "phase": "first-output",
+                    "at": "2026-10-27T00:19:41.148Z",
+                    "monotonicMs": 1720,
+                    "executionId": "d8d14dda-9345-49d1-a39b-1084e98bd519"
+                },
+                {
+                    "phase": "terminal",
+                    "at": "2026-10-27T00:19:41.150Z",
+                    "monotonicMs": 1722,
+                    "executionId": "d8d14dda-9345-49d1-a39b-1084e98bd519"
+                },
+                {
+                    "phase": "turn-settled",
+                    "at": "2026-10-27T00:19:41.161Z",
+                    "executionId": "d8d14dda-9345-49d1-a39b-1084e98bd519"
+                }
+            ],
+            "runId": "760faf6b-b5ad-42c2-96f5-e3beef8cfe2a",
+            "key": "fleet:task:0002:1",
+            "binary": {
+                "path": "/private/tmp/claude-501/spur-fleet-perf-pi-1793060366397/bin/claude",
+                "version": "fleet-e2e-stub 1.0.0"
+            },
+            "hostBinaryVersion": "0.87.1"
+        },
+        {
+            "model": "not-applicable (deterministic stub)",
+            "provider": "not-applicable (deterministic stub)",
+            "reasoning": "not-applicable (deterministic stub)",
+            "tokens": "unavailable",
+            "resources": "unavailable",
+            "agent": "pi",
+            "mode": "resume",
+            "status": "validated",
+            "durationMs": 2013,
+            "phases": [
+                {
+                    "phase": "enqueue",
+                    "at": "2026-10-27T00:19:45.139Z"
+                },
+                {
+                    "phase": "claim",
+                    "at": "2026-10-27T00:19:45.217Z",
+                    "executionId": "fe284008-1f67-479e-9575-d3a33d4f8c92"
+                },
+                {
+                    "phase": "process-ready",
+                    "at": "2026-10-27T00:19:45.240Z",
+                    "executionId": "fe284008-1f67-479e-9575-d3a33d4f8c92"
+                },
+                {
+                    "phase": "process-ready",
+                    "at": "2026-10-27T00:19:45.275Z",
+                    "monotonicMs": 20,
+                    "executionId": "fe284008-1f67-479e-9575-d3a33d4f8c92"
+                },
+                {
+                    "phase": "first-output",
+                    "at": "2026-10-27T00:19:47.149Z",
+                    "monotonicMs": 1893,
+                    "executionId": "fe284008-1f67-479e-9575-d3a33d4f8c92"
+                },
+                {
+                    "phase": "terminal",
+                    "at": "2026-10-27T00:19:47.152Z",
+                    "monotonicMs": 1896,
+                    "executionId": "fe284008-1f67-479e-9575-d3a33d4f8c92"
+                },
+                {
+                    "phase": "turn-settled",
+                    "at": "2026-10-27T00:19:47.162Z",
+                    "executionId": "fe284008-1f67-479e-9575-d3a33d4f8c92"
+                }
+            ],
+            "runId": "621f07a9-ea1c-415a-a22a-515613946fae",
+            "key": "fleet:task:0003:1",
+            "binary": {
+                "path": "/private/tmp/claude-501/spur-fleet-perf-pi-1793060366397/bin/claude",
+                "version": "fleet-e2e-stub 1.0.0"
+            },
+            "hostBinaryVersion": "0.87.1"
+        },
+        {
+            "model": "not-applicable (deterministic stub)",
+            "provider": "not-applicable (deterministic stub)",
+            "reasoning": "not-applicable (deterministic stub)",
+            "tokens": "unavailable",
+            "resources": "unavailable",
+            "agent": "pi",
+            "mode": "warm",
+            "status": "validated",
+            "durationMs": 2058,
+            "phases": [
+                {
+                    "phase": "enqueue",
+                    "at": "2026-10-27T00:19:53.154Z"
+                },
+                {
+                    "phase": "claim",
+                    "at": "2026-10-27T00:19:53.252Z",
+                    "executionId": "69f3a37d-9f57-49c9-91d6-9101041120b6"
+                },
+                {
+                    "phase": "process-ready",
+                    "at": "2026-10-27T00:19:53.286Z",
+                    "executionId": "69f3a37d-9f57-49c9-91d6-9101041120b6"
+                },
+                {
+                    "phase": "terminal",
+                    "at": "2026-10-27T00:19:55.212Z",
+                    "monotonicMs": 1907,
+                    "executionId": "69f3a37d-9f57-49c9-91d6-9101041120b6"
+                },
+                {
+                    "phase": "turn-settled",
+                    "at": "2026-10-27T00:19:55.225Z",
+                    "executionId": "69f3a37d-9f57-49c9-91d6-9101041120b6"
+                }
+            ],
+            "runId": "70eb2123-8f60-4b8f-8eee-fe3c1ed30f0c",
+            "key": "fleet:task:0004:1",
+            "binary": {
+                "path": "/private/tmp/claude-501/spur-fleet-perf-pi-1793060366397/bin/claude",
+                "version": "2.1.308 (fleet-e2e-stub)"
+            },
+            "hostBinaryVersion": "0.87.1"
+        },
+        {
+            "model": "not-applicable (deterministic stub)",
+            "provider": "not-applicable (deterministic stub)",
+            "reasoning": "not-applicable (deterministic stub)",
+            "tokens": "unavailable",
+            "resources": "unavailable",
+            "agent": "pi",
+            "mode": "warm",
+            "status": "validated",
+            "durationMs": 2436,
+            "phases": [
+                {
+                    "phase": "enqueue",
+                    "at": "2026-10-27T00:20:00.204Z"
+                },
+                {
+                    "phase": "claim",
+                    "at": "2026-10-27T00:20:00.227Z",
+                    "executionId": "1ebea1e0-75da-4771-af85-8fef0efdfff4"
+                },
+                {
+                    "phase": "process-ready",
+                    "at": "2026-10-27T00:20:00.248Z",
+                    "executionId": "1ebea1e0-75da-4771-af85-8fef0efdfff4"
+                },
+                {
+                    "phase": "terminal",
+                    "at": "2026-10-27T00:20:02.640Z",
+                    "monotonicMs": 2372,
+                    "executionId": "1ebea1e0-75da-4771-af85-8fef0efdfff4"
+                },
+                {
+                    "phase": "turn-settled",
+                    "at": "2026-10-27T00:20:02.654Z",
+                    "executionId": "1ebea1e0-75da-4771-af85-8fef0efdfff4"
+                }
+            ],
+            "runId": "3051519a-e187-4f6c-8d31-18948b8326f1",
+            "key": "fleet:task:0005:1",
+            "binary": {
+                "path": "/private/tmp/claude-501/spur-fleet-perf-pi-1793060366397/bin/claude",
+                "version": "2.1.308 (fleet-e2e-stub)"
+            },
+            "hostBinaryVersion": "0.87.1"
+        },
+        {
+            "model": "not-applicable (deterministic stub)",
+            "provider": "not-applicable (deterministic stub)",
+            "reasoning": "not-applicable (deterministic stub)",
+            "tokens": "unavailable",
+            "resources": "unavailable",
+            "agent": "pi",
+            "mode": "warm",
+            "status": "validated",
+            "durationMs": 2155,
+            "phases": [
+                {
+                    "phase": "enqueue",
+                    "at": "2026-10-27T00:20:07.788Z"
+                },
+                {
+                    "phase": "claim",
+                    "at": "2026-10-27T00:20:07.891Z",
+                    "executionId": "aa27699e-7850-431c-b0eb-8161853ae9d8"
+                },
+                {
+                    "phase": "process-ready",
+                    "at": "2026-10-27T00:20:07.913Z",
+                    "executionId": "aa27699e-7850-431c-b0eb-8161853ae9d8"
+                },
+                {
+                    "phase": "terminal",
+                    "at": "2026-10-27T00:20:09.943Z",
+                    "monotonicMs": 2013,
+                    "executionId": "aa27699e-7850-431c-b0eb-8161853ae9d8"
+                },
+                {
+                    "phase": "turn-settled",
+                    "at": "2026-10-27T00:20:09.953Z",
+                    "executionId": "aa27699e-7850-431c-b0eb-8161853ae9d8"
+                }
+            ],
+            "runId": "ab48994a-cba2-443c-90ba-444deeafa93c",
+            "key": "fleet:task:0006:1",
+            "binary": {
+                "path": "/private/tmp/claude-501/spur-fleet-perf-pi-1793060366397/bin/claude",
+                "version": "2.1.308 (fleet-e2e-stub)"
+            },
+            "hostBinaryVersion": "0.87.1"
+        },
+        {
+            "model": "not-applicable (deterministic stub)",
+            "provider": "not-applicable (deterministic stub)",
+            "reasoning": "not-applicable (deterministic stub)",
+            "tokens": "unavailable",
+            "resources": "unavailable",
+            "agent": "pi",
+            "mode": "attached-ready",
+            "status": "validated",
+            "durationMs": 1644,
+            "phases": [
+                {
+                    "phase": "attach",
+                    "at": "2026-10-27T00:20:13.308Z",
+                    "monotonicMs": 750
+                },
+                {
+                    "phase": "busy-wait",
+                    "at": "2026-10-27T00:20:16.440Z",
+                    "monotonicMs": 251
+                },
+                {
+                    "phase": "terminal",
+                    "at": "2026-10-27T00:20:17.779Z",
+                    "monotonicMs": 1644
+                }
+            ],
+            "binary": {
+                "path": "/private/tmp/claude-501/spur-fleet-perf-pi-1793060366397/bin/claude",
                 "version": "fleet-e2e-stub 1.0.0"
             },
             "hostBinaryVersion": "0.87.1"
@@ -72,26 +359,49 @@
             "agent": "pi",
             "mode": "attached-ready",
             "status": "validated",
-            "durationMs": 2466,
+            "durationMs": 1248,
             "phases": [
                 {
                     "phase": "attach",
-                    "at": "2026-10-26T02:15:28.745Z",
-                    "monotonicMs": 1093
-                },
-                {
-                    "phase": "busy-wait",
-                    "at": "2026-10-26T02:15:32.901Z",
-                    "monotonicMs": 252
+                    "at": "2026-10-27T00:20:13.308Z",
+                    "monotonicMs": 750
                 },
                 {
                     "phase": "terminal",
-                    "at": "2026-10-26T02:15:35.061Z",
-                    "monotonicMs": 2466
+                    "at": "2026-10-27T00:20:21.445Z",
+                    "monotonicMs": 1248
                 }
             ],
             "binary": {
-                "path": "/private/var/folders/2g/398pfv8j1tj_zt78g_ty2r740000gn/T/spur-fleet-perf-pi-1792980915141/bin/claude",
+                "path": "/private/tmp/claude-501/spur-fleet-perf-pi-1793060366397/bin/claude",
+                "version": "fleet-e2e-stub 1.0.0"
+            },
+            "hostBinaryVersion": "0.87.1"
+        },
+        {
+            "model": "not-applicable (deterministic stub)",
+            "provider": "not-applicable (deterministic stub)",
+            "reasoning": "not-applicable (deterministic stub)",
+            "tokens": "unavailable",
+            "resources": "unavailable",
+            "agent": "pi",
+            "mode": "attached-ready",
+            "status": "validated",
+            "durationMs": 1349,
+            "phases": [
+                {
+                    "phase": "attach",
+                    "at": "2026-10-27T00:20:13.308Z",
+                    "monotonicMs": 750
+                },
+                {
+                    "phase": "terminal",
+                    "at": "2026-10-27T00:20:25.240Z",
+                    "monotonicMs": 1349
+                }
+            ],
+            "binary": {
+                "path": "/private/tmp/claude-501/spur-fleet-perf-pi-1793060366397/bin/claude",
                 "version": "fleet-e2e-stub 1.0.0"
             },
             "hostBinaryVersion": "0.87.1"
@@ -100,12 +410,17 @@
     "measured": {
         "pi": {
             "cold": {
-                "p50Ms": 4095,
-                "p95Ms": 4095,
+                "p50Ms": 2634,
+                "p95Ms": 2634,
                 "completionRate": 1,
-                "validatedPerHour": 879.121
+                "validatedPerHour": 1366.743
             },
-            "resume": {},
+            "resume": {
+                "p50Ms": 1810,
+                "p95Ms": 2013,
+                "completionRate": 1,
+                "validatedPerHour": 1883.338
+            },
             "warm": {
                 "binary": {
                     "path": "node_modules/.bin/pi",
@@ -115,7 +430,7 @@
                 "verifiedVersion": "0.87.1",
                 "provenance": {
                     "host": {
-                        "path": "/Users/robin/node_modules/.bin/pi",
+                        "path": "~/node_modules/.bin/pi",
                         "version": "1.4.0"
                     },
                     "repository": {
@@ -126,11 +441,17 @@
                 "status": "qualified",
                 "qualified": true
             },
-            "attached": {
-                "p50Ms": 2466,
-                "p95Ms": 2466,
+            "warmTurns": {
+                "p50Ms": 2155,
+                "p95Ms": 2436,
                 "completionRate": 1,
-                "validatedPerHour": 1459.854
+                "validatedPerHour": 1624.304
+            },
+            "attached": {
+                "p50Ms": 1349,
+                "p95Ms": 1644,
+                "completionRate": 1,
+                "validatedPerHour": 2546.569
             }
         }
     },
@@ -152,10 +473,10 @@
                 "tokens": "unavailable",
                 "resources": "unavailable",
                 "status": "validated",
-                "durationMs": 246.77116699999897,
-                "runId": "1c509d93-225d-4eb5-92b3-9800af252915",
-                "executionId": "28475ca4-7a0a-42e1-9a05-2d76282e2180",
-                "requestId": "b222b4fc-838d-45be-84f5-61fc4328fef2",
+                "durationMs": 22.503290999993624,
+                "runId": "9d6f5ab6-7034-47b4-b2c1-6f6e1f4f775a",
+                "executionId": "ac19580c-3778-4d53-8565-6b9668e1f619",
+                "requestId": "5268b8a9-e287-4c0a-a4a2-628252d737e0",
                 "attempt": 0,
                 "memberId": "perf-pi",
                 "ownerEpoch": 1,
@@ -163,28 +484,28 @@
                 "phases": [
                     {
                         "phase": "enqueue",
-                        "at": "2026-10-26T02:15:36.539Z",
-                        "executionId": "28475ca4-7a0a-42e1-9a05-2d76282e2180"
+                        "at": "2026-10-27T00:20:26.504Z",
+                        "executionId": "ac19580c-3778-4d53-8565-6b9668e1f619"
                     },
                     {
                         "phase": "preflight",
-                        "at": "2026-10-26T02:15:36.540Z",
-                        "executionId": "28475ca4-7a0a-42e1-9a05-2d76282e2180"
+                        "at": "2026-10-27T00:20:26.505Z",
+                        "executionId": "ac19580c-3778-4d53-8565-6b9668e1f619"
                     },
                     {
                         "phase": "accepted",
-                        "at": "2026-10-26T02:15:36.541Z",
-                        "executionId": "28475ca4-7a0a-42e1-9a05-2d76282e2180"
+                        "at": "2026-10-27T00:20:26.505Z",
+                        "executionId": "ac19580c-3778-4d53-8565-6b9668e1f619"
                     },
                     {
                         "phase": "contract-validated",
-                        "at": "2026-10-26T02:15:36.786Z",
-                        "executionId": "28475ca4-7a0a-42e1-9a05-2d76282e2180"
+                        "at": "2026-10-27T00:20:26.526Z",
+                        "executionId": "ac19580c-3778-4d53-8565-6b9668e1f619"
                     },
                     {
                         "phase": "receipt",
-                        "at": "2026-10-26T02:15:36.786Z",
-                        "executionId": "28475ca4-7a0a-42e1-9a05-2d76282e2180"
+                        "at": "2026-10-27T00:20:26.527Z",
+                        "executionId": "ac19580c-3778-4d53-8565-6b9668e1f619"
                     }
                 ],
                 "binary": {
@@ -203,10 +524,10 @@
                 "tokens": "unavailable",
                 "resources": "unavailable",
                 "status": "validated",
-                "durationMs": 218.95808300000135,
-                "runId": "4f8d44e0-e7e0-42ce-8f2e-c0580d6d4d82",
-                "executionId": "e7dac750-608c-4841-920b-fe914e56299d",
-                "requestId": "8281364f-9355-4276-b5d8-74b063ed31f3",
+                "durationMs": 13.52666699999827,
+                "runId": "6ab32bbc-47a8-4a72-94cc-bdc4d7f80823",
+                "executionId": "e450dd43-28be-41f5-a719-cf0aef7ee639",
+                "requestId": "f9af5c8c-3fb7-4fde-95a3-f3a92643648b",
                 "attempt": 0,
                 "memberId": "perf-pi",
                 "ownerEpoch": 1,
@@ -214,28 +535,28 @@
                 "phases": [
                     {
                         "phase": "enqueue",
-                        "at": "2026-10-26T02:15:36.786Z",
-                        "executionId": "e7dac750-608c-4841-920b-fe914e56299d"
+                        "at": "2026-10-27T00:20:26.527Z",
+                        "executionId": "e450dd43-28be-41f5-a719-cf0aef7ee639"
                     },
                     {
                         "phase": "preflight",
-                        "at": "2026-10-26T02:15:36.786Z",
-                        "executionId": "e7dac750-608c-4841-920b-fe914e56299d"
+                        "at": "2026-10-27T00:20:26.527Z",
+                        "executionId": "e450dd43-28be-41f5-a719-cf0aef7ee639"
                     },
                     {
                         "phase": "accepted",
-                        "at": "2026-10-26T02:15:36.786Z",
-                        "executionId": "e7dac750-608c-4841-920b-fe914e56299d"
+                        "at": "2026-10-27T00:20:26.527Z",
+                        "executionId": "e450dd43-28be-41f5-a719-cf0aef7ee639"
                     },
                     {
                         "phase": "contract-validated",
-                        "at": "2026-10-26T02:15:37.005Z",
-                        "executionId": "e7dac750-608c-4841-920b-fe914e56299d"
+                        "at": "2026-10-27T00:20:26.540Z",
+                        "executionId": "e450dd43-28be-41f5-a719-cf0aef7ee639"
                     },
                     {
                         "phase": "receipt",
-                        "at": "2026-10-26T02:15:37.005Z",
-                        "executionId": "e7dac750-608c-4841-920b-fe914e56299d"
+                        "at": "2026-10-27T00:20:26.540Z",
+                        "executionId": "e450dd43-28be-41f5-a719-cf0aef7ee639"
                     }
                 ],
                 "binary": {
@@ -254,10 +575,10 @@
                 "tokens": "unavailable",
                 "resources": "unavailable",
                 "status": "validated",
-                "durationMs": 227.10083300000042,
-                "runId": "87628f6f-6ae7-4740-8be6-31434c708344",
-                "executionId": "bb38365a-7b06-435d-934d-69e4abe8ebae",
-                "requestId": "466e9812-e36e-4370-9312-2d36de552da4",
+                "durationMs": 22.213666000003286,
+                "runId": "c81ba364-ea37-4a0b-87cd-19a87a60fbfb",
+                "executionId": "c96a9211-aa3a-4521-b656-20a81f1ebdf6",
+                "requestId": "c02f41d0-a09e-44e0-9fc0-2c5a0ec518b1",
                 "attempt": 0,
                 "memberId": "perf-pi",
                 "ownerEpoch": 1,
@@ -267,38 +588,368 @@
                 "phases": [
                     {
                         "phase": "enqueue",
-                        "at": "2026-10-26T02:15:37.005Z",
-                        "executionId": "bb38365a-7b06-435d-934d-69e4abe8ebae"
+                        "at": "2026-10-27T00:20:26.540Z",
+                        "executionId": "c96a9211-aa3a-4521-b656-20a81f1ebdf6"
                     },
                     {
                         "phase": "preflight",
-                        "at": "2026-10-26T02:15:37.005Z",
-                        "executionId": "bb38365a-7b06-435d-934d-69e4abe8ebae"
+                        "at": "2026-10-27T00:20:26.541Z",
+                        "executionId": "c96a9211-aa3a-4521-b656-20a81f1ebdf6"
                     },
                     {
                         "phase": "accepted",
-                        "at": "2026-10-26T02:15:37.005Z",
-                        "executionId": "bb38365a-7b06-435d-934d-69e4abe8ebae"
+                        "at": "2026-10-27T00:20:26.541Z",
+                        "executionId": "c96a9211-aa3a-4521-b656-20a81f1ebdf6"
                     },
                     {
                         "phase": "contract-validated",
-                        "at": "2026-10-26T02:15:37.232Z",
-                        "executionId": "bb38365a-7b06-435d-934d-69e4abe8ebae"
+                        "at": "2026-10-27T00:20:26.562Z",
+                        "executionId": "c96a9211-aa3a-4521-b656-20a81f1ebdf6"
                     },
                     {
                         "phase": "turn-settled",
-                        "at": "2026-10-26T02:15:37.232Z",
-                        "executionId": "bb38365a-7b06-435d-934d-69e4abe8ebae"
-                    },
-                    {
-                        "phase": "receipt",
-                        "at": "2026-10-26T02:15:37.232Z",
-                        "executionId": "bb38365a-7b06-435d-934d-69e4abe8ebae"
+                        "at": "2026-10-27T00:20:26.562Z",
+                        "executionId": "c96a9211-aa3a-4521-b656-20a81f1ebdf6"
                     },
                     {
                         "phase": "turn-accepted",
-                        "at": "2026-10-26T02:15:37.232Z",
-                        "executionId": "bb38365a-7b06-435d-934d-69e4abe8ebae"
+                        "at": "2026-10-27T00:20:26.562Z",
+                        "executionId": "c96a9211-aa3a-4521-b656-20a81f1ebdf6"
+                    },
+                    {
+                        "phase": "receipt",
+                        "at": "2026-10-27T00:20:26.563Z",
+                        "executionId": "c96a9211-aa3a-4521-b656-20a81f1ebdf6"
+                    }
+                ],
+                "binary": {
+                    "path": "/Users/robin/.proto/tools/bun/1.4.3/bun",
+                    "version": "1.4.3"
+                },
+                "contractValidated": true,
+                "injected": false
+            },
+            {
+                "agent": "pi",
+                "mode": "warm",
+                "model": "fixture-v1",
+                "provider": "local-fixture",
+                "reasoning": "none",
+                "tokens": "unavailable",
+                "resources": "unavailable",
+                "status": "validated",
+                "durationMs": 0.8276660000046832,
+                "runId": "9a5a988b-9cdd-4416-bbe3-ca7f4d8c06e5",
+                "executionId": "0b4e6b8a-67e8-485a-824c-18e9c785f0f4",
+                "requestId": "1b337807-8225-4615-ab0c-f11241b8a1ba",
+                "attempt": 0,
+                "memberId": "perf-pi",
+                "ownerEpoch": 1,
+                "occupantGeneration": 1,
+                "nativeOutcome": "success",
+                "nativeSessionId": "fake-session-1",
+                "phases": [
+                    {
+                        "phase": "enqueue",
+                        "at": "2026-10-27T00:20:26.563Z",
+                        "executionId": "0b4e6b8a-67e8-485a-824c-18e9c785f0f4"
+                    },
+                    {
+                        "phase": "preflight",
+                        "at": "2026-10-27T00:20:26.563Z",
+                        "executionId": "0b4e6b8a-67e8-485a-824c-18e9c785f0f4"
+                    },
+                    {
+                        "phase": "accepted",
+                        "at": "2026-10-27T00:20:26.563Z",
+                        "executionId": "0b4e6b8a-67e8-485a-824c-18e9c785f0f4"
+                    },
+                    {
+                        "phase": "contract-validated",
+                        "at": "2026-10-27T00:20:26.563Z",
+                        "executionId": "0b4e6b8a-67e8-485a-824c-18e9c785f0f4"
+                    },
+                    {
+                        "phase": "turn-settled",
+                        "at": "2026-10-27T00:20:26.563Z",
+                        "executionId": "0b4e6b8a-67e8-485a-824c-18e9c785f0f4"
+                    },
+                    {
+                        "phase": "receipt",
+                        "at": "2026-10-27T00:20:26.563Z",
+                        "executionId": "0b4e6b8a-67e8-485a-824c-18e9c785f0f4"
+                    },
+                    {
+                        "phase": "turn-accepted",
+                        "at": "2026-10-27T00:20:26.563Z",
+                        "executionId": "0b4e6b8a-67e8-485a-824c-18e9c785f0f4"
+                    }
+                ],
+                "binary": {
+                    "path": "/Users/robin/.proto/tools/bun/1.4.3/bun",
+                    "version": "1.4.3"
+                },
+                "contractValidated": true,
+                "injected": false
+            },
+            {
+                "agent": "pi",
+                "mode": "cold",
+                "model": "fixture-v1",
+                "provider": "local-fixture",
+                "reasoning": "none",
+                "tokens": "unavailable",
+                "resources": "unavailable",
+                "status": "validated",
+                "durationMs": 13.500333000003593,
+                "runId": "18594193-2364-4c7d-90e3-1010dc4aee2d",
+                "executionId": "34859967-7bee-4fc8-a5a7-65e06f2326ae",
+                "requestId": "315aafe2-5859-4e31-ba4b-eabb6b71ba27",
+                "attempt": 0,
+                "memberId": "perf-pi",
+                "ownerEpoch": 1,
+                "occupantGeneration": 1,
+                "phases": [
+                    {
+                        "phase": "enqueue",
+                        "at": "2026-10-27T00:20:26.563Z",
+                        "executionId": "34859967-7bee-4fc8-a5a7-65e06f2326ae"
+                    },
+                    {
+                        "phase": "preflight",
+                        "at": "2026-10-27T00:20:26.563Z",
+                        "executionId": "34859967-7bee-4fc8-a5a7-65e06f2326ae"
+                    },
+                    {
+                        "phase": "accepted",
+                        "at": "2026-10-27T00:20:26.563Z",
+                        "executionId": "34859967-7bee-4fc8-a5a7-65e06f2326ae"
+                    },
+                    {
+                        "phase": "contract-validated",
+                        "at": "2026-10-27T00:20:26.577Z",
+                        "executionId": "34859967-7bee-4fc8-a5a7-65e06f2326ae"
+                    },
+                    {
+                        "phase": "receipt",
+                        "at": "2026-10-27T00:20:26.577Z",
+                        "executionId": "34859967-7bee-4fc8-a5a7-65e06f2326ae"
+                    }
+                ],
+                "binary": {
+                    "path": "/Users/robin/.proto/tools/bun/1.4.3/bun",
+                    "version": "1.4.3"
+                },
+                "contractValidated": true,
+                "injected": false
+            },
+            {
+                "agent": "pi",
+                "mode": "resume",
+                "model": "fixture-v1",
+                "provider": "local-fixture",
+                "reasoning": "none",
+                "tokens": "unavailable",
+                "resources": "unavailable",
+                "status": "validated",
+                "durationMs": 13.09687500000291,
+                "runId": "4a40eb91-a8a5-4d45-8a91-5d065e2a31c1",
+                "executionId": "f7ccfb10-a68b-43bb-800c-e4e2dd4f8e9d",
+                "requestId": "9a10d7f5-7fe5-42e9-a40d-c777bda437e5",
+                "attempt": 0,
+                "memberId": "perf-pi",
+                "ownerEpoch": 1,
+                "occupantGeneration": 1,
+                "phases": [
+                    {
+                        "phase": "enqueue",
+                        "at": "2026-10-27T00:20:26.577Z",
+                        "executionId": "f7ccfb10-a68b-43bb-800c-e4e2dd4f8e9d"
+                    },
+                    {
+                        "phase": "preflight",
+                        "at": "2026-10-27T00:20:26.577Z",
+                        "executionId": "f7ccfb10-a68b-43bb-800c-e4e2dd4f8e9d"
+                    },
+                    {
+                        "phase": "accepted",
+                        "at": "2026-10-27T00:20:26.577Z",
+                        "executionId": "f7ccfb10-a68b-43bb-800c-e4e2dd4f8e9d"
+                    },
+                    {
+                        "phase": "contract-validated",
+                        "at": "2026-10-27T00:20:26.590Z",
+                        "executionId": "f7ccfb10-a68b-43bb-800c-e4e2dd4f8e9d"
+                    },
+                    {
+                        "phase": "receipt",
+                        "at": "2026-10-27T00:20:26.590Z",
+                        "executionId": "f7ccfb10-a68b-43bb-800c-e4e2dd4f8e9d"
+                    }
+                ],
+                "binary": {
+                    "path": "/Users/robin/.proto/tools/bun/1.4.3/bun",
+                    "version": "1.4.3"
+                },
+                "contractValidated": true,
+                "injected": false
+            },
+            {
+                "agent": "pi",
+                "mode": "cold",
+                "model": "fixture-v1",
+                "provider": "local-fixture",
+                "reasoning": "none",
+                "tokens": "unavailable",
+                "resources": "unavailable",
+                "status": "validated",
+                "durationMs": 12.689291999995476,
+                "runId": "0977e4fb-a4b0-4fd3-9e86-7901f82f2703",
+                "executionId": "b80a41b4-c1fe-49bd-af88-7569138bf24d",
+                "requestId": "890036b5-9da8-4063-a219-8b01808f947f",
+                "attempt": 0,
+                "memberId": "perf-pi",
+                "ownerEpoch": 1,
+                "occupantGeneration": 1,
+                "phases": [
+                    {
+                        "phase": "enqueue",
+                        "at": "2026-10-27T00:20:26.590Z",
+                        "executionId": "b80a41b4-c1fe-49bd-af88-7569138bf24d"
+                    },
+                    {
+                        "phase": "preflight",
+                        "at": "2026-10-27T00:20:26.590Z",
+                        "executionId": "b80a41b4-c1fe-49bd-af88-7569138bf24d"
+                    },
+                    {
+                        "phase": "accepted",
+                        "at": "2026-10-27T00:20:26.590Z",
+                        "executionId": "b80a41b4-c1fe-49bd-af88-7569138bf24d"
+                    },
+                    {
+                        "phase": "contract-validated",
+                        "at": "2026-10-27T00:20:26.603Z",
+                        "executionId": "b80a41b4-c1fe-49bd-af88-7569138bf24d"
+                    },
+                    {
+                        "phase": "receipt",
+                        "at": "2026-10-27T00:20:26.603Z",
+                        "executionId": "b80a41b4-c1fe-49bd-af88-7569138bf24d"
+                    }
+                ],
+                "binary": {
+                    "path": "/Users/robin/.proto/tools/bun/1.4.3/bun",
+                    "version": "1.4.3"
+                },
+                "contractValidated": true,
+                "injected": false
+            },
+            {
+                "agent": "pi",
+                "mode": "resume",
+                "model": "fixture-v1",
+                "provider": "local-fixture",
+                "reasoning": "none",
+                "tokens": "unavailable",
+                "resources": "unavailable",
+                "status": "validated",
+                "durationMs": 12.676665999999386,
+                "runId": "a1fff2c4-ebda-4b71-932b-7f8884192f5b",
+                "executionId": "e798dabf-eef7-415d-a2b8-e420c5b6dfe4",
+                "requestId": "14f94fb7-11e4-4a9d-99cb-e55c59f688bd",
+                "attempt": 0,
+                "memberId": "perf-pi",
+                "ownerEpoch": 1,
+                "occupantGeneration": 1,
+                "phases": [
+                    {
+                        "phase": "enqueue",
+                        "at": "2026-10-27T00:20:26.603Z",
+                        "executionId": "e798dabf-eef7-415d-a2b8-e420c5b6dfe4"
+                    },
+                    {
+                        "phase": "preflight",
+                        "at": "2026-10-27T00:20:26.603Z",
+                        "executionId": "e798dabf-eef7-415d-a2b8-e420c5b6dfe4"
+                    },
+                    {
+                        "phase": "accepted",
+                        "at": "2026-10-27T00:20:26.603Z",
+                        "executionId": "e798dabf-eef7-415d-a2b8-e420c5b6dfe4"
+                    },
+                    {
+                        "phase": "contract-validated",
+                        "at": "2026-10-27T00:20:26.615Z",
+                        "executionId": "e798dabf-eef7-415d-a2b8-e420c5b6dfe4"
+                    },
+                    {
+                        "phase": "receipt",
+                        "at": "2026-10-27T00:20:26.615Z",
+                        "executionId": "e798dabf-eef7-415d-a2b8-e420c5b6dfe4"
+                    }
+                ],
+                "binary": {
+                    "path": "/Users/robin/.proto/tools/bun/1.4.3/bun",
+                    "version": "1.4.3"
+                },
+                "contractValidated": true,
+                "injected": false
+            },
+            {
+                "agent": "pi",
+                "mode": "warm",
+                "model": "fixture-v1",
+                "provider": "local-fixture",
+                "reasoning": "none",
+                "tokens": "unavailable",
+                "resources": "unavailable",
+                "status": "validated",
+                "durationMs": 1.0343330000032438,
+                "runId": "f6c22d77-91f1-468b-a7b8-290ee43cebea",
+                "executionId": "7a65b022-01e1-42a1-b9b4-2475d2816ce3",
+                "requestId": "efbd0e21-8dd2-43b4-9909-fee6e44b1c71",
+                "attempt": 0,
+                "memberId": "perf-pi",
+                "ownerEpoch": 1,
+                "occupantGeneration": 1,
+                "nativeOutcome": "success",
+                "nativeSessionId": "fake-session-1",
+                "phases": [
+                    {
+                        "phase": "enqueue",
+                        "at": "2026-10-27T00:20:26.615Z",
+                        "executionId": "7a65b022-01e1-42a1-b9b4-2475d2816ce3"
+                    },
+                    {
+                        "phase": "preflight",
+                        "at": "2026-10-27T00:20:26.615Z",
+                        "executionId": "7a65b022-01e1-42a1-b9b4-2475d2816ce3"
+                    },
+                    {
+                        "phase": "accepted",
+                        "at": "2026-10-27T00:20:26.615Z",
+                        "executionId": "7a65b022-01e1-42a1-b9b4-2475d2816ce3"
+                    },
+                    {
+                        "phase": "contract-validated",
+                        "at": "2026-10-27T00:20:26.616Z",
+                        "executionId": "7a65b022-01e1-42a1-b9b4-2475d2816ce3"
+                    },
+                    {
+                        "phase": "turn-settled",
+                        "at": "2026-10-27T00:20:26.616Z",
+                        "executionId": "7a65b022-01e1-42a1-b9b4-2475d2816ce3"
+                    },
+                    {
+                        "phase": "receipt",
+                        "at": "2026-10-27T00:20:26.616Z",
+                        "executionId": "7a65b022-01e1-42a1-b9b4-2475d2816ce3"
+                    },
+                    {
+                        "phase": "turn-accepted",
+                        "at": "2026-10-27T00:20:26.616Z",
+                        "executionId": "7a65b022-01e1-42a1-b9b4-2475d2816ce3"
                     }
                 ],
                 "binary": {
@@ -311,30 +962,30 @@
         ],
         "processes": {
             "pi": {
-                "cold": 1,
-                "resume": 1,
+                "cold": 3,
+                "resume": 3,
                 "warm": 1
             }
         },
         "measured": {
             "pi": {
                 "cold": {
-                    "p50Ms": 246.77116699999897,
-                    "p95Ms": 246.77116699999897,
+                    "p50Ms": 13.500333000003593,
+                    "p95Ms": 22.503290999993624,
                     "completionRate": 1,
-                    "validatedPerHour": 14588.414
+                    "validatedPerHour": 221798.177
                 },
                 "resume": {
-                    "p50Ms": 218.95808300000135,
-                    "p95Ms": 218.95808300000135,
+                    "p50Ms": 13.09687500000291,
+                    "p95Ms": 13.52666699999827,
                     "completionRate": 1,
-                    "validatedPerHour": 16441.503
+                    "validatedPerHour": 274807.706
                 },
                 "warm": {
-                    "p50Ms": 227.10083300000042,
-                    "p95Ms": 227.10083300000042,
+                    "p50Ms": 1.0343330000032438,
+                    "p95Ms": 22.213666000003286,
                     "completionRate": 1,
-                    "validatedPerHour": 15851.989
+                    "validatedPerHour": 448585.74
                 }
             }
         }
@@ -343,7 +994,7 @@
         {
             "agent": "grok-build",
             "binary": {
-                "path": "/Users/robin/.grok/bin/grok",
+                "path": "~/.grok/bin/grok",
                 "version": "grok 1.0.60 (01a8e1c591c0) [stable]"
             },
             "driver": null,
@@ -371,11 +1022,11 @@
         "rows": [
             {
                 "agent": "pi",
-                "attachedP50Ms": 2466,
-                "attachedP95Ms": 2466,
-                "warmP50Ms": 227.10083300000042,
-                "warmP95Ms": 227.10083300000042,
-                "verdict": "no-gain"
+                "attachedP50Ms": 1349,
+                "attachedP95Ms": 1644,
+                "warmP50Ms": 2155,
+                "warmP95Ms": 2436,
+                "verdict": "material-gain"
             }
         ]
     }
