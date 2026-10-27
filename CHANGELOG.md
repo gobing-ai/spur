@@ -1,5 +1,96 @@
 # Changelog
 
+## [0.4.21] - 2026-10-26
+
+_Claim bullets carry one source anchor and the level that anchor supports — `HIGH`: every anchor is a
+`path:line` beyond line 1 and resolves; `MEDIUM`: every anchor resolves but the set is not all
+line-precise (a URL or a whole file); `LOW`: an anchor that does not resolve, or none. The level is a
+function of the anchors, not a judgement (ADR-144; the check is
+`repo-wide-tests/changelog-confidence.test.ts`). Unanchored bullets are bookkeeping (status moves,
+filings) and assert no code, API or version fact._
+
+### Added
+- record the agent loop's task-turn receipt in the warm path and gate warm perf rows on it, so a plain keyed turn is provably warm or names its fallback runner (ec8388dc9)
+  <!-- src: packages/app/src/services/agent-loop-service.ts:588, packages/app/src/services/agent-loop-service.ts:647, scripts/commands/fleet-e2e.ts:2556 · confidence: HIGH -->
+- add paired cold/resume/warm-turn comparison rows to the perf receipt, measuring supervised-warm on the shared workload while `warm` stays the qualification row (85f98a673)
+  <!-- src: scripts/commands/fleet-e2e.ts:2244, scripts/commands/fleet-e2e.ts:3206 · confidence: HIGH -->
+- add a `--modes` perf selector with per-mode gain verdicts, batch-2 host probes and the combined supervised/attached receipt (1283) (768e2d318)
+  <!-- src: scripts/commands/fleet-e2e.ts:938, scripts/commands/fleet-e2e.ts:2188, scripts/commands/fleet-e2e.ts:2219 · confidence: HIGH -->
+- execute attached-stage occupants with correlated-only completion, so a deadline or operator abort leaves the turn `outcome-unknown` and resumable instead of failed (1282) (0b53ad818)
+  <!-- src: packages/app/src/services/attached-turn-dispatch.ts:13, packages/app/src/services/attached-turn-dispatch.ts:145, packages/app/src/services/attached-turn-dispatch.ts:201 · confidence: HIGH -->
+- probe installed host wake channels and prove the portable loop with hooks absent, ranking a connection-based wake over one that merely names hooks (1280) (5e08fef78)
+  <!-- src: scripts/commands/fleet-e2e.ts:820, scripts/commands/fleet-e2e.ts:1562 · confidence: HIGH -->
+- renew guest leases from a dedicated agent-owned process and bind declared members on `agent join --member`, so a rejoin spawns one renewer, not two (1279, 1281) (2588e2474)
+  <!-- src: apps/cli/src/commands/agent/join.ts:85, packages/app/src/services/fleet-guest-service.ts:59 · confidence: HIGH -->
+- qualify the Codex App Server warm task-turn adapter against a replay fixture (1278) (4df3065c6)
+  <!-- src: packages/app/tests/fixtures/codex-warm/replay.ts · confidence: MEDIUM -->
+- qualify the Pi RPC warm task-turn adapter against a replay fixture (1277) (dea28048f)
+  <!-- src: packages/app/tests/fixtures/pi-warm/replay.ts · confidence: MEDIUM -->
+- repin the catalog to @gobing-ai/ts-* 0.6.3 with the pi rpc driver (1277) (b6c224ffa)
+  <!-- src: package.json · confidence: MEDIUM -->
+- drive the claude-code warm task-turn adapter through the released ts-libs driver with a replay fixture and perf coverage (1276) (951e6fe0a)
+  <!-- src: packages/app/tests/fixtures/claude-warm/replay.ts · confidence: MEDIUM -->
+- add the correlated keyed task-turn seam with identity fencing and runner fallback (1275) (2bd7fd56b)
+  <!-- src: packages/app/src/services/warm-turn-dispatch.ts:147, packages/app/src/services/warm-turn-dispatch.ts:239 · confidence: HIGH -->
+- run the orchestrator's deterministic scheduling tick beside — never inside — an in-flight conversation, so dispatch survives with no turn open (1274) (7ce9fb4a1)
+  <!-- src: packages/app/src/services/agent-loop-service.ts:383, packages/app/src/services/agent-loop-service.ts:700 · confidence: HIGH -->
+- add correlated phase-timing marks and the `fleet-e2e --perf` KPI driver (1273) (c83543e2b)
+  <!-- src: scripts/commands/fleet-e2e.ts:7, scripts/commands/fleet-e2e.ts:2859 · confidence: HIGH -->
+
+### Fixed
+- resolve the 1283 review advisories: render the probe status in the batch-2 table, cover `no-gain` under the AC2 convenience note, carry the attach mark on the first trial only, and rename the measured lane to `attached-ready` (d3ade475e)
+  <!-- src: scripts/commands/fleet-e2e.ts:2509, scripts/commands/fleet-e2e.ts:2540, scripts/commands/fleet-e2e.ts:2662, scripts/commands/fleet-e2e.ts:2252 · confidence: HIGH -->
+- fail loudly on an empty `--modes` list and dedupe repeated lanes instead of writing an empty receipt (3ebd9bcd9)
+  <!-- src: scripts/commands/fleet-e2e.ts:938 · confidence: HIGH -->
+- redact POSIX home prefixes in probe output regardless of the runner's `$HOME` (bbd541987)
+  <!-- src: scripts/commands/fleet-e2e.ts:1537 · confidence: HIGH -->
+- treat review placeholder rows by exact match so a `none found` row is not read as a finding (66864614f)
+  <!-- src: packages/app/src/services/residual-scan.ts:444 · confidence: HIGH -->
+- accept the reviewer-written cert as the pipeline's review verdict (6cdfea7cc)
+  <!-- src: config/workflows/task-pipeline.yaml · confidence: MEDIUM -->
+- bind reused warm turns to their agent and correlation holder (a8c3c4509)
+  <!-- src: packages/app/src/services/warm-turn-dispatch.ts:28, packages/app/src/services/warm-turn-dispatch.ts:239 · confidence: HIGH -->
+- keep live ports on re-add and refuse remote stops in the projects CLI (358e9f009)
+  <!-- src: apps/cli/src/commands/projects.ts:447, apps/cli/src/commands/projects.ts:460 · confidence: HIGH -->
+- key project-registry writes by host and stop healing remote ports (a81812477)
+  <!-- src: packages/app/src/services/project-registry.ts:383 · confidence: HIGH -->
+
+### Changed
+- default `agent.enabled` to false in the project config (3bbfd7313)
+  <!-- src: .spur/config.yaml:163 · confidence: HIGH -->
+- re-verify the perf receipt at the fixed revision and mark the 1283 review findings fixed (838830d8a)
+- refresh the fleet receipts and re-anchor G75 task evidence to post-landing line numbers (4e6fb5ada)
+- mark G75 tasks 1282/1283 done with the feature pending its L4 dogfood artifact (833c0302a)
+- record the 1282+1283 batch wrap learnings and authority-doc sync (2165bb507)
+- skip the project DB bootstrap for gate status and other light read paths (324ac6f1e)
+  <!-- src: apps/cli/src/index.ts · confidence: MEDIUM -->
+- record the G74 verifyall re-audit verdicts (a7d42163f)
+- update session memory (fb677fcff)
+- mark G74 done and refresh task evidence (6421f254a)
+- record the D65 task-pipeline dogfood report (9cbf5c987)
+- update session memory (d5b012f1d)
+- sync G74 to verifying with all seven tasks done (1670b3fa2)
+- record G75 renewal, probing and binding in the owning docs (3aa69f0c3)
+- close tasks 1279-1281 with their evidence (9b7ccf113)
+- record task 1284 done and block 1275 on the missing npm release (79afe4eac)
+- record operator consent for `agent join --member` on 1281 (88b0ecc9c)
+- refine G74/G75 tasks to implement-ready (9c32bc792)
+- bind G75 task ACs to the feature ship scenarios (ad0c00710)
+- plan G74/G75 warm task turns and verified live-session occupancy (607f1ea7d)
+- repin the @gobing-ai/ts-* catalog to ^0.7.1 (8fb475754)
+  <!-- src: package.json:37 · confidence: HIGH -->
+- repin the @gobing-ai/ts-* catalog to ^0.7.0 (a8ea59666)
+  <!-- src: package.json · confidence: MEDIUM -->
+- repin the @gobing-ai/ts-* catalog to ^0.6.4 (59deb95ef)
+  <!-- src: package.json · confidence: MEDIUM -->
+
+### Other
+- merge sp/runall-g75-ad0c007 — G75 renew, probe and bind (464780d51)
+- merge the G74 feature-corpus sync, status verifying with seven tasks done (4030189ba)
+- merge the G74 warm task-turn batch, 1273-1284 with 1277/1278 via ts-libs 0.7.1 (12696cd50)
+- add a project script entry (d6ee13714)
+- upgrade the project configuration (b2e9fd5fd)
+
 ## [0.4.20] - 2026-10-21
 
 _Claim bullets carry one source anchor and the level that anchor supports — `HIGH`: every anchor is a
