@@ -2244,7 +2244,13 @@ export interface PerfReceipt {
     /** `warmTurns` measures supervised-warm on the shared workload; `warm` stays the qualification row. */
     measured: Record<
         string,
-        { cold: PerfMeasured; resume: PerfMeasured; warm: PerfWarm; warmTurns?: PerfMeasured; attached?: PerfMeasured }
+        {
+            cold: PerfMeasured;
+            resume: PerfMeasured;
+            warm: PerfWarm;
+            warmTurns?: PerfMeasured;
+            'attached-ready'?: PerfMeasured;
+        }
     >;
     /** The paired deterministic lane; absent when neither supervised mode was selected. */
     turnComparison?: TurnPerfComparison;
@@ -2500,7 +2506,7 @@ function writePerfReceipts(receipt: PerfReceipt, repeatCommand: string): void {
         );
         for (const probe of receipt.batch2Probes) {
             lines.push(
-                `| ${probe.agent} | unsupported | ${probe.driver ?? 'none'} | ${probe.binary?.path ?? 'absent'} | ${probe.binary?.version ?? '—'} | ${probe.reason ?? ''} |`,
+                `| ${probe.agent} | ${probe.status} | ${probe.driver ?? 'none'} | ${probe.binary?.path ?? 'absent'} | ${probe.binary?.version ?? '—'} | ${probe.reason ?? ''} |`,
             );
         }
         lines.push(
@@ -2526,12 +2532,12 @@ function writePerfReceipts(receipt: PerfReceipt, repeatCommand: string): void {
             );
         }
         const convenience = receipt.attachedComparison.rows
-            .filter((row) => row.verdict === 'convenience-only')
+            .filter((row) => row.verdict === 'convenience-only' || row.verdict === 'no-gain')
             .map((row) => row.agent);
         if (convenience.length > 0) {
             lines.push(
                 '',
-                `Convenience-only (under materiality): ${convenience.join(', ')} — attached-ready gains ergonomics, not speed.`,
+                `Convenience only (under materiality; AC2): ${convenience.join(', ')} — attached-ready gains ergonomics, not speed.`,
             );
         }
         lines.push(
@@ -2652,7 +2658,8 @@ async function runAttachedTrials(
             attempt: 1,
         };
         const requestKey = `fleet:task:${requestId}:1`;
-        const phases: PerfPhaseMark[] = [attachMark];
+        // The handshake happens once per lane, so only the first trial carries its mark.
+        const phases: PerfPhaseMark[] = index === 0 ? [attachMark] : [];
         const dispatcher = createAttachedTurnDispatcher({
             dispatcher: fleetDispatcher,
             replies: async (messageId) =>
@@ -3197,7 +3204,7 @@ export async function runFleetPerf(options: {
             resume,
             warm: warmRow(agent, warmProbes.get(agent) ?? { driver: null, binary: null, verifiedVersion: null }),
             ...(supervisedWarm ? { warmTurns: perfMeasured(agentTrials, 'warm') } : {}),
-            ...(attachedReady ? { attached: perfMeasured(agentTrials, 'attached-ready') } : {}),
+            ...(attachedReady ? { 'attached-ready': perfMeasured(agentTrials, 'attached-ready') } : {}),
         };
     }
     // The paired deterministic lane belongs to the supervised modes; an attached-only run skips it.
@@ -3231,7 +3238,7 @@ export async function runFleetPerf(options: {
                   source: 'docs/plans/2026-10-21-fleet-performance-measurement.md (provisional targets)',
               },
               rows: targets.map((agent) => {
-                  const attached = measured[agent]?.attached;
+                  const attached = measured[agent]?.['attached-ready'];
                   // Same workload, same digest: the supervised-warm lane above, never the turn fixture.
                   const warm = measured[agent]?.warmTurns;
                   return {
