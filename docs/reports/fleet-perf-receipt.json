@@ -1,7 +1,7 @@
 {
     "schemaVersion": 1,
-    "generatedAt": "2026-10-27T00:20:26.657Z",
-    "revision": "3ebd9bcd9c222a673bb5cd9e839199bcc7345abe",
+    "generatedAt": "2026-10-27T00:55:58.623Z",
+    "revision": "4e6fb5adacbc3bdcfb98617a3a8cddd590b094cd",
     "repeatCommand": "bun run fleet-e2e --perf --trials 3 --agents pi",
     "workloadDigest": "sha256:a851ae35a1798abecb2241aecd1442fa70acaf5f077c22a8f1d75703cf5239ea",
     "targets": {
@@ -20,50 +20,50 @@
             "agent": "pi",
             "mode": "cold",
             "status": "validated",
-            "durationMs": 2634,
+            "durationMs": 1706,
             "phases": [
                 {
                     "phase": "enqueue",
-                    "at": "2026-10-27T00:19:31.851Z"
+                    "at": "2026-10-27T00:55:16.293Z"
                 },
                 {
                     "phase": "claim",
-                    "at": "2026-10-27T00:19:31.909Z",
-                    "executionId": "925c4fcc-3a15-4d25-9d5f-e332f4838142"
+                    "at": "2026-10-27T00:55:16.315Z",
+                    "executionId": "e9ebbc21-b06a-4829-8a29-51e0ce3e55ee"
                 },
                 {
                     "phase": "process-ready",
-                    "at": "2026-10-27T00:19:32.400Z",
-                    "executionId": "925c4fcc-3a15-4d25-9d5f-e332f4838142"
+                    "at": "2026-10-27T00:55:16.479Z",
+                    "executionId": "e9ebbc21-b06a-4829-8a29-51e0ce3e55ee"
                 },
                 {
                     "phase": "process-ready",
-                    "at": "2026-10-27T00:19:32.451Z",
-                    "monotonicMs": 26,
-                    "executionId": "925c4fcc-3a15-4d25-9d5f-e332f4838142"
+                    "at": "2026-10-27T00:55:16.534Z",
+                    "monotonicMs": 29,
+                    "executionId": "e9ebbc21-b06a-4829-8a29-51e0ce3e55ee"
                 },
                 {
                     "phase": "first-output",
-                    "at": "2026-10-27T00:19:34.482Z",
-                    "monotonicMs": 2057,
-                    "executionId": "925c4fcc-3a15-4d25-9d5f-e332f4838142"
+                    "at": "2026-10-27T00:55:17.996Z",
+                    "monotonicMs": 1491,
+                    "executionId": "e9ebbc21-b06a-4829-8a29-51e0ce3e55ee"
                 },
                 {
                     "phase": "terminal",
-                    "at": "2026-10-27T00:19:34.485Z",
-                    "monotonicMs": 2060,
-                    "executionId": "925c4fcc-3a15-4d25-9d5f-e332f4838142"
+                    "at": "2026-10-27T00:55:17.999Z",
+                    "monotonicMs": 1494,
+                    "executionId": "e9ebbc21-b06a-4829-8a29-51e0ce3e55ee"
                 },
                 {
                     "phase": "turn-settled",
-                    "at": "2026-10-27T00:19:34.499Z",
-                    "executionId": "925c4fcc-3a15-4d25-9d5f-e332f4838142"
+                    "at": "2026-10-27T00:55:18.010Z",
+                    "executionId": "e9ebbc21-b06a-4829-8a29-51e0ce3e55ee"
                 }
             ],
-            "runId": "d0da818b-af11-43a2-89eb-e44a4f98e14e",
+            "runId": "b0ce9bea-0e49-48b0-89da-7a32bcddcff3",
             "key": "fleet:task:0001:1",
             "binary": {
-                "path": "/private/tmp/claude-501/spur-fleet-perf-pi-1793060366397/bin/claude",
+                "path": "/private/tmp/claude-501/spur-fleet-perf-pi-1793062511588/bin/claude",
                 "version": "fleet-e2e-stub 1.0.0"
             },
             "hostBinaryVersion": "0.87.1"
@@ -77,50 +77,50 @@
             "agent": "pi",
             "mode": "resume",
             "status": "validated",
-            "durationMs": 1810,
+            "durationMs": 1612,
             "phases": [
                 {
                     "phase": "enqueue",
-                    "at": "2026-10-27T00:19:39.340Z"
+                    "at": "2026-10-27T00:55:21.356Z"
                 },
                 {
                     "phase": "claim",
-                    "at": "2026-10-27T00:19:39.384Z",
-                    "executionId": "d8d14dda-9345-49d1-a39b-1084e98bd519"
+                    "at": "2026-10-27T00:55:21.406Z",
+                    "executionId": "0b6de31c-befa-413b-9bcd-290a41bd0852"
                 },
                 {
                     "phase": "process-ready",
-                    "at": "2026-10-27T00:19:39.411Z",
-                    "executionId": "d8d14dda-9345-49d1-a39b-1084e98bd519"
+                    "at": "2026-10-27T00:55:21.447Z",
+                    "executionId": "0b6de31c-befa-413b-9bcd-290a41bd0852"
                 },
                 {
                     "phase": "process-ready",
-                    "at": "2026-10-27T00:19:39.446Z",
-                    "monotonicMs": 18,
-                    "executionId": "d8d14dda-9345-49d1-a39b-1084e98bd519"
+                    "at": "2026-10-27T00:55:21.508Z",
+                    "monotonicMs": 31,
+                    "executionId": "0b6de31c-befa-413b-9bcd-290a41bd0852"
                 },
                 {
                     "phase": "first-output",
-                    "at": "2026-10-27T00:19:41.148Z",
-                    "monotonicMs": 1720,
-                    "executionId": "d8d14dda-9345-49d1-a39b-1084e98bd519"
+                    "at": "2026-10-27T00:55:22.966Z",
+                    "monotonicMs": 1489,
+                    "executionId": "0b6de31c-befa-413b-9bcd-290a41bd0852"
                 },
                 {
                     "phase": "terminal",
-                    "at": "2026-10-27T00:19:41.150Z",
-                    "monotonicMs": 1722,
-                    "executionId": "d8d14dda-9345-49d1-a39b-1084e98bd519"
+                    "at": "2026-10-27T00:55:22.968Z",
+                    "monotonicMs": 1491,
+                    "executionId": "0b6de31c-befa-413b-9bcd-290a41bd0852"
                 },
                 {
                     "phase": "turn-settled",
-                    "at": "2026-10-27T00:19:41.161Z",
-                    "executionId": "d8d14dda-9345-49d1-a39b-1084e98bd519"
+                    "at": "2026-10-27T00:55:22.979Z",
+                    "executionId": "0b6de31c-befa-413b-9bcd-290a41bd0852"
                 }
             ],
-            "runId": "760faf6b-b5ad-42c2-96f5-e3beef8cfe2a",
+            "runId": "fb794149-1354-4860-891f-d4416f504164",
             "key": "fleet:task:0002:1",
             "binary": {
-                "path": "/private/tmp/claude-501/spur-fleet-perf-pi-1793060366397/bin/claude",
+                "path": "/private/tmp/claude-501/spur-fleet-perf-pi-1793062511588/bin/claude",
                 "version": "fleet-e2e-stub 1.0.0"
             },
             "hostBinaryVersion": "0.87.1"
@@ -134,50 +134,50 @@
             "agent": "pi",
             "mode": "resume",
             "status": "validated",
-            "durationMs": 2013,
+            "durationMs": 1597,
             "phases": [
                 {
                     "phase": "enqueue",
-                    "at": "2026-10-27T00:19:45.139Z"
+                    "at": "2026-10-27T00:55:26.473Z"
                 },
                 {
                     "phase": "claim",
-                    "at": "2026-10-27T00:19:45.217Z",
-                    "executionId": "fe284008-1f67-479e-9575-d3a33d4f8c92"
+                    "at": "2026-10-27T00:55:26.516Z",
+                    "executionId": "1c05e4bd-240a-4aac-b6db-fc7d6fcedc5d"
                 },
                 {
                     "phase": "process-ready",
-                    "at": "2026-10-27T00:19:45.240Z",
-                    "executionId": "fe284008-1f67-479e-9575-d3a33d4f8c92"
+                    "at": "2026-10-27T00:55:26.558Z",
+                    "executionId": "1c05e4bd-240a-4aac-b6db-fc7d6fcedc5d"
                 },
                 {
                     "phase": "process-ready",
-                    "at": "2026-10-27T00:19:45.275Z",
-                    "monotonicMs": 20,
-                    "executionId": "fe284008-1f67-479e-9575-d3a33d4f8c92"
+                    "at": "2026-10-27T00:55:26.619Z",
+                    "monotonicMs": 32,
+                    "executionId": "1c05e4bd-240a-4aac-b6db-fc7d6fcedc5d"
                 },
                 {
                     "phase": "first-output",
-                    "at": "2026-10-27T00:19:47.149Z",
-                    "monotonicMs": 1893,
-                    "executionId": "fe284008-1f67-479e-9575-d3a33d4f8c92"
+                    "at": "2026-10-27T00:55:28.068Z",
+                    "monotonicMs": 1481,
+                    "executionId": "1c05e4bd-240a-4aac-b6db-fc7d6fcedc5d"
                 },
                 {
                     "phase": "terminal",
-                    "at": "2026-10-27T00:19:47.152Z",
-                    "monotonicMs": 1896,
-                    "executionId": "fe284008-1f67-479e-9575-d3a33d4f8c92"
+                    "at": "2026-10-27T00:55:28.070Z",
+                    "monotonicMs": 1484,
+                    "executionId": "1c05e4bd-240a-4aac-b6db-fc7d6fcedc5d"
                 },
                 {
                     "phase": "turn-settled",
-                    "at": "2026-10-27T00:19:47.162Z",
-                    "executionId": "fe284008-1f67-479e-9575-d3a33d4f8c92"
+                    "at": "2026-10-27T00:55:28.079Z",
+                    "executionId": "1c05e4bd-240a-4aac-b6db-fc7d6fcedc5d"
                 }
             ],
-            "runId": "621f07a9-ea1c-415a-a22a-515613946fae",
+            "runId": "a58308cf-d93b-4686-bb77-926d64f6806d",
             "key": "fleet:task:0003:1",
             "binary": {
-                "path": "/private/tmp/claude-501/spur-fleet-perf-pi-1793060366397/bin/claude",
+                "path": "/private/tmp/claude-501/spur-fleet-perf-pi-1793062511588/bin/claude",
                 "version": "fleet-e2e-stub 1.0.0"
             },
             "hostBinaryVersion": "0.87.1"
@@ -191,38 +191,38 @@
             "agent": "pi",
             "mode": "warm",
             "status": "validated",
-            "durationMs": 2058,
+            "durationMs": 1628,
             "phases": [
                 {
                     "phase": "enqueue",
-                    "at": "2026-10-27T00:19:53.154Z"
+                    "at": "2026-10-27T00:55:33.548Z"
                 },
                 {
                     "phase": "claim",
-                    "at": "2026-10-27T00:19:53.252Z",
-                    "executionId": "69f3a37d-9f57-49c9-91d6-9101041120b6"
+                    "at": "2026-10-27T00:55:33.578Z",
+                    "executionId": "87b07d2b-f55e-44ce-8ae7-088c48fc4a1e"
                 },
                 {
                     "phase": "process-ready",
-                    "at": "2026-10-27T00:19:53.286Z",
-                    "executionId": "69f3a37d-9f57-49c9-91d6-9101041120b6"
+                    "at": "2026-10-27T00:55:33.621Z",
+                    "executionId": "87b07d2b-f55e-44ce-8ae7-088c48fc4a1e"
                 },
                 {
                     "phase": "terminal",
-                    "at": "2026-10-27T00:19:55.212Z",
-                    "monotonicMs": 1907,
-                    "executionId": "69f3a37d-9f57-49c9-91d6-9101041120b6"
+                    "at": "2026-10-27T00:55:35.176Z",
+                    "monotonicMs": 1525,
+                    "executionId": "87b07d2b-f55e-44ce-8ae7-088c48fc4a1e"
                 },
                 {
                     "phase": "turn-settled",
-                    "at": "2026-10-27T00:19:55.225Z",
-                    "executionId": "69f3a37d-9f57-49c9-91d6-9101041120b6"
+                    "at": "2026-10-27T00:55:35.190Z",
+                    "executionId": "87b07d2b-f55e-44ce-8ae7-088c48fc4a1e"
                 }
             ],
-            "runId": "70eb2123-8f60-4b8f-8eee-fe3c1ed30f0c",
+            "runId": "f97d0f51-41f8-43d6-8aa1-dd4488c99802",
             "key": "fleet:task:0004:1",
             "binary": {
-                "path": "/private/tmp/claude-501/spur-fleet-perf-pi-1793060366397/bin/claude",
+                "path": "/private/tmp/claude-501/spur-fleet-perf-pi-1793062511588/bin/claude",
                 "version": "2.1.308 (fleet-e2e-stub)"
             },
             "hostBinaryVersion": "0.87.1"
@@ -236,38 +236,38 @@
             "agent": "pi",
             "mode": "warm",
             "status": "validated",
-            "durationMs": 2436,
+            "durationMs": 1535,
             "phases": [
                 {
                     "phase": "enqueue",
-                    "at": "2026-10-27T00:20:00.204Z"
+                    "at": "2026-10-27T00:55:38.621Z"
                 },
                 {
                     "phase": "claim",
-                    "at": "2026-10-27T00:20:00.227Z",
-                    "executionId": "1ebea1e0-75da-4771-af85-8fef0efdfff4"
+                    "at": "2026-10-27T00:55:38.626Z",
+                    "executionId": "ddf0bc6a-c6c3-4ddc-813a-7e541072ec18"
                 },
                 {
                     "phase": "process-ready",
-                    "at": "2026-10-27T00:20:00.248Z",
-                    "executionId": "1ebea1e0-75da-4771-af85-8fef0efdfff4"
+                    "at": "2026-10-27T00:55:38.667Z",
+                    "executionId": "ddf0bc6a-c6c3-4ddc-813a-7e541072ec18"
                 },
                 {
                     "phase": "terminal",
-                    "at": "2026-10-27T00:20:02.640Z",
-                    "monotonicMs": 2372,
-                    "executionId": "1ebea1e0-75da-4771-af85-8fef0efdfff4"
+                    "at": "2026-10-27T00:55:40.156Z",
+                    "monotonicMs": 1459,
+                    "executionId": "ddf0bc6a-c6c3-4ddc-813a-7e541072ec18"
                 },
                 {
                     "phase": "turn-settled",
-                    "at": "2026-10-27T00:20:02.654Z",
-                    "executionId": "1ebea1e0-75da-4771-af85-8fef0efdfff4"
+                    "at": "2026-10-27T00:55:40.165Z",
+                    "executionId": "ddf0bc6a-c6c3-4ddc-813a-7e541072ec18"
                 }
             ],
-            "runId": "3051519a-e187-4f6c-8d31-18948b8326f1",
+            "runId": "00fb6986-09ef-401f-8879-b2d0ffec5065",
             "key": "fleet:task:0005:1",
             "binary": {
-                "path": "/private/tmp/claude-501/spur-fleet-perf-pi-1793060366397/bin/claude",
+                "path": "/private/tmp/claude-501/spur-fleet-perf-pi-1793062511588/bin/claude",
                 "version": "2.1.308 (fleet-e2e-stub)"
             },
             "hostBinaryVersion": "0.87.1"
@@ -281,38 +281,38 @@
             "agent": "pi",
             "mode": "warm",
             "status": "validated",
-            "durationMs": 2155,
+            "durationMs": 1525,
             "phases": [
                 {
                     "phase": "enqueue",
-                    "at": "2026-10-27T00:20:07.788Z"
+                    "at": "2026-10-27T00:55:43.627Z"
                 },
                 {
                     "phase": "claim",
-                    "at": "2026-10-27T00:20:07.891Z",
-                    "executionId": "aa27699e-7850-431c-b0eb-8161853ae9d8"
+                    "at": "2026-10-27T00:55:43.649Z",
+                    "executionId": "ed3e75d1-f6e5-4db7-85bd-c7bb1e0da181"
                 },
                 {
                     "phase": "process-ready",
-                    "at": "2026-10-27T00:20:07.913Z",
-                    "executionId": "aa27699e-7850-431c-b0eb-8161853ae9d8"
+                    "at": "2026-10-27T00:55:43.687Z",
+                    "executionId": "ed3e75d1-f6e5-4db7-85bd-c7bb1e0da181"
                 },
                 {
                     "phase": "terminal",
-                    "at": "2026-10-27T00:20:09.943Z",
-                    "monotonicMs": 2013,
-                    "executionId": "aa27699e-7850-431c-b0eb-8161853ae9d8"
+                    "at": "2026-10-27T00:55:45.152Z",
+                    "monotonicMs": 1436,
+                    "executionId": "ed3e75d1-f6e5-4db7-85bd-c7bb1e0da181"
                 },
                 {
                     "phase": "turn-settled",
-                    "at": "2026-10-27T00:20:09.953Z",
-                    "executionId": "aa27699e-7850-431c-b0eb-8161853ae9d8"
+                    "at": "2026-10-27T00:55:45.161Z",
+                    "executionId": "ed3e75d1-f6e5-4db7-85bd-c7bb1e0da181"
                 }
             ],
-            "runId": "ab48994a-cba2-443c-90ba-444deeafa93c",
+            "runId": "0afafbaf-309f-4992-a4a8-5125598f9bd2",
             "key": "fleet:task:0006:1",
             "binary": {
-                "path": "/private/tmp/claude-501/spur-fleet-perf-pi-1793060366397/bin/claude",
+                "path": "/private/tmp/claude-501/spur-fleet-perf-pi-1793062511588/bin/claude",
                 "version": "2.1.308 (fleet-e2e-stub)"
             },
             "hostBinaryVersion": "0.87.1"
@@ -326,26 +326,26 @@
             "agent": "pi",
             "mode": "attached-ready",
             "status": "validated",
-            "durationMs": 1644,
+            "durationMs": 1420,
             "phases": [
                 {
                     "phase": "attach",
-                    "at": "2026-10-27T00:20:13.308Z",
-                    "monotonicMs": 750
+                    "at": "2026-10-27T00:55:47.121Z",
+                    "monotonicMs": 474
                 },
                 {
                     "phase": "busy-wait",
-                    "at": "2026-10-27T00:20:16.440Z",
+                    "at": "2026-10-27T00:55:49.419Z",
                     "monotonicMs": 251
                 },
                 {
                     "phase": "terminal",
-                    "at": "2026-10-27T00:20:17.779Z",
-                    "monotonicMs": 1644
+                    "at": "2026-10-27T00:55:50.535Z",
+                    "monotonicMs": 1420
                 }
             ],
             "binary": {
-                "path": "/private/tmp/claude-501/spur-fleet-perf-pi-1793060366397/bin/claude",
+                "path": "/private/tmp/claude-501/spur-fleet-perf-pi-1793062511588/bin/claude",
                 "version": "fleet-e2e-stub 1.0.0"
             },
             "hostBinaryVersion": "0.87.1"
@@ -359,21 +359,16 @@
             "agent": "pi",
             "mode": "attached-ready",
             "status": "validated",
-            "durationMs": 1248,
+            "durationMs": 1165,
             "phases": [
                 {
-                    "phase": "attach",
-                    "at": "2026-10-27T00:20:13.308Z",
-                    "monotonicMs": 750
-                },
-                {
                     "phase": "terminal",
-                    "at": "2026-10-27T00:20:21.445Z",
-                    "monotonicMs": 1248
+                    "at": "2026-10-27T00:55:53.899Z",
+                    "monotonicMs": 1165
                 }
             ],
             "binary": {
-                "path": "/private/tmp/claude-501/spur-fleet-perf-pi-1793060366397/bin/claude",
+                "path": "/private/tmp/claude-501/spur-fleet-perf-pi-1793062511588/bin/claude",
                 "version": "fleet-e2e-stub 1.0.0"
             },
             "hostBinaryVersion": "0.87.1"
@@ -387,21 +382,16 @@
             "agent": "pi",
             "mode": "attached-ready",
             "status": "validated",
-            "durationMs": 1349,
+            "durationMs": 1176,
             "phases": [
                 {
-                    "phase": "attach",
-                    "at": "2026-10-27T00:20:13.308Z",
-                    "monotonicMs": 750
-                },
-                {
                     "phase": "terminal",
-                    "at": "2026-10-27T00:20:25.240Z",
-                    "monotonicMs": 1349
+                    "at": "2026-10-27T00:55:57.240Z",
+                    "monotonicMs": 1176
                 }
             ],
             "binary": {
-                "path": "/private/tmp/claude-501/spur-fleet-perf-pi-1793060366397/bin/claude",
+                "path": "/private/tmp/claude-501/spur-fleet-perf-pi-1793062511588/bin/claude",
                 "version": "fleet-e2e-stub 1.0.0"
             },
             "hostBinaryVersion": "0.87.1"
@@ -410,16 +400,16 @@
     "measured": {
         "pi": {
             "cold": {
-                "p50Ms": 2634,
-                "p95Ms": 2634,
+                "p50Ms": 1706,
+                "p95Ms": 1706,
                 "completionRate": 1,
-                "validatedPerHour": 1366.743
+                "validatedPerHour": 2110.199
             },
             "resume": {
-                "p50Ms": 1810,
-                "p95Ms": 2013,
+                "p50Ms": 1597,
+                "p95Ms": 1612,
                 "completionRate": 1,
-                "validatedPerHour": 1883.338
+                "validatedPerHour": 2243.69
             },
             "warm": {
                 "binary": {
@@ -442,16 +432,16 @@
                 "qualified": true
             },
             "warmTurns": {
-                "p50Ms": 2155,
-                "p95Ms": 2436,
+                "p50Ms": 1535,
+                "p95Ms": 1628,
                 "completionRate": 1,
-                "validatedPerHour": 1624.304
+                "validatedPerHour": 2303.754
             },
-            "attached": {
-                "p50Ms": 1349,
-                "p95Ms": 1644,
+            "attached-ready": {
+                "p50Ms": 1176,
+                "p95Ms": 1420,
                 "completionRate": 1,
-                "validatedPerHour": 2546.569
+                "validatedPerHour": 2871.577
             }
         }
     },
@@ -473,10 +463,10 @@
                 "tokens": "unavailable",
                 "resources": "unavailable",
                 "status": "validated",
-                "durationMs": 22.503290999993624,
-                "runId": "9d6f5ab6-7034-47b4-b2c1-6f6e1f4f775a",
-                "executionId": "ac19580c-3778-4d53-8565-6b9668e1f619",
-                "requestId": "5268b8a9-e287-4c0a-a4a2-628252d737e0",
+                "durationMs": 22.306541999998444,
+                "runId": "f3e4cec2-535b-4086-bb49-39937c23d748",
+                "executionId": "08f3d830-f536-4990-90c7-40ec84c974fd",
+                "requestId": "5bad7ef6-33c5-4714-bd0d-910bf59456b4",
                 "attempt": 0,
                 "memberId": "perf-pi",
                 "ownerEpoch": 1,
@@ -484,28 +474,28 @@
                 "phases": [
                     {
                         "phase": "enqueue",
-                        "at": "2026-10-27T00:20:26.504Z",
-                        "executionId": "ac19580c-3778-4d53-8565-6b9668e1f619"
+                        "at": "2026-10-27T00:55:58.474Z",
+                        "executionId": "08f3d830-f536-4990-90c7-40ec84c974fd"
                     },
                     {
                         "phase": "preflight",
-                        "at": "2026-10-27T00:20:26.505Z",
-                        "executionId": "ac19580c-3778-4d53-8565-6b9668e1f619"
+                        "at": "2026-10-27T00:55:58.475Z",
+                        "executionId": "08f3d830-f536-4990-90c7-40ec84c974fd"
                     },
                     {
                         "phase": "accepted",
-                        "at": "2026-10-27T00:20:26.505Z",
-                        "executionId": "ac19580c-3778-4d53-8565-6b9668e1f619"
+                        "at": "2026-10-27T00:55:58.475Z",
+                        "executionId": "08f3d830-f536-4990-90c7-40ec84c974fd"
                     },
                     {
                         "phase": "contract-validated",
-                        "at": "2026-10-27T00:20:26.526Z",
-                        "executionId": "ac19580c-3778-4d53-8565-6b9668e1f619"
+                        "at": "2026-10-27T00:55:58.496Z",
+                        "executionId": "08f3d830-f536-4990-90c7-40ec84c974fd"
                     },
                     {
                         "phase": "receipt",
-                        "at": "2026-10-27T00:20:26.527Z",
-                        "executionId": "ac19580c-3778-4d53-8565-6b9668e1f619"
+                        "at": "2026-10-27T00:55:58.497Z",
+                        "executionId": "08f3d830-f536-4990-90c7-40ec84c974fd"
                     }
                 ],
                 "binary": {
@@ -524,10 +514,10 @@
                 "tokens": "unavailable",
                 "resources": "unavailable",
                 "status": "validated",
-                "durationMs": 13.52666699999827,
-                "runId": "6ab32bbc-47a8-4a72-94cc-bdc4d7f80823",
-                "executionId": "e450dd43-28be-41f5-a719-cf0aef7ee639",
-                "requestId": "f9af5c8c-3fb7-4fde-95a3-f3a92643648b",
+                "durationMs": 14.08220799999981,
+                "runId": "4a84e587-0c5d-4fd0-b6cb-45dc740a1de2",
+                "executionId": "2cbfd3d5-2e95-4f19-9c05-53822b414c65",
+                "requestId": "3f6227d5-cf03-4ea8-81e0-8f9e80c35060",
                 "attempt": 0,
                 "memberId": "perf-pi",
                 "ownerEpoch": 1,
@@ -535,28 +525,28 @@
                 "phases": [
                     {
                         "phase": "enqueue",
-                        "at": "2026-10-27T00:20:26.527Z",
-                        "executionId": "e450dd43-28be-41f5-a719-cf0aef7ee639"
+                        "at": "2026-10-27T00:55:58.497Z",
+                        "executionId": "2cbfd3d5-2e95-4f19-9c05-53822b414c65"
                     },
                     {
                         "phase": "preflight",
-                        "at": "2026-10-27T00:20:26.527Z",
-                        "executionId": "e450dd43-28be-41f5-a719-cf0aef7ee639"
+                        "at": "2026-10-27T00:55:58.497Z",
+                        "executionId": "2cbfd3d5-2e95-4f19-9c05-53822b414c65"
                     },
                     {
                         "phase": "accepted",
-                        "at": "2026-10-27T00:20:26.527Z",
-                        "executionId": "e450dd43-28be-41f5-a719-cf0aef7ee639"
+                        "at": "2026-10-27T00:55:58.497Z",
+                        "executionId": "2cbfd3d5-2e95-4f19-9c05-53822b414c65"
                     },
                     {
                         "phase": "contract-validated",
-                        "at": "2026-10-27T00:20:26.540Z",
-                        "executionId": "e450dd43-28be-41f5-a719-cf0aef7ee639"
+                        "at": "2026-10-27T00:55:58.511Z",
+                        "executionId": "2cbfd3d5-2e95-4f19-9c05-53822b414c65"
                     },
                     {
                         "phase": "receipt",
-                        "at": "2026-10-27T00:20:26.540Z",
-                        "executionId": "e450dd43-28be-41f5-a719-cf0aef7ee639"
+                        "at": "2026-10-27T00:55:58.511Z",
+                        "executionId": "2cbfd3d5-2e95-4f19-9c05-53822b414c65"
                     }
                 ],
                 "binary": {
@@ -575,10 +565,10 @@
                 "tokens": "unavailable",
                 "resources": "unavailable",
                 "status": "validated",
-                "durationMs": 22.213666000003286,
-                "runId": "c81ba364-ea37-4a0b-87cd-19a87a60fbfb",
-                "executionId": "c96a9211-aa3a-4521-b656-20a81f1ebdf6",
-                "requestId": "c02f41d0-a09e-44e0-9fc0-2c5a0ec518b1",
+                "durationMs": 21.10558299999684,
+                "runId": "f679435e-1aba-4431-a40b-dec803357bfb",
+                "executionId": "23cffb7c-dd7f-4b03-921e-66b3243a75c8",
+                "requestId": "cc1cbb39-27b1-400e-a9ee-7bab99d7a185",
                 "attempt": 0,
                 "memberId": "perf-pi",
                 "ownerEpoch": 1,
@@ -588,38 +578,38 @@
                 "phases": [
                     {
                         "phase": "enqueue",
-                        "at": "2026-10-27T00:20:26.540Z",
-                        "executionId": "c96a9211-aa3a-4521-b656-20a81f1ebdf6"
+                        "at": "2026-10-27T00:55:58.511Z",
+                        "executionId": "23cffb7c-dd7f-4b03-921e-66b3243a75c8"
                     },
                     {
                         "phase": "preflight",
-                        "at": "2026-10-27T00:20:26.541Z",
-                        "executionId": "c96a9211-aa3a-4521-b656-20a81f1ebdf6"
+                        "at": "2026-10-27T00:55:58.511Z",
+                        "executionId": "23cffb7c-dd7f-4b03-921e-66b3243a75c8"
                     },
                     {
                         "phase": "accepted",
-                        "at": "2026-10-27T00:20:26.541Z",
-                        "executionId": "c96a9211-aa3a-4521-b656-20a81f1ebdf6"
-                    },
-                    {
-                        "phase": "contract-validated",
-                        "at": "2026-10-27T00:20:26.562Z",
-                        "executionId": "c96a9211-aa3a-4521-b656-20a81f1ebdf6"
-                    },
-                    {
-                        "phase": "turn-settled",
-                        "at": "2026-10-27T00:20:26.562Z",
-                        "executionId": "c96a9211-aa3a-4521-b656-20a81f1ebdf6"
+                        "at": "2026-10-27T00:55:58.511Z",
+                        "executionId": "23cffb7c-dd7f-4b03-921e-66b3243a75c8"
                     },
                     {
                         "phase": "turn-accepted",
-                        "at": "2026-10-27T00:20:26.562Z",
-                        "executionId": "c96a9211-aa3a-4521-b656-20a81f1ebdf6"
+                        "at": "2026-10-27T00:55:58.531Z",
+                        "executionId": "23cffb7c-dd7f-4b03-921e-66b3243a75c8"
+                    },
+                    {
+                        "phase": "contract-validated",
+                        "at": "2026-10-27T00:55:58.532Z",
+                        "executionId": "23cffb7c-dd7f-4b03-921e-66b3243a75c8"
+                    },
+                    {
+                        "phase": "turn-settled",
+                        "at": "2026-10-27T00:55:58.532Z",
+                        "executionId": "23cffb7c-dd7f-4b03-921e-66b3243a75c8"
                     },
                     {
                         "phase": "receipt",
-                        "at": "2026-10-27T00:20:26.563Z",
-                        "executionId": "c96a9211-aa3a-4521-b656-20a81f1ebdf6"
+                        "at": "2026-10-27T00:55:58.532Z",
+                        "executionId": "23cffb7c-dd7f-4b03-921e-66b3243a75c8"
                     }
                 ],
                 "binary": {
@@ -638,10 +628,10 @@
                 "tokens": "unavailable",
                 "resources": "unavailable",
                 "status": "validated",
-                "durationMs": 0.8276660000046832,
-                "runId": "9a5a988b-9cdd-4416-bbe3-ca7f4d8c06e5",
-                "executionId": "0b4e6b8a-67e8-485a-824c-18e9c785f0f4",
-                "requestId": "1b337807-8225-4615-ab0c-f11241b8a1ba",
+                "durationMs": 0.7617909999971744,
+                "runId": "80678320-2421-4243-ae80-ee08383f0358",
+                "executionId": "a76b3292-fe09-40e1-baff-e79c91b27ff9",
+                "requestId": "0459ceaf-5893-4c90-9b96-02ff9a74f912",
                 "attempt": 0,
                 "memberId": "perf-pi",
                 "ownerEpoch": 1,
@@ -651,38 +641,38 @@
                 "phases": [
                     {
                         "phase": "enqueue",
-                        "at": "2026-10-27T00:20:26.563Z",
-                        "executionId": "0b4e6b8a-67e8-485a-824c-18e9c785f0f4"
+                        "at": "2026-10-27T00:55:58.532Z",
+                        "executionId": "a76b3292-fe09-40e1-baff-e79c91b27ff9"
                     },
                     {
                         "phase": "preflight",
-                        "at": "2026-10-27T00:20:26.563Z",
-                        "executionId": "0b4e6b8a-67e8-485a-824c-18e9c785f0f4"
+                        "at": "2026-10-27T00:55:58.532Z",
+                        "executionId": "a76b3292-fe09-40e1-baff-e79c91b27ff9"
                     },
                     {
                         "phase": "accepted",
-                        "at": "2026-10-27T00:20:26.563Z",
-                        "executionId": "0b4e6b8a-67e8-485a-824c-18e9c785f0f4"
-                    },
-                    {
-                        "phase": "contract-validated",
-                        "at": "2026-10-27T00:20:26.563Z",
-                        "executionId": "0b4e6b8a-67e8-485a-824c-18e9c785f0f4"
-                    },
-                    {
-                        "phase": "turn-settled",
-                        "at": "2026-10-27T00:20:26.563Z",
-                        "executionId": "0b4e6b8a-67e8-485a-824c-18e9c785f0f4"
-                    },
-                    {
-                        "phase": "receipt",
-                        "at": "2026-10-27T00:20:26.563Z",
-                        "executionId": "0b4e6b8a-67e8-485a-824c-18e9c785f0f4"
+                        "at": "2026-10-27T00:55:58.532Z",
+                        "executionId": "a76b3292-fe09-40e1-baff-e79c91b27ff9"
                     },
                     {
                         "phase": "turn-accepted",
-                        "at": "2026-10-27T00:20:26.563Z",
-                        "executionId": "0b4e6b8a-67e8-485a-824c-18e9c785f0f4"
+                        "at": "2026-10-27T00:55:58.532Z",
+                        "executionId": "a76b3292-fe09-40e1-baff-e79c91b27ff9"
+                    },
+                    {
+                        "phase": "contract-validated",
+                        "at": "2026-10-27T00:55:58.533Z",
+                        "executionId": "a76b3292-fe09-40e1-baff-e79c91b27ff9"
+                    },
+                    {
+                        "phase": "turn-settled",
+                        "at": "2026-10-27T00:55:58.533Z",
+                        "executionId": "a76b3292-fe09-40e1-baff-e79c91b27ff9"
+                    },
+                    {
+                        "phase": "receipt",
+                        "at": "2026-10-27T00:55:58.533Z",
+                        "executionId": "a76b3292-fe09-40e1-baff-e79c91b27ff9"
                     }
                 ],
                 "binary": {
@@ -701,10 +691,10 @@
                 "tokens": "unavailable",
                 "resources": "unavailable",
                 "status": "validated",
-                "durationMs": 13.500333000003593,
-                "runId": "18594193-2364-4c7d-90e3-1010dc4aee2d",
-                "executionId": "34859967-7bee-4fc8-a5a7-65e06f2326ae",
-                "requestId": "315aafe2-5859-4e31-ba4b-eabb6b71ba27",
+                "durationMs": 13.288666000000376,
+                "runId": "302b4724-d074-4fb6-bec4-784cfbb7ce7d",
+                "executionId": "cb28e34c-9cd6-44a4-b8c4-dddf813aeb3c",
+                "requestId": "695b5183-6fc0-4cc0-84a0-18bdca92447c",
                 "attempt": 0,
                 "memberId": "perf-pi",
                 "ownerEpoch": 1,
@@ -712,28 +702,28 @@
                 "phases": [
                     {
                         "phase": "enqueue",
-                        "at": "2026-10-27T00:20:26.563Z",
-                        "executionId": "34859967-7bee-4fc8-a5a7-65e06f2326ae"
+                        "at": "2026-10-27T00:55:58.533Z",
+                        "executionId": "cb28e34c-9cd6-44a4-b8c4-dddf813aeb3c"
                     },
                     {
                         "phase": "preflight",
-                        "at": "2026-10-27T00:20:26.563Z",
-                        "executionId": "34859967-7bee-4fc8-a5a7-65e06f2326ae"
+                        "at": "2026-10-27T00:55:58.533Z",
+                        "executionId": "cb28e34c-9cd6-44a4-b8c4-dddf813aeb3c"
                     },
                     {
                         "phase": "accepted",
-                        "at": "2026-10-27T00:20:26.563Z",
-                        "executionId": "34859967-7bee-4fc8-a5a7-65e06f2326ae"
+                        "at": "2026-10-27T00:55:58.533Z",
+                        "executionId": "cb28e34c-9cd6-44a4-b8c4-dddf813aeb3c"
                     },
                     {
                         "phase": "contract-validated",
-                        "at": "2026-10-27T00:20:26.577Z",
-                        "executionId": "34859967-7bee-4fc8-a5a7-65e06f2326ae"
+                        "at": "2026-10-27T00:55:58.546Z",
+                        "executionId": "cb28e34c-9cd6-44a4-b8c4-dddf813aeb3c"
                     },
                     {
                         "phase": "receipt",
-                        "at": "2026-10-27T00:20:26.577Z",
-                        "executionId": "34859967-7bee-4fc8-a5a7-65e06f2326ae"
+                        "at": "2026-10-27T00:55:58.546Z",
+                        "executionId": "cb28e34c-9cd6-44a4-b8c4-dddf813aeb3c"
                     }
                 ],
                 "binary": {
@@ -752,10 +742,10 @@
                 "tokens": "unavailable",
                 "resources": "unavailable",
                 "status": "validated",
-                "durationMs": 13.09687500000291,
-                "runId": "4a40eb91-a8a5-4d45-8a91-5d065e2a31c1",
-                "executionId": "f7ccfb10-a68b-43bb-800c-e4e2dd4f8e9d",
-                "requestId": "9a10d7f5-7fe5-42e9-a40d-c777bda437e5",
+                "durationMs": 12.515416999995068,
+                "runId": "ff251709-3b77-409b-b671-778a5a8b0a77",
+                "executionId": "29769283-96b4-4ca9-b517-97bde1e2521c",
+                "requestId": "bd9d71d9-5052-4d2f-852f-43e2451fcd18",
                 "attempt": 0,
                 "memberId": "perf-pi",
                 "ownerEpoch": 1,
@@ -763,28 +753,28 @@
                 "phases": [
                     {
                         "phase": "enqueue",
-                        "at": "2026-10-27T00:20:26.577Z",
-                        "executionId": "f7ccfb10-a68b-43bb-800c-e4e2dd4f8e9d"
+                        "at": "2026-10-27T00:55:58.546Z",
+                        "executionId": "29769283-96b4-4ca9-b517-97bde1e2521c"
                     },
                     {
                         "phase": "preflight",
-                        "at": "2026-10-27T00:20:26.577Z",
-                        "executionId": "f7ccfb10-a68b-43bb-800c-e4e2dd4f8e9d"
+                        "at": "2026-10-27T00:55:58.546Z",
+                        "executionId": "29769283-96b4-4ca9-b517-97bde1e2521c"
                     },
                     {
                         "phase": "accepted",
-                        "at": "2026-10-27T00:20:26.577Z",
-                        "executionId": "f7ccfb10-a68b-43bb-800c-e4e2dd4f8e9d"
+                        "at": "2026-10-27T00:55:58.546Z",
+                        "executionId": "29769283-96b4-4ca9-b517-97bde1e2521c"
                     },
                     {
                         "phase": "contract-validated",
-                        "at": "2026-10-27T00:20:26.590Z",
-                        "executionId": "f7ccfb10-a68b-43bb-800c-e4e2dd4f8e9d"
+                        "at": "2026-10-27T00:55:58.558Z",
+                        "executionId": "29769283-96b4-4ca9-b517-97bde1e2521c"
                     },
                     {
                         "phase": "receipt",
-                        "at": "2026-10-27T00:20:26.590Z",
-                        "executionId": "f7ccfb10-a68b-43bb-800c-e4e2dd4f8e9d"
+                        "at": "2026-10-27T00:55:58.559Z",
+                        "executionId": "29769283-96b4-4ca9-b517-97bde1e2521c"
                     }
                 ],
                 "binary": {
@@ -803,10 +793,10 @@
                 "tokens": "unavailable",
                 "resources": "unavailable",
                 "status": "validated",
-                "durationMs": 12.689291999995476,
-                "runId": "0977e4fb-a4b0-4fd3-9e86-7901f82f2703",
-                "executionId": "b80a41b4-c1fe-49bd-af88-7569138bf24d",
-                "requestId": "890036b5-9da8-4063-a219-8b01808f947f",
+                "durationMs": 13.306125000002794,
+                "runId": "04fcd925-087b-4393-8a1d-b51461ba26e5",
+                "executionId": "85531ecd-a56e-4156-9f94-22f1165caaba",
+                "requestId": "e7b00598-3614-4a35-b102-c7e9fe8bd858",
                 "attempt": 0,
                 "memberId": "perf-pi",
                 "ownerEpoch": 1,
@@ -814,28 +804,28 @@
                 "phases": [
                     {
                         "phase": "enqueue",
-                        "at": "2026-10-27T00:20:26.590Z",
-                        "executionId": "b80a41b4-c1fe-49bd-af88-7569138bf24d"
+                        "at": "2026-10-27T00:55:58.559Z",
+                        "executionId": "85531ecd-a56e-4156-9f94-22f1165caaba"
                     },
                     {
                         "phase": "preflight",
-                        "at": "2026-10-27T00:20:26.590Z",
-                        "executionId": "b80a41b4-c1fe-49bd-af88-7569138bf24d"
+                        "at": "2026-10-27T00:55:58.559Z",
+                        "executionId": "85531ecd-a56e-4156-9f94-22f1165caaba"
                     },
                     {
                         "phase": "accepted",
-                        "at": "2026-10-27T00:20:26.590Z",
-                        "executionId": "b80a41b4-c1fe-49bd-af88-7569138bf24d"
+                        "at": "2026-10-27T00:55:58.559Z",
+                        "executionId": "85531ecd-a56e-4156-9f94-22f1165caaba"
                     },
                     {
                         "phase": "contract-validated",
-                        "at": "2026-10-27T00:20:26.603Z",
-                        "executionId": "b80a41b4-c1fe-49bd-af88-7569138bf24d"
+                        "at": "2026-10-27T00:55:58.572Z",
+                        "executionId": "85531ecd-a56e-4156-9f94-22f1165caaba"
                     },
                     {
                         "phase": "receipt",
-                        "at": "2026-10-27T00:20:26.603Z",
-                        "executionId": "b80a41b4-c1fe-49bd-af88-7569138bf24d"
+                        "at": "2026-10-27T00:55:58.572Z",
+                        "executionId": "85531ecd-a56e-4156-9f94-22f1165caaba"
                     }
                 ],
                 "binary": {
@@ -854,10 +844,10 @@
                 "tokens": "unavailable",
                 "resources": "unavailable",
                 "status": "validated",
-                "durationMs": 12.676665999999386,
-                "runId": "a1fff2c4-ebda-4b71-932b-7f8884192f5b",
-                "executionId": "e798dabf-eef7-415d-a2b8-e420c5b6dfe4",
-                "requestId": "14f94fb7-11e4-4a9d-99cb-e55c59f688bd",
+                "durationMs": 13.12616700000217,
+                "runId": "a165607a-f576-431b-80fe-ba8d14234a11",
+                "executionId": "4ebdf0d8-11ca-457b-a769-0067f34a0686",
+                "requestId": "76030eb3-9fb7-4e4b-8c8e-d2e05bee183e",
                 "attempt": 0,
                 "memberId": "perf-pi",
                 "ownerEpoch": 1,
@@ -865,28 +855,28 @@
                 "phases": [
                     {
                         "phase": "enqueue",
-                        "at": "2026-10-27T00:20:26.603Z",
-                        "executionId": "e798dabf-eef7-415d-a2b8-e420c5b6dfe4"
+                        "at": "2026-10-27T00:55:58.572Z",
+                        "executionId": "4ebdf0d8-11ca-457b-a769-0067f34a0686"
                     },
                     {
                         "phase": "preflight",
-                        "at": "2026-10-27T00:20:26.603Z",
-                        "executionId": "e798dabf-eef7-415d-a2b8-e420c5b6dfe4"
+                        "at": "2026-10-27T00:55:58.572Z",
+                        "executionId": "4ebdf0d8-11ca-457b-a769-0067f34a0686"
                     },
                     {
                         "phase": "accepted",
-                        "at": "2026-10-27T00:20:26.603Z",
-                        "executionId": "e798dabf-eef7-415d-a2b8-e420c5b6dfe4"
+                        "at": "2026-10-27T00:55:58.572Z",
+                        "executionId": "4ebdf0d8-11ca-457b-a769-0067f34a0686"
                     },
                     {
                         "phase": "contract-validated",
-                        "at": "2026-10-27T00:20:26.615Z",
-                        "executionId": "e798dabf-eef7-415d-a2b8-e420c5b6dfe4"
+                        "at": "2026-10-27T00:55:58.585Z",
+                        "executionId": "4ebdf0d8-11ca-457b-a769-0067f34a0686"
                     },
                     {
                         "phase": "receipt",
-                        "at": "2026-10-27T00:20:26.615Z",
-                        "executionId": "e798dabf-eef7-415d-a2b8-e420c5b6dfe4"
+                        "at": "2026-10-27T00:55:58.585Z",
+                        "executionId": "4ebdf0d8-11ca-457b-a769-0067f34a0686"
                     }
                 ],
                 "binary": {
@@ -905,10 +895,10 @@
                 "tokens": "unavailable",
                 "resources": "unavailable",
                 "status": "validated",
-                "durationMs": 1.0343330000032438,
-                "runId": "f6c22d77-91f1-468b-a7b8-290ee43cebea",
-                "executionId": "7a65b022-01e1-42a1-b9b4-2475d2816ce3",
-                "requestId": "efbd0e21-8dd2-43b4-9909-fee6e44b1c71",
+                "durationMs": 1.0638330000001588,
+                "runId": "c2204368-b3d2-4bbf-9a79-63c1ffa0401a",
+                "executionId": "2949caf2-eec3-479b-b036-5c8b91ead10e",
+                "requestId": "4adc6b89-b77c-40f1-a55d-8a63549aef71",
                 "attempt": 0,
                 "memberId": "perf-pi",
                 "ownerEpoch": 1,
@@ -918,38 +908,38 @@
                 "phases": [
                     {
                         "phase": "enqueue",
-                        "at": "2026-10-27T00:20:26.615Z",
-                        "executionId": "7a65b022-01e1-42a1-b9b4-2475d2816ce3"
+                        "at": "2026-10-27T00:55:58.585Z",
+                        "executionId": "2949caf2-eec3-479b-b036-5c8b91ead10e"
                     },
                     {
                         "phase": "preflight",
-                        "at": "2026-10-27T00:20:26.615Z",
-                        "executionId": "7a65b022-01e1-42a1-b9b4-2475d2816ce3"
+                        "at": "2026-10-27T00:55:58.585Z",
+                        "executionId": "2949caf2-eec3-479b-b036-5c8b91ead10e"
                     },
                     {
                         "phase": "accepted",
-                        "at": "2026-10-27T00:20:26.615Z",
-                        "executionId": "7a65b022-01e1-42a1-b9b4-2475d2816ce3"
+                        "at": "2026-10-27T00:55:58.585Z",
+                        "executionId": "2949caf2-eec3-479b-b036-5c8b91ead10e"
                     },
                     {
                         "phase": "contract-validated",
-                        "at": "2026-10-27T00:20:26.616Z",
-                        "executionId": "7a65b022-01e1-42a1-b9b4-2475d2816ce3"
+                        "at": "2026-10-27T00:55:58.586Z",
+                        "executionId": "2949caf2-eec3-479b-b036-5c8b91ead10e"
                     },
                     {
                         "phase": "turn-settled",
-                        "at": "2026-10-27T00:20:26.616Z",
-                        "executionId": "7a65b022-01e1-42a1-b9b4-2475d2816ce3"
+                        "at": "2026-10-27T00:55:58.586Z",
+                        "executionId": "2949caf2-eec3-479b-b036-5c8b91ead10e"
                     },
                     {
                         "phase": "receipt",
-                        "at": "2026-10-27T00:20:26.616Z",
-                        "executionId": "7a65b022-01e1-42a1-b9b4-2475d2816ce3"
+                        "at": "2026-10-27T00:55:58.586Z",
+                        "executionId": "2949caf2-eec3-479b-b036-5c8b91ead10e"
                     },
                     {
                         "phase": "turn-accepted",
-                        "at": "2026-10-27T00:20:26.616Z",
-                        "executionId": "7a65b022-01e1-42a1-b9b4-2475d2816ce3"
+                        "at": "2026-10-27T00:55:58.586Z",
+                        "executionId": "2949caf2-eec3-479b-b036-5c8b91ead10e"
                     }
                 ],
                 "binary": {
@@ -970,22 +960,22 @@
         "measured": {
             "pi": {
                 "cold": {
-                    "p50Ms": 13.500333000003593,
-                    "p95Ms": 22.503290999993624,
+                    "p50Ms": 13.306125000002794,
+                    "p95Ms": 22.306541999998444,
                     "completionRate": 1,
-                    "validatedPerHour": 221798.177
+                    "validatedPerHour": 220852.875
                 },
                 "resume": {
-                    "p50Ms": 13.09687500000291,
-                    "p95Ms": 13.52666699999827,
+                    "p50Ms": 13.12616700000217,
+                    "p95Ms": 14.08220799999981,
                     "completionRate": 1,
-                    "validatedPerHour": 274807.706
+                    "validatedPerHour": 271877.368
                 },
                 "warm": {
-                    "p50Ms": 1.0343330000032438,
-                    "p95Ms": 22.213666000003286,
+                    "p50Ms": 1.0638330000001588,
+                    "p95Ms": 21.10558299999684,
                     "completionRate": 1,
-                    "validatedPerHour": 448585.74
+                    "validatedPerHour": 470973.9
                 }
             }
         }
@@ -1022,10 +1012,10 @@
         "rows": [
             {
                 "agent": "pi",
-                "attachedP50Ms": 1349,
-                "attachedP95Ms": 1644,
-                "warmP50Ms": 2155,
-                "warmP95Ms": 2436,
+                "attachedP50Ms": 1176,
+                "attachedP95Ms": 1420,
+                "warmP50Ms": 1535,
+                "warmP95Ms": 1628,
                 "verdict": "material-gain"
             }
         ]

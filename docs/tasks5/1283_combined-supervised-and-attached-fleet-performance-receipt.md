@@ -4,7 +4,7 @@ name: Combined supervised and attached fleet performance receipt
 status: done
 template: feature-impl
 created_at: 2026-10-22T07:00:38.146Z
-updated_at: "2026-10-27T00:34:38.853Z"
+updated_at: "2026-10-27T00:56:55.118Z"
 feature_id: G75
 priority: P3
 tags:
@@ -98,15 +98,15 @@ Scenario: AC3 — Batch-2 hosts never count as gains (req: R3)
 
 | Requirement | Status | Evidence |
 |-------------|--------|----------|
-| R1 | MET | Three lanes on one workload digest `scripts/commands/fleet-e2e.ts:1974`, busy-wait phase `scripts/commands/fleet-e2e.ts:2687`, injected attach failure kept in denominator `scripts/commands/fleet-e2e.ts:2800`; receipt `docs/reports/fleet-perf-receipt.md:6` (digest) and `docs/reports/fleet-perf-receipt.md:16` (9/9 validated trials with phases) |
+| R1 | MET | Three lanes on one workload digest `scripts/commands/fleet-e2e.ts:1974`, busy-wait phase `scripts/commands/fleet-e2e.ts:2694`, injected attach failure kept in denominator `scripts/commands/fleet-e2e.ts:2807`; receipt `docs/reports/fleet-perf-receipt.md:6` (digest) and `docs/reports/fleet-perf-receipt.md:16` (9/9 validated trials with phases) |
 | R2 | MET | p50/p95/completionRate/validatedPerHour per mode `docs/reports/fleet-perf-receipt.md:28`; materiality verdict `scripts/commands/fleet-e2e.ts:2216`; tests `scripts/commands/fleet-e2e-perf.test.ts:134` |
-| R3 | MET | Batch-2 probe rows built without driver and excluded from gains `scripts/commands/fleet-e2e.ts:3212`; receipt rows `docs/reports/fleet-perf-receipt.md:62` |
+| R3 | MET | Batch-2 probe rows built without driver and excluded from gains `scripts/commands/fleet-e2e.ts:3219`; receipt rows `docs/reports/fleet-perf-receipt.md:62` |
 
 | Acceptance Criteria | Status | Evidence Type | Evidence |
 |---------------------|--------|---------------|----------|
 | AC1 — R6 — A combined fleet receipt distinguishes participation gains from convenience (req: R1) | MET | command | `bun run fleet-e2e --perf --trials 3 --agents pi` → 9/9 validated, one digest `docs/reports/fleet-perf-receipt.md:6`, busy-wait/attach phases `docs/reports/fleet-perf-receipt.md:22`; warm-turn claim/redelivery tests `packages/app/tests/services/agent-loop-service.test.ts:428`, `packages/app/tests/services/agent-loop-service.test.ts:498` (19 pass) |
 | AC2 — Gains are reported with guardrails (req: R2) | MET | test | `scripts/commands/fleet-e2e-perf.test.ts:140` convenience-only under threshold (23 pass); receipt comparison `docs/reports/fleet-perf-receipt.md:69` |
-| AC3 — Batch-2 hosts never count as gains (req: R3) | MET | command | `docs/reports/fleet-perf-receipt.md:62` grok-build/antigravity-cli `unsupported` with reasons; gain rows iterate measured targets only `scripts/commands/fleet-e2e.ts:3233` |
+| AC3 — Batch-2 hosts never count as gains (req: R3) | MET | command | `docs/reports/fleet-perf-receipt.md:62` grok-build/antigravity-cli `unsupported` with reasons; gain rows iterate measured targets only `scripts/commands/fleet-e2e.ts:3240` |
 - Coverage: N/A (verdict-based; verify pipeline does not measure code coverage)
 
 ### Review
@@ -120,11 +120,11 @@ Scenario: AC3 — Batch-2 hosts never count as gains (req: R3)
 
 | # | Priority | Dimension | Finding | Location | Disposition |
 |---|----------|-----------|---------|----------|-------------|
-| 1 | P3 (minor) | correctness | `--modes` accepts an empty or duplicate list (`scripts/commands/fleet-e2e.ts:905`): `parseArgs` filters empty entries, so `--modes ""`, a whitespace value or an unset `$MODES` reaches `perfModesOf` as an empty lane list, the perf lane runs no trial, still writes `docs/reports/fleet-perf-receipt.{json,md}` (empty `trials`/`measured`, no comparison tables) and exits 0 — verified by evaluating `parsePerfArgs` on `--modes ' '`, which returned `[]`. Duplicates are not deduped either: two identical lane names keep both entries and double-run that lane, skewing its sample count. | `scripts/commands/fleet-e2e.ts:905` | DEFER(empty/duplicate list semantics are a selector-owned decision — fail loudly vs fall back to all lanes — and no path in the shipped `repeatCommand` emits an empty list; file as follow-up) |
-| 2 | P4 (advisory) | correctness | The Batch-2 markdown row hardcodes the literal `unsupported` instead of rendering `probe.status`, so a future batch-2 driver would show `qualified` in the JSON and `unsupported` in the table. Currently equivalent because `PERF_BATCH2_AGENTS` always passes `driver: null`. | `scripts/commands/fleet-e2e.ts:2459` | ACCEPTED |
-| 3 | P4 (advisory) | correctness | AC2's literal wording labels an under-materiality result "convenience only"; the verdict function splits that band into `convenience-only` (positive but under 15%/10%) and `no-gain` (attached slower than warm). The shipped receipt therefore reads `no-gain` for pi. Stricter than the AC, never a fabricated gain, and disclosed by the receipt caveat. | `scripts/commands/fleet-e2e.ts:2193` | ACCEPTED |
-| 4 | P4 (advisory) | usability | The `attach` phase mark is measured once per lane and pushed into every attached trial's `phases`, so an `--trials n>1` receipt repeats one attach timestamp per row and per-trial attach overhead cannot be separated from the single handshake. | `scripts/commands/fleet-e2e.ts:2565` | ACCEPTED |
-| 5 | P4 (advisory) | usability | The measured/JSON lane key is `attached` while trials and `modes` use `attached-ready`; AC2's per-mode table therefore needs a name mapping a reader has to infer. | `scripts/commands/fleet-e2e.ts:3104` | ACCEPTED |
+| 1 | P3 (minor) | correctness | `--modes` accepts an empty or duplicate list (`scripts/commands/fleet-e2e.ts:905`): `parseArgs` filters empty entries, so `--modes ""`, a whitespace value or an unset `$MODES` reaches `perfModesOf` as an empty lane list, the perf lane runs no trial, still writes `docs/reports/fleet-perf-receipt.{json,md}` (empty `trials`/`measured`, no comparison tables) and exits 0 — verified by evaluating `parsePerfArgs` on `--modes ' '`, which returned `[]`. Duplicates are not deduped either: two identical lane names keep both entries and double-run that lane, skewing its sample count. | `scripts/commands/fleet-e2e.ts:938` | FIXED (commit 3ebd9bcd9: `perfModesOf` dedupes repeated lanes and throws on an empty list — `scripts/commands/fleet-e2e.ts:938`; tests `scripts/commands/fleet-e2e-perf.test.ts:109`, `scripts/commands/fleet-e2e-perf.test.ts:116`) |
+| 2 | P4 (advisory) | correctness | The Batch-2 markdown row hardcodes the literal `unsupported` instead of rendering `probe.status`, so a future batch-2 driver would show `qualified` in the JSON and `unsupported` in the table. Currently equivalent because `PERF_BATCH2_AGENTS` always passes `driver: null`. | `scripts/commands/fleet-e2e.ts:2509` | FIXED (row renders `probe.status` — `scripts/commands/fleet-e2e.ts:2509`) |
+| 3 | P4 (advisory) | correctness | AC2's literal wording labels an under-materiality result "convenience only"; the verdict function splits that band into `convenience-only` (positive but under 15%/10%) and `no-gain` (attached slower than warm). The shipped receipt therefore reads `no-gain` for pi. Stricter than the AC, never a fabricated gain, and disclosed by the receipt caveat. | `scripts/commands/fleet-e2e.ts:2216` | FIXED (`no-gain` and `convenience-only` both render under the AC2 "Convenience only" note — `scripts/commands/fleet-e2e.ts:2535`) |
+| 4 | P4 (advisory) | usability | The `attach` phase mark is measured once per lane and pushed into every attached trial's `phases`, so an `--trials n>1` receipt repeats one attach timestamp per row and per-trial attach overhead cannot be separated from the single handshake. | `scripts/commands/fleet-e2e.ts:2662` | FIXED (only the first attached trial carries the `attach` mark — `scripts/commands/fleet-e2e.ts:2662`; receipt `docs/reports/fleet-perf-receipt.md:22-24`) |
+| 5 | P4 (advisory) | usability | The measured/JSON lane key is `attached` while trials and `modes` use `attached-ready`; AC2's per-mode table therefore needs a name mapping a reader has to infer. | `scripts/commands/fleet-e2e.ts:3207` | FIXED (measured key renamed `attached-ready` — `scripts/commands/fleet-e2e.ts:3207`; receipt `docs/reports/fleet-perf-receipt.md:34`) |
 
 ##### Functional Traceability
 

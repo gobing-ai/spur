@@ -1,7 +1,7 @@
 # Fleet performance receipt (task 1273)
 
-Generated: 2026-10-27T00:20:26.657Z
-Revision: 3ebd9bcd9c222a673bb5cd9e839199bcc7345abe
+Generated: 2026-10-27T00:55:58.623Z
+Revision: 4e6fb5adacbc3bdcfb98617a3a8cddd590b094cd
 Repeat: `bun run fleet-e2e --perf --trials 3 --agents pi`
 Workload digest: sha256:a851ae35a1798abecb2241aecd1442fa70acaf5f077c22a8f1d75703cf5239ea
 Executor settings: not applicable for deterministic stubs; real-agent defaults are unobserved. Token and resource usage: unavailable.
@@ -13,25 +13,25 @@ Executor settings: not applicable for deterministic stubs; real-agent defaults a
 
 | agent | mode | status | durationMs | phases observed | reason |
 | ----- | ---- | ------ | ---------- | --------------- | ------ |
-| pi | cold | validated | 2634 | enqueue→claim→process-ready→process-ready→first-output→terminal→turn-settled |  |
-| pi | resume | validated | 1810 | enqueue→claim→process-ready→process-ready→first-output→terminal→turn-settled |  |
-| pi | resume | validated | 2013 | enqueue→claim→process-ready→process-ready→first-output→terminal→turn-settled |  |
-| pi | warm | validated | 2058 | enqueue→claim→process-ready→terminal→turn-settled |  |
-| pi | warm | validated | 2436 | enqueue→claim→process-ready→terminal→turn-settled |  |
-| pi | warm | validated | 2155 | enqueue→claim→process-ready→terminal→turn-settled |  |
-| pi | attached-ready | validated | 1644 | attach→busy-wait→terminal |  |
-| pi | attached-ready | validated | 1248 | attach→terminal |  |
-| pi | attached-ready | validated | 1349 | attach→terminal |  |
+| pi | cold | validated | 1706 | enqueue→claim→process-ready→process-ready→first-output→terminal→turn-settled |  |
+| pi | resume | validated | 1612 | enqueue→claim→process-ready→process-ready→first-output→terminal→turn-settled |  |
+| pi | resume | validated | 1597 | enqueue→claim→process-ready→process-ready→first-output→terminal→turn-settled |  |
+| pi | warm | validated | 1628 | enqueue→claim→process-ready→terminal→turn-settled |  |
+| pi | warm | validated | 1535 | enqueue→claim→process-ready→terminal→turn-settled |  |
+| pi | warm | validated | 1525 | enqueue→claim→process-ready→terminal→turn-settled |  |
+| pi | attached-ready | validated | 1420 | attach→busy-wait→terminal |  |
+| pi | attached-ready | validated | 1165 | terminal |  |
+| pi | attached-ready | validated | 1176 | terminal |  |
 
 ## Measured (p50/p95 of enqueue→validated, UTC wall clock, one host)
 
 | agent | mode | p50Ms | p95Ms | completionRate | validatedPerHour |
 | ----- | ---- | ----- | ----- | -------------- | ---------------- |
-| pi | cold | 2634 | 2634 | 1 | 1366.743 |
-| pi | resume | 1810 | 2013 | 1 | 1883.338 |
+| pi | cold | 1706 | 1706 | 1 | 2110.199 |
+| pi | resume | 1597 | 1612 | 1 | 2243.69 |
 | pi | warm | — | — | — | — (qualified: node_modules/.bin/pi 0.87.1, driver pi, verifiedAgainst 0.87.1) |
-| pi | warmTurns | 2155 | 2436 | 1 | 1624.304 |
-| pi | attached | 1349 | 1644 | 1 | 2546.569 |
+| pi | warmTurns | 1535 | 1628 | 1 | 2303.754 |
+| pi | attached-ready | 1176 | 1420 | 1 | 2871.577 |
 
 ## Pi executable provenance
 
@@ -51,9 +51,9 @@ These measurements cover the real process/action-contract path with a local mode
 
 | agent | mode | p50Ms | p95Ms | completionRate | validatedPerHour | child processes |
 | --- | --- | --- | --- | --- | --- | --- |
-| pi | cold | 13.500333000003593 | 22.503290999993624 | 1 | 221798.177 | 3 |
-| pi | resume | 13.09687500000291 | 13.52666699999827 | 1 | 274807.706 | 3 |
-| pi | warm | 1.0343330000032438 | 22.213666000003286 | 1 | 448585.74 | 1 |
+| pi | cold | 13.306125000002794 | 22.306541999998444 | 1 | 220852.875 | 3 |
+| pi | resume | 13.12616700000217 | 14.08220799999981 | 1 | 271877.368 | 3 |
+| pi | warm | 1.0638330000001588 | 21.10558299999684 | 1 | 470973.9 | 1 |
 
 ## Batch-2 probes (R3)
 
@@ -71,7 +71,7 @@ anything under the thresholds is CONVENIENCE, not a measured speed win.
 
 | agent | attached p50Ms | attached p95Ms | warm p50Ms | warm p95Ms | verdict |
 | ----- | -------------- | -------------- | ---------- | ---------- | ------- |
-| pi | 1349 | 1644 | 2155 | 2436 | material-gain |
+| pi | 1176 | 1420 | 1535 | 1628 | material-gain |
 
 Both columns run the shared fleet workload (one digest above): attached-ready through the bound
 occupant, supervised-warm through the member loop holding one warm turn session. In the stub lane the
