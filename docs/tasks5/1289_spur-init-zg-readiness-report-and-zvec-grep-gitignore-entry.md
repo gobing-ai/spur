@@ -1,10 +1,10 @@
 ---
 schema_version: 1
 name: "spur init: zg readiness report and .zvec-grep gitignore entry"
-status: todo
+status: done
 template: feature-impl
 created_at: 2026-11-03T16:56:58.316Z
-updated_at: "2026-11-03T17:16:21.756Z"
+updated_at: "2026-11-03T20:16:50.063Z"
 feature_id: A34
 priority: P3
 tags:
@@ -13,6 +13,8 @@ tags:
   - init
 
 dependencies: ["1285"]
+done_forced: "false"
+done_reason: unforced close; PASS artifact at .spur/memory/evidence/1289-verdict.json
 ---
 
 ## 1289. spur init: zg readiness report and .zvec-grep gitignore entry
@@ -23,11 +25,11 @@ Feature A34 R12. Operators asked whether zg should be installed with spur or by 
 
 ### Requirements
 
-- [ ] R12. spur init reports zg readiness and ignores the zg index.
+- [x] R12. spur init reports zg readiness and ignores the zg index.
 
 ### Acceptance Criteria
 
-- [ ] AC1 — spur init reports zg readiness and ignores the zg index
+- [x] AC1 — spur init reports zg readiness and ignores the zg index
 
 ### Q&A
 
@@ -64,15 +66,42 @@ Invariants: init never spawns an installer, `zg index` or a model download; miss
 
 ### Solution
 
-<!-- Filled during implementation: file:line change map and concise rationale. -->
+- `apps/cli/src/commands/init.ts:384-405` — gitignore append generalized to a two-entry list (`{entry, comment}`): `.spur/context/` (byte-identical output preserved) and `.zvec-grep/` (zg semantic-search index, operator-built). Absent file → both sections; existing file → append per missing entry, idempotent.
+- `apps/cli/src/commands/init.ts:460-473` — readiness probe `searchStatus(context.cwd)` after scaffolding, wrapped so any throw yields `{rg:{available:false}, zg:{available:false,index:'unknown'}}`; `search` field added to the `--json` payload; no new init flag, no installer spawn (invariants kept).
+- `apps/cli/src/commands/init.ts:504` + `describeZgReadiness` (bottom) — one human line after the summary: `zg ready` / `zg index stale — run: zg index` / `zg index missing — run: zg index --embedding local/potion-code-16m-v2` / `zg not installed (optional) — install: bun add -g @zvec/zvec-grep` / `zg status unknown`.
+- `apps/cli/tests/commands/init-search.test.ts` (new) — 7 tests: fresh entries, re-init idempotence, pre-existing `.zvec-grep/` not duplicated, `--minimal` parity, `--json` search shape, PATH-stripped zg-absent → `index: 'unknown'` + exit 0, single human readiness line.
+
+Template parity check: no `.gitignore` template exists under `config/templates` (rg over config/ shows none) — nothing to mirror.
 
 ### Testing
 
-<!-- Filled during verification: commands run, outcomes, coverage claim or N/A. -->
+**Pipeline verify results**
+
+- Verdict: PASS (from verdict artifact)
+
+| Requirement | Status | Evidence |
+|-------------|--------|----------|
+| R12 | MET | command — `bun test apps/cli/tests/commands/init-search.test.ts` 7/7 pass (fresh gitignore entries, re-init idempotence, pre-existing-entry preservation, --minimal parity, JSON search shape, zg-absent → unknown + exit 0, one human line); E2E artifact: temp project, two init runs → `grep -c '^\.zvec-grep/$' .gitignore` = 1 and `.spur/context/` = 1; static-ref — apps/cli/src/commands/init.ts:384 (entry list `[{entry:'.spur/context/',...},{entry:'.zvec-grep/',...}]`), init.ts:460 (probe + throw-degrade), init.ts:473 (`search` in JSON payload), init.ts:504 (`search:` human line) |
+
+| Acceptance Criteria | Status | Evidence Type | Evidence |
+|---------------------|--------|---------------|----------|
+| R12 — spur init reports zg readiness and ignores the zg index | MET | command | `bun test apps/cli/tests/commands/init-search.test.ts apps/cli/tests/commands/init.test.ts apps/cli/tests/init-templates.test.ts apps/cli/tests/commands/init-status.test.ts` → 58 pass / 0 fail; E2E artifact (mktemp project, `git init`, init + init --force, grep counts) reproduced above; human output line `search: zg index missing — run: zg index --embedding local/potion-code-16m-v2` observed live; JSON `search.zg.index` = missing with `rg.available` = true in the same run |
+- Coverage: N/A (verdict-based; verify pipeline does not measure code coverage)
 
 ### Review
 
-<!-- Filled during review: P1-P4 findings, residual risk, and final disposition. -->
+| Priority | Finding | Disposition |
+| --- | --- | --- |
+| P1 | none | — |
+| P2 | none | — |
+| P3 | none | — |
+| P4 | `zg status` probe runs synchronously in init's command path, bounded by the service's own 5 s timeouts (packages/app/src/services/search.ts:88 `PROBE_TIMEOUT_MS = 5_000`); init latency grows by at most ~5 s when zg is present but wedged | accepted (informational, bounded by design §4 Init's declared probe budget; no action needed) |
+
+Residual risk: none material — init never installs zg, never runs `zg index`, and probe failure degrades to `index: 'unknown'` with exit code unchanged (PATH-stripped subprocess test).
+
+Confidence: HIGH
+
+Verdict: PASS
 
 ### References
 
@@ -84,4 +113,7 @@ Invariants: init never spawns an installer, `zg index` or a model download; miss
 ### History
 
 - 2026-11-03T17:06:32.825Z feature_id Q → A34 (system)
+- 2026-11-03T20:01:49.500Z todo → wip (system)
+- 2026-11-03T20:10:27.758Z wip → testing (system)
+- 2026-11-03T20:16:50.028Z testing → done (system)
 

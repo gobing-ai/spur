@@ -1,6 +1,7 @@
 import { homedir } from 'node:os';
 import { join, resolve } from 'node:path';
 import type { Command } from '@commander-js/extra-typings';
+import { searchStatus } from '@gobing-ai/spur-app';
 import { misplacedGlobalKeys, SDLC_ACTIONS } from '@gobing-ai/spur-config';
 import {
     BUNDLED_GLOBAL_CONFIG,
@@ -9,6 +10,7 @@ import {
     listBundledProjectSeedFiles,
     parseConfigYaml,
 } from '@gobing-ai/spur-config/loader';
+import type { SearchStatus } from '@gobing-ai/spur-contracts';
 import { ArtifactDao } from '@gobing-ai/spur-domain';
 import { bundledRulesRoot, listBundledRuleFiles } from '@gobing-ai/ts-rule-engine';
 import { CLI_CONFIG } from '../config';
@@ -381,23 +383,25 @@ export function registerInitCommand(program: Command, context: CliContext, optio
             const agentsDir = join(context.cwd, CLI_CONFIG.configDir, 'agents');
             await context.fs.ensureDir(agentsDir);
             await writeIfNew(context, join(agentsDir, '.gitkeep'), '', force, result);
-            // Ensure `.spur/context/` (machine-generated state, written by indexed-context
-            // hooks) is gitignored. Runs in all modes — hooks create the dir regardless of --minimal.
-            // Idempotent: skips the append if the entry already exists (even inside a comment).
+            // Ensure machine-generated state is gitignored. Runs in all modes — hooks create
+            // .spur/context/ regardless of --minimal, and zg builds .zvec-grep/ per project.
+            // Idempotent: each entry appends only when missing (even inside a comment).
+            const gitignoreEntries = [
+                { entry: '.spur/context/', comment: '# Spur indexed-context (machine-generated)' },
+                { entry: '.zvec-grep/', comment: '# zg semantic-search index (operator-built)' },
+            ];
             const gitignorePath = join(context.cwd, '.gitignore');
-            const contextEntry = '.spur/context/';
             if (await context.fs.exists(gitignorePath)) {
-                const existing = await context.fs.readFile(gitignorePath);
-                if (!existing.includes(contextEntry)) {
-                    await context.fs.writeFile(
-                        gitignorePath,
-                        `${existing.trimEnd()}\n\n# Spur indexed-context (machine-generated)\n${contextEntry}\n`,
-                    );
+                let existing = await context.fs.readFile(gitignorePath);
+                for (const { entry, comment } of gitignoreEntries) {
+                    if (existing.includes(entry)) continue;
+                    existing = `${existing.trimEnd()}\n\n${comment}\n${entry}\n`;
+                    await context.fs.writeFile(gitignorePath, existing);
                 }
             } else {
                 await context.fs.writeFile(
                     gitignorePath,
-                    `# Spur indexed-context (machine-generated)\n${contextEntry}\n`,
+                    gitignoreEntries.map(({ entry, comment }) => `${comment}\n${entry}\n`).join('\n'),
                 );
             }
 
@@ -461,6 +465,15 @@ export function registerInitCommand(program: Command, context: CliContext, optio
             const rulesSeeded = await seedGlobalRules(context);
             const configSeeded = await seedGlobalConfig(context);
 
+            // zg readiness probe (ADR-147 §4 Init): informational only — never installs, never
+            // indexes, and a probe failure degrades to index 'unknown' without failing init.
+            let search: SearchStatus;
+            try {
+                search = await searchStatus(context.cwd);
+            } catch {
+                search = { rg: { available: false }, zg: { available: false, index: 'unknown' } };
+            }
+
             if (json) {
                 context.output.write(
                     toEnvelopeJson(
@@ -471,6 +484,7 @@ export function registerInitCommand(program: Command, context: CliContext, optio
                             ...result,
                             globalRulesSeeded: rulesSeeded,
                             globalConfigSeeded: configSeeded,
+                            search,
                         },
                         { enveloped: options.jsonEnvelope },
                     ),
@@ -487,6 +501,16 @@ export function registerInitCommand(program: Command, context: CliContext, optio
                 if (configSeeded > 0) {
                     context.output.write(`  ✓ seeded ${configSeeded} config file(s) to ~/${GLOBAL_CONFIG_DIR}`);
                 }
+                context.output.write(`search: ${describeZgReadiness(search)}`);
             }
         });
+}
+
+/** One-line zg readiness for init's human output (hints are printed, never executed). */
+function describeZgReadiness(status: SearchStatus): string {
+    if (!status.zg.available) return `zg not installed (optional) — install: bun add -g @zvec/zvec-grep`;
+    if (status.zg.index === 'ready') return 'zg ready';
+    if (status.zg.index === 'stale') return 'zg index stale — run: zg index';
+    if (status.zg.index === 'missing') return 'zg index missing — run: zg index --embedding local/potion-code-16m-v2';
+    return 'zg status unknown';
 }
