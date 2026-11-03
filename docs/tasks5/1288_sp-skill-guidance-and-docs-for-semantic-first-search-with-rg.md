@@ -1,10 +1,10 @@
 ---
 schema_version: 1
 name: sp skill guidance and docs for semantic-first search with rg fallback
-status: testing
+status: done
 template: feature-impl
 created_at: 2026-11-03T16:50:38.254Z
-updated_at: "2026-11-03T19:57:12.908Z"
+updated_at: "2026-11-03T20:19:39.862Z"
 feature_id: A34
 priority: P3
 tags:
@@ -14,7 +14,7 @@ tags:
 
 dependencies: ["1286"]
 done_forced: "false"
-done_reason: unforced close
+done_reason: unforced close; PASS artifact at .spur/memory/evidence/1288-verdict.json
 ---
 
 ## 1288. sp skill guidance and docs for semantic-first search with rg fallback
@@ -128,4 +128,5 @@ Verdict: PASS
 - 2026-11-03T19:56:54.198Z wip → testing (system)
 - 2026-11-03T19:56:54.199Z testing → done (system)
 - 2026-11-03T19:57:12.908Z done → testing (system)
+- 2026-11-03T20:19:39.830Z testing → done (system)
 
