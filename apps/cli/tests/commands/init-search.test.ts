@@ -114,4 +114,22 @@ describe('init — zg readiness and .zvec-grep gitignore (task 1289 / A34 R12)',
         expect(lines.length).toBe(1);
         expect(lines[0]?.length).toBeGreaterThan('search: '.length);
     });
+
+    // Regression (A34 dogfood): the converged re-run branch returned before the readiness
+    // probe, so a second `spur init` silently dropped the R12 report in both output modes.
+    test('converged re-init still reports search readiness in JSON and human output', async () => {
+        const cwd = await createTempProject();
+        expect((await runCli(['init', '--minimal'], cwd)).code).toBe(0);
+
+        const jsonRun = await runCli(['init', '--minimal', '--json'], cwd);
+        expect(jsonRun.code).toBe(0);
+        const payload = JSON.parse(jsonRun.stdout) as { converged?: boolean; search?: { zg: { index: string } } };
+        expect(payload.converged).toBe(true);
+        expect(['ready', 'stale', 'missing', 'unknown']).toContain(payload.search?.zg.index ?? '<absent>');
+
+        const humanRun = await runCli(['init', '--minimal'], cwd);
+        expect(humanRun.code).toBe(0);
+        expect(humanRun.stdout).toContain('Already initialized');
+        expect(humanRun.stdout.split('\n').filter((line) => line.startsWith('search: ')).length).toBe(1);
+    });
 });

@@ -248,6 +248,14 @@ export function registerInitCommand(program: Command, context: CliContext, optio
                 }
             }
 
+            // R12 (A34): probe before the converge early-return so a re-run reports readiness too.
+            let search: SearchStatus;
+            try {
+                search = await searchStatus(context.cwd);
+            } catch {
+                search = { rg: { available: false }, zg: { available: false, index: 'unknown' } };
+            }
+
             // Re-init converge (R1/R2): a config that already exists is no longer an
             // error. Without --force the command converges instead — seeds missing
             // assets, writes no config, reports drift — and only rewrites the global
@@ -307,6 +315,7 @@ export function registerInitCommand(program: Command, context: CliContext, optio
                     globalConfigSeeded: configSeeded,
                     ...(adoptedGlobal ? { adoptGlobalConfig: adoptedGlobal } : {}),
                     ...(misplacedKeys.length > 0 ? { misplacedGlobalKeys: misplacedKeys } : {}),
+                    search,
                 };
                 if (json) {
                     context.output.write(toEnvelopeJson(payload, { enveloped: options.jsonEnvelope }));
@@ -328,6 +337,7 @@ export function registerInitCommand(program: Command, context: CliContext, optio
                             `  ⚠ global config carries project-shaped key(s): ${misplacedKeys.join(', ')}`,
                         );
                     }
+                    context.output.write(`search: ${describeZgReadiness(search)}`);
                 }
                 context.setExitCode(0);
                 return;
@@ -467,13 +477,6 @@ export function registerInitCommand(program: Command, context: CliContext, optio
 
             // zg readiness probe (ADR-147 §4 Init): informational only — never installs, never
             // indexes, and a probe failure degrades to index 'unknown' without failing init.
-            let search: SearchStatus;
-            try {
-                search = await searchStatus(context.cwd);
-            } catch {
-                search = { rg: { available: false }, zg: { available: false, index: 'unknown' } };
-            }
-
             if (json) {
                 context.output.write(
                     toEnvelopeJson(
