@@ -141,6 +141,8 @@ Execute phases in order. Stop at the phase boundary required by the selected mod
 3. Exclude or de-prioritize generated, vendored, build output, dependency cache, lockfile-only, binary-heavy, and snapshot-heavy paths unless they are directly relevant.
 4. For monorepos, identify packages/apps and either ask for scope or analyze each package at the requested depth if feasible.
 
+**Search routing** (hybrid search, ADR-147): concept, cross-file, or "how does X work" questions → semantic first — the zg MCP tool `zvec_grep_search` when the host exposes it, else `spur self search "<query>" --mode fuzzy --json`. Literal, symbol, regex, or exhaustive occurrence lists → `rg`. If zg is absent or the search response carries a `skipped` reason → fall back to `rg`.
+
 ### Phase 3: Classify
 
 Classify the codebase as one or more archetypes:

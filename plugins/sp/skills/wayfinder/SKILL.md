@@ -142,6 +142,8 @@ Invoked when a map already exists (operator provides the feature ID). A ticket i
    | **Prototype** | Cheap, rough, concrete artifact to react to — an outline, stub, or rough implementation via `sp:code-implementation`. | Linked prototype as a task artifact |
    | **Task** | Literal manual work — nothing to prototype or research. Moving data, provisioning access. | Checklist in task body; resolved when done |
 
+   **Search routing** (hybrid search, ADR-147): concept, cross-file, or "how does X work" questions → semantic first — the zg MCP tool `zvec_grep_search` when the host exposes it, else `spur self search "<query>" --mode fuzzy --json`. Literal, symbol, regex, or exhaustive occurrence lists → `rg`. If zg is absent or the search response carries a `skipped` reason → fall back to `rg`.
+
    An open question from the map is **not** resolved this way. It is settled with the operator in
    conversation (`AskUserQuestion` where available) and recorded straight into **## Decisions so far**
    — no task is claimed, and it does not consume the session's one ticket.

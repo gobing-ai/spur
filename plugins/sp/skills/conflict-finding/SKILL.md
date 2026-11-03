@@ -234,6 +234,8 @@ findings, unresolved, coverage, cost, remediation, errors`.
 | `Bash`          | `git`, `rg`, `spur task/feature ... --json`, `spur ... check`, `sp:doc-evolve` audit     |
 | `Write`         | Only for temp files / owner-routed repair payloads after confirmation (with `--resolve`) |
 
+**Search routing** (hybrid search, ADR-147): concept, cross-file, or "how does X work" questions → semantic first — the zg MCP tool `zvec_grep_search` when the host exposes it, else `spur self search "<query>" --mode fuzzy --json`. Literal, symbol, regex, or exhaustive occurrence lists → `rg`. If zg is absent or the search response carries a `skipped` reason → fall back to `rg`.
+
 ## Platform Notes
 
 ### Claude Code
