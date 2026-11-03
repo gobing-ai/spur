@@ -2738,3 +2738,22 @@ has 11 fields, skill/agent output contracts carry no level, and `response.valida
   required at task refinement); portable pull is the baseline for Codex, Claude Code and Pi; native
   wake channels are optional per-version adapters.
 - **Detail:** [verified attached occupants](design/fleet-attached-occupants.md).
+
+## ADR-147: zg Is an Optional External Search Dependency Behind One Adapter
+
+- **Status:** Proposed · **Date:** 2026-11-03 · **Feature:** A34 · **Extends:** ADR-021, ADR-051
+- **Decision:**
+  - Semantic (vector) search is delegated to the operator-installed `zg` (`@zvec/zvec-grep`) CLI,
+    resolved on PATH like `rg` and `sg`; Spur never bundles, installs, indexes for, or reimplements it.
+  - Exact search uses `rg --json` directly so it works without zg; fuzzy search degrades to an
+    explicit `skipped` reason, never a failure, when zg or its index is unavailable. The default
+    `auto` mode runs fuzzy only when zg and its index are present; `exact` and `fuzzy` are overrides.
+  - Exactly one module (`ZgAdapter` in `packages/app`) knows zg's CLI and output grammar; unknown
+    output fails loudly with the zg version. Results normalize to one contracts DTO.
+  - Public surface: one verb, `spur self search`, plus a local-server-only search contract and Board module.
+- **Why:** local-first semantic retrieval without owning embedding/index internals; one adapter
+  contains the risk that zg 0.2.x emits markdown only (no `--json`).
+- **Retains:** ADR-021 thin transports; ADR-051 consent for the one new verb; no stored API keys.
+- **Consequence:** zg upgrades are validated by golden parser fixtures; an MCP- or JSON-based
+  transport can replace the parser without a DTO change.
+- **Detail:** [hybrid search](design/hybrid-search.md).
