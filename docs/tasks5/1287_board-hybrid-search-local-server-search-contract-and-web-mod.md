@@ -1,10 +1,10 @@
 ---
 schema_version: 1
 name: "Board hybrid search: local-server search contract and web module"
-status: todo
+status: done
 template: feature-impl
 created_at: 2026-11-03T16:50:38.253Z
-updated_at: "2026-11-03T17:16:19.421Z"
+updated_at: "2026-11-03T19:29:22.394Z"
 feature_id: A34
 priority: P3
 tags:
@@ -13,6 +13,8 @@ tags:
   - web
 
 dependencies: ["1285"]
+done_forced: "false"
+done_reason: unforced close; PASS artifact at .spur/memory/evidence/1287-verdict.json
 ---
 
 ## 1287. Board hybrid search: local-server search contract and web module
@@ -23,11 +25,11 @@ Feature A34 Board surface. Covers R9. Operators need auto / exact / fuzzy search
 
 ### Requirements
 
-- [ ] R9. The Board offers auto, exact, and fuzzy search.
+- [x] R9. The Board offers auto, exact, and fuzzy search.
 
 ### Acceptance Criteria
 
-- [ ] AC1 — The Board offers auto, exact, and fuzzy search
+- [x] AC1 — The Board offers auto, exact, and fuzzy search
 
 ### Q&A
 
@@ -69,15 +71,47 @@ Invariants: no logic beyond calling the service (ADR-021); `apps/server/tests/op
 
 ### Solution
 
-<!-- Filled during implementation: file:line change map and concise rationale. -->
+Change map (ADR-147 hybrid search, ADR-021 thin server; design §4 Server/Board):
+
+- `packages/contracts/src/index.ts:39` — mount `search: { query: searchContract.search, status: searchContract.searchStatus }` into the public `contract`; Board client surface is `api.search.query` / `api.search.status` (matches design's `api.search.status`).
+- `packages/contracts/tests/search-contract.test.ts` — 1285's scope-boundary guard (`'search' in contract` false) flipped by design to assert the keyed mount (`['query','status']` + identity vs `searchContract`).
+- `apps/server/src/modules/search/handlers.ts` (new) — `createSearchHandlers(ctx)`; `query` handler binds `searchProject` to `ctx.cwd` only (client-supplied `root` is rejected by the `.strict()` request schema → SearchError `invalid-request` → ORPCError BAD_REQUEST: no path traversal); `status` handler binds `searchStatus(ctx.cwd)`; `toSearchORPCError` maps `invalid-request`→BAD_REQUEST, environment failures (`rg-not-installed`, `zg-index-missing`, …)→INTERNAL with the actionable hint carried verbatim in `data`.
+- `apps/server/src/modules/search/index.ts` (new) — factory re-export, oRPC-only (no Hono route, no `ServerModule` entry; Worker mounts no oRPC router so search stays local-only per design §4).
+- `apps/server/src/router.ts:38` — `search: createSearchHandlers(ctx ?? stubCtx)`.
+- `apps/web/src/modules/search/index.tsx` (new) — `SearchShell`: Enter-to-submit query input (disabled while pending), Auto/Exact/Fuzzy segmented control (default Auto), All/Docs/Code scope select; results grouped Exact/Fuzzy (`HitGroup`/`HitRow`) rendering `path:start-end`, monospace snippet, `matchedBy` Badge only when both routes agree; degraded groups render inline `skipped: <reason> — <hint>` (never an error state); `StatusStrip` (`role="status"`) shows rg/zg availability, version, index state and the exact hint strings; query fetch aborts on unmount/param change. `WebModule { id: 'search', route: 'search', order: 15 }` (between observability 10 and history 20).
+- Tests: `apps/server/tests/modules/search/handlers.test.ts` (query grouped hits bound to ctx.cwd vs tmpdir fixture; client `root` rejected; status shape), `apps/web/tests/modules/search/search-module.test.ts` (metadata, degraded-not-error, hit rendering, full shell happy path, mode switch sends `mode`), `apps/web/tests/modules/registry.test.ts` expected enabled-module list gains `search` (order 15).
+
+Invariants kept: server handlers contain no logic beyond service calls; all UI data via `api`; UI primitives only through the `@/ui` seam.
 
 ### Testing
 
-<!-- Filled during verification: commands run, outcomes, coverage claim or N/A. -->
+**Pipeline verify results**
+
+- Verdict: PASS (from verdict artifact)
+
+| Requirement | Status | Evidence |
+|-------------|--------|----------|
+| R9 | MET | packages/contracts/src/index.ts:39 (api.search.query/status mount); apps/server/src/router.ts:38 (search handlers registered); apps/web/src/modules/search/index.tsx (SearchShell: Enter-submit query input, Auto/Exact/Fuzzy segmented control default Auto, All/Docs/Code scope select, grouped results, StatusStrip); apps/web/tests/modules/search/search-module.test.ts:5 tests incl. mode-switch sends `mode`; live transport E2E (see Testing) |
+
+| Acceptance Criteria | Status | Evidence Type | Evidence |
+|---------------------|--------|---------------|----------|
+| R9 — The Board offers auto, exact, and fuzzy search | MET | test | apps/web/tests/modules/search/search-module.test.ts (metadata order 15; skipped degradation inline never error state; path:start-end + snippet + matchedBy badge only when both routes agree; full shell renders groups+status; mode switch sends `mode:fuzzy`); command — live transport E2E POST /api/search {mode:auto,scope:docs} → 200 with 10 exact hits, fuzzy null, skipped zg-index-missing + hint verbatim (recorded in task Testing section); degraded path exercised end-to-end over the real app |
+- Coverage: N/A (verdict-based; verify pipeline does not measure code coverage)
 
 ### Review
 
-<!-- Filled during review: P1-P4 findings, residual risk, and final disposition. -->
+| Priority | Finding | Disposition |
+| --- | --- | --- |
+| P1 | none | — |
+| P2 | none | — |
+| P3 | none | — |
+| P4 | observation: oRPC void-input procedures reject a POST body at transport level (`400 invalid_type`, reproduced in this session's live transport probe against `POST /api/search/status` with body `{}`); the Board's `OpenAPILink` client sends bodyless POSTs (packages/contracts/src/search.ts:139 declares the contract side, `packages/app` rpc-client uses `@orpc/openapi-client` OpenAPILink), so only hand-rolled curl callers would hit this | accepted (client behavior correct; documented here for future curl-based probes) |
+
+Residual risk: degraded-path UI verified via mocked api + live transport JSON, not via a real browser screenshot; risk limited to styling details.
+
+Confidence: high — design §4 invariants each have a focused test or a live transport assertion; full server/web/contracts suites green after the module addition.
+
+Verdict: PASS
 
 ### References
 
@@ -89,4 +123,7 @@ Invariants: no logic beyond calling the service (ADR-021); `apps/server/tests/op
 ### History
 
 - 2026-11-03T17:06:32.825Z feature_id Q → A34 (system)
+- 2026-11-03T19:18:01.317Z todo → wip (system)
+- 2026-11-03T19:29:19.856Z wip → testing (system)
+- 2026-11-03T19:29:22.389Z testing → done (system)
 

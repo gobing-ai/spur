@@ -7,6 +7,7 @@ import { historyContract } from './history';
 import { inboxContract } from './inbox';
 import { planningEventContract } from './planning-event';
 import { runsContract } from './runs';
+import { searchContract } from './search';
 import { taskContract } from './task';
 
 /** Application health payload returned by the public health procedure. */
@@ -35,6 +36,7 @@ export const contract = {
     feature: { ...featureContract },
     history: { ...historyContract },
     inbox: { ...inboxContract },
+    search: { query: searchContract.search, status: searchContract.searchStatus },
     fleet: { ...fleetContract },
     processes: { ...processesContract },
     runs: { ...runsContract },
@@ -57,6 +59,7 @@ export * from './observability';
 // Run progress projection wire schema (1069 / E72 R5) — the route is Hono-served;
 // the contract documents it for the generated OpenAPI.
 export * from './runs';
+export * from './search';
 // Shared transport envelope schemas (apiSuccessSchema / apiErrorSchema / pagination) —
 // public so the CLI can adopt them as its `--json-envelope` standard (ADR-091, task 0693).
 export * from './shared';
