@@ -4,7 +4,7 @@ name: "Board hybrid search: local-server search contract and web module"
 status: done
 template: feature-impl
 created_at: 2026-11-03T16:50:38.253Z
-updated_at: "2026-11-03T19:29:22.394Z"
+updated_at: "2026-11-03T22:07:48.168Z"
 feature_id: A34
 priority: P3
 tags:
@@ -91,11 +91,11 @@ Invariants kept: server handlers contain no logic beyond service calls; all UI d
 
 | Requirement | Status | Evidence |
 |-------------|--------|----------|
-| R9 | MET | packages/contracts/src/index.ts:39 (api.search.query/status mount); apps/server/src/router.ts:38 (search handlers registered); apps/web/src/modules/search/index.tsx (SearchShell: Enter-submit query input, Auto/Exact/Fuzzy segmented control default Auto, All/Docs/Code scope select, grouped results, StatusStrip); apps/web/tests/modules/search/search-module.test.ts:5 tests incl. mode-switch sends `mode`; live transport E2E (see Testing) |
+| R9 | MET | packages/contracts/src/index.ts:39 search mount; apps/server/src/router.ts:47 handlers; apps/web/src/modules/search/index.tsx:88-95 mode/scope controls default auto; apps/web/src/modules/search/index.tsx:194-195 grouped results; test apps/web/tests/modules/search/search-module.test.ts:140 mode switch |
 
 | Acceptance Criteria | Status | Evidence Type | Evidence |
 |---------------------|--------|---------------|----------|
-| R9 — The Board offers auto, exact, and fuzzy search | MET | test | apps/web/tests/modules/search/search-module.test.ts (metadata order 15; skipped degradation inline never error state; path:start-end + snippet + matchedBy badge only when both routes agree; full shell renders groups+status; mode switch sends `mode:fuzzy`); command — live transport E2E POST /api/search {mode:auto,scope:docs} → 200 with 10 exact hits, fuzzy null, skipped zg-index-missing + hint verbatim (recorded in task Testing section); degraded path exercised end-to-end over the real app |
+| R9 — The Board offers auto, exact, and fuzzy search | MET | test | apps/web/tests/modules/search/search-module.test.ts:140 and apps/web/tests/modules/search/search-module.test.ts:87; web search suite 5 pass / 0 fail (2026-11-03) |
 - Coverage: N/A (verdict-based; verify pipeline does not measure code coverage)
 
 ### Review

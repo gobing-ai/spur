@@ -4,7 +4,7 @@ name: "Hybrid search core: contracts DTO, SearchService, ZgAdapter, probe and de
 status: done
 template: feature-impl
 created_at: 2026-11-03T16:50:38.250Z
-updated_at: "2026-11-03T18:26:18.772Z"
+updated_at: "2026-11-03T22:07:45.825Z"
 feature_id: A34
 priority: P2
 tags:
@@ -116,23 +116,23 @@ Each entry cites the first changed line per file (`file:line`).
 
 | Requirement | Status | Evidence |
 |-------------|--------|----------|
-| R1 | MET | packages/app/src/services/search.ts:275 (runFuzzy → `zg query --hybrid`); parser packages/app/src/services/search-zg.ts:50; golden-fixture end-to-end test packages/app/tests/services/search.test.ts:293; live E2E stale-indexed tree returned ranked fuzzy groups (heading/range metadata intact) |
-| R2 | MET | packages/app/src/services/search.ts:216 (runExact → `rg --json --max-count <limit> [-F] -g… -- <query> .`); exit-1-as-no-matches + exit-2-as-rg-failed tests packages/app/tests/services/search.test.ts:208; live regex route returned worktree fixture hits |
-| R3 | MET | packages/app/src/services/search.ts:184-195 (Promise.all both routes, groups side by side); overlap marking packages/app/src/services/search.ts:202; test packages/app/tests/services/search.test.ts:383 asserts concurrent groups + matchedBy on both hits |
-| R4 | MET | packages/app/src/services/search.ts:88 (scopeGlobs docs/code/all + user glob append order); test packages/app/tests/services/search.test.ts (scope + user globs are appended in order as -g flags); live docs-scope query |
-| R5 | MET | packages/app/src/services/search.ts:95 (searchStatus probes which + `--version`, 5s bound, never throws); contracts status schema packages/contracts/src/search.ts:111; availability invariants tests packages/app/tests/services/search.test.ts:180 |
-| R6 | MET | packages/app/src/services/search.ts:169-182 (auto: rg absent throws; zg absent/index-missing → exact-only + skipped with hint; stale still runs fuzzy); tests packages/app/tests/services/search.test.ts:363,415; live worktree E2E returned skipped=[{route:fuzzy,reason:zg-index-missing,hint}] + exact hits |
-| R7 | MET | packages/app/src/services/search-zg.ts:52-53 (missing header), :75 (bad hit header), :103-106 (count mismatch) all throw ZgOutputError carrying zgVersion + capped sample; tests packages/app/tests/services/search-zg.test.ts (malformed/count-mismatch cases); skip path packages/app/src/services/search.ts:308-311 |
+| R1 | MET | packages/app/src/services/search.ts:275 runFuzzy; parser packages/app/src/services/search-zg.ts:50; test packages/app/tests/services/search.test.ts:293 fuzzy route suite; live 2026-11-03 self search auto on this repo returned 20 fuzzy hits, skipped=[] |
+| R2 | MET | packages/app/src/services/search.ts:216 runExact; test packages/app/tests/services/search.test.ts:208 exact route suite; live exact/code-scope query returned apps/cli/src/commands/self/search.ts hits |
+| R3 | MET | packages/app/src/services/search.ts:184-195 concurrent routes; overlap packages/app/src/services/search.ts:202; test packages/app/tests/services/search.test.ts:383 |
+| R4 | MET | packages/app/src/services/search.ts:88 scopeGlobs; tests packages/app/tests/services/search.test.ts:96 and packages/app/tests/services/search.test.ts:280 |
+| R5 | MET | packages/app/src/services/search.ts:95 searchStatus; test packages/app/tests/services/search.test.ts:180 availability invariants; packages/contracts/tests/search-contract.test.ts 6 pass |
+| R6 | MET | packages/app/src/services/search.ts:169-182 auto degradation; tests packages/app/tests/services/search.test.ts:363 and packages/app/tests/services/search.test.ts:415 |
+| R7 | MET | packages/app/src/services/search-zg.ts:52-53, packages/app/src/services/search-zg.ts:75, packages/app/src/services/search-zg.ts:103-106 throw ZgOutputError; tests packages/app/tests/services/search-zg.test.ts:124 and packages/app/tests/services/search-zg.test.ts:137; skip conversion packages/app/src/services/search.ts:308-311 |
 
 | Acceptance Criteria | Status | Evidence Type | Evidence |
 |---------------------|--------|---------------|----------|
-| R1 — Fuzzy mode returns semantic matches from the zg index | MET | test | packages/app/tests/services/search.test.ts:293 fuzzy-route suite (16 zg-parser tests in packages/app/tests/services/search-zg.test.ts incl. golden fixture end-to-end); command: live `searchProject` on stale-indexed tree returned fuzzy hits with heading+range |
-| R2 — Exact mode returns literal matches through ripgrep | MET | test | packages/app/tests/services/search.test.ts:208 exact-route suite (rg --json parsing, ranks, -F, truncation); command: live exact + regex queries returned worktree hits |
-| R3 — Auto mode returns exact and fuzzy groups side by side | MET | test | packages/app/tests/services/search.test.ts:383 both groups side by side + overlap matchedBy; command: live auto query returned non-null exact and fuzzy groups |
-| R4 — Search scope filters docs, code, or both | MET | test | scope globs ordering test (packages/app/tests/services/search.test.ts) + live docs-scope query hit only *.md paths |
-| R5 — zg is detected as an optional external dependency | MET | test | packages/app/tests/services/search.test.ts:180 availability-invariants suite; contracts tests packages/contracts/tests/search-contract.test.ts (6 pass) cover status wire shape |
-| R6 — Missing zg or index degrades to exact-only search | MET | test | packages/app/tests/services/search.test.ts:363 (zg absent), :415 (stale runs fuzzy); command: live worktree (no index) → skipped zg-index-missing with ZG_INDEX_HINT, exact hits intact |
-| R7 — The zg adapter fails loudly on unrecognized output | MET | test | packages/app/tests/services/search-zg.test.ts malformed-header/count-mismatch/bad-hit-header cases → ZgOutputError; skip conversion packages/app/src/services/search.ts:308-311 |
+| R1 — Fuzzy mode returns semantic matches from the zg index | MET | test | packages/app/tests/services/search.test.ts:293; bun test search.test.ts + search-zg.test.ts 52 pass / 0 fail (2026-11-03) |
+| R2 — Exact mode returns literal matches through ripgrep | MET | test | packages/app/tests/services/search.test.ts:208; 52 pass / 0 fail |
+| R3 — Auto mode returns exact and fuzzy groups side by side | MET | test | packages/app/tests/services/search.test.ts:383; live auto query exact=8 fuzzy=20 |
+| R4 — Search scope filters docs, code, or both | MET | test | packages/app/tests/services/search.test.ts:280 |
+| R5 — zg is detected as an optional external dependency | MET | test | packages/app/tests/services/search.test.ts:180; packages/contracts/tests/search-contract.test.ts 6 pass / 0 fail |
+| R6 — Missing zg or index degrades to exact-only search | MET | test | packages/app/tests/services/search.test.ts:363 |
+| R7 — The zg adapter fails loudly on unrecognized output | MET | test | packages/app/tests/services/search-zg.test.ts:124 |
 - Coverage: N/A (verdict-based; verify pipeline does not measure code coverage)
 
 ### Review

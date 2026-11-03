@@ -4,7 +4,7 @@ name: sp skill guidance and docs for semantic-first search with rg fallback
 status: done
 template: feature-impl
 created_at: 2026-11-03T16:50:38.254Z
-updated_at: "2026-11-03T20:19:39.862Z"
+updated_at: "2026-11-03T22:07:49.065Z"
 feature_id: A34
 priority: P3
 tags:
@@ -90,13 +90,13 @@ Rejected alternatives kept per task Q&A: no hooks, no auto-calls, no generated-a
 
 | Requirement | Status | Evidence |
 |-------------|--------|----------|
-| R10 | MET | plugins/sp/skills/reverse-engineering/SKILL.md:144, plugins/sp/skills/issue-finding/SKILL.md:370, plugins/sp/skills/conflict-finding/SKILL.md:237, plugins/sp/skills/wayfinder/SKILL.md:145 — identical Search-routing block: concept/cross-file → semantic first (zg MCP `zvec_grep_search` or `spur self search "<query>" --mode fuzzy --json`); literal/symbol/regex/exhaustive → `rg`; zg absent or `skipped` in response → `rg`. test — command: `rg -n "spur self search" plugins/sp/skills README.md docs/help` (coverage artifact, all four hits); plugins/sp/tests/skill-structure.test.ts:95 pass |
-| R11 | MET | README.md:253 (zg row in Optional backends: "`zg install` (zg-owned) wires agent integrations — Spur never registers them"); docs/help/how_to_use_spur_for_daily_software_development.md §Prerequisites optional bullet (same ownership note); static-ref: docs/design/hybrid-search.md §4 Skills — no hook/auto-call, no generated-adapter edit (`git status` shows only SKILL.md/README/docs files + the R44 test baselines) |
+| R10 | MET | plugins/sp/skills/reverse-engineering/SKILL.md:144, plugins/sp/skills/issue-finding/SKILL.md:370, plugins/sp/skills/conflict-finding/SKILL.md:237, plugins/sp/skills/wayfinder/SKILL.md:145 identical Search-routing block; budget test plugins/sp/tests/skill-structure.test.ts:937 |
+| R11 | MET | README.md:253 zg-owned install note; docs/help/how_to_use_spur_for_daily_software_development.md:42 |
 
 | Acceptance Criteria | Status | Evidence Type | Evidence |
 |---------------------|--------|---------------|----------|
-| R10 — sp skills prefer semantic search with rg fallback | MET | test | plugins/sp/skills/reverse-engineering/SKILL.md:144 (+3 siblings verbatim above); command — `superskill skill validate` all four Valid; `bun run plugin-smoke` PASS; rg coverage artifact in task Solution; concept-first vs literal-rg routing branches present in the block text; zg-absent → `rg` fallback clause in each block |
-| R11 — Agent integrations stay owned by zg | MET | command | command — `rg -n "zg install" README.md docs/help` returns README.md:253 + how_to_use_spur_for_daily_software_development.md:42 (zg-owned install note, Spur points only); `git status --short` filtered for source dirs shows no code change outside docs/skills/tests (no Spur-side registration introduced); docs/help/cmd_init.md zg-readiness note (gitignore entry + informational readiness line, probe failure `index: 'unknown'`, exit code unchanged) — wording coordinated with task 1289 design |
+| R10 — sp skills prefer semantic search with rg fallback | MET | test | plugins/sp/tests/skill-structure.test.ts:937; skill-structure suite 95 pass / 0 fail (2026-11-03) |
+| R11 — Agent integrations stay owned by zg | MET | command | rg -n "zg install" README.md docs/help → README.md:253 and docs/help/how_to_use_spur_for_daily_software_development.md:42 (2026-11-03) |
 - Coverage: N/A (verdict-based; verify pipeline does not measure code coverage)
 
 ### Review

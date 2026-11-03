@@ -4,7 +4,7 @@ name: spur self search verb over the hybrid search service
 status: done
 template: feature-impl
 created_at: 2026-11-03T16:50:38.253Z
-updated_at: "2026-11-03T18:54:07.599Z"
+updated_at: "2026-11-03T22:07:47.177Z"
 feature_id: A34
 priority: P2
 tags:
@@ -111,11 +111,11 @@ zg/rg passthrough flag; degradation never changes the exit code.
 
 | Requirement | Status | Evidence |
 |-------------|--------|----------|
-| R8 | MET | apps/cli/src/commands/self/search.ts:15 (verb), :80 (renderer); apps/cli/tests/commands/self/search.test.ts:198 (searchResponseSchema.parse of stdout), :187 (normalized grouped hits), :272 (usage exit 2), :341 (SearchError exit 1 with hint); live E2E command (see Testing) |
+| R8 | MET | apps/cli/src/commands/self/search.ts:15 verb; tests apps/cli/tests/commands/self/search.test.ts:183 (schema parse of stdout), apps/cli/tests/commands/self/search.test.ts:198 (envelope), apps/cli/tests/commands/self/search.test.ts:271 (usage exit 2), apps/cli/tests/commands/self/search.test.ts:341 (rg absent exit 1 with hint) |
 
 | Acceptance Criteria | Status | Evidence Type | Evidence |
 |---------------------|--------|---------------|----------|
-| R8 — spur self search exposes the search contract as JSON | MET | test | apps/cli/tests/commands/self/search.test.ts:198 (stdout parses with searchResponseSchema), :187-188 (grouped normalized hits with matchedBy), :325-337 (degraded auto exits 0 with named skip reason + hint), :341-350 (failed search exits 1 with actionable message); command — live E2E `self search --json` auto/exact/degraded/status all exit 0 with schema-valid payloads (recorded in task Testing section) |
+| R8 — spur self search exposes the search contract as JSON | MET | test | apps/cli/tests/commands/self/search.test.ts:183; cli suites 77 pass / 0 fail (2026-11-03); live self search --json on this repo exit 0, exact=8 fuzzy=20; --limit 0 exits 1 with Invalid search request |
 - Coverage: N/A (verdict-based; verify pipeline does not measure code coverage)
 
 ### Review

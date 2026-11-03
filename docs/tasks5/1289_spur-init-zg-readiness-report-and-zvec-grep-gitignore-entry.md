@@ -4,7 +4,7 @@ name: "spur init: zg readiness report and .zvec-grep gitignore entry"
 status: done
 template: feature-impl
 created_at: 2026-11-03T16:56:58.316Z
-updated_at: "2026-11-03T20:16:50.063Z"
+updated_at: "2026-11-03T22:28:46.848Z"
 feature_id: A34
 priority: P3
 tags:
@@ -81,11 +81,11 @@ Template parity check: no `.gitignore` template exists under `config/templates` 
 
 | Requirement | Status | Evidence |
 |-------------|--------|----------|
-| R12 | MET | command — `bun test apps/cli/tests/commands/init-search.test.ts` 7/7 pass (fresh gitignore entries, re-init idempotence, pre-existing-entry preservation, --minimal parity, JSON search shape, zg-absent → unknown + exit 0, one human line); E2E artifact: temp project, two init runs → `grep -c '^\.zvec-grep/$' .gitignore` = 1 and `.spur/context/` = 1; static-ref — apps/cli/src/commands/init.ts:384 (entry list `[{entry:'.spur/context/',...},{entry:'.zvec-grep/',...}]`), init.ts:460 (probe + throw-degrade), init.ts:473 (`search` in JSON payload), init.ts:504 (`search:` human line) |
+| R12 | MET | apps/cli/src/commands/init.ts:401 .zvec-grep/ gitignore entry; apps/cli/src/commands/init.ts:254 readiness probe hoisted before the converge branch; apps/cli/src/commands/init.ts:318 and apps/cli/src/commands/init.ts:490 search in JSON payload (converged + fresh); apps/cli/src/commands/init.ts:340 and apps/cli/src/commands/init.ts:507 human search line (converged + fresh); test apps/cli/tests/commands/init-search.test.ts:120 converged re-init regression |
 
 | Acceptance Criteria | Status | Evidence Type | Evidence |
 |---------------------|--------|---------------|----------|
-| R12 — spur init reports zg readiness and ignores the zg index | MET | command | `bun test apps/cli/tests/commands/init-search.test.ts apps/cli/tests/commands/init.test.ts apps/cli/tests/init-templates.test.ts apps/cli/tests/commands/init-status.test.ts` → 58 pass / 0 fail; E2E artifact (mktemp project, `git init`, init + init --force, grep counts) reproduced above; human output line `search: zg index missing — run: zg index --embedding local/potion-code-16m-v2` observed live; JSON `search.zg.index` = missing with `rg.available` = true in the same run |
+| R12 — spur init reports zg readiness and ignores the zg index | MET | test | bun test init-search + init + init-status + self/search → 54 pass / 0 fail (2026-11-03, incl. converged re-init regression `apps/cli/tests/commands/init-search.test.ts:120`) |
 - Coverage: N/A (verdict-based; verify pipeline does not measure code coverage)
 
 ### Review
