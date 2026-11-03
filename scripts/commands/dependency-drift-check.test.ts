@@ -200,6 +200,38 @@ describe('dependency-drift-check (0738 R3/R17)', () => {
         await rm(dir, { recursive: true });
     });
 
+    test('nested keys under the isolated linker resolve via the store, not the hoisted copy (regression: A34 verify)', async () => {
+        const dir = await mkdtemp(join(tmpdir(), 'drift-check-test-'));
+        const lockPath = join(dir, 'bun.lock');
+        const nodeModulesDir = join(dir, 'node_modules');
+
+        // Isolated linker: no node_modules/<parent>/node_modules/<child>; the hoisted
+        // zod is the root workspace pin (4.4.3) while ts-db's own zod (4.6.7) lives
+        // only in the .bun store (unhashed dir name when it has no peer deps). The hoisted
+        // copy must not be blamed.
+        await writeFile(
+            lockPath,
+            JSON.stringify({ packages: { '@gobing-ai/ts-db/zod': ['zod@4.6.7'], zod: ['zod@4.4.3'] } }),
+        );
+        await mkdir(join(nodeModulesDir, 'zod'), { recursive: true });
+        await writeFile(join(nodeModulesDir, 'zod', 'package.json'), JSON.stringify({ version: '4.4.3' }));
+        const storePkg = join(nodeModulesDir, '.bun', 'zod@4.6.7', 'node_modules', 'zod');
+        await mkdir(storePkg, { recursive: true });
+        await writeFile(join(storePkg, 'package.json'), JSON.stringify({ version: '4.6.7' }));
+
+        expect(checkDependencyDrift({ lockfilePath: lockPath, nodeModulesDir })).toHaveLength(0);
+
+        // Store lacks the locked nested resolution: drift still reports, as missing.
+        await writeFile(lockPath, JSON.stringify({ packages: { '@gobing-ai/ts-db/zod': ['zod@4.7.0'] } }));
+        const drifts = checkDependencyDrift({ lockfilePath: lockPath, nodeModulesDir });
+        expect(drifts).toHaveLength(1);
+        expect(drifts[0]?.name).toBe('zod');
+        expect(drifts[0]?.installed).toBeNull();
+        expect(drifts[0]?.locked).toBe('4.7.0');
+
+        await rm(dir, { recursive: true });
+    });
+
     test('lockKeyPackageName derives the package from plain, scoped, and nested keys', () => {
         expect(lockKeyPackageName('zod')).toBe('zod');
         expect(lockKeyPackageName('@gobing-ai/ts-db')).toBe('@gobing-ai/ts-db');
