@@ -1,5 +1,43 @@
 # Changelog
 
+## [0.4.22] - 2026-11-03
+
+_Claim bullets carry one source anchor and the level that anchor supports — `HIGH`: every anchor is a
+`path:line` beyond line 1 and resolves; `MEDIUM`: every anchor resolves but the set is not all
+line-precise (a URL or a whole file); `LOW`: an anchor that does not resolve, or none. The level is a
+function of the anchors, not a judgement (ADR-144; the check is
+`repo-wide-tests/changelog-confidence.test.ts`). Unanchored bullets are bookkeeping (status moves,
+filings) and assert no code, API or version fact._
+
+### Added
+- report zg readiness in `spur init` and gitignore the `.zvec-grep/` index directory (1289) (3f6a00b0d)
+  <!-- src: apps/cli/src/commands/init.ts:401, apps/cli/src/commands/init.ts:507 · confidence: HIGH -->
+- mount the search contract on the local server and add the Board search module with auto/exact/fuzzy mode tabs (1287) (730dcd2d4)
+  <!-- src: packages/contracts/src/index.ts:39, apps/server/src/router.ts:47, apps/web/src/modules/search/index.tsx:88 · confidence: HIGH -->
+- add the hybrid search core service (exact ripgrep + fuzzy zg), the zg output adapter, and the `spur self search` verb (1285, 1286) (4f9ba1aad)
+  <!-- src: packages/app/src/services/search.ts:216, packages/app/src/services/search-zg.ts:50, apps/cli/src/commands/self/search.ts:15 · confidence: HIGH -->
+
+### Fixed
+- report the search readiness line and JSON field on converged re-runs by probing before the init early return (c9c8e837e)
+  <!-- src: apps/cli/src/commands/init.ts:254, apps/cli/tests/commands/init-search.test.ts:120 · confidence: HIGH -->
+- resolve nested bun.lock keys through the `.bun` store instead of the hoisted copy, so isolated-linker packages are not blamed against the root workspace pin (0bc503c38)
+  <!-- src: scripts/commands/dependency-drift-check.ts:81, scripts/commands/dependency-drift-check.ts:88, scripts/commands/dependency-drift-check.test.ts:204 · confidence: HIGH -->
+- re-check remote board entries the server reports stopped from the browser so they reopen instead of dead-ending (a8946da4f)
+  <!-- src: apps/web/src/components/ProjectSwitcher.tsx:46 · confidence: HIGH -->
+
+### Changed
+- sync A34 task evidence tables and the dogfood index after verify (466f14a8a)
+- sync A34 to verifying with all five tasks done and the feature verify pending the drift-check fix (e84baa0b2)
+- record the A34 runall batch report (2a38d4dba)
+- close task 1288 at done after the manual residual-clean close (80905947a)
+- route concept questions in sp skills to semantic-first search with an rg fallback (1288) (e4c2ef165)
+  <!-- src: plugins/sp/skills/reverse-engineering/SKILL.md:144, plugins/sp/skills/issue-finding/SKILL.md:370, plugins/sp/skills/conflict-finding/SKILL.md:237, plugins/sp/skills/wayfinder/SKILL.md:145 · confidence: HIGH -->
+- deprecate completed tasks across B3/F61/G5/M4 (28a644a31)
+- add the A34 hybrid search planning corpus with ADR-147 and tasks 1285-1289 (997d9393b)
+- pin the workspace catalog to exact versions and bump yaml to 2.9.1 (55bb40ce1)
+  <!-- src: package.json:31, package.json:56 · confidence: HIGH -->
+- update key project files (d358d79e6)
+
 ## [0.4.21] - 2026-10-26
 
 _Claim bullets carry one source anchor and the level that anchor supports — `HIGH`: every anchor is a
