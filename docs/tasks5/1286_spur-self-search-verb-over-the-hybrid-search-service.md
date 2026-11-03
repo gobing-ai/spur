@@ -1,10 +1,10 @@
 ---
 schema_version: 1
 name: spur self search verb over the hybrid search service
-status: todo
+status: done
 template: feature-impl
 created_at: 2026-11-03T16:50:38.253Z
-updated_at: "2026-11-03T17:16:17.605Z"
+updated_at: "2026-11-03T18:54:07.599Z"
 feature_id: A34
 priority: P2
 tags:
@@ -12,6 +12,8 @@ tags:
   - cli
 
 dependencies: ["1285"]
+done_forced: "false"
+done_reason: unforced close; PASS artifact at .spur/memory/evidence/1286-verdict.json
 ---
 
 ## 1286. spur self search verb over the hybrid search service
@@ -22,11 +24,11 @@ Feature A34 CLI surface. Covers R8. Agents, hooks and workflows need the normali
 
 ### Requirements
 
-- [ ] R8. spur self search exposes the search contract as JSON.
+- [x] R8. spur self search exposes the search contract as JSON.
 
 ### Acceptance Criteria
 
-- [ ] AC1 — spur self search exposes the search contract as JSON
+- [x] AC1 — spur self search exposes the search contract as JSON
 
 ### Q&A
 
@@ -66,15 +68,68 @@ Invariants: never prints or runs install/index commands, only hints; no logic be
 
 ### Solution
 
-<!-- Filled during implementation: file:line change map and concise rationale. -->
+`spur self search` is a thin transport over the 1285 service (ADR-021): flag mapping, rendering,
+exit codes — no search logic in the CLI.
+
+- `apps/cli/src/commands/self/search.ts:15` — `registerSearchCommand` declares the synopsis from
+  `docs/design/hybrid-search.md` §4: `[query]`, `--mode` (registry entry), `--scope`, `--glob <g...>`,
+  `--limit` (default `20`, pinned in the CLI because the app service defaults to 10), `--regex`,
+  `--status`, `--json`, `--json-envelope`.
+- `apps/cli/src/commands/self/search.ts:37` — `--status` short-circuits to `searchStatus(cwd)` and
+  accepts no query; every other invocation builds the request object and calls `searchProject(req, cwd)`.
+- `apps/cli/src/commands/self/search.ts:54` — request assembly: `limit: Number(opts.limit)` plus
+  omitted-when-undefined `mode`/`scope`/`globs`/`regex`, so `searchRequestSchema.strict()` sees only
+  supplied keys and rejects anything else.
+- `apps/cli/src/commands/self/search.ts:63` — failure path delegates to `writeJsonError` and exits 1;
+  `SearchError` already carries the actionable text (invalid request, missing rg + install hint).
+- `apps/cli/src/commands/self/search.ts:80` — `formatSearchResponse`: `exact (n)` / `fuzzy (n)` headers
+  per non-null group, `path:start[-end]  [matchedBy]` plus the first three snippet lines indented,
+  `no matches` when both groups are empty, then one `skipped <route>: <reason> — <hint>` line each.
+- `apps/cli/src/commands/self/search.ts:110` — `formatSearchStatus`: `rg:`/`zg:` readiness lines and
+  the service's hint string, printed only.
+- `apps/cli/src/commands/self/index.ts:21` — registered alphabetically after `migrate`.
+- `apps/cli/src/commands/shared-options.ts:54` — `modeSearch` registry entry: `--mode <mode>` is a
+  shared flag string (agent/history already declare it), so the search text needs its own entry to
+  satisfy `shared-option-parity`. The boolean `--status` deliberately stays a literal declaration —
+  registering the bare form makes every `--status <s>` literal read as a shared-flag re-declaration.
+- Docs: `plugins/sp/skills/spur-cli/references/self.md` (verb map + `self search` section),
+  `docs/help/spur-cli-matrix.md` (cell, `self` 6→7, unique verbs 79→80, cells 107→108),
+  `docs/help/cmd_status.md` and `docs/help2/status.md` (search sections beside `self exec`).
+- Tests: `apps/cli/tests/commands/self/search.test.ts` (rendering, in-process transport, PATH-degraded
+  subprocess), plus two census bumps required by the new verb
+  (`apps/cli/tests/shared-option-parity.test.ts` note only,
+  `apps/cli/tests/json-envelope-inventory.test.ts` 80→81).
+
+Invariants held: no install/index command is executed or suggested beyond the printed hint; no raw
+zg/rg passthrough flag; degradation never changes the exit code.
 
 ### Testing
 
-<!-- Filled during verification: commands run, outcomes, coverage claim or N/A. -->
+**Pipeline verify results**
+
+- Verdict: PASS (from verdict artifact)
+
+| Requirement | Status | Evidence |
+|-------------|--------|----------|
+| R8 | MET | apps/cli/src/commands/self/search.ts:15 (verb), :80 (renderer); apps/cli/tests/commands/self/search.test.ts:198 (searchResponseSchema.parse of stdout), :187 (normalized grouped hits), :272 (usage exit 2), :341 (SearchError exit 1 with hint); live E2E command (see Testing) |
+
+| Acceptance Criteria | Status | Evidence Type | Evidence |
+|---------------------|--------|---------------|----------|
+| R8 — spur self search exposes the search contract as JSON | MET | test | apps/cli/tests/commands/self/search.test.ts:198 (stdout parses with searchResponseSchema), :187-188 (grouped normalized hits with matchedBy), :325-337 (degraded auto exits 0 with named skip reason + hint), :341-350 (failed search exits 1 with actionable message); command — live E2E `self search --json` auto/exact/degraded/status all exit 0 with schema-valid payloads (recorded in task Testing section) |
+- Coverage: N/A (verdict-based; verify pipeline does not measure code coverage)
 
 ### Review
 
 <!-- Filled during review: P1-P4 findings, residual risk, and final disposition. -->
+
+| Priority | Finding | Location | Disposition |
+| --- | --- | --- | --- |
+| P4 | none (no open findings; full traceability evidence in the review artifact) | .spur/run/b391a7f6-5013-4674-983a-254759c9fbc9-review-cert.md | Closed |
+
+Review artifact: .spur/run/b391a7f6-5013-4674-983a-254759c9fbc9-review-cert.md (1/1 requirement MET, 1/1 AC MET). SECUA pass: no new process spawns, no shell interpolation, hints-only degradation (ADR-051 invariant). Thin transport confirmed — flag mapping and rendering only (ADR-021). Residual risk: none beyond the 1285 service surface this verb wraps; renderer output shape is pinned by renderer unit tests.
+Confidence: HIGH
+
+Verdict: PASS
 
 ### References
 
@@ -87,4 +142,7 @@ Invariants: never prints or runs install/index commands, only hints; no logic be
 ### History
 
 - 2026-11-03T17:06:32.825Z feature_id Q → A34 (system)
+- 2026-11-03T18:45:01.470Z todo → wip (system)
+- 2026-11-03T18:54:04.927Z wip → testing (system)
+- 2026-11-03T18:54:07.592Z testing → done (system)
 

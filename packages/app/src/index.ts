@@ -709,6 +709,19 @@ export {
     schedulerJobTimeoutEnvName,
     validateSchedulerCustomJobPayload,
 } from './services/scheduler-custom-job-service';
+export {
+    defaultSearchDeps,
+    RG_INSTALL_HINT,
+    type SearchDeps,
+    SearchError,
+    scopeGlobs,
+    searchProject,
+    searchStatus,
+    ZG_INDEX_HINT,
+    ZG_INSTALL_HINT,
+    ZG_REFRESH_HINT,
+} from './services/search';
+export { buildZgArgs, parseZgQuery, parseZgStatus, ZgOutputError } from './services/search-zg';
 export type { LoadSectionMatrixOptions } from './services/section-matrix-loader';
 export { loadSectionMatrix } from './services/section-matrix-loader';
 export { shQuote } from './services/shell-quote';

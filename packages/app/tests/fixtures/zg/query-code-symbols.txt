@@ -1,0 +1,23 @@
+query groups (1):
+Q1 [primary]: precheck verdict artifact contract
+hits: 5
+
+#1 matchedBy=fts+vector packages/app/src/services/done-transition-guard.ts:295-344
+symbol: function formatDenialMessage
+304	const { wbs, taskFilePath, verdictPath, verdict, inconsistency, artifact } = args;
+
+#2 matchedBy=fts+vector packages/app/src/services/task-check.ts:1938-1999
+symbol: function checkVerdictArtifact scope: TaskCheckService
+1961	if (outcome.kind === 'malformed') {
+
+#3 matchedBy=fts+vector packages/app/src/services/task-check.ts:480-2000
+symbol: class TaskCheckService
+1968	            });
+
+#4 matchedBy=fts+vector packages/app/src/services/done-transition-guard.ts:373-466
+symbol: function evaluateDoneTransition
+422	const computed = computeAggregate(artifact);
+
+#5 matchedBy=fts+vector packages/app/src/services/feature-check.ts:888-1051
+symbol: function checkScenarioSatisfaction scope: FeatureCheckService
+931	for (const wbs of doneWbs) {

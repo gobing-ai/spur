@@ -83,6 +83,26 @@ Exit codes: the action's own code; `2` when the action is unbound (`action "<nam
 add builder.actions.<name> to .spur/config.yaml`), when a composite is given arguments, or when no
 action and no `--list` was supplied. Full surface: `docs/design/sdlc-actions.md` §3.3.
 
+## Related: search docs and code
+
+`spur self search <query>` runs a hybrid search over the project: `rg` for exact matches, `zg` for
+indexed semantic matches (`docs/design/hybrid-search.md` §4, ADR-147). Both binaries are optional
+environment tools — a missing or unindexed backend degrades to the exact route with a printed hint,
+never an install or index run.
+
+```bash
+spur self search "how is a paused workflow resumed"   # auto: exact + fuzzy where available
+spur self search Bun.which --mode exact               # ripgrep only
+spur self search --status                             # rg/zg readiness, no query
+spur self search Bun.which --mode exact --json        # raw SearchResponse payload
+```
+
+Flags: `--mode exact|fuzzy|auto` (default `auto`), `--scope docs|code|all` (default `all`),
+`--limit <1-100>` (default 20), `--glob <g...>` (repeatable), `--regex`, `--status`, `--json`
+(`--json-envelope` for the ADR-091 envelope). Exit `0` on results, empty results or a degraded fuzzy
+route; `1` on an invalid request or missing/failed rg; `2` when neither a query nor `--status` is
+given. Raw zg/rg passthrough flags are rejected by design.
+
 ## See Also
 
 - [Command index](./index.md)

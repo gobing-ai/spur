@@ -1,10 +1,10 @@
 ---
 schema_version: 1
 name: "Hybrid search core: contracts DTO, SearchService, ZgAdapter, probe and degradation"
-status: todo
+status: done
 template: feature-impl
 created_at: 2026-11-03T16:50:38.250Z
-updated_at: "2026-11-03T17:16:16.397Z"
+updated_at: "2026-11-03T18:26:18.772Z"
 feature_id: A34
 priority: P2
 tags:
@@ -12,6 +12,8 @@ tags:
   - zg
   - app
 
+done_forced: "false"
+done_reason: unforced close; PASS artifact at .spur/memory/evidence/1285-verdict.json
 ---
 
 ## 1285. Hybrid search core: contracts DTO, SearchService, ZgAdapter, probe and degradation
@@ -22,23 +24,23 @@ Feature A34 core (under A3, `spur self` family). Covers R1–R7. Spur needs one 
 
 ### Requirements
 
-- [ ] R1. Fuzzy mode returns semantic matches from the zg index.
-- [ ] R2. Exact mode returns literal matches through ripgrep.
-- [ ] R3. Auto mode returns exact and fuzzy groups side by side.
-- [ ] R4. Search scope filters docs, code, or both.
-- [ ] R5. zg is detected as an optional external dependency.
-- [ ] R6. Missing zg or index degrades to exact-only search.
-- [ ] R7. The zg adapter fails loudly on unrecognized output.
+- [x] R1. Fuzzy mode returns semantic matches from the zg index.
+- [x] R2. Exact mode returns literal matches through ripgrep.
+- [x] R3. Auto mode returns exact and fuzzy groups side by side.
+- [x] R4. Search scope filters docs, code, or both.
+- [x] R5. zg is detected as an optional external dependency.
+- [x] R6. Missing zg or index degrades to exact-only search.
+- [x] R7. The zg adapter fails loudly on unrecognized output.
 
 ### Acceptance Criteria
 
-- [ ] AC1 — Fuzzy mode returns semantic matches from the zg index
-- [ ] AC2 — Exact mode returns literal matches through ripgrep
-- [ ] AC3 — Auto mode returns exact and fuzzy groups side by side
-- [ ] AC4 — Search scope filters docs, code, or both
-- [ ] AC5 — zg is detected as an optional external dependency
-- [ ] AC6 — Missing zg or index degrades to exact-only search
-- [ ] AC7 — The zg adapter fails loudly on unrecognized output
+- [x] AC1 — Fuzzy mode returns semantic matches from the zg index
+- [x] AC2 — Exact mode returns literal matches through ripgrep
+- [x] AC3 — Auto mode returns exact and fuzzy groups side by side
+- [x] AC4 — Search scope filters docs, code, or both
+- [x] AC5 — zg is detected as an optional external dependency
+- [x] AC6 — Missing zg or index degrades to exact-only search
+- [x] AC7 — The zg adapter fails loudly on unrecognized output
 
 ### Q&A
 
@@ -84,15 +86,68 @@ Invariants: never read/write `.zvec-grep/`; never run `zg index`/`zg install`; f
 
 ### Solution
 
-<!-- Filled during implementation: file:line change map and concise rationale. -->
+Change-map (auto-generated — implement step did not record a Solution).
+Each entry cites the first changed line per file (`file:line`).
+
+| Change (`file:line`) |
+|----------------------|
+| `packages/app/package.json:32` |
+| `packages/app/src/index.ts:712` |
+| `packages/contracts/src/index.ts:60` |
+| `packages/app/src/services/search-zg.ts:1` |
+| `packages/app/src/services/search.ts:1` |
+| `packages/app/tests/fixtures/zg/README.md:1` |
+| `packages/app/tests/fixtures/zg/malformed.txt:1` |
+| `packages/app/tests/fixtures/zg/query-code-symbols.txt:1` |
+| `packages/app/tests/fixtures/zg/query-docs-heading.txt:1` |
+| `packages/app/tests/fixtures/zg/query-hybrid.txt:1` |
+| `packages/app/tests/fixtures/zg/status-missing.txt:1` |
+| `packages/app/tests/fixtures/zg/status-stale.txt:1` |
+| `packages/app/tests/services/search-zg.test.ts:1` |
+| `packages/app/tests/services/search.test.ts:1` |
+| `packages/contracts/src/search.ts:1` |
+| `packages/contracts/tests/search-contract.test.ts:1` |
 
 ### Testing
 
-<!-- Filled during verification: commands run, outcomes, coverage claim or N/A. -->
+**Pipeline verify results**
+
+- Verdict: PASS (from verdict artifact)
+
+| Requirement | Status | Evidence |
+|-------------|--------|----------|
+| R1 | MET | packages/app/src/services/search.ts:275 (runFuzzy → `zg query --hybrid`); parser packages/app/src/services/search-zg.ts:50; golden-fixture end-to-end test packages/app/tests/services/search.test.ts:293; live E2E stale-indexed tree returned ranked fuzzy groups (heading/range metadata intact) |
+| R2 | MET | packages/app/src/services/search.ts:216 (runExact → `rg --json --max-count <limit> [-F] -g… -- <query> .`); exit-1-as-no-matches + exit-2-as-rg-failed tests packages/app/tests/services/search.test.ts:208; live regex route returned worktree fixture hits |
+| R3 | MET | packages/app/src/services/search.ts:184-195 (Promise.all both routes, groups side by side); overlap marking packages/app/src/services/search.ts:202; test packages/app/tests/services/search.test.ts:383 asserts concurrent groups + matchedBy on both hits |
+| R4 | MET | packages/app/src/services/search.ts:88 (scopeGlobs docs/code/all + user glob append order); test packages/app/tests/services/search.test.ts (scope + user globs are appended in order as -g flags); live docs-scope query |
+| R5 | MET | packages/app/src/services/search.ts:95 (searchStatus probes which + `--version`, 5s bound, never throws); contracts status schema packages/contracts/src/search.ts:111; availability invariants tests packages/app/tests/services/search.test.ts:180 |
+| R6 | MET | packages/app/src/services/search.ts:169-182 (auto: rg absent throws; zg absent/index-missing → exact-only + skipped with hint; stale still runs fuzzy); tests packages/app/tests/services/search.test.ts:363,415; live worktree E2E returned skipped=[{route:fuzzy,reason:zg-index-missing,hint}] + exact hits |
+| R7 | MET | packages/app/src/services/search-zg.ts:52-53 (missing header), :75 (bad hit header), :103-106 (count mismatch) all throw ZgOutputError carrying zgVersion + capped sample; tests packages/app/tests/services/search-zg.test.ts (malformed/count-mismatch cases); skip path packages/app/src/services/search.ts:308-311 |
+
+| Acceptance Criteria | Status | Evidence Type | Evidence |
+|---------------------|--------|---------------|----------|
+| R1 — Fuzzy mode returns semantic matches from the zg index | MET | test | packages/app/tests/services/search.test.ts:293 fuzzy-route suite (16 zg-parser tests in packages/app/tests/services/search-zg.test.ts incl. golden fixture end-to-end); command: live `searchProject` on stale-indexed tree returned fuzzy hits with heading+range |
+| R2 — Exact mode returns literal matches through ripgrep | MET | test | packages/app/tests/services/search.test.ts:208 exact-route suite (rg --json parsing, ranks, -F, truncation); command: live exact + regex queries returned worktree hits |
+| R3 — Auto mode returns exact and fuzzy groups side by side | MET | test | packages/app/tests/services/search.test.ts:383 both groups side by side + overlap matchedBy; command: live auto query returned non-null exact and fuzzy groups |
+| R4 — Search scope filters docs, code, or both | MET | test | scope globs ordering test (packages/app/tests/services/search.test.ts) + live docs-scope query hit only *.md paths |
+| R5 — zg is detected as an optional external dependency | MET | test | packages/app/tests/services/search.test.ts:180 availability-invariants suite; contracts tests packages/contracts/tests/search-contract.test.ts (6 pass) cover status wire shape |
+| R6 — Missing zg or index degrades to exact-only search | MET | test | packages/app/tests/services/search.test.ts:363 (zg absent), :415 (stale runs fuzzy); command: live worktree (no index) → skipped zg-index-missing with ZG_INDEX_HINT, exact hits intact |
+| R7 — The zg adapter fails loudly on unrecognized output | MET | test | packages/app/tests/services/search-zg.test.ts malformed-header/count-mismatch/bad-hit-header cases → ZgOutputError; skip conversion packages/app/src/services/search.ts:308-311 |
+- Coverage: N/A (verdict-based; verify pipeline does not measure code coverage)
 
 ### Review
 
 <!-- Filled during review: P1-P4 findings, residual risk, and final disposition. -->
+
+| Priority | Finding | Location | Disposition |
+| --- | --- | --- | --- |
+| P4 | none (no open findings; full traceability evidence in the review artifact) | .spur/run/b2928972-4503-4134-a772-900f1f82f3ef-review-cert.md | Closed |
+
+Review artifact: .spur/run/b2928972-4503-4134-a772-900f1f82f3ef-review-cert.md (7/7 requirements MET, 7/7 ACs MET with path:line evidence). SECUA pass: argv-only spawns, bounded timeouts, no shell interpolation; degradation in-body via `skipped` with closed hint set. One review-time deviation fixed: `searchProject` input widened to `unknown` per design §3 (runtime schema safe-parse is the trust boundary) — packages/app/src/services/search.ts:132. Residual risk: zg 0.2.2 grammar pinned by golden fixtures captured from the installed binary (`packages/app/tests/fixtures/zg/`); a future zg major bump surfaces as fail-loud `zg-output-error` skips by design. Ready-index live path exercised on a stale index; fresh-index live E2E deferred to task 1286 per Q&A decision.
+
+Confidence: HIGH
+
+Verdict: PASS
 
 ### References
 
@@ -105,4 +160,7 @@ Invariants: never read/write `.zvec-grep/`; never run `zg index`/`zg install`; f
 ### History
 
 - 2026-11-03T17:06:32.825Z feature_id Q → A34 (system)
+- 2026-11-03T17:53:47.399Z todo → wip (system)
+- 2026-11-03T18:24:31.315Z wip → testing (system)
+- 2026-11-03T18:26:18.765Z testing → done (system)
 

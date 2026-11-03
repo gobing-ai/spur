@@ -1,6 +1,6 @@
 ---
 name: spur-cli-self
-description: "spur-cli noun reference for `spur self`: self-management verbs — SDLC action runner (`exec`), scaffold (`init`), database maintenance (`maintain`), schema migrations (`migrate`), local web server (`serve`), and status overview (`status`). The five legacy verbs (`init`, `maintain`, `migrate`, `serve`, `status`) each mount the same command builder as their legacy top-level noun, which remains a hidden alias; `exec` has no top-level alias."
+description: "spur-cli noun reference for `spur self`: self-management verbs — SDLC action runner (`exec`), scaffold (`init`), database maintenance (`maintain`), schema migrations (`migrate`), hybrid rg/zg search (`search`), local web server (`serve`), and status overview (`status`). The five legacy verbs (`init`, `maintain`, `migrate`, `serve`, `status`) each mount the same command builder as their legacy top-level noun, which remains a hidden alias; `exec` and `search` have no top-level alias."
 see_also:
   - spur-cli
 ---
@@ -14,7 +14,8 @@ Both paths share the same command builder: identical flags, output, and exit cod
 top-level forms are omitted from `spur --help`, leaving `self` as the visible surface.
 
 `exec` is the exception: it exists only as `spur self exec` — there is no `spur exec` top-level
-alias (`spur exec <action>` is an unknown command), so nothing depends on a legacy path.
+alias (`spur exec <action>` is an unknown command), so nothing depends on a legacy path. `search`
+is the second such verb: `spur self search` only.
 
 ## Verb map
 
@@ -24,6 +25,7 @@ alias (`spur exec <action>` is an unknown command), so nothing depends on a lega
 | `init` | Scaffold a new Spur project in the current directory | `--name <name>` `--force` `--minimal` `--adopt-global-config` `--json` |
 | `maintain` | Run database maintenance: PRAGMA optimize, WAL truncation, optional VACUUM | `--vacuum` `--json` |
 | `migrate` | Apply CLI-owned schema migrations (or `--check` the importer schema) | `--check` `--json` |
+| `search` | Hybrid exact (`rg`) and semantic (`zg`) search over project docs and code | `--mode` `--scope` `--glob` `--limit` `--regex` `--status` `--json` |
 | `serve` | Start the Spur web server (local fallback) | `--port <n>` `--host <addr>` `--no-open` `--cwd <path>` `--json` |
 | `status [path]` | Show project and git status for a Spur project | `--json` |
 
@@ -62,6 +64,39 @@ first non-zero exit.
 `--dry-run --json` prints `[{ name, command }]`, one object per resolved step, and runs nothing.
 `--json` without `--list` or `--dry-run` prints a final `{ action, steps: [{ name, exitCode, durationMs }], exitCode }`
 after the streaming output. Full surface: `docs/design/sdlc-actions.md` §3.3.
+
+## `self search` - hybrid exact and semantic search
+
+```bash
+spur self search "how is a paused workflow resumed"       # auto: exact + fuzzy where available
+spur self search Bun.which --mode exact                   # ripgrep only
+spur self search 'runCost' --mode fuzzy --limit 5         # zg semantic only
+spur self search resum --mode exact --scope docs --glob '*.md'
+spur self search --status                                 # backend readiness, no query
+spur self search Bun.which --mode exact --json            # raw SearchResponse payload
+```
+
+One verb over the hybrid search service (`docs/design/hybrid-search.md` §4, ADR-147). `--mode` is
+`exact` | `fuzzy` | `auto` (default `auto`), `--scope` is `docs` | `code` | `all` (default `all`),
+`--limit` is 1–100 (default 20), `--glob` adds a backend glob (repeatable; prefix `!` to negate),
+and `--regex` switches the exact route from fixed string to pattern. `--status` prints the `rg`/`zg`
+readiness payload and takes no query.
+
+The groups are `exact` (ripgrep `--json` events) and `fuzzy` (zg `--hybrid`); a group is `null` when
+that route did not run, and `skipped[]` names the degraded route with its reason
+(`zg-not-installed`, `zg-index-missing`, `zg-timeout`, `zg-failed`, `zg-output-error`) plus an exact
+hint string. Hints are printed, never executed — Spur installs and indexes nothing. Human output
+prints `exact (n)` / `fuzzy (n)` headers with `path:start[-end]  [matchedBy]` rows, the first three
+snippet lines indented, then the skip lines; zero hits print `no matches`. `--json` emits the
+`SearchResponse` verbatim (`--json-envelope` for the ADR-091 envelope).
+
+| Exit | When |
+| ---- | ---- |
+| `0` | results, empty results, or a degraded fuzzy route |
+| `1` | invalid request (empty query, bad mode/scope/limit), rg missing or rg failed |
+| `2` | no query and no `--status` (usage) |
+
+Raw zg/rg passthrough flags are deliberately absent: they would leak the adapter.
 
 ## `self init` - scaffold a Spur project
 

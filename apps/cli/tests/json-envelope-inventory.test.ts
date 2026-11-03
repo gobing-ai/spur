@@ -286,7 +286,8 @@ describe('0699 R1 — no flag-declaring verb exits non-zero without JSON', () =>
         // 73 → 77 (P 1093: `decision list/show/run/status` declare `--json-envelope`),
         // 77 → 78 (P1 1263: `decision outcome` declares it too).
         // 78 → 80 (G11 1268: `message show` and `message read` declare `--json-envelope`).
-        expect(advertising.length).toBe(80);
+        // 80 → 81 (A34 1286: `self search` declares `--json-envelope`).
+        expect(advertising.length).toBe(81);
         expect(new Set(advertising.map((b) => `${b.noun} ${b.verb}`)).size).toBe(advertising.length);
     });
 
