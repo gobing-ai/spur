@@ -6,7 +6,7 @@ status: cancelled
 priority: P2
 tags: ["wayfinder-map"]
 created_at: "2026-07-16T18:17:26.784Z"
-updated_at: "2026-09-14T01:08:51.025Z"
+updated_at: "2026-10-21T18:39:50.794Z"
 ---
 
 # M3: Teams board continuous UX fine-tune (Terminal-centric controls)
@@ -109,6 +109,12 @@ Feature: Teams board continuous UX fine-tune (Terminal-centric controls)
 <!-- END AUTO-GENERATED -->
 
 ## Notes
+
+### Current reading — 2026-10-21
+
+G64 records the shipped 2026-09-14 retirement and tasks 0849/0850 are done. The staging reconciliation below is history, not pending cleanup. Retain cancelled status for this superseded UI plan and done task 0269 as the historical implementation record.
+
+### Historical notes
 
 ### Destination
 

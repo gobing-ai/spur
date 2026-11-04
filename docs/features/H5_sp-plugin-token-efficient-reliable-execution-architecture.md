@@ -6,7 +6,7 @@ status: done
 priority: P2
 tags: []
 created_at: "2026-07-18T17:24:53.258Z"
-updated_at: "2026-08-05T22:48:33.485Z"
+updated_at: "2026-10-21T18:39:47.844Z"
 ---
 
 # O: sp plugin token-efficient reliable execution architecture
@@ -208,6 +208,13 @@ Feature: sp plugin token-efficient reliable execution architecture
 | 0319 | Wire stage-registry model routing and fallback into agent resolution | done |
 <!-- END AUTO-GENERATED -->
 ## Notes
+
+### Current reading — 2026-10-21
+
+The original no-dependencies-CLI statement is historical: task 0303 delivered dependency CLI operations. The architecture/reliability work remains retained; D65/D66 own later execution consolidation.
+
+### Historical notes
+
 **Domain context**
 
 - Actual plugin source is `plugins/sp`; there is no `plugins/cc` directory. Claude Code slash commands and Codex `$sp-dev-*` skills/adapters are platform surfaces over the same plugin corpus.
@@ -254,6 +261,7 @@ Feature: sp plugin token-efficient reliable execution architecture
 13. Workflow orchestration is driver-owned by `spur workflow`. Existing workflows may be enhanced and new workflows may be added, but they must execute through the `spur workflow` command/driver and align to the canonical stage contracts. Plugin commands, skills, campaign logic, and adapters must not introduce a competing workflow runner.
 14. `spur` CLI is the default execution-capacity surface for scripts, subprocesses, corpus mutation, orchestration, and operational automation. If a supported `spur` command is missing, the first response is to specify/enhance the CLI or workflow driver. `plugins/sp/scripts` is an exception-only path requiring explicit approval recorded in the owning task or rollout decision.
 15. Implementation kickoff is gated on each affected task documenting its `spur workflow` driver path and `spur` CLI invocation surface, or explicitly recording the approved exception and reason.
+
 ## History
 - 2026-07-20T00:46:32.141Z backlog → active (system)
 - 2026-07-25T19:33:20.378Z active → verifying (system)

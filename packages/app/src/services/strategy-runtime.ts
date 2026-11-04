@@ -3,8 +3,6 @@ import type { FleetStrategy } from '@gobing-ai/spur-config';
 import {
     CoordinationRunDao,
     type DbAdapter,
-    InboxUnfinishedDao,
-    type InboxUnfinishedRow,
     type MemberLifecycleState,
     ProjectClaimDao,
     ProjectStrategyDao,
@@ -14,6 +12,7 @@ import {
 import { DeliveryReconciler, type UnresolvedDelivery } from './delivery-reconciler';
 import type { FleetDispatcher, FleetReceipt } from './fleet-dispatcher';
 import type { FleetService, OrchestratorBinding, ResolvedFleetMember } from './fleet-service';
+import { type InboxMessage, InboxService } from './inbox-service';
 import { normalizeProjectPath } from './project-registry';
 import type { TaskService, TaskSummary } from './task-service';
 import { type DispatchDecision, WRITE_SLOT_TTL_MS, WriteSlotService } from './write-slot-service';
@@ -52,24 +51,6 @@ export function fleetTaskKeyPrefix(wbs: string): string {
 }
 
 /**
- * Parse the attempt ordinal out of a `fleet:task:<wbs>:<n>` request key, or null when the
- * key is unrelated or malformed. Refusing to guess keeps a malformed key from silently
- * becoming "attempt 1" and resetting a task's retry budget.
- */
-export function parseFleetTaskAttempt(requestKey: string, wbs: string): number | null {
-    const prefix = fleetTaskKeyPrefix(wbs);
-    if (!requestKey.startsWith(prefix)) return null;
-    const suffix = requestKey.slice(prefix.length);
-    if (!/^[1-9][0-9]*$/.test(suffix)) return null;
-    return Number.parseInt(suffix, 10);
-}
-
-/** The task wbs named by a `fleet:task:<wbs>:<n>` request key, or undefined for any other key. */
-function fleetTaskWbs(requestKey: string | null): string | undefined {
-    return /^fleet:task:([^:]+):[1-9][0-9]*$/.exec(requestKey ?? '')?.[1];
-}
-
-/**
  * Why a candidate was not dispatched (R4). Deliberately DISTINCT from G61
  * 0834's `HoldReason` — that one is delivery state, this is dispatch state;
  * one shared union would re-conflate the separation G61 exists to preserve.
@@ -85,6 +66,12 @@ export type DispatchHoldReason =
      * waiting on a human, so dispatch would queue work behind an operator prompt.
      */
     | 'member-blocked'
+    /**
+     * The member is a bound attached occupant that cannot take fleet stages right now
+     * (task 1282, design §5): mid-human-turn (`working`), never handshook, draining, or
+     * a pull-only host. The detail names the member and the readiness gap.
+     */
+    | 'member-busy'
     | 'rest-after-drain'
     /**
      * A keyed dispatch has no definite receipt yet (G71 R1): the member may still be
@@ -110,6 +97,16 @@ export interface DispatchHold {
     detail?: string;
 }
 
+/** Binding facts of one attached occupant (task 1282, design §5). */
+export interface MemberAttachmentState {
+    /** The attached handshake completed: the binder proved its host binding pin (§4). */
+    handshake: boolean;
+    /** Graceful `leave` marked the record draining — no new assignment. */
+    draining: boolean;
+    /** The binder's host attested the stage capabilities (1281). */
+    stageEligible: boolean;
+}
+
 /** Everything a strategy sees — assembled by {@link StrategyRuntime.selectNext}, never the strategy. */
 export interface StrategyContext {
     projectPath: string;
@@ -123,7 +120,12 @@ export interface StrategyContext {
      * allocated; the strategy stays pure and does no I/O for this map.
      */
     memberLifecycle: ReadonlyMap<string, MemberLifecycleState>;
-    /** `TaskService.list` todo + wip candidates — G71 R1: a wip task carries resumed work. */
+    /**
+     * Attached-occupant binding facts per member instanceId (task 1282 §5) — bound members
+     * only; a plain member is absent. A human turn (`working`), a missing handshake, or a
+     * drain makes the occupant unselectable; the strategy never reads guest records itself.
+     */
+    memberAttachments?: ReadonlyMap<string, MemberAttachmentState>;
     candidates: TaskSummary[];
     /** Enabled fleet members (0835) not currently holding a run (the live write-slot holder). */
     idleInstances: ResolvedFleetMember[];
@@ -207,7 +209,26 @@ export const gtdStrategy: Strategy = {
         const blockedIdle = ctx.idleInstances.filter(
             (member) => ctx.memberLifecycle.get(member.instanceId) === 'blocked',
         );
-        const idle = ctx.idleInstances.filter((member) => ctx.memberLifecycle.get(member.instanceId) !== 'blocked');
+        // G75 §5 (task 1282): a bound occupant mid-human-turn (or never handshook, or
+        // draining) is never dispatched to — its session belongs to the human. The gap
+        // is named in the hold; nothing is silently skipped.
+        const attachedGap = (member: ResolvedFleetMember): string | null => {
+            const attachment = ctx.memberAttachments?.get(member.instanceId);
+            if (attachment === undefined) return null; // A plain member, not an occupant.
+            const lifecycle = ctx.memberLifecycle.get(member.instanceId);
+            if (lifecycle === 'working') return 'reported working (human turn)';
+            if (attachment.draining) return 'draining';
+            if (!attachment.handshake) return 'handshake pending';
+            if (!attachment.stageEligible) return 'host is pull-only';
+            if (lifecycle !== 'idle') return `lifecycle ${lifecycle ?? 'unreported'}`;
+            return null;
+        };
+        const idle = ctx.idleInstances.filter(
+            (member) => ctx.memberLifecycle.get(member.instanceId) !== 'blocked' && attachedGap(member) === null,
+        );
+        const busyAttached = ctx.idleInstances.filter(
+            (member) => ctx.memberLifecycle.get(member.instanceId) !== 'blocked' && attachedGap(member) !== null,
+        );
         const accepts = (member: ResolvedFleetMember, candidate: TaskSummary): boolean => {
             const assignee = candidate.frontmatter.assignee;
             return typeof assignee === 'string' && assignee !== ''
@@ -276,6 +297,11 @@ export const gtdStrategy: Strategy = {
                     hold('member-blocked', `${blocked.instanceId} reported blocked (waiting on a human)`);
                     continue;
                 }
+                const busy = busyAttached.find((candidateMember) => accepts(candidateMember, candidate));
+                if (busy !== undefined) {
+                    hold('member-busy', `${busy.instanceId} is unavailable for fleet stages (${attachedGap(busy)})`);
+                    continue;
+                }
                 hold('no-idle-instance');
                 continue;
             }
@@ -329,6 +355,21 @@ export interface StrategyRuntimeContext {
      * then dispatches nothing and says so instead of faking a decision.
      */
     dispatcher?: Pick<FleetDispatcher, 'enqueue' | 'receipt'>;
+    /** Fleet phase marks (task 1273); absent where no bus is wired. */
+    emitPhase?: import('../workflow/fleet-work-item').FleetPhaseEmit;
+    /**
+     * Guest-lease expiry (G11 R3). Runs on the WRITE side of {@link StrategyRuntime.resume},
+     * never inside a read: the Board's requests view must not terminate a live guest. Absent
+     * means this host owns no guests (tests, read-only views).
+     */
+    guestExpiry?: () => Promise<string[]>;
+    /**
+     * Attached-occupant binding facts (task 1282 §5): bound members only, `null` = a plain
+     * member. Absent seam = this host tracks no guest records (tests, read-only views).
+     */
+    memberAttachments?: (instanceIds: string[]) => Promise<ReadonlyMap<string, MemberAttachmentState | null>>;
+    /** Warn sink for housekeeping failures that must not fail a tick. */
+    logger?: { warn(message: string, meta?: Record<string, unknown>): void };
 }
 
 /** R6: what a restart found and whether the runtime may accept dispatch work. */
@@ -445,6 +486,19 @@ export class StrategyRuntime {
                     : (await reconciler.reconcile(member.instanceId)).unresolved),
             );
         }
+        // G11 R3 (ADR-143): guest leases expire on the WRITE side of the tick, next to the
+        // reconcile — never inside a read. With no orchestrator nothing dispatches to a guest,
+        // so nothing can be stranded by skipping it (the early return above).
+        if (!options.readOnly && this.ctx.guestExpiry !== undefined) {
+            try {
+                await this.ctx.guestExpiry();
+            } catch (error) {
+                // Lease housekeeping must not take the orchestrator's tick down.
+                this.ctx.logger?.warn('strategy resume: guest expiry failed', {
+                    error: error instanceof Error ? error.message : String(error),
+                });
+            }
+        }
         return { strategy, version, orchestrator, unresolved, reconciled: true };
     }
 
@@ -477,7 +531,7 @@ export class StrategyRuntime {
             };
         }
         const db = await this.ctx.openDb(normalized);
-        const inbox = new InboxUnfinishedDao(db);
+        const inbox = new InboxService({ getDb: async () => db });
         const slots = new WriteSlotService(this.ctx);
         const dispatched: DispatchDecision[] = [];
         for (const decision of result.decisions) {
@@ -495,7 +549,7 @@ export class StrategyRuntime {
             try {
                 const attempts = await this.readAttempts(inbox, wbs);
                 const attempt = attempts.count + 1;
-                await dispatcher.enqueue({
+                const { messageId } = await dispatcher.enqueue({
                     member: decision.instanceId,
                     fromId: opts.orchestratorId,
                     // G71 R1: interrupted work resumes. A wip task, or one that already has a
@@ -503,6 +557,15 @@ export class StrategyRuntime {
                     // partial work up instead of starting over.
                     body: `/sp:dev-run ${wbs} --auto${resumeHint ? ' --continue' : ''}`,
                     requestKey: `${fleetTaskKeyPrefix(wbs)}${attempt}`,
+                    taskId: wbs,
+                });
+                this.ctx.emitPhase?.('enqueue', {
+                    phase: 'enqueue',
+                    at: new Date().toISOString(),
+                    key: `${fleetTaskKeyPrefix(wbs)}${attempt}`,
+                    messageId,
+                    member: decision.instanceId,
+                    taskId: wbs,
                 });
                 dispatched.push(decision);
                 // The slot stays held until the receipt lands: the orchestrator keeps it
@@ -556,15 +619,15 @@ export class StrategyRuntime {
         }
         const dispatcher = this.ctx.dispatcher;
         if (dispatcher === undefined) return { released: [] };
-        const rows = await new InboxUnfinishedDao(db).listUnfinished(holder.holderId);
-        const pending = rows.find((row) => (row.request_key ?? '').startsWith('fleet:task:'));
+        const rows = await new InboxService({ getDb: async () => db }).requests(holder.holderId);
+        const pending = rows.find((row) => row.taskId !== null);
         if (pending === undefined) return { released: [] };
         const receipt: FleetReceipt | null = await dispatcher.receipt(pending.id, holder.holderId);
         if (receipt === null) return { released: [] };
         this.stopHeartbeat(normalized);
         const slots = new WriteSlotService(this.ctx);
         await slots.validateResult(normalized, holder.holderId, holder.ownerEpoch, {
-            taskId: fleetTaskWbs(pending.request_key),
+            taskId: pending.taskId ?? undefined,
         });
         const released = await slots.release(normalized, holder.holderId, holder.ownerEpoch);
         return { released: released ? [holder.holderId] : [] };
@@ -707,7 +770,7 @@ export class StrategyRuntime {
                 idleInstances.push(member);
             }
         }
-        const inbox = new InboxUnfinishedDao(db);
+        const inbox = new InboxService({ getDb: async () => db });
         // G73 R3 (1080): the members' reported lifecycle rides the same snapshot. A read
         // failure degrades to "no state" (nobody is blocked) rather than failing the tick —
         // the deterministic guards still apply.
@@ -724,6 +787,33 @@ export class StrategyRuntime {
                 // Degrade: unreadable ledger — no member is treated as blocked.
             }
         }
+        // G75 §5 (task 1282): bound attached occupants ride the same snapshot. A read
+        // failure degrades CLOSED — an unknown attachment state must never deliver fleet
+        // work into a busy human session — so every idle member reads as un-handshook.
+        const memberAttachments = new Map<string, MemberAttachmentState>();
+        if (idleInstances.length > 0) {
+            const readAttachments = this.ctx.memberAttachments;
+            if (readAttachments !== undefined) {
+                try {
+                    for (const [instanceId, state] of await readAttachments(
+                        idleInstances.map((member) => member.instanceId),
+                    )) {
+                        if (state !== null) memberAttachments.set(instanceId, state);
+                    }
+                } catch (error) {
+                    for (const member of idleInstances) {
+                        memberAttachments.set(member.instanceId, {
+                            handshake: false,
+                            draining: false,
+                            stageEligible: false,
+                        });
+                    }
+                    this.ctx.logger?.warn('member attachment read failed; degrading closed', {
+                        error: String(error),
+                    });
+                }
+            }
+        }
         const dispatchAttempts = new Map<string, DispatchAttemptState>();
         const ready = new Map<string, boolean>();
         const blocked = new Map<string, string | null>();
@@ -735,7 +825,7 @@ export class StrategyRuntime {
             const latest = attempts.latest;
             let state: DispatchAttemptState | undefined;
             if (latest !== null) {
-                const receipt = await this.ctx.dispatcher?.receipt(latest.row.id, latest.row.to_id);
+                const receipt = await this.ctx.dispatcher?.receipt(latest.row.id, latest.row.toId);
                 state = {
                     attempt: latest.attempt,
                     // Only a DEFINITE receipt leaves the attempt in flight (R2): a
@@ -771,6 +861,7 @@ export class StrategyRuntime {
             candidates,
             idleInstances,
             memberLifecycle,
+            ...(memberAttachments.size > 0 ? { memberAttachments } : {}),
             dependencyBlocked: (wbs) => blocked.get(wbs) ?? null,
             ready: (wbs) => ready.get(wbs) === true,
             dispatchAttempts,
@@ -779,24 +870,21 @@ export class StrategyRuntime {
     }
 
     /**
-     * Every keyed dispatch attempt recorded for `wbs`: the total count (the next attempt
-     * number is `count + 1`) and the latest attempt by ordinal. A malformed key is skipped
-     * rather than read as attempt 1 — guessing would silently reset a retry budget.
+     * Every dispatch attempt recorded for `wbs`, read from the `task_id` column (G11 R9)
+     * rather than parsed out of a request key: the total count (the next attempt number is
+     * `count + 1`) and the newest attempt row.
      */
     private async readAttempts(
-        inbox: InboxUnfinishedDao,
+        inbox: InboxService,
         wbs: string,
     ): Promise<{
         count: number;
-        latest: { row: InboxUnfinishedRow; attempt: number } | null;
+        latest: { row: InboxMessage; attempt: number } | null;
     }> {
-        const rows = await inbox.listByRequestKeyPrefix(fleetTaskKeyPrefix(wbs));
-        let latest: { row: InboxUnfinishedRow; attempt: number } | null = null;
-        for (const row of rows) {
-            const attempt = parseFleetTaskAttempt(row.request_key ?? '', wbs);
-            if (attempt === null) continue;
-            if (latest === null || attempt > latest.attempt) latest = { row, attempt };
-        }
-        return { count: rows.length, latest };
+        const attempts = await inbox.attempts(wbs);
+        return {
+            count: attempts.count,
+            latest: attempts.latest === null ? null : { row: attempts.latest, attempt: attempts.count },
+        };
     }
 }

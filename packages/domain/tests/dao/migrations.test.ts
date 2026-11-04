@@ -17,6 +17,7 @@ import {
     HISTORY_BOARD_SKILL_5M_CAPABILITY_GRAIN_SCHEMA_SQL,
     HISTORY_PERFORMANCE_INDEXES_SCHEMA_SQL,
     INBOX_MESSAGES_READ_AT_SCHEMA_SQL,
+    INBOX_MESSAGES_REBUILD_SQL,
     loadSqlMigrations,
     PROJECT_CLAIMS_SCHEMA_SQL,
     PROJECT_STRATEGY_SCHEMA_SQL,
@@ -130,7 +131,7 @@ describe('db migrations', () => {
         });
 
         test('has foundation through History Board indexes, rollups, checkpoint identity, the history-refresh single-flight index, the 0722 task↔session attribution table, the 0817 queue-jobs deadline/lease columns, the 0832 inbox request key, the 0833 coordination-runs receipt columns, the 0836 project_claims table, the 0838 project_strategy table, the 0863 scheduler-custom single-flight index, and the 0890 executor-update owner columns', () => {
-            expect(CLI_MIGRATIONS).toHaveLength(54);
+            expect(CLI_MIGRATIONS).toHaveLength(55);
             expect(CLI_MIGRATIONS[0]?.id).toBe('0000_spur_cli_foundation');
             expect(CLI_MIGRATIONS[1]?.id).toBe('0001_spur_cli_team_inbox');
             expect(CLI_MIGRATIONS[2]?.id).toBe('0002_spur_cli_rule_history');
@@ -381,7 +382,8 @@ describe('db migrations', () => {
             // 0041 precedent).
             const applied = await applyCliMigrations(adapter);
             // 0052 journals + applies: standalone CREATE TABLE IF NOT EXISTS (0046 precedent).
-            expect(applied).toBe(50);
+            // 0054 journals + applies: DROP IF EXISTS + CREATE (1266 R1), no guard needed.
+            expect(applied).toBe(51);
             // 0005 and 0007 backfilled columns on the legacy runs table.
             const cols = await adapter.queryAll<{ name: string }>('PRAGMA table_info(runs)');
             expect(cols.some((c) => c.name === 'pid')).toBe(true);
@@ -435,10 +437,12 @@ describe('db migrations', () => {
             // 0044 likewise: CLI_SCHEMA_SQL already ships the receipt columns.
             // 0046 likewise: CLI_SCHEMA_SQL already ships project_strategy (journal counts).
             // 0048 likewise: CLI_SCHEMA_SQL already ships the owner columns (journal counts).
-            expect(applied).toBe(53);
+            // 0054 rebuilds inbox_messages (1266 R1) — journaled and applied.
+            expect(applied).toBe(54);
             await adapter.run(
-                'INSERT INTO inbox_messages (id, to_id, body, created_at, updated_at) VALUES (?, ?, ?, ?, ?)',
+                'INSERT INTO inbox_messages (id, from_id, to_id, body, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?)',
                 'm1',
+                'operator',
                 'planner',
                 'hi',
                 Date.now(),
@@ -695,7 +699,8 @@ describe('db migrations', () => {
             // + 0049 runs terminal_reason (journaled but skipped: no runs table here —
             // the 0041 table-absence precedent).
             // + 0053 inbox read_at (journaled but skipped: no inbox_messages here — 0043 precedent).
-            expect(await applyCliMigrations(adapter)).toBe(45);
+            // + 0054 inbox rebuild (journaled and applied: DROP IF EXISTS + CREATE, no guard needed).
+            expect(await applyCliMigrations(adapter)).toBe(46);
             const columns = await adapter.queryAll<{ name: string }>(
                 'PRAGMA index_info(idx_history_message_provenance_run)',
             );
@@ -752,10 +757,10 @@ describe('db migrations', () => {
             adapter.close();
         });
 
-        test('upgraded DB journaled through 0021 receives 0022-0053 and converges with a fresh DB', async () => {
+        test('upgraded DB journaled through 0021 receives 0022-0054 and converges with a fresh DB', async () => {
             const upgraded = await createDbAdapter({ driver: 'bun-sqlite', url: ':memory:' });
             await applyCliMigrations(upgraded, CLI_MIGRATIONS.slice(0, 22));
-            expect(await applyCliMigrations(upgraded)).toBe(32);
+            expect(await applyCliMigrations(upgraded)).toBe(33);
 
             const fresh = await createDbAdapter({ driver: 'bun-sqlite', url: ':memory:' });
             await applyCliMigrations(fresh);
@@ -922,8 +927,9 @@ describe('db migrations', () => {
             const adapter = await createDbAdapter({ driver: 'bun-sqlite', url: ':memory:' });
             await applyCliMigrations(adapter);
             await adapter.run(
-                'INSERT INTO inbox_messages (id, to_id, body, created_at, updated_at) VALUES (?, ?, ?, ?, ?)',
+                'INSERT INTO inbox_messages (id, from_id, to_id, body, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?)',
                 'm1',
+                'operator',
                 'planner',
                 'hi',
                 Date.now(),
@@ -1032,6 +1038,75 @@ describe('db migrations', () => {
                     .join('\n')
                     .trim();
             expect(stripComments(readAt?.sql ?? '')).toBe(stripComments(INBOX_MESSAGES_READ_AT_SCHEMA_SQL));
+        });
+
+        test('inbox rebuild migration drops and recreates the table (1266 R1)', () => {
+            expect(CLI_MIGRATIONS[54]?.id).toBe('0054_spur_cli_inbox_messages_rebuild');
+            expect(CLI_MIGRATIONS[54]?.sql).toBe(INBOX_MESSAGES_REBUILD_SQL);
+            expect(INBOX_MESSAGES_REBUILD_SQL).toContain('DROP TABLE IF EXISTS inbox_messages');
+            for (const column of [
+                '"from_id" text NOT NULL',
+                '"kind" text NOT NULL DEFAULT \'chat\'',
+                '"task_id" text',
+                '"parent_run_id" text',
+                '"thread_id" text',
+            ]) {
+                expect(INBOX_MESSAGES_REBUILD_SQL).toContain(column);
+            }
+            expect(INBOX_MESSAGES_REBUILD_SQL).not.toContain('inject_attempts');
+            expect(INBOX_MESSAGES_REBUILD_SQL).toContain('idx_inbox_messages_to_status');
+            expect(INBOX_MESSAGES_REBUILD_SQL).toContain('idx_inbox_messages_from_created');
+            expect(INBOX_MESSAGES_REBUILD_SQL).toContain('idx_inbox_messages_thread');
+            expect(INBOX_MESSAGES_REBUILD_SQL).toContain('idx_inbox_messages_request_key');
+            // The 0043/0053 AI-terms guards stay: they run BEFORE the rebuild on legacy journals.
+            expect(CLI_MIGRATIONS[43]?.id).toBe('0043_spur_cli_inbox_messages_request_key');
+            expect(CLI_MIGRATIONS[53]?.id).toBe('0053_spur_cli_inbox_messages_read_at');
+        });
+
+        test('repo drizzle folder includes the 0054 inbox rebuild (1266 folder-load)', async () => {
+            const migrations = await loadSqlMigrations(join(import.meta.dir, '../../../../drizzle'));
+            const rebuild = migrations.find((m) => m.id === '0054_spur_cli_inbox_messages_rebuild');
+            expect(rebuild).toBeDefined();
+            const stripComments = (sql: string): string =>
+                sql
+                    .split('\n')
+                    .filter((line) => !line.trimStart().startsWith('--'))
+                    .join('\n')
+                    .trim();
+            expect(stripComments(rebuild?.sql ?? '')).toBe(stripComments(INBOX_MESSAGES_REBUILD_SQL));
+        });
+
+        test('a legacy pre-0054 inbox table is rebuilt, and a DB without the table still migrates (1266 R1)', async () => {
+            // Legacy shape: the ts-db mirror from 0001 plus its rows, which the rebuild discards (A6).
+            const legacy = await createDbAdapter({ driver: 'bun-sqlite', url: ':memory:' });
+            await legacy.exec(`CREATE TABLE inbox_messages (
+                id TEXT PRIMARY KEY, from_id TEXT, to_id TEXT NOT NULL, body TEXT NOT NULL,
+                status TEXT NOT NULL DEFAULT 'queued', in_reply_to TEXT, created_at INTEGER NOT NULL,
+                updated_at INTEGER NOT NULL, delivered_at INTEGER,
+                inject_attempts INTEGER NOT NULL DEFAULT 0, inject_error TEXT, request_key TEXT)`);
+            await legacy.run(
+                `INSERT INTO inbox_messages (id, from_id, to_id, body, created_at, updated_at)
+                 VALUES ('old', 'a', 'b', 'legacy row', 1, 1)`,
+            );
+            await applyCliMigrations(legacy);
+            const legacyColumns = (await legacy.queryAll<{ name: string }>('PRAGMA table_info(inbox_messages)')).map(
+                (column) => column.name,
+            );
+            expect(legacyColumns).toContain('kind');
+            expect(legacyColumns).toContain('task_id');
+            expect(legacyColumns).not.toContain('inject_attempts');
+            expect(await legacy.queryAll('SELECT id FROM inbox_messages')).toEqual([]);
+            legacy.close();
+
+            // A journal that never had the table migrates cleanly: 0043/0053 skip, 0054 creates it.
+            const bare = await createDbAdapter({ driver: 'bun-sqlite', url: ':memory:' });
+            await bare.exec('DROP TABLE IF EXISTS inbox_messages');
+            await applyCliMigrations(bare);
+            const freshColumns = (await bare.queryAll<{ name: string }>('PRAGMA table_info(inbox_messages)')).map(
+                (column) => column.name,
+            );
+            expect(freshColumns).toContain('parent_run_id');
+            bare.close();
         });
 
         test('repo drizzle folder includes the 0046 project_strategy table (0838 folder-load)', async () => {
@@ -1202,7 +1277,7 @@ describe('db migrations', () => {
 
             await db.run("INSERT INTO runs (id, status, started_at) VALUES ('run-1', 'pending', 100)");
             await db.run(
-                "INSERT INTO inbox_messages (id, to_id, body, created_at, updated_at) VALUES ('msg-1', 'planner', 'hi', 100, 100)",
+                "INSERT INTO inbox_messages (id, from_id, to_id, body, created_at, updated_at) VALUES ('msg-1', 'operator', 'planner', 'hi', 100, 100)",
             );
 
             const newlyApplied = await applyCliMigrations(db);
@@ -1211,8 +1286,16 @@ describe('db migrations', () => {
             const run = await db.queryFirst<{ id: string }>('SELECT id FROM runs WHERE id = ?', 'run-1');
             expect(run?.id).toBe('run-1');
 
+            // 0054 (G11 R1) is the ONE declared exception: it drops and recreates the inbox table,
+            // so pre-rebuild messages are discarded by operator decision A6. Every other table's
+            // rows survive — asserted above for runs, and here for the rebuilt table's shape.
             const msg = await db.queryFirst<{ id: string }>('SELECT id FROM inbox_messages WHERE id = ?', 'msg-1');
-            expect(msg?.id).toBe('msg-1');
+            expect(msg?.id).toBeUndefined();
+            const rebuilt = (await db.queryAll<{ name: string }>('PRAGMA table_info(inbox_messages)')).map(
+                (column) => column.name,
+            );
+            expect(rebuilt).toContain('kind');
+            expect(rebuilt).toContain('task_id');
 
             db.close();
         });

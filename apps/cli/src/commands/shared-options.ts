@@ -51,6 +51,7 @@ export const SHARED_OPTIONS = {
     cwdAgent: ['--cwd <path>', 'Working directory for agent execution'] as const,
     modeAgent: ['--mode <mode>', 'Agent output mode: text|json'] as const,
     modeHistory: ['--mode <mode>', 'full|incremental|force-file'] as const,
+    modeSearch: ['--mode <mode>', 'Search mode: exact|fuzzy|auto (default: auto)'] as const,
     nameProjectDisplay: ['--name <name>', 'Display name for the project'] as const,
     nameProjectInit: ['--name <name>', 'Project name (default: current directory name)'] as const,
     pollWorkflow: ['--poll <ms>', 'Follow polling interval in milliseconds'] as const,

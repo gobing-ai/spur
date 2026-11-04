@@ -23,6 +23,8 @@ export interface FollowSystemEventsOptions {
     match: (row: SystemEventRow) => boolean;
     /** When aborted, the stream terminates cleanly (no further rows). */
     signal?: AbortSignal;
+    /** Poll cadence in milliseconds; defaults to the shared 100ms interval. */
+    pollIntervalMs?: number;
 }
 
 /** Ledger poll cadence for the follower (ms). */
@@ -31,7 +33,18 @@ export const FOLLOW_POLL_INTERVAL_MS = 100;
 /** Max rows pulled per poll — a query batch, not an in-memory event ring. */
 const FOLLOW_BATCH_SIZE = 512;
 
-const sleep = (ms: number): Promise<void> => new Promise((resolve) => setTimeout(resolve, ms));
+function sleep(ms: number, signal?: AbortSignal): Promise<void> {
+    if (signal?.aborted) return Promise.resolve();
+    return new Promise((resolve) => {
+        const finish = () => {
+            clearTimeout(timer);
+            signal?.removeEventListener('abort', finish);
+            resolve();
+        };
+        const timer = setTimeout(finish, ms);
+        signal?.addEventListener('abort', finish, { once: true });
+    });
+}
 
 /**
  * Yields rows with `sequence > afterSequence` (ascending) as they arrive.
@@ -58,6 +71,6 @@ export async function* followSystemEventsAfter(
             cursor = sequence;
             if (opts.match(row)) yield row;
         }
-        await sleep(FOLLOW_POLL_INTERVAL_MS);
+        await sleep(opts.pollIntervalMs ?? FOLLOW_POLL_INTERVAL_MS, opts.signal);
     }
 }

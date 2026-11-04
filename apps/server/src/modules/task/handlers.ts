@@ -53,7 +53,7 @@ export function createTaskHandlers(ctx: ServerContext) {
                     name: t.name,
                     status: normalizeTaskStatusSafe(t.status),
                     priority: typeof fm.priority === 'string' ? fm.priority : undefined,
-                    featureId: (fm.feature_id as string | null) ?? undefined,
+                    featureId: t.feature_id ?? undefined,
                     parentWbs: (fm.parent_wbs as string | null) ?? undefined,
                     type: (TASK_TYPES as readonly string[]).includes(fm.type as string)
                         ? (fm.type as (typeof TASK_TYPES)[number])

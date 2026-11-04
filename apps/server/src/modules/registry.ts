@@ -8,7 +8,6 @@ import { featureModule } from './feature';
 import { healthModule } from './health';
 import { historyModule } from './history';
 import { jobsModule } from './jobs';
-import { messagesModule } from './messages';
 import { observabilityModule } from './observability';
 import { processesModule } from './processes';
 import { runsModule } from './runs';
@@ -26,13 +25,13 @@ import type { ServerModule } from './types';
  * (explicit routes before wildcard mounts), but modules are
  * self-contained — no module depends on another being mounted first.
  */
+/** Every built-in module, in mount order — exported below for registry assertions. */
 const builtins: ServerModule[] = [
     healthModule,
     boardModule,
     taskModule,
     featureModule,
     eventsModule,
-    messagesModule,
     jobsModule,
     processesModule,
     observabilityModule,

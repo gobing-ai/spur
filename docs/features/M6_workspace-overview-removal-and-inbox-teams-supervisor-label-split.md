@@ -6,7 +6,7 @@ status: cancelled
 priority: P2
 tags: []
 created_at: "2026-08-19T05:34:33.143Z"
-updated_at: "2026-09-14T01:08:51.254Z"
+updated_at: "2026-10-21T18:38:19.144Z"
 ---
 
 # M6: Workspace Overview removal and Inbox/Teams supervisor-label split
@@ -76,6 +76,12 @@ _No linked tasks._
 <!-- END AUTO-GENERATED -->
 
 ## Notes
+
+### Current reading — 2026-10-21
+
+The staging reconciliation below is historical. G64 records the 2026-09-14 cutover; tasks 0849/0850 and later 0852/0853 are done. This feature remains cancelled because its original nav/Workspace design was superseded, not because retirement is still pending.
+
+### Historical notes
 
 Graduated from wayfinder map **I6** / task **0599**. Approach is decided in
 `docs/design/board-module-boundaries.md` §5–§6. Teams-absorbs-both is

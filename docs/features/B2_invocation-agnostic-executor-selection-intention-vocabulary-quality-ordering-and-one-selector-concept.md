@@ -6,7 +6,7 @@ status: done
 priority: P2
 tags: ["wayfinder-map"]
 created_at: "2026-07-27T01:24:47.771Z"
-updated_at: "2026-08-14T04:38:38.182Z"
+updated_at: "2026-10-21T18:35:02.236Z"
 ---
 
 # B2: Invocation-agnostic executor selection: intention vocabulary, quality ordering, and one selector concept
@@ -103,6 +103,13 @@ the map closes only on a clean `/sp:dev-verifyall --feature B2` reporting **Ship
 <!-- END AUTO-GENERATED -->
 
 ## Notes
+
+### Current reading — 2026-10-21
+
+This investigation map is complete. Statements that no code has shipped describe the investigation baseline; subsequent B-series features and the current selector contract own implemented behavior.
+
+### Historical notes
+
 ### Verified terrain (2026-07-26)
 
 Every claim below was checked against the working tree this session — re-verify before relying on a
@@ -382,6 +389,7 @@ questions arising during implementation go here first — never into a task file
 - The broad `plugins/sp` + `.spur/workflows` defect audit and tier-fallback exhaustion hardening.
   Real work, but wider than executor selection — sibling feature, sequenced after this map's
   migration ticket so the audit is informed by what the migration exposes.
+
 ## History
 - 2026-08-14T00:37:34.394Z backlog → active (system)
 - 2026-08-14T04:37:03.765Z active → verifying (system)

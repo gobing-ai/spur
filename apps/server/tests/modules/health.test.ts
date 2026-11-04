@@ -11,7 +11,7 @@ import {
 } from '@gobing-ai/spur-app';
 import { removeEnvVar, setEnvVar, spurConfigSchema } from '@gobing-ai/spur-config';
 import { loadSpurConfig } from '@gobing-ai/spur-config/loader';
-import { CoordinationRunDao, createMigratedDb, InboxMessageDao, ProjectStrategyDao } from '@gobing-ai/spur-domain';
+import { createMigratedDb, ProjectStrategyDao } from '@gobing-ai/spur-domain';
 import { createNodeFileSystem } from '@gobing-ai/ts-runtime';
 import { Hono } from 'hono';
 import type { ServerContext } from '../../src/context';
@@ -574,116 +574,6 @@ describe('healthModule', () => {
         expect(body.capacity.enabled).toBe(1);
     });
 
-    // ── 0844: /api/project/requests ──
-
-    test('/api/project/requests joins operator rows with delivery + run facts, scoped to the mailbox', async () => {
-        const dbUrl = join(tempDir, '.spur', 'spur.db');
-        const { ctx, close } = await fullCtx(dbUrl);
-        await writeFleetConfig(`    enabled: true\n    orchestrator: lead\n${LEAD_MEMBER}`);
-
-        const app = new Hono();
-        healthModule.mount(app, ctx);
-        try {
-            // The orchestrator mailbox identity comes from the fleet projection.
-            const fleetRes = await app.request('/api/project/fleet');
-            const fleetBody = (await fleetRes.json()) as { orchestrator: { instanceId?: string } };
-            const instanceId = fleetBody.orchestrator.instanceId;
-            expect(instanceId).toBeTruthy();
-
-            const db = await ctx.getDb();
-            const inbox = new InboxMessageDao(db);
-            const runs = new CoordinationRunDao(db);
-
-            // A consumed request with a run receipt (drained → injected → run exited).
-            const consumed = await inbox.enqueueIdempotent(
-                'board-operator',
-                instanceId as string,
-                'consumed request',
-                'rk-consumed',
-            );
-            await runs.insertStart({
-                specId: instanceId as string,
-                agentKind: 'planner',
-                processId: null,
-                runId: 'run-1',
-                generation: 1,
-                startedAt: new Date().toISOString(),
-            });
-            await runs.updateExit('run-1', 'exited', new Date().toISOString(), '[]', {
-                messageIds: [consumed.id],
-                taskId: '0844',
-                outcome: 'run-exit-only',
-            });
-            await inbox.drainPending(instanceId as string);
-
-            // A queued operator request with a durable key, and a foreign row that must be dropped.
-            await inbox.enqueueIdempotent('board-operator', instanceId as string, 'queued request', 'rk-queued');
-            await inbox.enqueueIdempotent('some-member', instanceId as string, 'not an operator request', 'rk-foreign');
-
-            const res = await app.request('/api/project/requests');
-            expect(res.status).toBe(200);
-            const body = (await res.json()) as {
-                requests: Array<{
-                    messageId: string;
-                    requestKey: string | null;
-                    deliveryStatus: string;
-                    injectAttempts: number;
-                    injectError: string | null;
-                    runId: string | null;
-                    taskId: string | null;
-                    outcome: string | null;
-                    reason: string | null;
-                    hold: string | null;
-                }>;
-            };
-            // Foreign mailbox traffic is filtered; only operator rows remain.
-            expect(body.requests).toHaveLength(2);
-
-            const consumedRow = body.requests.find((r) => r.messageId === consumed.id);
-            expect(consumedRow).toBeDefined();
-            expect(consumedRow?.requestKey).toBe('rk-consumed');
-            expect(consumedRow?.deliveryStatus).toBe('injected');
-            expect(consumedRow?.runId).toBe('run-1');
-            expect(consumedRow?.taskId).toBe('0844');
-            expect(consumedRow?.outcome).toBe('run-exit-only');
-            // 0834 classifies run-exit-only as an unresolved (queryable) hold —
-            // surfaced verbatim; the client's precedence maps it to completed-exit-only.
-            expect(consumedRow?.reason).toBe('run-exit-only');
-
-            const queuedRow = body.requests.find((r) => r.requestKey === 'rk-queued');
-            expect(queuedRow).toBeDefined();
-            expect(queuedRow?.deliveryStatus).toBe('queued');
-            expect(queuedRow?.runId).toBeNull();
-            expect(queuedRow?.outcome).toBeNull();
-
-            // The receipt projection is a GET: it must not persist the default
-            // strategy merely to compute named hold states.
-            expect(await new ProjectStrategyDao(db).get(normalizeProjectPath(tempDir))).toBeNull();
-
-            // limit caps the feed.
-            const limited = await app.request('/api/project/requests?limit=1');
-            const limitedBody = (await limited.json()) as { requests: unknown[] };
-            expect(limitedBody.requests).toHaveLength(1);
-        } finally {
-            close();
-        }
-    });
-
-    test('/api/project/requests degrades to {requests:[]} without a bound orchestrator (never 500)', async () => {
-        // No .spur/fleet.json at all → no orchestrator instance to address.
-        const { ctx, close } = await fullCtx(join(tempDir, '.spur', 'spur.db'));
-        const app = new Hono();
-        healthModule.mount(app, ctx);
-        try {
-            const res = await app.request('/api/project/requests');
-            expect(res.status).toBe(200);
-            const body = (await res.json()) as { requests: unknown[] };
-            expect(body.requests).toEqual([]);
-        } finally {
-            close();
-        }
-    });
-
     test('/api/project/executors/availability toggles executor disabled state in project config', async () => {
         const { writeFileSync, mkdirSync } = await import('node:fs');
         mkdirSync(join(tempDir, '.spur'), { recursive: true });
@@ -953,15 +843,6 @@ describe('healthModule', () => {
         } finally {
             close();
         }
-    });
-
-    test('/api/project/requests returns empty array without ServerContext', async () => {
-        const app = new Hono();
-        healthModule.mount(app, undefined);
-        const res = await app.request('/api/project/requests');
-        expect(res.status).toBe(200);
-        const body = (await res.json()) as { requests: unknown[] };
-        expect(body.requests).toEqual([]);
     });
 
     test('/api/project/executors/availability returns 501 without ServerContext', async () => {

@@ -2,10 +2,10 @@
 doc: 03_ARCHITECTURE
 owns: HOW — module boundaries, data flow, runtime model, invariants
 authority: derived
-version: 1.74.0
+version: 1.75.0
 derived_from: [01_PRD, 00_ADR]
 owner: Robin Min
-updated_at: 2026-10-15
+updated_at: 2026-10-26
 read_before: cross-module, seam, or schema work
 edit_rules: 99 §6.4
 sync: [T1]
@@ -566,28 +566,31 @@ eagerly globs sibling directories that export a named `module: WebModule` (`id`,
 `sidebarLabel`, `order`, `component`). A new module needs **no registry edit** — discovery is
 automatic; `order` only places it in the sidebar. Current modules: `observability` (10), `history`
 (20), `features` (30), `task-kanban` id `tasks` (40), `projects` (45), plus shell-level pieces
-(sidebar, project switcher). Workspace, Inbox, and Teams were retired by task 0849 once the Projects
-module carried their capabilities; their routes redirect into Projects (`apps/web/src/router.tsx`
-`RETIRED_ROUTES`).
+(sidebar, project switcher). Workspace and Teams were retired by task 0849 once the Projects module
+carried their capabilities; their routes redirect into Projects (`apps/web/src/router.tsx`
+`RETIRED_ROUTES`). Inbox is no longer a retired route at all: G11 made it a live Projects tab, so its
+redirect was deleted.
 
 ### 14.1 Current shipped state: two channels, two panes
 
 Spur has **two independent channels** between the Board and a backend coding agent. They are never
 merged — not in storage, not in delivery, and no longer in a single display surface. The Projects
-module presents each channel where it is consumed: durable messages in the Conversation tab, process
-frames in the Agents tab's member terminal.
+module presents each channel where it is consumed: durable messages in the Projects **Inbox** tab
+(member list → two-direction thread → composer), process frames in the Agents tab's member terminal.
 
 | | Durable message queue | Process pipe |
 | --- | --- | --- |
-| Write path | `AgentCoordinationService.sendMessage` → DAO `enqueue` | `POST /api/processes/:id/stdin` |
-| Read path | `AgentCoordinationService.getInbox` / `listRecent` / `drainPending` | `GET /api/processes/:id/stream` (SSE) |
-| Delivery to agent | Undeclared projects use `agent loop` → `drainPending`; fleets use the dispatch gate below | written straight to `PipeProcess` stdin |
-| Storage | SQLite (`inbox_messages`), durable, `queued → injected` lifecycle | in-memory ring buffer, bounded (default 500), lost on restart |
+| Write path | `InboxService` (the only writer) → `InboxDao`; each mutation commits its row with one `system_events` row | `POST /api/processes/:id/stdin` |
+| Read path | `InboxService.list` / `thread` / `requests` (typed oRPC `inbox` namespace); `spur message inbox` | `GET /api/processes/:id/stream` (SSE) |
+| Delivery to agent | `InboxService.claim` in `agent loop` / `agent run`; fleets use the dispatch gate below | written straight to `PipeProcess` stdin |
+| Storage | SQLite (`inbox_messages`), durable, `queued → claimed → delivered \| failed` lifecycle with requeue | in-memory ring buffer, bounded (default 500), lost on restart |
+| Live to the Board | one server relay follows `system_events` rows with prefix `message` and re-emits them on the bus | the process stream itself |
 | Ordering cursor | `createdAt` | `seq` (monotonic) + `ts` |
 
-The Board surfaces of these two channels are separate by design: Conversation (0841) renders the
-request/response thread over the durable queue, and the Agents tab's `MemberDetail` (0842) mounts the
-member terminal over the process stream plus a read-only inbox and activity pane. The retired Inbox
+The Board surfaces of these two channels are separate by design: the Projects Inbox tab renders one
+member's two-direction thread over the durable queue (with reply and mark-read inline), and the Agents
+tab's `MemberDetail` (0842) mounts the member terminal over the process stream plus a read-only inbox
+and activity pane. A terminal line reaches the process stdin and never the inbox. The retired Inbox
 module's client-side `mergeTimeline` (a discriminated union of messages and frames in
 `apps/web/src/modules/inbox/timeline.ts`) went with that module; nothing replaced it, because each
 channel now has its own pane and a per-agent timeline was the only place the two ever met.
@@ -616,10 +619,9 @@ name used as the mailbox prefix. Invalid fleet declarations fail startup before 
 
 The merge is retired: `apps/web/src/modules/inbox/timeline.ts` and its `mergeTimeline(messages,
 frames, agentId) → TimelineEntry[]` pure function were deleted with the Inbox module (0849). Its two
-inputs survive as separate panes (§14.1): durable rows in the Conversation thread, process frames in
-the member terminal, each read through the transports in the table above and each with its own
-narrowing function (`parseInboxMessages` in `projects/conversation.ts`, `parseFrame` in
-`lib/process-stream.ts`). The process-frame **history boundary** it used (`seq` monotonic per
+inputs survive as separate panes (§14.1): durable rows in the Projects Inbox tab, process frames in
+the member terminal, each read through the transports in the table above (rows typed by the oRPC
+`inbox` contract; frames narrowed by `parseFrame` in `lib/process-stream.ts`). The process-frame **history boundary** it used (`seq` monotonic per
 stream) still governs the terminal's ring buffer.
 
 ### 14.2 Shared process-stream helpers (R9)
@@ -783,6 +785,26 @@ declaration: role resolution counts declared members only and a guest is refused
 `spur agent leave` or lease expiry releases the claim and returns claimed messages to `queued`.
 Shapes: [inter-agent control plane](design/inter-agent-control-plane.md) §12.
 
+Renewal and binding (tasks 1279/1281, feature G75). The lease no longer depends on a pull: `join`
+records the **agent** process (pid + `ps lstart` birth time + executable, from a bounded ancestor
+walk) rather than the joining CLI, and spawns one detached copy of itself under
+`SPUR_GUEST_RENEWER=<guest-id>` that heartbeats at `TTL / 3` and stops on a missing record, a dead or
+reused pid, a lost fence or a 12-hour cap — no daemon, no new verb. `join --member <id>` binds one
+**declared** member instead of registering a guest: the roster validates role and executor, a
+capability proof gates the binding, and it takes the member's occupancy generation (`max + 1`) plus
+the `guest:<member-id>` claim, so the strategy's existing `hasRunning` check sees the member busy and
+the record id is the member's inbox address. Every fenced operation (renew, claim, release) refuses a
+superseded generation, so a stale binder cannot renew, claim or release the current owner's lease.
+
+Attached stage execution (task 1282) reuses that binding. `StrategyRuntime`'s `memberAttachments`
+seam holds a bound occupant out of role selection with the `member-busy` hold reason while it reports
+`working`, before its handshake, while draining, or on a `pull-only` host, and a failed read fails
+closed (every occupant treated as un-handshook). A selectable occupant runs its keyed stage through
+`createAttachedTurnDispatcher` (`packages/app/src/services/attached-turn-dispatch.ts`) on the
+ADR-145 turn contract over the member's inbox, certifying only the reply that links the request and
+matches the binding pin. `agent leave` on a bound member drains within `ATTACHED_DRAIN_GRACE_MS` and
+never signals the human-owned process; an unsettled turn stays `outcome-unknown`.
+
 **Project-owned supervision (task 1088, feature G67).** A project's loops are reached through the
 serve that owns the project, and a loop never outlives that serve. *Discovery:* the
 `agent status|stop|start` and `agent list --specs` default server URL comes from the cwd's project
@@ -801,8 +823,8 @@ marker file, or extra transport. Surfaces: [CLI contracts](design/cli-contracts.
 ```text
 Agent A (spec reviewer)
   → spur message send --to implementer
-  → inbox_messages (queued)
-  → implementer agent loop drain
+  → InboxService.send → inbox_messages (queued)
+  → implementer agent loop claim
   → OccupantRef { specId, agentKind, processId, runId, generation }
   → CoordinationRun + artifact paths
 Agent A

@@ -180,6 +180,22 @@ describe('blockingAnchors / foldVerdict', () => {
 });
 
 describe('parseReviewFindings (via scanResiduals inputs)', () => {
+    test('clean none-open rows are placeholders; substantive None-of findings remain open', () => {
+        const content = [
+            '### Review',
+            '| Priority | Finding | Disposition |',
+            '| --- | --- | --- |',
+            '| P1 | none open | — |',
+            '| P2 | None open (verified) | — |',
+            '| P2 | None of the native identities are fenced | OPEN |',
+            '| P2 | none open but the artifact is missing | OPEN |',
+        ].join('\n');
+        const rows = parseReviewFindings(content);
+        expect(rows.map((row) => row.text)).toEqual([
+            'None of the native identities are fenced',
+            'none open but the artifact is missing',
+        ]);
+    });
     const task = [
         '## 9001. Fixture',
         '',

@@ -6,7 +6,7 @@ status: done
 priority: P2
 tags: []
 created_at: "2026-10-06T17:50:56.789Z"
-updated_at: "2026-10-06T21:47:43.604Z"
+updated_at: "2026-10-21T18:39:51.056Z"
 ---
 
 # P: Decision catalogs and the spur decision noun
@@ -135,6 +135,10 @@ Feature: Decision catalogs and the spur decision noun
 <!-- END AUTO-GENERATED -->
 
 ## Notes
+
+### Current reading — 2026-10-21
+
+P1 implements the production workflow/event adoption originally deferred by this catalog-foundation feature. Decision catalogs and the spur decision noun remain current; the original staged deferrals below are historical.
 
 ## History
 

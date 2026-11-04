@@ -6,7 +6,7 @@ status: done
 priority: P1
 tags: [rd3-migration, wave-3]
 created_at: 2026-06-12T23:45:00.000Z
-updated_at: "2026-10-15T02:22:55.131Z"
+updated_at: "2026-10-21T18:39:47.129Z"
 ---
 
 # H1: spur-dev umbrella skill
@@ -623,6 +623,12 @@ Feature: spur-dev umbrella skill
 <!-- END AUTO-GENERATED -->
 
 ## Notes
+
+### Current reading — 2026-10-21
+
+The delivery/frontier discussion below is historical. Current execution uses the shared workflow engine and task-pipeline owned by D65/D66; completed task history does not replace the feature’s verification receipt.
+
+### Historical notes
 
 The umbrella skill is decomposed by **function**, not by lifecycle phase (ADR-028, task 0161): a thin
 spine dispatches deep competency skills and never inlines them. A phase split (planning vs. execution)

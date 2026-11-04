@@ -6,7 +6,7 @@ status: verifying
 priority: P2
 tags: []
 created_at: "2026-08-13T04:47:58.316Z"
-updated_at: "2026-09-13T02:54:42.462Z"
+updated_at: "2026-10-21T18:35:09.748Z"
 ---
 
 # G4: Inter-agent control plane
@@ -109,6 +109,12 @@ Feature: Inter-agent control plane
 <!-- END AUTO-GENERATED -->
 
 ## Notes
+
+### Current reading — 2026-10-21
+
+G65/G72 retire team carriers and naming while retaining occupant pins, artifacts and identity-pinned waits. All linked implementation tasks are done; feature verification remains a separate evidence gate. Historical team examples do not restore the retired team model.
+
+### Historical notes
 
 Authority: ADR-057 (complements ADR-052; does not change Board composition).
 Mechanism: `docs/03_ARCHITECTURE.md` §17.

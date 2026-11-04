@@ -70,6 +70,10 @@ export function registerSystemEventTap(
         // (they describe capability, not active subscription); tier is the
         // runtime switch — consult it, not the flags.
         if (entry.tier === 'diagnostic' && !diagnosticEnabled) continue;
+        // G11 R3 (ADR-143): InboxService persists `message.*` in the SAME transaction as the
+        // inbox row it describes, so the ledger already holds it. Tapping the bus here would
+        // write a second row for one transition.
+        if (entry.prefix === 'message') continue;
         const handler = (event: unknown) => {
             const actor = extractSystemEventActor(event);
             const p = persist(

@@ -9,7 +9,7 @@ tags:
   - sp-plugin
   - meta
 created_at: "2026-07-17T00:53:58.309Z"
-updated_at: "2026-08-05T22:48:32.933Z"
+updated_at: "2026-10-21T18:39:47.594Z"
 ---
 
 # H4: sp plugin next-layer UX — dev-next router and dogfood hardening
@@ -190,6 +190,13 @@ Feature: sp plugin next-layer UX — wayfinder map N
 <!-- END AUTO-GENERATED -->
 
 ## Notes
+
+### Current reading — 2026-10-21
+
+Later H6 and I-series role charters/facade routing supersede the old super-coder orchestration names and pre-restructure feature aliases below. The next-step router and dogfood hardening remain implemented.
+
+### Historical notes
+
 **Domain context**
 
 - Plugin surface: `plugins/sp/` (commands thin wrappers; logic in skills). Canonical index: `plugins/sp/README.md`.

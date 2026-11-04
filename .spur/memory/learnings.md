@@ -6602,3 +6602,265 @@ Date: 2026-10-16 · Branch: sp/runall-l1-05cd · Tasks: 1218, 1219, 1220 (all do
   doubt**, so the executor never learns about catalogs and a failure to rescue is indistinguishable
   from not rescuing. Redact the full text, *then* tail it — the reverse order can slice a secret.
 
+## Learnings — G11 inbox module (2026-10-20), tasks 1266–1269
+
+### Schema and migration
+
+- A rebuild migration (`DROP TABLE IF EXISTS` + `CREATE`) needs no table-absence guard, and it is the
+  one declared exception to "populated DBs keep their rows": say so in the test that would otherwise
+  assert survival, or the next reader thinks the rebuild is a bug.
+- A new schema constant must not reuse a name a historical migration already exports. `INBOX_MESSAGES_SCHEMA_SQL`
+  was the frozen 0001 DDL; the rebuilt table needed its own name (`INBOX_MESSAGES_TABLE_SQL`).
+- Adding a step to the CLI migration list shifts every count assertion in `migrations.test.ts`
+  (`CLI_MIGRATIONS.length`, per-suite applied counts, journal sizes). Expect to touch ~6 numbers.
+
+### Transactions on Bun SQLite
+
+- `drizzle`'s `db.transaction()` did **not** roll back through the ts-db runtime adapter in a probe: the
+  write survived a thrown callback. An explicit `BEGIN IMMEDIATE` / `COMMIT` / `ROLLBACK` through
+  `adapter.exec()` does roll back, and is what the inbox DAO uses.
+- Two services over one adapter *will* interleave `BEGIN` and throw "cannot start a transaction within a
+  transaction". Serialize with a per-adapter promise chain (`WeakMap<DbAdapter, Promise>`), not a
+  per-DAO mutex — the DAOs are different instances over the same connection.
+
+### Idempotency
+
+- Checking `request_key` and then inserting is a TOCTOU race: the loser gets a raw
+  `UNIQUE constraint failed`. Catch the driver error (prefer the typed `SQLITE_CONSTRAINT_UNIQUE` code,
+  keep the text form as a fallback) and re-read the winner — otherwise a failed dispatch releases a
+  write-slot claim for work that actually went out.
+- Idempotency means the same *request*, not the same key: compare from/to/body/kind before replaying.
+
+### Relay and events
+
+- A bus-less service plus a ledger relay is coherent only if the tap skips the same prefix; otherwise
+  every transition is persisted twice.
+- A relayed row already **is** its v2 envelope, so the SSE handler must render it through
+  `projectStoredSystemEventEnvelope`. Re-building the presentation from its `data` silently strips the
+  summary and fields, and live then disagrees with history for the same row — a confusing bug to chase.
+- Boot snapshot `latestSequence()` before following, or pre-boot history is re-emitted as live.
+
+### CLI surface
+
+- A CLI `main` invocation **closes** its DB connection. A test that seeds and then runs the CLI must
+  share a file-backed `dbUrl`, not an in-memory handle.
+- `FleetService` never reads config from disk: constructed without `spurConfig` it reports `missing` for
+  every project, which turns any orchestrator branch into dead code. Pass `spurConfig` (and `roles`).
+- A test that accepts either outcome (`code === 0 || code === 2`) hides a dead branch. Assert the
+  resolved path and the refusal separately.
+- A wait keyed on "the queue is empty" is not the same as "this message was consumed"; another consumer
+  emptying a different row satisfies the first. Key on the row.
+- Splitting a noun into a folder makes the `require-corresponding-test` rule demand one test file per
+  module; the parity sweeps keep working because the reader concatenates the folder.
+
+### Web / React
+
+- A default prop of `api.inbox` is a **new proxy identity per property access** — as a dependency it
+  re-runs effects forever (measured 4757 requests in 400 ms). Bind the client to a module constant, and
+  test the **no-prop** wiring, which is the production path (`<Active />`).
+- `mock.module` on a relative specifier is forbidden by the repo's `no-leaky-mock-module` rule: add an
+  injectable prop instead of a module mock.
+- Driving a controlled `<textarea>` through `fireEvent.change`/`input` does not update React state under
+  happy-dom + React 19 here; assert structure and cover the calls at the contract layer.
+- A retired top-level route is inferred from `RETIRED_ROUTES`; making it a live tab means deleting the
+  redirect **and** regenerating `board-runtime.json` (`bun run build`), then updating the manifest test.
+
+### Pipeline and process
+
+- `spur task wrapup resolve --tasks` takes a **JSON array** string (`'["1266","1267"]'`), not a CSV.
+- The review stage consumes its answer file: a re-entered review needs the answer re-emitted before the
+  next `continue`, and the stability of `review.status` depends on that file existing at entry.
+- `commit-guard stage` refuses directory arguments: expand new folders to file paths, or the commit
+  silently omits them (this bit twice — `modules/inbox/` and `commands/message/`), and a broken commit
+  reaches the branch. Verify with `git show --stat` after every driver commit.
+- One gate run reported eight 20 s timeouts with 120–630 s wall times purely from machine load; all 105
+  tests passed in isolation and the next idle run was clean. Treat absurd wall times as load, not code.
+- Review as a separate actor pays: 13 real defects across four tasks, three of them invisible to the
+  tests that shipped with the change (a dead resolution branch, a tautological test, an unbounded
+  refetch loop).
+
+## 2026-10-22 — G75 (tasks 1279, 1280, 1281)
+
+### Renewal / process identity (1279)
+- A worktree's shell reports its cwd physically (`/private/var/...`) while a test's `mkdtemp` path is
+  the symlinked form (`/var/...`). Any claim keyed on a caller-supplied cwd therefore fences the
+  *same* process out of its own lease when the caller is a detached child. Fix: key project claims on
+  `normalizeProjectPath(cwd)` (`FleetGuestService.projectPath`), and `realpath` fixtures that assert
+  claim rows. Symptom to recognize: the detached worker exits in <1s with `fence-lost`.
+- `ps -o lstart=` is a stable birth time; `etime` is a duration that drifts between two reads of the
+  same live pid. PID-reuse detection must compare the birth time, never the pid alone.
+- `ps -o comm=` is the LAST column and may contain spaces, while `lstart` is exactly five tokens.
+  Parse positionally from the left (ppid, 5 timestamp tokens, rest = executable); parsing from the
+  right silently mis-slices an executable whose path has spaces.
+- A transient ledger error (`SQLITE_BUSY`) must not end a renewal loop: skip the tick and let the
+  next one re-check identity, record and fence. A renewer that dies on one locked write is worthless.
+- `bun test` runs with a file-backed DB per `main()` call: a detached child reaches the same lease
+  rows only if the test uses a file-backed `dbUrl`. In-memory looks like an immediate fence loss.
+- Commit-msg hooks in a fresh git worktree fail with proto's "untrusted plugin" because trust is keyed
+  by absolute path. Prefixing `PATH=~/.proto/bin:$PATH` lets the real `cog` binary satisfy the hook —
+  do not reach for `--no-verify`.
+
+### Host capability probing (1280)
+- Truncating a `--help` capture before classification turns a hook-capable host into `pull-only`.
+  Classify on the FULL text; record only the one matched line as evidence.
+- Wake-channel precedence is specificity, not wording: a host exposing an App Server endpoint outranks
+  one that merely has a flag with "hook" in its name (Codex advertises
+  `--dangerously-bypass-hook-trust` while its channel is the app server).
+- Evidence lines must be the *positive* documentation of a surface, not the flag that disables it
+  (`--bare Minimal mode: skip hooks` proves hooks exist, not that they can wake a guest).
+- Direct `env-var-hygiene` rule: scripts and fixtures read env through `getEnvVar`/`getEnvVars`, never
+  `process.env` — the rule gate fails the whole task otherwise.
+- A full-gate run alongside another tree's heavy suite can blow a 20s per-test timeout on an unrelated
+  file (`script-absorption PR-9 … budget from db`) and exhaust the remediation budget. Check for a
+  concurrent suite before re-running, and re-run the pipeline rather than widening timeouts.
+
+### Member binding (1281)
+- Fencing one operation is not fencing the resource: the heartbeat fence stopped stale renew/claim, but
+  `retire` still released the *current* owner's claim by record id. Fence the release path too —
+  compare the epoch you still hold, and return early on a superseded occupancy generation.
+- A capability proof that fails closed on `unknown` makes `--member` require an attested executor
+  profile; that is the 0706 R5 contract, not a bug. Document it on the surface where operators meet it.
+- The help-docs parity gates (`apps/cli/tests/help-doc-parity.test.ts`,
+  `plugins/sp/tests/help-docs-parity.test.ts`) enumerate every live CLI flag: a new flag needs a row in
+  `docs/help/` AND `docs/help2/` in the same change, or the gate fails the task.
+- `spur task verdict --from-answer` requires requirement rows keyed by the BARE requirement id (`| R1 |`),
+  not a descriptive label; a descriptive label reads as an unknown id plus a missing row.
+- `spur task residual <wbs> review-gate` reads the `## Review` findings table: an ad-hoc `Severity`
+  column makes every row undecidable and reports a blocking contract violation. Use the super-reviewer
+  shape (`| # | Priority | Dimension | Finding | Location | Disposition |`) and let the dispositions
+  derive the stated `Confidence`.
+
+**Drift repaired** (6 files, all under `docs/`; no task/feature corpus touched, no missing `04` row re-added):
+
+| Doc | Drift (code says / doc said) | Repair |
+| --- | --- | --- |
+| `docs/design/fleet-attached-occupants.md` | `stageEligible` set by bind-time wake probe / doc claimed probe was authoritative; `status: proposed`, "unimplemented"; no `--pin`, `--drain-timeout`, reply-body, deadline, or failure-suite facts | Handshake semantics (`fleet-guest-service.ts:640`), implemented status per §3/§4/§5 (1279/1281/1282), pin exit-2 + handshake-once, attached dispatcher reply contract + 1 h `outcome-unknown` deadline, drain bound + `drained`, task-1282 failure matrix |
+| `docs/design/fleet-task-turn-execution.md` | §6 described `--perf` without the mode selector, gain verdicts or batch-2 probes | Added `--modes` lanes, `attachedComparison` thresholds (`modeGainVerdict`), cross-layer caveat, `batch2Probes` exclusion |
+| `docs/design/cli-contracts.md` | `agent report`/`leave`/`join` signatures documented without `--pin`, `--drain-timeout`, `--member` (1281/1282 CLI surface) | Signature bullets + exit codes + `drained` envelope, `join --member` binding paragraph, pointer to satellite §4 |
+| `docs/04_DESIGN.md` | both fleet rows labelled "proposed" / only §3+§4 implemented | Implemented labels, §5 by 1282, `--modes` lane note — pointers only, no new rows |
+| `docs/03_ARCHITECTURE.md` | fleet binding paragraph stopped at 1281 | `memberAttachments` fail-closed hold, `member-busy`, attached dispatcher over ADR-145 contract, drain + `outcome-unknown` |
+| `docs/00_ADR.md` | ADR-145/146 `Status: Proposed` after full implementation (1273–1283) | `Accepted (implemented 2026-10-26)`; decision text, IDs and dates untouched |
+
+Verification: `spur rule run` 51 rules → 0 findings; `repo-wide-tests/adr-supersession` + workflow-consolidation-absence → 15 pass; help-doc parity (`apps/cli`, `plugins/sp`) → 5 pass; every relative link target in the changed docs resolves; `spur-dev link-check` OK. Not run: full `spur-check-feature` (docs-only change, biome ignores `*.md`).
+
+Skipped: `docs/01_PRD.md`/`02_ROADMAP.md` (no G75/attached references — grep-verified, nothing to sync). Risk: flipping ADR status is a metadata correction, not an amendment — if the operator intends "Proposed" to mean "feature not yet exit-complete", revert those two lines only.
+
+# Working learnings — wrap 1282, 1283
+
+Batch: G75 attached occupants. Tasks captured at
+`.spur/run/e9e66340-b3b0-44ad-b08c-569f1d69365b-wrapup-tasks.json` → `["1282","1283"]`.
+
+## 2026-10-26 — 1282 (attached stage execution, human arbitration, safe detach)
+
+### Handshake beats a bind-time probe
+The written design set `stageEligible` from the binder's host wake probe
+(`bun run fleet-e2e --host-probe`). E2E showed probe-less hosts bound `pull-only` and stayed
+ineligible forever. Fix: keep the probe as a hint (`stageEligible = wake !== null && wake !== 'pull-only'`
+at bind) and let the **first pin-matched lifecycle report** set `handshakeAt` + `stageEligible = true` —
+a session that reports with the binding pin has proven it reads its inbox, which is the only liveness
+fact stages need (`packages/app/src/services/fleet-guest-service.ts:640`). Lesson: a capability probe
+captured once at bind time is a guess; an in-band proof from the live session is the invariant.
+
+### Reuse the existing readiness enum instead of extending it
+Readiness mapped onto `agent report working|idle|blocked` → `recordLifecycle` → `MemberLifecycleState`.
+A `draining` report value was rejected: it is a new public enum value needing consent, and drain is
+internal to `leave`. `draining` lives on the binding record only. Before adding an enum member, check
+whether the state is observable by an existing surface and whether the new value is really a
+transition-local flag.
+
+### Fence before write, write the handshake once
+`agent report` on a bound member refuses a pinless/malformed pin and a stale pin with exit 2 **before**
+any lifecycle write, and `fenceMemberPin` writes `handshakeAt` only if absent (earliest kept). A late
+or racing report must not move the fence timestamp or leak a lifecycle observation from a superseded
+generation (`apps/cli/src/commands/agent/report.ts:55`, `fleet-guest-service.ts:621`).
+
+### Correlated-only completion is the whole safety property
+Only the inbox reply whose `inReplyTo` links the dispatch request and whose body parses as
+`{requestId, attempt, ownerEpoch, occupancyGeneration, artifact?}` certifies a stage. Unlinked, foreign,
+stale or unparseable replies are diagnostic events, never completion — this is exactly the "a delivered
+message is not completed work" invariant, and it needs tests per rejection class (8 unit cases in
+`packages/app/tests/services/attached-turn-dispatch.test.ts`).
+
+### Attached turns have no process to time out
+A human turn has no child process, so the dispatcher deadline bounds only the wait: expiry is
+`outcome-unknown` (resumable), never `failure` (one hour, matching a long human turn). Do not reuse
+supervised-trial semantics where "deadline passed" meant failure.
+
+### Derive the drain bound, then expose it
+`ATTACHED_DRAIN_GRACE_MS = CLAIM_TTL_MS` (30 s) reuses one claim cycle instead of a new magic number,
+and `leave --drain-timeout <ms>` bounds the wait for operators and tests while the default stays the
+design value. Unsettled ⇒ retire anyway, keep the turn resumable, never signal the human-owned process.
+
+### Fail closed on the seam, and wire it for real
+`StrategyContext.memberAttachments` is optional; a read error treats every occupant as un-handshook and
+warns. And the seam had to be supplied by `makeFleetRuntime` — otherwise AC1/AC2 would have been true
+only in tests. Any new optional strategy seam needs a production supplier in the same change.
+
+### Retire fence protects the current owner
+`retire` compares the member's `maxGeneration` and returns early when the record's generation is
+superseded, so a stale binder releases neither the occupant row nor claimed messages.
+
+### Pipeline gotcha (recurring)
+Remediate re-entry clears the run's `-review-answer.txt`, so a resumed task needs a re-touch before the
+review gate re-reads a verdict. Bookkeeping only, no code impact, but it costs a cycle each time.
+
+### Test layout that paid off
+App-level unit matrix for the dispatcher (rejection classes) plus a CLI-level E2E with a fixture occupant
+child process driving `join → report --pin → drain` (6 cases). The E2E is what caught both design
+deviations; unit tests alone would have passed the wrong design.
+
+## 2026-10-26 — 1283 (combined supervised + attached perf receipt)
+
+### Extend the existing receipt driver, never add a harness
+`--modes <csv>` selects `supervised-cold|supervised-warm|attached-ready` inside `fleet-e2e --perf`;
+absent = all, unknown name throws. The receipt schema gained `modes`, `attachedComparison`,
+`batch2Probes` and an optional `attached` measurement. Reuse kept one workload digest across lanes.
+
+### Validate the selector in every entry path
+`perfModesOf` is shared by `parsePerfArgs` and the direct `runFleetE2e` entry — validating only the
+parsed-args path leaves the programmatic entry unguarded.
+
+### Never manufacture a gain
+`modeGainVerdict`: missing measurement ⇒ `inconclusive`; p50 <15% or p95 <10% improvement ⇒
+`convenience-only`; slower ⇒ `no-gain`; only both thresholds ⇒ `material-gain`. Thresholds are labelled
+with the plan as their source because they are provisional. Splitting the under-threshold band into
+`convenience-only` vs `no-gain` is stricter than the AC wording and was accepted as such.
+
+### Say which layers a comparison pairs
+The attached column measures the fleet-task lane; the warm column measures the turn fixture. A verdict
+therefore compares ergonomics across layers and cannot claim a paid-model delta. The pre-existing
+receipt note claiming the lanes were "never mixed" was false and was corrected in the same change —
+when a comparison is cross-layer, the caveat belongs next to the number.
+
+### Batch-2 hosts are qualification rows, not measurements
+`PERF_BATCH2_AGENTS` (grok-build, antigravity-cli) feeds `batch2Probes` only, renders `unsupported` with
+a reason, and is excluded from every gain computation. Keep probe records disjoint from `measured` so
+exclusion is structural, not a filter someone can forget.
+
+### Failure denominators survive the happy path
+The injected-failure trial never answers, aborts at `PERF_ATTACH_FAIL_MS`, records `timed-out` **and
+keeps its duration** in the completion-rate denominator.
+
+### Scope-allowlist gotcha
+`docs/reports/fleet-perf-receipt.{json,md}` brace form parses as a dead prefix in the implement scope
+allowlist; name generated files individually in the task Design.
+
+### Record deferrals instead of silently fixing or hiding them
+Deferred: `--modes ""`/duplicates run zero or doubled lanes and still write an empty receipt exiting 0
+(selector-owned semantics). Accepted as advisory: hardcoded `unsupported` batch-2 status cell, one
+attach timestamp copied into every trial row (per-trial attach overhead not separable), and `attached`
+vs `attached-ready` lane-key naming. Widening the shared measured/processes record to `Partial` was the
+cheap fix for an absent lane.
+
+## Docs wrap conventions applied (both tasks)
+
+- New CLI flags land in `docs/design/cli-contracts.md` (signature + exit codes + JSON additions) **and**
+  in the feature satellite (boundary behavior). 1282 updated `docs/help/*` only — those are covered by
+  help-doc parity tests, while `docs/design/*` are not, so a stale satellite passes CI silently.
+- Satellite metadata must move with content: `fleet-attached-occupants.md` still said
+  `status: proposed` / "unimplemented" and `fleet-task-turn-execution.md` claimed "proposed" in the `04`
+  index row long after the mechanisms shipped.
+- ADR status flip for an implemented decision uses the repo convention
+  `Accepted (implemented YYYY-MM-DD)`, changing no decision text, date, or ID.
+- Do not re-churn `cli-contracts.md` heading anchors: the manual `<a id>` slugs and the `04` links
+  already disagree, and a heading edit multiplies the mismatch.

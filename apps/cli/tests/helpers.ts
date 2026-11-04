@@ -1,6 +1,7 @@
 import { mkdtemp } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import { type InboxClaim, InboxService } from '@gobing-ai/spur-app';
 import { getEnvVars } from '@gobing-ai/spur-config';
 import type { CommandOutput } from '../src/output';
 
@@ -92,4 +93,65 @@ export async function runCli(
         }
     }
     return result;
+}
+
+/**
+ * Inbox fixture for CLI tests (G11 R2): the retired ts-db `InboxMessageDao` surface the CLI
+ * tests seed through, backed by the app-layer `InboxService`.
+ *
+ * Seeds are `kind: 'request'` when keyed (a fleet dispatch) and chat otherwise, and carry the
+ * `task_id` from a `fleet:task:<wbs>:<n>` key — the column that replaced the request-key parse.
+ */
+export function inboxFixture(db: import('@gobing-ai/spur-domain').DbAdapter) {
+    const service = new InboxService({ getDb: async () => db });
+    const claims = new Map<string, InboxClaim>();
+    const claimed = (id: string): InboxClaim => {
+        const claim = claims.get(id);
+        if (claim === undefined) throw new Error(`fixture did not claim message ${id}`);
+        return claim;
+    };
+    const taskIdOf = (requestKey: string) => /^fleet:task:([^:]+):/.exec(requestKey)?.[1];
+    return {
+        /** Seed a chat message; returns its id. */
+        async enqueue(fromId: string | null, toId: string, body: string): Promise<string> {
+            return (await service.send({ from: fromId ?? 'operator', to: toId, body })).message.id;
+        },
+        /** Seed an idempotent request (fleet dispatch / workflow request); returns id + replay flag. */
+        async enqueueIdempotent(fromId: string | null, toId: string, body: string, requestKey: string) {
+            const taskId = taskIdOf(requestKey);
+            const { message, replayed } = await service.send({
+                from: fromId ?? 'operator',
+                to: toId,
+                body,
+                kind: 'request',
+                requestKey,
+                ...(taskId !== undefined ? { taskId } : {}),
+            });
+            return { id: message.id, replayed };
+        },
+        async drainPending(member: string) {
+            const messages = await service.claim(member, 100);
+            for (const message of messages) claims.set(message.id, message);
+            return messages;
+        },
+        async release(ids: string[]) {
+            return service.release(ids.map(claimed));
+        },
+        async markDelivered(id: string) {
+            return service.settle([claimed(id)], 'accepted');
+        },
+        async markFailed(id: string, error: string) {
+            return service.settle([claimed(id)], 'not-started', error);
+        },
+        async getById(id: string) {
+            return service.get(id);
+        },
+        async inbox(member: string, limit = 100) {
+            return (await service.list(member, 'in', { limit })).messages;
+        },
+        async countPending(member: string) {
+            return service.countQueued(member);
+        },
+        service,
+    };
 }

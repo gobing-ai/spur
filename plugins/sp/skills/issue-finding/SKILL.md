@@ -367,6 +367,8 @@ With `--create-task`, include `"task": { "wbs": "…", "file": "…", "status": 
 | `Bash`          | `spur history` + `spur task` CLI     |
 | `Write`         | Temp files for section bodies        |
 
+**Search routing** (hybrid search, ADR-147): concept, cross-file, or "how does X work" questions → semantic first — the zg MCP tool `zvec_grep_search` when the host exposes it, else `spur self search "<query>" --mode fuzzy --json`. Literal, symbol, regex, or exhaustive occurrence lists → `rg`. If zg is absent or the search response carries a `skipped` reason → fall back to `rg`.
+
 ## Platform Notes
 
 - **Claude Code** — invoke via `/sp:dev-find-issue …` or `Skill(skill="sp:issue-finding",

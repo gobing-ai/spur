@@ -77,7 +77,7 @@ const PRIORITY_PATTERN = /^P[1-4]/;
 // regex literals as latin1, silently breaking the class (observed under bun).
 const RANGE_PRIORITY = /^P[1-4]\s*[\u2013\u2014-]\s*P?[1-4]/;
 // Placeholder "no finding" cells, optionally with a trailing "(…)" note; "None of X…" is a real finding.
-const NONE_FINDING = /^(none( found)?|no (findings?|issues?)( found)?|\u2014)\s*(\(.*\))?\.?$/i;
+const NONE_FINDING = /^(none( found| open)?|no (findings?|issues?)( found)?|\u2014)\s*(\(.*\))?\.?$/i;
 const DISPOSITION_HEADER = /^(Disposition|Action|Status|Resolution|Fixed)$/i;
 const RESOLVED_DISPOSITION = /^(FIXED|RESOLVED|DONE)\b/i;
 const DEFERRED_DISPOSITION = /^DEFER(RED)?\b/i;

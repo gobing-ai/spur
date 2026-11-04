@@ -39,6 +39,7 @@
  *   eval-pipeline [args]                        run fixture tasks through a pipeline and record cost/outcome
  *   fleet-e2e [--inject-failure <step>]         prove the inbox-only fleet end to end, write the receipt
  *   fleet-e2e --guest-join-fixture              exercise the R4 pre-1081 guest-join skip arm, write its receipt
+ *   fleet-e2e --perf [--trials <n>]             task 1273 KPI arm: paired stub trials per target agent, receipts in docs/reports/
  *   skill-eval [--fixtures|--json]             run the skill scenarios and render the report
  *
  * The L2–L4 modules are top-level scripts with their own argv contract and exit code, so they run

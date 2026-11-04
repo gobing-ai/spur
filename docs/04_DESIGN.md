@@ -2,10 +2,10 @@
 doc: 04_DESIGN
 owns: SURFACE — index of non-UI CLI, API, config, schema and boundary contracts
 authority: derived
-version: 1.94.0
+version: 1.95.0
 derived_from: [03_ARCHITECTURE, codebase]
 owner: Robin Min
-updated_at: 2026-10-17
+updated_at: 2026-10-26
 read_before: changing a command, flag, env var, or schema
 edit_rules: 99 §6.5
 sync: [T3, T9]
@@ -37,6 +37,7 @@ Root [DESIGN.md](../DESIGN.md) owns visual and interaction design;
 | Planning workflow and operation contracts | [planning-workflow-contracts](design/planning-workflow-contracts.md) |
 | Feature `deprecated` status — frozen lifecycle state and affected surfaces (F42) | [feature-deprecated-status](design/feature-deprecated-status.md) |
 | Task `deprecated` status — frozen task lifecycle state, guards and exempt write set (F43) | [task-deprecated-status](design/task-deprecated-status.md) |
+| Local-first hybrid search — exact (rg) + semantic (zg) over docs and code (feature A34) | [hybrid-search.md](design/hybrid-search.md) |
 | Observability and HTTP read contracts | [observability-contracts](design/observability-contracts.md) |
 | Projects Database tab — read-only table browser over the project database (feature G631) | [projects-database-tab](design/projects-database-tab.md) |
 | Essential workflow checks and observable execution | [essential-workflow-checks.md](design/essential-workflow-checks.md) |
@@ -73,7 +74,6 @@ Root [DESIGN.md](../DESIGN.md) owns visual and interaction design;
 | Workflow consolidation — feature-lifecycle owns verification, wrapup/idea on D65 primitives, three workflows removed (feature D66) | [workflow-consolidation.md](design/workflow-consolidation.md) |
 | Decision catalogs and the `spur decision` noun — layered catalogs, CLI contract (`list`/`show`/`run`/`status`/`outcome`), per-decision maker config, `decisions.outcomeMap` accuracy scoring, staged workflow adoption (features P/P1, ADR-134) | [decision-catalog.md](design/decision-catalog.md) |
 | Decision lifecycle events, decision log table and Board Decisions tab, reliability report, workflow decision-point audit and staged adoption roadmap (feature P1) | [decision-observability-and-adoption.md](design/decision-observability-and-adoption.md) |
-| Inbox Board module — durable message plane — **superseded by ADR-116** (retired by 0849; message plane now in the Projects Conversation tab) | [inbox-board-module.md](design/inbox-board-module.md) |
 | Workflow run log (all-in-one per-run log) | [workflow-run-log.md](design/workflow-run-log.md) |
 | Brainstorm: Workflow observability, traceability, live output, and steering for `spur workflow run` | [brainstorm-workflow-observability-steering.md](design/brainstorm-workflow-observability-steering.md) |
 | Cross-process workflow steering control channel | [workflow-steering-control-channel.md](design/workflow-steering-control-channel.md) |
@@ -83,6 +83,8 @@ Root [DESIGN.md](../DESIGN.md) owns visual and interaction design;
 | Actionable observability context | [actionable-observability-context.md](design/actionable-observability-context.md) |
 | System Events human table projection | [system-events-human-table.md](design/system-events-human-table.md) |
 | Inter-agent control plane | [inter-agent-control-plane.md](design/inter-agent-control-plane.md) |
+| Fleet task turns and measured warm execution (G74, ADR-145; implemented — `fleet-e2e --perf --modes` lane comparison) | [fleet-task-turn-execution.md](design/fleet-task-turn-execution.md) |
+| Verified attached fleet occupants (G75, ADR-146; §3 guest renewal + §4 `join --member` implemented by 1279/1281, §5 attached stages + drain by 1282, probe report `docs/reports/fleet-host-capabilities.json` by 1280) | [fleet-attached-occupants.md](design/fleet-attached-occupants.md) |
 | Historical spine cost/drift measurement — analysis only | [dev-spine-cost-and-drift.md](design/dev-spine-cost-and-drift.md) |
 | Event tracking — System Event 5W1H SSOT | [event-tracking.md](design/event-tracking.md) |
 | E7 run-record contract — implemented (two-file pair, terminal state projection, inline driver setup); Feature E72 Trace tab + run progress route — implemented (2026-10-04) | [run-record-contract.md](design/run-record-contract.md) |
@@ -162,11 +164,11 @@ See [contract detail](design/cli-contracts.md#spur-agent-usage---dry-run---sourc
 
 See [contract detail](design/cli-contracts.md#spur-agent-report---state-workingidleblocked---seq-ns---spec-id---json--spur-agent-join---role-name---id-id---session-id-sid---pid-n---executor-name---json--spur-agent-leave-id---session-id-sid---json).
 
-#### `spur agent wait [<specId>] [--role <name>] [--run <runId>] [--until <state>...] [--inbox <id>] [--timeout <ms>] [--json]` · `spur message send (--to <id>|--role <name>) <body> [--from <id>] [--wait] [--until injected|invoke-exit] [--timeout <ms>] [--json]`
+#### `spur agent wait [<specId>] [--role <name>] [--run <runId>] [--until <state>...] [--inbox <id>] [--timeout <ms>] [--json]` · `spur message send [--to <id>|--role <name>] <body> [--from <id>] [--wait] [--until injected|invoke-exit] [--timeout <ms>] [--json]`
 
 See [contract detail](design/cli-contracts.md#spur-agent-wait-specid---role-name---run-runid---until-state---timeout-ms---json--spur-message-send---to-id--role-name-body---from-id---wait---until-injectedinvoke-exit---timeout-ms---json).
 
-#### `spur message send --to <id> <body> [--from <id>] [--wait] [--until injected|invoke-exit] [--timeout <ms>] [--json]` · `spur message inbox --agent <id> [--json]` · `spur message reply <msg-id> <body> [--json]` · `spur message watch --agent <id> [--interval <ms>] [--json]`
+#### `spur message send [--to <id>] <body> [--from <id>] [--wait] [--until injected|invoke-exit] [--timeout <ms>] [--json]` · `spur message inbox --agent <id> [--json]` · `spur message show <msg-id> [--json]` · `spur message read <msg-id> [--reader <id>] [--json]` · `spur message reply <msg-id> <body> [--json]` · `spur message watch --agent <id> [--interval <ms>] [--json]`
 
 See [contract detail](design/cli-contracts.md#spur-message-send---to-id-body---from-id---wait---until-injectedinvoke-exit---timeout-ms---json--spur-message-inbox---agent-id---json--spur-message-reply-msg-id-body---json--spur-message-watch---agent-id---interval-ms---json).
 
@@ -412,9 +414,9 @@ See [contract detail](design/observability-contracts.md#team--message-http-route
 
 See [contract detail](design/observability-contracts.md#team-routes-appsserversrcmodulesteamindexts).
 
-### Message routes (`apps/server/src/modules/messages/index.ts`)
+### Message routes — retired; typed `inbox` namespace (G11)
 
-See [contract detail](design/observability-contracts.md#message-routes-appsserversrcmodulesmessagesindexts).
+See [contract detail](design/inter-agent-control-plane.md#13-inbox-message-plane-g11-adr-143).
 
 ## Project identity + fleet HTTP routes (0840)
 
@@ -446,9 +448,9 @@ modules, and `/board/projects/work` falls back to the default tab.
 
 See [contract detail](design/project-switcher.md#processes-tab-0852).
 
-## Board request envelope `SPUR-REQUEST/1` (0841)
+## Board request envelope `SPUR-REQUEST/1` (0841) — retired (G11)
 
-See [contract detail](design/project-switcher.md#request-envelope-0841).
+See [retirement note](design/project-switcher.md#request-envelope-0841).
 
 ## Project workflows reading surface (server + web, 2026-09-22)
 

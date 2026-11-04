@@ -55,6 +55,27 @@ them; `--json` makes both emit machine-readable JSON (`--list`: the action rows;
 `docs/design/sdlc-actions.md` for the exact shapes. Exit code `2` means the action is
 unbound, a composite was given arguments, or neither an action nor `--list` was supplied.
 
+## Related: search docs and code
+
+`spur self search <query>` queries the project through both backends and reports the readiness it saw:
+`rg` for exact matches and `zg` for indexed semantic matches (`docs/design/hybrid-search.md` §4,
+ADR-147). A missing or unindexed backend degrades to the exact route with a printed hint.
+
+```bash
+spur self search "how is a paused workflow resumed"   # auto: exact + fuzzy where available
+spur self search Bun.which --mode exact --limit 5     # ripgrep only, capped
+spur self search resum --mode fuzzy --scope docs      # zg only, docs glob set
+spur self search resum --glob '*.md' --regex          # extra glob, pattern query
+spur self search --status                             # rg/zg readiness, no query
+spur self search Bun.which --mode exact --json        # raw SearchResponse payload
+```
+
+Flags: `--mode exact|fuzzy|auto` (default `auto`), `--scope docs|code|all` (default `all`),
+`--limit` 1–100 (default 20), repeatable `--glob`, `--regex`, `--status`, `--json`
+(`--json-envelope` for the ADR-091 envelope). Exit `0` on results, empty results or a degraded fuzzy
+route; `1` on an invalid request or missing/failed rg; `2` when neither a query nor `--status` is
+given.
+
 ## See also
 
 - [init](./init.md) — what status validates was created correctly

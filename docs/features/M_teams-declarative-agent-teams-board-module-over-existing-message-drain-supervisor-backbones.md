@@ -6,7 +6,7 @@ status: deprecated
 priority: P2
 tags: ["wayfinder-map"]
 created_at: "2026-07-14T04:28:15.630Z"
-updated_at: "2026-10-20T01:53:08.778Z"
+updated_at: "2026-10-21T18:35:12.159Z"
 ---
 
 # M: Teams: declarative agent teams + Board module over existing message/drain/supervisor backbones
@@ -46,6 +46,7 @@ plus a Teams Board module — a capstone over existing machinery, not a rebuild.
 <!-- END AUTO-GENERATED -->
 
 ## Notes
+
 ### What this map consolidates (the backbones already exist)
 
 | Requirement | Already built | Real gap |
@@ -72,12 +73,12 @@ Core tension: `agent.executors` (named `{name,agent,model}` presets) and `.spur/
 
 ### Decisions so far
 
-- [0250 Team config schema](docs/tasks2/0250_team-config-schema-shape-of-agent-team-id-name-work-dir-memb.md) — `agent.team` = `Record<teamId, {name, work_dir, autostart?, members[]}>`; members are a **string-or-object union** (bare executor name, or `{executor, id?, purpose?, workspace?, model?, autonomy?, systemPrompt?, command?, autostart?}`); executor resolves **executors-first, raw-agent fallback**; autostart = **team default + per-member override**. Materializes to `AgentSpec` (ticket ### Design). _Id derivation superseded by 0251 → `<teamId>-(member.id ?? executor)`, always prefixed._
+- [0250 Team config schema](../tasks2/0250_team-config-schema-shape-of-agent-team-id-name-work-dir-memb.md) — `agent.team` = `Record<teamId, {name, work_dir, autostart?, members[]}>`; members are a **string-or-object union** (bare executor name, or `{executor, id?, purpose?, workspace?, model?, autonomy?, systemPrompt?, command?, autostart?}`); executor resolves **executors-first, raw-agent fallback**; autostart = **team default + per-member override**. Materializes to `AgentSpec` (ticket ### Design). _Id derivation superseded by 0251 → `<teamId>-(member.id ?? executor)`, always prefixed._
 
-- [0251 Member identity](docs/tasks2/0251_member-identity-unify-member-id-across-inbox-recipient-agent.md) — canonical member id = `<teamId>-<localId>` **always prefixed** (`localId = member.id ?? executor`); the four surfaces (inbox recipient, spec id, supervisor key, coding-agent type) collapse to **one identity + one derivation** (`memberId → spec.type` via the existing drain `--agent` rewrite); `ref: <existing-id>` aliases a legacy spec verbatim (shared inbox+process). Overrode 0250's bare-`member.id` draft.
-- [0252 spur team up/down](docs/tasks2/0252_spur-team-up-down-materialize-roster-into-spur-agents-specs-.md) — provenance via **`spur:generated`** tag (marked specs regenerated/pruned; hand-authored + `ref:` untouched); `team up` = materialize locally + start-autostart-if-server-reachable; `team down` = stop-only (`--purge` removes generated); `status` groups by `team:<id>`; drift = roster ⇄ marked-spec diff. Surfaced: per-member `command` can't round-trip (route via `config.command` + supervisor fix); autostart env→config wiring handed to the lifecycle ticket.
+- [0251 Member identity](../tasks2/0251_member-identity-unify-member-id-across-inbox-recipient-agent.md) — canonical member id = `<teamId>-<localId>` **always prefixed** (`localId = member.id ?? executor`); the four surfaces (inbox recipient, spec id, supervisor key, coding-agent type) collapse to **one identity + one derivation** (`memberId → spec.type` via the existing drain `--agent` rewrite); `ref: <existing-id>` aliases a legacy spec verbatim (shared inbox+process). Overrode 0250's bare-`member.id` draft.
+- [0252 spur team up/down](../tasks2/0252_spur-team-up-down-materialize-roster-into-spur-agents-specs-.md) — provenance via **`spur:generated`** tag (marked specs regenerated/pruned; hand-authored + `ref:` untouched); `team up` = materialize locally + start-autostart-if-server-reachable; `team down` = stop-only (`--purge` removes generated); `status` groups by `team:<id>`; drift = roster ⇄ marked-spec diff. Surfaced: per-member `command` can't round-trip (route via `config.command` + supervisor fix); autostart env→config wiring handed to the lifecycle ticket.
 
-- [0253 Team lifecycle over supervisor](docs/tasks2/0253_team-lifecycle-over-supervisor-self-drain-keep-alive-autosta.md) — keep-alive = **loop wrapper (persistent) + supervisor restart-on-crash** (loop: `drainPending → run → idle-sleep`); crash policy = **exp backoff (cap 30s) + max 5 retries → `errored`**; autostart = **derive from `agent.team.*.autostart` at boot + `team up`, env overrides**. Key fix: `--drain` must call the consuming `drainPending` (queued→injected), not `getInbox` — else the loop re-prepends forever.
+- [0253 Team lifecycle over supervisor](../tasks2/0253_team-lifecycle-over-supervisor-self-drain-keep-alive-autosta.md) — keep-alive = **loop wrapper (persistent) + supervisor restart-on-crash** (loop: `drainPending → run → idle-sleep`); crash policy = **exp backoff (cap 30s) + max 5 retries → `errored`**; autostart = **derive from `agent.team.*.autostart` at boot + `team up`, env overrides**. Key fix: `--drain` must call the consuming `drainPending` (queued→injected), not `getInbox` — else the loop re-prepends forever.
 
 _The remaining forks were locked in the discovery interview (above); this log gains one line per ticket (0254–0256) as it closes._
 
@@ -136,6 +137,7 @@ testable AC · Design · Plan), staying `todo`. Two decisions locked during refi
 
 The earlier backend-impl gap is **now closed** by 0257 (schema) + 0258 (runtime). 0256 is now **thin routes** —
 its service methods live in 0258 per ADR-021 (logic in `packages/app`, apps thin).
+
 ## History
 
 - 2026-07-25T19:33:19.292Z backlog → active (system)

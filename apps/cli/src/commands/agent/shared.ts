@@ -1,17 +1,23 @@
-import { dirname, resolve } from 'node:path';
+import { dirname, join, resolve } from 'node:path';
 import {
     AgentCoordinationService,
     type AgentLoopDeps,
     type AgentLoopRuntime,
     type AgentRunDeps,
+    capabilityDiagnostic,
     DEFAULT_LOOP_POLL_MS,
     DeliveryReconciler,
+    evaluateCapabilities,
     FINDING_CODES,
     FleetDispatcher,
     FleetGuestService,
     FleetService,
+    type InboxClaim,
+    InboxService,
     isPortLive,
-    MAX_INJECT_ATTEMPTS,
+    MAX_DELIVERY_ATTEMPTS,
+    MEMBER_BINDING_CAPABILITIES,
+    type MemberAttachmentState,
     normalizeProjectPath,
     ProjectRegistry,
     resolvePlanningFolders,
@@ -20,7 +26,7 @@ import {
     SUPERVISOR_RUN_MARKER,
 } from '@gobing-ai/spur-app';
 import { ExecutorDisabledError, type ProjectEntry, resolveExecutor } from '@gobing-ai/spur-config';
-import { CoordinationRunDao, InboxMessageDao, type MemberSessionObservation } from '@gobing-ai/spur-domain';
+import { CoordinationRunDao, type MemberSessionObservation } from '@gobing-ai/spur-domain';
 import { type AgentSpec, isAgentName } from '@gobing-ai/ts-ai-runner';
 import type { CliContext } from '../../context';
 import { toEnvelopeJson, writeJsonError } from '../../output';
@@ -145,6 +151,42 @@ export function guestService(context: CliContext): FleetGuestService {
         getDb: () => context.getDb(),
         declaredMemberIds: async () =>
             (await new AgentCoordinationService(context).listFleetMembers()).map((m) => m.instanceId),
+        resolveDeclaredMember: async (memberId) => {
+            const member = (await new AgentCoordinationService(context).listFleetMembers()).find(
+                (entry) => entry.instanceId === memberId,
+            );
+            if (member === undefined) return null;
+            return {
+                instanceId: member.instanceId,
+                ...(member.role !== undefined ? { role: member.role } : {}),
+                executor: member.executor,
+                enabled: member.enabled,
+            };
+        },
+        // R1 proof: the declared executor must attest the stage axes. Missing attestation is
+        // `unknown`, which never satisfies a requirement (0706 R5) — refuse, don't downgrade.
+        attestMemberCapabilities: async (member) => {
+            const config = await context.loadAgentConfig(context.cwd);
+            const profile = config?.agent?.executors?.find((entry) => entry.name === member.executor);
+            const evaluation = evaluateCapabilities(MEMBER_BINDING_CAPABILITIES, profile);
+            return evaluation.ok
+                ? { ok: true, detail: 'all stage axes attested' }
+                : { ok: false, detail: capabilityDiagnostic(member.executor, evaluation) };
+        },
+        // Stage eligibility comes from 1280's installed-host report: a `pull-only` host may bind
+        // for messages but can never be handed a stage.
+        hostWake: async (executor) => {
+            const report = join(context.cwd, 'docs', 'reports', 'fleet-host-capabilities.json');
+            try {
+                const parsed = JSON.parse(await context.fs.readFile(report)) as {
+                    hosts?: Array<{ agent?: string; mode?: string; wake?: string }>;
+                };
+                const row = parsed.hosts?.find((entry) => entry.agent === executor && entry.mode === 'interactive');
+                return row?.wake ?? null;
+            } catch {
+                return null;
+            }
+        },
     });
 }
 
@@ -358,32 +400,32 @@ export async function runAgentLifecycle(
  */
 export async function settleClaimedMessages(
     context: CliContext,
-    claimed: string[],
+    claimed: InboxClaim[],
     outcome: 'accepted' | 'not-started',
 ): Promise<void> {
     if (claimed.length === 0) return;
-    const coordination = new AgentCoordinationService(context);
+    const inbox = new InboxService({ getDb: () => context.getDb() });
     if (outcome === 'accepted') {
-        await coordination.settleDelivered(claimed);
+        await inbox.settle(claimed, 'accepted');
         return;
     }
     // Not started: release within the claim budget, else a queryable terminal failure.
-    const dao = new InboxMessageDao(await context.getDb());
-    const releasable: string[] = [];
-    const exhausted: string[] = [];
-    for (const id of claimed) {
-        const row = await dao.getById(id);
+    const releasable: InboxClaim[] = [];
+    const exhausted: InboxClaim[] = [];
+    for (const claim of claimed) {
+        const row = await inbox.get(claim.id);
         // Already settled on another path (e.g. the live stdin-injection delivery)
         // or gone — never re-settle someone else's row.
-        if (row?.status !== 'injected') continue;
-        if (row.injectAttempts >= MAX_INJECT_ATTEMPTS) exhausted.push(id);
-        else releasable.push(id);
+        if (row?.status !== 'claimed' || row.attempts !== claim.attempts) continue;
+        if (row.attempts >= MAX_DELIVERY_ATTEMPTS) exhausted.push(claim);
+        else releasable.push(claim);
     }
-    if (releasable.length > 0) await coordination.releasePending(releasable);
-    for (const id of exhausted) {
-        await coordination.settleFailed(
-            [id],
-            `delivery not accepted: invocation never started after ${MAX_INJECT_ATTEMPTS} inject attempts`,
+    if (releasable.length > 0) await inbox.release(releasable);
+    if (exhausted.length > 0) {
+        await inbox.settle(
+            exhausted,
+            'not-started',
+            `delivery not accepted: invocation never started after ${MAX_DELIVERY_ATTEMPTS} inject attempts`,
         );
     }
 }
@@ -410,7 +452,7 @@ export async function drainIntoPrompt(
 ): Promise<{
     prompt: string | undefined;
     flags: Record<string, string | boolean>;
-    claimed: string[];
+    claimed: InboxClaim[];
     /** Claimed rows' request keys (G71 R1) — a `fleet:task:*` key selects the keyed drain path. */
     requestKeys?: Array<string | null>;
 }> {
@@ -430,32 +472,37 @@ export async function drainIntoPrompt(
     // `--spec` without `--drain`: address the occupant, leave the inbox alone.
     if (flags.drain !== true) return { prompt, flags: flagsOut, claimed: [] };
 
-    const inbox = await coordination.drainPending(recipient, flags.singleMessage === true ? { limit: 1 } : undefined);
-    if (inbox.count === 0) return { prompt, flags: flagsOut, claimed: [] };
+    // G11 R5/R10: the drain claims through InboxService — the single writer charges the delivery
+    // budget and writes each row's `message.claimed` event in the same transaction.
+    const claimedRows = await new InboxService({ getDb: () => context.getDb() }).claim(
+        recipient,
+        flags.singleMessage === true ? 1 : 100,
+    );
+    if (claimedRows.length === 0) return { prompt, flags: flagsOut, claimed: [] };
 
-    const header = inbox.messages.map((m) => `- ${m.fromId ?? 'operator'}: ${m.body}`).join('\n');
+    const header = claimedRows.map((m) => `- ${m.fromId || 'operator'}: ${m.body}`).join('\n');
     const block = `Pending messages:\n${header}`;
     const merged = prompt === undefined ? block : `${block}\n\n${prompt}`;
-    const claimed = inbox.messages.map((m) => m.id);
+    const claimed = claimedRows.map(({ id, attempts }) => ({ id, attempts }));
     // G71 R1: a claimed fleet dispatch names its task, so the run's completion receipt
     // (`coordination_runs.task_id`) is attributable and the strategy's freshness read
     // sees the attempt. A keyless drain leaves `task` untouched.
-    const fleetTask = inbox.messages
-        .map((message) => /^fleet:task:([^:]+):[1-9][0-9]*$/.exec(message.requestKey ?? '')?.[1])
+    const fleetTask = claimedRows
+        .map((message) => message.taskId ?? /^fleet:task:([^:]+):[1-9][0-9]*$/.exec(message.requestKey ?? '')?.[1])
         .find((wbs) => wbs !== undefined);
     // 1076 R3 (ADR-132): a workflow dispatch key `<runId>/<state>` names the run that dispatched
     // this turn, which is the lineage edge `spur agent trace` walks. The fleet's own
     // `fleet:task:<wbs>:<n>` keys are retry attempts, not lineage, so they are excluded.
-    const parentRunId = inbox.messages
-        .map((message) => /^([^:/][^/]*)\/[^/]+$/.exec(message.requestKey ?? '')?.[1])
+    const parentRunId = claimedRows
+        .map((message) => message.parentRunId ?? /^([^:/][^/]*)\/[^/]+$/.exec(message.requestKey ?? '')?.[1])
         .find((runId) => runId !== undefined);
     // 0833: the same ids ride into executeRun as the requestMessage flag (comma-
     // joined, dual spelling per the sessionDir convention) so the exit sink can
     // persist the run↔message receipt.
-    const requestMessage = claimed.join(',');
+    const requestMessage = claimed.map((claim) => claim.id).join(',');
     // G71 R1: the loop decides between the stdin path and the run path from the batch's
     // request keys, so the claimed rows' keys ride out with the drain result.
-    const requestKeys = inbox.messages.map((message) => message.requestKey ?? null);
+    const requestKeys = claimedRows.map((message) => message.requestKey);
     return {
         prompt: merged,
         flags: {
@@ -524,7 +571,10 @@ export function parseTimeout(raw: string | boolean | undefined): number | undefi
 }
 
 /** Build the fleet strategy runtime (coordination + delivery seams) over this CLI context. */
-export async function makeFleetRuntime(context: CliContext): Promise<StrategyRuntime> {
+export async function makeFleetRuntime(
+    context: CliContext,
+    emitPhase?: import('@gobing-ai/spur-app').FleetPhaseEmit,
+): Promise<StrategyRuntime> {
     const coordination = new AgentCoordinationService(context);
     return new StrategyRuntime({
         openDb: () => context.getDb(),
@@ -544,6 +594,7 @@ export async function makeFleetRuntime(context: CliContext): Promise<StrategyRun
                     new CoordinationRunDao(await context.getDb()).listByMessageId(messageId),
             },
         }),
+        ...(emitPhase ? { emitPhase } : {}),
         ready: async (candidate) => {
             const check = await makeCheckService(context);
             const result = await check.check(candidate.filePath, candidate.wbs, { asStatus: 'wip', strict: true });
@@ -555,6 +606,29 @@ export async function makeFleetRuntime(context: CliContext): Promise<StrategyRun
             const { foldersConfig } = await resolvePlanningFolders(context.fs);
             const check = await makeCheckService(context);
             return await check.firstBlockingPrerequisite(context.fs.resolve(foldersConfig.active_folder), wbs);
+        },
+        // G11 R3: guest leases expire on the write side of the tick, beside the reconcile. The
+        // requests read no longer terminates a guest, so this is the one owner of that write.
+        guestExpiry: async () => await guestService(context).expire(),
+        // Task 1282 (design §5): attached-occupant binding facts ride every tick — a bound
+        // occupant mid-human-turn, never handshook, or draining is never dispatched to.
+        memberAttachments: async (instanceIds) => {
+            const guests = guestService(context);
+            const map = new Map<string, MemberAttachmentState | null>();
+            for (const id of instanceIds) {
+                const binding = (await guests.read(id))?.memberBinding;
+                map.set(
+                    id,
+                    binding === undefined
+                        ? null
+                        : {
+                              handshake: binding.handshakeAt !== undefined,
+                              draining: binding.draining === true,
+                              stageEligible: binding.stageEligible,
+                          },
+                );
+            }
+            return map;
         },
     });
 }
@@ -592,7 +666,7 @@ export async function runAgentLoop(
         fleet,
         // 1076 R2: a supervised loop is a child process, so the run tag crosses as a stdout control line.
         setSupervisorRun: (_agentId, runId) => context.output.write(`${SUPERVISOR_RUN_MARKER}${runId ?? ''}`),
-        makeStrategyRuntime: () => makeFleetRuntime(context),
+        makeStrategyRuntime: (emitPhase) => makeFleetRuntime(context, emitPhase),
         listAgentSpecs: () => new AgentCoordinationService(context).listAgentSpecs(),
         reconciler: new DeliveryReconciler(context),
         drain: (drainFlags) => drainIntoPrompt(undefined, context, { ...drainFlags, drain: true }),

@@ -17,7 +17,7 @@ import type { CliContext } from '../../context';
 import { maybeTriggerHistoryRefresh } from '../../history-refresh';
 import { toEnvelopeJson, writeJsonError } from '../../output';
 import { attachSystemEventLedger } from '../../system-event-ledger';
-import { resolveSpurBin } from '../../workflow/resolve-spur-bin';
+import { resolveSpurArgv } from '../../workflow/resolve-spur-bin';
 import { SHARED_OPTIONS } from '../shared-options';
 import {
     asyncRegisterTimeoutMs,
@@ -225,7 +225,7 @@ export function registerWorkflowContinueCommand(workflow: Command, context: CliC
                         if (json) cmd.push('--json');
                         if (options.jsonEnvelope === true) cmd.push('--json-envelope');
                         if (options.log === false) cmd.push('--no-log');
-                        await spawnAsyncWorkflowWorker(resolveSpurBin(), cmd);
+                        await spawnAsyncWorkflowWorker(resolveSpurArgv(), cmd);
                         const started = await waitForResumeClaim(
                             svc,
                             targetId,

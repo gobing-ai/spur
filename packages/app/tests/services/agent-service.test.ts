@@ -1740,6 +1740,7 @@ describe('AgentService.runTraced', () => {
         );
 
         await service.run('direct prompt', { agent: 'pi', 'run-id': 'direct-run' }, deps);
+        // Task 1273: phase marks ride `fleet.phase.*`, never the `agent.execution` stream.
         expect(directEvents.map((event) => event.kind)).toEqual(['started', 'output', 'finished']);
         expect(directEvents.every((event) => event.runId === 'direct-run')).toBe(true);
         expect(JSON.stringify(directEvents)).not.toContain('configured-secret');
@@ -1750,7 +1751,11 @@ describe('AgentService.runTraced', () => {
             observer: (event) => workflowEvents.push(event),
             heartbeatMs: 0,
         });
-        expect(workflowEvents.map((event) => event.kind)).toEqual(['started', 'output', 'finished']);
+        // Task 1273: the workflow observer additionally receives the lifecycle phase marks.
+        // The mock publishes no pid, so process-ready is absent here; first-output precedes
+        // the delivered output event (the mark fires at first enqueue) and terminal lands
+        // just before the finished outcome.
+        expect(workflowEvents.map((event) => event.kind)).toEqual(['started', 'phase', 'output', 'phase', 'finished']);
         expect(workflowEvents.every((event) => event.actionId === 'action-1')).toBe(true);
     });
 
@@ -4790,7 +4795,7 @@ describe('AgentService.doctor session capability surface (B8 / task 0889)', () =
         const doctorRunner = {
             runAll: mock(() =>
                 Promise.resolve([
-                    mockDoctorResult({ agent: 'codex-exec', version: '0.155.1' }),
+                    mockDoctorResult({ agent: 'codex-exec', version: '0.164.0' }),
                     mockDoctorResult({ agent: 'mystery-exec', version: '1.2.3' }),
                 ]),
             ),
@@ -4805,10 +4810,10 @@ describe('AgentService.doctor session capability surface (B8 / task 0889)', () =
         expect(parsed.agents[0].capabilities).toEqual({
             supportsResumeById: true,
             supportsSessionDir: false,
-            supportsPersistentStdin: false,
+            supportsPersistentStdin: true,
             supportsStructuredOutput: true,
-            verifiedAgainst: '0.155.1',
-            note: 'no session-dir flag — sessionDir is ignored; `exec` carries one prompt arg (stdin `-` is one-shot), so no multi-turn stdin',
+            verifiedAgainst: '0.164.0',
+            note: 'no session-dir flag — sessionDir is ignored; warm turns go through `app-server` (turn-session driver), one-shot/`exec resume` through the shim argv',
         });
         // Fresh version → no staleness.
         expect(parsed.agents[0].capabilityStale).toBeNull();
@@ -4830,7 +4835,7 @@ describe('AgentService.doctor session capability surface (B8 / task 0889)', () =
         await svc.doctor({ json: true }, { doctorRunner });
 
         const parsed = JSON.parse(lines.find((l) => l.includes('"agents"')) ?? '');
-        expect(parsed.agents[0].capabilityStale).toEqual({ verifiedAgainst: '0.155.1', detected: '0.999.0' });
+        expect(parsed.agents[0].capabilityStale).toEqual({ verifiedAgainst: '0.164.0', detected: '0.999.0' });
     });
 
     test('R5: stale executor warns on stderr and marks the CAPS cell in text mode', async () => {
@@ -4848,10 +4853,10 @@ describe('AgentService.doctor session capability surface (B8 / task 0889)', () =
 
         const table = lines.join('\n');
         expect(table).toContain('CAPS');
-        // codex record: resume ✓, dir ✗, stdin ✗, structured ✓ — plus the stale marker.
-        expect(table).toContain('r✓d✗s✗o✓⚠');
+        // codex record: resume ✓, dir ✗, stdin ✓, structured ✓ — plus the stale marker.
+        expect(table).toContain('r✓d✗s✓o✓⚠');
         expect(errors.some((e) => e.includes('capability-declaration-stale'))).toBe(true);
-        expect(errors.some((e) => e.includes('codex-exec') && e.includes('0.999.0') && e.includes('0.155.1'))).toBe(
+        expect(errors.some((e) => e.includes('codex-exec') && e.includes('0.999.0') && e.includes('0.164.0'))).toBe(
             true,
         );
     });
@@ -4862,7 +4867,7 @@ describe('AgentService.doctor session capability surface (B8 / task 0889)', () =
             executors: [{ name: 'pi-exec', agent: 'pi', disabled: false }],
         } as AgentConfig);
         const doctorRunner = {
-            runAll: mock(() => Promise.resolve([mockDoctorResult({ agent: 'pi-exec', version: '0.87.0' })])),
+            runAll: mock(() => Promise.resolve([mockDoctorResult({ agent: 'pi-exec', version: '0.87.1' })])),
             runOne: mock(() => Promise.resolve(mockDoctorResult())),
         } as unknown as AgentRunDeps['doctorRunner'];
 
@@ -4878,8 +4883,8 @@ describe('AgentService.doctor session capability surface (B8 / task 0889)', () =
         // Regression: pre-0899 exact compare false-positived on every real install
         // (`2.1.274 (Claude Code)`, `codex-cli 0.154.0`, `OpenClaw 2026.6.11 (e085fa1)`).
         const cases = [
-            { name: 'claude-exec', agent: 'claude', version: '2.1.278 (Claude Code)' },
-            { name: 'codex-exec', agent: 'codex', version: 'codex-cli 0.155.1' },
+            { name: 'claude-exec', agent: 'claude', version: '2.1.308 (Claude Code)' },
+            { name: 'codex-exec', agent: 'codex', version: 'codex-cli 0.164.0' },
             { name: 'omp-exec', agent: 'omp', version: 'omp/18.2.3' },
             { name: 'openclaw-exec', agent: 'openclaw', version: 'OpenClaw 2026.6.11 (e085fa1)' },
             { name: 'ds-exec', agent: 'deepseek', version: 'deepseek-cli 0.1.5-rc.1' },
@@ -4957,7 +4962,7 @@ describe('AgentService.doctor session capability surface (B8 / task 0889)', () =
         const warning = errors.find((e) => e.includes('capability-declaration-stale'));
         expect(warning).toBeDefined();
         expect(warning).toContain('"codex-cli 0.999.0" (core 0.999.0)');
-        expect(warning).toContain('"0.155.1" (core 0.155.1)');
+        expect(warning).toContain('"0.164.0" (core 0.164.0)');
     });
 });
 

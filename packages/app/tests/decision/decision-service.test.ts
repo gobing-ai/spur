@@ -6,9 +6,25 @@ import { getEnvVar, removeEnvVar, setEnvVar } from '@gobing-ai/spur-config';
 import type { CreateDecisionLogInput } from '@gobing-ai/spur-domain';
 import { DecisionHub } from '@gobing-ai/ts-ai-decision';
 import { EventBus } from '@gobing-ai/ts-infra';
-import { LayaWorkerClient } from '@gobing-ai/ts-laya-mlx';
 
 import { DecisionService, disposeDecisionServices, getDecisionService } from '../../src/decision/decision-service';
+
+/** `laya-local` is Apple-Silicon macOS only; the client's own host check enforces it. */
+const NON_LAY_HOST = process.platform !== 'darwin' || process.arch !== 'arm64';
+
+interface LayaWorkerClientLike {
+    ask(state: string, questions: Record<string, unknown>): Promise<unknown>;
+    dispose(): void;
+}
+
+/** Variable specifier: `@gobing-ai/ts-laya-mlx` is a darwin-only optional dependency (ADR-041),
+ * so a static import breaks typecheck on Linux and module loading on Windows. The class is only
+ * reachable inside `skipIf(NON_LAY_HOST)` tests, where the package is guaranteed installed. */
+const LAYA_MLX_PACKAGE = '@gobing-ai/ts-laya-mlx';
+async function layaWorkerClientPrototype(): Promise<LayaWorkerClientLike> {
+    const mod = (await import(LAYA_MLX_PACKAGE)) as { LayaWorkerClient: new () => LayaWorkerClientLike };
+    return mod.LayaWorkerClient.prototype;
+}
 
 const newRoot = async (): Promise<string> => mkdtemp(join(tmpdir(), 'spur-decision-service-'));
 
@@ -222,9 +238,6 @@ const LAYA_WORKER_RESULT = {
     },
 };
 
-/** `laya-local` is Apple-Silicon macOS only; the client's own host check enforces it. */
-const NON_LAY_HOST = process.platform !== 'darwin' || process.arch !== 'arm64';
-
 /**
  * `spur decision run` against `laya-local` used to print its result and then hang forever: the
  * driver holds a warm Python worker "for the client's lifetime", exposes no disposal seam, and the
@@ -238,8 +251,9 @@ describe('DecisionService — laya-local worker lifecycle', () => {
         roots.push(root);
         await writeCatalog(root, 'laya.yaml', LAYA_CATALOG);
         const service = await getDecisionService(null, root, join(root, 'shared'));
-        const ask = spyOn(LayaWorkerClient.prototype, 'ask').mockResolvedValue(LAYA_WORKER_RESULT);
-        const dispose = spyOn(LayaWorkerClient.prototype, 'dispose');
+        const proto = await layaWorkerClientPrototype();
+        const ask = spyOn(proto, 'ask').mockResolvedValue(LAYA_WORKER_RESULT);
+        const dispose = spyOn(proto, 'dispose');
         try {
             await expect(service.decide('pick-lane', {}, { maker: 'laya-local' })).resolves.toMatchObject({
                 value: 'fast',
@@ -264,8 +278,9 @@ describe('DecisionService — laya-local worker lifecycle', () => {
         roots.push(root);
         await writeCatalog(root, 'laya.yaml', LAYA_CATALOG);
         const service = await getDecisionService(null, root, join(root, 'shared'));
-        const ask = spyOn(LayaWorkerClient.prototype, 'ask').mockResolvedValue(LAYA_WORKER_RESULT);
-        const dispose = spyOn(LayaWorkerClient.prototype, 'dispose');
+        const proto = await layaWorkerClientPrototype();
+        const ask = spyOn(proto, 'ask').mockResolvedValue(LAYA_WORKER_RESULT);
+        const dispose = spyOn(proto, 'dispose');
         try {
             await expect(service.probeMaker('maker-liveness', 'laya-local', {}, 1_000)).resolves.toMatchObject({
                 maker: 'laya-local',

@@ -28,6 +28,9 @@ describe('shared option registry parity', () => {
     // D65 1242: the `runIdInline` entry left the registry with the `spur workflow inline` group it
     // served. The flag-string SET is unchanged at 28 — `--run-id <id>` is still contributed by
     // `runIdTask`/`runIdWorkflow` — so only the registry (checked below) lost an entry.
+    // 1286: `--status` (boolean, `spur self search`) is a distinct flag string from the
+    // `--status <s>` filter family, so it stays a literal declaration — registering the
+    // bare form would make every `--status <s>` literal read as a shared-flag re-declaration.
     test('SHARED_OPTION_FLAGS covers exactly 28 shared flag strings', () => {
         expect(SHARED_OPTION_FLAGS.size).toBe(28);
     });

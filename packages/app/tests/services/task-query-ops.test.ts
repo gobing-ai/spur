@@ -171,3 +171,16 @@ describe('TaskQueryOps.resolve / getFilePath', () => {
         expect(await q.getFilePath('0999')).toBeNull();
     });
 });
+
+describe('1271 — canonical task metadata projection', () => {
+    test('legacy feature links and status casing project canonically without rewriting raw metadata', async () => {
+        writeTask('0090_legacy.md', 'name: Legacy\nstatus: Done\nfeature-id: F1');
+        const q = ops();
+        const shown = await q.show('0090');
+        expect(shown.status).toBe('done');
+        expect(shown.feature_id).toBe('F1');
+        expect(shown.frontmatter.status).toBe('Done');
+        expect(shown.frontmatter['feature-id']).toBe('F1');
+        expect((await q.list({ status: 'done', featureId: 'F1' })).map((task) => task.wbs)).toEqual(['0090']);
+    });
+});

@@ -46,7 +46,7 @@ Pick the noun, read its reference. Each Tier A and Tier B reference owns that no
 | **Tier A** | **workflow** | Dual-mode workflow runtime: author state-machine / transition-flow workflows, validate, run, read traces | [references/workflows.md](references/workflows.md) |
 | **Tier A** | **builder** | Release/PR plumbing: `bump-ver` (including read-only `--check`), `drop-tags`, `publish`, the four flat PR verbs (`pr-status`, `pr-check`, `pr-open`, `pr-review`), and the read-only `show-branches` topology report | [references/builder.md](references/builder.md) |
 | **Tier B** | **agent** | Coding-agent execution surface: run prompts via detected/named agents, list agent specs (incl. `agent.fleet` members), start/stop supervised processes, fleet `report`/`join`/`leave`/`wait`/`trace`, readiness check | [references/agent.md](references/agent.md) |
-| **Tier B** | **message** | Durable inter-agent messaging: send, inbox, reply, watch | [references/message.md](references/message.md) |
+| **Tier B** | **message** | Durable inter-agent messaging: send, inbox, show, read, reply, watch | [references/message.md](references/message.md) |
 | **Tier B** | **self** | Self-management verbs: scaffold (`init`), project SDLC actions (`exec`), database maintenance (`maintain`), schema migrations (`migrate`), local web server (`serve`), status overview (`status`); `self init` runs post-scaffold validation probes & layout classification | [references/self.md](references/self.md) |
 | **Tier B** | **history** | Import agent histories, aggregate forensic artifacts, render reports, and run the checkpoint-resumed daily pipeline | [references/history.md](references/history.md) |
 | **Tier B** | **projects** | Manage the local multi-project registry and start/stop project servers | [references/projects.md](references/projects.md) |
@@ -162,7 +162,7 @@ and spreading it; full contract in `docs/04_DESIGN.md` §1.0.1.
   `list --specs`, `start`/`stop`). Cross-references the
   [dispatch-surface rule](../parallel-execution/references/dispatch-surface.md).
 - **[references/message.md](references/message.md)** - durable inter-agent messaging (`send`,
-  `inbox`, `reply`, `watch`).
+  `inbox`, `show`, `read`, `reply`, `watch`).
 - **[references/decision.md](references/decision.md)** - decision catalog (`list`, `show`, `run`,
   `status`); with no reachable backend each decision serves its declared fallback. Authoring and
   tuning: [references/decision/lifecycle.md](references/decision/lifecycle.md).

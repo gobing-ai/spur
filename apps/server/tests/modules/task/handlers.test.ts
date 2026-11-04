@@ -33,10 +33,11 @@ describe('task handlers', () => {
                         wbs: '0001',
                         name: 'Test',
                         status: 'todo',
+                        feature_id: 'A1',
                         filePath: '/test/0001.md',
                         frontmatter: {
                             priority: 'P1',
-                            feature_id: 'A1',
+                            'feature-id': 'A1',
                             parent_wbs: '0000',
                             type: 'task',
                             updated_at: '2026-06-13T00:00:00.000Z',

@@ -37,7 +37,10 @@ jobs:
               run: npm install -g npm@^11.5.1
 
             - name: Install dependencies
-              run: bun install --frozen-lockfile
+              # --os='*': ts-laya-mlx is a darwin-only optional dependency (ADR-041) that
+              # build:bundle (literal import) and bundle-laya-worker must resolve on this
+              # Linux runner; the flag installs every platform's optional packages.
+              run: bun install --frozen-lockfile --os='*'
 
             # Release gate for the plugin standalone contract (AGENTS.md): plugins/sp
             # bundled surfaces must install on targets with no node_modules — the class

@@ -6,7 +6,7 @@ status: verifying
 priority: P2
 tags: []
 created_at: "2026-09-15T05:09:07.437Z"
-updated_at: "2026-09-15T18:00:59.878Z"
+updated_at: "2026-10-21T18:35:11.141Z"
 ---
 
 # G65: Fleet declaration in spur config
@@ -127,6 +127,10 @@ Feature: Fleet declaration in spur config
 <!-- END AUTO-GENERATED -->
 
 ## Notes
+
+### Current reading — 2026-10-21
+
+G72 supersedes spec materialization: FleetService.specs derives enabled fleet specs in memory, without writing .spur/agents. agent.fleet declaration, enabled gating and strategy reconciliation remain current.
 
 ## History
 

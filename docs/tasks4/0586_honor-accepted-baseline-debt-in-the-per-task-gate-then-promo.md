@@ -3,7 +3,7 @@ template: feature-impl
 schema_version: 1
 name: "Honor accepted baseline debt in the per-task gate, then promote anchor-subject-mismatch to error"
 description: ""
-status: done
+status: deprecated
 type: task
 profile: standard
 feature_id: F61
@@ -13,7 +13,7 @@ tags: []
 dependencies: ["0583"]
 ac_numbering: task-local
 created_at: "2026-08-18T05:05:25.709Z"
-updated_at: "2026-08-19T22:56:42.723Z"
+updated_at: "2026-10-21T20:05:10.121Z"
 ---
 
 ## 0586. Honor accepted baseline debt in the per-task gate, then promote anchor-subject-mismatch to error
@@ -277,6 +277,11 @@ one copy command — the pattern feature F91 used four times.
 - **Measurement (2026-08-18, released 0.3.50)** — 1,583 `L4.anchor-subject-mismatch` findings across 364 tasks (361 `done`); `migrate-anchors --dry-run` reports 714 ambiguous, 6 qualifiable anchors remaining, all inside the 3 unwritable `L1.schema-validation` files.
 - **Verified premise** — `TaskCheckService` contains no reference to `config/corpus-baseline.json`; only `corpus-check.ts`, `apps/cli/src/commands/task.ts`, and `transition-shim-check.ts` read it.
 ### History
+
 - 2026-08-18T05:56:25.889Z todo → wip (system)
 - 2026-08-18T06:06:49.222Z wip → testing (system)
 - 2026-08-18T06:06:51.864Z testing → done (system)
+
+- 2026-10-21 deprecated with feature F61 (operator-confirmed post-G11 legacy audit). Implementation history retained as evidence.
+- 2026-10-21T20:05:10.121Z done → deprecated (system)
+

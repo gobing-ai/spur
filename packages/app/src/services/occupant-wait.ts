@@ -11,7 +11,7 @@
  *
  * Lifecycle (R6) is derived purely from cataloged first-class events:
  * - `agent.invoke.start` (latest) → `working`
- * - `agent.invoke.exit`   (latest) → `idle` iff `countPending(specId)===0`,
+ * - `agent.invoke.exit`   (latest) → `idle` iff `countQueued(specId)===0`,
  *   else `unknown` (exit with a queued inbox; will re-invoke)
  * - no events / other      → `unknown`
  * `blocked` requires a first-class blocked signal (none in this task) → never.
@@ -64,19 +64,19 @@ const HEARTBEAT = 'heartbeat' as const;
 export const DEFAULT_STALL_MS = 5000;
 
 /**
- * Project a lifecycle state from the latest invoke event + pending count (R6).
+ * Project a lifecycle state from the latest invoke event + queued count (R6).
  * Pure: no I/O. `blocked` is intentionally absent — it has no first-class
  * signal in wave 2 and is therefore never projected here.
  */
 export function projectLifecycle(input: {
     latestInvokeEvent: InvokeEventSnapshot | null;
-    pendingCount: number;
+    queuedCount: number;
 }): OccupantLifecycle {
-    const { latestInvokeEvent, pendingCount } = input;
+    const { latestInvokeEvent, queuedCount } = input;
     if (latestInvokeEvent === null) return 'unknown';
     if (latestInvokeEvent.eventName === 'agent.invoke.start') return 'working';
     if (latestInvokeEvent.eventName === 'agent.invoke.exit') {
-        return pendingCount === 0 ? 'idle' : 'unknown';
+        return queuedCount === 0 ? 'idle' : 'unknown';
     }
     return 'unknown';
 }
@@ -101,7 +101,7 @@ export interface OccupantWaitDeps {
     /** Current occupant for a specId (null = no occupant / no DB). */
     getOccupant(specId: string): Promise<OccupantRef | null>;
     /** Count of queued messages for a specId. */
-    countPending(specId: string): Promise<number>;
+    countQueued(specId: string): Promise<number>;
     /** Latest cataloged invoke event for a runId (null = none recorded). Used for the start snapshot. */
     latestInvokeEvent(runId: string): Promise<InvokeEventSnapshot | null>;
     /**
@@ -157,10 +157,10 @@ export async function snapshotOccupant(
     }
     const pin: OccupantPin = { specId, runId, generation: occupant.generation };
     const latest = await deps.latestInvokeEvent(runId);
-    const pendingCount = await deps.countPending(specId);
+    const queuedCount = await deps.countQueued(specId);
     return {
         pin,
-        lifecycle: projectLifecycle({ latestInvokeEvent: latest, pendingCount }),
+        lifecycle: projectLifecycle({ latestInvokeEvent: latest, queuedCount }),
         startClock: deps.now(),
         latestInvoke: latest,
     };
@@ -250,8 +250,8 @@ export async function waitForOccupant(
             throw new WaitError('run_replaced', `generation ${pin.generation} → ${occupant.generation}`);
         }
 
-        const pendingCount = await deps.countPending(pin.specId);
-        const lifecycle = projectLifecycle({ latestInvokeEvent: latestInvoke, pendingCount });
+        const queuedCount = await deps.countQueued(pin.specId);
+        const lifecycle = projectLifecycle({ latestInvokeEvent: latestInvoke, queuedCount });
 
         if (until === 'invoke-exit') {
             // Satisfied by an agent.invoke.exit at/after the snapshot (wave-2

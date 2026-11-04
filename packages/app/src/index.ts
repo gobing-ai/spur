@@ -155,11 +155,8 @@ export type {
     CoordinationEventBus,
     InboxEntry,
     InboxResult,
-    MessageEndpointIdentity,
     MessageEventBus,
     MessageEventPayload,
-    RecentMessageRow,
-    RecentMessagesResult,
     SendResult,
     TaskAssignedEventPayload,
 } from './services/agent-coordination-service';
@@ -246,6 +243,15 @@ export {
     qualifySectionBody,
     resolveConfiguredTaskDirs,
 } from './services/anchor-qualifier';
+export {
+    type AttachedTurnBinding,
+    type AttachedTurnDiagnostic,
+    type AttachedTurnDispatcher,
+    type AttachedTurnDispatcherDeps,
+    type AttachedTurnReceipt,
+    type AttachedTurnReply,
+    createAttachedTurnDispatcher,
+} from './services/attached-turn-dispatch';
 // Project Board module catalog preparation (0989 R3/R4/R6)
 export {
     type BoardModuleAssetRoot,
@@ -264,6 +270,11 @@ export {
     runBoundedChild,
     terminateJobChildren,
 } from './services/bounded-child-run';
+export {
+    type CapabilityEvaluation,
+    capabilityDiagnostic,
+    evaluateCapabilities,
+} from './services/capability-attestation';
 export type { CorpusSeverity } from './services/corpus-check';
 export { resolveFogRange, runCorpusCheck } from './services/corpus-check';
 export type {
@@ -279,7 +290,6 @@ export {
     DeliveryReconciler,
     type DeliveryReconcilerContext,
     type HoldReason,
-    MAX_INJECT_ATTEMPTS,
     type ReconcileReport,
     type UnresolvedDelivery,
 } from './services/delivery-reconciler';
@@ -366,13 +376,24 @@ export {
     RECEIPT_POLL_INTERVAL_MS,
 } from './services/fleet-dispatcher';
 export {
+    ATTACHED_DRAIN_GRACE_MS,
+    type DeclaredMemberView,
     FleetGuestService,
     GUEST_LEASE_TTL_MS,
     GUEST_RECORD_DIR,
     GUEST_ROLES,
+    type GuestBindFailureCode,
+    type GuestBindInput,
+    type GuestBindResult,
+    type GuestIdentityState,
     type GuestJoinInput,
     type GuestJoinResult,
     type GuestRecord,
+    MEMBER_BINDING_CAPABILITIES,
+    type MemberBinding,
+    type MemberPin,
+    type MemberPinFailureCode,
+    type MemberPinResult,
 } from './services/fleet-guest-service';
 export {
     type FleetMemberLister,
@@ -394,6 +415,12 @@ export type {
 } from './services/fleet-service';
 // Project fleet declaration (0835) + orchestrator binding (0836)
 export { FleetService, materializeRoster, mergeAgentSpecs, resolveMemberExecutor } from './services/fleet-service';
+export {
+    DEFAULT_RENEWER_MAX_LIFETIME_MS,
+    GuestLeaseRenewer,
+    type GuestLeaseRenewerContext,
+    type GuestRenewalStopReason,
+} from './services/guest-lease-renewer';
 export {
     type HistoryRollupRefreshResult,
     refreshHistoryRollups,
@@ -451,6 +478,32 @@ export {
     runHistoryReport,
     UnsafeHistoryImporterError,
 } from './services/history-service';
+// G11 (ADR-143): the single inbox reader/writer and its delivery budget (replaces
+// MAX_INJECT_ATTEMPTS, which the reconciler now derives from the shared constant).
+export {
+    CLAIM_LEASE_MS,
+    type InboxClaim,
+    type InboxDirection,
+    type InboxMarkReadResult,
+    type InboxMemberCounts,
+    type InboxMessage,
+    type InboxMessageKind,
+    type InboxMessageStatus,
+    type InboxRequestRow,
+    type InboxSendInput,
+    type InboxSendResult,
+    InboxService,
+    type InboxServiceDeps,
+    type InboxSettleOutcome,
+    type InboxSweepResult,
+    isReservedInboxId,
+    MAX_DELIVERY_ATTEMPTS,
+    type MessageEventName,
+    OPERATOR_INBOX_ID,
+    RESERVED_INBOX_IDS,
+    RequestKeyConflictError,
+    SPUR_INBOX_ID,
+} from './services/inbox-service';
 export { type InlineRunProjectDb, openInlineRunProjectDb } from './services/inline-run-attribution';
 export {
     acquireExclusiveJob,
@@ -514,6 +567,17 @@ export type {
 } from './services/planning-write-service';
 export { PlanningWriteService } from './services/planning-write-service';
 export { type PluginListEntry, PluginService } from './services/plugin-service';
+export {
+    AGENT_ANCESTOR_MAX_HOPS,
+    AGENT_EXECUTABLE_NAMES,
+    createPsProcessIdentityReader,
+    findAgentAncestor,
+    type ProcessFingerprint,
+    type ProcessIdentity,
+    type ProcessIdentityReader,
+    parseProcessIdentity,
+    sameProcess,
+} from './services/process-identity';
 export type {
     OsProcessRow,
     ProcessInspector,
@@ -645,8 +709,22 @@ export {
     schedulerJobTimeoutEnvName,
     validateSchedulerCustomJobPayload,
 } from './services/scheduler-custom-job-service';
+export {
+    defaultSearchDeps,
+    RG_INSTALL_HINT,
+    type SearchDeps,
+    SearchError,
+    scopeGlobs,
+    searchProject,
+    searchStatus,
+    ZG_INDEX_HINT,
+    ZG_INSTALL_HINT,
+    ZG_REFRESH_HINT,
+} from './services/search';
+export { buildZgArgs, parseZgQuery, parseZgStatus, ZgOutputError } from './services/search-zg';
 export type { LoadSectionMatrixOptions } from './services/section-matrix-loader';
 export { loadSectionMatrix } from './services/section-matrix-loader';
+export { shQuote } from './services/shell-quote';
 export {
     BUILTIN_CLAUDE_COMMANDS,
     type DiscoveredPlugin,
@@ -673,6 +751,7 @@ export {
     type DispatchHoldReason,
     FLEET_AUTO_TAG,
     gtdStrategy,
+    type MemberAttachmentState,
     type ResumeReport,
     restStrategy,
     STRATEGIES,
@@ -876,6 +955,7 @@ export type {
 export { TokenLedgerWatcher } from './services/token-ledger-watcher';
 export type { AnswerLintFinding } from './services/verify-answer-lint';
 export { ANSWER_LINT_MAX_FINDINGS, lintVerifyAnswer } from './services/verify-answer-lint';
+export { createWarmTurnDispatcher, type TurnSessionBinding } from './services/warm-turn-dispatch';
 export type {
     CleanedRun,
     PausedRun,
@@ -1039,6 +1119,8 @@ export {
     type FeatureVerificationRunResult,
     runFeatureVerification,
 } from './workflow/feature-verification-run';
+export { FRESH_SESSION_ROLES } from './workflow/fleet-dispatch';
+export { type FleetPhaseEmit, runFleetWorkItem, writeFleetWorkItem } from './workflow/fleet-work-item';
 export {
     type FinalizeIdeaHandoffOptions,
     type FinalizeIdeaHandoffResult,

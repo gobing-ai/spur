@@ -153,7 +153,6 @@ Feature: Workflow consolidation: one owner per lifecycle, D65 primitives everywh
 | 1250 | idea-pipeline on D65 primitives: typed entry gate, decide routing, executor dispatch | done |
 | 1251 | Remove pr-review and wayfinder-resolution workflows; skills call the verbs directly | done |
 | 1252 | Consolidation sweep: docs, references, CHANGELOG and end-to-end proofs | done |
-| 1253 | Workflow engine: wildcard from transitions for cancel/deprecate edges (deferred) | cancelled |
 <!-- END AUTO-GENERATED -->
 
 ## Notes

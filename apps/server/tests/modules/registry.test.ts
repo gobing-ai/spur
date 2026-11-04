@@ -3,7 +3,7 @@ import { Hono } from 'hono';
 import { builtins, registerModules } from '../../src/modules/registry';
 
 describe('module registry', () => {
-    test('builtins includes health, task, feature, events, messages, jobs, and processes modules', () => {
+    test('builtins includes health, task, feature, events, jobs, and processes modules', () => {
         const names = builtins.map((m) => m.name);
         expect(names).toEqual([
             'health',
@@ -11,7 +11,6 @@ describe('module registry', () => {
             'task',
             'feature',
             'events',
-            'messages',
             'jobs',
             'processes',
             'observability',

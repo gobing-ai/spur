@@ -24,14 +24,16 @@ describe('useProjectTab (0840 R3)', () => {
     test('parses the active tab from the path segment after projects', () => {
         const { result } = renderHook(() => useProjectTab(), { wrapper: wrapper(['/board/projects/fleet']) });
         expect(result.current.activeTab).toBe('fleet');
-        const legacy = renderHook(() => useProjectTab(), { wrapper: wrapper(['/board/projects/processes']) });
-        expect(legacy.result.current.activeTab).toBe('fleet');
         const inbox = renderHook(() => useProjectTab(), { wrapper: wrapper(['/board/projects/inbox']) });
         expect(inbox.result.current.activeTab).toBe('inbox');
-        const legacyConv = renderHook(() => useProjectTab(), {
-            wrapper: wrapper(['/board/projects/conversation']),
-        });
-        expect(legacyConv.result.current.activeTab).toBe('inbox');
+        // G11 R4 retired the `processes` and `conversation` segment mappings: an old deep link now
+        // falls back to the default tab instead of being silently rewritten.
+        for (const legacySegment of ['processes', 'conversation']) {
+            const legacy = renderHook(() => useProjectTab(), {
+                wrapper: wrapper([`/board/projects/${legacySegment}`]),
+            });
+            expect(legacy.result.current.activeTab).toBe('fleet');
+        }
     });
 
     test('missing or unknown segment falls back to the default tab', () => {

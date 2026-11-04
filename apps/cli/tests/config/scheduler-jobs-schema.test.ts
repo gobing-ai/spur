@@ -47,6 +47,30 @@ describe('bootstrap.scheduler.jobs schema (task 0734 R3/R5)', () => {
         expect(violations.length).toBeGreaterThan(0);
     });
 
+    test('accepts a per-job timeoutMs (positive integer or explicit null)', () => {
+        const violations = validateJsonSchema(
+            withJobs([
+                { name: 'bounded', command: 'echo hi', cron: '0 5 * * *', timeoutMs: 6_300_000 },
+                { name: 'unlimited', command: 'echo hi', cron: '0 6 * * *', timeoutMs: null },
+            ]),
+            schema,
+        );
+        expect(violations).toEqual([]);
+    });
+
+    test('rejects a non-integer timeoutMs (positivity is enforced upstream by ts-infra)', () => {
+        // The bundled validator implements type/shape keywords, not `minimum`; the
+        // authoritative positive-integer-or-null check lives in ts-infra's
+        // runNodeApplication (bootstrap.scheduler.jobs.<i>.timeoutMs).
+        for (const timeoutMs of ['3600000', 1.5]) {
+            const violations = validateJsonSchema(
+                withJobs([{ name: 'bad', command: 'echo hi', cron: '0 5 * * *', timeoutMs }]),
+                schema,
+            );
+            expect(violations.length).toBeGreaterThan(0);
+        }
+    });
+
     test('rejects a non-object job entry', () => {
         expect(validateJsonSchema(withJobs(['echo hi']), schema).length).toBeGreaterThan(0);
     });

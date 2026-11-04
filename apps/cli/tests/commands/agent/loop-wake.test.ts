@@ -19,7 +19,6 @@ import {
     CoordinationRunDao,
     createMigratedDb,
     type DbAdapter,
-    InboxMessageDao,
     ProjectClaimDao,
     ProjectStrategyDao,
     SystemEventDao,
@@ -30,6 +29,7 @@ import { makeCheckService } from '../../../src/commands/task';
 import { type CliContext, createCliContext } from '../../../src/context';
 import type { CommandOutput } from '../../../src/output';
 import { attachSystemEventLedger } from '../../../src/system-event-ledger';
+import { inboxFixture } from '../../helpers';
 
 function captureOutput(): CommandOutput & { stdout: string[]; stderr: string[] } {
     const stdout: string[] = [];
@@ -51,7 +51,7 @@ interface WakeRig {
     customCtx: CliContext;
     db: DbAdapter;
     dao: SystemEventDao;
-    inbox: InboxMessageDao;
+    inbox: ReturnType<typeof inboxFixture>;
     tempDir: string;
     output: CommandOutput & { stdout: string[]; stderr: string[] };
     run: ReturnType<typeof mock>;
@@ -119,7 +119,7 @@ async function makeRig(opts?: { corpus?: boolean }): Promise<WakeRig> {
         customCtx,
         db,
         dao: new SystemEventDao(db),
-        inbox: new InboxMessageDao(db),
+        inbox: inboxFixture(db),
         tempDir,
         output,
         run,
@@ -455,7 +455,7 @@ test('G71 production loop claims ownership, dispatches gated tasks through the i
                     },
                 }) as unknown as ReturnType<CliContext['agentService']>,
         };
-        const inbox = new InboxMessageDao(db);
+        const inbox = inboxFixture(db);
         expect(await runAgentLoop(managed, { spec: 'proj-lead', poll: '1' }, { maxIterations: 1 })).toBe(0);
         const sent = await inbox.inbox('proj-coder');
         expect(sent.map((message) => message.requestKey)).toEqual(['fleet:task:0841:1']);
@@ -553,7 +553,7 @@ test('G71 a member failure is read from the receipt: definite failed retries und
                     },
                 }) as unknown as ReturnType<CliContext['agentService']>,
         };
-        const inbox = new InboxMessageDao(db);
+        const inbox = inboxFixture(db);
         await runAgentLoop(managed, { spec: 'proj-lead', poll: '1' }, { maxIterations: 1 });
         const [first] = await inbox.inbox('proj-coder');
         expect(first?.requestKey).toBe('fleet:task:0841:1');

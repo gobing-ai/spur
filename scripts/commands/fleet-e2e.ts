@@ -4,6 +4,7 @@
  *
  * Usage: bun scripts/spur-dev.ts fleet-e2e [--inject-failure <step>] [--guest-join-fixture] [--keep]
  *        bun scripts/spur-dev.ts fleet-e2e --matrix
+ *        bun scripts/spur-dev.ts fleet-e2e --perf [--trials <n>] [--real-agents] [--agents <csv>] [--modes <csv>] [--keep]
  *
  * `--matrix` runs the EXECUTOR MATRIX instead of the fleet E2E (task 1238 R2/R3, feature D65): the
  * tracked fixture `packages/app/tests/fixtures/1238/executor-matrix-fixture.yaml` — one `agent.run`
@@ -36,6 +37,7 @@
  * compared projection (`[.steps[] | {step,status,assertion}]`). The receipt's ids and
  * timestamps are volatile by design.
  */
+import { createHash } from 'node:crypto';
 import {
     chmodSync,
     existsSync,
@@ -47,18 +49,32 @@ import {
     writeFileSync,
 } from 'node:fs';
 import { tmpdir } from 'node:os';
-import { dirname, join, resolve } from 'node:path';
+import { dirname, join, relative, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { StrategyRuntime } from '@gobing-ai/spur-app';
+import {
+    type AgentCoordinationService,
+    createAttachedTurnDispatcher,
+    FleetDispatcher,
+    InboxService,
+    StrategyRuntime,
+} from '@gobing-ai/spur-app';
 import { getEnvVar, getEnvVars } from '@gobing-ai/spur-config';
 import {
     CoordinationRunDao,
     createMigratedDb,
-    InboxUnfinishedDao,
     ProjectClaimDao,
     readMemberSessions,
     SystemEventDao,
 } from '@gobing-ai/spur-domain';
+import {
+    type AgentName,
+    getAgentSessionCapability,
+    getAgentShim,
+    TURN_SESSION_DRIVERS,
+    type TurnBinary,
+    type TurnSessionDriver,
+} from '@gobing-ai/ts-ai-runner';
+import { type PerfMeasured, perfMeasured, runPairedTurnPerf, type TurnPerfComparison } from './fleet-e2e-turn-perf';
 
 const REPO_ROOT = fileURLToPath(new URL('../../', import.meta.url));
 /** The source-local CLI entry (this repo's own transport, never an installed binary). */
@@ -112,6 +128,8 @@ const PLANNER_LOCAL_ID = 'planner-1';
 const CODER_LOCAL_ID = 'coder-1';
 const TASK_TITLE = 'E2E inbox-only fleet task';
 const HANG_TAG = 'e2e:hang';
+/** The version the warm stub reports: the claude driver's own qualification pin, never a literal. */
+const STUB_WARM_VERSION = getAgentSessionCapability(AGENT_TYPE as AgentName).verifiedAgainst;
 const LOOP_POLL_MS = 1_000; // wake backstop: a prompt tick keeps dispatch latency far below the poll budgets below (G71 1077 R3).
 
 /** Bounded waits. Generous enough for a cold `bun run` CLI start, never a wall-clock assertion. */
@@ -328,7 +346,7 @@ function sleep(ms: number): Promise<void> {
  */
 function spawnLoop(
     scratch: string,
-    state: RunState,
+    state: Pick<RunState, 'binDir' | 'stubLog'>,
     specId: string,
     suffix = '',
     env: Record<string, string> = {},
@@ -341,7 +359,7 @@ function spawnLoop(
             cwd: scratch,
             env: {
                 ...getEnvVars(),
-                PATH: `${state.binDir}:${getEnvVar('PATH') ?? ''}`,
+                PATH: state.binDir === '' ? (getEnvVar('PATH') ?? '') : `${state.binDir}:${getEnvVar('PATH') ?? ''}`,
                 // The stub resolves its own inputs from the environment the LOOP passes on: without
                 // these three the stub runs with an empty CLI path, its first `Bun.spawnSync` throws,
                 // and the turn dies right after logging its prompt — which looked like a hang
@@ -411,18 +429,46 @@ import { appendFileSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs'
 import { dirname } from 'node:path';
 
 const argv = process.argv.slice(2);
+const GATEWAY = ${JSON.stringify(join(REPO_ROOT, 'packages/config/src/index.ts'))};
+const { getEnvVars } = await import(GATEWAY);
+const env = getEnvVars();
+// Task 1283 supervised-warm: with SPUR_E2E_STUB_WARM=1 the stub reports the version the claude
+// stream-json driver is qualified against, so the member loop's REAL warm-turn dispatcher opens a
+// session on it. Without the flag the version stays unqualified and every keyed turn falls back.
+const warm = env.SPUR_E2E_STUB_WARM === '1';
 if (argv.includes('--version')) {
-    console.log('fleet-e2e-stub 1.0.0');
+    console.log(warm ? ${JSON.stringify(`${STUB_WARM_VERSION} (fleet-e2e-stub)`)} : 'fleet-e2e-stub 1.0.0');
     process.exit(0);
 }
 if (argv.includes('--help')) {
     console.log('fleet-e2e-stub — the stubbed model for the inbox-only fleet E2E');
     process.exit(0);
 }
+// The warm session: ONE long-lived process speaking claude stream-json (init → assistant → result
+// per turn). Each turn's work is the one-shot stub run on the turn's prompt — the stubbed model —
+// so cold and warm differ only in the member-side transport, which is what the lane measures.
+if (warm && argv.includes('--input-format') && argv.includes('stream-json')) {
+    const session = 'fleet-e2e-stub-' + process.pid;
+    const emit = (record) => process.stdout.write(JSON.stringify({ session_id: session, ...record }) + '\\n');
+    emit({ type: 'system', subtype: 'init' });
+    for await (const line of console) {
+        let frame;
+        try { frame = JSON.parse(line); } catch { continue; }
+        if (frame.type !== 'user') continue;
+        const text = (frame.message?.content ?? []).map((part) => part.text ?? '').join('');
+        emit({ type: 'system', subtype: 'init' });
+        const turn = Bun.spawnSync([process.execPath, import.meta.path, text], {
+            env: { ...env, SPUR_E2E_STUB_WARM: '' },
+            stdout: 'pipe',
+            stderr: 'pipe',
+        });
+        const out = turn.stdout.toString();
+        emit({ type: 'assistant', message: { content: [{ type: 'text', text: out }] } });
+        emit({ type: 'result', subtype: 'success', is_error: turn.exitCode !== 0, result: out });
+    }
+    process.exit(0);
+}
 
-const GATEWAY = ${JSON.stringify(join(REPO_ROOT, 'packages/config/src/index.ts'))};
-const { getEnvVars } = await import(GATEWAY);
-const env = getEnvVars();
 const cli = env.SPUR_E2E_CLI ?? '';
 const project = env.SPUR_E2E_PROJECT ?? process.cwd();
 const logPath = env.SPUR_E2E_STUB_LOG ?? project + '/stub-prompts.jsonl';
@@ -609,7 +655,7 @@ process.exit(1);
 }
 
 /** `agent.fleet` for the scratch project: a planner orchestrator and one stub-executor coder. */
-function fleetConfigSection(): string {
+function fleetConfigSection(agent = AGENT_TYPE): string {
     return [
         '',
         'agent:',
@@ -622,13 +668,22 @@ function fleetConfigSection(): string {
         `      - { id: ${CODER_LOCAL_ID}, role: coder, executor: ${EXECUTOR_NAME} }`,
         '  executors:',
         `    - name: ${EXECUTOR_NAME}`,
-        `      agent: ${AGENT_TYPE}`,
+        `      agent: ${agent}`,
         '      tier: standard',
         '      # fsWrite attestation: GTD only allocates a write-capable member (fleet-service.ts:512).',
+        '      # fsRead/processSpawn: member BINDING (G75 R3) requires the full',
+        '      # MEMBER_BINDING_CAPABILITIES set (fleet-guest-service.ts:189) — the attached perf',
+        '      # lane binds the coder member as its fixture occupant.',
         '      executionCapabilities:',
         '        version: 1',
         '        axes:',
+        '          fsRead:',
+        '            state: available',
+        '            provenance: native-known',
         '          fsWrite:',
+        '            state: available',
+        '            provenance: native-known',
+        '          processSpawn:',
         '            state: available',
         '            provenance: native-known',
         '',
@@ -714,11 +769,32 @@ function parseArgs(args: string[]): {
     keep: boolean;
     guestJoinFixture: boolean;
     matrix: boolean;
+    perf: boolean;
+    trials: number;
+    realAgents: boolean;
+    hostProbe: boolean;
+    realHosts: boolean;
+    /**
+     * `--agents <csv>` as written, or `undefined` when the flag was absent. Validation belongs to
+     * the MODE that consumes it (`--perf` → PERF_AGENTS, `--host-probe` → HOST_PROBE_AGENTS):
+     * the two lanes have disjoint agent sets, so a shared validator would reject the other mode's
+     * legitimate columns (G74 perf lane + G75 probe lane, merged 2026-10-24).
+     */
+    agents: string[] | undefined;
+    /** `--modes <csv>` as written, or `undefined` when absent (perf lane validates + defaults). */
+    modes: string[] | undefined;
 } {
     let injectFailure: StepName | null = null;
     let keep = false;
     let guestJoinFixture = false;
     let matrix = false;
+    let perf = false;
+    let trials = 3;
+    let realAgents = false;
+    let hostProbe = false;
+    let realHosts = false;
+    let agents: string[] | undefined;
+    let modes: string[] | undefined;
     for (let index = 0; index < args.length; index++) {
         const arg = args[index];
         if (arg === '--matrix') {
@@ -727,9 +803,67 @@ function parseArgs(args: string[]): {
             matrix = true;
             continue;
         }
+        if (arg === '--perf') {
+            // Task 1273: the KPI arm — paired cold/resume trials per target agent, phase marks
+            // joined from the real system-events ledger, receipts in docs/reports/.
+            perf = true;
+            continue;
+        }
+        if (arg === '--real-agents') {
+            // Task 1276 (1273 Q&A, CLOSED): the paid lane is OPT-IN. The deterministic lane stubs
+            // the model on PATH; this flag stops shadowing it so the member runs the installed
+            // binary and a warm turn can actually be measured.
+            realAgents = true;
+            continue;
+        }
+        if (arg === '--host-probe') {
+            // Task 1280 R1/R2: probe installed hosts and prove the portable loop with hooks absent.
+            hostProbe = true;
+            continue;
+        }
+        if (arg === '--real-hosts') {
+            // AC3: strictly opt-in. The default lane never launches a real host.
+            realHosts = true;
+            continue;
+        }
+        if (arg === '--agents') {
+            const value = args[index + 1];
+            const requested = (value ?? '')
+                .split(',')
+                .map((entry) => entry.trim())
+                .filter((entry) => entry !== '');
+            if (requested.length === 0) {
+                const known = perf ? PERF_AGENTS.join(', ') : HOST_PROBE_AGENTS.join(', ');
+                throw new Error(`--agents expects a csv of: ${known}`);
+            }
+            agents = requested;
+            index++;
+            continue;
+        }
+        if (arg === '--trials') {
+            const value = args[index + 1];
+            const parsed = value === undefined ? Number.NaN : Number.parseInt(value, 10);
+            if (!Number.isInteger(parsed) || parsed < 1 || parsed > 10) {
+                throw new Error('--trials expects an integer 1..10 (trials per agent per mode)');
+            }
+            trials = parsed;
+            index++;
+            continue;
+        }
         if (arg === '--guest-join-fixture') {
             // R4 skip arm: point the guest-join predicate at the generated pre-1081 fixture CLI.
             guestJoinFixture = true;
+            continue;
+        }
+        if (arg === '--modes') {
+            // Task 1283: select which perf modes run. Validation (and the default set) belongs
+            // to the perf lane — `--host-probe` shares the generic parser, not the contract.
+            const value = args[index + 1];
+            modes = (value ?? '')
+                .split(',')
+                .map((entry) => entry.trim())
+                .filter((entry) => entry !== '');
+            index++;
             continue;
         }
         if (arg === '--keep') {
@@ -748,10 +882,66 @@ function parseArgs(args: string[]): {
             continue;
         }
         throw new Error(
-            `unknown argument "${arg}" (usage: fleet-e2e [--inject-failure <step>] [--guest-join-fixture] [--keep] | --matrix)`,
+            `unknown argument "${arg}" (usage: fleet-e2e [--inject-failure <step>] [--guest-join-fixture] [--keep] | --matrix | --perf [--trials <n>] [--real-agents] [--agents <csv>] [--modes <csv>] | --host-probe [--real-hosts] [--agents <csv>])`,
         );
     }
-    return { injectFailure, keep, guestJoinFixture, matrix };
+    return {
+        injectFailure,
+        keep,
+        guestJoinFixture,
+        matrix,
+        perf,
+        trials,
+        realAgents,
+        hostProbe,
+        realHosts,
+        agents,
+        modes,
+    };
+}
+
+/**
+ * The `--perf` argument surface alone (task 1276). `runFleetE2e` shares {@link parseArgs}; this
+ * re-parse exists so the perf lane's defaults (`--agents` → every target, `--real-agents` off) are
+ * pinned by a test without invoking the harness.
+ */
+export function parsePerfArgs(args: string[]): {
+    trials: number;
+    realAgents: boolean;
+    agents: readonly string[];
+    modes: readonly PerfMode[];
+    keep: boolean;
+} {
+    const parsed = parseArgs(args);
+    // The perf lane's own contract (1273 R4): unknown columns fail loudly instead of measuring
+    // nothing, and an absent `--agents` means every target. The generic parse cannot do either —
+    // `--host-probe` runs the same flag against a different agent set.
+    const agents = parsed.agents ?? PERF_AGENTS;
+    const unknown = agents.filter((name) => !(PERF_AGENTS as readonly string[]).includes(name));
+    if (unknown.length > 0) throw new Error(`--agents expects a csv of: ${PERF_AGENTS.join(', ')}`);
+    return {
+        trials: parsed.trials,
+        realAgents: parsed.realAgents,
+        agents,
+        modes: perfModesOf(parsed.modes),
+        keep: parsed.keep,
+    };
+}
+
+/**
+ * Validate `--modes` (task 1283): absent means every mode; unknown names fail loudly instead of
+ * silently measuring a subset. Present-but-empty (e.g. an unset `$MODES`) fails the same way —
+ * it would measure nothing yet still emit a receipt — and duplicates dedupe so a repeated name
+ * cannot double-run a lane's samples (task 1285). Shared by `parsePerfArgs` and the direct
+ * `runFleetE2e` entry.
+ */
+export function perfModesOf(csv: string[] | undefined): readonly PerfMode[] {
+    if (csv !== undefined && csv.length === 0)
+        throw new Error(`--modes expects a csv of: ${ALL_PERF_MODES.join(', ')}`);
+    const deduped = [...new Set(csv ?? ALL_PERF_MODES)];
+    const unknown = deduped.filter((mode) => !ALL_PERF_MODES.includes(mode as PerfMode));
+    if (unknown.length > 0) throw new Error(`--modes expects a csv of: ${ALL_PERF_MODES.join(', ')}`);
+    return deduped as readonly PerfMode[];
 }
 
 interface AgentCommandProbe {
@@ -1292,15 +1482,1841 @@ function matrixRunState(scratch: string, binDir: string): RunState {
     };
 }
 
+// ── Host capability probe (G75 R2, task 1280) ─────────────────────────────────────
+//
+// Reports what each host can PROVE on this machine, never what it might support: a wake value
+// must cite the probe command and the observed output that produced it, and anything unproven is
+// `pull-only` with an actionable reason. The default lane never launches a real host — it probes
+// binaries and runs scripted fixture hosts through the durable inbox with hooks absent.
+
+/** Where the capability report lands (the task's artifact, AC1). */
+export const HOST_PROBE_REPORT_PATH = join(REPO_ROOT, 'docs/reports/fleet-host-capabilities.json');
+
+/** Hosts the probe reports on: one row each per mode. */
+export const HOST_PROBE_AGENTS = ['codex', 'claude', 'pi'] as const;
+
+/** The two modes a host is probed in; they have different wake surfaces. */
+export const HOST_PROBE_MODES = ['interactive', 'headless'] as const;
+
+/** One fixture host, spawned as a real child process (hooks absent). */
+const HOST_PROBE_FIXTURE = join(REPO_ROOT, 'scripts/commands/fixtures/fleet-host-fixture.ts');
+
+/** How a host can be woken; `pull-only` is the always-supported fallback. */
+export type HostWake = 'hook' | 'rpc' | 'app-server' | 'pull-only';
+
+/** Host mode the row describes. */
+export type HostMode = (typeof HOST_PROBE_MODES)[number];
+
+/** One host×mode capability row. */
+export interface HostCapabilityRow {
+    agent: string;
+    mode: HostMode;
+    binary: { path: string; version: string } | 'absent';
+    wake: HostWake;
+    evidence: { command: string; output: string } | null;
+    reason?: string;
+    e2e?: { status: 'passed' | 'failed'; detail: string };
+}
+
+/** The tracked capability report (AC1). */
+export interface HostCapabilityReport {
+    schemaVersion: 1;
+    generatedAt: string;
+    hosts: HostCapabilityRow[];
+}
+
+/** Redact secrets and the operator's home prefix from verbatim probe output. */
+export function redactProbeOutput(text: string): string {
+    const home = getEnvVar('HOME');
+    return (
+        text
+            .replace(/(sk-|ghp_|gho_|xox[bp]-|AKIA)[A-Za-z0-9_-]{8,}/g, '[redacted]')
+            // Home prefixes leak the operator identity on any POSIX machine, not just this runner's $HOME
+            // (a mac-authored path survives a Linux runner whose HOME is /home/runner). Generic pattern
+            // first so a longer neighbour name (/Users/robinathan) is not mangled by the $HOME split.
+            .replace(/\/(?:Users|home)\/[A-Za-z0-9._-]+/g, '~')
+            .split(home !== undefined && home !== '' ? home : '\u0000')
+            .join('~')
+    );
+}
+
+/**
+ * Classify a host's wake channel from its installed `--help` surface. Headless mode never has a
+ * host callback channel, so it is `pull-only` regardless of what the binary advertises.
+ */
+export function classifyHostWake(input: { mode: HostMode; helpText: string }): {
+    wake: HostWake;
+    reason?: string;
+} {
+    if (input.mode === 'headless') {
+        return {
+            wake: 'pull-only',
+            reason: 'headless mode has no host callback channel — the durable inbox pull loop is the delivery path',
+        };
+    }
+    const text = input.helpText.toLowerCase();
+    // Precedence is specificity, not wording: a host that exposes a long-lived server endpoint can
+    // be woken by a connection, which is a stronger channel than a flag that merely names hooks
+    // (Codex advertises `--dangerously-bypass-hook-trust` while its wake channel is the App Server).
+    if (/app[- ]server/.test(text)) return { wake: 'app-server' };
+    if (/\bhooks?\b/.test(text)) return { wake: 'hook' };
+    if (/\brpc\b/.test(text)) return { wake: 'rpc' };
+    return {
+        wake: 'pull-only',
+        reason: 'installed help text names no hook, RPC or App Server surface',
+    };
+}
+
+/**
+ * Build one row. Two invariants live here rather than in prose: an absent binary can never claim a
+ * wake channel, and a non-`pull-only` wake without recorded evidence is downgraded — an unprovable
+ * capability is not a capability (R3).
+ */
+export function buildHostRow(input: {
+    agent: string;
+    mode: HostMode;
+    binary: { path: string; version: string } | null;
+    helpText: string;
+    evidence: { command: string; output: string } | null;
+    e2e?: { status: 'passed' | 'failed'; detail: string };
+}): HostCapabilityRow {
+    const e2e = input.e2e === undefined ? {} : { e2e: input.e2e };
+    if (input.binary === null) {
+        return {
+            agent: input.agent,
+            mode: input.mode,
+            binary: 'absent',
+            wake: 'pull-only',
+            evidence: null,
+            reason: `${input.agent} is not installed on PATH — pull-only until the binary is present`,
+            ...e2e,
+        };
+    }
+    const binary = { path: redactProbeOutput(input.binary.path), version: redactProbeOutput(input.binary.version) };
+    const classified = classifyHostWake({ mode: input.mode, helpText: input.helpText });
+    const evidence =
+        input.evidence === null
+            ? null
+            : { command: redactProbeOutput(input.evidence.command), output: redactProbeOutput(input.evidence.output) };
+    if (classified.wake !== 'pull-only' && evidence === null) {
+        return {
+            agent: input.agent,
+            mode: input.mode,
+            binary,
+            wake: 'pull-only',
+            evidence: null,
+            reason: `help text suggests ${classified.wake} but no probe evidence was recorded — unproven, so pull-only`,
+            ...e2e,
+        };
+    }
+    return {
+        agent: input.agent,
+        mode: input.mode,
+        binary,
+        wake: classified.wake,
+        evidence,
+        ...(classified.reason === undefined ? {} : { reason: classified.reason }),
+        ...e2e,
+    };
+}
+
+/** Contract check over the whole report; returns the violations, empty when it holds. */
+export function hostReportViolations(report: HostCapabilityReport): string[] {
+    const violations: string[] = [];
+    if (report.schemaVersion !== 1) violations.push('schemaVersion must be 1');
+    const seen = new Set<string>();
+    for (const row of report.hosts) {
+        const key = `${row.agent}:${row.mode}`;
+        if (seen.has(key)) violations.push(`duplicate row for ${key}`);
+        seen.add(key);
+        if (!(HOST_PROBE_AGENTS as readonly string[]).includes(row.agent))
+            violations.push(`unknown agent "${row.agent}"`);
+        if (!(HOST_PROBE_MODES as readonly string[]).includes(row.mode)) violations.push(`unknown mode "${row.mode}"`);
+        if (row.wake !== 'pull-only' && row.evidence === null) {
+            violations.push(`${key}: wake "${row.wake}" cites no probe evidence`);
+        }
+        if (row.binary === 'absent' && row.wake !== 'pull-only') {
+            violations.push(`${key}: absent binary cannot advertise wake "${row.wake}"`);
+        }
+        if (row.binary === 'absent' && row.evidence !== null) {
+            violations.push(`${key}: absent binary carries evidence`);
+        }
+        if (row.wake === 'pull-only' && row.binary !== 'absent' && row.reason === undefined) {
+            violations.push(`${key}: pull-only needs an actionable reason`);
+        }
+    }
+    for (const agent of HOST_PROBE_AGENTS) {
+        for (const mode of HOST_PROBE_MODES) {
+            if (!seen.has(`${agent}:${mode}`)) violations.push(`missing row for ${agent}:${mode}`);
+        }
+    }
+    return violations;
+}
+
+/** Run one host binary with a bounded budget; a missing or failing binary reads as empty output. */
+function runHostBinary(path: string, args: string[]): { exitCode: number; output: string } {
+    try {
+        const proc = Bun.spawnSync([path, ...args], { stdout: 'pipe', stderr: 'pipe', timeout: 20_000 });
+        const stdout = proc.stdout?.toString() ?? '';
+        const stderr = proc.stderr?.toString() ?? '';
+        // Full text: the capability line can sit anywhere in a 200-line `--help`. The REPORT
+        // records only the matched line, so this is not a size risk in the artifact.
+        return { exitCode: proc.exitCode ?? 1, output: `${stdout}\n${stderr}` };
+    } catch (error) {
+        return { exitCode: 1, output: trimmed(errorMessage(error), 200) };
+    }
+}
+
+/**
+ * The `--help` line that proves a wake channel, or null. The report cites this one line — the
+ * observation a reader can re-run — instead of a truncated help dump.
+ */
+export function wakeEvidenceLine(helpText: string, wake: HostWake): string | null {
+    const pattern =
+        wake === 'hook' ? /\bhooks?\b/i : wake === 'rpc' ? /\brpc\b/i : wake === 'app-server' ? /app[- ]server/i : null;
+    if (pattern === null) return null;
+    const matches = helpText.split('\n').filter((line) => pattern.test(line));
+    // Prefer a line that documents the surface over one that disables or bypasses it — `--bare
+    // Minimal mode: skip hooks` proves hooks exist but says nothing about a wake channel.
+    const positive = matches.find((line) => !/skip|bypass|disable|without|no-?hooks/i.test(line));
+    const chosen = positive ?? matches[0];
+    return chosen === undefined ? null : trimmed(chosen, 300);
+}
+
+/** Probe one installed binary: path, version line, and the help text the wake class comes from. */
+function probeHostBinary(agent: string): {
+    binary: { path: string; version: string } | null;
+    helpText: string;
+    helpCommand: string;
+} {
+    const path = Bun.which(agent);
+    if (path === null) return { binary: null, helpText: '', helpCommand: `${agent} --help` };
+    const version = runHostBinary(path, ['--version']);
+    const help = runHostBinary(path, ['--help']);
+    const versionLine = version.output.split('\n')[0]?.trim() ?? '';
+    return {
+        binary: { path, version: versionLine === '' ? 'unknown' : versionLine },
+        helpText: help.exitCode === 0 ? help.output : '',
+        helpCommand: `${agent} --help`,
+    };
+}
+
+/** Evidence for one host×mode row: the matched help line, or null when nothing proves a channel. */
+function probeEvidence(
+    probe: ReturnType<typeof probeHostBinary>,
+    mode: HostMode,
+): { command: string; output: string } | null {
+    const { wake } = classifyHostWake({ mode, helpText: probe.helpText });
+    const line = wakeEvidenceLine(probe.helpText, wake);
+    return line === null ? null : { command: probe.helpCommand, output: line };
+}
+
+/**
+ * Run one scripted fixture host through the portable loop with hooks absent (AC2): the child
+ * process joins, the harness sends a bounded request, the child pulls it with `wait --inbox`,
+ * replies and leaves, and the operator inbox must show the reply linked to that request.
+ */
+async function runFixtureHost(
+    scratch: string,
+    agent: string,
+    env: Record<string, string>,
+): Promise<{ status: 'passed' | 'failed'; detail: string }> {
+    const guestId = `probe-${agent}`;
+    const resultPath = join(scratch, `host-${agent}.json`);
+    const child = Bun.spawn([process.execPath, 'run', HOST_PROBE_FIXTURE], {
+        cwd: scratch,
+        env: {
+            ...getEnvVars(),
+            ...env,
+            SPUR_E2E_CLI: CLI_ENTRY,
+            SPUR_E2E_PROJECT: scratch,
+            SPUR_E2E_HOST_AGENT: agent,
+            SPUR_E2E_GUEST_ID: guestId,
+            SPUR_E2E_RESULT: resultPath,
+        },
+        stdout: 'pipe',
+        stderr: 'pipe',
+    });
+    try {
+        // The request must arrive while the guest is waiting, so wait for the record it writes first.
+        await pollUntil(
+            `the ${agent} fixture guest record`,
+            async () => (existsSync(join(scratch, '.spur/run/guests', `${guestId}.json`)) ? true : undefined),
+            30_000,
+        );
+        const request = jsonOk<{ msgId: string }>(
+            ['message', 'send', '--to', guestId, `host probe request: ${agent}`, '--json'],
+            scratch,
+            { env },
+        );
+        await child.exited;
+        if (!existsSync(resultPath)) return { status: 'failed', detail: `fixture ${agent} wrote no result file` };
+        const result = JSON.parse(readFileSync(resultPath, 'utf8')) as {
+            ok?: boolean;
+            error?: string;
+            steps?: Array<{ command: string; exitCode: number }>;
+        };
+        if (result.ok !== true) {
+            return { status: 'failed', detail: `fixture-lane: ${result.error ?? 'fixture failed'}` };
+        }
+        const inbox = jsonOk<{ messages: Array<{ id: string; inReplyTo: string | null }> }>(
+            ['message', 'inbox', '--agent', 'operator', '--json'],
+            scratch,
+            { env },
+        );
+        const linked = inbox.messages.find((message) => message.inReplyTo === request.msgId);
+        if (linked === undefined) {
+            return { status: 'failed', detail: `fixture-lane: no reply linked to request ${request.msgId}` };
+        }
+        return {
+            status: 'passed',
+            detail: `fixture-lane (hooks absent): ${guestId} joined → wait --inbox pulled ${request.msgId} → replied ${linked.id} → left`,
+        };
+    } finally {
+        child.kill();
+    }
+}
+
+/** The prompt a real host receives in the opt-in `--real-hosts` lane. */
+function realHostPrompt(guestId: string, agent: string): string {
+    return [
+        'You are joining a local agent fleet as a guest. Run these commands in order with this shell:',
+        `1. spur agent join --role reviewer --id ${guestId} --json`,
+        `2. spur agent wait --inbox ${guestId} --timeout 30000 --json`,
+        '3. spur message reply <msgId> "<one line result>" --json',
+        `4. spur agent leave ${guestId} --json`,
+        `Then print the single word DONE. You are the ${agent} host; no hooks are installed.`,
+    ].join('\n');
+}
+
+/** Non-interactive prompt flags per host, used only by the opt-in real-host lane. */
+const REAL_HOST_ARGV: Record<string, (prompt: string) => string[]> = {
+    claude: (prompt) => ['-p', prompt],
+    codex: (prompt) => ['exec', prompt],
+    pi: (prompt) => ['-p', prompt],
+};
+
+/**
+ * The opt-in real-host lane (AC3): launch each installed host in its non-interactive mode and
+ * record either the end-to-end result or the exact failure. Never reached without `--real-hosts`.
+ */
+async function runRealHost(
+    scratch: string,
+    agent: string,
+    path: string,
+    env: Record<string, string>,
+): Promise<{ status: 'passed' | 'failed'; detail: string }> {
+    const argv = REAL_HOST_ARGV[agent];
+    if (argv === undefined) {
+        return { status: 'failed', detail: `real-host: no non-interactive invocation is known for ${agent}` };
+    }
+    const guestId = `real-${agent}`;
+    const child = Bun.spawn([path, ...argv(realHostPrompt(guestId, agent))], {
+        cwd: scratch,
+        env: { ...getEnvVars(), ...env },
+        stdout: 'pipe',
+        stderr: 'pipe',
+    });
+    try {
+        const joined = await pollUntil(
+            `the ${agent} real-host guest record`,
+            async () => (existsSync(join(scratch, '.spur/run/guests', `${guestId}.json`)) ? true : undefined),
+            90_000,
+        ).catch(() => undefined);
+        if (joined === undefined) {
+            const stderr = trimmed(await new Response(child.stderr as ReadableStream).text().catch(() => ''), 200);
+            child.kill();
+            return {
+                status: 'failed',
+                detail: `real-host: ${agent} never joined the fleet${stderr === '' ? '' : ` — ${stderr}`}`,
+            };
+        }
+        const request = jsonOk<{ msgId: string }>(
+            ['message', 'send', '--to', guestId, `real host probe: ${agent}`, '--json'],
+            scratch,
+            { env },
+        );
+        const inbox = await pollUntil(
+            `the ${agent} real-host reply`,
+            async () => {
+                const rows = jsonOk<{ messages: Array<{ id: string; inReplyTo: string | null }> }>(
+                    ['message', 'inbox', '--agent', 'operator', '--json'],
+                    scratch,
+                    { env },
+                );
+                return rows.messages.find((message) => message.inReplyTo === request.msgId);
+            },
+            120_000,
+        );
+        return {
+            status: 'passed',
+            detail: `real-host: ${agent} joined, pulled ${request.msgId} and replied ${inbox.id}`,
+        };
+    } catch (error) {
+        return { status: 'failed', detail: `real-host: ${trimmed(errorMessage(error), 200)}` };
+    } finally {
+        child.kill();
+    }
+}
+
+/**
+ * `fleet-e2e --host-probe [--real-hosts] [--agents <csv>]` (task 1280).
+ *
+ * Writes `docs/reports/fleet-host-capabilities.json` — one row per host×mode — and proves the
+ * portable loop with hooks absent through one scripted fixture host per executor. The real-host
+ * lane is strictly opt-in and records the exact failure rather than manufacturing a pass.
+ */
+export async function runHostProbe(
+    options: { realHosts?: boolean; agents?: string[]; keep?: boolean } = {},
+): Promise<number> {
+    const agents = options.agents ?? [...HOST_PROBE_AGENTS];
+    const unknown = agents.filter((agent) => !(HOST_PROBE_AGENTS as readonly string[]).includes(agent));
+    if (unknown.length > 0) {
+        console.error(
+            `fleet-e2e: unknown --agents entries: ${unknown.join(', ')} (known: ${HOST_PROBE_AGENTS.join(', ')})`,
+        );
+        return 2;
+    }
+    const scratch = join(realpathSync(tmpdir()), `spur-host-probe-${Date.now()}`);
+    const env = {
+        PATH: getEnvVar('PATH') ?? '',
+        SPUR_PROJECTS_FILE: join(scratch, 'projects.json'),
+        SPUR_SLASH_COMMANDS_FILE: join(scratch, 'slash_commands.json'),
+    };
+    const rows: HostCapabilityRow[] = [];
+    try {
+        rmSync(scratch, { recursive: true, force: true });
+        mkdirSync(scratch, { recursive: true });
+        Bun.spawnSync(['git', 'init', '-q', '.'], { cwd: scratch });
+        cliOk(['self', 'init', '--json'], scratch, { env });
+
+        const e2eByAgent = new Map<string, { status: 'passed' | 'failed'; detail: string }>();
+        for (const agent of agents) {
+            // Only the requested agents run e2e; the unrequested ones still get rows (AC1's
+            // "one row per host×mode"), with the absence recorded rather than invented.
+            if (options.realHosts === true) {
+                const probe = probeHostBinary(agent);
+                e2eByAgent.set(
+                    agent,
+                    probe.binary === null
+                        ? { status: 'failed', detail: `real-host: ${agent} is not installed on PATH` }
+                        : await runRealHost(scratch, agent, probe.binary.path, env),
+                );
+            } else {
+                e2eByAgent.set(agent, await runFixtureHost(scratch, agent, env));
+            }
+        }
+
+        for (const agent of HOST_PROBE_AGENTS) {
+            const probe = probeHostBinary(agent);
+            const e2e = e2eByAgent.get(agent);
+            for (const mode of HOST_PROBE_MODES) {
+                rows.push(
+                    buildHostRow({
+                        agent,
+                        mode,
+                        binary: probe.binary,
+                        helpText: probe.helpText,
+                        evidence: probeEvidence(probe, mode),
+                        ...(e2e === undefined || mode !== 'interactive' ? {} : { e2e }),
+                    }),
+                );
+            }
+        }
+
+        const report: HostCapabilityReport = {
+            schemaVersion: 1,
+            generatedAt: nowLabel(),
+            hosts: rows,
+        };
+        const violations = hostReportViolations(report);
+        if (violations.length > 0) {
+            console.error(`fleet-e2e: host report violates its contract: ${violations.join('; ')}`);
+            return 1;
+        }
+        mkdirSync(dirname(HOST_PROBE_REPORT_PATH), { recursive: true });
+        writeFileSync(HOST_PROBE_REPORT_PATH, `${JSON.stringify(report, null, 4)}\n`);
+        console.log(`fleet-e2e host probe: ${HOST_PROBE_REPORT_PATH}`);
+        for (const row of report.hosts) {
+            const binary = row.binary === 'absent' ? 'absent' : row.binary.version;
+            console.log(`  ${row.agent}/${row.mode}: wake=${row.wake} binary=${trimmed(binary, 40)}`);
+        }
+        const failed = report.hosts.filter((row) => row.e2e?.status === 'failed');
+        if (failed.length > 0) {
+            for (const row of failed) console.error(`  FAIL ${row.agent}: ${row.e2e?.detail ?? ''}`);
+            return 1;
+        }
+        return 0;
+    } finally {
+        if (options.keep !== true) rmSync(scratch, { recursive: true, force: true });
+    }
+}
+
 /**
  * The E2E. Execution order is NOT the receipt's row order: the strategy wedge recorded under
  * `strategy-retry-unreachable` allows exactly ONE strategy dispatch per project, so the
  * kill/resume half of that single turn has to happen before `dispatch-to-done` can observe the
  * task closing. Rows are still reported in the design's order.
  */
+// ══════════════════════════════ Perf mode (task 1273) ══════════════════════════════
+
+/** Stable receipt names — overwritten each run, same policy as the E2E receipt (1077 Q&A). */
+const PERF_RECEIPT_JSON = join(REPO_ROOT, 'docs/reports/fleet-perf-receipt.json');
+const PERF_RECEIPT_MD = join(REPO_ROOT, 'docs/reports/fleet-perf-receipt.md');
+/** The KPI target matrix (task Q&A): the agents the fleet measures. */
+const PERF_AGENTS = ['claude', 'codex', 'pi'] as const;
+
+/**
+ * The perf modes (task 1283): `supervised-cold`/`supervised-warm` are 1273/1276's keyed task-turn
+ * lanes; `attached-ready` runs the SAME first-batch workload through 1282's attached-turn
+ * dispatcher against a bound fixture occupant. `--modes` selects the subset to run.
+ */
+const ALL_PERF_MODES = ['supervised-cold', 'supervised-warm', 'attached-ready'] as const;
+export type PerfMode = (typeof ALL_PERF_MODES)[number];
+/** One trial's deadline. The stub lane settles in seconds; this only bounds a genuinely hung turn. */
+const PERF_TRIAL_TIMEOUT_MS = 90_000;
+/** The busy wait the attached fixture occupant performs on its first trial (AC1: a visible phase). */
+const PERF_ATTACH_BUSY_MS = 250;
+/** How long the injected-failure attached trial waits before the abort ends it `outcome-unknown`. */
+const PERF_ATTACH_FAIL_MS = 2_000;
+/** The fixed workload every trial runs — identical text, so the digest pins what was measured. */
+const PERF_WORKLOAD = {
+    title: 'Fleet perf trial task',
+    ac: 'Scenario: AC1 - the fleet coder member closes this perf-trial task (req: R1)\n',
+    design: 'The inbox-only GTD fleet dispatches this task to coder-1; the member process closes it.\n',
+} as const;
+
+export type PerfTrialStatus = 'validated' | 'failed' | 'timed-out' | 'cancelled';
+
+/** One observed phase mark, joined from the system_events ledger (`fleet.phase.*`). */
+export interface PerfPhaseMark {
+    phase: string;
+    at: string;
+    /** In-process monotonic offset (ms) when the producer reported one. */
+    monotonicMs?: number;
+    /** Correlation id when the mark carries one (claim/turn marks). */
+    executionId?: string;
+}
+
+/**
+ * The perf modes a trial ran under (task 1283). `attached-ready` is the new transport: the
+ * workload, model/provider/reasoning columns and trial-status vocabulary stay identical to the
+ * supervised lanes so the rows remain comparable (AC1).
+ */
+export interface PerfTrial {
+    agent: string;
+    mode: 'cold' | 'resume' | 'warm' | 'attached-ready';
+    model: string;
+    provider: string;
+    reasoning: string;
+    tokens: 'unavailable';
+    resources: 'unavailable';
+    status: PerfTrialStatus;
+    /** enqueue → contract-validated, UTC wall clock on one host (same clock domain). */
+    durationMs?: number;
+    phases: PerfPhaseMark[];
+    runId?: string;
+    key?: string;
+    /** The binary that executed the turn: the stub in this lane; host binaries stay provenance. */
+    binary: { path: string; version: string | null } | null;
+    /** The real host binary's `--version` — comparison context, not what ran. */
+    hostBinaryVersion?: string;
+    reason?: string;
+}
+
+export type { PerfMeasured } from './fleet-e2e-turn-perf';
+
+/**
+ * The warm-lane row (task 1276, G74 R1/AC1). Unlike `cold`/`resume` this row is QUALIFICATION
+ * evidence, not a measurement: it names the installed binary, the version the driver was verified
+ * against, and the driver's own verdict. It carries no latency — the lane's only trial modes are
+ * `cold` and `resume`, so any number here would be a cold turn wearing a warm label, which is the
+ * exact overclaim AC1 forbids.
+ */
+export interface PerfWarm {
+    status: 'qualified' | 'unsupported';
+    /** The driver's verdict, mirrored so a reader never has to re-derive it from `status`. */
+    qualified: boolean;
+    /** Probed binary; checkout-local paths are relative to the repository root. Null when absent. */
+    binary: { path: string; version: string | null } | null;
+    /** ts-ai-runner's registered driver for this agent (`null` = none registered yet). */
+    driver: string | null;
+    /** `AGENT_SESSION_CAPABILITY.<agent>.verifiedAgainst` — what the driver was verified against. */
+    verifiedVersion: string | null;
+    /** Pi's host PATH install and pinned repository dependency are distinct qualification inputs. */
+    provenance?: PiProvenance;
+    reason?: string;
+}
+
+interface PiProvenance {
+    host: WarmProbe['binary'];
+    repository: WarmProbe['binary'];
+}
+
+/** What {@link warmRow} needs: the registered driver plus the probed binary identity. */
+export interface WarmProbe {
+    driver: TurnSessionDriver | null;
+    binary: { path: string; version: string | null } | null;
+    verifiedVersion: string | null;
+    provenance?: PiProvenance;
+}
+
+/**
+ * Decide one agent's warm row (task 1276 R1). The driver's own `qualify()` is the ONLY verdict —
+ * this function never second-guesses a version itself, so a new qualified release only needs the
+ * driver to move. Every refusal keeps a name and still records the binary it refused (AC1: the
+ * row says WHICH binary was qualified or refused).
+ */
+export function warmRow(agent: string, probe: WarmProbe): PerfWarm {
+    // Persist local binary identities relative to the checkout; qualify the original probe below.
+    const binary = receiptBinary(probe.binary);
+    const base = {
+        binary,
+        driver: probe.driver?.agent ?? null,
+        verifiedVersion: probe.verifiedVersion,
+        ...(probe.provenance === undefined
+            ? {}
+            : {
+                  provenance: {
+                      host: receiptBinary(probe.provenance.host),
+                      repository: receiptBinary(probe.provenance.repository),
+                  },
+              }),
+    };
+    if (probe.driver === null) {
+        return {
+            ...base,
+            status: 'unsupported',
+            qualified: false,
+            reason: `no turn-session driver registered for agent '${agent}'`,
+        };
+    }
+    if (probe.binary === null) {
+        return { ...base, status: 'unsupported', qualified: false, reason: `${agent}: no installed binary resolved` };
+    }
+    if (probe.binary.version === null) {
+        return {
+            ...base,
+            status: 'unsupported',
+            qualified: false,
+            reason: `${agent}: installed binary version could not be probed`,
+        };
+    }
+    const qualification = probe.driver.qualify(probe.binary as TurnBinary);
+    if (!qualification.qualified) {
+        return { ...base, status: 'unsupported', qualified: false, reason: qualification.reason };
+    }
+    return { ...base, status: 'qualified', qualified: true };
+}
+
+function receiptBinary(binary: WarmProbe['binary']): WarmProbe['binary'] {
+    if (binary === null) return null;
+    return {
+        ...binary,
+        // External paths are tracked receipt content: never publish the operator's home directory.
+        path: binary.path.startsWith(`${resolve(REPO_ROOT)}/`)
+            ? relative(REPO_ROOT, binary.path)
+            : redactProbeOutput(binary.path),
+    };
+}
+
+/** Bound every provenance probe too; a failed/hung version command supplies no qualified version. */
+function probeVersion(command: { command: string; args: string[] }, timeoutMs: number): WarmProbe['binary'] {
+    try {
+        const proc = Bun.spawnSync([command.command, ...command.args], {
+            stdout: 'pipe',
+            stderr: 'pipe',
+            timeout: timeoutMs,
+            killSignal: 'SIGKILL',
+        });
+        return {
+            path: Bun.which(command.command) ?? command.command,
+            version:
+                proc.exitCode === 0 ? (/[0-9]+\.[0-9]+\.[0-9]+[^\s]*/.exec(proc.stdout.toString())?.[0] ?? null) : null,
+        };
+    } catch {
+        return null;
+    }
+}
+
+/**
+ * Probe the installed binary for the warm lane. Version parsing mirrors the runner's own
+ * `resolveTurnBinary` (first `x.y.z` token on stdout), so the row qualifies exactly the binary a
+ * real turn would spawn.
+ */
+export function probeWarm(agent: string, timeoutMs = 5_000): WarmProbe {
+    const driver = TURN_SESSION_DRIVERS.get(agent as AgentName) ?? null;
+    let verifiedVersion: string | null = null;
+    try {
+        verifiedVersion = getAgentSessionCapability(agent as AgentName).verifiedAgainst;
+    } catch {
+        // An agent ts-ai-runner does not know has no capability row; the driver lookup already
+        // refused it, so this stays evidence-free rather than throwing out of the perf lane.
+        verifiedVersion = null;
+    }
+    let binary: WarmProbe['binary'] = null;
+    try {
+        binary = probeVersion(getAgentShim(agent as AgentName).getVersionCommand(), timeoutMs);
+    } catch {
+        binary = null;
+    }
+    if (agent !== 'pi') return { driver, binary, verifiedVersion };
+    // `bun run` prepends the repository bin directory. Remove only that directory to identify
+    // the separate host installation; never substitute it for the executable actually selected.
+    const repositoryBin = resolve(REPO_ROOT, 'node_modules/.bin');
+    const hostPath = (getEnvVar('PATH') ?? '')
+        .split(':')
+        .filter((path) => resolve(path) !== repositoryBin)
+        .join(':');
+    const hostPi = Bun.which('pi', { PATH: hostPath });
+    return {
+        driver,
+        binary,
+        verifiedVersion,
+        provenance: {
+            host: hostPi === null ? null : probeVersion({ command: hostPi, args: ['--version'] }, timeoutMs),
+            repository: probeVersion({ command: join(repositoryBin, 'pi'), args: ['--version'] }, timeoutMs),
+        },
+    };
+}
+
+/**
+ * Second-batch probe rows (task 1283 AC3): agents named by R3 that have no turn-session driver
+ * yet. Each row reuses {@link PerfWarm} — QUALIFICATION evidence (driver verdict + probed binary),
+ * never a latency — and stays OUT of every gain computation.
+ */
+const PERF_BATCH2_AGENTS = [
+    ['grok-build', 'grok'],
+    ['antigravity-cli', 'antigravity'],
+] as const;
+
+/**
+ * The attached-vs-supervised-warm verdict per agent (task 1283 AC2). `materiality` names the
+ * plan's provisional thresholds (p50 ≥15% lower AND p95 ≥10% lower); anything under them is
+ * reported as convenience, never as a measured speed win.
+ */
+export interface PerfModeComparison {
+    materiality: { p50PctLower: number; p95PctLower: number; source: string };
+    rows: Array<{
+        agent: string;
+        attachedP50Ms?: number;
+        attachedP95Ms?: number;
+        warmP50Ms?: number;
+        warmP95Ms?: number;
+        verdict: 'material-gain' | 'convenience-only' | 'no-gain' | 'inconclusive';
+    }>;
+}
+
+/**
+ * Verdict for one agent's attached-ready vs supervised-warm pair (task 1283 AC2). Missing
+ * measurements on either side are `inconclusive` — never folded into a gain. Under the plan's
+ * provisional materiality thresholds the gain is convenience only, and a slower attached lane
+ * is `no-gain`.
+ */
+export function modeGainVerdict(
+    attached: PerfMeasured,
+    warm: PerfMeasured,
+): 'material-gain' | 'convenience-only' | 'no-gain' | 'inconclusive' {
+    if (
+        attached.p50Ms === undefined ||
+        attached.p95Ms === undefined ||
+        warm.p50Ms === undefined ||
+        warm.p95Ms === undefined
+    ) {
+        return 'inconclusive';
+    }
+    const p50Gain = (warm.p50Ms - attached.p50Ms) / warm.p50Ms;
+    const p95Gain = (warm.p95Ms - attached.p95Ms) / warm.p95Ms;
+    if (p50Gain >= 0.15 && p95Gain >= 0.1) return 'material-gain';
+    return p50Gain > 0 || p95Gain > 0 ? 'convenience-only' : 'no-gain';
+}
+
+export interface PerfReceipt {
+    schemaVersion: 1;
+    generatedAt: string;
+    revision: string;
+    repeatCommand: string;
+    workloadDigest: string;
+    targets: { provisional: true; note: string; agents: readonly string[] };
+    /** The modes this run selected (`--modes`; the full set when absent). */
+    modes: readonly PerfMode[];
+    trials: PerfTrial[];
+    /** `warmTurns` measures supervised-warm on the shared workload; `warm` stays the qualification row. */
+    measured: Record<
+        string,
+        {
+            cold: PerfMeasured;
+            resume: PerfMeasured;
+            warm: PerfWarm;
+            warmTurns?: PerfMeasured;
+            'attached-ready'?: PerfMeasured;
+        }
+    >;
+    /** The paired deterministic lane; absent when neither supervised mode was selected. */
+    turnComparison?: TurnPerfComparison;
+    /** R3 second-batch probes — qualification rows only, excluded from gains. */
+    batch2Probes: Array<{ agent: string } & PerfWarm>;
+    /** AC2 attached-ready vs supervised-warm verdict; present when both sides were measured. */
+    attachedComparison?: PerfModeComparison;
+}
+
+/** `--version` of the real host binary (probe targets), or null when absent. */
+function hostBinaryVersion(bin: string): string | undefined {
+    const proc = Bun.spawnSync([bin, '--version'], { stdout: 'pipe', stderr: 'pipe' });
+    const text = proc.stdout.toString().trim().split('\n')[0] ?? '';
+    return proc.exitCode === 0 && text !== '' ? text : undefined;
+}
+
+/** One agent column's scratch project: the E2E leg-1 scaffold, verbatim primitives. */
+export async function scaffoldPerfProject(
+    agent: string,
+    options: { realAgents: boolean } = { realAgents: false },
+): Promise<{
+    scratch: string;
+    binDir: string;
+    stubPath: string;
+    stubLog: string;
+    plannerId: string;
+    coderId: string;
+    loopPids: number[];
+    openDb(): Promise<Awaited<ReturnType<typeof createMigratedDb>>>;
+}> {
+    const scratch = join(realpathSync(tmpdir()), `spur-fleet-perf-${agent}-${Date.now()}`);
+    const binDir = join(scratch, 'bin');
+    const stubPath = join(binDir, AGENT_TYPE);
+    const stubLog = join(scratch, 'stub-prompts.jsonl');
+    rmSync(scratch, { recursive: true, force: true });
+    mkdirSync(binDir, { recursive: true });
+    Bun.spawnSync(['git', 'init', '-q', '.'], { cwd: scratch });
+    cliOk(['self', 'init', '--json'], scratch);
+    // The planner loop scans docs/tasks at startup — leg 1 creates the task before its loops
+    // start, but the perf trials spawn loops first, so the dir must exist up front.
+    mkdirSync(join(scratch, 'docs/tasks'), { recursive: true });
+    writeFileSync(
+        join(scratch, '.spur/config.yaml'),
+        `${readFileSync(join(scratch, '.spur/config.yaml'), 'utf8')}${fleetConfigSection(options.realAgents ? agent : AGENT_TYPE)}`,
+    );
+    // The real-agent lane must NOT leave a fake binary named after the agent in the scratch tree:
+    // the member resolves `claude` from PATH, and a stray stub would shadow the installed binary
+    // for anyone reading the kept scratch project (task 1276 R1).
+    if (!options.realAgents) {
+        writeFileSync(stubPath, stubSource());
+        chmodSync(stubPath, 0o755);
+    }
+    const db = await createMigratedDb({ url: join(scratch, '.spur/spur.db') });
+    const runtime = new StrategyRuntime({ openDb: async () => db } as never);
+    await runtime.reconcileStrategy(scratch, 'gtd');
+    const ids = jsonOk<{ specs: Array<{ id: string }> }>(['agent', 'list', '--specs', '--json'], scratch).specs.map(
+        (spec) => spec.id,
+    );
+    const localId = (suffix: string): string => {
+        const found = ids.find((candidate) => candidate.endsWith(`-${suffix}`));
+        if (found === undefined) throw new Error(`fleet did not resolve member ${suffix}: ${ids.join(', ')}`);
+        return found;
+    };
+    return {
+        scratch,
+        binDir,
+        stubPath,
+        stubLog,
+        plannerId: localId(PLANNER_LOCAL_ID),
+        coderId: localId(CODER_LOCAL_ID),
+        loopPids: [],
+        openDb: async () => db,
+    };
+}
+
+/** Create + prepare one perf-trial task (same readiness shape as the E2E done-task). */
+function createPerfTask(scratch: string, hang: boolean): string {
+    const feature = jsonOk<{ ref: { id: string } }>(
+        ['feature', 'create', `Fleet perf ${Date.now()}`, '--json'],
+        scratch,
+    );
+    const created = jsonOk<{ wbs: string }>(
+        ['task', 'create', hang ? `${PERF_WORKLOAD.title} (hang)` : PERF_WORKLOAD.title, '--skip-ready', '--json'],
+        scratch,
+    );
+    const wbs = created.wbs;
+    cliOk(['task', 'update', wbs, '--ac-altitude', 'task-local', '--no-lifecycle'], scratch);
+    cliOk(['task', 'update', wbs, '--ac-numbering', 'task-local', '--no-lifecycle'], scratch);
+    cliOk(['task', 'update', wbs, '--feature', feature.ref.id, '--no-lifecycle'], scratch);
+    cliOk(
+        ['task', 'update', wbs, '--section', 'Acceptance Criteria', '--from-file', '/dev/stdin', '--no-lifecycle'],
+        scratch,
+        { input: PERF_WORKLOAD.ac },
+    );
+    cliOk(['task', 'update', wbs, '--section', 'Design', '--from-file', '/dev/stdin', '--no-lifecycle'], scratch, {
+        input: PERF_WORKLOAD.design,
+    });
+    cliOk(
+        [
+            'task',
+            'update',
+            wbs,
+            '--add-tag',
+            'fleet:auto',
+            ...(hang ? (['--add-tag', HANG_TAG] as const) : []),
+            '--no-lifecycle',
+        ],
+        scratch,
+    );
+    cliOk(['task', 'update', wbs, 'todo', '--no-lifecycle'], scratch);
+    return wbs;
+}
+
+interface PerfPhaseRowPayload {
+    phase?: string;
+    runId?: string;
+    executionId?: string;
+    taskId?: string;
+    key?: string;
+    ok?: boolean;
+    monotonicMs?: number;
+    /** `turn-settled` only: the warm-turn receipt — `mode` says whether the turn really ran warm. */
+    turn?: { mode?: string; fallbackReason?: string };
+}
+
+/** Every `fleet.phase.*` row in this scratch project, payload decoded. */
+async function readPerfPhaseRows(
+    dao: SystemEventDao,
+): Promise<
+    Array<{ name: string; at: string; sequence: number | null; runId: string | null; payload: PerfPhaseRowPayload }>
+> {
+    const rows = await dao.follow(0, 100_000);
+    return rows
+        .filter((row) => row.event_name.startsWith('fleet.phase.'))
+        .map((row) => {
+            // Task 1273: the ledger persists the v2 envelope {schemaVersion, data:{…}} —
+            // read the bounded data block (fall back to a bare payload in tests).
+            const parsed = row.payload_json === null ? {} : (JSON.parse(row.payload_json) as Record<string, unknown>);
+            const data = (parsed.data ?? parsed) as PerfPhaseRowPayload;
+            return {
+                name: row.event_name.slice('fleet.phase.'.length),
+                at: row.occurred_at,
+                sequence: row.sequence,
+                runId: row.run_id,
+                payload: data,
+            };
+        });
+}
+
+// Biome format check is content-sensitive on JSON (short-array collapse at lineWidth 120), so
+// hand-rolled stringify intermittently fails the repo gate; route the receipt through the repo's
+// own formatter. shortcut: requires biome on PATH (repo devDependency); raw JSON if absent.
+function writePerfReceipts(receipt: PerfReceipt, repeatCommand: string): void {
+    const raw = `${JSON.stringify(receipt, null, 4)}\n`;
+    const biome = Bun.which('biome') ?? `${import.meta.dir}/../../node_modules/.bin/biome`;
+    const proc = Bun.spawnSync([biome, 'format', '--stdin-file-path', PERF_RECEIPT_JSON], {
+        stdin: Buffer.from(raw),
+        stdout: 'pipe',
+        stderr: 'pipe',
+    });
+    writeFileSync(PERF_RECEIPT_JSON, proc.exitCode === 0 ? proc.stdout.toString() : raw);
+    const lines: string[] = [
+        '# Fleet performance receipt (task 1273)',
+        '',
+        `Generated: ${receipt.generatedAt}`,
+        `Revision: ${receipt.revision}`,
+        `Repeat: \`${repeatCommand}\``,
+        `Workload digest: ${receipt.workloadDigest}`,
+        'Executor settings: not applicable for deterministic stubs; real-agent defaults are unobserved. Token and resource usage: unavailable.',
+        '',
+        '> Provisional: the deterministic lane drives the SAME stub everywhere; host binaries are',
+        '> provenance only. Deltas across agents mean nothing until the real-agent lane lands (1276–1278).',
+        '',
+        '## Trials',
+        '',
+        '| agent | mode | status | durationMs | phases observed | reason |',
+        '| ----- | ---- | ------ | ---------- | --------------- | ------ |',
+    ];
+    for (const trial of receipt.trials) {
+        lines.push(
+            `| ${trial.agent} | ${trial.mode} | ${trial.status} | ${trial.durationMs ?? ''} | ${
+                trial.phases.map((mark) => mark.phase).join('→') || 'none'
+            } | ${trial.reason ?? ''} |`,
+        );
+    }
+    lines.push('', '## Measured (p50/p95 of enqueue→validated, UTC wall clock, one host)', '');
+    lines.push(
+        '| agent | mode | p50Ms | p95Ms | completionRate | validatedPerHour |',
+        '| ----- | ---- | ----- | ----- | -------------- | ---------------- |',
+    );
+    for (const [agent, modes] of Object.entries(receipt.measured)) {
+        for (const [mode, m] of Object.entries(modes)) {
+            if (mode === 'warm') {
+                const warm = m as PerfWarm;
+                lines.push(
+                    warm.status === 'qualified'
+                        ? `| ${agent} | ${mode} | — | — | — | — (qualified: ${warm.binary?.path ?? '?'} ${warm.binary?.version ?? '?'}, driver ${warm.driver ?? '?'}, verifiedAgainst ${warm.verifiedVersion ?? '?'}) |`
+                        : `| ${agent} | ${mode} | — | — | — | — (${warm.reason ?? 'unsupported'}) |`,
+                );
+                continue;
+            }
+            const measuredRow = m as PerfMeasured;
+            lines.push(
+                measuredRow.status === 'unsupported'
+                    ? `| ${agent} | ${mode} | — | — | — | — (${measuredRow.reason ?? 'unsupported'}) |`
+                    : `| ${agent} | ${mode} | ${measuredRow.p50Ms ?? ''} | ${measuredRow.p95Ms ?? ''} | ${measuredRow.completionRate ?? ''} | ${measuredRow.validatedPerHour ?? ''} |`,
+            );
+        }
+    }
+    const piProvenance = receipt.measured.pi?.warm.provenance;
+    if (piProvenance !== undefined) {
+        lines.push(
+            '',
+            '## Pi executable provenance',
+            '',
+            '| install | path | version |',
+            '| ------- | ---- | ------- |',
+        );
+        for (const [install, binary] of Object.entries(piProvenance)) {
+            lines.push(`| ${install} | ${binary?.path ?? 'absent'} | ${binary?.version ?? 'unprobed'} |`);
+        }
+        lines.push('', 'The warm row qualifies the selected binary only; the other installation is provenance.');
+    }
+    if (receipt.turnComparison !== undefined) {
+        lines.push(
+            '',
+            '## Paired keyed task-turn measurements (deterministic fixtures)',
+            '',
+            `Workload: ${receipt.turnComparison.workloadDigest}`,
+            `Pinned settings: ${JSON.stringify(receipt.turnComparison.settings)}`,
+            'Every mode uses the same bounded response and artifact contract. Pair order alternates.',
+            'These measurements cover the real process/action-contract path with a local model fixture; they make no paid-model speed claim.',
+            '',
+            '| agent | mode | p50Ms | p95Ms | completionRate | validatedPerHour | child processes |',
+            '| --- | --- | --- | --- | --- | --- | --- |',
+        );
+        for (const [agent, modes] of Object.entries(receipt.turnComparison.measured)) {
+            for (const [mode, row] of Object.entries(modes)) {
+                lines.push(
+                    `| ${agent} | ${mode} | ${row.p50Ms ?? ''} | ${row.p95Ms ?? ''} | ${row.completionRate ?? 0} | ${row.validatedPerHour ?? ''} | ${receipt.turnComparison.processes[agent]?.[mode as PerfTrial['mode']] ?? ''} |`,
+                );
+            }
+        }
+    }
+    if (receipt.batch2Probes.length > 0) {
+        // Task 1283 AC3: second-batch probes are rows, never gains.
+        lines.push(
+            '',
+            '## Batch-2 probes (R3)',
+            '',
+            '| agent | status | driver | binary | version | reason |',
+            '| ----- | ------ | ------ | ------ | ------- | ------ |',
+        );
+        for (const probe of receipt.batch2Probes) {
+            lines.push(
+                `| ${probe.agent} | ${probe.status} | ${probe.driver ?? 'none'} | ${probe.binary?.path ?? 'absent'} | ${probe.binary?.version ?? '—'} | ${probe.reason ?? ''} |`,
+            );
+        }
+        lines.push(
+            '',
+            'These agents have no turn-session driver yet; their rows are excluded from every gain computation.',
+        );
+    }
+    if (receipt.attachedComparison !== undefined) {
+        const materiality = receipt.attachedComparison.materiality;
+        lines.push(
+            '',
+            '## Mode comparison — attached-ready vs supervised-warm (task 1283)',
+            '',
+            `Materiality: attached p50 ≥ ${materiality.p50PctLower}% lower AND p95 ≥ ${materiality.p95PctLower}% lower (${materiality.source});`,
+            'anything under the thresholds is CONVENIENCE, not a measured speed win.',
+            '',
+            '| agent | attached p50Ms | attached p95Ms | warm p50Ms | warm p95Ms | verdict |',
+            '| ----- | -------------- | -------------- | ---------- | ---------- | ------- |',
+        );
+        for (const row of receipt.attachedComparison.rows) {
+            lines.push(
+                `| ${row.agent} | ${row.attachedP50Ms ?? ''} | ${row.attachedP95Ms ?? ''} | ${row.warmP50Ms ?? ''} | ${row.warmP95Ms ?? ''} | ${row.verdict} |`,
+            );
+        }
+        const convenience = receipt.attachedComparison.rows
+            .filter((row) => row.verdict === 'convenience-only' || row.verdict === 'no-gain')
+            .map((row) => row.agent);
+        if (convenience.length > 0) {
+            lines.push(
+                '',
+                `Convenience only (under materiality; AC2): ${convenience.join(', ')} — attached-ready gains ergonomics, not speed.`,
+            );
+        }
+        lines.push(
+            '',
+            'Both columns run the shared fleet workload (one digest above): attached-ready through the bound',
+            'occupant, supervised-warm through the member loop holding one warm turn session. In the stub lane the',
+            'stub speaks the qualified claude stream-json protocol, so the delta is transport, not model speed.',
+        );
+    }
+    lines.push(
+        '',
+        'Notes: durations use UTC wall clock across processes (one host clock domain);',
+        'per-phase `monotonicMs` stays in-process. `gates` has no observable in the stub lane',
+        '(the stub closes tasks without running quality gates) and is recorded absent.',
+        'Warm rows (tasks 1276-1278) record QUALIFICATION of the installed binary — driver verdict,',
+        'binary path and version; `warmTurns` rows measure supervised-warm trials on the shared workload, and a',
+        'trial counts only when its turn receipt says it ran warm. The separate paired comparison measures',
+        'cold/resume/warm task turns against one local fixture workload and feeds no Mode-comparison verdict.',
+        'Repository-local binary paths are relative to the repository root; external home paths are redacted to `~`.',
+        '',
+    );
+    writeFileSync(PERF_RECEIPT_MD, `${lines.join('\n')}\n`);
+}
+
+/**
+ * The `attached-ready` lane (task 1283): the SAME first-batch workload (`createPerfTask`) driven
+ * through 1282's `createAttachedTurnDispatcher` instead of the member's pull loop. A bound fixture
+ * occupant answers the keyed dispatch in-process with the correlated reply, so the turn resolves
+ * on the reply — exactly the production contract — while the receipt keeps the supervised rows'
+ * columns. Busy waits, attach overhead and the injected failure surface as phases or trial
+ * statuses (AC1); the responder is deterministic, so samples stay comparable across modes.
+ */
+async function runAttachedTrials(
+    p: Awaited<ReturnType<typeof scaffoldPerfProject>>,
+    context: Pick<PerfTrial, 'model' | 'provider' | 'reasoning' | 'tokens' | 'resources'>,
+    options: {
+        agent: string;
+        trials: number;
+        injectFailure: boolean;
+        binary: { path: string; version: string | null } | null;
+        hostVersion?: string;
+    },
+): Promise<PerfTrial[]> {
+    const inbox = new InboxService({ getDb: async () => await p.openDb() });
+    // Bind the fixture occupant to the roster member (G75 R3) and complete the report handshake —
+    // the attach overhead this lane measures. The binding pin arrives in the join output.
+    const attachStartedAt = Date.now();
+    const joined = jsonOk<{
+        guest: { id: string; memberBinding?: { memberId: string; ownerEpoch: number; occupancyGeneration: number } };
+    }>(['agent', 'join', '--role', 'coder', '--member', p.coderId, '--json'], p.scratch);
+    const binding = joined.guest.memberBinding;
+    if (binding === undefined) {
+        throw new Error(`attached lane: join did not bind member ${p.coderId} (guest ${joined.guest.id})`);
+    }
+    const pin = `${binding.ownerEpoch}:${binding.occupancyGeneration}`;
+    const report = jsonOk<{ accepted: boolean }>(
+        [
+            'agent',
+            'report',
+            '--state',
+            'working',
+            '--seq',
+            String(process.hrtime.bigint()),
+            '--spec',
+            p.coderId,
+            '--pin',
+            pin,
+            '--json',
+        ],
+        p.scratch,
+    );
+    if (!report.accepted) throw new Error(`attached lane: the working report was not accepted for ${p.coderId}`);
+    const attachMs = Date.now() - attachStartedAt;
+    const attachMark: PerfPhaseMark = { phase: 'attach', at: new Date().toISOString(), monotonicMs: attachMs };
+
+    // The single enqueue path (R5): the attached dispatcher's keyed send rides FleetDispatcher,
+    // adapted onto the scratch project's inbox service (the deps are structural picks).
+    const fleetDispatcher = new FleetDispatcher({
+        coordination: {
+            // Forward the keyed columns: the fixture occupant finds its request BY requestKey,
+            // and dropping the extra bag would strand the dispatch as an unkeyed chat message.
+            sendMessage: async (
+                fromId: string | null,
+                toId: string,
+                body: string,
+                replyTo: string | undefined,
+                requestKey: string | undefined,
+                extra: { kind?: string; taskId?: string; parentRunId?: string } | undefined,
+            ) => {
+                const sent = await inbox.send({
+                    from: fromId ?? 'human',
+                    to: toId,
+                    body,
+                    ...(replyTo !== undefined ? { replyTo } : {}),
+                    ...(requestKey !== undefined ? { requestKey } : {}),
+                    ...(extra?.kind !== undefined ? { kind: extra.kind as never } : {}),
+                    ...(extra?.taskId !== undefined ? { taskId: extra.taskId } : {}),
+                    ...(extra?.parentRunId !== undefined ? { parentRunId: extra.parentRunId } : {}),
+                });
+                return { msgId: sent.message.id, toId, status: sent.message.status, injected: false };
+            },
+            getMessage: async (id: string) => await inbox.get(id),
+        } as unknown as Pick<AgentCoordinationService, 'sendMessage' | 'getMessage'>,
+        // The attached dispatcher reads REPLIES, never coordination_runs rows.
+        runs: { listByMessageId: async () => [] },
+    });
+
+    const trials: PerfTrial[] = [];
+    for (let index = 0; index < options.trials + (options.injectFailure ? 1 : 0); index++) {
+        const failArm = options.injectFailure && index === options.trials; // failure runs LAST (1273 rule)
+        const busyArm = index === 0; // the first trial carries the busy wait (AC1)
+        const wbs = createPerfTask(p.scratch, false);
+        const requestId = `perf-attached-${wbs}`;
+        const correlation = {
+            runId: `perf-attached-${Date.now()}`,
+            executionId: `exec-${requestId}`,
+            requestId,
+            attempt: 1,
+        };
+        const requestKey = `fleet:task:${requestId}:1`;
+        // The handshake happens once per lane, so only the first trial carries its mark.
+        const phases: PerfPhaseMark[] = index === 0 ? [attachMark] : [];
+        const dispatcher = createAttachedTurnDispatcher({
+            dispatcher: fleetDispatcher,
+            replies: async (messageId) =>
+                (await inbox.list(p.coderId, 'out', { limit: 500 })).messages.filter(
+                    (message) => message.inReplyTo === messageId,
+                ),
+            binding: {
+                memberId: p.coderId,
+                ownerEpoch: binding.ownerEpoch,
+                occupantGeneration: binding.occupancyGeneration,
+            },
+            pollMs: 50,
+        });
+
+        // The fixture occupant: read the keyed dispatch, (optionally) sit busy, close the task
+        // through the source-local CLI exactly like the stub lane, then answer with the
+        // correlation + pin. The injected failure never answers; the abort ends the wait. The
+        // loop is bounded so a dispatch that never lands cannot hang the whole perf run.
+        const respondDeadline = Date.now() + PERF_TRIAL_TIMEOUT_MS;
+        let respondError: unknown;
+        const respond = (async () => {
+            for (;;) {
+                if (Date.now() > respondDeadline) return; // the dispatch turn will report its own deadline
+                const queued = (await inbox.list(p.coderId, 'in', { limit: 500 })).messages.find(
+                    (message) => message.requestKey === requestKey && message.status === 'queued',
+                );
+                if (queued !== undefined) {
+                    if (busyArm) {
+                        const busyStart = Date.now();
+                        await sleep(PERF_ATTACH_BUSY_MS);
+                        phases.push({
+                            phase: 'busy-wait',
+                            at: new Date().toISOString(),
+                            monotonicMs: Date.now() - busyStart,
+                        });
+                    }
+                    if (failArm) return; // no reply: the dispatcher's abort ends the turn unknown
+                    cliOk(['task', 'update', wbs, 'wip', '--no-lifecycle'], p.scratch);
+                    cliOk(
+                        ['task', 'update', wbs, '--section', 'Solution', '--from-file', '/dev/stdin', '--no-lifecycle'],
+                        p.scratch,
+                        {
+                            input: 'scripts/commands/fleet-e2e.ts:1 — the attached fixture occupant closed this trial task.\n',
+                        },
+                    );
+                    cliOk(
+                        ['task', 'update', wbs, '--section', 'Testing', '--from-file', '/dev/stdin', '--no-lifecycle'],
+                        p.scratch,
+                        {
+                            input:
+                                'The attached fixture occupant drove ' +
+                                wbs +
+                                ' through the source-local CLI (todo -> wip -> testing -> done).\n',
+                        },
+                    );
+                    cliOk(['task', 'update', wbs, 'testing', '--no-lifecycle'], p.scratch);
+                    cliOk(
+                        [
+                            'task',
+                            'update',
+                            wbs,
+                            'done',
+                            '--force-done',
+                            '--reason',
+                            'fleet-e2e attached fixture',
+                            '--no-lifecycle',
+                            '--json',
+                        ],
+                        p.scratch,
+                    );
+                    await inbox.reply(
+                        queued.id,
+                        p.coderId,
+                        JSON.stringify({
+                            requestId,
+                            attempt: 1,
+                            ownerEpoch: binding.ownerEpoch,
+                            occupancyGeneration: binding.occupancyGeneration,
+                            artifact: 'scripts/commands/fleet-e2e.ts:1',
+                        }),
+                    );
+                    return;
+                }
+                await sleep(50);
+            }
+        })().catch((error: unknown) => {
+            // A crashed responder must surface in the trial's reason, not vanish as an
+            // unhandled rejection while the dispatch polls on.
+            respondError = error;
+        });
+
+        const abort = new AbortController();
+        // Every trial is bounded by the lane's own timeout: the dispatcher's built-in deadline
+        // is one hour (production contract), far past what a perf sample may wait. Abort ends
+        // the turn outcome-unknown (1282), keeping the trial resumable rather than force-failed.
+        const deadlineTimer = setTimeout(() => abort.abort(), PERF_TRIAL_TIMEOUT_MS);
+        const failTimer = failArm ? setTimeout(() => abort.abort(), PERF_ATTACH_FAIL_MS) : undefined;
+        const describe = (base: string): string =>
+            respondError === undefined ? base : `${base}; fixture responder failed: ${errorMessage(respondError)}`;
+        try {
+            const dispatchStartedAt = Date.now();
+            const result = await dispatcher.dispatchTurn({
+                agent: options.agent,
+                prompt: `/sp:dev-run ${wbs} --auto`,
+                cwd: p.scratch,
+                role: 'coder',
+                correlation,
+                signal: abort.signal,
+            });
+            const durationMs = Date.now() - dispatchStartedAt;
+            await respond;
+            if (result.kind !== 'warm') {
+                trials.push({
+                    ...context,
+                    agent: options.agent,
+                    mode: 'attached-ready',
+                    status: 'failed',
+                    phases,
+                    binary: options.binary,
+                    ...(options.hostVersion !== undefined ? { hostBinaryVersion: options.hostVersion } : {}),
+                    reason: `attached dispatch returned ${result.kind}, expected a warm turn`,
+                });
+                continue;
+            }
+            phases.push({
+                phase: result.outcome.kind === 'success' ? 'terminal' : 'deadline',
+                at: result.outcome.terminalAt,
+                monotonicMs: durationMs,
+            });
+            if (result.outcome.kind !== 'success') {
+                trials.push({
+                    ...context,
+                    agent: options.agent,
+                    mode: 'attached-ready',
+                    status: failArm ? 'timed-out' : 'failed',
+                    // The aborted wait still OCCUPIED the member for its wall time, so the
+                    // throughput denominator sees it (same convention as the paired lane's
+                    // injected-failure row).
+                    durationMs,
+                    phases,
+                    binary: options.binary,
+                    ...(options.hostVersion !== undefined ? { hostBinaryVersion: options.hostVersion } : {}),
+                    reason: failArm
+                        ? describe(
+                              `--inject-failure: the occupant never replied; aborted after ${PERF_ATTACH_FAIL_MS}ms; outcome-unknown stays in the denominator`,
+                          )
+                        : describe(`attached turn ended ${result.outcome.kind}: ${result.outcome.reason}`),
+                });
+                continue;
+            }
+            const done = jsonOk<{ status: string }>(['task', 'show', wbs, '--json'], p.scratch);
+            trials.push({
+                ...context,
+                agent: options.agent,
+                mode: 'attached-ready',
+                status: done.status === 'done' ? 'validated' : 'failed',
+                ...(done.status === 'done' ? { durationMs } : {}),
+                phases,
+                binary: options.binary,
+                ...(options.hostVersion !== undefined ? { hostBinaryVersion: options.hostVersion } : {}),
+                ...(done.status !== 'done'
+                    ? { reason: describe(`correlated reply arrived but task status=${done.status}`) }
+                    : {}),
+            });
+        } catch (error) {
+            await respond.catch(() => {});
+            trials.push({
+                ...context,
+                agent: options.agent,
+                mode: 'attached-ready',
+                status: 'failed',
+                phases,
+                binary: options.binary,
+                ...(options.hostVersion !== undefined ? { hostBinaryVersion: options.hostVersion } : {}),
+                reason: describe(errorMessage(error)),
+            });
+        } finally {
+            if (failTimer !== undefined) clearTimeout(failTimer);
+            clearTimeout(deadlineTimer);
+        }
+    }
+    return trials;
+}
+
+/**
+ * `--perf` (task 1273): per target agent, scaffold a scratch fleet, drive `--trials` keyed
+ * task turns (first = cold, rest = resume), join the `fleet.phase.*` marks from the real
+ * ledger, and write paired-trial receipts. The stub lane never compares agent speed — it
+ * proves the measurement pipeline and records baseline numbers with provenance.
+ *
+ * `--agents <csv>` narrows the measured columns; `--real-agents` (task 1276, opt-in) stops
+ * shadowing the agent binary with the stub, so the member spawns the INSTALLED binary and a
+ * correlated warm turn (task 1275 seam + a ts-ai-runner driver) can be measured for real. The
+ * warm row is qualification evidence either way: it names the probed binary path and version and
+ * the driver's own verdict, and carries a latency only when the real lane produced trials.
+ */
+export async function runFleetPerf(options: {
+    trials: number;
+    keep: boolean;
+    injectFailure: StepName | null;
+    realAgents: boolean;
+    agents: readonly string[];
+    modes: readonly PerfMode[];
+}): Promise<number> {
+    // Mode selection (task 1283): the supervised lanes keep 1273's structure; `attached-ready`
+    // adds the 1282 dispatcher lane per agent. The warm QUALIFICATION row is cheap provenance and
+    // stays in every run so the receipt's measured record keeps its shape.
+    const modes = options.modes;
+    const supervisedCold = modes.includes('supervised-cold');
+    const supervisedWarm = modes.includes('supervised-warm');
+    const attachedReady = modes.includes('attached-ready');
+    const revision = Bun.spawnSync(['git', 'rev-parse', 'HEAD'], { cwd: REPO_ROOT });
+    if (revision.exitCode !== 0) throw new Error('fleet-perf: cannot record the repository revision');
+    const setting = options.realAgents ? 'unavailable (agent default)' : 'not-applicable (deterministic stub)';
+    const trialContext = {
+        model: setting,
+        provider: setting,
+        reasoning: setting,
+        tokens: 'unavailable' as const,
+        resources: 'unavailable' as const,
+    };
+    const targets = PERF_AGENTS.filter((agent) => options.agents.includes(agent));
+    const warmProbes = new Map<string, WarmProbe>();
+    for (const agent of targets) warmProbes.set(agent, probeWarm(agent));
+    const repeatCommand = `bun run fleet-e2e --perf --trials ${options.trials}${options.realAgents ? ' --real-agents' : ''}${options.agents.length === PERF_AGENTS.length ? '' : ` --agents ${options.agents.join(',')}`}${modes.length === ALL_PERF_MODES.length ? '' : ` --modes ${modes.join(',')}`}${options.injectFailure !== null ? ` --inject-failure ${options.injectFailure}` : ''}${options.keep ? ' --keep' : ''}`;
+    const workloadDigest = `sha256:${createHash('sha256')
+        .update(`${PERF_WORKLOAD.title}\n${PERF_WORKLOAD.ac}${PERF_WORKLOAD.design}`)
+        .digest('hex')}`;
+    const trials: PerfTrial[] = [];
+    const failures: string[] = [];
+
+    for (const agent of targets) {
+        let project: Awaited<ReturnType<typeof scaffoldPerfProject>> | undefined;
+        try {
+            // `p` is the narrowed alias the async closures read; a captured `let` never narrows.
+            const p = await scaffoldPerfProject(agent, { realAgents: options.realAgents });
+            project = p;
+            const hostVersion = hostBinaryVersion(agent);
+            // The binary the row names: the stub in the deterministic lane, the installed binary
+            // when the real-agent lane runs (task 1276 R1 — the row's provenance must be true).
+            const binaryRow =
+                (options.realAgents
+                    ? (warmProbes.get(agent)?.binary ?? null)
+                    : { path: p.stubPath, version: 'fleet-e2e-stub 1.0.0' }) ?? null;
+            const warmBinary = options.realAgents
+                ? binaryRow
+                : { path: p.stubPath, version: `${STUB_WARM_VERSION} (fleet-e2e-stub)` };
+            const dao = new SystemEventDao(await p.openDb());
+            const runs = new CoordinationRunDao(await p.openDb());
+            const inbox = new InboxService({ getDb: async () => await p.openDb() });
+            // The supervised lanes dispatch through the member's pull loop, so the loops only
+            // exist while a supervised lane runs. `attached-ready` binds a fixture occupant whose
+            // in-process responder answers the keyed dispatch — a live loop would claim the
+            // request message first, so it is killed before the attached trials start.
+            const startLoops = async (suffix: string, env: Record<string, string>): Promise<void> => {
+                for (const specId of [p.plannerId, p.coderId]) {
+                    p.loopPids.push(
+                        spawnLoop(
+                            p.scratch,
+                            { binDir: options.realAgents ? '' : p.binDir, stubLog: p.stubLog },
+                            specId,
+                            suffix,
+                            env,
+                        ),
+                    );
+                }
+                // Wait for the orchestrator claim so the first trial's dispatch has an owner.
+                const claims = new ProjectClaimDao(await p.openDb());
+                await pollUntil(
+                    `${agent}: the planner orchestrator claim`,
+                    async () => {
+                        const claim = await claims.get(p.scratch, 'orchestrator');
+                        return claim !== null && claim.expiresAt > Date.now() ? claim : undefined;
+                    },
+                    BOUNDS.loops,
+                );
+            };
+            const stopLoops = async (): Promise<void> => {
+                for (const pid of p.loopPids) {
+                    try {
+                        process.kill(pid, 'SIGTERM');
+                    } catch {
+                        /* already gone */
+                    }
+                }
+                p.loopPids = [];
+                await sleep(1_000);
+            };
+            if (supervisedCold) await startLoops('', {});
+
+            const driveTrial = async (index: number, hang: boolean, lane: 'cold' | 'warm' = 'cold'): Promise<void> => {
+                const mode: PerfTrial['mode'] = lane === 'warm' ? 'warm' : index === 0 ? 'cold' : 'resume';
+                const wbs = createPerfTask(p.scratch, hang);
+                let runId: string | undefined;
+                let key: string | undefined;
+                try {
+                    const settled = await pollUntil(
+                        `${agent} trial ${index} (${mode}${hang ? ', hang-armed' : ''}) to settle`,
+                        async () => {
+                            const done = jsonOk<{ status: string }>(['task', 'show', wbs, '--json'], p.scratch);
+                            if (hang) {
+                                // A hang-armed trial never closes: its deadline below IS the trial's
+                                // failure verdict. Any keyed attempt observed counts as settled enough
+                                // to attribute phases.
+                                const attempts = await inbox.taskAttempts(wbs);
+                                if (attempts.length === 0) return undefined;
+                                return true;
+                            }
+                            if (done.status !== 'done') return undefined;
+                            const attemptRows = await inbox.taskAttempts(wbs);
+                            const attempt = attemptRows[0]; // newest first
+                            if (attempt === undefined) return undefined;
+                            const runRows = await runs.listByMessageId(attempt.id);
+                            const run = runRows[0];
+                            if (run === undefined) return undefined;
+                            runId = run.run_id;
+                            key = attempt.requestKey ?? undefined;
+                            // The loop records the turn receipt only after the run returns, which is
+                            // after the task already reads `done`; judging warmth earlier races it.
+                            if (lane === 'warm') {
+                                const rows = await readPerfPhaseRows(dao);
+                                if (!rows.some((row) => row.name === 'turn-settled' && row.payload.runId === runId)) {
+                                    return undefined;
+                                }
+                            }
+                            return true;
+                        },
+                        PERF_TRIAL_TIMEOUT_MS,
+                    );
+                    void settled;
+                    const allRows = await readPerfPhaseRows(dao);
+                    const phases: PerfPhaseMark[] = allRows
+                        .filter(
+                            (row) =>
+                                row.payload.taskId === wbs ||
+                                (runId !== undefined && (row.runId === runId || row.payload.runId === runId)) ||
+                                // Task 1273: the claim row is the only wbs-carrying row on the
+                                // member side when the strategy row is missing (resumed scratch).
+                                (key !== undefined && row.payload.key === key),
+                        )
+                        // Task 1273: order by wall clock — `sequence` is the emitting
+                        // process's event counter, not a global insert order.
+                        .sort((a, b) => Date.parse(a.at) - Date.parse(b.at))
+                        .map((row) => ({
+                            phase: row.name,
+                            at: row.at,
+                            ...(row.payload.monotonicMs !== undefined ? { monotonicMs: row.payload.monotonicMs } : {}),
+                            ...(typeof row.payload.executionId === 'string' && row.payload.executionId !== ''
+                                ? { executionId: row.payload.executionId }
+                                : {}),
+                        }));
+                    // Join identity: the keyed path's claim mark carries (runId, executionId)
+                    // and its key names the task; a task turn terminal is the lifecycle
+                    // `terminal` mark of THAT execution (svc.run lane — work-item envelopes
+                    // don't exist here).
+                    const claimRow = allRows.find(
+                        (row) =>
+                            row.name === 'claim' &&
+                            (runId !== undefined
+                                ? row.runId === runId || row.payload.runId === runId
+                                : row.payload.key?.includes(wbs) === true),
+                    );
+                    const executionId =
+                        typeof claimRow?.payload.executionId === 'string' ? claimRow.payload.executionId : undefined;
+                    if (hang) {
+                        trials.push({
+                            ...trialContext,
+                            agent,
+                            mode,
+                            status: 'timed-out',
+                            phases,
+                            ...(runId !== undefined ? { runId } : {}),
+                            ...(key !== undefined ? { key } : {}),
+                            binary: lane === 'warm' ? warmBinary : binaryRow,
+                            ...(hostVersion !== undefined ? { hostBinaryVersion: hostVersion } : {}),
+                            reason: `--inject-failure ${options.injectFailure}: synthetic timeout for a hang-tagged trial; stays in the denominator`,
+                        });
+                        return;
+                    }
+                    const enqueue = phases.find((mark) => mark.phase === 'enqueue');
+                    // Workflow-lane contract completion when the envelope exists; otherwise the
+                    // task turn's lifecycle terminal for THIS execution (svc.run lane — work-item
+                    // envelopes don't exist for plain task dispatch).
+                    const terminalAt = phases
+                        .filter((mark) => mark.phase === 'terminal' && mark.executionId === executionId)
+                        .at(-1)?.at;
+                    const validatedAt = phases.find((mark) => mark.phase === 'contract-validated')?.at ?? terminalAt;
+                    const done = jsonOk<{ status: string }>(['task', 'show', wbs, '--json'], p.scratch);
+                    // A warm-lane trial counts only when the member's receipt says the turn ran warm;
+                    // a fallback is a cold turn wearing a warm label (task 1276 AC1's overclaim).
+                    const settledTurn = allRows.find(
+                        (row) => row.name === 'turn-settled' && runId !== undefined && row.payload.runId === runId,
+                    )?.payload.turn;
+                    if (lane === 'warm' && settledTurn?.mode !== 'warm') {
+                        trials.push({
+                            ...trialContext,
+                            agent,
+                            mode,
+                            status: 'failed',
+                            phases,
+                            ...(runId !== undefined ? { runId } : {}),
+                            ...(key !== undefined ? { key } : {}),
+                            binary: lane === 'warm' ? warmBinary : binaryRow,
+                            ...(hostVersion !== undefined ? { hostBinaryVersion: hostVersion } : {}),
+                            reason: `turn did not run warm: ${settledTurn === undefined ? 'no turn-settled receipt' : `${settledTurn.mode} (${settledTurn.fallbackReason ?? 'no reason'})`}`,
+                        });
+                        failures.push(`${agent} warm trial ${index}: not warm`);
+                        return;
+                    }
+                    if (enqueue === undefined || validatedAt === undefined || done.status !== 'done') {
+                        trials.push({
+                            ...trialContext,
+                            agent,
+                            mode,
+                            status: 'failed',
+                            phases,
+                            ...(runId !== undefined ? { runId } : {}),
+                            ...(key !== undefined ? { key } : {}),
+                            binary: lane === 'warm' ? warmBinary : binaryRow,
+                            ...(hostVersion !== undefined ? { hostBinaryVersion: hostVersion } : {}),
+                            reason: `missing ${enqueue === undefined ? 'enqueue' : executionId === undefined ? 'claim/executionId' : 'terminal'} phase or task status=${done.status}`,
+                        });
+                        failures.push(`${agent} trial ${index}: no validated terminal`);
+                        return;
+                    }
+                    const durationMs = new Date(validatedAt).getTime() - new Date(enqueue.at).getTime();
+                    trials.push({
+                        ...trialContext,
+                        agent,
+                        mode,
+                        status: 'validated',
+                        durationMs,
+                        phases,
+                        ...(runId !== undefined ? { runId } : {}),
+                        ...(key !== undefined ? { key } : {}),
+                        binary: lane === 'warm' ? warmBinary : binaryRow,
+                        ...(hostVersion !== undefined ? { hostBinaryVersion: hostVersion } : {}),
+                    });
+                } catch (error) {
+                    // Deadline hit (hang arm) or an infrastructure error — the row records which.
+                    const timedOut = errorMessage(error).includes('timed out');
+                    trials.push({
+                        ...trialContext,
+                        agent,
+                        mode,
+                        status: hang ? 'timed-out' : timedOut ? 'timed-out' : 'failed',
+                        phases: [],
+                        binary: lane === 'warm' ? warmBinary : binaryRow,
+                        ...(hostVersion !== undefined ? { hostBinaryVersion: hostVersion } : {}),
+                        reason: errorMessage(error),
+                    });
+                    if (!hang) failures.push(`${agent} trial ${index}: ${errorMessage(error)}`);
+                }
+            };
+
+            const quietBetweenTrials = async (): Promise<void> => {
+                // The coder must be fully quiet so the next task's turn is clean.
+                await pollUntil(
+                    `${agent}: the coder to be quiet between trials`,
+                    async () => {
+                        if (await runs.hasRunning(p.coderId)) return undefined;
+                        const queued = (await inbox.list(p.coderId, 'in', { limit: 500 })).messages.filter(
+                            (row) => row.status === 'queued' || row.status === 'claimed',
+                        );
+                        return queued.length === 0 ? true : undefined;
+                    },
+                    BOUNDS.done,
+                );
+            };
+            for (let index = 0; index < (supervisedCold ? options.trials : 0); index++) {
+                await driveTrial(index, false);
+                if (index < options.trials - 1) await quietBetweenTrials();
+            }
+            // The armed failure runs LAST in the first SELECTED agent's project only — a hung turn
+            // holds the write slot and would block every later trial. Keyed on `targets`, not the
+            // full roster, so a narrowed `--agents pi` run still arms it.
+            if (options.injectFailure !== null && supervisedCold && agent === targets[0]) {
+                await driveTrial(options.trials, true);
+            }
+            if (supervisedWarm) {
+                // Fresh loops whose member holds ONE warm turn session across every trial on the
+                // shared workload: same task shape, same dispatch, only the transport differs.
+                // The stub lane opts the stub into the qualified protocol; real agents qualify on
+                // their own binary.
+                await stopLoops();
+                await startLoops('-warm', options.realAgents ? {} : { SPUR_E2E_STUB_WARM: '1' });
+                for (let index = 0; index < options.trials; index++) {
+                    await driveTrial(index, false, 'warm');
+                    if (index < options.trials - 1) await quietBetweenTrials();
+                }
+            }
+            if (attachedReady) {
+                // No loops on the member now: the attached occupant replaces the pull loop as
+                // the executor for this lane (the finally below reaps anything supervised left).
+                await stopLoops();
+                trials.push(
+                    ...(await runAttachedTrials(p, trialContext, {
+                        agent,
+                        trials: options.trials,
+                        injectFailure: options.injectFailure !== null && agent === targets[0],
+                        binary: binaryRow,
+                        ...(hostVersion !== undefined ? { hostVersion } : {}),
+                    })),
+                );
+            }
+        } catch (error) {
+            failures.push(
+                `${agent}: ${errorMessage(error)}\\n${error instanceof Error ? (error.stack ?? '').split('\n').slice(0, 6).join('\n') : ''}`,
+            );
+        } finally {
+            const proj = project;
+            if (proj !== undefined) {
+                for (const pid of proj.loopPids) {
+                    try {
+                        process.kill(pid, 'SIGTERM');
+                    } catch {
+                        /* already gone */
+                    }
+                }
+                await sleep(1_000);
+                try {
+                    (await proj.openDb()).close();
+                } catch {
+                    /* closed with the dir */
+                }
+                const resolvedScratch = resolve(proj.scratch);
+                const resolvedTmp = realpathSync(tmpdir());
+                if (resolvedScratch.startsWith(`${resolvedTmp}/`) && !options.keep) {
+                    rmSync(resolvedScratch, { recursive: true, force: true });
+                }
+            }
+        }
+    }
+
+    const measured: PerfReceipt['measured'] = {};
+    for (const agent of targets) {
+        const agentTrials = trials.filter((trial) => trial.agent === agent);
+        const cold = perfMeasured(agentTrials, 'cold');
+        const resume = perfMeasured(agentTrials, 'resume');
+        measured[agent] = {
+            cold,
+            resume,
+            warm: warmRow(agent, warmProbes.get(agent) ?? { driver: null, binary: null, verifiedVersion: null }),
+            ...(supervisedWarm ? { warmTurns: perfMeasured(agentTrials, 'warm') } : {}),
+            ...(attachedReady ? { 'attached-ready': perfMeasured(agentTrials, 'attached-ready') } : {}),
+        };
+    }
+    // The paired deterministic lane belongs to the supervised modes; an attached-only run skips it.
+    const turnComparison =
+        supervisedCold || supervisedWarm
+            ? await runPairedTurnPerf(targets, options.trials, options.injectFailure !== null)
+            : undefined;
+    for (const trial of turnComparison?.trials ?? []) {
+        if (trial.status !== 'validated' && !trial.injected)
+            failures.push(`${trial.agent} ${trial.mode}: ${trial.reason}`);
+    }
+    // R3 second-batch probes: qualification rows only — no driver, no latency, excluded from gains.
+    // The binary column is PATH provenance (`which`), so a later driver lands against evidence.
+    const batch2Probes = PERF_BATCH2_AGENTS.map(([agent, bin]) => ({
+        agent,
+        ...warmRow(agent, {
+            driver: null,
+            binary:
+                Bun.which(bin) !== null
+                    ? { path: Bun.which(bin) as string, version: hostBinaryVersion(bin) ?? null }
+                    : null,
+            verifiedVersion: null,
+        }),
+    }));
+    // AC2: attach the mode verdict when both sides of the comparison were measured.
+    const attachedComparison: PerfModeComparison | undefined = attachedReady
+        ? {
+              materiality: {
+                  p50PctLower: 15,
+                  p95PctLower: 10,
+                  source: 'docs/plans/2026-10-21-fleet-performance-measurement.md (provisional targets)',
+              },
+              rows: targets.map((agent) => {
+                  const attached = measured[agent]?.['attached-ready'];
+                  // Same workload, same digest: the supervised-warm lane above, never the turn fixture.
+                  const warm = measured[agent]?.warmTurns;
+                  return {
+                      agent,
+                      ...(attached?.p50Ms !== undefined ? { attachedP50Ms: attached.p50Ms } : {}),
+                      ...(attached?.p95Ms !== undefined ? { attachedP95Ms: attached.p95Ms } : {}),
+                      ...(warm?.p50Ms !== undefined ? { warmP50Ms: warm.p50Ms } : {}),
+                      ...(warm?.p95Ms !== undefined ? { warmP95Ms: warm.p95Ms } : {}),
+                      verdict:
+                          attached === undefined || warm === undefined
+                              ? ('inconclusive' as const)
+                              : modeGainVerdict(attached, warm),
+                  };
+              }),
+          }
+        : undefined;
+    const receipt: PerfReceipt = {
+        schemaVersion: 1,
+        generatedAt: new Date().toISOString(),
+        revision: revision.stdout.toString().trim(),
+        repeatCommand,
+        workloadDigest,
+        targets: {
+            provisional: true,
+            note: options.realAgents
+                ? 'real-agent lane — the member ran the installed binary; deltas across agents compare different binaries'
+                : 'deterministic stub lane — same binary everywhere; comparisons are provisional. Warm rows record qualification of the INSTALLED binary (tasks 1276-1278) and carry no latency',
+            agents: targets,
+        },
+        /** The modes this run selected (`--modes`; the full set when absent). */
+        modes,
+        trials,
+        measured,
+        ...(turnComparison !== undefined ? { turnComparison } : {}),
+        batch2Probes,
+        ...(attachedComparison !== undefined ? { attachedComparison } : {}),
+    };
+    writePerfReceipts(receipt, repeatCommand);
+    if (failures.length > 0) {
+        process.stderr.write(
+            `fleet-perf: ${failures.length} problem(s):\n${failures.map((f) => `  - ${f}`).join('\n')}\n`,
+        );
+        return 1;
+    }
+    process.stdout.write(
+        `fleet-perf: ${trials.filter((t) => t.status === 'validated').length}/${trials.length} trials validated; receipts at ${PERF_RECEIPT_JSON} and ${PERF_RECEIPT_MD}\n`,
+    );
+    return 0;
+}
+
 export async function runFleetE2e(args: string[]): Promise<number> {
-    const { injectFailure, keep, guestJoinFixture, matrix } = parseArgs(args);
+    const {
+        injectFailure,
+        keep,
+        guestJoinFixture,
+        matrix,
+        perf,
+        trials,
+        realAgents,
+        hostProbe,
+        realHosts,
+        agents,
+        modes,
+    } = parseArgs(args);
+    if (hostProbe) {
+        return await runHostProbe({ realHosts, keep, ...(agents === undefined ? {} : { agents }) });
+    }
     if (matrix) return await runExecutorMatrix({ keep });
+    // The perf lane owns its own default: absent `--agents` means every target (1273 R4).
+    if (perf)
+        return await runFleetPerf({
+            trials,
+            keep,
+            injectFailure,
+            realAgents,
+            agents: agents ?? PERF_AGENTS,
+            modes: perfModesOf(modes),
+        });
     // Canonical scratch root: on macOS `os.tmpdir()` is a symlinked path, and the fleet
     // normalizes project paths (`normalizeProjectPath`), so a raw `/var/...` path would never
     // match the claim/session rows the loops write under `/private/var/...`.
@@ -1497,8 +3513,8 @@ export async function runFleetE2e(args: string[]): Promise<number> {
             const openDb = db;
             if (openDb === undefined) throw new Error('no project db');
             const runs = new CoordinationRunDao(openDb);
-            const inboxRows = new InboxUnfinishedDao(openDb);
-            const keyedRows = (wbs: string) => inboxRows.listByRequestKeyPrefix(`fleet:task:${wbs}:`);
+            const inboxRows = new InboxService({ getDb: async () => openDb });
+            const keyedRows = (wbs: string) => inboxRows.taskAttempts(wbs);
 
             // (0) R1's E2E proof: ONE unkeyed conversational message to the persistent coder,
             // delivered through stdin with NO coordination run row — exactly the message class that
@@ -1515,8 +3531,8 @@ export async function runFleetE2e(args: string[]): Promise<number> {
                     const done = jsonOk<{ status: string }>(['task', 'show', state.wbs ?? '', '--json'], scratch);
                     if (done.status !== 'done') return undefined;
                     if (await runs.hasRunning(state.coderId)) return undefined;
-                    const queued = (await inboxRows.listUnfinished(state.coderId)).filter(
-                        (row) => row.status === 'queued' || row.status === 'injected',
+                    const queued = (await inboxRows.list(state.coderId, 'in', { limit: 500 })).messages.filter(
+                        (row) => row.status === 'queued' || row.status === 'claimed',
                     );
                     return queued.length === 0 ? true : undefined;
                 },
@@ -1534,7 +3550,9 @@ export async function runFleetE2e(args: string[]): Promise<number> {
                         scratch,
                     ).messages;
                     const row = rows.find((message) => message.id === chat.msgId);
-                    if (row === undefined || row.status === 'queued' || row.status === 'injected') return undefined;
+                    // G11 renamed the consumed state `injected` → `claimed`: a chat row that a
+                    // drain picked up is `claimed`, so only `queued` means "not delivered yet".
+                    if (row === undefined || row.status === 'queued') return undefined;
                     // A run row here would make it a receipt-bearing delivery: this message must be
                     // delivered through stdin, alone, with no run row at all.
                     if ((await runs.listByMessageId(chat.msgId)).length > 0) {
@@ -1596,7 +3614,7 @@ export async function runFleetE2e(args: string[]): Promise<number> {
             // path never writes.
             const attemptOne = await pollUntil(
                 `the strategy to dispatch fleet:task:${wbs}:1`,
-                async () => (await keyedRows(wbs)).find((row) => row.request_key === `fleet:task:${wbs}:1`),
+                async () => (await keyedRows(wbs)).find((row) => row.requestKey === `fleet:task:${wbs}:1`),
                 BOUNDS.hang,
             );
             // The keyed turn writes its coordination row at invoke start; the stub then hangs.
@@ -1636,7 +3654,7 @@ export async function runFleetE2e(args: string[]): Promise<number> {
             // (d) the strategy re-dispatches under the next attempt key with no operator message.
             const attemptTwo = await pollUntil(
                 `the strategy to re-dispatch fleet:task:${wbs}:2`,
-                async () => (await keyedRows(wbs)).find((row) => row.request_key === `fleet:task:${wbs}:2`),
+                async () => (await keyedRows(wbs)).find((row) => row.requestKey === `fleet:task:${wbs}:2`),
                 BOUNDS.dispatch,
             );
             const resumed = await pollUntil(
@@ -1667,9 +3685,9 @@ export async function runFleetE2e(args: string[]): Promise<number> {
                 STEP_SIX_ASSERTION,
                 [
                     `unkeyed delivered=${chat.msgId} status=delivered (stdin, no run row) — named by 0 of ${keyedOnlyHolds.length} unresolved-deliveries hold(s)`,
-                    `attempt-1=${attemptOne.request_key} run=${runningRun.run_id} hung directive=${hungDirective}`,
+                    `attempt-1=${attemptOne.requestKey} run=${runningRun.run_id} hung directive=${hungDirective}`,
                     `killed → restarted pid=${restartedPid}; attempt-1 run=${terminalRun.run_id} status=${terminalRun.status} completed_at=${terminalRun.completed_at}`,
-                    `attempt-2=${attemptTwo.request_key} dispatched by the strategy; resumed directive=${resumedDirective}`,
+                    `attempt-2=${attemptTwo.requestKey} dispatched by the strategy; resumed directive=${resumedDirective}`,
                 ].join(' | '),
             );
         } catch (error) {

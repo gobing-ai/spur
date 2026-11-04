@@ -6,7 +6,7 @@ status: done
 priority: P1
 tags: []
 created_at: "2026-09-03T20:25:50.515Z"
-updated_at: "2026-10-01T17:52:40.287Z"
+updated_at: "2026-10-21T18:35:05.587Z"
 ---
 
 # D9: Workflow seam stabilization and proportional gate rollout
@@ -206,6 +206,13 @@ Feature: Workflow seam stabilization and proportional gate rollout
 <!-- END AUTO-GENERATED -->
 
 ## Notes
+
+### Current reading — 2026-10-21
+
+D65 / ADR-140 supersedes the separate proof-chain and inline machinery referenced in the original stabilization plan. Preserve the Option B decision and completed work as history.
+
+### Historical notes
+
 ### Authority and selected branch
 
 The frozen D8 strategy remains the design authority. Its re-measure gate is a conjunction: at least five real terminal runs and at least 80% `mappedRuns / terminalRuns` coverage per candidate. Task 0757 measured wrapup at `1 / 45` (2.2%), task-lifecycle at `0 / 465` (0%), and task-pipeline at `0 / 207` (0%). The coverage conjunct fails, so D9 closes through Option B.
@@ -230,6 +237,7 @@ Task 0764 reconciles the conditional contracts and covers these feature scenario
 - `A proportional route always resolves and never trades the safety floor`
 
 Tasks 0754, 0757, 0758, 0759, and 0764 are re-verified against this selected branch. ADR-107's 2026-09-04 amendment records the same closure and reopening rule.
+
 ## History
 
 - 2026-09-03T22:54:31.541Z backlog → active (system)

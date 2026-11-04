@@ -1,5 +1,227 @@
 # Changelog
 
+## [0.4.22] - 2026-11-03
+
+_Claim bullets carry one source anchor and the level that anchor supports — `HIGH`: every anchor is a
+`path:line` beyond line 1 and resolves; `MEDIUM`: every anchor resolves but the set is not all
+line-precise (a URL or a whole file); `LOW`: an anchor that does not resolve, or none. The level is a
+function of the anchors, not a judgement (ADR-144; the check is
+`repo-wide-tests/changelog-confidence.test.ts`). Unanchored bullets are bookkeeping (status moves,
+filings) and assert no code, API or version fact._
+
+### Added
+- report zg readiness in `spur init` and gitignore the `.zvec-grep/` index directory (1289) (3f6a00b0d)
+  <!-- src: apps/cli/src/commands/init.ts:401, apps/cli/src/commands/init.ts:507 · confidence: HIGH -->
+- mount the search contract on the local server and add the Board search module with auto/exact/fuzzy mode tabs (1287) (730dcd2d4)
+  <!-- src: packages/contracts/src/index.ts:39, apps/server/src/router.ts:47, apps/web/src/modules/search/index.tsx:88 · confidence: HIGH -->
+- add the hybrid search core service (exact ripgrep + fuzzy zg), the zg output adapter, and the `spur self search` verb (1285, 1286) (4f9ba1aad)
+  <!-- src: packages/app/src/services/search.ts:216, packages/app/src/services/search-zg.ts:50, apps/cli/src/commands/self/search.ts:15 · confidence: HIGH -->
+
+### Fixed
+- report the search readiness line and JSON field on converged re-runs by probing before the init early return (c9c8e837e)
+  <!-- src: apps/cli/src/commands/init.ts:254, apps/cli/tests/commands/init-search.test.ts:120 · confidence: HIGH -->
+- resolve nested bun.lock keys through the `.bun` store instead of the hoisted copy, so isolated-linker packages are not blamed against the root workspace pin (0bc503c38)
+  <!-- src: scripts/commands/dependency-drift-check.ts:81, scripts/commands/dependency-drift-check.ts:88, scripts/commands/dependency-drift-check.test.ts:204 · confidence: HIGH -->
+- re-check remote board entries the server reports stopped from the browser so they reopen instead of dead-ending (a8946da4f)
+  <!-- src: apps/web/src/components/ProjectSwitcher.tsx:46 · confidence: HIGH -->
+
+### Changed
+- sync A34 task evidence tables and the dogfood index after verify (466f14a8a)
+- sync A34 to verifying with all five tasks done and the feature verify pending the drift-check fix (e84baa0b2)
+- record the A34 runall batch report (2a38d4dba)
+- close task 1288 at done after the manual residual-clean close (80905947a)
+- route concept questions in sp skills to semantic-first search with an rg fallback (1288) (e4c2ef165)
+  <!-- src: plugins/sp/skills/reverse-engineering/SKILL.md:144, plugins/sp/skills/issue-finding/SKILL.md:370, plugins/sp/skills/conflict-finding/SKILL.md:237, plugins/sp/skills/wayfinder/SKILL.md:145 · confidence: HIGH -->
+- deprecate completed tasks across B3/F61/G5/M4 (28a644a31)
+- add the A34 hybrid search planning corpus with ADR-147 and tasks 1285-1289 (997d9393b)
+- pin the workspace catalog to exact versions and bump yaml to 2.9.1 (55bb40ce1)
+  <!-- src: package.json:31, package.json:56 · confidence: HIGH -->
+- update key project files (d358d79e6)
+
+## [0.4.21] - 2026-10-26
+
+_Claim bullets carry one source anchor and the level that anchor supports — `HIGH`: every anchor is a
+`path:line` beyond line 1 and resolves; `MEDIUM`: every anchor resolves but the set is not all
+line-precise (a URL or a whole file); `LOW`: an anchor that does not resolve, or none. The level is a
+function of the anchors, not a judgement (ADR-144; the check is
+`repo-wide-tests/changelog-confidence.test.ts`). Unanchored bullets are bookkeeping (status moves,
+filings) and assert no code, API or version fact._
+
+### Added
+- record the agent loop's task-turn receipt in the warm path and gate warm perf rows on it, so a plain keyed turn is provably warm or names its fallback runner (ec8388dc9)
+  <!-- src: packages/app/src/services/agent-loop-service.ts:588, packages/app/src/services/agent-loop-service.ts:647, scripts/commands/fleet-e2e.ts:2556 · confidence: HIGH -->
+- add paired cold/resume/warm-turn comparison rows to the perf receipt, measuring supervised-warm on the shared workload while `warm` stays the qualification row (85f98a673)
+  <!-- src: scripts/commands/fleet-e2e.ts:2244, scripts/commands/fleet-e2e.ts:3206 · confidence: HIGH -->
+- add a `--modes` perf selector with per-mode gain verdicts, batch-2 host probes and the combined supervised/attached receipt (1283) (768e2d318)
+  <!-- src: scripts/commands/fleet-e2e.ts:938, scripts/commands/fleet-e2e.ts:2188, scripts/commands/fleet-e2e.ts:2219 · confidence: HIGH -->
+- execute attached-stage occupants with correlated-only completion, so a deadline or operator abort leaves the turn `outcome-unknown` and resumable instead of failed (1282) (0b53ad818)
+  <!-- src: packages/app/src/services/attached-turn-dispatch.ts:13, packages/app/src/services/attached-turn-dispatch.ts:145, packages/app/src/services/attached-turn-dispatch.ts:201 · confidence: HIGH -->
+- probe installed host wake channels and prove the portable loop with hooks absent, ranking a connection-based wake over one that merely names hooks (1280) (5e08fef78)
+  <!-- src: scripts/commands/fleet-e2e.ts:820, scripts/commands/fleet-e2e.ts:1562 · confidence: HIGH -->
+- renew guest leases from a dedicated agent-owned process and bind declared members on `agent join --member`, so a rejoin spawns one renewer, not two (1279, 1281) (2588e2474)
+  <!-- src: apps/cli/src/commands/agent/join.ts:85, packages/app/src/services/fleet-guest-service.ts:59 · confidence: HIGH -->
+- qualify the Codex App Server warm task-turn adapter against a replay fixture (1278) (4df3065c6)
+  <!-- src: packages/app/tests/fixtures/codex-warm/replay.ts · confidence: MEDIUM -->
+- qualify the Pi RPC warm task-turn adapter against a replay fixture (1277) (dea28048f)
+  <!-- src: packages/app/tests/fixtures/pi-warm/replay.ts · confidence: MEDIUM -->
+- repin the catalog to @gobing-ai/ts-* 0.6.3 with the pi rpc driver (1277) (b6c224ffa)
+  <!-- src: package.json · confidence: MEDIUM -->
+- drive the claude-code warm task-turn adapter through the released ts-libs driver with a replay fixture and perf coverage (1276) (951e6fe0a)
+  <!-- src: packages/app/tests/fixtures/claude-warm/replay.ts · confidence: MEDIUM -->
+- add the correlated keyed task-turn seam with identity fencing and runner fallback (1275) (2bd7fd56b)
+  <!-- src: packages/app/src/services/warm-turn-dispatch.ts:147, packages/app/src/services/warm-turn-dispatch.ts:239 · confidence: HIGH -->
+- run the orchestrator's deterministic scheduling tick beside — never inside — an in-flight conversation, so dispatch survives with no turn open (1274) (7ce9fb4a1)
+  <!-- src: packages/app/src/services/agent-loop-service.ts:383, packages/app/src/services/agent-loop-service.ts:700 · confidence: HIGH -->
+- add correlated phase-timing marks and the `fleet-e2e --perf` KPI driver (1273) (c83543e2b)
+  <!-- src: scripts/commands/fleet-e2e.ts:7, scripts/commands/fleet-e2e.ts:2859 · confidence: HIGH -->
+
+### Fixed
+- resolve the 1283 review advisories: render the probe status in the batch-2 table, cover `no-gain` under the AC2 convenience note, carry the attach mark on the first trial only, and rename the measured lane to `attached-ready` (d3ade475e)
+  <!-- src: scripts/commands/fleet-e2e.ts:2509, scripts/commands/fleet-e2e.ts:2540, scripts/commands/fleet-e2e.ts:2662, scripts/commands/fleet-e2e.ts:2252 · confidence: HIGH -->
+- fail loudly on an empty `--modes` list and dedupe repeated lanes instead of writing an empty receipt (3ebd9bcd9)
+  <!-- src: scripts/commands/fleet-e2e.ts:938 · confidence: HIGH -->
+- redact POSIX home prefixes in probe output regardless of the runner's `$HOME` (bbd541987)
+  <!-- src: scripts/commands/fleet-e2e.ts:1537 · confidence: HIGH -->
+- treat review placeholder rows by exact match so a `none found` row is not read as a finding (66864614f)
+  <!-- src: packages/app/src/services/residual-scan.ts:444 · confidence: HIGH -->
+- accept the reviewer-written cert as the pipeline's review verdict (6cdfea7cc)
+  <!-- src: config/workflows/task-pipeline.yaml · confidence: MEDIUM -->
+- bind reused warm turns to their agent and correlation holder (a8c3c4509)
+  <!-- src: packages/app/src/services/warm-turn-dispatch.ts:28, packages/app/src/services/warm-turn-dispatch.ts:239 · confidence: HIGH -->
+- keep live ports on re-add and refuse remote stops in the projects CLI (358e9f009)
+  <!-- src: apps/cli/src/commands/projects.ts:447, apps/cli/src/commands/projects.ts:460 · confidence: HIGH -->
+- key project-registry writes by host and stop healing remote ports (a81812477)
+  <!-- src: packages/app/src/services/project-registry.ts:383 · confidence: HIGH -->
+
+### Changed
+- default `agent.enabled` to false in the project config (3bbfd7313)
+  <!-- src: .spur/config.yaml:163 · confidence: HIGH -->
+- re-verify the perf receipt at the fixed revision and mark the 1283 review findings fixed (838830d8a)
+- refresh the fleet receipts and re-anchor G75 task evidence to post-landing line numbers (4e6fb5ada)
+- mark G75 tasks 1282/1283 done with the feature pending its L4 dogfood artifact (833c0302a)
+- record the 1282+1283 batch wrap learnings and authority-doc sync (2165bb507)
+- skip the project DB bootstrap for gate status and other light read paths (324ac6f1e)
+  <!-- src: apps/cli/src/index.ts · confidence: MEDIUM -->
+- record the G74 verifyall re-audit verdicts (a7d42163f)
+- update session memory (fb677fcff)
+- mark G74 done and refresh task evidence (6421f254a)
+- record the D65 task-pipeline dogfood report (9cbf5c987)
+- update session memory (d5b012f1d)
+- sync G74 to verifying with all seven tasks done (1670b3fa2)
+- record G75 renewal, probing and binding in the owning docs (3aa69f0c3)
+- close tasks 1279-1281 with their evidence (9b7ccf113)
+- record task 1284 done and block 1275 on the missing npm release (79afe4eac)
+- record operator consent for `agent join --member` on 1281 (88b0ecc9c)
+- refine G74/G75 tasks to implement-ready (9c32bc792)
+- bind G75 task ACs to the feature ship scenarios (ad0c00710)
+- plan G74/G75 warm task turns and verified live-session occupancy (607f1ea7d)
+- repin the @gobing-ai/ts-* catalog to ^0.7.1 (8fb475754)
+  <!-- src: package.json:37 · confidence: HIGH -->
+- repin the @gobing-ai/ts-* catalog to ^0.7.0 (a8ea59666)
+  <!-- src: package.json · confidence: MEDIUM -->
+- repin the @gobing-ai/ts-* catalog to ^0.6.4 (59deb95ef)
+  <!-- src: package.json · confidence: MEDIUM -->
+
+### Other
+- merge sp/runall-g75-ad0c007 — G75 renew, probe and bind (464780d51)
+- merge the G74 feature-corpus sync, status verifying with seven tasks done (4030189ba)
+- merge the G74 warm task-turn batch, 1273-1284 with 1277/1278 via ts-libs 0.7.1 (12696cd50)
+- add a project script entry (d6ee13714)
+- upgrade the project configuration (b2e9fd5fd)
+
+## [0.4.20] - 2026-10-21
+
+_Claim bullets carry one source anchor and the level that anchor supports — `HIGH`: every anchor is a
+`path:line` beyond line 1 and resolves; `MEDIUM`: every anchor resolves but the set is not all
+line-precise (a URL or a whole file); `LOW`: an anchor that does not resolve, or none. The level is a
+function of the anchors, not a judgement (ADR-144; the check is
+`repo-wide-tests/changelog-confidence.test.ts`). Unanchored bullets are bookkeeping (status moves,
+filings) and assert no code, API or version fact._
+
+### Added
+- add a per-job `timeoutMs` to the bootstrap scheduler schema, so one model-driven chain is bounded without raising the global scheduler default: absent inherits that default, `null` is explicit unlimited, and the deadline SIGTERMs the owned process group before the SIGKILL (9944b6ec9)
+  <!-- src: apps/cli/schemas/spur-config.schema.json:124, .spur/config.yaml:60, config/config.example.yaml:64 · confidence: HIGH -->
+
+### Fixed
+- escalate the test-suite watchdog independently of child exit and reap the owned process group, so a suite whose `child.exited` never resolves is killed instead of hanging the gate; Windows tree cleanup runs through a bounded `taskkill /T /F` (31134da87)
+  <!-- src: scripts/commands/run-tests.ts:163, scripts/commands/run-tests.ts:189, scripts/commands/test-suite-termination.ts:7 · confidence: HIGH -->
+- project the latest recorded attempt as a step's current status while the earlier rows stay history, and name the row ids in the ambiguous-action diagnostic (31134da87)
+  <!-- src: packages/app/src/workflow/progress-projection.ts:536, packages/app/src/workflow/progress-projection.ts:528 · confidence: HIGH -->
+- redact the request URL's credentials and every header value from an `http.request` failure message, not just the `headers` block (31134da87)
+  <!-- src: packages/app/src/workflow/actions/http-request.ts:261 · confidence: HIGH -->
+- release the progress-follow timeout timer and abort listener in a `finally`, and make the event follower's sleep abortable with a configurable poll interval (31134da87)
+  <!-- src: packages/app/src/workflow/progress-follow.ts:104, packages/app/src/services/system-event-follow.ts:36 · confidence: HIGH -->
+- launch a Windows async workflow worker through `Start-Process` with a data-only argv handoff, refusing a `.cmd`/`.bat` launcher that would re-expand the arguments (31134da87)
+  <!-- src: apps/cli/src/commands/workflow/shared.ts:38, apps/cli/src/commands/workflow/shared.ts:61 · confidence: HIGH -->
+- run inbox row/event mutations through the adapter's synchronous transaction facade instead of a chained `BEGIN IMMEDIATE` on the shared connection, so a failed event write rolls back only its own mutation (69c2d9d61)
+  <!-- src: packages/domain/src/dao/inbox-dao.ts:165, patches/README.md:3 · confidence: HIGH -->
+- fence inbox settle and release to the exact claim generation (`{id, attempts}`), so a stale claimant cannot mutate a replacement claim, and return claims in created order (69c2d9d61)
+  <!-- src: packages/domain/src/dao/inbox-dao.ts:12, packages/domain/src/dao/inbox-dao.ts:276, packages/app/src/services/inbox-service.ts:282 · confidence: HIGH -->
+- reject a replayed request key whose task or parent-run metadata conflicts with the stored row, instead of serving that row as the idempotent answer (69c2d9d61)
+  <!-- src: packages/app/src/services/inbox-service.ts:116, packages/app/src/services/inbox-service.ts:118 · confidence: HIGH -->
+- read the current inbox JSON in the guest Stop hook so answered work is claimed and settled on handoff, keeping inbox reads side-effect free (69c2d9d61)
+  <!-- src: plugins/sp/scripts/hooks/fleet-guest-stop.ts:107, apps/cli/src/commands/agent/wait.ts:21 · confidence: HIGH -->
+- derive the global composer receipt from the durable `inbox.requests` row for any message kind and exact recipient, and poll only while the receipt or its run is still active (69c2d9d61)
+  <!-- src: apps/web/src/components/GlobalAgentBar.tsx:187, apps/web/src/components/GlobalAgentBar.tsx:337, apps/server/src/modules/inbox/handlers.ts:269 · confidence: HIGH -->
+- fence Inbox pagination to the selected member and project through a selection generation, and list declared fleet members before their first message (69c2d9d61)
+  <!-- src: apps/web/src/modules/projects/InboxView.tsx:121, apps/web/src/modules/projects/InboxView.tsx:22 · confidence: HIGH -->
+- read task status and feature id through one canonical projection, including the legacy `feature-id` key and status casing, and bind the feature edge into the readiness digest (69c2d9d61)
+  <!-- src: packages/app/src/services/task-metadata.ts:4, packages/app/src/services/task-query-ops.ts:27, packages/app/src/services/task-readiness.ts:411 · confidence: HIGH -->
+- resolve the feature directory from the task check's configured `featuresDir`, so a non-sibling features tree still validates scenario linkage (69c2d9d61)
+  <!-- src: packages/app/src/services/task-feature-link.ts:36 · confidence: HIGH -->
+- remove the retired `accepted`-baseline suppression from the planning and task checks, leaving `severityOverrides` and the unsuppressible error set as the only severity controls (69c2d9d61)
+  <!-- src: packages/app/src/services/planning-check-base.ts:318 · confidence: HIGH -->
+
+### Changed
+- upgrade the `@gobing-ai/ts-*` catalog from 0.5.32 to 0.5.33 and superskill from 0.3.39 to 0.3.42: the engine bump is what supplies the per-job scheduler `timeoutMs`, the ts-db synchronous-transaction patch is regenerated at 0.5.33, and the retired dual-workflow-engine 0.5.28 patch is dropped (f327408ef)
+  <!-- src: package.json:37, package.json:44, package.json:143, package.json:144, patches/README.md:3 · confidence: HIGH -->
+
+### Other
+- align the role-SSOT references with ADR-078 and note the shipped todo projection's declared ordering in D7 (55ec783a8)
+- deprecate superseded M4, F61, G5 and B3 with tasks 0422/0565/0566/0572/0586/0670 and record each successor (07c86761f)
+- reconcile feature history and stale projections (1270) (9b2a96f0d)
+- mark the superskill legacy-lib pitfall resolved in the project context (ba9b428bf)
+
+## [0.4.19] - 2026-10-20
+
+_Claim bullets carry one source anchor and the level that anchor supports — `HIGH`: a `path:line` was
+read and matches the bullet (`:1` locates nothing, so it counts as whole-file); `MEDIUM`: an external
+URL, or whole-file/artifact presence only; `LOW`: an anchor that no longer resolves or none at all, so
+the claim is reworded or dropped. The level is a function of the anchors, not a judgement: to record
+`MEDIUM` cite a URL or a whole file. ADR-144; the check is
+`repo-wide-tests/changelog-confidence.test.ts`. Unanchored bullets are bookkeeping (filings, status
+moves) and assert no code, API or version fact._
+
+### Added
+- rebuild the inbox as one DAO (`InboxDao`) plus one service (`InboxService`), replacing `InboxRecentDao`; migration 0054 rebuilds `inbox_messages` as a Spur-owned table carrying `kind`, `task_id`, `parent_run_id` and a non-null sender (8064812d3)
+  <!-- src: packages/domain/src/dao/inbox-dao.ts:164, packages/app/src/services/inbox-service.ts:170, drizzle/0054_spur_cli_inbox_messages_rebuild.sql:9, drizzle/0054_spur_cli_inbox_messages_rebuild.sql:22 · confidence: HIGH -->
+- add a typed oRPC `inbox` contract (`list`, `thread`, `send`, `reply`, `requests`) and the server module implementing it, replacing the raw `/api/messages*` routes and the health module's requests block; a server-scoped relay follows `system_events` `message.*` rows so a reply written by an agent CLI process reaches SSE exactly once (61001c457)
+  <!-- src: packages/contracts/src/inbox.ts:137, apps/server/src/modules/inbox/handlers.ts:157, apps/server/src/modules/events/index.ts:144 · confidence: HIGH -->
+- split `spur message` into one module per verb on `InboxService` and add `show` (the whole thread, oldest first) and `read` (`--reader`, operator by default) (60b54895c)
+  <!-- src: apps/cli/src/commands/message/index.ts:20, apps/cli/src/commands/message/show.ts:8, apps/cli/src/commands/message/read.ts:9 · confidence: HIGH -->
+- replace the board Conversation view with a three-pane Projects Inbox tab (member list, both-direction thread, composer) driven by `api.inbox.*`, with the global input sending as operator and reading its receipt from `inbox.requests` (2f1706e52)
+  <!-- src: apps/web/src/modules/projects/tabs.tsx:20, apps/web/src/components/GlobalAgentBar.tsx:279, apps/web/src/components/GlobalAgentBar.tsx:423 · confidence: HIGH -->
+- page older inbox history through a cursor, keeping already-loaded older pages across a live refetch of the same member, and refetch only the panes a `message.*` frame touches — the member list always, the open thread only when the frame names the selected member (a90bad268)
+  <!-- src: apps/web/src/modules/projects/InboxView.tsx:46, apps/web/src/modules/projects/InboxView.tsx:56, apps/web/src/modules/projects/InboxView.tsx:180 · confidence: HIGH -->
+
+### Fixed
+- render a relayed ledger row live exactly as history renders it: `actor` and `occurred_at` sit beside the payload, so the relay carries them out of band and a live message frame now shows the same agent chip and timestamp as the history endpoint (c16d60117)
+  <!-- src: apps/server/src/modules/events/index.ts:142, apps/server/src/modules/events/index.ts:163, apps/server/src/modules/events/index.ts:264 · confidence: HIGH -->
+- keep a review PASS when the review state is re-entered without an answer: the answer file is consumed as a stage input, so the run-scoped verdict status is consulted only when an answer is present, instead of rewriting PASS to FAIL and closing the task's run as failed (b1c8456d7)
+  <!-- src: config/workflows/task-pipeline.yaml:704, config/workflows/task-pipeline.yaml:712 · confidence: HIGH -->
+
+### Changed
+- finish the G11 consolidation under `InboxService`: the lifecycle probe counts what the service queues (`countQueued`), the superseded `recent`/`listRecent`/`countReplies` paths and the coordination service's send duplicates are deleted, and an expired-claim read no longer requeues anything by itself (0d6781d80)
+  <!-- src: packages/app/src/services/occupant-wait.ts:160, packages/app/src/services/inbox-service.ts:392, packages/domain/src/dao/inbox-dao.ts:367 · confidence: HIGH -->
+- retire the SPUR-REQUEST/1 draft refs surface: the draft is text-only, and a stored legacy `refs` key is ignored on load rather than rejected (118cb0fda)
+  <!-- src: apps/web/src/modules/projects/drafts.tsx:51 · confidence: HIGH -->
+- document `spur message` send/show/read and the inbox service in the CLI contracts reference (204bd1ef6)
+  <!-- src: docs/design/cli-contracts.md:810 · confidence: HIGH -->
+
+### Other
+- mark G11 verified — dogfood report, feature status done (bfecbd8e9)
+- refresh G11 task status and the fleet e2e receipt (9a161cb82)
+
 ## [0.4.18] - 2026-10-20
 
 _Every claim bullet carries one source anchor; unanchored bullets are bookkeeping (filings, status
@@ -40,7 +262,7 @@ status moves, filings) and assert no code, API or version fact._
 
 ### Added
 - add `spur decision outcome <invocation-id>` to record what actually happened after a served decision, with `--review-severity <wbs>` / `--gate-status <run-id>` derivations, first-write-wins and exit 2 on a malformed outcome; `spur decision status --reliability` scores accuracy against `decisions.outcomeMap`, and a shipped `executor-failure-class` catalog (off by default) rescues a dispatch failure no `FAILURE_RULES` entry matched (f04edd1bc)
-  <!-- src: apps/cli/src/commands/decision.ts:251, config/config.global.yaml:176, config/decisions/executor.yaml:1 · confidence: HIGH -->
+  <!-- src: apps/cli/src/commands/decision.ts:251, config/config.global.yaml:176, config/decisions/executor.yaml:1 · confidence: MEDIUM -->
 - name the drifted paths in a coverage stale-tree refusal, so "what changed during the canonical run?" is answerable from the marker's raw git-tree SHA instead of a bare fingerprint mismatch (51040cab4)
   <!-- src: scripts/commands/coverage-certification.ts:140 · confidence: HIGH -->
 

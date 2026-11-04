@@ -6,7 +6,7 @@ status: done
 priority: P2
 tags: []
 created_at: "2026-09-16T10:34:18.496Z"
-updated_at: "2026-10-07T18:02:51.800Z"
+updated_at: "2026-10-21T18:35:04.612Z"
 ---
 
 # D62: Workflow execution economy: contract-first stages, inline traceability, and graph retirement
@@ -225,6 +225,12 @@ Feature: Workflow execution economy: contract-first stages, inline traceability,
 <!-- END AUTO-GENERATED -->
 
 ## Notes
+
+### Current reading — 2026-10-21
+
+D65 / ADR-140 replaces the separate inline interpreter and proof-chain bookkeeping. Workflow execution economy and selector behavior remain live; the historical inline-specific mechanism below is superseded.
+
+### Historical notes
 
 Scoped-gate / test-fix-timeout pilot (F3/F4): the `0912-workflow-baseline.md:55` criterion sample is recorded in `docs/reports/i31/1107-runall-p1-pilot.md` (task 1107, feature H15), with the dated verdict addendum in `docs/reports/i31/0912-workflow-baseline.md`.
 

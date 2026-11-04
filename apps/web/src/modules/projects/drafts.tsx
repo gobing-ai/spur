@@ -14,8 +14,6 @@
  * needs it.
  */
 import { createContext, type ReactNode, useContext, useEffect, useMemo, useState } from 'react';
-import type { ConversationRef } from './conversation';
-import { sameRef } from './conversation';
 import { useProjectContext } from './useProjectContext';
 
 export const DRAFT_STORAGE_KEY = 'spur.board.projects.draft.v1';
@@ -34,21 +32,12 @@ export interface DraftPending {
 export interface DraftRecord {
     path: string;
     text: string;
-    refs: ConversationRef[];
     revision: number;
     pending?: DraftPending;
 }
 
 export function emptyDraft(path: string): DraftRecord {
-    return { path, text: '', refs: [], revision: 0 };
-}
-
-function isRef(value: unknown): value is ConversationRef {
-    if (value === null || typeof value !== 'object') return false;
-    const r = value as Record<string, unknown>;
-    if (r.kind === 'task') return typeof r.wbs === 'string' && r.wbs.length > 0;
-    if (r.kind === 'feature') return typeof r.id === 'string' && r.id.length > 0;
-    return false;
+    return { path, text: '', revision: 0 };
 }
 
 /** Shape-check a parsed record; anything but the exact v1 shape is no draft. */
@@ -57,10 +46,12 @@ function parseDraftRecord(parsed: unknown): DraftRecord | null {
     const r = parsed as Record<string, unknown>;
     if (typeof r.path !== 'string' || typeof r.text !== 'string') return null;
     if (typeof r.revision !== 'number' || !Number.isFinite(r.revision)) return null;
-    if (!Array.isArray(r.refs) || !r.refs.every((ref) => isRef(ref))) return null;
     // `pending` (0844) is additive and optional; consumers re-validate it
-    // (typeof requestKey === 'string') rather than the loader dropping it.
-    return { ...r, path: r.path, text: r.text, refs: r.refs, revision: r.revision } as DraftRecord;
+    // (typeof requestKey === 'string') rather than the loader dropping it. A legacy
+    // `refs` key (retired with the SPUR-REQUEST/1 envelope, G11 1269) is ignored, not rejected.
+    const draft: DraftRecord = { path: r.path, text: r.text, revision: r.revision };
+    if (r.pending !== undefined) draft.pending = r.pending as DraftPending;
+    return draft;
 }
 
 /**
@@ -98,8 +89,6 @@ export function saveDraft(draft: DraftRecord): void {
 export interface ConversationDraft {
     draft: DraftRecord;
     setText(text: string): void;
-    addRef(ref: ConversationRef): void; // deduplicates by kind + id
-    removeRef(ref: ConversationRef): void;
     /**
      * Persist the submission identity for the CURRENT revision (0844 R1/R3):
      * called before the POST so a crash mid-submit still lets the retry reuse
@@ -109,18 +98,16 @@ export interface ConversationDraft {
     persistPending(requestKey: string): void;
     /**
      * Clear exactly the submitted revision (0844 R2): a no-op when any newer
-     * edit has landed since submission (`revision !== submittedRevision`) —
+     * edit has landed since submission or the served project changed —
      * the newer edit survives verbatim, checked against LIVE state inside the
      * functional update.
      */
-    clearSubmitted(submittedRevision: number): void;
+    clearSubmitted(submittedRevision: number, submittedPath: string): void;
 }
 
 const noopDraft: ConversationDraft = {
     draft: emptyDraft(''),
     setText: () => {},
-    addRef: () => {},
-    removeRef: () => {},
     persistPending: () => {},
     clearSubmitted: () => {},
 };
@@ -154,48 +141,28 @@ export function ConversationDraftProvider({ children }: { children: ReactNode })
             draft,
             setText: (text) =>
                 setDraft((prev) => {
-                    if (prev.path === '') return prev; // identity not resolved yet — nothing to guard or persist
+                    if (prev.path !== servedPath) return prev;
                     const next = { ...prev, text, revision: prev.revision + 1 };
-                    saveDraft(next);
-                    return next;
-                }),
-            addRef: (ref) =>
-                setDraft((prev) => {
-                    if (prev.path === '') return prev;
-                    if (prev.refs.some((r) => sameRef(r, ref))) return prev; // dedupe by kind + id
-                    const next = { ...prev, refs: [...prev.refs, ref], revision: prev.revision + 1 };
-                    saveDraft(next);
-                    return next;
-                }),
-            removeRef: (ref) =>
-                setDraft((prev) => {
-                    if (prev.path === '') return prev;
-                    if (!prev.refs.some((r) => sameRef(r, ref))) return prev;
-                    const next = {
-                        ...prev,
-                        refs: prev.refs.filter((r) => !sameRef(r, ref)),
-                        revision: prev.revision + 1,
-                    };
                     saveDraft(next);
                     return next;
                 }),
             persistPending: (requestKey) =>
                 setDraft((prev) => {
-                    if (prev.path === '') return prev;
+                    if (prev.path !== draft.path || prev.revision !== draft.revision) return prev;
                     const next = { ...prev, pending: { requestKey, revision: prev.revision } };
                     saveDraft(next);
                     return next;
                 }),
-            clearSubmitted: (submittedRevision) =>
+            clearSubmitted: (submittedRevision, submittedPath) =>
                 setDraft((prev) => {
-                    if (prev.path === '') return prev;
+                    if (prev.path !== submittedPath) return prev;
                     if (prev.revision !== submittedRevision) return prev; // newer edit exists — leave it alone (R2)
-                    const next = { path: prev.path, text: '', refs: [], revision: prev.revision + 1 };
+                    const next = { path: prev.path, text: '', revision: prev.revision + 1 };
                     saveDraft(next);
                     return next;
                 }),
         }),
-        [draft],
+        [draft, servedPath],
     );
 
     return <ConversationDraftContext.Provider value={value}>{children}</ConversationDraftContext.Provider>;

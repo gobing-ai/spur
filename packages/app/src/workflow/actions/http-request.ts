@@ -258,7 +258,11 @@ export class HttpRequestActionRunner implements ActionRunner {
             });
         } catch (err) {
             const message = err instanceof Error ? err.message : String(err);
-            return { ok: false, error: redactHeaders(`http.request: ${message}`) };
+            let redacted = message.replaceAll(url, redactUrl(url));
+            for (const value of Object.values(headers).sort((a, b) => b.length - a.length)) {
+                if (value !== '') redacted = redacted.replaceAll(value, '<redacted>');
+            }
+            return { ok: false, error: redactHeaders(`http.request: ${redacted}`) };
         }
 
         // --- Success mapping ---

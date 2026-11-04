@@ -461,7 +461,18 @@ describe('task-pipeline evidence chain — review certifies (D65 R2)', () => {
         // 1262 R6 retired the `review-failure-class` decide: the review status file plus the
         // attempt cap is the whole remediation signal, so the state carries no model call.
         // 1263 R3b adds the outcome-recording shell between the status write and the approval.
-        expect(kindsOf('review')).toEqual(['agent.run', 'command.gate', 'shell', 'shell', 'hitl.confirm', 'shell']);
+        // G74 batch (2026-10-24) adds the pre-verdict shell that materialises the agent-written
+        // `-review-cert.md` (falling back to the captured answer), so the verdict lint reads what
+        // the reviewer WROTE rather than its final chat line.
+        expect(kindsOf('review')).toEqual([
+            'agent.run',
+            'shell',
+            'command.gate',
+            'shell',
+            'shell',
+            'hitl.confirm',
+            'shell',
+        ]);
         const options = actionOf('review', 'agent.run')?.options as Record<string, unknown> | undefined;
         expect(String(options?.input)).toContain(`/sp:dev-review --tasks ${VAR('wbs')} --auto`);
         // 0943 R1/R2: the resolved lane sets the review depth (fast  functional-only).
@@ -475,7 +486,9 @@ describe('task-pipeline evidence chain — review certifies (D65 R2)', () => {
             'verdict',
             VAR('wbs'),
             '--from-answer',
-            `.spur/run/${VAR('__runId')}-review-answer.txt`,
+            // The cert file the reviewer writes itself; the shell above falls back to the captured
+            // answer, so the lint no longer reads a narration-shaped stdout as the certification.
+            `.spur/run/${VAR('__runId')}-review-cert.md`,
         ]);
         expect(verdict?.softFail).toBe(true);
     });
@@ -556,6 +569,79 @@ describe('task-pipeline evidence chain — review certifies (D65 R2)', () => {
                 staged.wbs,
                 'Review',
                 `${REVIEW_HEAD}| P2 (major) | Missing validation | src/index.ts:8 | OPEN |\n`,
+            );
+            expect(runSh(fold, staged.dir, vars).code).toBe(0);
+            expect(statusNow()).toBe('FAIL');
+        } finally {
+            staged.cleanup();
+        }
+    }, 60000);
+
+    test('behavioral: a re-entered review keeps a PASS whose answer file was already consumed', () => {
+        // The review state consumes its answer file as a stage input, so a second visit has nothing
+        // to re-judge and the typed verdict rewrites its run-scoped status to FAIL. Without the
+        // idempotent fold that FAIL overwrote a PASS and closed the task's run as `failed` (observed
+        // twice in the G11 batch, tasks 1267 and 1268).
+        const staged = stage();
+        try {
+            setSection(staged.dir, staged.wbs, 'Requirements', '- [ ] R1. Do the thing.\n');
+            setSection(
+                staged.dir,
+                staged.wbs,
+                'Review',
+                `${REVIEW_HEAD}| P4 (advisory) | Note | src/index.ts:1 | ACCEPTED |\n\nVerdict: PASS\nConfidence: MEDIUM\n`,
+            );
+            const vars = { wbs: staged.wbs, __runId: 'run-reentry', spurBin: SPUR_BIN, profile: 'auto' };
+            const fold = cmdOf('review', '-review.status');
+            const statusNow = (): string =>
+                readFileSync(join(staged.dir, '.spur/run', `${staged.wbs}-review.status`), 'utf8').trim();
+            const answerPath = writeReviewAnswer(
+                staged.dir,
+                'run-reentry',
+                'Verdict: PASS\n\n| Req | Status | Evidence |\n| --- | --- | --- |\n' +
+                    '| R1 | MET | `src/index.ts:1` does the thing |\n\nConfidence: HIGH\n',
+            );
+            expect(
+                runTypedGate(
+                    staged.dir,
+                    '.spur/run/run-reentry-review-verdict.status',
+                    ['task', 'verdict', staged.wbs, '--from-answer', '.spur/run/run-reentry-review-answer.txt'],
+                    vars,
+                ),
+            ).toBe('PASS');
+            expect(runSh(fold, staged.dir, vars).code).toBe(0);
+            expect(statusNow()).toBe('PASS');
+            // `review → done` also needs the approval token; the fold is what decides the status.
+            writeFileSync(join(staged.dir, '.spur/run', `${staged.wbs}-approval.status`), 'APPROVED\n');
+            expect(firstPassingEdge('review', staged.dir, vars)).toBe('done');
+
+            // Re-entry: the answer is gone and the run-scoped status is now FAIL. The durable
+            // artifact is still PASS and the residual gate is clean, so the fold keeps PASS.
+            rmSync(answerPath);
+            writeFileSync(join(staged.dir, '.spur/run', 'run-reentry-review-verdict.status'), 'FAIL\n');
+            expect(runSh(fold, staged.dir, vars).code).toBe(0);
+            expect(statusNow()).toBe('PASS');
+            expect(firstPassingEdge('review', staged.dir, vars)).toBe('done');
+
+            // A fresh pass is still judged on its own evidence: an answer present with the typed
+            // verdict FAIL cannot certify, even though the artifact still reads PASS.
+            writeReviewAnswer(staged.dir, 'run-reentry', 'Verdict: FAIL\n');
+            expect(
+                runTypedGate(
+                    staged.dir,
+                    '.spur/run/run-reentry-review-verdict.status',
+                    ['task', 'verdict', staged.wbs, '--from-answer', '.spur/run/run-reentry-review-answer.txt'],
+                    vars,
+                ),
+            ).toBe('FAIL');
+            expect(runSh(fold, staged.dir, vars).code).toBe(0);
+            expect(statusNow()).toBe('FAIL');
+
+            // And a downgraded artifact blocks the close even with no answer to re-judge.
+            rmSync(join(staged.dir, '.spur/run', 'run-reentry-review-answer.txt'));
+            writeFileSync(
+                join(staged.dir, '.spur/run', `${staged.wbs}-verdict.json`),
+                `${JSON.stringify({ verdict: 'PARTIAL' })}\n`,
             );
             expect(runSh(fold, staged.dir, vars).code).toBe(0);
             expect(statusNow()).toBe('FAIL');

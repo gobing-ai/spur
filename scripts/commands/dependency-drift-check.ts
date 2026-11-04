@@ -76,14 +76,19 @@ function findInstalledPkgJsonPath(nodeModulesDir: string, lockKey: string, locke
     if (parentKey) {
         const nested = join(nodeModulesDir, parentKey, 'node_modules', name, 'package.json');
         if (existsSync(nested)) return nested;
+    } else {
+        // The hoisted copy is the top-level resolution only. A nested key under bun's
+        // isolated linker lives solely in the .bun store; reading the hoisted copy for
+        // it false-positives against the root workspace pin.
+        const hoisted = join(nodeModulesDir, name, 'package.json');
+        if (existsSync(hoisted)) return hoisted;
     }
-    const hoisted = join(nodeModulesDir, name, 'package.json');
-    if (existsSync(hoisted)) return hoisted;
     const storeDir = join(nodeModulesDir, '.bun');
     if (!existsSync(storeDir)) return null;
-    const prefix = `${name.replace('/', '+')}@${lockedVersion}+`;
+    // Store dirs are `<name>@<ver>` or `<name>@<ver>+<peer-hash>` (hash only with peer deps).
+    const base = `${name.replace('/', '+')}@${lockedVersion}`;
     for (const entry of readdirSync(storeDir)) {
-        if (!entry.startsWith(prefix)) continue;
+        if (entry !== base && !entry.startsWith(`${base}+`)) continue;
         const storePath = join(storeDir, entry, 'node_modules', name, 'package.json');
         if (existsSync(storePath)) return storePath;
     }

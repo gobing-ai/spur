@@ -3,7 +3,7 @@ kind: design
 title: "Workflow run observability"
 status: implemented
 created_at: 2026-06-25
-updated_at: 2026-10-04
+updated_at: 2026-10-21
 related: [D2, D3, D9, "0109", "0114", "0365", "0597", "0603", "0604", "1064"]
 tags: [system, D2, D9, workflow, observability]
 ---
@@ -124,6 +124,10 @@ roots remain read-only.
 - Steering notes are redacted before the 1,024-character bound and before acknowledgement/state mutation.
 - Other renderable strings are capped after redaction; result projection exposes only bounded error text
   and the explicit usage availability marker.
+- `http.request` sanitizes requester exceptions before returning an action error: the original
+  request URL loses userinfo, query values and fragment, and non-empty request-header values are
+  replaced longest first so overlapping credentials cannot leave a suffix exposed. Structured
+  header dumps are also removed; useful non-secret transport failure context remains visible.
 - 0901 R5 (persisted shell tails): shell action output is redacted across the FULL stream first
   (`redactAndBound` with an effectively unbounded char budget), then tail-bounded to 64 KiB per
   stream (`utf8SafeByteTail`, no multi-byte splits); the persistence projection carries
@@ -261,7 +265,8 @@ The projection maps existing sources as follows:
 Definition actions use `<state>:<onEnter|onExit>:<ordinal>` after extensions resolve. Existing
 action rows do not carry that definition key, so the projector matches ordered rows by node/kind
 within a state visit. Zero matches leave the definition action pending; more than one valid mapping
-emits `ambiguous-action` and marks the action `ambiguous`. It never guesses or mutates stored rows.
+emits `ambiguous-action` naming every candidate action-run row id and marks the action `ambiguous`.
+It never guesses or mutates stored rows.
 
 ### Visit derivation for transition-less runs (1085 / E72 R10)
 
@@ -284,8 +289,9 @@ silently. Unclaimed rows are reported by cause
 (0868 #7, extended by 1085 R4): `orphan-action-row` when the `node` matches no declared state action,
 `unvisited-state-row` when the row's `node` is a declared state the run did not visit. Each unclaimed
 row yields exactly one diagnostic naming it. Same-kind rows beyond the first match of a single
-declared action surface as additional attempts in recorded order (retries stay visible), so no
-recorded row of a visited state is dropped unsurfaced; rows claimed under a multi-same-kind-action
+declared action surface as additional attempts in recorded order (retries stay visible). The latest
+recorded attempt supplies that action's current status; earlier failed attempts remain in its history.
+No recorded row of a visited state is dropped unsurfaced; rows claimed under a multi-same-kind-action
 mapping keep the `ambiguous-action` behaviour above.
 
 ### Definition digest persistence
@@ -335,12 +341,15 @@ snapshot latest system-event sequence
   → return projection
   → follow system events strictly after the snapshot
   → on correlated workflow event, re-query persisted truth
-  → on timeout or event gap, bounded poll and re-query
+  → on timeout or abort, stop following
 ```
 
-An event payload never advances projected state directly. Reconnect repeats snapshot-then-follow;
-polling remains active at a bounded interval until the run is terminal. The same projection is
-therefore returned after event loss, duplicate events, or process restart.
+An event payload never advances projected state directly. Reconnect repeats snapshot-then-follow.
+The ledger poll uses `pollIntervalMs` (default 100 ms); events recorded between polls remain visible
+to the next query. Poll sleep is abortable, so an external abort or the follow deadline interrupts a
+long cadence promptly. Terminal completion and normal consumer return release the deadline timer
+and external abort listener. A consumer waiting on a pending `next()` uses the abort signal to
+interrupt that wait.
 
 ### Inline record-only journal
 

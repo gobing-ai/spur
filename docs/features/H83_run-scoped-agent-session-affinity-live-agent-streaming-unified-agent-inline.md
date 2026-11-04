@@ -6,7 +6,7 @@ status: done
 priority: P1
 tags: []
 created_at: "2026-08-05T18:59:07.219Z"
-updated_at: "2026-08-06T01:09:02.313Z"
+updated_at: "2026-10-21T18:38:18.019Z"
 ---
 
 # H83: Run-scoped agent session affinity, live agent streaming, unified --agent inline
@@ -181,6 +181,13 @@ Feature: Run-scoped agent session affinity, live agent streaming, unified --agen
 <!-- END AUTO-GENERATED -->
 
 ## Notes
+
+### Current reading — 2026-10-21
+
+Run/session affinity, streaming and session safety remain implemented. Later B7 and D65 own the per-stage session policy and shared host/subprocess/fleet interpreter; earlier stage/interpreter details below describe the prior implementation.
+
+### Historical notes
+
 **Locked decisions**
 
 1. Agent matrix: omp, claude, codex, agy, grok, pi — ts-libs + bun link.
@@ -198,6 +205,7 @@ Feature: Run-scoped agent session affinity, live agent streaming, unified --agen
 | **0450** | 0448, 0449 | Multi-agent dogfood matrix |
 
 Each task Design freezes APIs, anti-patterns, file targets, and handoffs. Prefer implementing 0447 → 0448; 0449 parallel; 0450 last. Review after implement — do not invent a second shim layer in Spur.
+
 ## History
 - 2026-08-05T20:53:54.249Z backlog → active (system)
 - 2026-08-05T20:53:54.460Z active → verifying (system)

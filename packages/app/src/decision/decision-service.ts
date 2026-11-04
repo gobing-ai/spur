@@ -8,6 +8,7 @@ import {
     DecisionMakerRegistry,
     type DecisionResult,
     type DecisionSummary,
+    type LayaLocalDriverOptions,
     type MakerRef,
     resolveDecisionInput,
     UnknownDecisionError,
@@ -15,13 +16,6 @@ import {
 } from '@gobing-ai/ts-ai-decision';
 import { createDecisionMaker } from '@gobing-ai/ts-ai-runner';
 import { type ClefDriverOptions, createClefDriver } from '@gobing-ai/ts-decision-clef';
-import {
-    createLayaClient,
-    type LayaClient,
-    type LayaDriverOptions,
-    type LayaWorkerResult,
-    type WorkerQuestion,
-} from '@gobing-ai/ts-laya-mlx';
 import { dirnamePath, joinPath, nodeBunFactory } from '@gobing-ai/ts-runtime';
 import { configuredSecretValues, redactAndBound } from '../observability/agent-execution';
 import type { SystemEventBus } from '../services/system-event-tap';
@@ -154,6 +148,29 @@ export interface DecisionProbeOutcome {
 }
 
 /**
+ * Structural mirror of `LayaClient` from `@gobing-ai/ts-laya-mlx` (ADR-041). That package is a
+ * darwin-only optional dependency, so a static import breaks typecheck on Linux and module
+ * loading on Windows (CI runs 39693894312/39693894232): its specifier must never appear
+ * statically in this file. The worker wire shapes (`WorkerQuestion`, `LayaWorkerResult`) pass
+ * through opaquely to the driver, which already types this client as `unknown`.
+ */
+interface LayaClientLike {
+    ask(state: string, questions: Record<string, unknown>): Promise<unknown>;
+    dispose(): void;
+}
+
+/** Variable specifier: an inline literal would re-introduce the static reference TS resolves. */
+const LAYA_MLX_PACKAGE = '@gobing-ai/ts-laya-mlx';
+
+/** Load the darwin-only client factory on first ask; rejects on hosts without the optional package. */
+async function createLayaClientLazy(options: LayaLocalDriverOptions): Promise<LayaClientLike> {
+    const mod = (await import(LAYA_MLX_PACKAGE)) as {
+        createLayaClient(options?: LayaLocalDriverOptions): LayaClientLike;
+    };
+    return mod.createLayaClient(options);
+}
+
+/**
  * A `laya-local` client Spur owns so it can be released again. The driver the registry builds
  * keeps its worker "warm for the client's lifetime" and exposes no disposal seam, so the piped
  * stdio of its Python worker holds the event loop open: without this, a one-shot Spur process
@@ -163,13 +180,13 @@ export interface DecisionProbeOutcome {
  * that cannot serve this backend at all (a construction throw is mapped to `no-backend` by the
  * hub, exactly as the lazy registry factory did before). Rebuilt on demand after {@link dispose}.
  */
-class OwnedLayaClient implements LayaClient {
-    private client: LayaClient | undefined;
+class OwnedLayaClient implements LayaClientLike {
+    private client: LayaClientLike | undefined;
 
-    constructor(private readonly options: LayaDriverOptions) {}
+    constructor(private readonly options: LayaLocalDriverOptions) {}
 
-    async ask(state: string, questions: Record<string, WorkerQuestion>): Promise<LayaWorkerResult> {
-        this.client ??= createLayaClient(this.options);
+    async ask(state: string, questions: Record<string, unknown>): Promise<unknown> {
+        this.client ??= await createLayaClientLazy(this.options);
         return await this.client.ask(state, questions);
     }
 
@@ -266,7 +283,7 @@ export class DecisionService {
         this.duplicateIds = new Map(resolution.duplicateIds.map((d) => [d.id, d.sources]));
         const env = getEnvVars();
         this.layaWorkerScript = bundledLayaWorkerScript(undefined, env);
-        const layaDriverOptions = (): LayaDriverOptions => ({
+        const layaDriverOptions = (): LayaLocalDriverOptions => ({
             env,
             ...(this.layaWorkerScript !== undefined ? { workerScript: this.layaWorkerScript } : {}),
         });
@@ -289,7 +306,7 @@ export class DecisionService {
     /**
      * Take ownership of one `laya-local` client so {@link dispose} can release its worker.
      */
-    private ownLayaClient(options: LayaDriverOptions): LayaClient {
+    private ownLayaClient(options: LayaLocalDriverOptions): LayaClientLike {
         const owned = new OwnedLayaClient(options);
         this.ownedLayaClients.push(owned);
         return owned;

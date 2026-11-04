@@ -6,7 +6,7 @@ status: done
 priority: P2
 tags: ["g6-program"]
 created_at: "2026-09-12T04:42:44.011Z"
-updated_at: "2026-09-12T19:54:12.751Z"
+updated_at: "2026-10-21T18:35:10.432Z"
 ---
 
 # G62: Project fleet, orchestrator binding, and rest/GTD strategy runtime
@@ -145,6 +145,12 @@ Feature: Project fleet, orchestrator binding, and rest/GTD strategy runtime
 <!-- END AUTO-GENERATED -->
 
 ## Notes
+
+### Current reading — 2026-10-21
+
+G65 makes agent.fleet the only fleet declaration; G72 derives fleet specs in memory and retires agent_instances. Strategy, orchestration, capacity and fencing remain live; materialized specs and team carriers below describe earlier implementation stages.
+
+### Historical notes
 
 Design authority: [Projects and agent fleet unification](../plans/2026-09-11-project-agent-fleet-brainstorm.md)
 § "Strategy and capacity". Executable traces for every scenario above already exist as a prototype

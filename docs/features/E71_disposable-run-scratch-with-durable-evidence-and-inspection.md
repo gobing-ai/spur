@@ -110,6 +110,13 @@ Feature: Disposable run scratch with durable evidence and inspection
 | 1046 | Emit inline pipeline action rows so run close needs no post-hoc backfill | done |
 | 1049 | Block automatic worktree teardown when provenance is skipped for an external-key conflict | done |
 | 1089 | Keep worktree-batch evidence references and prior-task evidence resolvable after teardown | done |
+| 1139 | Unblock workflow housekeeping from legacy evidence-migration failures | done |
+| 1140 | Retarget task done_reason evidence pointers from run scratch to durable evidence | done |
+| 1141 | Rule: durable records must not cite run scratch as evidence | done |
+| 1145 | Refuse executable source registered from run scratch | cancelled |
+| 1148 | Worktree teardown bookkeeping: cited-scope persist-out-check, skipped-item report, markerless landing record | done |
+| 1149 | Worktree batch transitions cannot land their task-lifecycle row when the invoking tree owns the identity | done |
+| 1165 | Pin the landing-record and persist-out reconcile failure diagnostics | done |
 <!-- END AUTO-GENERATED -->
 
 ## Notes

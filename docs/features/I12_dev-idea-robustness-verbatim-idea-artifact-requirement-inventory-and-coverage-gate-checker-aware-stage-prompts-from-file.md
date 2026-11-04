@@ -80,7 +80,6 @@ Scenario: R7 — Generated bundle and baselines stay green
 | WBS | Task | Status |
 | --- | ---- | ------ |
 | 0887 | idea-pipeline robustness: verbatim idea artifact, requirement inventory + coverage gate, task-check-aware stage prompts, --from-file, inline trace startedAt | done |
-| 0887 | idea-pipeline robustness: verbatim idea artifact, requirement inventory + coverage gate, task-check-aware stage prompts, --from-file, inline trace startedAt | done |
 <!-- END AUTO-GENERATED -->
 
 ## Notes

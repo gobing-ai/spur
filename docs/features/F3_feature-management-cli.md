@@ -62,6 +62,8 @@ Feature: Feature management CLI
 | 0060 | W2: Task-to-feature traceability validation (L4) | done |
 | 0061 | W2: spur feature move — cascade rename for hierarchy changes | done |
 | 0340 | spur feature check --strict reports PASS when a linked AC scenario is known-unsatisfied | done |
+| 1119 | record's feature sync can mark a feature done before its feature-verification receipt exists | done |
+| 1126 | F3 acceptance: re-verify the W2 feature-management scenarios | done |
 <!-- END AUTO-GENERATED -->
 
 ## Notes

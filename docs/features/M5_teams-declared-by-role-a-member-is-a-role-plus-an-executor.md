@@ -6,7 +6,7 @@ status: done
 priority: P2
 tags: []
 created_at: "2026-08-14T00:18:06.752Z"
-updated_at: "2026-08-15T06:46:56.866Z"
+updated_at: "2026-10-21T18:38:18.685Z"
 ---
 
 # M5: Teams declared by role: a member is a role plus an executor
@@ -99,6 +99,13 @@ Feature: Teams declared by role
 <!-- END AUTO-GENERATED -->
 
 ## Notes
+
+### Current reading — 2026-10-21
+
+G64/G65 retired Teams, agent.team and spur team status. Role-based member resolution and role/executor attribution from tasks 0543/0544 remain implemented in FleetService, config and agent list; G65/G71 own their fleet integration. Retain this capability and its task history rather than treating removal of the Teams carrier as removal of role resolution.
+
+### Historical notes
+
 ### Sequencing
 
 Blocked on feature B2 task 0538, which adds the optional `role` field this feature promotes to
@@ -119,6 +126,7 @@ argument G4 already applied to coding-agent kind
   been used.
 - **Role-aware supervision policy.** Whether a failing `reviewer` should be restarted differently
   from a failing `coder` is unexamined.
+
 ## History
 - 2026-08-15T06:37:04.942Z backlog → active (system)
 - 2026-08-15T06:46:56.596Z active → verifying (system)

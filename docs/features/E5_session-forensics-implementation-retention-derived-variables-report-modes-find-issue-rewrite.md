@@ -6,7 +6,7 @@ status: active
 priority: P2
 tags: []
 created_at: "2026-08-14T01:03:25.438Z"
-updated_at: "2026-10-08T18:52:03.887Z"
+updated_at: "2026-10-21T18:35:06.048Z"
 ---
 
 # E5: Session forensics implementation: retention, derived variables, report modes, find-issue rewrite
@@ -134,6 +134,13 @@ Feature: Session forensics implementation
 <!-- END AUTO-GENERATED -->
 
 ## Notes
+
+### Current reading — 2026-10-21
+
+I8 and I81 supersede the former find-issue workflow/CLI slice. The forensics, retention and derived-metric capabilities remain live; old find-issue arguments below are historical.
+
+### Historical notes
+
 ### Data-plane-evidence rule (0578 R5, 2026-08-17)
 
 A mapper/retention fix is accepted only by its measured post-re-import effect on `.spur/spur.db` — importer provenance header (0.4.37) + before/after row counts, never a source-read verdict. Measured after `--mode full` re-import of omp/pi/grok/opencode:
@@ -193,6 +200,7 @@ not be replaced.
 - Retention pressure — bounded at ~18 KB/session by the allowlist ruling; history-row pruning stays
   unwired and is revisited only if a future ruling retains result content.
 - TTFT/generation split — deferred by 0491; the artifact carries no intra-call latency fields.
+
 ## History
 
 - 2026-08-17T19:05:22.219Z backlog → active (system)

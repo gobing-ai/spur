@@ -34,16 +34,48 @@ export function takeAsyncWorkerEnv(): { expectedDigest: string | undefined; isAs
     return { expectedDigest, isAsyncWorker };
 }
 
+/** Windows workers use Start-Process with data-only env handoff, never cmd's argv interpolation. */
+export function buildWindowsAsyncWorkflowLaunch(argv: readonly string[]): {
+    command: string;
+    args: string[];
+    env: Record<string, string>;
+} {
+    const executable = argv[0];
+    if (!executable || argv.some((arg) => arg.includes('\0'))) {
+        throw new Error('async workflow launch: expected a non-empty executable and NUL-free argv');
+    }
+    if (/\.(cmd|bat)$/i.test(executable)) {
+        throw new Error('async workflow launch: batch launchers re-expand arguments; use a native executable');
+    }
+    // Start-Process joins ArgumentList: pass one Windows-escaped command line, preserving JSON quotes and empty args.
+    const argumentLine = argv
+        .slice(1)
+        .map((arg) => `"${arg.replace(/(\\*)"/g, '$1$1\\"').replace(/(\\+)$/g, '$1$1')}"`)
+        .join(' ');
+    return {
+        command: 'powershell.exe',
+        args: [
+            '-NoProfile',
+            '-NonInteractive',
+            '-Command',
+            '$ErrorActionPreference = "Stop"; Start-Process -FilePath $env:SPUR_WORKFLOW_COMMAND -ArgumentList $env:SPUR_WORKFLOW_ARGS -WindowStyle Hidden',
+        ],
+        env: { SPUR_WORKFLOW_COMMAND: executable, SPUR_WORKFLOW_ARGS: argumentLine },
+    };
+}
+
 /**
  * Launch a long-lived async workflow worker via ProcessExecutor + nohup.
  * Avoids direct child_process.spawn (no-direct-process-spawn).
  */
 export async function spawnAsyncWorkflowWorker(
-    spurBin: string,
+    spurArgv: readonly string[],
     cmd: string[],
     extraEnv?: Record<string, string>,
 ): Promise<void> {
-    const line = [spurBin, ...cmd].map(shQuote).join(' ');
+    const argv = [...spurArgv, ...cmd];
+    const line = argv.map(shQuote).join(' ');
+    const windowsLaunch = process.platform === 'win32' ? buildWindowsAsyncWorkflowLaunch(argv) : undefined;
     const env: Record<string, string> = {};
     for (const [key, value] of Object.entries(getEnvVars())) {
         if (value !== undefined) env[key] = value;
@@ -57,12 +89,9 @@ export async function spawnAsyncWorkflowWorker(
         env[key] = value;
     }
     await new NodeProcessExecutor().run({
-        command: process.platform === 'win32' ? 'cmd' : '/bin/sh',
-        args:
-            process.platform === 'win32'
-                ? ['/c', `start /b "" ${[spurBin, ...cmd].map((c) => `"${c.replace(/"/g, '""')}"`).join(' ')}`]
-                : ['-c', `nohup ${line} </dev/null >/dev/null 2>&1 &`],
-        env,
+        command: windowsLaunch?.command ?? '/bin/sh',
+        args: windowsLaunch?.args ?? ['-c', `nohup ${line} </dev/null >/dev/null 2>&1 &`],
+        env: { ...env, ...windowsLaunch?.env },
         forceBuffered: true,
         rejectOnError: false,
     });

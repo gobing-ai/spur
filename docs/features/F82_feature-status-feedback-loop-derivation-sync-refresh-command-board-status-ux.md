@@ -6,7 +6,7 @@ status: done
 priority: P2
 tags: ["wayfinder-map"]
 created_at: "2026-07-24T23:39:28.101Z"
-updated_at: "2026-08-28T05:20:40.447Z"
+updated_at: "2026-10-21T18:35:11.669Z"
 ---
 
 # R: Feature status feedback loop: derivation sync, refresh command, Board status UX
@@ -47,6 +47,13 @@ Close the task→feature status feedback loop so a feature's status always refle
 <!-- END AUTO-GENERATED -->
 
 ## Notes
+
+### Current reading — 2026-10-21
+
+The original stub/roster survey is historical. F821 owns sync derivation; D66 owns current feature verification. Keep scenario identities and the investigation history intact.
+
+### Historical notes
+
 ### Existing machinery (surveyed 2026-07-24 — the map's low-res terrain)
 
 - Feature statuses: `backlog → active → verifying → blocked → done → cancelled` (`packages/domain/src/planning/schema.ts:23`). `verifying` is the L4 AC-traceability gate; one active goal corpus-wide.
@@ -70,11 +77,11 @@ Close the task→feature status feedback loop so a feature's status always refle
 
 ### Decisions so far
 
-- [0322 Derivation rules + logic home](docs/tasks2/0322_decide-feature-status-derivation-rules-and-where-the-sync-lo.md) — app-service derivation + `spur feature sync` verb; conservative forward-only mapping (advance hops, L4-gated verifying); reopen only operator-confirmed; pull now, push defined-but-deferred.
+- [0322 Derivation rules + logic home](../tasks2/0322_decide-feature-status-derivation-rules-and-where-the-sync-lo.md) — app-service derivation + `spur feature sync` verb; conservative forward-only mapping (advance hops, L4-gated verifying); reopen only operator-confirmed; pull now, push defined-but-deferred.
 
-- [0323 Hook placement + unattended policy](docs/tasks2/0323_decide-post-verify-feature-refresh-hook-placement-missing-fe.md) — refresh fires in pipeline record + wrapup (replacing unconditional advance) + dev-verify, one `spur feature sync` implementation; unattended = forward-only auto-apply + report, orphan links queued; interactive missing-id = link-helper with persisted skip.
+- [0323 Hook placement + unattended policy](../tasks2/0323_decide-post-verify-feature-refresh-hook-placement-missing-fe.md) — refresh fires in pipeline record + wrapup (replacing unconditional advance) + dev-verify, one `spur feature sync` implementation; unattended = forward-only auto-apply + report, orphan links queued; interactive missing-id = link-helper with persisted skip.
 
-- [0324 Command surface](docs/tasks2/0324_decide-refresh-command-surface-single-dev-refresh-with-modes.md) — single `/sp:dev-refresh [feature-id | wbs | --all] [--auto]` thin wrapper over `spur feature sync` + link-helper; `--all` = combined link+refresh sweep; per-item confirm with derivation reason + summary report.
+- [0324 Command surface](../tasks2/0324_decide-refresh-command-surface-single-dev-refresh-with-modes.md) — single `/sp:dev-refresh [feature-id | wbs | --all] [--auto]` thin wrapper over `spur feature sync` + link-helper; `--all` = combined link+refresh sweep; per-item confirm with derivation reason + summary report.
 
 ### Not yet specified
 
@@ -89,6 +96,7 @@ Graduated 2026-07-24 → feature R1 (derivation engine + `spur feature sync` ver
 - Unconfirmed auto-transitions in interactive sessions — operator confirm/skip stays.
 - Task Kanban module visuals.
 - Auto-creating features for orphan tasks beyond feature-link-helper's existing confirm flow.
+
 ## History
 - 2026-07-25T19:33:13.775Z backlog → active (system)
 - 2026-07-28T00:31:39.627Z moved R → F82 (system)

@@ -828,6 +828,58 @@ describe('spur projects CLI command', () => {
         expect(entry?.host).toBe('remote.dev.internal');
     });
 
+    // `projects add` is also the re-register path: it must not wipe a live port
+    // that `spur serve` recorded (2026-10-22, knowledge-kit 3003 -> 0).
+    it('should preserve an existing live port when re-adding a registered project', async () => {
+        const registry = new ProjectRegistry(projectsFile);
+        await registry.upsert({ name: 'KeepPort', path: projectPath, port: 3007, host: 'localhost' });
+
+        const mockAdd = createMockOutput();
+        const exit = await main(['projects', 'add', projectPath, '--name', 'KeepPort', '--json'], {
+            cwd: tempDir,
+            output: mockAdd.output,
+        });
+        expect(exit).toBe(0);
+
+        const entry = new ProjectRegistry(projectsFile).readRaw().projects.find((p) => p.name === 'KeepPort');
+        expect(entry?.port).toBe(3007);
+    });
+
+    it('should refuse to stop a remote project and keep its port', async () => {
+        const registry = new ProjectRegistry(projectsFile);
+        await registry.upsert({ name: 'RemoteKk', path: '/var/remote/kk', port: 3456, host: '192.168.87.27' });
+        // The remote serve is live on its own host; nothing answers that port locally.
+        setPortProbeForTests(async (port, host) =>
+            host === '192.168.87.27' && port === 3456 ? 'in-use' : 'available',
+        );
+
+        const mock = createMockOutput();
+        const exit = await main(['projects', 'stop', 'RemoteKk'], { cwd: tempDir, output: mock.output });
+        expect(exit).toBe(1);
+        expect(mock.getText()).toContain('192.168.87.27');
+        expect(new ProjectRegistry(projectsFile).readRaw().projects.find((p) => p.name === 'RemoteKk')?.port).toBe(
+            3456,
+        );
+    });
+
+    it('should remove only the entry matching --host', async () => {
+        const registry = new ProjectRegistry(projectsFile);
+        await registry.upsert({ name: 'Dup', path: projectPath, port: 3003, host: '192.168.87.27' });
+        await registry.upsert({ name: 'Dup', path: projectPath, port: 0, host: 'localhost' });
+
+        const mock = createMockOutput();
+        const exit = await main(['projects', 'remove', 'Dup', '--host', 'localhost', '--json'], {
+            cwd: tempDir,
+            output: mock.output,
+        });
+        expect(exit).toBe(0);
+
+        const entries = new ProjectRegistry(projectsFile).readRaw().projects;
+        expect(entries).toHaveLength(1);
+        expect(entries[0]?.host).toBe('192.168.87.27');
+        expect(entries[0]?.port).toBe(3003);
+    });
+
     it('should report resetPorts on projects clean when closed ports are reset to 0', async () => {
         const registry = new ProjectRegistry(projectsFile);
         await registry.upsert({ name: 'LiveLocal', path: projectPath, port: 3888, host: 'localhost' });
@@ -854,12 +906,14 @@ describe('spur projects CLI command', () => {
         };
         expect(data.ok).toBe(true);
         expect(data.purgedCount).toBe(0);
-        expect(data.resetPorts).toHaveLength(2);
+        expect(data.resetPorts).toHaveLength(1);
         expect(data.resetPorts.some((p) => p.name === 'LiveLocal')).toBe(true);
-        expect(data.resetPorts.some((p) => p.name === 'RemoteDead')).toBe(true);
+        // Remote entries keep their recorded port: a failed cross-host probe cannot
+        // disprove a live serve, and zeroing it lost knowledge-kit's 3003.
+        expect(data.resetPorts.some((p) => p.name === 'RemoteDead')).toBe(false);
 
         const updated = await registry.list();
         expect(updated.find((p) => p.name === 'LiveLocal')?.port).toBe(0);
-        expect(updated.find((p) => p.name === 'RemoteDead')?.port).toBe(0);
+        expect(updated.find((p) => p.name === 'RemoteDead')?.port).toBe(4567);
     });
 });

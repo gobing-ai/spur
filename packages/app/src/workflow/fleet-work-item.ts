@@ -3,6 +3,7 @@ import { CoordinationRunDao, type DbAdapter } from '@gobing-ai/spur-domain';
 import type { ActionResult } from '@gobing-ai/ts-dual-workflow-engine';
 import { createNodeFileSystem } from '@gobing-ai/ts-runtime';
 import type { AgentRunDeps } from '../services/agent-service';
+import type { WarmTurnDispatcher } from '../services/warm-turn-dispatch';
 import type { WorkflowAgentService } from './actions/agent-run';
 
 interface FleetWorkItem {
@@ -16,6 +17,11 @@ function paths(cwd: string, key: string): { input: string; result: string; state
     if (match === null) return null;
     const base = join(cwd, '.spur/run', match[1] as string, 'prompts', match[2] as string);
     return { input: `${base}.execution.json`, result: `${base}.result.json`, state: match[2] as string };
+}
+
+/** Read a flag value as a string id, or undefined when absent/empty. */
+function stringOrUndefined(value: unknown): string | undefined {
+    return typeof value === 'string' && value.length > 0 ? value : undefined;
 }
 
 function bindingVars(vars: Record<string, unknown>): Record<string, string> {
@@ -59,6 +65,24 @@ export async function readFleetWorkItemResult(cwd: string, runId: string, state:
     }
 }
 
+/** Fleet phase-mark emitter (task 1273): a boundary name plus bounded identity payload. */
+export type FleetPhaseEmit = (phase: string, payload: Record<string, unknown>) => void;
+
+/** Build a phase payload with the correlation ids a keyed run owns. */
+function phasePayload(
+    phase: string,
+    ids: { runId?: string; executionId?: string },
+    extra: Record<string, unknown> = {},
+): Record<string, unknown> {
+    return {
+        phase,
+        ...(ids.runId !== undefined ? { runId: ids.runId } : {}),
+        ...(ids.executionId !== undefined ? { executionId: ids.executionId } : {}),
+        at: new Date().toISOString(),
+        ...extra,
+    };
+}
+
 /** The member runs the shared action contract before publishing its completion receipt. */
 export async function runFleetWorkItem(input: {
     cwd: string;
@@ -69,10 +93,26 @@ export async function runFleetWorkItem(input: {
     service: WorkflowAgentService;
     runDeps?: AgentRunDeps;
     getDb(): Promise<DbAdapter>;
+    /** Phase marks (task 1273); absent where no bus is wired. */
+    emitPhase?: FleetPhaseEmit;
+    /**
+     * Correlated warm-turn dispatcher for THIS keyed request (task 1275). Absent → today's
+     * fresh-process path. The turn receipt it records is projected onto the completion receipt
+     * separately from the action-contract verdict, never merged into it.
+     */
+    turn?: WarmTurnDispatcher;
 }): Promise<ActionResult | null> {
     const file = paths(input.cwd, input.key);
     const fs = createNodeFileSystem(input.cwd);
     if (file === null || !(await fs.exists(file.input))) return null;
+    input.emitPhase?.(
+        'preflight',
+        phasePayload(
+            'preflight',
+            { runId: stringOrUndefined(input.flags['run-id']) },
+            { key: input.key, messageId: input.messageId, member: input.recipient },
+        ),
+    );
     const work = JSON.parse(await fs.readFile(file.input)) as FleetWorkItem;
     if (
         work === null ||
@@ -89,7 +129,15 @@ export async function runFleetWorkItem(input: {
     const flags = { ...input.flags };
     delete flags.requestMessage;
     delete flags['request-message'];
+    // Task 1275 R2: the turn correlation's requestId is the inbox message that asked for this
+    // run, so the executor can compose it without reaching back into loop state.
+    flags['message-id'] = input.messageId;
     const runId = String(flags['run-id'] ?? crypto.randomUUID());
+    const ids = { runId, executionId: stringOrUndefined(flags['execution-id']) };
+    input.emitPhase?.(
+        'accepted',
+        phasePayload('accepted', ids, { key: input.key, messageId: input.messageId, member: input.recipient }),
+    );
     const runner = new AgentRunActionRunner(input.service, undefined, undefined, { excludeGlobs: work.excludeGlobs });
     const result = await runner.execute(
         { ...work.options, agent: flags.agent, cwd: input.cwd },
@@ -100,16 +148,26 @@ export async function runFleetWorkItem(input: {
             vars: bindingVars(work.vars),
             env: {},
         },
-        { flags, deps: input.runDeps },
+        {
+            flags,
+            deps:
+                input.turn === undefined ? input.runDeps : { ...input.runDeps, dispatchTurn: input.turn.dispatchTurn },
+        },
     );
+    input.emitPhase?.('contract-validated', phasePayload('contract-validated', ids, { ok: result.ok }));
+    // Task 1275 R2: the turn receipt (acceptance, native terminal, correlation) is recorded
+    // SEPARATELY from the action-contract verdict above — a native success that missed its
+    // artifact is still a contract violation, and the reader can see both.
+    const turn = input.turn?.lastTurn();
+    if (turn !== undefined) input.emitPhase?.('turn-settled', phasePayload('turn-settled', ids, { turn }));
     // Answers stay in their declared artifact; the transport receipt carries only contract metadata.
     const projected: ActionResult = {
         ok: result.ok,
         ...(result.ok ? {} : { error: `Fleet work-item contract failed; inspect member run ${runId}` }),
         ...(result.setVars ? { setVars: bindingVars(result.setVars) } : {}),
         data: Object.fromEntries(
-            Object.entries(result.data ?? {}).filter(([key]) =>
-                ['outcome', 'contract', 'observed', 'escalated'].includes(key),
+            Object.entries({ ...result.data, ...(turn !== undefined ? { turn } : {}) }).filter(([key]) =>
+                ['outcome', 'contract', 'observed', 'escalated', 'turn'].includes(key),
             ),
         ),
     };

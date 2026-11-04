@@ -130,7 +130,7 @@ function defaultWrapperArgv(agentId: string): { command: string; args: string[] 
 /**
  * Process supervisor (task 0195/0207).
  *
- * Manages supervised agent processes spawned from `.spur/agents/<id>.yaml` specs.
+ * Manages supervised processes from derived fleet specs and hand-authored agent specs.
  * Supports option (c): a `config.command` (or legacy top-level `command`) wins when
  * present; absent → the spur-provided `agent loop` self-draining wrapper. Abnormal
  * exits are restarted with bounded backoff, then marked `errored` (0258 R7). Emits

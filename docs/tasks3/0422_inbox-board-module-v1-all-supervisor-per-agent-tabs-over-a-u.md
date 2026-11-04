@@ -3,7 +3,7 @@ template: feature-impl
 schema_version: 1
 name: "Inbox Board module v1: All / Supervisor / per-agent tabs over a unified message+process timeline"
 description: ""
-status: done
+status: deprecated
 type: task
 profile: standard
 feature_id: M4
@@ -12,7 +12,7 @@ priority: P2
 tags: []
 dependencies: []
 created_at: 2026-08-03T23:02:05.562Z
-updated_at: "2026-08-05T23:46:08.489Z"
+updated_at: "2026-10-21T20:05:09.088Z"
 ---
 
 ## 0422. Inbox Board module v1: All / Supervisor / per-agent tabs over a unified message+process timeline
@@ -485,6 +485,7 @@ Re-audit of terminal task with `--force`. No code changes this run; evidence re-
 - Root `DESIGN.md` — UI/UX SSOT (REQ-10).
 - `docs/design/workspace-design.md:84` — notes the earlier tab-component reuse pattern.
 ### History
+
 - 2026-08-04T03:36:55.234Z todo → wip (system)
 - 2026-08-04T03:52:17.746Z wip → testing (system)
 - 2026-08-04T03:53:05.876Z testing → done (system)
@@ -494,3 +495,7 @@ Re-audit of terminal task with `--force`. No code changes this run; evidence re-
   - Verdict artifact still PASS at `.spur/run/0422-verdict.json` (do not discard without re-verify)
 - 2026-08-04T04:44:04.261Z wip → testing (system)
 - 2026-08-04T04:44:04.560Z testing → done (system)
+
+- 2026-10-21 deprecated with feature M4 (operator-confirmed post-G11 legacy audit). Implementation history retained as evidence.
+- 2026-10-21T20:05:09.088Z done → deprecated (system)
+

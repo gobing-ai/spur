@@ -629,7 +629,8 @@ export class FeatureCheckService extends PlanningCheckService {
             section: '',
             message:
                 `Feature "${featureId}" completion evidence rejected (${outcome.reason}): ${outcome.detail}. ` +
-                'Re-run the feature-scoped verification pass to record current evidence.',
+                // Name the verb: `bun run spur-check-feature` alone runs the same checks but records no receipt.
+                `Re-run the feature-scoped verification pass to record current evidence: spur feature verify ${featureId}.`,
         });
     }
 

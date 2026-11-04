@@ -6,7 +6,7 @@ status: done
 priority: P2
 tags: []
 created_at: "2026-09-28T01:13:21.763Z"
-updated_at: "2026-10-15T02:22:33.531Z"
+updated_at: "2026-10-21T18:35:32.897Z"
 ---
 
 # A8: Downstream Spur Board modules and embedded resources
@@ -177,6 +177,12 @@ Feature: Downstream Spur Board modules and embedded resources
 <!-- END AUTO-GENERATED -->
 
 ## Notes
+
+### Current reading — 2026-10-21
+
+The implementation is delivered; the generated task roster records completed work and cancelled investigation 0997. The proposed/unimplemented status and next-run instructions below are historical planning notes, not current implementation status; the generated task roster is the execution projection.
+
+### Historical notes
 
 Source investigation and decision history: docs/plans/2026-09-27-dynamic-board-modules-brainstorm.md. Accepted, unimplemented contract: docs/design/downstream-board-modules.md; ADR-128; root DESIGN.md's downstream Board rules.
 

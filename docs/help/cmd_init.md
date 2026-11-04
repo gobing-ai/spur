@@ -44,6 +44,11 @@ Under `.spur/`:
 > legacy `.spur/config.json` project marker is retired; the bootstrap block is folded into the
 > same YAML (consumed by `@gobing-ai/ts-infra` `runNodeApplication`).
 
+> **zg readiness.** Init appends `.zvec-grep/` — the zg semantic-search index dir (operator-built,
+> never created by Spur) — to `.gitignore` when absent, and reports zg readiness (`zg` on PATH,
+> `zg status` for the project index) as an informational line with the install/index hint when not;
+> a probe failure reports `index: 'unknown'` and never changes the init exit code.
+
 The scaffolded files are an explicit reviewed manifest (`SCAFFOLD_MANIFEST` in
 `apps/cli/src/config/scaffold-manifest.ts`) — adding a new default is a one-line manifest edit,
 not new control flow. Files are read from the resolved config source, not embedded as string

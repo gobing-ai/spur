@@ -6,7 +6,7 @@ status: done
 priority: P2
 tags: []
 created_at: "2026-09-07T03:39:36.195Z"
-updated_at: "2026-09-07T07:24:00.472Z"
+updated_at: "2026-10-21T18:39:50.306Z"
 ---
 
 # J31: Observabilities module polish: header naming, shell-level time range, catalog-open event ingestion
@@ -134,6 +134,10 @@ Feature: Observabilities module polish — naming, shell time range, catalog-ope
 <!-- END AUTO-GENERATED -->
 
 ## Notes
+
+### Current reading — 2026-10-21
+
+J92/J93 subsequently changed the shared header and time-range presentation. Catalog-open event ingestion remains live; old header naming/layout below records its original design.
 
 ## History
 

@@ -6,7 +6,7 @@ status: done
 priority: P1
 tags: []
 created_at: "2026-08-27T19:43:44.288Z"
-updated_at: "2026-08-28T03:26:22.958Z"
+updated_at: "2026-10-21T18:35:08.532Z"
 ---
 
 # F94: Pipeline close-out and gate friction: baseline reconcile verb, anchor-drift detection, verified-box auto-flip, and FSM denial guidance
@@ -109,6 +109,10 @@ Feature: Pipeline close-out and gate friction
 <!-- END AUTO-GENERATED -->
 
 ## Notes
+
+### Current reading — 2026-10-21
+
+D61 / ADR-108 supersedes corpus-baseline reconciliation and acceptance snapshots. Anchor drift detection, verified checkbox updates and FSM denial guidance remain live; routine edits use affected-input checking.
 
 ## History
 - 2026-08-28T01:01:06.233Z backlog → active (system)

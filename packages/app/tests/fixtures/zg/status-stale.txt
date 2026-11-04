@@ -1,0 +1,13 @@
+! Workspace index needs an update
+  ~/xprojects/spur-new
+
+  Coverage    ████████████████████ 100%  3,806 / 3,806 files
+  Entities    44,450
+  Truncated   5 fragments
+  Queue       0 pending · 0 failed
+  Changes     0 added · 0 modified · 4 deleted
+
+  Embedding   local/potion-code-16m-v2
+              256 dimensions · cosine
+
+  Storage     .zvec-grep/index.zvec

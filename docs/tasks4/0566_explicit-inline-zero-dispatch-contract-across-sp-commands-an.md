@@ -3,7 +3,7 @@ template: feature-impl
 schema_version: 1
 name: "Explicit-inline zero-dispatch contract across sp commands and skills"
 description: ""
-status: done
+status: deprecated
 type: task
 profile: standard
 feature_id: G5
@@ -13,7 +13,7 @@ tags: ["plugins/sp", "contracts", "adr-047"]
 dependencies: ["0565"]
 ac_numbering: task-local
 created_at: "2026-08-15T16:12:04.377Z"
-updated_at: "2026-09-09T06:47:13.076Z"
+updated_at: "2026-10-21T20:05:12.246Z"
 ---
 
 ## 0566. Explicit-inline zero-dispatch contract across sp commands and skills
@@ -241,6 +241,11 @@ L
 <!-- Links to the parent feature, design docs, related tasks, or external references. -->
 
 ### History
+
 - 2026-08-15T17:39:29.107Z todo → wip (system)
 - 2026-08-15T17:56:40.593Z wip → testing (system)
 - 2026-08-15T17:57:30.584Z testing → done (system)
+
+- 2026-10-21 deprecated with feature G5 (operator-confirmed post-G11 legacy audit). Implementation history retained as evidence.
+- 2026-10-21T20:05:12.246Z done → deprecated (system)
+

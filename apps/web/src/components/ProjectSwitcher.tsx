@@ -22,9 +22,51 @@ interface ProjectSwitcherProps {
  * of the same name. Local entries keep the bare name.
  */
 export function projectDisplayName(project: Pick<RegistryProject, 'name' | 'host'>): string {
-    const host = project.host?.trim().toLowerCase();
-    const remote = host !== undefined && host !== '' && host !== 'localhost' && host !== '127.0.0.1' && host !== '::1';
-    return remote ? `${project.name} (${project.host?.trim()})` : project.name;
+    return isRemoteHost(project.host) ? `${project.name} (${project.host?.trim()})` : project.name;
+}
+
+function isRemoteHost(host?: string): boolean {
+    const h = host?.trim().toLowerCase();
+    return h !== undefined && h !== '' && h !== 'localhost' && h !== '127.0.0.1' && h !== '::1';
+}
+
+/**
+ * Board URL to navigate to without a start call, or null when the entry must be started.
+ * Remote entries skip the server's `running` flag: that TCP probe runs in the serving
+ * process, which can be denied LAN access (macOS Local Network privacy, firewall) while
+ * the browser reaches the host fine — and a remote entry can never be started from here.
+ */
+export function directBoardUrl(project: Pick<RegistryProject, 'host' | 'port' | 'running'>): string | null {
+    if (project.port <= 0) return null;
+    if (!project.running && !isRemoteHost(project.host)) return null;
+    return `http://${project.host?.trim() || 'localhost'}:${project.port}/board`;
+}
+
+/**
+ * Re-check remote entries the server reported stopped, from the browser. The server's TCP
+ * probe can be denied LAN access (see `directBoardUrl`), but the browser is what navigates.
+ */
+export async function markRemoteLiveness(
+    projects: RegistryProject[],
+    probe: (url: string) => Promise<boolean>,
+): Promise<RegistryProject[]> {
+    return Promise.all(
+        projects.map(async (p) =>
+            !p.running && p.port > 0 && isRemoteHost(p.host)
+                ? { ...p, running: await probe(`http://${p.host?.trim()}:${p.port}/api/health`) }
+                : p,
+        ),
+    );
+}
+
+/** Reachability only: a `no-cors` fetch resolves (opaque) on any HTTP answer, rejects on network failure. */
+async function browserProbe(url: string): Promise<boolean> {
+    try {
+        await fetchWithTimeout(new Request(url, { mode: 'no-cors' }), 1500);
+        return true;
+    } catch {
+        return false;
+    }
 }
 
 /**
@@ -210,7 +252,10 @@ export default function ProjectSwitcher({ currentName, collapsed = false }: Proj
             .then(async (res) => {
                 if (!res.ok) return;
                 const body = (await res.json()) as { projects: RegistryProject[] };
-                setProjects(body.projects ?? []);
+                const list = body.projects ?? [];
+                setProjects(list);
+                const checked = await markRemoteLiveness(list, browserProbe);
+                if (!controller.signal.aborted) setProjects(checked);
             })
             .catch(() => {
                 setError('Failed to load projects');
@@ -243,8 +288,9 @@ export default function ProjectSwitcher({ currentName, collapsed = false }: Proj
             return;
         }
 
-        if (project.running && project.port > 0) {
-            window.location.href = `http://${project.host ?? 'localhost'}:${project.port}/board`;
+        const direct = directBoardUrl(project);
+        if (direct) {
+            window.location.href = direct;
             return;
         }
 

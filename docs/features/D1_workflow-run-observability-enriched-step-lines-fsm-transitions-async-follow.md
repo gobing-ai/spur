@@ -6,7 +6,7 @@ status: done
 priority: P2
 tags: ["wayfinder-map"]
 created_at: "2026-07-21T20:46:29.481Z"
-updated_at: "2026-10-05T03:25:42.519Z"
+updated_at: "2026-10-21T18:35:03.756Z"
 ---
 
 # P: workflow run observability — enriched step lines, FSM transitions, async follow
@@ -140,6 +140,13 @@ Feature: observable and steerable workflow execution
 <!-- END AUTO-GENERATED -->
 
 ## Notes
+
+### Current reading — 2026-10-21
+
+The linked implementation tasks are complete. Frontier and investigation descriptions below are historical, not an instruction to repeat implementation.
+
+### Historical notes
+
 ### Skills every session should consult
 
 - `sp:wayfinder` — the map protocol. **One ticket per session.** Claim (`wip`) before work.
@@ -228,6 +235,7 @@ independent of every display decision.
 **Note:** 0310's title still reads "Decide the verbosity model", which understates its consolidated scope.
 The CLI has no task-rename verb (`spur task` exposes no `delete` or `rename`), so the title was left rather
 than direct-writing the corpus. Read the scope from `### Background`.
+
 ## History
 
 - 2026-07-25T19:33:21.180Z backlog → active (system)

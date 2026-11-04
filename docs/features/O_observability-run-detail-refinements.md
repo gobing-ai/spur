@@ -6,7 +6,7 @@ status: backlog
 priority: P2
 tags: []
 created_at: "2026-10-05T01:58:58.049Z"
-updated_at: "2026-10-05T02:55:21.031Z"
+updated_at: "2026-10-21T18:44:39.400Z"
 ---
 
 # O: Observability run-detail refinements
@@ -48,5 +48,9 @@ _No linked tasks._
 <!-- END AUTO-GENERATED -->
 
 ## Notes
+
+### Current reading — 2026-10-21
+
+E72 task 1085 implements the single-action retry grouping and has regression coverage. The source audit found that ambiguous same-kind action definitions still consume rows without naming their durable IDs, so the entire R1 contract is not yet met; task 1272 owns that confirmed residual and retry-status correctness. Preserve this feature’s backlog state until its actual acceptance is verified. The earlier document-only inference that all behavior was already delivered is superseded by this executable source finding.
 
 ## History

@@ -6,7 +6,7 @@ status: done
 priority: P2
 tags: []
 created_at: "2026-09-24T00:07:59.728Z"
-updated_at: "2026-10-03T04:04:05.977Z"
+updated_at: "2026-10-21T18:35:05.107Z"
 ---
 
 # D64: Measured, decision-explicit, check-deduplicated workflow catalogue
@@ -146,6 +146,10 @@ Feature: Measured, decision-explicit, check-deduplicated workflow catalogue
 <!-- END AUTO-GENERATED -->
 
 ## Notes
+
+### Current reading — 2026-10-21
+
+D65 / ADR-140 supersedes per-surface inline interpreter/parity machinery. The measured checks, decision catalog integration and fleet behavior remain live.
 
 ## History
 

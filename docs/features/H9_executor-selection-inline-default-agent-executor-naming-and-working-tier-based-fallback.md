@@ -6,7 +6,7 @@ status: done
 priority: P1
 tags: []
 created_at: "2026-08-01T05:21:06.210Z"
-updated_at: "2026-08-01T21:41:27.658Z"
+updated_at: "2026-10-21T18:39:48.360Z"
 ---
 
 # H9: Executor selection: inline default, agent/executor naming, and working tier-based fallback
@@ -135,6 +135,10 @@ Feature: reliable executor selection
 <!-- END AUTO-GENERATED -->
 
 ## Notes
+
+### Current reading — 2026-10-21
+
+The selector is now --agent inline|auto|name. H82 collapsed the old --inline/--subprocess spellings; B task 0687 / ADR-087 owns headless inline tier substitution. Tier availability and fallback remain live.
 
 ## History
 - 2026-08-01T18:14:27.052Z backlog → active (system)

@@ -3,7 +3,7 @@ template: feature-impl
 schema_version: 1
 name: "Move role-tier SSOT from roles.md into packages/config (code defaults + agent.roles override)"
 description: ""
-status: done
+status: deprecated
 type: task
 profile: standard
 feature_id: B3
@@ -13,7 +13,7 @@ tags: []
 dependencies: []
 ac_numbering: task-local
 created_at: "2026-08-16T18:41:48.594Z"
-updated_at: "2026-08-16T23:12:40.987Z"
+updated_at: "2026-10-21T20:05:13.364Z"
 ---
 
 ## 0572. Move role-tier SSOT from roles.md into packages/config (code defaults + agent.roles override)
@@ -195,6 +195,11 @@ B3
 <!-- Links to the parent feature, design docs, related tasks, or external references. -->
 
 ### History
+
 - 2026-08-16T22:14:57.860Z todo → wip (system)
 - 2026-08-16T22:33:44.833Z wip → testing (system)
 - 2026-08-16T22:34:02.797Z testing → done (system)
+
+- 2026-10-21 deprecated with feature B3 (operator-confirmed post-G11 legacy audit). Implementation history retained as evidence.
+- 2026-10-21T20:05:13.364Z done → deprecated (system)
+

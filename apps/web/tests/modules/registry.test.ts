@@ -105,6 +105,7 @@ describe('singleton registry instance', () => {
     test('enabled modules are the surviving modules plus settings, in declared order', () => {
         expect(getEnabledModules()).toEqual([
             'observability',
+            'search',
             'history',
             'plans',
             'designs',

@@ -6,7 +6,7 @@ status: done
 priority: P2
 tags: ["wayfinder-map"]
 created_at: "2026-08-06T23:08:18.775Z"
-updated_at: "2026-08-08T12:43:55.812Z"
+updated_at: "2026-10-21T18:35:05.819Z"
 ---
 
 # E1: History data plane trustworthy end-to-end: forensic ETL, verified incremental import, analyze/report, one scheduled loop
@@ -117,6 +117,12 @@ Feature: History data plane trustworthy end-to-end
 <!-- END AUTO-GENERATED -->
 
 ## Notes
+
+### Current reading — 2026-10-21
+
+The implementation tasks are complete. Statements about report stubs and remaining implementation describe the investigation baseline; the current history CLI and E5/I8 own the shipped report surfaces.
+
+### Historical notes
 
 ### Map protocol
 

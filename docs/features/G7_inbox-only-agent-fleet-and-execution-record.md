@@ -6,7 +6,7 @@ status: backlog
 priority: P2
 tags: []
 created_at: "2026-10-04T20:29:17.951Z"
-updated_at: "2026-10-04T20:30:18.921Z"
+updated_at: "2026-10-21T18:35:11.409Z"
 ---
 
 # G7: Inbox-only agent fleet and execution record
@@ -50,5 +50,9 @@ _No linked tasks._
 <!-- END AUTO-GENERATED -->
 
 ## Notes
+
+### Current reading — 2026-10-21
+
+G71 implementation tasks are done and its feature awaits verification; G72/G73 are done. This parent has no direct task edges, so its backlog status is not proof that the child implementations are missing. Parent acceptance requires its own evidence-backed closure.
 
 ## History

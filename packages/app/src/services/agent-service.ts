@@ -13,7 +13,7 @@ import type { EventBus } from '@gobing-ai/ts-infra';
 import type { FileSystem } from '@gobing-ai/ts-runtime';
 import { NodeProcessExecutor, type OutputPolicy, type ProcessRegistry } from '@gobing-ai/ts-runtime';
 import type { DecisionCorrelation } from '../decision/decision-events';
-import type { AgentExecutionOptions } from '../observability/agent-execution';
+import type { AgentExecutionOptions, WarmTurnContext, WarmTurnDispatch } from '../observability/agent-execution';
 import { toEnvelopeJson } from '../output/envelope';
 import { parseArtifactRefs } from './agent-invocation-sanitize';
 import { AgentResolver } from './agent-resolver';
@@ -41,6 +41,13 @@ export type { AgentExecutorConfig } from './executor-tier';
 /** Runtime dependencies injectable for tests. */
 export interface AgentRunDeps {
     runner?: AiRunner;
+    /**
+     * Correlated warm-turn seam (task 1275): the per-dispatch dispatcher a keyed fleet drain
+     * built. The executor reads it off this deps bag because it is the one value that reaches
+     * `executeRun` unchanged from the loop; `AgentRunActionRunner` forwards it onto the
+     * `AgentExecutionOptions.dispatchTurn` field the executor branches on.
+     */
+    dispatchTurn?: (context: WarmTurnContext) => Promise<WarmTurnDispatch>;
     detector?: AgentDetector;
     doctorRunner?: DoctorRunner;
     /** Test seam (B4/0683 Q1): filesystem for the detection cache; defaults to the context cwd. */
@@ -61,7 +68,7 @@ export interface AgentRunDeps {
  * Absent → resolution behaves exactly as the legacy Tier-1 priority path.
  *
  * `roles` (0572): optional per-role tier/stage overrides over the
- * `DEFAULT_AGENT_ROLES` SSOT (packages/config); the CLI boundary merges them
+ * config-layer role table (ADR-078; `DEFAULT_AGENT_ROLES` fallback in packages/config); the CLI boundary merges them
  * before threading {@link AgentServiceContext.roles}, so resolution never
  * reads this field — it rides here only so the validated section passes through
  * the CLI context unchanged.
@@ -107,7 +114,7 @@ export type AgentResolveResult =
           role?: string;
           /** Whether the role was declared by the caller or inherited via SPUR_ROLE (0551). */
           roleOrigin?: 'declared' | 'inherited';
-          /** Tier the role's row declares in the Layer-1 role table (DEFAULT_AGENT_ROLES SSOT, 0572/ADR-061; source `role`). */
+          /** Tier the role's row declares in the Layer-1 role table (config-layer table per ADR-078, `DEFAULT_AGENT_ROLES` fallback; source `role`). */
           tier?: CapabilityTier;
           /** Executor entry name that won — role resolution or an executor pin. */
           executor?: string;
@@ -151,7 +158,7 @@ export interface AgentRunInvocation {
     role?: string;
     /** Origin of the effective role — declared or inherited via SPUR_ROLE (0551). */
     roleOrigin?: 'declared' | 'inherited';
-    /** Tier the role's row declares in the Layer-1 role table (DEFAULT_AGENT_ROLES SSOT, 0572/ADR-061; source `role`). */
+    /** Tier the role's row declares in the Layer-1 role table (config-layer table per ADR-078, `DEFAULT_AGENT_ROLES` fallback; source `role`). */
     tier?: CapabilityTier;
     /** Executor entry name that won — role resolution or an executor pin. */
     executor?: string;
@@ -231,7 +238,7 @@ export interface AgentServiceOutput {
 }
 
 /**
- * A Layer-1 role as declared in the `DEFAULT_AGENT_ROLES` SSOT (task 0572 / ADR-061;
+ * A Layer-1 role as declared in the config-layer role table (ADR-078; `DEFAULT_AGENT_ROLES` is the fallback;
  * `plugins/sp/references/roles.md` survives as a parity-gated projection).
  *
  * `stages` lists the canonical stage ids the role folds. It is not decoration:
@@ -279,7 +286,7 @@ export interface AgentServiceContext {
     rolesSource?: 'config' | 'fallback';
     /**
      * Layer-1 role map resolved at the CLI boundary (0536 R1) from the
-     * `DEFAULT_AGENT_ROLES` SSOT (0572 / ADR-061) merged with the project's
+     * config-layer role table (ADR-078, `DEFAULT_AGENT_ROLES` fallback) merged with the project's
      * `agent.roles` override. Absent → role selectors are not recognized
      * and fall through to the executor / binary lookup.
      */
@@ -449,7 +456,12 @@ export class AgentService {
     ): Promise<number> {
         const outcome = await this.runExecutor.executeRun(prompt, flags, deps, {
             silent: false,
-            execution: this.defaultExecutionOptions(flags),
+            // A keyed loop drain that is not a fleet work item still carries the per-drain
+            // warm dispatcher on its deps; the executor only branches on the execution field.
+            execution: {
+                ...this.defaultExecutionOptions(flags),
+                ...(deps?.dispatchTurn !== undefined ? { dispatchTurn: deps.dispatchTurn } : {}),
+            },
         });
         // agent.ts restores Commander's tri-state value under `jsonEnvelope` after the
         // generic camelCase-to-kebab conversion; absence still defers to the env.
@@ -588,14 +600,23 @@ export class AgentService {
 
     private defaultExecutionOptions(flags: Record<string, string | boolean>): AgentExecutionOptions {
         const runId = stringFlag(flags, 'run-id', '') || crypto.randomUUID();
+        // Task 1273: a keyed fleet run pins one execution identity across all its
+        // phase marks, so every phase row joins by the same (runId, executionId).
+        const executionId = stringFlag(flags, 'execution-id', '') || crypto.randomUUID();
         const observer =
             this.ctx.events === undefined
                 ? undefined
                 : (event: import('../observability/agent-execution').AgentExecutionEvent) => {
+                      // Phase marks ride their own `fleet.phase.*` name (task 1273) so the
+                      // KPI driver selects them without decoding `agent.execution` payloads.
+                      if (event.kind === 'phase') {
+                          void this.ctx.events?.emit(`fleet.phase.${event.phase}`, event);
+                          return;
+                      }
                       void this.ctx.events?.emit('agent.execution', event);
                   };
         return {
-            correlation: { runId, executionId: crypto.randomUUID() },
+            correlation: { runId, executionId },
             ...(observer !== undefined ? { observer } : {}),
         };
     }

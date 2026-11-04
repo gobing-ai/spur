@@ -39,6 +39,7 @@ Spur owns no model-reaching path other than `spur agent run` (delegated to the i
 
 - **Bun ≥ 1.4.3** on PATH (Spur runs as `.ts` under Bun; no compiled binary needed for dev).
 - At least one supported coding agent installed and authenticated (run `spur agent doctor` to verify).
+- Optional: [zg](https://www.npmjs.com/package/@zvec/zvec-grep) for semantic search — `bun add -g @zvec/zvec-grep`, then `zg index --embedding local/potion-code-16m-v2` per project. `zg install` (zg-owned) wires agent integrations; Spur only points here. Exact search works without it.
 
 ### From source (this repository)
 

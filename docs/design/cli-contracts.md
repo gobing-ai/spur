@@ -3,7 +3,7 @@ kind: design
 title: "CLI grammar, initialization, agents, teams and rules"
 status: implemented
 created_at: 2026-09-09
-updated_at: 2026-10-16
+updated_at: 2026-10-26
 related: ["0822", "0850", "0856", "0857", "0860", "0861", "1064", "1080", "1081"]
 tags: [contract, cli, agent]
 ---
@@ -72,6 +72,11 @@ The CLI surface is built on `commander` + `@commander-js/extra-typings`. Each no
 noun requires writing its registration function and importing it in `apps/cli/src/index.ts`.
 Commander handles option parsing, `--help` rendering, and subcommand dispatch — no custom
 help rendering overrides remain.
+
+`spur task gate` dispatches before project database/bootstrap initialization. Its file and Git
+checks still receive the merged builder configuration; `status`, `light`, `deferred`, `run` and
+`recheck` do not create or migrate a database merely to inspect or record a gate receipt. The
+full modes retain the host-wide lock; light/status remain lock-free.
 
 <a id="101-shared-option-registry-0618"></a>
 
@@ -755,11 +760,18 @@ sees a member waiting on a human and the Board can show `needs human`.
 - An accepted report writes the `agent.lifecycle.changed` ledger row (`system_events`, no new table);
   the highest-seq accepted row for the actor (racing reports cannot regress it) is the member's current state. `--json` returns
   `{ member, state, seq, accepted, observation }`.
+- A **bound** member's report (task 1282) requires `--pin <ownerEpoch>:<occupancyGeneration>`: a
+  pinless or malformed pin and a stale pin are both exit 2 before any lifecycle write. The first
+  matching report writes `handshakeAt` once (earliest kept) and sets `stageEligible`, completing the
+  attached handshake. A plain guest's report path is unchanged.
 
 `agent join` makes a live interactive session a **guest occupant** that pulls its own work instead of
 being dispatched to; `agent leave` retires it. Identity is a `coordination_runs` row plus a
 `.spur/run/guests/<id>.json` record; the lease is a `ProjectClaimDao` claim on slot `guest:<id>` with
-the shared claim TTL.
+the shared claim TTL. `join --member <id>` binds a **declared** member instead of registering a plain
+guest (task 1281): the roster validates role and executor, a capability proof gates the binding, and
+it takes the member's occupancy generation plus the `guest:<member-id>` claim, so the record id is the
+member's inbox address. Boundary shapes: [verified attached occupants](fleet-attached-occupants.md) §4.
 
 - `join` validates a known Layer-1 role (`scribe | coder | reviewer | planner`), allocates
   `<role>-g<n>` when `--id` is absent, and runs an expiry sweep first. An id colliding with a declared
@@ -767,6 +779,10 @@ the shared claim TTL.
 - `leave` defaults to the guest whose record matches `CLAUDE_CODE_SESSION_ID` / `--session-id`; no
   match or an unknown id exits 2. Leaving releases the lease, returns claimed messages to `queued`,
   marks the occupant `exited`, then deletes the record.
+- A bound member's leave drains first (task 1282): it stops new assignment and waits up to
+  `--drain-timeout <ms>` (default `ATTACHED_DRAIN_GRACE_MS`, one claim TTL = 30 s) for the in-flight
+  turn to settle, then retires the occupant; `--json` adds `drained`. An unsettled turn stays
+  resumable, and no process is ever signalled.
 - A guest is never supervised and never a stage target: role resolution counts declared members only,
   and `spur agent run --spec <guest>` is refused (no executor attestation for a `requiresCapabilities`
   stage). Guests are addressed by message (`--to <guest-id>`); the `fleet-join` skill loops
@@ -774,7 +790,7 @@ the shared claim TTL.
 
 <a id="spur-agent-wait-specid---role-name---run-runid---until-state---timeout-ms---json--spur-message-send---to-id--role-name-body---from-id---wait---until-injectedinvoke-exit---timeout-ms---json"></a>
 
-#### `spur agent wait [<specId>] [--role <name>] [--run <runId>] [--until <state>...] [--inbox <id>] [--timeout <ms>] [--json]` · `spur message send (--to <id>|--role <name>) <body> [--from <id>] [--wait] [--until injected|invoke-exit] [--timeout <ms>] [--json]`
+#### `spur agent wait [<specId>] [--role <name>] [--run <runId>] [--until <state>...] [--inbox <id>] [--timeout <ms>] [--json]` · `spur message send [--to <id>|--role <name>] <body> [--from <id>] [--wait] [--until injected|invoke-exit] [--timeout <ms>] [--json]`
 
 Identity-pinned wait on an occupant run (ADR-057 wave 2 / G4 R4–R5; role-addressed selector per the
 ADR-075 amendment, 0685). Addressing is by spec id **or** `--role` — never both: `--role` resolves
@@ -807,17 +823,26 @@ unchanged). No oRPC wait path.
 
 <a id="spur-message-send---to-id-body---from-id---wait---until-injectedinvoke-exit---timeout-ms---json--spur-message-inbox---agent-id---json--spur-message-reply-msg-id-body---json--spur-message-watch---agent-id---interval-ms---json"></a>
 
-#### `spur message send --to <id> <body> [--from <id>] [--wait] [--until injected|invoke-exit] [--timeout <ms>] [--json]` · `spur message inbox --agent <id> [--json]` · `spur message reply <msg-id> <body> [--json]` · `spur message watch --agent <id> [--interval <ms>] [--json]`
+#### `spur message send [--to <id>] <body> [--from <id>] [--wait] [--until injected|invoke-exit] [--timeout <ms>] [--json]` · `spur message inbox --agent <id> [--json]` · `spur message show <msg-id> [--json]` · `spur message read <msg-id> [--reader <id>] [--json]` · `spur message reply <msg-id> <body> [--json]` · `spur message watch --agent <id> [--interval <ms>] [--json]`
 
-Durable inter-agent messaging over the SQLite `inbox_messages` table (backed by `AgentCoordinationService` →
-`ts-db` `InboxMessageDao`).
+Durable inter-agent messaging over the SQLite `inbox_messages` table. Every verb goes through
+`InboxService` (`packages/app`) — the only reader and writer of the inbox plane — and never through the
+retired `AgentCoordinationService` message wrappers or the ts-db DAO.
 
-- `send` — enqueue a message; `--from` defaults to `operator`. Prints `queued <id> → <to>`.
-  `--wait` / `--until` / `--timeout` are documented with `agent wait` above.
-- `inbox` — list messages addressed to `--agent` (`<id> <status> <from> <body> <createdAt>`); reports
-  "No messages" when empty.
-- `reply` — look up the original message, address the reply back to its `from_id`, and thread it via
-  `in_reply_to`. Rejects an unknown id, or an operator-originated message (null sender) with no peer.
+- `send` — store a message and its `message.sent` event in one transaction. `--to` is optional: without
+  it the message goes to the project's orchestrator member, and a project with none exits 2 writing no
+  row. `--from` defaults to `operator`; both addresses are syntax-checked before the write. Prints
+  `queued <id> → <to>`, or `replayed <id> → <to>` for a repeated `--request-key`.
+  `--wait` / `--until` / `--timeout` are documented with `agent wait` above; `--until injected` is
+  satisfied when THIS message leaves `queued`, not when the recipient's inbox is empty.
+- `inbox` — list messages addressed to `--agent` (`<id> <status> <from> <body> <createdAt>`) and write
+  nothing: `--unresolved` classifies through the pure reconciler pass. Reports "No messages" when empty.
+- `show` — print the thread the id belongs to (root plus replies, oldest first, both directions); an
+  unknown id exits 1.
+- `read` — stamp the read receipt for `--reader` (default `operator`), idempotently: only the first mark
+  transitions and writes `message.read`. A missing or mis-addressed message exits 1.
+- `reply` — address the reply to the original sender and thread it via `in_reply_to`; an unknown id
+  exits 1.
 
 <a id="spur-agent-start-spec-id---server-url---json--spur-agent-stop-spec-id---server-url---json"></a>
 
@@ -952,6 +977,13 @@ failure states that the worker may or may not be running. Both point at `spur wo
 `spur workflow trace <run-id>` and deliberately do **not** recommend an immediate replay. Confirmation
 — including a successful observation on the final allowed poll — keeps the unchanged `started`
 response, the plan-artifact stamp and exactly one dispatch.
+
+**Async worker launch (`run` and `continue`).** The launcher preserves the executable, optional
+runtime entrypoint and command arguments as separate argv elements, including paths with spaces.
+POSIX uses individually quoted arguments through `nohup`; Windows uses PowerShell `Start-Process`
+with the executable and a Windows-escaped argument line supplied through environment values.
+Percent signs, exclamation marks, JSON quotes and trailing backslashes do not pass through `cmd`
+expansion. Windows batch launchers (`.cmd` / `.bat`) and NUL-containing arguments are refused.
 
   Worked example — re-drive the publish tail of a completed daily run after fixing a credential:
 

@@ -6,7 +6,7 @@ status: done
 priority: P2
 tags: []
 created_at: "2026-07-03T23:28:35.958Z"
-updated_at: "2026-08-13T20:18:20.128Z"
+updated_at: "2026-10-21T18:35:09.483Z"
 ---
 
 # G2: Team process supervision
@@ -92,11 +92,19 @@ Feature: Team process supervision
 <!-- END AUTO-GENERATED -->
 
 ## Notes
+
+### Current reading — 2026-10-21
+
+G64/G65 retired spur team and /api/team; G72 derives fleet specs in memory. SupervisorService, bounded restarts and process/terminal streaming remain live under spur agent and Projects. The original command/route examples below describe the retired transport.
+
+### Historical notes
+
 Shipped (tasks 0195, 0207–0210, 0532). `01`/`05` previously called start/stop Phase-4 stubs;
 repaired 2026-08-12. CLI attach was in the original 0209 title but never landed — HTTP/SSE
 is the attach surface. Complements ADR-052/057 (process pipe ≠ inbox).
 0532 recorded PASS verdict artifacts for 0195/0207–0210; `feature check G2 --strict --as done`
 is clean and the feature is `done` (2026-08-13).
+
 ## History
 - 2026-07-03 — created; implementation 0195 / 0207–0210 later marked done.
 - 2026-08-12 — Scope/AC aligned to shipped supervisor (no CLI attach; SSE/HTTP attach;

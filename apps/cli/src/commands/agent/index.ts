@@ -52,7 +52,7 @@ export function registerAgentCommand(program: Command, context: CliContext): voi
     registerAgentStopCommand(agent, context);
 }
 
-export { runAgentJoin } from './join';
+export { runAgentJoin, setGuestRenewerArgvForTesting } from './join';
 export { runAgentLeave } from './leave';
 export { startParentWatch } from './loop';
 export { runAgentReport } from './report';

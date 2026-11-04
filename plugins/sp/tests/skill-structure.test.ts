@@ -934,10 +934,14 @@ describe('sp plugin structure — functional split invariants (task 0161 / ADR-0
             // 1251 R3: +444 B absorbed, not grown — `references/pipeline-resolution.md` was the
             // retired wayfinder-resolution workflow's hop contract, so its resolution boundary and
             // evidence-anchor rules moved into the body (condensed) and the references/ dir is gone.
-            wayfinder: 26_708,
+            // 1288 R10: +394 B identical ADR-147 Search-routing block (task AC: body placement,
+            // same wording in all four locating skills; hybrid-search design §4 Skills).
+            wayfinder: 27_102,
             // 0622 R9: +921B of live-matrix reconciliation (section table, SPUR_BIN
             // refusal, artifact-size discipline). Not permanent — split into references.
-            'issue-finding': 27_060,
+            // 1288 R10: +388 B identical ADR-147 Search-routing block (task AC: body placement,
+            // same wording in all four locating skills; hybrid-search design §4 Skills).
+            'issue-finding': 27_448,
             // 0884 R2/R4: the `## Spur contract` adapter (+~1.5–2.6KB) must live in
             // SKILL.md per task AC (≤40 lines, coordinator reads it from the skill);
             // splitting it into references would break the contract. Not permanent —

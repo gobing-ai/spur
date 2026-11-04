@@ -6,7 +6,7 @@ status: done
 priority: P2
 tags: []
 created_at: "2026-07-30T21:46:41.324Z"
-updated_at: "2026-07-31T04:03:45.663Z"
+updated_at: "2026-10-21T18:39:48.079Z"
 ---
 
 # H6: sp plugin role rescope: 4-agent roster, spur-cli parity gate, and dispatch-surface strategy
@@ -218,6 +218,10 @@ Feature: sp plugin role rescope: 4-agent roster, spur-cli parity gate, and dispa
 <!-- END AUTO-GENERATED -->
 
 ## Notes
+
+### Current reading — 2026-10-21
+
+The current spur-cli facade includes the later decision, message, self, history and projects references. Original immature-noun exclusions below describe the review baseline, not current exclusions; retain role charters and parity/dispatch behavior.
 
 ## History
 - 2026-07-31T03:53:22.062Z backlog → active (system)

@@ -115,9 +115,9 @@ Feature: Workflow run reliability defects
 | 1067 | enforce e71 persist out before worktree removal in wt4 landings | done |
 | 1117 | feature-verification leaks the async launcher's expected definition digest into verificationCmd | done |
 | 1253 | Workflow engine: wildcard from transitions for cancel/deprecate edges (deferred) | cancelled |
-| 1256 | Record the agent dispatch failure as the run terminal reason | testing |
+| 1256 | Record the agent dispatch failure as the run terminal reason | done |
 | 1257 | Finalize lifecycle run rows left running by a manual transition | cancelled |
-| 1259 | Harness operational seams: staging, dispatch, cleanup, scheduler and CLI parity | todo |
+| 1259 | Harness operational seams: staging, dispatch, cleanup, scheduler and CLI parity | done |
 <!-- END AUTO-GENERATED -->
 
 ## Notes

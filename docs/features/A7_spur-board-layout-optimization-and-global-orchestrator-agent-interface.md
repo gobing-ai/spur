@@ -6,7 +6,7 @@ status: done
 priority: P2
 tags: []
 created_at: "2026-09-06T03:19:34.027Z"
-updated_at: "2026-09-06T05:03:55.074Z"
+updated_at: "2026-10-21T18:35:01.394Z"
 ---
 
 # A7: Spur Board layout optimization and global orchestrator agent interface
@@ -90,6 +90,10 @@ Feature: Spur Board layout optimization and global orchestrator agent interface
 <!-- END AUTO-GENERATED -->
 
 ## Notes
+
+### Current reading — 2026-10-21
+
+G63/G64 replaced the original Workspace/Inbox/Teams navigation with Projects; G11 now owns the member Inbox tab. The Board shell and global input remain live capabilities.
 
 ## History
 

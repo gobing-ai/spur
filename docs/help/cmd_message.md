@@ -8,8 +8,10 @@
 
 | Subcommand | Description |
 |---|---|
-| `send <body>` | Enqueue a message for an agent |
-| `inbox` | List messages addressed to an agent |
+| `send <body>` | Send a message to a member inbox (defaults to the orchestrator, from `operator`) |
+| `inbox` | List messages addressed to an agent (read-only) |
+| `show <msg-id>` | Print one thread: root plus replies, oldest first, both directions |
+| `read <msg-id>` | Mark a message read by its recipient (`--reader`, default `operator`) |
 | `reply <msg-id> <body>` | Thread a reply to a message |
 | `watch` | Follow an agent inbox — surface new messages as they arrive |
 
@@ -25,12 +27,12 @@ spur message send [options] <body>
 
 | Flag | Default | Description |
 |---|---|---|
-| `--to <id>` | — | Recipient agent id (required unless `--role`) |
+| `--to <id>` | orchestrator | Recipient address. Omitted = the project's orchestrator member; a project with none is a usage error (exit 2) and writes no row |
 | `--from <id>` | `operator` | Sender id |
 | `--role <name>` | — | Address by Layer-1 role or executor name; must resolve to exactly one materialized instance |
 | `--request-key <key>` | — | Caller-minted idempotency key. The same key with the same body + recipient replays the original receipt (`replayed: true`; no second row or delivery); the same key with a different payload fails with a request-key-conflict error (0832) |
 | `--wait` | — | Block until the recipient occupant reaches `--until` (snapshots occupant **before** enqueue) |
-| `--until <state>` | `invoke-exit` | Wait target when `--wait` is set: `injected` \| `invoke-exit` (repeatable OR) |
+| `--until <state>` | `invoke-exit` | Wait target when `--wait` is set: `injected` \| `invoke-exit` (repeatable OR). `injected` resolves when THIS message leaves `queued` (claimed, delivered or failed) — not when the inbox happens to be empty |
 | `--timeout <ms>` | — | Caller deadline for `--wait` |
 | `--json` | — | Output machine-readable JSON |
 
@@ -60,11 +62,44 @@ spur message send "Review 0042" --to reviewer --wait --until invoke-exit --timeo
 }
 ```
 
+## spur message show
+
+```
+spur message show <msg-id> [--json]
+```
+
+Prints the whole thread the id belongs to — the root and every reply, oldest first, in both
+directions (what the operator sent and what came back). An unknown id exits 1.
+
+| Flag | Description |
+|---|---|
+| `--json` | Output machine-readable JSON (`{ messages, count }`) |
+
+## spur message read
+
+```
+spur message read <msg-id> [--reader <id>] [--json]
+```
+
+Stamps the read receipt. Idempotent: only the first mark transitions and writes the
+`message.read` ledger event; a repeat returns the original stamp with `transitioned: false`.
+
+| Flag | Default | Description |
+|---|---|---|
+| `--reader <id>` | `operator` | Address marking the message read |
+| `--json` | — | Output machine-readable JSON |
+
+A missing or mis-addressed message exits 1 — ids cannot be probed across addresses.
+
 ## spur message inbox
 
 ```
 spur message inbox --agent <id> [--unresolved] [--json]
 ```
+
+Writes nothing: the listing classifies in-flight work through the pure reconciler pass and never
+sweeps, settles or expires anything. The write side of that bookkeeping belongs to the
+orchestrator's strategy tick.
 
 | Flag | Description |
 |---|---|

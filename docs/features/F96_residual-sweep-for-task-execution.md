@@ -6,7 +6,7 @@ status: done
 priority: P2
 tags: []
 created_at: "2026-09-24T18:48:46.363Z"
-updated_at: "2026-10-05T03:14:40.713Z"
+updated_at: "2026-10-21T18:35:08.787Z"
 ---
 
 # F96: Residual sweep for task execution
@@ -108,6 +108,10 @@ Feature: Residual sweep for task execution
 <!-- END AUTO-GENERATED -->
 
 ## Notes
+
+### Current reading — 2026-10-21
+
+D65 merged certification into review and uses gate/remediate for fixes. Residual scanning/folding remains current; former test-fix/verify stage names below are historical.
 
 ## History
 

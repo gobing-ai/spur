@@ -5,7 +5,6 @@ import { z } from 'zod';
 import {
     type CheckFindings,
     type CheckResultBase,
-    type CorpusSeverity,
     type DocKind,
     FINDING_CODES,
     isUnsuppressibleFinding,
@@ -47,10 +46,9 @@ class TestCheckService extends PlanningCheckService {
         findings: CheckFindings[],
         strict?: boolean,
         overrides?: Record<string, 'error' | 'warning' | 'off'>,
-        accepted?: ReadonlyMap<string, CorpusSeverity>,
-        id?: string,
+        requiredList?: readonly string[],
     ): CheckResultBase {
-        return super.summarizeWithStatus(status, findings, strict, overrides, accepted, id);
+        return super.summarizeWithStatus(status, findings, strict, overrides, requiredList);
     }
 }
 
@@ -411,7 +409,7 @@ describe('PlanningCheckService.summarizeWithStatus (D61 task 0765 — R1 unsuppr
         ]);
     });
 
-    test('essential L2 unclosed-code-fence error survives severityOverrides and accepted-map suppression', () => {
+    test('essential L2 unclosed-code-fence error survives severityOverrides', () => {
         expect(isUnsuppressibleFinding(FINDING_CODES.L2_UNCLOSED_CODE_FENCE)).toBe(true);
         const svc = new TestCheckService(simpleMatrix);
         const findings: CheckFindings[] = [
@@ -431,26 +429,6 @@ describe('PlanningCheckService.summarizeWithStatus (D61 task 0765 — R1 unsuppr
             expect(result.findings[0]?.severity).toBe('error');
             expect(result.pass).toBe(false);
         }
-        const accepted = new Map<string, CorpusSeverity>([
-            [`task:0810:${FINDING_CODES.L2_UNCLOSED_CODE_FENCE}`, 'error'],
-        ]);
-        // Full 6-arg signature via cast; TestCheckService exposes a 3-arg shim only.
-        const protectedCall = (
-            svc as unknown as {
-                summarizeWithStatus: (
-                    s: string,
-                    f: CheckFindings[],
-                    strict: boolean,
-                    overrides: undefined,
-                    accepted: Map<string, CorpusSeverity>,
-                    id: string,
-                ) => CheckResultBase;
-            }
-        ).summarizeWithStatus;
-        const result = protectedCall('testing', findings, false, undefined, accepted, '0810');
-        expect(result.findings).toHaveLength(1);
-        expect(result.findings[0]?.severity).toBe('error');
-        expect(result.pass).toBe(false);
     });
 
     test('advisory L3 warning is still suppressed by severityOverrides: { code: off }', () => {
@@ -483,7 +461,7 @@ describe('PlanningCheckService.summarizeWithStatus (D61 task 0765 — R1 unsuppr
         expect(result.pass).toBe(true);
     });
 
-    test('essential L4 malformed-verdict error survives accepted-map suppression', () => {
+    test('essential L4 malformed-verdict error survives severity overrides', () => {
         const svc = new TestCheckService(simpleMatrix);
         const findings: CheckFindings[] = [
             {
@@ -494,28 +472,14 @@ describe('PlanningCheckService.summarizeWithStatus (D61 task 0765 — R1 unsuppr
                 message: 'malformed',
             },
         ];
-        const accepted = new Map<string, CorpusSeverity>([
-            [`task:0810:${FINDING_CODES.L4_MALFORMED_VERDICT_ARTIFACT}`, 'error'],
-        ]);
-        // Re-call with the full 6-arg signature to exercise the accepted branch.
-        // TestCheckService only exposes a 3-arg overload; fall back to the
-        // protected helper through a cast.
-        const protectedCall = (
-            svc as unknown as {
-                summarizeWithStatus: (
-                    s: string,
-                    f: CheckFindings[],
-                    strict: boolean,
-                    overrides: undefined,
-                    accepted: Map<string, CorpusSeverity>,
-                    id: string,
-                ) => CheckResultBase;
-            }
-        ).summarizeWithStatus;
-        const result = protectedCall('testing', findings, false, undefined, accepted, '0810');
-        expect(result.findings).toHaveLength(1);
-        expect(result.findings[0]?.severity).toBe('error');
-        expect(result.pass).toBe(false);
+        for (const severity of ['off', 'warning'] as const) {
+            const result = svc.summarizeWithStatus('testing', findings, false, {
+                [FINDING_CODES.L4_MALFORMED_VERDICT_ARTIFACT]: severity,
+            });
+            expect(result.findings).toHaveLength(1);
+            expect(result.findings[0]?.severity).toBe('error');
+            expect(result.pass).toBe(false);
+        }
     });
 });
 

@@ -17,7 +17,7 @@ import { describe, expect, test } from 'bun:test';
 import { mkdirSync, mkdtempSync, readdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
-import { key, resolveFogRange, sectionLabels, ungraduatedFog } from '../../src/services/corpus-check';
+import { resolveFogRange, sectionLabels, ungraduatedFog } from '../../src/services/corpus-check';
 
 const FOG = /^###\s+Not yet specified\b/;
 const OUT_OF_SCOPE = /^###\s+Out of scope\b/;
@@ -290,10 +290,7 @@ describe('ungraduatedFog decision table', () => {
             (r) => write(r, MAP_FILE, mapMd(FOG_2)),
         );
         const [error] = await inspectFog(root);
-        // The finding carries the shared identity triple so any consumer (transition
-        // gates, audits, tooling) can key on it without a second mechanism.
-        const baselineEntry = { kind: 'feature', id: 'Z1', code: 'corpus.ungraduated-fog' };
-        expect(key(error as { kind: string; id: string; code: string })).toBe(key(baselineEntry));
+        expect(error).toMatchObject({ kind: 'feature', id: 'Z1', code: 'corpus.ungraduated-fog' });
     });
 
     test('a map created inside the range cannot shrink', async () => {

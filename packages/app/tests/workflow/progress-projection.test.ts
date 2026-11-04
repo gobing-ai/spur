@@ -356,6 +356,9 @@ describe('projectWorkflowProgress', () => {
         });
 
         expect(projection.diagnostics.some((d) => d.code === 'ambiguous-action')).toBe(true);
+        for (const id of ['a1', 'a2', 'a3']) {
+            expect(projection.diagnostics.some((d) => d.message.includes(id))).toBe(true);
+        }
         const s1 = projection.states.find((s) => s.state === 's1');
         expect(s1?.actions.some((a) => a.status === 'ambiguous')).toBe(true);
         db.close();
@@ -532,6 +535,37 @@ describe('projectWorkflowProgress', () => {
         expect(attemptIds(projection, 'test')).toEqual(['ar-test']);
         expect(projection.diagnostics).toEqual([]);
         db.close();
+    });
+
+    test('the latest retry decides current status while earlier failures remain inspectable (1272)', async () => {
+        const db = await setupDb();
+        try {
+            await seedInlineRun(db, 'r-retry-status', 'running', inlinePipelineDef);
+            for (const [index, status] of ['failed', 'passed'].entries()) {
+                await seedInlineActionRow(db, 'r-retry-status', {
+                    id: `attempt-${index}`,
+                    node: 'precheck',
+                    kind: 'shell',
+                    durationMs: 10,
+                    createdAt: index + 1,
+                });
+                await db.run(
+                    'UPDATE action_runs SET status = ?, ok = ? WHERE id = ?',
+                    status,
+                    index,
+                    `attempt-${index}`,
+                );
+            }
+            const passed = await projectWorkflowProgress('r-retry-status', { db, workflowDef: inlinePipelineDef });
+            const action = passed.states.find((state) => state.state === 'precheck')?.actions[0];
+            expect(action?.status).toBe('passed');
+            expect(action?.attempts.map((attempt) => attempt.status)).toEqual(['failed', 'passed']);
+            await db.run("UPDATE action_runs SET status = 'failed', ok = 0 WHERE id = 'attempt-1'");
+            const failed = await projectWorkflowProgress('r-retry-status', { db, workflowDef: inlinePipelineDef });
+            expect(failed.states.find((state) => state.state === 'precheck')?.actions[0]?.status).toBe('failed');
+        } finally {
+            db.close();
+        }
     });
 
     // 1085 R4 residual (review-finding 857e62b5): same-kind rows beyond the first match inside

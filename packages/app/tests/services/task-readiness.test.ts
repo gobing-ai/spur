@@ -501,3 +501,11 @@ describe('task readiness — fenced batch extraction (0788 R3)', () => {
         expect(stage).toBe('invalid-output');
     });
 });
+
+test('1271 — a legacy feature linkage participates in the planning digest', () => {
+    const raw = (feature: string) => `---\nname: legacy\nfeature-id: ${feature}\n---\n\n### Background\n\nSame body\n`;
+    expect(computePlanningDigest(raw('A1'))).not.toBe(computePlanningDigest(raw('B1')));
+    expect(computePlanningDigest(raw('A1'))).toBe(
+        computePlanningDigest(raw('A1').replace('feature-id:', 'feature_id:')),
+    );
+});

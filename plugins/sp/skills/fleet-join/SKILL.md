@@ -26,17 +26,63 @@ Pick the role whose work this session can actually do. `--session-id` defaults t
 `CLAUDE_CODE_SESSION_ID`, which is what the Stop hook matches against — without it the hook cannot
 find this session, though the `wait --inbox` loop still works.
 
-## Pull loop
+**Renewal is automatic (G75 R1, task 1279).** `join` records the *agent* process that launched this
+session — never the short-lived CLI pid — and starts one detached renewer that heartbeats the lease
+every third of the TTL. Long work with no `wait --inbox` in between no longer lets the lease expire.
+The record says which happened: `identity: 'verified'` with a `pid`/`processStartedAt` means renewal
+is running; `identity: 'unverified'` with `pid: null` means no agent ancestor could be proved, so
+nothing renews and the session must keep looping `wait --inbox` to stay joined. A rejoin from the
+same session reuses the running renewer instead of starting a second one.
 
-`spur agent wait --inbox <id> --timeout 540000` returns **0** the moment queued work exists and
-**1** on timeout. Each call heartbeats the lease, so a looping session stays joined. The Bash tool's
+## Binding a declared member (opt-in, fenced)
+
+```bash
+spur agent join --role coder --member <declared-member-id> --json
+```
+
+`--member` binds this session to one **declared** member instead of joining as a plain guest: the
+record id becomes the member id, so `wait --inbox <member-id>` addresses the declared member's inbox,
+and a supervised spawn or fleet dispatch sees the member busy through its own occupant row. It exits 2
+with a named reason for an unknown/disabled member, a role mismatch, an executor that cannot attest
+the stage capabilities, a live occupant, or a concurrent binder that lost the race. Guests without
+`--member` are unchanged — and still excluded from role selection.
+
+### Attached lifecycle reports carry the binding pin (task 1282)
+
+A bound occupant's lifecycle reports must present the host binding pin or they are refused (exit 2):
+
+```bash
+spur agent report --state working --seq <ns> --pin <ownerEpoch>:<occupancyGeneration> --json
+```
+
+The first pin-matched report completes the handshake (the host's strategy then treats this member as
+stage-visible); later reports never move it. A pin mismatch means the occupant generation moved —
+re-read `spur agent list --specs --json` instead of retrying. Plain guests keep reporting without a pin.
+
+## Pull loop (the default path — hooks are acceleration only)
+
+The durable inbox loop below is what makes a guest work on **every** host, hooks installed or not.
+Never substitute it with repeated model turns or terminal polling while the session is busy: each
+`wait --inbox` call is one bounded pull, and the session does the work between pulls.
+
+`spur agent wait --inbox <id> --timeout 540000 --json` returns **0** with up to five claimed messages
+in `{ id, pending, messages }`, settling their delivery after the output handoff. It returns **1**
+on timeout. An output failure releases the exact claims for retry; inbox listing itself never
+consumes messages. Each call heartbeats the lease, so a looping session stays joined. The Bash tool's
 own ~10-minute limit is why the timeout stays under it: one bounded call per turn, re-armed after
 the work is done.
 
-1. `spur agent wait --inbox <id> --timeout 540000 --json` → exit 0 means work is waiting.
-2. `spur message inbox --agent <id> --json` → read the messages.
+1. `spur agent wait --inbox <id> --timeout 540000 --json` → exit 0 hands this session `messages`.
+2. Read the returned messages, including their IDs. `spur message show <id> --json` can reread one;
+   `spur message inbox --agent <id> --json` is a non-consuming historical view.
 3. Do the work the message asks for.
-4. `spur message reply <msgId> "<result>"` → reply to each one.
+4. `spur message reply <msgId> "<result>"` → reply to each one. A bound occupant answering a **stage
+   request** (a `fleet:task:<requestId>:<attempt>` keyed message) MUST make the reply body the JSON
+   correlation payload — `{ "requestId": …, "attempt": …, "ownerEpoch": …, "occupancyGeneration": …,
+   "artifact": "<path or summary>" }` — with the values from the request and its own binding. The
+   host certifies the turn on that payload alone; a plain-text reply never completes a stage and the
+   request is retried to someone else. Do not answer stage requests for a binding you no longer hold:
+   a stale epoch/generation in the payload is fenced off, not promoted.
 5. Re-arm: go back to step 1 while the operator wants this session in the fleet.
 
 ## Leave
@@ -46,8 +92,29 @@ spur agent leave --json                     # the guest joined by this session
 spur agent leave my-session --json           # an explicit id
 ```
 
-Leaving releases the lease immediately. If the session dies without leaving, the lease expires and
-the reconciler pass retires the guest — pending work is never lost, it returns to `queued`.
+Leaving releases the lease immediately. A **bound** occupant's leave drains first: it stops new
+assignment, waits up to the drain grace (default 30s, `--drain-timeout <ms>` to bound it) for the
+in-flight turn to settle, then retires the record. A turn that does not settle in time is never
+failed by the leave — it stays outcome-unknown and resumable; nothing is killed. If the session dies
+without leaving, the lease expires and the reconciler pass retires the guest — pending work is never
+lost, it returns to `queued`.
+
+## Host capabilities (probed, not assumed)
+
+`bun run fleet-e2e --host-probe` writes `docs/reports/fleet-host-capabilities.json`: one row per
+host×mode with the installed binary path/version, the wake channel and the exact `--help` line that
+proves it. Anything unproven is `pull-only` with a reason.
+
+| Host | Interactive wake | Headless |
+| --- | --- | --- |
+| Codex | `app-server` (a reachable App Server connection) | `pull-only` |
+| Claude Code | `hook` (the Stop callback below) | `pull-only` |
+| Pi | `rpc` | `pull-only` |
+
+These values are **installed-host evidence**, so re-read the report instead of trusting this table
+after an upgrade. A `pull-only` row is not a defect: the loop above is the portable contract, and the
+hook/RPC/App Server channels only shorten the wait. `--real-hosts --agents <csv>` is the opt-in lane
+that drives a real host end to end; the default lane never launches one.
 
 ## Stop-hook delivery (opportunistic)
 
@@ -63,3 +130,5 @@ so the pull loop above — not the hook — is what makes a guest work anywhere.
 - Guests are **not** supervised: do not expect restart, pid ownership, or `--drain` injection.
 - Never dispatch a stage to a guest id: `spur agent run --spec <guest-id>` is refused on purpose.
 - Never hold the write slot through a guest: the guest lease is the only heartbeat (R5).
+- Renewal stops itself on agent-process death, a reused pid, a lost fence or `leave`. There is no
+  command to stop it and no daemon behind it: it lives no longer than the agent that joined.

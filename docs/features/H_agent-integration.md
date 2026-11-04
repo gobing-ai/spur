@@ -6,7 +6,7 @@ status: done
 priority: P2
 tags: [group, rd3-migration]
 created_at: 2026-06-12T23:45:00.000Z
-updated_at: "2026-08-11T21:14:55.064Z"
+updated_at: "2026-10-21T18:38:17.342Z"
 ---
 
 # H: Agent integration
@@ -32,9 +32,17 @@ new runtime execution work belongs under B, and new `sp` plugin harness work bel
 <!-- END AUTO-GENERATED -->
 
 ## Notes
+
+### Current reading — 2026-10-21
+
+This completed integration record remains historical; live H-series capabilities continue under their existing feature owners. The old frozen-program description is not a deprecated lifecycle state and does not freeze child features.
+
+### Historical notes
+
 Frozen legacy branch as of 2026-08-11. H became a mixture of runtime agent-execution concerns and
 plugin harness concerns; retaining the completed descendants preserves history without treating H
 as an active ownership root. A later evidence-backed audit may move individual children to B or I.
+
 ## History
 
 - 2026-06-12 — created (rd3-migration feature finalizing)

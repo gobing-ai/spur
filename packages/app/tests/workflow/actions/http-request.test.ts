@@ -331,6 +331,44 @@ describe('HttpRequestActionRunner', () => {
         expect(result.data).toBeUndefined();
     });
 
+    test('requester errors redact query credentials and individually echoed header values (1272)', async () => {
+        const { runner, fake } = newRunner();
+        const url = 'https://api.example.com/data?token=fixture-query-secret';
+        fake.nextError = new Error(`ECONNRESET requesting ${url}; Authorization=Bearer fixture-header-secret`);
+        const result = await runner.execute(
+            { url, headers: { Authorization: 'Bearer fixture-header-secret' } },
+            makeContext(),
+        );
+        expect(result.ok).toBe(false);
+        expect(result.error).toContain('ECONNRESET requesting https://api.example.com/data?<redacted>');
+        expect(result.error).not.toContain('fixture-query-secret');
+        expect(result.error).not.toContain('fixture-header-secret');
+    });
+
+    test('overlapping and repeated header values cannot partially expose a longer credential (1272)', async () => {
+        const { runner, fake } = newRunner();
+        const url = 'https://api.example.com/data?token=fixture-query-secret';
+        fake.nextError = new Error(
+            `ECONNRESET ${url}; scheme=Bearer; Authorization=Bearer fixture-secret; duplicate=Bearer fixture-secret`,
+        );
+        const result = await runner.execute(
+            {
+                url,
+                headers: {
+                    'X-Scheme': 'Bearer',
+                    Authorization: 'Bearer fixture-secret',
+                    'X-Duplicate': 'Bearer fixture-secret',
+                },
+            },
+            makeContext(),
+        );
+        expect(result.ok).toBe(false);
+        expect(result.error).toContain('ECONNRESET https://api.example.com/data?<redacted>');
+        expect(result.error).not.toContain('Bearer');
+        expect(result.error).not.toContain('fixture-secret');
+        expect(result.error).not.toContain('fixture-query-secret');
+    });
+
     test('timeout error returns ok:false', async () => {
         const { runner, fake } = newRunner();
         fake.nextError = new Error('The operation was aborted');

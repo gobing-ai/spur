@@ -1,0 +1,5 @@
+? Workspace index is not configured
+  ~/xprojects/spur-new-dev-runall-a34-9f3a
+
+  Storage     .zvec-grep/index.zvec
+  Policy      undecided

@@ -9,11 +9,12 @@ import { bundledConfigRoot, resolvePlanningFolders } from '@gobing-ai/spur-confi
 import { createNodeFileSystem, NodeProcessExecutor } from '@gobing-ai/ts-runtime';
 import { parse } from 'yaml';
 import { FeatureCheckService } from './feature-check';
-import { type CorpusSeverity, key, type SectionMatrix } from './planning-check-base';
+import type { SectionMatrix } from './planning-check-base';
 import { TaskCheckService } from './task-check';
 import { TaskLocator } from './task-locator';
 
-export type { CorpusSeverity };
+/** Finding severity in the unsuppressed corpus audit. */
+export type CorpusSeverity = 'error' | 'warning';
 
 /** A single finding observed in the corpus sweep (errors and warnings alike). */
 export interface CorpusError {
@@ -23,8 +24,6 @@ export interface CorpusError {
     severity: CorpusSeverity;
     message: string;
 }
-
-export { key };
 
 async function loadTaskMatrix(projectRoot: string): Promise<SectionMatrix> {
     const fs = createNodeFileSystem(projectRoot);

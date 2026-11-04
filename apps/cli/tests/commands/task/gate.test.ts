@@ -54,6 +54,14 @@ describe('spur task gate', () => {
         expect(existsSync(join(cwd, '.spur', 'run', '2003-test-gate.status'))).toBe(false);
     });
 
+    test('status and light do not bootstrap a project database', async () => {
+        const opts = { cwd, output: createCapturedOutput(), env: {} };
+        expect(await main(['task', 'gate', '2005', 'status'], opts)).toBe(0);
+        expect(existsSync(join(cwd, '.spur', 'spur.db'))).toBe(false);
+        expect(await main(['task', 'gate', '2005', 'light'], opts)).toBe(0);
+        expect(existsSync(join(cwd, '.spur', 'spur.db'))).toBe(false);
+    });
+
     // 1234: the receipt key is the gate's own git tree hash, so the caller-supplied digest flag is
     // gone (ADR-140). The surface must reject it rather than silently ignore it.
     test('the retired --proof-digest flag is rejected as an unknown option', async () => {

@@ -4,16 +4,8 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import type { SpurConfig } from '@gobing-ai/spur-config';
 import { spurConfigSchema } from '@gobing-ai/spur-config';
-import { createMigratedDb, type DbAdapter, InboxMessageDao } from '@gobing-ai/spur-domain';
-import {
-    type AgentEvents,
-    type AgentProcessOptions,
-    type AgentSpec,
-    loadAgentSpecs,
-    saveAgentSpec,
-    TeamAgentProcess,
-    TeamOrchestrator,
-} from '@gobing-ai/ts-ai-runner';
+import { createMigratedDb, type DbAdapter, SystemEventDao } from '@gobing-ai/spur-domain';
+import { type AgentEvents, type AgentSpec, loadAgentSpecs, saveAgentSpec } from '@gobing-ai/ts-ai-runner';
 import { EventBus } from '@gobing-ai/ts-infra';
 import { createNodeFileSystem } from '@gobing-ai/ts-runtime';
 import {
@@ -75,53 +67,15 @@ async function makeService(
     };
 }
 
-/** Minimal process double so TeamOrchestrator start/stop/send never spawns a real agent. */
-class FakeTeamAgentProcess extends TeamAgentProcess {
-    private fakeStatus: 'running' | 'stopped' | 'errored' = 'stopped';
-
-    constructor(options: AgentProcessOptions) {
-        super(options);
-    }
-
-    override async start(): Promise<void> {
-        this.fakeStatus = 'running';
-    }
-
-    override async stop(): Promise<void> {
-        this.fakeStatus = 'stopped';
-    }
-
-    override async send(_message: string): Promise<{ ok: boolean }> {
-        return { ok: true };
-    }
-
-    override getStatus(): 'running' | 'stopped' | 'errored' {
-        return this.fakeStatus;
-    }
-
-    override getPid(): number | null {
-        return this.fakeStatus === 'running' ? 4242 : null;
-    }
-
-    override getExitCode(): number | null {
-        return null;
-    }
-}
-
-/** Build a fresh EventBus and capture every emitted payload by event name. */
-function makeCapturingBus(): { bus: MessageEventBus; events: Map<string, MessageEventPayload[]> } {
-    const bus = new EventBus<
-        Record<'message.sent' | 'message.replied' | 'message.read', (event: MessageEventPayload) => void>
-    >();
-    const events = new Map<string, MessageEventPayload[]>([
-        ['message.sent', []],
-        ['message.replied', []],
-        ['message.read', []],
-    ]);
-    bus.on('message.sent', (e) => events.get('message.sent')?.push(e));
-    bus.on('message.replied', (e) => events.get('message.replied')?.push(e));
-    bus.on('message.read', (e) => events.get('message.read')?.push(e));
-    return { bus, events };
+/**
+ * Read the `message.*` ledger rows for one event name, newest-last — G11 R3 replaced the bus
+ * emit with an in-transaction `system_events` write, so these tests assert the ledger.
+ */
+async function messageEvents(db: DbAdapter, name: string): Promise<Array<Record<string, unknown>>> {
+    const rows = await new SystemEventDao(db).query({ name, limit: 50 });
+    return rows
+        .map((row) => JSON.parse(row.payload_json ?? '{}') as Record<string, unknown>)
+        .sort((a, b) => String(a.createdAt).localeCompare(String(b.createdAt)));
 }
 
 // ---------------------------------------------------------------------------
@@ -186,12 +140,14 @@ describe('AgentCoordinationService messaging', () => {
         }
     });
 
-    test('replyToMessage rejects operator-originated messages (no sender)', async () => {
+    test('a null sender is attributed to operator, and its message is replyable (G11 R5)', async () => {
         const { svc, cleanup } = await makeService();
         try {
-            // from_id null — there is no addressable peer to reply to.
+            // from_id is never null: an identity-less CLI caller IS the human operator, and the
+            // reply goes back to that address instead of dead-ending on a null sender.
             const sent = await svc.sendMessage(null, 'planner', 'broadcast');
-            await expect(svc.replyToMessage(sent.msgId, 'reply')).rejects.toThrow(/operator-originated/);
+            const reply = await svc.replyToMessage(sent.msgId, 'reply');
+            expect(reply.toId).toBe('operator');
         } finally {
             await cleanup();
         }
@@ -199,18 +155,17 @@ describe('AgentCoordinationService messaging', () => {
 
     // ── Event emission (task 0193/0204 R1) ──
 
-    test('sendMessage emits message.sent with metadata only (no body)', async () => {
-        const { bus, events } = makeCapturingBus();
-        const { svc, cleanup } = await makeService(bus);
+    test('sendMessage writes one message.sent ledger row, metadata only (no body)', async () => {
+        const { svc, db, cleanup } = await makeService();
         try {
             const result = await svc.sendMessage('coder', 'planner', 'secret body');
-            const sent = events.get('message.sent');
-            expect(sent?.length).toBe(1);
-            const payload = sent?.[0];
+            const sent = await messageEvents(db, 'message.sent');
+            expect(sent).toHaveLength(1);
+            const payload = sent[0];
             expect(payload?.msgId).toBe(result.msgId);
             expect(payload?.fromId).toBe('coder');
             expect(payload?.toId).toBe('planner');
-            expect(payload?.threadId).toBeNull();
+            expect(payload?.status).toBe('queued');
             expect(payload?.createdAt).toBeTruthy();
             // The event payload must NEVER carry the body — events are observable metadata.
             expect(JSON.stringify(payload)).not.toContain('secret body');
@@ -219,26 +174,24 @@ describe('AgentCoordinationService messaging', () => {
         }
     });
 
-    test('replyToMessage emits message.replied with the thread id', async () => {
-        const { bus, events } = makeCapturingBus();
-        const { svc, cleanup } = await makeService(bus);
+    test('replyToMessage writes one message.replied row carrying the thread id', async () => {
+        const { svc, db, cleanup } = await makeService();
         try {
             const sent = await svc.sendMessage('coder', 'planner', 'need a plan');
             await svc.replyToMessage(sent.msgId, 'here is the plan');
-            // Exactly one of each event — the reply does not also fire message.sent.
-            expect(events.get('message.sent')?.length).toBe(1);
-            const replied = events.get('message.replied');
-            expect(replied?.length).toBe(1);
-            expect(replied?.[0]?.threadId).toBe(sent.msgId);
-            expect(replied?.[0]?.toId).toBe('coder'); // reply addresses the original sender
+            // Exactly one of each event — the reply does not also write message.sent.
+            expect(await messageEvents(db, 'message.sent')).toHaveLength(1);
+            const replied = await messageEvents(db, 'message.replied');
+            expect(replied).toHaveLength(1);
+            expect(replied[0]?.threadId).toBe(sent.msgId);
+            expect(replied[0]?.toId).toBe('coder'); // reply addresses the original sender
         } finally {
             await cleanup();
         }
     });
 
-    test('markMessageRead emits message.read once, metadata only, recipient-checked (0204 P2)', async () => {
-        const { bus, events } = makeCapturingBus();
-        const { svc, cleanup } = await makeService(bus);
+    test('markMessageRead writes message.read once, metadata only, recipient-checked (0204 P2)', async () => {
+        const { svc, db, cleanup } = await makeService();
         try {
             const sent = await svc.sendMessage('coder', 'planner', 'secret body');
             const first = await svc.markMessageRead(sent.msgId, 'planner');
@@ -246,15 +199,15 @@ describe('AgentCoordinationService messaging', () => {
             expect(first.readAt).toBeTruthy();
             const again = await svc.markMessageRead(sent.msgId, 'planner');
             expect(again).toEqual({ ...first, transitioned: false });
-            const read = events.get('message.read');
-            expect(read?.length).toBe(1);
-            expect(read?.[0]).toMatchObject({ msgId: sent.msgId, fromId: 'coder', toId: 'planner', threadId: null });
+            const read = await messageEvents(db, 'message.read');
+            expect(read).toHaveLength(1);
+            expect(read[0]).toMatchObject({ msgId: sent.msgId, fromId: 'coder', toId: 'planner' });
             expect(JSON.stringify(read?.[0])).not.toContain('secret body');
             // Only the recipient may mark it read; unknown ids are not found either way.
             await expect(svc.markMessageRead(sent.msgId, 'coder')).rejects.toBeInstanceOf(MessageNotFoundError);
             await expect(svc.markMessageRead('missing', 'planner')).rejects.toThrow(/not found/);
             await expect(svc.markMessageRead(sent.msgId, '../bad')).rejects.toThrow();
-            expect(events.get('message.read')?.length).toBe(1);
+            expect(await messageEvents(db, 'message.read')).toHaveLength(1);
         } finally {
             await cleanup();
         }
@@ -295,111 +248,6 @@ describe('AgentCoordinationService messaging', () => {
         const { svc, cleanup } = await makeService();
         try {
             await expect(svc.getInbox('Bad Id')).rejects.toThrow();
-        } finally {
-            await cleanup();
-        }
-    });
-
-    test('listRecent returns messages across all agents newest-first', async () => {
-        const { svc, cleanup } = await makeService();
-        try {
-            await svc.sendMessage('coder', 'planner', 'first');
-            await svc.sendMessage('coder', 'coder', 'second');
-            await svc.sendMessage(null, 'planner', 'broadcast');
-
-            const recent = await svc.listRecent(50);
-            expect(recent.count).toBe(3);
-            // Each row carries the recipient (toId) — the global feed is per-recipient,
-            // unlike getInbox which is scoped to one agent.
-            expect(recent.messages[0]?.toId).toBeDefined();
-            expect(recent.messages.every((m) => typeof m.toId === 'string')).toBe(true);
-            // createdAt surfaced as ISO for stable display.
-            expect(recent.messages[0]?.createdAt).toMatch(/^\d{4}-\d{2}-\d{2}T/);
-            // R11: identity + reply signals surfaced on every row.
-            expect(recent.messages.every((m) => typeof m.hasReply === 'boolean')).toBe(true);
-            expect(recent.messages.every((m) => typeof m.replyCount === 'number')).toBe(true);
-            // No replies in this fixture — hasReply false, replyCount 0.
-            expect(recent.messages.every((m) => !m.hasReply)).toBe(true);
-            // `to` identity always present; `from` only when fromId is non-null.
-            expect(recent.messages.every((m) => m.to.agentId === m.toId)).toBe(true);
-            const broadcast = recent.messages.find((m) => m.fromId === null);
-            expect(broadcast?.from).toBeUndefined();
-            const nonBroadcast = recent.messages.find((m) => m.fromId !== null);
-            expect(nonBroadcast?.from?.agentId).toBe(nonBroadcast?.fromId ?? undefined);
-            // Unresolved agent ids fall back to the raw agentId only.
-            expect(nonBroadcast?.from?.agentType).toBeUndefined();
-        } finally {
-            await cleanup();
-        }
-    });
-
-    test('listRecent clamps limit into [1, 500] and defaults to 50', async () => {
-        const { svc, cleanup } = await makeService();
-        try {
-            await svc.sendMessage('coder', 'planner', 'one');
-
-            // limit <= 0 → clamped to 1.
-            const one = await svc.listRecent(0);
-            expect(one.count).toBe(1);
-
-            // limit huge → clamped to 500 (still returns all 1 row present).
-            const huge = await svc.listRecent(100_000);
-            expect(huge.count).toBe(1);
-
-            // No arg → default 50.
-            const def = await svc.listRecent();
-            expect(def.count).toBe(1);
-        } finally {
-            await cleanup();
-        }
-    });
-
-    test('listRecent surfaces hasReply/replyCount for threaded messages', async () => {
-        const { svc, cleanup } = await makeService();
-        try {
-            // Send a message, then reply to it — the original should show hasReply=true.
-            const sent = await svc.sendMessage('coder', 'planner', 'original');
-            await svc.replyToMessage(sent.msgId, 'got it');
-
-            const recent = await svc.listRecent(50);
-            expect(recent.count).toBe(2);
-            // The original message (sent first) should have a reply.
-            const original = recent.messages.find((m) => m.id === sent.msgId);
-            expect(original).toBeDefined();
-            expect(original?.hasReply).toBe(true);
-            expect(original?.replyCount).toBe(1);
-            // The reply itself has no replies.
-            const reply = recent.messages.find((m) => m.inReplyTo === sent.msgId);
-            expect(reply).toBeDefined();
-            expect(reply?.hasReply).toBe(false);
-            expect(reply?.replyCount).toBe(0);
-        } finally {
-            await cleanup();
-        }
-    });
-
-    test('listRecent replyCount is window-scoped — only replies to in-window messages are counted', async () => {
-        const { svc, cleanup } = await makeService();
-        try {
-            // Three-message thread: original → reply → reply-to-reply.
-            const sent = await svc.sendMessage('coder', 'planner', 'original');
-            const reply = await svc.replyToMessage(sent.msgId, 'reply');
-            await svc.replyToMessage(reply.msgId, 'reply to reply');
-
-            // Full window: all three messages visible.
-            // The original has 1 reply; the first reply has 1 reply; the newest has none.
-            const all = await svc.listRecent(50);
-            expect(all.count).toBe(3);
-            expect(all.messages.find((m) => m.id === sent.msgId)?.replyCount).toBe(1);
-            expect(all.messages.find((m) => m.id === reply.msgId)?.replyCount).toBe(1);
-            const newest = all.messages.find((m) => m.inReplyTo === reply.msgId);
-            expect(newest?.replyCount).toBe(0);
-            expect(newest?.hasReply).toBe(false);
-
-            // The replyCount map only contains ids that are in the window — if we
-            // query a narrow window, messages outside it don't get their replies
-            // counted. This is enforced by the DAO passing only in-window ids to
-            // countReplies (verified in the DAO-level test).
         } finally {
             await cleanup();
         }
@@ -460,6 +308,34 @@ describe('AgentCoordinationService agent specs', () => {
             await svc.createAgentSpec({ id: 'coder', type: 'codex', executor: 'codex', purpose: 'write code' });
             const specs = (await svc.listAgentSpecs()).map((s) => s.id).sort();
             expect(specs).toEqual(['coder', 'planner']);
+        } finally {
+            await cleanup();
+        }
+    });
+
+    test('G11 R5: a spec claiming a reserved inbox identity is reported and dropped', async () => {
+        const { svc, cwd, cleanup } = await makeService();
+        try {
+            // `operator` and `spur` are addresses every project already has; a spec shadowing one
+            // would own the human's or the system's inbox. Written straight to disk: the spec
+            // loader is what must refuse it, not just the create path.
+            await saveAgentSpec(
+                {
+                    id: 'operator',
+                    name: 'operator',
+                    type: 'claude-code',
+                    workspace: cwd,
+                    purpose: 'shadow the human',
+                    tags: [],
+                    config: {},
+                },
+                join(cwd, '.spur', 'agents'),
+            );
+            await svc.createAgentSpec({ id: 'planner', type: 'claude-code', executor: 'claude' });
+
+            const specs = (await svc.listAgentSpecs()).map((spec) => spec.id);
+            expect(specs).toContain('planner');
+            expect(specs).not.toContain('operator');
         } finally {
             await cleanup();
         }
@@ -591,74 +467,37 @@ describe('AgentCoordinationService status & assignment', () => {
 });
 
 // ---------------------------------------------------------------------------
-// Task 0237 — TeamOrchestrator events bus wiring
+// G11 (ADR-143) — the message plane is a LEDGER, not a bus.
 // ---------------------------------------------------------------------------
 
-describe('AgentCoordinationService agent lifecycle bus (task 0237)', () => {
-    test('R5: message.sent still fires when both eventBus and events are wired', async () => {
-        // Two independent bus fields must not interfere: AgentCoordinationService messaging uses
-        // eventBus; TeamOrchestrator lifecycle uses events.
-        const { bus, events: msgEvents } = makeCapturingBus();
+describe('AgentCoordinationService messaging events (0237 R5, G11 R3)', () => {
+    test('R5: a send writes one message.sent ledger row and emits nothing on the bus', async () => {
+        // G11 R3 replaced the bus emit with an in-transaction `system_events` write: consumers
+        // (the agent-loop wake, the 1267 SSE relay) follow the ledger. The tap skips `message.*`,
+        // so a bus emit here would double-persist the same transition.
+        const bus = new EventBus<
+            Record<'message.sent' | 'message.replied' | 'message.read', (event: MessageEventPayload) => void>
+        >();
         const agentBus = new EventBus<AgentEvents>();
         const agentSeen: string[] = [];
+        const busSeen: string[] = [];
         agentBus.on('agent.started', (e) => agentSeen.push(e.agentId));
+        bus.on('message.sent', (event) => busSeen.push(event.msgId));
 
-        const { svc, cleanup } = await makeService(bus, agentBus);
+        const { svc, db, cleanup } = await makeService(bus, agentBus);
         try {
             const result = await svc.sendMessage('coder', 'planner', 'hello body');
-            expect(msgEvents.get('message.sent')?.length).toBe(1);
-            expect(msgEvents.get('message.sent')?.[0]?.msgId).toBe(result.msgId);
+            expect(busSeen).toEqual([]);
             // Messaging must not emit agent.* (different path / different event names).
             expect(agentSeen).toEqual([]);
-            expect(JSON.stringify(msgEvents.get('message.sent')?.[0])).not.toContain('hello body');
+
+            // The ledger carries it exactly once, metadata-only (never the body).
+            const rows = await new SystemEventDao(db).query({ name: 'message.sent', limit: 10 });
+            expect(rows).toHaveLength(1);
+            expect(rows[0]?.payload_json ?? '').toContain(result.msgId);
+            expect(rows[0]?.payload_json ?? '').not.toContain('hello body');
         } finally {
             await cleanup();
-        }
-    });
-
-    test('R4: TeamOrchestrator with events bus emits agent.started/stopped/message.sent', async () => {
-        // Mirrors AgentCoordinationService.orchestrator(): `new TeamOrchestrator(configDir, dao, { events })`.
-        // processFactory is test-only (AgentCoordinationService does not inject it) so we never spawn a real agent.
-        const cwd = await mkdtemp(join(tmpdir(), 'spur-team-orch-'));
-        const db = await createMigratedDb({ url: ':memory:' });
-        const configDir = join(cwd, '.spur', 'agents');
-        await createNodeFileSystem(cwd).ensureDir(configDir);
-        await saveAgentSpec(
-            {
-                id: 'coder',
-                name: 'coder',
-                type: 'codex',
-                workspace: cwd,
-                purpose: 'Implement',
-                tags: [],
-                config: {},
-            },
-            configDir,
-        );
-
-        const agentBus = new EventBus<AgentEvents>();
-        const seen: string[] = [];
-        agentBus.on('agent.started', (e) => seen.push(`started:${e.agentId}`));
-        agentBus.on('agent.stopped', (e) => seen.push(`stopped:${e.agentId}`));
-        agentBus.on('agent.message.sent', (e) => seen.push(`message:${e.agentId}:${e.ok}`));
-
-        const inbox = new InboxMessageDao(db);
-        const orchestrator = new TeamOrchestrator(configDir, inbox, {
-            events: agentBus,
-            processFactory: (options) => new FakeTeamAgentProcess(options),
-        });
-
-        try {
-            await orchestrator.startAgent('coder');
-            await orchestrator.sendMessage('planner', 'coder', 'live ping');
-            await orchestrator.stopAgent('coder');
-
-            expect(seen).toContain('started:coder');
-            expect(seen).toContain('stopped:coder');
-            expect(seen).toContain('message:coder:true');
-        } finally {
-            db.close();
-            await rm(cwd, { recursive: true, force: true });
         }
     });
 
@@ -724,7 +563,7 @@ describe('AgentCoordinationService buildIdentity', () => {
 // ---------------------------------------------------------------------------
 
 describe('AgentCoordinationService drain loop (0253)', () => {
-    test('drainPending consumes queued messages and marks them injected', async () => {
+    test('drainPending consumes queued messages and marks them claimed', async () => {
         const { svc, cleanup } = await makeService();
         try {
             await svc.sendMessage('operator', 'planner', 'one');
@@ -732,8 +571,10 @@ describe('AgentCoordinationService drain loop (0253)', () => {
 
             const drained = await svc.drainPending('planner');
             expect(drained.count).toBe(2);
-            // Every drained row is now in the injected state (consumed, not just read).
-            expect(drained.messages.every((m) => m.status === 'injected')).toBe(true);
+            // Every drained row is now claimed (consumed by a run, not merely read) — the
+            // G11 rename of the old `injected` state, charged against the delivery budget.
+            expect(drained.messages.every((m) => m.status === 'claimed')).toBe(true);
+            expect(drained.messages.every((m) => m.injectAttempts === 1)).toBe(true);
             const bodies = drained.messages.map((m) => m.body).sort();
             expect(bodies).toEqual(['one', 'two']);
         } finally {
@@ -749,6 +590,32 @@ describe('AgentCoordinationService drain loop (0253)', () => {
             const second = await svc.drainPending('planner');
             expect(second.count).toBe(0);
             expect(second.messages).toEqual([]);
+        } finally {
+            await cleanup();
+        }
+    });
+
+    test('drainPending honours a one-message limit (the --single-message loop)', async () => {
+        const { svc, cleanup } = await makeService();
+        try {
+            await svc.sendMessage('operator', 'planner', 'one');
+            await svc.sendMessage('operator', 'planner', 'two');
+
+            const first = await svc.drainPending('planner', { limit: 1 });
+            expect(first.count).toBe(1);
+            expect(await svc.countPending('planner')).toBe(1);
+        } finally {
+            await cleanup();
+        }
+    });
+
+    test('an empty settle/release batch is a no-op, not a query', async () => {
+        const { svc, cleanup } = await makeService();
+        try {
+            // Callers run these from a `finally`, so an empty claim must be silent.
+            expect(await svc.releasePending([])).toBe(0);
+            await svc.settleDelivered([]);
+            await svc.settleFailed([], 'nothing');
         } finally {
             await cleanup();
         }
@@ -908,4 +775,18 @@ describe('resolveMemberExecutor disabled executors (0796)', () => {
             }),
         ).toThrow(/every tier-eligible executor for role "reviewer" .*is disabled \(retired\)/);
     });
+});
+
+test('1271 — drain carries the exact claim references its settlement wrappers require', async () => {
+    const { svc, cleanup } = await makeService();
+    try {
+        await svc.sendMessage('operator', 'agent-a', 'work');
+        const drained = await svc.drainPending('agent-a');
+        expect(drained.claims).toHaveLength(1);
+        expect(drained.claims[0]?.attempts).toBe(1);
+        await svc.settleDelivered(drained.claims);
+        expect((await svc.getMessage(drained.claims[0]?.id ?? ''))?.status).toBe('delivered');
+    } finally {
+        await cleanup();
+    }
 });

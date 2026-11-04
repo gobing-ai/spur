@@ -120,6 +120,11 @@
                                         "type": "string",
                                         "minLength": 1,
                                         "description": "Five-field cron expression (minute hour day-of-month month day-of-week) evaluated in local time. Mutually exclusive with `intervalMinutes`."
+                                    },
+                                    "timeoutMs": {
+                                        "type": ["integer", "null"],
+                                        "minimum": 1,
+                                        "description": "Total child budget for this job in milliseconds. At the deadline the runtime SIGTERMs the owned process group, then SIGKILLs after the scheduler grace. `null` is explicit unlimited; absent falls back to the global scheduler default (10 min). Keep a model-driven chain below the server queue's 2 h visibility timeout so it fails its own attempt instead of being re-delivered."
                                     }
                                 },
                                 "oneOf": [

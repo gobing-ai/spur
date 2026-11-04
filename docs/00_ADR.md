@@ -2,9 +2,9 @@
 doc: 00_ADR
 owns: WHY — lasting architectural choices, context and tradeoffs
 authority: authoritative
-version: 1.71.0
+version: 1.72.0
 owner: Robin Min
-updated_at: 2026-10-16
+updated_at: 2026-10-26
 read_before: any structural change; before diverging from a decision
 edit_rules: 99 §6.1
 sync: [T1, T2]
@@ -2186,7 +2186,7 @@ launched with `ackLowConfidence=true`); the feature boundary now carries the sam
 
 ## ADR-130: Spur Logic Lives in the CLI; Plugin Scripts, Hooks and Lib Are Thin Glue
 
-- **Status:** Accepted · **Date:** 2026-09-28 · **Feature:** A9 · **Amended:** 2026-10-11, 2026-10-15, 2026-10-16
+- **Status:** Accepted · **Date:** 2026-09-28 · **Feature:** A9 · **Amended:** 2026-10-11, 2026-10-15, 2026-10-16, 2026-10-21
 - **Current reading (2026-10-16):** Classify by responsibility before path or size. Every script surface has one owner:
 
   | Surface | Owns | Never holds |
@@ -2210,6 +2210,7 @@ launched with `ackLowConfidence=true`); the feature boundary now carries the sam
 - **Amendment (2026-10-15 · hook entry location):** Hook entries live at `plugins/sp/scripts/hooks/<id>.ts`, run by `superskill hook run sp <id>` (superskill ADR-039); an entry prints nothing on allow, a PreToolUse guard prints Claude-native JSON, Stop prints `{decision,reason}`. Why: `hook run` resolves `hooks/<id>` then `scripts/hooks/<id>`, but install stages only `scripts/` (with `lib/` beside it) for Codex, OpenCode, Antigravity and Hermes, so `scripts/hooks` is the one location every target resolves. Rejected: a forwarding wrapper (cannot reach across trees on staged targets) and duplicated entries.
 - **Amendment (2026-10-15 · tasks 1211–1213, hook-only):** Every non-hook plugin script was absorbed into existing CLI nouns; the generated lib bundles, `.mjs` twins, `config/plugin-scripts.json`, the script-root resolver, `spur-bin.ts` and the placement baseline were deleted. Why: each absorbed script had been a second implementation and a second installed contract, and the bundles exposed app/DB code inside the plugin. A skill helper that would justify a script is an unapproved CLI surface instead.
 - **Amendment (2026-10-16 · consolidation):** Added the current reading and extended the DB boundary to `scripts/commands`. Why: the register still described skill scripts, lib bundles and `spur-bin.ts` as legal, so it licensed the pattern the 2026-10-15 cleanup removed; and repo tooling had no DB check, so raw SQL analytics sat outside `packages/domain` (the one DB owner, ADR-011). Rejected: a per-file allowlist (a baseline by another name).
+- **Amendment (2026-10-21 · staged lib location):** The 2026-10-15 clause "install stages only `scripts/` (with `lib/` beside it)" is superseded on the superskill side: install now stages `lib/` **inside** the plugin's staged root (`.agents/scripts/sp/lib/`) and retargets an entry's `../../lib/…` to `../lib/…`, because the staged tree drops the `scripts/` level. Why: a shared `.agents/scripts/lib/` leaf can collide between lib-shipping plugins, is written by overlay copy (so files a newer plugin version dropped survive as stale residue), and takes a hand symlink or stray file there as a fatal install error. Nothing in `plugins/sp` changes: `scripts/hooks/<id>.ts` keeps its `../../lib/…` import, which is correct for the plugin tree and correct for native targets, and stays the one path every target resolves. Rejected: shipping self-contained bundled hook entries (regenerates generated twins ADR-130 retired) and keeping the shared leaf behind an ownership manifest. Older superskill builds keep staging the shared leaf and need no plugin change.
 
 ## ADR-131: Completed Run Scratch Is Disposable; Lasting Records Have Durable Owners
 
@@ -2440,6 +2441,9 @@ owner split this entry established.
   (`cited-version-strings`, `cited-api-claims`), and the changelog "no confidence ratings" invariant.
   (As first accepted this clause also kept the derived feature-receipt level and the history-anatomy
   per-finding confidence; the 2026-10-16 amendment retires both.)
+  **Amended 2026-10-21 (ADR-144):** the changelog clause is superseded — a claim bullet states a
+  level derived from its own anchors and cross-checked by the repo-wide changelog check; every other
+  carrier listed above stays retired.
 
 **Amendment (2026-10-16 · task 1221) — every HIGH/MEDIUM/LOW label is retired, not only the asserted
 one.** The "derived" family kept above still graded a self-claim one hop removed, and it re-imported
@@ -2609,7 +2613,7 @@ has 11 fields, skill/agent output contracts carry no level, and `response.valida
 
 ## ADR-143: The Inbox Is a Spur-Owned Service With One Writer
 
-- **Status:** Proposed · **Date:** 2026-10-19 · **Feature:** G11 · **Amends:** ADR-057 (the inbox
+- **Status:** Accepted · **Date:** 2026-10-19 · **Feature:** G11 · **Amends:** ADR-057 (the inbox
   remains the only agent transport; this fixes its ownership and identity model)
 - **Decision:**
   - Each fleet member has exactly one inbox. A fleet member is one declared member slot in one project,
@@ -2646,3 +2650,110 @@ has 11 fields, skill/agent output contracts carry no level, and `response.valida
   - Terminal stdin no longer enqueues messages.
 - **Detail:** [inter-agent control plane](design/inter-agent-control-plane.md) §13;
   [plan](plans/2026-10-19-inbox-module-refactor.md).
+
+## ADR-144: Changelog Claim Confidence Is Derived From Its Anchors and Cross-Checked
+
+- **Status:** Accepted · **Date:** 2026-10-21 · **Extends:** ADR-141 · **Amends:** the changelog
+  "no confidence ratings" clause ADR-138 retains
+- **Decision:** a changelog claim bullet's `<!-- src: … -->` comment carries one
+  `· confidence: HIGH|MEDIUM|LOW` token. The level is a **function of the anchors in that comment**,
+  not a judgment, and the repo-wide check recomputes it and fails on disagreement. A `:1` anchor
+  locates nothing a reader could not take from the bare path, so it counts as whole-file evidence.
+
+  | Derived | When |
+  | --- | --- |
+  | `HIGH` | every anchor is a repo `path:line` beyond line 1, and each resolves (file exists, line within it) |
+  | `MEDIUM` | every anchor resolves, but the set is not all line-precise — an http(s) URL, a path without a line, or a `:1` anchor |
+  | `LOW` | an anchor does not resolve (missing file, line past EOF) or the comment lists none |
+
+  Rejections: `confidence-vocabulary` (a token outside the three), `confidence-mismatch` (stated
+  level ≠ derived), `confidence-missing` (an anchor in the newest release section states no level;
+  older sections are cross-checked where they state one, never retro-levelled).
+- **What it is not:** not self-assessment — a `HIGH` over URL-only or dead anchors is rejected, which
+  is the failure ADR-138 was written to stop. Not the retired asserted family (verdict-artifact
+  fields, feature-receipt levels, `ackLowConfidence` vars, per-finding history-anatomy confidence,
+  the docs rule family): those stay dead. Not ADR-141's answer lanes, which keep
+  `packages/app/src/services/answer-confidence.ts` as their owner.
+- **Why:** the anchor comment records *where* a claim points; it does not record whether that pointer
+  is still live. A `path:line` drifts with every refactor and nothing notices — the 2026-10-21 pass
+  over `CHANGELOG.md` found 183 anchors, 79 levelled, and one stating `HIGH` over a whole-file anchor.
+  Deriving from resolvability records anchor composition (re-runnable line vs external or whole-file
+  citation vs dead pointer), which no artifact recorded, and the cross-check makes it evidence rather
+  than assertion — the test ADR-138's amendment set for any re-introduction.
+- **Consequence:** `dev-operations.md` §8 step 7 and `dev-changelog.md` state the level instead of
+  denying it; the generator's claim pass now emits the derived level per bullet. The changelog lane's
+  derivation lives in its checker (`repo-wide-tests/changelog-confidence.test.ts`) because it needs
+  tree resolution, and shares the three-token vocabulary with the answer lanes.
+- **Retains:** ADR-138's invariant for every other surface; ADR-141's answer-lane derivation,
+  rejections and owner module unchanged.
+- **Detail:** `repo-wide-tests/changelog-confidence.test.ts`;
+  `plugins/sp/skills/spur-dev/references/dev-operations.md` §8 step 7.
+
+## ADR-145: Keyed Fleet Work Runs as Correlated Turns Behind the Existing Traced Action
+
+- **Status:** Accepted (implemented 2026-10-26) · **Date:** 2026-10-21 · **Feature:** G74 · **Extends:** ADR-140, ADR-143
+- **Decision:**
+  - The orchestrator's scheduling tick is independent of its conversation consumer: a held model
+    response never blocks wake/reconcile/select/enqueue. One fenced scheduling owner remains.
+  - Keyed requests may execute as correlated turns in a warm, policy-compatible worker process. The
+    turn is dispatched through `AgentRunActionRunner` / `runFleetWorkItem`; the existing artifact,
+    action-contract, permission and receipt checks remain the only success authority.
+  - Transport acceptance, native terminal result and validated completion are distinct records.
+    Outcomes normalize to success, failure, interrupted, not-started or outcome-unknown; an unknown
+    writing turn is reconciled before any replacement and is never replayed automatically.
+  - Reusable process/protocol mechanics belong to a released ts-ai-runner facade; Spur adds no
+    duplicate transport. Unsupported persistence falls back, before acceptance, to resume then one-shot.
+  - Process reuse never implies conversation reuse: independent review starts a fresh conversation.
+- **Why:** keyed work bypasses persistent stdin to keep its durable receipt, so a warm member did not
+  give warm task execution, and a stdin write proves acceptance only. A second persistent executor would
+  duplicate validation and recovery; extending the traced seam serves both supervised and attached
+  (ADR-146) occupants.
+- **Retains:** ADR-143 inbox ownership; one active turn per worker; one writer per worktree; reviewer
+  independence and required gates.
+- **Consequence:** first batch Codex (App Server), Claude Code (stream-json) and Pi (RPC), each behind an
+  exact-version qualification; Grok Build and Antigravity CLI are batch 2. Gains are claimed only from
+  the shared measurement receipt.
+- **Detail:** [fleet task turns](design/fleet-task-turn-execution.md);
+  [measurement contract](plans/2026-10-21-fleet-performance-measurement.md).
+
+## ADR-146: Verified Live Sessions Occupy Declared Members; Guests Stay Message-Only
+
+- **Status:** Accepted (implemented 2026-10-26) · **Date:** 2026-10-21 · **Feature:** G75 · **Extends:** ADR-121, ADR-143, ADR-145
+- **Decision:**
+  - A cooperating live session may bind to one enabled declared member (`spur agent join --member`)
+    only after project, session, process, executor-policy and capability proof; binding is fenced by
+    occupancy generation and lease epoch. Without `--member`, join stays guest-only.
+  - Guests remain concrete-address message participants and never enter role selection or satisfy
+    `requiresCapabilities`.
+  - Readiness (ready/busy/blocked/draining) is explicit; human work keeps priority and fleet turns
+    start only at a safe yield. Detach drains, never kills the human-owned process, and leaves
+    possibly executed work outcome-unknown until reconciled.
+  - Attached stage work uses the ADR-145 turn contract; a delivered message never completes a stage.
+  - Guest leases renew independently of inbox waits, so long work keeps its identity.
+- **Why:** PID registration alone exposes no prompt or completion channel, so universal PID takeover
+  is rejected; binding to existing declarations reuses role selection, inbox and G74 validation
+  instead of a second scheduler.
+- **Retains:** ADR-057 terminal-write ban; ADR-121 guest occupancy defaults; ADR-143 one inbox per member.
+- **Consequence:** an additive `--member` flag on the existing `agent join` (public-surface consent
+  required at task refinement); portable pull is the baseline for Codex, Claude Code and Pi; native
+  wake channels are optional per-version adapters.
+- **Detail:** [verified attached occupants](design/fleet-attached-occupants.md).
+
+## ADR-147: zg Is an Optional External Search Dependency Behind One Adapter
+
+- **Status:** Proposed · **Date:** 2026-11-03 · **Feature:** A34 · **Extends:** ADR-021, ADR-051
+- **Decision:**
+  - Semantic (vector) search is delegated to the operator-installed `zg` (`@zvec/zvec-grep`) CLI,
+    resolved on PATH like `rg` and `sg`; Spur never bundles, installs, indexes for, or reimplements it.
+  - Exact search uses `rg --json` directly so it works without zg; fuzzy search degrades to an
+    explicit `skipped` reason, never a failure, when zg or its index is unavailable. The default
+    `auto` mode runs fuzzy only when zg and its index are present; `exact` and `fuzzy` are overrides.
+  - Exactly one module (`ZgAdapter` in `packages/app`) knows zg's CLI and output grammar; unknown
+    output fails loudly with the zg version. Results normalize to one contracts DTO.
+  - Public surface: one verb, `spur self search`, plus a local-server-only search contract and Board module.
+- **Why:** local-first semantic retrieval without owning embedding/index internals; one adapter
+  contains the risk that zg 0.2.x emits markdown only (no `--json`).
+- **Retains:** ADR-021 thin transports; ADR-051 consent for the one new verb; no stored API keys.
+- **Consequence:** zg upgrades are validated by golden parser fixtures; an MCP- or JSON-based
+  transport can replace the parser without a DTO change.
+- **Detail:** [hybrid search](design/hybrid-search.md).

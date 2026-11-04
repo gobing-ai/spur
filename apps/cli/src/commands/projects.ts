@@ -43,7 +43,7 @@ export function registerProjectsCommand(program: Command, context: CliContext): 
                 }
                 const name = options.name ?? basename(absolutePath);
                 const registry = new ProjectRegistry();
-                const entry = await registry.upsert({ path: absolutePath, name, host, port: 0 });
+                const entry = await registry.upsert({ path: absolutePath, name, host });
 
                 if (options.json) {
                     context.output.write(
@@ -72,12 +72,13 @@ export function registerProjectsCommand(program: Command, context: CliContext): 
     projectsCmd
         .command('remove')
         .argument('<target>', 'Project display name or directory path')
+        .option('--host <host>', 'Remove only the entry registered for this host (default: every match)')
         .option(...SHARED_OPTIONS.jsonProjectsResponse)
         .option(...SHARED_OPTIONS.jsonEnvelope)
         .action(async (target, options) => {
             try {
                 const registry = new ProjectRegistry();
-                const removed = await registry.remove(target);
+                const removed = await registry.remove(target, options.host);
                 if (!removed) {
                     throw new Error(`Project not found in registry: "${target}"`);
                 }
@@ -442,6 +443,16 @@ export function registerProjectsCommand(program: Command, context: CliContext): 
                     throw new Error(`Project not found: "${target}"`);
                 }
 
+                // A remote entry is another machine's serve: this CLI cannot verify or
+                // signal it, and probing locally read an absent local listener as "already
+                // stopped", clearing the remote port while its serve kept listening.
+                if (!isLocalHost(entry.host)) {
+                    throw new Error(
+                        `Refusing to stop "${entry.name}": it is a remote project on ${entry.host}` +
+                            `${entry.port > 0 ? `:${entry.port}` : ''}. Stop that serve on ${entry.host}, or remove the entry with \`spur projects remove ${entry.name} --host ${entry.host}\`.`,
+                    );
+                }
+
                 if (entry.port > 0) {
                     // 1156: the shared ownership-verified stop — a live listener is
                     // signaled only after it proves service:spur and this exact
@@ -455,7 +466,7 @@ export function registerProjectsCommand(program: Command, context: CliContext): 
                     if (!result.stopped) {
                         throw new Error(result.reason ?? `Refused to stop project "${entry.name}"`);
                     }
-                    await registry.setPort(entry.path, 0);
+                    await registry.setPort(entry.path, 0, entry.host);
                 }
 
                 if (options.json) {

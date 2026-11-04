@@ -8,8 +8,9 @@
  * These tests drive the service directly: no `CliContext`, no spawned agent CLI.
  * The persistent process is stubbed through `MemberSessionDeps.processFactory`
  * and the runner capability lookup through `MemberSessionDeps.sessionCapability`
- * (the only way to reach the `member-persistent-stdin-unwired` degrade with a
- * runner whose three persistent-capable shims all wire the stdin argv).
+ * (a record that vouches for persistent stdin over a one-shot argv). Codex's
+ * released row does that on its own: `supportsPersistentStdin` is the app-server
+ * turn driver, while `getPromptCommand` stays `exec`.
  */
 import { describe, expect, test } from 'bun:test';
 import {
@@ -183,8 +184,18 @@ describe('MemberSession mode resolution (G66 R1, G67 R1)', () => {
 
     test('resume-by-id wins when the agent has no persistent stdin', async () => {
         const h = await harness();
-        expect(h.session.resolveMode(spec({ type: 'codex' }))).toBe('resume');
+        // grok: supportsResumeById, no persistent stdin (codex no longer qualifies —
+        // its row vouches for app-server persistent stdin over a one-shot exec argv).
+        expect(h.session.resolveMode(spec({ type: 'grok' }))).toBe('resume');
         expect(h.warnings).toEqual([]);
+    });
+
+    test('codex app-server persistent capability degrades to resume-by-id over the one-shot exec shim', async () => {
+        const h = await harness();
+        expect(h.session.resolveMode(spec({ type: 'codex' }))).toBe('resume');
+        expect(h.warnings).toHaveLength(1);
+        expect(h.warnings[0]).toContain('member-persistent-stdin-unwired');
+        expect(h.warnings[0]).toContain('degrades to resume-by-id');
     });
 
     test('an agent with neither capability falls back to one-shot', async () => {

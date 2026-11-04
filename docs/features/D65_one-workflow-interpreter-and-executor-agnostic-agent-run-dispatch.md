@@ -6,7 +6,7 @@ status: done
 priority: P2
 tags: []
 created_at: "2026-10-17T07:27:13.932Z"
-updated_at: "2026-10-18T02:07:56.470Z"
+updated_at: "2026-10-21T18:35:05.337Z"
 ---
 
 # D65: One workflow interpreter and executor-agnostic agent.run dispatch
@@ -177,6 +177,10 @@ Feature: One workflow interpreter and executor-agnostic agent.run dispatch
 <!-- END AUTO-GENERATED -->
 
 ## Notes
+
+### Current reading — 2026-10-21
+
+D66 subsequently consolidated workflow lifecycle ownership and retired this feature’s pilot feature-verification workflow. The single-interpreter and executor-agnostic primitives remain current.
 
 ## History
 

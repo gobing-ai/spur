@@ -301,6 +301,10 @@ The following matrix fixes summary behavior, retained facts, and outcome support
 | `message.sent` | `msgId`, `fromId`, `toId`, `threadId`, `createdAt` | `[message] {fromId} -> {toId}` | — |
 | `message.replied` | `msgId`, `fromId`, `toId`, `threadId`, `createdAt` | `[message] {fromId} replied in {threadId}` | — |
 | `message.read` | `msgId`, `fromId`, `toId` (reader), `threadId`, `createdAt` (read time) | `[message] {toId} read {msgId}` | — |
+| `message.claimed` | `msgId`, `fromId`, `toId` (member), `threadId`, `status`, `createdAt` | `[message] {toId} claimed` | — |
+| `message.delivered` | `msgId`, `fromId`, `toId` (member), `threadId`, `status`, `createdAt` | `[message] {toId} delivered` | — |
+| `message.failed` | `msgId`, `fromId`, `toId` (member), `threadId`, `status`, `createdAt` | `[message] {toId} delivery failed` | — |
+| `message.requeued` | `msgId`, `fromId`, `toId` (member), `threadId`, `status`, `createdAt` | `[message] {toId} requeued` | — |
 | `process.spawned` | `label`, `pid`, `agentId` | `[process] {label | pid} spawned` | — |
 | `process.exited` | `label`, `pid`, `exitCode`, `signal`, `durationMs`, `reason`, `error` | `[process] {label | pid} exited` | `exitCode` / `signal` / `reason` |
 | `process.stopped` | `label`, `pid`, `signal`, `reason` | `[process] {label | pid} stopped` | `reason` |
@@ -315,6 +319,16 @@ The following matrix fixes summary behavior, retained facts, and outcome support
 | `agent.lifecycle.changed` | `member`, `state`, `seq` | `[agent] {member} · {state}` | `state` |
 | `strategy.changed` | `projectPath`, `strategy`, `version` | `[strategy] {strategy} (v{version})` | — |
 | `fleet.capacity.changed` | `projectPath`, `change`, `holderId` | `[fleet] write slot {change} — {holderId}` | — |
+| `fleet.phase.enqueue` | `phase`, `key`, `taskId`, `member`, `monotonicMs` | `[fleet] phase enqueue {key}` | — |
+| `fleet.phase.claim` | `phase`, `key`, `member`, `runId`, `executionId` | `[fleet] phase claim {key}` | — |
+| `fleet.phase.preflight` | `phase`, `key`, `member` | `[fleet] phase preflight {key}` | — |
+| `fleet.phase.accepted` | `phase`, `key`, `member` | `[fleet] phase accepted {key}` | — |
+| `fleet.phase.contract-validated` | `phase`, `key`, `ok` | `[fleet] phase contract-validated {key}` | — |
+| `fleet.phase.turn-settled` | `phase`, `key`, `turn.mode`, `turn.nativeOutcome`, `turn.requestId`, `turn.attempt` | `[fleet] turn settled (turn-mode={mode}, outcome={nativeOutcome}, req={requestId}, attempt={attempt})` | — |
+| `fleet.turn.stale` | `reason`, `turn.memberId`, `turn.requestId`, `turn.attempt` | `[fleet] stale turn evidence: {reason}` | — |
+| `fleet.phase.process-ready` | `phase`, `monotonicMs`, `runId`, `executionId` | `[fleet] phase process-ready` | — |
+| `fleet.phase.first-output` | `phase`, `monotonicMs`, `runId`, `executionId` | `[fleet] phase first-output` | — |
+| `fleet.phase.terminal` | `phase`, `monotonicMs`, `runId`, `executionId` | `[fleet] phase terminal` | — |
 | `task.assigned` | member/type/task, `outcome` | `[task] {taskId} assigned to {memberId}` | `outcome` |
 | `history.import.completed` | source(s), files/messages, duration, exit code, artifact, `coverage`; + `trigger`/window/`importMode` when a refresh context is present | `[history] import · {source | sources}` | `exitCode` |
 | `history.analyze.completed` | source(s), duration, exit code, artifact; + `trigger`/window/`importMode` when a refresh context is present | `[history] analyze · {source | sources}` | `exitCode` |

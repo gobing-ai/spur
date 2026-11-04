@@ -140,16 +140,18 @@ they make no call at all.
 | `--state <state>` | Lifecycle state: `working`, `idle`, or `blocked` (required) |
 | `--seq <ns>` | Monotonic report sequence in nanoseconds; a value not greater than the last accepted one is ignored (required) |
 | `--spec <id>` | Member spec id (defaults to `SPUR_SPEC_ID`) |
+| `--pin <epoch:generation>` | Host binding pin required for a **bound member**: `<ownerEpoch>:<occupancyGeneration>` from the binding record; a pinless or stale-pin report on a bound member exits 2, and the first matched report completes the binding handshake. Plain guests report without a pin |
 | `--json` | Output machine-readable JSON |
 
-Exit `2` when `--state`/`--seq` is missing or malformed, or when no member id resolves (set
-`SPUR_SPEC_ID` or pass `--spec`). An accepted report writes the `agent.lifecycle.changed`
+Exit `2` when `--state`/`--seq` is missing or malformed, when no member id resolves (set
+`SPUR_SPEC_ID` or pass `--spec`), or when a bound member's report lacks `--pin` or carries a
+stale pin. An accepted report writes the `agent.lifecycle.changed`
 ledger row; a stale report is ignored and prints `ignored stale report`.
 
 ## spur agent join
 
 ```
-spur agent join --role <name> [--id <id>] [--session-id <sid>] [--pid <n>] [--executor <name>]
+spur agent join --role <name> [--id <id>] [--member <id>] [--session-id <sid>] [--pid <n>] [--executor <name>]
 ```
 
 A **guest occupant** is a live interactive session that joins the fleet to pull work instead of
@@ -160,8 +162,9 @@ being driven by it: it is never supervised, never restarted, and never a stage t
 | `--role <name>` | Layer-1 role the guest occupies (`scribe` \| `coder` \| `reviewer` \| `planner`) |
 | `--id <id>` | Guest id (defaults to `<role>-g<n>`); a collision with a declared member or a joined guest exits 2, except that the same host session rejoining its own live guest renews the lease |
 | `--session-id <sid>` | Host session id (defaults to `CLAUDE_CODE_SESSION_ID`); the Stop hook matches on it |
-| `--pid <n>` | Process id to record (defaults to this process) |
+| `--pid <n>` | Agent process id to record (defaults to the matching agent ancestor) |
 | `--executor <name>` | Executor name to record (informational — a guest is never dispatched to) |
+| `--member <id>` | Bind a **declared member** instead of joining as a guest (G75 R3): fenced by occupancy generation + claim epoch, refuses an unknown/disabled member, a role mismatch, an unattested executor, a live occupant or a concurrent binder (exit 2 each). The record id becomes the member id, so `wait --inbox <member-id>` addresses the member's inbox |
 | `--json` | Output machine-readable JSON |
 | `--json-envelope` | Wrap the JSON in the standard output envelope |
 
@@ -178,11 +181,14 @@ spur agent leave [id] [--session-id <sid>]
 |---|---|
 | `[id]` | Guest id (defaults to the guest joined by this host session) |
 | `--session-id <sid>` | Host session id (defaults to `CLAUDE_CODE_SESSION_ID`) |
+| `--drain-timeout <ms>` | Bound member only: cap on the drain wait for an in-flight turn to settle before retiring (default `ATTACHED_DRAIN_GRACE_MS`, 30s). A turn that does not settle stays resumable — nothing is killed |
 | `--json` | Output machine-readable JSON |
 | `--json-envelope` | Wrap the JSON in the standard output envelope |
 
 `leave` (or lease expiry) releases the lease, marks the occupant exited, returns its claimed
-messages to `queued`, and removes the record. Exit `2` on an unknown role, an id collision, or
+messages to `queued`, and removes the record. A **bound** member drains first: assignment stops,
+and the leave waits for the in-flight turn within `--drain-timeout` before retiring. Exit `2` on
+an unknown role, an id collision, or
 `leave` without an id when this host session never joined.
 
 ## spur agent status

@@ -20,7 +20,6 @@ import { spurConfigSchema } from '@gobing-ai/spur-config';
 import {
     createMigratedDb,
     type DbAdapter,
-    InboxMessageDao,
     RunSessionDao,
     readMemberSessions,
     SystemEventDao,
@@ -29,6 +28,7 @@ import { type AgentProcessOptions, saveAgentSpec } from '@gobing-ai/ts-ai-runner
 import { type MemberAgentProcess, runAgentLoop, selectsPersistentStdinDispatch } from '../../../src/commands/agent';
 import { type CliContext, createCliContext } from '../../../src/context';
 import type { CommandOutput } from '../../../src/output';
+import { inboxFixture } from '../../helpers';
 
 function captureOutput(): CommandOutput & { stdout: string[]; stderr: string[] } {
     const stdout: string[] = [];
@@ -76,7 +76,7 @@ interface SessionRig {
     customCtx: CliContext;
     db: DbAdapter;
     dao: SystemEventDao;
-    inbox: InboxMessageDao;
+    inbox: ReturnType<typeof inboxFixture>;
     runSessions: RunSessionDao;
     tempDir: string;
     output: CommandOutput & { stdout: string[]; stderr: string[] };
@@ -202,7 +202,7 @@ export async function makeSessionRig(specType: string, opts: RigOptions = {}): P
         } as CliContext,
         db,
         dao: new SystemEventDao(db),
-        inbox: new InboxMessageDao(db),
+        inbox: inboxFixture(db),
         runSessions,
         tempDir,
         output,

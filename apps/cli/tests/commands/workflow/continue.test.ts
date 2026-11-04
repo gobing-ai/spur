@@ -581,6 +581,7 @@ describe('continue --answer-text (H1 R27/R28)', () => {
             expect(parsed.status).toBe('started');
             // shQuote wraps each argv token, so the quoted pair is what lands in the sh -c line.
             expect(workerLine).toContain("'--answer-text' 'mocha'");
+            expect(workerLine).toContain(`'${process.execPath}' '${Bun.main}'`);
         } finally {
             runSpy.mockRestore();
         }

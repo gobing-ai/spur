@@ -3,8 +3,8 @@ kind: design
 title: "Inter-agent control plane"
 status: accepted
 created_at: 2026-08-12
-updated_at: 2026-10-05
-related: [G4, "0529", "0530", "0531", "0599", "0685", "0820", "1080", "1081"]
+updated_at: 2026-10-21
+related: [G4, "0529", "0530", "0531", "0599", "0685", "0820", "1080", "1081", "1271"]
 tags: [system, G4, agent]
 ---
 
@@ -142,7 +142,7 @@ Another agent “reads output” by reading `artifactRefs[].path` (or a bounded 
 | State | Source (first-class only) |
 | --- | --- |
 | `working` | latest `agent.invoke.start` for this `runId` |
-| `idle` | latest `agent.invoke.exit` for this `runId` **and** `countPending(specId)===0` |
+| `idle` | latest `agent.invoke.exit` for this `runId` **and** `countQueued(specId)===0` |
 | `blocked` | First-class signal only: the highest-seq accepted `agent.lifecycle.changed` row for this member (`spur agent report --state blocked`, 1080). Absent signal ⇒ state is not `blocked` |
 | `done` | Out of v1. Herdr `done` is unseen-idle UI; do not invent an unseen bit here |
 
@@ -150,7 +150,7 @@ No screen-manifest detector. No OSC/spinner matching.
 
 > **Wave 2 (0530):** `projectLifecycle` in `packages/app/src/services/occupant-wait.ts` implements
 > this table as a pure function. `exit` + a non-empty queued inbox is `unknown` (will re-invoke), not
-> `idle`; `idle` requires exit **and** `countPending===0`.
+> `idle`; `idle` requires exit **and** `countQueued===0`.
 
 > **Blocked (1080):** the ledger row is first-class for dispatch and Board — `gtdStrategy` holds the
 > member with the `member-blocked` reason and the snapshot carries `lifecycle` to the `needs human`
@@ -236,7 +236,7 @@ Board SSE (roadmap S6/W6) is **not** a prerequisite. CLI wait may poll the ledge
 - `packages/app/src/services/agent-coordination-service.ts` — send-wait snapshot; do not add a third store
 - `packages/app/src/services/supervisor-service.ts` — env injection; generation bump on replace
 - `apps/cli/src/commands/agent/` — drain rewrite (`shared.ts`); wait verb (`wait.ts`, Wave 2)
-- `apps/cli/src/commands/message.ts` — `--wait` (Wave 2)
+- `apps/cli/src/commands/message/send.ts` — `--wait`, and `--until injected` keyed on the sent row (G11 R2)
 - `packages/domain/src/migrations.ts` — coordination-run table
 - `packages/contracts/src/` — oRPC DTOs only when Board/server expose the record
 - `plugins/sp/skills/spur-cli/references/agent.md` + `message.md` — Wave 2, same commit as verbs
@@ -286,7 +286,10 @@ crash mid-retire leaves a leaseless guest (retired by the next pass) rather than
 Guests sit structurally outside the fleet declaration: role/executor selectors resolve over declared
 members only, so a guest never makes `--role` ambiguous, and `spur agent run --spec <guest>` is
 refused because a guest carries no executor attestation for a `requiresCapabilities` stage. The pull
-loop is `spur agent wait --inbox <id>` (heartbeating the lease) → work → `spur message reply`,
+loop is `spur agent wait --inbox <id> --json` (heartbeating the lease) → work → `spur message reply`.
+The wait claims a batch of at most five messages and returns `{ id, pending, messages }`; a successful
+output handoff settles those exact claim generations as delivered, while a failed output releases
+them. Further queued work stays for the next pull. Inbox listing never consumes work. The loop is
 re-armed inside the Bash ~10-minute budget by the `fleet-join` skill; a joined session's Stop hook
 may also deliver pending messages through `decision: block`, which converts the block into the next
 inbox item, never into a terminal write (ADR-057 A1).
@@ -306,24 +309,39 @@ process, run or generation id. `InboxService` (`packages/app`) is the only reade
 | --- | --- |
 | `from_id`, `to_id` | Never null. `operator` is the human (CLI and Board global input). `spur` is the system (fleet dispatcher, workflows). Both are rejected as agent spec ids. |
 | `kind` | `chat` or `request`. Only `request` rows enter receipt reconciliation (§11). |
-| `status` | `queued` → `claimed` → `delivered` \| `failed`. `release` and the sweeper move a row back to `queued`. Each transition is guarded by its prior status. |
-| `claimed_at`, `attempts`, `error` | Claim lease (default 10 min). The sweeper requeues expired claims and fails a row at `MAX_ATTEMPTS`. |
+| `status` | `queued` → `claimed` → `delivered` \| `failed`. `release` and the sweeper move a row back to `queued`. Settlement/release require the original `{id, attempts}` claim, so a stale consumer cannot mutate a later claim. |
+| `claimed_at`, `attempts`, `error` | Claim lease (default 10 min), with `attempts` as the claim generation. The sweeper requeues expired claims and fails a row at `MAX_ATTEMPTS`. |
 | `in_reply_to`, `thread_id` | `thread_id` is the root message id. A reply inherits it and is addressed to the original `from_id`. |
-| `request_key` | Idempotency only (partial unique index). Never parsed. |
+| `request_key` | Idempotency (partial unique index): replay requires matching sender, recipient, body, kind, task and parent-run linkage. |
 | `task_id`, `parent_run_id` | Request linkage (formerly regex-parsed from `request_key`). |
 | `read_at` | Set by `markRead`. |
 
 **Atomicity:** each service mutation writes its row and one `system_events` row in one
-transaction. The events are `message.sent`, `replied`, `claimed`, `delivered`, `failed`, `requeued`
+native synchronous transaction through the database facade, with no await between its statements;
+unrelated requests cannot join a pending inbox transaction. The events are `message.sent`, `replied`, `claimed`, `delivered`, `failed`, `requeued`
 and `read`. Bus fan-out happens after commit, so a failed event insert rolls back the row.
+
+**Live updates (ledger relay).** `InboxService` persists `message.*` in the same transaction as the row
+it describes and holds no bus, so the server runs one relay per process: snapshot `latestSequence()` at
+boot, then follow `system_events` rows whose name starts with `message.` and re-emit each row's payload on
+the server bus, which `/api/events/planning` fans out to clients. That is the only channel that sees
+writes from agent CLI processes; rows written before boot stay history, and a relayed row renders through
+the same stored-envelope path as the history endpoint, so live and history agree.
 
 **Surfaces:**
 
 | Surface | Calls |
 | --- | --- |
-| oRPC inbox contract | `list(member, direction)`, `thread(id)`, `send`, `reply`, `read`, `requests(orchestrator)`. Reads are side-effect free; guest expiry and the claim sweep run in the server reconciler pass. |
+| oRPC inbox contract | `list(member, direction)`, `thread(id)`, `send`, `reply`, `read`, `requests(orchestrator)`. Optional `messageId` on requests reads the exact any-kind/any-recipient receipt instead; the default feed remains request-only. Reads are side-effect free; guest expiry and the claim sweep run in the server reconciler pass. |
 | CLI | `spur message send` (defaults to the orchestrator, sender `operator`), `inbox` (read-only), `show <id>`, `read <id>`, `reply`, `watch`. |
 | `spur agent run` | Claims its inbox into the prompt and settles via the service on exit. |
-| Board Projects → Inbox | Member list → two-direction thread → composer, with reply and mark-read. Updates come over SSE `message.*` events. |
-| Board global input | Sends from `operator` to the orchestrator. |
-| Member terminal | Writes stdin only, never the inbox. |
+| Board Projects → Inbox | Member list → two-direction thread → composer, with reply and mark-read. Declared members appear before their first message. Updates refresh through the oldest loaded row; page responses cannot cross member selection or outlive their refresh. |
+| Board global input | Sends chat as `operator` to the selected member through `inbox.send` — no body envelope; the returned row seeds delivery status, then `inbox.requests({messageId})` refreshes its exact delivery/run receipt on SSE. Active receipts also refresh every two seconds because a CLI run can finish without an inbox mutation; polling stops on terminal delivery/run states and clears on project/message change or unmount. |
+| Member terminal | Writes stdin only, never the inbox: one keystroke must not arrive twice. |
+
+Composer request completions are fenced by project and submission generation. A late response cannot
+replace another project's receipt, release its active-send state, or clear its equal-revision draft;
+draft clearing checks both project path and revision. Inbox selection and paging are project-scoped
+even when two served projects reuse the same member address. The guest Stop handoff carries each
+claimed message's full multiline body; only legacy non-consuming previews may truncate, with an
+explicit `message show` instruction.

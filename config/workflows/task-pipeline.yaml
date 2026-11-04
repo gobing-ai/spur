@@ -660,19 +660,27 @@ states:
                 # feature credit) is owned by `plugins/sp/agents/super-reviewer.md` Output Format,
                 # which this pointer names.
                 input: >-
-                    /sp:dev-review --tasks ${vars.wbs} --auto --focus ${vars.reviewFocus} Answer contract (full: super-reviewer Output
-                    Format). Two artifacts: the `## Review` section (deriveReviewConfidence) and your captured answer
-                    (`spur task verdict` input). The answer has one `Confidence: HIGH|MEDIUM|LOW` line, EVIDENCE-derived
-                    (deriveVerifyConfidence), never the section's disposition level. End with one `Verdict: PASS|PARTIAL|FAIL` line after `| Req | Status | Evidence |` (one row per requirement; MET | PARTIAL | UNMET) and `| AC | Status |
-                    Evidence Type | Evidence |` (one row per AC; MET | PARTIAL | UNMET | N/A). Evidence types (`+` ok): test
-                    | command | static-ref | manual-review | llm-judge | n/a. Evidence cells cite a repo-root-relative `path:line`
-                    (never `/tmp`: out-of-repo blocks done) or a named check. AC rows
-                    key on the task's identities or a declared `AC-N` alias; a linked scenario covers its task and a task-local criterion
-                    needs no feature credit. Open P1-P3 blocks completion.
+                    /sp:dev-review --tasks ${vars.wbs} --auto --focus ${vars.reviewFocus}
+                    Answer contract: super-reviewer Output Format. Emit the machine-linted artifact, not a prose summary.
+                    `## Review`: deriveReviewConfidence. Captured answer (`spur task verdict`) has one `Confidence: HIGH|MEDIUM|LOW`
+                    line (deriveVerifyConfidence), never the section's disposition level.
+                    End with one `Verdict: PASS|PARTIAL|FAIL` line (plain, final) after
+                    `| Req | Status | Evidence |` (one row per requirement; MET | PARTIAL | UNMET) and
+                    `| AC | Status | Evidence Type | Evidence |` (one row per AC; MET | PARTIAL | UNMET | N/A).
+                    Evidence types (`+` ok): test | command | static-ref | manual-review | llm-judge | n/a.
+                    Cite repo-root-relative `path:line` (never `/tmp`) or named checks. AC rows use the task's identities or
+                    a declared `AC-N` alias; a linked scenario covers its task; a task-local criterion needs no feature credit.
+                    Open P1-P3 blocks completion.
+                    Also write it to `.spur/run/${vars.__runId}-review-cert.md`.
                 # The captured review answer is the run's certification input (and the
                 # `task verdict` input below): expectFile fails the step when no answer landed.
                 answerFile: .spur/run/${vars.__runId}-review-answer.txt
                 expectFile: .spur/run/${vars.__runId}-review-answer.txt
+                # The reviewer WRITES this one itself (see (c2)); declared so the composition lint can
+                # see the run path the prompt names (1233 R2).
+                inputs:
+                    - path: .spur/run/${vars.__runId}-review-cert.md
+                      kind: artifact
                 # Declared Layer-1 role (0538 R2/0710 R7): routing reason; no executor pin — role routing feeds the distinctness gate.
                 role: reviewer
                 # B7 R3/R6 (0894): declared fresh policy (reviewer default) — the action
@@ -683,6 +691,16 @@ states:
                 priority: ${vars.taskPriority}
                 compareExecutorWith: implement
                 timeoutMs: ${vars.stepTimeoutMs}
+          # (c2) The reviewer is asked to WRITE its canonical artifact to `-review-cert.md`, because
+          # the captured answer above is the agent's stdout: a reviewer that writes the artifact and
+          # then narrates its summary has the artifact overwritten by the narration, and the verdict
+          # lint fails work that is actually complete (four such runs in the G74 batch, 2026-10-24).
+          # The agent-written cert wins; when it is absent or empty the captured answer is used, so
+          # this is a strict widening of accepted inputs, never a new failure mode.
+          - kind: shell
+            options:
+                command: >-
+                    A=".spur/run/$__runId-review-answer.txt"; C=".spur/run/$__runId-review-cert.md"; [ -s "$C" ] || cp "$A" "$C" 2>/dev/null; exit 0
           # (d) `spur task verdict` owns the answer lint and the verdict derivation (task 1003
           # R2): one complete requirement row per declared requirement, AC identities resolved,
           # status/evidence vocabularies accepted, hedged or uncited evidence rejected. It
@@ -694,17 +712,22 @@ states:
             options:
                 id: review-verdict
                 executable: "${vars.spurBin}"
-                args: ["task", "verdict", "${vars.wbs}", "--from-answer", ".spur/run/${vars.__runId}-review-answer.txt"]
+                args: ["task", "verdict", "${vars.wbs}", "--from-answer", ".spur/run/${vars.__runId}-review-cert.md"]
                 resultFile: .spur/run/${vars.__runId}-review-verdict.status
                 softFail: true
           # (e) one fold, one token: PASS requires the typed verdict PASS, the artifact's own
           # PASS, and a clean review gate (open P1-P3 finding or an uncited claim blocks it).
           # Fail-closed: any missing/corrupt input leaves FAIL, so the transitions can route a
           # non-PASS review into remediation instead of dead-ending the run.
+          # Idempotent re-entry: the answer file is consumed as a stage input, so a second visit to
+          # this state has no answer to re-judge. An ABSENT answer is not new evidence against a
+          # PASS — the durable `<wbs>-verdict.json` and the residual gate still have to pass — so the
+          # run-scoped verdict status is consulted only when an answer is actually present (without
+          # this, re-entry overwrote a PASS with FAIL and closed the task's run as `failed`).
           - kind: shell
             options:
                 command: >-
-                    mkdir -p .spur/run; S=FAIL; if [ "$(cat ".spur/run/$__runId-review-verdict.status" 2>/dev/null)" = PASS ] && [ "$(jq -r '.verdict // empty' ".spur/run/$wbs-verdict.json" 2>/dev/null)" = PASS ] && $spurBin task residual "$wbs" review-gate --no-logo >&2; then S=PASS; fi; printf '%s\n' "$S" > ".spur/run/$wbs-review.status"; exit 0
+                    mkdir -p .spur/run; S=FAIL; if [ ! -f ".spur/run/$__runId-review-answer.txt" -o "$(cat ".spur/run/$__runId-review-verdict.status" 2>/dev/null)" = PASS ]; then [ "$(jq -r '.verdict // empty' ".spur/run/$wbs-verdict.json" 2>/dev/null)" = PASS ] && $spurBin task residual "$wbs" review-gate --no-logo >&2 && S=PASS; fi; printf '%s\n' "$S" > ".spur/run/$wbs-review.status"; exit 0
           # (d) record the review severity as the lane decision's outcome (1263 R3b): the
           # question `task-semantic-risk` answered is "is this risky?", and the Review table's
           # worst finding is the answer as observed. Resolved rows count (a fixed P2 was still

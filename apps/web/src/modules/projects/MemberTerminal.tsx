@@ -122,9 +122,6 @@ export function parseExecutions(value: unknown): RegistryExecution[] | null {
 
 export const stdinUrl = (agentId: string) => `${resolveApiUrl()}/processes/${encodeURIComponent(agentId)}/stdin`;
 
-/** POST /api/messages — enqueue a message for the agent loop to drain (0261 R2). */
-export const messagesUrl = () => `${resolveApiUrl()}/messages`;
-
 const processesUrl = () => `${resolveApiUrl()}/processes`;
 
 /**
@@ -266,18 +263,9 @@ export default function MemberTerminal({ agentId, sessionId }: { agentId: string
                 }),
             );
 
-            // R2: for default loop-agent members, also enqueue as a message so the
-            // agent drains it on the next iteration. The POST is fire-and-forget —
-            // its failure must not block stdin delivery or input clearing.
-            fetchWithTimeout(
-                new Request(messagesUrl(), {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ from: 'terminal', to: agentId, body: line }),
-                }),
-            ).catch(() => {
-                // Non-blocking — stdin was already delivered.
-            });
+            // G11 R3: a terminal line reaches the process stdin and NOTHING else. Posting it to the
+            // inbox as well delivered every keystroke twice (the loop drains the inbox), so the
+            // duplicate path is gone and `messagesUrl` no longer exists.
 
             if (!res.ok) {
                 const body: unknown = await res.json().catch(() => null);
