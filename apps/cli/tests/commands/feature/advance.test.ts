@@ -212,3 +212,43 @@ describe('spur feature CLI', () => {
         expect(output.errors.join('')).toContain('Feature Z99 not found');
     });
 });
+
+describe('spur feature advance branch coverage (per-verb split)', () => {
+    test('advance walks past one hop and stops at the next denied guard (backlog → verifying)', async () => {
+        const cOut = createCapturedOutput();
+        await main(['feature', 'create', 'Advance Multi Hop'], { cwd, output: cOut });
+        const id = createdId(cOut);
+
+        const output = createCapturedOutput();
+        const exitCode = await main(['feature', 'advance', id, '--to', 'verifying'], { cwd, output });
+        expect(exitCode).toBe(1);
+        expect(output.errors.at(-1)).toContain('Lifecycle transition denied');
+    });
+
+    test('advance from verifying runs the done-boundary feature check and refuses on failure', async () => {
+        const root = mkdtempSync(join(tmpdir(), 'spur-advance-verifying-'));
+        const featuresDir = join(root, 'features');
+        try {
+            const cOut = createCapturedOutput();
+            await main(['feature', 'create', 'Advance Verifying', '--folder', featuresDir], {
+                cwd: root,
+                output: cOut,
+            });
+            const id = createdId(cOut);
+            // Fixture: a bare feature placed at `verifying` lacks the sections the done boundary requires.
+            const file = join(featuresDir, readdirSync(featuresDir).find((f) => f.startsWith(`${id}_`)) ?? '');
+            writeFileSync(file, readFileSync(file, 'utf8').replace(/^status: backlog$/m, 'status: verifying'));
+
+            const output = createCapturedOutput();
+            const exitCode = await main(['feature', 'advance', id, '--to', 'done', '--folder', featuresDir], {
+                cwd: root,
+                output,
+            });
+            expect(exitCode).toBe(1);
+            expect(output.errors.at(-1)).toContain(`Feature ${id} check failed before advance`);
+            expect(readFileSync(file, 'utf8')).toMatch(/^status: verifying$/m);
+        } finally {
+            rmSync(root, { recursive: true, force: true });
+        }
+    });
+});

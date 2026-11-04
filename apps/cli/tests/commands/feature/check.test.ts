@@ -8,7 +8,7 @@
  * and exit codes 0/1/2 (design §7.2, §10).
  */
 import { afterAll, beforeAll, describe, expect, test } from 'bun:test';
-import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { mkdir } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -132,5 +132,42 @@ describe('spur feature CLI', () => {
         expect(Array.isArray(parsed)).toBe(true);
         expect(parsed.length).toBeGreaterThan(1);
         expect(exitCode === 0 || exitCode === 1).toBe(true);
+    });
+});
+
+describe('spur feature check branch coverage (per-verb split)', () => {
+    test('check --fix reopens a verifying feature with a live linked task through the guarded transition', async () => {
+        const root = mkdtempSync(join(tmpdir(), 'spur-check-reopen-'));
+        const featuresDir = join(root, 'features');
+        try {
+            const cOut = createCapturedOutput();
+            await main(['feature', 'create', 'Reopen Me', '--folder', featuresDir], { cwd: root, output: cOut });
+            const id = createdId(cOut);
+            // Fixture: place the feature at `verifying` directly — the reopen path is what is under test.
+            const file = join(featuresDir, readdirSync(featuresDir).find((f) => f.startsWith(`${id}_`)) ?? '');
+            writeFileSync(file, readFileSync(file, 'utf8').replace(/^status: backlog$/m, 'status: verifying'));
+            mkdirSync(join(root, 'docs', 'tasks'), { recursive: true });
+            writeFileSync(
+                join(root, 'docs', 'tasks', '0001_live.md'),
+                `---\nname: live\nstatus: wip\nfeature_id: ${id}\n---\n\n# live\n`,
+            );
+
+            const output = createCapturedOutput();
+            await main(['feature', 'check', id, '--fix', '--folder', featuresDir], { cwd: root, output });
+            expect(output.messages.join('\n')).toContain(`reopened feature ${id} (verifying -> active)`);
+            expect(readFileSync(file, 'utf8')).toMatch(/^status: active$/m);
+        } finally {
+            rmSync(root, { recursive: true, force: true });
+        }
+    });
+
+    test('check against an unreadable features folder exits 1 with a structured error', async () => {
+        const output = createCapturedOutput();
+        const exitCode = await main(['feature', 'check', '--json', '--folder', join(cwd, 'no-such-dir')], {
+            cwd,
+            output,
+        });
+        expect(exitCode).toBe(1);
+        expect(output.errors.join('')).toContain('no-such-dir');
     });
 });

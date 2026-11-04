@@ -8,7 +8,12 @@ import { mkdirSync, mkdtempSync, writeFileSync } from 'node:fs';
 import { createRequire } from 'node:module';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { HistoryService, MIN_SAFE_PI_BASH_IMPORTER_VERSION, parseImporterVersion } from '@gobing-ai/spur-app';
+import {
+    HistoryService,
+    MIN_SAFE_PI_BASH_IMPORTER_VERSION,
+    parseImporterVersion,
+    UnsafeHistoryImporterError,
+} from '@gobing-ai/spur-app';
 import type { CoverageEntry } from '@gobing-ai/spur-domain';
 import { main } from '../../../src';
 import type { CommandOutput } from '../../../src/output';
@@ -528,5 +533,92 @@ describe('history import scope and budget remedy (task 1144)', () => {
         expect(help).toContain(
             "For one session's evidence, use `--file`; a full replay can exceed the per-source budget.",
         );
+    });
+});
+
+describe('history import error branches (per-verb split)', () => {
+    test('malformed --capability-origin is a usage error before service construction (text)', async () => {
+        const { output, lines } = capturingOutput();
+        const exitCode = await main(['history', 'import', '--source', 'pi', '--capability-origin', 'bad'], {
+            output,
+            cwd: makeTmpCwd(),
+            dbUrl: ':memory:',
+        });
+        expect(exitCode).toBe(1);
+        expect(lines.join('')).toContain('spur history import: --capability-origin expects');
+    });
+
+    test('malformed --capability-origin is a usage error (enveloped json)', async () => {
+        const { output, lines } = capturingOutput();
+        const exitCode = await main(
+            ['history', 'import', '--source', 'pi', '--capability-origin', 'a:b', '--json', '--json-envelope'],
+            { output, cwd: makeTmpCwd(), dbUrl: ':memory:' },
+        );
+        expect(exitCode).toBe(1);
+        const parsed = JSON.parse(lines.join('')) as { ok: boolean; error?: { details?: { cliCode?: string } } };
+        expect(parsed.ok).toBe(false);
+        expect(parsed.error?.details?.cliCode).toBe('usage');
+    });
+
+    // The host-version provenance tests above only take the refusal branch on an unsafe host
+    // importer; injecting the error makes the CLI mapping deterministic on every host.
+    test('UnsafeHistoryImporterError maps to exit 1 with code and versions (text)', async () => {
+        const spy = spyOn(HistoryService.prototype, 'importAll').mockRejectedValueOnce(
+            new UnsafeHistoryImporterError('importer drops bash commands', '0.0.1'),
+        );
+        try {
+            const { output, lines } = capturingOutput();
+            const exitCode = await main(['history', 'import', '--source', 'pi', '--mode', 'full'], {
+                output,
+                cwd: makeTmpCwd(),
+                dbUrl: ':memory:',
+            });
+            expect(exitCode).toBe(1);
+            expect(lines.join('')).toContain(
+                'spur history import: unsafe-history-importer: importer drops bash commands',
+            );
+        } finally {
+            spy.mockRestore();
+        }
+    });
+
+    test('UnsafeHistoryImporterError carries structured details (enveloped json)', async () => {
+        const spy = spyOn(HistoryService.prototype, 'importAll').mockRejectedValueOnce(
+            new UnsafeHistoryImporterError('importer drops bash commands', '0.0.1'),
+        );
+        try {
+            const { output, lines } = capturingOutput();
+            const exitCode = await main(
+                ['history', 'import', '--source', 'pi', '--mode', 'full', '--json', '--json-envelope'],
+                { output, cwd: makeTmpCwd(), dbUrl: ':memory:' },
+            );
+            expect(exitCode).toBe(1);
+            const parsed = JSON.parse(lines.join('')) as {
+                error?: { details?: { cliCode?: string; installedVersion?: string; minSafeVersion?: string } };
+            };
+            expect(parsed.error?.details).toEqual({
+                cliCode: 'unsafe-history-importer',
+                installedVersion: '0.0.1',
+                minSafeVersion: MIN_SAFE_PI_BASH_IMPORTER_VERSION,
+            });
+        } finally {
+            spy.mockRestore();
+        }
+    });
+
+    test('any other import failure is rethrown, not mapped to the provenance refusal', async () => {
+        const spy = spyOn(HistoryService.prototype, 'importAll').mockRejectedValueOnce(new Error('disk on fire'));
+        try {
+            const { output, lines } = capturingOutput();
+            const exitCode = await main(['history', 'import', '--source', 'pi'], {
+                output,
+                cwd: makeTmpCwd(),
+                dbUrl: ':memory:',
+            });
+            expect(exitCode).not.toBe(0);
+            expect(lines.join('')).not.toContain('unsafe-history-importer');
+        } finally {
+            spy.mockRestore();
+        }
     });
 });
