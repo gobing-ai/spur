@@ -9,7 +9,7 @@ import { registerWorkflowTransportCommands } from '../src/workflow-transport';
  * mounts the guard, and the full tree mounts the same command so `spur workflow --help` lists it.
  */
 describe('workflow transport composition root', () => {
-    test('mounts the commit-guard-* verbs and the hidden commit-guard shim under workflow', () => {
+    test('mounts the commit-guard-* verbs and no nested commit-guard group under workflow', () => {
         const program = new Command();
         const workflow = program.command('workflow');
         registerWorkflowTransportCommands(workflow, {
@@ -20,7 +20,8 @@ describe('workflow transport composition root', () => {
         });
         const sub = (name: string) => workflow.commands.find((c) => c.name() === name);
         for (const op of ['start', 'stage', 'check']) expect(sub(`commit-guard-${op}`)).toBeDefined();
-        expect(sub('commit-guard')?.commands.map((c) => c.name())).toEqual(['start', 'stage', 'check']);
+        // 1290: the nested `commit-guard <op>` group was removed, not kept as a shim.
+        expect(sub('commit-guard')).toBeUndefined();
         // WT-4 landing keeps its capability as flat verbs (task 1242), not as an `inline` sub-verb.
         expect(sub('persist-out')).toBeDefined();
         expect(sub('persist-check')).toBeDefined();
