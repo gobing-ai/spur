@@ -114,7 +114,7 @@ Row-level deltas from the default rule:
   projects add/remove/list/start/stop error branches, builder bump-ver/drop-tags error
   branches, message send/wait usage + typed failures, agent wait resolution/usage/fail
   branches, history daily `{error: detail}`, and (close-out 2026-08-27) the `feature show` /
-  `feature transition` not-found returns at `apps/cli/src/commands/feature.ts:60,175`, which had
+  `feature transition` not-found returns at `apps/cli/src/commands/feature/show.ts:25` / `feature/advance.ts:31`, which had
   bypassed the seam via a direct `context.output.error(...)`.
   Task 0787 (2026-09-06) added the create/batch-create machine-error surface:
   `writeCreateJsonError` (`apps/cli/src/commands/task/shared.ts`) emits ONE parseable

@@ -15,6 +15,7 @@ import {
 import { createSpawnRunner } from '@gobing-ai/spur-app/pr-review';
 import type { CliContext } from '../../context';
 import { toJson } from '../../output';
+import { SHARED_OPTIONS } from '../shared-options';
 
 const FORMATS = ['markdown', 'json', 'text'] as const;
 
@@ -37,7 +38,7 @@ export function registerBuilderShowBranchesCommand(builder: Command, context: Cl
             ].join('\n'),
         )
         .option('--format <format>', 'output format: markdown | json | text (default markdown)', 'markdown')
-        .option('--json', 'alias of --format json (prints the raw BranchTopology object)')
+        .option(...SHARED_OPTIONS.jsonShowBranches)
         .option('--base <ref>', 'base ref to measure every branch against (default: origin/HEAD, else main)')
         .option('--local', 'only local branches')
         .option('--remote', 'only remote branches')

@@ -89,8 +89,11 @@ test('the retired release forwarder and its dispatcher cases are gone (task 1173
 });
 
 test('the builder command still owns the release implementation (task 1173 R4)', () => {
-    const builder = readFileSync(join(REPO_ROOT, 'apps', 'cli', 'src', 'commands', 'builder.ts'), 'utf8');
-    expect(builder).toContain("from '../release-ops'");
+    // `spur builder` is a per-verb folder (commands/builder/<verb>.ts); each release verb delegates to release-ops.
+    for (const verb of ['bump-ver', 'drop-tags']) {
+        const src = readFileSync(join(REPO_ROOT, 'apps', 'cli', 'src', 'commands', 'builder', `${verb}.ts`), 'utf8');
+        expect(src).toContain("from '../../release-ops'");
+    }
     // The alias must not have invented a second implementation path.
     expect(existsSync(join(REPO_ROOT, 'apps', 'cli', 'src', 'release-ops.ts'))).toBe(true);
 });

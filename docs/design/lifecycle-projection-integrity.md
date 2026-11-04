@@ -91,7 +91,7 @@ check and becomes blocking under the existing strict feature-done gate.
 
 | Concern | Source |
 | --- | --- |
-| explicit refresh breadth | `apps/cli/src/commands/feature.ts` |
+| explicit refresh breadth | `apps/cli/src/commands/feature/refresh.ts` |
 | scoped post-sync refresh | `packages/app/src/services/feature-service.ts` |
 | dogfood identity match | `packages/app/src/services/feature-check.ts` |
 | hollow Testing + path-token checks | `packages/app/src/services/task-check.ts` |

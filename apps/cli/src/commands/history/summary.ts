@@ -6,6 +6,7 @@
  */
 import type { Command } from '@commander-js/extra-typings';
 import type { CliContext } from '../../context';
+import { SHARED_OPTIONS } from '../shared-options';
 
 /** Register `spur history summary`. */
 export function registerHistorySummaryCommand(history: Command, context: CliContext): void {
@@ -20,7 +21,7 @@ export function registerHistorySummaryCommand(history: Command, context: CliCont
             ].join('\n'),
         )
         .option('--date <date>', 'YYYY-MM-DD, today or yesterday (default: today)')
-        .option('--dry-run', 'print the summary without writing the file')
+        .option(...SHARED_OPTIONS.dryRunHistorySummary)
         .option('--output <path>', 'write to a custom path')
         .option('--no-git', 'skip git history collection')
         .option('--no-ccusage', 'skip token usage collection')

@@ -114,7 +114,7 @@ export function registerBuilderPrCommand(builder: Command, context: CliContext):
                 '(verdict PENDING — pending, never failure).',
             ].join('\n'),
         )
-        .option('--force', 'request a fresh review even when the current HEAD is already reviewed')
+        .option(...SHARED_OPTIONS.forceBuilderPr)
         .option('--focus <text>', 'extra review focus appended to the request')
         .option('--no-wait', 'post the request and return PENDING without polling')
         .option('--timeout <s>', 'wait budget in seconds (service default 600)')

@@ -87,9 +87,9 @@ Scores are family-uniform **by construction** — the defect from §2.1 means pr
 | 27 | `agent.stopped` | `context.ts:460` → ts-ai-runner | ~ | ~ | P | ~ | – | ~ |
 | 28 | `agent.message.sent` | `context.ts:460` → ts-ai-runner | ~ | ~ | P | ~ | – | ~ |
 | 31 | `task.assigned` | `agent-coordination-service.ts:509` | ~ | ~ | P | ~ | – | ~ |
-| 34 | `history.import.completed` | `apps/cli/src/commands/history.ts:364` | – | ~ | P | ~ | ~ | P |
-| 35 | `history.analyze.completed` | `apps/cli/src/commands/history.ts:378` | – | ~ | P | ~ | ~ | P |
-| 36 | `history.daily.failed` | `apps/cli/src/commands/history.ts:336` / `:390` | – | ~ | P | ~ | P | P |
+| 34 | `history.import.completed` | `apps/cli/src/commands/history/daily.ts:149` | – | ~ | P | ~ | ~ | P |
+| 35 | `history.analyze.completed` | `apps/cli/src/commands/history/daily.ts:163` | – | ~ | P | ~ | ~ | P |
+| 36 | `history.daily.failed` | `apps/cli/src/commands/history/daily.ts:121` / `:175` | – | ~ | P | ~ | P | P |
 | 37 | `history.refresh.enqueued` | `apps/cli/src/history-refresh.ts:47` | – | ~ | P | ~ | P | ~ |
 | 38 | `rule.run.start` | `rule-service.ts:523` | ~ | ~ | P | ~ | – | ~ |
 | 39 | `rule.eval.start` | `rule-service.ts:532` | ~ | ~ | P | ~ | – | ~ |

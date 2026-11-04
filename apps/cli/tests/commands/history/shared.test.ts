@@ -7,7 +7,7 @@
  * or a non-canonical value silently never classifies.
  */
 import { describe, expect, test } from 'bun:test';
-import { parseCapabilityOriginSpec } from '../../src/commands/history';
+import { parseCapabilityOriginSpec } from '../../../src/commands/history';
 
 const DIGEST = 'a1b2c3d4e5f6a7b8c9d0e1f2a3b4c5d6e7f8a9b0c1d2e3f4a5b6c7d8e9f0a1b2';
 

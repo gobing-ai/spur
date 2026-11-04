@@ -57,7 +57,7 @@ attach new work to it or advance it. Leaving the state is explicit — un-deprec
 | S8 | Task link guard | `packages/app/src/services/task-feature-link.ts:87` (`guardParentFeature`; shared by create, update and batch-create) | One branch rejects `deprecated` parents on create / update `--feature` / batch-create; no reopen, `--no-reopen` irrelevant. |
 | S9 | Task check | `packages/app/src/services/task-check.ts:1148` (beside `L4_FEATURE_TERMINAL`) | New warning `L4.feature-deprecated` for a live task under a deprecated feature. |
 | S10 | Feature check | `packages/app/src/services/feature-check.ts:239,706,806,821` | No verifying/done probes for `deprecated`; no new errors. |
-| S11 | CLI `advance` | `apps/cli/src/commands/feature.ts:210` | Already stops (no `forwardPath` entry); add the un-deprecate hint. `list --status deprecated` works through the enum. |
+| S11 | CLI `advance` | `apps/cli/src/commands/feature/advance.ts:38` | Already stops (no `forwardPath` entry); add the un-deprecate hint. `list --status deprecated` works through the enum. |
 | S12 | `sync` / `refresh` | `feature-service.ts` sync path; `docs/features/INDEX.md` | `sync`: no status change for deprecated. `refresh` is docs-only by contract; INDEX lists it. |
 | S13 | Board | `apps/web/src/modules/features/feature-actions.ts`, `status-icons.tsx:20`, `FeaturesShell.tsx:265`, `FeatureDetail.tsx:489` | Lucide `Archive` icon (ADR-133); filter follows `FEATURE_STATUSES` automatically; `deprecate` action on backlog/active/verifying/blocked/done; deprecated shows only `undeprecate` and `cancel`. |
 | S14 | Plugin scripts | `plugins/sp/scripts/wrapup-steps.ts:171,288`, `batch-preflight.ts:144,258` | Audit only — they read task statuses or `verifying`; expected no edit. |

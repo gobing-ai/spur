@@ -87,6 +87,7 @@ export const SHARED_OPTIONS = {
     jsonProjectsResponse: ['--json', 'Output JSON response'] as const,
     jsonMessageStream: ['--json', 'Output one JSON object per new message (machine-consumable)'] as const,
     jsonServePortUrl: ['--json', 'Output { port, url, pid } and exit'] as const,
+    jsonShowBranches: ['--json', 'alias of --format json (prints the raw BranchTopology object)'] as const,
     fromFileOutcomeRows: ['--from-file <path>', 'Path to JSON array of {wbs,outcome[,reason]} rows'] as const,
     asFeature0418: [
         '--as <status>',
@@ -106,6 +107,7 @@ export const SHARED_OPTIONS = {
     dryRunWorkflowValidate: ['--dry-run', 'Validate and walk transitions without executing actions'] as const,
     execDryRun: ['--dry-run', 'Print the resolved command(s) and run nothing'] as const,
     dryRunWorkflowClean: ['--dry-run', 'List what would be cleaned without writing (applies to both scopes)'] as const,
+    dryRunHistorySummary: ['--dry-run', 'print the summary without writing the file'] as const,
     featureTrace: ['--feature <id>', 'Feature ID for traceability and Goal→Background derivation'] as const,
     featureFrontmatter: ['--feature <id>', 'Set the feature_id frontmatter field (traceability edge)'] as const,
     featureFilterEdge: ['--feature <id>', 'Filter by linked feature ID (feature_id edge)'] as const,
@@ -122,6 +124,7 @@ export const SHARED_OPTIONS = {
         '--force',
         'Force applying reopen proposals without confirmation; also bypasses repeated-BLOCKED suppression',
     ] as const,
+    forceBuilderPr: ['--force', 'request a fresh review even when the current HEAD is already reviewed'] as const,
     forceInitRecreate: ['--force', 'Recreate files that already exist'] as const,
     forceTaskPreflight: [
         '--force',
