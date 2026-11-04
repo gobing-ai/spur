@@ -200,7 +200,7 @@ function parseJson<T>(raw: string, what: string): T {
 const VALUE_FLAGS = new Set(['--base', '--focus', '--since', '--head', '--timeout', '--interval', '--status-file']);
 const BOOL_FLAGS = new Set(['--json', '--force']);
 
-/** Parse `spur builder pr <op>` argv into the op, its value flags and its boolean flags. */
+/** Parse spine-op argv (the op behind each flat `spur builder pr-<verb>`) into op, value flags and booleans. */
 export function parseArgs(argv: readonly string[]): ParsedArgs {
     const [subcommand = '', ...rest] = argv;
     const flags = new Map<string, string>();
@@ -930,9 +930,9 @@ function cmdStatus(rt: SpineRuntime, args: ParsedArgs): void {
 
 // ─── Entrypoint ─────────────────────────────────────────────────────────────
 
-export const PR_REVIEW_HELP = `spur builder pr — deterministic spine for /sp:dev-pr-review (sp:pr-reviewing)
+export const PR_REVIEW_HELP = `pr-review spine — internal ops composed by the flat spur builder pr-status|pr-check|pr-open|pr-review verbs
 
-Usage: spur builder pr <subcommand> [flags]
+Usage: main([<op>, ...flags]) — not a CLI verb (the builder pr <op> alias was removed in 1290)
 
 Subcommands:
   preflight            git/gh/repo checks; FAILs on detached HEAD or a dirty tree
@@ -952,8 +952,8 @@ Exit codes: 0 ok · 1 usage · 2 hard failure · 3 wait timeout`;
 
 /**
  * Run one spine op. Every line goes to `sink`; the CLI passes its command output so
- * `spur builder pr` writes through the shared output seam. The optional `context` binds external
- * commands and status writes to the caller's cwd/env for this invocation only.
+ * the `spur builder pr-<verb>` verbs write through the shared output seam. The optional `context`
+ * binds external commands and status writes to the caller's cwd/env for this invocation only.
  */
 export function main(argv: readonly string[], sink: PrReviewIo, context: PrReviewContext = {}): number {
     const previous = io;

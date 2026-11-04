@@ -1,5 +1,5 @@
 /**
- * `spur history anatomy` op contract (feature I8, HA-S1 0659 / ADR-079; task 1005 R2/R4;
+ * `spur history anatomy-<op>` verb contract (feature I8, HA-S1 0659 / ADR-079; task 1005 R2/R4;
  * script-absorption PR-6, moved from plugins/sp/tests/history-anatomy-cache.test.ts).
  *
  * Behavioral cases for the cache core live in ./history-anatomy.test.ts; this suite keeps the op

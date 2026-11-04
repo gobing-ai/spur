@@ -1,10 +1,10 @@
 ---
 schema_version: 1
 name: Flatten CLI command-depth breaches to spur <noun> <verb>
-status: backlog
+status: wip
 template: standard
 created_at: 2026-11-04T05:13:54.386Z
-updated_at: "2026-11-04T06:18:37.322Z"
+updated_at: "2026-11-04T06:53:03.092Z"
 feature_id: A35
 
 ac_altitude: task-local
@@ -140,7 +140,36 @@ Frozen fixture `apps/cli/tests/fixtures/script-absorption-pr9/workflows/pr-revie
 
 ### Review
 
-<!-- Filled during review: P1-P4 findings, residual risk, and final disposition. -->
+#### Review Report — 1290
+**Scope:** commits 54133745c, 45be3fb70, 01bd868af (`git diff 9cd0790fa..HEAD`, 93 files; task file and `bun.lock` excluded)
+**Dimensions:** functional, security, efficiency, correctness, usability, architecture
+**Verdict:** PARTIAL
+Confidence: LOW
+
+##### Findings (ranked)
+
+| # | Priority | Dimension | Finding | Location | Disposition |
+|---|----------|-----------|---------|----------|-------------|
+| 1 | P3 (minor) | usability | Stale references to removed/deprecated nested surfaces survive outside history records. AC4 requires `rg "builder pr "` to find no hits outside history/changelog, but the app-layer spine still advertises the removed alias in its help text and doc comments (`packages/app/src/services/pr-review/index.ts:203`, `:933`, `:935`, `:955`). The `main()` spine stays as the flat-verb parity oracle (`apps/cli/tests/commands/builder/pr.test.ts:233`), so its wording should describe the internal op spine, not `spur builder pr <subcommand>`. Same class, missed by the AC5 regex because they name the bare group: `docs/design/workflow-execution-foundation.md:137` (`spur workflow commit-guard`), `packages/app/src/services/history-anatomy.ts:16` (`spur history anatomy`), `packages/app/tests/workflow/commit-guard.test.ts:24`, `packages/app/tests/services/history-anatomy-cli.test.ts:2`. The Solution does not record these as exceptions (only the frozen pr9 fixture is) | `packages/app/src/services/pr-review/index.ts:933` | OPEN |
+| 2 | P3 (minor) | functional | R8 says the ADR-051 amendment should record "`self exec`'s named operand and the top-level `self` aliases as allowed shapes". The amendment covers `self exec <action>` and `task wrapup <op>`, but it says nothing about the hidden top-level `init\|maintain\|migrate\|serve\|status` aliases. That decision is only in the governance consent row (`docs/design/harness-surface-governance.md:226`) and the task Q&A | `docs/00_ADR.md:523-525` | OPEN |
+| 3 | P4 (advisory) | correctness | The `history anatomy` shim tests `op in OPS` on a plain object, so prototype keys match. `spur history anatomy constructor` prints `use spur history anatomy-constructor` (verified this run) before `runCacheCli` rejects it with exit 1. Cosmetic only, and the shim goes away in task 1291. `Object.hasOwn(OPS, op)` would fix it | `apps/cli/src/commands/history/anatomy.ts:68` | ACCEPTED |
+| 4 | P4 (advisory) | architecture | The depth guard reads Commander's private `_hidden` field. A Commander upgrade that renames it would make every hidden shim look visible, so the guard would fail loudly rather than pass silently, which is an acceptable failure direction | `apps/cli/tests/cli-depth-guard.test.ts:23` | ACCEPTED |
+| 5 | P4 (advisory) | security | No security, efficiency or injection surface was added. The shims delegate to the same handlers through a shared per-op definition (`ops()` registered twice), so flags and exit codes cannot drift between a flat verb and its shim. B1 stays boot-free for both spellings | `apps/cli/src/workflow-transport-argv.ts:8-16` | ACCEPTED |
+
+##### Functional Traceability
+
+| Req | Status | Evidence |
+|-----|--------|----------|
+| R1 | MET | `apps/cli/src/commands/workflow/commit-guard.ts:96`, `apps/cli/src/commands/agent/dogfood.ts:77`, `apps/cli/src/commands/history/anatomy.ts:49`, `apps/cli/src/commands/task/batch-plan.ts:44`; command tests pass (37 pass / 0 fail) |
+| R2 | PARTIAL | dispatcher removed (`apps/cli/src/commands/builder.ts:173`); `builder pr preflight` exits 1 `unknown command 'pr'`; help text in `packages/app/src/services/pr-review/index.ts:933` still names the alias (finding 1) |
+| R3 | MET | shim stderr lines asserted in `apps/cli/tests/commands/workflow/commit-guard.test.ts:97`, `apps/cli/tests/commands/agent/dogfood.test.ts:97`, `apps/cli/tests/commands/history/anatomy.test.ts:35`, `apps/cli/tests/commands/task/batch-plan.test.ts:51`; follow-up task 1291 filed (backlog) |
+| R4 | MET | `apps/cli/src/workflow-transport-argv.ts:8-16`; `apps/cli/tests/workflow-transport-argv.test.ts:7` |
+| R5 | MET | `apps/cli/tests/cli-depth-guard.test.ts:45-51` |
+| R6 | MET | `config/workflows/history-anatomy.yaml:116`; app callers renamed; bundled `apps/cli/config/workflows/history-anatomy.yaml` regenerated (25 `anatomy-` hits) |
+| R7 | MET | `plugins/sp/commands/dev-runall.md:105`, `plugins/sp/skills/spur-cli/references/tasks.md:53`; plugin parity tests 91 pass / 0 fail |
+| R8 | PARTIAL | `docs/00_ADR.md:517-525`, `docs/design/harness-surface-governance.md:226`; top-level alias shape not recorded in ADR (finding 2) |
+
+**Next:** fix findings 1 and 2. Reword the pr-review spine help and doc comments plus the bare-group references, and add one sentence to the ADR-051 amendment for the top-level `self` aliases. Then re-run gate and review.
 
 ### References
 
@@ -150,3 +179,6 @@ Frozen fixture `apps/cli/tests/fixtures/script-absorption-pr9/workflows/pr-revie
 - `apps/cli/tests/commands/workflow/inline-removal.test.ts` — precedent: ADR-140 removal of `workflow inline`
 
 ### History
+
+- 2026-11-04T06:21:27.716Z backlog → wip (system)
+

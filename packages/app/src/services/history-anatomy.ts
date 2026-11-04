@@ -13,7 +13,7 @@
  * Moved from `plugins/sp/scripts/history-anatomy-cache.ts` (task 1005 R2, ADR-130 lib rule): every
  * exported function except argv parsing/dispatch, plus the frozen REPORT_SECTIONS /
  * FINDING_FIELDS contract consts (pinned by plugins/sp/tests/skill-structure.test.ts against this
- * module now). The op glue is `./history-anatomy-cli.ts` behind `spur history anatomy`
+ * module now). The op glue is `./history-anatomy-cli.ts` behind the `spur history anatomy-<op>` verbs
  * (script-absorption PR-6 retired the plugin script and its generated bundle).
  */
 import { createHash } from 'node:crypto';

@@ -134,7 +134,7 @@ that call existing services rather than new verbs:
 
 | Builtin | Wraps | Replaces |
 | --- | --- | --- |
-| `command.gate` | `spur task gate`, `spur task update`, `spur self exec <action>`, `spur workflow commit-guard` | ad-hoc shell steps for those verbs |
+| `command.gate` | `spur task gate`, `spur task update`, `spur self exec <action>`, `spur workflow commit-guard-start|stage|check` | ad-hoc shell steps for those verbs |
 | decision (`decide`) | the `spur decision` catalog (ADR-134) | inline judge prompts on routing |
 
 **No new action kinds.** Task 1234 settled the open question in favour of reuse: `command.gate`
