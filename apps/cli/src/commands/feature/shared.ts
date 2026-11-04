@@ -22,6 +22,7 @@ export async function makeReceiptRunPort(context: CliContext): Promise<FeatureRe
     return createFeatureReceiptRunPort(await context.getDb(), context.fs);
 }
 
+/** Build a FeatureService over the configured feature/task folders; `folderOverride` replaces the features dir. */
 export async function makeService(context: CliContext, folderOverride?: string): Promise<FeatureService> {
     // Derive feature/task folders from `.spur/config.yaml` (phase folders) — never hardcode.
     const resolved = await resolvePlanningFolders(context.fs);

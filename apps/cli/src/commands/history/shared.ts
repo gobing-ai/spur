@@ -50,6 +50,7 @@ export async function resolveImportProvenance(fs: FileSystem): Promise<{ binary:
     return { binary, importer };
 }
 
+/** Valid `capabilityKind` segments of a `--capability-origin` spec. */
 export const CAPABILITY_KINDS: ReadonlySet<string> = new Set(['command', 'subagent', 'skill']);
 
 /**
