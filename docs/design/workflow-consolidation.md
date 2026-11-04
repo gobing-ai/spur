@@ -161,8 +161,8 @@ doc-tripwire → metrics-record → branch-cleanup? → done | skipped | failed`
   feature-lifecycle `verifying`; call `spur builder pr-*` directly; delete the three seeded copies
   from `~/.config/spur/workflows/`.
 - **Unchanged public verbs:** `spur feature verify`, `spur feature check`, `spur feature sync`,
-  `spur builder pr-*`, `spur task wrapup`. The hidden deprecated `spur builder pr` alias stays
-  (operator decision 2026-10-17) but no workflow, skill, command or agent invokes it; they call the
+  `spur builder pr-*`, `spur task wrapup`. The hidden deprecated `spur builder pr` alias stayed
+  (operator decision 2026-10-17; removed by task 1290) but no workflow, skill, command or agent invokes it; they call the
   `spur builder pr-*` verbs.
 - **Receipts:** existing feature-latest receipts recorded under the old verifier name read as stale
   with a re-verify command; no data migration.
@@ -176,7 +176,7 @@ doc-tripwire → metrics-record → branch-cleanup? → done | skipped | failed`
   workaround.
 - Stale-receipt reporting forces one re-verify per in-flight feature after upgrade; accepted over a
   compatibility read that would trust a digest of a deleted definition.
-- Decided: keep the hidden `spur builder pr` alias; callers use `spur builder pr-*` only.
+- Decided: keep the hidden `spur builder pr` alias for one release (removed by task 1290); callers use `spur builder pr-*` only.
 - Deferred: wildcard `from` in the engine would remove the 10 `to: cancelled|deprecated` fan-in edges in feature-lifecycle and
   the 12 in task-lifecycle; recorded as task 1253 under D66 (cancelled on close — deferred until the engine
   ships, not implemented here).

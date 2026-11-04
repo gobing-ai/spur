@@ -148,10 +148,9 @@ spur builder pr-review --force --json                           # mode=rerun: fo
 Exit codes: `0` ok, `1` usage, `2` hard failure, `3` wait timeout (verdict `PENDING` — pending, never
 failure; collect later with `pr-status`).
 
-## Deprecated alias: `spur builder pr <op>`
+## Removed alias: `spur builder pr <op>`
 
-Still registered for one release, hidden from `spur builder --help`: it prints one stderr deprecation
-line naming the replacement verb, then runs the unchanged pass-through. `preflight`/`hygiene` →
+Removed by task 1290; call the flat verbs. `preflight`/`hygiene` →
 `pr-check`, `push`/`ensure` → `pr-open`, `request`/`wait` → `pr-review`, `collect`/`status` →
 `pr-status`.
 

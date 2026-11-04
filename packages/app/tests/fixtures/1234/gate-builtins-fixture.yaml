@@ -2,7 +2,7 @@
 #
 # Shape contract (R1/R3): every deterministic step here is a `command.gate` action that runs an
 # existing spur verb with an explicit argv (no shell): `spur task gate`, `spur self exec <action>`,
-# `spur task update <wbs> <status>`, `spur workflow commit-guard`. `command.gate` records a typed
+# `spur task update <wbs> <status>`, `spur workflow commit-guard-check`. `command.gate` records a typed
 # outcome (PASS / FAIL / BLOCKED) from the exit code plus the verb's own artifact, writes it to
 # `resultFile`, and exposes it in the `action_runs` trace. No shell action performs any of these.
 #

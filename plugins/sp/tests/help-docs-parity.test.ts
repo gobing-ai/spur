@@ -56,9 +56,9 @@ function live(commandPath: string[]): CliSurfaceCapture {
 }
 
 /**
- * A verb's live flags, plus those of its own subcommands when the verb is a group
- * (`spur agent dogfood gate|validate-report`): docs name the group-level path
- * `spur <noun> <verb> <sub> --flag`, which the two-token scan reads as `<noun> <verb>`.
+ * A verb's live flags, plus those of its own subcommands when the verb is a group. No visible group
+ * remains (task 1290 flattened them); kept so a doc naming `spur <noun> <verb> <sub> --flag`, which
+ * the two-token scan reads as `<noun> <verb>`, still resolves.
  */
 function verbFlags(noun: string, verb: string): string[] {
     const capture = live([noun, verb]);

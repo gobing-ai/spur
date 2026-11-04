@@ -20,8 +20,7 @@ This noun is **frozen at exactly eight verbs** (`bump-ver`, `drop-tags`, `publis
 script-absorption entries; `show-branches` and the four flat PR verbs `pr-status`, `pr-check`,
 `pr-open`, `pr-review` from the 2026-10-16 feature-L1 entries) by operator consent
 (`docs/design/harness-surface-governance.md` §3) — do not invent additional `builder` subcommands.
-The former `pr <op>` pass-through stays registered as a **hidden, deprecated alias** for one release
-(it prints one stderr deprecation line naming the replacement verb), so it is not listed here.
+The former `pr <op>` pass-through was removed by task 1290 (two-level `spur <noun> <verb>` rule).
 
 ## Verb map
 
@@ -95,12 +94,6 @@ PR); `pr-check` → `{ ok, verdict, preflight, hygiene }`; `pr-open` → `{ ok, 
 - **Deduping:** `pr-review` collects without a new request when the exact HEAD is already reviewed,
   and returns `PENDING` when a marked request is still in flight; `--force` requests a fresh review
   of the current HEAD regardless. Never force-pushes.
-
-```bash
-# deprecated alias, one release: maps the old op names to the verbs above
-spur builder pr preflight --json     # -> spur builder pr-check
-spur builder pr status --json        # -> spur builder pr-status
-```
 
 ## `show-branches` - read-only branch topology report
 

@@ -133,8 +133,7 @@ The workflow becomes `check → precheck → open → review` with the same term
 `--no-wait`). The `review` state also writes the findings and status artifacts that `fix` reads.
 *(Superseded two days later: D66 task 1251 deleted the definition outright — see §5.)*
 
-`spur builder pr <op>` stays for one release as a hidden alias that prints a deprecation line
-naming the replacement verb, then runs the unchanged pass-through `main()`. A parity test compares
+`spur builder pr <op>` stayed for one release as a hidden alias (removed by task 1290). A parity test compares
 each verb against the old op sequence on the same stubbed runner (stdout, status file, exit code).
 
 ### 3.3 `/sp:dev-pr-review` redesign

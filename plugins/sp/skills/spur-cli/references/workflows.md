@@ -121,7 +121,9 @@ The skill's logic divides by **whether the LLM adds value**:
 | `cost` | `spur workflow cost` (CLI) | `[--workflow <name>]… [--by-state] [--include-bookkeeping] [--since <date>] [--budget <file>] [--measured-file <json>] [--json]` | Real terminal non-dry run measurements, or a budget result; unknown measurements stay null. Budget failures exit 1 |
 | `persist-out` | `spur workflow persist-out` (CLI) | `--from <worktree> [--task-file <path>]…` | WT-4 landing: copy a worktree's run rows, two-file records and cited/owned evidence into the invoking tree before teardown; exit 1 fail closed (retain the worktree) |
 | `persist-check` | `spur workflow persist-check` (CLI) | `--from <worktree> [--task-file <path>]… [--run-id <id>]… [--root <tree>] [--success-json <path>]` | WT-4 pre-removal assertion that the worktree owns no unpersisted durable evidence; exit 0 ok / 1 blocked or divergent / 2 usage |
-| `commit-guard` | `spur workflow commit-guard <op>` (CLI) | `start\|stage\|check --run <id> [--base <sha>] [-- <paths…>]` | Stages only paths this run wrote; exit 2 when a listed path is refused, 3 on unmerged/conflict-marked targets |
+| `commit-guard-start` | `spur workflow commit-guard-start` (CLI) | `--run <id>` | Fingerprint HEAD and the dirty working files into `.spur/run/<run>-tree-start.json` |
+| `commit-guard-stage` | `spur workflow commit-guard-stage` (CLI) | `--run <id> [--base <sha>] [-- <paths…>]` | Stages only paths this run wrote; exit 2 when a listed path is refused, 3 on unmerged/conflict-marked targets |
+| `commit-guard-check` | `spur workflow commit-guard-check` (CLI) | `--run <id> [--base <sha>]` | Report working-tree changes this run did not write; stage nothing. The nested `commit-guard <op>` spelling is a one-release hidden shim (task 1290) |
 | `add` | agent procedure | `"<nl-description>" [--kind <state-machine\|transition-flow>] [--file <path>]` | **Mode chosen (confirmed)** → first reconciled against existing workflows (extend an existing flow rather than duplicate) → YAML authored in real schema shape → **validated AND dry-run** (reaches the expected terminal state) → [add](workflows/operations.md#add) |
 | `refine` | agent procedure | `<workflow-file> [--intent "<goal>"] [--dry-run]` | Smallest change meeting the intent, re-validated and re-dry-run; `--dry-run` emits a diff only → [refine](workflows/operations.md#refine) |
 
@@ -277,7 +279,9 @@ spur workflow profile  <workflow> [--last <n>] [--window <sec>] [--spur-bin <cmd
 spur workflow cost     [--workflow <name>]... [--by-state] [--include-bookkeeping] [--since <YYYY-MM-DD>] [--budget <file>] [--measured-file <json>] [--json]
 spur workflow persist-out   --from <worktree> [--task-file <path>]...
 spur workflow persist-check --from <worktree> [--task-file <path>]... [--run-id <id>]... [--root <tree>]
-spur workflow commit-guard <op> [options]
+spur workflow commit-guard-start --run <id>
+spur workflow commit-guard-stage --run <id> [--base <sha>] [-- <paths>...]
+spur workflow commit-guard-check --run <id> [--base <sha>]
 ```
 
 ### `cost` — real-run measurements and budgets

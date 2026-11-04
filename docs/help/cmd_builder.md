@@ -7,8 +7,8 @@
 > plus `show-branches` (2026-10-16 feature-L1 consent, task 1218) and the four flat PR verbs
 > `pr-status`, `pr-check`, `pr-open`, `pr-review` (2026-10-16 feature-L1 consent, task 1219) — future
 > promotions land only with their own justification
-> (`docs/design/harness-surface-governance.md` §3). The old `pr <op>` layer stays registered as a
-> hidden, deprecated alias for one release.
+> (`docs/design/harness-surface-governance.md` §3). The old `pr <op>` alias was removed by task 1290
+> (two-level `spur <noun> <verb>` rule).
 
 ## Subcommands
 
@@ -168,11 +168,9 @@ returns `PENDING` immediately.
 Exit codes: `0` ok, `1` usage, `2` hard failure, `3` wait timeout (verdict `PENDING` — pending, never
 failure).
 
-## Deprecated alias: `spur builder pr <op>`
+## Removed alias: `spur builder pr <op>`
 
-The former pass-through layer stays registered for one release. It is hidden from
-`spur builder --help`, prints one stderr deprecation line naming the replacement verb, and then runs
-unchanged. `preflight`/`hygiene` map to `pr-check`, `push`/`ensure` to `pr-open`, `request`/`wait` to
+The former pass-through layer was removed by task 1290; call the flat verbs. `preflight`/`hygiene` map to `pr-check`, `push`/`ensure` to `pr-open`, `request`/`wait` to
 `pr-review`, and `collect`/`status` to `pr-status`.
 
 ## spur builder show-branches

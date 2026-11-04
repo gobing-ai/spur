@@ -11,8 +11,8 @@
  * It runs inside `spur-check-feature` (the feature-scoped repo-wide pass, ADR-119), not the
  * per-task gate, which is the scope the invariant actually has.
  *
- * Scope note (R2): the hidden deprecated `spur builder pr <op>` alias is deliberately kept
- * (1251 R5). What is forbidden is a *caller* invoking it instead of the flat verbs.
+ * Scope note (R2): the `spur builder pr <op>` alias was removed by task 1290; this still forbids any
+ * *caller* reintroducing it instead of the flat verbs.
  */
 import { describe, expect, test } from 'bun:test';
 import { execFileSync } from 'node:child_process';
@@ -35,18 +35,11 @@ const RETIRED_IDENTITIES = ['feature-verification.yaml', 'pr-review.yaml', 'wayf
 /** `spur workflow run <deleted>` in any spelling, including the bare names the token scan allows. */
 const RETIRED_INVOCATION = /workflow run\s+(feature-verification|pr-review|wayfinder-resolution)\b/;
 
-/** The deprecated bare alias: `spur builder pr <op>`. `pr-<verb>` is a flat verb, not the alias. */
+/** The removed bare alias: `spur builder pr <op>`. `pr-<verb>` is a flat verb, not the alias. */
 const BARE_PR_ALIAS = /spur builder pr\s+(preflight|push|ensure|ensure-pr|hygiene|request|wait|collect|status)\b/;
 
 /** Surfaces that must call the flat verbs, never the alias (R2). */
 const ALIAS_SCANNED = ['config/', 'plugins/sp/', 'packages/app/src/'];
-
-/**
- * The alias keeps exactly one documentation home — the CLI catalog, which must list every surface
- * including deprecated ones, each with its flat-verb replacement (1251 R5). Documenting the alias
- * is the opposite of invoking it; every other page under the scanned prefixes calls a flat verb.
- */
-const ALIAS_DOC = 'plugins/sp/skills/spur-cli/references/builder.md';
 
 /**
  * Files allowed to name a retired identity. History is not rewritten (1252 out-of-scope), and an
@@ -143,16 +136,13 @@ describe('D66 workflow consolidation — the deleted definitions are gone everyw
         expect(shipped.filter((rel) => RETIRED_IDENTITIES.some((identity) => rel.endsWith(identity)))).toEqual([]);
     });
 
-    test('R2: no config, plugin or app source invokes the deprecated bare `spur builder pr` alias', () => {
+    test('R2: no config, plugin or app source invokes the removed bare `spur builder pr` alias', () => {
         const offenders: string[] = [];
         for (const rel of trackedFiles()) {
-            if (rel === ALIAS_DOC) continue;
             if (!ALIAS_SCANNED.some((prefix) => rel.startsWith(prefix))) continue;
             const text = readTracked(rel);
             if (text !== null && BARE_PR_ALIAS.test(text)) offenders.push(rel);
         }
-        // The alias's own registration (`apps/cli/src/commands/builder/pr.ts`) is outside every
-        // scanned prefix, so it stays registered without an exemption clause.
         expect(offenders.sort()).toEqual([]);
     });
 

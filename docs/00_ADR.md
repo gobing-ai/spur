@@ -514,11 +514,15 @@ selects among sub-operations with different argument grammars — that is a nest
 disguise. A closed mode operand that shares one grammar is allowed (`spur task gate <wbs> <mode>`);
 so are flags. A new action that does not fit an existing verb is a new verb under the owning noun
 (hyphenated when needed, e.g. `migrate-anchors`), and its consent request names that shape.
-Existing violators are grandfathered until migrated; none may gain sub-verbs meanwhile:
-`spur workflow inline <begin|fingerprint|action|actions|node-enter|close|decide|persist-out|persist-check|attribution|dispatch-failure>`
-(deleted rather than migrated by ADR-140), `spur workflow commit-guard <start|check|stage>`,
-`spur agent dogfood <gate|validate-report|contract>`, and `spur history anatomy <op> [argv]`
-(`digest|check|paths|assert-clean|probe|stamp|refresh|publish`). Why: two-level commands keep the
+The grandfathered violators are all resolved: `spur workflow inline <…>` was deleted rather than
+migrated (ADR-140); task 1290 flattened `spur workflow commit-guard <start|stage|check>` to
+`commit-guard-start|stage|check`, `spur agent dogfood <gate|validate-report>` to
+`dogfood-gate|dogfood-validate-report`, `spur history anatomy <op>` to `anatomy-<op>`, and the
+`task batch-plan task-children` mode (a different grammar) to `task batch-plan-children`, keeping
+each old spelling for one release as a hidden shim that prints one stderr deprecation line; and
+removed the hidden `builder pr <op>` alias. A named operand (`spur self exec <action>`) and a closed
+single-grammar operand (`spur task wrapup <op>`) are allowed. `apps/cli/tests/cli-depth-guard.test.ts`
+fails on any visible command at depth 3 or more. Why: two-level commands keep the
 surface discoverable from `spur <noun> --help`, keep the `sp:spur-cli` parity inventory flat, and
 stop internal plumbing from growing into public sub-trees — `workflow inline` gained eleven
 sub-verbs before anyone reviewed it as a public surface.

@@ -59,21 +59,22 @@ describe('parseArgs', () => {
         expect(() => parseArgs(['wait', '--timeout'])).toThrow('requires a value');
     });
 
-    test('spur builder pr --help prints the absorbed spine usage', () => {
+    test('spur builder --help lists the flat pr-* verbs and no nested pr group (1290)', () => {
         const result = spawnSync(
             'bun',
             [
                 join(import.meta.dir, '..', '..', '..', '..', '..', 'apps', 'cli', 'src', 'index.ts'),
                 'builder',
-                'pr',
                 '--help',
                 '--no-logo',
             ],
             { encoding: 'utf8' },
         );
         expect(result.status).toBe(0);
-        expect(result.stdout).toContain('spur builder pr');
-        expect(result.stdout).toContain('Subcommands:');
+        for (const verb of ['pr-status', 'pr-check', 'pr-open', 'pr-review']) {
+            expect(result.stdout).toContain(verb);
+        }
+        expect(result.stdout).not.toMatch(/^\s+pr(\s|$)/m);
     });
 
     test('the default runner really spawns, and reports a missing binary instead of throwing', () => {

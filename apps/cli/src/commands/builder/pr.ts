@@ -18,7 +18,7 @@ import type { CliContext } from '../../context';
 import { SHARED_OPTIONS } from '../shared-options';
 
 /** Register the four flat `spur builder pr-<verb>` composers. */
-export function registerBuilderPrCommands(builder: Command, context: CliContext): void {
+export function registerBuilderPrCommand(builder: Command, context: CliContext): void {
     const io = (): PrReviewIo => ({
         out: (line) => context.output.write(line),
         err: (line) => context.output.error(line),

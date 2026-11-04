@@ -26,15 +26,21 @@ import { resolveSkillDir, runCacheCli } from '../../src/services/history-anatomy
 const REPO_ROOT = join(import.meta.dir, '..', '..', '..', '..');
 const CLI_ENTRY = join(REPO_ROOT, 'apps', 'cli', 'src', 'index.ts');
 
-/** Run `spur history anatomy <argv>` as a real CLI process (the shipped entry, not the module). */
-function cli(argv: string[]): { exitCode: number; stdout: { toString(): string }; stderr: { toString(): string } } {
-    const proc = Bun.spawnSync(['bun', CLI_ENTRY, 'history', 'anatomy', ...argv, '--no-logo'], { cwd: REPO_ROOT });
+/** Run `spur history anatomy-<op> <argv>` as a real CLI process (the shipped entry, not the module). */
+function cli([op, ...argv]: string[]): {
+    exitCode: number;
+    stdout: { toString(): string };
+    stderr: { toString(): string };
+} {
+    const proc = Bun.spawnSync(['bun', CLI_ENTRY, 'history', `anatomy-${op}`, ...argv, '--no-logo'], {
+        cwd: REPO_ROOT,
+    });
     return { exitCode: proc.exitCode ?? -1, stdout: proc.stdout, stderr: proc.stderr };
 }
 
 describe('semanticArtifactDigest CLI parity (0669 R2, spur history anatomy)', () => {
     // R2 backstop (task 0669 Q&A): the shipped CLI entry must digest exactly like the core. This
-    // invokes `spur history anatomy digest` as a process and requires the same hex as the
+    // invokes `spur history anatomy-digest` as a process and requires the same hex as the
     // in-process implementation over an identical fixture.
     test('the CLI digests identically (R2)', () => {
         const dir = mkdtempSync(join(tmpdir(), 'ha-twin-'));
@@ -47,7 +53,7 @@ describe('semanticArtifactDigest CLI parity (0669 R2, spur history anatomy)', ()
         try {
             const proc = cli(['digest', fixturePath]);
             if (proc.exitCode !== 0) {
-                throw new Error(`spur history anatomy digest failed: ${proc.stderr.toString()}`);
+                throw new Error(`spur history anatomy-digest failed: ${proc.stderr.toString()}`);
             }
             expect(proc.stdout.toString().trim()).toBe(semanticArtifactDigest(JSON.parse(fixtureJson)));
         } finally {

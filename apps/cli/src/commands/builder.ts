@@ -2,7 +2,7 @@ import type { Command } from '@commander-js/extra-typings';
 import type { CliContext } from '../context';
 import { toEnvelopeJson } from '../output';
 import { bumpVer, checkVersionDrift, dropTags, publishPackage } from '../release-ops';
-import { registerBuilderPrCommands } from './builder/pr';
+import { registerBuilderPrCommand } from './builder/pr';
 import { registerBuilderShowBranchesCommand } from './builder/show-branches';
 import { SHARED_OPTIONS } from './shared-options';
 
@@ -170,5 +170,5 @@ export function registerBuilderCommand(program: Command, context: CliContext): v
         });
 
     registerBuilderShowBranchesCommand(noun, context);
-    registerBuilderPrCommands(noun, context);
+    registerBuilderPrCommand(noun, context);
 }

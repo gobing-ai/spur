@@ -3,7 +3,7 @@
  *
  * The fixture (`fixtures/1234/gate-builtins-fixture.yaml`) expresses the quality gate, the
  * project check (`spur self exec <action>`), the corpus transition (`spur task update`) and the
- * commit guard (`spur workflow commit-guard`) as `command.gate` actions. This suite proves the
+ * commit guard (`spur workflow commit-guard-check`) as `command.gate` actions. This suite proves the
  * two contract halves:
  *   - shape: no shell action performs any of those verbs (R1);
  *   - outcome: each step's exit code becomes a typed PASS / FAIL / BLOCKED token in its
@@ -41,7 +41,7 @@ function stubSpur(dir: string, codes: { gate: number; check: number; transition:
             `  "task gate") echo gate-stub; exit ${codes.gate} ;;`,
             `  "self exec") echo check-stub; exit ${codes.check} ;;`,
             `  "task update") echo "illegal transition" >&2; exit ${codes.transition} ;;`,
-            `  "workflow commit-guard") echo "refused: foreign path" >&2; exit ${codes.guard} ;;`,
+            `  "workflow commit-guard-check") echo "refused: foreign path" >&2; exit ${codes.guard} ;;`,
             'esac',
             'echo "unexpected: $*" >&2; exit 9',
             '',
@@ -103,7 +103,7 @@ describe('gate-builtins fixture shape (R1)', () => {
             ['gate', 'task', 'gate'],
             ['gate', 'self', 'exec'],
             ['transition', 'task', 'update'],
-            ['commit-guard', 'workflow', 'commit-guard'],
+            ['commit-guard', 'workflow', 'commit-guard-check'],
         ]);
         // Each step runs the run's own spur entry (an existing verb), never a shell string.
         for (const gate of gates) expect(gate.options.executable).toBe(SPUR_BIN_REF);

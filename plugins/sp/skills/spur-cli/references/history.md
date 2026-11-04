@@ -23,7 +23,14 @@ live in `packages/app/src/services/history-service.ts` (`FanOutResult`, `DailyRe
 | `report [path]` | Purely render an existing artifact; default to `latest.json` | `--mode <name>` `--task <wbs>` `--top <n>` `--json` |
 | `daily` | Run import-all → analyze → artifact → 90-day report pruning once | `--since <iso>` `--until <iso>` `--root <path>` `--source-timeout <ms>` `--mode <name>` `--json` |
 | `reset` | Destructively wipe every `history_*` table for a clean re-import; refuses without `--yes` | `--yes` `--json` |
-| `anatomy-<op>` | history-anatomy cache ops behind the `history-anatomy` workflow, one verb per op: `anatomy-digest`, `anatomy-check`, `anatomy-paths`, `anatomy-assert-clean`, `anatomy-probe`, `anatomy-stamp`, `anatomy-refresh`, `anatomy-publish` | op argv (see `spur history anatomy-<op> --help`) |
+| `anatomy-digest` | history-anatomy cache op `digest` behind the `history-anatomy` workflow | op argv (see `spur history anatomy-digest --help`) |
+| `anatomy-check` | history-anatomy cache op `check` behind the `history-anatomy` workflow | op argv (see `spur history anatomy-check --help`) |
+| `anatomy-paths` | history-anatomy cache op `paths` behind the `history-anatomy` workflow | op argv (see `spur history anatomy-paths --help`) |
+| `anatomy-assert-clean` | history-anatomy cache op `assert-clean` behind the `history-anatomy` workflow | op argv (see `spur history anatomy-assert-clean --help`) |
+| `anatomy-probe` | history-anatomy cache op `probe` behind the `history-anatomy` workflow | op argv (see `spur history anatomy-probe --help`) |
+| `anatomy-stamp` | history-anatomy cache op `stamp` behind the `history-anatomy` workflow | op argv (see `spur history anatomy-stamp --help`) |
+| `anatomy-refresh` | history-anatomy cache op `refresh` behind the `history-anatomy` workflow | op argv (see `spur history anatomy-refresh --help`) |
+| `anatomy-publish` | history-anatomy cache op `publish` behind the `history-anatomy` workflow | op argv (see `spur history anatomy-publish --help`) |
 | `timeline` | Per-prompt work/wait time and tokens from the host transcript (JSON), for `sp:session-review` | `--transcript <path>` `--group <spec>` |
 | `summary` | Daily summary report for `sp:daily-summary` (tokens, git, history health, annotations) | `--date <d>` `--dry-run` `--output <path>` `--no-git` `--no-ccusage` |
 

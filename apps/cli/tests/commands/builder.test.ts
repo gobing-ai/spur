@@ -62,7 +62,7 @@ afterEach(() => {
 });
 
 describe('spur builder command wiring', () => {
-    test('registers the noun with exactly its eight verbs plus the hidden deprecated pr alias', () => {
+    test('registers the noun with exactly its eight verbs (the hidden pr alias was removed in 1290)', () => {
         const program = new Command();
         const { context } = makeContext(process.cwd());
         registerBuilderCommand(program, context);
@@ -79,10 +79,7 @@ describe('spur builder command wiring', () => {
             'pr-check',
             'pr-open',
             'pr-review',
-            'pr',
         ]);
-        // 1219: the flat verbs are the surface; `pr` stays hidden for one release.
-        expect(builder?.helpInformation() ?? '').not.toMatch(/^\s+pr \[options\]/m);
     });
 
     test('help renders both verbs without invoking actions', () => {

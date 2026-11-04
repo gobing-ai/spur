@@ -7,9 +7,8 @@
  * `spur workflow run pr-review.yaml`, a resurrected budget entry, or a plugin page that still
  * frames the Codex route as a workflow state order all fail here.
  *
- * Scope note: the deprecated `spur builder pr <op>` alias is deliberately kept (R5) and
- * documented in the `sp:spur-cli` builder reference. What is forbidden is a *caller* invoking it
- * instead of the flat verbs.
+ * Scope note: the `spur builder pr <op>` alias was removed by task 1290; what is forbidden is a
+ * *caller* invoking it instead of the flat verbs.
  */
 import { describe, expect, test } from 'bun:test';
 import { existsSync, readFileSync, statSync } from 'node:fs';
@@ -89,16 +88,12 @@ describe('retired pr-review / wayfinder-resolution workflows (1251)', () => {
         expect(offenders).toEqual([]);
     });
 
-    test('R5: no plugin page invokes the deprecated bare `spur builder pr` alias', () => {
-        // The alias keeps exactly one documentation home — the CLI catalog that must list every
-        // surface, deprecated ones included. Every other page calls a flat verb.
-        const ALIAS_DOC = 'plugins/sp/skills/spur-cli/references/builder.md';
+    test('R5: no plugin page invokes the removed bare `spur builder pr` alias', () => {
         // `spur builder pr` followed by a bare op word is the invocation shape; `pr-<verb>` is not.
         const BARE_ALIAS = /spur builder pr\s+(preflight|push|ensure|ensure-pr|hygiene|request|wait|collect|status)\b/;
         const offenders: string[] = [];
         for (const rel of new Glob('plugins/sp/**/*.md').scanSync({ cwd: REPO_ROOT })) {
             const normalized = rel.split('\\').join('/');
-            if (normalized === ALIAS_DOC) continue;
             if (BARE_ALIAS.test(readFileSync(join(REPO_ROOT, normalized), 'utf8'))) offenders.push(normalized);
         }
         expect(offenders).toEqual([]);
