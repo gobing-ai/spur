@@ -298,32 +298,65 @@ describe('cli-surface-parity — R1: facade noun routing vs live root', () => {
 });
 
 describe('cli-surface-parity — R1: per-noun verb/flag inventories vs live', () => {
+    // One serial `--help` spawn per documented verb: `history` measured 3.8s isolated, and captures
+    // run ~5x slower under the parallel coverage suite (1150 R3), crossing the 20s suite default on CI.
+    const PER_NOUN_TIMEOUT_MS = 60_000;
     const rootCommands = liveCapture([]).commands;
 
     for (const { tier, noun } of facadeRoutingNouns().filter((r) => r.tier !== 'C')) {
-        test(`${tier}: ${noun} reference verbs/flags match live surface`, () => {
-            const rows = documentedVerbs(noun);
-            const documented = rows.map((r) => r.verb);
-            const nounCapture = liveCapture([noun]);
+        test(
+            `${tier}: ${noun} reference verbs/flags match live surface`,
+            () => {
+                const rows = documentedVerbs(noun);
+                const documented = rows.map((r) => r.verb);
+                const nounCapture = liveCapture([noun]);
 
-            if (nounCapture.commands.length === 0) {
-                // Leaf noun (init/status/serve): the reference documents the noun command itself.
-                // The live surface for a noun command is root help — check existence there, and
-                // compare the noun row's key flags against the noun's own Options block.
-                const ownRows = rows.filter((r) => r.verb === noun);
-                expect(ownRows.length).toBeGreaterThan(0);
-                const { documentedNotOnCli } = diffSets(
-                    ownRows.map((r) => r.verb),
-                    rootCommands,
-                );
-                expect({ noun, label: 'documented-not-on-CLI', documentedNotOnCli }).toEqual({
-                    noun,
-                    label: 'documented-not-on-CLI',
-                    documentedNotOnCli: [],
-                });
-                for (const row of ownRows) {
+                if (nounCapture.commands.length === 0) {
+                    // Leaf noun (init/status/serve): the reference documents the noun command itself.
+                    // The live surface for a noun command is root help — check existence there, and
+                    // compare the noun row's key flags against the noun's own Options block.
+                    const ownRows = rows.filter((r) => r.verb === noun);
+                    expect(ownRows.length).toBeGreaterThan(0);
+                    const { documentedNotOnCli } = diffSets(
+                        ownRows.map((r) => r.verb),
+                        rootCommands,
+                    );
+                    expect({ noun, label: 'documented-not-on-CLI', documentedNotOnCli }).toEqual({
+                        noun,
+                        label: 'documented-not-on-CLI',
+                        documentedNotOnCli: [],
+                    });
+                    for (const row of ownRows) {
+                        if (row.flags.length === 0) continue;
+                        const { documentedNotOnCli: missing } = diffSets(row.flags, nounCapture.flags);
+                        expect({
+                            noun,
+                            verb: row.verb,
+                            label: 'flags-documented-not-on-CLI',
+                            documentedNotOnCli: missing,
+                        }).toEqual({
+                            noun,
+                            verb: row.verb,
+                            label: 'flags-documented-not-on-CLI',
+                            documentedNotOnCli: [],
+                        });
+                    }
+                    return;
+                }
+
+                // Non-leaf noun: bidirectional verb comparison. Commander's generated `help`
+                // subcommand is excluded via its parsed Tier C reason (0516).
+                const liveVerbs = nounCapture.commands.filter((v) => v !== helpNoun);
+                expectParity(documented, liveVerbs, `facade ${noun} verbs vs <noun> --help`);
+
+                // Key flags documented for each documented/live verb must exist on the live verb.
+                // Live-only flags are the documented "unlisted long-tail" (Execute-First Contract) —
+                // not drift, so only the documented-not-on-CLI side is asserted.
+                for (const row of rows) {
                     if (row.flags.length === 0) continue;
-                    const { documentedNotOnCli: missing } = diffSets(row.flags, nounCapture.flags);
+                    if (!liveVerbs.includes(row.verb)) continue; // already a verb-level finding
+                    const liveFlags = liveCapture([noun, row.verb]).flags;
+                    const { documentedNotOnCli: missing } = diffSets(row.flags, liveFlags);
                     expect({
                         noun,
                         verb: row.verb,
@@ -336,35 +369,9 @@ describe('cli-surface-parity — R1: per-noun verb/flag inventories vs live', ()
                         documentedNotOnCli: [],
                     });
                 }
-                return;
-            }
-
-            // Non-leaf noun: bidirectional verb comparison. Commander's generated `help`
-            // subcommand is excluded via its parsed Tier C reason (0516).
-            const liveVerbs = nounCapture.commands.filter((v) => v !== helpNoun);
-            expectParity(documented, liveVerbs, `facade ${noun} verbs vs <noun> --help`);
-
-            // Key flags documented for each documented/live verb must exist on the live verb.
-            // Live-only flags are the documented "unlisted long-tail" (Execute-First Contract) —
-            // not drift, so only the documented-not-on-CLI side is asserted.
-            for (const row of rows) {
-                if (row.flags.length === 0) continue;
-                if (!liveVerbs.includes(row.verb)) continue; // already a verb-level finding
-                const liveFlags = liveCapture([noun, row.verb]).flags;
-                const { documentedNotOnCli: missing } = diffSets(row.flags, liveFlags);
-                expect({
-                    noun,
-                    verb: row.verb,
-                    label: 'flags-documented-not-on-CLI',
-                    documentedNotOnCli: missing,
-                }).toEqual({
-                    noun,
-                    verb: row.verb,
-                    label: 'flags-documented-not-on-CLI',
-                    documentedNotOnCli: [],
-                });
-            }
-        });
+            },
+            PER_NOUN_TIMEOUT_MS,
+        );
     }
 });
 
