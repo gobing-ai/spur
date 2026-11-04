@@ -4,7 +4,7 @@ name: Flatten CLI command-depth breaches to spur <noun> <verb>
 status: backlog
 template: standard
 created_at: 2026-11-04T05:13:54.386Z
-updated_at: "2026-11-04T05:14:25.471Z"
+updated_at: "2026-11-04T06:18:37.322Z"
 feature_id: A35
 
 ac_altitude: task-local
@@ -115,7 +115,24 @@ And `bun run spur-check`, `bun run plugin-smoke` and the help-doc parity tests p
 
 ### Solution
 
-<!-- Filled during implementation: file:line change map and concise rationale. -->
+Delivered in two commits: `54133745c` (core flattening + shims) and `45be3fb70` (guard, docs, ADR, alias removal).
+
+**Source (B1–B3, B5)**
+- `agent dogfood <gate|validate-report>` → `agent dogfood-gate` / `agent dogfood-validate-report`; hidden shim group at `apps/cli/src/commands/agent/dogfood.ts:77` warns once on stderr.
+- `workflow commit-guard <start|stage|check>` → `workflow commit-guard-*`; hidden shim group at `apps/cli/src/commands/workflow/commit-guard.ts:96`.
+- `history anatomy <op>` → `history anatomy-<op>` (8 verbs, `apps/cli/src/commands/history/anatomy.ts:49`); positional shim at `:60`. `task batch-plan task-children` → `task batch-plan-children` (shim `apps/cli/src/commands/task/batch-plan.ts:44`).
+- `workflow cost` given a `.summary()` (`apps/cli/src/commands/workflow/cost.ts:34`) so the help parser stops emitting bogus verbs.
+- Kept by decision: hidden top-level `init|maintain|migrate|serve|status` (back-compat aliases), `self exec <action>` and `task wrapup <op>` positional args (not commands).
+
+**B4 builder pr alias** — hidden `builder pr <op>` removed; `registerBuilderPrCommands` → `registerBuilderPrCommand` (`apps/cli/src/commands/builder/pr.ts:21`, `apps/cli/src/commands/builder.ts:173`) for `cli-register-pattern`.
+
+**R5 regression guard** — `apps/cli/tests/cli-depth-guard.test.ts:12` walks `buildProgram()` (incl. `self`); fails on any visible depth ≥3 command and any hidden depth-3 command outside `SHIM_ALLOWLIST` (5 shims; emptied by task 1291).
+
+**Docs/skills** — `docs/00_ADR.md:517` ADR-051 amendment (grandfathered list resolved); `docs/design/harness-surface-governance.md:226` consent row 1290; `docs/help/spur-cli-matrix.md` counts; builder docs (`cmd_builder.md`, `help2/builder.md`, `cli-contracts.md`, `builder-branches-and-pr-review.md`, `workflow-consolidation.md`, `README.md`); spur-cli references `agent.md`, `history.md`, `workflows.md`, `builder.md`; rule comments in `config/rules/{surface,boundary,strict}/*.yaml`.
+
+**Tests updated to the flat surface** — `apps/cli/tests/commands/builder.test.ts` (eight verbs, no `pr`), `packages/app/tests/services/pr-review/pr-review.test.ts` (`builder --help` lists `pr-*`, no `pr` group), dogfood/anatomy CLI tests, gate-builtins fixture test, plugin parity/retired-ref tests, repo-wide workflow-consolidation-absence.
+
+Frozen fixture `apps/cli/tests/fixtures/script-absorption-pr9/workflows/pr-review.yaml` intentionally untouched. Follow-up: task 1291 removes the shims.
 
 ### Testing
 

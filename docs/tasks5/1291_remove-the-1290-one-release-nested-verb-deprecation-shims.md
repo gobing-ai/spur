@@ -4,7 +4,7 @@ name: Remove the 1290 one-release nested-verb deprecation shims
 status: backlog
 template: feature-impl
 created_at: 2026-11-04T06:08:04.782Z
-updated_at: "2026-11-04T06:08:32.814Z"
+updated_at: "2026-11-04T06:18:37.007Z"
 feature_id: A35
 
 ---
@@ -19,7 +19,7 @@ Task 1290 (feature A35) flattened every depth-3 `spur` verb to `<noun> <prefix>-
 
 - [ ] R1. Remove the hidden `spur agent dogfood <gate|validate-report>` shim group; only `agent dogfood-gate` and `agent dogfood-validate-report` remain.
 - [ ] R2. Remove the hidden `spur workflow commit-guard <start|stage|check>` shim group; only the flat `workflow commit-guard-*` verbs remain.
-- [ ] R3. Remove the shared shim deprecation-warning helper if no caller remains after R1–R2.
+- [ ] R3. Remove the positional-arg shims the depth guard cannot see: hidden `history anatomy <op>` (`apps/cli/src/commands/history/anatomy.ts:60`) and `task batch-plan task-children` (`apps/cli/src/commands/task/batch-plan.ts:44`); drop the shared warning helper if unused.
 - [ ] R4. Empty `SHIM_ALLOWLIST` in `apps/cli/tests/cli-depth-guard.test.ts` so any depth-3 command (hidden or visible) fails.
 - [ ] R5. Drop the "hidden shims" notes from `docs/help/spur-cli-matrix.md`, `docs/00_ADR.md` ADR-051 amendment, and the spur-cli references; add a CHANGELOG/BREAKING note.
 
