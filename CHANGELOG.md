@@ -1,5 +1,42 @@
 # Changelog
 
+## [0.4.23] - 2026-11-04
+
+_Claim bullets carry one source anchor and the level that anchor supports — `HIGH`: every anchor is a
+`path:line` beyond line 1 and resolves; `MEDIUM`: every anchor resolves but the set is not all
+line-precise (a URL or a whole file); `LOW`: an anchor that does not resolve, or none. The level is a
+function of the anchors, not a judgement (ADR-144; the check is
+`repo-wide-tests/changelog-confidence.test.ts`). Unanchored bullets are bookkeeping (status moves,
+filings) and assert no code, API or version fact._
+
+### Added
+- flatten the two-level CLI verbs to flat verbs — `workflow commit-guard-start|stage|check`, `agent dogfood-gate|dogfood-validate-report`, `history anatomy-<op>`, `task batch-plan-children` (54133745c)
+  <!-- src: apps/cli/src/commands/workflow/commit-guard.ts:44, apps/cli/src/commands/agent/dogfood.ts:28, apps/cli/src/commands/history/anatomy.ts:30, apps/cli/src/commands/task/batch-plan.ts:52 · confidence: HIGH -->
+
+### Changed
+- finish the two-level CLI conformance pass — the depth guard, help/docs rewording and the ADR-051 amendment (45be3fb70)
+  <!-- src: apps/cli/tests/cli-depth-guard.test.ts:33, docs/00_ADR.md:511 · confidence: HIGH -->
+- drop the removed nested groups from the help verb tables (7a172e857)
+  <!-- src: docs/help/cmd_workflow.md:26, docs/help/cmd_agent.md:19, docs/help/cmd_history.md:16 · confidence: HIGH -->
+- reword the stale nested-verb references and record the depth-1 alias shape in ADR-051 (13595ecd7)
+  <!-- src: docs/00_ADR.md:522 · confidence: HIGH -->
+- add the A35 CLI two-level surface conformance feature and task 1290 (9cd0790fa)
+- record 1290's solution and scope the 1291 shim-removal follow-up (01bd868af)
+- record the 1290 review (PASS) (7ece5600c)
+- close 1290 as done with corrected evidence anchors (9395d2dcc)
+- upgrade project dependencies (05af2fcf7)
+  <!-- src: bun.lock · confidence: MEDIUM -->
+
+### Removed
+- the one-release nested-verb deprecation shims — the flat spellings are the only public surface (67390886c)
+  <!-- src: apps/cli/src/workflow-transport-argv.ts:9, docs/00_ADR.md:522 · confidence: HIGH -->
+
+BREAKING CHANGE: the nested `spur workflow commit-guard <start|stage|check>`, `spur agent dogfood <gate|validate-report>`, `spur history anatomy <op>` and `spur task batch-plan task-children` spellings no longer exist. Use `commit-guard-start|stage|check`, `dogfood-gate|dogfood-validate-report`, `anatomy-<op>` and `batch-plan-children`.
+
+### Other
+- move the remaining callers off the removed nested verbs in the workflow-transport and dogfood pipeline-detect tests (316e96480)
+  <!-- src: apps/cli/tests/workflow-transport.test.ts:37, packages/app/tests/services/dogfood/pipeline-detect.test.ts:256 · confidence: HIGH -->
+
 ## [0.4.22] - 2026-11-03
 
 _Claim bullets carry one source anchor and the level that anchor supports — `HIGH`: every anchor is a
