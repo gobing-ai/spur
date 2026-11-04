@@ -1,15 +1,17 @@
 ---
 schema_version: 1
 name: Flatten CLI command-depth breaches to spur <noun> <verb>
-status: wip
+status: done
 template: standard
 created_at: 2026-11-04T05:13:54.386Z
-updated_at: "2026-11-04T16:25:38.650Z"
+updated_at: "2026-11-04T16:42:00.370Z"
 feature_id: A35
 
 ac_altitude: task-local
 ac_numbering: task-local
 priority: P2
+done_forced: "false"
+done_reason: unforced close; PASS artifact at .spur/memory/evidence/1290-verdict.json
 ---
 
 ## 1290. Flatten CLI command-depth breaches to spur <noun> <verb>
@@ -40,14 +42,14 @@ Out of scope (reviewed, compliant):
 
 ### Requirements
 
-- [ ] R1. Flatten every breach mechanically as `<noun> <group> <sub>` → `<noun> <group>-<sub>` (and `<verb> <mode>` → `<verb>-<mode>` for the split mode), with unchanged flags, arguments, exit codes and JSON output: B1 → `workflow commit-guard-start|commit-guard-stage|commit-guard-check`; B2 → `agent dogfood-gate|dogfood-validate-report`; B3 → `history anatomy-digest|anatomy-check|anatomy-paths|anatomy-assert-clean|anatomy-probe|anatomy-stamp|anatomy-refresh|anatomy-publish`; B5 → `task batch-plan <waves|order>` plus new `task batch-plan-children`.
-- [ ] R2. Delete the hidden deprecated `spur builder pr` dispatcher (B4) and its fixture/doc references; the flat `pr-check|pr-status|pr-open|pr-review` verbs remain the only PR surface.
-- [ ] R3. Remove the B1/B2/B3/B5 old forms outright (BREAKING, no deprecation shims, operator 2026-11-03): each old spelling exits nonzero with no stdout, and no follow-up shim-removal task is filed.
-- [ ] R4. B1's new verbs stay boot-free: `WORKFLOW_TRANSPORT_VERBS` (`apps/cli/src/workflow-transport-argv.ts:8`) and the early dispatch serve the new verbs; the bare `commit-guard` group is no longer a transport verb.
-- [ ] R5. Add a command-depth guard test that walks `buildProgram()` and fails on any command, hidden or visible, at depth ≥ 3 (no allowlist).
-- [ ] R6. Migrate every caller to the new verbs: bundled workflow YAML (`config/workflows/history-anatomy.yaml`), app-layer invocations (`packages/app/src/workflow/actions/command-gate.ts`, `packages/app/src/services/history-anatomy*.ts`, `packages/app/src/workflow/batch-plan.ts`), rules (`config/rules/**`), and test fixtures/parity cases; regenerate `apps/cli/config/` via `build:bundle`.
-- [ ] R7. Update agent-facing surfaces: `plugins/sp/skills/spur-cli/references/{workflows,agent,history,builder,tasks}.md`, `plugins/sp/skills/spur-dev/references/execution-{batch,batch-report,worktree-setup,worktree-landing}.md`, `plugins/sp/skills/dogfood-testing/{SKILL.md,references/report-template.md}`, `plugins/sp/skills/history-anatomy/references/modes.md`, `plugins/sp/commands/dev-runall.md`, and their plugin parity tests.
-- [ ] R8. Update docs: `docs/help/cmd_{workflow,agent,history,builder,task}.md` and `docs/help/spur-cli-matrix.md`; affected `docs/design/*` satellites (workflow-execution-foundation, environment-improvement-lens, history-cli-contracts, workflow-consolidation, workflow-execution-economy, builder-branches-and-pr-review, cli-contracts); a dated consent row in `docs/design/harness-surface-governance.md`; and an ADR-051 amendment that marks the grandfathered list migrated, drops the stale `dogfood contract`, and records `self exec`'s named operand and the top-level `self` aliases as allowed shapes.
+- [x] R1. Flatten every breach mechanically as `<noun> <group> <sub>` → `<noun> <group>-<sub>` (and `<verb> <mode>` → `<verb>-<mode>` for the split mode), with unchanged flags, arguments, exit codes and JSON output: B1 → `workflow commit-guard-start|commit-guard-stage|commit-guard-check`; B2 → `agent dogfood-gate|dogfood-validate-report`; B3 → `history anatomy-digest|anatomy-check|anatomy-paths|anatomy-assert-clean|anatomy-probe|anatomy-stamp|anatomy-refresh|anatomy-publish`; B5 → `task batch-plan <waves|order>` plus new `task batch-plan-children`.
+- [x] R2. Delete the hidden deprecated `spur builder pr` dispatcher (B4) and its fixture/doc references; the flat `pr-check|pr-status|pr-open|pr-review` verbs remain the only PR surface.
+- [x] R3. Remove the B1/B2/B3/B5 old forms outright (BREAKING, no deprecation shims, operator 2026-11-03): each old spelling exits nonzero with no stdout, and no follow-up shim-removal task is filed.
+- [x] R4. B1's new verbs stay boot-free: `WORKFLOW_TRANSPORT_VERBS` (`apps/cli/src/workflow-transport-argv.ts:8`) and the early dispatch serve the new verbs; the bare `commit-guard` group is no longer a transport verb.
+- [x] R5. Add a command-depth guard test that walks `buildProgram()` and fails on any command, hidden or visible, at depth ≥ 3 (no allowlist).
+- [x] R6. Migrate every caller to the new verbs: bundled workflow YAML (`config/workflows/history-anatomy.yaml`), app-layer invocations (`packages/app/src/workflow/actions/command-gate.ts`, `packages/app/src/services/history-anatomy*.ts`, `packages/app/src/workflow/batch-plan.ts`), rules (`config/rules/**`), and test fixtures/parity cases; regenerate `apps/cli/config/` via `build:bundle`.
+- [x] R7. Update agent-facing surfaces: `plugins/sp/skills/spur-cli/references/{workflows,agent,history,builder,tasks}.md`, `plugins/sp/skills/spur-dev/references/execution-{batch,batch-report,worktree-setup,worktree-landing}.md`, `plugins/sp/skills/dogfood-testing/{SKILL.md,references/report-template.md}`, `plugins/sp/skills/history-anatomy/references/modes.md`, `plugins/sp/commands/dev-runall.md`, and their plugin parity tests.
+- [x] R8. Update docs: `docs/help/cmd_{workflow,agent,history,builder,task}.md` and `docs/help/spur-cli-matrix.md`; affected `docs/design/*` satellites (workflow-execution-foundation, environment-improvement-lens, history-cli-contracts, workflow-consolidation, workflow-execution-economy, builder-branches-and-pr-review, cli-contracts); a dated consent row in `docs/design/harness-surface-governance.md`; and an ADR-051 amendment that marks the grandfathered list migrated, drops the stale `dogfood contract`, and records `self exec`'s named operand and the top-level `self` aliases as allowed shapes.
 
 ### Acceptance Criteria
 
@@ -135,13 +137,13 @@ Delivered in `54133745c` (core flattening), `45be3fb70` (guard, docs, ADR, alias
 - `agent dogfood <gate|validate-report>` → `agent dogfood-gate` / `agent dogfood-validate-report` registered directly (`apps/cli/src/commands/agent/dogfood.ts:28`).
 - `workflow commit-guard <start|stage|check>` → `workflow commit-guard-*` (`apps/cli/src/commands/workflow/commit-guard.ts:44`); bare `commit-guard` dropped from `WORKFLOW_TRANSPORT_VERBS` (`apps/cli/src/workflow-transport-argv.ts:9`).
 - `history anatomy <op>` → `history anatomy-<op>` (8 verbs, `apps/cli/src/commands/history/anatomy.ts`); the positional group is gone.
-- `task batch-plan task-children` → `task batch-plan-children`; `batch-plan` now rejects any mode but `waves|order` with its usage line, exit 2 (`apps/cli/src/commands/task/batch-plan.ts:40`).
+- `task batch-plan task-children` → `task batch-plan-children`; `batch-plan` now rejects any mode but `waves|order` with its usage line, exit 2 (`apps/cli/src/commands/task/batch-plan.ts:39-52`).
 - `workflow cost` given a `.summary()` (`apps/cli/src/commands/workflow/cost.ts:34`) so the help parser stops emitting bogus verbs.
 - Kept by decision: hidden top-level `init|maintain|migrate|serve|status` (back-compat aliases), `self exec <action>` and `task wrapup <op>` positional args (not commands).
 
 **B4 builder pr alias** — hidden `builder pr <op>` removed; `registerBuilderPrCommands` → `registerBuilderPrCommand` (`apps/cli/src/commands/builder/pr.ts:21`, `apps/cli/src/commands/builder.ts:173`). The app-layer spine help/doc comments describe the internal op spine, not a CLI group (`packages/app/src/services/pr-review/index.ts:203`).
 
-**R5 regression guard** — `apps/cli/tests/cli-depth-guard.test.ts:33` walks `buildProgram()` (incl. `self`) and fails on any command, hidden or visible, at depth ≥3; no allowlist. `apps/cli/tests/help-doc-parity.test.ts` back to the plain walk (no hidden filters).
+**R5 regression guard** — `apps/cli/tests/cli-depth-guard.test.ts:7-9` walks `buildProgram()` (incl. `self`) and fails on any command, hidden or visible, at depth ≥3; no allowlist. `apps/cli/tests/help-doc-parity.test.ts` back to the plain walk (no hidden filters).
 
 **Removal tests (R3)** — `apps/cli/tests/commands/agent/dogfood.test.ts:96`, `apps/cli/tests/commands/workflow/commit-guard.test.ts:97` (also asserts no tree-start snapshot), `apps/cli/tests/commands/history/anatomy.test.ts:35`, `apps/cli/tests/commands/task/batch-plan.test.ts:51`; transport argv expectations in `apps/cli/tests/workflow-transport-argv.test.ts`.
 
@@ -151,7 +153,29 @@ Frozen fixture `apps/cli/tests/fixtures/script-absorption-pr9/workflows/pr-revie
 
 ### Testing
 
-<!-- Filled during verification: commands run, outcomes, coverage claim or N/A. -->
+**Pipeline verify results**
+
+- Verdict: PASS (from verdict artifact)
+
+| Requirement | Status | Evidence |
+|-------------|--------|----------|
+| R1 | MET | `apps/cli/src/commands/workflow/commit-guard.ts:43-80`, `apps/cli/src/commands/agent/dogfood.ts:26-64`, `apps/cli/src/commands/history/anatomy.ts:49-57`, `apps/cli/src/commands/task/batch-plan.ts:25-63`; focused suite 48 pass / 0 fail this run |
+| R2 | MET | `apps/cli/tests/commands/builder/pr.test.ts:53-56` asserts unknown command 'pr'; probe exit 1 |
+| R3 | MET | `apps/cli/tests/commands/workflow/commit-guard.test.ts:97-107`, `apps/cli/tests/commands/agent/dogfood.test.ts:96-100`, `apps/cli/tests/commands/history/anatomy.test.ts:35-39`, `apps/cli/tests/commands/task/batch-plan.test.ts:50-58`; former task 1291 deleted |
+| R4 | MET | `apps/cli/src/workflow-transport-argv.ts:8-14`; `apps/cli/tests/workflow-transport-argv.test.ts:17-26` |
+| R5 | MET | `apps/cli/tests/cli-depth-guard.test.ts:17-35` (hidden included, no allowlist) |
+| R6 | MET | `config/workflows/history-anatomy.yaml:115`; `packages/app/src/workflow/actions/command-gate.ts:18`; bundled `apps/cli/config/workflows/history-anatomy.yaml` regenerated |
+| R7 | MET | `plugins/sp/commands/dev-runall.md:105`, `plugins/sp/skills/spur-dev/references/execution-batch.md:314`, `plugins/sp/skills/dogfood-testing/SKILL.md:85`, `plugins/sp/skills/spur-cli/references/tasks.md:52-53` |
+| R8 | MET | `docs/00_ADR.md:517-525`, `docs/design/harness-surface-governance.md:226`, `docs/help/cmd_agent.md:19`, `docs/help/cmd_history.md:16`, `docs/help/cmd_task.md:21-22`, `docs/help/spur-cli-matrix.md:139` |
+
+| Acceptance Criteria | Status | Evidence Type | Evidence |
+|---------------------|--------|---------------|----------|
+| AC1 — no public command sits below a verb (req: R1, R5) | MET | test | `apps/cli/tests/cli-depth-guard.test.ts:33-35` passes this run |
+| AC2 — flattened verbs keep their contract (req: R1, R4) | MET | test | `apps/cli/tests/commands/agent/dogfood.test.ts:88-90`, `apps/cli/tests/commands/history/anatomy.test.ts:27-29`, `apps/cli/tests/commands/task/batch-plan.test.ts:40-47`, `apps/cli/tests/workflow-transport-argv.test.ts:17-23`; 48 pass / 0 fail |
+| AC3 — old forms are removed (req: R3) | MET | test | removal tests above, plus a probe of the four old forms: all nonzero, empty stdout under `--no-logo`, no tree-start snapshot written |
+| AC4 — builder pr is gone (req: R2) | MET | test | `apps/cli/tests/commands/builder/pr.test.ts:53-56`; the remaining `rg "builder pr "` hits are history/plan/report records, removal headings (`docs/help/cmd_builder.md:171`) and the exempted pr9 fixture |
+| AC5 — callers and docs use only the flat verbs (req: R6, R7, R8) | MET | test | The AC5 regex (with `docs/help2` added) finds only the removal record `docs/help/spur-cli-matrix.md:139`, the removal test `apps/cli/tests/commands/task/batch-plan.test.ts:50` and unrelated prose in `packages/app/tests/services/feature-check.test.ts:1790`. help-docs-parity passes 3/0 this run. The operator's `spur self exec check` gate passed at the 316e96480 tree (code-identical to HEAD). The coordinator reports `plugin-smoke` was not re-run this round |
+- Coverage: N/A (verdict-based; verify pipeline does not measure code coverage)
 
 ### Review
 
@@ -175,7 +199,7 @@ Confidence: MEDIUM
 
 | Req | Status | Evidence |
 | --- | --- | --- |
-| R1 | MET | `apps/cli/src/commands/workflow/commit-guard.ts:44-84`, `apps/cli/src/commands/agent/dogfood.ts:28-66`, `apps/cli/src/commands/history/anatomy.ts:49-57`, `apps/cli/src/commands/task/batch-plan.ts:25-63`; focused suite 48 pass / 0 fail this run |
+| R1 | MET | `apps/cli/src/commands/workflow/commit-guard.ts:43-80`, `apps/cli/src/commands/agent/dogfood.ts:26-64`, `apps/cli/src/commands/history/anatomy.ts:49-57`, `apps/cli/src/commands/task/batch-plan.ts:25-63`; focused suite 48 pass / 0 fail this run |
 | R2 | MET | `apps/cli/tests/commands/builder/pr.test.ts:53-56` asserts unknown command 'pr'; probe exit 1 |
 | R3 | MET | `apps/cli/tests/commands/workflow/commit-guard.test.ts:97-107`, `apps/cli/tests/commands/agent/dogfood.test.ts:96-100`, `apps/cli/tests/commands/history/anatomy.test.ts:35-39`, `apps/cli/tests/commands/task/batch-plan.test.ts:50-58`; former task 1291 deleted |
 | R4 | MET | `apps/cli/src/workflow-transport-argv.ts:8-14`; `apps/cli/tests/workflow-transport-argv.test.ts:17-26` |
@@ -206,4 +230,6 @@ Verdict: PASS
 ### History
 
 - 2026-11-04T06:21:27.716Z backlog → wip (system)
+- 2026-11-04T16:40:08.011Z wip → testing (system)
+- 2026-11-04T16:42:00.357Z testing → done (system)
 
