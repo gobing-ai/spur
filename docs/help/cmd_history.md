@@ -13,7 +13,7 @@
 | `report` | Render a previously-generated artifact as a spend + forensic report (pure renderer — never opens the DB) |
 | `daily` | Run-once daily pipeline: import-all → analyze → write artifact → prune reports older than 90 days |
 | `reset` | Destructively wipe every history table (requires `--yes`); task corpus and run provenance are untouched |
-| `anatomy <op>` | history-anatomy report cache ops (digest, check, paths, assert-clean, probe, stamp, refresh, publish) behind the `history-anatomy` workflow |
+| `anatomy-<op>` | history-anatomy report cache ops, one verb each (`anatomy-digest`, `-check`, `-paths`, `-assert-clean`, `-probe`, `-stamp`, `-refresh`, `-publish`) behind the `history-anatomy` workflow |
 | `timeline` | Per-prompt work/wait time and tokens from the host transcript (JSON) for `sp:session-review` |
 | `summary` | Daily summary report: tokens (ccusage), git activity, history health, annotations |
 

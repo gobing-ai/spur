@@ -12,7 +12,7 @@ a local SQLite corpus you can query for spend, cache efficiency, and per-task fo
 | `reset` | Destructively wipe every history table (requires `--yes`) |
 | `report` | Render a previously generated artifact as a spend + forensic report |
 | `daily` | Run-once pipeline: import-all → analyze → write artifact → prune old reports |
-| `anatomy <op>` | history-anatomy cache ops (digest, check, paths, assert-clean, probe, stamp, refresh, publish) |
+| `anatomy-<op>` | history-anatomy cache ops, one verb each (`anatomy-digest`, `-check`, `-paths`, `-assert-clean`, `-probe`, `-stamp`, `-refresh`, `-publish`) |
 | `timeline` | Per-prompt work/wait time and tokens from the host transcript (JSON) |
 | `summary` | Daily summary report: tokens, git activity, history health, annotations |
 

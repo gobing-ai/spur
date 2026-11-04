@@ -18,7 +18,8 @@
 | `refresh` | Re-scan the task corpus and report counts (`kanban.md` retired — A17 cutover) |
 | `refresh-roster <wbs>` | Regenerate a parent's sub-task roster block inside its `## Plan` |
 | `batch-create` | Create many tasks from validated JSON (all-or-nothing) |
-| `batch-plan <mode>` | Project a task batch: visible plan waves, dependency order, or a task row's phase digits |
+| `batch-plan <mode>` | Project a task batch: visible plan waves or dependency order |
+| `batch-plan-children` | Project one task row's phase digits from the visible batch plan |
 | `preflight [wbs]` | Batch preflight for one task: TABLE A STOP check, quick readiness, recovery hint |
 | `wrapup <op>` | Run one deterministic wrapup-pipeline step (resolve, metrics, doc-sync guards, drift probe) |
 | `record <wbs>` | Write Testing/Review from verify verdict; optional Solution backfill + status move |

@@ -16,7 +16,7 @@
 | `report` | Report a fleet member lifecycle state (`working`/`idle`/`blocked`) from a host hook |
 | `join` / `leave` | Join or leave the fleet as a guest occupant (a live session that pulls its own work) |
 | `doctor [agent]` | Check agent readiness (usable, authenticated, version) |
-| `dogfood <gate\|validate-report>` | Dogfood-testing gates: pipeline-driving refusal and report validation |
+| `dogfood-gate` / `dogfood-validate-report` | Dogfood-testing gates: pipeline-driving refusal and report validation |
 | `trace <runId>` | Run lineage (workflow → agent runs), optionally followed to completion |
 | `wait [specId]` | Identity-pinned wait for an occupant run to reach a lifecycle state, or (`--inbox`) for a guest's queued work |
 | `loop` | Supervisor-internal self-draining loop for an agent spec (hidden from `--help`) |

@@ -16,7 +16,8 @@ status transitions, frontmatter fields, and section edits — never mutate a tas
 | `refresh` | Re-scan the task corpus and report counts |
 | `refresh-roster <wbs>` | Regenerate a parent's sub-task roster block |
 | `batch-create` | Create many tasks from a validated JSON file (all-or-nothing) |
-| `batch-plan <mode>` | Project a task batch: plan waves, dependency order, or phase digits |
+| `batch-plan <mode>` | Project a task batch: plan waves or dependency order |
+| `batch-plan-children` | Project one task row's phase digits from the visible batch plan |
 | `preflight [wbs]` | Read-only batch admission decision for one task |
 | `wrapup <op>` | Run one deterministic wrapup-pipeline step |
 | `record <wbs>` | Record pipeline results into the task file |

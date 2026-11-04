@@ -13,7 +13,7 @@ model call in Spur (skills, workflow `agent.run` actions, team-mode runs) routes
 | `report` | Report a fleet member lifecycle state (`working`/`idle`/`blocked`) from a host hook |
 | `join` / `leave` | Join or leave the fleet as a guest occupant (a live session that pulls its own work) |
 | `doctor [agent]` | Check agent readiness |
-| `dogfood <gate\|validate-report>` | Dogfood-testing gates (pipeline-driving refusal, report validation) |
+| `dogfood-gate` / `dogfood-validate-report` | Dogfood-testing gates (pipeline-driving refusal, report validation) |
 | `status` | Show agent specs with live process status and member session (requires `spur self serve`) |
 | `usage` | Run-once provider usage capture that refreshes quota-owned executor availability |
 | `wait [specId]` | Wait for a pinned occupant run to reach a lifecycle state (`--inbox <id>` waits for a guest's queued work instead) |
@@ -180,7 +180,7 @@ spur agent stop <spec-id> [--server <url>] [--json]
 
 Start or stop a supervised agent process through the running server.
 
-## spur agent dogfood
+## spur agent dogfood-gate | dogfood-validate-report
 
 ```bash
 spur agent dogfood-gate --testee "<testee>" [--max-retry-present] [--steps "s1||s2"] [--json]
