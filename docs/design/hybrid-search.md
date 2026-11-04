@@ -3,7 +3,7 @@ kind: design
 title: Local-first hybrid search — exact (rg) and semantic (zg) over docs and code
 status: proposed
 created_at: 2026-11-03
-updated_at: 2026-11-03
+updated_at: 2026-11-04
 related: [docs/features/A34_local-first-hybrid-search-exact-rg-and-semantic-zg-over-docs-and-code.md, docs/00_ADR.md#adr-147]
 tags: [search, external-dependency, zg, rg, board, cli]
 ---
@@ -15,7 +15,7 @@ tags: [search, external-dependency, zg, rg, board, cli]
 Feature A34 (under A3, the `spur self` capability family). Downstream projects have no Spur-native
 way to search docs and code: agents call `rg` ad hoc, the Board has per-module filters only, and
 nothing offers fuzzy/semantic retrieval. The operator installs `zg` (`@zvec/zvec-grep`) and builds
-the index (`zg index --embedding local/potion-code-16m-v2`); Spur consumes that and does not own
+the index (`zg --index --embedding local/potion-code-16m-v2`); Spur consumes that and does not own
 vector search. Status: **proposed**.
 
 In scope: zg/rg detection, one app search service with `exact` / `fuzzy` / `auto` modes, a zg
@@ -27,44 +27,44 @@ index formats, index creation, bundling zg, remote embedding providers, the Clou
 
 - `rg` and `sg` are external binaries Spur already relies on (through the `ts-rule-engine`
   evaluators). They are resolved on PATH and never bundled. zg joins that class as **optional**.
-- **zg 0.2.2 CLI, observed against this repo** (these facts bind the adapter):
-  - Query form: `zg query --hybrid <q> --limit <n> [-g <glob>]…` produces exactly one primary
-    group. `--fts`, `--vector` and `--hybrid` take a **value**. A bare `--fts` swallows the next
-    token and creates extra groups, so the adapter always uses the explicit `--hybrid <q>` form.
-    That form also lets a query begin with `-`. `--limit` applies per group (default 7).
-  - **Transport:** the default `--mode auto` takes about 0.28 s when a zg server is running and
-    falls back to direct (about 1.3 s). Spur passes no `--mode`.
-  - **Output** (`--json` was removed). The output is agent markdown with this grammar:
+- **zg 0.3.0 CLI, observed against this repo** (these facts bind the adapter; 0.2.x is unsupported):
+  - 0.3.0 dropped subcommands. Management verbs are flags (`--index`, `--status`, `--version`),
+    and bare words, including `query`, `status`, `index` and `version`, are literal search text.
+  - Query form: `zg --hybrid <q> --limit <n> --preview short [-g <glob>]…` produces one group.
+    `--fts`, `--vector` and `--hybrid` take a **value** and are repeatable, so the adapter always
+    uses one explicit `--hybrid <q>`. That form also lets a query begin with `-` and bypasses
+    zg's automatic path lookup for path-shaped queries. `--limit` applies per group (default 7).
+  - **Transport:** the default `--mode auto` uses a running zg server or falls back to direct.
+    Spur passes no `--mode`.
+  - **Output.** There is no `--json`. Spur pins `--preview short` (the default) because
+    `--preview detail` adds outlines and file grouping. Piped output is uncoloured (`--color auto`).
+    The grammar is:
 
     ```text
-    query groups (1):
-    Q1 [primary]: <query>
-    hits: <N>
-
-    #1 matchedBy=fts+vector packages/app/src/services/search.ts:12-40
-    heading: <text>          (optional; docs)
-    heading_level: <n>       (optional)
-    scope: <text>            (optional; code)
-    symbol: <text>           (optional; code)
-    12	<source line>
-    13	<source line>
-    ...                      (optional elision marker)
+    #1 packages/app/tests/services/agent-quota-updates.test.ts:537-537
+    symbol: [function] alpha     (optional `key: value` metadata; `heading:` on docs)
+      537: <source line>
+      …                          (U+2026; marks truncated source)
     ```
 
-    - A hit header is `#<rank> matchedBy=(fts|vector|fts+vector) <path>:<start>(-<end>)?`. A
-      single-line hit has no `-<end>`.
-    - Metadata lines are `key: value` for the four keys above. Source lines are
-      `<lineNo>\t<text>`, and a source block may end with a literal `...`.
-    - There is **no** `source:` label and **no** freshness/results trailer.
-    - Vector retrieval always returns hits, even for nonsense queries. Relevance is zg's concern,
-      and Spur does not threshold.
-  - **Missing index:** the query exits **1** with stderr containing `[INDEX_MISSING]`.
-  - **`zg status`:** always exits 0. Its first line starts with a glyph:
-    - `!` means "Workspace index needs an update" (stale).
-    - `?` means "Workspace index is not configured" (missing).
-    - Any other glyph is treated as ready.
-    - Other lines include `Embedding local/potion-code-16m-v2` and `Storage .zvec-grep/index.zvec`.
-  - `zg version` prints the version string, which goes into `ZgOutputError`.
+    - A hit header is `#<rank> <path>:<start>(-<end>)?`. Ranks run consecutively from 1.
+    - Metadata lines are unindented `key: value`. Spur keeps `heading` and `symbol` raw.
+      Source lines are indented `<lineNo>: <text>`.
+    - A miss prints `No matches.`. Multi-query output adds `-- query i/n: text --` separators;
+      Spur sends one query and only tolerates them.
+    - Vector retrieval returns hits even for nonsense queries. Relevance is zg's concern, and
+      Spur does not threshold.
+  - **Missing index:** the query exits **1** with stderr
+    `Error[ZG.ENGINE.NOT_FOUND]: No index found in <dir>`. The adapter also accepts 0.2.x's
+    `[INDEX_MISSING]`.
+  - **`zg --status`** exits 0.
+    - An unindexed tree prints `Coverage    Unavailable (index not configured)`, which means missing.
+    - A ready index prints a `Coverage` bar such as `100%  3,859 / 3,859 files`, followed by
+      `Embedding`, `FTS` and `Storage .zvec-grep/index` lines.
+    - A stale index has not been captured for 0.3.0. The parser keeps 0.2.x's first-glyph rule
+      (`!` stale, `?` missing); any other non-empty output counts as ready.
+  - `zg --version` prints the version string, which goes into `ZgOutputError`. `zg version` is
+    search text, not a subcommand, and may prompt for or build an index.
 - zg also ships an MCP server (`zg server`) with structured results. It is a daemon with its own
   lifecycle, and Spur does not manage third-party daemons.
 - Apps are thin transports (ADR-021): logic lives in `packages/app`, wire shapes live in
@@ -81,8 +81,8 @@ index formats, index creation, bundling zg, remote embedding providers, the Clou
 spur self search ─┐
 Board /search ────┼─► SearchService (packages/app/src/services/search.ts)
 spur init ────────┘        ├─ exact  → rg --json [-F] … (stable JSON events)
-                           ├─ fuzzy  → ZgAdapter (search-zg.ts) → zg query --hybrid <q> --limit n -g …
-                           └─ status → Bun.which('rg'|'zg') + `zg version` + `zg status`
+                           ├─ fuzzy  → ZgAdapter (search-zg.ts) → zg --hybrid <q> --limit n -g …
+                           └─ status → Bun.which('rg'|'zg') + `zg --version` + `zg --status`
 ```
 
 - **SearchService** exposes `searchProject(req, deps) → SearchResponse` and
@@ -93,16 +93,16 @@ spur init ────────┘        ├─ exact  → rg --json [-F] �
   - zg query: 15 s
   - zg status / version: 5 s
 
-  It never reads or writes `.zvec-grep/` and never runs `zg index`.
+  It never reads or writes `.zvec-grep/` and never runs `zg --index`.
 - **ZgAdapter** (`packages/app/src/services/search-zg.ts`) is the only code that knows zg's argv
   and grammar. It exports `buildZgArgs(req)` and `parseZgQuery(stdout, zgVersion) → SearchHit[]`.
-  - A non-empty stdout without a `query groups (` header throws `ZgOutputError`. So does a hit
-    line that fails the header regex, or a header count that disagrees with the parsed hits.
-    The error carries `{ zgVersion, sample }`, where sample is the first 400 chars.
-  - `hits: 0` gives `[]`.
-  - Golden fixtures captured from installed zg 0.2.2 live under
-    `packages/app/tests/fixtures/zg/`. A zg upgrade that changes the grammar fails these fixtures
-    instead of failing silently in production.
+  - Any line that fits no grammar rule throws `ZgOutputError`, and so do out-of-sequence ranks.
+    0.2.x output is therefore rejected rather than misparsed. The error carries
+    `{ zgVersion, sample }`, where sample is the first 400 chars.
+  - Empty output and `No matches.` give `[]`.
+  - Golden fixtures captured from installed zg 0.3.0 live under `packages/app/tests/fixtures/zg/`.
+    A zg upgrade that changes the grammar fails these fixtures instead of failing silently in
+    production.
 - **Exact route:** `rg --json --max-count <limit> [-F] [-g …] -- <q> .`.
   - Parse `type:"match"` events into `path` (from `data.path.text`), `line_number`, and a snippet
     taken from `data.lines.text` trimmed to 300 chars.
@@ -188,8 +188,8 @@ export const searchContract = {
 **Hints** are exact strings, printed and never executed (R5):
 
 - zg absent: `bun add -g @zvec/zvec-grep`
-- index missing: `zg index --embedding local/potion-code-16m-v2`
-- stale: `zg index` (incremental refresh; operator's choice)
+- index missing: `zg --index --embedding local/potion-code-16m-v2`
+- stale: `zg --index` (incremental refresh; operator's choice)
 - rg absent: `brew install ripgrep`
 
 **Skip reasons** form a closed set: `zg-not-installed`, `zg-index-missing`, `zg-timeout`,
@@ -238,7 +238,7 @@ spur self search <query> [--mode exact|fuzzy|auto] [--scope docs|code|all]
 - It calls `searchStatus(cwd)` and prints one readiness line. The `--json` payload gains
   `search: SearchStatus`.
 - A probe failure or timeout yields `index: 'unknown'` and never fails init.
-- It never installs zg, runs `zg index`, or downloads a model. Reasons:
+- It never installs zg, runs `zg --index`, or downloads a model. Reasons:
   - zg needs Node ≥ 22 and about 100 MB of runtime deps.
   - Its model cache and per-project index (about 300 MB for this repo) are operator-owned cost.
   - The standalone `install.sh` path has no package manager.
@@ -265,7 +265,7 @@ spur self search <query> [--mode exact|fuzzy|auto] [--scope docs|code|all]
   overrides.
 - **No score fusion:** zg already ranks. Mixing rg line hits with zg chunk ranks would invent a
   scoring model Spur does not want to own, so grouped results keep each route's own rank.
-- **Index freshness** is surfaced from `zg status` as `index: 'stale'`. Spur does not refresh;
-  `zg index` / `zg query --refresh` stay the operator's choice.
+- **Index freshness** is surfaced from `zg --status` as `index: 'stale'`. Spur does not refresh;
+  `zg --index` stays the operator's choice.
 - **Deferred:** `spur self status` does not print `SearchStatus`; `spur self search --status`
   owns it. Revisit if operators ask for it.

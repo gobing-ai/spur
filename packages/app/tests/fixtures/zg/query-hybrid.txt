@@ -1,21 +1,11 @@
-query groups (1):
-Q1 [primary]: how is a paused workflow resumed
-hits: 3
+#1 packages/app/tests/services/agent-quota-updates.test.ts:537-537
+symbol: [function] alpha
+  537: alpha = cfg.agent.executors.find((entry) => entry.name === 'alpha')
 
-#1 matchedBy=fts+vector docs/tasks/0063_W3_spur_workflow_continue_HITL_resume.md:46-58
-heading: Solution
-heading_level: 3
-scope: 0063. "W3: spur workflow continue — HITL resume"
-46	### Solution
+#2 apps/server/tests/modules/health.test.ts:605-605
+symbol: [function] alpha
+  605: alpha = fleetBody.executors.find((e) => e.name === 'alpha')
 
-#2 matchedBy=fts+vector plugins/sp/skills/spur-dev/references/cross-cutting.md:724-812
-heading: Session Checkpoint Convention
-heading_level: 2
-scope: Cross-cutting Rules
-771	("checkpoint: <workflow> done ...") that violated the canonical schema; those writers were removed
-
-#3 matchedBy=fts+vector docs/tasks/0063_W3_spur_workflow_continue_HITL_resume.md:109-129
-heading: Testing
-heading_level: 3
-scope: 0063. "W3: spur workflow continue — HITL resume"
-109	### Testing
+#3 apps/web/tests/modules/discover.test.ts:163-163
+symbol: [value] alpha
+  163: alpha = shape({ id: 'alpha', route: 'alpha' })

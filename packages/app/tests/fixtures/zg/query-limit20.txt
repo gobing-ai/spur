@@ -1,0 +1,105 @@
+#1 packages/app/tests/services/agent-quota-updates.test.ts:537-537
+symbol: [function] alpha
+  537: alpha = cfg.agent.executors.find((entry) => entry.name === 'alpha')
+
+#2 apps/server/tests/modules/health.test.ts:605-605
+symbol: [function] alpha
+  605: alpha = fleetBody.executors.find((e) => e.name === 'alpha')
+
+#3 apps/web/tests/modules/discover.test.ts:163-163
+symbol: [value] alpha
+  163: alpha = shape({ id: 'alpha', route: 'alpha' })
+
+#4 packages/app/tests/services/agent-quota-updates.test.ts:472-472
+symbol: [function] alpha
+  472: alpha = cfg.agent.executors.find((entry) => entry.name === 'alpha')
+
+#5 packages/config/tests/executor-update.test.ts:195-195
+symbol: [value] path
+  195: path = writeProject('agent:\n  executors:\n    - name: alpha\n    - name: alpha\n')
+
+#6 packages/app/tests/services/project-registry.test.ts:491-491
+symbol: [value] alphaDir
+  491: alphaDir = join(tempDir, 'alpha')
+
+#7 apps/web/tests/modules/discover.test.ts:214-214
+symbol: [value] alpha
+  214: alpha = shape({ id: 'alpha', route: 'alpha' })
+
+#8 packages/app/tests/services/agent-service.test.ts:4725-4725
+symbol: [value] project
+  4725: project = join(root, 'alpha')
+
+#9 packages/app/tests/services/agent-quota-updates.test.ts:599-599
+symbol: [function] alpha
+  599: alpha = cfg.agent.executors.find((entry) => entry.name === 'alpha')
+
+#10 packages/app/tests/services/supervisor-service.test.ts:246-246
+symbol: [value] entry
+  246: entry = svc.get('alpha')
+
+#11 apps/cli/tests/commands/message/read.test.ts:28-28
+symbol: [value] cwd
+  28: cwd = join(root, 'alpha')
+
+#12 apps/web/tests/lib/process-stream.test.ts:96-96
+symbol: [value] url
+  96: url = streamUrl('alpha-claude')
+
+#13 apps/cli/tests/commands/message/show.test.ts:28-28
+symbol: [value] cwd
+  28: cwd = join(root, 'alpha')
+
+#14 apps/web/tests/modules/observability/system-events-tab.test.ts:359-359
+symbol: [value] url
+  359: url = historyUrl({ actor: 'agent-alpha' })
+
+#15 docs/tasks2/0267_process-watch-list-filters-and-teamid-tagging.md:30-43
+heading: Acceptance Criteria
+heading_level: 3
+scope: 0267. Process watch list filters and teamId tagging
+  30: ### Acceptance Criteria
+  31: ```gherkin
+  32: @core
+  33: Scenario: Process watch list can focus running registry executions
+  34:   Given supervised and exited one-shot executions exist
+  35:   When the operator enables running-only filter
+  36:   Then exited rows are hidden
+  37:
+  38: @edge
+  39: Scenario: Supervised spawns carry teamId when team membership is known
+  …
+
+#16 packages/app/tests/services/task-service.test.ts:2487-2487
+symbol: [value] src
+  2487: src = await writeAc('y2-ok', ['Alpha'])
+
+#17 apps/cli/tests/commands/self/search.test.ts:221-225
+symbol: [value] result
+  221: result = await record(
+  222:             'auto-degraded',
+  223:             'spur self search alpha --json',
+  224:             await search(['alpha', '--json']),
+  225:         )
+
+#18 packages/app/tests/services/agent-usage-producer.test.ts:341-341
+symbol: [value] row
+  341: row = await dao.getUpdate(root, 'alpha')
+
+#19 apps/web/tests/modules/projects/member-terminal-identity-pipeline.tsx:385-385
+symbol: [value] alphaRow
+  385: alphaRow = view.container.querySelector('[data-processes-row="sup:alpha"]') as HTMLElement
+
+#20 apps/cli/tests/commands/workflow-vars-merge.test.ts:23-42
+symbol: [value] VARS_PROBE_YAML
+  23: VARS_PROBE_YAML = `name: vars-merge-probe
+  24: kind: state-machine
+  25: initialState: start
+  26: terminalStates: [done]
+  27: vars:
+  28:   alpha: "DEFAULT_ALPHA"
+  29:   beta: "DEFAULT_BETA"
+  30: states:
+  31:   - id: start
+  32:     onEnter:
+  …

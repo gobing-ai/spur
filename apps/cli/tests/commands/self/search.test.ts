@@ -75,7 +75,7 @@ function fixtureResponse(overrides: Partial<SearchResponse> = {}): SearchRespons
             ],
         },
         skipped: [
-            { route: 'fuzzy', reason: 'zg-index-missing', hint: 'zg index --embedding local/potion-code-16m-v2' },
+            { route: 'fuzzy', reason: 'zg-index-missing', hint: 'zg --index --embedding local/potion-code-16m-v2' },
         ],
         status: { rg: { available: true, version: '14.1.0' }, zg: { available: true, index: 'missing' } },
         ...overrides,
@@ -94,7 +94,7 @@ describe('formatSearchResponse', () => {
             'fuzzy (1)',
             'src/app.ts:10-24  [fuzzy]',
             '    export const alpha = 1;',
-            'skipped fuzzy: zg-index-missing — zg index --embedding local/potion-code-16m-v2',
+            'skipped fuzzy: zg-index-missing — zg --index --embedding local/potion-code-16m-v2',
         ]);
     });
 
@@ -113,7 +113,7 @@ describe('formatSearchResponse', () => {
         expect(formatSearchResponse(response).split('\n')).toEqual([
             'exact (0)',
             'no matches',
-            'skipped fuzzy: zg-index-missing — zg index --embedding local/potion-code-16m-v2',
+            'skipped fuzzy: zg-index-missing — zg --index --embedding local/potion-code-16m-v2',
         ]);
     });
 
@@ -129,9 +129,9 @@ describe('formatSearchStatus', () => {
     test('reports both backends with their index readiness and hint', () => {
         const text = formatSearchStatus({
             rg: { available: true, version: '14.1.0' },
-            zg: { available: true, version: '0.2.2', index: 'missing', hint: 'zg index' },
+            zg: { available: true, version: '0.2.2', index: 'missing', hint: 'zg --index' },
         });
-        expect(text.split('\n')).toEqual(['rg: 14.1.0', 'zg: 0.2.2 index=missing', 'hint: zg index']);
+        expect(text.split('\n')).toEqual(['rg: 14.1.0', 'zg: 0.2.2 index=missing', 'hint: zg --index']);
     });
 
     test('reports absent binaries without inventing versions', () => {

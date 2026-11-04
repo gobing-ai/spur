@@ -29,10 +29,10 @@ export const RG_INSTALL_HINT = 'brew install ripgrep';
 export const ZG_INSTALL_HINT = 'bun add -g @zvec/zvec-grep';
 
 /** Hint printed when no zg index exists — names the command, printed only. */
-export const ZG_INDEX_HINT = 'zg index --embedding local/potion-code-16m-v2';
+export const ZG_INDEX_HINT = 'zg --index --embedding local/potion-code-16m-v2';
 
 /** Hint printed when the zg index is stale — printed, never executed. */
-export const ZG_REFRESH_HINT = 'zg index';
+export const ZG_REFRESH_HINT = 'zg --index';
 
 /** Hard failures: exact search requested but impossible, or a malformed request. */
 export class SearchError extends Error {
@@ -102,10 +102,10 @@ export async function searchStatus(root: string, deps: SearchDeps = defaultSearc
     if (!zgPath) {
         return { rg, zg: { available: false, index: 'unknown', hint: ZG_INSTALL_HINT } };
     }
-    const version = await probeVersion(deps, zgPath, ['version']);
+    const version = await probeVersion(deps, zgPath, ['--version']);
     let index: SearchStatus['zg']['index'] = 'unknown';
     try {
-        const result = await deps.run('zg', ['status'], { cwd: root, timeout: PROBE_TIMEOUT_MS });
+        const result = await deps.run('zg', ['--status'], { cwd: root, timeout: PROBE_TIMEOUT_MS });
         if (result.exitCode === 0) index = parseZgStatus(result.stdout);
     } catch {
         // probe failure stays unknown — status never throws
@@ -296,7 +296,8 @@ async function runFuzzy(
     }
     if (result.timedOut) return { hits: null, skipped: [{ route: 'fuzzy', reason: 'zg-timeout' }] };
     if (result.exitCode !== 0) {
-        if (result.stderr.includes('[INDEX_MISSING]')) {
+        // 0.3.0: `Error[ZG.ENGINE.NOT_FOUND]: No index found in <dir>`; 0.2.x printed `[INDEX_MISSING]`.
+        if (/ZG\.ENGINE\.NOT_FOUND|\[INDEX_MISSING\]/.test(result.stderr)) {
             return { hits: null, skipped: [{ route: 'fuzzy', reason: 'zg-index-missing', hint: ZG_INDEX_HINT }] };
         }
         return { hits: null, skipped: [{ route: 'fuzzy', reason: 'zg-failed' }] };
@@ -306,7 +307,8 @@ async function runFuzzy(
         return { hits: parseZgQuery(result.stdout, status.zg.version ?? 'unknown').slice(0, limit), skipped: [] };
     } catch (error) {
         if (error instanceof ZgOutputError) {
-            const sample = `${error.zgVersion}: ${error.sample}`.slice(0, 300);
+            // Lead with the message: it names the offending line, which the head-of-output sample may not reach.
+            const sample = `${error.zgVersion}: ${error.message} | ${error.sample}`.slice(0, 300);
             return { hits: null, skipped: [{ route: 'fuzzy', reason: 'zg-output-error', hint: sample }] };
         }
         throw error;

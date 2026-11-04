@@ -1,7 +1,7 @@
 import { homedir } from 'node:os';
 import { join, resolve } from 'node:path';
 import type { Command } from '@commander-js/extra-typings';
-import { searchStatus } from '@gobing-ai/spur-app';
+import { searchStatus, ZG_INDEX_HINT, ZG_INSTALL_HINT, ZG_REFRESH_HINT } from '@gobing-ai/spur-app';
 import { misplacedGlobalKeys, SDLC_ACTIONS } from '@gobing-ai/spur-config';
 import {
     BUNDLED_GLOBAL_CONFIG,
@@ -511,9 +511,9 @@ export function registerInitCommand(program: Command, context: CliContext, optio
 
 /** One-line zg readiness for init's human output (hints are printed, never executed). */
 function describeZgReadiness(status: SearchStatus): string {
-    if (!status.zg.available) return `zg not installed (optional) — install: bun add -g @zvec/zvec-grep`;
+    if (!status.zg.available) return `zg not installed (optional) — install: ${ZG_INSTALL_HINT}`;
     if (status.zg.index === 'ready') return 'zg ready';
-    if (status.zg.index === 'stale') return 'zg index stale — run: zg index';
-    if (status.zg.index === 'missing') return 'zg index missing — run: zg index --embedding local/potion-code-16m-v2';
+    if (status.zg.index === 'stale') return `zg index stale — run: ${ZG_REFRESH_HINT}`;
+    if (status.zg.index === 'missing') return `zg index missing — run: ${ZG_INDEX_HINT}`;
     return 'zg status unknown';
 }

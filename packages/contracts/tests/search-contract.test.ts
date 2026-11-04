@@ -38,7 +38,7 @@ describe('searchContract (task 1285)', () => {
             ok: true,
             data: {
                 rg: { available: true, version: 'ripgrep 15.2.0' },
-                zg: { available: true, version: '0.2.2', index: 'stale', hint: 'zg index' },
+                zg: { available: true, version: '0.3.0', index: 'stale', hint: 'zg --index' },
             },
         });
         expect(status.data.zg.index).toBe('stale');

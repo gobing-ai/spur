@@ -56,10 +56,11 @@ function fakeDeps(opts: FakeOpts = {}) {
                 };
             }
             if (bin === 'zg') {
-                if (args[0] === 'version') return { exitCode: 0, stdout: '0.2.2\n', stderr: '', timedOut: false };
-                if (args[0] === 'status')
+                // `zg version` is NOT a subcommand — zg treats it as search text (and may start an index build).
+                if (args[0] === '--version') return { exitCode: 0, stdout: '0.3.0\n', stderr: '', timedOut: false };
+                if (args[0] === '--status')
                     return { exitCode: 0, stdout: opts.statusOut ?? '✓ fresh\n', stderr: '', timedOut: false };
-                if (args[0] === 'query') {
+                if (args[0] === '--hybrid') {
                     if (opts.queryThrow) throw opts.queryThrow;
                     return {
                         exitCode: opts.queryExit ?? 0,
@@ -112,13 +113,15 @@ describe('searchStatus probes (never throws)', () => {
         const { deps } = fakeDeps({ statusOut: '✓ fresh\n' });
         const status = await searchStatus('/repo', deps);
         expect(status.rg).toEqual({ available: true, version: 'ripgrep 15.2.0' });
-        expect(status.zg).toMatchObject({ available: true, version: '0.2.2', index: 'ready' });
+        expect(status.zg).toMatchObject({ available: true, version: '0.3.0', index: 'ready' });
         expect(status.zg.hint).toBeUndefined();
     });
 
     test('missing index → zg hint is the exact index command', async () => {
-        const { deps } = fakeDeps({ statusOut: fx('status-missing.txt') });
+        // Real zg 0.3.0 `--status` output for an unindexed tree (exit 0).
+        const { deps, calls } = fakeDeps({ statusOut: fx('status-missing-0.3.txt') });
         const status = await searchStatus('/repo', deps);
+        expect(calls.some((c) => c.command === 'zg' && c.args[0] === '--status')).toBe(true);
         expect(status.zg.index).toBe('missing');
         expect(status.zg.hint).toBe(ZG_INDEX_HINT);
     });
@@ -290,7 +293,7 @@ describe('exact route (rg --json)', () => {
 
 // ─── Fuzzy route ─────────────────────────────────────────────────────────────
 
-describe('fuzzy route (zg query)', () => {
+describe('fuzzy route (zg --hybrid)', () => {
     test('golden fixture end-to-end: ranked hits with ranges and metadata', async () => {
         const { deps, calls } = fakeDeps({ queryOut: fx('query-hybrid.txt') });
         const res = await searchProject(baseReq({ mode: 'fuzzy', limit: 3 }), '/repo', deps);
@@ -298,15 +301,15 @@ describe('fuzzy route (zg query)', () => {
         expect(res.groups.fuzzy).toHaveLength(3);
         expect(resFuzzy[0]).toMatchObject({
             rank: 1,
-            path: 'docs/tasks/0063_W3_spur_workflow_continue_HITL_resume.md',
-            startLine: 46,
-            endLine: 58,
-            heading: 'Solution',
+            path: 'packages/app/tests/services/agent-quota-updates.test.ts',
+            startLine: 537,
+            endLine: 537,
+            symbol: '[function] alpha',
             matchedBy: ['fuzzy'],
         });
-        const queryCall = calls.find((c) => c.command === 'zg' && c.args[0] === 'query');
+        const queryCall = calls.find((c) => c.command === 'zg' && c.args[0] === '--hybrid');
         if (!queryCall) throw new Error('zg query was not invoked');
-        expect(queryCall.args.slice(0, 5)).toEqual(['query', '--hybrid', 'paused resume', '--limit', '3']);
+        expect(queryCall.args.slice(0, 4)).toEqual(['--hybrid', 'paused resume', '--limit', '3']);
     });
 
     test('timeout → skipped zg-timeout, exit 0, no throw', async () => {
@@ -314,6 +317,16 @@ describe('fuzzy route (zg query)', () => {
         const res = await searchProject(baseReq({ mode: 'fuzzy' }), '/repo', deps);
         expect(res.groups.fuzzy).toBeNull();
         expect(res.skipped).toEqual([{ route: 'fuzzy', reason: 'zg-timeout' }]);
+    });
+
+    test('zg 0.3.0 nonzero exit with ZG.ENGINE.NOT_FOUND stderr → skipped zg-index-missing', async () => {
+        const { deps } = fakeDeps({
+            queryExit: 1,
+            queryStderr:
+                'Error[ZG.ENGINE.NOT_FOUND]: No index found in /repo. Run `zg --index --embedding <model>` to build it, then retry the query.\n',
+        });
+        const res = await searchProject(baseReq({ mode: 'fuzzy' }), '/repo', deps);
+        expect(res.skipped).toEqual([{ route: 'fuzzy', reason: 'zg-index-missing', hint: ZG_INDEX_HINT }]);
     });
 
     test('nonzero exit with [INDEX_MISSING] stderr → skipped zg-index-missing with hint', async () => {
@@ -335,8 +348,16 @@ describe('fuzzy route (zg query)', () => {
         expect(res.groups.fuzzy).toBeNull();
         expect(res.skipped).toHaveLength(1);
         expect(res.skipped[0]?.reason).toBe('zg-output-error');
-        expect(res.skipped[0]?.hint).toContain('0.2.2');
+        expect(res.skipped[0]?.hint).toContain('0.3.0');
         expect(res.skipped[0]?.hint).toContain('search results for');
+    });
+
+    test('zg-output-error hint names the offending line even past the first 300 chars of output', async () => {
+        const good = Array.from({ length: 6 }, (_, i) => [`#${i + 1} docs/x${i}.md:1`, `  1: ${'y'.repeat(60)}`, '']);
+        const queryOut = [...good.flat(), 'UNEXPECTED trailer'].join('\n');
+        const { deps } = fakeDeps({ queryOut });
+        const res = await searchProject(baseReq({ mode: 'fuzzy' }), '/repo', deps);
+        expect(res.skipped[0]?.hint).toContain('UNEXPECTED trailer');
     });
 
     test('zg unavailable → skipped zg-not-installed with install hint (no probe crash)', async () => {
@@ -363,7 +384,7 @@ describe('auto mode grouping and overlap', () => {
     test('zg absent → exact only + skipped fuzzy (R6 / AC6)', async () => {
         const { deps, calls } = fakeDeps({ zgAvailable: false, rgEvents: rgMatch('docs/x.md', 5, 'exact match\n') });
         const res = await searchProject(baseReq({ mode: 'auto' }), '/repo', deps);
-        expect(calls.some((c) => c.command === 'zg' && c.args[0] === 'query')).toBe(false);
+        expect(calls.some((c) => c.command === 'zg' && c.args[0] === '--hybrid')).toBe(false);
         expect(res.groups.exact).toHaveLength(1);
         expect(res.groups.fuzzy).toBeNull();
         expect(res.skipped).toEqual([{ route: 'fuzzy', reason: 'zg-not-installed', hint: ZG_INSTALL_HINT }]);
@@ -375,21 +396,18 @@ describe('auto mode grouping and overlap', () => {
             rgEvents: rgMatch('docs/x.md', 5, 'exact match\n'),
         });
         const res = await searchProject(baseReq({ mode: 'auto' }), '/repo', deps);
-        expect(calls.some((c) => c.command === 'zg' && c.args[0] === 'query')).toBe(false);
+        expect(calls.some((c) => c.command === 'zg' && c.args[0] === '--hybrid')).toBe(false);
         expect(res.groups.exact).toHaveLength(1);
         expect(res.skipped).toEqual([{ route: 'fuzzy', reason: 'zg-index-missing', hint: ZG_INDEX_HINT }]);
     });
 
     test('ready index → both groups run concurrently; overlap marks matchedBy on both hits', async () => {
         const queryOut = [
-            'query groups (1):',
-            'Q1 [primary]: q',
-            'hits: 2',
+            '#1 docs/shared.md:10-20',
+            '  10: fuzzy shared',
             '',
-            '#1 matchedBy=fts+vector docs/shared.md:10-20',
-            '10\tfuzzy shared',
-            '#2 matchedBy=vector docs/only-fuzzy.md:30',
-            '30\tfuzzy only',
+            '#2 docs/only-fuzzy.md:30',
+            '  30: fuzzy only',
         ].join('\n');
         const rgEvents = [
             rgMatch('docs/shared.md', 12, 'exact shared\n'),
@@ -419,7 +437,7 @@ describe('auto mode grouping and overlap', () => {
             rgEvents: rgMatch('a.ts', 1, 'x\n'),
         });
         const res = await searchProject(baseReq({ mode: 'auto' }), '/repo', deps);
-        expect(calls.some((c) => c.command === 'zg' && c.args[0] === 'query')).toBe(true);
+        expect(calls.some((c) => c.command === 'zg' && c.args[0] === '--hybrid')).toBe(true);
         expect(res.status.zg.index).toBe('stale');
         expect(res.groups.fuzzy).toHaveLength(3);
         expect(res.skipped).toEqual([]);

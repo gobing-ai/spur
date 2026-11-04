@@ -1,0 +1,6 @@
+  Coverage    Unavailable (index not configured)
+
+  Embedding   Not configured
+  FTS         Not configured
+
+  Storage     .zvec-grep/index
