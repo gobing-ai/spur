@@ -238,7 +238,7 @@ its detailed contract belongs in the linked owner. It is not precedent for new t
 - **Status:** Accepted · **Date:** 2026-07-02
 - **Decision:** Defer whether to retire or merge the planning pipeline; replace the wrap-up shell status ladder with idempotent `spur feature advance`, sharing transition logic with single-step update.
 - **Why:** The pipeline decision lacks evidence, while lifecycle walking is deterministic CLI behavior.
-- **Detail:** `04 §1`; `apps/cli/src/commands/feature.ts`.
+- **Detail:** `04 §1`; `apps/cli/src/commands/feature/`.
 - **Amendment (2026-08-20, ADR-072 accepted):** the deferral is resolved — planning is retired.
   `config/workflows/planning-pipeline.yaml` is deleted; planning routes through the canonical
   idea/dev-plan path (idea-pipeline + `/sp:dev-plan`).

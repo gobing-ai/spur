@@ -271,6 +271,11 @@ sync and harness verification gates. No implementation task is declared ready be
 
 ## 8. Inline attribution and the observation refresh (task 1134, 2026-10-09)
 
+> **Historical (2026-10-19).** Task 1242 (ADR-140) deleted the inline driver,
+> `packages/app/src/services/inline-run-setup.ts` and `classifyDispatchFailure`. The pre-dispatch
+> classification described here is no longer a current runtime path. The attribution readers live
+> on in `packages/app/src/services/inline-run-attribution.ts`.
+
 A **pre-dispatch** failure on the interactive inline path is classified before the driver chooses a
 fallback (R1/R2). `classifyDispatchFailure(text)` in `packages/app/src/services/inline-run-setup.ts`
 wraps the upstream `classifyQuotaErrorRecord` — **no provider-code or quota-vocabulary matching

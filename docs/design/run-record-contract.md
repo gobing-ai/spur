@@ -248,7 +248,7 @@ Every current reader of a `.spur/run/*` artifact, with `path:line`:
 
 | Capability | Token ledger (today) | History plane (`import` → `analyze`) |
 | --- | --- | --- |
-| correctness of tool rows | partial — ledger rows are tool-*activity* hints, not the per-call time+token record the operator wants | correct — `analyze` writes the Q1–Q10 versioned JSON artifact (`apps/cli/src/commands/history.ts:129`) over imported `history_message` typed columns |
+| correctness of tool rows | partial — ledger rows are tool-*activity* hints, not the per-call time+token record the operator wants | correct — `analyze` writes the Q1–Q10 versioned JSON artifact (`apps/cli/src/commands/history/shared.ts:100`) over imported `history_message` typed columns |
 | liveness | **live-tailable** (`fs.watch` → SSE) | **batch-imported** — no live tail equivalent |
 | per-call time + token cost | absent (ledger has no per-call duration/token fields) | present (task 0559 join, `workflow/trace.ts` cost renderer) |
 

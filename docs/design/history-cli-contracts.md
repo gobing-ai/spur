@@ -129,14 +129,15 @@ the transcripts already carry a per-record `ts`, so the ETL derives the value in
 | `NULL` | `duration_ms` is the provider's own measurement, or the step has none |
 | `'derived'` | `duration_ms` is an ETL timestamp delta — includes queue and network time |
 
-**Derivation.** `deriveAssistantDurations()` (`packages/domain/src/analytics/assistant-duration.ts`)
-runs once per non-dry-run `history import`, after `alignMessageProvenance()`. For each `assistant`
+**Derivation.** `deriveMissingAssistantDurations()` (`packages/domain/src/analytics/derived-assistant-duration.ts`,
+a set-based replacement for the upstream per-row `deriveAssistantDurations` loop) runs once per
+non-dry-run `history import`, after `alignMessageProvenance()`. For each `assistant`
 row with a valid `ts` and no `duration_ms`, it takes the delta to the preceding record in the same
 `(source, session_id)` by `seq`, at exact millisecond resolution
 (`unixepoch(ts, 'subsec')` — the `julianday` form loses ~1ms to double-precision rounding).
 
 Three rules keep the number honest, each pinned by a test in
-`packages/domain/tests/analytics/assistant-duration.test.ts`:
+`packages/domain/tests/analytics/derived-assistant-duration.test.ts`:
 
 - **A provider value always wins.** The `UPDATE` re-asserts `duration_ms IS NULL`, so the pass is
   additive and idempotent; re-running after a later import only fills rows it could not reach.
@@ -417,7 +418,7 @@ run-cost R3) and is `null` plus an explicit `costCoverage {covered,total}` pair 
 never coalesced to zero (R4). Exclusions land in `excludedReasons` by frozen reason. The
 default report mode renders a `Verified outcome` section with `n/a` for unmeasured values
 (R5); duplicate wbs rows dedupe (R8); `history analyze --json` carries the block unchanged.
-`HistoryServiceContext.taskLocator` (wired in `apps/cli/src/commands/history.ts` from
+`HistoryServiceContext.taskLocator` (wired in `apps/cli/src/commands/history/shared.ts` (`makeHistoryService`) from
 `TaskLocator.forDirs`) gates derivation; derivation failure never fails the analyze batch.
 
 **Pairings renderer (task 0574, feature J8 R2/R3):** `renderPairings`
@@ -541,7 +542,7 @@ changes forever); a fifth detection layer or health-check verb (four already ear
 
 **System events (R1, R2).** Choosing an external scheduler makes the event ledger the only in-harness
 evidence the loop ran. Three `history.*` events declared in `packages/app/src/services/event-names.ts`
-emit from `apps/cli/src/commands/history.ts` (daily verb) via the existing
+emit from `apps/cli/src/commands/history/daily.ts` via the existing
 `attachSystemEventLedger(bus, context)` bridge:
 
 | Event                       | Renderer          | When                                                        |

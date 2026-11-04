@@ -308,8 +308,9 @@ invokes must resolve in a seeded project or degrade deliberately:
 - **Built-in action kinds** (`doctor.probe`, `command.gate`, `run.artifact`) run in-process in the
   `spur` CLI, which seeded projects install — portable by construction.
 - **Reusable application operations** in `packages/app` are bundled into the installed Spur CLI.
-  Shipped workflows invoke their owning-noun transports, including `spur feature handoff` and
-  `spur workflow inline`; they do not resolve plugin scripts or generated library bundles.
+  Shipped workflows invoke their owning-noun transports, such as `spur feature handoff`; they do
+  not resolve plugin scripts or generated library bundles. (`spur workflow inline` was retired by
+  task 1242 under ADR-140; the engine is the only executing surface.)
 - **Plugin hooks** remain plugin-owned entries and cores, executed by
   `superskill hook run sp <id>` from the installed plugin layout. They invoke ordinary Spur
   commands when they need project operations.

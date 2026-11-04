@@ -115,6 +115,11 @@ consumer onto `spur <noun> <verb>` (`workflow inline`, `feature verify`, `task b
 `history anatomy|timeline|summary`, `workflow summary|profile`), and PR-6 deleted every generated
 bundle and `inline-run-app.ts`. The paragraphs above are historical.
 
+**Amendment (2026-10-19, ADR-140).** Task 1242 deleted the inline driver and every
+`spur workflow inline *` verb; the engine is the only executing surface. This section's
+`workflow inline` transport is therefore historical too. The surviving run-provenance readers live
+in `packages/app/src/services/inline-run-attribution.ts` and `inline-run-log.ts`.
+
 For source and installed setup, the selected Spur CLI's existing `workflow show --format todo --json`
 projection owns project/registered/shared resolution. The application service validates the
 projection and re-loads its selected definition under schema validation, checks name and digest,

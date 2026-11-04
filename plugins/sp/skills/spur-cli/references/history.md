@@ -9,7 +9,7 @@ see_also:
 
 `spur history` is the local history data plane: import transcripts into SQLite, aggregate a
 versioned artifact, render that artifact, or run the daily composition. Command registration and
-CLI guards live in `apps/cli/src/commands/history.ts` (`registerHistoryCommand`); payload contracts
+CLI guards live in `apps/cli/src/commands/history/` (`registerHistoryCommand` in `index.ts`, one file per verb); payload contracts
 live in `packages/app/src/services/history-service.ts` (`FanOutResult`, `DailyResult`,
 `HistoryService`, `runHistoryReport`) and `packages/domain/src/analytics/artifact.ts`
 (`HistoryArtifact`).

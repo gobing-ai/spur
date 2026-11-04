@@ -262,12 +262,12 @@ Workflow paths in this repository:
 
 | Path | Role | Rule |
 | --- | --- | --- |
-| `.spur/workflows/<name>.yaml` | Project-facing workflow root used by operators, plugin commands, and seeded local config | Prefer this path in command examples and wrapper command docs. |
-| `config/workflows/<name>.yaml` | Physical repo source for this checkout; `.spur/workflows` is a symlink to it | **Monorepo edit SSOT.** Do not copy between `config/` and `.spur/` — same inodes. |
+| `.spur/workflows/<name>.yaml` | Optional `project` layer (ADR-113). Absent in this checkout: task 0650 removed the symlink, and `spur init` seeds no shadow | An explicit path falls back to the bundled `shared` layer by basename. Shipped workflows are invoked by bare name (`configuration-contracts.md`). |
+| `config/workflows/<name>.yaml` | Physical repo source for this checkout and the bundled `shared` layer | **Monorepo edit SSOT.** Do not create a `.spur/workflows` copy; it would shadow the shared layer. |
 | `apps/cli/config/workflows/` | Gitignored `build:bundle` / `bundle-config` output for npm package ship | Do **not** hand-edit or hand-`cp` after pipeline edits. Rebuild the CLI package when you need the published tree. |
 
 Implementation and validation may use either of the first two paths. Plugin command examples should
-use `.spur/workflows/*` because it is the stable project-local surface after `spur init`. Repository
+invoke shipped workflows by bare name, which resolves through the layers. Repository
 tests may validate `config/workflows/*` directly because that is the committed physical source.
 **Never** treat `apps/cli/config/` as a third source of truth that must stay manually in sync.
 
