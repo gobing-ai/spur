@@ -4,7 +4,7 @@ name: Annotate sp plugin entities with runtime requires
 status: todo
 template: feature-impl
 created_at: 2026-11-04T23:00:25.705Z
-updated_at: "2026-11-04T23:33:21.805Z"
+updated_at: "2026-11-04T23:53:45.831Z"
 feature_id: I14
 
 ac_altitude: task-local
@@ -95,6 +95,11 @@ Out of scope:
 ### Acceptance Criteria
 
 ```gherkin
+Scenario: R1 — sp entities declare runtime requirements (req: R1, R2, R3, R4)
+  Given the sp plugin skills, commands and agents
+  When the requires annotations are validated
+  Then every entity that shells out to spur, superskill or kk, or relies on hooks or subagents, declares it and a check fails on undeclared use
+
 Scenario: AC1 — Every sp entity declares a valid requires list (req: R1, R2)
   Given the 88 sp entities
   When `plugins/sp/tests/runtime-requires.test.ts` runs

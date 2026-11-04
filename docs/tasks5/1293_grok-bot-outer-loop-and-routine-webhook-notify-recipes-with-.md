@@ -4,7 +4,7 @@ name: Grok Bot outer-loop and routine webhook notify recipes with E2E receipt
 status: todo
 template: feature-impl
 created_at: 2026-11-04T23:00:26.825Z
-updated_at: "2026-11-04T23:38:25.653Z"
+updated_at: "2026-11-04T23:53:46.471Z"
 feature_id: I14
 
 dependencies: ["1292"]
@@ -72,6 +72,16 @@ Out of scope:
 ### Acceptance Criteria
 
 ```gherkin
+Scenario: R3 — Webhook notify recipe delivers a run summary (req: R1, R3)
+  Given a workflow using the documented shell curl step and a local webhook stub
+  When the workflow completes or fails
+  Then the stub receives one authenticated POST with the run summary and a missing key fails the step with an actionable error
+
+Scenario: R4 — Outer-loop recipe uses only existing surfaces (req: R2, R4)
+  Given the recipe documentation
+  When it is reviewed against the spur CLI surface
+  Then every command it names exists with --json and no new public noun or verb is introduced
+
 Scenario: AC1 — Successful target notifies once with bearer auth (req: R1, R3)
   Given a local webhook stub and GROK_ROUTINE_URL/GROK_ROUTINE_KEY=test-key exported
   When `spur workflow run docs/help/examples/grok-bot-notify.yaml --vars '{"target":"<pass.yaml>"}' --json` runs

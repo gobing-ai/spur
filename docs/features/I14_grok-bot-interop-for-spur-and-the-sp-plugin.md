@@ -6,7 +6,7 @@ status: backlog
 priority: P2
 tags: []
 created_at: "2026-11-04T22:57:50.302Z"
-updated_at: "2026-11-04T23:03:29.488Z"
+updated_at: "2026-11-04T23:53:45.506Z"
 ---
 
 # I14: Grok Bot interop for spur and the sp plugin
@@ -31,22 +31,22 @@ Depends on the superskill feature "Grok Bot plugin-native distribution and host 
 ```gherkin
 Feature: Grok Bot interop for spur and the sp plugin
 
-  Scenario: R1 — sp entities declare runtime requirements (R1)
+  Scenario: R1 — sp entities declare runtime requirements
     Given the sp plugin skills, commands and agents
     When the requires annotations are validated
     Then every entity that shells out to spur, superskill or kk, or relies on hooks or subagents, declares it and a check fails on undeclared use
 
-  Scenario: R2 — Bootstrap is idempotent and secret-free (R2)
+  Scenario: R2 — Bootstrap is idempotent and secret-free
     Given a computer with and without the spur toolchain
     When the sp-bot-bootstrap check and setup run twice
     Then the second run is a no-op, the toolchain resolves on PATH and no credential is written to the script or logs
 
-  Scenario: R3 — Webhook notify recipe delivers a run summary (R3)
+  Scenario: R3 — Webhook notify recipe delivers a run summary
     Given a workflow using the documented shell curl step and a local webhook stub
     When the workflow completes or fails
     Then the stub receives one authenticated POST with the run summary and a missing key fails the step with an actionable error
 
-  Scenario: R4 — Outer-loop recipe uses only existing surfaces (R4)
+  Scenario: R4 — Outer-loop recipe uses only existing surfaces
     Given the recipe documentation
     When it is reviewed against the spur CLI surface
     Then every command it names exists with --json and no new public noun or verb is introduced

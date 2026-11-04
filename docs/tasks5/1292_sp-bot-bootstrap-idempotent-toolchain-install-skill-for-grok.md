@@ -4,7 +4,7 @@ name: sp-bot-bootstrap idempotent toolchain install skill for Grok Bot computers
 status: todo
 template: feature-impl
 created_at: 2026-11-04T23:00:26.297Z
-updated_at: "2026-11-04T23:34:48.741Z"
+updated_at: "2026-11-04T23:53:46.150Z"
 feature_id: I14
 
 dependencies: ["1291"]
@@ -76,6 +76,11 @@ Out of scope:
 ### Acceptance Criteria
 
 ```gherkin
+Scenario: R2 — Bootstrap is idempotent and secret-free (req: R2, R3, R5)
+  Given a computer with and without the spur toolchain
+  When the sp-bot-bootstrap check and setup run twice
+  Then the second run is a no-op, the toolchain resolves on PATH and no credential is written to the script or logs
+
 Scenario: AC1 — Empty host bootstraps once (req: R1, R2, R3, R5)
   Given a temp HOME with no bun and stub `curl`/`bun` that log argv and create fake binaries
   When the extracted check block runs, then setup, then check again
