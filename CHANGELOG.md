@@ -1,5 +1,25 @@
 # Changelog
 
+## [0.4.24] - 2026-11-04
+
+### Fixed
+- migrate the zg adapter to zvec-grep 0.3.0 — `--version`/`--status` probes, `--hybrid … --preview short` queries, a strict parser for the new hit grammar, and `ZG.ENGINE.NOT_FOUND` as the missing-index signal (4c0c32cea)
+  <!-- src: packages/app/src/services/search-zg.ts:33, packages/app/src/services/search-zg.ts:59, packages/app/src/services/search.ts:300 · confidence: HIGH -->
+
+### Changed
+- split the `builder`, `feature` and `history` commands into per-verb modules with mirrored per-verb tests (215abf7d7)
+  <!-- src: apps/cli/src/commands/builder/index.ts:17, apps/cli/src/commands/feature/index.ts:16, apps/cli/src/commands/history/index.ts:15 · confidence: HIGH -->
+- repair stale design-satellite projections — the retired inline driver and `workflow inline` transport are marked historical (ADR-140), and the removed `.spur/workflows` symlink is dropped from the path model (task 0650) (bcf20bb23)
+  <!-- src: docs/design/executor-availability.md:274, docs/design/workflow-execution-economy.md:118, docs/design/e2e-workflow-for-system-development.md:265 · confidence: HIGH -->
+
+### Removed
+- drop the orphaned assistant-duration test; the derived-assistant-duration test now covers duration derivation (e8f7d7baf)
+  <!-- src: docs/design/history-cli-contracts.md:140 · confidence: HIGH -->
+
+### Other
+- assert the fleet-e2e unknown-agent stderr line instead of letting it leak into test output (8744be548)
+  <!-- src: scripts/commands/fleet-e2e-host-probe.test.ts:166 · confidence: HIGH -->
+
 ## [0.4.23] - 2026-11-04
 
 _Claim bullets carry one source anchor and the level that anchor supports — `HIGH`: every anchor is a
