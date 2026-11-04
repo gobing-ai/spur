@@ -94,7 +94,7 @@ export async function main(argv = process.argv.slice(2), options: MainOptions = 
         (commandTokens[0] === 'migrate' || (commandTokens[0] === 'self' && commandTokens[1] === 'migrate')) &&
         argv.includes('--check');
     const taskGate = commandTokens[0] === 'task' && commandTokens[1] === 'gate';
-    // `workflow commit-guard|persist-*` are boot-free transports (script-absorption PR-4): like the
+    // `workflow commit-guard-*|persist-*` are boot-free transports (script-absorption PR-4): like the
     // plugin scripts they replace, they never create a database in the cwd. Migration checks must also
     // bypass boot, which would create or repair the database being checked.
     if (isWorkflowTransportInvocation(argv) || migrationCheck || taskGate) {

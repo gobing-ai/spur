@@ -1,6 +1,6 @@
 /**
  * Composition root for the boot-free workflow transports (script-absorption PR-4):
- * `spur workflow commit-guard <op>` and the WT-4 landing verbs `persist-out` / `persist-check`.
+ * `spur workflow commit-guard-<op>` and the WT-4 landing verbs `persist-out` / `persist-check`.
  *
  * Like the plugin scripts they replace, they must not create `.spur/spur.db` in the cwd (the app
  * runners open the run-owning trees' database themselves) and must not print the startup banner.

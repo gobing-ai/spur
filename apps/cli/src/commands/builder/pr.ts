@@ -1,46 +1,21 @@
 /**
- * `spur builder pr-<verb>` — the four flat PR-review verbs (task 1219, feature L1) plus the hidden
- * `pr [argv...]` pass-through alias kept for one release (R4).
+ * `spur builder pr-<verb>` — the four flat PR-review verbs (task 1219, feature L1). The hidden
+ * `pr [argv...]` alias was removed in task 1290.
  *
  * Thin transport over `@gobing-ai/spur-app/pr-review` (ADR-021): Commander owns the flags and the
  * usage errors (exit 1), the service owns the op sequencing, the verdict words and the exit codes
- * (0 ok · 1 usage · 2 hard failure · 3 wait timeout). The alias keeps the absorbed spine's own argv
- * parser, so installed callers of `spur builder pr <op>` keep working byte-identically apart from
- * one stderr deprecation line.
+ * (0 ok · 1 usage · 2 hard failure · 3 wait timeout).
  */
 import type { Command } from '@commander-js/extra-typings';
 import {
-    PR_REVIEW_HELP,
     type PrReviewContext,
     type PrReviewIo,
     type PrVerb,
     type PrVerbOptions,
-    main as runPrReview,
     runPrVerb,
 } from '@gobing-ai/spur-app/pr-review';
 import type { CliContext } from '../../context';
 import { SHARED_OPTIONS } from '../shared-options';
-
-/** `pr <op>` → the flat verb that replaces it, for the one deprecation line. */
-const PR_VERB_FOR_OP: Readonly<Record<string, string>> = {
-    preflight: 'pr-check',
-    hygiene: 'pr-check',
-    push: 'pr-open',
-    ensure: 'pr-open',
-    'ensure-pr': 'pr-open',
-    request: 'pr-review',
-    wait: 'pr-review',
-    collect: 'pr-status',
-    status: 'pr-status',
-};
-
-/** One stderr line naming the replacing verb; an unknown/absent op lists the whole surface. */
-function prDeprecationLine(op: string | undefined): string {
-    const replacement = op === undefined ? undefined : PR_VERB_FOR_OP[op];
-    return replacement !== undefined
-        ? `spur builder pr ${op} is deprecated; use spur builder ${replacement}`
-        : 'spur builder pr is deprecated; use spur builder pr-status | pr-check | pr-open | pr-review';
-}
 
 /** Register the four flat `spur builder pr-<verb>` composers. */
 export function registerBuilderPrCommands(builder: Command, context: CliContext): void {
@@ -156,34 +131,5 @@ export function registerBuilderPrCommands(builder: Command, context: CliContext)
                 ...(options.json === true ? { json: true } : {}),
                 ...(options.statusFile !== undefined ? { statusFile: options.statusFile } : {}),
             });
-        });
-}
-
-/**
- * Register the hidden `spur builder pr [argv...]` alias: one deprecation line naming the replacing
- * verb, then the unchanged pass-through. Hidden from `builder --help`; removal is a follow-up task.
- */
-export function registerBuilderPrAliasCommand(builder: Command, context: CliContext): void {
-    builder
-        .command('pr', { hidden: true })
-        .summary('deprecated alias for the flat pr-<verb> commands')
-        .description(PR_REVIEW_HELP)
-        .allowUnknownOption(true)
-        .allowExcessArguments(true)
-        .argument('[argv...]', 'subcommand and flags (see description)')
-        .action((argv: string[]) => {
-            context.output.error(prDeprecationLine(argv[0]));
-            context.setExitCode(
-                runPrReview(
-                    argv,
-                    {
-                        out: (line) => context.output.write(line),
-                        err: (line) => context.output.error(line),
-                    },
-                    // 1215: run the spine's git/gh and relative status writes in the invocation cwd
-                    // with the caller env — never the process-global cwd/env.
-                    { cwd: context.cwd, env: context.env },
-                ),
-            );
         });
 }

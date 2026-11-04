@@ -335,9 +335,9 @@ Posts to the supervisor API
 ## `dogfood` - dogfood-testing gates
 
 ```bash
-spur agent dogfood gate --testee "/sp:dev-run 0123" --json        # exit 2 = refuse (pipeline-driving, no --max-retry)
-spur agent dogfood gate --testee "…" --steps "plan||implement"     # Phase 1 W8 re-check
-spur agent dogfood validate-report --file report.md --json         # exit 2 = contract errors
+spur agent dogfood-gate --testee "/sp:dev-run 0123" --json        # exit 2 = refuse (pipeline-driving, no --max-retry)
+spur agent dogfood-gate --testee "…" --steps "plan||implement"     # Phase 1 W8 re-check
+spur agent dogfood-validate-report --file report.md --json         # exit 2 = contract errors
 ```
 
 Absorbed from `plugins/sp/scripts/dogfood-testing/` (script-absorption PR-7). `--json` here prints

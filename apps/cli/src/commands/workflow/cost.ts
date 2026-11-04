@@ -31,6 +31,7 @@ export interface WorkflowCostDeps {
 export function registerWorkflowCostCommand(workflow: Command, context: CliContext, deps: WorkflowCostDeps = {}): void {
     workflow
         .command('cost')
+        .summary('Report per-workflow wall-clock and cost from real runs (or --budget gate)')
         .description(
             [
                 'Report per-workflow wall-clock and cost from REAL (terminal, non-dry) runs in .spur/spur.db.',

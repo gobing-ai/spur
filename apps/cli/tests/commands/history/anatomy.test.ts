@@ -1,5 +1,5 @@
 /**
- * Thin-wrapper tests for `spur history anatomy` (script-absorption PR-6). The ops are pinned by
+ * Thin-wrapper tests for `spur history anatomy-<op>` (script-absorption PR-6). The ops are pinned by
  * packages/app/tests/services/history-anatomy-cli.test.ts; this pins argv pass-through, the
  * HA_HELPER identity and exit codes.
  */
@@ -18,13 +18,13 @@ async function run(argv: string[], cwd = tmpdir()) {
     return { exitCode, stdout: output.messages.join('\n'), stderr: output.errors.join('\n') };
 }
 
-describe('spur history anatomy', () => {
+describe('spur history anatomy-<op>', () => {
     test('digest passes through and prints the hex digest (exit 0)', async () => {
         const dir = mkdtempSync(join(tmpdir(), 'cli-ha-'));
         try {
             const artifact = join(dir, 'a.json');
             writeFileSync(artifact, '{"totals":{"messages":1}}');
-            const r = await run(['history', 'anatomy', 'digest', artifact]);
+            const r = await run(['history', 'anatomy-digest', artifact]);
             expect(r.exitCode).toBe(0);
             expect(r.stdout).toMatch(/^[0-9a-f]{64}$/);
         } finally {
@@ -32,9 +32,25 @@ describe('spur history anatomy', () => {
         }
     });
 
-    test('an unknown op is a usage failure (exit 1) listing the ops', async () => {
+    test('the hidden `anatomy <op>` shim warns once then runs the same op (task 1290)', async () => {
+        const dir = mkdtempSync(join(tmpdir(), 'cli-ha-shim-'));
+        try {
+            const artifact = join(dir, 'a.json');
+            writeFileSync(artifact, '{"totals":{"messages":1}}');
+            const flat = await run(['history', 'anatomy-digest', artifact]);
+            const shim = await run(['history', 'anatomy', 'digest', artifact]);
+            expect(shim.exitCode).toBe(flat.exitCode);
+            expect(shim.stdout).toBe(flat.stdout);
+            expect(shim.stderr).toBe('spur history anatomy digest is deprecated; use spur history anatomy-digest');
+        } finally {
+            rmSync(dir, { recursive: true, force: true });
+        }
+    });
+
+    test('the shim with an unknown op warns generically, then fails as a usage error listing the ops', async () => {
         const r = await run(['history', 'anatomy', 'bogus']);
         expect(r.exitCode).toBe(1);
+        expect(r.stderr).toContain('spur history anatomy <op> is deprecated; use spur history anatomy-<op>');
         expect(r.stderr).toContain('valid commands: digest, check, paths');
     });
 
@@ -42,7 +58,7 @@ describe('spur history anatomy', () => {
         const dir = mkdtempSync(join(tmpdir(), 'cli-ha-paths-'));
         try {
             const out = join(dir, 'paths.env');
-            const r = await run(['history', 'anatomy', 'paths', '--date', '2026-08-24', '--out', out], dir);
+            const r = await run(['history', 'anatomy-paths', '--date', '2026-08-24', '--out', out], dir);
             expect(r.exitCode).toBe(0);
             const env = readFileSync(out, 'utf8');
             expect(env).toContain(`HA_HELPER=${spurEntryPath()}\n`);

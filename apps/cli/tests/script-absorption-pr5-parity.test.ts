@@ -30,6 +30,11 @@ const TEXT_DIVERGENCES: ReadonlyArray<readonly [from: string, to: string]> = [
         'usage: spur task wrapup <resolve|route-reason|metrics|doc-sync-snapshot|doc-sync-scope|doc-supersession|drift-probe>  (env: __runId, tasks, mode, spurBin)',
     ],
     ['usage: batch-plan.ts ', 'usage: spur task batch-plan '],
+    // `task-children` became the flat `spur task batch-plan-children` verb (task 1290).
+    [
+        ' | task-children --letter <A-Z> --plan <plan.json>',
+        '; spur task batch-plan-children --letter <A-Z> --plan <plan.json>',
+    ],
     // Input files now resolve through the CLI fs seam against the project dir (absolute in the message).
     ["open 'missing.json'", "open '<CWD>/missing.json'"],
     ['feature-verification-steps: ', 'feature verify: '],

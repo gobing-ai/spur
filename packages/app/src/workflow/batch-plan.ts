@@ -1,5 +1,5 @@
 /**
- * `spur task batch-plan <waves|order|task-children>` — letters-first batch plan surface (task 1104,
+ * `spur task batch-plan <waves|order>` + `spur task batch-plan-children` — letters-first batch plan surface (task 1104,
  * feature I13).
  *
  * Absorbed from the retired sp plugin script `plugins/sp/scripts/batch-plan.ts` (script-absorption
@@ -31,7 +31,7 @@ export const BATCH_PLAN_MODES = ['waves', 'order', 'task-children'] as const;
 
 /** Usage line printed on a usage error (exit 2). */
 export const BATCH_PLAN_USAGE =
-    'usage: spur task batch-plan waves --tasks <tasks.json> | order --tasks <tasks.json> [--concurrency <n>] | task-children --letter <A-Z> --plan <plan.json>';
+    'usage: spur task batch-plan waves --tasks <tasks.json> | order --tasks <tasks.json> [--concurrency <n>]; spur task batch-plan-children --letter <A-Z> --plan <plan.json>';
 
 /** Parsed `spur task batch-plan` request. */
 export interface BatchPlanRequest {

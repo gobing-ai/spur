@@ -171,12 +171,19 @@ validation, none are created. This is the bulk-creation gate for agents and scri
 ```bash
 spur task batch-plan waves --tasks <file>
 spur task batch-plan order --tasks <file> [--concurrency <n>]
-spur task batch-plan task-children --letter <A-Z> --plan <file>
 ```
 
 The batch driver's visible plan, as JSON on stdout: `waves` lays out the letters-first rows
 (A prepare, one row per task, Z report), `order` sorts by dependencies into parallel waves
-(a cycle is reported as data), `task-children` returns one task row's phase digits.
+(a cycle is reported as data).
+
+## spur task batch-plan-children
+
+```bash
+spur task batch-plan-children --letter <A-Z> --plan <file>
+```
+
+Returns one task row's phase digits from the visible plan, as JSON on stdout.
 
 ## spur task preflight
 

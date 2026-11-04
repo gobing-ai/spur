@@ -1,17 +1,17 @@
 /**
- * CLI argv / exit-code contract for `spur agent dogfood validate-report`.
+ * CLI argv / exit-code contract for `spur agent dogfood-validate-report`.
  * Absorbed from plugins/sp/scripts/dogfood-testing/validate-report.ts (script-absorption PR-7).
  */
 import { validateReport } from './report';
 
-/** Parsed `spur agent dogfood validate-report` arguments. */
+/** Parsed `spur agent dogfood-validate-report` arguments. */
 export interface DogfoodValidateCliArgs {
     file: string | null;
     json: boolean;
     help: boolean;
 }
 
-/** Parse `spur agent dogfood validate-report` argv (`--file`, `--json`, `--help`). */
+/** Parse `spur agent dogfood-validate-report` argv (`--file`, `--json`, `--help`). */
 export function parseDogfoodValidateArgs(argv: readonly string[]): DogfoodValidateCliArgs {
     let file: string | null = null;
     let json = false;
@@ -27,9 +27,9 @@ export function parseDogfoodValidateArgs(argv: readonly string[]): DogfoodValida
     return { file, json, help };
 }
 
-/** Usage text for `spur agent dogfood validate-report`. */
+/** Usage text for `spur agent dogfood-validate-report`. */
 export const DOGFOOD_VALIDATE_USAGE = `Usage:
-  spur agent dogfood validate-report --file <report.md> [--json]
+  spur agent dogfood-validate-report --file <report.md> [--json]
 
 Exit codes:
   0  report validates clean (complete-report shape)
@@ -48,7 +48,7 @@ On exit 2: set status: aborted and list error codes under #### Unresolved.`;
 /** Reads the report text; the CLI passes its FileSystem seam (sync or async). */
 export type DogfoodReportReader = (path: string) => string | Promise<string>;
 
-/** Run `spur agent dogfood validate-report`: read the report through `readFile` and validate it. */
+/** Run `spur agent dogfood-validate-report`: read the report through `readFile` and validate it. */
 export async function runDogfoodValidateCli(
     argv: readonly string[],
     readFile: DogfoodReportReader,

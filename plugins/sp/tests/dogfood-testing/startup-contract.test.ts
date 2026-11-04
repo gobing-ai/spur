@@ -45,7 +45,12 @@ describe('batch and command publish-first (task 1105 R3/R4) — spec pins', () =
         const section = BATCH.indexOf('### 2.7 Visible batch plan');
         expect(section).toBeGreaterThan(BATCH.indexOf('### 2.6 Preflight'));
         expect(section).toBeLessThan(BATCH.indexOf('## Step 3'));
-        for (const needle of ['spur task batch-plan', 'waves --tasks', 'task-children --letter', 'Z Batch report']) {
+        for (const needle of [
+            'spur task batch-plan',
+            'waves --tasks',
+            'batch-plan-children --letter',
+            'Z Batch report',
+        ]) {
             expect(BATCH, `batch driver should name ${needle}`).toContain(needle);
         }
     });

@@ -25,7 +25,7 @@ const ALLOW_LIST = new Set(['--json-envelope', '--help']);
 
 interface CmdLike {
     name(): string;
-    options: Array<{ long?: string }>;
+    options: Array<{ long?: string; hidden?: boolean }>;
     commands: CmdLike[];
 }
 
@@ -36,9 +36,16 @@ function collectCliFlags(): Map<string, Set<string>> {
     const cli = new Map<string, Set<string>>();
     const walk = (cmd: CmdLike, path: string): void => {
         if (!cli.has(path)) {
-            cli.set(path, new Set(cmd.options.map((o) => o.long).filter((f): f is string => f !== undefined)));
+            // Hidden options are deprecated-shim flags (task 1290), not documented surface.
+            const visible = cmd.options.filter((o) => o.hidden !== true);
+            cli.set(path, new Set(visible.map((o) => o.long).filter((f): f is string => f !== undefined)));
         }
-        for (const sub of cmd.commands) walk(sub, `${path} ${sub.name()}`);
+        // A hidden group is a one-release deprecated shim (task 1290): not public surface, so its
+        // sub-verbs carry no doc rows. Hidden leaf verbs (`agent loop`) stay documented.
+        for (const sub of cmd.commands) {
+            const hiddenGroup = (sub as unknown as { _hidden?: boolean })._hidden === true && sub.commands.length > 0;
+            if (!hiddenGroup) walk(sub, `${path} ${sub.name()}`);
+        }
     };
     for (const noun of program.commands) {
         // `self` is a container re-registering the five legacy nouns as visible verbs;

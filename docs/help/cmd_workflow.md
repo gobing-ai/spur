@@ -23,7 +23,7 @@
 | `cancel <run-id>` | Cancel a single non-terminal run by id (mark as failed; SIGTERM async worker when live) |
 | `clean` | Housekeeping: finalize stale non-terminal runs **and** reclaim retained run logs |
 | `inline <op>` | Host-inline run lifecycle transport for the inline pipeline driver (begin, trace, close, decide, persist-out/check, dispatch) |
-| `commit-guard <op>` | Run-scoped commit guard: stage only the paths this run wrote (`start` / `stage` / `check`) |
+| `commit-guard-start` / `commit-guard-stage` / `commit-guard-check` | Run-scoped commit guard: stage only the paths this run wrote (`commit-guard <op>` is a deprecated one-release alias) |
 
 ## spur workflow validate
 
@@ -467,33 +467,34 @@ The WT-4 pre-removal assertion: every `.spur/run/` and `.spur/memory/evidence/` 
 owns must exist in the invoking tree with identical bytes. Unowned evidence is counted
 (`unowned: N`) and does not block. Exit codes: `0` ok, `1` blocked or divergent, `2` usage error.
 
-## spur workflow commit-guard
+## Commit guard verbs
 
 ```
-spur workflow commit-guard <start|stage|check> [options] [-- <paths…>]
+spur workflow commit-guard-<start|stage|check> [options] [-- <paths…>]
 ```
 
 Run-scoped staging guard for driver commit steps (replaced the plugin script `commit-guard`,
-script-absorption PR-4). `start` fingerprints HEAD and the dirty files into
-`.spur/run/<run>-tree-start.json`; `stage` stages only listed paths the run wrote and prints
-`{staged, foreign}`; `check` prints `{foreign}` and stages nothing. Exit codes: `0` ok, `1` usage or
+script-absorption PR-4; flattened from `commit-guard <op>` in task 1290, which stays as a hidden
+deprecated alias for one release). `commit-guard-start` fingerprints HEAD and the dirty files into
+`.spur/run/<run>-tree-start.json`; `commit-guard-stage` stages only listed paths the run wrote and prints
+`{staged, foreign}`; `commit-guard-check` prints `{foreign}` and stages nothing. Exit codes: `0` ok, `1` usage or
 a failed probe (nothing staged), `2` `stage` refused a path, `3` a target is unmerged or carries
 conflict markers.
 
-## spur workflow commit-guard start
+## spur workflow commit-guard-start
 
 | Flag | Description |
 |---|---|
 | `--run <id>` | Run id the snapshot belongs to |
 
-## spur workflow commit-guard stage
+## spur workflow commit-guard-stage
 
 | Flag | Description |
 |---|---|
 | `--run <id>` | Run id whose tree-start snapshot partitions the paths |
 | `--base <sha>` | Diff base (default: the snapshot HEAD) |
 
-## spur workflow commit-guard check
+## spur workflow commit-guard-check
 
 | Flag | Description |
 |---|---|

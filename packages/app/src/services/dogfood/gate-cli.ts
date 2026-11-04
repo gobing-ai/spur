@@ -1,10 +1,10 @@
 /**
- * CLI argv / exit-code contract for `spur agent dogfood gate`.
+ * CLI argv / exit-code contract for `spur agent dogfood-gate`.
  * Absorbed from plugins/sp/scripts/dogfood-testing/detect-pipeline-driving.ts (script-absorption PR-7).
  */
 import { evaluateDogfoodGate } from './pipeline-detect';
 
-/** Parsed `spur agent dogfood gate` arguments. */
+/** Parsed `spur agent dogfood-gate` arguments. */
 export interface DogfoodGateCliArgs {
     testee: string | null;
     maxRetryPresent: boolean;
@@ -52,9 +52,9 @@ export function parseDogfoodGateArgs(argv: readonly string[]): DogfoodGateCliArg
     return { testee, maxRetryPresent, steps, json, help };
 }
 
-/** Usage text for `spur agent dogfood gate`. */
+/** Usage text for `spur agent dogfood-gate`. */
 export const DOGFOOD_GATE_USAGE = `Usage:
-  spur agent dogfood gate --testee "<testee string>" [--max-retry-present] [--steps "s1||s2"] [--json]
+  spur agent dogfood-gate --testee "<testee string>" [--max-retry-present] [--steps "s1||s2"] [--json]
 
 Exit codes:
   0  proceed (stdout may carry implement-heavy advisory)

@@ -339,7 +339,7 @@ Every item is an existing verb, or a flat `spur <noun> <verb>` needing operator 
 | --- | --- | --- |
 | `spur workflow run`, `spur workflow continue` | return/consume the work item and its receipt in `--json`; `--answer-text` unchanged | existing verbs, additive payload |
 | `spur workflow validate` | self-contained-stage lint findings (§4.4) | existing verb |
-| `spur workflow commit-guard start\|check\|stage` | grandfathered nested group (ADR-051 amendment); unchanged in D65, used as a builtin | none |
+| `spur workflow commit-guard-start\|check\|stage` | grandfathered nested group (ADR-051 amendment); unchanged in D65, used as a builtin | none |
 | `spur task gate <wbs> <mode>`, `spur task update`, `spur task record` | unchanged; invoked by builtins | none |
 | `spur self exec <action>` | unchanged; the project-command builtin path (A92/ADR-139) | none |
 | `spur decision run\|show\|list\|status` | unchanged; gate answering reads the catalog | none |

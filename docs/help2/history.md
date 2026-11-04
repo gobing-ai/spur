@@ -97,14 +97,15 @@ docs/help carry-over (accuracy) > DeepWiki TOC (structure signal only).
 Verified: every command, verb, and flag above matches the live snapshots.
 -->
 
-## spur history anatomy
+## spur history anatomy-digest | anatomy-check | anatomy-paths | anatomy-assert-clean | anatomy-probe | anatomy-stamp | anatomy-refresh | anatomy-publish
 
 ```bash
-spur history anatomy <op> [op flags...]
+spur history anatomy-<op> [op flags...]
 ```
 
-Deterministic cache ops behind the `history-anatomy` workflow: `digest`, `check`, `paths`,
-`assert-clean`, `probe`, `stamp`, `refresh`, `publish`. Exit `0` ok, `1` usage or op failure.
+Deterministic cache ops behind the `history-anatomy` workflow, one verb per op: `anatomy-digest`,
+`anatomy-check`, `anatomy-paths`, `anatomy-assert-clean`, `anatomy-probe`, `anatomy-stamp`,
+`anatomy-refresh`, `anatomy-publish`. Exit `0` ok, `1` usage or op failure.
 
 ## spur history timeline
 

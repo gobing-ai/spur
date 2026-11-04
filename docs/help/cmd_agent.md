@@ -380,10 +380,10 @@ Stops a supervised agent process via `spur self serve`.
 | `--server <url>` | Server API URL (default: this project's registry serve port, `http://localhost:<port>/api`; `http://localhost:3000/api` only when the project has no live entry) |
 | `--json` | Output machine-readable JSON |
 
-## spur agent dogfood gate
+## spur agent dogfood-gate
 
 ```
-spur agent dogfood gate [options] [testee]
+spur agent dogfood-gate [options] [testee]
 ```
 
 Deterministic Phase 1.0 / W8 gate for the `sp:dogfood-testing` skill, absorbed from the retired
@@ -399,10 +399,10 @@ usage error.
 | `--steps <labels>` | Derived step labels joined by `\|\|` (Phase 1 W8 re-check) |
 | `--json` | Print the gate result as JSON |
 
-## spur agent dogfood validate-report
+## spur agent dogfood-validate-report
 
 ```
-spur agent dogfood validate-report [options] [file]
+spur agent dogfood-validate-report [options] [file]
 ```
 
 Validate a dogfood report against the report contract, Cost block included (absorbed from the

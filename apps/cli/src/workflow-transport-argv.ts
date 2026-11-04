@@ -1,11 +1,19 @@
 /**
- * Argv detection for the boot-free workflow transports (`spur workflow commit-guard …`,
+ * Argv detection for the boot-free workflow transports (`spur workflow commit-guard-* …`,
  * `spur workflow persist-out|persist-check …`), split from `workflow-transport.ts` so the
  * detection stays dependency-free and unit-testable without the app layer.
  */
 
 /** The `workflow` verbs served by the early dispatch instead of the full DB/config boot. */
-export const WORKFLOW_TRANSPORT_VERBS: readonly string[] = ['commit-guard', 'persist-out', 'persist-check'];
+export const WORKFLOW_TRANSPORT_VERBS: readonly string[] = [
+    'commit-guard-start',
+    'commit-guard-stage',
+    'commit-guard-check',
+    // Hidden one-release shim (task 1290): `commit-guard <op>` stays boot-free until it is removed.
+    'commit-guard',
+    'persist-out',
+    'persist-check',
+];
 
 /** True when argv addresses one of the boot-free transports (global flags ignored). */
 export function isWorkflowTransportInvocation(argv: readonly string[]): boolean {

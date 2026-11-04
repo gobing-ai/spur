@@ -8,7 +8,7 @@ import { type Observation, runSide } from './script-absorption-pr7/harness';
 /**
  * Script-absorption PR-7 parity: every case frozen from the retired plugin scripts
  * (`fixtures/script-absorption-pr7-golden.json`, captured from origin/main by
- * `script-absorption-pr7/capture.ts`) is replayed through `spur agent dogfood` / `spur builder pr`
+ * `script-absorption-pr7/capture.ts`) is replayed through `spur agent dogfood-*` (the `spur builder pr` cases left with the alias, task 1290)
  * and must produce the same exit code, stdout and — after the rewrites below, which only rename
  * the retired script in its usage text — the same stderr.
  */
@@ -30,19 +30,7 @@ function rewrite(stderr: string): string {
         .replace(LEGACY_VALIDATE_USAGE_HEAD, DOGFOOD_VALIDATE_USAGE.split('\n\n')[0] ?? '');
 }
 
-/**
- * Task 1219 keeps `spur builder pr <op>` as a hidden alias that prints ONE stderr deprecation line
- * naming the replacement verb before the unchanged pass-through. The legacy capture has no such
- * line, so it is stripped before comparing — the one intended delta. The line itself (text and
- * single occurrence) is asserted in `tests/commands/builder/pr.test.ts`.
- */
-const ALIAS_DEPRECATION = /^spur builder pr(?: [^\n]+)? is deprecated; use spur builder [^\n]+\n/m;
-
-function stripAliasDeprecation(stderr: string): string {
-    return stderr.replace(ALIAS_DEPRECATION, '');
-}
-
-describe('spur agent dogfood | builder pr golden parity (script-absorption PR-7)', () => {
+describe('spur agent dogfood golden parity (script-absorption PR-7)', () => {
     test('the fixture covers every case exactly', () => {
         expect(Object.keys(GOLDEN.cases).sort()).toEqual(PR7_CASES.map((c) => c.name).sort());
     });
@@ -56,7 +44,7 @@ describe('spur agent dogfood | builder pr golden parity (script-absorption PR-7)
             const mode = c.compare ?? 'full';
             if (mode !== 'exit') expect({ where, stdout: got.stdout }).toEqual({ where, stdout: want.stdout });
             if (mode === 'full')
-                expect({ where, stderr: stripAliasDeprecation(got.stderr) }).toEqual({
+                expect({ where, stderr: got.stderr }).toEqual({
                     where,
                     stderr: rewrite(want.stderr),
                 });

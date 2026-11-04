@@ -168,7 +168,7 @@ describe('commit-guard (1129 R1–R4, AC1–AC3)', () => {
         writeFileSync(join(cwd, 'a.txt'), 'run edit\n');
         const stage = commitGuardStage('ghost', ['a.txt'], { cwd });
         expect(stage.exitCode).toBe(1);
-        expect(err(stage)).toContain('spur workflow commit-guard start --run ghost');
+        expect(err(stage)).toContain('spur workflow commit-guard-start --run ghost');
         expect(staged(cwd)).toEqual([]);
         expect(commitGuardCheck('ghost', { cwd }).exitCode).toBe(1);
     });

@@ -125,22 +125,31 @@ Destructively wipe every `history_*` table: normalized rows, per-source ETL, boa
 daily stats, and importer checkpoints/ledger. The task corpus and run provenance
 (`task_run_links`) are untouched; a full `spur history import` rebuilds everything.
 
-## spur history anatomy
+## spur history anatomy-digest | anatomy-check | anatomy-paths | anatomy-assert-clean | anatomy-probe | anatomy-stamp | anatomy-refresh | anatomy-publish
 
 ```
-spur history anatomy <op> [op flags...]
+spur history anatomy-<op> [op flags...]
 ```
 
-| Argument | Description |
+| Verb | Operands and flags |
 |---|---|
-| `op` | `digest <artifact.json>` · `check <report.md>` · `paths --out <env> [--skill-dir d] [--helper p] ...` · `assert-clean --baseline <porcelain> [--expect p]` · `probe --artifact a --target t ...` · `stamp --candidate c --provenance p --out o` · `refresh --report r --out o` · `publish <candidate.md> <target.md>` |
+| `anatomy-digest` | `<artifact.json>` — semantic artifact digest |
+| `anatomy-check` | `<report.md>` — report-contract structure gate (`PASS`/`FAIL`) |
+| `anatomy-paths` | `--out <env> [--skill-dir d] [--helper p] ...` — resolve the run paths into an env file |
+| `anatomy-assert-clean` | `--baseline <porcelain> [--expect p]...` — fail on undeclared writes |
+| `anatomy-probe` | `--artifact a --target t ...` — cache disposition + provenance |
+| `anatomy-stamp` | `--candidate c --provenance p --out o` — stamp provenance frontmatter |
+| `anatomy-refresh` | `--report r --out o` — refresh a cache-hit report |
+| `anatomy-publish` | `<candidate.md> <target.md>` — atomic publish |
 
 Deterministic cache ops behind the `history-anatomy` workflow (ADR-079; absorbed from the retired
-`history-anatomy-cache` plugin script, script-absorption PR-6). Each op keeps its own argv grammar.
-`paths` records the running spur as `HA_HELPER` (so a spur upgrade invalidates the cache) and resolves
-`HA_SKILL` from `--skill-dir`, else `plugins/sp/skills/history-anatomy` under the cwd, else the
-superskill install (`~/.agents/skills/sp-history-anatomy`, `~/.claude/skills/sp-history-anatomy`).
-Exit: `0` ok, `1` usage or op failure (`check` prints `PASS` or `FAIL` plus one line per finding).
+`history-anatomy-cache` plugin script, script-absorption PR-6). Each verb keeps its op's own argv
+grammar, so op flags are passed through rather than declared. `anatomy-paths` records the running
+spur as `HA_HELPER` (so a spur upgrade invalidates the cache) and resolves `HA_SKILL` from
+`--skill-dir`, else `plugins/sp/skills/history-anatomy` under the cwd, else the superskill install
+(`~/.agents/skills/sp-history-anatomy`, `~/.claude/skills/sp-history-anatomy`). Exit: `0` ok, `1`
+usage or op failure (`anatomy-check` prints `PASS` or `FAIL` plus one line per finding). The former
+`spur history anatomy <op>` spelling is a hidden one-release shim that warns on stderr (task 1290).
 
 ## spur history timeline
 

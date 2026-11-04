@@ -60,7 +60,7 @@ states:
         options:
           id: commit-guard
           executable: "${vars.spurBin}"
-          args: ["workflow", "commit-guard", "check", "--run", "${vars.__runId}"]
+          args: ["workflow", "commit-guard-check", "--run", "${vars.__runId}"]
           resultFile: .spur/run/${vars.__runId}-commit-guard.status
           softFail: true
           timeoutMs: 120000

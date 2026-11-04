@@ -555,7 +555,7 @@ export function resolvePaths(opts: {
     mode?: string;
     since?: string;
     until?: string;
-    /** Explicit skill directory (`spur history anatomy paths --skill-dir`); wins over the helper layout. */
+    /** Explicit skill directory (`spur history anatomy-paths --skill-dir`); wins over the helper layout. */
     skillDir?: string;
 }): string {
     // Layouts: monorepo `<root>/scripts/<file>` → skill `<root>/skills/history-anatomy`;

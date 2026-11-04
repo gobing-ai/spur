@@ -26,6 +26,11 @@ const plan = (args: string[]): { old: string[]; new: string[] } => ({
     old: ['batch-plan.ts', ...args],
     new: ['task', 'batch-plan', ...args],
 });
+/** The script's `task-children` mode is the flat `task batch-plan-children` verb (task 1290). */
+const children = (args: string[]): { old: string[]; new: string[] } => ({
+    old: ['batch-plan.ts', 'task-children', ...args],
+    new: ['task', 'batch-plan-children', ...args],
+});
 
 const TASKS_FILE = '.spur/run/r1-wrapup-tasks.json';
 const solution = (body: string): string => `# T\n\n## Solution\n\n${body}\n\n## Testing\n\nVerdict: PASS\n`;
@@ -322,10 +327,10 @@ export const BATCH_PLAN_CASES: GoldenCase[] = [
         id: 'batch-plan-task-children',
         files: { 'plan.json': TODO_PLAN, 'bare.json': JSON.stringify(JSON.parse(TODO_PLAN).plan), 'obj.json': '{}' },
         steps: [
-            plan(['task-children', '--letter', 'D', '--plan', 'plan.json']),
-            plan(['task-children', '--letter', 'E', '--plan', 'bare.json']),
-            plan(['task-children', '--letter', 'E', '--plan', 'obj.json']),
-            plan(['task-children', '--letter', 'e', '--plan', 'plan.json']),
+            children(['--letter', 'D', '--plan', 'plan.json']),
+            children(['--letter', 'E', '--plan', 'bare.json']),
+            children(['--letter', 'E', '--plan', 'obj.json']),
+            children(['--letter', 'e', '--plan', 'plan.json']),
         ],
     },
     {

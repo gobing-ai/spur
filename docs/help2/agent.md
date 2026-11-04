@@ -183,8 +183,8 @@ Start or stop a supervised agent process through the running server.
 ## spur agent dogfood
 
 ```bash
-spur agent dogfood gate --testee "<testee>" [--max-retry-present] [--steps "s1||s2"] [--json]
-spur agent dogfood validate-report --file <report.md> [--json]
+spur agent dogfood-gate --testee "<testee>" [--max-retry-present] [--steps "s1||s2"] [--json]
+spur agent dogfood-validate-report --file <report.md> [--json]
 ```
 
 `gate` exits 2 when the testee drives a pipeline (or a mutating `--fix` mode) without an explicit

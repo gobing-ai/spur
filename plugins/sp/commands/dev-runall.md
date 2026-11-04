@@ -102,7 +102,7 @@ full distinction.
 - **Bootstrap reads (1128):** before the first dispatch, read [SKILL.md § Bootstrap reads](../skills/spur-dev/SKILL.md#bootstrap-reads) and load only that mode's files — the section whose trigger has not fired is on demand.
 - **Publish the visible batch plan first (1105):** publish `A Prepare batch` (A1–A4) and `Z Batch
   report` before the first task, then one letter per task from `spur task batch-plan waves` after
-  freeze/order and digit children from `spur task batch-plan task-children` at task start —
+  freeze/order and digit children from `spur task batch-plan-children` at task start —
   [execution-batch.md](../skills/spur-dev/references/execution-batch.md#27-visible-batch-plan-1105-r3)
   § 2.7 Visible batch plan.
 - Apply the [inline-default execution-surface contract](../skills/spur-dev/references/cross-cutting.md#inline-default-execution-surface). Interactive sequential omit/`inline` keeps the orchestrator in the host session through the engine loop (`spur workflow run --vars '{"executor":"host"}'` → work item → `spur workflow continue`); the resolved selector applies uniformly — eligible `agent.run` stages dispatch once to a native subagent with host fallback (0508). `--agent auto`, a name, or parallel mode retains the isolated per-task workflow boundary.

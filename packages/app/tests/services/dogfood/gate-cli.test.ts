@@ -1,7 +1,7 @@
 import { describe, expect, test } from 'bun:test';
 import { parseDogfoodGateArgs, runDogfoodGateCli } from '../../../src/services/dogfood/gate-cli';
 
-/** `spur agent dogfood gate` argv contract (script-absorption PR-7; formerly detect-pipeline-driving). */
+/** `spur agent dogfood-gate` argv contract (script-absorption PR-7; formerly detect-pipeline-driving). */
 describe('dogfood gate CLI', () => {
     test('parseDogfoodGateArgs — flags, positional, -- remainder, empty steps', () => {
         expect(parseDogfoodGateArgs(['--help']).help).toBe(true);

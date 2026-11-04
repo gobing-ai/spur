@@ -1,7 +1,7 @@
 /**
  * Commit guard — refuse a driver commit that would sweep a *foreign* writer's working-tree changes
  * (task 1129, feature H1; incidents `a94f9f431`, `36f274590` — commits swept other sessions' files).
- * Transport: `spur workflow commit-guard <start|stage|check> --run <id>` (script-absorption PR-4;
+ * Transport: `spur workflow commit-guard-<start|stage|check> --run <id>` (script-absorption PR-4;
  * moved verbatim from the retired `plugins/sp/scripts/commit-guard.ts`).
  *
  * Read/write `.spur/run/<id>-tree-start.json`; stage only the listed paths this run wrote; report
@@ -58,7 +58,7 @@ export interface CommitGuardStageReport extends CommitGuardReport {
 
 /** One-line usage printed when an op or its required `--run` is missing (exit 1). */
 export const COMMIT_GUARD_USAGE =
-    'usage: spur workflow commit-guard start --run <id> | stage --run <id> [--base <sha>] -- <paths…> | check --run <id> [--base <sha>]';
+    'usage: spur workflow commit-guard-start --run <id> | commit-guard-stage --run <id> [--base <sha>] -- <paths…> | commit-guard-check --run <id> [--base <sha>]';
 
 /** Run bookkeeping is not product work — neither set may contain it (task-diffstat's rule). */
 const isBookkeeping = (path: string): boolean => path === '.spur' || path.startsWith('.spur/');
@@ -154,7 +154,7 @@ function missingStart(run: string): CommitGuardReport {
     return report(
         1,
         [],
-        [`commit-guard: no ${artifactPath(run)} — run \`spur workflow commit-guard start --run ${run}\` first`],
+        [`commit-guard: no ${artifactPath(run)} — run \`spur workflow commit-guard-start --run ${run}\` first`],
     );
 }
 /** The usage line with exit 1 — a mis-invocation stages and reports nothing. */

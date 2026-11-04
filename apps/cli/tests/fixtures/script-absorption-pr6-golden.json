@@ -26,16 +26,6 @@
             "stdout": "",
             "stderr": "usage: <script> check <report.md>\n"
         },
-        "anatomy unknown op": {
-            "exitCode": 1,
-            "stdout": "",
-            "stderr": "valid commands: digest, check, paths, assert-clean, probe, stamp, refresh, publish\n"
-        },
-        "anatomy no op": {
-            "exitCode": 1,
-            "stdout": "",
-            "stderr": "valid commands: digest, check, paths, assert-clean, probe, stamp, refresh, publish\n"
-        },
         "anatomy paths env": {
             "exitCode": 0,
             "stdout": "--- paths.env\nHA_HELPER=<FIXTURES>/ha-artifact.json\nHA_SKILL=<FIXTURES>/ha-artifact.json/skills/history-anatomy\nHA_TARGET=docs/report/2026-08-24-history-anatomy.md\nHA_DATE=2026-08-24\nHA_SINCE=2026-08-24T00:00:00.000+00:00\nHA_UNTIL=2026-08-24T23:59:59.999+00:00\nHA_BASELINE_SINCE=2026-08-23T00:00:00.000+00:00\nHA_BASELINE_UNTIL=2026-08-23T23:59:59.999+00:00\n",

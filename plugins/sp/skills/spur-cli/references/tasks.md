@@ -49,7 +49,8 @@ re-reading or re-tokenizing the task.
 | `migrate-anchors` | Qualify in-repo evidence anchors to repo-relative paths (0583 R1–R3); `--wbs` scopes to one task file (1109 R1); retargets scratch `done_reason` verdict pointers (1140) | `--wbs` `--dry-run` `--json` |
 | `refresh-roster <wbs>` | Regenerate a parent task's sub-task roster block in `## Plan` | `--folder` `--json` |
 | `batch-create` | Create many tasks from a validated JSON array | `--file <path>` `--skip-ready` `--agent <selector>` `--folder` `--json` |
-| `batch-plan <mode>` | Batch plan projection: `waves` / `order` / `task-children` (JSON on stdout; the batch driver's visible plan) | `--tasks <file>` `--concurrency <n>` `--letter <A-Z>` `--plan <file>` |
+| `batch-plan <mode>` | Batch plan projection: `waves` / `order` (JSON on stdout; the batch driver's visible plan) | `--tasks <file>` `--concurrency <n>` |
+| `batch-plan-children` | One task row's phase digits from the visible plan (JSON on stdout) | `--letter <A-Z>` `--plan <file>` |
 | `preflight [wbs]` | Read-only batch admission: TABLE A STOP check, quick readiness (`--operation`), one-shot recovery hop; status/deps read from the corpus unless given | `--status <s>` `--deps <list>` `--dep-status <map>` `--operation <op>` `--filtered-count <n>` `--required-sections <list>` `--present-sections <list>` `--force` `--recovery` `--classify-feature <json>` `--folder` `--json` |
 | `wrapup <op>` | One deterministic `wrapup-pipeline` step (`resolve`, `route-reason`, `metrics`, `doc-sync-snapshot`, `doc-sync-scope`, `doc-supersession`, `drift-probe`) — workflow-internal | `--run-id <id>` `--tasks <json>` `--mode <m>` `--spur-bin <cmd>` |
 | `record <wbs>` | Write `Testing` from a verify verdict (deterministic); bare-`## Review` fallback only; optional Solution + transition | `--verdict-file <path>` `--solution-from-diff` `--transition <status>` `--folder` `--json` |

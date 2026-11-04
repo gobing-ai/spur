@@ -44,32 +44,31 @@ function pair(
     return { name, legacy: [script, ...argv], cli: [...verb, ...argv], ...extra };
 }
 
-const ANATOMY = ['history', 'anatomy'];
+/** A cache op: the legacy script takes `<op> …`, the spur verb is the flat `history anatomy-<op>` (task 1290). */
+function anatomy(name: string, argv: readonly [string, ...string[]], extra: Partial<Pr6Case> = {}): Pr6Case {
+    const [op, ...rest] = argv;
+    return { name, legacy: [HA, ...argv], cli: ['history', `anatomy-${op}`, ...rest], ...extra };
+}
+
 const TIMELINE = ['history', 'timeline'];
 const WSUMMARY = ['workflow', 'summary'];
 const PROFILE = ['workflow', 'profile'];
 const DSUMMARY = ['history', 'summary'];
 
 export const PR6_CASES: readonly Pr6Case[] = [
-    // ── spur history anatomy (history-anatomy-cache) ──
-    pair('anatomy digest', HA, ANATOMY, ['digest', F('ha-artifact.json')]),
-    pair('anatomy check pass', HA, ANATOMY, ['check', F('ha-report-good.md')]),
-    pair('anatomy check bad category', HA, ANATOMY, ['check', F('ha-report-bad-category.md')]),
-    pair('anatomy check missing sections', HA, ANATOMY, ['check', F('ha-report-missing.md')]),
-    pair('anatomy check usage', HA, ANATOMY, ['check']),
-    pair('anatomy unknown op', HA, ANATOMY, ['bogus']),
-    pair('anatomy no op', HA, ANATOMY, []),
-    pair(
+    // ── spur history anatomy-<op> (history-anatomy-cache) ──
+    anatomy('anatomy digest', ['digest', F('ha-artifact.json')]),
+    anatomy('anatomy check pass', ['check', F('ha-report-good.md')]),
+    anatomy('anatomy check bad category', ['check', F('ha-report-bad-category.md')]),
+    anatomy('anatomy check missing sections', ['check', F('ha-report-missing.md')]),
+    anatomy('anatomy check usage', ['check']),
+    anatomy(
         'anatomy paths env',
-        HA,
-        ANATOMY,
         ['paths', '--helper', F('ha-artifact.json'), '--date', '2026-08-24', '--out', 'paths.env'],
         { readBack: 'paths.env' },
     ),
-    pair(
+    anatomy(
         'anatomy paths daily rejects --output',
-        HA,
-        ANATOMY,
         [
             'paths',
             '--helper',
@@ -83,14 +82,12 @@ export const PR6_CASES: readonly Pr6Case[] = [
         ],
         { readBack: 'paths.env' },
     ),
-    pair(
+    anatomy(
         'anatomy paths bad date',
-        HA,
-        ANATOMY,
         ['paths', '--helper', F('ha-artifact.json'), '--date', '2026-13-40', '--out', 'paths.env'],
         { readBack: 'paths.env' },
     ),
-    pair('anatomy paths no out', HA, ANATOMY, ['paths', '--helper', F('ha-artifact.json')]),
+    anatomy('anatomy paths no out', ['paths', '--helper', F('ha-artifact.json')]),
     // ── spur history timeline (session-timeline) ──
     pair('timeline no session', TL, TIMELINE, []),
     pair('timeline claude transcript', TL, TIMELINE, ['--transcript', F('transcript.jsonl')]),

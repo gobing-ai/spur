@@ -1,6 +1,6 @@
 /**
- * Tests for `spur builder pr-<verb>` (the four flat composers, task 1219) and its hidden
- * `pr [argv...]` alias (script-absorption PR-7). The spine is pinned by
+ * Tests for `spur builder pr-<verb>` (the four flat composers, task 1219); the hidden
+ * `pr [argv...]` alias was removed in task 1290. The spine is pinned by
  * packages/app/tests/services/pr-review; this pins the Commander surface, the per-verb
  * composition against the former op sequence, and the exit-code/verdict contract.
  */
@@ -50,33 +50,20 @@ async function run(argv: string[]) {
 }
 
 describe('spur builder pr', () => {
-    test('help subcommand prints the spine usage (exit 0)', async () => {
-        const r = await run(['builder', 'pr', 'help']);
-        expect(r.exitCode).toBe(0);
-        expect(r.stdout).toContain('spur builder pr');
-    });
-
-    test('an unknown subcommand is a usage error (exit 1)', async () => {
-        const r = await run(['builder', 'pr', 'bogus']);
+    test('the removed pr alias is an unknown command (1290)', async () => {
+        const r = await run(['builder', 'pr', 'preflight']);
         expect(r.exitCode).toBe(1);
-        expect(r.stderr).toContain('unknown subcommand: bogus');
-    });
-
-    test('unknown flags reach the spine parser instead of Commander', async () => {
-        // Same as the retired script: a parser throw is a hard failure (exit 2) with the reason.
-        const r = await run(['builder', 'pr', 'wait', '--bogus']);
-        expect(r.exitCode).toBe(2);
-        expect(r.stderr).toContain('unknown argument');
+        expect(r.stderr).toContain("unknown command 'pr'");
     });
 });
 
-// ─── 1215: the adapter forwards its invocation cwd/env to the PR spine ────────
+// ─── 1215: the PR spine honours its invocation cwd/env ────────────────────────
 //
 // Two real throwaway repositories; only `gh` is faked (no network). The process runs inside the
 // checkout while the CLI context selects repository B, so a pre-fix (context-less) adapter would
 // resolve the checkout's repository and fail the root assertion.
 
-describe('spur builder pr execution context (1215)', () => {
+describe('pr spine execution context (1215)', () => {
     let root = '';
     let binDir = '';
     let repoA = '';
@@ -131,10 +118,17 @@ describe('spur builder pr execution context (1215)', () => {
         PR_REVIEW_FIXTURE_ENV: marker,
     });
 
+    // The CLI alias that used to carry these ops is gone (1290); the flat verbs forward the same
+    // context through `runPrVerb`, so the regression is pinned on the spine entry point itself.
     const runWithContext = async (argv: string[], cwd: string, env: Record<string, string | undefined>) => {
-        const output = createCapturedOutput();
-        const exitCode = await main(argv, { cwd, output, env });
-        return { exitCode, stdout: output.messages.join('\n'), stderr: output.errors.join('\n') };
+        const lines: string[] = [];
+        const errs: string[] = [];
+        const exitCode = runPrReviewMain(
+            argv,
+            { out: (line) => lines.push(line), err: (line) => errs.push(line) },
+            { cwd, env },
+        );
+        return { exitCode, stdout: lines.join('\n'), stderr: errs.join('\n') };
     };
 
     const jsonLine = (stdout: string): string => {
@@ -170,7 +164,7 @@ describe('spur builder pr execution context (1215)', () => {
             cwd: process.cwd(),
         }).stdout.trim();
         const r = await runWithContext(
-            ['builder', 'pr', 'preflight', '--json', '--status-file', 'pr.status'],
+            ['preflight', '--json', '--status-file', 'pr.status'],
             repoB,
             contextEnv('marker-b'),
         );
@@ -189,8 +183,8 @@ describe('spur builder pr execution context (1215)', () => {
     });
 
     test('consecutive invocations bind to their own repository', async () => {
-        const a = await runWithContext(['builder', 'pr', 'preflight', '--json'], repoA, contextEnv('marker-a'));
-        const b = await runWithContext(['builder', 'pr', 'preflight', '--json'], repoB, contextEnv('marker-b'));
+        const a = await runWithContext(['preflight', '--json'], repoA, contextEnv('marker-a'));
+        const b = await runWithContext(['preflight', '--json'], repoB, contextEnv('marker-b'));
         expect(JSON.parse(jsonLine(a.stdout))).toMatchObject({ repoRoot: repoA, nameWithOwner: 'octo/marker-a' });
         expect(JSON.parse(jsonLine(b.stdout))).toMatchObject({ repoRoot: repoB, nameWithOwner: 'octo/marker-b' });
     });
@@ -201,7 +195,7 @@ describe('spur builder pr execution context (1215)', () => {
             cwd: process.cwd(),
         }).stdout.trim();
         expect(checkoutRoot).not.toBe('');
-        const r = await runWithContext(['builder', 'pr', 'preflight', '--json'], nonGit, contextEnv('marker-b'));
+        const r = await runWithContext(['preflight', '--json'], nonGit, contextEnv('marker-b'));
         expect(r.exitCode).toBe(2);
         expect(r.stderr).toContain('not a git repository');
         expect(r.stdout).not.toContain(checkoutRoot);
@@ -209,7 +203,7 @@ describe('spur builder pr execution context (1215)', () => {
 
     test('a mutation-capable operation (push) mutates the context repository, not the process checkout', async () => {
         const r = await runWithContext(
-            ['builder', 'pr', 'push', '--json', '--status-file', 'push.status'],
+            ['push', '--json', '--status-file', 'push.status'],
             repoB,
             contextEnv('marker-b'),
         );
@@ -811,21 +805,17 @@ describe('spur builder pr-<verb> composition parity (1219)', () => {
 });
 
 describe('spur builder pr-<verb> surface (1219)', () => {
-    test('builder registers the four flat verbs and hides the deprecating pr alias', () => {
+    test('builder registers the four flat verbs and no pr alias', () => {
         const program = new Command();
         const { context } = makeContext(tmpdir());
         registerBuilderCommand(program, context);
         const builder = program.commands.find((c) => c.name() === 'builder');
         const verbs = builder?.commands.map((c) => c.name()) ?? [];
 
-        expect(verbs).toEqual(expect.arrayContaining(['pr-status', 'pr-check', 'pr-open', 'pr-review', 'pr']));
+        expect(verbs).toEqual(expect.arrayContaining(['pr-status', 'pr-check', 'pr-open', 'pr-review']));
+        expect(verbs).not.toContain('pr');
         const names = new Set(verbs);
         expect(names.size).toBe(verbs.length);
-        // The alias is registered but hidden: it is absent from `builder --help` while the four
-        // replacement verbs are listed.
-        const help = builder?.helpInformation() ?? '';
-        expect(help).toContain('pr-status');
-        expect(help).not.toMatch(/^\s+pr \[options\]/m);
     });
 
     test('each verb advertises its own flags in help', () => {
@@ -842,35 +832,5 @@ describe('spur builder pr-<verb> surface (1219)', () => {
         expect(help('pr-review')).toContain('--no-wait');
         expect(help('pr-review')).toContain('--interval');
         expect(help('pr-review')).not.toContain('--scan-only');
-    });
-
-    test('the hidden pr alias prints one deprecation line naming the replacement verb', async () => {
-        const state = makeFixture();
-        const verb = await runVerb(state, ['builder', 'pr', 'preflight', '--json', '--status-file', 'alias.status']);
-
-        expect(verb.exitCode).toBe(0);
-        expect(verb.stderr.split('\n').filter((line) => line.includes('deprecated'))).toHaveLength(1);
-        expect(verb.stderr).toContain('spur builder pr preflight is deprecated; use spur builder pr-check');
-        expect(readStatus(state, 'alias.status')).toBe('PASS');
-    });
-
-    test('the hidden pr alias still passes the ops through unchanged', async () => {
-        const legacy = makeFixture();
-        const next = makeFixture();
-        const op = runOp(legacy, ['request', '--focus', 'migration safety', '--json', '--status-file', 'alias.status']);
-        const verb = await runVerb(next, [
-            'builder',
-            'pr',
-            'request',
-            '--focus',
-            'migration safety',
-            '--json',
-            '--status-file',
-            'alias.status',
-        ]);
-
-        expect(verb.exitCode).toBe(op.code);
-        expect(stable(verb.payload)).toEqual(stable(op.payload));
-        expect(readStatus(next, 'alias.status')).toBe(readStatus(legacy, 'alias.status'));
     });
 });

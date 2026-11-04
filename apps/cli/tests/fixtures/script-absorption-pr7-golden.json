@@ -70,36 +70,6 @@
             "exitCode": 1,
             "stdout": "",
             "stderr": "Failed to read <FIXTURES>/does-not-exist.md: ENOENT: no such file or directory, open '<FIXTURES>/does-not-exist.md'\n"
-        },
-        "pr unknown subcommand": {
-            "exitCode": 1,
-            "stdout": "",
-            "stderr": "error: unknown subcommand: bogus\n"
-        },
-        "pr unknown argument": {
-            "exitCode": 2,
-            "stdout": "",
-            "stderr": "error: unknown argument: --bogus\n"
-        },
-        "pr value flag without value": {
-            "exitCode": 2,
-            "stdout": "",
-            "stderr": "error: flag --timeout requires a value\n"
-        },
-        "pr unknown argument json": {
-            "exitCode": 2,
-            "stdout": "",
-            "stderr": "error: unknown argument: --bogus\n"
-        },
-        "pr preflight outside a git repo": {
-            "exitCode": 2,
-            "stdout": "{\"ok\":false,\"error\":\"git rev-parse --show-toplevel failed: fatal: not a git repository (or any of the parent directories): .git\"}\n",
-            "stderr": "error: git rev-parse --show-toplevel failed: fatal: not a git repository (or any of the parent directories): .git\n"
-        },
-        "pr help": {
-            "exitCode": 0,
-            "stdout": "pr-reviewing.ts — deterministic spine for /sp:dev-pr-review (sp:pr-reviewing)\n\nInstalled usage: node \"$(superskill script path sp pr-reviewing.mjs)\" <subcommand> [flags]\nSource-tree usage: bun plugins/sp/scripts/pr-reviewing.ts <subcommand> [flags]\n\nSubcommands:\n  preflight            git/gh/repo checks; FAILs on detached HEAD or a dirty tree\n  push                 push the branch (never force); sets upstream when missing\n  ensure-pr [--base b] reuse the branch's PR or create one with gh pr create --fill\n  hygiene  [--base b]  scan base...HEAD for secrets/.env/conflict markers (BLOCK) and debug residue (WARN)\n  request  [--force] [--focus text]\n                       post @codex review (dedupes reviewed/in-flight HEAD unless --force)\n  wait     [--since iso] [--head sha] [--timeout 600] [--interval 30]\n                       poll for Codex output; exit 3 on timeout (pending, not failed)\n  collect  [--since iso] [--head sha]\n                       fetch the current-HEAD Codex result (FINDINGS, CLEAN, or PENDING)\n  status   [--since iso] [--head sha] composite repo/PR/CI/Codex status (read-only)\n\nGlobal flags: --json (single JSON object)  --status-file <path> (one-word verdict)\nExit codes: 0 ok · 1 usage · 2 hard failure · 3 wait timeout\n",
-            "stderr": ""
         }
     }
 }

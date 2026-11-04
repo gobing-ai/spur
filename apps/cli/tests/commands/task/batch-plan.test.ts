@@ -1,5 +1,5 @@
 /**
- * Thin-wrapper tests for `spur task batch-plan` (apps/cli/src/commands/task/batch-plan.ts; script-absorption PR-5). The
+ * Thin-wrapper tests for `spur task batch-plan|batch-plan-children` (apps/cli/src/commands/task/batch-plan.ts; script-absorption PR-5). The
  * projections are pinned by packages/app tests and the golden parity test; this pins the file reads
  * and flag mapping through `main()`.
  */
@@ -36,7 +36,7 @@ describe('spur task batch-plan', () => {
         expect(JSON.parse(waves.out)).toHaveProperty('waves');
         const order = await run(['task', 'batch-plan', 'order', '--tasks', 'tasks.json', '--concurrency', '1']);
         expect(JSON.parse(order.out)).toMatchObject({ order: ['0101'] });
-        const children = await run(['task', 'batch-plan', 'task-children', '--letter', 'B', '--plan', 'plan.json']);
+        const children = await run(['task', 'batch-plan-children', '--letter', 'B', '--plan', 'plan.json']);
         expect(children.out).toBe('[]');
         const missing = await run(['task', 'batch-plan', 'waves', '--tasks', 'nope.json']);
         expect(missing.exitCode).toBe(1);
@@ -44,5 +44,16 @@ describe('spur task batch-plan', () => {
         const usage = await run(['task', 'batch-plan', 'bogus']);
         expect(usage.exitCode).toBe(2);
         expect(usage.err).toStartWith('usage: spur task batch-plan');
+    });
+});
+
+describe('spur task batch-plan task-children deprecated shim (task 1290)', () => {
+    test('warns once on stderr then runs batch-plan-children', async () => {
+        await writeFile(join(cwd, 'plan.json'), JSON.stringify({ plan: [] }));
+        const flat = await run(['task', 'batch-plan-children', '--letter', 'B', '--plan', 'plan.json']);
+        const shim = await run(['task', 'batch-plan', 'task-children', '--letter', 'B', '--plan', 'plan.json']);
+        expect(shim.exitCode).toBe(flat.exitCode);
+        expect(shim.out).toBe(flat.out);
+        expect(shim.err).toBe('spur task batch-plan task-children is deprecated; use spur task batch-plan-children');
     });
 });

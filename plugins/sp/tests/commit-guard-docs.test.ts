@@ -3,7 +3,7 @@ import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 
 /**
- * 1129 AC4 (R5): the runbooks route every driver commit through `spur workflow commit-guard`.
+ * 1129 AC4 (R5): the runbooks route every driver commit through `spur workflow commit-guard-*`.
  * The guard itself moved into the CLI (script-absorption PR-4); its behaviour is pinned by
  * `packages/app/tests/workflow/commit-guard.test.ts`. This file keeps the doc contract for the
  * surviving execution runbooks (the inline driver runbook retired with the driver, task 1242).
@@ -50,12 +50,12 @@ describe('commit-guard (1129 AC4) — runbook commit-step contract', () => {
         return steps;
     }
 
-    /** The guard call: `spur workflow commit-guard stage` (the retired `$GUARD` script form is gone). */
+    /** The guard call: `spur workflow commit-guard-stage` (the retired `$GUARD` script form is gone). */
     function invokesGuard(step: string): boolean {
-        return /spur workflow commit-guard\s+stage/.test(step);
+        return /spur workflow commit-guard-stage/.test(step);
     }
 
-    test('every commit step invokes commit-guard stage', () => {
+    test('every commit step invokes commit-guard-stage', () => {
         for (const [name, doc] of docs) {
             const steps = commitSteps(doc);
             if (COMMIT_STEP_DOCS.includes(name as (typeof COMMIT_STEP_DOCS)[number])) {
@@ -80,7 +80,7 @@ describe('commit-guard (1129 AC4) — runbook commit-step contract', () => {
         // 1129 residual (b): the sequential start/close-out pair consumed `$RUN_ID` with no assignment
         // on that path — the guard then failed closed (exit 1) instead of guarding the close-out.
         for (const [name, doc] of docs) {
-            const start = doc.search(/spur workflow commit-guard\s+start --run "\$RUN_ID"/);
+            const start = doc.search(/spur workflow commit-guard-start --run "\$RUN_ID"/);
             if (start < 0) continue;
             expect([name, /RUN_ID\s*=/.test(doc.slice(0, start))]).toEqual([name, true]);
         }

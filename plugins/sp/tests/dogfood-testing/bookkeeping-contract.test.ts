@@ -7,7 +7,7 @@ export function findBookkeepingSuppression(snippet: string, filename = 'snippet.
     const forbiddenPatterns = [
         // Script-absorption PR-4 kept these as CLI ops; task 1242 flattened the inline group, so the
         // WT-4 landing verbs are the live spelling and their output must stay visible too.
-        /spur workflow (?:persist-out|persist-check|commit-guard)\b[^\n]*?(?:>[^&]*\/dev\/null|2>\s*\/dev\/null|&>\s*\/dev\/null)/,
+        /spur workflow (?:persist-out|persist-check|commit-guard(?:-start|-stage|-check)?)\b[^\n]*?(?:>[^&]*\/dev\/null|2>\s*\/dev\/null|&>\s*\/dev\/null)/,
         /(?:bun|node|\$SETUP_SCRIPT|\$RS|\$CHECK_SCRIPT)\s+(?:"?\$[A-Za-z0-9_]+"|\S*inline-run-setup|\S*quality-gate|\S*persist-out)[^\n]*?(?:>[^&]*\/dev\/null|2>\s*\/dev\/null|&>\s*\/dev\/null)/,
         /(?<!superskill script path [^\n]*)(?:inline-run-setup|quality-gate|persist-out)\.(?:ts|mjs)[^\n]*?(?:>[^&]*\/dev\/null|2>\s*\/dev\/null|&>\s*\/dev\/null)/,
     ];

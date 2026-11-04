@@ -11,7 +11,7 @@ import type { HistoryArtifact } from './artifact';
  * field to `HistoryArtifact` without classifying it fails `tsc` naming the key.
  *
  * Consumers: `packages/app/src/services/history-anatomy.ts` imports this module directly (task
- * 1005 R2); `spur history anatomy` reaches it through that service (script-absorption PR-6 retired
+ * 1005 R2); `spur history anatomy-*` reaches it through that service (script-absorption PR-6 retired
  * the generated plugin bundle).
  */
 

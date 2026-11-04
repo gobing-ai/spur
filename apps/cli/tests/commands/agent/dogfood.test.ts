@@ -1,5 +1,5 @@
 /**
- * Thin-wrapper tests for `spur agent dogfood gate|validate-report` (script-absorption PR-7).
+ * Thin-wrapper tests for `spur agent dogfood-gate|dogfood-validate-report` (script-absorption PR-7).
  * Logic is pinned by packages/app/tests/services/dogfood; this pins flag mapping and exit codes.
  */
 import { afterAll, beforeAll, describe, expect, test } from 'bun:test';
@@ -22,9 +22,9 @@ async function run(argv: string[]) {
     return { exitCode, out: output.messages.join('\n'), err: output.errors.join('\n') };
 }
 
-describe('spur agent dogfood gate', () => {
+describe('spur agent dogfood-gate', () => {
     test('refuses a pipeline-driving testee without --max-retry-present (exit 2)', async () => {
-        const r = await run(['agent', 'dogfood', 'gate', '--testee', '/sp:dev-run 0125 --auto']);
+        const r = await run(['agent', 'dogfood-gate', '--testee', '/sp:dev-run 0125 --auto']);
         expect(r.exitCode).toBe(2);
         expect(r.out).toContain('pipeline-driving testee detected');
     });
@@ -47,26 +47,26 @@ describe('spur agent dogfood gate', () => {
     });
 
     test('a missing testee is a usage error (exit 1)', async () => {
-        const r = await run(['agent', 'dogfood', 'gate']);
+        const r = await run(['agent', 'dogfood-gate']);
         expect(r.exitCode).toBe(1);
-        expect(r.err).toContain('spur agent dogfood gate');
+        expect(r.err).toContain('spur agent dogfood-gate');
     });
 });
 
-describe('spur agent dogfood validate-report', () => {
+describe('spur agent dogfood-validate-report', () => {
     test('a missing --file is a usage error (exit 1)', async () => {
-        const r = await run(['agent', 'dogfood', 'validate-report']);
+        const r = await run(['agent', 'dogfood-validate-report']);
         expect(r.exitCode).toBe(1);
-        expect(r.err).toContain('spur agent dogfood validate-report');
+        expect(r.err).toContain('spur agent dogfood-validate-report');
     });
 
     test('an incomplete report fails validation (exit 2) with --json and positional file', async () => {
         const file = join(cwd, 'bad.md');
         writeFileSync(file, '# not a dogfood report\n');
-        const r = await run(['agent', 'dogfood', 'validate-report', file, '--json']);
+        const r = await run(['agent', 'dogfood-validate-report', file, '--json']);
         expect(r.exitCode).toBe(2);
         expect((JSON.parse(r.out) as { ok: boolean }).ok).toBe(false);
-        const plain = await run(['agent', 'dogfood', 'validate-report', '--file', file]);
+        const plain = await run(['agent', 'dogfood-validate-report', '--file', file]);
         expect(plain.exitCode).toBe(2);
         expect(plain.out.length).toBeGreaterThan(0);
     });
@@ -87,8 +87,21 @@ describe('spur agent dogfood validate-report', () => {
             'fixtures',
             'report-complete.md',
         );
-        const r = await run(['agent', 'dogfood', 'validate-report', '--file', fixture]);
+        const r = await run(['agent', 'dogfood-validate-report', '--file', fixture]);
         expect(r.exitCode).toBe(0);
         expect(r.out).toBe('ok');
+    });
+});
+
+describe('spur agent dogfood <op> deprecated shim (task 1290)', () => {
+    test('warns once on stderr then runs the same action as the flat verb', async () => {
+        const argv = ['--testee', '/sp:dev-run 0125 --auto'];
+        const flat = await run(['agent', 'dogfood-gate', ...argv]);
+        const shim = await run(['agent', 'dogfood', 'gate', ...argv]);
+        expect(shim.exitCode).toBe(flat.exitCode);
+        expect(shim.out).toBe(flat.out);
+        expect(shim.err).toBe(
+            ['spur agent dogfood gate is deprecated; use spur agent dogfood-gate', flat.err].filter(Boolean).join('\n'),
+        );
     });
 });

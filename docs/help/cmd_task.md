@@ -268,19 +268,32 @@ spur task batch-plan [options] <mode>
 
 | Argument | Description |
 |---|---|
-| `mode` | `waves` \| `order` \| `task-children` |
+| `mode` | `waves` \| `order` |
 
 | Flag | Description |
 |---|---|
 | `--tasks <file>` | Tasks JSON file: `{wbs, name}[]` for `waves`, `{wbs, dependencies?, files?}[]` for `order` |
 | `--concurrency <n>` | Parallel slots for `order` (positive integer, default 2) |
-| `--letter <letter>` | Task row letter `A`–`Z` (`task-children`) |
-| `--plan <file>` | `spur workflow show --format todo --json` payload or a bare plan array (`task-children`) |
 
 The batch driver's letters-first visible plan (script-absorption PR-5; replaces the plugin script
 `batch-plan`). JSON on stdout: `waves` → `{ waves }` (A Prepare batch, B…Y one row per task, Z Batch
-report), `order` → `{ order, waves, cycle, overlaps, mode, reason }` (a cycle is data, not an error),
-`task-children` → the task's phase digits. Files resolve against the project directory. Exit `0`
+report), `order` → `{ order, waves, cycle, overlaps, mode, reason }` (a cycle is data, not an error).
+Files resolve against the project directory. Exit `0` success, `1` unreadable/invalid input, `2`
+usage error. The former `task-children` mode is a hidden one-release shim over
+`spur task batch-plan-children` that warns on stderr (task 1290).
+
+## spur task batch-plan-children
+
+```
+spur task batch-plan-children --letter <A-Z> --plan <file>
+```
+
+| Flag | Description |
+|---|---|
+| `--letter <letter>` | Task row letter `A`–`Z` |
+| `--plan <file>` | `spur workflow show --format todo --json` payload or a bare plan array |
+
+One task row's phase digits from the batch driver's visible plan, as JSON on stdout. Exit `0`
 success, `1` unreadable/invalid input, `2` usage error.
 
 ## spur task preflight

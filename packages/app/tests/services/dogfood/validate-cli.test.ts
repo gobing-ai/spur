@@ -5,7 +5,7 @@ import { runDogfoodValidateCli } from '../../../src/services/dogfood/validate-cl
 
 const passFixture = readFileSync(join(import.meta.dir, 'fixtures', 'report-complete.md'), 'utf8');
 
-/** `spur agent dogfood validate-report` argv contract (script-absorption PR-7). */
+/** `spur agent dogfood-validate-report` argv contract (script-absorption PR-7). */
 describe('dogfood validate-report CLI', () => {
     test('validate CLI — pass fixture exits 0; §-style exits 2 (task 0278 R6)', async () => {
         const files = new Map<string, string>([

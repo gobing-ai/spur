@@ -5,11 +5,11 @@ import { buildProgram } from '../src/index';
 import { registerWorkflowTransportCommands } from '../src/workflow-transport';
 
 /**
- * The boot-free composition root for `spur workflow commit-guard` (script-absorption PR-4): it
+ * The boot-free composition root for `spur workflow commit-guard-*` (script-absorption PR-4; flattened in task 1290): it
  * mounts the guard, and the full tree mounts the same command so `spur workflow --help` lists it.
  */
 describe('workflow transport composition root', () => {
-    test('mounts commit-guard (start/stage/check) under workflow', () => {
+    test('mounts the commit-guard-* verbs and the hidden commit-guard shim under workflow', () => {
         const program = new Command();
         const workflow = program.command('workflow');
         registerWorkflowTransportCommands(workflow, {
@@ -19,6 +19,7 @@ describe('workflow transport composition root', () => {
             setExitCode: () => {},
         });
         const sub = (name: string) => workflow.commands.find((c) => c.name() === name);
+        for (const op of ['start', 'stage', 'check']) expect(sub(`commit-guard-${op}`)).toBeDefined();
         expect(sub('commit-guard')?.commands.map((c) => c.name())).toEqual(['start', 'stage', 'check']);
         // WT-4 landing keeps its capability as flat verbs (task 1242), not as an `inline` sub-verb.
         expect(sub('persist-out')).toBeDefined();
@@ -32,7 +33,7 @@ describe('workflow transport composition root', () => {
         const program = await buildProgram(createCliContext({ output }), output);
         const workflow = program.commands.find((c) => c.name() === 'workflow');
         const names = workflow?.commands.map((c) => c.name()) ?? [];
-        expect(names).toContain('commit-guard');
+        expect(names).toContain('commit-guard-start');
         expect(names).toContain('persist-out');
         expect(names).toContain('persist-check');
         expect(names).not.toContain('inline');

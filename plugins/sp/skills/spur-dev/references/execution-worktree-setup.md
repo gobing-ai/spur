@@ -352,7 +352,7 @@ fingerprints the invoking tree for the same reason (its own step 1b).
   [ "$(git branch --show-current)" = "$BRANCH" ] \
     || { echo "branch mismatch: expected $BRANCH, got $(git branch --show-current)" >&2; exit 1; }
   RUN_ID="<marker-id>"   # the WT-3 marker's id — the same id WT-3b's stage call uses
-  spur workflow commit-guard start --run "$RUN_ID"   # <worktree>/.spur/run/$RUN_ID-tree-start.json = { head, dirty[] }
+  spur workflow commit-guard-start --run "$RUN_ID"   # <worktree>/.spur/run/$RUN_ID-tree-start.json = { head, dirty[] }
 )
 ```
 
@@ -368,8 +368,8 @@ same call, verifies the WT-3 identity, and never relies on a persistent `cd` or 
   cd -- "../<worktree-dir>" || { echo "tree missing: expected ../<worktree-dir>" >&2; exit 1; }
   [ "$(git branch --show-current)" = "$BRANCH" ] \
     || { echo "branch mismatch: expected $BRANCH, got $(git branch --show-current)" >&2; exit 1; }
-  spur workflow commit-guard check --run "$RUN_ID"        # 1129 R3: concurrent foreign writers; a non-empty list goes in the batch report
-  spur workflow commit-guard stage --run "$RUN_ID" -- <files-the-batch-wrote> \
+  spur workflow commit-guard-check --run "$RUN_ID"        # 1129 R3: concurrent foreign writers; a non-empty list goes in the batch report
+  spur workflow commit-guard-stage --run "$RUN_ID" -- <files-the-batch-wrote> \
     || { echo "WT-3b halt: commit-guard refused a path (foreign, unmerged or conflict-marked); nothing committed" >&2; exit 1; }
   git commit -m "<type>(<scope>): <command> <selector> batch writes"
 )
@@ -377,7 +377,7 @@ same call, verifies the WT-3 identity, and never relies on a persistent `cd` or 
 
 > **Forbidden in every driver commit step:** `git add -A` and `git add .`. They stage whatever a
 > concurrent writer happened to leave in the tree — the two incidents this guard exists for are
-> `a94f9f431` and `36f274590` — so a driver stages only through `spur workflow commit-guard stage`.
+> `a94f9f431` and `36f274590` — so a driver stages only through `spur workflow commit-guard-stage`.
 
 > **`stage` takes files, never directories.** A directory argument is refused as `(unchanged since
 > base)` and stages *nothing*, so a task whose diff lives in a moved tree must expand the changed

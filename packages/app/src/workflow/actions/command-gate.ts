@@ -15,7 +15,7 @@ const KIND = 'command.gate';
 /**
  * The typed outcome of a gate step (1234 R3), derived from the exit code alone:
  * `PASS` = 0 (the step ran and succeeded), `FAIL` = 1 (the step ran and failed),
- * `BLOCKED` = anything else — a refusal/usage exit (2, e.g. `spur workflow commit-guard stage`
+ * `BLOCKED` = anything else — a refusal/usage exit (2, e.g. `spur workflow commit-guard-stage`
  * refusing a foreign path or an unbound `spur self exec`) or a signal-killed / timed-out process.
  * A blocked step could not decide; guards route it rather than reading it as a red gate.
  */

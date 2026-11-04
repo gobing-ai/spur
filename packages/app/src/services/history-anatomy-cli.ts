@@ -1,5 +1,5 @@
 /**
- * `spur history anatomy <op>` — argv glue for the history-anatomy report cache (feature I8,
+ * `spur history anatomy-<op>` — argv glue for the history-anatomy report cache (feature I8,
  * HA-S1 0659 / ADR-079): eight ops, argv/stdout/exit pinned to the retired
  * `plugins/sp/scripts/history-anatomy-cache.ts` (script-absorption PR-6 golden). The cache core is
  * `./history-anatomy.ts`; this module only parses argv and does the op's file IO.
@@ -12,7 +12,7 @@ import * as core from './history-anatomy';
 
 const VALID_COMMANDS = 'digest, check, paths, assert-clean, probe, stamp, refresh, publish';
 const PROBE_USAGE =
-    'spur history anatomy probe --artifact <a.json> --target <report.md> [--baseline <b.json>] [--mode daily|ad-hoc] ' +
+    'spur history anatomy-probe --artifact <a.json> --target <report.md> [--baseline <b.json>] [--mode daily|ad-hoc] ' +
     '[--date <YYYY-MM-DD>] [--recompute true] [--out <prov.json>] [--skill-dir <d>] [--contract <f>] [--workflow <f>] [--helper <f>]';
 
 /** `--key value` / `--flag` → record. Bare flags become `"true"` so `--recompute` needs no value. */
@@ -81,7 +81,7 @@ export function runCacheCli(argv: string[], deps: HistoryAnatomyCliDeps = {}): c
     switch (cmd) {
         case 'digest': {
             if (a === undefined) {
-                return { exitCode: 1, stdout: '', stderr: 'usage: spur history anatomy digest <artifact.json>\n' };
+                return { exitCode: 1, stdout: '', stderr: 'usage: spur history anatomy-digest <artifact.json>\n' };
             }
             let artifact: unknown;
             try {
@@ -94,7 +94,7 @@ export function runCacheCli(argv: string[], deps: HistoryAnatomyCliDeps = {}): c
         }
         case 'check': {
             if (a === undefined) {
-                return { exitCode: 1, stdout: '', stderr: 'usage: spur history anatomy check <report.md>\n' };
+                return { exitCode: 1, stdout: '', stderr: 'usage: spur history anatomy-check <report.md>\n' };
             }
             const result = core.checkReportStructure(readFileSync(a, 'utf8'));
             const stdout = `${result.ok ? 'PASS' : 'FAIL'}\n${result.problems.map((p) => `- ${p}\n`).join('')}`;
@@ -105,7 +105,7 @@ export function runCacheCli(argv: string[], deps: HistoryAnatomyCliDeps = {}): c
                 return {
                     exitCode: 1,
                     stdout: '',
-                    stderr: 'usage: spur history anatomy publish <candidate.md> <target.md>\n',
+                    stderr: 'usage: spur history anatomy-publish <candidate.md> <target.md>\n',
                 };
             }
             core.publishAtomically(a, b);
@@ -120,7 +120,7 @@ export function runCacheCli(argv: string[], deps: HistoryAnatomyCliDeps = {}): c
                 return {
                     exitCode: 1,
                     stdout: '',
-                    stderr: 'usage: spur history anatomy assert-clean --baseline <porcelain.txt> [--expect <path>]...\n',
+                    stderr: 'usage: spur history anatomy-assert-clean --baseline <porcelain.txt> [--expect <path>]...\n',
                 };
             }
             const expects = new Set<string>();
@@ -149,7 +149,7 @@ export function runCacheCli(argv: string[], deps: HistoryAnatomyCliDeps = {}): c
                 return {
                     exitCode: 1,
                     stdout: '',
-                    stderr: 'usage: spur history anatomy paths --out <env> [--skill-dir <d>] [--helper <p>] [--report-dir <d>] [--date <d>] [--output <p>] [--mode <m>] [--since <s>] [--until <u>] [--focus <text>] [--recompute true|false] [--run-id <id>]\n',
+                    stderr: 'usage: spur history anatomy-paths --out <env> [--skill-dir <d>] [--helper <p>] [--report-dir <d>] [--date <d>] [--output <p>] [--mode <m>] [--since <s>] [--until <u>] [--focus <text>] [--recompute true|false] [--run-id <id>]\n',
                 };
             }
             const v = core.validateSelector({
@@ -239,7 +239,7 @@ export function runCacheCli(argv: string[], deps: HistoryAnatomyCliDeps = {}): c
                 return {
                     exitCode: 1,
                     stdout: '',
-                    stderr: 'usage: spur history anatomy stamp --candidate <c.md> --provenance <p.json> --out <o.md>\n',
+                    stderr: 'usage: spur history anatomy-stamp --candidate <c.md> --provenance <p.json> --out <o.md>\n',
                 };
             }
             try {
@@ -256,7 +256,7 @@ export function runCacheCli(argv: string[], deps: HistoryAnatomyCliDeps = {}): c
                 return {
                     exitCode: 1,
                     stdout: '',
-                    stderr: 'usage: spur history anatomy refresh --report <published.md> --out <o.md> [--disposition hit]\n',
+                    stderr: 'usage: spur history anatomy-refresh --report <published.md> --out <o.md> [--disposition hit]\n',
                 };
             }
             try {

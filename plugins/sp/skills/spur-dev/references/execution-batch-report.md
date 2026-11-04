@@ -185,11 +185,11 @@ batch tip — the step that makes the close-out the report's own contradiction).
 is never a point on the base ref.
 Stage them through the guard — never a free-form `git add` — so a concurrent writer's file cannot
 ride into the close-out commit (incident `36f274590`). `$RUN_ID` is the id Step 3 fixed before
-`spur workflow commit-guard start` (execution-batch.md § Step 3); an unset id makes the guard exit 1 — fail closed:
+`spur workflow commit-guard-start` (execution-batch.md § Step 3); an unset id makes the guard exit 1 — fail closed:
 
 ```bash
-spur workflow commit-guard check --run "$RUN_ID"      # 1129 R3: a non-empty foreign list goes in the batch report
-spur workflow commit-guard stage --run "$RUN_ID" -- <files the wrap wrote> \
+spur workflow commit-guard-check --run "$RUN_ID"      # 1129 R3: a non-empty foreign list goes in the batch report
+spur workflow commit-guard-stage --run "$RUN_ID" -- <files the wrap wrote> \
   || { echo "close-out halt: commit-guard refused a path (foreign, unmerged or conflict-marked); nothing committed" >&2; exit 1; }
 git commit -m "chore(wrap): <command> <selector> close-out writes"
 ```

@@ -378,7 +378,7 @@ describe('CommandGateActionRunner', () => {
 
     // 1234 R3: pass / fail / blocked is the exit-code taxonomy. 0 = PASS, 1 = the command
     // ran and failed, anything else (2 usage/refusal, a signal kill) = BLOCKED — the step
-    // could not decide. `spur workflow commit-guard stage` and an unbound `spur self exec`
+    // could not decide. `spur workflow commit-guard-stage` and an unbound `spur self exec`
     // both exit 2, so a workflow routes a refusal instead of reading it as a red gate.
     test('exit 2 records BLOCKED, exit 1 records FAIL, exit 0 records PASS', async () => {
         const workdir = join(tmpdir(), `test-gate-typed-${crypto.randomUUID()}`);

@@ -1,5 +1,5 @@
 /**
- * `spur workflow commit-guard <start|stage|check> --run <id>` — the run-scoped staging guard the
+ * `spur workflow commit-guard-<start|stage|check> --run <id>` — the run-scoped staging guard the
  * inline driver uses before a commit (script-absorption PR-4; replaces
  * `plugins/sp/scripts/commit-guard.ts`). Thin adapter: the probes and partition live in
  * `@gobing-ai/spur-app/commit-guard`, which returns its report lines instead of writing them.
@@ -20,7 +20,10 @@ import type { CliContext } from '../../context';
 
 type GuardContext = Pick<CliContext, 'cwd' | 'output' | 'setExitCode'>;
 
-/** Register `spur workflow commit-guard start|stage|check` under `workflow`. */
+/**
+ * Register `spur workflow commit-guard-start|commit-guard-stage|commit-guard-check` (each verb's
+ * description carries the run-scoped guard summary and exit codes) plus the hidden shim.
+ */
 export function registerWorkflowCommitGuardCommand(workflow: Command, context: GuardContext): void {
     const emit = (report: CommitGuardReport): void => {
         for (const line of report.stdout) context.output.write(line);
@@ -37,51 +40,67 @@ export function registerWorkflowCommitGuardCommand(workflow: Command, context: G
         emit(guarded(run));
     };
 
-    const guard = workflow
-        .command('commit-guard')
-        .summary('stage only the paths this run wrote; report the foreign ones')
-        .description(
-            [
-                'Run-scoped commit guard for the inline driver: `start` fingerprints the tree before the',
-                'run writes, `stage` stages only listed paths the run wrote, `check` reports foreign changes.',
-                'Exit codes: 0 ok, 1 usage or failed probe (nothing staged), 2 stage refused a path.',
-            ].join('\n'),
-        );
+    // One definition per op, registered twice: as the flat `commit-guard-<op>` verb and under the
+    // hidden one-release `commit-guard <op>` shim (task 1290), which warns once then runs the same action.
+    const ops = (parent: Command, name: (op: string) => string, warn: (op: string) => void): void => {
+        parent
+            .command(name('start'))
+            .description('Fingerprint HEAD and the dirty working files into .spur/run/<run>-tree-start.json')
+            .option('--run <id>', 'Run id the snapshot belongs to')
+            .allowExcessArguments(false)
+            .action((options) => {
+                warn('start');
+                withRun(options.run, (run) => commitGuardStart(run, { cwd: context.cwd }));
+            });
 
-    guard
-        .command('start')
-        .description('Fingerprint HEAD and the dirty working files into .spur/run/<run>-tree-start.json')
-        .option('--run <id>', 'Run id the snapshot belongs to')
-        .allowExcessArguments(false)
-        .action((options) => withRun(options.run, (run) => commitGuardStart(run, { cwd: context.cwd })));
+        parent
+            .command(name('stage'))
+            .description('Stage only the listed paths this run wrote; print {staged, foreign}')
+            .argument('[paths...]', 'Candidate paths (after `--`)')
+            .option('--run <id>', 'Run id whose tree-start snapshot partitions the paths')
+            .option('--base <sha>', 'Diff base (default: the snapshot HEAD)')
+            .action((paths, options) => {
+                warn('stage');
+                withRun(options.run, (run) =>
+                    commitGuardStage(run, paths, {
+                        cwd: context.cwd,
+                        ...(options.base === undefined ? {} : { base: options.base }),
+                    }),
+                );
+            });
 
-    guard
-        .command('stage')
-        .description('Stage only the listed paths this run wrote; print {staged, foreign}')
-        .argument('[paths...]', 'Candidate paths (after `--`)')
-        .option('--run <id>', 'Run id whose tree-start snapshot partitions the paths')
-        .option('--base <sha>', 'Diff base (default: the snapshot HEAD)')
-        .action((paths, options) =>
-            withRun(options.run, (run) =>
-                commitGuardStage(run, paths, {
-                    cwd: context.cwd,
-                    ...(options.base === undefined ? {} : { base: options.base }),
-                }),
+        parent
+            .command(name('check'))
+            .description('Report working-tree changes this run did not write; stage nothing')
+            .option('--run <id>', 'Run id whose tree-start snapshot defines "written by this run"')
+            .option('--base <sha>', 'Diff base (default: the snapshot HEAD)')
+            .allowExcessArguments(false)
+            .action((options) => {
+                warn('check');
+                withRun(options.run, (run) =>
+                    commitGuardCheck(run, {
+                        cwd: context.cwd,
+                        ...(options.base === undefined ? {} : { base: options.base }),
+                    }),
+                );
+            });
+    };
+
+    ops(
+        workflow,
+        (op) => `commit-guard-${op}`,
+        () => {},
+    );
+
+    const shim = workflow
+        .command('commit-guard', { hidden: true })
+        .summary('deprecated: use commit-guard-start | commit-guard-stage | commit-guard-check');
+    ops(
+        shim,
+        (op) => op,
+        (op) =>
+            context.output.error(
+                `spur workflow commit-guard ${op} is deprecated; use spur workflow commit-guard-${op}`,
             ),
-        );
-
-    guard
-        .command('check')
-        .description('Report working-tree changes this run did not write; stage nothing')
-        .option('--run <id>', 'Run id whose tree-start snapshot defines "written by this run"')
-        .option('--base <sha>', 'Diff base (default: the snapshot HEAD)')
-        .allowExcessArguments(false)
-        .action((options) =>
-            withRun(options.run, (run) =>
-                commitGuardCheck(run, {
-                    cwd: context.cwd,
-                    ...(options.base === undefined ? {} : { base: options.base }),
-                }),
-            ),
-        );
+    );
 }

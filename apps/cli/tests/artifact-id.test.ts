@@ -10,11 +10,11 @@ const commands = [
     ['task', 'gate', '../../outside', 'run', '--cmd', 'touch should-not-run'],
     ['task', 'residual', '../../outside', 'fold'],
     ['task', 'wrapup', 'drift-probe', '--run-id', '../../outside'],
-    ['workflow', 'commit-guard', 'start', '--run', '../../outside'],
-    ['workflow', 'commit-guard', 'stage', '--run', '../../outside', 'file.txt'],
-    ['workflow', 'commit-guard', 'check', '--run', '../../outside'],
+    ['workflow', 'commit-guard-start', '--run', '../../outside'],
+    ['workflow', 'commit-guard-stage', '--run', '../../outside', 'file.txt'],
+    ['workflow', 'commit-guard-check', '--run', '../../outside'],
     ['feature', 'handoff', 'A9', '--run-id', '../../outside'],
-    ['history', 'anatomy', 'paths', '--out', 'should-not-write.env', '--run-id', '../../outside'],
+    ['history', 'anatomy-paths', '--out', 'should-not-write.env', '--run-id', '../../outside'],
 ];
 
 describe('public artifact identity validation', () => {

@@ -453,14 +453,14 @@ git checkout <base-ref> && git merge --no-ff -m "<prepared message>" <branch>
 #     the batch's run id, the same one WT-3b's worktree fingerprint used — the two trees keep two
 #     artifacts under the same id):
 #       RUN_ID="<marker-id>"   # the WT-3 marker's id
-#       spur workflow commit-guard start --run "$RUN_ID"
+#       spur workflow commit-guard-start --run "$RUN_ID"
 #     git checkout <base-ref> && git merge --no-commit <branch>
 # 2. resolve source conflicts by hand; generated files are then regenerated with the project's
 #    generator, never hand-merged
 #    (this repo: bun run --filter @gobing-ai/spur build:bundle)
 # 3. stage every resolved path and regenerated bundle through the guard — an unmerged or
 #    unstaged path makes step 5 abort, and a conflict-marked path exits 3 (resolve, then retry):
-#      spur workflow commit-guard stage --run "$RUN_ID" -- <resolved paths and regenerated bundles>
+#      spur workflow commit-guard-stage --run "$RUN_ID" -- <resolved paths and regenerated bundles>
 #    Forbidden here as in every driver commit step: `git add -A` and `git add .`.
 # 4. run qualityGateCmd once, after ALL conflicts are resolved
 # 5. commit the merge with the prepared message file — CHECK THE PARENTS FIRST (step 5a)

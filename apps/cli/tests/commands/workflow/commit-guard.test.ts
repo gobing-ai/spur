@@ -1,5 +1,5 @@
 /**
- * `spur workflow commit-guard <start|stage|check>` — in-process coverage of the thin adapter over
+ * `spur workflow commit-guard-<start|stage|check>` (+ the hidden 1290 shim) — in-process coverage of the thin adapter over
  * `@gobing-ai/spur-app/commit-guard` (script-absorption PR-4), driven through `main()`'s early
  * dispatch against a real temp repo. Behaviour is pinned by the app tests and the golden parity
  * suite; this asserts argv mapping, line routing and exit codes.
@@ -29,10 +29,16 @@ function makeRepo(): string {
     return cwd;
 }
 
-async function guard(cwd: string, args: string[]): Promise<{ code: number; out: string[]; err: string[] }> {
+/** `guard(cwd, [op, ...rest])` runs the flat `commit-guard-<op>` verb; `shim` runs the deprecated form. */
+async function guard(
+    cwd: string,
+    [op, ...rest]: string[],
+    shim = false,
+): Promise<{ code: number; out: string[]; err: string[] }> {
     const out: string[] = [];
     const err: string[] = [];
-    const code = await main(['workflow', 'commit-guard', ...args], {
+    const verb = shim ? ['commit-guard', op ?? ''] : [`commit-guard-${op}`];
+    const code = await main(['workflow', ...verb, ...rest], {
         cwd,
         env: {},
         output: { write: (m) => out.push(m), error: (m) => err.push(m) },
@@ -40,7 +46,7 @@ async function guard(cwd: string, args: string[]): Promise<{ code: number; out: 
     return { code, out, err };
 }
 
-describe('spur workflow commit-guard', () => {
+describe('spur workflow commit-guard-*', () => {
     test('start → stage → check over a real repo, never booting a database', async () => {
         const cwd = makeRepo();
         try {
@@ -83,6 +89,27 @@ describe('spur workflow commit-guard', () => {
             expect((await guard(cwd, ['start', '--run', 'r1', 'extra'])).code).toBe(1);
             expect((await guard(cwd, ['check', '--run', 'r1', 'extra'])).code).toBe(1);
             expect((await guard(cwd, ['bogus'])).code).toBe(1);
+        } finally {
+            rmSync(cwd, { recursive: true, force: true });
+        }
+    });
+
+    test('the deprecated `commit-guard <op>` shim warns once, then behaves like the flat verb (1290)', async () => {
+        const cwd = makeRepo();
+        try {
+            const start = await guard(cwd, ['start', '--run', 'r1'], true);
+            expect(start).toEqual({
+                code: 0,
+                out: [],
+                err: ['spur workflow commit-guard start is deprecated; use spur workflow commit-guard-start'],
+            });
+            const check = await guard(cwd, ['check', '--run', 'r1'], true);
+            expect(check.code).toBe(0);
+            expect(check.out).toEqual((await guard(cwd, ['check', '--run', 'r1'])).out);
+            expect(check.err).toEqual([
+                'spur workflow commit-guard check is deprecated; use spur workflow commit-guard-check',
+            ]);
+            expect(existsSync(join(cwd, '.spur', 'spur.db'))).toBe(false);
         } finally {
             rmSync(cwd, { recursive: true, force: true });
         }

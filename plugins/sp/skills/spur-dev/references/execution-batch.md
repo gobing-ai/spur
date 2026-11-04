@@ -311,7 +311,7 @@ per-task letter is ever hand-assigned.
    `spur workflow show task-pipeline.yaml --no-logo --format todo --json` payload:
 
    ```bash
-   spur task batch-plan task-children --letter <task-letter> --plan <plan.json>
+   spur task batch-plan-children --letter <task-letter> --plan <plan.json>
    ```
 
 4. **When a task ends:** mark the task's letter (and its published digits) with the task's terminal
@@ -327,7 +327,7 @@ plan = resolve(--tasks) → freeze → order(deps)        # may abort (cycle) or
 report = []
 publish visible plan §2.7: A/Z rows now; one letter per task after this freeze (task batch-plan waves)
 RUN_ID = WT-3 marker id under --worktree, else "batch-$(date -u +%Y%m%dT%H%M%SZ)"   # fixed ONCE here; the close-out reuses it
-spur workflow commit-guard start --run "$RUN_ID"       # 1129 R1: fingerprint before the first task writes; the close-out commit stages through it
+spur workflow commit-guard-start --run "$RUN_ID"       # 1129 R1: fingerprint before the first task writes; the close-out commit stages through it
 for wbs in plan:                                       # default sequential mode
     if any dependency of wbs failed earlier in THIS batch:
         report += skipped(wbs, reason); continue       # only relevant under --keep-going
@@ -338,7 +338,7 @@ for wbs in plan:                                       # default sequential mode
     preflight = spur task preflight <wbs>              # Step 2.6 — TABLE A STOP
     if preflight.action == skip:
         report += preflight-skip(wbs, preflight); continue
-    visible plan (§2.7): letter in_progress + task-children digits at start; letter ← outcome at end
+    visible plan (§2.7): letter in_progress + batch-plan-children digits at start; letter ← outcome at end
     run: if interactive sequential omit/inline:
              spur workflow run task-pipeline.yaml --vars <vars with executor=host> --json
              perform the returned work item; spur workflow continue <run-id> --answer-text <receipt>

@@ -7,7 +7,7 @@ import { type Observation, runSide } from './script-absorption-pr6/harness';
 /**
  * Script-absorption PR-6 parity: every case frozen from the retired plugin scripts
  * (`fixtures/script-absorption-pr6-golden.json`, captured by `script-absorption-pr6/capture.ts`
- * from the stack base before deletion) is replayed through `spur history anatomy|timeline|summary`
+ * from the stack base before deletion) is replayed through `spur history anatomy-<op>|timeline|summary`
  * / `spur workflow summary|profile` and must produce the same exit code, stdout and — after the
  * rewrites below, which only rename the retired script in its usage and error prefixes — the
  * same stderr.
@@ -23,9 +23,8 @@ const RENAMES: readonly [string, string][] = [
     // `paths` no longer requires --helper (it defaults to the running spur) and gained --skill-dir.
     [
         'usage: <script> paths --helper <p> --out <env> ',
-        'usage: spur history anatomy paths --out <env> [--skill-dir <d>] [--helper <p>] ',
+        'usage: spur history anatomy-paths --out <env> [--skill-dir <d>] [--helper <p>] ',
     ],
-    ['usage: <script> ', 'usage: spur history anatomy '],
     ['session-timeline: ', 'spur history timeline: '],
     ['usage: run-summary ', 'usage: spur workflow summary '],
     ['run-summary: ', 'spur workflow summary: '],
@@ -33,10 +32,14 @@ const RENAMES: readonly [string, string][] = [
 ];
 
 function rewrite(stderr: string): string {
-    return RENAMES.reduce((text, [from, to]) => text.replaceAll(from, to), stderr);
+    // `<script> <op>` became the flat `spur history anatomy-<op>` verb (task 1290).
+    return RENAMES.reduce((text, [from, to]) => text.replaceAll(from, to), stderr).replaceAll(
+        /usage: <script> (\S+)/g,
+        'usage: spur history anatomy-$1',
+    );
 }
 
-describe('spur history anatomy|timeline|summary | workflow summary|profile golden parity (script-absorption PR-6)', () => {
+describe('spur history anatomy-<op>|timeline|summary | workflow summary|profile golden parity (script-absorption PR-6)', () => {
     test('the fixture covers every case exactly', () => {
         expect(Object.keys(GOLDEN.cases).sort()).toEqual(PR6_CASES.map((c) => c.name).sort());
     });
