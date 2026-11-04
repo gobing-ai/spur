@@ -22,63 +22,42 @@ function writeResult(context: CliContext, result: { exitCode: number; stdout: st
     context.setExitCode(result.exitCode);
 }
 
-/** Register `spur agent dogfood-gate|dogfood-validate-report` plus the hidden `dogfood <op>` shim. */
+/** Register `spur agent dogfood-gate|dogfood-validate-report`. */
 export function registerAgentDogfoodCommand(agent: Command, context: CliContext): void {
-    // One definition per op, registered twice: as the flat `dogfood-<op>` verb and under the hidden
-    // one-release `dogfood <op>` shim (task 1290), which warns once then runs the same action.
-    const ops = (parent: Command, name: (op: string) => string, warn: (op: string) => void): void => {
-        parent
-            .command(name('gate'))
-            .summary('Refuse a pipeline-driving testee without --max-retry (dogfood Phase 1.0 / W8)')
-            .description(DOGFOOD_GATE_USAGE)
-            .option('--testee <string>', 'the testee invocation under evaluation')
-            .option('--max-retry-present', 'operator already supplied an explicit --max-retry')
-            .option('--steps <labels>', 'derived step labels joined by || (Phase 1 W8 re-check)')
-            .option(...SHARED_OPTIONS.json)
-            .argument('[testee]', 'positional alias for --testee')
-            .action((positional, options) => {
-                warn('gate');
-                const argv: string[] = [];
-                const testee = options.testee ?? positional;
-                if (testee) argv.push('--testee', String(testee));
-                if (options.maxRetryPresent === true) argv.push('--max-retry-present');
-                if (options.steps) argv.push('--steps', String(options.steps));
-                if (options.json === true) argv.push('--json');
-                writeResult(context, runDogfoodGateCli(argv));
-            });
+    agent
+        .command('dogfood-gate')
+        .summary('Refuse a pipeline-driving testee without --max-retry (dogfood Phase 1.0 / W8)')
+        .description(DOGFOOD_GATE_USAGE)
+        .option('--testee <string>', 'the testee invocation under evaluation')
+        .option('--max-retry-present', 'operator already supplied an explicit --max-retry')
+        .option('--steps <labels>', 'derived step labels joined by || (Phase 1 W8 re-check)')
+        .option(...SHARED_OPTIONS.json)
+        .argument('[testee]', 'positional alias for --testee')
+        .action((positional, options) => {
+            const argv: string[] = [];
+            const testee = options.testee ?? positional;
+            if (testee) argv.push('--testee', String(testee));
+            if (options.maxRetryPresent === true) argv.push('--max-retry-present');
+            if (options.steps) argv.push('--steps', String(options.steps));
+            if (options.json === true) argv.push('--json');
+            writeResult(context, runDogfoodGateCli(argv));
+        });
 
-        parent
-            .command(name('validate-report'))
-            .summary('Validate a dogfood report against the @1.2 contract')
-            .description(DOGFOOD_VALIDATE_USAGE)
-            .option('--file <path>', 'report markdown path')
-            .option(...SHARED_OPTIONS.json)
-            .argument('[file]', 'positional alias for --file')
-            .action(async (positional, options) => {
-                warn('validate-report');
-                const argv: string[] = [];
-                const file = options.file ?? positional;
-                if (file) argv.push('--file', String(file));
-                if (options.json === true) argv.push('--json');
-                writeResult(
-                    context,
-                    await runDogfoodValidateCli(argv, (path) => context.fs.readFile(context.fs.resolve(path))),
-                );
-            });
-    };
-
-    ops(
-        agent,
-        (op) => `dogfood-${op}`,
-        () => {},
-    );
-
-    const shim = agent
-        .command('dogfood', { hidden: true })
-        .summary('deprecated: use dogfood-gate | dogfood-validate-report');
-    ops(
-        shim,
-        (op) => op,
-        (op) => context.output.error(`spur agent dogfood ${op} is deprecated; use spur agent dogfood-${op}`),
-    );
+    agent
+        .command('dogfood-validate-report')
+        .summary('Validate a dogfood report against the @1.2 contract')
+        .description(DOGFOOD_VALIDATE_USAGE)
+        .option('--file <path>', 'report markdown path')
+        .option(...SHARED_OPTIONS.json)
+        .argument('[file]', 'positional alias for --file')
+        .action(async (positional, options) => {
+            const argv: string[] = [];
+            const file = options.file ?? positional;
+            if (file) argv.push('--file', String(file));
+            if (options.json === true) argv.push('--json');
+            writeResult(
+                context,
+                await runDogfoodValidateCli(argv, (path) => context.fs.readFile(context.fs.resolve(path))),
+            );
+        });
 }

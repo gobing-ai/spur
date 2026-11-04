@@ -47,13 +47,12 @@ describe('spur task batch-plan', () => {
     });
 });
 
-describe('spur task batch-plan task-children deprecated shim (task 1290)', () => {
-    test('warns once on stderr then runs batch-plan-children', async () => {
+describe('spur task batch-plan task-children removed (task 1290)', () => {
+    test('the old mode is a usage error; only batch-plan-children projects task rows', async () => {
         await writeFile(join(cwd, 'plan.json'), JSON.stringify({ plan: [] }));
-        const flat = await run(['task', 'batch-plan-children', '--letter', 'B', '--plan', 'plan.json']);
-        const shim = await run(['task', 'batch-plan', 'task-children', '--letter', 'B', '--plan', 'plan.json']);
-        expect(shim.exitCode).toBe(flat.exitCode);
-        expect(shim.out).toBe(flat.out);
-        expect(shim.err).toBe('spur task batch-plan task-children is deprecated; use spur task batch-plan-children');
+        const old = await run(['task', 'batch-plan', 'task-children']);
+        expect(old.exitCode).toBe(2);
+        expect(old.out).toBe('');
+        expect(old.err).toStartWith('usage: spur task batch-plan');
     });
 });

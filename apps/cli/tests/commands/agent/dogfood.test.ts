@@ -32,8 +32,7 @@ describe('spur agent dogfood-gate', () => {
     test('positional testee, --max-retry-present, --steps and --json map onto the gate', async () => {
         const r = await run([
             'agent',
-            'dogfood',
-            'gate',
+            'dogfood-gate',
             '/sp:dev-verify 0277 --next',
             '--max-retry-present',
             '--steps',
@@ -93,15 +92,10 @@ describe('spur agent dogfood-validate-report', () => {
     });
 });
 
-describe('spur agent dogfood <op> deprecated shim (task 1290)', () => {
-    test('warns once on stderr then runs the same action as the flat verb', async () => {
-        const argv = ['--testee', '/sp:dev-run 0125 --auto'];
-        const flat = await run(['agent', 'dogfood-gate', ...argv]);
-        const shim = await run(['agent', 'dogfood', 'gate', ...argv]);
-        expect(shim.exitCode).toBe(flat.exitCode);
-        expect(shim.out).toBe(flat.out);
-        expect(shim.err).toBe(
-            ['spur agent dogfood gate is deprecated; use spur agent dogfood-gate', flat.err].filter(Boolean).join('\n'),
-        );
+describe('spur agent dogfood <op> removed (task 1290)', () => {
+    test('the nested spelling is an unknown command; only dogfood-gate runs', async () => {
+        const r = await run(['agent', 'dogfood', 'gate', '--testee', '/sp:dev-run 0125 --auto']);
+        expect(r.exitCode).not.toBe(0);
+        expect(r.out).toBe('');
     });
 });

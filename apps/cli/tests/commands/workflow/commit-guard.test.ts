@@ -29,15 +29,15 @@ function makeRepo(): string {
     return cwd;
 }
 
-/** `guard(cwd, [op, ...rest])` runs the flat `commit-guard-<op>` verb; `shim` runs the deprecated form. */
+/** `guard(cwd, [op, ...rest])` runs the flat `commit-guard-<op>` verb; `nested` runs the removed form. */
 async function guard(
     cwd: string,
     [op, ...rest]: string[],
-    shim = false,
+    nested = false,
 ): Promise<{ code: number; out: string[]; err: string[] }> {
     const out: string[] = [];
     const err: string[] = [];
-    const verb = shim ? ['commit-guard', op ?? ''] : [`commit-guard-${op}`];
+    const verb = nested ? ['commit-guard', op ?? ''] : [`commit-guard-${op}`];
     const code = await main(['workflow', ...verb, ...rest], {
         cwd,
         env: {},
@@ -94,22 +94,13 @@ describe('spur workflow commit-guard-*', () => {
         }
     });
 
-    test('the deprecated `commit-guard <op>` shim warns once, then behaves like the flat verb (1290)', async () => {
+    test('the removed nested `commit-guard <op>` spelling fails and writes no snapshot (1290)', async () => {
         const cwd = makeRepo();
         try {
             const start = await guard(cwd, ['start', '--run', 'r1'], true);
-            expect(start).toEqual({
-                code: 0,
-                out: [],
-                err: ['spur workflow commit-guard start is deprecated; use spur workflow commit-guard-start'],
-            });
-            const check = await guard(cwd, ['check', '--run', 'r1'], true);
-            expect(check.code).toBe(0);
-            expect(check.out).toEqual((await guard(cwd, ['check', '--run', 'r1'])).out);
-            expect(check.err).toEqual([
-                'spur workflow commit-guard check is deprecated; use spur workflow commit-guard-check',
-            ]);
-            expect(existsSync(join(cwd, '.spur', 'spur.db'))).toBe(false);
+            expect(start.code).not.toBe(0);
+            expect(start.out).toEqual([]);
+            expect(existsSync(join(cwd, '.spur', 'run', 'r1-tree-start.json'))).toBe(false);
         } finally {
             rmSync(cwd, { recursive: true, force: true });
         }

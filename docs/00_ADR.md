@@ -518,9 +518,8 @@ The grandfathered violators are all resolved: `spur workflow inline <…>` was d
 migrated (ADR-140); task 1290 flattened `spur workflow commit-guard <start|stage|check>` to
 `commit-guard-start|stage|check`, `spur agent dogfood <gate|validate-report>` to
 `dogfood-gate|dogfood-validate-report`, `spur history anatomy <op>` to `anatomy-<op>`, and the
-`task batch-plan task-children` mode (a different grammar) to `task batch-plan-children`, keeping
-each old spelling for one release as a hidden shim that prints one stderr deprecation line; and
-removed the hidden `builder pr <op>` alias. The hidden top-level `init|maintain|migrate|serve|status`
+`task batch-plan task-children` mode (a different grammar) to `task batch-plan-children`, removing
+each old spelling outright (no deprecation shims); and removed the hidden `builder pr <op>` alias. The hidden top-level `init|maintain|migrate|serve|status`
 commands are depth-1 back-compat aliases of their noun verbs and remain an allowed shape. A named
 operand (`spur self exec <action>`) and a closed single-grammar operand (`spur task wrapup <op>`) are allowed.
 `apps/cli/tests/cli-depth-guard.test.ts` fails on any visible command at depth 3 or more. Why: two-level commands keep the

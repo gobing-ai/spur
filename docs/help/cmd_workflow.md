@@ -23,7 +23,7 @@
 | `cancel <run-id>` | Cancel a single non-terminal run by id (mark as failed; SIGTERM async worker when live) |
 | `clean` | Housekeeping: finalize stale non-terminal runs **and** reclaim retained run logs |
 | `inline <op>` | Host-inline run lifecycle transport for the inline pipeline driver (begin, trace, close, decide, persist-out/check, dispatch) |
-| `commit-guard-start` / `commit-guard-stage` / `commit-guard-check` | Run-scoped commit guard: stage only the paths this run wrote (`commit-guard <op>` is a deprecated one-release alias) |
+| `commit-guard-start` / `commit-guard-stage` / `commit-guard-check` | Run-scoped commit guard: stage only the paths this run wrote (the nested `commit-guard <op>` spelling was removed in 1290) |
 
 ## spur workflow validate
 
@@ -474,8 +474,8 @@ spur workflow commit-guard-<start|stage|check> [options] [-- <paths…>]
 ```
 
 Run-scoped staging guard for driver commit steps (replaced the plugin script `commit-guard`,
-script-absorption PR-4; flattened from `commit-guard <op>` in task 1290, which stays as a hidden
-deprecated alias for one release). `commit-guard-start` fingerprints HEAD and the dirty files into
+script-absorption PR-4; flattened from `commit-guard <op>` in task 1290, which removed the
+nested spelling). `commit-guard-start` fingerprints HEAD and the dirty files into
 `.spur/run/<run>-tree-start.json`; `commit-guard-stage` stages only listed paths the run wrote and prints
 `{staged, foreign}`; `commit-guard-check` prints `{foreign}` and stages nothing. Exit codes: `0` ok, `1` usage or
 a failed probe (nothing staged), `2` `stage` refused a path, `3` a target is unmerged or carries

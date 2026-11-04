@@ -4,12 +4,11 @@ import { isWorkflowTransportInvocation, WORKFLOW_TRANSPORT_VERBS } from '../src/
 
 /** Early-dispatch classification of `spur workflow commit-guard-*` (script-absorption PR-4; task 1290). */
 describe('workflow transport routing', () => {
-    test('the transport verbs are the commit-guard-* verbs, their shim and the flat landing verbs', () => {
+    test('the transport verbs are the flat commit-guard-* and landing verbs', () => {
         expect(WORKFLOW_TRANSPORT_VERBS).toEqual([
             'commit-guard-start',
             'commit-guard-stage',
             'commit-guard-check',
-            'commit-guard',
             'persist-out',
             'persist-check',
         ]);
@@ -17,10 +16,11 @@ describe('workflow transport routing', () => {
 
     test('argv detection ignores global flags and only claims commit-guard', () => {
         expect(isWorkflowTransportInvocation(['workflow', 'commit-guard-check'])).toBe(true);
-        expect(isWorkflowTransportInvocation(['workflow', 'commit-guard', 'check'])).toBe(true);
+        // The nested `commit-guard <op>` spelling was removed (1290): not a transport.
+        expect(isWorkflowTransportInvocation(['workflow', 'commit-guard', 'check'])).toBe(false);
         expect(isWorkflowTransportInvocation(['workflow', 'persist-out', '--from', 'wt'])).toBe(true);
         expect(isWorkflowTransportInvocation(['workflow', 'persist-check', '--from', 'wt'])).toBe(true);
-        expect(isWorkflowTransportInvocation(['--no-logo', 'workflow', 'commit-guard'])).toBe(true);
+        expect(isWorkflowTransportInvocation(['--no-logo', 'workflow', 'commit-guard-start'])).toBe(true);
         // D65 1242: the retired inline driver is not a transport (or a command) any more.
         expect(isWorkflowTransportInvocation(['workflow', 'inline', 'begin'])).toBe(false);
         expect(isWorkflowTransportInvocation(['workflow', 'run'])).toBe(false);

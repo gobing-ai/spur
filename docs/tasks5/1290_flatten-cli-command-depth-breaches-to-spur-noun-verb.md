@@ -4,7 +4,7 @@ name: Flatten CLI command-depth breaches to spur <noun> <verb>
 status: wip
 template: standard
 created_at: 2026-11-04T05:13:54.386Z
-updated_at: "2026-11-04T06:53:03.092Z"
+updated_at: "2026-11-04T07:11:58.038Z"
 feature_id: A35
 
 ac_altitude: task-local
@@ -42,9 +42,9 @@ Out of scope (reviewed, compliant):
 
 - [ ] R1. Flatten every breach mechanically as `<noun> <group> <sub>` → `<noun> <group>-<sub>` (and `<verb> <mode>` → `<verb>-<mode>` for the split mode), with unchanged flags, arguments, exit codes and JSON output: B1 → `workflow commit-guard-start|commit-guard-stage|commit-guard-check`; B2 → `agent dogfood-gate|dogfood-validate-report`; B3 → `history anatomy-digest|anatomy-check|anatomy-paths|anatomy-assert-clean|anatomy-probe|anatomy-stamp|anatomy-refresh|anatomy-publish`; B5 → `task batch-plan <waves|order>` plus new `task batch-plan-children`.
 - [ ] R2. Delete the hidden deprecated `spur builder pr` dispatcher (B4) and its fixture/doc references; the flat `pr-check|pr-status|pr-open|pr-review` verbs remain the only PR surface.
-- [ ] R3. Keep the B1/B2/B3/B5 old forms for one release as hidden shims that delegate to the new verb and print one `<old> is deprecated; use <new>` line on stderr (pattern: `apps/cli/tests/commands/builder/pr.test.ts:853`); file the removal as a follow-up task.
-- [ ] R4. B1's new verbs stay boot-free: `WORKFLOW_TRANSPORT_VERBS` (`apps/cli/src/workflow-transport-argv.ts:8`) and the early dispatch serve both the new verbs and the deprecated shims.
-- [ ] R5. Add a command-depth guard test that walks `buildProgram()` and fails on any non-hidden command at depth ≥ 3 and on any hidden depth-3 command not in an explicit deprecated-shim allowlist (B1/B2/B3 shims only).
+- [ ] R3. Remove the B1/B2/B3/B5 old forms outright (BREAKING, no deprecation shims, operator 2026-11-03): each old spelling exits nonzero with no stdout, and no follow-up shim-removal task is filed.
+- [ ] R4. B1's new verbs stay boot-free: `WORKFLOW_TRANSPORT_VERBS` (`apps/cli/src/workflow-transport-argv.ts:8`) and the early dispatch serve the new verbs; the bare `commit-guard` group is no longer a transport verb.
+- [ ] R5. Add a command-depth guard test that walks `buildProgram()` and fails on any command, hidden or visible, at depth ≥ 3 (no allowlist).
 - [ ] R6. Migrate every caller to the new verbs: bundled workflow YAML (`config/workflows/history-anatomy.yaml`), app-layer invocations (`packages/app/src/workflow/actions/command-gate.ts`, `packages/app/src/services/history-anatomy*.ts`, `packages/app/src/workflow/batch-plan.ts`), rules (`config/rules/**`), and test fixtures/parity cases; regenerate `apps/cli/config/` via `build:bundle`.
 - [ ] R7. Update agent-facing surfaces: `plugins/sp/skills/spur-cli/references/{workflows,agent,history,builder,tasks}.md`, `plugins/sp/skills/spur-dev/references/execution-{batch,batch-report,worktree-setup,worktree-landing}.md`, `plugins/sp/skills/dogfood-testing/{SKILL.md,references/report-template.md}`, `plugins/sp/skills/history-anatomy/references/modes.md`, `plugins/sp/commands/dev-runall.md`, and their plugin parity tests.
 - [ ] R8. Update docs: `docs/help/cmd_{workflow,agent,history,builder,task}.md` and `docs/help/spur-cli-matrix.md`; affected `docs/design/*` satellites (workflow-execution-foundation, environment-improvement-lens, history-cli-contracts, workflow-consolidation, workflow-execution-economy, builder-branches-and-pr-review, cli-contracts); a dated consent row in `docs/design/harness-surface-governance.md`; and an ADR-051 amendment that marks the grandfathered list migrated, drops the stale `dogfood contract`, and records `self exec`'s named operand and the top-level `self` aliases as allowed shapes.
@@ -55,17 +55,17 @@ Out of scope (reviewed, compliant):
 Scenario: AC1 — no public command sits below a verb (req: R1, R5)
 Given the CLI built from this change
 When the depth guard test walks `buildProgram()`
-Then no non-hidden command sits at depth ≥ 3, and the only hidden depth-3 commands are the allowlisted B1/B2/B3 deprecated shims
+Then no command, hidden or visible, sits at depth ≥ 3
 
 Scenario: AC2 — flattened verbs keep their contract (req: R1, R4)
 Given each existing command test for commit-guard, dogfood, history anatomy and batch-plan
 When it is re-pointed at the new verb names
 Then it passes unchanged in flags, exit codes and `--json` output, and `isWorkflowTransportInvocation` is true for `workflow commit-guard-start|stage|check`
 
-Scenario: AC3 — old forms warn and delegate (req: R3)
+Scenario: AC3 — old forms are removed (req: R3)
 Given `spur workflow commit-guard check`, `spur agent dogfood gate`, `spur history anatomy digest <f>` and `spur task batch-plan task-children ...`
 When each runs
-Then it produces the same stdout and exit code as its new verb and prints exactly one deprecation line naming the replacement on stderr
+Then it exits nonzero, prints nothing on stdout, and performs no side effect
 
 Scenario: AC4 — builder pr is gone (req: R2)
 Given the CLI built from this change
@@ -75,7 +75,7 @@ Then Commander rejects it as an unknown command, and `rg "builder pr "` finds no
 Scenario: AC5 — callers and docs use only the flat verbs (req: R6, R7, R8)
 Given the repository after the change
 When `rg -n "commit-guard (start|stage|check)|dogfood (gate|validate-report)|history anatomy (digest|check|paths|assert-clean|probe|stamp|refresh|publish)|batch-plan task-children"` runs over `plugins/ config/ packages/ apps/ docs/help docs/design AGENTS.md`
-Then the only matches are deprecation shims, their tests, and dated ADR/governance history
+Then the only matches are removal tests and dated ADR/governance history
 And `bun run spur-check`, `bun run plugin-smoke` and the help-doc parity tests pass
 ```
 
@@ -93,46 +93,61 @@ And `bun run spur-check`, `bun run plugin-smoke` and the help-doc parity tests p
 - **`self exec <action>`:** kept; open, config-declared named operand with one grammar.
 - **Consent:** the operator requested this migration on 2026-11-03; the governance row records it.
 
+#### Q&A entry — 2026-11-04T07:11:57.059Z
+
+<!-- CLOSED decisions from refinement: what was chosen and why, what was deferred and on what
+     condition. Not a parking lot for open questions — an unanswered question here means the task
+     is not ready to hand off. Keep empty if none. -->
+
+#### Q&A entry — 2026-11-04T05:13:55.863Z
+
+- **Naming:** mechanical `<group>-<sub>` (e.g. `history anatomy-digest`) over shorter or merged names. Why: a predictable one-to-one rename keeps workflow YAML and doc diffs trivially reviewable and lets one regex find stale callers; prefixed verbs stay contiguous in `spur <noun> --help`. Merging anatomy ops (e.g. probe/stamp/refresh) is deferred; reopen only if the eight verbs prove noisy in `history --help`.
+- **Back-compat:** none. B1/B2/B3/B5 old spellings are removed outright alongside B4 (operator, 2026-11-03: no follow-up task 1291). Bundled plugin, workflows and rules call only the flat verbs; installed plugin copies older than this binary must be re-synced via `superskill install sp`.
+- **Top-level `init|maintain|migrate|serve|status`:** kept as back-compat aliases of `spur self <verb>` (operator, 2026-11-03).
+- **`self exec <action>`:** kept; open, config-declared named operand with one grammar.
+- **Consent:** the operator requested this migration on 2026-11-03; the governance row records it.
+
 ### Design
 
 - **Rename rule:** `<noun> <group> <sub>` → `<noun> <group>-<sub>`; split mode `<verb> <mode>` → `<verb>-<mode>`. Each new verb registers directly on the noun and calls the same app-layer function the sub-command calls today (`packages/app/src/workflow/commit-guard.ts`, `packages/app/src/services/dogfood/*-cli.ts`, `packages/app/src/services/history-anatomy-cli.ts`, `packages/app/src/workflow/batch-plan.ts`). Only transport wiring changes; no app-layer logic or output changes.
-- **Shims:** the old group/operand stays registered `{ hidden: true }`, writes one deprecation line to stderr, then delegates to the new verb's handler. The depth guard's allowlist names exactly these shims so a new sub-verb still fails.
-- **Boot-free transport:** `WORKFLOW_TRANSPORT_VERBS` gains `commit-guard-start|commit-guard-stage|commit-guard-check`; `commit-guard` stays in the list for the shim.
+- **No shims:** the old groups/operand are unregistered; Commander rejects them as unknown commands, and `batch-plan` rejects any mode other than `waves|order` with its usage line (exit 2). The depth guard has no allowlist.
+- **Boot-free transport:** `WORKFLOW_TRANSPORT_VERBS` gains `commit-guard-start|commit-guard-stage|commit-guard-check`; the bare `commit-guard` entry is dropped.
 - **`batch-plan`:** `waves|order` keep the shared `--tasks [--concurrency]` grammar; `batch-plan-children` owns `--letter --plan`.
 - **Invariants:** stdout/`--json` payloads, exit codes and `.spur/run/*` artifact names are byte-identical; the existing command tests are the regression oracle.
 - **Impacted surfaces:** CLI (`apps/cli/src/commands/{workflow,agent,history,builder,task}`), transport argv, bundled workflows, app-layer callers, rules, the `sp` plugin skills/commands, `docs/help`, design satellites, ADR-051.
 
 ### Plan
 
-1. Depth guard test (R5) with an initial allowlist of today's breaches; red → green as each step lands.
+1. Depth guard test (R5); red → green as each step lands.
 2. B4: delete `builder pr` dispatcher, its tests/fixture, and doc/reference lines (R2).
-3. B1: add `commit-guard-*` verbs + shims; update transport verb list and early dispatch; migrate app/rule/plugin callers (R1, R3, R4, R6, R7).
-4. B2: `dogfood-*` verbs + shims; migrate dogfood skill and reference docs.
-5. B3: `anatomy-*` verbs + shims; migrate `config/workflows/history-anatomy.yaml`, app services, parity cases.
-6. B5: `batch-plan-children` + shim; migrate `dev-runall.md` and execution-batch reference.
+3. B1: add `commit-guard-*` verbs; update transport verb list and early dispatch; migrate app/rule/plugin callers (R1, R3, R4, R6, R7).
+4. B2: `dogfood-*` verbs; migrate dogfood skill and reference docs.
+5. B3: `anatomy-*` verbs; migrate `config/workflows/history-anatomy.yaml`, app services, parity cases.
+6. B5: `batch-plan-children`; migrate `dev-runall.md` and execution-batch reference.
 7. Docs (R8): `docs/help`, design satellites, governance row, ADR-051 amendment.
-8. `bun link` + `build:bundle`; run `spur-check`, `plugin-smoke`, help-doc parity; file the shim-removal follow-up task.
+8. `bun link` + `build:bundle`; run `spur-check`, `plugin-smoke`, help-doc parity.
 
 ### Solution
 
-Delivered in two commits: `54133745c` (core flattening + shims) and `45be3fb70` (guard, docs, ADR, alias removal).
+Delivered in three commits: `54133745c` (core flattening), `45be3fb70` (guard, docs, ADR, alias removal) and the shim-removal commit that absorbed former task 1291 (deleted; operator 2026-11-03).
 
-**Source (B1–B3, B5)**
-- `agent dogfood <gate|validate-report>` → `agent dogfood-gate` / `agent dogfood-validate-report`; hidden shim group at `apps/cli/src/commands/agent/dogfood.ts:77` warns once on stderr.
-- `workflow commit-guard <start|stage|check>` → `workflow commit-guard-*`; hidden shim group at `apps/cli/src/commands/workflow/commit-guard.ts:96`.
-- `history anatomy <op>` → `history anatomy-<op>` (8 verbs, `apps/cli/src/commands/history/anatomy.ts:49`); positional shim at `:60`. `task batch-plan task-children` → `task batch-plan-children` (shim `apps/cli/src/commands/task/batch-plan.ts:44`).
+**Source (B1–B3, B5)** — old spellings removed outright (BREAKING, no shims)
+- `agent dogfood <gate|validate-report>` → `agent dogfood-gate` / `agent dogfood-validate-report` registered directly (`apps/cli/src/commands/agent/dogfood.ts:28`).
+- `workflow commit-guard <start|stage|check>` → `workflow commit-guard-*` (`apps/cli/src/commands/workflow/commit-guard.ts:44`); bare `commit-guard` dropped from `WORKFLOW_TRANSPORT_VERBS` (`apps/cli/src/workflow-transport-argv.ts:9`).
+- `history anatomy <op>` → `history anatomy-<op>` (8 verbs, `apps/cli/src/commands/history/anatomy.ts`); the positional group is gone.
+- `task batch-plan task-children` → `task batch-plan-children`; `batch-plan` now rejects any mode but `waves|order` with its usage line, exit 2 (`apps/cli/src/commands/task/batch-plan.ts:40`).
 - `workflow cost` given a `.summary()` (`apps/cli/src/commands/workflow/cost.ts:34`) so the help parser stops emitting bogus verbs.
 - Kept by decision: hidden top-level `init|maintain|migrate|serve|status` (back-compat aliases), `self exec <action>` and `task wrapup <op>` positional args (not commands).
 
-**B4 builder pr alias** — hidden `builder pr <op>` removed; `registerBuilderPrCommands` → `registerBuilderPrCommand` (`apps/cli/src/commands/builder/pr.ts:21`, `apps/cli/src/commands/builder.ts:173`) for `cli-register-pattern`.
+**B4 builder pr alias** — hidden `builder pr <op>` removed; `registerBuilderPrCommands` → `registerBuilderPrCommand` (`apps/cli/src/commands/builder/pr.ts:21`, `apps/cli/src/commands/builder.ts:173`). The app-layer spine help/doc comments describe the internal op spine, not a CLI group (`packages/app/src/services/pr-review/index.ts:203`).
 
-**R5 regression guard** — `apps/cli/tests/cli-depth-guard.test.ts:12` walks `buildProgram()` (incl. `self`); fails on any visible depth ≥3 command and any hidden depth-3 command outside `SHIM_ALLOWLIST` (5 shims; emptied by task 1291).
+**R5 regression guard** — `apps/cli/tests/cli-depth-guard.test.ts:33` walks `buildProgram()` (incl. `self`) and fails on any command, hidden or visible, at depth ≥3; no allowlist. `apps/cli/tests/help-doc-parity.test.ts` back to the plain walk (no hidden filters).
 
-**Docs/skills** — `docs/00_ADR.md:517` ADR-051 amendment (grandfathered list resolved); `docs/design/harness-surface-governance.md:226` consent row 1290; `docs/help/spur-cli-matrix.md` counts; builder docs (`cmd_builder.md`, `help2/builder.md`, `cli-contracts.md`, `builder-branches-and-pr-review.md`, `workflow-consolidation.md`, `README.md`); spur-cli references `agent.md`, `history.md`, `workflows.md`, `builder.md`; rule comments in `config/rules/{surface,boundary,strict}/*.yaml`.
+**Removal tests (R3)** — `apps/cli/tests/commands/agent/dogfood.test.ts:96`, `apps/cli/tests/commands/workflow/commit-guard.test.ts:97` (also asserts no tree-start snapshot), `apps/cli/tests/commands/history/anatomy.test.ts:35`, `apps/cli/tests/commands/task/batch-plan.test.ts:51`; transport argv expectations in `apps/cli/tests/workflow-transport-argv.test.ts`.
 
-**Tests updated to the flat surface** — `apps/cli/tests/commands/builder.test.ts` (eight verbs, no `pr`), `packages/app/tests/services/pr-review/pr-review.test.ts` (`builder --help` lists `pr-*`, no `pr` group), dogfood/anatomy CLI tests, gate-builtins fixture test, plugin parity/retired-ref tests, repo-wide workflow-consolidation-absence.
+**Docs/skills** — `docs/00_ADR.md:517` ADR-051 amendment (old spellings removed, no shims; top-level aliases allowed); `docs/design/harness-surface-governance.md:226` consent row 1290 (BREAKING, rejected-shape now one-release shims); `docs/help/spur-cli-matrix.md:139`, `docs/help/cmd_{history,workflow,task,builder}.md`, `docs/design/cli-contracts.md:49`; spur-cli references `agent.md`, `history.md`, `workflows.md`, `builder.md`; rule comments in `config/rules/{surface,boundary,strict}/*.yaml`; feature A35 Scope/AC updated via `spur feature update`.
 
-Frozen fixture `apps/cli/tests/fixtures/script-absorption-pr9/workflows/pr-review.yaml` intentionally untouched. Follow-up: task 1291 removes the shims.
+Frozen fixture `apps/cli/tests/fixtures/script-absorption-pr9/workflows/pr-review.yaml` intentionally untouched.
 
 ### Testing
 

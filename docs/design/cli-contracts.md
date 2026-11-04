@@ -46,7 +46,7 @@ spur <noun> [<verb>] [positionals] [--flags]
 - **`builder`** is the noun hosting the release plumbing — `spur builder bump-ver|drop-tags`
   (task 0617, ADR-051), later joined by `publish`, `show-branches` and the four flat PR verbs
   `pr-status`, `pr-check`, `pr-open`, `pr-review` (the 2026-10-15/16 amendments, feature L1). The
-  former `pr <op>` pass-through stays a hidden, one-release deprecated alias. Frozen at those eight
+  former `pr <op>` pass-through was removed (task 1290). Frozen at those eight
   verbs (see `docs/design/harness-surface-governance.md` §3).
 - **`self`** is the noun hosting the self-management verbs — `spur self exec|init|maintain|migrate|serve|status`.
   Each of the five legacy verbs mounts the same command builder as its legacy top-level noun, so

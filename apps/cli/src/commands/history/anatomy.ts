@@ -27,7 +27,7 @@ const OPS: Record<string, string> = {
     publish: '<candidate.md> <target.md> — atomic publish',
 };
 
-/** Register `spur history anatomy-<op>` (one verb per cache op) plus the hidden `anatomy <op>` shim. */
+/** Register `spur history anatomy-<op>` (one verb per cache op). */
 export function registerHistoryAnatomyCommand(history: Command, context: CliContext): void {
     const run = async (argv: string[]): Promise<void> => {
         for (let i = 0; i < argv.length; i++) {
@@ -54,21 +54,4 @@ export function registerHistoryAnatomyCommand(history: Command, context: CliCont
             .argument('[argv...]', 'the op flags and operands (see description)')
             .action((argv: string[]) => run([op, ...argv]));
     }
-
-    // Hidden one-release `anatomy <op>` shim (task 1290): warns once, then runs the same op.
-    history
-        .command('anatomy', { hidden: true })
-        .summary('deprecated: use anatomy-<op>')
-        .allowUnknownOption(true)
-        .allowExcessArguments(true)
-        .argument('[argv...]', 'op and its flags')
-        .action((argv: string[]) => {
-            const op = argv[0];
-            context.output.error(
-                op !== undefined && op in OPS
-                    ? `spur history anatomy ${op} is deprecated; use spur history anatomy-${op}`
-                    : 'spur history anatomy <op> is deprecated; use spur history anatomy-<op>',
-            );
-            return run(argv);
-        });
 }

@@ -1,5 +1,5 @@
-import { type Command, Option } from '@commander-js/extra-typings';
-import type { BatchPlanRequest } from '@gobing-ai/spur-app/pipeline-steps';
+import type { Command } from '@commander-js/extra-typings';
+import { BATCH_PLAN_USAGE, type BatchPlanRequest } from '@gobing-ai/spur-app/pipeline-steps';
 import type { CliContext } from '../../context';
 import { writeStepText } from './step-output';
 
@@ -35,15 +35,11 @@ export function registerTaskBatchPlanCommand(task: Command, context: CliContext)
         .argument('<mode>', 'waves | order')
         .option('--tasks <file>', 'tasks JSON file')
         .option('--concurrency <n>', 'parallel slots for order (default 2)')
-        // Hidden one-release `task-children` mode shim (task 1290): warns, then runs batch-plan-children.
-        .addOption(new Option('--letter <letter>').hideHelp())
-        .addOption(new Option('--plan <file>').hideHelp())
         .action(async (mode, options) => {
-            if (mode === 'task-children') {
-                context.output.error(
-                    'spur task batch-plan task-children is deprecated; use spur task batch-plan-children',
-                );
-                await run(childrenReq(options));
+            // `task-children` is a different grammar and lives only in `batch-plan-children` (1290).
+            if (mode !== 'waves' && mode !== 'order') {
+                context.output.error(BATCH_PLAN_USAGE);
+                context.setExitCode(2);
                 return;
             }
             await run({

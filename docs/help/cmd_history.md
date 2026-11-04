@@ -149,7 +149,7 @@ spur as `HA_HELPER` (so a spur upgrade invalidates the cache) and resolves `HA_S
 `--skill-dir`, else `plugins/sp/skills/history-anatomy` under the cwd, else the superskill install
 (`~/.agents/skills/sp-history-anatomy`, `~/.claude/skills/sp-history-anatomy`). Exit: `0` ok, `1`
 usage or op failure (`anatomy-check` prints `PASS` or `FAIL` plus one line per finding). The former
-`spur history anatomy <op>` spelling is a hidden one-release shim that warns on stderr (task 1290).
+`spur history anatomy <op>` spelling was removed in task 1290.
 
 ## spur history timeline
 

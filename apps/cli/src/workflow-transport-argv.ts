@@ -9,8 +9,6 @@ export const WORKFLOW_TRANSPORT_VERBS: readonly string[] = [
     'commit-guard-start',
     'commit-guard-stage',
     'commit-guard-check',
-    // Hidden one-release shim (task 1290): `commit-guard <op>` stays boot-free until it is removed.
-    'commit-guard',
     'persist-out',
     'persist-check',
 ];

@@ -279,8 +279,8 @@ The batch driver's letters-first visible plan (script-absorption PR-5; replaces 
 `batch-plan`). JSON on stdout: `waves` → `{ waves }` (A Prepare batch, B…Y one row per task, Z Batch
 report), `order` → `{ order, waves, cycle, overlaps, mode, reason }` (a cycle is data, not an error).
 Files resolve against the project directory. Exit `0` success, `1` unreadable/invalid input, `2`
-usage error. The former `task-children` mode is a hidden one-release shim over
-`spur task batch-plan-children` that warns on stderr (task 1290).
+usage error. The former `task-children` mode was removed in task 1290 (any mode other than `waves` or
+`order` is a usage error); use `spur task batch-plan-children`.
 
 ## spur task batch-plan-children
 

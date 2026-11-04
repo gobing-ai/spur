@@ -32,26 +32,10 @@ describe('spur history anatomy-<op>', () => {
         }
     });
 
-    test('the hidden `anatomy <op>` shim warns once then runs the same op (task 1290)', async () => {
-        const dir = mkdtempSync(join(tmpdir(), 'cli-ha-shim-'));
-        try {
-            const artifact = join(dir, 'a.json');
-            writeFileSync(artifact, '{"totals":{"messages":1}}');
-            const flat = await run(['history', 'anatomy-digest', artifact]);
-            const shim = await run(['history', 'anatomy', 'digest', artifact]);
-            expect(shim.exitCode).toBe(flat.exitCode);
-            expect(shim.stdout).toBe(flat.stdout);
-            expect(shim.stderr).toBe('spur history anatomy digest is deprecated; use spur history anatomy-digest');
-        } finally {
-            rmSync(dir, { recursive: true, force: true });
-        }
-    });
-
-    test('the shim with an unknown op warns generically, then fails as a usage error listing the ops', async () => {
-        const r = await run(['history', 'anatomy', 'bogus']);
-        expect(r.exitCode).toBe(1);
-        expect(r.stderr).toContain('spur history anatomy <op> is deprecated; use spur history anatomy-<op>');
-        expect(r.stderr).toContain('valid commands: digest, check, paths');
+    test('the removed nested `anatomy <op>` spelling is an unknown command (1290)', async () => {
+        const r = await run(['history', 'anatomy', 'digest', 'a.json']);
+        expect(r.exitCode).not.toBe(0);
+        expect(r.stdout).toBe('');
     });
 
     test('paths records the running spur entry as HA_HELPER and resolves the skill from cwd (HOME from the context)', async () => {
