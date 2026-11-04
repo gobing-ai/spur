@@ -10,7 +10,7 @@
  * The probe body in `fleet-e2e.ts` only collects observations; every word of the report's contract
  * is decided by the functions this file pins.
  */
-import { describe, expect, test } from 'bun:test';
+import { describe, expect, spyOn, test } from 'bun:test';
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import {
@@ -163,7 +163,15 @@ describe('redactProbeOutput (1280 R1 — recorded verbatim, redacted)', () => {
 
 describe('runHostProbe (1280 AC3 — real hosts are opt-in)', () => {
     test('an unknown --agents entry is refused before any host work', async () => {
-        expect(await runHostProbe({ agents: ['wizard'] })).toBe(2);
+        const error = spyOn(console, 'error').mockImplementation(() => {});
+        try {
+            expect(await runHostProbe({ agents: ['wizard'] })).toBe(2);
+            expect(error.mock.calls.map((call) => String(call[0]))).toEqual([
+                'fleet-e2e: unknown --agents entries: wizard (known: codex, claude, pi)',
+            ]);
+        } finally {
+            error.mockRestore();
+        }
     });
 });
 
