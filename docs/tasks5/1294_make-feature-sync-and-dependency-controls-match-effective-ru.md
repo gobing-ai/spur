@@ -1,10 +1,10 @@
 ---
 schema_version: 1
 name: Make feature sync and dependency controls match effective runner behavior
-status: todo
+status: wip
 template: feature-impl
 created_at: 2026-11-05T20:01:23.909Z
-updated_at: "2026-11-05T20:37:38.581Z"
+updated_at: "2026-11-05T21:52:31.004Z"
 ac_altitude: task-local
 ac_numbering: task-local
 feature_id: F8
@@ -95,14 +95,27 @@ No production implementation occurs during this refinement. No new dependency, p
 
 ### Plan
 
-- [ ] 1. Write draft-retention and absence-of-inert-control DOM regressions before editing the dialog.
-- [ ] 2. Remove the inactive control; preserve pull default/disabled push and existing queue payload/API compatibility.
-- [ ] 3. Exercise metadata reload, HTTP push refusal and guard denial without mocking the collaborator whose behavior is asserted.
-- [ ] 4. Run the exact focused checks above, inspect the diff against R-items/feature AC, synchronize owners and record evidence through the task pipeline; do not fabricate completion.
+- [x] 1. Write draft-retention and absence-of-inert-control DOM regressions before editing the dialog.
+- [x] 2. Remove the inactive control; preserve pull default/disabled push and existing queue payload/API compatibility.
+- [x] 3. Exercise metadata reload, HTTP push refusal and guard denial without mocking the collaborator whose behavior is asserted.
+- [x] 4. Run the exact focused checks above, inspect the diff against R-items/feature AC, synchronize owners and record evidence through the task pipeline; do not fabricate completion.
 
 ### Solution
 
-<!-- Filled during implementation: file:line change map and concise rationale. -->
+| File | What changed and why |
+| --- | --- |
+| `apps/web/src/modules/features/FeatureDetail.tsx:4` | Removed the unsupported dependency checkbox and its unused UI import, leaving only effective feature-action controls. |
+| `apps/web/tests/modules/features/feature-sync.test.ts:17-70` | Added a rendered sync journey proving pull is the default, push is disabled, the outcome and metadata reload occur, and an unsaved MDEditor draft survives `reloadFeature({ body: false })`. |
+| `apps/web/tests/modules/features/feature-sync.test.ts:72-91` | Added the rendered regression proving the unsupported dependency control is absent while the channel remains usable. |
+
+Compatibility evidence: optional `skipDeps` remains accepted in `apps/web/src/lib/feature-types.ts:58-63` and forwarded by `apps/server/src/modules/feature/handlers.ts:100-108`; no HTTP or queue contract changed.
+
+Verification evidence:
+- `(cd apps/web && bun test tests/modules/features/feature-sync.test.ts tests/lib/feature-client.test.ts tests/modules/features/feature-actions.test.ts --reporter=junit --reporter-outfile=../../.spur/run/1294-web.junit.xml)` — 44 pass, 0 fail; JUnit at `.spur/run/1294-web.junit.xml`.
+- `(cd apps/server && bun test tests/modules/feature/handlers.test.ts tests/modules/feature/transition-gate.test.ts)` — 25 pass, 0 fail, including HTTP push refusal and lifecycle guard denial.
+- `bun run --filter @gobing-ai/spur-web typecheck` — exit 0.
+- `spur task gate 1294 light` — format, pre-rules, web typecheck and related test PASS; post-check coverage provenance is deferred to the pipeline's canonical full gate because this fresh worktree has no full-suite artifact.
+- `probe: not-applicable (no public surface changed)` — no CLI verb/flag, HTTP route, or plugin script entry changed.
 
 ### Testing
 
@@ -117,3 +130,6 @@ No production implementation occurs during this refinement. No new dependency, p
 <!-- Links to the parent feature, design docs, related tasks, or external references. -->
 
 ### History
+
+- 2026-11-05T21:52:31.004Z todo → wip (system)
+

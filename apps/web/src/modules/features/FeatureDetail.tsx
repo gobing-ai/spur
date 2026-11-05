@@ -1,7 +1,7 @@
 import { taskStatusIcon } from '@gobing-ai/spur-domain/schema';
 import { type RefObject, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
-import { Badge, Button, Checkbox, Loading, MDEditor, Select } from '@/ui';
+import { Badge, Button, Loading, MDEditor, Select } from '@/ui';
 import {
     createChildFeature,
     createFeatureTask,
@@ -896,10 +896,6 @@ export default function FeatureDetail({
                                             ),
                                         )}
                                     </Select>
-                                    <label htmlFor="skip-deps" className="flex items-center gap-2 cursor-pointer">
-                                        <Checkbox id="skip-deps" size="xs" checked={false} onChange={() => {}} />
-                                        <span className="text-xs text-spur-text">Skip dependencies</span>
-                                    </label>
                                 </div>
                             </>
                         )}

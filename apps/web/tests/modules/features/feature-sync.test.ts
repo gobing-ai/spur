@@ -1,7 +1,7 @@
 registerHappyDom();
 
 import { afterAll, afterEach, expect, test } from 'bun:test';
-import { cleanup, fireEvent, render, waitFor, within } from '@testing-library/react';
+import { act, cleanup, fireEvent, render, waitFor, within } from '@testing-library/react';
 import { createElement } from 'react';
 import { resetFetchForTesting, setFetchForTesting } from '../../../src/lib/rpc-client';
 import FeatureDetail from '../../../src/modules/features/FeatureDetail';
@@ -14,7 +14,7 @@ afterEach(() => {
     resetFetchForTesting();
 });
 
-test('feature sync defaults to supported pull, disables push, and reloads after dispatch', async () => {
+test('feature sync defaults to supported pull, disables push, and preserves an unsaved draft', async () => {
     const syncRequests: unknown[] = [];
     let reads = 0;
     setFetchForTesting((async (input: RequestInfo | URL) => {
@@ -39,6 +39,18 @@ test('feature sync defaults to supported pull, disables push, and reloads after 
 
     const view = render(createElement(FeatureDetail, { featureId: 'F1' }));
     const sync = await view.findByRole('button', { name: 'Sync' });
+    fireEvent.click(view.getByLabelText('Edit body'));
+    const editor = within(view.getByTestId('body-editor')).getByRole('textbox') as HTMLTextAreaElement;
+    const reactPropsKey = Object.keys(editor).find((key) => key.startsWith('__reactProps'));
+    if (!reactPropsKey) throw new Error('missing MDEditor React props');
+    const reactProps = Reflect.get(editor, reactPropsKey) as {
+        onChange: (event: { target: { value: string } }) => void;
+    };
+    // Drive the real MDEditor handler so the controlled draft changes without mocking the renderer.
+    await act(async () => {
+        reactProps.onChange({ target: { value: 'Unsaved feature draft' } });
+    });
+    await waitFor(() => expect(editor.value).toBe('Unsaved feature draft'));
     fireEvent.click(sync);
     const dialog = view.getByRole('dialog', { name: 'Configure sync-status action' });
     const direction = within(dialog).getByRole('combobox') as HTMLSelectElement;
@@ -51,4 +63,29 @@ test('feature sync defaults to supported pull, disables push, and reloads after 
     await view.findByText('Sync applied: status is now active.');
     expect(reads).toBeGreaterThan(readsBeforeSync);
     expect(view.queryByRole('dialog')).toBeNull();
+    expect((within(view.getByTestId('body-editor')).getByRole('textbox') as HTMLTextAreaElement).value).toBe(
+        'Unsaved feature draft',
+    );
+});
+
+test('feature action dialog omits the unsupported dependency control', async () => {
+    setFetchForTesting((async () =>
+        Response.json({
+            ok: true,
+            data: {
+                id: 'F2',
+                name: 'Action fixture',
+                status: 'backlog',
+                frontmatter: {},
+                filePath: 'docs/features/F2_action.md',
+                content: 'Feature body',
+            },
+        })) as unknown as typeof fetch);
+
+    const view = render(createElement(FeatureDetail, { featureId: 'F2' }));
+    fireEvent.click(await view.findByRole('button', { name: 'Plan' }));
+    const dialog = view.getByRole('dialog', { name: 'Configure plan action' });
+
+    expect((within(dialog).getByRole('combobox') as HTMLSelectElement).value).toBe('claude');
+    expect(within(dialog).queryByText('Skip dependencies')).toBeNull();
 });
