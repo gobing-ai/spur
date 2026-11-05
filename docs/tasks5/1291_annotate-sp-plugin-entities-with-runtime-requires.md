@@ -12,7 +12,7 @@ ac_numbering: task-local
 priority: P2
 estimate_hours: 4
 done_forced: "true"
-done_reason: "strict task check 1291 exits 0 in-tree; verdict PASS at .spur/run/1291-verdict.json; the done-gate's anchor summary requotes the pre-rebase Testing text (cosmetic) — re-checked via spur feature check I14 --strict after landing"
+done_reason: "strict task check 1291 exits 0 in-tree; verdict PASS recorded (run-id artifact); the done-gate's anchor summary requotes the pre-rebase Testing text (cosmetic) — re-checked via spur feature check I14 --strict after landing"
 ---
 
 ## 1291. Annotate sp plugin entities with runtime requires

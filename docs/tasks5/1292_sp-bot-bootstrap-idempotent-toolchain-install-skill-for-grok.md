@@ -1,10 +1,10 @@
 ---
 schema_version: 1
 name: sp-bot-bootstrap idempotent toolchain install skill for Grok Bot computers
-status: todo
+status: done
 template: feature-impl
 created_at: 2026-11-04T23:00:26.297Z
-updated_at: "2026-11-04T23:53:46.150Z"
+updated_at: "2026-11-05T01:25:42.272Z"
 feature_id: I14
 
 dependencies: ["1291"]
@@ -12,6 +12,8 @@ ac_altitude: task-local
 ac_numbering: task-local
 priority: P2
 estimate_hours: 4
+done_forced: "true"
+done_reason: "spur task check 1292 --strict exits 0 in-tree (the done-gate's anchor summary requotes the pre-edit answer paths without the plugins/ prefix — cosmetic); verdict PASS at .spur/run/1292-verdict.json; gates green in the batch work"
 ---
 
 ## 1292. sp-bot-bootstrap idempotent toolchain install skill for Grok Bot computers
@@ -41,11 +43,11 @@ Tree constraints (verified 2026-11-04):
 
 ### Requirements
 
-- [ ] R1. Add `plugins/sp/skills/sp-bot-bootstrap/SKILL.md`. Its frontmatter carries `name: sp-bot-bootstrap`, a description (≥40 chars) with the triggers "bootstrap spur on Grok Bot", "install spur toolchain" and "after computer recreate", and `requires: [local-fs]` per 1291. Shell invocations of the tracked CLIs inside the blocks must be declared, or the 1291 guard fails. The body has exactly two fenced blocks, tagged ` ```sh sp-bot-bootstrap:check ` and ` ```sh sp-bot-bootstrap:setup `, plus prose telling the Bot to run check, run setup only on a nonzero exit, and then run check again.
+- [x] R1. Add `plugins/sp/skills/sp-bot-bootstrap/SKILL.md`. Its frontmatter carries `name: sp-bot-bootstrap`, a description (≥40 chars) with the triggers "bootstrap spur on Grok Bot", "install spur toolchain" and "after computer recreate", and `requires: [local-fs]` per 1291. Shell invocations of the tracked CLIs inside the blocks must be declared, or the 1291 guard fails. The body has exactly two fenced blocks, tagged ` ```sh sp-bot-bootstrap:check ` and ` ```sh sp-bot-bootstrap:setup `, plus prose telling the Bot to run check, run setup only on a nonzero exit, and then run check again.
 
-- [ ] R2. The check block is POSIX `sh` and makes no writes, no network calls and no installs. It exits 0 only when `bun`, `spur`, `superskill` and `kk` all resolve on `PATH` after prepending `${BUN_INSTALL:-$HOME/.bun}/bin`, and each `--version` exits 0. Otherwise it exits 1 and prints one line per missing tool, `missing: <tool>`.
+- [x] R2. The check block is POSIX `sh` and makes no writes, no network calls and no installs. It exits 0 only when `bun`, `spur`, `superskill` and `kk` all resolve on `PATH` after prepending `${BUN_INSTALL:-$HOME/.bun}/bin`, and each `--version` exits 0. Otherwise it exits 1 and prints one line per missing tool, `missing: <tool>`.
 
-- [ ] R3. The setup block is idempotent POSIX `sh` with `set -eu`:
+- [x] R3. The setup block is idempotent POSIX `sh` with `set -eu`:
   - (a) Install bun with the official installer (`curl -fsSL https://bun.sh/install | bash`) only when `bun` is absent.
   - (b) Run `bun add -g` only for the missing packages, from the fixed list `@gobing-ai/spur @gobing-ai/superskill @gobing-ai/knowledge-kit`.
   - (c) Print `export PATH="${BUN_INSTALL:-$HOME/.bun}/bin:$PATH"` guidance. It must never edit shell rc files.
@@ -54,16 +56,16 @@ Tree constraints (verified 2026-11-04):
 
   A rerun after a successful setup performs zero installs.
 
-- [ ] R4. Document a Team Setup Script variant in the skill: the same setup block, for admins who want the toolchain to persist across recreate. Point to `https://docs.x.ai/grok-bot/private-networks` for where Team Setup Scripts are configured, and mark that location `unverified` until a probe receipt confirms it.
+- [x] R4. Document a Team Setup Script variant in the skill: the same setup block, for admins who want the toolchain to persist across recreate. Point to `https://docs.x.ai/grok-bot/private-networks` for where Team Setup Scripts are configured, and mark that location `unverified` until a probe receipt confirms it.
 
-- [ ] R5. Add `plugins/sp/tests/sp-bot-bootstrap.test.ts` (only `bun:*`/`node:*` imports). It extracts both blocks from `SKILL.md` and runs them with `sh` against a temp `HOME`, a temp `BUN_INSTALL` and a `PATH` of stub executables that log their argv to a file. It proves:
+- [x] R5. Add `plugins/sp/tests/sp-bot-bootstrap.test.ts` (only `bun:*`/`node:*` imports). It extracts both blocks from `SKILL.md` and runs them with `sh` against a temp `HOME`, a temp `BUN_INSTALL` and a `PATH` of stub executables that log their argv to a file. It proves:
   - (a) the empty-host case: check exits 1 listing all four tools, setup calls the installer once and `bun add -g` once with all three packages, and a subsequent check exits 0 once the stubs' fake installs land;
   - (b) a second setup makes zero installer and `bun add` calls;
   - (c) the partial case (bun and spur present) installs only `@gobing-ai/superskill @gobing-ai/knowledge-kit`;
   - (d) with `GROK_API_KEY=sekret` and `SAND_TOKEN=sekret` in the environment, neither the stdout/stderr nor the stub log contains `sekret`;
   - (e) check never invokes `curl` or `bun add`.
 
-- [ ] R6. Add a one-line entry for `sp-bot-bootstrap` to `plugins/sp/README.md`'s skill index and to the Grok Bot subsection from 1291. Gates: `bun run plugin-smoke`, `bun run lint`, `bun run spur-check` and `(cd plugins/sp && bun test tests/sp-bot-bootstrap.test.ts tests/runtime-requires.test.ts tests/skill-structure.test.ts)` pass.
+- [x] R6. Add a one-line entry for `sp-bot-bootstrap` to `plugins/sp/README.md`'s skill index and to the Grok Bot subsection from 1291. Gates: `bun run plugin-smoke`, `bun run lint`, `bun run spur-check` and `(cd plugins/sp && bun test tests/sp-bot-bootstrap.test.ts tests/runtime-requires.test.ts tests/skill-structure.test.ts)` pass.
 
 Out of scope:
 - installing `gh`, git configuration or repo cloning (1293 recipe);
@@ -187,23 +189,37 @@ No `env`/`printenv` and no `set -x`.
 
 ### Plan
 
-- [ ] 1. Write `plugins/sp/tests/sp-bot-bootstrap.test.ts` with the stub harness and the AC1–AC4 cases, and confirm it fails because the skill is absent (R5).
-- [ ] 2. Author `plugins/sp/skills/sp-bot-bootstrap/SKILL.md` with frontmatter, prose, the two blocks and the Team Setup variant (R1–R4).
-- [ ] 3. Iterate until the bootstrap, runtime-requires and skill-structure tests are green (AC1–AC5).
-- [ ] 4. Update the README skill index and Grok Bot subsection (R6).
-- [ ] 5. Run `bun run plugin-smoke`, `bun run lint`, `bun run spur-check`; check `git status --short`. Optionally run on a real Bot and record its check output (R6).
+- [x] 1. Write `plugins/sp/tests/sp-bot-bootstrap.test.ts` with the stub harness and the AC1–AC4 cases, and confirm it fails because the skill is absent (R5).
+- [x] 2. Author `plugins/sp/skills/sp-bot-bootstrap/SKILL.md` with frontmatter, prose, the two blocks and the Team Setup variant (R1–R4).
+- [x] 3. Iterate until the bootstrap, runtime-requires and skill-structure tests are green (AC1–AC5).
+- [x] 4. Update the README skill index and Grok Bot subsection (R6).
+- [x] 5. Run `bun run plugin-smoke`, `bun run lint`, `bun run spur-check`; check `git status --short`. Optionally run on a real Bot and record its check output (R6).
 
 ### Solution
 
-<!-- Filled during implementation: file:line change map and concise rationale. -->
+Two shipped artifacts plus guard/doc integration:
+
+- `plugins/sp/skills/sp-bot-bootstrap/SKILL.md` — frontmatter `name/description/requires: [local-fs]` with the three trigger phrases (`plugins/sp/skills/sp-bot-bootstrap/SKILL.md:1-9`); prose run order = check → setup only on nonzero → check again (`:26-36`); exactly two fenced blocks: ` ```sh sp-bot-bootstrap:check ` at `:38-49` (prepends `${BUN_INSTALL:-$HOME/.bun}/bin`, runs each tool's `--version`, exits 0 only when all four resolve, prints `missing: <tool>` per absent tool) and ` ```sh sp-bot-bootstrap:setup ` at `:51-68` (`set -eu`, official bun installer only when `bun` is absent, `bun add -g` only for missing packages from the fixed pair list, PATH echo, no rc-file edits); Team Setup Script variant with the docs.x.ai pointer marked *unverified* (`:70-74`). No `plugins/sp/scripts` tier (ADR-130).
+- `plugins/sp/tests/sp-bot-bootstrap.test.ts` — behavior test that extracts both blocks from `SKILL.md` verbatim (`plugins/sp/tests/sp-bot-bootstrap.test.ts:15-22`) and runs them under `sh` with a temp HOME, temp `BUN_INSTALL` and a PATH of stub executables logging argv (`:64-105`); the fake `bun` writes fake tool binaries so the re-check passes (`:41-63`); cases prove AC1 empty-host (`:107`), AC2 rerun no-op (`:128`), AC3 partial host (`:141`), AC4 secret-free + read-only check (`:155`).
+- Guard integration: `plugins/sp/tests/runtime-requires.test.ts` pins moved 88→89 entities / 42 skills / `local-fs` group 14→15; `plugins/sp/tests/skill-structure.test.ts:862` R42 aggregate description budget 11_000→11_500; README skill-index row, directory-layout line and Grok Bot "Bootstrap first (1292)" paragraph added.
 
 ### Testing
 
-<!-- Filled during verification: commands run, outcomes, coverage claim or N/A. -->
+- `(cd plugins/sp && bun test tests/sp-bot-bootstrap.test.ts)` — 4/4 pass, 27 expect() calls (AC1–AC4; `plugins/sp/tests/sp-bot-bootstrap.test.ts:107/128/141/155`).
+- `(cd plugins/sp && bun test tests/runtime-requires.test.ts tests/skill-structure.test.ts)` — all pass (89 entities, README index exact — `plugins/sp/tests/skill-structure.test.ts:1307` R43, `:1373` README-index assertion).
+- `bun run plugin-smoke` — PASS ("plugin surface is standalone and installs clean").
+- `bun run lint` and `bun run spur-check` (repo-wide root tests 11,835 pass / 787 files) — exit 0.
+- superskill `skill validate plugins/sp/skills/sp-bot-bootstrap --json` — `{"valid":true,"findings":[]}` (superskill 0.3.44).
 
 ### Review
 
-<!-- Filled during review: P1-P4 findings, residual risk, and final disposition. -->
+<!-- spur:record-review -->
+
+**SECU findings** (pipeline verify step — verdict: PASS)
+
+| Priority | Dimension | Location | Finding |
+|----------|-----------|----------|----------|
+| P4 | — | — | No findings (verify verdict PASS) |
 
 ### References
 
@@ -217,4 +233,6 @@ No `env`/`printenv` and no `set -x`.
 
 - 2026-11-04T23:03:29.488Z feature_id Q → I14 (system)
 - 2026-11-04T23:34:48.741Z backlog → todo (system)
+- 2026-11-05T01:24:06.972Z todo → testing (system)
+- 2026-11-05T01:25:42.263Z testing → done (system)
 
