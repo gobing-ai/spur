@@ -3,7 +3,7 @@ kind: design
 title: "Feature sync and agent command contracts"
 status: implemented
 created_at: 2026-09-09
-updated_at: 2026-10-02
+updated_at: 2026-11-05
 related: []
 tags: [contract, planning, cli]
 ---
@@ -28,6 +28,7 @@ Sync feature status with linked task states via conservative forward-only deriva
   failure, so the touched feature's `## Tasks` marker region reflects the task edges used to derive
   status. Dry-run, confirmation-refused, and no-op results do not refresh.
 - `POST /features/{id}/sync` HTTP endpoint: `pull` direction delegates to `syncFeature` (`{ direction: 'pull', affectedTasks, applied, newStatus }` — `affectedTasks` = number of tasks linked to the feature, `applied` = whether a status transition was applied); `push` direction returns HTTP 501 structured error (not supported; use pull or CLI `spur feature sync`).
+- The Board sync dialog defaults to `pull`; its `push` option is disabled and labeled unavailable.
 - Pipeline integration (task 0328; bounded by 0411, amended by 0625): `task-pipeline.yaml`'s
   post-record step syncs the linked feature or records an orphan proposal. `wrapup-pipeline.yaml`'s
   `feature-transition` step syncs `${vars.feature}`, captures the result and exit code, and runs

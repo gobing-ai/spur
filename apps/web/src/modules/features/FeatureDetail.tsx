@@ -92,7 +92,7 @@ export default function FeatureDetail({
     const [inlineModal, setInlineModal] = useState<string | null>(null);
     const [inlineValue, setInlineValue] = useState('');
     const [selectedChannel, setSelectedChannel] = useState<string>('claude');
-    const [syncDirection, setSyncDirection] = useState<SyncDirection>('push');
+    const [syncDirection, setSyncDirection] = useState<SyncDirection>('pull');
     const [showNewTaskPanel, setShowNewTaskPanel] = useState(false);
     const [showNewFeaturePanel, setShowNewFeaturePanel] = useState(false);
 
@@ -868,7 +868,9 @@ export default function FeatureDetail({
                                         value={syncDirection}
                                         onChange={(e) => setSyncDirection(e.target.value as SyncDirection)}
                                     >
-                                        <option value="push">Push (feature → tasks)</option>
+                                        <option value="push" disabled>
+                                            Push (feature → tasks) — unavailable
+                                        </option>
                                         <option value="pull">Pull (tasks → feature)</option>
                                     </Select>
                                 </div>
