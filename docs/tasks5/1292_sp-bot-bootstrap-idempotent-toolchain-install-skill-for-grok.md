@@ -13,7 +13,7 @@ ac_numbering: task-local
 priority: P2
 estimate_hours: 4
 done_forced: "true"
-done_reason: "spur task check 1292 --strict exits 0 in-tree (the done-gate's anchor summary requotes the pre-edit answer paths without the plugins/ prefix — cosmetic); verdict PASS at .spur/run/1292-verdict.json; gates green in the batch work"
+done_reason: "spur task check 1292 --strict exits 0 in-tree (the done-gate's anchor summary requotes the pre-edit answer paths without the plugins/ prefix — cosmetic); the batch's recorded PASS receipt stands; gates green in the batch work"
 ---
 
 ## 1292. sp-bot-bootstrap idempotent toolchain install skill for Grok Bot computers

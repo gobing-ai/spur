@@ -133,6 +133,14 @@ the declaration fields, the serve preflight, trust limits and troubleshooting.
 execution policy, agent selection, invocation contracts, parent→child), the retired names, and
 the ADR-120 gate for adding a new one.
 
+**Using Spur with a Grok Bot (outer loop + routine webhooks):**
+➡️ **[How to Use Spur with Grok Bot](./how_to_use_spur_with_grok_bot.md)**
+— the one-time `superskill install sp --targets grok-bot` + `sp-bot-bootstrap` bootstrap, the
+read-only outer-loop maintenance routine (`spur task list --status todo --json` → `show`/
+`check` → issues/PRs via the connector), the `grok-bot-notify` webhook recipe (env contract,
+run command, failure semantics, no-secrets rule), and what stays unverified until a
+real-Bot receipt.
+
 **Optional Jev workflow decisions:**
 ➡️ **[How to Enable Jev in Spur](./how_to_enable_jev_in_spur.md)**
 — project/global activation, credentials, disablement, fallback, and execution-path limits.
