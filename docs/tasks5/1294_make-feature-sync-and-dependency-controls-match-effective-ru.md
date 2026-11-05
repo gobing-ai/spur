@@ -1,10 +1,10 @@
 ---
 schema_version: 1
 name: Make feature sync and dependency controls match effective runner behavior
-status: wip
+status: done
 template: feature-impl
 created_at: 2026-11-05T20:01:23.909Z
-updated_at: "2026-11-05T21:52:31.004Z"
+updated_at: "2026-11-05T22:57:58.390Z"
 ac_altitude: task-local
 ac_numbering: task-local
 feature_id: F8
@@ -16,6 +16,8 @@ tags:
 estimate_hours: 4
 
 dependencies: []
+done_forced: "false"
+done_reason: unforced close; PASS artifact at .spur/memory/evidence/1294-verdict.json
 ---
 
 ## 1294. Make feature sync and dependency controls match effective runner behavior
@@ -44,8 +46,8 @@ Already implemented in the starting uncommitted review diff: default pull, disab
 
 ### Requirements
 
-- [ ] R1. Preserve supported pull sync, unavailable push and the unsaved feature draft across metadata reload.
-- [ ] R2. Remove the feature-action dependency checkbox because the current runner has no effective bypass; preserve accepted HTTP input compatibility.
+- [x] R1. Preserve supported pull sync, unavailable push and the unsaved feature draft across metadata reload.
+- [x] R2. Remove the feature-action dependency checkbox because the current runner has no effective bypass; preserve accepted HTTP input compatibility.
 
 ### Acceptance Criteria
 
@@ -119,11 +121,41 @@ Verification evidence:
 
 ### Testing
 
-<!-- Filled during verification: commands run, outcomes, coverage claim or N/A. -->
+**Pipeline verify results**
+
+- Verdict: PASS (from verdict artifact)
+
+| Requirement | Status | Evidence |
+|-------------|--------|----------|
+| R1 | MET | `apps/web/src/modules/features/FeatureDetail.tsx:95` defaults pull; `:415-416` reloads metadata with `{ body: false }`; `apps/web/tests/modules/features/feature-sync.test.ts:17-70` proves pull, disabled push and draft preservation. |
+| R2 | MET | `apps/web/src/modules/features/FeatureDetail.tsx:4,879-895` removes the inert control; `apps/web/tests/modules/features/feature-sync.test.ts:72-91` proves its absence; optional `skipDeps` remains in `apps/web/src/lib/feature-types.ts:58-63`. |
+
+| Acceptance Criteria | Status | Evidence Type | Evidence |
+|---------------------|--------|---------------|----------|
+| AC1 — Feature sync defaults to the supported direction and preserves drafts (req: R1) | MET | test | `apps/web/tests/modules/features/feature-sync.test.ts:17-70` — rendered pull/disabled-push/draft journey; 44 focused web tests and full 11848-test gate pass. |
+| AC2 — Feature dependency controls reflect effective action semantics (req: R2) | MET | test | `apps/web/tests/modules/features/feature-sync.test.ts:72-91` proves the control is absent; `apps/server/tests/modules/feature/handlers.test.ts` covers accepted action input and push refusal (25 focused server tests pass). |
+- Coverage: N/A (verdict-based; verify pipeline does not measure code coverage)
 
 ### Review
 
-<!-- Filled during review: P1-P4 findings, residual risk, and final disposition. -->
+#### Review Report — 1294
+**Scope:** committed implementation `ffafa8481` plus current task evidence
+**Dimensions:** functional, security, efficiency, correctness, usability, architecture
+**Verdict:** PASS
+**Confidence: MEDIUM**
+
+| # | Priority | Dimension | Finding | Location | Disposition |
+| --- | --- | --- | --- | --- | --- |
+| 1 | P4 (advisory) | test surface | The draft regression drives the real MDEditor's React `onChange` handler directly rather than a DOM input event. This matches the frozen instruction to change `draftBody` and still exercises the real renderer/reload path; no production behavior is mocked. | `apps/web/tests/modules/features/feature-sync.test.ts:43-52` | ACCEPTED |
+
+##### Functional Traceability
+
+| Req | Status | Evidence |
+| --- | --- | --- |
+| R1 | MET | Pull is the default at `apps/web/src/modules/features/FeatureDetail.tsx:95`; sync reloads with `{ body: false }` at `:415-416`; the rendered draft journey passes at `apps/web/tests/modules/features/feature-sync.test.ts:17-70`. |
+| R2 | MET | The inert dependency control and Checkbox import are removed at `apps/web/src/modules/features/FeatureDetail.tsx:4,879-895`; its absence is proven at `apps/web/tests/modules/features/feature-sync.test.ts:72-91`, while optional HTTP `skipDeps` remains at `apps/web/src/lib/feature-types.ts:58-63`. |
+
+**Next:** close through record/done; the accepted P4 is the only residual and no P1–P3 finding remains.
 
 ### References
 
@@ -132,4 +164,6 @@ Verification evidence:
 ### History
 
 - 2026-11-05T21:52:31.004Z todo → wip (system)
+- 2026-11-05T22:57:56.530Z wip → testing (system)
+- 2026-11-05T22:57:58.385Z testing → done (system)
 
