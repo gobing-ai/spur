@@ -16,6 +16,7 @@ import {
     validateAcceptanceCriteria,
 } from '@gobing-ai/spur-domain';
 import type { FileSystem } from '@gobing-ai/ts-runtime';
+import { PlanningReadError } from '../errors';
 import type { FeatureReceiptRunPort } from '../workflow/feature-verification-receipt';
 import {
     type CheckFeatureFindings,
@@ -302,32 +303,34 @@ export class FeatureService {
     /** List features. */
     async list(): Promise<FeatureSummary[]> {
         const results: FeatureSummary[] = [];
+        let names: string[];
         try {
-            const names = await this.ctx.fs.readDir(this.ctx.featuresDir);
-            for (const name of names) {
-                const match = name.match(FEATURE_FILE_RE);
-                if (!match) continue;
-                const eid = match[1];
-                const eslug = match[2];
-                if (!eid || !eslug) continue;
-                const filePath = `${this.ctx.featuresDir}/${name}`;
-                try {
-                    const raw = await this.ctx.fs.readFile(filePath);
-                    const doc = MarkdownDocument.parse(raw, 'feature');
-                    results.push({
-                        id: eid,
-                        name: (doc.frontmatterData?.name as string) ?? eslug,
-                        status: (doc.frontmatterData?.status as string) ?? 'backlog',
-                        priority: (doc.frontmatterData?.priority as string) ?? 'P2',
-                        filePath,
-                        frontmatter: (doc.frontmatterData ?? {}) as Record<string, unknown>,
-                    });
-                } catch {
-                    // skip unparseable files
-                }
+            names = await this.ctx.fs.readDir(this.ctx.featuresDir);
+        } catch (error) {
+            if ((error as NodeJS.ErrnoException).code === 'ENOENT') return [];
+            throw new PlanningReadError(this.ctx.featuresDir, error);
+        }
+        for (const name of names) {
+            const match = name.match(FEATURE_FILE_RE);
+            if (!match) continue;
+            const eid = match[1];
+            const eslug = match[2];
+            if (!eid || !eslug) continue;
+            const filePath = `${this.ctx.featuresDir}/${name}`;
+            try {
+                const raw = await this.ctx.fs.readFile(filePath);
+                const doc = MarkdownDocument.parse(raw, 'feature');
+                results.push({
+                    id: eid,
+                    name: (doc.frontmatterData?.name as string) ?? eslug,
+                    status: (doc.frontmatterData?.status as string) ?? 'backlog',
+                    priority: (doc.frontmatterData?.priority as string) ?? 'P2',
+                    filePath,
+                    frontmatter: (doc.frontmatterData ?? {}) as Record<string, unknown>,
+                });
+            } catch (error) {
+                throw new PlanningReadError(filePath, error);
             }
-        } catch {
-            // dir doesn't exist yet
         }
         return results;
     }
@@ -895,8 +898,9 @@ export class FeatureService {
             let names: string[];
             try {
                 names = await this.ctx.fs.readDir(dir);
-            } catch {
-                continue; // folder may not exist yet
+            } catch (error) {
+                if ((error as NodeJS.ErrnoException).code === 'ENOENT') continue;
+                throw new PlanningReadError(dir, error);
             }
             for (const name of names) {
                 if (!/^\d{4}_.+\.md$/.test(name)) continue;
@@ -916,8 +920,8 @@ export class FeatureService {
                     const list = byFeature.get(fid) ?? [];
                     list.push(row);
                     byFeature.set(fid, list);
-                } catch {
-                    // skip unparseable task files
+                } catch (error) {
+                    throw new PlanningReadError(`${dir}/${name}`, error);
                 }
             }
         }

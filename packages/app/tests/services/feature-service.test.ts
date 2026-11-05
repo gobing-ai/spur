@@ -239,6 +239,56 @@ describe('FeatureService', () => {
             const ids = result.map((f) => f.id);
             expect(ids.length).toBeGreaterThan(0);
         });
+
+        test('an unreadable feature file fails with PlanningReadError instead of disappearing', async () => {
+            const created = await svc.create('Unreadable feature');
+            const fs = createNodeFileSystem(root);
+            const readFile = fs.readFile.bind(fs);
+            fs.readFile = async (path) => {
+                if (path === created.ref.filePath)
+                    throw Object.assign(new Error('permission denied'), { code: 'EACCES' });
+                return readFile(path);
+            };
+            const failing = new FeatureService({
+                fs,
+                featuresDir,
+                tasksDir,
+                writeService: new PlanningWriteService({ fs }),
+            });
+            await expect(failing.list()).rejects.toMatchObject({
+                name: 'PlanningReadError',
+                path: created.ref.filePath,
+            });
+            rmSync(created.ref.filePath, { force: true });
+        });
+    });
+
+    describe('planning read containment', () => {
+        test('an unreadable linked todo aborts sync before any status write', async () => {
+            const created = await svc.create('Unreadable linked');
+            await svc.transition(created.ref.id, 'active');
+            const done = writeLinkedTask('9876', 'Readable done', 'done', created.ref.id);
+            const unreadable = writeLinkedTask('9877', 'Unreadable todo', 'todo', created.ref.id);
+            const fs = createNodeFileSystem(root);
+            const readFile = fs.readFile.bind(fs);
+            fs.readFile = async (path) => {
+                if (path === unreadable) throw Object.assign(new Error('I/O failure'), { code: 'EIO' });
+                return readFile(path);
+            };
+            const failing = new FeatureService({
+                fs,
+                featuresDir,
+                tasksDir,
+                writeService: new PlanningWriteService({ fs }),
+            });
+            const before = readFileSync(created.ref.filePath, 'utf8');
+            await expect(failing.syncFeature(created.ref.id)).rejects.toMatchObject({
+                name: 'PlanningReadError',
+                path: unreadable,
+            });
+            expect(readFileSync(created.ref.filePath, 'utf8')).toBe(before);
+            for (const path of [created.ref.filePath, done, unreadable]) rmSync(path, { force: true });
+        });
     });
 
     describe('show', () => {

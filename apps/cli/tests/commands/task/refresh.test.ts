@@ -61,9 +61,12 @@ describe('spur task CLI', () => {
         expect(exitCode).toBe(0);
         expect(output.messages.join('')).toContain('Corpus scanned');
     });
-    test('refresh with bad folder exits 1', async () => {
+    test('refresh with a non-directory folder exits 1 with a read error', async () => {
+        const filePath = join(cwd, 'not-a-directory');
+        await writeFile(filePath, 'x');
         const output = createCapturedOutput();
-        const exitCode = await main(['task', 'refresh', '--folder', join(cwd, 'nonexistent')], { cwd, output });
+        const exitCode = await main(['task', 'refresh', '--folder', filePath], { cwd, output });
         expect(exitCode).toBe(1);
+        expect(output.errors.join('\n')).toContain(filePath);
     });
 });

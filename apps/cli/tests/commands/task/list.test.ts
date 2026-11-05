@@ -189,13 +189,21 @@ describe('spur task CLI', () => {
         expect(tasks.some((t) => t.name === 'Linked to F3')).toBe(true);
         expect(tasks.some((t) => t.name === 'Unlinked task')).toBe(false);
     });
-    test('list with a bad folder exits 1 (catch block)', async () => {
+    test('list with an optional missing folder returns empty success', async () => {
         const output = createCapturedOutput();
         const exitCode = await main(['task', 'list', '--folder', join(cwd, 'totally-nonexistent-dir')], {
             cwd,
             output,
         });
+        expect(exitCode).toBe(0);
+        expect(output.errors).toHaveLength(0);
+    });
+    test('list with a non-directory folder exits 1 with a read error', async () => {
+        const filePath = join(cwd, 'not-a-directory');
+        await writeFile(filePath, 'x');
+        const output = createCapturedOutput();
+        const exitCode = await main(['task', 'list', '--folder', filePath], { cwd, output });
         expect(exitCode).toBe(1);
-        expect(output.errors.length).toBeGreaterThan(0);
+        expect(output.errors.join('\n')).toContain(filePath);
     });
 });

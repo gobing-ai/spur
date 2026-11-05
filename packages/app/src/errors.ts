@@ -4,6 +4,19 @@
  * raise the same types the handler matches via `instanceof`.
  */
 
+/** Thrown when a planning input exists but cannot be read or parsed. Carries its path and original cause. */
+export class PlanningReadError extends Error {
+    readonly path: string;
+    override readonly cause: unknown;
+
+    constructor(path: string, cause: unknown) {
+        super(`Failed to read planning input ${path}: ${cause instanceof Error ? cause.message : String(cause)}`);
+        this.name = 'PlanningReadError';
+        this.path = path;
+        this.cause = cause;
+    }
+}
+
 /** Thrown when a lifecycle guard blocks a status transition. Maps to 409 GUARD_DENIED. */
 export class GuardDeniedError extends Error {
     constructor(message: string) {

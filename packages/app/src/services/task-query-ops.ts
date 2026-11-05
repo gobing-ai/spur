@@ -1,5 +1,6 @@
 import { atomicWriteAsync, MarkdownDocument, normalizeTaskStatus, type TaskStatus } from '@gobing-ai/spur-domain';
 import { ValidationError } from '@gobing-ai/ts-utils';
+import { PlanningReadError } from '../errors';
 import type { TaskFiles } from './task-files';
 import type { TaskLocator } from './task-locator';
 import { taskMetadata } from './task-metadata';
@@ -106,7 +107,13 @@ export class TaskQueryOps {
         const wantPhase = filters?.phase === undefined ? undefined : canonical(filters.phase);
         const dir = this.files.resolveListDir(filters?.folder);
 
-        const entries = await this.ctx.fs.readDir(dir);
+        let entries: string[];
+        try {
+            entries = await this.ctx.fs.readDir(dir);
+        } catch (error) {
+            if ((error as NodeJS.ErrnoException).code === 'ENOENT') return [];
+            throw new PlanningReadError(dir, error);
+        }
         const tasks: TaskSummary[] = [];
 
         for (const name of entries) {
@@ -141,8 +148,8 @@ export class TaskQueryOps {
                     feature_id: (featureId as string | undefined) ?? null,
                     frontmatter: fm as Record<string, unknown>,
                 });
-            } catch {
-                // Skip unparseable files
+            } catch (error) {
+                throw new PlanningReadError(actualPath, error);
             }
         }
         return tasks;

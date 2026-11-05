@@ -1,10 +1,10 @@
 ---
 schema_version: 1
 name: Reject incomplete planning inputs before deriving feature state
-status: todo
+status: done
 template: feature-impl
 created_at: 2026-11-05T20:01:23.912Z
-updated_at: "2026-11-05T20:37:42.693Z"
+updated_at: "2026-11-05T23:53:40.507Z"
 ac_altitude: task-local
 ac_numbering: task-local
 feature_id: F22
@@ -16,6 +16,8 @@ tags:
 estimate_hours: 6
 
 dependencies: []
+done_forced: "false"
+done_reason: unforced close; PASS artifact at .spur/memory/evidence/1296-verdict.json
 ---
 
 ## 1296. Reject incomplete planning inputs before deriving feature state
@@ -42,7 +44,7 @@ Rubric: E6 D1 L2 C1 R2 = 12. Keep this candidate as one cohesive deliverable wit
 
 ### Requirements
 
-- [ ] R1. Incomplete planning input cannot silently drive lifecycle state; implement the exact Given/When/Then contract below.
+- [x] R1. Incomplete planning input cannot silently drive lifecycle state; implement the exact Given/When/Then contract below.
 
 ### Acceptance Criteria
 
@@ -87,26 +89,74 @@ No production implementation occurs during this refinement. No new dependency, p
 
 ### Plan
 
-- [ ] 1. First reproduce EACCES/EIO/ENOTDIR and unreadable-todo/readable-done cases through app and fixture HTTP/CLI.
-- [ ] 2. Replace broad read/parse catches on the named list/collection paths with narrow missing-folder handling and PlanningReadError.
-- [ ] 3. Verify refresh/syncFingerprintInputs/sync callers propagate incomplete input and cannot apply a status transition.
-- [ ] 4. Confirm valid legacy aliases, optional ENOENT folders and successful list/Map JSON shapes are unchanged.
-- [ ] 5. Run the exact focused checks above, inspect the diff against R-items/feature AC, synchronize owners and record evidence through the task pipeline; do not fabricate completion.
+- [x] 1. First reproduce EACCES/EIO/ENOTDIR and unreadable-todo/readable-done cases through app and fixture HTTP/CLI.
+- [x] 2. Replace broad read/parse catches on the named list/collection paths with narrow missing-folder handling and PlanningReadError.
+- [x] 3. Verify refresh/syncFingerprintInputs/sync callers propagate incomplete input and cannot apply a status transition.
+- [x] 4. Confirm valid legacy aliases, optional ENOENT folders and successful list/Map JSON shapes are unchanged.
+- [x] 5. Run the exact focused checks above, inspect the diff against R-items/feature AC, synchronize owners and record evidence through the task pipeline; do not fabricate completion.
 
 ### Solution
 
-<!-- Filled during implementation: file:line change map and concise rationale. -->
+| File | What changed and why |
+| --- | --- |
+| `packages/app/src/errors.ts:7-17` | Add internal PlanningReadError with the failing path and original cause so transports surface actionable diagnostics instead of silent omission. |
+| `packages/app/src/services/task-query-ops.ts:110-152` | Treat only optional-folder ENOENT as empty; wrap every other list read/parse failure with its file or folder path. |
+| `packages/app/src/services/feature-service.ts:303-332` | Fail feature-list reads with PlanningReadError rather than skipping unreadable feature files. |
+| `packages/app/src/services/feature-service.ts:895-925` | Abort feature task collection on incomplete input so sync/fingerprint/status derivation cannot proceed from only the readable subset. |
+| `packages/app/tests/services/task-query-ops.test.ts:59-83` | Cover unreadable-todo/readable-done, optional ENOENT, ENOTDIR and EIO with exact paths. |
+| `packages/app/tests/services/feature-service.test.ts:243-291` | Prove unreadable feature files fail and an unreadable linked todo aborts sync with zero status writes. |
+| `apps/cli/tests/commands/task/refresh.test.ts:64-70` | Prove refresh propagates a non-directory read error instead of silently returning success. |
+
+Verification evidence:
+- `(cd packages/app && bun test tests/services/task-query-ops.test.ts tests/services/feature-service.test.ts tests/services/task-locator.test.ts)` — 102 pass, 0 fail; valid legacy aliases and successful Map shapes remain green.
+- `(cd apps/server && bun test tests/modules/task/handlers.test.ts tests/modules/feature/handlers.test.ts)` — 39 pass, 0 fail.
+- `(cd apps/cli && bun test tests/commands/task/list.test.ts tests/commands/task/refresh.test.ts)` — 19 pass, 0 fail, including optional-folder and non-directory CLI cases.
+- Disposable-project proof at `.spur/run/6c42d05a-03da-4637-ac8b-d5d138b5a00a/planning-read-refusal.json` — chmod-unreadable todo: CLI exit 1 and oRPC handler error 500 both name the file; corpus bytes preserved.
+- `bun run --filter @gobing-ai/spur-app typecheck`, `bun run --filter @gobing-ai/spur typecheck`, and `bun run --filter @gobing-ai/spur-server typecheck` — all exit 0; all 51 pre-check rules passed.
+- Light gate: format, pre-rules, app typecheck and related tests PASS; post-check coverage provenance is deferred to the pipeline's canonical full gate.
 
 ### Testing
 
-<!-- Filled during verification: commands run, outcomes, coverage claim or N/A. -->
+**Pipeline verify results**
+
+- Verdict: PASS (from verdict artifact)
+
+| Requirement | Status | Evidence |
+|-------------|--------|----------|
+| R1 | MET | `packages/app/src/services/task-query-ops.ts:110-152` and `packages/app/src/services/feature-service.ts:303-332,895-925` reject unreadable inputs with paths; `packages/app/tests/services/feature-service.test.ts:267-291` proves sync writes nothing. |
+
+| Acceptance Criteria | Status | Evidence Type | Evidence |
+|---------------------|--------|---------------|----------|
+| AC1 — Incomplete planning input cannot silently drive lifecycle state (req: R1) | MET | test | `packages/app/tests/services/task-query-ops.test.ts:59-83` covers unreadable todo/readable done; `packages/app/tests/services/feature-service.test.ts:267-291` proves sync aborts; disposable CLI/oRPC refusal at `.spur/run/6c42d05a-03da-4637-ac8b-d5d138b5a00a/planning-read-refusal.json` names the file with bytes preserved. |
+- Coverage: N/A (verdict-based; verify pipeline does not measure code coverage)
 
 ### Review
 
-<!-- Filled during review: P1-P4 findings, residual risk, and final disposition. -->
+#### Review Report — 1296
+**Scope:** planning read containment in TaskQueryOps and FeatureService plus tests and disposable-project proof
+**Dimensions:** functional, security, efficiency, correctness, usability, architecture
+**Verdict:** PASS
+**Confidence: MEDIUM**
+
+| # | Priority | Dimension | Finding | Location | Disposition |
+| --- | --- | --- | --- | --- | --- |
+| 1 | P4 (advisory) | architecture | The change is deliberately limited to the three failing read seams; unrelated tolerant lookup behavior remains untouched, so no new corpus-wide schema gate or tolerant DTO was introduced. | `packages/app/src/services/task-query-ops.ts:110-152` | ACCEPTED |
+
+##### Functional Traceability
+
+| Req | Status | Evidence |
+| --- | --- | --- |
+| R1 | MET | Task list fails at `packages/app/src/services/task-query-ops.ts:110-152`; feature list fails at `packages/app/src/services/feature-service.ts:303-332`; linked collection aborts at `:895-925`, preventing status derivation. CLI and oRPC proofs name the unreadable file with bytes preserved. |
+
+**Next:** close through record/done; no P1–P3 finding remains and optional-folder ENOENT stays empty by design.
 
 ### References
 
 <!-- Links to the parent feature, design docs, related tasks, or external references. -->
 
 ### History
+
+- 2026-11-05T23:41:49.696Z todo → wip (system)
+- 2026-11-05T23:53:38.532Z wip → testing (system)
+- 2026-11-05T23:53:40.502Z testing → done (system)
+

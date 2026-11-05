@@ -56,6 +56,39 @@ describe('TaskQueryOps.list / show', () => {
         expect((await q.list({ featureId: 'F1' })).map((t) => t.name)).toEqual(['Alpha']);
     });
 
+    test('an unreadable todo beside a readable done fails with its path instead of disappearing', async () => {
+        writeTask('0001_done.md', 'name: Done\nstatus: done\nfeature_id: F1');
+        const unreadable = writeTask('0002_todo.md', 'name: Todo\nstatus: todo\nfeature_id: F1');
+        const readFile = ctx.fs.readFile.bind(ctx.fs);
+        ctx.fs.readFile = async (path) => {
+            if (path === unreadable) throw Object.assign(new Error('permission denied'), { code: 'EACCES' });
+            return readFile(path);
+        };
+        await expect(ops().list()).rejects.toMatchObject({
+            name: 'PlanningReadError',
+            path: unreadable,
+        });
+    });
+
+    test('optional missing folder is empty, while ENOTDIR and EIO fail with PlanningReadError', async () => {
+        const optional = join(tasksDir, 'optional-missing');
+        await expect(ops().list({ folder: optional })).resolves.toEqual([]);
+
+        const notDirectory = join(root, 'not-a-directory');
+        writeFileSync(notDirectory, 'x');
+        await expect(ops().list({ folder: notDirectory })).rejects.toMatchObject({
+            name: 'PlanningReadError',
+            path: notDirectory,
+        });
+
+        const readDir = ctx.fs.readDir.bind(ctx.fs);
+        ctx.fs.readDir = async (dir) => {
+            if (dir === tasksDir) throw Object.assign(new Error('I/O failure'), { code: 'EIO' });
+            return readDir(dir);
+        };
+        await expect(ops().list()).rejects.toMatchObject({ name: 'PlanningReadError', path: tasksDir });
+    });
+
     test('an un-normalizable status filter is a typed ValidationError', async () => {
         await expect(ops().list({ status: 'not-a-status' })).rejects.toBeInstanceOf(ValidationError);
     });
