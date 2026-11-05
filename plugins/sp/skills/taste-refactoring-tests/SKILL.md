@@ -1,6 +1,7 @@
 ---
 name: taste-refactoring-tests
 description: Refactor unit tests for failure sensitivity, deterministic confidence, and regression protection without mock-heavy brittle tests or vanity coverage. Backs test suite quality audits.
+requires: [local-fs]
 license: Apache-2.0
 metadata:
   author: spur

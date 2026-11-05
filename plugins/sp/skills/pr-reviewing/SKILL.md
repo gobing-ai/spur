@@ -1,6 +1,7 @@
 ---
 name: pr-reviewing
 description: "Local-first PR review — status, a local /sp:dev-review of the branch diff, and validated fixes; `--codex` opts into the GitHub Codex review spine. Backs /sp:dev-pr-review. Triggers: PR review, codex review, @codex review, review my PR, dev-pr-review."
+requires: [cli:gh, cli:spur, local-fs]
 license: Apache-2.0
 version: 2.0.0
 metadata:

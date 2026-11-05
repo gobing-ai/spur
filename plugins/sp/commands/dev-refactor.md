@@ -1,5 +1,6 @@
 ---
 description: Lens-routed refactoring with a preservation contract — taste lenses classify findings against the shared schema; cutting/breaking changes pause for operator approval
+requires: [cli:spur, local-fs]
 role: reviewer
 argument-hint: "[<description>] [--scope <path>] [--focus <api|architect|tests|ui|auto>] [--fix <none|blockers-first|all>] [--check <cmd>] [--agent <inline|auto|name>] [--auto]"
 allowed-tools: ["Bash", "Read", "Edit", "Skill"]

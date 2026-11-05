@@ -1,6 +1,7 @@
 ---
 name: reverse-engineering
 description: "Depth-driven codebase reverse engineering with orthogonal mode, focus, and output format controls. Use for unfamiliar codebases, architecture/design reconstruction, onboarding docs, technical debt assessment, and evidence-backed audit reports."
+requires: [cli:spur, local-fs]
 license: Apache-2.0
 version: 1.1.0
 created_at: 2026-03-28

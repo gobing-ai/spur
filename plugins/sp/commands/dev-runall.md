@@ -1,5 +1,6 @@
 ---
 description: Run a batch of tasks through their pipelines in dependency-correct order — resolve a set, topo-sort, run each via task-pipeline.yaml, emit a batch report
+requires: [cli:spur, local-fs]
 role: planner
 argument-hint: "--tasks <selector> [--feature <id>] [--mode <sequential|parallel|auto>] [--concurrency <n>] [--keep-going] [--auto] [--agent <inline|auto|name>] [--json] [--wrap] [--next] [--continue] [--worktree [<name>]] [--no-summary] [--defer-gate]"
 allowed-tools: ["Bash", "Read", "Skill"]

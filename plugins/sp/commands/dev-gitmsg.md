@@ -1,5 +1,6 @@
 ---
 description: Generate conventional commit message(s) from the current change set via one bounded gather call, optionally commit
+requires: [cli:spur, local-fs]
 role: scribe
 argument-hint: "[--commit] [--squash] [--all] [--scope <path>] [--check <cmd>]"
 allowed-tools: ["Bash", "Read"]

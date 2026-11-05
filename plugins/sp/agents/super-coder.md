@@ -9,6 +9,7 @@ description: |
   assistant: "Delegating to sp:super-coder — dispatches sp:code-implementation to write the code against the task's requirements and AC."
   <commentary>A single task's implementation is the build agent's core unit of work.</commentary>
   </example>
+requires: [cli:spur, local-fs]
 tools: [Read, Grep, Glob, Bash, Skill]
 model: inherit
 color: blue

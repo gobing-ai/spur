@@ -1,6 +1,7 @@
 ---
 name: taste-refactoring-api
 description: Design, review, and refactor REST/HTTP, RPC/gRPC, GraphQL, and event API contracts safely.
+requires: [local-fs]
 license: Apache-2.0
 metadata:
   author: spur

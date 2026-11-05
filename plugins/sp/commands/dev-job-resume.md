@@ -1,5 +1,6 @@
 ---
 description: Resume remaining work from a Markdown handoff file
+requires: [cli:spur, local-fs]
 role: planner
 argument-hint: "--file <path>"
 allowed-tools: ["Bash", "Read", "Write", "Edit", "Skill"]

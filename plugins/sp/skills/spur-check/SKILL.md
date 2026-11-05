@@ -1,6 +1,7 @@
 ---
 name: spur-check
 description: 'Two-tier check primitive for the sp pipeline: light (changed-scope biome, per-workspace typecheck, related tests) during development; full (`spur self exec check`) once at the quality boundary. Reads/writes fingerprint-bound check receipts (.spur/run/<wbs>-check-receipt.json) and reuses a PASS full receipt only at the same proof digest.'
+requires: [cli:spur, local-fs]
 license: Apache-2.0
 version: 1.0.0
 metadata:

@@ -1,6 +1,7 @@
 ---
 name: parallel-execution
 description: "Decide when to fan out independent work across subagents, choose the fan-out pattern, synthesize parallel results. Triggers: \"fan out\", \"run in parallel\", \"parallelize\", \"concurrent execution\", \"multi-agent run\"."
+requires: [cli:spur, local-fs]
 license: Apache-2.0
 metadata:
   author: spur

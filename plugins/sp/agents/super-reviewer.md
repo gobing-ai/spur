@@ -16,6 +16,7 @@ description: |
   assistant: "Delegating to sp:super-reviewer — pipeline Phase 7 review of task 0042's diff."
   <commentary>Pipeline review step.</commentary>
   </example>
+requires: [cli:spur, local-fs]
 tools: [Read, Grep, Glob, Bash, Skill]
 model: inherit
 color: crimson

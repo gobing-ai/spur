@@ -1,6 +1,7 @@
 ---
 name: history-anatomy
 description: "Independent owner of diagnostic interpretation over already-imported history — the daily/ad-hoc mode contract, a closed finding taxonomy, the twelve-section report contract, and the enrich/validate rubrics. Triggers: history-anatomy, run the daily report, ad-hoc diagnosis, find issues over history."
+requires: [local-fs]
 license: Apache-2.0
 version: 1.0.0
 metadata:

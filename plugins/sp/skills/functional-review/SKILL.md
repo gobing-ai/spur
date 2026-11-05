@@ -1,6 +1,7 @@
 ---
 name: functional-review
 description: "Requirements traceability assessment: verify implementation satisfies ALL task requirements. Phase 8b gate for the sp pipeline. Produces per-requirement verdicts with file:line evidence. Triggers: \"functional review\", \"traceability check\", \"verify requirements\", \"did we build what was asked\", \"requirements completeness\"."
+requires: [cli:spur, local-fs]
 license: Apache-2.0
 metadata:
   author: spur

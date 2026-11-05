@@ -1,6 +1,7 @@
 ---
 name: issue-finding
 description: "Render the session forensics report, analyze agent session logs, find performance bottlenecks, propose fixes, and optionally create a structured task. Triggers: find issues, post-mortem, session review, topic focus."
+requires: [cli:spur, local-fs]
 license: Apache-2.0
 version: 2.0.0
 metadata:

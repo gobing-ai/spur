@@ -1,6 +1,7 @@
 ---
 name: spur-cli
 description: "Reference and operate the complete `spur` CLI surface: task, feature, rule, workflow, builder, agent, message, decision, self, history, and projects. Use for verb or flag lookup, machine-readable output and exit contracts, or CLI-gated corpus writes. Triggers: \"spur task\", \"spur history\", \"spur projects\", \"spur decision\", \"spur agent join\", \"create a task\", \"task check\", and any Spur CLI convention. Not for planning or execution lifecycle orchestration (`sp:spur-dev`)."
+requires: [cli:spur, local-fs]
 license: Apache-2.0
 metadata:
   author: spur

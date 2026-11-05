@@ -1,6 +1,7 @@
 ---
 name: source-driven-development
 description: "Verify framework / API / library facts against primary sources before generating code, and separate \"the API exists\" from \"I used it correctly under its contract.\" The single sp owner of source-first verification. Triggers: \"check the docs first\", \"verify this API\", \"source-first\", \"is this the real signature\"."
+requires: [cli:spur, local-fs]
 license: Apache-2.0
 metadata:
   author: spur

@@ -1,6 +1,7 @@
 ---
 name: wayfinder
 description: "Chart a multi-session investigation map when the destination is too foggy to spec in one session. Creates a spur feature as the map, decomposes specifiable questions into spur tasks, and resolves them one at a time until the route becomes visible. Triggers: wayfind, chart a course, multi-session investigation, /sp:dev-find-way."
+requires: [cli:spur, local-fs]
 license: Apache-2.0
 version: 1.0.0
 created_at: 2026-07-06

@@ -1,6 +1,7 @@
 ---
 name: session-review
 description: "Review the active coding-agent session: separate resolved from open issues with evidence, propose bounded improvements. With --fix auto (alias --triage), apply pure-doc / 1–2-line fixes inline and file the rest as tasks; with --fix all, fix every actionable finding inline and file none. Triggers: review this session, wrap-up, triage findings."
+requires: [cli:spur, local-fs]
 license: Apache-2.0
 version: 1.3.0
 metadata:

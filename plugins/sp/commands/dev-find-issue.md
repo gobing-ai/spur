@@ -1,5 +1,6 @@
 ---
 description: "Generate the daily or ad-hoc history-anatomy diagnostic report over already-imported history: the twelve-section report contract, closed finding taxonomy, cache branch, bounded correction, and atomic publication. Triggers: find historical issues, post-mortem, performance analysis, history-anatomy, run the daily report, ad-hoc diagnosis"
+requires: [local-fs]
 role: reviewer
 argument-hint: "[<focus>] [--mode <daily|ad-hoc>] [--date <YYYY-MM-DD>] [--since <RFC3339>] [--until <RFC3339>] [--recompute] [--agent <auto|name>] [--output <path>]"
 allowed-tools: ["Bash", "Read", "Skill"]

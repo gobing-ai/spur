@@ -1,5 +1,6 @@
 ---
 description: Dump remaining work to a Markdown handoff file
+requires: [cli:spur, local-fs]
 role: scribe
 argument-hint: "--file <path>"
 allowed-tools: ["Bash", "Read", "Write", "Skill"]

@@ -1,6 +1,7 @@
 ---
 name: test-driven-development
 description: "Test-driven development discipline: red-green-refactor, behavior-first test design, AAA structure, naming, data builders, mock-at-boundary anti-patterns. Triggers: \"write tests first\", \"TDD\", \"red-green-refactor\", \"characterization test\", \"contract test\", \"how to structure/name a test\"."
+requires: [local-fs]
 license: Apache-2.0
 version: 1.0.0
 created_at: 2026-06-25

@@ -1,6 +1,7 @@
 ---
 name: code-review
 description: "Pre-commit self-review checklist, structured review requests, and processing review findings into tasks. Triggers: \"review this\", \"self-review\", \"pre-commit check\", \"code review\", \"review my changes\", \"check before commit\"."
+requires: [cli:spur, local-fs]
 license: Apache-2.0
 metadata:
   author: spur

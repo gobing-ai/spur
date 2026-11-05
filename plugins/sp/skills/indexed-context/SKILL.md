@@ -1,6 +1,7 @@
 ---
 name: indexed-context
 description: "Cross-agent project intelligence: file index (anatomy), learnings, pitfalls, bug log, token ledger, and session memory under .spur/context/. Triggers: \"load project context\", \"new session\", \"unfamiliar codebase\", \"index this codebase\", \"codebase memory\", \"indexed context\", \"project intelligence\"."
+requires: [local-fs]
 license: Apache-2.0
 metadata:
   author: spur

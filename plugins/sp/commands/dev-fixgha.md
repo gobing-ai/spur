@@ -1,5 +1,6 @@
 ---
 description: Find and fix failing GitHub Actions runs — gh fetch → diagnose → root-cause fix → commit → push → re-verify until green
+requires: [cli:gh, local-fs]
 role: coder
 argument-hint: "[<context>] [--max-retry <n>] [--no-push]"
 allowed-tools: ["Bash", "Read", "Write", "Edit", "Grep", "Glob"]

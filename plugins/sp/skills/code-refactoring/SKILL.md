@@ -1,6 +1,7 @@
 ---
 name: code-refactoring
 description: "Refactoring coordinator with a preservation contract: routes the four taste lenses (api, architect, tests, ui), normalizes findings to a shared schema and P1–P4 severities, gates applies, runs a fix ladder with revert-on-regression. Use for 'dev-refactor', 'safe refactor', 'refactor while keeping every feature'."
+requires: [cli:spur, local-fs]
 license: Apache-2.0
 metadata:
   author: spur

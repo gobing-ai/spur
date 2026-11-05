@@ -1,5 +1,6 @@
 ---
 description: Fix all lint, type, and test errors systematically across the working tree
+requires: [local-fs]
 role: coder
 argument-hint: "[<validation-command>] [--max-retry <n>] [--scope <path>] [--gate-log <path>] [--findings <anchors>]"
 allowed-tools: ["Bash", "Read", "Write", "Edit", "Grep", "Glob"]

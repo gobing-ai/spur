@@ -1,6 +1,7 @@
 ---
 name: code-implementation
 description: "The implementation competency — turn a task's requirements, AC, and design into production code: task-driven scope, stack-pattern selection, root-cause debugging, a Solution change-map. Triggers: \"implement\", \"write code\", \"add feature\", \"fix the bug\", \"refactor\", \"code this task\"."
+requires: [cli:spur, local-fs]
 license: Apache-2.0
 metadata:
   author: spur

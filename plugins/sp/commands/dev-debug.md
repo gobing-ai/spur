@@ -1,5 +1,6 @@
 ---
 description: "Systematic debugging protocol — reproduce, isolate, diagnose root cause, apply minimal fix, and verify with regression tests"
+requires: [cli:spur, local-fs]
 role: coder
 argument-hint: "\"<symptom | failing command>\" [--scope <path>] [--task [<wbs>]] [--agent <inline|auto|name>]"
 allowed-tools: ["Bash", "Read", "Write", "Skill"]

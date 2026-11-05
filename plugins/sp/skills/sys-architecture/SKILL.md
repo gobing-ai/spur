@@ -1,6 +1,7 @@
 ---
 name: sys-architecture
 description: "The architecture competency — decide and record system design before code: module boundaries, data flow, build-vs-extend, transport/storage/auth tradeoffs, ADR routing. Triggers: \"what's the right approach\", \"design this\", \"architecture\", \"should this be an ADR\", \"module boundary\", \"build vs extend\"."
+requires: [cli:spur, local-fs]
 license: Apache-2.0
 metadata:
   author: spur

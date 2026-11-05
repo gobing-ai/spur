@@ -1,6 +1,7 @@
 ---
 name: spur-composer
 description: "Select, compose and tune spur artifacts — tasks, features, rules, workflows, decisions, agent specs and project Board modules. Owns workflow catalog selection, the ephemeral→project→shared ladder, ADR-115 budgets, trace-driven rule tuning and applying accepted sp:spur-doctor proposals. Triggers: compose a workflow, tune a rule, add a Board module."
+requires: [cli:spur, local-fs]
 license: Apache-2.0
 version: 1.0.0
 metadata:

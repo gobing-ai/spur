@@ -9,6 +9,7 @@ description: |
   assistant: "Delegating to sp:super-planner — resolves feature:A1, topo-sorts by dependencies, runs each through task-pipeline.yaml, emits a report."
   <commentary>A batch needs between-runs judgment: set resolution, dependency ordering, failure policy.</commentary>
   </example>
+requires: [cli:spur, local-fs]
 tools: [Read, Grep, Glob, Bash, Skill]
 model: inherit
 color: green

@@ -1,5 +1,6 @@
 ---
 description: "Restructure the feature tree from a mapping file — dry-run then apply via spur feature move / task feature_id edges / root docs/*.md reference rewrites (CLI-gated; no raw Write on docs/features or docs/tasks). Triggers: feature restructure, feature tree move, reparent features, apply mapping file"
+requires: [cli:spur, local-fs]
 role: planner
 argument-hint: "[--map <path>] [--dry-run] [--apply] [--limit <old-id>] [--wave <1|2|3|all>] [--yes]"
 allowed-tools: ["Bash", "Read", "AskUserQuestion", "Skill"]

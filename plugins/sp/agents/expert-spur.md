@@ -9,6 +9,7 @@ description: |-
   assistant: "Delegating to sp:expert-spur — loads the task reference, resolves the set, then applies and checks each transition."
   <commentary>A multi-task sweep needs isolated sequencing and between-operation judgment.</commentary>
   </example>
+requires: [cli:spur, local-fs]
 tools: [Read, Grep, Glob, Bash, Skill]
 model: inherit
 color: green

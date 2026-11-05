@@ -1,5 +1,6 @@
 ---
 description: Plan a feature from a description — intake → feature create → AC generation → decomposition → batch-create (Design by default)
+requires: [cli:spur, local-fs]
 role: planner
 argument-hint: "\"<description>\" [--feature <id>] [--parent <feature-id>] [--skip-design] [--agent <inline|auto|name>] [--auto]"
 allowed-tools: ["Bash", "Read", "Skill", "AskUserQuestion"]

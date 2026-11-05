@@ -1,6 +1,7 @@
 ---
 name: redesign-web-ui
 description: "Upgrade an existing website or app UI past generic AI defaults without rewriting the stack. Triggers: \"redesign this UI\", \"make it look premium\", \"generic AI design\", \"polish this page\", \"restyle the web app\"."
+requires: [local-fs]
 license: Apache-2.0
 metadata:
   author: spur

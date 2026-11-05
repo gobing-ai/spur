@@ -1,5 +1,6 @@
 ---
 description: "Review the active coding-agent session immediately: summarize outcomes, distinguish resolved and open issues with evidence, and propose bounded improvements. With --fix auto (alias --triage): apply pure-doc / one-to-two-line fixes inline, then file remaining findings as one or more implement-ready tasks. With --fix all: fix every actionable finding inline and file no task. Triggers: review this session, session wrap-up, immediate retrospective, what happened, what was resolved, triage findings"
+requires: [cli:spur, local-fs]
 role: reviewer
 argument-hint: "[<focus>] [--fix <none|auto|all>] [--triage]"
 allowed-tools: ["Bash", "Read", "Grep", "Glob", "Skill"]

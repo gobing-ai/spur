@@ -1,5 +1,6 @@
 ---
 description: Refine an existing workflow, then re-validate and re-dry-run it
+requires: [cli:spur, local-fs]
 role: scribe
 argument-hint: "<workflow-file> [--intent \"<goal>\"] [--dry-run]"
 allowed-tools: ["Bash", "Read", "Edit", "Skill"]

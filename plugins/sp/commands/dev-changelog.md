@@ -1,5 +1,6 @@
 ---
 description: Generate changelog from git commits
+requires: [cli:spur, local-fs]
 role: scribe
 argument-hint: "[<file>] [--since <tag|commit>] [--until <tag|commit>] [--version <version>]"
 allowed-tools: ["Bash", "Read", "Edit"]

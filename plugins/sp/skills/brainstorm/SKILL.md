@@ -1,6 +1,7 @@
 ---
 name: brainstorm
 description: "Structured ideation: generate solution options with trade-offs and source citations, then delegate to research/task-creation skills. Triggers: \"brainstorm ideas\", \"explore solutions\", \"consider options\", \"research approaches\", \"what are my options\", \"how should I approach X\"."
+requires: [cli:spur, local-fs]
 license: Apache-2.0
 version: 1.0.0
 created_at: 2026-03-25

@@ -1,6 +1,7 @@
 ---
 name: daily-summary
 description: "Generate a daily summary report from agent usage, git history, and your notes."
+requires: [cli:spur, local-fs]
 disable-model-invocation: true
 license: Apache-2.0
 version: 1.0.0

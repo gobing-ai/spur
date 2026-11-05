@@ -894,7 +894,10 @@ describe('sp plugin structure — functional split invariants (task 0161 / ADR-0
         // listed skill that has come back under budget fails so the entry is removed. The
         // baseline only exists to stop new drift while the four listed bodies are split into
         // references; it is not a permanent exemption.
-        const BODY_BUDGET = 20_000;
+        // Task 1291: every SKILL.md gained a `requires:` frontmatter token line (≤47B for the
+        // largest standard set). It is metadata, not procedure, but this test measures whole
+        // file size — so the whole-file budget extends by the token line's maximum, 20_000 → 20_050.
+        const BODY_BUDGET = 20_050;
         const BASELINE: Record<string, number> = {
             // 0687 R12: +696B engine-driven-sandbox note (allowWrite + allowLocalBinding
             // affordances, doctor caveat). Not permanent — split into references.
@@ -930,24 +933,24 @@ describe('sp plugin structure — functional split invariants (task 0161 / ADR-0
             // references/verdict-schema.md (§ Basename-only anchors) because this body is at its
             // baseline; the +41 B left here is the pointer inside the concrete-anchors line plus a
             // net -59 B trim of the variants note. Split, not grown.
-            'code-verification': 35_509,
+            'code-verification': 35_520,
             // 1251 R3: +444 B absorbed, not grown — `references/pipeline-resolution.md` was the
             // retired wayfinder-resolution workflow's hop contract, so its resolution boundary and
             // evidence-anchor rules moved into the body (condensed) and the references/ dir is gone.
             // 1288 R10: +394 B identical ADR-147 Search-routing block (task AC: body placement,
             // same wording in all four locating skills; hybrid-search design §4 Skills).
-            wayfinder: 27_102,
+            wayfinder: 27_133,
             // 0622 R9: +921B of live-matrix reconciliation (section table, SPUR_BIN
             // refusal, artifact-size discipline). Not permanent — split into references.
             // 1288 R10: +388 B identical ADR-147 Search-routing block (task AC: body placement,
             // same wording in all four locating skills; hybrid-search design §4 Skills).
-            'issue-finding': 27_448,
+            'issue-finding': 27_479,
             // 0884 R2/R4: the `## Spur contract` adapter (+~1.5–2.6KB) must live in
             // SKILL.md per task AC (≤40 lines, coordinator reads it from the skill);
             // splitting it into references would break the contract. Not permanent —
             // revisit if the lenses are ever physically split.
-            'taste-refactoring-architect': 20_360,
-            'taste-refactoring-tests': 21_106,
+            'taste-refactoring-architect': 20_381,
+            'taste-refactoring-tests': 21_127,
         };
 
         const overBudget: string[] = [];

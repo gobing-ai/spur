@@ -1,5 +1,6 @@
 ---
 description: Wayfinder — chart a multi-session investigation map for a foggy destination, or resolve one map ticket, always inside an isolated git worktree + branch
+requires: [cli:spur, local-fs]
 role: planner
 argument-hint: "<idea> | <feature-id> [<wbs>] [--agent <inline|auto|name>] [--auto] [--worktree [<name>]] [--wrap]"
 allowed-tools: ["Bash", "Read", "Write", "Edit", "Skill", "AskUserQuestion"]

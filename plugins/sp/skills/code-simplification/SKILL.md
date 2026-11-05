@@ -1,6 +1,7 @@
 ---
 name: code-simplification
 description: "Simplify code for clarity without changing behavior. Use when refactoring for readability or reducing complexity."
+requires: [local-fs]
 license: Apache-2.0
 metadata:
   author: spur

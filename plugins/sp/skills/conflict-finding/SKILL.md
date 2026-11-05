@@ -1,6 +1,7 @@
 ---
 name: conflict-finding
 description: "Authority-aware semantic audit across source, task files, feature files, and project authority files — detect conflicts, resolve claim-specific authority, collect reproducible evidence, and route confirmed repairs through owner surfaces. Triggers: find conflict, conflict audit, semantic conflict, authority mismatch, stale projection."
+requires: [cli:spur, local-fs]
 license: Apache-2.0
 version: 1.0.0
 metadata:

@@ -1,5 +1,6 @@
 ---
 description: Turn a vague idea into a feature with AC and a decomposed task batch — discovery, idea-eval, feature-create, AC, system-design, decompose, batch-create (Design by default), handoff
+requires: [cli:spur, local-fs]
 role: planner
 argument-hint: "\"<idea>\" | --from-file <path> [--skip-design] [--agent <inline|auto|name>] [--auto]"
 allowed-tools: ["Bash", "Read", "Skill", "AskUserQuestion"]

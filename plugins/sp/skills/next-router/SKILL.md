@@ -1,6 +1,7 @@
 ---
 name: next-router
 description: "Status→command router backing /sp:dev-next — resolve a task WBS or feature frontier, load corpus signals, look up TABLE A/B/C, dispatch exactly one existing /sp:dev-* command or stop with an exact dev-next: message. Never a second pipeline FSM. Triggers: \"what's next\", \"advance this task\", \"which dev command\"."
+requires: [cli:spur, local-fs]
 license: Apache-2.0
 metadata:
   author: spur

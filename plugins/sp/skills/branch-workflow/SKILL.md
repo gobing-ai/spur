@@ -1,6 +1,7 @@
 ---
 name: branch-workflow
 description: "Branch lifecycle discipline: create, worktree, commit, self-review, merge, cleanup."
+requires: [cli:spur, local-fs]
 disable-model-invocation: true
 license: Apache-2.0
 metadata:

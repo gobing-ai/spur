@@ -1,6 +1,7 @@
 ---
 name: spur-doctor
 description: "Evaluate spur artifacts and plan/design Markdown from read-only evidence, reflect over sp:history-anatomy findings, and return a proposal table. Diagnoses artifacts, not runtime environments (that is spur agent doctor). Triggers: check artifact health, propose evolution, review legacy documents."
+requires: [cli:spur, local-fs]
 license: Apache-2.0
 version: 1.0.0
 metadata:

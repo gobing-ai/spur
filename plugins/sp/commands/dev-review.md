@@ -1,5 +1,6 @@
 ---
 description: "Review code for a task set or paths — multi-dimensional review across functional traceability, SECUA quality, and architectural depth. With --triage: fix small findings directly, then file the rest as implement-ready tasks. Triggers: \"review this\", \"check the code\", \"SECUA review\", \"dev review\", \"audit this\", \"triage review findings\"."
+requires: [cli:spur, local-fs]
 role: reviewer
 argument-hint: "[--tasks <selector> | --feature <id>[,<id>] | --scope <path>[,<path>]] [--agent <inline|auto|name>] [--focus <dims>] [--triage] [--worktree [<name>]] [--auto]"
 allowed-tools: ["Bash", "Read", "Skill", "Edit", "Write"]

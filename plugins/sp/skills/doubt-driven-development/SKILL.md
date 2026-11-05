@@ -1,6 +1,7 @@
 ---
 name: doubt-driven-development
 description: "In-flight adversarial review of a non-trivial decision before you commit it: extract the artifact + contract, hand them (not your reasoning) to a fresh-context skeptic, reconcile findings, stop at 3 cycles. Triggers: \"doubt this\", \"stress-test this decision\", \"adversarial check before I commit\"."
+requires: [cli:spur, local-fs]
 license: Apache-2.0
 metadata:
   author: spur

@@ -1,5 +1,6 @@
 ---
 description: Author a validated, smoke-tested constraint rule
+requires: [cli:spur, local-fs]
 role: scribe
 argument-hint: "\"<description>\" [--file <path>] [--preset <target>]"
 allowed-tools: ["Bash", "Read", "Write", "Skill"]

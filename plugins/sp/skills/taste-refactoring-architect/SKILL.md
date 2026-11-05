@@ -1,6 +1,7 @@
 ---
 name: taste-refactoring-architect
 description: Review, simplify, and refactor system architecture toward minimum sufficient architecture while preserving required capabilities, quality attributes, delivery safety, and data invariants. Backs architectural refactoring and boundary reviews.
+requires: [local-fs]
 license: Apache-2.0
 metadata:
   author: spur

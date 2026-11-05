@@ -1,5 +1,6 @@
 ---
 description: Wrap up a batch of completed tasks — learnings, metrics, doc-sync, optional branch cleanup
+requires: [cli:spur, local-fs]
 role: coder
 argument-hint: "[--since <iso-date>] [--feature <id>] [--status <s>] [--agent <inline|auto|name>] [--auto] [--merge] [--dry-run]"
 allowed-tools: ["Bash", "Read", "AskUserQuestion"]

@@ -1,5 +1,6 @@
 ---
 description: Refine or re-audit a task — fill missing sections via Q&A, or with --depth ready verify existing claims and fixes against the tree, correct them, and promote to todo
+requires: [cli:spur, local-fs]
 role: planner
 argument-hint: "<wbs> [--focus <mode>] [--description <text>] [--depth <standard|ready>] [--agent <inline|auto|name>] [--auto] [--next]"
 allowed-tools: ["Bash", "Read", "Skill", "AskUserQuestion"]

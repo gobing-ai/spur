@@ -1,5 +1,6 @@
 ---
 description: "Local-first PR review — status, a local branch-diff review, and validated fixes; --codex opts into the GitHub Codex review spine."
+requires: [cli:gh, cli:spur, local-fs]
 role: reviewer
 argument-hint: "[status|review|fix] [--codex] [--force] [--no-wait] [--base <branch>] [--agent <inline|auto|name>] [<focus>]"
 allowed-tools: ["Bash", "Read", "Skill"]

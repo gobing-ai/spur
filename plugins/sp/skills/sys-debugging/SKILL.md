@@ -1,6 +1,7 @@
 ---
 name: sys-debugging
 description: "The systematic debugging protocol: reproduce → isolate → root cause → fix → regression test. Triggers: \"debug this\", \"why is this failing\", \"fix this error\", \"what caused this\", \"trace this bug\", \"root cause\"."
+requires: [cli:spur, local-fs]
 license: Apache-2.0
 metadata:
   author: spur

@@ -1,6 +1,7 @@
 ---
 name: code-improvement
 description: "Surface architectural friction and propose deepening opportunities — refactors that turn shallow, tightly-coupled modules into deep, testable, AI-navigable ones. Triggers: \"improve architecture\", \"find refactoring opportunities\", \"shallow module\", \"hard to test\", \"reduce coupling\", \"deepen modules\"."
+requires: [cli:spur, local-fs]
 license: Apache-2.0
 metadata:
   author: spur

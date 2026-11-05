@@ -1,6 +1,7 @@
 ---
 name: taste-refactoring-ui
 description: Design, review, and refactor UI hierarchy, layout, typography, spacing, color, and interactions.
+requires: [local-fs]
 license: Apache-2.0
 metadata:
   author: spur

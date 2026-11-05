@@ -1,6 +1,7 @@
 ---
 name: next-feature
 description: "Prompt-first feature frontier prioritizer — answers 'which feature should we work on now?' by deriving importance/urgency from corpus, git, and authority-doc evidence, and emits rank-distorting tree defects as proposals /sp:dev-feature-change consumes. Triggers: find next, which feature, feature ranking, frontier priority, what should I work on."
+requires: [cli:spur, local-fs]
 license: Apache-2.0
 version: 1.0.0
 metadata:

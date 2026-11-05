@@ -709,6 +709,54 @@ pipeline owns one lifecycle phase:
 > (zero runs, example-only — `docs/design/workflow-catalogue-refactor.md` §10); the pattern lives on
 > as a test fixture (`packages/app/tests/services/fixtures/decision-routing-example.yaml`).
 
+#### Runtime `requires` metadata (task 1291, superskill 0162)
+
+Every sp entity (`skills/*/SKILL.md`, `commands/*.md`, `agents/*.md`) declares a `requires:`
+frontmatter list in the superskill 0162 grammar — a sorted YAML flow list of tokens:
+
+- `local-fs` — the entity acts on local project files. All 88 entities require it.
+- `cli:<tool>` — a tracked CLI the entity's body invokes directly (`spur`, `superskill`, `kk`,
+  `gh`) or inherits through a dispatched `Skill(skill="sp:<id>…")` skill.
+- `hooks` / `subagents` — reserved tokens; no sp entity currently declares either.
+
+The declared set intentionally equals the union of direct invocations and the transitive `requires`
+of every dispatch target, so the set stays self-maintaining:
+`plugins/sp/tests/runtime-requires.test.ts` derives the expected set from each entity body,
+compares it to the annotation (missing tokens fail on undeclared use, direct or inherited; extra
+stale tokens fail too), and pins the group snapshot from the 2026-11-04 scan: 70 entities
+`[cli:spur, local-fs]`, 2 `[cli:gh, local-fs]`, 2 `[cli:gh, cli:spur, local-fs]`, 14 `[local-fs]`.
+Consumers (e.g. `superskill skill validate`) read the same line, declaring what a skill needs
+before it runs instead of discovering it at invocation time.
+
+#### Grok Bot (task 1291, feature I14 R4)
+
+The `requires` annotations let a Grok Bot (superskill 0162) decide what it can run before it runs it.
+The four tokens mean, in Bot context:
+
+- `local-fs` — the entity needs the local project files (corpus, docs, git checkout). A Bot only has
+  these after a repo is cloned; the operator opts in with `--bot-provides local-fs`.
+- `cli:spur` / `cli:superskill` / `cli:kk` — the tracked, non-baseline CLIs the entity may invoke.
+  Until 1292's `sp-bot-bootstrap` skill installs them on the Bot, these are unmet.
+- `cli:gh` — `gh` CLI use; provide it only when `gh` is authenticated on the Bot.
+- `hooks` / `subagents` — reserved tokens; no sp entity declares either today.
+
+**sp hooks do not run on a Bot.** The hook tools that ship in `hooks/` (task-write guard, careful
+guard, context token ledger, fleet Stop delivery) are harness extensions; a Grok Bot session has no
+hook runtime, so those protections are not claimed on a Bot. Follow the skills' explicit gate
+instructions and the CLI validation instead.
+
+**With defaults every sp entity is excluded.** A Bot that meets none of the declared requirements
+installs nothing; an operator opts an entity set in explicitly with `--bot-provides`.
+
+**Recommended install after 1292's bootstrap** (follow the `sp-bot-bootstrap` skill first, which
+installs bun plus `spur`, `superskill` and `kk`), then:
+
+```
+superskill install sp --targets grok-bot --bot-provides cli:spur --bot-provides local-fs
+```
+
+plus `--bot-provides cli:gh` when `gh` is available on the Bot.
+
 ### Lifecycle operations
 
 All planning entities (tasks and features) share a common lifecycle, managed by the `spur` CLI:
