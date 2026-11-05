@@ -2,11 +2,11 @@
 schema_version: 1
 id: "H16"
 name: "Faster default quality gate while keeping per-file 90/90 coverage"
-status: backlog
+status: active
 priority: P2
 tags: []
 created_at: "2026-10-10T05:19:09.284Z"
-updated_at: "2026-11-05T20:03:48.475Z"
+updated_at: "2026-11-05T23:21:03.914Z"
 ---
 
 # H16: Faster default quality gate while keeping per-file 90/90 coverage
@@ -112,7 +112,7 @@ Feature: Faster default quality gate while keeping per-file 90/90 coverage
 | WBS | Task | Status |
 | --- | ---- | ------ |
 | 1154 | Implement the faster default gate without lowering the 90/90 coverage floor | done |
-| 1295 | Restore ordinary-suite execution of real-renderer Markdown security proofs | todo |
+| 1295 | Restore ordinary-suite execution of real-renderer Markdown security proofs | testing |
 | 1316 | Reduce duplicated test mocks behind retained behavioral and gate evidence | todo |
 <!-- END AUTO-GENERATED -->
 
@@ -140,4 +140,5 @@ Plan: `docs/plans/2026-11-05-simplification-and-product-enhancement.md`. Review:
 `main` (`5715de2e8`) pins Bun 1.4.3 and `package.json` `test` passes `bun test --parallel`; `test:coverage` and `test:heavy` stay serial, so `bun run check` and CI keep the per-file 90/90 floor. The bar this feature recorded was not measured on the way in: `--no-isolate` actually honored, and beats the serial baseline, are outstanding; only "a quiet-machine run that finishes" has CI evidence.
 
 Open conflict for the owner: **R3** still requires the default invocation to *not* pass `--parallel`, so R3 currently fails against `main`. Re-scoping the feature or retiring R3 against a measured bar is an owner decision, not a mechanical sync.
+- 2026-11-05T23:21:03.914Z backlog → active (system)
 
