@@ -17,6 +17,7 @@ git ls-files docs/dogfood | grep -Ev '(README|INDEX)\.md$'
 
 ## Reports
 
+- `2026-11-04-I14-grok-bot-notify-dogfood.md`
 - `2026-11-03-A34-hybrid-search-dogfood.md`
 - `2026-10-26-G75-fleet-participation-dogfood.md`
 - `2026-10-24-G74-fleet-perf-dogfood.md`
