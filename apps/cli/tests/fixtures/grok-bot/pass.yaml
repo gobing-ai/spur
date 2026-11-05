@@ -1,0 +1,17 @@
+"$schema": "@gobing-ai/spur/schemas/state-machine-workflow.schema.json"
+kind: state-machine
+name: grok-bot-notify-pass
+version: "1"
+description: "Fixture: no-op workflow that always ends done."
+initialState: start
+terminalStates:
+  - done
+vars:
+  workflowFile: "fixtures/grok-bot/pass.yaml"
+states:
+  - id: start
+    description: "Entry."
+  - id: done
+    description: "Terminal."
+transitions:
+  - {from: start, to: done, guard: {kind: always}}

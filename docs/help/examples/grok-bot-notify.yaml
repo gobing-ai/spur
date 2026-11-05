@@ -1,0 +1,52 @@
+# Grok Bot routine wrapper (feature I14, task 1293): soft-run a target workflow,
+# then POST its run summary to a routine webhook. The summary is the target's
+# `spur workflow run --json` document as-is (its "status" is done/failed).
+#
+# Env contract (reads nothing else; no secrets in YAML — pass them as env vars):
+#   GROK_ROUTINE_URL  — routine webhook endpoint
+#   GROK_ROUTINE_KEY  — bearer key for the endpoint (never in argv or in this file)
+#
+# Sanctioned exception (task 1293 Q&A, cites 0610 R4): the probe clears
+# SPUR_WORKFLOW_RUN_ACTIVE for exactly its one leg so the leg runs as a clean
+# top-level run — engine nested-run refusal otherwise makes the wrapper unusable.
+"$schema": "@gobing-ai/spur/schemas/state-machine-workflow.schema.json"
+kind: state-machine
+name: grok-bot-notify
+version: "1"
+description: "Grok Bot routine wrapper: soft-run a target workflow, then POST its run summary to a routine webhook. Env contract: GROK_ROUTINE_URL (webhook endpoint) + GROK_ROUTINE_KEY (bearer key); the key never appears in argv or in the command string. terminalReason: failed-check."
+initialState: start
+terminalStates:
+  - done
+  - failed
+failureStates:
+  - failed
+vars:
+  target: ""
+  out: ".spur/run/grok-bot-notify.json"
+states:
+  - id: start
+    description: "Entry."
+  - id: run
+    description: "Soft probe — run the wrapped target workflow, capture rc + JSON, never fail."
+    onEnter:
+      - kind: shell
+        options:
+          command: 'env -u SPUR_WORKFLOW_RUN_ACTIVE spur workflow run "$target" --json > "$out"; echo $? > "$out.rc"; exit 0'
+  - id: notify
+    description: "POST the run summary as application/json; the bearer key is passed on stdin via -H @- (never argv)."
+    onEnter:
+      - kind: shell
+        options:
+          command: 'test -n "$GROK_ROUTINE_KEY" && test -n "$GROK_ROUTINE_URL" || { echo "GROK_ROUTINE_KEY is not set" >&2; echo "GROK_ROUTINE_URL is not set" >&2; exit 2; }'
+      - kind: shell
+        options:
+          command: 'printf "Authorization: Bearer $GROK_ROUTINE_KEY\n" | curl --fail-with-body -sS -X POST "$GROK_ROUTINE_URL" -H "Content-Type: application/json" -H @- --data-binary "@$out"; echo $? > "$out.notify.rc"; exit 0'
+  - id: done
+    description: "Terminal — target run succeeded and the webhook POST returned 2xx."
+  - id: failed
+    description: "Terminal — target run failed, the webhook POST failed, or a required routine env var is missing."
+transitions:
+  - {from: start, to: run, guard: {kind: always}}
+  - {from: run, to: notify, guard: {kind: always}}
+  - {from: notify, to: failed, terminalReason: failed-check, guard: {kind: shell, options: {command: 'test "$(cat "$out.rc" 2>/dev/null)" != 0 || test "$(cat "$out.notify.rc" 2>/dev/null)" != 0'}}}
+  - {from: notify, to: done, guard: {kind: always}}

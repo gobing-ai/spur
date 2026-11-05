@@ -1,0 +1,19 @@
+"$schema": "@gobing-ai/spur/schemas/state-machine-workflow.schema.json"
+kind: state-machine
+name: grok-bot-notify-fail
+version: "1"
+description: "Fixture: workflow that always ends failed."
+initialState: start
+terminalStates:
+  - failed
+failureStates:
+  - failed
+vars:
+  workflowFile: "fixtures/grok-bot/fail.yaml"
+states:
+  - id: start
+    description: "Entry."
+  - id: failed
+    description: "Terminal failure."
+transitions:
+  - {from: start, to: failed, guard: {kind: always}, terminalReason: failed-check}
