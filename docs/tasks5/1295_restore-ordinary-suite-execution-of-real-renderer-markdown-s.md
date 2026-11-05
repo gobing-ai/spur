@@ -1,10 +1,10 @@
 ---
 schema_version: 1
 name: Restore ordinary-suite execution of real-renderer Markdown security proofs
-status: todo
+status: done
 template: feature-impl
 created_at: 2026-11-05T20:01:23.912Z
-updated_at: "2026-11-05T20:37:40.635Z"
+updated_at: "2026-11-05T23:23:32.236Z"
 ac_altitude: task-local
 ac_numbering: task-local
 feature_id: H16
@@ -16,6 +16,8 @@ tags:
 estimate_hours: 4
 
 dependencies: []
+done_forced: "false"
+done_reason: unforced close; PASS artifact at .spur/memory/evidence/1295-verdict.json
 ---
 
 ## 1295. Restore ordinary-suite execution of real-renderer Markdown security proofs
@@ -42,7 +44,7 @@ Rubric: E4 D1 L2 C0 R1 = 8. Keep this candidate as one cohesive deliverable with
 
 ### Requirements
 
-- [ ] R1. Routine tests execute every isolated Markdown security proof; implement the exact Given/When/Then contract below.
+- [x] R1. Routine tests execute every isolated Markdown security proof; implement the exact Given/When/Then contract below.
 
 ### Acceptance Criteria
 
@@ -87,25 +89,70 @@ No production implementation occurs during this refinement. No new dependency, p
 
 ### Plan
 
-- [ ] 1. Read the current 12 test names; write parent failure controls for missing report, zero collected cases and nonzero child exit.
-- [ ] 2. Add the discoverable child-proof wrapper and bounded timeout; preserve fixture-process isolation.
-- [ ] 3. Run the parent through ordinary discovery and demonstrate that a deliberately failing child fixture fails the parent.
-- [ ] 4. Run the exact focused checks above, inspect the diff against R-items/feature AC, synchronize owners and record evidence through the task pipeline; do not fabricate completion.
+- [x] 1. Read the current 12 test names; write parent failure controls for missing report, zero collected cases and nonzero child exit.
+- [x] 2. Add the discoverable child-proof wrapper and bounded timeout; preserve fixture-process isolation.
+- [x] 3. Run the parent through ordinary discovery and demonstrate that a deliberately failing child fixture fails the parent.
+- [x] 4. Run the exact focused checks above, inspect the diff against R-items/feature AC, synchronize owners and record evidence through the task pipeline; do not fabricate completion.
 
 ### Solution
 
-<!-- Filled during implementation: file:line change map and concise rationale. -->
+| File | What changed and why |
+| --- | --- |
+| `apps/web/tests/modules/task-kanban/markdown-safety.test.ts:8-25` | Pin all 12 current real-renderer Markdown/Mermaid case titles so removing or renaming any proof fails the ordinary parent instead of silently reducing coverage. |
+| `apps/web/tests/modules/task-kanban/markdown-safety.test.ts:53-66` | Validate JUnit existence, nonzero collected cases, zero failures and assertions > 0 without pinning the historical 1203 assertion count. |
+| `apps/web/tests/modules/task-kanban/markdown-safety.test.ts:53-85` | Spawn the real probe once with explicit tests/setup preload, isolation, a 120s bound and unique JUnit evidence under .spur/run. |
+| `apps/web/tests/modules/task-kanban/markdown-safety.test.ts:90-116` | Make the discoverable parent assert every case and propagate missing-report, zero-case and deliberate-child failure diagnostics. |
+
+Verification evidence:
+- `(cd apps/web && bun test tests/modules/task-kanban/markdown-safety.test.ts tests/lib/markdown-safety.test.ts)` — 13 pass, 0 fail, including missing-report, zero-case and real failing-child controls.
+- `(cd apps/web && bun test --isolate ./tests/modules/task-kanban/markdown-safety-pipeline.tsx)` — 12 pass, 0 fail, 1203 assertions; JUnit at `.spur/run/1295-direct-child.junit.xml`.
+- Wrapper result: `.spur/run/markdown-safety-proof-result-81498.json` — 12 tests, 1203 assertions, failures 0.
+- `bun run --filter @gobing-ai/spur-web typecheck` — exit 0; all 51 pre-check rules passed.
+- Light gate: format, pre-rules, web typecheck and related test PASS; post-check coverage provenance is deferred to the pipeline's canonical full gate after this new test file changed the tree.
+- `probe: not-applicable (no public surface changed)` — test-only change; no Markdown renderer or DOM sanitizer was mocked.
 
 ### Testing
 
-<!-- Filled during verification: commands run, outcomes, coverage claim or N/A. -->
+**Pipeline verify results**
+
+- Verdict: PASS (from verdict artifact)
+
+| Requirement | Status | Evidence |
+|-------------|--------|----------|
+| R1 | MET | `apps/web/tests/modules/task-kanban/markdown-safety-pipeline.tsx:128-262` covers all 12 real-renderer cases; `.spur/run/markdown-safety-proof-result-81498.json` records the parent wrapper's 12 tests, 1203 assertions and zero failures plus its missing/zero/failing-child controls. |
+
+| Acceptance Criteria | Status | Evidence Type | Evidence |
+|---------------------|--------|---------------|----------|
+| AC1 — Routine tests execute every isolated Markdown security proof (req: R1) | MET | test | `apps/web/tests/modules/task-kanban/markdown-safety.test.ts` + `apps/web/tests/lib/markdown-safety.test.ts:1-55` — 13 pass, 0 fail; direct isolated `apps/web/tests/modules/task-kanban/markdown-safety-pipeline.tsx` — 12 pass, 1203 assertions, JUnit `.spur/run/1295-direct-child.junit.xml`. |
+- Coverage: N/A (verdict-based; verify pipeline does not measure code coverage)
 
 ### Review
 
-<!-- Filled during review: P1-P4 findings, residual risk, and final disposition. -->
+#### Review Report — 1295
+**Scope:** new test-only wrapper `apps/web/tests/modules/task-kanban/markdown-safety.test.ts`
+**Dimensions:** functional, security, efficiency, correctness, usability, architecture
+**Verdict:** PASS
+**Confidence: MEDIUM**
+
+| # | Priority | Dimension | Finding | Location | Disposition |
+| --- | --- | --- | --- | --- | --- |
+| 1 | P4 (advisory) | architecture | One child process is intentional because the real renderer/process isolation is the behavior under test. The parent, not a second production abstraction, owns all case and failure assertions. | `apps/web/tests/modules/task-kanban/markdown-safety.test.ts:53-85` | ACCEPTED |
+
+##### Functional Traceability
+
+| Req | Status | Evidence |
+| --- | --- | --- |
+| R1 | MET | `apps/web/tests/modules/task-kanban/markdown-safety.test.ts:8-116` pins all 12 titles and validates child exit, JUnit existence, nonzero cases and nonzero assertions; the isolated pipeline itself passes all 12 cases with 1203 assertions. |
+
+**Next:** close through record/done; no P1–P3 finding remains and ordinary discovery now includes the wrapper.
 
 ### References
 
 <!-- Links to the parent feature, design docs, related tasks, or external references. -->
 
 ### History
+
+- 2026-11-05T23:15:42.943Z todo → wip (system)
+- 2026-11-05T23:21:03.212Z wip → testing (system)
+- 2026-11-05T23:23:32.227Z testing → done (system)
+
