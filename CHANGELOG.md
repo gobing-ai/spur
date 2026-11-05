@@ -1,5 +1,33 @@
 # Changelog
 
+## [0.4.25] - 2026-11-05
+
+### Added
+- annotate all sp-plugin entities (`skills/*/SKILL.md`, `commands/*.md`, `agents/*.md`) with runtime `requires:` metadata and a repo-wide guard that fails the build when a shell-out to spur/superskill/kk or a hook/subagent reliance is undeclared (1291, feature I14 R1) (8a367b4cd)
+  <!-- src: plugins/sp/README.md:715, plugins/sp/tests/runtime-requires.test.ts:182 · confidence: HIGH -->
+- add `sp-bot-bootstrap` — an idempotent POSIX `sh` install skill for the Grok Bot toolchain (`bun` + spur/superskill/kk): a check block exits nonzero listing every absent tool, setup installs only what is missing via the official bun installer plus a `PATH` export line (never touching shell rc files or secrets), and the setup block doubles as a Grok Team Setup Script surviving computer recreates (1292, feature I14 R2) (a2fe2000d)
+  <!-- src: plugins/sp/skills/sp-bot-bootstrap/SKILL.md:36, plugins/sp/skills/sp-bot-bootstrap/SKILL.md:51, plugins/sp/skills/sp-bot-bootstrap/SKILL.md:70 · confidence: HIGH -->
+- add the `grok-bot-notify` webhook recipe — a state-machine workflow that soft-runs a target workflow (`env -u SPUR_WORKFLOW_RUN_ACTIVE spur workflow run …`, a task-1293 Q&A-sanctioned exception), POSTs the target's run-summary JSON with the bearer key passed on stdin (`curl -H @-`, never argv), and fails with `terminalReason: failed-check` when the target run, the POST, or the required `GROK_ROUTINE_*` env vars fail (1293, feature I14 R3) (18d644793)
+  <!-- src: docs/help/examples/grok-bot-notify.yaml:34, docs/help/examples/grok-bot-notify.yaml:43, docs/help/examples/grok-bot-notify.yaml:51 · confidence: HIGH -->
+- add the Grok Bot help doc (bootstrap / outer-loop / webhook-notify / limits sections) with a `docs/help/index.md` link entry, and a live-commander surface-parity test that resolves every recipe↔doc↔tool name pair (1293, feature I14 R4) (0242eade1)
+  <!-- src: docs/help/index.md:137, docs/help/how_to_use_spur_with_grok_bot.md:125, apps/cli/tests/grok-bot-recipe-surface.test.ts:74 · confidence: HIGH -->
+
+### Fixed
+- harden the `grok-bot-notify` recipe: the Authorization header is built through a `%s` placeholder instead of `printf`-formatting the key, each missing routine env var emits exactly its own actionable error, and the heavy E2E now pushes a secret-shaped key (`test-%s-key\\n`) verbatim through the recipe in a fresh temp project so runs never touch the live `.spur/` (1293) (ea24d4f30)
+  <!-- src: docs/help/examples/grok-bot-notify.yaml:43, apps/cli/tests/workflow/grok-bot-notify-recipe.heavy.test.ts:28, apps/cli/tests/workflow/grok-bot-notify-recipe.heavy.test.ts:115 · confidence: HIGH -->
+
+### Other
+- add feature I14 (Grok Bot interop) with the 1291–1293 task batch (df1da43cc)
+  <!-- src: docs/features/I14_grok-bot-interop-for-spur-and-the-sp-plugin.md:34 · confidence: HIGH -->
+- link feature I14 scenarios to task AC titles verbatim for DD-09 coverage (4d02d34f3)
+  <!-- src: docs/features/I14_grok-bot-interop-for-spur-and-the-sp-plugin.md:34, docs/features/I14_grok-bot-interop-for-spur-and-the-sp-plugin.md:39, docs/features/I14_grok-bot-interop-for-spur-and-the-sp-plugin.md:44 · confidence: HIGH -->
+- record 1291 solution/testing/review and close the task (be6799337)
+  <!-- src: docs/tasks5/1291_annotate-sp-plugin-entities-with-runtime-requires.md · confidence: MEDIUM -->
+- record 1292 solution/testing/review and close the task (65d638d96)
+  <!-- src: docs/tasks5/1292_sp-bot-bootstrap-idempotent-toolchain-install-skill-for-grok.md · confidence: MEDIUM -->
+- record the I14 grok-bot-notify recipe dogfood report (PASS, two P4 findings) with a dogfood-INDEX row (1d9ad5c94)
+  <!-- src: docs/dogfood/2026-11-04-I14-grok-bot-notify-dogfood.md:34 · confidence: HIGH -->
+
 ## [0.4.24] - 2026-11-04
 
 ### Fixed
