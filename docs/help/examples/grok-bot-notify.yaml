@@ -37,10 +37,10 @@ states:
     onEnter:
       - kind: shell
         options:
-          command: 'test -n "$GROK_ROUTINE_KEY" && test -n "$GROK_ROUTINE_URL" || { echo "GROK_ROUTINE_KEY is not set" >&2; echo "GROK_ROUTINE_URL is not set" >&2; exit 2; }'
+          command: 'test -n "$GROK_ROUTINE_KEY" || { echo "GROK_ROUTINE_KEY is not set" >&2; exit 2; }; test -n "$GROK_ROUTINE_URL" || { echo "GROK_ROUTINE_URL is not set" >&2; exit 2; }'
       - kind: shell
         options:
-          command: 'printf "Authorization: Bearer $GROK_ROUTINE_KEY\n" | curl --fail-with-body -sS -X POST "$GROK_ROUTINE_URL" -H "Content-Type: application/json" -H @- --data-binary "@$out"; echo $? > "$out.notify.rc"; exit 0'
+          command: 'printf "Authorization: Bearer %s\n" "$GROK_ROUTINE_KEY" | curl --fail-with-body -sS -X POST "$GROK_ROUTINE_URL" -H "Content-Type: application/json" -H @- --data-binary "@$out"; echo $? > "$out.notify.rc"; exit 0'
   - id: done
     description: "Terminal — target run succeeded and the webhook POST returned 2xx."
   - id: failed
