@@ -1,7 +1,8 @@
 import { afterAll, beforeAll, describe, expect, test } from 'bun:test';
-import { mkdir, mkdtemp, rm, symlink, writeFile } from 'node:fs/promises';
+import { chmod, mkdir, mkdtemp, rm, symlink, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import { getEnvVar, setEnvVar } from '@gobing-ai/spur-config';
 import {
     type SearchResponse,
     searchResponseDataSchema,
@@ -146,9 +147,19 @@ const FIXTURE_CONFIG = 'project: search-fixture\n';
 
 describe('spur self search — in-process transport', () => {
     let root = '';
+    let bin = '';
+    let previousPath: string | undefined;
 
     beforeAll(async () => {
         root = await mkdtemp(join(tmpdir(), 'spur-search-inproc-'));
+        bin = await binDir('inproc-fixture', ['rg']);
+        await writeFile(
+            join(bin, 'zg'),
+            '#!/bin/sh\ncase "$1" in\n  --version) echo "0.3.0" ;;\n  --status) echo "Coverage    Unavailable (index not configured)" ;;\n  *) echo "unexpected zg invocation: $*" >&2; exit 1 ;;\nesac\n',
+        );
+        await chmod(join(bin, 'zg'), 0o755);
+        previousPath = getEnvVar('PATH');
+        setEnvVar('PATH', bin);
         await mkdir(join(root, '.spur'), { recursive: true });
         await mkdir(join(root, 'docs'), { recursive: true });
         await mkdir(join(root, 'src'), { recursive: true });
@@ -158,7 +169,9 @@ describe('spur self search — in-process transport', () => {
     });
 
     afterAll(async () => {
+        setEnvVar('PATH', previousPath);
         await rm(root, { recursive: true, force: true });
+        await rm(bin, { recursive: true, force: true });
     });
 
     /** Dispatch one `spur self search` invocation in this process and capture its output. */
@@ -228,9 +241,13 @@ describe('spur self search — in-process transport', () => {
         expect(response.mode).toBe('auto');
         expect(response.groups.exact).not.toBeNull();
         expect(response.groups.fuzzy).toBeNull();
-        // This fixture has no zg index, so the only skip reason possible is the index
-        // (zg is installed) or the missing binary (zg is not).
-        expect(['zg-index-missing', 'zg-not-installed']).toContain(response.skipped[0]?.reason ?? '');
+        expect(response.skipped).toEqual([
+            {
+                route: 'fuzzy',
+                reason: 'zg-index-missing',
+                hint: 'zg --index --embedding local/potion-code-16m-v2',
+            },
+        ]);
     });
 
     test('human output renders the group header and no matches', async () => {

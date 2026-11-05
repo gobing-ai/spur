@@ -3,7 +3,7 @@ kind: design
 title: Local-first hybrid search — exact (rg) and semantic (zg) over docs and code
 status: proposed
 created_at: 2026-11-03
-updated_at: 2026-11-04
+updated_at: 2026-11-05
 related: [docs/features/A34_local-first-hybrid-search-exact-rg-and-semantic-zg-over-docs-and-code.md, docs/00_ADR.md#adr-147]
 tags: [search, external-dependency, zg, rg, board, cli]
 ---
@@ -93,6 +93,10 @@ spur init ────────┘        ├─ exact  → rg --json [-F] �
   - zg query: 15 s
   - zg status / version: 5 s
 
+  The internal process result preserves `outcome` and `outputTruncated`; reaching either output cap
+  marks truncation even when the executor reports a normal exit. A failed status probe leaves the
+  zg index `unknown`, never an inferred `missing`.
+
   It never reads or writes `.zvec-grep/` and never runs `zg --index`.
 - **ZgAdapter** (`packages/app/src/services/search-zg.ts`) is the only code that knows zg's argv
   and grammar. It exports `buildZgArgs(req)` and `parseZgQuery(stdout, zgVersion) → SearchHit[]`.
@@ -107,7 +111,9 @@ spur init ────────┘        ├─ exact  → rg --json [-F] �
   - Parse `type:"match"` events into `path` (from `data.path.text`), `line_number`, and a snippet
     taken from `data.lines.text` trimmed to 300 chars.
   - Rank is emission order, truncated to `limit`.
-  - rg exit 1 means no matches and is not an error. Exit 2 is an error.
+  - Timeout, output at the 2 MiB cap, or a malformed JSON match event is an explicit
+    `SearchError('rg-failed')`, never a truncated/empty success. Only after output validation does
+    rg exit 1 mean no matches; exit 2 is an error.
   - It does not use `zg --rg`, so exact mode works without zg (R2/R6).
 - **Scope mapping:**
   - `docs` → `-g '*.md' -g '*.mdx' -g '*.txt' -g '*.rst'`
@@ -120,7 +126,8 @@ spur init ────────┘        ├─ exact  → rg --json [-F] �
   - When `status.zg.available && status.zg.index !== 'missing'`, run both routes concurrently.
   - Otherwise run exact only and add a `skipped` entry for fuzzy.
   - A stale index still runs fuzzy and adds `stale: true` to `status`. It is not skipped.
-  - Each route keeps its own group. Spur does no cross-route score fusion.
+  - Each route keeps its own group. Spur does no cross-route score fusion. A successfully executed
+    zero-match fuzzy route returns `groups.fuzzy = []`; every skipped route keeps `null`.
 - **Overlap rule:** a fuzzy hit and an exact hit overlap when they have the same `path` and
   `exact.startLine ∈ [fuzzy.startLine, fuzzy.endLine]`. Both hits then get
   `matchedBy: ['exact','fuzzy']`, and neither group drops the hit.
@@ -132,8 +139,8 @@ spur init ────────┘        ├─ exact  → rg --json [-F] �
     `groups.exact = null`, and the exit code is still 0 (R6).
   - `ZgOutputError` is a fuzzy failure reported as `reason: 'zg-output-error'` with the version
     and sample. Its hits are never presented (R7).
-  - Exact unavailable (rg missing or rg exit 2) in `exact` or `auto` throws `SearchError`, and
-    the transport exits nonzero.
+  - Exact unavailable (rg missing, timeout, capped/malformed output, a non-exit process outcome, or rg
+    exit 2) in `exact` or `auto` throws `SearchError`, and the transport exits nonzero.
 
 ## 4. Contract and compatibility
 

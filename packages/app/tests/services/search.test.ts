@@ -27,10 +27,14 @@ interface FakeOpts {
     queryStderr?: string;
     queryTimedOut?: boolean;
     queryThrow?: Error;
+    statusExit?: number;
     rgEvents?: string;
     rgExit?: number;
     rgStderr?: string;
     rgThrow?: Error;
+    rgTimedOut?: boolean;
+    rgOutcome?: string;
+    rgOutputTruncated?: boolean;
 }
 
 function fakeDeps(opts: FakeOpts = {}) {
@@ -52,14 +56,21 @@ function fakeDeps(opts: FakeOpts = {}) {
                     exitCode: opts.rgExit ?? 0,
                     stdout: opts.rgEvents ?? '',
                     stderr: opts.rgStderr ?? '',
-                    timedOut: false,
+                    timedOut: opts.rgTimedOut ?? false,
+                    outcome: opts.rgOutcome,
+                    outputTruncated: opts.rgOutputTruncated,
                 };
             }
             if (bin === 'zg') {
                 // `zg version` is NOT a subcommand — zg treats it as search text (and may start an index build).
                 if (args[0] === '--version') return { exitCode: 0, stdout: '0.3.0\n', stderr: '', timedOut: false };
                 if (args[0] === '--status')
-                    return { exitCode: 0, stdout: opts.statusOut ?? '✓ fresh\n', stderr: '', timedOut: false };
+                    return {
+                        exitCode: opts.statusExit ?? 0,
+                        stdout: opts.statusOut ?? '✓ fresh\n',
+                        stderr: '',
+                        timedOut: false,
+                    };
                 if (args[0] === '--hybrid') {
                     if (opts.queryThrow) throw opts.queryThrow;
                     return {
@@ -131,6 +142,13 @@ describe('searchStatus probes (never throws)', () => {
         const status = await searchStatus('/repo', deps);
         expect(status.zg.index).toBe('stale');
         expect(status.zg.hint).toBe(ZG_REFRESH_HINT);
+    });
+
+    test('failed zg status probe keeps index unknown without inventing a missing-index hint', async () => {
+        const { deps } = fakeDeps({ statusExit: 1 });
+        const status = await searchStatus('/repo', deps);
+        expect(status.zg.index).toBe('unknown');
+        expect(status.zg.hint).toBeUndefined();
     });
 
     test('zg absent → available false with the install hint', async () => {
@@ -209,6 +227,33 @@ describe('availability invariants (design §3)', () => {
 // ─── Exact route ─────────────────────────────────────────────────────────────
 
 describe('exact route (rg --json)', () => {
+    test('timeout is an explicit rg failure, not a no-match result', async () => {
+        await expect(
+            searchProject(baseReq({ mode: 'exact' }), '/repo', fakeDeps({ rgTimedOut: true }).deps),
+        ).rejects.toMatchObject({ code: 'rg-failed', message: expect.stringContaining('timed out') });
+    });
+
+    test.each(['cancelled', 'signal'])(
+        '%s process outcome is an explicit failure, not empty success',
+        async (outcome) => {
+            await expect(
+                searchProject(baseReq({ mode: 'exact' }), '/repo', fakeDeps({ rgOutcome: outcome }).deps),
+            ).rejects.toMatchObject({ code: 'rg-failed', message: expect.stringContaining(outcome) });
+        },
+    );
+
+    test('bounded output is an explicit rg failure instead of a truncated success', async () => {
+        await expect(
+            searchProject(baseReq({ mode: 'exact', limit: 1 }), '/repo', fakeDeps({ rgOutputTruncated: true }).deps),
+        ).rejects.toMatchObject({ code: 'rg-failed', message: expect.stringContaining('2 MiB') });
+    });
+
+    test('malformed JSON match events are explicit failures, even with a no-match exit', async () => {
+        await expect(
+            searchProject(baseReq({ mode: 'exact' }), '/repo', fakeDeps({ rgExit: 1, rgEvents: '{not-json' }).deps),
+        ).rejects.toMatchObject({ code: 'rg-failed', message: expect.stringContaining('malformed JSON') });
+    });
+
     test('exit 1 means zero matches, not an error', async () => {
         const { deps } = fakeDeps({ rgExit: 1 });
         const res = await searchProject(baseReq({ mode: 'exact' }), '/repo', deps);
@@ -398,7 +443,35 @@ describe('auto mode grouping and overlap', () => {
         const res = await searchProject(baseReq({ mode: 'auto' }), '/repo', deps);
         expect(calls.some((c) => c.command === 'zg' && c.args[0] === '--hybrid')).toBe(false);
         expect(res.groups.exact).toHaveLength(1);
+        expect(res.groups.fuzzy).toBeNull();
         expect(res.skipped).toEqual([{ route: 'fuzzy', reason: 'zg-index-missing', hint: ZG_INDEX_HINT }]);
+    });
+
+    test('unknown index status plus a failed fuzzy backend keeps the skipped route null', async () => {
+        const { deps, calls } = fakeDeps({
+            statusExit: 1,
+            queryExit: 3,
+            rgEvents: rgMatch('docs/x.md', 5, 'exact match\n'),
+        });
+        const res = await searchProject(baseReq({ mode: 'auto' }), '/repo', deps);
+        expect(calls.some((c) => c.command === 'zg' && c.args[0] === '--hybrid')).toBe(true);
+        expect(res.status.zg.index).toBe('unknown');
+        expect(res.groups.fuzzy).toBeNull();
+        expect(res.skipped).toEqual([{ route: 'fuzzy', reason: 'zg-failed' }]);
+    });
+
+    test('failed fuzzy backend keeps the auto route null instead of returning an empty group', async () => {
+        const { deps } = fakeDeps({ queryExit: 3, rgEvents: rgMatch('docs/x.md', 5, 'exact match\n') });
+        const res = await searchProject(baseReq({ mode: 'auto' }), '/repo', deps);
+        expect(res.groups.fuzzy).toBeNull();
+        expect(res.skipped).toEqual([{ route: 'fuzzy', reason: 'zg-failed' }]);
+    });
+
+    test('successfully empty fuzzy output stays an empty array in auto mode', async () => {
+        const { deps } = fakeDeps({ queryOut: 'No matches.\n', rgEvents: rgMatch('docs/x.md', 5, 'exact match\n') });
+        const res = await searchProject(baseReq({ mode: 'auto' }), '/repo', deps);
+        expect(res.groups.fuzzy).toEqual([]);
+        expect(res.skipped).toEqual([]);
     });
 
     test('ready index → both groups run concurrently; overlap marks matchedBy on both hits', async () => {
@@ -466,5 +539,13 @@ describe('defaultSearchDeps', () => {
         const result = await defaultSearchDeps.run('echo', ['hi'], { cwd: import.meta.dir, timeout: 5000 });
         expect(result).toMatchObject({ exitCode: 0, stdout: 'hi' });
         expect(typeof result.timedOut).toBe('boolean');
+    });
+
+    test('marks output at the 2 MiB process cap as truncated', async () => {
+        const result = await defaultSearchDeps.run('bun', ['-e', 'process.stdout.write("x".repeat(3 * 1024 * 1024))'], {
+            cwd: import.meta.dir,
+            timeout: 5000,
+        });
+        expect(result.outputTruncated).toBe(true);
     });
 });

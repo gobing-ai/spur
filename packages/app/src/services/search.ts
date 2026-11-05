@@ -52,7 +52,14 @@ export interface SearchDeps {
         command: string,
         args: string[],
         opts: { cwd: string; timeout: number },
-    ): Promise<{ exitCode: number; stdout: string; stderr: string; timedOut?: boolean }>;
+    ): Promise<{
+        exitCode: number;
+        stdout: string;
+        stderr: string;
+        timedOut?: boolean;
+        outcome?: string;
+        outputTruncated?: boolean;
+    }>;
 }
 
 /** Production SearchDeps: Bun.which + NodeProcessExecutor with the design §3 budgets. */
@@ -68,16 +75,23 @@ export const defaultSearchDeps: SearchDeps = {
             rejectOnError: false,
             forceBuffered: true,
         });
+        const outputTruncated = (result as { outputTruncated?: boolean }).outputTruncated;
         return {
             exitCode: result.exitCode ?? -1,
             stdout: result.stdout,
             stderr: result.stderr,
             timedOut: result.outcome === 'timeout',
+            outcome: result.outcome,
+            outputTruncated:
+                outputTruncated ??
+                (Buffer.byteLength(result.stdout) >= RG_MAX_OUTPUT_BYTES ||
+                    Buffer.byteLength(result.stderr) >= RG_MAX_OUTPUT_BYTES),
         };
     },
 };
 
 // Timeouts per design §2: rg query 10 s, zg query 15 s, probes 5 s.
+const RG_MAX_OUTPUT_BYTES = 2 * 1024 * 1024;
 const RG_TIMEOUT_MS = 10_000;
 const ZG_QUERY_TIMEOUT_MS = 15_000;
 const PROBE_TIMEOUT_MS = 5_000;
@@ -192,7 +206,7 @@ export async function searchProject(
         query: req.query,
         mode,
         scope,
-        groups: { exact: exactHits, fuzzy: fuzzyHits },
+        groups: { exact: exactHits, fuzzy: fuzzy.hits },
         skipped: fuzzy.skipped,
         status,
     };
@@ -234,8 +248,20 @@ async function runExact(
             `ripgrep spawn failed: ${error instanceof Error ? error.message : String(error)}`,
         );
     }
-    if (result.exitCode === 1) return []; // rg's documented "no matches" exit
-    if (result.exitCode !== 0) {
+    if (result.timedOut || result.outcome === 'timeout') {
+        throw new SearchError('rg-failed', `ripgrep timed out after ${RG_TIMEOUT_MS}ms`);
+    }
+    if (result.outputTruncated) {
+        throw new SearchError(
+            'rg-failed',
+            'ripgrep output exceeded the 2 MiB cap; narrow the query, scope or globs before retrying',
+        );
+    }
+    if (result.outcome !== undefined && result.outcome !== 'exit') {
+        const diagnostic = result.stderr.slice(0, 200).trim() || 'no diagnostic output';
+        throw new SearchError('rg-failed', `ripgrep process ended with outcome '${result.outcome}': ${diagnostic}`);
+    }
+    if (result.exitCode !== 0 && result.exitCode !== 1) {
         throw new SearchError('rg-failed', `ripgrep exited ${result.exitCode}: ${result.stderr.slice(0, 200).trim()}`);
     }
 
@@ -249,9 +275,12 @@ async function runExact(
         try {
             event = JSON.parse(line);
         } catch {
-            continue;
+            throw new SearchError('rg-failed', `ripgrep produced malformed JSON event: ${line.slice(0, 200)}`);
         }
-        if (event.type !== 'match' || !event.data?.path?.text || !event.data.line_number) continue;
+        if (event.type !== 'match') continue;
+        if (!event.data?.path?.text || !event.data.line_number) {
+            throw new SearchError('rg-failed', `ripgrep produced malformed JSON match event: ${line.slice(0, 200)}`);
+        }
         const startLine = event.data.line_number;
         hits.push({
             rank: hits.length + 1,
@@ -264,7 +293,7 @@ async function runExact(
         });
         if (hits.length >= limit) break;
     }
-    return hits;
+    return result.exitCode === 1 ? [] : hits;
 }
 
 interface FuzzyRun {

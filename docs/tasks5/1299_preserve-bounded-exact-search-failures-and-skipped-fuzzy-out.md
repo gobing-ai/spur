@@ -1,10 +1,10 @@
 ---
 schema_version: 1
 name: Preserve bounded exact-search failures and skipped fuzzy outcomes
-status: todo
+status: done
 template: feature-impl
 created_at: 2026-11-05T20:01:23.914Z
-updated_at: "2026-11-05T20:37:48.904Z"
+updated_at: "2026-11-05T22:51:16.370Z"
 ac_altitude: task-local
 ac_numbering: task-local
 feature_id: A34
@@ -16,6 +16,8 @@ tags:
 estimate_hours: 6
 
 dependencies: []
+done_forced: "false"
+done_reason: unforced close; PASS artifact at .spur/memory/evidence/1299-verdict.json
 ---
 
 ## 1299. Preserve bounded exact-search failures and skipped fuzzy outcomes
@@ -42,8 +44,8 @@ Rubric: E6 D1 L2 C0 R1 = 10. Keep this candidate as one cohesive deliverable wit
 
 ### Requirements
 
-- [ ] R1. Bounded exact search never reports lost matches as an empty success; implement the exact Given/When/Then contract below.
-- [ ] R2. Auto search preserves skipped fuzzy outcomes; implement the exact Given/When/Then contract below.
+- [x] R1. Bounded exact search never reports lost matches as an empty success; implement the exact Given/When/Then contract below.
+- [x] R2. Auto search preserves skipped fuzzy outcomes; implement the exact Given/When/Then contract below.
 
 ### Acceptance Criteria
 
@@ -93,26 +95,79 @@ No production implementation occurs during this refinement. No new dependency, p
 
 ### Plan
 
-- [ ] 1. Write cap, malformed-event, timeout, valid no-match and all fuzzy outcome fixture cases before code.
-- [ ] 2. Preserve process outcome through defaultSearchDeps and reject incomplete exact output explicitly.
-- [ ] 3. Fix the null/empty distinction in auto mode; keep optional-backend degradation and unknown status truthful.
-- [ ] 4. Replace host-dependent CLI expectations with fixture binaries and keep a separately reported optional real-tool probe.
-- [ ] 5. Run the exact focused checks above, inspect the diff against R-items/feature AC, synchronize owners and record evidence through the task pipeline; do not fabricate completion.
+- [x] 1. Write cap, malformed-event, timeout, valid no-match and all fuzzy outcome fixture cases before code.
+- [x] 2. Preserve process outcome through defaultSearchDeps and reject incomplete exact output explicitly.
+- [x] 3. Fix the null/empty distinction in auto mode; keep optional-backend degradation and unknown status truthful.
+- [x] 4. Replace host-dependent CLI expectations with fixture binaries and keep a separately reported optional real-tool probe.
+- [x] 5. Run the exact focused checks above, inspect the diff against R-items/feature AC, synchronize owners and record evidence through the task pipeline; do not fabricate completion.
 
 ### Solution
 
-<!-- Filled during implementation: file:line change map and concise rationale. -->
+| File | What changed and why |
+| --- | --- |
+| `packages/app/src/services/search.ts:78-89` | Preserve process `outcome` and mark output at the unchanged 2 MiB cap as truncated, so a normal exit cannot hide lost exact-search output. |
+| `packages/app/src/services/search.ts:209` | Return `fuzzy.hits` directly in auto mode: skipped routes stay null while a successful zero-match route remains an empty array. |
+| `packages/app/src/services/search.ts:251-264` | Reject timeout, capped output, every non-exit process outcome and malformed JSON match events before accepting rg's no-match exit; remediation names the 2 MiB bound. |
+| `packages/app/tests/services/search.test.ts:225-258` | Added timeout, cancelled/signaled, cap and malformed-event regressions while retaining valid no-match and complete-hit coverage. |
+| `packages/app/tests/services/search.test.ts:441-467` | Added unknown-status, failed-backend and successful-empty auto fixtures proving the null/empty distinction. |
+| `packages/app/tests/services/search.test.ts:544-549` | Proved the real process wrapper marks 3 MiB output as truncated at its 2 MiB cap. |
+| `apps/cli/tests/commands/self/search.test.ts:148-175` | Replaced host-dependent zg behavior with a fixture executable and PATH lifecycle; host installations no longer choose the expected skip reason. |
+| `docs/design/hybrid-search.md:90-145` | Synchronized the owning contract with cap/malformed/timeout failures, unknown status, and skipped-null versus successful-empty fuzzy outcomes. |
+
+Verification evidence:
+- `(cd packages/app && bun test tests/services/search.test.ts tests/services/search-zg.test.ts)` — 65 pass, 0 fail.
+- `(cd apps/cli && bun test tests/commands/self/search.test.ts)` — 19 pass, 0 fail, including the previously blocking auto-degraded assertion.
+- `(cd apps/server && bun test tests/modules/search/handlers.test.ts)` — 3 pass, 0 fail.
+- `bun run --filter @gobing-ai/spur-app typecheck` and `bun run --filter @gobing-ai/spur typecheck` — both exit 0; all 51 pre-check rules passed.
+- Real-rg cap artifact: `.spur/run/69b79df6-9fea-4023-8e0b-efe2f3159d2f/cap-repro/result.json` — two 1,450,025-byte matching lines produced explicit `rg-failed` at the 2 MiB cap.
+- Public-surface probe: `.spur/run/69b79df6-9fea-4023-8e0b-efe2f3159d2f/public-probe/result.json` — throwaway roots, real rg + fixture zg: exact exit 0 with a complete hit, auto exit 0 with skipped fuzzy null, capped exact exit 1 with the bounded error.
+- Light gate: format, pre-rules, app/CLI typechecks and related tests PASS; post-check coverage provenance is deferred to the pipeline's canonical full gate.
 
 ### Testing
 
-<!-- Filled during verification: commands run, outcomes, coverage claim or N/A. -->
+**Pipeline verify results**
+
+- Verdict: PASS (from verdict artifact)
+
+| Requirement | Status | Evidence |
+|-------------|--------|----------|
+| R1 | MET | `packages/app/src/services/search.ts:251-281` rejects timeout, cap, every non-exit outcome and malformed JSON; `packages/app/tests/services/search.test.ts:225-258` covers all four classes. |
+| R2 | MET | `packages/app/src/services/search.ts:209` preserves skipped-null versus successful-empty; `packages/app/tests/services/search.test.ts:450-476` covers unknown, failed and empty outcomes. |
+
+| Acceptance Criteria | Status | Evidence Type | Evidence |
+|---------------------|--------|---------------|----------|
+| AC1 — Bounded exact search never reports lost matches as an empty success (req: R1) | MET | test | `packages/app/tests/services/search.test.ts` + `packages/app/tests/services/search-zg.test.ts` — 65 pass, 0 fail (`cd packages/app && bun test …`); real-rg cap artifact `.spur/run/69b79df6-9fea-4023-8e0b-efe2f3159d2f/cap-repro/result.json` returns explicit `rg-failed` at 2 MiB. |
+| AC2 — Auto search preserves skipped fuzzy outcomes (req: R2) | MET | test | `apps/cli/tests/commands/self/search.test.ts` — 19 pass, 0 fail (`cd apps/cli && bun test …`); unknown/failed/empty fixtures at `packages/app/tests/services/search.test.ts:450-476` pass. |
+- Coverage: N/A (verdict-based; verify pipeline does not measure code coverage)
 
 ### Review
 
-<!-- Filled during review: P1-P4 findings, residual risk, and final disposition. -->
+#### Review Report — 1299
+**Scope:** remediated working tree (four implementation/test/design files plus task evidence)
+**Dimensions:** functional, security, efficiency, correctness, usability, architecture
+**Verdict:** PASS
+**Confidence: HIGH**
+
+| # | Priority | Dimension | Finding | Location | Disposition |
+| --- | --- | --- | --- | --- | --- |
+| 1 | P2 (major) | correctness | Cancelled or signaled rg processes were accepted as empty success. Every non-`exit` outcome now fails explicitly, with executable cancelled/signaled regressions. | `packages/app/src/services/search.ts:261-264` | RESOLVED (65 app tests + 19 CLI tests + full gate 11848 pass) |
+
+##### Functional Traceability
+
+| Req | Status | Evidence |
+| --- | --- | --- |
+| R1 | MET | Timeout, cap, cancelled/signaled and malformed output fail at `packages/app/src/services/search.ts:251-281`; regressions at `packages/app/tests/services/search.test.ts:225-258` and the real-rg cap artifact passed. |
+| R2 | MET | Auto returns `fuzzy.hits` directly at `packages/app/src/services/search.ts:209`; unknown/failed/empty outcomes pass at `packages/app/tests/services/search.test.ts:450-476`. |
+
+**Next:** close through the deterministic record/done gate; no open P1–P3 finding remains.
 
 ### References
 
 <!-- Links to the parent feature, design docs, related tasks, or external references. -->
 
 ### History
+
+- 2026-11-05T22:28:00.215Z todo → wip (system)
+- 2026-11-05T22:49:22.000Z wip → testing (system)
+- 2026-11-05T22:51:16.362Z testing → done (system)
+
