@@ -2,11 +2,11 @@
 schema_version: 1
 id: "A8"
 name: "Downstream Spur Board modules and embedded resources"
-status: done
+status: active
 priority: P2
 tags: []
 created_at: "2026-09-28T01:13:21.763Z"
-updated_at: "2026-10-21T18:35:32.897Z"
+updated_at: "2026-11-05T20:03:51.470Z"
 ---
 
 # A8: Downstream Spur Board modules and embedded resources
@@ -31,6 +31,10 @@ Let downstream projects extend their installed Spur Board with explicitly config
   - Local HTML-directory iframe hosting, automatic message/data/context synchronization, simultaneous split views, persistent hidden frames, or iframe login workarounds.
   - Live config replacement or module HMR integration; v1 uses server restart and browser reload.
   - Filesystem extension loading for Cloudflare Worker deployment or public CLI noun/verb additions.
+
+### Approved follow-up — 2026-11-05
+
+W8 / R9: audit the inert runtime registerModuleRoot operation and its callers, then remove only unused internal scaffolding or explicitly deprecate an externally consumed operation. Preserve existing configured React/iframe composition, installed Board contracts, and extension loading boundaries.
 
 ## Acceptance Criteria
 
@@ -158,6 +162,12 @@ Feature: Downstream Spur Board modules and embedded resources
     When the probe exercises route changes after an initial request
     Then the report records Bun handler replacement, Hono matcher finalization, and fresh-app dispatch replacement outcomes
     And the authoring contract states startup configuration with browser imports before route construction
+
+  @core
+  Scenario: R16 — Board extension operations no longer promise unsupported registration
+    Given the runtime registration stub, its caller inventory and configured contribution fixtures
+    When the extension surface is simplified using the existing composition owner
+    Then no callable operation silently claims a rescan and supported configured React and iframe contributions retain their behavior and compatibility
 ```
 
 ## Tasks
@@ -174,6 +184,7 @@ Feature: Downstream Spur Board modules and embedded resources
 | 0998 | Prove a changed module selection follows restart plus reload end to end | done |
 | 0999 | Harden published authoring-example validation against unmarked code fences | done |
 | 1208 | Fail closed when Board module real paths cannot be verified | done |
+| 1315 | Remove unsupported runtime registration promises from the Board registry | todo |
 <!-- END AUTO-GENERATED -->
 
 ## Notes
@@ -192,6 +203,12 @@ The real installed shared-React/browser/type-export proof must pass in 0988 befo
 
 All 15 feature scenarios are linked. Planning checks and 35 ready-checklist rows pass; dependent tasks retain prerequisite-not-done findings until their predecessors finish. No implementation verdict is claimed, and the feature remains unimplemented. Next command: /sp:dev-runall --feature A8 --auto.
 
+### Approved simplification follow-up — 2026-11-05
+
+Robin approved this plan and requested feature updates/new features and implementation tasks on 2026-11-05; continued the same corpus conversion in the next message. Approval covers planning this scope, not deployment, new public verbs, new dependencies, gate weakening, or production data changes.
+
+Plan: `docs/plans/2026-11-05-simplification-and-product-enhancement.md`. Review: `docs/reports/2026-11-05-codebase-review.md`. Historical scenarios, completed tasks and verification receipts remain intact; new scenarios describe follow-up work and do not retroactively certify implementation. Conditional cleanup remains unscheduled until the named decision/evidence gate is met.
+
 ## History
 
 - 2026-09-28T23:00:17.202Z backlog → active (system)
@@ -203,4 +220,5 @@ All 15 feature scenarios are linked. Planning checks and 35 ready-checklist rows
 - 2026-10-14T23:25:05.637Z done → active (system)
 - 2026-10-15T02:21:11.258Z active → verifying (system)
 - 2026-10-15T02:22:33.531Z verifying → done (system)
+- 2026-11-05T19:58:54.936Z done → active (system)
 

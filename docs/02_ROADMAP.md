@@ -2,10 +2,10 @@
 doc: 02_ROADMAP
 owns: WHEN — phases, current vs deferred, sequencing
 authority: derived
-version: 1.11.0
+version: 1.12.0
 derived_from: [01_PRD, 00_ADR]
 owner: Robin Min
-updated_at: 2026-10-04
+updated_at: 2026-11-05
 read_before: placing work in a phase
 edit_rules: 99 §6.3
 sync: [T5, T6]
@@ -35,6 +35,25 @@ Execution deadline and queue-ownership work is tracked in [execution deadlines](
 and the [feature index](features/INDEX.md).
 
 **Exit:** clean-clone build, self-hosted gates and verified history/coverage paths.
+
+### Approved simplification and daily-use enhancement sequence — 2026-11-05
+
+The [approved plan](plans/2026-11-05-simplification-and-product-enhancement.md) pairs removal of
+duplicated mechanisms with user-visible improvements, within the existing capability scope:
+
+1. Restore trust: complete planning reads, ordinary security-proof discovery, truthful search
+   outcomes, and reliable task/feature actions and refreshes.
+2. Improve daily adoption: shared Board transport/live updates, actionable readiness, and safe
+   non-Bun project action onboarding after the relevant trust fixes.
+3. Consolidate executor policy and evidence navigation, then expose verified outcomes and measured
+   cost through existing run/task links.
+4. Schedule analytics/migration consolidation and broader test-scaffolding cleanup only when their
+   measurement and go/no-go conditions justify the change.
+
+Each increment exits on its fixture journeys, preserved contracts and applicable harness checks;
+code reduction alone does not establish success. No replacement engine, new public command family,
+or query-library adoption is implied. Feature/task state remains in the generated feature index and
+the tool-owned corpus, rather than in this sequence.
 
 ## Phase 1.5 — Planning Layer (rd3 migration) _(current — waves done, board cutover done)_
 

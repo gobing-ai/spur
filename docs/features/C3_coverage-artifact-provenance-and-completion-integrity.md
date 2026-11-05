@@ -2,11 +2,11 @@
 schema_version: 1
 id: "C3"
 name: "Coverage artifact provenance and completion integrity"
-status: verifying
+status: active
 priority: P2
 tags: []
 created_at: "2026-10-14T05:42:58.952Z"
-updated_at: "2026-10-14T07:24:25.757Z"
+updated_at: "2026-11-05T20:03:47.978Z"
 ---
 
 # C3: Coverage artifact provenance and completion integrity
@@ -18,6 +18,10 @@ Make the repository post-test coverage gate consume only a completed canonical f
 ## Scope
 
 In: scripts/commands/run-tests.ts, a repository coverage-artifact-check command, canonical root test entrypoints, test-post-check entrypoints, coverage rule producer documentation and regression fixtures. Out: test hang diagnosis, threshold relaxation, LCOV parser replacement, portable rule-engine API changes, extra full-suite executions.
+
+### Approved follow-up — 2026-11-05
+
+W8 / R8: native TOML parsing for coverage diagnostic thresholds, preserving canonical coverage provenance, missing-setting behavior and Bun enforcement. This extends diagnostics only and does not replace LCOV or lower a floor.
 
 ## Acceptance Criteria
 
@@ -47,6 +51,12 @@ Scenario: Recovery and caller scope are documented
   Then both repository post-check variants validate provenance first
   And a completed successful canonical full run is the documented recovery
   And direct portable spur rule execution is documented as outside this repository certification wrapper
+
+  @core
+  Scenario: R6 — Equivalent TOML threshold forms produce equivalent diagnostics
+    Given inline and standard-table forms of the same coverage threshold plus absent and malformed settings
+    When the quality gate reads coverage diagnostics
+    Then valid equivalent forms report the same shortfalls while invalid input is actionable and missing settings retain documented behavior without weakening Bun coverage enforcement
 ```
 
 ## Tasks
@@ -55,12 +65,20 @@ Scenario: Recovery and caller scope are documented
 | WBS | Task | Status |
 | --- | ---- | ------ |
 | 1203 | coverage-gate: an interrupted full run leaves a partial .coverage artifact that fails unrelated files | done |
+| 1314 | Parse coverage diagnostic thresholds with the native TOML parser | todo |
 <!-- END AUTO-GENERATED -->
 
 ## Notes
+
+### Approved simplification follow-up — 2026-11-05
+
+Robin approved this plan and requested feature updates/new features and implementation tasks on 2026-11-05; continued the same corpus conversion in the next message. Approval covers planning this scope, not deployment, new public verbs, new dependencies, gate weakening, or production data changes.
+
+Plan: `docs/plans/2026-11-05-simplification-and-product-enhancement.md`. Review: `docs/reports/2026-11-05-codebase-review.md`. Historical scenarios, completed tasks and verification receipts remain intact; new scenarios describe follow-up work and do not retroactively certify implementation. Conditional cleanup remains unscheduled until the named decision/evidence gate is met.
 
 ## History
 
 - 2026-10-14T07:23:20.865Z backlog → active (system)
 - 2026-10-14T07:24:25.757Z active → verifying (system)
+- 2026-11-05T19:58:40.118Z verifying → active (system)
 

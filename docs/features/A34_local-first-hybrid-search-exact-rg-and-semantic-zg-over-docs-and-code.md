@@ -2,11 +2,11 @@
 schema_version: 1
 id: "A34"
 name: "Local-first hybrid search: exact (rg) and semantic (zg) over docs and code"
-status: verifying
+status: active
 priority: P2
 tags: []
 created_at: "2026-11-03T16:48:14.451Z"
-updated_at: "2026-11-03T20:20:06.746Z"
+updated_at: "2026-11-05T20:03:46.490Z"
 ---
 
 # A34: Local-first hybrid search: exact (rg) and semantic (zg) over docs and code
@@ -34,6 +34,10 @@ Spur downstream projects get one local-first search capability that returns exac
   - Remote embedding providers / credentials (local models only; Spur stores no API keys).
   - The Cloudflare Worker deployment path (no local filesystem).
   - New public nouns or verbs outside `spur self`.
+
+### Approved follow-up — 2026-11-05
+
+W2 / R5 and R10: exact-search output budgets must fail explicitly instead of losing matches; auto-mode skipped fuzzy routes retain null and deterministic backend status/error fixtures. No new backend or buffer inflation.
 
 ## Acceptance Criteria
 
@@ -145,6 +149,18 @@ Feature: Local-first hybrid search: exact (rg) and semantic (zg) over docs and c
     And init reports zg as available, missing with the hint "bun add -g @zvec/zvec-grep", or present without an index with the hint "zg index --embedding local/potion-code-16m-v2"
     And init never installs zg, never runs zg index, and never downloads an embedding model
     And a missing zg never fails init
+
+  @core
+  Scenario: R13 — Bounded exact search never reports lost matches as an empty success
+    Given matching generated source lines exceeding the process output cap
+    When exact search requests a limited result set
+    Then the response contains a complete hit or an explicit bounded output-limit failure and preserves distinct timeout and no-match outcomes
+
+  @core
+  Scenario: R14 — Auto search preserves skipped fuzzy outcomes
+    Given absent, missing-index, unknown-status, failed and successfully empty fuzzy backends
+    When the same auto request is evaluated against each deterministic fixture
+    Then skipped routes remain null with the correct reason while successfully executed zero-match routes remain empty arrays
 ```
 
 ## Tasks
@@ -157,6 +173,7 @@ Feature: Local-first hybrid search: exact (rg) and semantic (zg) over docs and c
 | 1287 | Board hybrid search: local-server search contract and web module | done |
 | 1288 | sp skill guidance and docs for semantic-first search with rg fallback | done |
 | 1289 | spur init: zg readiness report and .zvec-grep gitignore entry | done |
+| 1299 | Preserve bounded exact-search failures and skipped fuzzy outcomes | todo |
 <!-- END AUTO-GENERATED -->
 
 ## Notes
@@ -167,9 +184,16 @@ Feature: Local-first hybrid search: exact (rg) and semantic (zg) over docs and c
 - zg grammar correction: zg 0.2.2 output has no `source:` block and no freshness/results trailer; the observed grammar and exit codes are pinned in docs/design/hybrid-search.md §2.
 - Install posture (R12): zg is never installed by spur or `spur init` — see task 1289 Background and design §4 Init.
 
+### Approved simplification follow-up — 2026-11-05
+
+Robin approved this plan and requested feature updates/new features and implementation tasks on 2026-11-05; continued the same corpus conversion in the next message. Approval covers planning this scope, not deployment, new public verbs, new dependencies, gate weakening, or production data changes.
+
+Plan: `docs/plans/2026-11-05-simplification-and-product-enhancement.md`. Review: `docs/reports/2026-11-05-codebase-review.md`. Historical scenarios, completed tasks and verification receipts remain intact; new scenarios describe follow-up work and do not retroactively certify implementation. Conditional cleanup remains unscheduled until the named decision/evidence gate is met.
+
 ## History
 
 - 2026-11-03T17:06:32.825Z moved Q → A34 (system)
 - 2026-11-03T18:24:31.988Z backlog → active (system)
 - 2026-11-03T20:20:06.746Z active → verifying (system)
+- 2026-11-05T19:58:33.867Z verifying → active (system)
 

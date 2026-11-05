@@ -1,0 +1,2107 @@
+{
+    "date": "2026-11-05",
+    "scope": "Approved simplification plan corpus conversion; no implementation execution",
+    "features": [
+        {
+            "id": "F22",
+            "name": "Complete planning corpus reads with explicit diagnostics",
+            "status": "backlog",
+            "operation": "created",
+            "filePath": "docs/features/F22_complete-planning-corpus-reads-with-explicit-diagnostics.md",
+            "added_scenarios": [
+                "Incomplete planning input cannot silently drive lifecycle state",
+                "Corpus snapshots preserve identifiers and cross-folder relationships"
+            ]
+        },
+        {
+            "id": "F73",
+            "name": "Planning Board query convergence and actionable daily readiness",
+            "status": "backlog",
+            "operation": "created",
+            "filePath": "docs/features/F73_planning-board-query-convergence-and-actionable-daily-readiness.md",
+            "added_scenarios": [
+                "Planning Board reads use validated shared transport contracts",
+                "Planning live updates share one owned subscription",
+                "Daily readiness explains work and exact blockers"
+            ]
+        },
+        {
+            "id": "E94",
+            "name": "Measured history query simplification with preserved analytics semantics",
+            "status": "backlog",
+            "operation": "created",
+            "filePath": "docs/features/E94_measured-history-query-simplification-with-preserved-analytics-semantics.md",
+            "added_scenarios": [
+                "History parity evidence decides whether consolidation is justified",
+                "Equivalent analytics definitions are consolidated without changing results"
+            ]
+        },
+        {
+            "id": "A34",
+            "name": "Local-first hybrid search: exact (rg) and semantic (zg) over docs and code",
+            "status": "active",
+            "operation": "updated",
+            "filePath": "docs/features/A34_local-first-hybrid-search-exact-rg-and-semantic-zg-over-docs-and-code.md",
+            "added_scenarios": [
+                "Bounded exact search never reports lost matches as an empty success",
+                "Auto search preserves skipped fuzzy outcomes"
+            ]
+        },
+        {
+            "id": "F8",
+            "name": "Features board module",
+            "status": "active",
+            "operation": "updated",
+            "filePath": "docs/features/F8_features-board-module.md",
+            "added_scenarios": [
+                "Feature sync defaults to the supported direction and preserves drafts",
+                "Feature dependency controls reflect effective action semantics"
+            ]
+        },
+        {
+            "id": "F7",
+            "name": "Task Kanban web parity",
+            "status": "active",
+            "operation": "updated",
+            "filePath": "docs/features/F7_task-kanban-web-parity.md",
+            "added_scenarios": [
+                "Task folder selection owns every committed response",
+                "Task refresh bursts retain eventual freshness"
+            ]
+        },
+        {
+            "id": "C3",
+            "name": "Coverage artifact provenance and completion integrity",
+            "status": "active",
+            "operation": "updated",
+            "filePath": "docs/features/C3_coverage-artifact-provenance-and-completion-integrity.md",
+            "added_scenarios": ["Equivalent TOML threshold forms produce equivalent diagnostics"]
+        },
+        {
+            "id": "H16",
+            "name": "Faster default quality gate while keeping per-file 90/90 coverage",
+            "status": "backlog",
+            "operation": "updated",
+            "filePath": "docs/features/H16_faster-default-quality-gate-while-keeping-per-file-90-90-coverage.md",
+            "added_scenarios": [
+                "Routine tests execute every isolated Markdown security proof",
+                "Test scaffolding shrinks only behind equivalent behavioral evidence"
+            ]
+        },
+        {
+            "id": "A92",
+            "name": "Stack-neutral SDLC actions: builder.actions, spur self exec, and script-structure consolidation",
+            "status": "active",
+            "operation": "updated",
+            "filePath": "docs/features/A92_stack-neutral-sdlc-actions-builder-actions-spur-self-exec-and-script-structure-consolidation.md",
+            "added_scenarios": [
+                "JavaScript project onboarding proposes declared action bindings safely",
+                "Language and monorepo onboarding retains execution ownership"
+            ]
+        },
+        {
+            "id": "D65",
+            "name": "One workflow interpreter and executor-agnostic agent.run dispatch",
+            "status": "active",
+            "operation": "updated",
+            "filePath": "docs/features/D65_one-workflow-interpreter-and-executor-agnostic-agent-run-dispatch.md",
+            "added_scenarios": [
+                "Executor surfaces apply the same declared admission contract",
+                "Executor results share truthful finalization and failure context"
+            ]
+        },
+        {
+            "id": "E71",
+            "name": "Disposable run scratch with durable evidence and inspection",
+            "status": "active",
+            "operation": "updated",
+            "filePath": "docs/features/E71_disposable-run-scratch-with-durable-evidence-and-inspection.md",
+            "added_scenarios": [
+                "Run evidence and valid recovery are reachable from the affected task",
+                "Expired scratch is distinguished from durable recovery evidence"
+            ]
+        },
+        {
+            "id": "E6",
+            "name": "Run-to-session correlation and cost-path repair",
+            "status": "active",
+            "operation": "updated",
+            "filePath": "docs/features/E6_run-to-session-correlation-and-cost-path-repair.md",
+            "added_scenarios": ["Outcome feedback reconciles measured cost and verified work"]
+        },
+        {
+            "id": "A6",
+            "name": "Harness trust and operational controls",
+            "status": "active",
+            "operation": "updated",
+            "filePath": "docs/features/A6_harness-trust-and-operational-controls.md",
+            "added_scenarios": ["Destructive-command policy distinguishes literal data from execution"]
+        },
+        {
+            "id": "A8",
+            "name": "Downstream Spur Board modules and embedded resources",
+            "status": "active",
+            "operation": "updated",
+            "filePath": "docs/features/A8_downstream-spur-board-modules-and-embedded-resources.md",
+            "added_scenarios": ["Board extension operations no longer promise unsupported registration"]
+        },
+        {
+            "id": "A331",
+            "name": "Verified offline migration artifacts and safe upgrades",
+            "status": "backlog",
+            "operation": "created",
+            "filePath": "docs/features/A331_verified-offline-migration-artifacts-and-safe-upgrades.md",
+            "added_scenarios": [
+                "Migration ownership evidence decides whether embedding consolidation is safe",
+                "Offline migration embedding shares an authoritative source without rewriting history"
+            ]
+        }
+    ],
+    "tasks": [
+        {
+            "wbs": "1294",
+            "name": "Make feature sync and dependency controls match effective runner behavior",
+            "feature": "F8",
+            "wave": "W0",
+            "status": "todo",
+            "priority": "P1",
+            "estimate_hours": 4,
+            "dependencies": [],
+            "conditional": false,
+            "scheduling_condition": null,
+            "scenario_titles": [
+                "Feature sync defaults to the supported direction and preserves drafts",
+                "Feature dependency controls reflect effective action semantics"
+            ],
+            "filePath": "docs/tasks5/1294_make-feature-sync-and-dependency-controls-match-effective-ru.md"
+        },
+        {
+            "wbs": "1295",
+            "name": "Restore ordinary-suite execution of real-renderer Markdown security proofs",
+            "feature": "H16",
+            "wave": "W0",
+            "status": "todo",
+            "priority": "P1",
+            "estimate_hours": 4,
+            "dependencies": [],
+            "conditional": false,
+            "scheduling_condition": null,
+            "scenario_titles": ["Routine tests execute every isolated Markdown security proof"],
+            "filePath": "docs/tasks5/1295_restore-ordinary-suite-execution-of-real-renderer-markdown-s.md"
+        },
+        {
+            "wbs": "1296",
+            "name": "Reject incomplete planning inputs before deriving feature state",
+            "feature": "F22",
+            "wave": "W1",
+            "status": "todo",
+            "priority": "P1",
+            "estimate_hours": 6,
+            "dependencies": [],
+            "conditional": false,
+            "scheduling_condition": null,
+            "scenario_titles": ["Incomplete planning input cannot silently drive lifecycle state"],
+            "filePath": "docs/tasks5/1296_reject-incomplete-planning-inputs-before-deriving-feature-st.md"
+        },
+        {
+            "wbs": "1297",
+            "name": "Reuse an operation-scoped planning snapshot across corpus readers",
+            "feature": "F22",
+            "wave": "W1",
+            "status": "todo",
+            "priority": "P1",
+            "estimate_hours": 8,
+            "dependencies": ["1296"],
+            "conditional": false,
+            "scheduling_condition": null,
+            "scenario_titles": ["Corpus snapshots preserve identifiers and cross-folder relationships"],
+            "filePath": "docs/tasks5/1297_reuse-an-operation-scoped-planning-snapshot-across-corpus-re.md"
+        },
+        {
+            "wbs": "1298",
+            "name": "Keep task-store refreshes owned by the latest folder and subscription",
+            "feature": "F7",
+            "wave": "W2",
+            "status": "todo",
+            "priority": "P1",
+            "estimate_hours": 6,
+            "dependencies": [],
+            "conditional": false,
+            "scheduling_condition": null,
+            "scenario_titles": [
+                "Task folder selection owns every committed response",
+                "Task refresh bursts retain eventual freshness"
+            ],
+            "filePath": "docs/tasks5/1298_keep-task-store-refreshes-owned-by-the-latest-folder-and-sub.md"
+        },
+        {
+            "wbs": "1299",
+            "name": "Preserve bounded exact-search failures and skipped fuzzy outcomes",
+            "feature": "A34",
+            "wave": "W2",
+            "status": "todo",
+            "priority": "P1",
+            "estimate_hours": 6,
+            "dependencies": [],
+            "conditional": false,
+            "scheduling_condition": null,
+            "scenario_titles": [
+                "Bounded exact search never reports lost matches as an empty success",
+                "Auto search preserves skipped fuzzy outcomes"
+            ],
+            "filePath": "docs/tasks5/1299_preserve-bounded-exact-search-failures-and-skipped-fuzzy-out.md"
+        },
+        {
+            "wbs": "1300",
+            "name": "Converge planning Board procedures on existing validated oRPC transport",
+            "feature": "F73",
+            "wave": "W3",
+            "status": "todo",
+            "priority": "P2",
+            "estimate_hours": 8,
+            "dependencies": ["1296", "1299"],
+            "conditional": false,
+            "scheduling_condition": null,
+            "scenario_titles": ["Planning Board reads use validated shared transport contracts"],
+            "filePath": "docs/tasks5/1300_converge-planning-board-procedures-on-existing-validated-orp.md"
+        },
+        {
+            "wbs": "1301",
+            "name": "Share planning-event invalidation across task and feature views",
+            "feature": "F73",
+            "wave": "W3",
+            "status": "todo",
+            "priority": "P2",
+            "estimate_hours": 6,
+            "dependencies": ["1298", "1300"],
+            "conditional": false,
+            "scheduling_condition": null,
+            "scenario_titles": ["Planning live updates share one owned subscription"],
+            "filePath": "docs/tasks5/1301_share-planning-event-invalidation-across-task-and-feature-vi.md"
+        },
+        {
+            "wbs": "1302",
+            "name": "Explain ready work, blocking dependencies and paused runs in planning views",
+            "feature": "F73",
+            "wave": "W3",
+            "status": "todo",
+            "priority": "P2",
+            "estimate_hours": 8,
+            "dependencies": ["1297", "1301"],
+            "conditional": false,
+            "scheduling_condition": null,
+            "scenario_titles": ["Daily readiness explains work and exact blockers"],
+            "filePath": "docs/tasks5/1302_explain-ready-work-blocking-dependencies-and-paused-runs-in-.md"
+        },
+        {
+            "wbs": "1303",
+            "name": "Propose safe npm and pnpm bindings through existing init actions",
+            "feature": "A92",
+            "wave": "W4",
+            "status": "todo",
+            "priority": "P2",
+            "estimate_hours": 8,
+            "dependencies": ["1294", "1295"],
+            "conditional": false,
+            "scheduling_condition": null,
+            "scenario_titles": ["JavaScript project onboarding proposes declared action bindings safely"],
+            "filePath": "docs/tasks5/1303_propose-safe-npm-and-pnpm-bindings-through-existing-init-act.md"
+        },
+        {
+            "wbs": "1304",
+            "name": "Complete language and monorepo action onboarding without guessing commands",
+            "feature": "A92",
+            "wave": "W4",
+            "status": "todo",
+            "priority": "P2",
+            "estimate_hours": 8,
+            "dependencies": ["1303"],
+            "conditional": false,
+            "scheduling_condition": null,
+            "scenario_titles": ["Language and monorepo onboarding retains execution ownership"],
+            "filePath": "docs/tasks5/1304_complete-language-and-monorepo-action-onboarding-without-gue.md"
+        },
+        {
+            "wbs": "1305",
+            "name": "Unify executor admission and invocation policy across existing dispatch surfaces",
+            "feature": "D65",
+            "wave": "W5",
+            "status": "todo",
+            "priority": "P2",
+            "estimate_hours": 8,
+            "dependencies": ["1294", "1295", "1299", "1298"],
+            "conditional": false,
+            "scheduling_condition": null,
+            "scenario_titles": ["Executor surfaces apply the same declared admission contract"],
+            "filePath": "docs/tasks5/1305_unify-executor-admission-and-invocation-policy-across-existi.md"
+        },
+        {
+            "wbs": "1306",
+            "name": "Share executor result finalization while preserving receipts and partial work",
+            "feature": "D65",
+            "wave": "W5",
+            "status": "todo",
+            "priority": "P2",
+            "estimate_hours": 8,
+            "dependencies": ["1305"],
+            "conditional": false,
+            "scheduling_condition": null,
+            "scenario_titles": ["Executor results share truthful finalization and failure context"],
+            "filePath": "docs/tasks5/1306_share-executor-result-finalization-while-preserving-receipts.md"
+        },
+        {
+            "wbs": "1307",
+            "name": "Link task failures and paused runs to retained evidence and safe recovery",
+            "feature": "E71",
+            "wave": "W6",
+            "status": "todo",
+            "priority": "P2",
+            "estimate_hours": 8,
+            "dependencies": ["1302", "1306"],
+            "conditional": false,
+            "scheduling_condition": null,
+            "scenario_titles": [
+                "Run evidence and valid recovery are reachable from the affected task",
+                "Expired scratch is distinguished from durable recovery evidence"
+            ],
+            "filePath": "docs/tasks5/1307_link-task-failures-and-paused-runs-to-retained-evidence-and-.md"
+        },
+        {
+            "wbs": "1308",
+            "name": "Show verified outcomes and reconcilable measured cost through current run links",
+            "feature": "E6",
+            "wave": "W6",
+            "status": "todo",
+            "priority": "P2",
+            "estimate_hours": 8,
+            "dependencies": ["1307", "1297"],
+            "conditional": false,
+            "scheduling_condition": null,
+            "scenario_titles": ["Outcome feedback reconciles measured cost and verified work"],
+            "filePath": "docs/tasks5/1308_show-verified-outcomes-and-reconcilable-measured-cost-throug.md"
+        },
+        {
+            "wbs": "1309",
+            "name": "Measure raw rollup and mart parity before selecting query simplification",
+            "feature": "E94",
+            "wave": "W7",
+            "status": "blocked",
+            "priority": "P3",
+            "estimate_hours": 6,
+            "dependencies": ["1308"],
+            "conditional": true,
+            "scheduling_condition": "Keep backlog until W6 measurements are available; this task gathers evidence only. Its go/no-go recommendation is reviewed before scheduling analytics consolidation.",
+            "scenario_titles": ["History parity evidence decides whether consolidation is justified"],
+            "filePath": "docs/tasks5/1309_measure-raw-rollup-and-mart-parity-before-selecting-query-si.md"
+        },
+        {
+            "wbs": "1310",
+            "name": "Consolidate only proven equivalent history selectors and measures",
+            "feature": "E94",
+            "wave": "W7",
+            "status": "blocked",
+            "priority": "P3",
+            "estimate_hours": 8,
+            "dependencies": ["1309"],
+            "conditional": true,
+            "scheduling_condition": "Requires an explicit recorded go decision identifying equivalent definitions and a net maintenance benefit; implementation remains backlog until then.",
+            "scenario_titles": ["Equivalent analytics definitions are consolidated without changing results"],
+            "filePath": "docs/tasks5/1310_consolidate-only-proven-equivalent-history-selectors-and-mea.md"
+        },
+        {
+            "wbs": "1311",
+            "name": "Prove migration SQL ownership and offline upgrade parity on fixtures",
+            "feature": "A331",
+            "wave": "W7",
+            "status": "blocked",
+            "priority": "P3",
+            "estimate_hours": 6,
+            "dependencies": ["1308"],
+            "conditional": true,
+            "scheduling_condition": "Keep backlog pending measured maintenance benefit after W6. This task proves safety and proposes a source; it does not authorize a new dependency or a real database migration.",
+            "scenario_titles": ["Migration ownership evidence decides whether embedding consolidation is safe"],
+            "filePath": "docs/tasks5/1311_prove-migration-sql-ownership-and-offline-upgrade-parity-on-.md"
+        },
+        {
+            "wbs": "1312",
+            "name": "Generate offline migration embedding from verified authoritative SQL",
+            "feature": "A331",
+            "wave": "W7",
+            "status": "blocked",
+            "priority": "P3",
+            "estimate_hours": 8,
+            "dependencies": ["1311"],
+            "conditional": true,
+            "scheduling_condition": "Requires a recorded go decision and available compatible authoritative SQL source; remain backlog for unavailable upstream exports or unapproved dependency changes.",
+            "scenario_titles": ["Offline migration embedding shares an authoritative source without rewriting history"],
+            "filePath": "docs/tasks5/1312_generate-offline-migration-embedding-from-verified-authorita.md"
+        },
+        {
+            "wbs": "1313",
+            "name": "Classify executable shell positions without blocking literal read-only searches",
+            "feature": "A6",
+            "wave": "W8",
+            "status": "todo",
+            "priority": "P2",
+            "estimate_hours": 8,
+            "dependencies": ["1295"],
+            "conditional": false,
+            "scheduling_condition": null,
+            "scenario_titles": ["Destructive-command policy distinguishes literal data from execution"],
+            "filePath": "docs/tasks5/1313_classify-executable-shell-positions-without-blocking-literal.md"
+        },
+        {
+            "wbs": "1314",
+            "name": "Parse coverage diagnostic thresholds with the native TOML parser",
+            "feature": "C3",
+            "wave": "W8",
+            "status": "todo",
+            "priority": "P2",
+            "estimate_hours": 3,
+            "dependencies": ["1295"],
+            "conditional": false,
+            "scheduling_condition": null,
+            "scenario_titles": ["Equivalent TOML threshold forms produce equivalent diagnostics"],
+            "filePath": "docs/tasks5/1314_parse-coverage-diagnostic-thresholds-with-the-native-toml-pa.md"
+        },
+        {
+            "wbs": "1315",
+            "name": "Remove unsupported runtime registration promises from the Board registry",
+            "feature": "A8",
+            "wave": "W8",
+            "status": "todo",
+            "priority": "P2",
+            "estimate_hours": 3,
+            "dependencies": ["1300"],
+            "conditional": false,
+            "scheduling_condition": null,
+            "scenario_titles": ["Board extension operations no longer promise unsupported registration"],
+            "filePath": "docs/tasks5/1315_remove-unsupported-runtime-registration-promises-from-the-bo.md"
+        },
+        {
+            "wbs": "1316",
+            "name": "Reduce duplicated test mocks behind retained behavioral and gate evidence",
+            "feature": "H16",
+            "wave": "W8",
+            "status": "blocked",
+            "priority": "P3",
+            "estimate_hours": 6,
+            "dependencies": ["1295", "1301"],
+            "conditional": true,
+            "scheduling_condition": "Keep backlog until a measured duplicated family and stronger behavior proof are identified; no blanket deletion campaign.",
+            "scenario_titles": ["Test scaffolding shrinks only behind equivalent behavioral evidence"],
+            "filePath": "docs/tasks5/1316_reduce-duplicated-test-mocks-behind-retained-behavioral-and-.md"
+        }
+    ],
+    "task_checks": [
+        {
+            "wbs": "1294",
+            "check": [
+                {
+                    "wbs": "1294",
+                    "status": "todo",
+                    "findings": [],
+                    "requiredSections": ["Background", "Acceptance Criteria", "Design", "Plan"],
+                    "missingSections": [],
+                    "pass": true,
+                    "notes": [],
+                    "repairs": []
+                }
+            ],
+            "precheck": [
+                {
+                    "wbs": "1294",
+                    "status": "todo",
+                    "findings": [],
+                    "requiredSections": ["Background", "Acceptance Criteria", "Design", "Plan"],
+                    "missingSections": [],
+                    "pass": true,
+                    "notes": [],
+                    "repairs": []
+                }
+            ]
+        },
+        {
+            "wbs": "1295",
+            "check": [
+                {
+                    "wbs": "1295",
+                    "status": "todo",
+                    "findings": [],
+                    "requiredSections": ["Background", "Acceptance Criteria", "Design", "Plan"],
+                    "missingSections": [],
+                    "pass": true,
+                    "notes": [],
+                    "repairs": []
+                }
+            ],
+            "precheck": [
+                {
+                    "wbs": "1295",
+                    "status": "todo",
+                    "findings": [],
+                    "requiredSections": ["Background", "Acceptance Criteria", "Design", "Plan"],
+                    "missingSections": [],
+                    "pass": true,
+                    "notes": [],
+                    "repairs": []
+                }
+            ]
+        },
+        {
+            "wbs": "1296",
+            "check": [
+                {
+                    "wbs": "1296",
+                    "status": "todo",
+                    "findings": [],
+                    "requiredSections": ["Background", "Acceptance Criteria", "Design", "Plan"],
+                    "missingSections": [],
+                    "pass": true,
+                    "notes": [],
+                    "repairs": []
+                }
+            ],
+            "precheck": [
+                {
+                    "wbs": "1296",
+                    "status": "todo",
+                    "findings": [],
+                    "requiredSections": ["Background", "Acceptance Criteria", "Design", "Plan"],
+                    "missingSections": [],
+                    "pass": true,
+                    "notes": [],
+                    "repairs": []
+                }
+            ]
+        },
+        {
+            "wbs": "1297",
+            "check": [
+                {
+                    "wbs": "1297",
+                    "status": "todo",
+                    "findings": [
+                        {
+                            "layer": "L4",
+                            "code": "L4.prerequisite-not-done",
+                            "severity": "warning",
+                            "section": "",
+                            "message": "Prerequisite 1296 is todo; task 1297 is not ready until it is done"
+                        }
+                    ],
+                    "requiredSections": ["Background", "Acceptance Criteria", "Design", "Plan"],
+                    "missingSections": [],
+                    "pass": true,
+                    "notes": [],
+                    "repairs": []
+                }
+            ],
+            "precheck": [
+                {
+                    "wbs": "1297",
+                    "status": "todo",
+                    "findings": [
+                        {
+                            "layer": "L4",
+                            "code": "L4.prerequisite-not-done",
+                            "severity": "warning",
+                            "section": "",
+                            "message": "Prerequisite 1296 is todo; task 1297 is not ready until it is done"
+                        }
+                    ],
+                    "requiredSections": ["Background", "Acceptance Criteria", "Design", "Plan"],
+                    "missingSections": [],
+                    "pass": true,
+                    "notes": [],
+                    "repairs": []
+                }
+            ]
+        },
+        {
+            "wbs": "1298",
+            "check": [
+                {
+                    "wbs": "1298",
+                    "status": "todo",
+                    "findings": [],
+                    "requiredSections": ["Background", "Acceptance Criteria", "Design", "Plan"],
+                    "missingSections": [],
+                    "pass": true,
+                    "notes": [],
+                    "repairs": []
+                }
+            ],
+            "precheck": [
+                {
+                    "wbs": "1298",
+                    "status": "todo",
+                    "findings": [],
+                    "requiredSections": ["Background", "Acceptance Criteria", "Design", "Plan"],
+                    "missingSections": [],
+                    "pass": true,
+                    "notes": [],
+                    "repairs": []
+                }
+            ]
+        },
+        {
+            "wbs": "1299",
+            "check": [
+                {
+                    "wbs": "1299",
+                    "status": "todo",
+                    "findings": [],
+                    "requiredSections": ["Background", "Acceptance Criteria", "Design", "Plan"],
+                    "missingSections": [],
+                    "pass": true,
+                    "notes": [],
+                    "repairs": []
+                }
+            ],
+            "precheck": [
+                {
+                    "wbs": "1299",
+                    "status": "todo",
+                    "findings": [],
+                    "requiredSections": ["Background", "Acceptance Criteria", "Design", "Plan"],
+                    "missingSections": [],
+                    "pass": true,
+                    "notes": [],
+                    "repairs": []
+                }
+            ]
+        },
+        {
+            "wbs": "1300",
+            "check": [
+                {
+                    "wbs": "1300",
+                    "status": "todo",
+                    "findings": [
+                        {
+                            "layer": "L4",
+                            "code": "L4.prerequisite-not-done",
+                            "severity": "warning",
+                            "section": "",
+                            "message": "Prerequisite 1296 is todo; task 1300 is not ready until it is done"
+                        },
+                        {
+                            "layer": "L4",
+                            "code": "L4.prerequisite-not-done",
+                            "severity": "warning",
+                            "section": "",
+                            "message": "Prerequisite 1299 is todo; task 1300 is not ready until it is done"
+                        }
+                    ],
+                    "requiredSections": ["Background", "Acceptance Criteria", "Design", "Plan"],
+                    "missingSections": [],
+                    "pass": true,
+                    "notes": [],
+                    "repairs": []
+                }
+            ],
+            "precheck": [
+                {
+                    "wbs": "1300",
+                    "status": "todo",
+                    "findings": [
+                        {
+                            "layer": "L4",
+                            "code": "L4.prerequisite-not-done",
+                            "severity": "warning",
+                            "section": "",
+                            "message": "Prerequisite 1296 is todo; task 1300 is not ready until it is done"
+                        },
+                        {
+                            "layer": "L4",
+                            "code": "L4.prerequisite-not-done",
+                            "severity": "warning",
+                            "section": "",
+                            "message": "Prerequisite 1299 is todo; task 1300 is not ready until it is done"
+                        }
+                    ],
+                    "requiredSections": ["Background", "Acceptance Criteria", "Design", "Plan"],
+                    "missingSections": [],
+                    "pass": true,
+                    "notes": [],
+                    "repairs": []
+                }
+            ]
+        },
+        {
+            "wbs": "1301",
+            "check": [
+                {
+                    "wbs": "1301",
+                    "status": "todo",
+                    "findings": [
+                        {
+                            "layer": "L4",
+                            "code": "L4.prerequisite-not-done",
+                            "severity": "warning",
+                            "section": "",
+                            "message": "Prerequisite 1298 is todo; task 1301 is not ready until it is done"
+                        },
+                        {
+                            "layer": "L4",
+                            "code": "L4.prerequisite-not-done",
+                            "severity": "warning",
+                            "section": "",
+                            "message": "Prerequisite 1300 is todo; task 1301 is not ready until it is done"
+                        }
+                    ],
+                    "requiredSections": ["Background", "Acceptance Criteria", "Design", "Plan"],
+                    "missingSections": [],
+                    "pass": true,
+                    "notes": [],
+                    "repairs": []
+                }
+            ],
+            "precheck": [
+                {
+                    "wbs": "1301",
+                    "status": "todo",
+                    "findings": [
+                        {
+                            "layer": "L4",
+                            "code": "L4.prerequisite-not-done",
+                            "severity": "warning",
+                            "section": "",
+                            "message": "Prerequisite 1298 is todo; task 1301 is not ready until it is done"
+                        },
+                        {
+                            "layer": "L4",
+                            "code": "L4.prerequisite-not-done",
+                            "severity": "warning",
+                            "section": "",
+                            "message": "Prerequisite 1300 is todo; task 1301 is not ready until it is done"
+                        }
+                    ],
+                    "requiredSections": ["Background", "Acceptance Criteria", "Design", "Plan"],
+                    "missingSections": [],
+                    "pass": true,
+                    "notes": [],
+                    "repairs": []
+                }
+            ]
+        },
+        {
+            "wbs": "1302",
+            "check": [
+                {
+                    "wbs": "1302",
+                    "status": "todo",
+                    "findings": [
+                        {
+                            "layer": "L4",
+                            "code": "L4.prerequisite-not-done",
+                            "severity": "warning",
+                            "section": "",
+                            "message": "Prerequisite 1297 is todo; task 1302 is not ready until it is done"
+                        },
+                        {
+                            "layer": "L4",
+                            "code": "L4.prerequisite-not-done",
+                            "severity": "warning",
+                            "section": "",
+                            "message": "Prerequisite 1301 is todo; task 1302 is not ready until it is done"
+                        }
+                    ],
+                    "requiredSections": ["Background", "Acceptance Criteria", "Design", "Plan"],
+                    "missingSections": [],
+                    "pass": true,
+                    "notes": [],
+                    "repairs": []
+                }
+            ],
+            "precheck": [
+                {
+                    "wbs": "1302",
+                    "status": "todo",
+                    "findings": [
+                        {
+                            "layer": "L4",
+                            "code": "L4.prerequisite-not-done",
+                            "severity": "warning",
+                            "section": "",
+                            "message": "Prerequisite 1297 is todo; task 1302 is not ready until it is done"
+                        },
+                        {
+                            "layer": "L4",
+                            "code": "L4.prerequisite-not-done",
+                            "severity": "warning",
+                            "section": "",
+                            "message": "Prerequisite 1301 is todo; task 1302 is not ready until it is done"
+                        }
+                    ],
+                    "requiredSections": ["Background", "Acceptance Criteria", "Design", "Plan"],
+                    "missingSections": [],
+                    "pass": true,
+                    "notes": [],
+                    "repairs": []
+                }
+            ]
+        },
+        {
+            "wbs": "1303",
+            "check": [
+                {
+                    "wbs": "1303",
+                    "status": "todo",
+                    "findings": [
+                        {
+                            "layer": "L4",
+                            "code": "L4.prerequisite-not-done",
+                            "severity": "warning",
+                            "section": "",
+                            "message": "Prerequisite 1294 is todo; task 1303 is not ready until it is done"
+                        },
+                        {
+                            "layer": "L4",
+                            "code": "L4.prerequisite-not-done",
+                            "severity": "warning",
+                            "section": "",
+                            "message": "Prerequisite 1295 is todo; task 1303 is not ready until it is done"
+                        }
+                    ],
+                    "requiredSections": ["Background", "Acceptance Criteria", "Design", "Plan"],
+                    "missingSections": [],
+                    "pass": true,
+                    "notes": [],
+                    "repairs": []
+                }
+            ],
+            "precheck": [
+                {
+                    "wbs": "1303",
+                    "status": "todo",
+                    "findings": [
+                        {
+                            "layer": "L4",
+                            "code": "L4.prerequisite-not-done",
+                            "severity": "warning",
+                            "section": "",
+                            "message": "Prerequisite 1294 is todo; task 1303 is not ready until it is done"
+                        },
+                        {
+                            "layer": "L4",
+                            "code": "L4.prerequisite-not-done",
+                            "severity": "warning",
+                            "section": "",
+                            "message": "Prerequisite 1295 is todo; task 1303 is not ready until it is done"
+                        }
+                    ],
+                    "requiredSections": ["Background", "Acceptance Criteria", "Design", "Plan"],
+                    "missingSections": [],
+                    "pass": true,
+                    "notes": [],
+                    "repairs": []
+                }
+            ]
+        },
+        {
+            "wbs": "1304",
+            "check": [
+                {
+                    "wbs": "1304",
+                    "status": "todo",
+                    "findings": [
+                        {
+                            "layer": "L4",
+                            "code": "L4.prerequisite-not-done",
+                            "severity": "warning",
+                            "section": "",
+                            "message": "Prerequisite 1303 is todo; task 1304 is not ready until it is done"
+                        }
+                    ],
+                    "requiredSections": ["Background", "Acceptance Criteria", "Design", "Plan"],
+                    "missingSections": [],
+                    "pass": true,
+                    "notes": [],
+                    "repairs": []
+                }
+            ],
+            "precheck": [
+                {
+                    "wbs": "1304",
+                    "status": "todo",
+                    "findings": [
+                        {
+                            "layer": "L4",
+                            "code": "L4.prerequisite-not-done",
+                            "severity": "warning",
+                            "section": "",
+                            "message": "Prerequisite 1303 is todo; task 1304 is not ready until it is done"
+                        }
+                    ],
+                    "requiredSections": ["Background", "Acceptance Criteria", "Design", "Plan"],
+                    "missingSections": [],
+                    "pass": true,
+                    "notes": [],
+                    "repairs": []
+                }
+            ]
+        },
+        {
+            "wbs": "1305",
+            "check": [
+                {
+                    "wbs": "1305",
+                    "status": "todo",
+                    "findings": [
+                        {
+                            "layer": "L4",
+                            "code": "L4.prerequisite-not-done",
+                            "severity": "warning",
+                            "section": "",
+                            "message": "Prerequisite 1294 is todo; task 1305 is not ready until it is done"
+                        },
+                        {
+                            "layer": "L4",
+                            "code": "L4.prerequisite-not-done",
+                            "severity": "warning",
+                            "section": "",
+                            "message": "Prerequisite 1295 is todo; task 1305 is not ready until it is done"
+                        },
+                        {
+                            "layer": "L4",
+                            "code": "L4.prerequisite-not-done",
+                            "severity": "warning",
+                            "section": "",
+                            "message": "Prerequisite 1299 is todo; task 1305 is not ready until it is done"
+                        },
+                        {
+                            "layer": "L4",
+                            "code": "L4.prerequisite-not-done",
+                            "severity": "warning",
+                            "section": "",
+                            "message": "Prerequisite 1298 is todo; task 1305 is not ready until it is done"
+                        }
+                    ],
+                    "requiredSections": ["Background", "Acceptance Criteria", "Design", "Plan"],
+                    "missingSections": [],
+                    "pass": true,
+                    "notes": [],
+                    "repairs": []
+                }
+            ],
+            "precheck": [
+                {
+                    "wbs": "1305",
+                    "status": "todo",
+                    "findings": [
+                        {
+                            "layer": "L4",
+                            "code": "L4.prerequisite-not-done",
+                            "severity": "warning",
+                            "section": "",
+                            "message": "Prerequisite 1294 is todo; task 1305 is not ready until it is done"
+                        },
+                        {
+                            "layer": "L4",
+                            "code": "L4.prerequisite-not-done",
+                            "severity": "warning",
+                            "section": "",
+                            "message": "Prerequisite 1295 is todo; task 1305 is not ready until it is done"
+                        },
+                        {
+                            "layer": "L4",
+                            "code": "L4.prerequisite-not-done",
+                            "severity": "warning",
+                            "section": "",
+                            "message": "Prerequisite 1299 is todo; task 1305 is not ready until it is done"
+                        },
+                        {
+                            "layer": "L4",
+                            "code": "L4.prerequisite-not-done",
+                            "severity": "warning",
+                            "section": "",
+                            "message": "Prerequisite 1298 is todo; task 1305 is not ready until it is done"
+                        }
+                    ],
+                    "requiredSections": ["Background", "Acceptance Criteria", "Design", "Plan"],
+                    "missingSections": [],
+                    "pass": true,
+                    "notes": [],
+                    "repairs": []
+                }
+            ]
+        },
+        {
+            "wbs": "1306",
+            "check": [
+                {
+                    "wbs": "1306",
+                    "status": "todo",
+                    "findings": [
+                        {
+                            "layer": "L4",
+                            "code": "L4.prerequisite-not-done",
+                            "severity": "warning",
+                            "section": "",
+                            "message": "Prerequisite 1305 is todo; task 1306 is not ready until it is done"
+                        }
+                    ],
+                    "requiredSections": ["Background", "Acceptance Criteria", "Design", "Plan"],
+                    "missingSections": [],
+                    "pass": true,
+                    "notes": [],
+                    "repairs": []
+                }
+            ],
+            "precheck": [
+                {
+                    "wbs": "1306",
+                    "status": "todo",
+                    "findings": [
+                        {
+                            "layer": "L4",
+                            "code": "L4.prerequisite-not-done",
+                            "severity": "warning",
+                            "section": "",
+                            "message": "Prerequisite 1305 is todo; task 1306 is not ready until it is done"
+                        }
+                    ],
+                    "requiredSections": ["Background", "Acceptance Criteria", "Design", "Plan"],
+                    "missingSections": [],
+                    "pass": true,
+                    "notes": [],
+                    "repairs": []
+                }
+            ]
+        },
+        {
+            "wbs": "1307",
+            "check": [
+                {
+                    "wbs": "1307",
+                    "status": "todo",
+                    "findings": [
+                        {
+                            "layer": "L4",
+                            "code": "L4.prerequisite-not-done",
+                            "severity": "warning",
+                            "section": "",
+                            "message": "Prerequisite 1302 is todo; task 1307 is not ready until it is done"
+                        },
+                        {
+                            "layer": "L4",
+                            "code": "L4.prerequisite-not-done",
+                            "severity": "warning",
+                            "section": "",
+                            "message": "Prerequisite 1306 is todo; task 1307 is not ready until it is done"
+                        }
+                    ],
+                    "requiredSections": ["Background", "Acceptance Criteria", "Design", "Plan"],
+                    "missingSections": [],
+                    "pass": true,
+                    "notes": [],
+                    "repairs": []
+                }
+            ],
+            "precheck": [
+                {
+                    "wbs": "1307",
+                    "status": "todo",
+                    "findings": [
+                        {
+                            "layer": "L4",
+                            "code": "L4.prerequisite-not-done",
+                            "severity": "warning",
+                            "section": "",
+                            "message": "Prerequisite 1302 is todo; task 1307 is not ready until it is done"
+                        },
+                        {
+                            "layer": "L4",
+                            "code": "L4.prerequisite-not-done",
+                            "severity": "warning",
+                            "section": "",
+                            "message": "Prerequisite 1306 is todo; task 1307 is not ready until it is done"
+                        }
+                    ],
+                    "requiredSections": ["Background", "Acceptance Criteria", "Design", "Plan"],
+                    "missingSections": [],
+                    "pass": true,
+                    "notes": [],
+                    "repairs": []
+                }
+            ]
+        },
+        {
+            "wbs": "1308",
+            "check": [
+                {
+                    "wbs": "1308",
+                    "status": "todo",
+                    "findings": [
+                        {
+                            "layer": "L4",
+                            "code": "L4.prerequisite-not-done",
+                            "severity": "warning",
+                            "section": "",
+                            "message": "Prerequisite 1307 is todo; task 1308 is not ready until it is done"
+                        },
+                        {
+                            "layer": "L4",
+                            "code": "L4.prerequisite-not-done",
+                            "severity": "warning",
+                            "section": "",
+                            "message": "Prerequisite 1297 is todo; task 1308 is not ready until it is done"
+                        }
+                    ],
+                    "requiredSections": ["Background", "Acceptance Criteria", "Design", "Plan"],
+                    "missingSections": [],
+                    "pass": true,
+                    "notes": [],
+                    "repairs": []
+                }
+            ],
+            "precheck": [
+                {
+                    "wbs": "1308",
+                    "status": "todo",
+                    "findings": [
+                        {
+                            "layer": "L4",
+                            "code": "L4.prerequisite-not-done",
+                            "severity": "warning",
+                            "section": "",
+                            "message": "Prerequisite 1307 is todo; task 1308 is not ready until it is done"
+                        },
+                        {
+                            "layer": "L4",
+                            "code": "L4.prerequisite-not-done",
+                            "severity": "warning",
+                            "section": "",
+                            "message": "Prerequisite 1297 is todo; task 1308 is not ready until it is done"
+                        }
+                    ],
+                    "requiredSections": ["Background", "Acceptance Criteria", "Design", "Plan"],
+                    "missingSections": [],
+                    "pass": true,
+                    "notes": [],
+                    "repairs": []
+                }
+            ]
+        },
+        {
+            "wbs": "1309",
+            "check": [
+                {
+                    "wbs": "1309",
+                    "status": "blocked",
+                    "findings": [
+                        {
+                            "layer": "L4",
+                            "code": "L4.readiness-blocked",
+                            "severity": "warning",
+                            "section": "",
+                            "message": "Task 1309 is blocked \u2014 readiness is false until the blocker is resolved or explicitly forced"
+                        },
+                        {
+                            "layer": "L4",
+                            "code": "L4.prerequisite-not-done",
+                            "severity": "warning",
+                            "section": "",
+                            "message": "Prerequisite 1308 is todo; task 1309 is not ready until it is done"
+                        }
+                    ],
+                    "requiredSections": ["Background"],
+                    "missingSections": [],
+                    "pass": true,
+                    "notes": [],
+                    "repairs": []
+                }
+            ],
+            "precheck": null
+        },
+        {
+            "wbs": "1310",
+            "check": [
+                {
+                    "wbs": "1310",
+                    "status": "blocked",
+                    "findings": [
+                        {
+                            "layer": "L4",
+                            "code": "L4.readiness-blocked",
+                            "severity": "warning",
+                            "section": "",
+                            "message": "Task 1310 is blocked \u2014 readiness is false until the blocker is resolved or explicitly forced"
+                        },
+                        {
+                            "layer": "L4",
+                            "code": "L4.prerequisite-not-done",
+                            "severity": "warning",
+                            "section": "",
+                            "message": "Prerequisite 1309 is blocked; task 1310 is not ready until it is done"
+                        }
+                    ],
+                    "requiredSections": ["Background"],
+                    "missingSections": [],
+                    "pass": true,
+                    "notes": [],
+                    "repairs": []
+                }
+            ],
+            "precheck": null
+        },
+        {
+            "wbs": "1311",
+            "check": [
+                {
+                    "wbs": "1311",
+                    "status": "blocked",
+                    "findings": [
+                        {
+                            "layer": "L4",
+                            "code": "L4.readiness-blocked",
+                            "severity": "warning",
+                            "section": "",
+                            "message": "Task 1311 is blocked \u2014 readiness is false until the blocker is resolved or explicitly forced"
+                        },
+                        {
+                            "layer": "L4",
+                            "code": "L4.prerequisite-not-done",
+                            "severity": "warning",
+                            "section": "",
+                            "message": "Prerequisite 1308 is todo; task 1311 is not ready until it is done"
+                        }
+                    ],
+                    "requiredSections": ["Background"],
+                    "missingSections": [],
+                    "pass": true,
+                    "notes": [],
+                    "repairs": []
+                }
+            ],
+            "precheck": null
+        },
+        {
+            "wbs": "1312",
+            "check": [
+                {
+                    "wbs": "1312",
+                    "status": "blocked",
+                    "findings": [
+                        {
+                            "layer": "L4",
+                            "code": "L4.readiness-blocked",
+                            "severity": "warning",
+                            "section": "",
+                            "message": "Task 1312 is blocked \u2014 readiness is false until the blocker is resolved or explicitly forced"
+                        },
+                        {
+                            "layer": "L4",
+                            "code": "L4.prerequisite-not-done",
+                            "severity": "warning",
+                            "section": "",
+                            "message": "Prerequisite 1311 is blocked; task 1312 is not ready until it is done"
+                        }
+                    ],
+                    "requiredSections": ["Background"],
+                    "missingSections": [],
+                    "pass": true,
+                    "notes": [],
+                    "repairs": []
+                }
+            ],
+            "precheck": null
+        },
+        {
+            "wbs": "1313",
+            "check": [
+                {
+                    "wbs": "1313",
+                    "status": "todo",
+                    "findings": [
+                        {
+                            "layer": "L4",
+                            "code": "L4.prerequisite-not-done",
+                            "severity": "warning",
+                            "section": "",
+                            "message": "Prerequisite 1295 is todo; task 1313 is not ready until it is done"
+                        }
+                    ],
+                    "requiredSections": ["Background", "Acceptance Criteria", "Design", "Plan"],
+                    "missingSections": [],
+                    "pass": true,
+                    "notes": [],
+                    "repairs": []
+                }
+            ],
+            "precheck": [
+                {
+                    "wbs": "1313",
+                    "status": "todo",
+                    "findings": [
+                        {
+                            "layer": "L4",
+                            "code": "L4.prerequisite-not-done",
+                            "severity": "warning",
+                            "section": "",
+                            "message": "Prerequisite 1295 is todo; task 1313 is not ready until it is done"
+                        }
+                    ],
+                    "requiredSections": ["Background", "Acceptance Criteria", "Design", "Plan"],
+                    "missingSections": [],
+                    "pass": true,
+                    "notes": [],
+                    "repairs": []
+                }
+            ]
+        },
+        {
+            "wbs": "1314",
+            "check": [
+                {
+                    "wbs": "1314",
+                    "status": "todo",
+                    "findings": [
+                        {
+                            "layer": "L4",
+                            "code": "L4.prerequisite-not-done",
+                            "severity": "warning",
+                            "section": "",
+                            "message": "Prerequisite 1295 is todo; task 1314 is not ready until it is done"
+                        }
+                    ],
+                    "requiredSections": ["Background", "Acceptance Criteria", "Design", "Plan"],
+                    "missingSections": [],
+                    "pass": true,
+                    "notes": [],
+                    "repairs": []
+                }
+            ],
+            "precheck": [
+                {
+                    "wbs": "1314",
+                    "status": "todo",
+                    "findings": [
+                        {
+                            "layer": "L4",
+                            "code": "L4.prerequisite-not-done",
+                            "severity": "warning",
+                            "section": "",
+                            "message": "Prerequisite 1295 is todo; task 1314 is not ready until it is done"
+                        }
+                    ],
+                    "requiredSections": ["Background", "Acceptance Criteria", "Design", "Plan"],
+                    "missingSections": [],
+                    "pass": true,
+                    "notes": [],
+                    "repairs": []
+                }
+            ]
+        },
+        {
+            "wbs": "1315",
+            "check": [
+                {
+                    "wbs": "1315",
+                    "status": "todo",
+                    "findings": [
+                        {
+                            "layer": "L4",
+                            "code": "L4.prerequisite-not-done",
+                            "severity": "warning",
+                            "section": "",
+                            "message": "Prerequisite 1300 is todo; task 1315 is not ready until it is done"
+                        }
+                    ],
+                    "requiredSections": ["Background", "Acceptance Criteria", "Design", "Plan"],
+                    "missingSections": [],
+                    "pass": true,
+                    "notes": [],
+                    "repairs": []
+                }
+            ],
+            "precheck": [
+                {
+                    "wbs": "1315",
+                    "status": "todo",
+                    "findings": [
+                        {
+                            "layer": "L4",
+                            "code": "L4.prerequisite-not-done",
+                            "severity": "warning",
+                            "section": "",
+                            "message": "Prerequisite 1300 is todo; task 1315 is not ready until it is done"
+                        }
+                    ],
+                    "requiredSections": ["Background", "Acceptance Criteria", "Design", "Plan"],
+                    "missingSections": [],
+                    "pass": true,
+                    "notes": [],
+                    "repairs": []
+                }
+            ]
+        },
+        {
+            "wbs": "1316",
+            "check": [
+                {
+                    "wbs": "1316",
+                    "status": "blocked",
+                    "findings": [
+                        {
+                            "layer": "L4",
+                            "code": "L4.readiness-blocked",
+                            "severity": "warning",
+                            "section": "",
+                            "message": "Task 1316 is blocked \u2014 readiness is false until the blocker is resolved or explicitly forced"
+                        },
+                        {
+                            "layer": "L4",
+                            "code": "L4.prerequisite-not-done",
+                            "severity": "warning",
+                            "section": "",
+                            "message": "Prerequisite 1295 is todo; task 1316 is not ready until it is done"
+                        },
+                        {
+                            "layer": "L4",
+                            "code": "L4.prerequisite-not-done",
+                            "severity": "warning",
+                            "section": "",
+                            "message": "Prerequisite 1301 is todo; task 1316 is not ready until it is done"
+                        }
+                    ],
+                    "requiredSections": ["Background"],
+                    "missingSections": [],
+                    "pass": true,
+                    "notes": [],
+                    "repairs": []
+                }
+            ],
+            "precheck": null
+        }
+    ],
+    "feature_checks": [
+        {
+            "feature": "F22",
+            "check": [
+                {
+                    "id": "F22",
+                    "status": "backlog",
+                    "findings": [
+                        {
+                            "layer": "L4",
+                            "code": "L4.scenario-unverified",
+                            "severity": "warning",
+                            "section": "Acceptance Criteria",
+                            "message": "Feature scenario \"R1 \u2014 Incomplete planning input cannot silently drive lifecycle state\" is linked but unverified: covering task(s) 1296 have no PASS verdict with MET requirement"
+                        },
+                        {
+                            "layer": "L4",
+                            "code": "L4.scenario-unverified",
+                            "severity": "warning",
+                            "section": "Acceptance Criteria",
+                            "message": "Feature scenario \"R2 \u2014 Corpus snapshots preserve identifiers and cross-folder relationships\" is linked but unverified: covering task(s) 1297 have no PASS verdict with MET requirement"
+                        }
+                    ],
+                    "requiredSections": [],
+                    "missingSections": [],
+                    "pass": true,
+                    "notes": [],
+                    "repairs": []
+                }
+            ]
+        },
+        {
+            "feature": "F73",
+            "check": [
+                {
+                    "id": "F73",
+                    "status": "backlog",
+                    "findings": [
+                        {
+                            "layer": "L4",
+                            "code": "L4.scenario-unverified",
+                            "severity": "warning",
+                            "section": "Acceptance Criteria",
+                            "message": "Feature scenario \"R1 \u2014 Planning Board reads use validated shared transport contracts\" is linked but unverified: covering task(s) 1300 have no PASS verdict with MET requirement"
+                        },
+                        {
+                            "layer": "L4",
+                            "code": "L4.scenario-unverified",
+                            "severity": "warning",
+                            "section": "Acceptance Criteria",
+                            "message": "Feature scenario \"R2 \u2014 Planning live updates share one owned subscription\" is linked but unverified: covering task(s) 1301 have no PASS verdict with MET requirement"
+                        },
+                        {
+                            "layer": "L4",
+                            "code": "L4.scenario-unverified",
+                            "severity": "warning",
+                            "section": "Acceptance Criteria",
+                            "message": "Feature scenario \"R3 \u2014 Daily readiness explains work and exact blockers\" is linked but unverified: covering task(s) 1302 have no PASS verdict with MET requirement"
+                        }
+                    ],
+                    "requiredSections": [],
+                    "missingSections": [],
+                    "pass": true,
+                    "notes": [],
+                    "repairs": []
+                }
+            ]
+        },
+        {
+            "feature": "E94",
+            "check": [
+                {
+                    "id": "E94",
+                    "status": "backlog",
+                    "findings": [
+                        {
+                            "layer": "L4",
+                            "code": "L4.scenario-unverified",
+                            "severity": "warning",
+                            "section": "Acceptance Criteria",
+                            "message": "Feature scenario \"R1 \u2014 History parity evidence decides whether consolidation is justified\" is linked but unverified: covering task(s) 1309 have no PASS verdict with MET requirement"
+                        },
+                        {
+                            "layer": "L4",
+                            "code": "L4.scenario-unverified",
+                            "severity": "warning",
+                            "section": "Acceptance Criteria",
+                            "message": "Feature scenario \"R2 \u2014 Equivalent analytics definitions are consolidated without changing results\" is linked but unverified: covering task(s) 1310 have no PASS verdict with MET requirement"
+                        }
+                    ],
+                    "requiredSections": [],
+                    "missingSections": [],
+                    "pass": true,
+                    "notes": [],
+                    "repairs": []
+                }
+            ]
+        },
+        {
+            "feature": "A34",
+            "check": [
+                {
+                    "id": "A34",
+                    "status": "active",
+                    "findings": [
+                        {
+                            "layer": "L4",
+                            "code": "L4.scenario-unverified",
+                            "severity": "warning",
+                            "section": "Acceptance Criteria",
+                            "message": "Feature scenario \"R13 \u2014 Bounded exact search never reports lost matches as an empty success\" is linked but unverified: covering task(s) 1299 have no PASS verdict with MET requirement"
+                        },
+                        {
+                            "layer": "L4",
+                            "code": "L4.scenario-unverified",
+                            "severity": "warning",
+                            "section": "Acceptance Criteria",
+                            "message": "Feature scenario \"R14 \u2014 Auto search preserves skipped fuzzy outcomes\" is linked but unverified: covering task(s) 1299 have no PASS verdict with MET requirement"
+                        }
+                    ],
+                    "requiredSections": [],
+                    "missingSections": [],
+                    "pass": true,
+                    "notes": [],
+                    "repairs": []
+                }
+            ]
+        },
+        {
+            "feature": "F8",
+            "check": [
+                {
+                    "id": "F8",
+                    "status": "active",
+                    "findings": [
+                        {
+                            "layer": "L4",
+                            "code": "L4.evidence-not-recoverable",
+                            "severity": "warning",
+                            "section": "Acceptance Criteria",
+                            "message": "Task 0194 has no verdict artifact and its tracked ## Testing section carries no recoverable coverage evidence (invalid); its evidence predates durable recording, so it is neither verified nor failed."
+                        },
+                        {
+                            "layer": "L4",
+                            "code": "L4.scenario-unverified",
+                            "severity": "warning",
+                            "section": "Acceptance Criteria",
+                            "message": "Feature scenario \"Feature tree renders with live status\" is linked but unverified: covering task(s) 0194 have no PASS verdict with MET requirement"
+                        },
+                        {
+                            "layer": "L4",
+                            "code": "L4.scenario-unverified",
+                            "severity": "warning",
+                            "section": "Acceptance Criteria",
+                            "message": "Feature scenario \"Detail panel shows the feature body\" is linked but unverified: covering task(s) 0194 have no PASS verdict with MET requirement"
+                        },
+                        {
+                            "layer": "L4",
+                            "code": "L4.scenario-unverified",
+                            "severity": "warning",
+                            "section": "Acceptance Criteria",
+                            "message": "Feature scenario \"Status transitions go through lifecycle guards\" is linked but unverified: covering task(s) 0194 have no PASS verdict with MET requirement"
+                        },
+                        {
+                            "layer": "L4",
+                            "code": "L4.scenario-unverified",
+                            "severity": "warning",
+                            "section": "Acceptance Criteria",
+                            "message": "Feature scenario \"Guard-denied transitions surface the reason\" is linked but unverified: covering task(s) 0194 have no PASS verdict with MET requirement"
+                        },
+                        {
+                            "layer": "L4",
+                            "code": "L4.scenario-unverified",
+                            "severity": "warning",
+                            "section": "Acceptance Criteria",
+                            "message": "Feature scenario \"Feature check runs from the board\" is linked but unverified: covering task(s) 0194 have no PASS verdict with MET requirement"
+                        },
+                        {
+                            "layer": "L4",
+                            "code": "L4.scenario-unverified",
+                            "severity": "warning",
+                            "section": "Acceptance Criteria",
+                            "message": "Feature scenario \"R6 \u2014 Feature sync defaults to the supported direction and preserves drafts\" is linked but unverified: covering task(s) 1294 have no PASS verdict with MET requirement"
+                        },
+                        {
+                            "layer": "L4",
+                            "code": "L4.scenario-unverified",
+                            "severity": "warning",
+                            "section": "Acceptance Criteria",
+                            "message": "Feature scenario \"R7 \u2014 Feature dependency controls reflect effective action semantics\" is linked but unverified: covering task(s) 1294 have no PASS verdict with MET requirement"
+                        }
+                    ],
+                    "requiredSections": [],
+                    "missingSections": [],
+                    "pass": true,
+                    "notes": [],
+                    "repairs": []
+                }
+            ]
+        },
+        {
+            "feature": "F7",
+            "check": [
+                {
+                    "id": "F7",
+                    "status": "active",
+                    "findings": [
+                        {
+                            "layer": "L4",
+                            "code": "L4.uncovered-feature-scenario",
+                            "severity": "warning",
+                            "section": "Acceptance Criteria",
+                            "message": "Feature scenario \"Board renders with columns for each task status\" is not covered by any linked task (DD-09)"
+                        },
+                        {
+                            "layer": "L4",
+                            "code": "L4.uncovered-feature-scenario",
+                            "severity": "warning",
+                            "section": "Acceptance Criteria",
+                            "message": "Feature scenario \"Task cards show WBS, name, and status\" is not covered by any linked task (DD-09)"
+                        },
+                        {
+                            "layer": "L4",
+                            "code": "L4.uncovered-feature-scenario",
+                            "severity": "warning",
+                            "section": "Acceptance Criteria",
+                            "message": "Feature scenario \"Drag-and-drop moves a task between status columns\" is not covered by any linked task (DD-09)"
+                        },
+                        {
+                            "layer": "L4",
+                            "code": "L4.uncovered-feature-scenario",
+                            "severity": "warning",
+                            "section": "Acceptance Criteria",
+                            "message": "Feature scenario \"New task creation from the board\" is not covered by any linked task (DD-09)"
+                        },
+                        {
+                            "layer": "L4",
+                            "code": "L4.uncovered-feature-scenario",
+                            "severity": "warning",
+                            "section": "Acceptance Criteria",
+                            "message": "Feature scenario \"Task detail panel opens on card click\" is not covered by any linked task (DD-09)"
+                        },
+                        {
+                            "layer": "L4",
+                            "code": "L4.uncovered-feature-scenario",
+                            "severity": "warning",
+                            "section": "Acceptance Criteria",
+                            "message": "Feature scenario \"SSE real-time sync updates the board without polling\" is not covered by any linked task (DD-09)"
+                        },
+                        {
+                            "layer": "L4",
+                            "code": "L4.uncovered-feature-scenario",
+                            "severity": "warning",
+                            "section": "Acceptance Criteria",
+                            "message": "Feature scenario \"Task body is editable inline\" is not covered by any linked task (DD-09)"
+                        },
+                        {
+                            "layer": "L4",
+                            "code": "L4.uncovered-feature-scenario",
+                            "severity": "warning",
+                            "section": "Acceptance Criteria",
+                            "message": "Feature scenario \"Board is responsive for mobile and desktop\" is not covered by any linked task (DD-09)"
+                        },
+                        {
+                            "layer": "L4",
+                            "code": "L4.uncovered-feature-scenario",
+                            "severity": "warning",
+                            "section": "Acceptance Criteria",
+                            "message": "Feature scenario \"Dark mode renders correctly\" is not covered by any linked task (DD-09)"
+                        },
+                        {
+                            "layer": "L4",
+                            "code": "L4.evidence-not-recoverable",
+                            "severity": "warning",
+                            "section": "Acceptance Criteria",
+                            "message": "Task 0191 has no verdict artifact and its tracked ## Testing section carries no recoverable coverage evidence (invalid); its evidence predates durable recording, so it is neither verified nor failed."
+                        },
+                        {
+                            "layer": "L4",
+                            "code": "L4.evidence-not-recoverable",
+                            "severity": "warning",
+                            "section": "Acceptance Criteria",
+                            "message": "Task 0202 has no verdict artifact and its tracked ## Testing section carries no recoverable coverage evidence (invalid); its evidence predates durable recording, so it is neither verified nor failed."
+                        },
+                        {
+                            "layer": "L4",
+                            "code": "L4.evidence-not-recoverable",
+                            "severity": "warning",
+                            "section": "Acceptance Criteria",
+                            "message": "Task 0203 has no verdict artifact and its tracked ## Testing section carries no recoverable coverage evidence (invalid); its evidence predates durable recording, so it is neither verified nor failed."
+                        },
+                        {
+                            "layer": "L4",
+                            "code": "L4.scenario-unverified",
+                            "severity": "warning",
+                            "section": "Acceptance Criteria",
+                            "message": "Feature scenario \"New Task panel offers markdown editing with live preview\" is linked but unverified: covering task(s) 0191, 0202 have no PASS verdict with MET requirement"
+                        },
+                        {
+                            "layer": "L4",
+                            "code": "L4.scenario-unverified",
+                            "severity": "warning",
+                            "section": "Acceptance Criteria",
+                            "message": "Feature scenario \"Task detail shows estimate and implementation progress\" is linked but unverified: covering task(s) 0191, 0202 have no PASS verdict with MET requirement"
+                        },
+                        {
+                            "layer": "L4",
+                            "code": "L4.scenario-unverified",
+                            "severity": "warning",
+                            "section": "Acceptance Criteria",
+                            "message": "Feature scenario \"Workflow actions prompt for a channel and reach the server\" is linked but unverified: covering task(s) 0191, 0203 have no PASS verdict with MET requirement"
+                        },
+                        {
+                            "layer": "L4",
+                            "code": "L4.scenario-unverified",
+                            "severity": "warning",
+                            "section": "Acceptance Criteria",
+                            "message": "Feature scenario \"R13 \u2014 Task folder selection owns every committed response\" is linked but unverified: covering task(s) 1298 have no PASS verdict with MET requirement"
+                        },
+                        {
+                            "layer": "L4",
+                            "code": "L4.scenario-unverified",
+                            "severity": "warning",
+                            "section": "Acceptance Criteria",
+                            "message": "Feature scenario \"R14 \u2014 Task refresh bursts retain eventual freshness\" is linked but unverified: covering task(s) 1298 have no PASS verdict with MET requirement"
+                        }
+                    ],
+                    "requiredSections": [],
+                    "missingSections": [],
+                    "pass": true,
+                    "notes": [],
+                    "repairs": []
+                }
+            ]
+        },
+        {
+            "feature": "C3",
+            "check": [
+                {
+                    "id": "C3",
+                    "status": "active",
+                    "findings": [
+                        {
+                            "layer": "L4",
+                            "code": "L4.scenario-unverified",
+                            "severity": "warning",
+                            "section": "Acceptance Criteria",
+                            "message": "Feature scenario \"R6 \u2014 Equivalent TOML threshold forms produce equivalent diagnostics\" is linked but unverified: covering task(s) 1314 have no PASS verdict with MET requirement"
+                        }
+                    ],
+                    "requiredSections": [],
+                    "missingSections": [],
+                    "pass": true,
+                    "notes": [],
+                    "repairs": []
+                }
+            ]
+        },
+        {
+            "feature": "H16",
+            "check": [
+                {
+                    "id": "H16",
+                    "status": "backlog",
+                    "findings": [
+                        {
+                            "layer": "L4",
+                            "code": "L4.uncovered-feature-scenario",
+                            "severity": "warning",
+                            "section": "Acceptance Criteria",
+                            "message": "Feature scenario \"R3 \u2014 The parallel default holds only while its bar is measured\" is not covered by any linked task (DD-09)"
+                        },
+                        {
+                            "layer": "L4",
+                            "code": "L4.scenario-unverified",
+                            "severity": "warning",
+                            "section": "Acceptance Criteria",
+                            "message": "Feature scenario \"R7 \u2014 Routine tests execute every isolated Markdown security proof\" is linked but unverified: covering task(s) 1295 have no PASS verdict with MET requirement"
+                        },
+                        {
+                            "layer": "L4",
+                            "code": "L4.scenario-unverified",
+                            "severity": "warning",
+                            "section": "Acceptance Criteria",
+                            "message": "Feature scenario \"R8 \u2014 Test scaffolding shrinks only behind equivalent behavioral evidence\" is linked but unverified: covering task(s) 1316 have no PASS verdict with MET requirement"
+                        }
+                    ],
+                    "requiredSections": [],
+                    "missingSections": [],
+                    "pass": true,
+                    "notes": [],
+                    "repairs": []
+                }
+            ]
+        },
+        {
+            "feature": "A92",
+            "check": [
+                {
+                    "id": "A92",
+                    "status": "active",
+                    "findings": [
+                        {
+                            "layer": "L4",
+                            "code": "L4.scenario-unverified",
+                            "severity": "warning",
+                            "section": "Acceptance Criteria",
+                            "message": "Feature scenario \"R12 \u2014 JavaScript project onboarding proposes declared action bindings safely\" is linked but unverified: covering task(s) 1303 have no PASS verdict with MET requirement"
+                        },
+                        {
+                            "layer": "L4",
+                            "code": "L4.scenario-unverified",
+                            "severity": "warning",
+                            "section": "Acceptance Criteria",
+                            "message": "Feature scenario \"R13 \u2014 Language and monorepo onboarding retains execution ownership\" is linked but unverified: covering task(s) 1304 have no PASS verdict with MET requirement"
+                        }
+                    ],
+                    "requiredSections": [],
+                    "missingSections": [],
+                    "pass": true,
+                    "notes": [],
+                    "repairs": []
+                }
+            ]
+        },
+        {
+            "feature": "D65",
+            "check": [
+                {
+                    "id": "D65",
+                    "status": "active",
+                    "findings": [
+                        {
+                            "layer": "L4",
+                            "code": "L4.scenario-unverified",
+                            "severity": "warning",
+                            "section": "Acceptance Criteria",
+                            "message": "Feature scenario \"R17 \u2014 Executor surfaces apply the same declared admission contract\" is linked but unverified: covering task(s) 1305 have no PASS verdict with MET requirement"
+                        },
+                        {
+                            "layer": "L4",
+                            "code": "L4.scenario-unverified",
+                            "severity": "warning",
+                            "section": "Acceptance Criteria",
+                            "message": "Feature scenario \"R18 \u2014 Executor results share truthful finalization and failure context\" is linked but unverified: covering task(s) 1306 have no PASS verdict with MET requirement"
+                        }
+                    ],
+                    "requiredSections": [],
+                    "missingSections": [],
+                    "pass": true,
+                    "notes": [],
+                    "repairs": []
+                }
+            ]
+        },
+        {
+            "feature": "E71",
+            "check": [
+                {
+                    "id": "E71",
+                    "status": "active",
+                    "findings": [
+                        {
+                            "layer": "L4",
+                            "code": "L4.scenario-unverified",
+                            "severity": "warning",
+                            "section": "Acceptance Criteria",
+                            "message": "Feature scenario \"R8 \u2014 Run evidence and valid recovery are reachable from the affected task\" is linked but unverified: covering task(s) 1307 have no PASS verdict with MET requirement"
+                        },
+                        {
+                            "layer": "L4",
+                            "code": "L4.scenario-unverified",
+                            "severity": "warning",
+                            "section": "Acceptance Criteria",
+                            "message": "Feature scenario \"R9 \u2014 Expired scratch is distinguished from durable recovery evidence\" is linked but unverified: covering task(s) 1307 have no PASS verdict with MET requirement"
+                        }
+                    ],
+                    "requiredSections": [],
+                    "missingSections": [],
+                    "pass": true,
+                    "notes": [],
+                    "repairs": []
+                }
+            ]
+        },
+        {
+            "feature": "E6",
+            "check": [
+                {
+                    "id": "E6",
+                    "status": "active",
+                    "findings": [
+                        {
+                            "layer": "L4",
+                            "code": "L4.scenario-unverified",
+                            "severity": "warning",
+                            "section": "Acceptance Criteria",
+                            "message": "Feature scenario \"R11 \u2014 Outcome feedback reconciles measured cost and verified work\" is linked but unverified: covering task(s) 1308 have no PASS verdict with MET requirement"
+                        }
+                    ],
+                    "requiredSections": [],
+                    "missingSections": [],
+                    "pass": true,
+                    "notes": [],
+                    "repairs": []
+                }
+            ]
+        },
+        {
+            "feature": "A6",
+            "check": [
+                {
+                    "id": "A6",
+                    "status": "active",
+                    "findings": [
+                        {
+                            "layer": "L4",
+                            "code": "L4.scenario-unverified",
+                            "severity": "warning",
+                            "section": "Acceptance Criteria",
+                            "message": "Feature scenario \"R11 \u2014 Destructive-command policy distinguishes literal data from execution\" is linked but unverified: covering task(s) 1313 have no PASS verdict with MET requirement"
+                        }
+                    ],
+                    "requiredSections": [],
+                    "missingSections": [],
+                    "pass": true,
+                    "notes": [],
+                    "repairs": []
+                }
+            ]
+        },
+        {
+            "feature": "A8",
+            "check": [
+                {
+                    "id": "A8",
+                    "status": "active",
+                    "findings": [
+                        {
+                            "layer": "L4",
+                            "code": "L4.scenario-unverified",
+                            "severity": "warning",
+                            "section": "Acceptance Criteria",
+                            "message": "Feature scenario \"R16 \u2014 Board extension operations no longer promise unsupported registration\" is linked but unverified: covering task(s) 1315 have no PASS verdict with MET requirement"
+                        }
+                    ],
+                    "requiredSections": [],
+                    "missingSections": [],
+                    "pass": true,
+                    "notes": [],
+                    "repairs": []
+                }
+            ]
+        },
+        {
+            "feature": "A331",
+            "check": [
+                {
+                    "id": "A331",
+                    "status": "backlog",
+                    "findings": [
+                        {
+                            "layer": "L4",
+                            "code": "L4.scenario-unverified",
+                            "severity": "warning",
+                            "section": "Acceptance Criteria",
+                            "message": "Feature scenario \"R1 \u2014 Migration ownership evidence decides whether embedding consolidation is safe\" is linked but unverified: covering task(s) 1311 have no PASS verdict with MET requirement"
+                        },
+                        {
+                            "layer": "L4",
+                            "code": "L4.scenario-unverified",
+                            "severity": "warning",
+                            "section": "Acceptance Criteria",
+                            "message": "Feature scenario \"R2 \u2014 Offline migration embedding shares an authoritative source without rewriting history\" is linked but unverified: covering task(s) 1312 have no PASS verdict with MET requirement"
+                        }
+                    ],
+                    "requiredSections": [],
+                    "missingSections": [],
+                    "pass": true,
+                    "notes": [],
+                    "repairs": []
+                }
+            ]
+        }
+    ],
+    "dependency_projection": {
+        "order": [
+            "1294",
+            "1295",
+            "1296",
+            "1297",
+            "1298",
+            "1299",
+            "1300",
+            "1301",
+            "1302",
+            "1303",
+            "1304",
+            "1305",
+            "1306",
+            "1307",
+            "1308",
+            "1309",
+            "1310",
+            "1311",
+            "1312",
+            "1313",
+            "1314",
+            "1315",
+            "1316"
+        ],
+        "waves": [
+            ["1294", "1295", "1296", "1298", "1299"],
+            ["1297", "1300", "1303", "1305", "1313", "1314"],
+            ["1301", "1304", "1306", "1315"],
+            ["1302", "1316"],
+            ["1307"],
+            ["1308"],
+            ["1309", "1311"],
+            ["1310", "1312"]
+        ],
+        "cycle": null,
+        "overlaps": [],
+        "mode": "sequential",
+        "reason": "concurrency is 1"
+    },
+    "first_unblocked": ["1294", "1295", "1296", "1298", "1299"]
+}

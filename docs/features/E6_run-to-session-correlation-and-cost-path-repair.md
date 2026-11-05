@@ -2,11 +2,11 @@
 schema_version: 1
 id: "E6"
 name: "Run-to-session correlation and cost-path repair"
-status: verifying
+status: active
 priority: P2
 tags: []
 created_at: "2026-08-14T02:43:12.670Z"
-updated_at: "2026-10-08T08:15:26.777Z"
+updated_at: "2026-11-05T20:03:50.463Z"
 ---
 
 # E6: Run-to-session correlation and cost-path repair
@@ -39,6 +39,7 @@ run-cost attribution is blind to every source including the default agent.
 This feature closes the correlation gap and repairs the cost path onto the data that actually exists.
 
 ## Scope
+
 - In:
     - **Observe-at-spawn correlation (primary).** Spur watermarks the agent's session root at
       `agent.invoke.start` and resolves the produced session at `agent.invoke.exit`, recording a
@@ -68,6 +69,11 @@ This feature closes the correlation gap and repairs the cost path onto the data 
       bound on coverage; the mapper fix is feature E1/E5 territory, not this feature's.
     - Changing the role model, the routing decision, or what feature J6 records.
     - Forensic primitives, derived variables, and report modes — feature E5.
+
+### Approved follow-up — 2026-11-05
+
+W6: expose cost and outcomes using current run/task/session links and verified completion evidence. Show failures, rework, gate duration, measured attributable cost and unknown attribution with drill-through. No estimates represented as measurements, productivity inference from token counts, or autonomous routing.
+
 ## Acceptance Criteria
 
 ```gherkin
@@ -144,6 +150,12 @@ Feature: Run-to-session and task-to-session correlation
     Then the first run creates every evidence-backed task-to-session correlation
     And the second run creates no duplicate correlation
     And no Git worktree or sibling database is required
+
+  @core
+  Scenario: R11 — Outcome feedback reconciles measured cost and verified work
+    Given known and unknown cost attribution, retries, rework and independently verified task completions
+    When the operator opens the existing outcome or history surface
+    Then verified outcomes and measured attributable costs reconcile to source totals with an explicit unknown bucket and evidence links
 ```
 
 ## Tasks
@@ -155,6 +167,7 @@ Feature: Run-to-session and task-to-session correlation
 | 0558 | Correlate existing history retroactively by time window, marked estimated | done |
 | 0559 | Repoint cost attribution at typed columns and retire the dead ETL path | done |
 | 0722 | Recover task attribution from imported agent sessions | done |
+| 1308 | Show verified outcomes and reconcilable measured cost through current run links | todo |
 <!-- END AUTO-GENERATED -->
 
 ## Notes
@@ -200,6 +213,12 @@ nothing today. Feature J7 task **0552** renders 0547's output and inherits the b
 cannot manufacture data that was never captured, so those two will correlate but report unmeasured
 tokens. Recorded as a finding here; the mapper investigation belongs to feature E1/E5.
 
+### Approved simplification follow-up — 2026-11-05
+
+Robin approved this plan and requested feature updates/new features and implementation tasks on 2026-11-05; continued the same corpus conversion in the next message. Approval covers planning this scope, not deployment, new public verbs, new dependencies, gate weakening, or production data changes.
+
+Plan: `docs/plans/2026-11-05-simplification-and-product-enhancement.md`. Review: `docs/reports/2026-11-05-codebase-review.md`. Historical scenarios, completed tasks and verification receipts remain intact; new scenarios describe follow-up work and do not retroactively certify implementation. Conditional cleanup remains unscheduled until the named decision/evidence gate is met.
+
 ## History
 
 - 2026-08-14T06:04:41.907Z backlog → active (system)
@@ -207,4 +226,5 @@ tokens. Recorded as a finding here; the mapper investigation belongs to feature 
 - 2026-08-14T17:26:25.929Z verifying → done (system)
 - 2026-08-30T18:43:57.363Z done → active (system)
 - 2026-10-08T08:15:26.777Z active → verifying (system)
+- 2026-11-05T19:58:50.475Z verifying → active (system)
 

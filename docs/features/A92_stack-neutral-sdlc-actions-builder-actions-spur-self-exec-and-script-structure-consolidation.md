@@ -2,11 +2,11 @@
 schema_version: 1
 id: "A92"
 name: "Stack-neutral SDLC actions: builder.actions, spur self exec, and script-structure consolidation"
-status: done
+status: active
 priority: P2
 tags: []
 created_at: "2026-10-17T03:57:44.144Z"
-updated_at: "2026-10-17T16:16:31.457Z"
+updated_at: "2026-11-05T20:03:48.972Z"
 ---
 
 # A92: Stack-neutral SDLC actions: builder.actions, spur self exec, and script-structure consolidation
@@ -35,6 +35,10 @@ Make Spur stack-neutral at the SDLC boundary: Spur owns a small, intent-named ac
 - Automatic runtime stack detection beyond `spur init` seeding.
 - Replacing bun as Spur's own runtime, or making Spur's own build stack-neutral.
 - New CLI nouns, or any public verb other than `spur self exec`.
+
+### Approved follow-up — 2026-11-05
+
+W4: extend existing init discovery and builder.actions proposals to declared npm/pnpm scripts and Cargo/Go/Python/Make fixtures, preserving configured actions and monorepo working directories. Discovery never runs commands or writes outside the selected project. No automatic framework guessing or new public noun.
 
 ## Acceptance Criteria
 
@@ -117,6 +121,18 @@ Feature: Stack-neutral SDLC actions and script-structure consolidation
     Given a project whose .spur/config.yaml has no builder.actions block
     When the task pipeline quality gate and spur self exec check run
     Then they execute the same bun commands as before this feature
+
+  @core
+  Scenario: R12 — JavaScript project onboarding proposes declared action bindings safely
+    Given npm or pnpm scripts, lockfile conflicts, missing tools and existing custom builder actions
+    When init discovers or previews action bindings
+    Then declared commands and provenance are proposed deterministically while conflicts and unbound actions are explicit and existing configuration is preserved
+
+  @core
+  Scenario: R13 — Language and monorepo onboarding retains execution ownership
+    Given Cargo, Go, Python, Make and mixed-monorepo fixtures with selected roots and missing scripts
+    When the operator inspects and accepts supported action bindings
+    Then working directories and tool availability are explicit, no unsupported command is invented and a representative non-Bun project reaches a successful check within five operator actions
 ```
 
 ## Tasks
@@ -130,13 +146,22 @@ Feature: Stack-neutral SDLC actions and script-structure consolidation
 | 1225 | Seed builder actions in spur self init by detected stack | done |
 | 1226 | Consolidate package.json scripts and script folders onto the action vocabulary | done |
 | 1227 | Point sp plugin gate guidance at spur self exec | done |
+| 1303 | Propose safe npm and pnpm bindings through existing init actions | todo |
+| 1304 | Complete language and monorepo action onboarding without guessing commands | todo |
 <!-- END AUTO-GENERATED -->
 
 ## Notes
+
+### Approved simplification follow-up — 2026-11-05
+
+Robin approved this plan and requested feature updates/new features and implementation tasks on 2026-11-05; continued the same corpus conversion in the next message. Approval covers planning this scope, not deployment, new public verbs, new dependencies, gate weakening, or production data changes.
+
+Plan: `docs/plans/2026-11-05-simplification-and-product-enhancement.md`. Review: `docs/reports/2026-11-05-codebase-review.md`. Historical scenarios, completed tasks and verification receipts remain intact; new scenarios describe follow-up work and do not retroactively certify implementation. Conditional cleanup remains unscheduled until the named decision/evidence gate is met.
 
 ## History
 
 - 2026-10-17T04:39:10.675Z backlog → active (system)
 - 2026-10-17T15:58:36.176Z active → verifying (system)
 - 2026-10-17T16:16:31.457Z verifying → done (system)
+- 2026-11-05T19:58:44.201Z done → active (system)
 

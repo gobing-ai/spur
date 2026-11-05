@@ -6,7 +6,7 @@ status: active
 priority: P2
 tags: []
 created_at: "2026-09-30T19:53:48.380Z"
-updated_at: "2026-10-09T17:56:08.510Z"
+updated_at: "2026-11-05T20:03:49.965Z"
 ---
 
 # E71: Disposable run scratch with durable evidence and inspection
@@ -30,6 +30,10 @@ Out of scope:
 - Automatic terminal cleanup steps in individual commands/workflows, new schedulers or retention frameworks.
 - New public CLI nouns, verbs or flags; changing retention durations or weakening verification requirements.
 - Deleting live project data during planning, rewriting unrelated historical tasks, or replacing existing evidence parsers/stores unnecessarily.
+
+### Approved follow-up — 2026-11-05
+
+W6: complete task-to-run-to-failed-step navigation and safe recovery guidance through existing RunStoreService, run-record APIs and TraceTab. Expose expired scratch versus retained evidence, exact existing recovery commands and receipt validity. No new run ledger or automatic recovery action.
 
 ## Acceptance Criteria
 
@@ -94,6 +98,18 @@ Feature: Disposable run scratch with durable evidence and inspection
     Then acceptance, analytics and retained inspection remain unchanged and absent scratch is recreated as needed
     And command, workflow, unit-test and installed plugin contracts agree on temporary-only run storage
     And no per-workflow terminal cleanup step or new public CLI surface is required
+
+  @core
+  Scenario: R8 — Run evidence and valid recovery are reachable from the affected task
+    Given one failed and one paused run linked to a task
+    When the operator navigates from the task or run to the cause
+    Then redacted step evidence and a valid existing recovery action are reachable within two navigation steps without executing the action automatically
+
+  @core
+  Scenario: R9 — Expired scratch is distinguished from durable recovery evidence
+    Given a completed run whose disposable scratch expired and stale or missing proof fixtures
+    When the operator inspects run evidence or recovery eligibility
+    Then retained provenance remains usable while expired scratch and invalid proof are explicit and cannot be reused as fresh evidence
 ```
 
 ## Tasks
@@ -117,9 +133,16 @@ Feature: Disposable run scratch with durable evidence and inspection
 | 1148 | Worktree teardown bookkeeping: cited-scope persist-out-check, skipped-item report, markerless landing record | done |
 | 1149 | Worktree batch transitions cannot land their task-lifecycle row when the invoking tree owns the identity | done |
 | 1165 | Pin the landing-record and persist-out reconcile failure diagnostics | done |
+| 1307 | Link task failures and paused runs to retained evidence and safe recovery | todo |
 <!-- END AUTO-GENERATED -->
 
 ## Notes
+
+### Approved simplification follow-up — 2026-11-05
+
+Robin approved this plan and requested feature updates/new features and implementation tasks on 2026-11-05; continued the same corpus conversion in the next message. Approval covers planning this scope, not deployment, new public verbs, new dependencies, gate weakening, or production data changes.
+
+Plan: `docs/plans/2026-11-05-simplification-and-product-enhancement.md`. Review: `docs/reports/2026-11-05-codebase-review.md`. Historical scenarios, completed tasks and verification receipts remain intact; new scenarios describe follow-up work and do not retroactively certify implementation. Conditional cleanup remains unscheduled until the named decision/evidence gate is met.
 
 ## History
 

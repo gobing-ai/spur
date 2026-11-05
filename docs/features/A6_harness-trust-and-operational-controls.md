@@ -2,11 +2,11 @@
 schema_version: 1
 id: "A6"
 name: "Harness trust and operational controls"
-status: done
+status: active
 priority: P0
 tags: []
 created_at: "2026-08-28T23:07:08.583Z"
-updated_at: "2026-10-21T18:35:01.144Z"
+updated_at: "2026-11-05T20:03:50.971Z"
 
 ---
 
@@ -40,6 +40,10 @@ as verified outcomes rather than activity.
   deletion of authoritative/operator-authored memory.
 - Copying the source PDF's architecture. Each delivery extends Spur's current seams and preserves its local-first,
   native-agent, Markdown/SQLite authority model.
+
+### Approved follow-up — 2026-11-05
+
+W8 / R7: the existing destructive-command guard must distinguish executable commands from quoted literal search patterns while still inspecting shell substitutions and nested interpreters. Keep permission decisions and portable standalone boundaries; no blanket search-command allowlist or guard disablement.
 
 ## Acceptance Criteria
 
@@ -105,6 +109,12 @@ Feature: Harness trust and operational controls
     Given a task completes through a proof-valid PASS without later correction
     When history analysis covers the run
     Then verified-result, correction, duration, and attributable-cost metrics report it with explicit coverage
+
+  @core
+  Scenario: R11 — Destructive-command policy distinguishes literal data from execution
+    Given quoted ripgrep patterns containing destructive vocabulary and destructive commands inside executable positions or substitutions
+    When the shared classifier and host hook evaluate the command
+    Then literal data causes no false permission prompt while all destructive positive controls still request approval without weakening nested-execution detection
 ```
 
 ## Tasks
@@ -123,6 +133,7 @@ Feature: Harness trust and operational controls
 | 0711 | Govern checkpoint and indexed-context freshness and retention | done |
 | 0712 | Derive verified-result and correction-cost operational metrics | done |
 | 0720 | Fix E31 integration friction: orphaned serve daemons defeat worktree removal; corpus gate runs full test suite; R2d replay discards verdicts | done |
+| 1313 | Classify executable shell positions without blocking literal read-only searches | todo |
 <!-- END AUTO-GENERATED -->
 
 ## Notes
@@ -142,8 +153,16 @@ Implementation should preserve the comparison report's adaptation rule: reuse Sp
 executor registry, event ledger, artifact ownership, cleanup surface, and history plane. The PDF is an external design
 input, not source code or an authority to reproduce.
 
+### Approved simplification follow-up — 2026-11-05
+
+Robin approved this plan and requested feature updates/new features and implementation tasks on 2026-11-05; continued the same corpus conversion in the next message. Approval covers planning this scope, not deployment, new public verbs, new dependencies, gate weakening, or production data changes.
+
+Plan: `docs/plans/2026-11-05-simplification-and-product-enhancement.md`. Review: `docs/reports/2026-11-05-codebase-review.md`. Historical scenarios, completed tasks and verification receipts remain intact; new scenarios describe follow-up work and do not retroactively certify implementation. Conditional cleanup remains unscheduled until the named decision/evidence gate is met.
+
 ## History
+
 - 2026-08-30T06:27:38.149Z backlog → active (system)
 - 2026-08-30T06:27:38.475Z active → verifying (system)
 - 2026-08-30T06:46:01.192Z verifying → done (system)
+- 2026-11-05T19:58:52.674Z done → active (system)
 

@@ -1,0 +1,782 @@
+{
+    "method": "git tracked blobs; physical lines; implementation in app/package src, plugin lib/scripts/hooks, scripts commands; excludes fixtures, test names and tests dirs; tests counted separately; generated src not specially excluded; no vendored/generated bundle/corpus/docs counted",
+    "snapshots": [
+        {
+            "ref": "6d7bf8ce197aaede8abaeccdcbbfca0cbb51c1a5",
+            "date": "2026-09-05",
+            "totals": {
+                "implementation": {
+                    "files": 423,
+                    "lines": 115253,
+                    "bytes": 4988858
+                },
+                "test": {
+                    "files": 422,
+                    "lines": 143204,
+                    "bytes": 6133774
+                }
+            },
+            "groups": {
+                "apps/cli": {
+                    "implementation": {
+                        "files": 38,
+                        "lines": 10020,
+                        "bytes": 469485
+                    },
+                    "test": {
+                        "files": 60,
+                        "lines": 18219,
+                        "bytes": 787406
+                    }
+                },
+                "apps/server": {
+                    "implementation": {
+                        "files": 35,
+                        "lines": 3874,
+                        "bytes": 161764
+                    },
+                    "test": {
+                        "files": 41,
+                        "lines": 8166,
+                        "bytes": 341179
+                    }
+                },
+                "apps/web": {
+                    "implementation": {
+                        "files": 102,
+                        "lines": 22438,
+                        "bytes": 1018253
+                    },
+                    "test": {
+                        "files": 51,
+                        "lines": 16602,
+                        "bytes": 717300
+                    }
+                },
+                "packages/app": {
+                    "implementation": {
+                        "files": 99,
+                        "lines": 38554,
+                        "bytes": 1672213
+                    },
+                    "test": {
+                        "files": 120,
+                        "lines": 52459,
+                        "bytes": 2265090
+                    }
+                },
+                "packages/config": {
+                    "implementation": {
+                        "files": 6,
+                        "lines": 2064,
+                        "bytes": 89816
+                    },
+                    "test": {
+                        "files": 10,
+                        "lines": 2260,
+                        "bytes": 95534
+                    }
+                },
+                "packages/contracts": {
+                    "implementation": {
+                        "files": 6,
+                        "lines": 1394,
+                        "bytes": 49907
+                    },
+                    "test": {
+                        "files": 2,
+                        "lines": 1113,
+                        "bytes": 43746
+                    }
+                },
+                "packages/domain": {
+                    "implementation": {
+                        "files": 82,
+                        "lines": 20140,
+                        "bytes": 855071
+                    },
+                    "test": {
+                        "files": 85,
+                        "lines": 25390,
+                        "bytes": 1017489
+                    }
+                },
+                "plugins/sp": {
+                    "test": {
+                        "files": 40,
+                        "lines": 17568,
+                        "bytes": 800069
+                    },
+                    "implementation": {
+                        "files": 35,
+                        "lines": 13977,
+                        "bytes": 551097
+                    }
+                },
+                "scripts/commands": {
+                    "implementation": {
+                        "files": 19,
+                        "lines": 2677,
+                        "bytes": 116280
+                    },
+                    "test": {
+                        "files": 13,
+                        "lines": 1427,
+                        "bytes": 65961
+                    }
+                },
+                "scripts/spur-dev.ts": {
+                    "implementation": {
+                        "files": 1,
+                        "lines": 115,
+                        "bytes": 4972
+                    }
+                }
+            },
+            "largest_implementation_files": [
+                {
+                    "path": "packages/app/src/services/agent-service.ts",
+                    "lines": 2778
+                },
+                {
+                    "path": "packages/domain/src/analytics/forensic-query.ts",
+                    "lines": 2416
+                },
+                {
+                    "path": "packages/app/src/services/workflow-service.ts",
+                    "lines": 2175
+                },
+                {
+                    "path": "packages/domain/src/analytics/history-board-rollup.ts",
+                    "lines": 2079
+                },
+                {
+                    "path": "apps/web/src/modules/observability/SystemEventsTab.tsx",
+                    "lines": 1831
+                },
+                {
+                    "path": "packages/app/src/services/history-board-service.ts",
+                    "lines": 1813
+                },
+                {
+                    "path": "packages/app/src/services/event-names.ts",
+                    "lines": 1785
+                },
+                {
+                    "path": "packages/app/src/services/task-service.ts",
+                    "lines": 1743
+                },
+                {
+                    "path": "packages/app/src/services/task-check.ts",
+                    "lines": 1667
+                },
+                {
+                    "path": "apps/cli/src/commands/workflow.ts",
+                    "lines": 1636
+                },
+                {
+                    "path": "apps/cli/src/commands/task.ts",
+                    "lines": 1581
+                },
+                {
+                    "path": "packages/domain/src/migrations.ts",
+                    "lines": 1547
+                },
+                {
+                    "path": "plugins/sp/scripts/stage-registry-adapter.ts",
+                    "lines": 1533
+                },
+                {
+                    "path": "packages/app/src/services/history-service.ts",
+                    "lines": 1505
+                },
+                {
+                    "path": "apps/web/src/modules/history/ToolCallDetail.tsx",
+                    "lines": 1430
+                },
+                {
+                    "path": "packages/app/src/services/history-board-mock-service.ts",
+                    "lines": 1296
+                },
+                {
+                    "path": "packages/app/src/workflow/actions/agent-run.ts",
+                    "lines": 1287
+                },
+                {
+                    "path": "apps/web/src/modules/history/SummaryTab.tsx",
+                    "lines": 1167
+                },
+                {
+                    "path": "apps/web/src/modules/history/TimelineTab.tsx",
+                    "lines": 1122
+                },
+                {
+                    "path": "packages/app/src/services/rule-service.ts",
+                    "lines": 1107
+                },
+                {
+                    "path": "packages/app/src/services/feature-check.ts",
+                    "lines": 1106
+                },
+                {
+                    "path": "packages/app/src/services/feature-service.ts",
+                    "lines": 1082
+                },
+                {
+                    "path": "packages/app/src/services/team-service.ts",
+                    "lines": 1030
+                },
+                {
+                    "path": "plugins/sp/scripts/history-anatomy-cache.ts",
+                    "lines": 1028
+                },
+                {
+                    "path": "packages/domain/src/stage-registry/schema.ts",
+                    "lines": 1026
+                }
+            ]
+        },
+        {
+            "ref": "cbc50f779a8d4924df976c44c8de8d93eae6e344",
+            "date": "2026-10-05",
+            "totals": {
+                "implementation": {
+                    "files": 570,
+                    "lines": 171565,
+                    "bytes": 10079450
+                },
+                "test": {
+                    "files": 614,
+                    "lines": 216823,
+                    "bytes": 9530020
+                }
+            },
+            "groups": {
+                "apps/cli": {
+                    "implementation": {
+                        "files": 41,
+                        "lines": 12773,
+                        "bytes": 611911
+                    },
+                    "test": {
+                        "files": 83,
+                        "lines": 27195,
+                        "bytes": 1205369
+                    }
+                },
+                "apps/desktop": {
+                    "implementation": {
+                        "files": 7,
+                        "lines": 1163,
+                        "bytes": 46275
+                    },
+                    "test": {
+                        "files": 7,
+                        "lines": 1540,
+                        "bytes": 58884
+                    }
+                },
+                "apps/server": {
+                    "implementation": {
+                        "files": 39,
+                        "lines": 6401,
+                        "bytes": 283424
+                    },
+                    "test": {
+                        "files": 51,
+                        "lines": 12964,
+                        "bytes": 563273
+                    }
+                },
+                "apps/web": {
+                    "implementation": {
+                        "files": 131,
+                        "lines": 30455,
+                        "bytes": 1409901
+                    },
+                    "test": {
+                        "files": 94,
+                        "lines": 24836,
+                        "bytes": 1074828
+                    }
+                },
+                "packages/app": {
+                    "implementation": {
+                        "files": 150,
+                        "lines": 63047,
+                        "bytes": 2830232
+                    },
+                    "test": {
+                        "files": 182,
+                        "lines": 87741,
+                        "bytes": 3892269
+                    }
+                },
+                "packages/config": {
+                    "implementation": {
+                        "files": 11,
+                        "lines": 3145,
+                        "bytes": 139709
+                    },
+                    "test": {
+                        "files": 17,
+                        "lines": 3514,
+                        "bytes": 154233
+                    }
+                },
+                "packages/contracts": {
+                    "implementation": {
+                        "files": 11,
+                        "lines": 2122,
+                        "bytes": 76160
+                    },
+                    "test": {
+                        "files": 4,
+                        "lines": 1465,
+                        "bytes": 57508
+                    }
+                },
+                "packages/domain": {
+                    "implementation": {
+                        "files": 92,
+                        "lines": 23631,
+                        "bytes": 1008802
+                    },
+                    "test": {
+                        "files": 96,
+                        "lines": 28570,
+                        "bytes": 1166090
+                    }
+                },
+                "plugins/sp": {
+                    "test": {
+                        "files": 54,
+                        "lines": 21296,
+                        "bytes": 1002997
+                    },
+                    "implementation": {
+                        "files": 56,
+                        "lines": 18735,
+                        "bytes": 3220313
+                    }
+                },
+                "repo-wide-tests/adr-supersession.test.ts": {
+                    "test": {
+                        "files": 1,
+                        "lines": 202,
+                        "bytes": 9943
+                    },
+                    "implementation": {
+                        "files": 0,
+                        "lines": 0,
+                        "bytes": 0
+                    }
+                },
+                "scripts/commands": {
+                    "test": {
+                        "files": 25,
+                        "lines": 7500,
+                        "bytes": 344626
+                    },
+                    "implementation": {
+                        "files": 31,
+                        "lines": 9948,
+                        "bytes": 445877
+                    }
+                },
+                "scripts/spur-dev.ts": {
+                    "implementation": {
+                        "files": 1,
+                        "lines": 145,
+                        "bytes": 6846
+                    }
+                }
+            },
+            "largest_implementation_files": [
+                {
+                    "path": "packages/app/src/services/agent-service.ts",
+                    "lines": 3368
+                },
+                {
+                    "path": "packages/app/src/services/workflow-service.ts",
+                    "lines": 2768
+                },
+                {
+                    "path": "packages/domain/src/analytics/forensic-query.ts",
+                    "lines": 2620
+                },
+                {
+                    "path": "packages/domain/src/analytics/history-board-rollup.ts",
+                    "lines": 2375
+                },
+                {
+                    "path": "apps/cli/src/commands/workflow.ts",
+                    "lines": 2367
+                },
+                {
+                    "path": "packages/app/src/services/task-service.ts",
+                    "lines": 2264
+                },
+                {
+                    "path": "packages/app/src/workflow/actions/agent-run.ts",
+                    "lines": 1996
+                },
+                {
+                    "path": "packages/domain/src/migrations.ts",
+                    "lines": 1988
+                },
+                {
+                    "path": "apps/cli/src/commands/task.ts",
+                    "lines": 1977
+                },
+                {
+                    "path": "packages/app/src/services/task-check.ts",
+                    "lines": 1930
+                },
+                {
+                    "path": "apps/cli/src/commands/agent.ts",
+                    "lines": 1885
+                },
+                {
+                    "path": "packages/app/src/services/history-board-service.ts",
+                    "lines": 1874
+                },
+                {
+                    "path": "apps/web/src/modules/observability/SystemEventsTab.tsx",
+                    "lines": 1829
+                },
+                {
+                    "path": "packages/app/src/services/event-names.ts",
+                    "lines": 1761
+                },
+                {
+                    "path": "packages/app/src/services/history-service.ts",
+                    "lines": 1723
+                },
+                {
+                    "path": "packages/app/src/services/inline-run-setup.ts",
+                    "lines": 1651
+                },
+                {
+                    "path": "plugins/sp/lib/inline-run.generated.mjs",
+                    "lines": 1585
+                },
+                {
+                    "path": "packages/app/src/services/feature-check.ts",
+                    "lines": 1553
+                },
+                {
+                    "path": "apps/web/src/modules/history/ToolCallDetail.tsx",
+                    "lines": 1430
+                },
+                {
+                    "path": "plugins/sp/lib/idea-handoff.generated.mjs",
+                    "lines": 1408
+                },
+                {
+                    "path": "scripts/commands/fleet-e2e.ts",
+                    "lines": 1404
+                },
+                {
+                    "path": "packages/app/src/testing/history-board-mock.ts",
+                    "lines": 1310
+                },
+                {
+                    "path": "apps/web/src/modules/settings/AgentsView.tsx",
+                    "lines": 1305
+                },
+                {
+                    "path": "apps/server/src/serve.ts",
+                    "lines": 1300
+                },
+                {
+                    "path": "apps/web/src/modules/history/SummaryTab.tsx",
+                    "lines": 1254
+                }
+            ]
+        },
+        {
+            "ref": "3a1f675f1c1834b6236e980dfae71b01712a321c",
+            "date": "2026-11-04",
+            "totals": {
+                "implementation": {
+                    "files": 725,
+                    "lines": 188960,
+                    "bytes": 8553698
+                },
+                "test": {
+                    "files": 831,
+                    "lines": 249475,
+                    "bytes": 11113732
+                }
+            },
+            "groups": {
+                "apps/cli": {
+                    "implementation": {
+                        "files": 136,
+                        "lines": 17481,
+                        "bytes": 853024
+                    },
+                    "test": {
+                        "files": 201,
+                        "lines": 41722,
+                        "bytes": 1869136
+                    }
+                },
+                "apps/desktop": {
+                    "implementation": {
+                        "files": 7,
+                        "lines": 1163,
+                        "bytes": 46275
+                    },
+                    "test": {
+                        "files": 7,
+                        "lines": 1540,
+                        "bytes": 58884
+                    }
+                },
+                "apps/server": {
+                    "implementation": {
+                        "files": 42,
+                        "lines": 6981,
+                        "bytes": 310138
+                    },
+                    "test": {
+                        "files": 55,
+                        "lines": 14427,
+                        "bytes": 629823
+                    }
+                },
+                "apps/web": {
+                    "implementation": {
+                        "files": 129,
+                        "lines": 32162,
+                        "bytes": 1505243
+                    },
+                    "test": {
+                        "files": 64,
+                        "lines": 10013,
+                        "bytes": 438127
+                    }
+                },
+                "packages/app": {
+                    "implementation": {
+                        "files": 247,
+                        "lines": 85751,
+                        "bytes": 3874213
+                    },
+                    "test": {
+                        "files": 308,
+                        "lines": 124817,
+                        "bytes": 5592394
+                    }
+                },
+                "packages/config": {
+                    "implementation": {
+                        "files": 12,
+                        "lines": 3422,
+                        "bytes": 152777
+                    },
+                    "test": {
+                        "files": 19,
+                        "lines": 3691,
+                        "bytes": 162708
+                    }
+                },
+                "packages/contracts": {
+                    "implementation": {
+                        "files": 14,
+                        "lines": 2710,
+                        "bytes": 97828
+                    },
+                    "test": {
+                        "files": 6,
+                        "lines": 1651,
+                        "bytes": 66329
+                    }
+                },
+                "packages/domain": {
+                    "implementation": {
+                        "files": 95,
+                        "lines": 25730,
+                        "bytes": 1097202
+                    },
+                    "test": {
+                        "files": 100,
+                        "lines": 30330,
+                        "bytes": 1248567
+                    }
+                },
+                "plugins/sp": {
+                    "implementation": {
+                        "files": 15,
+                        "lines": 1869,
+                        "bytes": 82265
+                    },
+                    "test": {
+                        "files": 41,
+                        "lines": 13065,
+                        "bytes": 666495
+                    }
+                },
+                "repo-wide-tests/adr-supersession.test.ts": {
+                    "test": {
+                        "files": 1,
+                        "lines": 202,
+                        "bytes": 9943
+                    },
+                    "implementation": {
+                        "files": 0,
+                        "lines": 0,
+                        "bytes": 0
+                    }
+                },
+                "repo-wide-tests/changelog-confidence.test.ts": {
+                    "test": {
+                        "files": 1,
+                        "lines": 156,
+                        "bytes": 6785
+                    },
+                    "implementation": {
+                        "files": 0,
+                        "lines": 0,
+                        "bytes": 0
+                    }
+                },
+                "repo-wide-tests/workflow-consolidation-absence.test.ts": {
+                    "test": {
+                        "files": 1,
+                        "lines": 160,
+                        "bytes": 8288
+                    },
+                    "implementation": {
+                        "files": 0,
+                        "lines": 0,
+                        "bytes": 0
+                    }
+                },
+                "scripts/commands": {
+                    "test": {
+                        "files": 27,
+                        "lines": 7701,
+                        "bytes": 356253
+                    },
+                    "implementation": {
+                        "files": 27,
+                        "lines": 11516,
+                        "bytes": 525956
+                    }
+                },
+                "scripts/spur-dev.ts": {
+                    "implementation": {
+                        "files": 1,
+                        "lines": 175,
+                        "bytes": 8777
+                    }
+                }
+            },
+            "largest_implementation_files": [
+                {
+                    "path": "scripts/commands/fleet-e2e.ts",
+                    "lines": 4044
+                },
+                {
+                    "path": "packages/domain/src/analytics/forensic-query.ts",
+                    "lines": 2534
+                },
+                {
+                    "path": "packages/domain/src/analytics/history-board-rollup.ts",
+                    "lines": 2446
+                },
+                {
+                    "path": "packages/app/src/workflow/actions/agent-run.ts",
+                    "lines": 2293
+                },
+                {
+                    "path": "packages/domain/src/migrations.ts",
+                    "lines": 2087
+                },
+                {
+                    "path": "packages/app/src/services/event-names.ts",
+                    "lines": 2076
+                },
+                {
+                    "path": "packages/app/src/services/task-check.ts",
+                    "lines": 2000
+                },
+                {
+                    "path": "packages/app/src/services/history-service.ts",
+                    "lines": 1961
+                },
+                {
+                    "path": "packages/app/src/services/history-board-service.ts",
+                    "lines": 1874
+                },
+                {
+                    "path": "apps/web/src/modules/observability/SystemEventsTab.tsx",
+                    "lines": 1829
+                },
+                {
+                    "path": "packages/app/src/services/feature-check.ts",
+                    "lines": 1665
+                },
+                {
+                    "path": "packages/app/src/services/quality-gate.ts",
+                    "lines": 1436
+                },
+                {
+                    "path": "apps/web/src/modules/history/ToolCallDetail.tsx",
+                    "lines": 1430
+                },
+                {
+                    "path": "apps/web/src/modules/projects/DatabaseView.tsx",
+                    "lines": 1407
+                },
+                {
+                    "path": "apps/server/src/serve.ts",
+                    "lines": 1387
+                },
+                {
+                    "path": "packages/config/src/index.ts",
+                    "lines": 1352
+                },
+                {
+                    "path": "packages/app/src/services/pr-review/index.ts",
+                    "lines": 1349
+                },
+                {
+                    "path": "packages/app/src/services/feature-service.ts",
+                    "lines": 1344
+                },
+                {
+                    "path": "apps/web/src/modules/settings/AgentsView.tsx",
+                    "lines": 1325
+                },
+                {
+                    "path": "packages/app/src/testing/history-board-mock.ts",
+                    "lines": 1310
+                },
+                {
+                    "path": "packages/app/src/index.ts",
+                    "lines": 1267
+                },
+                {
+                    "path": "apps/web/src/modules/history/SummaryTab.tsx",
+                    "lines": 1254
+                },
+                {
+                    "path": "scripts/commands/surface-drift-inventory.ts",
+                    "lines": 1189
+                },
+                {
+                    "path": "apps/web/src/modules/history/TimelineTab.tsx",
+                    "lines": 1122
+                },
+                {
+                    "path": "packages/app/src/services/rule-service.ts",
+                    "lines": 1114
+                }
+            ]
+        }
+    ]
+}

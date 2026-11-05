@@ -1,0 +1,2854 @@
+{
+    "runId": "2026-11-05-implementation-ready-audit",
+    "depth": "ready",
+    "scope": "Planning/specification readiness only; no implementation or completion verification is claimed.",
+    "auditedHead": "3a1f675f1c1834b6236e980dfae71b01712a321c",
+    "observedProbes": [
+        {
+            "probe": "incomplete-corpus",
+            "error": "EACCES",
+            "visibleTasks": ["0001"],
+            "featureInputs": [
+                {
+                    "wbs": "0001",
+                    "name": "Visible",
+                    "status": "done"
+                }
+            ]
+        },
+        {
+            "probe": "coverage-parser",
+            "validTomlTableIgnored": true
+        },
+        {
+            "probe": "read-only-guard",
+            "classifiedAs": "a recursive force remove (rm -rf)"
+        },
+        {
+            "probe": "search-output-budget",
+            "result": {
+                "ok": true,
+                "hits": 0
+            }
+        },
+        {
+            "probe": "search-degraded-group",
+            "fuzzy": [],
+            "skipped": [
+                {
+                    "route": "fuzzy",
+                    "reason": "zg-failed"
+                }
+            ]
+        },
+        {
+            "probe": "task-store-stale-response",
+            "afterOldRequestCompletes": "old folder"
+        }
+    ],
+    "summary": {
+        "refined": 23,
+        "specificationReady": 23,
+        "todo": 21,
+        "blocked": 2,
+        "blockedForEvidence": ["1310", "1312"],
+        "failed": 0,
+        "cancelled": 0
+    },
+    "tasks": [
+        {
+            "wbs": "1294",
+            "status": "ready",
+            "planningDigest": "c49b21197ab1546563002921ac9bf5ea655eea7e43c0b023fda269d1b5e361bf",
+            "checks": [
+                {
+                    "id": "requirements",
+                    "pass": true,
+                    "evidence": "docs/tasks5/1294_make-feature-sync-and-dependency-controls-match-effective-ru.md:45 freezes observable R-items; docs/tasks5/1294_make-feature-sync-and-dependency-controls-match-effective-ru.md:78 states scope/preservation boundaries."
+                },
+                {
+                    "id": "design",
+                    "pass": true,
+                    "evidence": "docs/tasks5/1294_make-feature-sync-and-dependency-controls-match-effective-ru.md:78 freezes names, source owners, algorithm/precedence and handoff. Current seams: apps/server/src/serve.ts:623; apps/web/src/modules/features/FeatureDetail.tsx:95; apps/web/src/modules/features/FeatureDetail.tsx:900."
+                },
+                {
+                    "id": "plan",
+                    "pass": true,
+                    "evidence": "docs/tasks5/1294_make-feature-sync-and-dependency-controls-match-effective-ru.md:96 orders failure controls before production changes and ends with focused checks, owner sync and actual harness evidence. (cd apps/web && bun test tests/modules/features/feature-sync.test.ts tests/lib/feature-client.test.ts tests/modules/features/feature-actions.test.ts); (cd apps/server && bun test tests/modules/feature/handlers.test.ts tests/modules/feature/transition-gate.test.ts). Save feature-sync JUnit and draft DOM assertions."
+                },
+                {
+                    "id": "ac",
+                    "pass": true,
+                    "evidence": "docs/tasks5/1294_make-feature-sync-and-dependency-controls-match-effective-ru.md:50 preserves every AC title and req:R mapping; source-local task check/precheck passed and feature scenario coverage is one owner per added scenario."
+                },
+                {
+                    "id": "decisions",
+                    "pass": true,
+                    "evidence": "docs/tasks5/1294_make-feature-sync-and-dependency-controls-match-effective-ru.md:66 records closed choices; no unresolved API/library selection. Closed: remove the unsupported control. Do not add dependency skipping to the runner."
+                },
+                {
+                    "id": "dependencies",
+                    "pass": true,
+                    "evidence": "docs/tasks5/1294_make-feature-sync-and-dependency-controls-match-effective-ru.md:78 names no direct prerequisite and the consumed/output contract. CLI metadata agrees and whole-batch dependency projection has no cycle. Scheduling status=todo; prerequisites are not claimed done."
+                },
+                {
+                    "id": "premises",
+                    "pass": true,
+                    "evidence": "docs/tasks5/1294_make-feature-sync-and-dependency-controls-match-effective-ru.md:23 records current-source corrections: The pull default and disabled push already exist in the starting diff; retain them and add the missing draft-preservation assertion. skipDeps is serialized but runFeatureActionJob never consumes it. The chosen fix is removal of the inert feature-action checkbox, not a new bypass or additional UI state. Inspected seams: apps/server/src/serve.ts:623; apps/web/src/modules/features/FeatureDetail.tsx:95; apps/web/src/modules/features/FeatureDetail.tsx:900. Source/test paths checked; new files are explicitly planned. Starting diff preserved; one worktree and five-folder wip inventory recorded."
+                }
+            ],
+            "outcome": "refined",
+            "correctionsCount": 1,
+            "droppedIssues": [],
+            "failedChecklistIds": [],
+            "statusBefore": "todo",
+            "statusAfter": "todo",
+            "filePath": "docs/tasks5/1294_make-feature-sync-and-dependency-controls-match-effective-ru.md",
+            "dependenciesBefore": [],
+            "dependencies": [],
+            "feature": "F8",
+            "sourceAnchors": [
+                "apps/server/src/serve.ts:623",
+                "apps/web/src/modules/features/FeatureDetail.tsx:95",
+                "apps/web/src/modules/features/FeatureDetail.tsx:900"
+            ],
+            "correction": "The pull default and disabled push already exist in the starting diff; retain them and add the missing draft-preservation assertion. skipDeps is serialized but runFeatureActionJob never consumes it. The chosen fix is removal of the inert feature-action checkbox, not a new bypass or additional UI state.",
+            "structuralCheck": [
+                {
+                    "wbs": "1294",
+                    "status": "todo",
+                    "findings": [],
+                    "requiredSections": ["Background", "Acceptance Criteria", "Design", "Plan"],
+                    "missingSections": [],
+                    "pass": true,
+                    "notes": [],
+                    "repairs": []
+                }
+            ],
+            "implementationPrecheck": [
+                {
+                    "wbs": "1294",
+                    "status": "todo",
+                    "findings": [],
+                    "requiredSections": ["Background", "Acceptance Criteria", "Design", "Plan"],
+                    "missingSections": [],
+                    "pass": true,
+                    "notes": [],
+                    "repairs": []
+                }
+            ]
+        },
+        {
+            "wbs": "1295",
+            "status": "ready",
+            "planningDigest": "0a7597f0cece2e94fbe5eb6d2eef48b699c0bc6aff9d0138efa2e341010f958c",
+            "checks": [
+                {
+                    "id": "requirements",
+                    "pass": true,
+                    "evidence": "docs/tasks5/1295_restore-ordinary-suite-execution-of-real-renderer-markdown-s.md:43 freezes observable R-items; docs/tasks5/1295_restore-ordinary-suite-execution-of-real-renderer-markdown-s.md:70 states scope/preservation boundaries."
+                },
+                {
+                    "id": "design",
+                    "pass": true,
+                    "evidence": "docs/tasks5/1295_restore-ordinary-suite-execution-of-real-renderer-markdown-s.md:70 freezes names, source owners, algorithm/precedence and handoff. Current seams: apps/web/tests/modules/task-kanban/markdown-safety-pipeline.tsx:11; apps/web/tests/modules/projects/member-terminal-identity.test.ts:19."
+                },
+                {
+                    "id": "plan",
+                    "pass": true,
+                    "evidence": "docs/tasks5/1295_restore-ordinary-suite-execution-of-real-renderer-markdown-s.md:88 orders failure controls before production changes and ends with focused checks, owner sync and actual harness evidence. (cd apps/web && bun test tests/modules/task-kanban/markdown-safety.test.ts tests/lib/markdown-safety.test.ts); (cd apps/web && bun test --isolate ./tests/modules/task-kanban/markdown-safety-pipeline.tsx). Save the child JUnit and failure-control result."
+                },
+                {
+                    "id": "ac",
+                    "pass": true,
+                    "evidence": "docs/tasks5/1295_restore-ordinary-suite-execution-of-real-renderer-markdown-s.md:47 preserves every AC title and req:R mapping; source-local task check/precheck passed and feature scenario coverage is one owner per added scenario."
+                },
+                {
+                    "id": "decisions",
+                    "pass": true,
+                    "evidence": "docs/tasks5/1295_restore-ordinary-suite-execution-of-real-renderer-markdown-s.md:58 records closed choices; no unresolved API/library selection. "
+                },
+                {
+                    "id": "dependencies",
+                    "pass": true,
+                    "evidence": "docs/tasks5/1295_restore-ordinary-suite-execution-of-real-renderer-markdown-s.md:70 names no direct prerequisite and the consumed/output contract. CLI metadata agrees and whole-batch dependency projection has no cycle. Scheduling status=todo; prerequisites are not claimed done."
+                },
+                {
+                    "id": "premises",
+                    "pass": true,
+                    "evidence": "docs/tasks5/1295_restore-ordinary-suite-execution-of-real-renderer-markdown-s.md:23 records current-source corrections: The 12-case real-renderer probe is not discoverable; its stated wrapper does not exist. The existing member-terminal wrapper is a concrete isolation/child-JUnit precedent. Keep this proof in the normal suite. Inspected seams: apps/web/tests/modules/task-kanban/markdown-safety-pipeline.tsx:11; apps/web/tests/modules/projects/member-terminal-identity.test.ts:19. Source/test paths checked; new files are explicitly planned. Starting diff preserved; one worktree and five-folder wip inventory recorded."
+                }
+            ],
+            "outcome": "refined",
+            "correctionsCount": 1,
+            "droppedIssues": [],
+            "failedChecklistIds": [],
+            "statusBefore": "todo",
+            "statusAfter": "todo",
+            "filePath": "docs/tasks5/1295_restore-ordinary-suite-execution-of-real-renderer-markdown-s.md",
+            "dependenciesBefore": [],
+            "dependencies": [],
+            "feature": "H16",
+            "sourceAnchors": [
+                "apps/web/tests/modules/task-kanban/markdown-safety-pipeline.tsx:11",
+                "apps/web/tests/modules/projects/member-terminal-identity.test.ts:19"
+            ],
+            "correction": "The 12-case real-renderer probe is not discoverable; its stated wrapper does not exist. The existing member-terminal wrapper is a concrete isolation/child-JUnit precedent. Keep this proof in the normal suite.",
+            "structuralCheck": [
+                {
+                    "wbs": "1295",
+                    "status": "todo",
+                    "findings": [],
+                    "requiredSections": ["Background", "Acceptance Criteria", "Design", "Plan"],
+                    "missingSections": [],
+                    "pass": true,
+                    "notes": [],
+                    "repairs": []
+                }
+            ],
+            "implementationPrecheck": [
+                {
+                    "wbs": "1295",
+                    "status": "todo",
+                    "findings": [],
+                    "requiredSections": ["Background", "Acceptance Criteria", "Design", "Plan"],
+                    "missingSections": [],
+                    "pass": true,
+                    "notes": [],
+                    "repairs": []
+                }
+            ]
+        },
+        {
+            "wbs": "1296",
+            "status": "ready",
+            "planningDigest": "99cd2adf509465916fe321b80df35614c6ad6aa8b3d2eafeb44b70ec1d6e0e20",
+            "checks": [
+                {
+                    "id": "requirements",
+                    "pass": true,
+                    "evidence": "docs/tasks5/1296_reject-incomplete-planning-inputs-before-deriving-feature-st.md:43 freezes observable R-items; docs/tasks5/1296_reject-incomplete-planning-inputs-before-deriving-feature-st.md:70 states scope/preservation boundaries."
+                },
+                {
+                    "id": "design",
+                    "pass": true,
+                    "evidence": "docs/tasks5/1296_reject-incomplete-planning-inputs-before-deriving-feature-st.md:70 freezes names, source owners, algorithm/precedence and handoff. Current seams: packages/app/src/services/task-query-ops.ts:90; packages/app/src/services/feature-service.ts:892; packages/app/src/services/task-locator.ts:50."
+                },
+                {
+                    "id": "plan",
+                    "pass": true,
+                    "evidence": "docs/tasks5/1296_reject-incomplete-planning-inputs-before-deriving-feature-st.md:88 orders failure controls before production changes and ends with focused checks, owner sync and actual harness evidence. (cd packages/app && bun test tests/services/task-query-ops.test.ts tests/services/feature-service.test.ts tests/services/task-locator.test.ts); (cd apps/server && bun test tests/modules/task/handlers.test.ts tests/modules/feature/handlers.test.ts). Add a disposable-project CLI/HTTP refusal proof and assert corpus bytes unchanged."
+                },
+                {
+                    "id": "ac",
+                    "pass": true,
+                    "evidence": "docs/tasks5/1296_reject-incomplete-planning-inputs-before-deriving-feature-st.md:47 preserves every AC title and req:R mapping; source-local task check/precheck passed and feature scenario coverage is one owner per added scenario."
+                },
+                {
+                    "id": "decisions",
+                    "pass": true,
+                    "evidence": "docs/tasks5/1296_reject-incomplete-planning-inputs-before-deriving-feature-st.md:58 records closed choices; no unresolved API/library selection. "
+                },
+                {
+                    "id": "dependencies",
+                    "pass": true,
+                    "evidence": "docs/tasks5/1296_reject-incomplete-planning-inputs-before-deriving-feature-st.md:70 names no direct prerequisite and the consumed/output contract. CLI metadata agrees and whole-batch dependency projection has no cycle. Scheduling status=todo; prerequisites are not claimed done."
+                },
+                {
+                    "id": "premises",
+                    "pass": true,
+                    "evidence": "docs/tasks5/1296_reject-incomplete-planning-inputs-before-deriving-feature-st.md:23 records current-source corrections: The earlier text called TaskLocator an error-taxonomy precedent but it actually treats ENOTDIR as missing. Keep its unrelated lookup behavior intact here; fail closed at the list/feature-derivation read seam instead. Freeze all-or-error transport now; a tolerant new DTO is not required for containment. Inspected seams: packages/app/src/services/task-query-ops.ts:90; packages/app/src/services/feature-service.ts:892; packages/app/src/services/task-locator.ts:50. Source/test paths checked; new files are explicitly planned. Starting diff preserved; one worktree and five-folder wip inventory recorded."
+                }
+            ],
+            "outcome": "refined",
+            "correctionsCount": 1,
+            "droppedIssues": [],
+            "failedChecklistIds": [],
+            "statusBefore": "todo",
+            "statusAfter": "todo",
+            "filePath": "docs/tasks5/1296_reject-incomplete-planning-inputs-before-deriving-feature-st.md",
+            "dependenciesBefore": [],
+            "dependencies": [],
+            "feature": "F22",
+            "sourceAnchors": [
+                "packages/app/src/services/task-query-ops.ts:90",
+                "packages/app/src/services/feature-service.ts:892",
+                "packages/app/src/services/task-locator.ts:50"
+            ],
+            "correction": "The earlier text called TaskLocator an error-taxonomy precedent but it actually treats ENOTDIR as missing. Keep its unrelated lookup behavior intact here; fail closed at the list/feature-derivation read seam instead. Freeze all-or-error transport now; a tolerant new DTO is not required for containment.",
+            "structuralCheck": [
+                {
+                    "wbs": "1296",
+                    "status": "todo",
+                    "findings": [],
+                    "requiredSections": ["Background", "Acceptance Criteria", "Design", "Plan"],
+                    "missingSections": [],
+                    "pass": true,
+                    "notes": [],
+                    "repairs": []
+                }
+            ],
+            "implementationPrecheck": [
+                {
+                    "wbs": "1296",
+                    "status": "todo",
+                    "findings": [],
+                    "requiredSections": ["Background", "Acceptance Criteria", "Design", "Plan"],
+                    "missingSections": [],
+                    "pass": true,
+                    "notes": [],
+                    "repairs": []
+                }
+            ]
+        },
+        {
+            "wbs": "1297",
+            "status": "ready",
+            "planningDigest": "3543d2496e29a5b45b1e668c62ddcc7de0d8fd4c9cc4472b57c14a1ae1913e22",
+            "checks": [
+                {
+                    "id": "requirements",
+                    "pass": true,
+                    "evidence": "docs/tasks5/1297_reuse-an-operation-scoped-planning-snapshot-across-corpus-re.md:43 freezes observable R-items; docs/tasks5/1297_reuse-an-operation-scoped-planning-snapshot-across-corpus-re.md:70 states scope/preservation boundaries."
+                },
+                {
+                    "id": "design",
+                    "pass": true,
+                    "evidence": "docs/tasks5/1297_reuse-an-operation-scoped-planning-snapshot-across-corpus-re.md:70 freezes names, source owners, algorithm/precedence and handoff. Current seams: packages/app/src/services/task-query-ops.ts:119; packages/app/src/services/feature-service.ts:906; packages/app/src/services/task-locator.ts:91."
+                },
+                {
+                    "id": "plan",
+                    "pass": true,
+                    "evidence": "docs/tasks5/1297_reuse-an-operation-scoped-planning-snapshot-across-corpus-re.md:88 orders failure controls before production changes and ends with focused checks, owner sync and actual harness evidence. (cd packages/app && bun test tests/services/task-query-ops.test.ts tests/services/feature-service.test.ts tests/services/feature-check.test.ts tests/services/task-check.test.ts); add tests/services/planning-snapshot.test.ts with instrumented fs counts and CLI/HTTP golden outputs."
+                },
+                {
+                    "id": "ac",
+                    "pass": true,
+                    "evidence": "docs/tasks5/1297_reuse-an-operation-scoped-planning-snapshot-across-corpus-re.md:47 preserves every AC title and req:R mapping; source-local task check/precheck passed and feature scenario coverage is one owner per added scenario."
+                },
+                {
+                    "id": "decisions",
+                    "pass": true,
+                    "evidence": "docs/tasks5/1297_reuse-an-operation-scoped-planning-snapshot-across-corpus-re.md:58 records closed choices; no unresolved API/library selection. "
+                },
+                {
+                    "id": "dependencies",
+                    "pass": true,
+                    "evidence": "docs/tasks5/1297_reuse-an-operation-scoped-planning-snapshot-across-corpus-re.md:70 names 1296 and the consumed/output contract. CLI metadata agrees and whole-batch dependency projection has no cycle. Scheduling status=todo; prerequisites are not claimed done."
+                },
+                {
+                    "id": "premises",
+                    "pass": true,
+                    "evidence": "docs/tasks5/1297_reuse-an-operation-scoped-planning-snapshot-across-corpus-re.md:23 records current-source corrections: Snapshot reuse needs an operation boundary and frozen shape. A singleton/request-spanning cache would change freshness; use an explicitly passed snapshot and keep original public service signatures. Inspected seams: packages/app/src/services/task-query-ops.ts:119; packages/app/src/services/feature-service.ts:906; packages/app/src/services/task-locator.ts:91. Source/test paths checked; new files are explicitly planned. Starting diff preserved; one worktree and five-folder wip inventory recorded."
+                }
+            ],
+            "outcome": "refined",
+            "correctionsCount": 1,
+            "droppedIssues": [],
+            "failedChecklistIds": [],
+            "statusBefore": "todo",
+            "statusAfter": "todo",
+            "filePath": "docs/tasks5/1297_reuse-an-operation-scoped-planning-snapshot-across-corpus-re.md",
+            "dependenciesBefore": ["1296"],
+            "dependencies": ["1296"],
+            "feature": "F22",
+            "sourceAnchors": [
+                "packages/app/src/services/task-query-ops.ts:119",
+                "packages/app/src/services/feature-service.ts:906",
+                "packages/app/src/services/task-locator.ts:91"
+            ],
+            "correction": "Snapshot reuse needs an operation boundary and frozen shape. A singleton/request-spanning cache would change freshness; use an explicitly passed snapshot and keep original public service signatures.",
+            "structuralCheck": [
+                {
+                    "wbs": "1297",
+                    "status": "todo",
+                    "findings": [
+                        {
+                            "layer": "L4",
+                            "code": "L4.prerequisite-not-done",
+                            "severity": "warning",
+                            "section": "",
+                            "message": "Prerequisite 1296 is todo; task 1297 is not ready until it is done"
+                        }
+                    ],
+                    "requiredSections": ["Background", "Acceptance Criteria", "Design", "Plan"],
+                    "missingSections": [],
+                    "pass": true,
+                    "notes": [],
+                    "repairs": []
+                }
+            ],
+            "implementationPrecheck": [
+                {
+                    "wbs": "1297",
+                    "status": "todo",
+                    "findings": [
+                        {
+                            "layer": "L4",
+                            "code": "L4.prerequisite-not-done",
+                            "severity": "warning",
+                            "section": "",
+                            "message": "Prerequisite 1296 is todo; task 1297 is not ready until it is done"
+                        }
+                    ],
+                    "requiredSections": ["Background", "Acceptance Criteria", "Design", "Plan"],
+                    "missingSections": [],
+                    "pass": true,
+                    "notes": [],
+                    "repairs": []
+                }
+            ]
+        },
+        {
+            "wbs": "1298",
+            "status": "ready",
+            "planningDigest": "e5c58a314e2e14a21c58ba8375cfff6f8fdf8986f26c33f51e032bed3b8e7bec",
+            "checks": [
+                {
+                    "id": "requirements",
+                    "pass": true,
+                    "evidence": "docs/tasks5/1298_keep-task-store-refreshes-owned-by-the-latest-folder-and-sub.md:43 freezes observable R-items; docs/tasks5/1298_keep-task-store-refreshes-owned-by-the-latest-folder-and-sub.md:76 states scope/preservation boundaries."
+                },
+                {
+                    "id": "design",
+                    "pass": true,
+                    "evidence": "docs/tasks5/1298_keep-task-store-refreshes-owned-by-the-latest-folder-and-sub.md:76 freezes names, source owners, algorithm/precedence and handoff. Current seams: apps/web/src/modules/task-kanban/useTasks.ts:86; apps/web/src/modules/task-kanban/useTasks.ts:113; apps/web/src/modules/features/FeatureDetail.tsx:133."
+                },
+                {
+                    "id": "plan",
+                    "pass": true,
+                    "evidence": "docs/tasks5/1298_keep-task-store-refreshes-owned-by-the-latest-folder-and-sub.md:94 orders failure controls before production changes and ends with focused checks, owner sync and actual harness evidence. (cd apps/web && bun test tests/modules/task-kanban/useTasks.test.ts). Add a rendered folder-switch case and save request counts/final DOM state with controlled promises rather than real timer waits."
+                },
+                {
+                    "id": "ac",
+                    "pass": true,
+                    "evidence": "docs/tasks5/1298_keep-task-store-refreshes-owned-by-the-latest-folder-and-sub.md:48 preserves every AC title and req:R mapping; source-local task check/precheck passed and feature scenario coverage is one owner per added scenario."
+                },
+                {
+                    "id": "decisions",
+                    "pass": true,
+                    "evidence": "docs/tasks5/1298_keep-task-store-refreshes-owned-by-the-latest-folder-and-sub.md:64 records closed choices; no unresolved API/library selection. "
+                },
+                {
+                    "id": "dependencies",
+                    "pass": true,
+                    "evidence": "docs/tasks5/1298_keep-task-store-refreshes-owned-by-the-latest-folder-and-sub.md:76 names no direct prerequisite and the consumed/output contract. CLI metadata agrees and whole-batch dependency projection has no cycle. Scheduling status=todo; prerequisites are not claimed done."
+                },
+                {
+                    "id": "premises",
+                    "pass": true,
+                    "evidence": "docs/tasks5/1298_keep-task-store-refreshes-owned-by-the-latest-folder-and-sub.md:23 records current-source corrections: Generation ownership and burst coalescing must distinguish a folder change from another request in the same generation. Do not serialize a new folder behind a hung old request. Inspected seams: apps/web/src/modules/task-kanban/useTasks.ts:86; apps/web/src/modules/task-kanban/useTasks.ts:113; apps/web/src/modules/features/FeatureDetail.tsx:133. Source/test paths checked; new files are explicitly planned. Starting diff preserved; one worktree and five-folder wip inventory recorded."
+                }
+            ],
+            "outcome": "refined",
+            "correctionsCount": 1,
+            "droppedIssues": [],
+            "failedChecklistIds": [],
+            "statusBefore": "todo",
+            "statusAfter": "todo",
+            "filePath": "docs/tasks5/1298_keep-task-store-refreshes-owned-by-the-latest-folder-and-sub.md",
+            "dependenciesBefore": [],
+            "dependencies": [],
+            "feature": "F7",
+            "sourceAnchors": [
+                "apps/web/src/modules/task-kanban/useTasks.ts:86",
+                "apps/web/src/modules/task-kanban/useTasks.ts:113",
+                "apps/web/src/modules/features/FeatureDetail.tsx:133"
+            ],
+            "correction": "Generation ownership and burst coalescing must distinguish a folder change from another request in the same generation. Do not serialize a new folder behind a hung old request.",
+            "structuralCheck": [
+                {
+                    "wbs": "1298",
+                    "status": "todo",
+                    "findings": [],
+                    "requiredSections": ["Background", "Acceptance Criteria", "Design", "Plan"],
+                    "missingSections": [],
+                    "pass": true,
+                    "notes": [],
+                    "repairs": []
+                }
+            ],
+            "implementationPrecheck": [
+                {
+                    "wbs": "1298",
+                    "status": "todo",
+                    "findings": [],
+                    "requiredSections": ["Background", "Acceptance Criteria", "Design", "Plan"],
+                    "missingSections": [],
+                    "pass": true,
+                    "notes": [],
+                    "repairs": []
+                }
+            ]
+        },
+        {
+            "wbs": "1299",
+            "status": "ready",
+            "planningDigest": "7550b42849c98f2db9dee624e63714b93b91190cdd6b042a23850d200ed7a24a",
+            "checks": [
+                {
+                    "id": "requirements",
+                    "pass": true,
+                    "evidence": "docs/tasks5/1299_preserve-bounded-exact-search-failures-and-skipped-fuzzy-out.md:43 freezes observable R-items; docs/tasks5/1299_preserve-bounded-exact-search-failures-and-skipped-fuzzy-out.md:76 states scope/preservation boundaries."
+                },
+                {
+                    "id": "design",
+                    "pass": true,
+                    "evidence": "docs/tasks5/1299_preserve-bounded-exact-search-failures-and-skipped-fuzzy-out.md:76 freezes names, source owners, algorithm/precedence and handoff. Current seams: packages/app/src/services/search.ts:189; packages/app/src/services/search.ts:67; packages/app/src/services/search-zg.ts:115."
+                },
+                {
+                    "id": "plan",
+                    "pass": true,
+                    "evidence": "docs/tasks5/1299_preserve-bounded-exact-search-failures-and-skipped-fuzzy-out.md:94 orders failure controls before production changes and ends with focused checks, owner sync and actual harness evidence. (cd packages/app && bun test tests/services/search.test.ts tests/services/search-zg.test.ts); (cd apps/cli && bun test tests/commands/self/search.test.ts); (cd apps/server && bun test tests/modules/search/handlers.test.ts). Save two-3MB-lines repro and bounded error result."
+                },
+                {
+                    "id": "ac",
+                    "pass": true,
+                    "evidence": "docs/tasks5/1299_preserve-bounded-exact-search-failures-and-skipped-fuzzy-out.md:48 preserves every AC title and req:R mapping; source-local task check/precheck passed and feature scenario coverage is one owner per added scenario."
+                },
+                {
+                    "id": "decisions",
+                    "pass": true,
+                    "evidence": "docs/tasks5/1299_preserve-bounded-exact-search-failures-and-skipped-fuzzy-out.md:64 records closed choices; no unresolved API/library selection. "
+                },
+                {
+                    "id": "dependencies",
+                    "pass": true,
+                    "evidence": "docs/tasks5/1299_preserve-bounded-exact-search-failures-and-skipped-fuzzy-out.md:76 names no direct prerequisite and the consumed/output contract. CLI metadata agrees and whole-batch dependency projection has no cycle. Scheduling status=todo; prerequisites are not claimed done."
+                },
+                {
+                    "id": "premises",
+                    "pass": true,
+                    "evidence": "docs/tasks5/1299_preserve-bounded-exact-search-failures-and-skipped-fuzzy-out.md:23 records current-source corrections: Both defects reproduced again during this audit: output overflow returns successful zero hits; auto skipped fuzzy returns []. Unknown-status and missing-index failure fixtures must be explicit; nonempty status output is currently optimistically ready. Freeze an explicit error at the cap instead of a new streaming implementation. Inspected seams: packages/app/src/services/search.ts:189; packages/app/src/services/search.ts:67; packages/app/src/services/search-zg.ts:115. Source/test paths checked; new files are explicitly planned. Starting diff preserved; one worktree and five-folder wip inventory recorded."
+                }
+            ],
+            "outcome": "refined",
+            "correctionsCount": 1,
+            "droppedIssues": [],
+            "failedChecklistIds": [],
+            "statusBefore": "todo",
+            "statusAfter": "todo",
+            "filePath": "docs/tasks5/1299_preserve-bounded-exact-search-failures-and-skipped-fuzzy-out.md",
+            "dependenciesBefore": [],
+            "dependencies": [],
+            "feature": "A34",
+            "sourceAnchors": [
+                "packages/app/src/services/search.ts:189",
+                "packages/app/src/services/search.ts:67",
+                "packages/app/src/services/search-zg.ts:115"
+            ],
+            "correction": "Both defects reproduced again during this audit: output overflow returns successful zero hits; auto skipped fuzzy returns []. Unknown-status and missing-index failure fixtures must be explicit; nonempty status output is currently optimistically ready. Freeze an explicit error at the cap instead of a new streaming implementation.",
+            "structuralCheck": [
+                {
+                    "wbs": "1299",
+                    "status": "todo",
+                    "findings": [],
+                    "requiredSections": ["Background", "Acceptance Criteria", "Design", "Plan"],
+                    "missingSections": [],
+                    "pass": true,
+                    "notes": [],
+                    "repairs": []
+                }
+            ],
+            "implementationPrecheck": [
+                {
+                    "wbs": "1299",
+                    "status": "todo",
+                    "findings": [],
+                    "requiredSections": ["Background", "Acceptance Criteria", "Design", "Plan"],
+                    "missingSections": [],
+                    "pass": true,
+                    "notes": [],
+                    "repairs": []
+                }
+            ]
+        },
+        {
+            "wbs": "1300",
+            "status": "ready",
+            "planningDigest": "fa69a6d61b1ae8254eec6d5020aac804c506f385b75124b83c00e5c966635d76",
+            "checks": [
+                {
+                    "id": "requirements",
+                    "pass": true,
+                    "evidence": "docs/tasks5/1300_converge-planning-board-procedures-on-existing-validated-orp.md:43 freezes observable R-items; docs/tasks5/1300_converge-planning-board-procedures-on-existing-validated-orp.md:70 states scope/preservation boundaries."
+                },
+                {
+                    "id": "design",
+                    "pass": true,
+                    "evidence": "docs/tasks5/1300_converge-planning-board-procedures-on-existing-validated-orp.md:70 freezes names, source owners, algorithm/precedence and handoff. Current seams: apps/web/src/lib/plan-client.ts:23; apps/web/src/lib/design-client.ts:23; apps/server/src/modules/health/index.ts:951; packages/contracts/src/index.ts:25."
+                },
+                {
+                    "id": "plan",
+                    "pass": true,
+                    "evidence": "docs/tasks5/1300_converge-planning-board-procedures-on-existing-validated-orp.md:88 orders failure controls before production changes and ends with focused checks, owner sync and actual harness evidence. (cd apps/server && bun test tests/modules/plans.test.ts tests/modules/designs.test.ts tests/modules/feature/handlers.test.ts); (cd apps/web && bun test tests/lib/plan-client.test.ts tests/lib/design-client.test.ts tests/lib/feature-client.test.ts). Add fixture HTTP-to-real-client proof and update owning contracts."
+                },
+                {
+                    "id": "ac",
+                    "pass": true,
+                    "evidence": "docs/tasks5/1300_converge-planning-board-procedures-on-existing-validated-orp.md:47 preserves every AC title and req:R mapping; source-local task check/precheck passed and feature scenario coverage is one owner per added scenario."
+                },
+                {
+                    "id": "decisions",
+                    "pass": true,
+                    "evidence": "docs/tasks5/1300_converge-planning-board-procedures-on-existing-validated-orp.md:58 records closed choices; no unresolved API/library selection. Closed: retain Hono aliases but give each read one application owner; no TanStack dependency pilot in this task."
+                },
+                {
+                    "id": "dependencies",
+                    "pass": true,
+                    "evidence": "docs/tasks5/1300_converge-planning-board-procedures-on-existing-validated-orp.md:70 names no direct prerequisite and the consumed/output contract. CLI metadata agrees and whole-batch dependency projection has no cycle. Scheduling status=todo; prerequisites are not claimed done."
+                },
+                {
+                    "id": "premises",
+                    "pass": true,
+                    "evidence": "docs/tasks5/1300_converge-planning-board-procedures-on-existing-validated-orp.md:23 records current-source corrections: Plans/designs are read-only raw Hono routes in health/index.ts, not missing mutation APIs. Their response shapes differ from the feature envelope. No dependency on corpus containment or search is necessary; remove those artificial edges. Inspected seams: apps/web/src/lib/plan-client.ts:23; apps/web/src/lib/design-client.ts:23; apps/server/src/modules/health/index.ts:951; packages/contracts/src/index.ts:25. Source/test paths checked; new files are explicitly planned. Starting diff preserved; one worktree and five-folder wip inventory recorded."
+                }
+            ],
+            "outcome": "refined",
+            "correctionsCount": 1,
+            "droppedIssues": [],
+            "failedChecklistIds": [],
+            "statusBefore": "todo",
+            "statusAfter": "todo",
+            "filePath": "docs/tasks5/1300_converge-planning-board-procedures-on-existing-validated-orp.md",
+            "dependenciesBefore": ["1296", "1299"],
+            "dependencies": [],
+            "feature": "F73",
+            "sourceAnchors": [
+                "apps/web/src/lib/plan-client.ts:23",
+                "apps/web/src/lib/design-client.ts:23",
+                "apps/server/src/modules/health/index.ts:951",
+                "packages/contracts/src/index.ts:25"
+            ],
+            "correction": "Plans/designs are read-only raw Hono routes in health/index.ts, not missing mutation APIs. Their response shapes differ from the feature envelope. No dependency on corpus containment or search is necessary; remove those artificial edges.",
+            "structuralCheck": [
+                {
+                    "wbs": "1300",
+                    "status": "todo",
+                    "findings": [],
+                    "requiredSections": ["Background", "Acceptance Criteria", "Design", "Plan"],
+                    "missingSections": [],
+                    "pass": true,
+                    "notes": [],
+                    "repairs": []
+                }
+            ],
+            "implementationPrecheck": [
+                {
+                    "wbs": "1300",
+                    "status": "todo",
+                    "findings": [],
+                    "requiredSections": ["Background", "Acceptance Criteria", "Design", "Plan"],
+                    "missingSections": [],
+                    "pass": true,
+                    "notes": [],
+                    "repairs": []
+                }
+            ]
+        },
+        {
+            "wbs": "1301",
+            "status": "ready",
+            "planningDigest": "3fb7b82d374d560dc9e5390bd0ff400b9925fe5f07df3b3da78d432e13e05c36",
+            "checks": [
+                {
+                    "id": "requirements",
+                    "pass": true,
+                    "evidence": "docs/tasks5/1301_share-planning-event-invalidation-across-task-and-feature-vi.md:43 freezes observable R-items; docs/tasks5/1301_share-planning-event-invalidation-across-task-and-feature-vi.md:70 states scope/preservation boundaries."
+                },
+                {
+                    "id": "design",
+                    "pass": true,
+                    "evidence": "docs/tasks5/1301_share-planning-event-invalidation-across-task-and-feature-vi.md:70 freezes names, source owners, algorithm/precedence and handoff. Current seams: apps/web/src/modules/features/FeaturesShell.tsx:105; apps/web/src/modules/features/useFeatureActionProgress.ts:39; apps/web/src/modules/task-kanban/useTasks.ts:157."
+                },
+                {
+                    "id": "plan",
+                    "pass": true,
+                    "evidence": "docs/tasks5/1301_share-planning-event-invalidation-across-task-and-feature-vi.md:88 orders failure controls before production changes and ends with focused checks, owner sync and actual harness evidence. (cd apps/web && bun test tests/modules/task-kanban/useTasks.test.ts tests/modules/features/useFeatureActionProgress.test.ts tests/modules/features/sse-helpers.test.ts); add tests/lib/planning-events.test.ts and rendered multi-view proof."
+                },
+                {
+                    "id": "ac",
+                    "pass": true,
+                    "evidence": "docs/tasks5/1301_share-planning-event-invalidation-across-task-and-feature-vi.md:47 preserves every AC title and req:R mapping; source-local task check/precheck passed and feature scenario coverage is one owner per added scenario."
+                },
+                {
+                    "id": "decisions",
+                    "pass": true,
+                    "evidence": "docs/tasks5/1301_share-planning-event-invalidation-across-task-and-feature-vi.md:58 records closed choices; no unresolved API/library selection. "
+                },
+                {
+                    "id": "dependencies",
+                    "pass": true,
+                    "evidence": "docs/tasks5/1301_share-planning-event-invalidation-across-task-and-feature-vi.md:70 names 1298 and the consumed/output contract. CLI metadata agrees and whole-batch dependency projection has no cycle. Scheduling status=todo; prerequisites are not claimed done."
+                },
+                {
+                    "id": "premises",
+                    "pass": true,
+                    "evidence": "docs/tasks5/1301_share-planning-event-invalidation-across-task-and-feature-vi.md:23 records current-source corrections: Transport conversion is independent of event connection ownership. Remove dependency 1300; retain 1298 because the new stream invalidation must use its source/lifetime and trailing-refresh rules. Inspected seams: apps/web/src/modules/features/FeaturesShell.tsx:105; apps/web/src/modules/features/useFeatureActionProgress.ts:39; apps/web/src/modules/task-kanban/useTasks.ts:157. Source/test paths checked; new files are explicitly planned. Starting diff preserved; one worktree and five-folder wip inventory recorded."
+                }
+            ],
+            "outcome": "refined",
+            "correctionsCount": 1,
+            "droppedIssues": [],
+            "failedChecklistIds": [],
+            "statusBefore": "todo",
+            "statusAfter": "todo",
+            "filePath": "docs/tasks5/1301_share-planning-event-invalidation-across-task-and-feature-vi.md",
+            "dependenciesBefore": ["1298", "1300"],
+            "dependencies": ["1298"],
+            "feature": "F73",
+            "sourceAnchors": [
+                "apps/web/src/modules/features/FeaturesShell.tsx:105",
+                "apps/web/src/modules/features/useFeatureActionProgress.ts:39",
+                "apps/web/src/modules/task-kanban/useTasks.ts:157"
+            ],
+            "correction": "Transport conversion is independent of event connection ownership. Remove dependency 1300; retain 1298 because the new stream invalidation must use its source/lifetime and trailing-refresh rules.",
+            "structuralCheck": [
+                {
+                    "wbs": "1301",
+                    "status": "todo",
+                    "findings": [
+                        {
+                            "layer": "L4",
+                            "code": "L4.prerequisite-not-done",
+                            "severity": "warning",
+                            "section": "",
+                            "message": "Prerequisite 1298 is todo; task 1301 is not ready until it is done"
+                        }
+                    ],
+                    "requiredSections": ["Background", "Acceptance Criteria", "Design", "Plan"],
+                    "missingSections": [],
+                    "pass": true,
+                    "notes": [],
+                    "repairs": []
+                }
+            ],
+            "implementationPrecheck": [
+                {
+                    "wbs": "1301",
+                    "status": "todo",
+                    "findings": [
+                        {
+                            "layer": "L4",
+                            "code": "L4.prerequisite-not-done",
+                            "severity": "warning",
+                            "section": "",
+                            "message": "Prerequisite 1298 is todo; task 1301 is not ready until it is done"
+                        }
+                    ],
+                    "requiredSections": ["Background", "Acceptance Criteria", "Design", "Plan"],
+                    "missingSections": [],
+                    "pass": true,
+                    "notes": [],
+                    "repairs": []
+                }
+            ]
+        },
+        {
+            "wbs": "1302",
+            "status": "ready",
+            "planningDigest": "530276fcf7f1e875359fbfcc12c6e441417a80de6aa6a18094e70adf7b68023c",
+            "checks": [
+                {
+                    "id": "requirements",
+                    "pass": true,
+                    "evidence": "docs/tasks5/1302_explain-ready-work-blocking-dependencies-and-paused-runs-in-.md:43 freezes observable R-items; docs/tasks5/1302_explain-ready-work-blocking-dependencies-and-paused-runs-in-.md:70 states scope/preservation boundaries."
+                },
+                {
+                    "id": "design",
+                    "pass": true,
+                    "evidence": "docs/tasks5/1302_explain-ready-work-blocking-dependencies-and-paused-runs-in-.md:70 freezes names, source owners, algorithm/precedence and handoff. Current seams: packages/app/src/services/planning-preflight.ts:27; packages/app/src/services/task-check.ts:480; packages/app/src/services/run-store-service.ts:260; packages/contracts/src/task.ts:155."
+                },
+                {
+                    "id": "plan",
+                    "pass": true,
+                    "evidence": "docs/tasks5/1302_explain-ready-work-blocking-dependencies-and-paused-runs-in-.md:88 orders failure controls before production changes and ends with focused checks, owner sync and actual harness evidence. Add packages/app/tests/services/planning-readiness.test.ts, apps/server/tests/modules/task/readiness.test.ts and apps/web/tests/modules/task-kanban/readiness.test.ts. Save a single fixture CLI-check/HTTP/DOM journey and zero-model-dispatch assertion."
+                },
+                {
+                    "id": "ac",
+                    "pass": true,
+                    "evidence": "docs/tasks5/1302_explain-ready-work-blocking-dependencies-and-paused-runs-in-.md:47 preserves every AC title and req:R mapping; source-local task check/precheck passed and feature scenario coverage is one owner per added scenario."
+                },
+                {
+                    "id": "decisions",
+                    "pass": true,
+                    "evidence": "docs/tasks5/1302_explain-ready-work-blocking-dependencies-and-paused-runs-in-.md:58 records closed choices; no unresolved API/library selection. "
+                },
+                {
+                    "id": "dependencies",
+                    "pass": true,
+                    "evidence": "docs/tasks5/1302_explain-ready-work-blocking-dependencies-and-paused-runs-in-.md:70 names 1297, 1301 and the consumed/output contract. CLI metadata agrees and whole-batch dependency projection has no cycle. Scheduling status=todo; prerequisites are not claimed done."
+                },
+                {
+                    "id": "premises",
+                    "pass": true,
+                    "evidence": "docs/tasks5/1302_explain-ready-work-blocking-dependencies-and-paused-runs-in-.md:23 records current-source corrections: The first design did not freeze a readiness algorithm or response. Use existing deterministic checks and task/run data, not a second advice engine. Add a read-only procedure rather than changing task.list success shapes. Inspected seams: packages/app/src/services/planning-preflight.ts:27; packages/app/src/services/task-check.ts:480; packages/app/src/services/run-store-service.ts:260; packages/contracts/src/task.ts:155. Source/test paths checked; new files are explicitly planned. Starting diff preserved; one worktree and five-folder wip inventory recorded."
+                }
+            ],
+            "outcome": "refined",
+            "correctionsCount": 1,
+            "droppedIssues": [],
+            "failedChecklistIds": [],
+            "statusBefore": "todo",
+            "statusAfter": "todo",
+            "filePath": "docs/tasks5/1302_explain-ready-work-blocking-dependencies-and-paused-runs-in-.md",
+            "dependenciesBefore": ["1297", "1301"],
+            "dependencies": ["1297", "1301"],
+            "feature": "F73",
+            "sourceAnchors": [
+                "packages/app/src/services/planning-preflight.ts:27",
+                "packages/app/src/services/task-check.ts:480",
+                "packages/app/src/services/run-store-service.ts:260",
+                "packages/contracts/src/task.ts:155"
+            ],
+            "correction": "The first design did not freeze a readiness algorithm or response. Use existing deterministic checks and task/run data, not a second advice engine. Add a read-only procedure rather than changing task.list success shapes.",
+            "structuralCheck": [
+                {
+                    "wbs": "1302",
+                    "status": "todo",
+                    "findings": [
+                        {
+                            "layer": "L4",
+                            "code": "L4.prerequisite-not-done",
+                            "severity": "warning",
+                            "section": "",
+                            "message": "Prerequisite 1297 is todo; task 1302 is not ready until it is done"
+                        },
+                        {
+                            "layer": "L4",
+                            "code": "L4.prerequisite-not-done",
+                            "severity": "warning",
+                            "section": "",
+                            "message": "Prerequisite 1301 is todo; task 1302 is not ready until it is done"
+                        }
+                    ],
+                    "requiredSections": ["Background", "Acceptance Criteria", "Design", "Plan"],
+                    "missingSections": [],
+                    "pass": true,
+                    "notes": [],
+                    "repairs": []
+                }
+            ],
+            "implementationPrecheck": [
+                {
+                    "wbs": "1302",
+                    "status": "todo",
+                    "findings": [
+                        {
+                            "layer": "L4",
+                            "code": "L4.prerequisite-not-done",
+                            "severity": "warning",
+                            "section": "",
+                            "message": "Prerequisite 1297 is todo; task 1302 is not ready until it is done"
+                        },
+                        {
+                            "layer": "L4",
+                            "code": "L4.prerequisite-not-done",
+                            "severity": "warning",
+                            "section": "",
+                            "message": "Prerequisite 1301 is todo; task 1302 is not ready until it is done"
+                        }
+                    ],
+                    "requiredSections": ["Background", "Acceptance Criteria", "Design", "Plan"],
+                    "missingSections": [],
+                    "pass": true,
+                    "notes": [],
+                    "repairs": []
+                }
+            ]
+        },
+        {
+            "wbs": "1303",
+            "status": "ready",
+            "planningDigest": "d4aa9a1a7b92151d29eac205de05d4cb256412c0a59da37e1d245d00a7b14ce9",
+            "checks": [
+                {
+                    "id": "requirements",
+                    "pass": true,
+                    "evidence": "docs/tasks5/1303_propose-safe-npm-and-pnpm-bindings-through-existing-init-act.md:43 freezes observable R-items; docs/tasks5/1303_propose-safe-npm-and-pnpm-bindings-through-existing-init-act.md:70 states scope/preservation boundaries."
+                },
+                {
+                    "id": "design",
+                    "pass": true,
+                    "evidence": "docs/tasks5/1303_propose-safe-npm-and-pnpm-bindings-through-existing-init-act.md:70 freezes names, source owners, algorithm/precedence and handoff. Current seams: apps/cli/src/commands/init.ts:70; packages/app/src/services/sdlc-actions.ts:66; apps/cli/src/commands/self/exec.ts:39."
+                },
+                {
+                    "id": "plan",
+                    "pass": true,
+                    "evidence": "docs/tasks5/1303_propose-safe-npm-and-pnpm-bindings-through-existing-init-act.md:88 orders failure controls before production changes and ends with focused checks, owner sync and actual harness evidence. (cd apps/cli && bun test tests/commands/init.test.ts tests/commands/self/exec.test.ts tests/init-templates.test.ts); (cd packages/app && bun test tests/services/sdlc-actions.test.ts). Save generated YAML, inspection JSON and fixture check exit."
+                },
+                {
+                    "id": "ac",
+                    "pass": true,
+                    "evidence": "docs/tasks5/1303_propose-safe-npm-and-pnpm-bindings-through-existing-init-act.md:47 preserves every AC title and req:R mapping; source-local task check/precheck passed and feature scenario coverage is one owner per added scenario."
+                },
+                {
+                    "id": "decisions",
+                    "pass": true,
+                    "evidence": "docs/tasks5/1303_propose-safe-npm-and-pnpm-bindings-through-existing-init-act.md:58 records closed choices; no unresolved API/library selection. "
+                },
+                {
+                    "id": "dependencies",
+                    "pass": true,
+                    "evidence": "docs/tasks5/1303_propose-safe-npm-and-pnpm-bindings-through-existing-init-act.md:70 names no direct prerequisite and the consumed/output contract. CLI metadata agrees and whole-batch dependency projection has no cycle. Scheduling status=todo; prerequisites are not claimed done."
+                },
+                {
+                    "id": "premises",
+                    "pass": true,
+                    "evidence": "docs/tasks5/1303_propose-safe-npm-and-pnpm-bindings-through-existing-init-act.md:23 records current-source corrections: No working-directory field exists in builder.actions and no init preview flag exists. Keep the current action string/array schema; place subdirectory commands behind existing quoting/cwd behavior. UI fixes and Markdown proof are not functional dependencies. Inspected seams: apps/cli/src/commands/init.ts:70; packages/app/src/services/sdlc-actions.ts:66; apps/cli/src/commands/self/exec.ts:39. Source/test paths checked; new files are explicitly planned. Starting diff preserved; one worktree and five-folder wip inventory recorded."
+                }
+            ],
+            "outcome": "refined",
+            "correctionsCount": 1,
+            "droppedIssues": [],
+            "failedChecklistIds": [],
+            "statusBefore": "todo",
+            "statusAfter": "todo",
+            "filePath": "docs/tasks5/1303_propose-safe-npm-and-pnpm-bindings-through-existing-init-act.md",
+            "dependenciesBefore": ["1294", "1295"],
+            "dependencies": [],
+            "feature": "A92",
+            "sourceAnchors": [
+                "apps/cli/src/commands/init.ts:70",
+                "packages/app/src/services/sdlc-actions.ts:66",
+                "apps/cli/src/commands/self/exec.ts:39"
+            ],
+            "correction": "No working-directory field exists in builder.actions and no init preview flag exists. Keep the current action string/array schema; place subdirectory commands behind existing quoting/cwd behavior. UI fixes and Markdown proof are not functional dependencies.",
+            "structuralCheck": [
+                {
+                    "wbs": "1303",
+                    "status": "todo",
+                    "findings": [],
+                    "requiredSections": ["Background", "Acceptance Criteria", "Design", "Plan"],
+                    "missingSections": [],
+                    "pass": true,
+                    "notes": [],
+                    "repairs": []
+                }
+            ],
+            "implementationPrecheck": [
+                {
+                    "wbs": "1303",
+                    "status": "todo",
+                    "findings": [],
+                    "requiredSections": ["Background", "Acceptance Criteria", "Design", "Plan"],
+                    "missingSections": [],
+                    "pass": true,
+                    "notes": [],
+                    "repairs": []
+                }
+            ]
+        },
+        {
+            "wbs": "1304",
+            "status": "ready",
+            "planningDigest": "c4a5b6fbab7496bfb658183a0fb0e4db7b2ebac24c078bde4eb14a57ab7cd4d8",
+            "checks": [
+                {
+                    "id": "requirements",
+                    "pass": true,
+                    "evidence": "docs/tasks5/1304_complete-language-and-monorepo-action-onboarding-without-gue.md:43 freezes observable R-items; docs/tasks5/1304_complete-language-and-monorepo-action-onboarding-without-gue.md:70 states scope/preservation boundaries."
+                },
+                {
+                    "id": "design",
+                    "pass": true,
+                    "evidence": "docs/tasks5/1304_complete-language-and-monorepo-action-onboarding-without-gue.md:70 freezes names, source owners, algorithm/precedence and handoff. Current seams: apps/cli/src/commands/self/exec.ts:32; packages/app/src/services/sdlc-actions.ts:103; apps/cli/src/commands/init.ts:353."
+                },
+                {
+                    "id": "plan",
+                    "pass": true,
+                    "evidence": "docs/tasks5/1304_complete-language-and-monorepo-action-onboarding-without-gue.md:88 orders failure controls before production changes and ends with focused checks, owner sync and actual harness evidence. (cd apps/cli && bun test tests/commands/init.test.ts tests/commands/self/exec.test.ts); (cd packages/app && bun test tests/services/sdlc-actions.test.ts). Use fixture executable stubs for deterministic discovery and separately report real-tool availability. Verify Cargo/Go semantics against the official references recorded in Q&A."
+                },
+                {
+                    "id": "ac",
+                    "pass": true,
+                    "evidence": "docs/tasks5/1304_complete-language-and-monorepo-action-onboarding-without-gue.md:47 preserves every AC title and req:R mapping; source-local task check/precheck passed and feature scenario coverage is one owner per added scenario."
+                },
+                {
+                    "id": "decisions",
+                    "pass": true,
+                    "evidence": "docs/tasks5/1304_complete-language-and-monorepo-action-onboarding-without-gue.md:58 records closed choices; no unresolved API/library selection. Closed: use the conservative mapping above. Sources checked: https://doc.rust-lang.org/cargo/commands/cargo-check.html ; https://doc.rust-lang.org/cargo/commands/cargo-test.html ; https://pkg.go.dev/cmd/go . Python defaults remain unbound without declared project commands."
+                },
+                {
+                    "id": "dependencies",
+                    "pass": true,
+                    "evidence": "docs/tasks5/1304_complete-language-and-monorepo-action-onboarding-without-gue.md:70 names 1303 and the consumed/output contract. CLI metadata agrees and whole-batch dependency projection has no cycle. Scheduling status=todo; prerequisites are not claimed done."
+                },
+                {
+                    "id": "premises",
+                    "pass": true,
+                    "evidence": "docs/tasks5/1304_complete-language-and-monorepo-action-onboarding-without-gue.md:23 records current-source corrections: Freeze conservative language defaults and package selection. Do not assume Python project.scripts are shell actions or introduce a cwd schema. The selected fixture root and quoted command prefix suffice. Inspected seams: apps/cli/src/commands/self/exec.ts:32; packages/app/src/services/sdlc-actions.ts:103; apps/cli/src/commands/init.ts:353. Source/test paths checked; new files are explicitly planned. Starting diff preserved; one worktree and five-folder wip inventory recorded."
+                }
+            ],
+            "outcome": "refined",
+            "correctionsCount": 1,
+            "droppedIssues": [],
+            "failedChecklistIds": [],
+            "statusBefore": "todo",
+            "statusAfter": "todo",
+            "filePath": "docs/tasks5/1304_complete-language-and-monorepo-action-onboarding-without-gue.md",
+            "dependenciesBefore": ["1303"],
+            "dependencies": ["1303"],
+            "feature": "A92",
+            "sourceAnchors": [
+                "apps/cli/src/commands/self/exec.ts:32",
+                "packages/app/src/services/sdlc-actions.ts:103",
+                "apps/cli/src/commands/init.ts:353"
+            ],
+            "correction": "Freeze conservative language defaults and package selection. Do not assume Python project.scripts are shell actions or introduce a cwd schema. The selected fixture root and quoted command prefix suffice.",
+            "structuralCheck": [
+                {
+                    "wbs": "1304",
+                    "status": "todo",
+                    "findings": [
+                        {
+                            "layer": "L4",
+                            "code": "L4.prerequisite-not-done",
+                            "severity": "warning",
+                            "section": "",
+                            "message": "Prerequisite 1303 is todo; task 1304 is not ready until it is done"
+                        }
+                    ],
+                    "requiredSections": ["Background", "Acceptance Criteria", "Design", "Plan"],
+                    "missingSections": [],
+                    "pass": true,
+                    "notes": [],
+                    "repairs": []
+                }
+            ],
+            "implementationPrecheck": [
+                {
+                    "wbs": "1304",
+                    "status": "todo",
+                    "findings": [
+                        {
+                            "layer": "L4",
+                            "code": "L4.prerequisite-not-done",
+                            "severity": "warning",
+                            "section": "",
+                            "message": "Prerequisite 1303 is todo; task 1304 is not ready until it is done"
+                        }
+                    ],
+                    "requiredSections": ["Background", "Acceptance Criteria", "Design", "Plan"],
+                    "missingSections": [],
+                    "pass": true,
+                    "notes": [],
+                    "repairs": []
+                }
+            ]
+        },
+        {
+            "wbs": "1305",
+            "status": "ready",
+            "planningDigest": "d37d355bdec593f3e420418af948338889cad098ca4987a6aaadf5d45d1fa2cd",
+            "checks": [
+                {
+                    "id": "requirements",
+                    "pass": true,
+                    "evidence": "docs/tasks5/1305_unify-executor-admission-and-invocation-policy-across-existi.md:43 freezes observable R-items; docs/tasks5/1305_unify-executor-admission-and-invocation-policy-across-existi.md:70 states scope/preservation boundaries."
+                },
+                {
+                    "id": "design",
+                    "pass": true,
+                    "evidence": "docs/tasks5/1305_unify-executor-admission-and-invocation-policy-across-existi.md:70 freezes names, source owners, algorithm/precedence and handoff. Current seams: packages/app/src/workflow/actions/agent-run.ts:633; packages/app/src/workflow/actions/agent-run.ts:905; packages/app/src/workflow/actions/agent-run.ts:311."
+                },
+                {
+                    "id": "plan",
+                    "pass": true,
+                    "evidence": "docs/tasks5/1305_unify-executor-admission-and-invocation-policy-across-existi.md:88 orders failure controls before production changes and ends with focused checks, owner sync and actual harness evidence. (cd packages/app && bun test tests/workflow/actions/agent-run.test.ts tests/workflow/actions/agent-run-receipt.test.ts tests/workflow/host-executor.test.ts tests/workflow/agent-run-fleet.test.ts tests/workflow/fleet-dispatch.test.ts). Save admission matrix with intentional surface differences."
+                },
+                {
+                    "id": "ac",
+                    "pass": true,
+                    "evidence": "docs/tasks5/1305_unify-executor-admission-and-invocation-policy-across-existi.md:47 preserves every AC title and req:R mapping; source-local task check/precheck passed and feature scenario coverage is one owner per added scenario."
+                },
+                {
+                    "id": "decisions",
+                    "pass": true,
+                    "evidence": "docs/tasks5/1305_unify-executor-admission-and-invocation-policy-across-existi.md:58 records closed choices; no unresolved API/library selection. Closed: preserve observable behavior; unify only shared semantics. A stronger enforcement guarantee would require a separately designed change, not this refactor."
+                },
+                {
+                    "id": "dependencies",
+                    "pass": true,
+                    "evidence": "docs/tasks5/1305_unify-executor-admission-and-invocation-policy-across-existi.md:70 names no direct prerequisite and the consumed/output contract. CLI metadata agrees and whole-batch dependency projection has no cycle. Scheduling status=todo; prerequisites are not claimed done."
+                },
+                {
+                    "id": "premises",
+                    "pass": true,
+                    "evidence": "docs/tasks5/1305_unify-executor-admission-and-invocation-policy-across-existi.md:23 records current-source corrections: Current dispatch branches have intentionally different observable guarantees: host returns a work item before subprocess-only capability/budget checks. Do not pretend every old policy already applies identically. Remove unrelated Board/search prerequisites and freeze a behavior-preserving extraction first. Inspected seams: packages/app/src/workflow/actions/agent-run.ts:633; packages/app/src/workflow/actions/agent-run.ts:905; packages/app/src/workflow/actions/agent-run.ts:311. Source/test paths checked; new files are explicitly planned. Starting diff preserved; one worktree and five-folder wip inventory recorded."
+                }
+            ],
+            "outcome": "refined",
+            "correctionsCount": 1,
+            "droppedIssues": [],
+            "failedChecklistIds": [],
+            "statusBefore": "todo",
+            "statusAfter": "todo",
+            "filePath": "docs/tasks5/1305_unify-executor-admission-and-invocation-policy-across-existi.md",
+            "dependenciesBefore": ["1294", "1295", "1299", "1298"],
+            "dependencies": [],
+            "feature": "D65",
+            "sourceAnchors": [
+                "packages/app/src/workflow/actions/agent-run.ts:633",
+                "packages/app/src/workflow/actions/agent-run.ts:905",
+                "packages/app/src/workflow/actions/agent-run.ts:311"
+            ],
+            "correction": "Current dispatch branches have intentionally different observable guarantees: host returns a work item before subprocess-only capability/budget checks. Do not pretend every old policy already applies identically. Remove unrelated Board/search prerequisites and freeze a behavior-preserving extraction first.",
+            "structuralCheck": [
+                {
+                    "wbs": "1305",
+                    "status": "todo",
+                    "findings": [],
+                    "requiredSections": ["Background", "Acceptance Criteria", "Design", "Plan"],
+                    "missingSections": [],
+                    "pass": true,
+                    "notes": [],
+                    "repairs": []
+                }
+            ],
+            "implementationPrecheck": [
+                {
+                    "wbs": "1305",
+                    "status": "todo",
+                    "findings": [],
+                    "requiredSections": ["Background", "Acceptance Criteria", "Design", "Plan"],
+                    "missingSections": [],
+                    "pass": true,
+                    "notes": [],
+                    "repairs": []
+                }
+            ]
+        },
+        {
+            "wbs": "1306",
+            "status": "ready",
+            "planningDigest": "6660e6357f8fa915d0bd3f28fe0c9c5f72b340bcc67d4c60c3890819cec8c1b1",
+            "checks": [
+                {
+                    "id": "requirements",
+                    "pass": true,
+                    "evidence": "docs/tasks5/1306_share-executor-result-finalization-while-preserving-receipts.md:43 freezes observable R-items; docs/tasks5/1306_share-executor-result-finalization-while-preserving-receipts.md:70 states scope/preservation boundaries."
+                },
+                {
+                    "id": "design",
+                    "pass": true,
+                    "evidence": "docs/tasks5/1306_share-executor-result-finalization-while-preserving-receipts.md:70 freezes names, source owners, algorithm/precedence and handoff. Current seams: packages/app/src/workflow/actions/agent-run.ts:587; packages/app/src/workflow/actions/agent-run.ts:598; packages/app/src/services/failure-classification.ts:6."
+                },
+                {
+                    "id": "plan",
+                    "pass": true,
+                    "evidence": "docs/tasks5/1306_share-executor-result-finalization-while-preserving-receipts.md:88 orders failure controls before production changes and ends with focused checks, owner sync and actual harness evidence. (cd packages/app && bun test tests/workflow/actions/agent-run.test.ts tests/workflow/actions/agent-run-receipt.test.ts tests/workflow/agent-run-fleet.test.ts tests/workflow/host-executor.test.ts tests/services/workflow-host-executor.test.ts). Real-agent dogfood is separately reported; fake process fixtures must prove containment without external agent availability."
+                },
+                {
+                    "id": "ac",
+                    "pass": true,
+                    "evidence": "docs/tasks5/1306_share-executor-result-finalization-while-preserving-receipts.md:47 preserves every AC title and req:R mapping; source-local task check/precheck passed and feature scenario coverage is one owner per added scenario."
+                },
+                {
+                    "id": "decisions",
+                    "pass": true,
+                    "evidence": "docs/tasks5/1306_share-executor-result-finalization-while-preserving-receipts.md:58 records closed choices; no unresolved API/library selection. "
+                },
+                {
+                    "id": "dependencies",
+                    "pass": true,
+                    "evidence": "docs/tasks5/1306_share-executor-result-finalization-while-preserving-receipts.md:70 names 1305 and the consumed/output contract. CLI metadata agrees and whole-batch dependency projection has no cycle. Scheduling status=todo; prerequisites are not claimed done."
+                },
+                {
+                    "id": "premises",
+                    "pass": true,
+                    "evidence": "docs/tasks5/1306_share-executor-result-finalization-while-preserving-receipts.md:23 records current-source corrections: Receipt writing is already shared by execute/recordReceipt. Do not create a second finalizer or duplicate failure classification. Share repeated post-condition/freshness result preparation around the existing one writer, preserving the host receipt exception. Inspected seams: packages/app/src/workflow/actions/agent-run.ts:587; packages/app/src/workflow/actions/agent-run.ts:598; packages/app/src/services/failure-classification.ts:6. Source/test paths checked; new files are explicitly planned. Starting diff preserved; one worktree and five-folder wip inventory recorded."
+                }
+            ],
+            "outcome": "refined",
+            "correctionsCount": 1,
+            "droppedIssues": [],
+            "failedChecklistIds": [],
+            "statusBefore": "todo",
+            "statusAfter": "todo",
+            "filePath": "docs/tasks5/1306_share-executor-result-finalization-while-preserving-receipts.md",
+            "dependenciesBefore": ["1305"],
+            "dependencies": ["1305"],
+            "feature": "D65",
+            "sourceAnchors": [
+                "packages/app/src/workflow/actions/agent-run.ts:587",
+                "packages/app/src/workflow/actions/agent-run.ts:598",
+                "packages/app/src/services/failure-classification.ts:6"
+            ],
+            "correction": "Receipt writing is already shared by execute/recordReceipt. Do not create a second finalizer or duplicate failure classification. Share repeated post-condition/freshness result preparation around the existing one writer, preserving the host receipt exception.",
+            "structuralCheck": [
+                {
+                    "wbs": "1306",
+                    "status": "todo",
+                    "findings": [
+                        {
+                            "layer": "L4",
+                            "code": "L4.prerequisite-not-done",
+                            "severity": "warning",
+                            "section": "",
+                            "message": "Prerequisite 1305 is todo; task 1306 is not ready until it is done"
+                        }
+                    ],
+                    "requiredSections": ["Background", "Acceptance Criteria", "Design", "Plan"],
+                    "missingSections": [],
+                    "pass": true,
+                    "notes": [],
+                    "repairs": []
+                }
+            ],
+            "implementationPrecheck": [
+                {
+                    "wbs": "1306",
+                    "status": "todo",
+                    "findings": [
+                        {
+                            "layer": "L4",
+                            "code": "L4.prerequisite-not-done",
+                            "severity": "warning",
+                            "section": "",
+                            "message": "Prerequisite 1305 is todo; task 1306 is not ready until it is done"
+                        }
+                    ],
+                    "requiredSections": ["Background", "Acceptance Criteria", "Design", "Plan"],
+                    "missingSections": [],
+                    "pass": true,
+                    "notes": [],
+                    "repairs": []
+                }
+            ]
+        },
+        {
+            "wbs": "1307",
+            "status": "ready",
+            "planningDigest": "a717060e900a9dee746899b6c50396151127d9e96bb495394238ff086714079f",
+            "checks": [
+                {
+                    "id": "requirements",
+                    "pass": true,
+                    "evidence": "docs/tasks5/1307_link-task-failures-and-paused-runs-to-retained-evidence-and-.md:43 freezes observable R-items; docs/tasks5/1307_link-task-failures-and-paused-runs-to-retained-evidence-and-.md:76 states scope/preservation boundaries."
+                },
+                {
+                    "id": "design",
+                    "pass": true,
+                    "evidence": "docs/tasks5/1307_link-task-failures-and-paused-runs-to-retained-evidence-and-.md:76 freezes names, source owners, algorithm/precedence and handoff. Current seams: packages/app/src/services/run-store-service.ts:77; packages/contracts/src/runs.ts:82; apps/web/src/modules/observability/TraceTab.tsx:106."
+                },
+                {
+                    "id": "plan",
+                    "pass": true,
+                    "evidence": "docs/tasks5/1307_link-task-failures-and-paused-runs-to-retained-evidence-and-.md:94 orders failure controls before production changes and ends with focused checks, owner sync and actual harness evidence. (cd packages/app && bun test tests/services/run-store-service.test.ts tests/workflow/run-record.test.ts); (cd apps/server && bun test tests/modules/runs/index.test.ts). Add apps/web/tests/modules/observability/run-recovery.test.ts rendered/HTTP journey."
+                },
+                {
+                    "id": "ac",
+                    "pass": true,
+                    "evidence": "docs/tasks5/1307_link-task-failures-and-paused-runs-to-retained-evidence-and-.md:48 preserves every AC title and req:R mapping; source-local task check/precheck passed and feature scenario coverage is one owner per added scenario."
+                },
+                {
+                    "id": "decisions",
+                    "pass": true,
+                    "evidence": "docs/tasks5/1307_link-task-failures-and-paused-runs-to-retained-evidence-and-.md:64 records closed choices; no unresolved API/library selection. "
+                },
+                {
+                    "id": "dependencies",
+                    "pass": true,
+                    "evidence": "docs/tasks5/1307_link-task-failures-and-paused-runs-to-retained-evidence-and-.md:76 names 1306 and the consumed/output contract. CLI metadata agrees and whole-batch dependency projection has no cycle. Scheduling status=todo; prerequisites are not claimed done."
+                },
+                {
+                    "id": "premises",
+                    "pass": true,
+                    "evidence": "docs/tasks5/1307_link-task-failures-and-paused-runs-to-retained-evidence-and-.md:23 records current-source corrections: RunStoreService, task-run links, progress and run-record outcomes already exist. Recovery navigation does not require the new readiness panel, so remove the 1302 dependency and reuse existing routes. Inspected seams: packages/app/src/services/run-store-service.ts:77; packages/contracts/src/runs.ts:82; apps/web/src/modules/observability/TraceTab.tsx:106. Source/test paths checked; new files are explicitly planned. Starting diff preserved; one worktree and five-folder wip inventory recorded."
+                }
+            ],
+            "outcome": "refined",
+            "correctionsCount": 1,
+            "droppedIssues": [],
+            "failedChecklistIds": [],
+            "statusBefore": "todo",
+            "statusAfter": "todo",
+            "filePath": "docs/tasks5/1307_link-task-failures-and-paused-runs-to-retained-evidence-and-.md",
+            "dependenciesBefore": ["1302", "1306"],
+            "dependencies": ["1306"],
+            "feature": "E71",
+            "sourceAnchors": [
+                "packages/app/src/services/run-store-service.ts:77",
+                "packages/contracts/src/runs.ts:82",
+                "apps/web/src/modules/observability/TraceTab.tsx:106"
+            ],
+            "correction": "RunStoreService, task-run links, progress and run-record outcomes already exist. Recovery navigation does not require the new readiness panel, so remove the 1302 dependency and reuse existing routes.",
+            "structuralCheck": [
+                {
+                    "wbs": "1307",
+                    "status": "todo",
+                    "findings": [
+                        {
+                            "layer": "L4",
+                            "code": "L4.prerequisite-not-done",
+                            "severity": "warning",
+                            "section": "",
+                            "message": "Prerequisite 1306 is todo; task 1307 is not ready until it is done"
+                        }
+                    ],
+                    "requiredSections": ["Background", "Acceptance Criteria", "Design", "Plan"],
+                    "missingSections": [],
+                    "pass": true,
+                    "notes": [],
+                    "repairs": []
+                }
+            ],
+            "implementationPrecheck": [
+                {
+                    "wbs": "1307",
+                    "status": "todo",
+                    "findings": [
+                        {
+                            "layer": "L4",
+                            "code": "L4.prerequisite-not-done",
+                            "severity": "warning",
+                            "section": "",
+                            "message": "Prerequisite 1306 is todo; task 1307 is not ready until it is done"
+                        }
+                    ],
+                    "requiredSections": ["Background", "Acceptance Criteria", "Design", "Plan"],
+                    "missingSections": [],
+                    "pass": true,
+                    "notes": [],
+                    "repairs": []
+                }
+            ]
+        },
+        {
+            "wbs": "1308",
+            "status": "ready",
+            "planningDigest": "52774aa74e5f2cc11eb520fa03d44ab8d91e10f9d2dd181827f81429cd3192a6",
+            "checks": [
+                {
+                    "id": "requirements",
+                    "pass": true,
+                    "evidence": "docs/tasks5/1308_show-verified-outcomes-and-reconcilable-measured-cost-throug.md:45 freezes observable R-items; docs/tasks5/1308_show-verified-outcomes-and-reconcilable-measured-cost-throug.md:72 states scope/preservation boundaries."
+                },
+                {
+                    "id": "design",
+                    "pass": true,
+                    "evidence": "docs/tasks5/1308_show-verified-outcomes-and-reconcilable-measured-cost-throug.md:72 freezes names, source owners, algorithm/precedence and handoff. Current seams: packages/app/src/services/verified-outcome.ts:92; packages/app/src/workflow/run-measurements.ts:21; packages/domain/src/analytics/workflow-measurements.ts:36; packages/app/src/workflow/run-measurements.ts:95; packages/domain/src/analytics/workflow-measurements.ts:76; packages/contracts/src/observability.ts:96."
+                },
+                {
+                    "id": "plan",
+                    "pass": true,
+                    "evidence": "docs/tasks5/1308_show-verified-outcomes-and-reconcilable-measured-cost-throug.md:90 orders failure controls before production changes and ends with focused checks, owner sync and actual harness evidence. (cd packages/app && bun test tests/services/verified-outcome.test.ts tests/workflow/run-measurements.test.ts tests/workflow/run-cost.test.ts); add ProjectOutcomeService and rendered Summary tests with exact known/unknown totals."
+                },
+                {
+                    "id": "ac",
+                    "pass": true,
+                    "evidence": "docs/tasks5/1308_show-verified-outcomes-and-reconcilable-measured-cost-throug.md:49 preserves every AC title and req:R mapping; source-local task check/precheck passed and feature scenario coverage is one owner per added scenario."
+                },
+                {
+                    "id": "decisions",
+                    "pass": true,
+                    "evidence": "docs/tasks5/1308_show-verified-outcomes-and-reconcilable-measured-cost-throug.md:60 records closed choices; no unresolved API/library selection. "
+                },
+                {
+                    "id": "dependencies",
+                    "pass": true,
+                    "evidence": "docs/tasks5/1308_show-verified-outcomes-and-reconcilable-measured-cost-throug.md:72 names no direct prerequisite and the consumed/output contract. CLI metadata agrees and whole-batch dependency projection has no cycle. Scheduling status=todo; prerequisites are not claimed done."
+                },
+                {
+                    "id": "premises",
+                    "pass": true,
+                    "evidence": "docs/tasks5/1308_show-verified-outcomes-and-reconcilable-measured-cost-throug.md:23 records current-source corrections: Verified-outcome derivation already exists and token attribution intentionally does not price USD. Reuse it; do not rebuild completion proof logic or present token totals as dollars. Recovery UI and planning snapshots are not functional prerequisites. The proposed aggregateRunSamples name is not an existing export. The actual owner is private foldWorkflow in packages/app/src/workflow/run-measurements.ts:95. Reuse/export that existing pure fold within the app workspace, with unchanged existing callers. readWorkflowRuns accepts sinceMs only; filter startedAt <= until in the service before folding so Summary and outcome windows agree. Existing verified outcome counts are task counts, not retry-attempt counts; label them accordingly. Inspected seams: packages/app/src/services/verified-outcome.ts:92; packages/app/src/workflow/run-measurements.ts:21; packages/domain/src/analytics/workflow-measurements.ts:36; packages/app/src/workflow/run-measurements.ts:95; packages/domain/src/analytics/workflow-measurements.ts:76; packages/contracts/src/observability.ts:96. Source/test paths checked; new files are explicitly planned. Starting diff preserved; one worktree and five-folder wip inventory recorded."
+                }
+            ],
+            "outcome": "refined",
+            "correctionsCount": 2,
+            "droppedIssues": [],
+            "failedChecklistIds": [],
+            "statusBefore": "todo",
+            "statusAfter": "todo",
+            "filePath": "docs/tasks5/1308_show-verified-outcomes-and-reconcilable-measured-cost-throug.md",
+            "dependenciesBefore": ["1307", "1297"],
+            "dependencies": [],
+            "feature": "E6",
+            "sourceAnchors": [
+                "packages/app/src/services/verified-outcome.ts:92",
+                "packages/app/src/workflow/run-measurements.ts:21",
+                "packages/domain/src/analytics/workflow-measurements.ts:36",
+                "packages/app/src/workflow/run-measurements.ts:95",
+                "packages/domain/src/analytics/workflow-measurements.ts:76",
+                "packages/contracts/src/observability.ts:96"
+            ],
+            "correction": "Verified-outcome derivation already exists and token attribution intentionally does not price USD. Reuse it; do not rebuild completion proof logic or present token totals as dollars. Recovery UI and planning snapshots are not functional prerequisites. The proposed aggregateRunSamples name is not an existing export. The actual owner is private foldWorkflow in packages/app/src/workflow/run-measurements.ts:95. Reuse/export that existing pure fold within the app workspace, with unchanged existing callers. readWorkflowRuns accepts sinceMs only; filter startedAt <= until in the service before folding so Summary and outcome windows agree. Existing verified outcome counts are task counts, not retry-attempt counts; label them accordingly.",
+            "structuralCheck": [
+                {
+                    "wbs": "1308",
+                    "status": "todo",
+                    "findings": [],
+                    "requiredSections": ["Background", "Acceptance Criteria", "Design", "Plan"],
+                    "missingSections": [],
+                    "pass": true,
+                    "notes": [],
+                    "repairs": []
+                }
+            ],
+            "implementationPrecheck": [
+                {
+                    "wbs": "1308",
+                    "status": "todo",
+                    "findings": [],
+                    "requiredSections": ["Background", "Acceptance Criteria", "Design", "Plan"],
+                    "missingSections": [],
+                    "pass": true,
+                    "notes": [],
+                    "repairs": []
+                }
+            ]
+        },
+        {
+            "wbs": "1309",
+            "status": "ready",
+            "planningDigest": "aebf1acbcda8d42375cbab33225bbfb5aafc9fc15c1589475b19b610124ddde1",
+            "checks": [
+                {
+                    "id": "requirements",
+                    "pass": true,
+                    "evidence": "docs/tasks5/1309_measure-raw-rollup-and-mart-parity-before-selecting-query-si.md:43 freezes observable R-items; docs/tasks5/1309_measure-raw-rollup-and-mart-parity-before-selecting-query-si.md:78 states scope/preservation boundaries."
+                },
+                {
+                    "id": "design",
+                    "pass": true,
+                    "evidence": "docs/tasks5/1309_measure-raw-rollup-and-mart-parity-before-selecting-query-si.md:78 freezes names, source owners, algorithm/precedence and handoff. Current seams: packages/domain/tests/analytics/rollup-equivalence.test.ts:35; packages/domain/src/analytics/history-board-rollup.ts:711; packages/domain/src/analytics/history-board-marts.ts:300."
+                },
+                {
+                    "id": "plan",
+                    "pass": true,
+                    "evidence": "docs/tasks5/1309_measure-raw-rollup-and-mart-parity-before-selecting-query-si.md:96 orders failure controls before production changes and ends with focused checks, owner sync and actual harness evidence. (cd packages/domain && bun test tests/analytics/rollup-equivalence.test.ts tests/analytics/history-board-rollup.test.ts); (cd packages/app && bun test tests/services/history-board-service.test.ts). Add a fixture evidence test and publish golden predicate vectors."
+                },
+                {
+                    "id": "ac",
+                    "pass": true,
+                    "evidence": "docs/tasks5/1309_measure-raw-rollup-and-mart-parity-before-selecting-query-si.md:47 preserves every AC title and req:R mapping; source-local task check/precheck passed and feature scenario coverage is one owner per added scenario."
+                },
+                {
+                    "id": "decisions",
+                    "pass": true,
+                    "evidence": "docs/tasks5/1309_measure-raw-rollup-and-mart-parity-before-selecting-query-si.md:58 records closed choices; no unresolved API/library selection. Closed: evidence work is runnable without W6. Preserve 1310 as blocked pending an explicit positive artifact."
+                },
+                {
+                    "id": "dependencies",
+                    "pass": true,
+                    "evidence": "docs/tasks5/1309_measure-raw-rollup-and-mart-parity-before-selecting-query-si.md:78 names no direct prerequisite and the consumed/output contract. CLI metadata agrees and whole-batch dependency projection has no cycle. Scheduling status=todo; prerequisites are not claimed done."
+                },
+                {
+                    "id": "premises",
+                    "pass": true,
+                    "evidence": "docs/tasks5/1309_measure-raw-rollup-and-mart-parity-before-selecting-query-si.md:23 records current-source corrections: This evidence task can run now on disposable seeded fixtures; W6 output is not a functional dependency. Freeze one candidate for its downstream task instead of leaving candidate selection to that implementer. Inspected seams: packages/domain/tests/analytics/rollup-equivalence.test.ts:35; packages/domain/src/analytics/history-board-rollup.ts:711; packages/domain/src/analytics/history-board-marts.ts:300. Source/test paths checked; new files are explicitly planned. Starting diff preserved; one worktree and five-folder wip inventory recorded."
+                }
+            ],
+            "outcome": "refined",
+            "correctionsCount": 1,
+            "droppedIssues": [],
+            "failedChecklistIds": [],
+            "statusBefore": "blocked",
+            "statusAfter": "todo",
+            "filePath": "docs/tasks5/1309_measure-raw-rollup-and-mart-parity-before-selecting-query-si.md",
+            "dependenciesBefore": ["1308"],
+            "dependencies": [],
+            "feature": "E94",
+            "sourceAnchors": [
+                "packages/domain/tests/analytics/rollup-equivalence.test.ts:35",
+                "packages/domain/src/analytics/history-board-rollup.ts:711",
+                "packages/domain/src/analytics/history-board-marts.ts:300"
+            ],
+            "correction": "This evidence task can run now on disposable seeded fixtures; W6 output is not a functional dependency. Freeze one candidate for its downstream task instead of leaving candidate selection to that implementer.",
+            "structuralCheck": [
+                {
+                    "wbs": "1309",
+                    "status": "todo",
+                    "findings": [],
+                    "requiredSections": ["Background", "Acceptance Criteria", "Design", "Plan"],
+                    "missingSections": [],
+                    "pass": true,
+                    "notes": [],
+                    "repairs": []
+                }
+            ],
+            "implementationPrecheck": [
+                {
+                    "wbs": "1309",
+                    "status": "todo",
+                    "findings": [],
+                    "requiredSections": ["Background", "Acceptance Criteria", "Design", "Plan"],
+                    "missingSections": [],
+                    "pass": true,
+                    "notes": [],
+                    "repairs": []
+                }
+            ]
+        },
+        {
+            "wbs": "1310",
+            "status": "ready",
+            "planningDigest": "61077c04ef682aaa316fb79449f6ab03fb1f522ee4a9162e9ac76cc37484d629",
+            "checks": [
+                {
+                    "id": "requirements",
+                    "pass": true,
+                    "evidence": "docs/tasks5/1310_consolidate-only-proven-equivalent-history-selectors-and-mea.md:43 freezes observable R-items; docs/tasks5/1310_consolidate-only-proven-equivalent-history-selectors-and-mea.md:78 states scope/preservation boundaries."
+                },
+                {
+                    "id": "design",
+                    "pass": true,
+                    "evidence": "docs/tasks5/1310_consolidate-only-proven-equivalent-history-selectors-and-mea.md:78 freezes names, source owners, algorithm/precedence and handoff. Current seams: packages/domain/src/analytics/history-board-rollup.ts:711; packages/domain/src/analytics/history-board-marts.ts:300."
+                },
+                {
+                    "id": "plan",
+                    "pass": true,
+                    "evidence": "docs/tasks5/1310_consolidate-only-proven-equivalent-history-selectors-and-mea.md:96 orders failure controls before production changes and ends with focused checks, owner sync and actual harness evidence. (cd packages/domain && bun test tests/analytics/rollup-equivalence.test.ts tests/analytics/history-board-rollup.test.ts); add selector-time-range tests. Use exact integer/null equality and existing 1e-9 allocated-token tolerance."
+                },
+                {
+                    "id": "ac",
+                    "pass": true,
+                    "evidence": "docs/tasks5/1310_consolidate-only-proven-equivalent-history-selectors-and-mea.md:47 preserves every AC title and req:R mapping; source-local task check/precheck passed and feature scenario coverage is one owner per added scenario."
+                },
+                {
+                    "id": "decisions",
+                    "pass": true,
+                    "evidence": "docs/tasks5/1310_consolidate-only-proven-equivalent-history-selectors-and-mea.md:58 records closed choices; no unresolved API/library selection. Deferred with explicit owner: task 1309 provides the go/no-go artifact. Implementation shape is frozen; scheduling remains blocked until a go exists."
+                },
+                {
+                    "id": "dependencies",
+                    "pass": true,
+                    "evidence": "docs/tasks5/1310_consolidate-only-proven-equivalent-history-selectors-and-mea.md:78 names 1309 and the consumed/output contract. CLI metadata agrees and whole-batch dependency projection has no cycle. Scheduling status=blocked; prerequisites are not claimed done."
+                },
+                {
+                    "id": "premises",
+                    "pass": true,
+                    "evidence": "docs/tasks5/1310_consolidate-only-proven-equivalent-history-selectors-and-mea.md:23 records current-source corrections: The previous design allowed an unknown future consolidation target. Freeze only the existing duplicated time bounds and exclude token aggregates/filter routing. Inspected seams: packages/domain/src/analytics/history-board-rollup.ts:711; packages/domain/src/analytics/history-board-marts.ts:300. Source/test paths checked; new files are explicitly planned. Starting diff preserved; one worktree and five-folder wip inventory recorded."
+                }
+            ],
+            "outcome": "refined",
+            "correctionsCount": 1,
+            "droppedIssues": [],
+            "failedChecklistIds": [],
+            "statusBefore": "blocked",
+            "statusAfter": "blocked",
+            "filePath": "docs/tasks5/1310_consolidate-only-proven-equivalent-history-selectors-and-mea.md",
+            "dependenciesBefore": ["1309"],
+            "dependencies": ["1309"],
+            "feature": "E94",
+            "sourceAnchors": [
+                "packages/domain/src/analytics/history-board-rollup.ts:711",
+                "packages/domain/src/analytics/history-board-marts.ts:300"
+            ],
+            "correction": "The previous design allowed an unknown future consolidation target. Freeze only the existing duplicated time bounds and exclude token aggregates/filter routing.",
+            "structuralCheck": [
+                {
+                    "wbs": "1310",
+                    "status": "blocked",
+                    "findings": [
+                        {
+                            "layer": "L4",
+                            "code": "L4.readiness-blocked",
+                            "severity": "warning",
+                            "section": "",
+                            "message": "Task 1310 is blocked — readiness is false until the blocker is resolved or explicitly forced"
+                        },
+                        {
+                            "layer": "L4",
+                            "code": "L4.prerequisite-not-done",
+                            "severity": "warning",
+                            "section": "",
+                            "message": "Prerequisite 1309 is todo; task 1310 is not ready until it is done"
+                        }
+                    ],
+                    "requiredSections": ["Background"],
+                    "missingSections": [],
+                    "pass": true,
+                    "notes": [],
+                    "repairs": []
+                }
+            ],
+            "implementationPrecheck": [
+                {
+                    "wbs": "1310",
+                    "status": "todo",
+                    "findings": [
+                        {
+                            "layer": "L4",
+                            "code": "L4.prerequisite-not-done",
+                            "severity": "warning",
+                            "section": "",
+                            "message": "Prerequisite 1309 is todo; task 1310 is not ready until it is done"
+                        }
+                    ],
+                    "requiredSections": ["Background", "Acceptance Criteria", "Design", "Plan"],
+                    "missingSections": [],
+                    "pass": true,
+                    "notes": [],
+                    "repairs": []
+                }
+            ]
+        },
+        {
+            "wbs": "1311",
+            "status": "ready",
+            "planningDigest": "b6aca7e85213d1ec7ed1973551dbc7c9ec8ecc8ff37a27adf2c1da3512dcaf01",
+            "checks": [
+                {
+                    "id": "requirements",
+                    "pass": true,
+                    "evidence": "docs/tasks5/1311_prove-migration-sql-ownership-and-offline-upgrade-parity-on-.md:43 freezes observable R-items; docs/tasks5/1311_prove-migration-sql-ownership-and-offline-upgrade-parity-on-.md:78 states scope/preservation boundaries."
+                },
+                {
+                    "id": "design",
+                    "pass": true,
+                    "evidence": "docs/tasks5/1311_prove-migration-sql-ownership-and-offline-upgrade-parity-on-.md:78 freezes names, source owners, algorithm/precedence and handoff. Current seams: packages/domain/src/migrations.ts:1407; packages/domain/src/migrations.ts:2046; packages/domain/src/migrations.ts:1305."
+                },
+                {
+                    "id": "plan",
+                    "pass": true,
+                    "evidence": "docs/tasks5/1311_prove-migration-sql-ownership-and-offline-upgrade-parity-on-.md:96 orders failure controls before production changes and ends with focused checks, owner sync and actual harness evidence. (cd packages/domain && bun test tests/dao/migrations.test.ts); add a fixture ownership/parity proof and use the existing CLI build path for a disposable source-free smoke when available. Preserve all legacy reference files read-only."
+                },
+                {
+                    "id": "ac",
+                    "pass": true,
+                    "evidence": "docs/tasks5/1311_prove-migration-sql-ownership-and-offline-upgrade-parity-on-.md:47 preserves every AC title and req:R mapping; source-local task check/precheck passed and feature scenario coverage is one owner per added scenario."
+                },
+                {
+                    "id": "decisions",
+                    "pass": true,
+                    "evidence": "docs/tasks5/1311_prove-migration-sql-ownership-and-offline-upgrade-parity-on-.md:58 records closed choices; no unresolved API/library selection. Closed: fixture evidence can begin now. Runtime checksums are not invented, and historical SQL is not rewritten."
+                },
+                {
+                    "id": "dependencies",
+                    "pass": true,
+                    "evidence": "docs/tasks5/1311_prove-migration-sql-ownership-and-offline-upgrade-parity-on-.md:78 names no direct prerequisite and the consumed/output contract. CLI metadata agrees and whole-batch dependency projection has no cycle. Scheduling status=todo; prerequisites are not claimed done."
+                },
+                {
+                    "id": "premises",
+                    "pass": true,
+                    "evidence": "docs/tasks5/1311_prove-migration-sql-ownership-and-offline-upgrade-parity-on-.md:23 records current-source corrections: The runtime migration journal records id and applied_at, not SQL checksums. Preserve hashes as audit evidence, not a fictitious enforced DB field. Remove the W6 UI dependency; fixture evidence is runnable now. Inspected seams: packages/domain/src/migrations.ts:1407; packages/domain/src/migrations.ts:2046; packages/domain/src/migrations.ts:1305. Source/test paths checked; new files are explicitly planned. Starting diff preserved; one worktree and five-folder wip inventory recorded."
+                }
+            ],
+            "outcome": "refined",
+            "correctionsCount": 1,
+            "droppedIssues": [],
+            "failedChecklistIds": [],
+            "statusBefore": "blocked",
+            "statusAfter": "todo",
+            "filePath": "docs/tasks5/1311_prove-migration-sql-ownership-and-offline-upgrade-parity-on-.md",
+            "dependenciesBefore": ["1308"],
+            "dependencies": [],
+            "feature": "A331",
+            "sourceAnchors": [
+                "packages/domain/src/migrations.ts:1407",
+                "packages/domain/src/migrations.ts:2046",
+                "packages/domain/src/migrations.ts:1305"
+            ],
+            "correction": "The runtime migration journal records id and applied_at, not SQL checksums. Preserve hashes as audit evidence, not a fictitious enforced DB field. Remove the W6 UI dependency; fixture evidence is runnable now.",
+            "structuralCheck": [
+                {
+                    "wbs": "1311",
+                    "status": "todo",
+                    "findings": [],
+                    "requiredSections": ["Background", "Acceptance Criteria", "Design", "Plan"],
+                    "missingSections": [],
+                    "pass": true,
+                    "notes": [],
+                    "repairs": []
+                }
+            ],
+            "implementationPrecheck": [
+                {
+                    "wbs": "1311",
+                    "status": "todo",
+                    "findings": [],
+                    "requiredSections": ["Background", "Acceptance Criteria", "Design", "Plan"],
+                    "missingSections": [],
+                    "pass": true,
+                    "notes": [],
+                    "repairs": []
+                }
+            ]
+        },
+        {
+            "wbs": "1312",
+            "status": "ready",
+            "planningDigest": "faee40fe2bfb33878e9a30d7e196274fd95d148a192d917b6d43672dbaa9a124",
+            "checks": [
+                {
+                    "id": "requirements",
+                    "pass": true,
+                    "evidence": "docs/tasks5/1312_generate-offline-migration-embedding-from-verified-authorita.md:43 freezes observable R-items; docs/tasks5/1312_generate-offline-migration-embedding-from-verified-authorita.md:78 states scope/preservation boundaries."
+                },
+                {
+                    "id": "design",
+                    "pass": true,
+                    "evidence": "docs/tasks5/1312_generate-offline-migration-embedding-from-verified-authorita.md:78 freezes names, source owners, algorithm/precedence and handoff. Current seams: packages/domain/src/migrations.ts:1305; packages/domain/src/migrations.ts:1553; scripts/commands/build-cli.ts:32."
+                },
+                {
+                    "id": "plan",
+                    "pass": true,
+                    "evidence": "docs/tasks5/1312_generate-offline-migration-embedding-from-verified-authorita.md:96 orders failure controls before production changes and ends with focused checks, owner sync and actual harness evidence. (cd packages/domain && bun test tests/dao/migrations.test.ts); add scripts/commands/emit-migration-sql.test.ts; run the required CLI bundle/relink checks only during implementation. Save IDs, SQL hashes, fixture schema comparison and offline binary result."
+                },
+                {
+                    "id": "ac",
+                    "pass": true,
+                    "evidence": "docs/tasks5/1312_generate-offline-migration-embedding-from-verified-authorita.md:47 preserves every AC title and req:R mapping; source-local task check/precheck passed and feature scenario coverage is one owner per added scenario."
+                },
+                {
+                    "id": "decisions",
+                    "pass": true,
+                    "evidence": "docs/tasks5/1312_generate-offline-migration-embedding-from-verified-authorita.md:58 records closed choices; no unresolved API/library selection. Deferred owner: task 1311 decides measured safety/benefit. The generator source, target and pilot migration are fixed."
+                },
+                {
+                    "id": "dependencies",
+                    "pass": true,
+                    "evidence": "docs/tasks5/1312_generate-offline-migration-embedding-from-verified-authorita.md:78 names 1311 and the consumed/output contract. CLI metadata agrees and whole-batch dependency projection has no cycle. Scheduling status=blocked; prerequisites are not claimed done."
+                },
+                {
+                    "id": "premises",
+                    "pass": true,
+                    "evidence": "docs/tasks5/1312_generate-offline-migration-embedding-from-verified-authorita.md:23 records current-source corrections: Freeze one static mirror as a safe generation pilot instead of waiting for unspecified upstream SQL exports. All migration control flow and other mirrors remain unchanged. Inspected seams: packages/domain/src/migrations.ts:1305; packages/domain/src/migrations.ts:1553; scripts/commands/build-cli.ts:32. Source/test paths checked; new files are explicitly planned. Starting diff preserved; one worktree and five-folder wip inventory recorded."
+                }
+            ],
+            "outcome": "refined",
+            "correctionsCount": 1,
+            "droppedIssues": [],
+            "failedChecklistIds": [],
+            "statusBefore": "blocked",
+            "statusAfter": "blocked",
+            "filePath": "docs/tasks5/1312_generate-offline-migration-embedding-from-verified-authorita.md",
+            "dependenciesBefore": ["1311"],
+            "dependencies": ["1311"],
+            "feature": "A331",
+            "sourceAnchors": [
+                "packages/domain/src/migrations.ts:1305",
+                "packages/domain/src/migrations.ts:1553",
+                "scripts/commands/build-cli.ts:32"
+            ],
+            "correction": "Freeze one static mirror as a safe generation pilot instead of waiting for unspecified upstream SQL exports. All migration control flow and other mirrors remain unchanged.",
+            "structuralCheck": [
+                {
+                    "wbs": "1312",
+                    "status": "blocked",
+                    "findings": [
+                        {
+                            "layer": "L4",
+                            "code": "L4.readiness-blocked",
+                            "severity": "warning",
+                            "section": "",
+                            "message": "Task 1312 is blocked — readiness is false until the blocker is resolved or explicitly forced"
+                        },
+                        {
+                            "layer": "L4",
+                            "code": "L4.prerequisite-not-done",
+                            "severity": "warning",
+                            "section": "",
+                            "message": "Prerequisite 1311 is todo; task 1312 is not ready until it is done"
+                        }
+                    ],
+                    "requiredSections": ["Background"],
+                    "missingSections": [],
+                    "pass": true,
+                    "notes": [],
+                    "repairs": []
+                }
+            ],
+            "implementationPrecheck": [
+                {
+                    "wbs": "1312",
+                    "status": "todo",
+                    "findings": [
+                        {
+                            "layer": "L4",
+                            "code": "L4.prerequisite-not-done",
+                            "severity": "warning",
+                            "section": "",
+                            "message": "Prerequisite 1311 is todo; task 1312 is not ready until it is done"
+                        }
+                    ],
+                    "requiredSections": ["Background", "Acceptance Criteria", "Design", "Plan"],
+                    "missingSections": [],
+                    "pass": true,
+                    "notes": [],
+                    "repairs": []
+                }
+            ]
+        },
+        {
+            "wbs": "1313",
+            "status": "ready",
+            "planningDigest": "8a96424d44f16e228b402822d8b5620a463c0f6270e434afc7aaf0c6027f2287",
+            "checks": [
+                {
+                    "id": "requirements",
+                    "pass": true,
+                    "evidence": "docs/tasks5/1313_classify-executable-shell-positions-without-blocking-literal.md:43 freezes observable R-items; docs/tasks5/1313_classify-executable-shell-positions-without-blocking-literal.md:70 states scope/preservation boundaries."
+                },
+                {
+                    "id": "design",
+                    "pass": true,
+                    "evidence": "docs/tasks5/1313_classify-executable-shell-positions-without-blocking-literal.md:70 freezes names, source owners, algorithm/precedence and handoff. Current seams: plugins/sp/lib/destructive-policy.ts:190; plugins/sp/lib/destructive-policy.ts:185; plugins/sp/scripts/hooks/careful-guard.ts:84."
+                },
+                {
+                    "id": "plan",
+                    "pass": true,
+                    "evidence": "docs/tasks5/1313_classify-executable-shell-positions-without-blocking-literal.md:88 orders failure controls before production changes and ends with focused checks, owner sync and actual harness evidence. (cd plugins/sp && bun test tests/hooks/destructive-policy.test.ts tests/hooks/careful-guard.test.ts). Extend the existing shared classifier matrix in destructive-policy.test.ts. Save false-positive and destructive control matrix; plugin-smoke is required only if actual plugin dependency graph changes."
+                },
+                {
+                    "id": "ac",
+                    "pass": true,
+                    "evidence": "docs/tasks5/1313_classify-executable-shell-positions-without-blocking-literal.md:47 preserves every AC title and req:R mapping; source-local task check/precheck passed and feature scenario coverage is one owner per added scenario."
+                },
+                {
+                    "id": "decisions",
+                    "pass": true,
+                    "evidence": "docs/tasks5/1313_classify-executable-shell-positions-without-blocking-literal.md:58 records closed choices; no unresolved API/library selection. Closed: use a bounded internal lexer and conservative fallback; no new parser package, no claim of full shell-language coverage."
+                },
+                {
+                    "id": "dependencies",
+                    "pass": true,
+                    "evidence": "docs/tasks5/1313_classify-executable-shell-positions-without-blocking-literal.md:70 names no direct prerequisite and the consumed/output contract. CLI metadata agrees and whole-batch dependency projection has no cycle. Scheduling status=todo; prerequisites are not claimed done."
+                },
+                {
+                    "id": "premises",
+                    "pass": true,
+                    "evidence": "docs/tasks5/1313_classify-executable-shell-positions-without-blocking-literal.md:23 records current-source corrections: Do not leave parser/library choice open or claim a complete shell parser is needed. Freeze a conservative lexical pass: allow only proven literal read-only searches; everything ambiguous retains the current classifier behavior. Inspected seams: plugins/sp/lib/destructive-policy.ts:190; plugins/sp/lib/destructive-policy.ts:185; plugins/sp/scripts/hooks/careful-guard.ts:84. Source/test paths checked; new files are explicitly planned. Starting diff preserved; one worktree and five-folder wip inventory recorded."
+                }
+            ],
+            "outcome": "refined",
+            "correctionsCount": 1,
+            "droppedIssues": [],
+            "failedChecklistIds": [],
+            "statusBefore": "todo",
+            "statusAfter": "todo",
+            "filePath": "docs/tasks5/1313_classify-executable-shell-positions-without-blocking-literal.md",
+            "dependenciesBefore": ["1295"],
+            "dependencies": [],
+            "feature": "A6",
+            "sourceAnchors": [
+                "plugins/sp/lib/destructive-policy.ts:190",
+                "plugins/sp/lib/destructive-policy.ts:185",
+                "plugins/sp/scripts/hooks/careful-guard.ts:84"
+            ],
+            "correction": "Do not leave parser/library choice open or claim a complete shell parser is needed. Freeze a conservative lexical pass: allow only proven literal read-only searches; everything ambiguous retains the current classifier behavior.",
+            "structuralCheck": [
+                {
+                    "wbs": "1313",
+                    "status": "todo",
+                    "findings": [],
+                    "requiredSections": ["Background", "Acceptance Criteria", "Design", "Plan"],
+                    "missingSections": [],
+                    "pass": true,
+                    "notes": [],
+                    "repairs": []
+                }
+            ],
+            "implementationPrecheck": [
+                {
+                    "wbs": "1313",
+                    "status": "todo",
+                    "findings": [],
+                    "requiredSections": ["Background", "Acceptance Criteria", "Design", "Plan"],
+                    "missingSections": [],
+                    "pass": true,
+                    "notes": [],
+                    "repairs": []
+                }
+            ]
+        },
+        {
+            "wbs": "1314",
+            "status": "ready",
+            "planningDigest": "4a9729bb0f7878f35d9651fce41903dba08757cbf82df818dd8ece39f93f7265",
+            "checks": [
+                {
+                    "id": "requirements",
+                    "pass": true,
+                    "evidence": "docs/tasks5/1314_parse-coverage-diagnostic-thresholds-with-the-native-toml-pa.md:43 freezes observable R-items; docs/tasks5/1314_parse-coverage-diagnostic-thresholds-with-the-native-toml-pa.md:70 states scope/preservation boundaries."
+                },
+                {
+                    "id": "design",
+                    "pass": true,
+                    "evidence": "docs/tasks5/1314_parse-coverage-diagnostic-thresholds-with-the-native-toml-pa.md:70 freezes names, source owners, algorithm/precedence and handoff. Current seams: packages/app/src/services/quality-gate.ts:172; packages/app/tests/services/quality-gate.test.ts:330; scripts/commands/run-tests.ts:228."
+                },
+                {
+                    "id": "plan",
+                    "pass": true,
+                    "evidence": "docs/tasks5/1314_parse-coverage-diagnostic-thresholds-with-the-native-toml-pa.md:88 orders failure controls before production changes and ends with focused checks, owner sync and actual harness evidence. (cd packages/app && bun test tests/services/quality-gate.test.ts tests/services/quality-gate-main.test.ts tests/services/quality-gate-receipt.test.ts). No new dependency; no whole coverage-policy rewrite."
+                },
+                {
+                    "id": "ac",
+                    "pass": true,
+                    "evidence": "docs/tasks5/1314_parse-coverage-diagnostic-thresholds-with-the-native-toml-pa.md:47 preserves every AC title and req:R mapping; source-local task check/precheck passed and feature scenario coverage is one owner per added scenario."
+                },
+                {
+                    "id": "decisions",
+                    "pass": true,
+                    "evidence": "docs/tasks5/1314_parse-coverage-diagnostic-thresholds-with-the-native-toml-pa.md:58 records closed choices; no unresolved API/library selection. Closed: preserve null on malformed/missing settings and the legacy helper snippet; this is diagnostic parsing, not gate-policy tightening."
+                },
+                {
+                    "id": "dependencies",
+                    "pass": true,
+                    "evidence": "docs/tasks5/1314_parse-coverage-diagnostic-thresholds-with-the-native-toml-pa.md:70 names no direct prerequisite and the consumed/output contract. CLI metadata agrees and whole-batch dependency projection has no cycle. Scheduling status=todo; prerequisites are not claimed done."
+                },
+                {
+                    "id": "premises",
+                    "pass": true,
+                    "evidence": "docs/tasks5/1314_parse-coverage-diagnostic-thresholds-with-the-native-toml-pa.md:23 records current-source corrections: Current helper callers expect null for malformed text and support a root-level legacy snippet. Freeze those behaviors rather than introducing new exceptions or changing the full gate outcome. Inspected seams: packages/app/src/services/quality-gate.ts:172; packages/app/tests/services/quality-gate.test.ts:330; scripts/commands/run-tests.ts:228. Source/test paths checked; new files are explicitly planned. Starting diff preserved; one worktree and five-folder wip inventory recorded."
+                }
+            ],
+            "outcome": "refined",
+            "correctionsCount": 1,
+            "droppedIssues": [],
+            "failedChecklistIds": [],
+            "statusBefore": "todo",
+            "statusAfter": "todo",
+            "filePath": "docs/tasks5/1314_parse-coverage-diagnostic-thresholds-with-the-native-toml-pa.md",
+            "dependenciesBefore": ["1295"],
+            "dependencies": [],
+            "feature": "C3",
+            "sourceAnchors": [
+                "packages/app/src/services/quality-gate.ts:172",
+                "packages/app/tests/services/quality-gate.test.ts:330",
+                "scripts/commands/run-tests.ts:228"
+            ],
+            "correction": "Current helper callers expect null for malformed text and support a root-level legacy snippet. Freeze those behaviors rather than introducing new exceptions or changing the full gate outcome.",
+            "structuralCheck": [
+                {
+                    "wbs": "1314",
+                    "status": "todo",
+                    "findings": [],
+                    "requiredSections": ["Background", "Acceptance Criteria", "Design", "Plan"],
+                    "missingSections": [],
+                    "pass": true,
+                    "notes": [],
+                    "repairs": []
+                }
+            ],
+            "implementationPrecheck": [
+                {
+                    "wbs": "1314",
+                    "status": "todo",
+                    "findings": [],
+                    "requiredSections": ["Background", "Acceptance Criteria", "Design", "Plan"],
+                    "missingSections": [],
+                    "pass": true,
+                    "notes": [],
+                    "repairs": []
+                }
+            ]
+        },
+        {
+            "wbs": "1315",
+            "status": "ready",
+            "planningDigest": "a8c2fed2c6c74c70730b08a973ef001c065f3b2fbc417c45bebe291cbb4a98da",
+            "checks": [
+                {
+                    "id": "requirements",
+                    "pass": true,
+                    "evidence": "docs/tasks5/1315_remove-unsupported-runtime-registration-promises-from-the-bo.md:43 freezes observable R-items; docs/tasks5/1315_remove-unsupported-runtime-registration-promises-from-the-bo.md:70 states scope/preservation boundaries."
+                },
+                {
+                    "id": "design",
+                    "pass": true,
+                    "evidence": "docs/tasks5/1315_remove-unsupported-runtime-registration-promises-from-the-bo.md:70 freezes names, source owners, algorithm/precedence and handoff. Current seams: apps/web/src/modules/registry.ts:20; apps/web/tests/modules/registry.test.ts:90; scripts/commands/emit-board-types.ts:20."
+                },
+                {
+                    "id": "plan",
+                    "pass": true,
+                    "evidence": "docs/tasks5/1315_remove-unsupported-runtime-registration-promises-from-the-bo.md:88 orders failure controls before production changes and ends with focused checks, owner sync and actual harness evidence. (cd apps/web && bun test tests/modules/registry.test.ts tests/modules/compose.test.ts tests/modules/contribution.test.ts tests/modules/runtime-distribution.test.ts); run declaration emit check and typecheck. Use installed Board fixtures where required, not a new loader."
+                },
+                {
+                    "id": "ac",
+                    "pass": true,
+                    "evidence": "docs/tasks5/1315_remove-unsupported-runtime-registration-promises-from-the-bo.md:47 preserves every AC title and req:R mapping; source-local task check/precheck passed and feature scenario coverage is one owner per added scenario."
+                },
+                {
+                    "id": "decisions",
+                    "pass": true,
+                    "evidence": "docs/tasks5/1315_remove-unsupported-runtime-registration-promises-from-the-bo.md:58 records closed choices; no unresolved API/library selection. Closed: remove the unused internal operation. A newly introduced production consumer is source drift, not an open design option."
+                },
+                {
+                    "id": "dependencies",
+                    "pass": true,
+                    "evidence": "docs/tasks5/1315_remove-unsupported-runtime-registration-promises-from-the-bo.md:70 names no direct prerequisite and the consumed/output contract. CLI metadata agrees and whole-batch dependency projection has no cycle. Scheduling status=todo; prerequisites are not claimed done."
+                },
+                {
+                    "id": "premises",
+                    "pass": true,
+                    "evidence": "docs/tasks5/1315_remove-unsupported-runtime-registration-promises-from-the-bo.md:23 records current-source corrections: The current caller search finds only registry implementation/exports and its tests. The public Board declaration source is contribution.ts, not Registry. Freeze removal of the unused internal method rather than leaving a compatibility choice to implementation. Inspected seams: apps/web/src/modules/registry.ts:20; apps/web/tests/modules/registry.test.ts:90; scripts/commands/emit-board-types.ts:20. Source/test paths checked; new files are explicitly planned. Starting diff preserved; one worktree and five-folder wip inventory recorded."
+                }
+            ],
+            "outcome": "refined",
+            "correctionsCount": 1,
+            "droppedIssues": [],
+            "failedChecklistIds": [],
+            "statusBefore": "todo",
+            "statusAfter": "todo",
+            "filePath": "docs/tasks5/1315_remove-unsupported-runtime-registration-promises-from-the-bo.md",
+            "dependenciesBefore": ["1300"],
+            "dependencies": [],
+            "feature": "A8",
+            "sourceAnchors": [
+                "apps/web/src/modules/registry.ts:20",
+                "apps/web/tests/modules/registry.test.ts:90",
+                "scripts/commands/emit-board-types.ts:20"
+            ],
+            "correction": "The current caller search finds only registry implementation/exports and its tests. The public Board declaration source is contribution.ts, not Registry. Freeze removal of the unused internal method rather than leaving a compatibility choice to implementation.",
+            "structuralCheck": [
+                {
+                    "wbs": "1315",
+                    "status": "todo",
+                    "findings": [],
+                    "requiredSections": ["Background", "Acceptance Criteria", "Design", "Plan"],
+                    "missingSections": [],
+                    "pass": true,
+                    "notes": [],
+                    "repairs": []
+                }
+            ],
+            "implementationPrecheck": [
+                {
+                    "wbs": "1315",
+                    "status": "todo",
+                    "findings": [],
+                    "requiredSections": ["Background", "Acceptance Criteria", "Design", "Plan"],
+                    "missingSections": [],
+                    "pass": true,
+                    "notes": [],
+                    "repairs": []
+                }
+            ]
+        },
+        {
+            "wbs": "1316",
+            "status": "ready",
+            "planningDigest": "e6c1137ad525ee8466fbc79c0211437d9c4f4e3a1d9b75dec6ea0c84add20103",
+            "checks": [
+                {
+                    "id": "requirements",
+                    "pass": true,
+                    "evidence": "docs/tasks5/1316_reduce-duplicated-test-mocks-behind-retained-behavioral-and-.md:43 freezes observable R-items; docs/tasks5/1316_reduce-duplicated-test-mocks-behind-retained-behavioral-and-.md:78 states scope/preservation boundaries."
+                },
+                {
+                    "id": "design",
+                    "pass": true,
+                    "evidence": "docs/tasks5/1316_reduce-duplicated-test-mocks-behind-retained-behavioral-and-.md:78 freezes names, source owners, algorithm/precedence and handoff. Current seams: apps/web/tests/test-helpers/rpc-client-mock.ts:32; apps/web/src/lib/rpc-client.ts:42; apps/web/src/lib/rpc-client.ts:61."
+                },
+                {
+                    "id": "plan",
+                    "pass": true,
+                    "evidence": "docs/tasks5/1316_reduce-duplicated-test-mocks-behind-retained-behavioral-and-.md:96 orders failure controls before production changes and ends with focused checks, owner sync and actual harness evidence. (cd apps/web && bun test tests/lib/rpc-client.test.ts tests/rpc-client.test.ts tests/lib/feature-client.test.ts tests/modules/features/feature-sync.test.ts). Add tests/lib/rpc-fetch.test.ts with controlled timeout/abort fixtures. Repeat ordinary discovery and preserve source-boundary tests."
+                },
+                {
+                    "id": "ac",
+                    "pass": true,
+                    "evidence": "docs/tasks5/1316_reduce-duplicated-test-mocks-behind-retained-behavioral-and-.md:47 preserves every AC title and req:R mapping; source-local task check/precheck passed and feature scenario coverage is one owner per added scenario."
+                },
+                {
+                    "id": "decisions",
+                    "pass": true,
+                    "evidence": "docs/tasks5/1316_reduce-duplicated-test-mocks-behind-retained-behavioral-and-.md:58 records closed choices; no unresolved API/library selection. Closed: use the existing duplicated fetch seam as the measured candidate; preserve production behavior and remove the mock copy. This task can be todo after 1295."
+                },
+                {
+                    "id": "dependencies",
+                    "pass": true,
+                    "evidence": "docs/tasks5/1316_reduce-duplicated-test-mocks-behind-retained-behavioral-and-.md:78 names 1295 and the consumed/output contract. CLI metadata agrees and whole-batch dependency projection has no cycle. Scheduling status=todo; prerequisites are not claimed done."
+                },
+                {
+                    "id": "premises",
+                    "pass": true,
+                    "evidence": "docs/tasks5/1316_reduce-duplicated-test-mocks-behind-retained-behavioral-and-.md:23 records current-source corrections: A concrete duplicated family is now identified: the shared rpc-client mock duplicates fetch timeout/cancellation code and diverges (10s vs 30s, missing pre-abort/reason/listener cleanup). This is no longer blocked on discovering a candidate or on SSE migration. Inspected seams: apps/web/tests/test-helpers/rpc-client-mock.ts:32; apps/web/src/lib/rpc-client.ts:42; apps/web/src/lib/rpc-client.ts:61. Source/test paths checked; new files are explicitly planned. Starting diff preserved; one worktree and five-folder wip inventory recorded."
+                }
+            ],
+            "outcome": "refined",
+            "correctionsCount": 1,
+            "droppedIssues": [],
+            "failedChecklistIds": [],
+            "statusBefore": "blocked",
+            "statusAfter": "todo",
+            "filePath": "docs/tasks5/1316_reduce-duplicated-test-mocks-behind-retained-behavioral-and-.md",
+            "dependenciesBefore": ["1295", "1301"],
+            "dependencies": ["1295"],
+            "feature": "H16",
+            "sourceAnchors": [
+                "apps/web/tests/test-helpers/rpc-client-mock.ts:32",
+                "apps/web/src/lib/rpc-client.ts:42",
+                "apps/web/src/lib/rpc-client.ts:61"
+            ],
+            "correction": "A concrete duplicated family is now identified: the shared rpc-client mock duplicates fetch timeout/cancellation code and diverges (10s vs 30s, missing pre-abort/reason/listener cleanup). This is no longer blocked on discovering a candidate or on SSE migration.",
+            "structuralCheck": [
+                {
+                    "wbs": "1316",
+                    "status": "todo",
+                    "findings": [
+                        {
+                            "layer": "L4",
+                            "code": "L4.prerequisite-not-done",
+                            "severity": "warning",
+                            "section": "",
+                            "message": "Prerequisite 1295 is todo; task 1316 is not ready until it is done"
+                        }
+                    ],
+                    "requiredSections": ["Background", "Acceptance Criteria", "Design", "Plan"],
+                    "missingSections": [],
+                    "pass": true,
+                    "notes": [],
+                    "repairs": []
+                }
+            ],
+            "implementationPrecheck": [
+                {
+                    "wbs": "1316",
+                    "status": "todo",
+                    "findings": [
+                        {
+                            "layer": "L4",
+                            "code": "L4.prerequisite-not-done",
+                            "severity": "warning",
+                            "section": "",
+                            "message": "Prerequisite 1295 is todo; task 1316 is not ready until it is done"
+                        }
+                    ],
+                    "requiredSections": ["Background", "Acceptance Criteria", "Design", "Plan"],
+                    "missingSections": [],
+                    "pass": true,
+                    "notes": [],
+                    "repairs": []
+                }
+            ]
+        }
+    ],
+    "featureChecks": [
+        {
+            "id": "F22",
+            "filePath": "docs/features/F22_complete-planning-corpus-reads-with-explicit-diagnostics.md",
+            "scenarios": {
+                "Incomplete planning input cannot silently drive lifecycle state": "1296",
+                "Corpus snapshots preserve identifiers and cross-folder relationships": "1297"
+            },
+            "check": [
+                {
+                    "id": "F22",
+                    "status": "backlog",
+                    "findings": [
+                        {
+                            "layer": "L4",
+                            "code": "L4.scenario-unverified",
+                            "severity": "warning",
+                            "section": "Acceptance Criteria",
+                            "message": "Feature scenario \"R1 — Incomplete planning input cannot silently drive lifecycle state\" is linked but unverified: covering task(s) 1296 have no PASS verdict with MET requirement"
+                        },
+                        {
+                            "layer": "L4",
+                            "code": "L4.scenario-unverified",
+                            "severity": "warning",
+                            "section": "Acceptance Criteria",
+                            "message": "Feature scenario \"R2 — Corpus snapshots preserve identifiers and cross-folder relationships\" is linked but unverified: covering task(s) 1297 have no PASS verdict with MET requirement"
+                        }
+                    ],
+                    "requiredSections": [],
+                    "missingSections": [],
+                    "pass": true,
+                    "notes": [],
+                    "repairs": []
+                }
+            ]
+        },
+        {
+            "id": "F73",
+            "filePath": "docs/features/F73_planning-board-query-convergence-and-actionable-daily-readiness.md",
+            "scenarios": {
+                "Planning Board reads use validated shared transport contracts": "1300",
+                "Planning live updates share one owned subscription": "1301",
+                "Daily readiness explains work and exact blockers": "1302"
+            },
+            "check": [
+                {
+                    "id": "F73",
+                    "status": "backlog",
+                    "findings": [
+                        {
+                            "layer": "L4",
+                            "code": "L4.scenario-unverified",
+                            "severity": "warning",
+                            "section": "Acceptance Criteria",
+                            "message": "Feature scenario \"R1 — Planning Board reads use validated shared transport contracts\" is linked but unverified: covering task(s) 1300 have no PASS verdict with MET requirement"
+                        },
+                        {
+                            "layer": "L4",
+                            "code": "L4.scenario-unverified",
+                            "severity": "warning",
+                            "section": "Acceptance Criteria",
+                            "message": "Feature scenario \"R2 — Planning live updates share one owned subscription\" is linked but unverified: covering task(s) 1301 have no PASS verdict with MET requirement"
+                        },
+                        {
+                            "layer": "L4",
+                            "code": "L4.scenario-unverified",
+                            "severity": "warning",
+                            "section": "Acceptance Criteria",
+                            "message": "Feature scenario \"R3 — Daily readiness explains work and exact blockers\" is linked but unverified: covering task(s) 1302 have no PASS verdict with MET requirement"
+                        }
+                    ],
+                    "requiredSections": [],
+                    "missingSections": [],
+                    "pass": true,
+                    "notes": [],
+                    "repairs": []
+                }
+            ]
+        },
+        {
+            "id": "E94",
+            "filePath": "docs/features/E94_measured-history-query-simplification-with-preserved-analytics-semantics.md",
+            "scenarios": {
+                "History parity evidence decides whether consolidation is justified": "1309",
+                "Equivalent analytics definitions are consolidated without changing results": "1310"
+            },
+            "check": [
+                {
+                    "id": "E94",
+                    "status": "backlog",
+                    "findings": [
+                        {
+                            "layer": "L4",
+                            "code": "L4.scenario-unverified",
+                            "severity": "warning",
+                            "section": "Acceptance Criteria",
+                            "message": "Feature scenario \"R1 — History parity evidence decides whether consolidation is justified\" is linked but unverified: covering task(s) 1309 have no PASS verdict with MET requirement"
+                        },
+                        {
+                            "layer": "L4",
+                            "code": "L4.scenario-unverified",
+                            "severity": "warning",
+                            "section": "Acceptance Criteria",
+                            "message": "Feature scenario \"R2 — Equivalent analytics definitions are consolidated without changing results\" is linked but unverified: covering task(s) 1310 have no PASS verdict with MET requirement"
+                        }
+                    ],
+                    "requiredSections": [],
+                    "missingSections": [],
+                    "pass": true,
+                    "notes": [],
+                    "repairs": []
+                }
+            ]
+        },
+        {
+            "id": "A34",
+            "filePath": "docs/features/A34_local-first-hybrid-search-exact-rg-and-semantic-zg-over-docs-and-code.md",
+            "scenarios": {
+                "Bounded exact search never reports lost matches as an empty success": "1299",
+                "Auto search preserves skipped fuzzy outcomes": "1299"
+            },
+            "check": [
+                {
+                    "id": "A34",
+                    "status": "active",
+                    "findings": [
+                        {
+                            "layer": "L4",
+                            "code": "L4.scenario-unverified",
+                            "severity": "warning",
+                            "section": "Acceptance Criteria",
+                            "message": "Feature scenario \"R13 — Bounded exact search never reports lost matches as an empty success\" is linked but unverified: covering task(s) 1299 have no PASS verdict with MET requirement"
+                        },
+                        {
+                            "layer": "L4",
+                            "code": "L4.scenario-unverified",
+                            "severity": "warning",
+                            "section": "Acceptance Criteria",
+                            "message": "Feature scenario \"R14 — Auto search preserves skipped fuzzy outcomes\" is linked but unverified: covering task(s) 1299 have no PASS verdict with MET requirement"
+                        }
+                    ],
+                    "requiredSections": [],
+                    "missingSections": [],
+                    "pass": true,
+                    "notes": [],
+                    "repairs": []
+                }
+            ]
+        },
+        {
+            "id": "F8",
+            "filePath": "docs/features/F8_features-board-module.md",
+            "scenarios": {
+                "Feature sync defaults to the supported direction and preserves drafts": "1294",
+                "Feature dependency controls reflect effective action semantics": "1294"
+            },
+            "check": [
+                {
+                    "id": "F8",
+                    "status": "active",
+                    "findings": [
+                        {
+                            "layer": "L4",
+                            "code": "L4.evidence-not-recoverable",
+                            "severity": "warning",
+                            "section": "Acceptance Criteria",
+                            "message": "Task 0194 has no verdict artifact and its tracked ## Testing section carries no recoverable coverage evidence (invalid); its evidence predates durable recording, so it is neither verified nor failed."
+                        },
+                        {
+                            "layer": "L4",
+                            "code": "L4.scenario-unverified",
+                            "severity": "warning",
+                            "section": "Acceptance Criteria",
+                            "message": "Feature scenario \"Feature tree renders with live status\" is linked but unverified: covering task(s) 0194 have no PASS verdict with MET requirement"
+                        },
+                        {
+                            "layer": "L4",
+                            "code": "L4.scenario-unverified",
+                            "severity": "warning",
+                            "section": "Acceptance Criteria",
+                            "message": "Feature scenario \"Detail panel shows the feature body\" is linked but unverified: covering task(s) 0194 have no PASS verdict with MET requirement"
+                        },
+                        {
+                            "layer": "L4",
+                            "code": "L4.scenario-unverified",
+                            "severity": "warning",
+                            "section": "Acceptance Criteria",
+                            "message": "Feature scenario \"Status transitions go through lifecycle guards\" is linked but unverified: covering task(s) 0194 have no PASS verdict with MET requirement"
+                        },
+                        {
+                            "layer": "L4",
+                            "code": "L4.scenario-unverified",
+                            "severity": "warning",
+                            "section": "Acceptance Criteria",
+                            "message": "Feature scenario \"Guard-denied transitions surface the reason\" is linked but unverified: covering task(s) 0194 have no PASS verdict with MET requirement"
+                        },
+                        {
+                            "layer": "L4",
+                            "code": "L4.scenario-unverified",
+                            "severity": "warning",
+                            "section": "Acceptance Criteria",
+                            "message": "Feature scenario \"Feature check runs from the board\" is linked but unverified: covering task(s) 0194 have no PASS verdict with MET requirement"
+                        },
+                        {
+                            "layer": "L4",
+                            "code": "L4.scenario-unverified",
+                            "severity": "warning",
+                            "section": "Acceptance Criteria",
+                            "message": "Feature scenario \"R6 — Feature sync defaults to the supported direction and preserves drafts\" is linked but unverified: covering task(s) 1294 have no PASS verdict with MET requirement"
+                        },
+                        {
+                            "layer": "L4",
+                            "code": "L4.scenario-unverified",
+                            "severity": "warning",
+                            "section": "Acceptance Criteria",
+                            "message": "Feature scenario \"R7 — Feature dependency controls reflect effective action semantics\" is linked but unverified: covering task(s) 1294 have no PASS verdict with MET requirement"
+                        }
+                    ],
+                    "requiredSections": [],
+                    "missingSections": [],
+                    "pass": true,
+                    "notes": [],
+                    "repairs": []
+                }
+            ]
+        },
+        {
+            "id": "F7",
+            "filePath": "docs/features/F7_task-kanban-web-parity.md",
+            "scenarios": {
+                "Task folder selection owns every committed response": "1298",
+                "Task refresh bursts retain eventual freshness": "1298"
+            },
+            "check": [
+                {
+                    "id": "F7",
+                    "status": "active",
+                    "findings": [
+                        {
+                            "layer": "L4",
+                            "code": "L4.uncovered-feature-scenario",
+                            "severity": "warning",
+                            "section": "Acceptance Criteria",
+                            "message": "Feature scenario \"Board renders with columns for each task status\" is not covered by any linked task (DD-09)"
+                        },
+                        {
+                            "layer": "L4",
+                            "code": "L4.uncovered-feature-scenario",
+                            "severity": "warning",
+                            "section": "Acceptance Criteria",
+                            "message": "Feature scenario \"Task cards show WBS, name, and status\" is not covered by any linked task (DD-09)"
+                        },
+                        {
+                            "layer": "L4",
+                            "code": "L4.uncovered-feature-scenario",
+                            "severity": "warning",
+                            "section": "Acceptance Criteria",
+                            "message": "Feature scenario \"Drag-and-drop moves a task between status columns\" is not covered by any linked task (DD-09)"
+                        },
+                        {
+                            "layer": "L4",
+                            "code": "L4.uncovered-feature-scenario",
+                            "severity": "warning",
+                            "section": "Acceptance Criteria",
+                            "message": "Feature scenario \"New task creation from the board\" is not covered by any linked task (DD-09)"
+                        },
+                        {
+                            "layer": "L4",
+                            "code": "L4.uncovered-feature-scenario",
+                            "severity": "warning",
+                            "section": "Acceptance Criteria",
+                            "message": "Feature scenario \"Task detail panel opens on card click\" is not covered by any linked task (DD-09)"
+                        },
+                        {
+                            "layer": "L4",
+                            "code": "L4.uncovered-feature-scenario",
+                            "severity": "warning",
+                            "section": "Acceptance Criteria",
+                            "message": "Feature scenario \"SSE real-time sync updates the board without polling\" is not covered by any linked task (DD-09)"
+                        },
+                        {
+                            "layer": "L4",
+                            "code": "L4.uncovered-feature-scenario",
+                            "severity": "warning",
+                            "section": "Acceptance Criteria",
+                            "message": "Feature scenario \"Task body is editable inline\" is not covered by any linked task (DD-09)"
+                        },
+                        {
+                            "layer": "L4",
+                            "code": "L4.uncovered-feature-scenario",
+                            "severity": "warning",
+                            "section": "Acceptance Criteria",
+                            "message": "Feature scenario \"Board is responsive for mobile and desktop\" is not covered by any linked task (DD-09)"
+                        },
+                        {
+                            "layer": "L4",
+                            "code": "L4.uncovered-feature-scenario",
+                            "severity": "warning",
+                            "section": "Acceptance Criteria",
+                            "message": "Feature scenario \"Dark mode renders correctly\" is not covered by any linked task (DD-09)"
+                        },
+                        {
+                            "layer": "L4",
+                            "code": "L4.evidence-not-recoverable",
+                            "severity": "warning",
+                            "section": "Acceptance Criteria",
+                            "message": "Task 0191 has no verdict artifact and its tracked ## Testing section carries no recoverable coverage evidence (invalid); its evidence predates durable recording, so it is neither verified nor failed."
+                        },
+                        {
+                            "layer": "L4",
+                            "code": "L4.evidence-not-recoverable",
+                            "severity": "warning",
+                            "section": "Acceptance Criteria",
+                            "message": "Task 0202 has no verdict artifact and its tracked ## Testing section carries no recoverable coverage evidence (invalid); its evidence predates durable recording, so it is neither verified nor failed."
+                        },
+                        {
+                            "layer": "L4",
+                            "code": "L4.evidence-not-recoverable",
+                            "severity": "warning",
+                            "section": "Acceptance Criteria",
+                            "message": "Task 0203 has no verdict artifact and its tracked ## Testing section carries no recoverable coverage evidence (invalid); its evidence predates durable recording, so it is neither verified nor failed."
+                        },
+                        {
+                            "layer": "L4",
+                            "code": "L4.scenario-unverified",
+                            "severity": "warning",
+                            "section": "Acceptance Criteria",
+                            "message": "Feature scenario \"New Task panel offers markdown editing with live preview\" is linked but unverified: covering task(s) 0191, 0202 have no PASS verdict with MET requirement"
+                        },
+                        {
+                            "layer": "L4",
+                            "code": "L4.scenario-unverified",
+                            "severity": "warning",
+                            "section": "Acceptance Criteria",
+                            "message": "Feature scenario \"Task detail shows estimate and implementation progress\" is linked but unverified: covering task(s) 0191, 0202 have no PASS verdict with MET requirement"
+                        },
+                        {
+                            "layer": "L4",
+                            "code": "L4.scenario-unverified",
+                            "severity": "warning",
+                            "section": "Acceptance Criteria",
+                            "message": "Feature scenario \"Workflow actions prompt for a channel and reach the server\" is linked but unverified: covering task(s) 0191, 0203 have no PASS verdict with MET requirement"
+                        },
+                        {
+                            "layer": "L4",
+                            "code": "L4.scenario-unverified",
+                            "severity": "warning",
+                            "section": "Acceptance Criteria",
+                            "message": "Feature scenario \"R13 — Task folder selection owns every committed response\" is linked but unverified: covering task(s) 1298 have no PASS verdict with MET requirement"
+                        },
+                        {
+                            "layer": "L4",
+                            "code": "L4.scenario-unverified",
+                            "severity": "warning",
+                            "section": "Acceptance Criteria",
+                            "message": "Feature scenario \"R14 — Task refresh bursts retain eventual freshness\" is linked but unverified: covering task(s) 1298 have no PASS verdict with MET requirement"
+                        }
+                    ],
+                    "requiredSections": [],
+                    "missingSections": [],
+                    "pass": true,
+                    "notes": [],
+                    "repairs": []
+                }
+            ]
+        },
+        {
+            "id": "C3",
+            "filePath": "docs/features/C3_coverage-artifact-provenance-and-completion-integrity.md",
+            "scenarios": {
+                "Equivalent TOML threshold forms produce equivalent diagnostics": "1314"
+            },
+            "check": [
+                {
+                    "id": "C3",
+                    "status": "active",
+                    "findings": [
+                        {
+                            "layer": "L4",
+                            "code": "L4.scenario-unverified",
+                            "severity": "warning",
+                            "section": "Acceptance Criteria",
+                            "message": "Feature scenario \"R6 — Equivalent TOML threshold forms produce equivalent diagnostics\" is linked but unverified: covering task(s) 1314 have no PASS verdict with MET requirement"
+                        }
+                    ],
+                    "requiredSections": [],
+                    "missingSections": [],
+                    "pass": true,
+                    "notes": [],
+                    "repairs": []
+                }
+            ]
+        },
+        {
+            "id": "H16",
+            "filePath": "docs/features/H16_faster-default-quality-gate-while-keeping-per-file-90-90-coverage.md",
+            "scenarios": {
+                "Routine tests execute every isolated Markdown security proof": "1295",
+                "Test scaffolding shrinks only behind equivalent behavioral evidence": "1316"
+            },
+            "check": [
+                {
+                    "id": "H16",
+                    "status": "backlog",
+                    "findings": [
+                        {
+                            "layer": "L4",
+                            "code": "L4.uncovered-feature-scenario",
+                            "severity": "warning",
+                            "section": "Acceptance Criteria",
+                            "message": "Feature scenario \"R3 — The parallel default holds only while its bar is measured\" is not covered by any linked task (DD-09)"
+                        },
+                        {
+                            "layer": "L4",
+                            "code": "L4.scenario-unverified",
+                            "severity": "warning",
+                            "section": "Acceptance Criteria",
+                            "message": "Feature scenario \"R7 — Routine tests execute every isolated Markdown security proof\" is linked but unverified: covering task(s) 1295 have no PASS verdict with MET requirement"
+                        },
+                        {
+                            "layer": "L4",
+                            "code": "L4.scenario-unverified",
+                            "severity": "warning",
+                            "section": "Acceptance Criteria",
+                            "message": "Feature scenario \"R8 — Test scaffolding shrinks only behind equivalent behavioral evidence\" is linked but unverified: covering task(s) 1316 have no PASS verdict with MET requirement"
+                        }
+                    ],
+                    "requiredSections": [],
+                    "missingSections": [],
+                    "pass": true,
+                    "notes": [],
+                    "repairs": []
+                }
+            ]
+        },
+        {
+            "id": "A92",
+            "filePath": "docs/features/A92_stack-neutral-sdlc-actions-builder-actions-spur-self-exec-and-script-structure-consolidation.md",
+            "scenarios": {
+                "JavaScript project onboarding proposes declared action bindings safely": "1303",
+                "Language and monorepo onboarding retains execution ownership": "1304"
+            },
+            "check": [
+                {
+                    "id": "A92",
+                    "status": "active",
+                    "findings": [
+                        {
+                            "layer": "L4",
+                            "code": "L4.scenario-unverified",
+                            "severity": "warning",
+                            "section": "Acceptance Criteria",
+                            "message": "Feature scenario \"R12 — JavaScript project onboarding proposes declared action bindings safely\" is linked but unverified: covering task(s) 1303 have no PASS verdict with MET requirement"
+                        },
+                        {
+                            "layer": "L4",
+                            "code": "L4.scenario-unverified",
+                            "severity": "warning",
+                            "section": "Acceptance Criteria",
+                            "message": "Feature scenario \"R13 — Language and monorepo onboarding retains execution ownership\" is linked but unverified: covering task(s) 1304 have no PASS verdict with MET requirement"
+                        }
+                    ],
+                    "requiredSections": [],
+                    "missingSections": [],
+                    "pass": true,
+                    "notes": [],
+                    "repairs": []
+                }
+            ]
+        },
+        {
+            "id": "D65",
+            "filePath": "docs/features/D65_one-workflow-interpreter-and-executor-agnostic-agent-run-dispatch.md",
+            "scenarios": {
+                "Executor surfaces apply the same declared admission contract": "1305",
+                "Executor results share truthful finalization and failure context": "1306"
+            },
+            "check": [
+                {
+                    "id": "D65",
+                    "status": "active",
+                    "findings": [
+                        {
+                            "layer": "L4",
+                            "code": "L4.scenario-unverified",
+                            "severity": "warning",
+                            "section": "Acceptance Criteria",
+                            "message": "Feature scenario \"R17 — Executor surfaces apply the same declared admission contract\" is linked but unverified: covering task(s) 1305 have no PASS verdict with MET requirement"
+                        },
+                        {
+                            "layer": "L4",
+                            "code": "L4.scenario-unverified",
+                            "severity": "warning",
+                            "section": "Acceptance Criteria",
+                            "message": "Feature scenario \"R18 — Executor results share truthful finalization and failure context\" is linked but unverified: covering task(s) 1306 have no PASS verdict with MET requirement"
+                        }
+                    ],
+                    "requiredSections": [],
+                    "missingSections": [],
+                    "pass": true,
+                    "notes": [],
+                    "repairs": []
+                }
+            ]
+        },
+        {
+            "id": "E71",
+            "filePath": "docs/features/E71_disposable-run-scratch-with-durable-evidence-and-inspection.md",
+            "scenarios": {
+                "Run evidence and valid recovery are reachable from the affected task": "1307",
+                "Expired scratch is distinguished from durable recovery evidence": "1307"
+            },
+            "check": [
+                {
+                    "id": "E71",
+                    "status": "active",
+                    "findings": [
+                        {
+                            "layer": "L4",
+                            "code": "L4.scenario-unverified",
+                            "severity": "warning",
+                            "section": "Acceptance Criteria",
+                            "message": "Feature scenario \"R8 — Run evidence and valid recovery are reachable from the affected task\" is linked but unverified: covering task(s) 1307 have no PASS verdict with MET requirement"
+                        },
+                        {
+                            "layer": "L4",
+                            "code": "L4.scenario-unverified",
+                            "severity": "warning",
+                            "section": "Acceptance Criteria",
+                            "message": "Feature scenario \"R9 — Expired scratch is distinguished from durable recovery evidence\" is linked but unverified: covering task(s) 1307 have no PASS verdict with MET requirement"
+                        }
+                    ],
+                    "requiredSections": [],
+                    "missingSections": [],
+                    "pass": true,
+                    "notes": [],
+                    "repairs": []
+                }
+            ]
+        },
+        {
+            "id": "E6",
+            "filePath": "docs/features/E6_run-to-session-correlation-and-cost-path-repair.md",
+            "scenarios": {
+                "Outcome feedback reconciles measured cost and verified work": "1308"
+            },
+            "check": [
+                {
+                    "id": "E6",
+                    "status": "active",
+                    "findings": [
+                        {
+                            "layer": "L4",
+                            "code": "L4.scenario-unverified",
+                            "severity": "warning",
+                            "section": "Acceptance Criteria",
+                            "message": "Feature scenario \"R11 — Outcome feedback reconciles measured cost and verified work\" is linked but unverified: covering task(s) 1308 have no PASS verdict with MET requirement"
+                        }
+                    ],
+                    "requiredSections": [],
+                    "missingSections": [],
+                    "pass": true,
+                    "notes": [],
+                    "repairs": []
+                }
+            ]
+        },
+        {
+            "id": "A6",
+            "filePath": "docs/features/A6_harness-trust-and-operational-controls.md",
+            "scenarios": {
+                "Destructive-command policy distinguishes literal data from execution": "1313"
+            },
+            "check": [
+                {
+                    "id": "A6",
+                    "status": "active",
+                    "findings": [
+                        {
+                            "layer": "L4",
+                            "code": "L4.scenario-unverified",
+                            "severity": "warning",
+                            "section": "Acceptance Criteria",
+                            "message": "Feature scenario \"R11 — Destructive-command policy distinguishes literal data from execution\" is linked but unverified: covering task(s) 1313 have no PASS verdict with MET requirement"
+                        }
+                    ],
+                    "requiredSections": [],
+                    "missingSections": [],
+                    "pass": true,
+                    "notes": [],
+                    "repairs": []
+                }
+            ]
+        },
+        {
+            "id": "A8",
+            "filePath": "docs/features/A8_downstream-spur-board-modules-and-embedded-resources.md",
+            "scenarios": {
+                "Board extension operations no longer promise unsupported registration": "1315"
+            },
+            "check": [
+                {
+                    "id": "A8",
+                    "status": "active",
+                    "findings": [
+                        {
+                            "layer": "L4",
+                            "code": "L4.scenario-unverified",
+                            "severity": "warning",
+                            "section": "Acceptance Criteria",
+                            "message": "Feature scenario \"R16 — Board extension operations no longer promise unsupported registration\" is linked but unverified: covering task(s) 1315 have no PASS verdict with MET requirement"
+                        }
+                    ],
+                    "requiredSections": [],
+                    "missingSections": [],
+                    "pass": true,
+                    "notes": [],
+                    "repairs": []
+                }
+            ]
+        },
+        {
+            "id": "A331",
+            "filePath": "docs/features/A331_verified-offline-migration-artifacts-and-safe-upgrades.md",
+            "scenarios": {
+                "Migration ownership evidence decides whether embedding consolidation is safe": "1311",
+                "Offline migration embedding shares an authoritative source without rewriting history": "1312"
+            },
+            "check": [
+                {
+                    "id": "A331",
+                    "status": "backlog",
+                    "findings": [
+                        {
+                            "layer": "L4",
+                            "code": "L4.scenario-unverified",
+                            "severity": "warning",
+                            "section": "Acceptance Criteria",
+                            "message": "Feature scenario \"R1 — Migration ownership evidence decides whether embedding consolidation is safe\" is linked but unverified: covering task(s) 1311 have no PASS verdict with MET requirement"
+                        },
+                        {
+                            "layer": "L4",
+                            "code": "L4.scenario-unverified",
+                            "severity": "warning",
+                            "section": "Acceptance Criteria",
+                            "message": "Feature scenario \"R2 — Offline migration embedding shares an authoritative source without rewriting history\" is linked but unverified: covering task(s) 1312 have no PASS verdict with MET requirement"
+                        }
+                    ],
+                    "requiredSections": [],
+                    "missingSections": [],
+                    "pass": true,
+                    "notes": [],
+                    "repairs": []
+                }
+            ]
+        }
+    ],
+    "dependencyProjection": {
+        "order": [
+            "1294",
+            "1295",
+            "1296",
+            "1297",
+            "1298",
+            "1299",
+            "1300",
+            "1301",
+            "1302",
+            "1303",
+            "1304",
+            "1305",
+            "1306",
+            "1307",
+            "1308",
+            "1309",
+            "1310",
+            "1311",
+            "1312",
+            "1313",
+            "1314",
+            "1315",
+            "1316"
+        ],
+        "waves": [
+            [
+                "1294",
+                "1295",
+                "1296",
+                "1298",
+                "1299",
+                "1300",
+                "1303",
+                "1305",
+                "1308",
+                "1309",
+                "1311",
+                "1313",
+                "1314",
+                "1315"
+            ],
+            ["1297", "1301", "1304", "1306", "1310", "1312", "1316"],
+            ["1302", "1307"]
+        ],
+        "cycle": null,
+        "overlaps": [],
+        "mode": "sequential",
+        "reason": "concurrency is 1"
+    },
+    "taskWarningCounts": {
+        "L4.prerequisite-not-done": 10,
+        "L4.readiness-blocked": 2
+    },
+    "featureWarningCounts": {
+        "L4.scenario-unverified": 35,
+        "L4.evidence-not-recoverable": 4,
+        "L4.uncovered-feature-scenario": 10
+    },
+    "concurrencyInventory": {
+        "worktrees": 1,
+        "wipByFolder": {
+            "docs/tasks": [],
+            "docs/tasks2": [],
+            "docs/tasks3": [],
+            "docs/tasks4": [],
+            "docs/tasks5": []
+        }
+    },
+    "limitations": [
+        "No production implementation gate rerun for this planning-only refinement.",
+        "Prior review gate search failure remains owned by 1299.",
+        "1310 and 1312 remain blocked pending current positive fixture evidence from 1309 and 1311.",
+        "git diff --check reports the existing tool-emitted F8 blank line at EOF."
+    ]
+}

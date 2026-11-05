@@ -6,7 +6,7 @@ status: backlog
 priority: P2
 tags: []
 created_at: "2026-10-10T05:19:09.284Z"
-updated_at: "2026-10-13T18:35:58.463Z"
+updated_at: "2026-11-05T20:03:48.475Z"
 ---
 
 # H16: Faster default quality gate while keeping per-file 90/90 coverage
@@ -36,6 +36,10 @@ Per measured file, line coverage and function coverage both stay at or above 90 
 - Task 1150's load fixture and timeout budgets. Task 1127's lock semantics other than the scope of what the default suite holds. H15's shipped `deferQualityGate` policy. H52's shipped "full spur-check at most twice" bound.
 - Enabling `bun test --parallel` **on the retired Bun 1.3.14 pin** (the default passes `--parallel` on 1.4.3; see the parallelism-bar bullet in Scope). A full `--parallel --no-isolate` run on that pin wedged (one worker near 99 percent CPU, a zombie child, stdout frozen) and was killed. Do not quote that run as a speedup. `--timings` is absent from `bun test --help` on 1.3.14.
 - A new public `spur` noun or verb. Edits to `.github/workflows/`. Reopening done feature D64 (it owns the two-tier check and the catalogue, not this wall-time slice).
+
+### Approved follow-up — 2026-11-05
+
+W0 / R2 and conditional W8 / C7: restore routine discovery of isolated real-renderer Markdown security proofs; reduce duplicated test scaffolding only after behavioral replacement and timing evidence. Critical security proofs remain in the ordinary suite; no coverage reduction or move to an unrun heavy tier.
 
 ## Acceptance Criteria
 
@@ -88,6 +92,18 @@ Feature: Faster default quality gate while keeping per-file 90/90 coverage
     Then every measured file is at or above 90 percent lines and 90 percent functions
     And plugins/sp/scripts/run-summary.ts meets that function floor by tests
     And the threshold values in bunfig.toml are unchanged
+
+  @core
+  Scenario: R7 — Routine tests execute every isolated Markdown security proof
+    Given the twelve real-renderer Markdown and Mermaid regression cases outside default discovery
+    When the normal test entrypoint runs or a child proof fails or collects zero cases
+    Then a discoverable wrapper proves every expected case ran and propagates child failure or missing-proof failure
+
+  @core
+  Scenario: R8 — Test scaffolding shrinks only behind equivalent behavioral evidence
+    Given an inventory of duplicated mocks and brittle source-text assertions with their contract owners
+    When a measured approved candidate is replaced with shared behavior-oriented proof
+    Then the old duplicate is removed while boundary assertions, ordinary discovery, coverage floors and failure sensitivity remain preserved
 ```
 
 ## Tasks
@@ -96,6 +112,8 @@ Feature: Faster default quality gate while keeping per-file 90/90 coverage
 | WBS | Task | Status |
 | --- | ---- | ------ |
 | 1154 | Implement the faster default gate without lowering the 90/90 coverage floor | done |
+| 1295 | Restore ordinary-suite execution of real-renderer Markdown security proofs | todo |
+| 1316 | Reduce duplicated test mocks behind retained behavioral and gate evidence | todo |
 <!-- END AUTO-GENERATED -->
 
 ## Notes
@@ -108,6 +126,12 @@ Hierarchy (2026-10-10). Not a new root. D64, H15, and H52 are done, and a live t
 - H1 is the live daily-workflow parent and already carries the host lock (task 1127) and the load-flake follow-up (task 1150). H16 is the sibling that owns the default gate's own hop cost. H1 had a free child digit (H11–H15 were taken).
 
 Operator instruction for the filed task: implement every 2026-10-09 gate-performance suggestion except suggestion 3, and keep per-file line coverage and function coverage at or above 90 percent.
+
+### Approved simplification follow-up — 2026-11-05
+
+Robin approved this plan and requested feature updates/new features and implementation tasks on 2026-11-05; continued the same corpus conversion in the next message. Approval covers planning this scope, not deployment, new public verbs, new dependencies, gate weakening, or production data changes.
+
+Plan: `docs/plans/2026-11-05-simplification-and-product-enhancement.md`. Review: `docs/reports/2026-11-05-codebase-review.md`. Historical scenarios, completed tasks and verification receipts remain intact; new scenarios describe follow-up work and do not retroactively certify implementation. Conditional cleanup remains unscheduled until the named decision/evidence gate is met.
 
 ## History
 

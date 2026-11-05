@@ -2,11 +2,11 @@
 schema_version: 1
 id: "D65"
 name: "One workflow interpreter and executor-agnostic agent.run dispatch"
-status: done
+status: active
 priority: P2
 tags: []
 created_at: "2026-10-17T07:27:13.932Z"
-updated_at: "2026-10-21T18:35:05.337Z"
+updated_at: "2026-11-05T20:03:49.468Z"
 ---
 
 # D65: One workflow interpreter and executor-agnostic agent.run dispatch
@@ -38,6 +38,10 @@ Every Spur workflow runs on one interpreter — the engine — and every `agent.
 - The ADR-051 amendment and ADR-140 text (landed directly before this feature).
 - A92's action map and `spur self exec` (consumed, not built here).
 - Fleet-only workflow catalogues and fleet as the default executor (ADR-126).
+
+### Approved follow-up — 2026-11-05
+
+W5 / C1: remove duplicate admission and completion policy around existing host/fleet/subprocess dispatch functions, with normalized invocation data and shared finalization. Preserve the engine interpreter, host pauses, receipts, fencing, reviewer independence, redaction and budgets. No executor registry/SDK or replacement engine.
 
 ## Acceptance Criteria
 
@@ -155,6 +159,18 @@ Feature: One workflow interpreter and executor-agnostic agent.run dispatch
     Given the D65 task set
     When task dependencies are listed
     Then every task that consumes spur self exec or edits task-pipeline gate variables depends on the A92 task that delivers it
+
+  @core
+  Scenario: R17 — Executor surfaces apply the same declared admission contract
+    Given equivalent host, fleet and subprocess work items including unsupported capability, stale artifact, reviewer identity and exhausted-budget fixtures
+    When each existing surface evaluates admission
+    Then common declared policy produces equivalent justified decisions while surface-specific identity and host-pause semantics remain explicit
+
+  @core
+  Scenario: R18 — Executor results share truthful finalization and failure context
+    Given success, refusal, timeout, cancellation, contract failure and partial-work fixtures on each executor surface
+    When execution finishes or the host resumes from its receipt
+    Then shared finalization preserves freshness, usage, redaction and ownership while recording a classified failure and evidence without duplicating policy
 ```
 
 ## Tasks
@@ -174,6 +190,8 @@ Feature: One workflow interpreter and executor-agnostic agent.run dispatch
 | 1240 | Measure the rewritten task-pipeline against the 32-run baseline | done |
 | 1241 | Migrate idea, wrapup and pr-review pipelines onto the foundation | done |
 | 1242 | Delete the inline bookkeeping verbs and parity scripts | done |
+| 1305 | Unify executor admission and invocation policy across existing dispatch surfaces | todo |
+| 1306 | Share executor result finalization while preserving receipts and partial work | todo |
 <!-- END AUTO-GENERATED -->
 
 ## Notes
@@ -182,9 +200,16 @@ Feature: One workflow interpreter and executor-agnostic agent.run dispatch
 
 D66 subsequently consolidated workflow lifecycle ownership and retired this feature’s pilot feature-verification workflow. The single-interpreter and executor-agnostic primitives remain current.
 
+### Approved simplification follow-up — 2026-11-05
+
+Robin approved this plan and requested feature updates/new features and implementation tasks on 2026-11-05; continued the same corpus conversion in the next message. Approval covers planning this scope, not deployment, new public verbs, new dependencies, gate weakening, or production data changes.
+
+Plan: `docs/plans/2026-11-05-simplification-and-product-enhancement.md`. Review: `docs/reports/2026-11-05-codebase-review.md`. Historical scenarios, completed tasks and verification receipts remain intact; new scenarios describe follow-up work and do not retroactively certify implementation. Conditional cleanup remains unscheduled until the named decision/evidence gate is met.
+
 ## History
 
 - 2026-10-17T17:17:52.534Z backlog → active (system)
 - 2026-10-18T02:07:40.922Z active → verifying (system)
 - 2026-10-18T02:07:56.470Z verifying → done (system)
+- 2026-11-05T19:58:46.382Z done → active (system)
 
