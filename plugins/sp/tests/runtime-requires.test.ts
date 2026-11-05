@@ -180,9 +180,9 @@ function checkRequires(list: Entity[]): string[] {
 }
 
 describe('runtime-requires (task 1291 / feature I14 R1, R2)', () => {
-    test('88 sp entities are collected (41 skills, 43 commands, 4 agents)', () => {
-        expect(entities.length).toBe(88);
-        expect(byPath.size).toBe(88);
+    test('89 sp entities are collected (42 skills, 43 commands, 4 agents)', () => {
+        expect(entities.length).toBe(89);
+        expect(byPath.size).toBe(89);
     });
 
     test('R2a/AC1: every entity declares a valid, sorted, deduped requires list containing local-fs', () => {
@@ -209,7 +209,7 @@ describe('runtime-requires (task 1291 / feature I14 R1, R2)', () => {
         expect(bad).toEqual([]);
     });
 
-    test('R2b/R2c/AC2: declared equals the derived closure and the group snapshot matches 2026-11-04', () => {
+    test('R2b/R2c/AC2: declared equals the derived closure and the group snapshot matches 2026-11-04 (local-fs +1 since 1292 sp-bot-bootstrap)', () => {
         expect(checkRequires(entities)).toEqual([]);
 
         const groups: Record<string, number> = {};
@@ -221,7 +221,7 @@ describe('runtime-requires (task 1291 / feature I14 R1, R2)', () => {
             'cli:spur,local-fs': 70,
             'cli:gh,local-fs': 2,
             'cli:gh,cli:spur,local-fs': 2,
-            'local-fs': 14,
+            'local-fs': 15,
         });
     });
 

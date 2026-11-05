@@ -333,6 +333,7 @@ surface or run one workflow. All skills target the same five core platforms: `cl
 | `functional-review`         | 1.0   | Requirements-traceability assessment — per-requirement verdicts with file:line evidence that the implementation satisfies ALL task requirements; pipeline Phase 8b gate                                                                    |
 | `doubt-driven-development`  | 1.0   | In-flight adversarial review of a non-trivial decision before committing it — hand artifact + contract to a fresh-context skeptic, reconcile, stop at 3 cycles                                                                             |
 | `source-driven-development` | 1.0   | Source-first verification — verify framework/API/library facts against primary sources before generating code; separates "the API exists" from "used correctly under its contract"                                                         |
+| `sp-bot-bootstrap`          | 1.0   | Grok Bot toolchain bootstrap — POSIX `sh` check/setup pair installing `bun` plus the three sp CLIs; idempotent after a computer recreate; Team Setup Script variant (1292, feature I14 R4) |
 | `dogfood-testing`           | 1.2   | Dogfood backbone — drives a testee end-to-end with bounded auto-fix, a live monitor ledger, and a structured report; @1.2 adds footer-mandatory reports, 7-check finalize-or-abort, and the `validate-report` CLI; backs `/sp:dev-dogfood` |
 | `next-router`               | 1.0   | Status→command router — resolve a task WBS or feature frontier, TABLE A/B/C lookup with light-gate short-circuit, single dispatch or HITL stop; backs `/sp:dev-next`                                                                       |
 | `parallel-execution`        | 1.0   | Fan-out decision framework — when to parallelize, four proven fan-out patterns, and result synthesis; backs `/sp:dev-runall --mode parallel\|auto`                                                                                                           |
@@ -747,6 +748,9 @@ instructions and the CLI validation instead.
 
 **With defaults every sp entity is excluded.** A Bot that meets none of the declared requirements
 installs nothing; an operator opts an entity set in explicitly with `--bot-provides`.
+
+**Bootstrap first (1292).** For a fresh Bot computer, follow the `sp-bot-bootstrap` skill —
+check, then setup only on a nonzero exit, then check again — before installing the plugin.
 
 **Recommended install after 1292's bootstrap** (follow the `sp-bot-bootstrap` skill first, which
 installs bun plus `spur`, `superskill` and `kk`), then:
