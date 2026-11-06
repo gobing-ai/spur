@@ -189,10 +189,15 @@ export abstract class PlanningCheckService {
     }
 
     /** L1: parse the markdown + validate frontmatter against the Zod schema. */
-    protected runL1(raw: string, ref: string, findings: CheckFindings[]): MarkdownDocument | null {
+    protected runL1(
+        raw: string,
+        ref: string,
+        findings: CheckFindings[],
+        document?: MarkdownDocument,
+    ): MarkdownDocument | null {
         let doc: MarkdownDocument;
         try {
-            doc = this.parse(raw, this.docKind);
+            doc = document ?? this.parse(raw, this.docKind);
         } catch (err) {
             findings.push({
                 layer: 'L1',

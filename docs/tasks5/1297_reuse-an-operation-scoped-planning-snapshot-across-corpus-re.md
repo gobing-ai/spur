@@ -1,10 +1,10 @@
 ---
 schema_version: 1
 name: Reuse an operation-scoped planning snapshot across corpus readers
-status: todo
+status: done
 template: feature-impl
 created_at: 2026-11-05T20:01:23.913Z
-updated_at: "2026-11-05T20:37:44.776Z"
+updated_at: "2026-11-06T00:22:24.079Z"
 ac_altitude: task-local
 ac_numbering: task-local
 feature_id: F22
@@ -16,6 +16,8 @@ tags:
 estimate_hours: 8
 
 dependencies: ["1296"]
+done_forced: "false"
+done_reason: unforced close; PASS artifact at .spur/memory/evidence/1297-verdict.json
 ---
 
 ## 1297. Reuse an operation-scoped planning snapshot across corpus readers
@@ -42,7 +44,7 @@ Rubric: E8 D1 L2 C0 R1 = 12. Keep this candidate as one cohesive deliverable wit
 
 ### Requirements
 
-- [ ] R1. Corpus snapshots preserve identifiers and cross-folder relationships; implement the exact Given/When/Then contract below.
+- [x] R1. Corpus snapshots preserve identifiers and cross-folder relationships; implement the exact Given/When/Then contract below.
 
 ### Acceptance Criteria
 
@@ -87,26 +89,75 @@ No production implementation occurs during this refinement. No new dependency, p
 
 ### Plan
 
-- [ ] 1. Write read/parse-count and cross-folder/duplicate-ID golden fixtures before introducing the helper.
-- [ ] 2. Implement operation-scoped snapshot creation using existing locator folder order and parser.
-- [ ] 3. Migrate one complete feature refresh/syncAll/check operation at a time, deleting its old scan and preserving stable public outputs.
-- [ ] 4. Prove a subsequent read after mutation sees new bytes and no persistent cache or second authority exists.
-- [ ] 5. Run the exact focused checks above, inspect the diff against R-items/feature AC, synchronize owners and record evidence through the task pipeline; do not fabricate completion.
+- [x] 1. Write read/parse-count and cross-folder/duplicate-ID golden fixtures before introducing the helper.
+- [x] 2. Implement operation-scoped snapshot creation using existing locator folder order and parser.
+- [x] 3. Migrate one complete feature refresh/syncAll/check operation at a time, deleting its old scan and preserving stable public outputs.
+- [x] 4. Prove a subsequent read after mutation sees new bytes and no persistent cache or second authority exists.
+- [x] 5. Run the exact focused checks above, inspect the diff against R-items/feature AC, synchronize owners and record evidence through the task pipeline; do not fabricate completion.
 
 ### Solution
 
-<!-- Filled during implementation: file:line change map and concise rationale. -->
+| File | What changed and why |
+| --- | --- |
+| `packages/app/src/services/planning-snapshot.ts:1-180` | New internal readPlanningSnapshot parses each selected task/feature file once, groups by WBS/feature and dependencies, and records duplicate identifiers as diagnostics rather than overwriting maps. |
+| `packages/app/src/services/planning-snapshot.ts:44-52` | assertPlanningSnapshotComplete refuses lifecycle derivation on an ambiguous snapshot using the 1296 PlanningReadError. |
+| `packages/app/src/services/feature-service.ts:303-340` | list() now delegates to the snapshot's parsed feature records so one operation reuses them instead of re-reading. |
+| `packages/app/src/services/feature-service.ts:455-530` | deriveFeatureStatus takes an optional operation snapshot and reuses it for feature/task reads while still validating the same inputs. |
+| `packages/app/src/services/feature-service.ts:874-900` | syncAllFeatures builds one snapshot for the whole sweep and passes it into each feature's sync instead of rescanning per feature. |
+| `packages/app/src/services/feature-service.ts:393-440` | refresh() consumes the same snapshot for INDEX and Tasks regions. |
+| `packages/app/src/services/feature-check.ts:236-330` | check() reuses the snapshot's parsed feature document and task records for L1/L4 unless --fix mutates the tree. |
+| `packages/app/tests/services/planning-snapshot.test.ts:1-82` | Parse-count, duplicate-WBS/feature diagnostics and mutation-freshness proofs. |
+| `packages/app/tests/services/feature-service.test.ts:295-320` | syncAll over two features reads each selected corpus file exactly once. |
+
+Verification evidence:
+- `(cd packages/app && bun test tests/services/planning-snapshot.test.ts tests/services/feature-service.test.ts tests/services/feature-check.test.ts tests/services/task-query-ops.test.ts tests/services/task-check.test.ts)` — 436 pass, 0 fail.
+- `(cd packages/app && bun test tests/services/planning-snapshot.test.ts tests/services/feature-service.test.ts tests/services/feature-check.test.ts)` — 213 pass, 0 fail after the final typecheck fixes.
+- `bun run --filter @gobing-ai/spur-app typecheck` — exit 0; all 51 pre-check rules passed.
+- Light gate: format, pre-rules, app typecheck and related tests PASS; post-check coverage provenance is deferred to the pipeline's canonical full gate.
+- Freshness: snapshot.test proves a second operation after a write sees the new bytes; no snapshot is retained on a service instance.
 
 ### Testing
 
-<!-- Filled during verification: commands run, outcomes, coverage claim or N/A. -->
+**Pipeline verify results**
+
+- Verdict: PASS (from verdict artifact)
+
+| Requirement | Status | Evidence |
+|-------------|--------|----------|
+| R1 | MET | `packages/app/src/services/planning-snapshot.ts:72-180` parses once and records duplicate WBS/feature diagnostics; `packages/app/src/services/feature-service.ts:874-920` reuses one snapshot per syncAll; freshness proven by `packages/app/tests/services/planning-snapshot.test.ts:64-82`. |
+
+| Acceptance Criteria | Status | Evidence Type | Evidence |
+|---------------------|--------|---------------|----------|
+| AC1 — Corpus snapshots preserve identifiers and cross-folder relationships (req: R1) | MET | test | `packages/app/tests/services/planning-snapshot.test.ts:24-62` proves one parse per file, duplicate WBS/feature diagnostics and cross-folder dependency union; `packages/app/tests/services/feature-service.test.ts:295-320` proves syncAll reads each selected file once. |
+- Coverage: N/A (verdict-based; verify pipeline does not measure code coverage)
 
 ### Review
 
-<!-- Filled during review: P1-P4 findings, residual risk, and final disposition. -->
+#### Review Report — 1297
+**Scope:** operation-scoped planning snapshot plus feature list/derive/refresh/syncAll/check wiring
+**Dimensions:** functional, security, efficiency, correctness, usability, architecture
+**Verdict:** PASS
+**Confidence: MEDIUM**
+
+| # | Priority | Dimension | Finding | Location | Disposition |
+| --- | --- | --- | --- | --- | --- |
+| 1 | P4 (advisory) | architecture | The snapshot is passed explicitly and never cached on the service; post-write paths (`refresh` in sync's finally, `--fix`) build a fresh one. This is the intended freshness boundary, not a second authority. | `packages/app/src/services/feature-service.ts:837-920` | ACCEPTED |
+
+##### Functional Traceability
+
+| Req | Status | Evidence |
+| --- | --- | --- |
+| R1 | MET | `packages/app/src/services/planning-snapshot.ts:72-180` parses each selected file once and keeps duplicates as diagnostics; `packages/app/src/services/feature-service.ts:874-920` builds one snapshot per syncAll sweep; `packages/app/tests/services/planning-snapshot.test.ts:24-82` and `packages/app/tests/services/feature-service.test.ts:295-320` prove parse-once, duplicate visibility and mutation freshness. |
+
+**Next:** close through record/done; the accepted P4 records the deliberate freshness boundary.
 
 ### References
 
 <!-- Links to the parent feature, design docs, related tasks, or external references. -->
 
 ### History
+
+- 2026-11-06T00:17:39.546Z todo → wip (system)
+- 2026-11-06T00:22:21.161Z wip → testing (system)
+- 2026-11-06T00:22:24.071Z testing → done (system)
+

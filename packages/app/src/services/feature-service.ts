@@ -32,6 +32,7 @@ import {
     type SyncFingerprintInput,
     serializeBlockedState,
 } from './feature-sync-suppression';
+import { assertPlanningSnapshotComplete, type PlanningSnapshot, readPlanningSnapshot } from './planning-snapshot';
 import type { EntityRef, PlanningWriteService, WriteResult } from './planning-write-service';
 import { TaskLocator } from './task-locator';
 
@@ -62,6 +63,8 @@ export interface FeatureSyncOptions {
     forceConfirm?: boolean;
     /** 1004 R3: bypass repeated-BLOCKED suppression — always run the live derivation. */
     force?: boolean;
+    /** One operation's parsed inputs; never retained on this service instance. */
+    snapshot?: PlanningSnapshot;
     /** 1119: run-store ports for the completion-boundary receipt probe (CLI wires the project DB). */
     receiptRunPort?: FeatureReceiptRunPort;
 }
@@ -391,8 +394,10 @@ export class FeatureService {
      */
     async refresh(options?: {
         featureId?: string;
+        snapshot?: PlanningSnapshot;
     }): Promise<{ index: string; tasksUpdated: number; skipped: Array<{ id: string; reason: string }> }> {
-        const features = await this.list();
+        const snapshot = options?.snapshot ?? (await this.planningSnapshot());
+        const features = [...snapshot.features];
         features.sort((a, b) => a.id.localeCompare(b.id));
 
         // ── R1: INDEX.md tree ──
@@ -406,7 +411,7 @@ export class FeatureService {
         );
 
         // ── R2: per-feature ## Tasks marker region ──
-        const tasksByFeature = await this.collectTasksByFeature();
+        const tasksByFeature = snapshot.tasksByFeature;
         const targets = options?.featureId ? features.filter((f) => f.id === options.featureId) : features;
         let tasksUpdated = 0;
         // R4 (task 1008/1009): a feature whose Tasks region can't be updated used
@@ -454,15 +459,15 @@ export class FeatureService {
      */
     async deriveFeatureStatus(
         featureId: string,
-        options?: { receiptRunPort?: FeatureReceiptRunPort },
+        options?: { receiptRunPort?: FeatureReceiptRunPort; snapshot?: PlanningSnapshot },
     ): Promise<FeatureSyncProposal> {
-        const feature = await this.show(featureId);
+        const snapshot = options?.snapshot ?? (await this.planningSnapshot());
+        const feature = snapshot.features.find((candidate) => candidate.id === featureId);
         if (!feature) {
             throw new Error(`Feature ${featureId} not found`);
         }
 
-        const tasksByFeature = await this.collectTasksByFeature();
-        const linkedTasks = tasksByFeature.get(featureId) ?? [];
+        const linkedTasks = snapshot.tasksByFeature.get(featureId) ?? [];
         const from = feature.status;
 
         // 1180 R4: `deprecated` is sticky — no task-based rule may pull a frozen feature
@@ -529,6 +534,7 @@ export class FeatureService {
             tasksDir: this.ctx.tasksDir,
             tasksDirs,
             runDir: defaultVerdictRunDir(this.ctx.tasksDir),
+            snapshot,
         };
 
         // Helper to evaluate L4 AC gate before transitioning into verifying or done
@@ -658,11 +664,12 @@ export class FeatureService {
      * fingerprint cannot invalidate).
      */
     async syncFeature(featureId: string, options?: FeatureSyncOptions): Promise<FeatureSyncResult> {
+        const snapshot = options?.snapshot ?? (await this.planningSnapshot());
         // forceConfirm is an explicit re-attempt of a deferred hop — it must bypass the replay
         // exactly like --force, or a confirmed reopen would replay the prior deferral.
         const suppressible = options?.force !== true && options?.dryRun !== true && options?.forceConfirm !== true;
         if (suppressible) {
-            const replay = await this.replaySuppressedBlocked(featureId);
+            const replay = await this.replaySuppressedBlocked(featureId, snapshot);
             if (replay) return { ...replay, suppressed: true };
         }
 
@@ -706,7 +713,7 @@ export class FeatureService {
                 // operator still has a CLI path (advance the older goal first, or
                 // transition manually once a goal slot is free).
                 if (hop === 'active') {
-                    const conflict = await this.findOneActiveGoalConflict(featureId);
+                    const conflict = await this.findOneActiveGoalConflict(featureId, options?.snapshot);
                     if (conflict !== null) {
                         return {
                             proposal: {
@@ -763,7 +770,10 @@ export class FeatureService {
      * 1004 R3: the prior BLOCKED outcome when its persisted fingerprint still matches the
      * current inputs, else null. Never derives hops — the fingerprint inputs are read directly.
      */
-    private async replaySuppressedBlocked(featureId: string): Promise<FeatureSyncResult | null> {
+    private async replaySuppressedBlocked(
+        featureId: string,
+        snapshot: PlanningSnapshot,
+    ): Promise<FeatureSyncResult | null> {
         const statePath = blockedStateFile(featureId, defaultVerdictRunDir(this.ctx.tasksDir));
         let prior: ReturnType<typeof parseBlockedState> = null;
         try {
@@ -772,7 +782,7 @@ export class FeatureService {
             return null;
         }
         if (!prior) return null;
-        const inputs = await this.syncFingerprintInputs(featureId);
+        const inputs = await this.syncFingerprintInputs(featureId, snapshot);
         if (inputs === null) return null;
         return computeSyncFingerprint(inputs) === prior.inputFingerprint ? prior.result : null;
     }
@@ -820,12 +830,16 @@ export class FeatureService {
     }
 
     /** Fingerprint inputs for the suppression state: feature content, task statuses, verdict mtimes. */
-    private async syncFingerprintInputs(featureId: string): Promise<SyncFingerprintInput | null> {
-        const feature = await this.show(featureId);
+    private async syncFingerprintInputs(
+        featureId: string,
+        snapshot?: PlanningSnapshot,
+    ): Promise<SyncFingerprintInput | null> {
+        const current = snapshot ?? (await this.planningSnapshot());
+        const feature = current.features.find((candidate) => candidate.id === featureId);
         if (!feature) return null;
-        const tasks = (await this.collectTasksByFeature()).get(featureId) ?? [];
+        const tasks = current.tasksByFeature.get(featureId) ?? [];
         return {
-            featureContentHash: createHash('sha256').update(feature.content).digest('hex'),
+            featureContentHash: createHash('sha256').update(feature.raw).digest('hex'),
             taskStatusVector: tasks.map((t) => `${t.wbs}:${t.status}`),
             verdictMtimeVector: await readVerdictMtimeVector(this.ctx.fs, defaultVerdictRunDir(this.ctx.tasksDir)),
         };
@@ -836,9 +850,20 @@ export class FeatureService {
      * `featureId` would respect the one-active-goal limit. Same corpus scan the
      * feature-check L3 rule uses — one WIP-limit definition, one enforcement.
      */
-    private async findOneActiveGoalConflict(featureId: string): Promise<{ featureId: string; status: string } | null> {
-        const feature = await this.show(featureId);
+    private async findOneActiveGoalConflict(
+        featureId: string,
+        snapshot?: PlanningSnapshot,
+    ): Promise<{ featureId: string; status: string } | null> {
+        const feature =
+            snapshot?.features.find((candidate) => candidate.id === featureId) ?? (await this.show(featureId));
         if (feature === null || feature.frontmatter.priority !== 'P0') return null;
+        if (snapshot !== undefined) {
+            const conflict = snapshot.features.find(
+                (candidate) =>
+                    candidate.id !== featureId && candidate.priority === 'P0' && candidate.status === 'active',
+            );
+            return conflict === undefined ? null : { featureId: conflict.id, status: conflict.status };
+        }
         const conflict = await findOtherP0InStatus(this.ctx.fs, this.ctx.featuresDir, featureId, ['active']);
         return conflict === null ? null : { featureId: conflict.id, status: conflict.status };
     }
@@ -847,8 +872,9 @@ export class FeatureService {
      * Sync all features that have linked tasks.
      */
     async syncAllFeatures(options?: FeatureSyncOptions): Promise<FeatureSyncAllResult> {
-        const allFeatures = await this.list();
-        const tasksByFeature = await this.collectTasksByFeature();
+        const snapshot = await this.planningSnapshot();
+        const allFeatures = snapshot.features;
+        const tasksByFeature = snapshot.tasksByFeature;
         const evaluated = allFeatures.filter((f) => (tasksByFeature.get(f.id) ?? []).length > 0);
 
         const results: FeatureSyncResult[] = [];
@@ -856,7 +882,7 @@ export class FeatureService {
 
         for (const f of evaluated) {
             try {
-                const res = await this.syncFeature(f.id, options);
+                const res = await this.syncFeature(f.id, { ...options, snapshot });
                 if (res.applied) updatedCount++;
                 results.push(res);
             } catch (err) {
@@ -889,6 +915,16 @@ export class FeatureService {
             tasksDir: this.ctx.tasksDir,
             foldersConfig: this.ctx.foldersConfig,
         });
+    }
+
+    private async planningSnapshot(): Promise<PlanningSnapshot> {
+        const snapshot = await readPlanningSnapshot({
+            fs: this.ctx.fs,
+            taskDirs: this.taskLocator().folderDirs(),
+            featuresDir: this.ctx.featuresDir,
+        });
+        assertPlanningSnapshotComplete(snapshot);
+        return snapshot;
     }
 
     /** Scan registered task folders for `feature_id` edges, grouped by feature ID. */

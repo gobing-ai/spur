@@ -42,6 +42,7 @@ import {
     type SectionMatrix,
     type Severity,
 } from './planning-check-base';
+import type { PlanningSnapshot } from './planning-snapshot';
 import { applyStructuralRepairs, type StructuralRepair } from './structural-repair';
 import { TaskLocator } from './task-locator';
 import { parseTesting } from './task-record';
@@ -198,6 +199,8 @@ export class FeatureCheckService extends PlanningCheckService {
             dogfoodDir?: string;
             /** Directory containing `<wbs>-verdict.json` artifacts (default: <tasksDir parent>/.spur/run). */
             runDir?: string;
+            /** Parsed inputs for this operation; --fix always falls back to live reads. */
+            snapshot?: PlanningSnapshot;
             /**
              * Read-only run-store ports for receipt validation (D63 task 0915):
              * terminal run-row status, persisted definition identity/vars and
@@ -233,14 +236,18 @@ export class FeatureCheckService extends PlanningCheckService {
         },
     ): Promise<CheckFeatureResult> {
         const strict = options?.strict === true;
-        const rawSource = await this.fs.readFile(filePath);
+        const snapshotFeature =
+            options?.fix === true
+                ? undefined
+                : options?.snapshot?.features.find((feature) => feature.filePath === filePath);
+        const rawSource = snapshotFeature?.raw ?? (await this.fs.readFile(filePath));
         let raw = rawSource;
         let repairs: StructuralRepair[] = [];
         // Declared before the --fix block so the 1137 R1 no-port reopen refusal can
         // report its error finding from inside the repair phase.
         const findings: CheckFeatureFindings[] = [];
         if (options?.fix === true) {
-            const probe = MarkdownDocument.parse(rawSource, 'feature');
+            const probe = snapshotFeature?.document ?? MarkdownDocument.parse(rawSource, 'feature');
             const probeFm = probe.frontmatterData ?? {};
             const probeStatus = (probeFm.status as string) ?? 'backlog';
             const probeEffective = options?.asStatus ?? probeStatus;
@@ -262,31 +269,40 @@ export class FeatureCheckService extends PlanningCheckService {
                           ? [options.tasksDir]
                           : [];
                 let hasLiveTask = false;
-                for (const td of taskScanDirs) {
-                    try {
-                        const entries = await this.fs.readDir(td);
-                        for (const entry of entries) {
-                            if (!/^\d{4}_.+\.md$/.test(entry)) continue;
-                            try {
-                                const tr = await this.fs.readFile(`${td}/${entry}`);
-                                const tDoc = MarkdownDocument.parse(tr, 'task');
-                                const tfm = tDoc.frontmatterData ?? {};
-                                const tfid =
-                                    (tfm.feature_id as string | undefined) ?? (tfm['feature-id'] as string | undefined);
-                                if (tfid === featureId) {
-                                    const st = (tfm.status as string | undefined) ?? 'backlog';
-                                    if (['backlog', 'todo', 'wip', 'testing', 'blocked'].includes(st)) {
-                                        hasLiveTask = true;
-                                        break;
+                if (options?.fix !== true && options?.snapshot !== undefined) {
+                    hasLiveTask = options.snapshot.tasks.some(
+                        (task) =>
+                            task.featureId === featureId &&
+                            ['backlog', 'todo', 'wip', 'testing', 'blocked'].includes(task.status),
+                    );
+                } else {
+                    for (const td of taskScanDirs) {
+                        try {
+                            const entries = await this.fs.readDir(td);
+                            for (const entry of entries) {
+                                if (!/^\d{4}_.+\.md$/.test(entry)) continue;
+                                try {
+                                    const tr = await this.fs.readFile(`${td}/${entry}`);
+                                    const tDoc = MarkdownDocument.parse(tr, 'task');
+                                    const tfm = tDoc.frontmatterData ?? {};
+                                    const tfid =
+                                        (tfm.feature_id as string | undefined) ??
+                                        (tfm['feature-id'] as string | undefined);
+                                    if (tfid === featureId) {
+                                        const st = (tfm.status as string | undefined) ?? 'backlog';
+                                        if (['backlog', 'todo', 'wip', 'testing', 'blocked'].includes(st)) {
+                                            hasLiveTask = true;
+                                            break;
+                                        }
                                     }
+                                } catch {
+                                    // ignore unparseable
                                 }
-                            } catch {
-                                // ignore unparseable
                             }
+                            if (hasLiveTask) break;
+                        } catch {
+                            // ignore unreadable dir
                         }
-                        if (hasLiveTask) break;
-                    } catch {
-                        // ignore unreadable dir
                     }
                 }
                 if (hasLiveTask) {
@@ -319,7 +335,7 @@ export class FeatureCheckService extends PlanningCheckService {
                 }
             }
         }
-        const doc = this.runL1(raw, featureId, findings);
+        const doc = this.runL1(raw, featureId, findings, snapshotFeature?.document);
         if (doc === null) {
             return { id: featureId, ...this.summarizeWithStatus('', findings, strict, options?.severityOverrides) };
         }
@@ -383,7 +399,16 @@ export class FeatureCheckService extends PlanningCheckService {
                 : options?.tasksDir
                   ? [options.tasksDir]
                   : [];
-        await this.runL4(doc, featureId, effectiveStatus, taskScanDirs, dogfoodDir, runDir, findings);
+        await this.runL4(
+            doc,
+            featureId,
+            effectiveStatus,
+            taskScanDirs,
+            dogfoodDir,
+            runDir,
+            findings,
+            options?.snapshot,
+        );
 
         // ── 1004 R1: requirement-inventory ↔ AC coverage (feature check --inventory) ──
         if (typeof options?.inventory === 'string') {
@@ -678,6 +703,7 @@ export class FeatureCheckService extends PlanningCheckService {
         dogfoodDir: string | undefined,
         runDir: string | undefined,
         findings: CheckFeatureFindings[],
+        snapshot?: PlanningSnapshot,
     ): Promise<void> {
         if (tasksDirs.length === 0) return;
 
@@ -693,47 +719,66 @@ export class FeatureCheckService extends PlanningCheckService {
         // links them; "verified" only when that task is done AND its resolved
         // evidence is an internally consistent PASS with a matching MET row.
         const linkedTaskRecords: Array<{ wbs: string; status: string; ac: string; testing: string }> = [];
-        for (const tasksDir of tasksDirs) {
-            try {
-                const entries = await this.fs.readDir(tasksDir);
-                for (const entry of entries) {
-                    if (!/^\d{4}_.+\.md$/.test(entry)) continue;
-                    try {
-                        const raw = await this.fs.readFile(`${tasksDir}/${entry}`);
-                        const taskDoc = MarkdownDocument.parse(raw, 'task');
-                        const tfm = taskDoc.frontmatterData ?? {};
-                        const tfid =
-                            (tfm.feature_id as string | undefined) ?? (tfm['feature-id'] as string | undefined);
-                        if (tfid !== featureId) continue;
-                        linkedTasks += 1;
-                        const tStatus = (tfm.status as string | undefined) ?? 'backlog';
-                        const wbs = entry.match(/^(\d{4})_/)?.[1] ?? entry;
-                        if (tStatus !== 'done' && tStatus !== 'cancelled') {
-                            incompleteTasks.push(wbs);
-                        }
-                        const tac = stripAcFence(taskDoc.getSection('Acceptance Criteria') ?? '');
-                        if (tac.trim().length > 0) linkedTaskAc.push(tac);
-                        linkedTaskSolutions.push(taskDoc.getSection('Solution') ?? '');
-                        linkedTaskRecords.push({
-                            wbs,
-                            status: tStatus,
-                            ac: tac,
-                            testing: taskDoc.getSection('Testing') ?? '',
-                        });
-                    } catch {
-                        // A task that references this feature but fails to parse is a
-                        // dangling edge — surface it as a traceability warning.
-                        findings.push({
-                            layer: 'L4',
-                            code: FINDING_CODES.L4_LINKED_TASK_PARSE_FAILED,
-                            severity: 'warning',
-                            section: '',
-                            message: `Linked task file "${entry}" failed to parse — dangling feature_id edge`,
-                        });
-                    }
+        if (snapshot !== undefined) {
+            for (const task of snapshot.tasks) {
+                if (task.featureId !== featureId) continue;
+                linkedTasks += 1;
+                if (task.status !== 'done' && task.status !== 'cancelled') {
+                    incompleteTasks.push(task.wbs);
                 }
-            } catch {
-                // One phase folder unreadable — continue scanning the others.
+                const tac = stripAcFence(task.document.getSection('Acceptance Criteria') ?? '');
+                if (tac.trim().length > 0) linkedTaskAc.push(tac);
+                linkedTaskSolutions.push(task.document.getSection('Solution') ?? '');
+                linkedTaskRecords.push({
+                    wbs: task.wbs,
+                    status: task.status,
+                    ac: tac,
+                    testing: task.document.getSection('Testing') ?? '',
+                });
+            }
+        } else {
+            for (const tasksDir of tasksDirs) {
+                try {
+                    const entries = await this.fs.readDir(tasksDir);
+                    for (const entry of entries) {
+                        if (!/^\d{4}_.+\.md$/.test(entry)) continue;
+                        try {
+                            const raw = await this.fs.readFile(`${tasksDir}/${entry}`);
+                            const taskDoc = MarkdownDocument.parse(raw, 'task');
+                            const tfm = taskDoc.frontmatterData ?? {};
+                            const tfid =
+                                (tfm.feature_id as string | undefined) ?? (tfm['feature-id'] as string | undefined);
+                            if (tfid !== featureId) continue;
+                            linkedTasks += 1;
+                            const tStatus = (tfm.status as string | undefined) ?? 'backlog';
+                            const wbs = entry.match(/^(\d{4})_/)?.[1] ?? entry;
+                            if (tStatus !== 'done' && tStatus !== 'cancelled') {
+                                incompleteTasks.push(wbs);
+                            }
+                            const tac = stripAcFence(taskDoc.getSection('Acceptance Criteria') ?? '');
+                            if (tac.trim().length > 0) linkedTaskAc.push(tac);
+                            linkedTaskSolutions.push(taskDoc.getSection('Solution') ?? '');
+                            linkedTaskRecords.push({
+                                wbs,
+                                status: tStatus,
+                                ac: tac,
+                                testing: taskDoc.getSection('Testing') ?? '',
+                            });
+                        } catch {
+                            // A task that references this feature but fails to parse is a
+                            // dangling edge — surface it as a traceability warning.
+                            findings.push({
+                                layer: 'L4',
+                                code: FINDING_CODES.L4_LINKED_TASK_PARSE_FAILED,
+                                severity: 'warning',
+                                section: '',
+                                message: `Linked task file "${entry}" failed to parse — dangling feature_id edge`,
+                            });
+                        }
+                    }
+                } catch {
+                    // One phase folder unreadable — continue scanning the others.
+                }
             }
         }
 

@@ -289,6 +289,35 @@ describe('FeatureService', () => {
             expect(readFileSync(created.ref.filePath, 'utf8')).toBe(before);
             for (const path of [created.ref.filePath, done, unreadable]) rmSync(path, { force: true });
         });
+        test('syncAllFeatures parses each selected file once', async () => {
+            const first = await svc.create('Snapshot First');
+            await svc.transition(first.ref.id, 'active');
+            const second = await svc.create('Snapshot Second');
+            await svc.transition(second.ref.id, 'active');
+            const firstTask = writeLinkedTask('9880', 'Snapshot Done First', 'done', first.ref.id);
+            const secondTask = writeLinkedTask('9881', 'Snapshot Done Second', 'done', second.ref.id);
+            const fs = createNodeFileSystem(root);
+            const reads: string[] = [];
+            const original = fs.readFile.bind(fs);
+            fs.readFile = async (path) => {
+                reads.push(path);
+                return original(path);
+            };
+            const instrumented = new FeatureService({
+                fs,
+                featuresDir,
+                tasksDir,
+                writeService: new PlanningWriteService({ fs }),
+            });
+            await instrumented.syncAllFeatures({ dryRun: true });
+            const owned = new Set([first.ref.filePath, second.ref.filePath, firstTask, secondTask]);
+            const corpusReads = reads.filter((path) => owned.has(path));
+            expect(corpusReads).toHaveLength(4);
+            expect(new Set(corpusReads).size).toBe(corpusReads.length);
+            for (const path of [first.ref.filePath, second.ref.filePath, firstTask, secondTask]) {
+                rmSync(path, { force: true });
+            }
+        });
     });
 
     describe('show', () => {
