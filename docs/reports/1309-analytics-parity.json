@@ -1,0 +1,377 @@
+{
+    "schemaVersion": 1,
+    "candidate": "time-range-predicates",
+    "status": "go",
+    "reason": "Date-grain raw, rollup, and mart reads match on comparable requests, and one timeBoundClauses helper is smaller than the buildRollupWhere and dayClauses assemblies. Whole queries are not claimed equivalent. 1310 may consume this artifact; this task does not unblock it.",
+    "cases": [
+        {
+            "id": "bounds-null",
+            "grain": "1d",
+            "bounds": "null",
+            "filters": "none",
+            "comparable": true,
+            "reason": "time-predicates-select-the-same-rows",
+            "selectedCounts": {
+                "raw": 7,
+                "rollupDate": 7,
+                "rollupInstant": 7
+            },
+            "differences": []
+        },
+        {
+            "id": "bounds-lower-only",
+            "grain": "1d",
+            "bounds": "lower",
+            "filters": "none",
+            "comparable": false,
+            "reason": "time-predicate-selects-different-rows: DATE(?) keeps the whole calendar day; the raw instant bound does not",
+            "selectedCounts": {
+                "raw": 4,
+                "rollupDate": 5,
+                "rollupInstant": 4
+            },
+            "differences": []
+        },
+        {
+            "id": "bounds-upper-only",
+            "grain": "1d",
+            "bounds": "upper",
+            "filters": "none",
+            "comparable": false,
+            "reason": "time-predicate-selects-different-rows: DATE(?) keeps the whole calendar day; the raw instant bound does not",
+            "selectedCounts": {
+                "raw": 4,
+                "rollupDate": 5,
+                "rollupInstant": 4
+            },
+            "differences": []
+        },
+        {
+            "id": "bounds-both-day-aligned",
+            "grain": "1d",
+            "bounds": "both-day",
+            "filters": "none",
+            "comparable": true,
+            "reason": "time-predicates-select-the-same-rows",
+            "selectedCounts": {
+                "raw": 7,
+                "rollupDate": 7,
+                "rollupInstant": 7
+            },
+            "differences": []
+        },
+        {
+            "id": "grain-daily",
+            "grain": "1d",
+            "bounds": "both-day",
+            "filters": "none",
+            "comparable": true,
+            "reason": "time-predicates-select-the-same-rows",
+            "selectedCounts": {
+                "raw": 7,
+                "rollupDate": 7,
+                "rollupInstant": 7
+            },
+            "differences": []
+        },
+        {
+            "id": "filter-same-dimension",
+            "grain": "1d",
+            "bounds": "null",
+            "filters": "source=claude",
+            "comparable": true,
+            "reason": "time-predicates-select-the-same-rows",
+            "selectedCounts": {
+                "raw": 5,
+                "rollupDate": 5,
+                "rollupInstant": 5
+            },
+            "differences": []
+        },
+        {
+            "id": "bounds-both-subdaily",
+            "grain": "1h",
+            "bounds": "both-instant",
+            "filters": "none",
+            "comparable": false,
+            "reason": "mart is day-grain only, and DATE(?) selects different rows than the raw instant bound",
+            "selectedCounts": {
+                "raw": 1,
+                "rollupDate": 3,
+                "rollupInstant": 1
+            },
+            "differences": [],
+            "notes": ["raw buckets 1", "rollup buckets 1", "raw-vs-instant-rows equal"]
+        },
+        {
+            "id": "grain-subdaily",
+            "grain": "1h",
+            "bounds": "null",
+            "filters": "none",
+            "comparable": false,
+            "reason": "mart has no subdaily grain; a 1h request stays on the rollup path",
+            "selectedCounts": {
+                "raw": 0,
+                "rollupDate": 0,
+                "rollupInstant": 0
+            },
+            "differences": []
+        },
+        {
+            "id": "filter-cross-dimension",
+            "grain": "1d",
+            "bounds": "null",
+            "filters": "model=opus on source dimension",
+            "comparable": false,
+            "reason": "mart cannot apply a model filter on the source dimension; the service routes that request to rollup",
+            "selectedCounts": {
+                "raw": 0,
+                "rollupDate": 0,
+                "rollupInstant": 0
+            },
+            "differences": []
+        },
+        {
+            "id": "filter-tool",
+            "grain": "1d",
+            "bounds": "null",
+            "filters": "tool=Read",
+            "comparable": false,
+            "reason": "a tool filter is not mart-eligible and the rollup read switches to allocated tool measures",
+            "selectedCounts": {
+                "raw": 0,
+                "rollupDate": 0,
+                "rollupInstant": 0
+            },
+            "differences": []
+        },
+        {
+            "id": "filter-skill",
+            "grain": "1d",
+            "bounds": "null",
+            "filters": "skill=code-review",
+            "comparable": false,
+            "reason": "a skill filter is not mart-eligible; skill rows are not a second copy of the day predicate",
+            "selectedCounts": {
+                "raw": 0,
+                "rollupDate": 0,
+                "rollupInstant": 0
+            },
+            "differences": []
+        },
+        {
+            "id": "watermark-fresh",
+            "grain": "1d",
+            "bounds": "null",
+            "filters": "none",
+            "comparable": false,
+            "reason": "rollups are fresh after refresh; measure parity is bounds-null",
+            "selectedCounts": {
+                "raw": 0,
+                "rollupDate": 0,
+                "rollupInstant": 0
+            },
+            "differences": []
+        },
+        {
+            "id": "watermark-stale",
+            "grain": "1d",
+            "bounds": "null",
+            "filters": "none",
+            "comparable": false,
+            "reason": "stale watermark: rollup and mart omit the trailing import; raw includes it. Noncomparable until refresh.",
+            "selectedCounts": {
+                "raw": 1,
+                "rollupDate": 230,
+                "rollupInstant": 0
+            },
+            "differences": [],
+            "notes": ["rawIncludes999=true", "rollupOpus=230"]
+        },
+        {
+            "id": "phenomenon-duplicate-import",
+            "grain": "none",
+            "bounds": "null",
+            "filters": "fixture",
+            "comparable": false,
+            "reason": "m-dup-old is superseded by m-dup-new (same request_id, later rowid)",
+            "selectedCounts": {
+                "raw": 0,
+                "rollupDate": 0,
+                "rollupInstant": 0
+            },
+            "differences": []
+        },
+        {
+            "id": "phenomenon-null-measures",
+            "grain": "none",
+            "bounds": "null",
+            "filters": "fixture",
+            "comparable": false,
+            "reason": "m-null stores null token measures and is coalesced to 0 on the message rollup",
+            "selectedCounts": {
+                "raw": 0,
+                "rollupDate": 0,
+                "rollupInstant": 0
+            },
+            "differences": []
+        },
+        {
+            "id": "phenomenon-unknown-usage",
+            "grain": "none",
+            "bounds": "null",
+            "filters": "fixture",
+            "comparable": false,
+            "reason": "m-unknown uses model unknown in its own session",
+            "selectedCounts": {
+                "raw": 0,
+                "rollupDate": 0,
+                "rollupInstant": 0
+            },
+            "differences": []
+        },
+        {
+            "id": "phenomenon-midnight-boundary",
+            "grain": "none",
+            "bounds": "null",
+            "filters": "fixture",
+            "comparable": false,
+            "reason": "m-midnight is 2026-01-02T00:00:00Z and m-pre-midnight is the previous second",
+            "selectedCounts": {
+                "raw": 0,
+                "rollupDate": 0,
+                "rollupInstant": 0
+            },
+            "differences": []
+        }
+    ],
+    "predicateVectors": [
+        {
+            "id": "rollup-date-both",
+            "path": "rollup",
+            "fragments": ["r.day >= DATE(?)", "r.day <= DATE(?)"],
+            "absent": []
+        },
+        {
+            "id": "mart-date-both",
+            "path": "mart",
+            "fragments": ["d.day >= DATE(?)", "d.day <= DATE(?)"],
+            "absent": []
+        },
+        {
+            "id": "raw-instant-both",
+            "path": "raw",
+            "fragments": ["m.ts >= ?", "m.ts <= ?"],
+            "absent": ["DATE(?)"]
+        },
+        {
+            "id": "rollup-date-lower",
+            "path": "rollup",
+            "fragments": ["r.day >= DATE(?)"],
+            "absent": ["r.day <= DATE(?)"]
+        },
+        {
+            "id": "rollup-date-unbounded",
+            "path": "rollup",
+            "fragments": [],
+            "absent": ["DATE(?)"]
+        },
+        {
+            "id": "rollup-instant-both",
+            "path": "rollup",
+            "fragments": ["strftime('%Y-%m-%dT%H:%M:%SZ', ?)"],
+            "absent": ["r.day >= DATE(?)"]
+        }
+    ],
+    "surface": {
+        "candidateFunctions": ["buildRollupWhere", "dayClauses"],
+        "currentLines": 20,
+        "proposedLines": 15,
+        "smaller": true,
+        "adjacentAssemblies": [
+            "packages/domain/src/analytics/history-board-rollup.ts:726",
+            "packages/domain/src/analytics/history-board-rollup.ts:732",
+            "packages/domain/src/analytics/history-board-rollup.ts:969",
+            "packages/domain/src/analytics/history-board-rollup.ts:1146",
+            "packages/domain/src/analytics/history-board-rollup.ts:1301",
+            "packages/domain/src/analytics/history-board-rollup.ts:1305",
+            "packages/domain/src/analytics/history-board-rollup.ts:1854",
+            "packages/domain/src/analytics/history-board-marts.ts:304",
+            "packages/domain/src/analytics/history-board-marts.ts:308",
+            "packages/domain/src/analytics/history-board-marts.ts:372",
+            "packages/domain/src/analytics/history-board-marts.ts:376",
+            "packages/domain/src/analytics/history-board-marts.ts:491",
+            "packages/domain/src/analytics/history-board-marts.ts:569",
+            "packages/domain/src/analytics/history-board-marts.ts:599",
+            "packages/domain/src/analytics/history-board-marts.ts:603",
+            "packages/domain/src/analytics/message-where.ts:22"
+        ]
+    },
+    "toolVersions": {
+        "bun": "1.4.3",
+        "sqlite": "3.54.0"
+    },
+    "timings": {
+        "sevenDay": {
+            "warmups": 2,
+            "measuredReads": 9,
+            "rollupMs": [
+                0.04016699999999673, 0.031166000000013128, 0.027375000000006366, 0.026500000000027057,
+                0.024124999999997954, 0.028999999999996362, 0.02641700000000924, 0.024957999999998037,
+                0.031666000000001304
+            ],
+            "martMs": [
+                0.024333000000012817, 0.02745899999999324, 0.027874999999994543, 0.0237499999999784,
+                0.029250000000018872, 0.03608299999999076, 0.030166000000008353, 0.02370900000002507,
+                0.02112499999998363
+            ],
+            "rawMs": [
+                0.037208999999990056, 0.037499999999994316, 0.03608299999999076, 0.03383400000001302,
+                0.040832999999992126, 0.03691700000001674, 0.034624999999977035, 0.04079099999998448,
+                0.03258400000001416
+            ]
+        },
+        "allHistory": {
+            "warmups": 2,
+            "measuredReads": 9,
+            "rollupMs": [
+                0.01833300000001259, 0.017291000000000167, 0.021250000000009095, 0.017500000000012506,
+                0.019292000000007192, 0.018292000000002417, 0.01870800000000372, 0.027084000000002106,
+                0.016250000000013642
+            ],
+            "martMs": [
+                0.0171670000000006, 0.0196250000000191, 0.01762500000000955, 0.015457999999995309, 0.027291999999988548,
+                0.015166999999991049, 0.0362920000000031, 0.0267080000000135, 0.013541000000003578
+            ],
+            "rawMs": [
+                0.03437499999998295, 0.040541999999987866, 0.04008299999998144, 0.03550000000001319,
+                0.03999999999999204, 0.039749999999997954, 0.03962500000000091, 0.031999999999982265,
+                0.030624999999986358
+            ]
+        }
+    },
+    "sourceRevision": "2f63548bb9239b84925f640ed68d80ddb5c5a111",
+    "sourceDigests": {
+        "packages/domain/src/analytics/history-board-rollup.ts": "a2811302b9f216814297bc171e4c2b87276a26446c4ff9de0d49fd383004c8ab",
+        "packages/domain/src/analytics/history-board-marts.ts": "968cefc46197be250fd2af42ea8ff798fcdffadf0bd550ea614b4fe9769e862d",
+        "packages/domain/src/analytics/message-where.ts": "f1cbd0bd12689cf8421c895a130234c5d3b4c7ffddb37b96057aa0a326bbe9dc",
+        "packages/app/src/services/history-board-service.ts": "09ac7d4ed69491d0637bc20b7bd71ae5a011628a658b9054c909ace1abc1d2eb"
+    },
+    "fixtureSeed": {
+        "id": "1309-48h-v1",
+        "hours": 48,
+        "start": "2026-01-01T12:00:00Z",
+        "end": "2026-01-03T12:00:00Z",
+        "importedAt": "2026-01-03T12:00:00Z",
+        "staleImportedAt": "2026-01-03T18:00:00Z",
+        "phenomena": [
+            "duplicate-import",
+            "null-measures",
+            "unknown-usage",
+            "midnight-boundary",
+            "fresh-and-stale-watermark"
+        ]
+    },
+    "command": "rm -f docs/reports/1309-analytics-parity.json docs/reports/1309-analytics-parity.md && cd packages/domain && bun test tests/analytics/history-parity-evidence.test.ts",
+    "measuredAt": "2026-11-06T07:50:44.659Z"
+}
