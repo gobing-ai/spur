@@ -2,7 +2,8 @@ import { homedir } from 'node:os';
 import { join, resolve } from 'node:path';
 import type { Command } from '@commander-js/extra-typings';
 import { searchStatus, ZG_INDEX_HINT, ZG_INSTALL_HINT, ZG_REFRESH_HINT } from '@gobing-ai/spur-app';
-import { misplacedGlobalKeys, SDLC_ACTIONS } from '@gobing-ai/spur-config';
+import { resolveAction } from '@gobing-ai/spur-app/sdlc-actions';
+import { misplacedGlobalKeys, SDLC_ACTIONS, type SdlcAction } from '@gobing-ai/spur-config';
 import {
     BUNDLED_GLOBAL_CONFIG,
     bundledConfigRoot,
@@ -61,28 +62,137 @@ export function substituteDocTemplateTokens(content: string, date: Date = new Da
 /** Makefile rule head: the bare `target:` form. `target := value` is an assignment, not a target. */
 const MAKEFILE_TARGET_PATTERN = /^([a-z][a-z0-9-]*):(?!=)/;
 
-/**
- * The `builder` block for a fresh `.spur/config.yaml`, chosen from the stack detected at init
- * (A92, ADR-139): `bun` when a bun lockfile exists, `make <action>` bindings for the reserved
- * actions a Makefile declares as targets, and a commented skeleton when neither is present.
- * Detection runs here once and is written down; nothing re-detects at run time.
- */
-export function renderBuilderBlock(files: { bunLock: boolean; makefile: string | null }): string[] {
-    if (files.bunLock) return ['builder:', '  preset: bun'];
+/** Manager evidence is read as data; no lockfile content or script body becomes a command. */
+const JS_LOCKFILES = {
+    'package-lock.json': 'npm',
+    'npm-shrinkwrap.json': 'npm',
+    'pnpm-lock.yaml': 'pnpm',
+    'yarn.lock': 'yarn',
+} as const;
+
+interface BuilderFiles {
+    bunLock: boolean;
+    makefile: string | null;
+    packageJson?: string | null;
+    lockfiles?: string[];
+    availableManagers?: { npm: boolean; pnpm: boolean };
+}
+
+interface BuilderBindings {
+    bindings: Partial<Record<SdlcAction, string>>;
+    sourceByAction: Partial<Record<SdlcAction, string>>;
+    diagnostics: string[];
+}
+
+/** Select one declared JS manager, refusing contradictory or unsupported evidence. */
+function detectJsManager(files: BuilderFiles, manifest: Record<string, unknown>, diagnostics: string[]) {
+    const managers = new Set<string>();
+    const evidence: string[] = [];
+    for (const [lock, manager] of Object.entries(JS_LOCKFILES)) {
+        if (!files.lockfiles?.includes(lock)) continue;
+        managers.add(manager);
+        evidence.push(lock);
+    }
+    if (manifest.packageManager !== undefined) {
+        // Accept only a manager plus a version/integrity token, never shell text or a URL.
+        const match =
+            typeof manifest.packageManager === 'string'
+                ? /^([a-z][a-z0-9-]*)@[0-9][a-zA-Z0-9.+_-]*$/.exec(manifest.packageManager)
+                : null;
+        if (!match) {
+            diagnostics.push('invalid packageManager; JavaScript actions remain unbound');
+            return null;
+        }
+        managers.add(match[1] as string);
+        evidence.push('package.json packageManager');
+    }
+    if (managers.size > 1) {
+        diagnostics.push(
+            `conflicting package manager evidence: ${evidence.join(', ')}; JavaScript actions remain unbound`,
+        );
+        return null;
+    }
+    const manager = [...managers][0];
+    if (manager !== 'npm' && manager !== 'pnpm') {
+        diagnostics.push(
+            manager === undefined
+                ? 'no unambiguous npm or pnpm evidence; JavaScript actions remain unbound'
+                : 'unsupported packageManager; JavaScript actions remain unbound',
+        );
+        return null;
+    }
+    if (files.availableManagers?.[manager] === false) {
+        diagnostics.push(
+            `${manager} is not available on PATH; bindings are proposals only; install it before execution`,
+        );
+    }
+    return { manager, evidence: evidence.join(', ') };
+}
+
+/** Init-only proposals: matching Make targets win; JS fallback uses exact reserved script names. */
+function detectBuilderBindings(files: BuilderFiles): BuilderBindings {
+    const result: BuilderBindings = { bindings: {}, sourceByAction: {}, diagnostics: [] };
     const targets = new Set(
         (files.makefile ?? '').split('\n').flatMap((line) => MAKEFILE_TARGET_PATTERN.exec(line)?.[1] ?? []),
     );
-    const bound = SDLC_ACTIONS.filter((action) => targets.has(action));
-    if (bound.length === 0) {
-        return [
-            'builder:',
-            '  preset: none',
-            '  # Uncomment and bind each action this project supports:',
-            '  # actions:',
-            ...SDLC_ACTIONS.map((action) => `  #   ${action}: <command>`),
-        ];
+    for (const action of SDLC_ACTIONS) {
+        if (!targets.has(action)) continue;
+        result.bindings[action] = `make ${action}`;
+        result.sourceByAction[action] = `Makefile target ${action}`;
     }
-    return ['builder:', '  preset: none', '  actions:', ...bound.map((action) => `    ${action}: make ${action}`)];
+    if (files.packageJson == null) {
+        result.diagnostics.push('no package.json; JavaScript actions remain unbound');
+        return result;
+    }
+    let manifest: Record<string, unknown>;
+    try {
+        const parsed: unknown = JSON.parse(files.packageJson);
+        if (parsed === null || typeof parsed !== 'object' || Array.isArray(parsed)) throw new Error('not an object');
+        manifest = parsed as Record<string, unknown>;
+    } catch {
+        result.diagnostics.push('invalid package.json; JavaScript actions remain unbound');
+        return result;
+    }
+    const selected = detectJsManager(files, manifest, result.diagnostics);
+    if (selected === null) return result;
+    const scripts = manifest.scripts;
+    if (scripts === null || typeof scripts !== 'object' || Array.isArray(scripts)) return result;
+    const declared = scripts as Record<string, unknown>;
+    for (const action of SDLC_ACTIONS) {
+        const script = declared[action];
+        if (result.bindings[action] !== undefined || typeof script !== 'string' || script.trim().length === 0) continue;
+        result.bindings[action] = `${selected.manager} run ${action}`;
+        result.sourceByAction[action] = `package.json scripts.${action} (${selected.evidence})`;
+    }
+    return result;
+}
+
+/**
+ * Render init's one-time stack discovery as command config plus provenance comments.
+ * Bun lockfiles retain preset precedence; other stacks expose missing actions explicitly.
+ */
+export function renderBuilderBlock(files: BuilderFiles): string[] {
+    if (files.bunLock) return ['builder:', '  preset: bun'];
+    const { bindings, sourceByAction, diagnostics } = detectBuilderBindings(files);
+    const bound = SDLC_ACTIONS.filter((action) => bindings[action] !== undefined);
+    const unbound = SDLC_ACTIONS.filter(
+        (action) => resolveAction({ preset: 'none', actions: bindings }, action).kind === 'unbound',
+    );
+    return [
+        'builder:',
+        '  preset: none',
+        ...diagnostics.map((message) => `  # ${message}`),
+        ...(bound.length > 0 ? ['  actions:'] : []),
+        ...bound.flatMap((action) => [`    # source: ${sourceByAction[action]}`, `    ${action}: ${bindings[action]}`]),
+        ...(unbound.length > 0
+            ? [
+                  '  # Uncomment and bind each action this project supports:',
+                  '  # Unbound proposals: no matching declared target or script, or manager evidence was refused.',
+                  ...(bound.length === 0 ? ['  # actions:'] : []),
+                  ...unbound.map((action) => `  #   ${action}: <command>`),
+              ]
+            : []),
+    ];
 }
 
 /**
@@ -352,6 +462,17 @@ export function registerInitCommand(program: Command, context: CliContext, optio
                 (await context.fs.exists(join(context.cwd, 'bun.lockb')));
             const makefilePath = join(context.cwd, 'Makefile');
             const makefile = (await context.fs.exists(makefilePath)) ? await context.fs.readFile(makefilePath) : null;
+            const packagePath = join(context.cwd, 'package.json');
+            const packageJson = (await context.fs.exists(packagePath)) ? await context.fs.readFile(packagePath) : null;
+            const lockfiles: string[] = [];
+            for (const lock of Object.keys(JS_LOCKFILES)) {
+                if (await context.fs.exists(join(context.cwd, lock))) lockfiles.push(lock);
+            }
+            // PATH lookup does not run a manager (including Corepack shims) or install anything.
+            const availableManagers = {
+                npm: Bun.which('npm', { PATH: context.env.PATH }) !== null,
+                pnpm: Bun.which('pnpm', { PATH: context.env.PATH }) !== null,
+            };
 
             const configYaml = `${[
                 `# Spur project configuration for ${projectName}`,
@@ -381,7 +502,7 @@ export function registerInitCommand(program: Command, context: CliContext, optio
                 '  # See docs/design/downstream-board-modules.md for the react/iframe schema.',
                 '  modules: []',
                 '',
-                ...renderBuilderBlock({ bunLock, makefile }),
+                ...renderBuilderBlock({ bunLock, makefile, packageJson, lockfiles, availableManagers }),
             ].join('\n')}\n`;
 
             await context.fs.ensureDir(join(context.cwd, CLI_CONFIG.configDir));

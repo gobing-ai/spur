@@ -3,7 +3,7 @@ kind: design
 title: Stack-neutral SDLC actions — builder.actions, spur self exec, and script-structure consolidation
 status: implemented
 created_at: 2026-10-16
-updated_at: 2026-10-21
+updated_at: 2026-11-05
 related:
   - docs/features/A92_stack-neutral-sdlc-actions-builder-actions-spur-self-exec-and-script-structure-consolidation.md
   - docs/design/harness-surface-governance.md
@@ -176,8 +176,33 @@ the implementing task's design review.
 | Quality gate full tier / task-pipeline | `qualityGateCmd` default `${spurBin:-spur} self exec check`; `gateProbeCmd` default `${spurBin:-spur} self exec lint`; `formatCmd` default `${spurBin:-spur} self exec format`; `--vars` overrides still win. These vars run through `sh -c` (`quality-gate.ts:762`), and the CLI injects `spurBin` at run start, so the gate re-enters the same binary that drives the run, not whatever `spur` is first on `PATH` |
 | feature-verification (YAML + `feature-verification-run.ts`) | default `spur self exec check-feature`. `verificationCmd` is launched through the safe argv splitter with no shell (`feature-verification-run.ts:219`), so `$spurBin` cannot expand there; `spur` resolves on `PATH`. The splitter invariant is kept; the action body that `self exec` runs is project-owned config, the same trust boundary as a `package.json` script today |
 | wrapup-pipeline tripwire | run `$spurBin self exec test-repo-wide` only when `$spurBin self exec --list --json` shows it bound (spur-new declares it as a custom action) |
-| `spur self init` | seed `builder.preset` + `builder.actions`: `bun` when `bun.lock`/`bun.lockb`; `none` + `make <target>` bindings for each matching Makefile target; commented skeleton otherwise |
+| `spur self init` | seed `builder.preset` + `builder.actions`: Bun lockfiles select `bun`; otherwise `none` with matching Make targets, then unambiguous npm/pnpm scripts; provenance and unbound proposals are comments |
 | sp plugin commands/skills | replace "run `bun run spur-check`" with "run `spur self exec check`" (and `lint`, `check-feature`, `autofix`) |
+
+#### 3.4.1 Init discovery and inspection
+
+Discovery reads only root manifests and target declarations; it never executes a discovered command
+or installs tools. A Bun lockfile keeps the existing `bun` preset behavior. Otherwise, each reserved
+action binds to an identically named Make target first, then an identically named, nonempty string
+script in `package.json`. Script bodies and custom script names are never copied into commands;
+there is no alias inference (for example, `test:full` does not bind `test-full`).
+
+JavaScript fallback requires one unambiguous manager: `package-lock.json` or `npm-shrinkwrap.json`
+indicates npm; `pnpm-lock.yaml` indicates pnpm; a supported `packageManager` declaration can select
+the manager without a lockfile. Multiple lockfiles for the same manager agree. Conflicting lockfiles
+(including `yarn.lock`) or a conflicting, unsupported, or malformed `packageManager` declaration leave
+JS actions unbound. Invalid/missing manifests and scripts produce no inferred JS bindings. Valid
+commands have the fixed form `npm run <action>` or `pnpm run <action>` under `preset: none`.
+
+The generated YAML records declaration provenance, refusal reasons, missing manager availability
+(PATH lookup only), and commented proposals for actions without an effective binding. Availability
+warnings do not discard otherwise deterministic proposals. These comments add no schema fields.
+Stack-neutral rule defaults resolve normally and are excluded from unbound proposals. Inspect accepted
+bindings with `spur self exec --list --json` or `spur self exec <action> --dry-run --json`; no init preview
+flag is added.
+
+Re-init without `--force` preserves existing project configuration byte for byte, including custom
+commands and comments. The existing explicit `--force` regeneration behavior remains available.
 
 ### 3.5 This repository: `package.json` and `scripts/`
 

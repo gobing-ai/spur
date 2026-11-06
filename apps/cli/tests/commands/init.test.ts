@@ -7,6 +7,7 @@ import { resolveWorkflowFile } from '@gobing-ai/spur-app';
 import { type BuilderConfig, getEnvVars, spurConfigSchema } from '@gobing-ai/spur-config';
 import { bundledConfigRoot, parseConfigYaml } from '@gobing-ai/spur-config/loader';
 import { TASK_VARIANTS } from '@gobing-ai/spur-domain';
+import { renderBuilderBlock } from '../../src/commands/init';
 import { SCAFFOLD_MANIFEST } from '../../src/config/scaffold-manifest';
 import { main } from '../../src/index';
 import type { CommandOutput } from '../../src/output';
@@ -19,7 +20,7 @@ function nullOutput(): CommandOutput {
 /** Build main() options with the global rules seed redirected to an isolated temp dir. */
 async function isolatedOptions(cwd: string) {
     const globalDir = await mkdtemp(join(tmpdir(), 'spur-glob-'));
-    const env = { ...getEnvVars(), SPUR_GLOBAL_RULES_DIR: globalDir };
+    const env: Record<string, string | undefined> = { ...getEnvVars(), SPUR_GLOBAL_RULES_DIR: globalDir };
     return { options: { cwd, env, output: nullOutput(), dbUrl: ':memory:' as const }, globalDir };
 }
 
@@ -449,5 +450,186 @@ describe('init command', () => {
         const forced = await initAndParse(cwd, ['--force']);
         expect(forced.text).toContain('builder:\n  preset: bun');
         expect(forced.builder.preset).toBe('bun');
+    });
+});
+
+describe('JavaScript action onboarding (1303)', () => {
+    // Failure cases: conflicting/unsupported manager evidence; malformed manifests/scripts;
+    // aliases or script bodies copied into commands; lost Make/Bun precedence; executing
+    // discovery candidates; silently assuming installed tools; rewriting custom config.
+    const scripts = {
+        build: 'touch discovery-ran',
+        check: 'touch discovery-ran',
+        'test-full': 'touch discovery-ran',
+        'test:heavy': 'touch discovery-ran',
+        'check; touch discovery-ran': 'touch discovery-ran',
+        deploy: 'touch discovery-ran',
+        lint: '',
+        test: 42,
+    };
+
+    async function scaffold(manifest: string | null, locks: string[], makefile?: string) {
+        const cwd = await createTempProjectStackNeutral();
+        if (manifest !== null) await Bun.write(join(cwd, 'package.json'), manifest);
+        for (const lock of locks) await Bun.write(join(cwd, lock), '');
+        if (makefile !== undefined) await Bun.write(join(cwd, 'Makefile'), makefile);
+        const { options } = await isolatedOptions(cwd);
+        // PATH contains no tools: discovery must neither install nor execute a manager.
+        options.env.PATH = cwd;
+        expect(await main(['self', 'init', '--minimal'], options)).toBe(0);
+        const text = await readFile(join(cwd, '.spur/config.yaml'), 'utf8');
+        const builder = spurConfigSchema.parse(parseConfigYaml(text)).builder as BuilderConfig;
+        expect(existsSync(join(cwd, 'discovery-ran'))).toBe(false);
+        return { cwd, options, text, builder };
+    }
+
+    test.each([
+        ['npm', ['package-lock.json'], undefined],
+        ['npm', ['npm-shrinkwrap.json'], undefined],
+        ['npm', ['package-lock.json', 'npm-shrinkwrap.json'], 'npm@10.0.0'],
+        ['pnpm', ['pnpm-lock.yaml'], undefined],
+        ['pnpm', [], 'pnpm@9.0.0'],
+        ['npm', [], 'npm@10.0.0'],
+    ] as const)('proposes only exact declared scripts for %s (%j, %s)', async (manager, locks, packageManager) => {
+        const { text, builder, cwd, options } = await scaffold(JSON.stringify({ scripts, packageManager }), [...locks]);
+        expect(builder).toEqual({
+            preset: 'none',
+            actions: {
+                build: `${manager} run build`,
+                'test-full': `${manager} run test-full`,
+                check: `${manager} run check`,
+            },
+        });
+        expect(text).toContain('# source: package.json scripts.build');
+        expect(text).toContain(`# ${manager} is not available on PATH`);
+        expect(text).toContain('#   test: <command>');
+        expect(text).toContain('no matching declared target or script');
+        expect(text).not.toContain('touch discovery-ran');
+        expect(text).not.toContain('test:heavy');
+
+        // Inspect the generated binding through the existing transport and real config loader.
+        const globalDir = options.env.SPUR_GLOBAL_RULES_DIR;
+        const list = await runCli(['--no-logo', 'self', 'exec', '--list', '--json'], cwd, {
+            SPUR_GLOBAL_RULES_DIR: globalDir,
+        });
+        expect(list.code).toBe(0);
+        expect(list.json).toContainEqual({
+            name: 'build',
+            reserved: true,
+            source: 'config',
+            command: `${manager} run build`,
+        });
+        const preview = await runCli(['--no-logo', 'self', 'exec', 'build', '--dry-run', '--json'], cwd, {
+            SPUR_GLOBAL_RULES_DIR: globalDir,
+        });
+        expect(preview.code).toBe(0);
+        expect(preview.json).toEqual([{ name: 'build', command: `${manager} run build` }]);
+        expect(existsSync(join(cwd, 'discovery-ran'))).toBe(false);
+    });
+
+    test.each([
+        ['npm', ['package-lock.json']],
+        ['pnpm', ['pnpm-lock.yaml']],
+        ['conflicting managers', ['package-lock.json', 'pnpm-lock.yaml']],
+    ] as const)('keeps rule defaults out of unbound proposals for %s', async (_manager, locks) => {
+        const { cwd, options, text } = await scaffold(JSON.stringify({ scripts }), [...locks]);
+        const list = await runCli(['--no-logo', 'self', 'exec', '--list', '--json'], cwd, {
+            SPUR_GLOBAL_RULES_DIR: options.env.SPUR_GLOBAL_RULES_DIR,
+        });
+        expect(list.code).toBe(0);
+        for (const [name, preset] of [
+            ['rules-pre', 'recommended-pre-check'],
+            ['rules-post', 'recommended-post-check'],
+        ]) {
+            expect(list.json).toContainEqual({
+                name,
+                reserved: true,
+                source: 'default',
+                command: `spur rule run --preset ${preset} --fail-on warning --no-logo`,
+            });
+            expect(text).not.toContain(`#   ${name}: <command>`);
+        }
+        expect(text).toContain('#   test: <command>');
+    });
+
+    test.each([
+        [JSON.stringify({ scripts }), ['package-lock.json', 'pnpm-lock.yaml'], 'conflicting package manager evidence'],
+        [
+            JSON.stringify({ scripts, packageManager: 'npm@10' }),
+            ['pnpm-lock.yaml'],
+            'conflicting package manager evidence',
+        ],
+        [
+            JSON.stringify({ scripts, packageManager: 'pnpm@9' }),
+            ['package-lock.json'],
+            'conflicting package manager evidence',
+        ],
+        [JSON.stringify({ scripts }), ['package-lock.json', 'yarn.lock'], 'conflicting package manager evidence'],
+        [JSON.stringify({ scripts, packageManager: 'yarn@4' }), [], 'unsupported packageManager'],
+        [JSON.stringify({ scripts, packageManager: 'npm@10; touch discovery-ran' }), [], 'invalid packageManager'],
+        [JSON.stringify({ scripts, packageManager: 42 }), ['package-lock.json'], 'invalid packageManager'],
+        [JSON.stringify({ scripts }), [], 'no unambiguous npm or pnpm evidence'],
+        ['{invalid', ['package-lock.json'], 'invalid package.json'],
+        ['null', ['package-lock.json'], 'invalid package.json'],
+        ['[]', ['package-lock.json'], 'invalid package.json'],
+        [null, ['package-lock.json'], 'no package.json'],
+    ] as const)('keeps ambiguous or malformed input unbound: %s %j', async (manifest, locks, diagnostic) => {
+        const { text, builder } = await scaffold(manifest, [...locks]);
+        expect(builder).toEqual({ preset: 'none', actions: {} });
+        expect(text).toContain(diagnostic);
+        expect(text).toContain('#   build: <command>');
+    });
+
+    test.each([{}, { scripts: null }, { scripts: [] }, { scripts: 'check' }, { scripts: { check: false } }])(
+        'does not infer commands from missing or invalid scripts: %j',
+        async (manifest) => {
+            const { builder } = await scaffold(JSON.stringify(manifest), ['package-lock.json']);
+            expect(builder.actions).toEqual({});
+        },
+    );
+
+    test('Make targets override matching scripts and leave remaining scripts available', async () => {
+        const { builder, text } = await scaffold(
+            JSON.stringify({ scripts }),
+            ['pnpm-lock.yaml'],
+            'build:\n\ttouch discovery-ran\n',
+        );
+        expect(builder.actions).toEqual({
+            build: 'make build',
+            'test-full': 'pnpm run test-full',
+            check: 'pnpm run check',
+        });
+        expect(text).toContain('# source: Makefile target build');
+    });
+
+    test('Make targets survive conflicting JS evidence; Bun retains its established preset precedence', async () => {
+        const manifest = JSON.stringify({ scripts, packageManager: 'pnpm@9' });
+        const make = await scaffold(manifest, ['package-lock.json'], 'build:\n\ttouch discovery-ran\n');
+        expect(make.builder.actions).toEqual({ build: 'make build' });
+        const bun = await scaffold(manifest, ['bun.lock', 'package-lock.json'], 'build:\n');
+        expect(bun.builder).toEqual({ preset: 'bun', actions: {} });
+    });
+
+    test('re-init preserves every byte of custom actions even when discovery evidence conflicts', async () => {
+        const { cwd, options } = await scaffold(JSON.stringify({ scripts }), ['package-lock.json']);
+        const custom =
+            '# user comment\nbuilder:\n  preset: none\n  actions:\n    check: custom-check\n    ci: [check]\n';
+        await Bun.write(join(cwd, '.spur/config.yaml'), custom);
+        await Bun.write(join(cwd, 'pnpm-lock.yaml'), '');
+        expect(await main(['self', 'init', '--minimal'], options)).toBe(0);
+        expect(await readFile(join(cwd, '.spur/config.yaml'), 'utf8')).toBe(custom);
+    });
+
+    test('available manager discovery uses PATH lookup only and preserves fixed command names', () => {
+        // The pure renderer supports availability evidence without invoking a manager.
+        const text = renderBuilderBlock({
+            bunLock: false,
+            makefile: null,
+            packageJson: JSON.stringify({ scripts: { check: ':' } }),
+            lockfiles: ['package-lock.json'],
+            availableManagers: { npm: true, pnpm: false },
+        }).join('\n');
+        expect(text).toContain('check: npm run check');
+        expect(text).not.toContain('not available on PATH');
     });
 });

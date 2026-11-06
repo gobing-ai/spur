@@ -240,6 +240,10 @@ redaction:
 #   #   none           — only the stack-neutral `spur rule run` presets are bound; declare the
 #   #                    rest in `actions` (see below) or they stay unbound.
 #   preset: bun
+#   # Fresh `spur self init` detects Bun first, then matching Make targets and exact JavaScript
+#   # scripts with unambiguous lockfile/packageManager evidence under preset: none. Generated
+#   # comments explain provenance, missing tools and unbound actions; re-init preserves config
+#   # unless --force is explicitly selected. Inspect with `spur self exec --list --json`.
 #   # action name -> one shell command, or a list of action names (composite, run in order,
 #   # fail-fast). A declared entry replaces the preset binding whole. Reserved names: build, dev,
 #   # clean, format, autofix, lint, typecheck, test, test-full, test-heavy, rules-pre, rules-post,
