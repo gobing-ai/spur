@@ -91,6 +91,94 @@ export const observabilityRecentErrorSchema = z.object({
 export type ObservabilityRecentError = z.infer<typeof observabilityRecentErrorSchema>;
 
 /**
+ * Time from first wip to verified done schema.
+ * `meanMs` and `maxMs` are null when `count` is 0.
+ */
+export const observabilityVerifiedTimeSchema = z.object({
+    count: z.number(),
+    meanMs: z.number().nullable(),
+    maxMs: z.number().nullable(),
+});
+/**
+ * Time from first wip to verified done.
+ */
+export type ObservabilityVerifiedTime = z.infer<typeof observabilityVerifiedTimeSchema>;
+
+/**
+ * Tasks excluded from verified completion, by the existing reason vocabulary schema.
+ */
+export const observabilityExcludedReasonsSchema = z.object({
+    notDone: z.number(),
+    forcedDone: z.number(),
+    missingVerdict: z.number(),
+    syntheticVerdict: z.number(),
+    verdictNotPass: z.number(),
+    proofAbsent: z.number(),
+    certifyingRunFailed: z.number(),
+});
+/**
+ * Tasks excluded from verified completion, by the existing reason vocabulary.
+ */
+export type ObservabilityExcludedReasons = z.infer<typeof observabilityExcludedReasonsSchema>;
+
+/**
+ * Verified-outcome subset shown on the Summary tab schema.
+ * Task counts follow `VerifiedOutcomeStat`. Forced and unproved done stay excluded.
+ */
+export const observabilityVerifiedOutcomeSchema = z.object({
+    taskDenominator: z.number(),
+    verifiedResults: z.number(),
+    correctionCount: z.number(),
+    retryExhaustedCount: z.number(),
+    timeToVerified: observabilityVerifiedTimeSchema,
+    excludedReasons: observabilityExcludedReasonsSchema,
+});
+/**
+ * Verified-outcome subset shown on the Summary tab.
+ */
+export type ObservabilityVerifiedOutcome = z.infer<typeof observabilityVerifiedOutcomeSchema>;
+
+/**
+ * One evidence link into an existing run or task route schema.
+ */
+export const observabilityOutcomeEvidenceSchema = z.object({
+    runId: z.string(),
+    wbs: z.string().nullable(),
+    measuredUsd: z.number().nullable(),
+    unknownUsdRows: z.number(),
+});
+/**
+ * One evidence link into an existing run or task route.
+ */
+export type ObservabilityOutcomeEvidence = z.infer<typeof observabilityOutcomeEvidenceSchema>;
+
+/**
+ * Current-window verified outcomes and measured cost schema.
+ * Absent on the summary when the outcome plane fails. `measuredUsd` is null when
+ * no exact-mapped row has persisted USD. Tokens are not priced here.
+ */
+export const observabilityOutcomesSchema = z.object({
+    verified: observabilityVerifiedOutcomeSchema.nullable(),
+    measuredUsd: z.number().nullable(),
+    tokens: z.number().nullable(),
+    terminalRuns: z.number(),
+    mappedRuns: z.number(),
+    historyRows: z.number(),
+    usdRows: z.number(),
+    unknownUsdRows: z.number(),
+    unknownCostRunCount: z.number(),
+    terminalReasonMix: z.record(z.string(), z.number()),
+    gateDurationMs: z.number().nullable(),
+    gateSampleCount: z.number(),
+    evidence: z.array(observabilityOutcomeEvidenceSchema),
+    evidenceTruncated: z.boolean(),
+});
+/**
+ * Current-window verified outcomes and measured cost.
+ */
+export type ObservabilityOutcomes = z.infer<typeof observabilityOutcomesSchema>;
+
+/**
  * Aggregated response for the Observability Summary tab schema.
  */
 export const observabilitySummaryResponseSchema = z.object({
@@ -104,6 +192,7 @@ export const observabilitySummaryResponseSchema = z.object({
     decisionVolumeBuckets: z.array(observabilityDecisionVolumeBucketSchema).default([]),
     topEventTypes: z.array(observabilityTopEventTypeSchema),
     recentErrors: z.array(observabilityRecentErrorSchema),
+    outcomes: observabilityOutcomesSchema.optional(),
 });
 /**
  * Aggregated response for the Observability Summary tab.

@@ -145,8 +145,42 @@ export interface ObservabilitySummaryResponse {
         message: string;
         refId?: string;
     }>;
+    /** Present when the current-window outcome fold succeeds (task 1308). Omitted when that plane throws. */
+    outcomes?: {
+        verified: null | {
+            taskDenominator: number;
+            verifiedResults: number;
+            correctionCount: number;
+            retryExhaustedCount: number;
+            timeToVerified: { count: number; meanMs: number | null; maxMs: number | null };
+            excludedReasons: {
+                notDone: number;
+                forcedDone: number;
+                missingVerdict: number;
+                syntheticVerdict: number;
+                verdictNotPass: number;
+                proofAbsent: number;
+                certifyingRunFailed: number;
+            };
+        };
+        measuredUsd: number | null;
+        tokens: number | null;
+        terminalRuns: number;
+        mappedRuns: number;
+        historyRows: number;
+        usdRows: number;
+        unknownUsdRows: number;
+        unknownCostRunCount: number;
+        terminalReasonMix: Record<string, number>;
+        gateDurationMs: number | null;
+        gateSampleCount: number;
+        evidence: Array<{ runId: string; wbs: string | null; measuredUsd: number | null; unknownUsdRows: number }>;
+        evidenceTruncated: boolean;
+    };
 }
 ```
+
+**Outcomes (task 1308).** The Summary tab reads optional `outcomes` from this same response. `measuredUsd` is the sum of persisted exact-mapped USD only; null means unmeasured, and `unknownUsdRows` is `historyRows - usdRows`. Token totals are separate and are not priced. `correctionCount` and `retryExhaustedCount` are task counts. Gate duration sums retained `command.gate` timestamps on state `gate` for the selected runs, and is null with zero samples when those timestamps are absent. Evidence links use the existing task and trace routes, capped at 100; totals cover the whole selected window.
 
 **Top event types KPIs.** `avgDurationMs` is the mean of v2 `$.data.durationMs` else legacy `$.durationMs` (numeric values only; untimed rows are excluded, never treated as 0). `failureCount` is the count of that type with `presentation.severity = 'error'`. The Summary tab **Top Event Types** card renders `avgDurationMs / 1000` as `Avg(Duration - s)` (em dash when null) and `failureCount` as `Failures`.
 

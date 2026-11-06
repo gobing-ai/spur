@@ -604,6 +604,12 @@ export type {
 } from './services/process-inventory-service';
 export { ProcessInventoryService } from './services/process-inventory-service';
 export {
+    type ProjectOutcome,
+    type ProjectOutcomeDeps,
+    type ProjectOutcomeWindow,
+    summarizeProjectOutcome,
+} from './services/project-outcome';
+export {
     classifyPortBindError,
     findListeningPid,
     isLocalHost,

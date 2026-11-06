@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, test } from 'bun:test';
 import { InvalidWorkflowRunIdError } from '@gobing-ai/spur-app';
-import { applyCliMigrations, DecisionLogDao } from '@gobing-ai/spur-domain';
+import { applyCliMigrations, DecisionLogDao, RunSessionDao } from '@gobing-ai/spur-domain';
 import { createDbAdapter } from '@gobing-ai/ts-db';
 import { Hono } from 'hono';
 import type { ServerContext } from '../../../src/context';
@@ -568,6 +568,101 @@ describe('observability routing-summary (task 0552)', () => {
             expect(body.kpis.totalEvents).toBe(0);
             expect(body.kpis.activeJobs).toBe(0);
             expect(body.kpis.successRatePct).toBe(0);
+        });
+
+        test('includes measured outcomes for the summary window', async () => {
+            const db = await createDbAdapter({ driver: 'bun-sqlite', url: ':memory:' });
+            await applyCliMigrations(db);
+            const since = '2026-08-20T00:00:00.000Z';
+            const until = '2026-08-20T23:00:00.000Z';
+            const started = '2026-08-20T01:00:00.000Z';
+            const completed = '2026-08-20T01:05:00.000Z';
+            await db.run(
+                `INSERT INTO runs (
+                    id, workflow_name, mode, status, agent, started_at, completed_at, metadata_json,
+                    created_at, updated_at, terminal_reason
+                 ) VALUES ('run-probe', 'task-pipeline', 'auto', 'done', NULL, ?, ?, '{}', ?, ?, 'done')`,
+                started,
+                completed,
+                Date.parse(started),
+                Date.parse(completed),
+            );
+            await new RunSessionDao(db).insert({
+                runId: 'run-probe',
+                source: 'fixture',
+                sessionId: 'sess-probe',
+                exactness: 'exact',
+                mechanism: 'observed',
+                resolvedAt: started,
+            });
+            await db.run(
+                `INSERT INTO history_message (
+                    record_hash, source, source_file, source_line, session_id, seq, role, record_type,
+                    disposition, ts, model, input_tokens, output_tokens, cost_usd, provenance, imported_at
+                 ) VALUES ('probe-1', 'fixture', 'fixture.jsonl', 1, 'sess-probe', 1, 'assistant', 'message',
+                           'conversation', ?, 'fixture', 100, 40, 0.25, 'ambient', ?)`,
+                started,
+                started,
+            );
+            const app = new Hono();
+            const ctx = {
+                systemEventDao: async () => ({
+                    eventSummary: async (spec: { since: string; until: string }) => ({
+                        window: { since: spec.since, until: spec.until },
+                        totalEvents: 0,
+                        errorEventCount: 0,
+                        warningEventCount: 0,
+                        eventVolumeBuckets: [],
+                        topEventTypes: [],
+                        recentErrors: [],
+                    }),
+                }),
+                getDb: async () => db,
+            } as unknown as ServerContext;
+            observabilityModule.mount(app, ctx);
+            try {
+                const res = await app.request(`/api/observability/summary?since=${since}&until=${until}`);
+                expect(res.status).toBe(200);
+                const body = (await res.json()) as {
+                    outcomes?: { measuredUsd: number | null; tokens: number | null; verified: unknown };
+                };
+                expect(body.outcomes?.measuredUsd).toBeCloseTo(0.25, 6);
+                expect(body.outcomes?.tokens).toBe(140);
+                expect(body.outcomes?.verified).toBeNull();
+            } finally {
+                db.close();
+            }
+        });
+
+        test('omits outcomes when the run plane throws and still returns the summary', async () => {
+            const app = new Hono();
+            const ctx = {
+                systemEventDao: async () => ({
+                    eventSummary: async (spec: { since: string; until: string }) => ({
+                        window: { since: spec.since, until: spec.until },
+                        totalEvents: 0,
+                        errorEventCount: 0,
+                        warningEventCount: 0,
+                        eventVolumeBuckets: [],
+                        topEventTypes: [],
+                        recentErrors: [],
+                    }),
+                }),
+                getDb: async () => ({
+                    queryAll: async (sql: string) => {
+                        if (sql.includes('FROM runs')) throw new Error('runs plane down');
+                        return [];
+                    },
+                }),
+            } as unknown as ServerContext;
+            observabilityModule.mount(app, ctx);
+            const res = await app.request(
+                '/api/observability/summary?since=2026-08-20T00:00:00.000Z&until=2026-08-20T04:00:00.000Z',
+            );
+            expect(res.status).toBe(200);
+            const body = (await res.json()) as { outcomes?: unknown; kpis: { totalEvents: number } };
+            expect(body.outcomes).toBeUndefined();
+            expect(body.kpis.totalEvents).toBe(0);
         });
     });
 

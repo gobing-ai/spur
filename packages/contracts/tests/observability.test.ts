@@ -80,6 +80,59 @@ describe('observability contracts', () => {
 
         const parsed = observabilitySummaryResponseSchema.parse(fixture);
         expect(parsed).toEqual(fixture);
+        expect(parsed.outcomes).toBeUndefined();
+    });
+
+    test('observabilitySummaryResponseSchema accepts an optional outcomes block', () => {
+        const parsed = observabilitySummaryResponseSchema.parse({
+            window: { since: '2026-08-20T00:00:00.000Z', until: '2026-08-20T04:00:00.000Z', range: '4h' },
+            kpis: {
+                totalEvents: 0,
+                activeJobs: 0,
+                completedJobs: 0,
+                failedJobs: 0,
+                successRatePct: 0,
+                errorEventCount: 0,
+                warningEventCount: 0,
+            },
+            eventVolumeBuckets: [],
+            decisionVolumeBuckets: [],
+            topEventTypes: [],
+            recentErrors: [],
+            outcomes: {
+                verified: {
+                    taskDenominator: 1,
+                    verifiedResults: 1,
+                    correctionCount: 0,
+                    retryExhaustedCount: 0,
+                    timeToVerified: { count: 1, meanMs: 1000, maxMs: 1000 },
+                    excludedReasons: {
+                        notDone: 0,
+                        forcedDone: 0,
+                        missingVerdict: 0,
+                        syntheticVerdict: 0,
+                        verdictNotPass: 0,
+                        proofAbsent: 0,
+                        certifyingRunFailed: 0,
+                    },
+                },
+                measuredUsd: 0.25,
+                tokens: 140,
+                terminalRuns: 1,
+                mappedRuns: 1,
+                historyRows: 1,
+                usdRows: 1,
+                unknownUsdRows: 0,
+                unknownCostRunCount: 0,
+                terminalReasonMix: { done: 1 },
+                gateDurationMs: null,
+                gateSampleCount: 0,
+                evidence: [{ runId: 'run-1', wbs: '1308', measuredUsd: 0.25, unknownUsdRows: 0 }],
+                evidenceTruncated: false,
+            },
+        });
+        expect(parsed.outcomes?.measuredUsd).toBe(0.25);
+        expect(parsed.outcomes?.verified?.verifiedResults).toBe(1);
     });
 
     test('queueJobListResponseSchema validates null timing and payload handling', () => {

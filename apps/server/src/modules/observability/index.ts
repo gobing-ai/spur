@@ -2,6 +2,7 @@ import {
     DecisionLogQueryService,
     type DecisionLogQuerySpec,
     InvalidWorkflowRunIdError,
+    summarizeProjectOutcome,
     type ToolUseEvent,
 } from '@gobing-ai/spur-app';
 import type { ObservabilitySummaryResponse } from '@gobing-ai/spur-contracts';
@@ -367,6 +368,29 @@ function handleObservabilitySummary(ctx: ServerContext) {
                 decisionDao.volumeBuckets({ since, until, bucketMs }).catch(() => []),
             ]);
 
+            let outcomes: ObservabilitySummaryResponse['outcomes'];
+            try {
+                const corpus =
+                    ctx.cwd && ctx.fs
+                        ? {
+                              cwd: ctx.cwd,
+                              fs: ctx.fs,
+                              locator:
+                                  typeof ctx.taskService === 'function'
+                                      ? {
+                                            findByWbs: async (wbs: string) => {
+                                                const filePath = await ctx.taskService().getFilePath(wbs);
+                                                return filePath === null ? null : { filePath };
+                                            },
+                                        }
+                                      : undefined,
+                          }
+                        : {};
+                outcomes = await summarizeProjectOutcome({ db, ...corpus }, { since, until });
+            } catch {
+                outcomes = undefined;
+            }
+
             const combinedErrors = [
                 ...eventSummary.recentErrors.map((e) => ({
                     id: e.id,
@@ -406,6 +430,7 @@ function handleObservabilitySummary(ctx: ServerContext) {
                 decisionVolumeBuckets: decisionBuckets,
                 topEventTypes: eventSummary.topEventTypes,
                 recentErrors: combinedErrors,
+                ...(outcomes ? { outcomes } : {}),
             };
 
             return c.json(payload);

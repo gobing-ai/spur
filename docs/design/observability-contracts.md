@@ -96,8 +96,9 @@ repeated owning end never emits a second `session_end`.
 ### 7.8c Observability Summary aggregations
 
 `GET /api/observability/summary` — Summary tab KPI, volume-bucket, and hotspot aggregations
-(including per-type `avgDurationMs` and `failureCount`). Contract:
-[`observability-module-refactor.md`](observability-module-refactor.md) §3.1.
+(including per-type `avgDurationMs` and `failureCount`). The same response may include optional
+`outcomes`: verified task counts, measured USD, unknown cost, gate duration, and evidence links.
+Contract: [`observability-module-refactor.md`](observability-module-refactor.md) §3.1.
 
 <a id="79-system-event-catalog"></a>
 

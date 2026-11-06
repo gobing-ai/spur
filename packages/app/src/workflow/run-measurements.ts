@@ -92,7 +92,14 @@ export function nearestRankPercentile(values: number[], p: number): number | nul
     return sorted[rank - 1] ?? null;
 }
 
-function foldWorkflow(workflow: string, list: WorkflowRunRow[]): WorkflowMetrics {
+/**
+ * Fold one workflow's run rows into {@link WorkflowMetrics}.
+ * Dry-run and non-terminal rows stay in their exclusion buckets and do not
+ * enter cost, token, or wall-clock claims. Exported for the project outcome
+ * composition (task 1308). {@link readWorkflowMetrics} is the per-workflow caller
+ * and is unchanged.
+ */
+export function foldWorkflow(workflow: string, list: WorkflowRunRow[]): WorkflowMetrics {
     const dryRuns = list.filter((r) => r.dryRun).length;
     const terminal = list.filter((r) => !r.dryRun && TERMINAL_RUN_STATUSES.includes(r.status));
     const nonTerminalRuns = list.length - dryRuns - terminal.length;
