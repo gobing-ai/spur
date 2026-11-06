@@ -68,6 +68,86 @@ const KIND = 'agent.run';
 /** A declared `agent.run` post-condition (ADR-118). */
 type ContractName = 'answerFile' | 'escalationFile' | 'expectFile' | 'requireDiff' | 'requiresCapabilities';
 
+/** Existing dispatch surfaces resolved from workflow `vars.executor` (D65 1232 / 1305). */
+type ExecutorDispatchSurface = 'host' | 'fleet' | 'subprocess';
+
+/**
+ * Declared admission capabilities per dispatch surface (1305).
+ *
+ * Models native capability/timeout/usage checks as surface capabilities rather than
+ * asserting a host work-item pause offers subprocess enforcement; fleet delegates
+ * native capability, reviewer-independence and usage-budget checks to the member's
+ * subprocess invocation (`writeFleetWorkItem` → `runFleetWorkItem`).
+ */
+interface ExecutorSurfaceCapabilities {
+    readonly requiresWorkItemPrompt: boolean;
+    readonly validatesTimeoutBeforeDispatch: boolean;
+    readonly enforcesNativeCapabilities: boolean;
+    readonly enforcesUsageBudget: boolean;
+}
+
+const EXECUTOR_SURFACE_CAPABILITIES: Record<ExecutorDispatchSurface, ExecutorSurfaceCapabilities> = {
+    host: {
+        requiresWorkItemPrompt: true,
+        validatesTimeoutBeforeDispatch: false,
+        enforcesNativeCapabilities: false,
+        enforcesUsageBudget: false,
+    },
+    fleet: {
+        requiresWorkItemPrompt: true,
+        validatesTimeoutBeforeDispatch: true,
+        enforcesNativeCapabilities: false,
+        enforcesUsageBudget: false,
+    },
+    subprocess: {
+        requiresWorkItemPrompt: false,
+        validatesTimeoutBeforeDispatch: true,
+        enforcesNativeCapabilities: true,
+        enforcesUsageBudget: true,
+    },
+};
+
+/**
+ * Private option shape and behavior matrix shared by the existing dispatch surfaces (1305/1306).
+ *
+ * | Policy | Host | Fleet | Subprocess |
+ * | --- | --- | --- | --- |
+ * | session/role/input shape | common guard | common guard | common guard |
+ * | blank prompt | reject (`workItemPromptError`) | reject (`workItemPromptError`) | accepted legacy prompt |
+ * | timeout (`timeoutMs`) | host pause | positive before enqueue | positive before spawn |
+ * | stale `expectFile` | delete before pause | delete before enqueue/member | delete before spawn |
+ * | stale `expectFiles[]` | delete before pause | metadata only | metadata only |
+ * | capability/budget shape | host pause | delegated member validation | native validation |
+ * | unsupported capability | host pause | member fails before spawn | fail before spawn |
+ * | P1 reviewer identity | host pause | actual member attempt | actual subprocess attempt |
+ * | exhausted usage budget | host pause | member fails after execution | fail after execution |
+ * | executor pin | common availability | declared member identity | pinned executor identity |
+ */
+interface NormalizedAgentInvocation {
+    input: string | undefined;
+    agent: string | undefined;
+    role: string | undefined;
+    sessionOption: string | undefined;
+    model: string | undefined;
+    mode: string;
+    cwd: string;
+    continueFlag: boolean | undefined;
+    timeoutMs: number | undefined;
+    answerFile: string | undefined;
+    expectFile: string | undefined;
+    expectFiles: string[];
+    escalationFile: string | undefined;
+    requireDiff: boolean | undefined;
+    requireDiffAllowCleanCheck: boolean | undefined;
+    capture: boolean;
+    skill: string | null;
+    inputs: WorkItem['inputs'];
+    ownedSections: string[];
+    surface: ExecutorDispatchSurface;
+    surfaceCapabilities: ExecutorSurfaceCapabilities;
+    flags: Record<string, string | boolean>;
+}
+
 /** Config slice injected at composition root for agent.run steps (R1, task 0451). */
 export interface AgentRunAgentConfig {
     default?: string;
@@ -311,10 +391,10 @@ export class AgentRunActionRunner implements ActionRunner {
     private async executeFleetSurface(
         options: Record<string, unknown>,
         context: ActionRunContext,
-        input: string | undefined,
+        invocation: NormalizedAgentInvocation,
         role: string,
-        cwd: string,
     ): Promise<{ result?: ActionResult; fallbackReason?: string }> {
+        const { input, cwd, expectFile, timeoutMs } = invocation;
         if (this.fleetDeps === undefined) {
             return {
                 result: {
@@ -358,38 +438,19 @@ export class AgentRunActionRunner implements ActionRunner {
             const value = options[key];
             return !(value === undefined || value === null || value === false || value === '');
         });
-        if (input === undefined || input.trim() === '') {
-            return {
-                result: {
-                    ok: false,
-                    error: 'agent.run: fleet dispatch requires an input prompt (continue/resume is not a fleet surface)',
-                },
-            };
-        }
-        const expectFile = asOptionalString(options.expectFile);
-        const timeoutMs = asOptionalNumber(options.timeoutMs);
-        if (timeoutMs !== undefined && timeoutMs <= 0) {
-            return { result: { ok: false, error: 'agent.run: timeoutMs must be > 0' } };
-        }
+        const promptError = workItemPromptError(input, 'fleet');
+        if (promptError !== undefined) return { result: { ok: false, error: promptError } };
+        const timeoutError = invocationTimeoutError(timeoutMs);
+        if (timeoutError !== undefined) return { result: { ok: false, error: timeoutError } };
         // Delete-before-invoke (same contract as the subprocess path): a stale
         // expectFile from a PRIOR run must not satisfy this dispatch's wait —
         // presence after dispatch is the proof THIS member produced it.
-        if (expectFile !== undefined) {
-            const target = isAbsolute(expectFile) ? expectFile : join(cwd, expectFile);
-            const fs = createNodeFileSystem(cwd);
-            if (await fs.exists(target)) {
-                try {
-                    await fs.deleteFile(target);
-                } catch (error) {
-                    return {
-                        result: {
-                            ok: false,
-                            error: `agent.run: expectFile ${expectFile} exists from a previous run and could not be removed before dispatch: ${(error as Error).message}`,
-                        },
-                    };
-                }
-            }
-        }
+        const freshnessError = await removeStaleArtifacts(
+            cwd,
+            expectFile !== undefined ? [{ kind: 'expectFile', path: expectFile }] : [],
+            'dispatch',
+        );
+        if (freshnessError !== undefined) return { result: { ok: false, error: freshnessError } };
         if (delegated.length > 0) {
             await writeFleetWorkItem(
                 cwd,
@@ -403,7 +464,7 @@ export class AgentRunActionRunner implements ActionRunner {
         const dispatch = await dispatchToFleet(
             {
                 role,
-                prompt: input,
+                prompt: input as string,
                 projectPath: cwd,
                 ...(expectFile !== undefined ? { expectFile } : {}),
                 ...(timeoutMs !== undefined ? { timeoutMs } : {}),
@@ -520,44 +581,31 @@ export class AgentRunActionRunner implements ActionRunner {
      * `spur workflow continue --answer-text <receipt-path>` completes the stage.
      */
     private async executeHostSurface(
-        options: Record<string, unknown>,
+        invocation: NormalizedAgentInvocation,
         context: ActionRunContext,
-        input: string | undefined,
-        cwd: string,
     ): Promise<ActionResult> {
-        if (input === undefined || input.trim() === '') {
-            return {
-                ok: false,
-                error: 'agent.run: host dispatch requires an input prompt (continue/resume is not a host surface)',
-            };
-        }
-        const expectFiles = declaredExpectFiles(options);
+        const { input, cwd, expectFiles, skill, inputs, ownedSections } = invocation;
+        const promptError = workItemPromptError(input, 'host');
+        if (promptError !== undefined) return { ok: false, error: promptError };
         // Freshness (0751 R3), the same rule the subprocess and fleet surfaces apply: a
         // file left by a PRIOR run must not satisfy this work item's receipt.
-        const fs = createNodeFileSystem(cwd);
-        for (const path of expectFiles) {
-            const target = isAbsolute(path) ? path : join(cwd, path);
-            if (!(await fs.exists(target))) continue;
-            try {
-                await fs.deleteFile(target);
-            } catch (error) {
-                return {
-                    ok: false,
-                    error: `agent.run: expectFile ${path} exists from a previous run and could not be removed before the host work item: ${(error as Error).message}`,
-                };
-            }
-        }
+        const freshnessError = await removeStaleArtifacts(
+            cwd,
+            expectFiles.map((path) => ({ kind: 'expectFile', path })),
+            'the host work item',
+        );
+        if (freshnessError !== undefined) return { ok: false, error: freshnessError };
         const workItem: WorkItem = {
             runId: context.runId,
             state: context.stateOrNodeId,
-            skill: asOptionalString(options.skill) ?? null,
-            prompt: input,
-            inputs: declaredInputs(options.inputs),
+            skill,
+            prompt: input as string,
+            inputs,
             expectFiles,
-            ownedSections: declaredStrings(options.ownedSections),
+            ownedSections,
         };
         try {
-            await writeWorkItem(fs, cwd, workItem);
+            await writeWorkItem(createNodeFileSystem(cwd), cwd, workItem);
         } catch (error) {
             return {
                 ok: false,
@@ -638,28 +686,25 @@ export class AgentRunActionRunner implements ActionRunner {
         // Per-invocation reset: a prior execute()'s fallback reason must never leak
         // onto a default-path row.
         this.fleetFallbackReason = undefined;
-        const input = asOptionalString(options.input);
-        const agent = asOptionalString(options.agent);
+        const invocation = normalizeAgentInvocation(options, context, execution?.flags);
+        const { input, agent, role, sessionOption, mode, cwd } = invocation;
         // 0687 R3: explicit `inline` is no longer rejected on dispatch surfaces;
         // it flows to AgentService.resolveAgent which substitutes tier resolution
         // with a substitution warning (host-session inline never reaches here).
         // Declared step role (0538 R2): threaded onto the underlying `spur agent run`
         // so the resolution records the reason even when the `agent:` pin beats it.
-        const role = asOptionalString(options.role);
         // B7 R3 (0894): optional stage session policy — 'reuse' | 'fresh'. An
         // invalid value fails the step here; `spur workflow validate` rejects it
         // earlier at the definition gate.
-        const sessionOption = asOptionalString(options.session);
-        if (sessionOption !== undefined && sessionOption !== 'reuse' && sessionOption !== 'fresh') {
-            return { ok: false, error: `agent.run: session must be 'reuse' or 'fresh' (got '${sessionOption}')` };
-        }
+        const sessionError = validateDeclaredSessionOption(sessionOption);
+        if (sessionError !== undefined) return { ok: false, error: sessionError };
         // B7 R4 (0894): the declaration source rides the action result — a reviewer
         // stage that opted into reuse explicitly is distinguishable from a default.
         const sessionDeclared = sessionOption !== undefined;
         // B7 R1 (0894): run-scoped executor pin. Precheck/start resolved every
         // declared role once into `__executor.<role>`; the per-stage path reads the
         // pin and performs no doctor/detection call.
-        const roleValid = role !== undefined && (AGENT_ROLE_NAMES as readonly string[]).includes(role);
+        const roleValid = isDeclaredRoleValid(role);
         let pin = roleValid ? parseExecutorPin(context.vars[`__executor.${role}`]) : undefined;
         // B7 R6 (0895): pre-spawn pin availability read through the config loader
         // (the B6 drain invalidates the loader cache, so this sees a mid-run
@@ -728,9 +773,7 @@ export class AgentRunActionRunner implements ActionRunner {
         // R1 (0451): config is injected at composition root, not read from a fake cast.
         // Affinity config via this.agentConfig below.
         const dispatchAgent = pin !== undefined ? pin.name : agent;
-        const model = asOptionalString(options.model) ?? pin?.model;
-        const mode = asOptionalString(options.mode) ?? 'text';
-        const cwd = asOptionalString(options.cwd) ?? context.workdir ?? '.';
+        const model = invocation.model ?? pin?.model;
 
         const sessionAffinityVar = context.vars.sessionAffinity;
         const affinityDisabled =
@@ -836,7 +879,7 @@ export class AgentRunActionRunner implements ActionRunner {
 
         // Session latch (Q8): auto-determine continue from vars.__agentSession
         // unless the step author set `continue` explicitly.
-        let continueFlag = asOptionalBoolean(options.continue);
+        let continueFlag = invocation.continueFlag;
         // Fresh actions skip the latch entirely: no inherited resume, ever.
         const latch = freshSession ? undefined : context.vars.__agentSession;
         // Track whether the latch (not an explicit step flag) set continue so
@@ -880,12 +923,9 @@ export class AgentRunActionRunner implements ActionRunner {
         // Run-time enforcement (0538 R2): the validate verb rejects a role-less or
         // unknown-role step at the schema gate; this is the guard for any dispatch
         // that bypassed validate — fail before a subprocess spawns.
-        if (role === undefined || !(AGENT_ROLE_NAMES as readonly string[]).includes(role)) {
-            return {
-                ok: false,
-                error: `agent.run: step must declare a Layer-1 role: (scribe | coder | reviewer | planner) beside agent: (0538 R2)${role === undefined ? '' : ` — unknown role '${role}'`}`,
-            };
-        }
+        const roleError = validateDeclaredRole(role);
+        if (roleError !== undefined) return { ok: false, error: roleError };
+        const validatedRole = role as string;
 
         // 0942/ADR-126: the opt-in fleet executor surface. Taken ONLY when the
         // run var selects it; every default path in this method is untouched.
@@ -893,8 +933,8 @@ export class AgentRunActionRunner implements ActionRunner {
         // subprocess below (declared via `executorFallback: traditional`, reason
         // recorded) or fails explicitly with the 0937 reason `failed-agent` —
         // never a silent downgrade.
-        if (context.vars.executor === 'fleet') {
-            const fleet = await this.executeFleetSurface(options, context, input, role, cwd);
+        if (invocation.surface === 'fleet') {
+            const fleet = await this.executeFleetSurface(options, context, invocation, validatedRole);
             if (fleet.result !== undefined) return fleet.result;
             this.fleetFallbackReason = fleet.fallbackReason;
         }
@@ -902,16 +942,16 @@ export class AgentRunActionRunner implements ActionRunner {
         // D65 1232: the host executor surface, beside the fleet branch and selected the
         // same way — by the run var, never by a flag. The work item is written and the
         // action result pauses the engine before any consumer can run.
-        if (selectsHostExecutor(context.vars)) {
-            return await this.executeHostSurface(options, context, input, cwd);
+        if (invocation.surface === 'host') {
+            return await this.executeHostSurface(invocation, context);
         }
 
-        const flags: Record<string, string | boolean> = { ...execution?.flags };
+        const flags = invocation.flags;
         if (dispatchAgent !== undefined) flags.agent = dispatchAgent;
         // B7 R1 (0894): tell the service the executor was resolved at precheck so
         // its per-stage resolution skips the usability probe.
         if (pin !== undefined) flags.pinResolved = 'true';
-        if (role !== undefined) flags.role = role;
+        flags.role = validatedRole;
         if (model !== undefined) flags.model = model;
         flags.mode = mode as string;
         if (cwd !== '') flags.cwd = cwd as string;
@@ -928,13 +968,9 @@ export class AgentRunActionRunner implements ActionRunner {
             }
         }
 
-        const timeoutMs = asOptionalNumber(options.timeoutMs);
-        if (timeoutMs !== undefined && timeoutMs <= 0) {
-            return {
-                ok: false,
-                error: 'agent.run: timeoutMs must be > 0',
-            };
-        }
+        const { timeoutMs } = invocation;
+        const timeoutError = invocationTimeoutError(timeoutMs);
+        if (timeoutError !== undefined) return { ok: false, error: timeoutError };
         if (timeoutMs !== undefined) flags.timeout = String(timeoutMs);
         // B8 R2: an explicit or latch-derived continue on a resume-incapable agent
         // is suppressed — the record decides, the stage gets a fresh dispatch.
@@ -944,12 +980,7 @@ export class AgentRunActionRunner implements ActionRunner {
         // downstream shell step can read (the engine only propagates setVars, not
         // result.data, so a file is the deterministic transport for the answer —
         // e.g. the verify step writing its PASS/FAIL verdict artifact).
-        const answerFile = asOptionalString(options.answerFile);
-        const expectFile = asOptionalString(options.expectFile);
-        const escalationFile = asOptionalString(options.escalationFile);
-        const requireDiff = asOptionalBoolean(options.requireDiff);
-        const requireDiffAllowCleanCheck = asOptionalBoolean(options.requireDiffAllowCleanCheck);
-        const capture = asOptionalBoolean(options.capture) || answerFile !== undefined;
+        const { answerFile, expectFile, escalationFile, requireDiff, requireDiffAllowCleanCheck, capture } = invocation;
 
         // Capability requirements (0706 R4/R8): validate the closed vocabulary at
         // the action boundary — an invalid shape fails the step before any dispatch.
@@ -1051,41 +1082,17 @@ export class AgentRunActionRunner implements ActionRunner {
         // target is removed before dispatch; presence after exit-0 proves THIS attempt
         // paused. On a resume re-entry the pipeline consumes the question in its onEnter
         // shell before this delete, so the delete is a no-op there.
-        if (escalationFile !== undefined) {
-            const target = isAbsolute(escalationFile) ? escalationFile : join(cwd, escalationFile);
-            const fs = createNodeFileSystem(cwd);
-            if (await fs.exists(target)) {
-                try {
-                    await fs.deleteFile(target);
-                } catch (error) {
-                    return {
-                        ok: false,
-                        error: `agent.run: escalationFile ${escalationFile} exists from a previous run and could not be removed before dispatch: ${(error as Error).message}`,
-                    };
-                }
-            }
-        }
-
         // R3 (task 0751): delete-before-invoke. A verifier answer file left by a PRIOR run must
         // not satisfy this run's expectFile assertion - stat/mtime comparison is racy on coarse
         // filesystem timestamps, so the target is removed before dispatch instead. Presence after
         // exit-0 is then proof THIS run produced it. A caller that legitimately needs an existing
         // file preserved needs a different action, not an expectFile. Deletion failure fails the
         // step before dispatch rather than risking a stale satisfy.
-        if (expectFile !== undefined) {
-            const target = isAbsolute(expectFile) ? expectFile : join(cwd, expectFile);
-            const fs = createNodeFileSystem(cwd);
-            if (await fs.exists(target)) {
-                try {
-                    await fs.deleteFile(target);
-                } catch (error) {
-                    return {
-                        ok: false,
-                        error: `agent.run: expectFile ${expectFile} exists from a previous run and could not be removed before dispatch: ${(error as Error).message}`,
-                    };
-                }
-            }
-        }
+        const staleArtifacts: { kind: 'expectFile' | 'escalationFile'; path: string }[] = [];
+        if (escalationFile !== undefined) staleArtifacts.push({ kind: 'escalationFile', path: escalationFile });
+        if (expectFile !== undefined) staleArtifacts.push({ kind: 'expectFile', path: expectFile });
+        const freshnessError = await removeStaleArtifacts(cwd, staleArtifacts, 'dispatch');
+        if (freshnessError !== undefined) return { ok: false, error: freshnessError };
 
         // 0689: an expectFile/answerFile prompt that names a RELATIVE path lets a
         // headless executor with a scratch-rooted file tool (antigravity-cli)
@@ -1758,6 +1765,96 @@ function requiresCapabilitiesFlagForResolve(raw: unknown): string | undefined {
 function asOptionalString(value: unknown): string | undefined {
     if (value === undefined || value === null) return undefined;
     return String(value);
+}
+
+/** Parse option shape once without moving admission checks or effects across a surface boundary. */
+function normalizeAgentInvocation(
+    options: Record<string, unknown>,
+    context: ActionRunContext,
+    flags: Record<string, string | boolean> | undefined,
+): NormalizedAgentInvocation {
+    const answerFile = asOptionalString(options.answerFile);
+    const surface: ExecutorDispatchSurface =
+        context.vars.executor === 'fleet' ? 'fleet' : selectsHostExecutor(context.vars) ? 'host' : 'subprocess';
+    return {
+        input: asOptionalString(options.input),
+        agent: asOptionalString(options.agent),
+        role: asOptionalString(options.role),
+        sessionOption: asOptionalString(options.session),
+        model: asOptionalString(options.model),
+        mode: asOptionalString(options.mode) ?? 'text',
+        cwd: asOptionalString(options.cwd) ?? context.workdir ?? '.',
+        continueFlag: asOptionalBoolean(options.continue),
+        timeoutMs: asOptionalNumber(options.timeoutMs),
+        answerFile,
+        expectFile: asOptionalString(options.expectFile),
+        expectFiles: declaredExpectFiles(options),
+        escalationFile: asOptionalString(options.escalationFile),
+        requireDiff: asOptionalBoolean(options.requireDiff),
+        requireDiffAllowCleanCheck: asOptionalBoolean(options.requireDiffAllowCleanCheck),
+        capture: asOptionalBoolean(options.capture) || answerFile !== undefined,
+        skill: asOptionalString(options.skill) ?? null,
+        inputs: declaredInputs(options.inputs),
+        ownedSections: declaredStrings(options.ownedSections),
+        surface,
+        surfaceCapabilities: EXECUTOR_SURFACE_CAPABILITIES[surface],
+        flags: { ...flags },
+    };
+}
+
+/** Common declared session-option validation shared across host, fleet and subprocess admission. */
+function validateDeclaredSessionOption(sessionOption: string | undefined): string | undefined {
+    if (sessionOption !== undefined && sessionOption !== 'reuse' && sessionOption !== 'fresh') {
+        return `agent.run: session must be 'reuse' or 'fresh' (got '${sessionOption}')`;
+    }
+    return undefined;
+}
+
+/** True when the step declared a valid Layer-1 role (0538 R2). */
+function isDeclaredRoleValid(role: string | undefined): role is string {
+    return role !== undefined && (AGENT_ROLE_NAMES as readonly string[]).includes(role);
+}
+
+/** Common declared role validation shared across host, fleet and subprocess admission. */
+function validateDeclaredRole(role: string | undefined): string | undefined {
+    if (!isDeclaredRoleValid(role)) {
+        return `agent.run: step must declare a Layer-1 role: (scribe | coder | reviewer | planner) beside agent: (0538 R2)${role === undefined ? '' : ` — unknown role '${role}'`}`;
+    }
+    return undefined;
+}
+
+/** Work-item transports need a prompt; the subprocess path retains its resume/blank-prompt semantics. */
+function workItemPromptError(input: string | undefined, surface: 'host' | 'fleet'): string | undefined {
+    return input === undefined || input.trim() === ''
+        ? `agent.run: ${surface} dispatch requires an input prompt (continue/resume is not a ${surface} surface)`
+        : undefined;
+}
+
+/** Used only at the native/fleet boundary: a host work-item pause does not enforce a native timeout. */
+function invocationTimeoutError(timeoutMs: number | undefined): string | undefined {
+    return timeoutMs !== undefined && timeoutMs <= 0 ? 'agent.run: timeoutMs must be > 0' : undefined;
+}
+
+/**
+ * Delete only the artifacts this surface already owns, in declaration order. Failing removal
+ * stops admission so proof from a prior attempt cannot satisfy the current dispatch.
+ */
+async function removeStaleArtifacts(
+    cwd: string,
+    artifacts: readonly { kind: 'expectFile' | 'escalationFile'; path: string }[],
+    boundary: 'dispatch' | 'the host work item',
+): Promise<string | undefined> {
+    const fs = createNodeFileSystem(cwd);
+    for (const { kind, path } of artifacts) {
+        const target = isAbsolute(path) ? path : join(cwd, path);
+        if (!(await fs.exists(target))) continue;
+        try {
+            await fs.deleteFile(target);
+        } catch (error) {
+            return `agent.run: ${kind} ${path} exists from a previous run and could not be removed before ${boundary}: ${(error as Error).message}`;
+        }
+    }
+    return undefined;
 }
 
 /** The stage's declared completion artifacts: `expectFile` folds into `expectFiles` (D65 1232). */

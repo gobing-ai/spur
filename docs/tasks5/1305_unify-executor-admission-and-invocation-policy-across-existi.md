@@ -1,10 +1,10 @@
 ---
 schema_version: 1
 name: Unify executor admission and invocation policy across existing dispatch surfaces
-status: todo
+status: done
 template: feature-impl
 created_at: 2026-11-05T20:01:23.917Z
-updated_at: "2026-11-05T20:38:01.440Z"
+updated_at: "2026-11-06T05:01:25.781Z"
 ac_altitude: task-local
 ac_numbering: task-local
 feature_id: D65
@@ -16,6 +16,8 @@ tags:
 estimate_hours: 8
 
 dependencies: []
+done_forced: "false"
+done_reason: unforced close; PASS artifact at .spur/memory/evidence/1305-verdict.json
 ---
 
 ## 1305. Unify executor admission and invocation policy across existing dispatch surfaces
@@ -42,7 +44,7 @@ Rubric: E8 D1 L2 C1 R2 = 14. Keep this candidate as one cohesive deliverable wit
 
 ### Requirements
 
-- [ ] R1. Executor surfaces apply the same declared admission contract; implement the exact Given/When/Then contract below.
+- [x] R1. Executor surfaces apply the same declared admission contract; implement the exact Given/When/Then contract below.
 
 ### Acceptance Criteria
 
@@ -85,27 +87,74 @@ Output/handoff: 1306 consumes private normalized invocation and behavior matrix;
 
 No production implementation occurs during this refinement. No new dependency, public noun/verb, workflow/IAM/env edit, production migration or new control guarantee is implied. Preserve successful outputs, validation, errors, redaction, proof freshness, cancellation, accessibility and one writer per tree. New unit or isolated policy failure cases must precede production code; prefer cross-layer/fixture journeys. Use the applicable harness gate once after focused checks and record real implementation results through Spur. Update owning contracts for actual surface changes, architecture for mechanisms, and an ADR before lasting boundary reversal. Save repeatable JUnit/JSON proof under the task run directory and durable evidence in the task Testing record. Scope is the named source seams and necessary callers/tests/docs; no speculative framework or broad cleanup.
 
+
+#### Repo gate conventions
+
+The post-check preset requires a TSDoc comment on every exported symbol (`every-export-has-tsdoc`),
+and per-file line and function coverage must stay at or above 90%. Give each new export a doc
+comment and exercise every new branch before reporting done.
+
 ### Plan
 
-- [ ] 1. Write admission matrix covering actual host/fleet/subprocess branches, pinning, stale artifacts and negative capability/independence cases.
-- [ ] 2. Introduce private normalization and extract proven common checks while retaining surface-specific order and effects.
-- [ ] 3. Delete replaced duplicated blocks and prove no subprocess spawns on host pause or new host-control guarantee is claimed.
-- [ ] 4. Run the exact focused checks above, inspect the diff against R-items/feature AC, synchronize owners and record evidence through the task pipeline; do not fabricate completion.
+- [x] 1. Write admission matrix covering actual host/fleet/subprocess branches, pinning, stale artifacts and negative capability/independence cases.
+- [x] 2. Introduce private normalization and extract proven common checks while retaining surface-specific order and effects.
+- [x] 3. Delete replaced duplicated blocks and prove no subprocess spawns on host pause or new host-control guarantee is claimed.
+- [x] 4. Run the exact focused checks above, inspect the diff against R-items/feature AC, synchronize owners and record evidence through the task pipeline; do not fabricate completion.
 
 ### Solution
 
-<!-- Filled during implementation: file:line change map and concise rationale. -->
+- `packages/app/src/workflow/actions/agent-run.ts:71-149` — Introduced private `ExecutorDispatchSurface`, `ExecutorSurfaceCapabilities`, `EXECUTOR_SURFACE_CAPABILITIES`, and `NormalizedAgentInvocation` with the surface admission behavior matrix (for R1 / AC1 and task 1306 handoff), modeling native capability, timeout, prompt, and usage-budget checks as surface capabilities without claiming subprocess enforcement on a host work-item pause.
+- `packages/app/src/workflow/actions/agent-run.ts:391-454` — Updated `executeFleetSurface` to consume `NormalizedAgentInvocation` and shared admission helpers (`workItemPromptError`, `invocationTimeoutError`, `removeStaleArtifacts`) while retaining fleet member identity rules, envelope delegation, and fallback behavior.
+- `packages/app/src/workflow/actions/agent-run.ts:583-616` — Updated `executeHostSurface` to consume `NormalizedAgentInvocation`, `workItemPromptError`, and `removeStaleArtifacts` across `expectFiles`, replacing duplicated prompt and stale-artifact deletion loops while preserving the host work-item pause boundary.
+- `packages/app/src/workflow/actions/agent-run.ts:689-1096` — Normalized stage options once at `dispatch()` entry via `normalizeAgentInvocation`, routed shared declared-shape checks through `validateDeclaredSessionOption`, `isDeclaredRoleValid`, and `validateDeclaredRole`, and unified pre-dispatch `escalationFile`/`expectFile` removal through `removeStaleArtifacts` while preserving executor pinning, mid-run re-resolution, native capability attestation, P1 reviewer independence, and post-dispatch budget evaluation.
+- `packages/app/src/workflow/actions/agent-run.ts:1770-1858` — Added private helpers `normalizeAgentInvocation`, `validateDeclaredSessionOption`, `isDeclaredRoleValid`, `validateDeclaredRole`, `workItemPromptError`, `invocationTimeoutError`, and `removeStaleArtifacts`.
+- `packages/app/tests/workflow/actions/agent-run-admission.test.ts:15-247` — Added the 48-case `host` × `fleet` × `subprocess` admission matrix suite verifying shared session/role/input guards, blank-prompt handling, timeout validation after the host pause boundary, singular and plural stale-artifact freshness and removal-failure handling, capability/budget/P1-reviewer-independence boundaries, and pinned vs fleet-member executor identities.
+- `probe: not-applicable (no public surface changed)`
 
 ### Testing
 
-<!-- Filled during verification: commands run, outcomes, coverage claim or N/A. -->
+**Pipeline verify results**
+
+- Verdict: PASS (from verdict artifact)
+
+| Requirement | Status | Evidence |
+|-------------|--------|----------|
+| R1 | MET | `packages/app/src/workflow/actions/agent-run.ts:71-149`, `packages/app/src/workflow/actions/agent-run.ts:391-454`, `packages/app/src/workflow/actions/agent-run.ts:583-616`, `packages/app/src/workflow/actions/agent-run.ts:689-1096`, `packages/app/src/workflow/actions/agent-run.ts:1770-1858`, `packages/app/tests/workflow/actions/agent-run-admission.test.ts:15-248` |
+
+| Acceptance Criteria | Status | Evidence Type | Evidence |
+|---------------------|--------|---------------|----------|
+| AC1 — Executor surfaces apply the same declared admission contract (req: R1) | MET | test | `packages/app/tests/workflow/actions/agent-run-admission.test.ts:130-248` (48-case host × fleet × subprocess admission matrix pass); `packages/app/src/workflow/actions/agent-run.ts:71-149` |
+| R17 — Executor surfaces apply the same declared admission contract | MET | test | `packages/app/tests/workflow/actions/agent-run-admission.test.ts:130-248` (48-case host × fleet × subprocess admission matrix pass); `packages/app/src/workflow/actions/agent-run.ts:71-149` |
+- Coverage: N/A (verdict-based; verify pipeline does not measure code coverage)
 
 ### Review
 
-<!-- Filled during review: P1-P4 findings, residual risk, and final disposition. -->
+#### Review Report — 1305
+**Scope:** working tree diff (`packages/app/src/workflow/actions/agent-run.ts`, `packages/app/tests/workflow/actions/agent-run-admission.test.ts`; no `(1305)` tagged commit yet)
+**Dimensions:** functional, security, efficiency, correctness, usability, architecture
+**Verdict:** PASS
+**Confidence:** MEDIUM
+##### Findings (ranked)
+
+| # | Priority | Dimension | Finding | Location | Disposition |
+|---|----------|-----------|---------|----------|-------------|
+| 1 | P4 (advisory) | architecture | No P1–P3 findings: `NormalizedAgentInvocation` and `EXECUTOR_SURFACE_CAPABILITIES` unify option normalization, session/role guards, prompt/timeout checks, and stale-artifact cleanup across host, fleet, and subprocess surfaces while preserving the host work-item pause boundary and 1306 handoff | `packages/app/src/workflow/actions/agent-run.ts:71-149` | ACCEPTED |
+
+##### Functional Traceability
+
+| Req | Status | Evidence |
+|-----|--------|----------|
+| R1 | MET | `packages/app/src/workflow/actions/agent-run.ts:71-149`, `packages/app/src/workflow/actions/agent-run.ts:391-454`, `packages/app/src/workflow/actions/agent-run.ts:583-616`, `packages/app/src/workflow/actions/agent-run.ts:689-1096`, `packages/app/src/workflow/actions/agent-run.ts:1770-1858`, `packages/app/tests/workflow/actions/agent-run-admission.test.ts:15-248` |
+
+**Next:** Proceed to task verdict certification and completion close.
 
 ### References
 
 <!-- Links to the parent feature, design docs, related tasks, or external references. -->
 
 ### History
+
+- 2026-11-06T04:54:49.870Z todo → wip (system)
+- 2026-11-06T05:01:23.716Z wip → testing (system)
+- 2026-11-06T05:01:25.773Z testing → done (system)
+
