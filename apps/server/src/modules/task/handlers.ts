@@ -36,6 +36,10 @@ function createResponseShape(r: WriteResult) {
  */
 export function createTaskHandlers(ctx: ServerContext) {
     return {
+        readiness: os.task.readiness.handler(async ({ input }) => ({
+            ok: true as const,
+            data: await ctx.planningReadinessService().read(input),
+        })),
         list: os.task.list.handler(async ({ input }) => {
             const filters = toFilters(input as Record<string, unknown> | undefined);
             const tasks = await ctx.taskService().list(filters);

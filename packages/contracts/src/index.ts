@@ -68,6 +68,7 @@ export * from './search';
 export * from './shared';
 // ─── Re-exported DTO schemas for handler return-type inference ───
 export {
+    type TaskReadinessResponse,
     taskActionInputSchema,
     taskActionResponseSchema,
     taskBodyUpdateInputSchema,
@@ -76,5 +77,6 @@ export {
     taskFoldersResponseSchema,
     taskListInputSchema,
     taskListResponseSchema,
+    taskReadinessResponseSchema,
     taskShowResponseSchema,
 } from './task';

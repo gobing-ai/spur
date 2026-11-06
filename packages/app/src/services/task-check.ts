@@ -529,6 +529,13 @@ export class TaskCheckService extends PlanningCheckService {
              */
             asStatus?: string;
             severityOverrides?: Record<string, 'error' | 'warning' | 'off'>;
+            /**
+             * Operation-scoped child index (`parent_wbs` -> children). A batch caller such as the
+             * readiness projection supplies one pass of parsed records instead of paying the
+             * documented O(tasks) rollup scan on every row, which made N checks O(N^2) parses.
+             * Absent -> the original per-check scan, unchanged.
+             */
+            childIndex?: ReadonlyMap<string, ReadonlyArray<{ wbs: string; status: string }>>;
             /** Repair structural findings (heading presence/level/order, R-item checkboxes) in place before validating (task 0619). */
             fix?: boolean;
             /**
@@ -612,7 +619,7 @@ export class TaskCheckService extends PlanningCheckService {
 
         // ── L4 roll-up (0121, R1–R3): parent↔child status drift + roster presence.
         // Inert unless one or more sibling tasks declare parent_wbs == this wbs.
-        await this.runL4Rollup(doc, wbs, effectiveStatus, findings, tasksDir);
+        await this.runL4Rollup(doc, wbs, effectiveStatus, findings, tasksDir, options?.childIndex);
 
         // ── L4 readiness (0211/R4): dependencies and gate-like prose are prerequisites.
         // Terminal tasks are completion records, not readiness candidates.
@@ -1262,12 +1269,12 @@ export class TaskCheckService extends PlanningCheckService {
      * Severity is `warning`; `--strict` elevates per the shared base. Inert for a
      * task with zero kids (R3) — the dir scan finds nothing and returns early.
      *
-     * NOTE (0121 design correction): L4 does NOT pre-load the corpus — `check()` is
+     * Without an operation-scoped child index, L4 does NOT pre-load the corpus — `check()` is
      * invoked per-task and resolves the *current* task's edges by reading individual
      * files. Finding kids therefore requires one `readDir` + frontmatter scan of
      * the tasks dir here; it cannot "reuse the same pass" as the Design assumed. The
      * scan is O(n) over the tasks dir, once per check, and short-circuits when no
-     * kid references this wbs.
+     * kid references this wbs. Batch readers pass an index from their parsed snapshot instead.
      */
     private async runL4Rollup(
         doc: MarkdownDocument,
@@ -1275,8 +1282,10 @@ export class TaskCheckService extends PlanningCheckService {
         status: string,
         findings: CheckFindings[],
         tasksDir: string,
+        childIndex?: ReadonlyMap<string, ReadonlyArray<{ wbs: string; status: string }>>,
     ): Promise<void> {
-        const kids = await this.findChildren(tasksDir, wbs);
+        const kids =
+            childIndex !== undefined ? [...(childIndex.get(wbs) ?? [])] : await this.findChildren(tasksDir, wbs);
         if (kids.length === 0) return; // not a parent — inert (R3)
 
         const closed = (s: string): boolean => s === 'done' || s === 'cancelled';

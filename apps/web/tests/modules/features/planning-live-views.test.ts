@@ -1,4 +1,5 @@
 import { afterAll, afterEach, beforeAll, expect, spyOn, test } from 'bun:test';
+import type { TaskReadinessResponse } from '@gobing-ai/spur-contracts';
 import { act, cleanup, fireEvent, render, waitFor } from '@testing-library/react';
 import { createElement } from 'react';
 import { resetFetchForTesting, setFetchForTesting } from '../../../src/lib/rpc-client';
@@ -151,6 +152,12 @@ test('a selected feature detail refresh is coalesced with the final list reload 
     };
     setFetchForTesting((async (input: RequestInfo | URL) => {
         const path = new URL((input as Request).url).pathname;
+        if (path.endsWith('/tasks/readiness')) {
+            return Response.json({
+                ok: true,
+                data: { tasks: [], pausedRuns: [], diagnostics: [] },
+            } satisfies TaskReadinessResponse);
+        }
         if (path.endsWith('/features')) {
             listReads++;
             return listReads === 2 ? reload.promise : Response.json({ ok: true, data: [data] });

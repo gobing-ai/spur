@@ -95,6 +95,7 @@ describe('task handlers', () => {
             'create',
             'folders',
             'list',
+            'readiness',
             'show',
             'transition',
         ]);

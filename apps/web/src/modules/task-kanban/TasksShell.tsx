@@ -6,6 +6,7 @@ import ModuleIcon from '../../components/ModuleIcon';
 import { api } from '../../lib/rpc-client';
 import { BOOTSTRAP_FOLDER } from './KanbanBoard';
 import NewTaskPanel from './NewTaskPanel';
+import PlanningReadinessPanel from './PlanningReadinessPanel';
 import { TASKS_TABS } from './tabs';
 import { useTaskParams } from './useTaskParams';
 
@@ -199,6 +200,7 @@ export default function TasksShell() {
                 </div>
             </header>
 
+            <PlanningReadinessPanel folder={folder} />
             <div data-kanban-board className="flex-1 overflow-hidden">
                 <ActiveTab
                     onSelectTask={selectTask}

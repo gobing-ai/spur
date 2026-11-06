@@ -151,8 +151,32 @@ export const taskFoldersResponseSchema = apiSuccessSchema(z.array(taskFolderSche
     activeFolder: z.string().optional(),
 });
 
+/** Additive readiness projection; task.list keeps its existing successful payload. */
+export const taskReadinessResponseSchema = apiSuccessSchema(
+    z.object({
+        tasks: z.array(
+            z.object({
+                wbs: z.string(),
+                state: z.enum(['ready', 'blocked', 'not-startable']),
+                reasons: z.array(
+                    z.object({ code: z.string(), message: z.string(), relatedWbs: z.string().optional() }),
+                ),
+                nextAction: z.object({ kind: z.literal('run-task'), wbs: z.string(), command: z.string() }).nullable(),
+            }),
+        ),
+        pausedRuns: z.array(z.object({ runId: z.string(), wbs: z.string() })),
+        diagnostics: z.array(z.object({ path: z.string(), message: z.string() })),
+    }),
+);
+/** Wire payload for the task readiness read. */
+export type TaskReadinessResponse = z.infer<typeof taskReadinessResponseSchema>;
+
 /** oRPC contract for the task domain — list, show, create, transition, body. */
 export const taskContract = {
+    readiness: oc
+        .route({ method: 'GET', path: '/tasks/readiness', summary: 'Explain planning readiness', tags: ['task'] })
+        .input(z.object({ folder: z.string().optional() }))
+        .output(taskReadinessResponseSchema),
     list: oc
         .route({
             method: 'GET',

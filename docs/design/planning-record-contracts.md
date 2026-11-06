@@ -26,7 +26,8 @@ Its success envelope is `{ok:true,data:{tasks,pausedRuns,diagnostics}}`:
 
 - `tasks`: `{wbs,state,reasons,nextAction}` rows, ordered by WBS/path. State is `ready`, `blocked`,
   or `not-startable`; reasons carry `{code,message,relatedWbs?}`. Only `todo` records with all
-  dependencies uniquely resolved to `done`, no target-todo checker errors and complete inputs are ready.
+  dependencies uniquely resolved to `done`, no target-todo checker errors, no missing required
+  sections and complete inputs are ready. A linked paused run blocks a second start for that task.
   Other lifecycle states cannot start; blocked status and missing/deprecated/unfinished dependencies
   explain why. The existing `TaskCheckService` supplies structural and transitive policy findings.
 - `nextAction`: only ready rows carry `{kind:"run-task",wbs,command:"/sp:dev-run <wbs>"}`.
@@ -40,6 +41,8 @@ Its success envelope is `{ok:true,data:{tasks,pausedRuns,diagnostics}}`:
 Each request builds one snapshot across configured task folders before applying the display filter;
 cross-folder dependencies retain their meaning. The checker reads its corpus bytes from that snapshot,
 while evidence files remain on the existing filesystem seam. No snapshot is retained after the read.
+The snapshot also supplies a parent-to-children index to the checker, avoiding a sibling parse scan
+for each displayed task while preserving the checker's existing child-status and alias policy.
 Native disclosure panels in TasksShell and FeatureDetail use the shared planning subscription,
 coalesce in-flight invalidations, abort on unmount/folder change, discard old responses and remove
 previous ready actions while refreshing. FeatureDetail limits rows to its existing linked-task set.

@@ -38,6 +38,7 @@ import {
     systemEventProjectContext as makeSystemEventProjectContext,
     PlanningDocumentService,
     type PlanningEventMap,
+    PlanningReadinessService,
     PlanningWriteService as PlanningWriteServiceImpl,
     ProcessInventoryService as ProcessInventoryServiceImpl,
     RuleService as RuleServiceImpl,
@@ -181,6 +182,9 @@ export interface ServerContext {
 
     /** Lazy, cached TaskService (planning layer). */
     taskService(): TaskService;
+
+    /** Read-only readiness projection with operation-scoped inputs. */
+    planningReadinessService(): PlanningReadinessService;
 
     /** Lazy, cached PlanningDocumentService — the plan/design read owner (task 1300). */
     planningDocumentService(): PlanningDocumentService;
@@ -548,6 +552,21 @@ export function createServerContext(appRt: ApplicationRuntime, options: CreateSe
                 });
             }
             return taskSvc;
+        },
+
+        planningReadinessService(): PlanningReadinessService {
+            return new PlanningReadinessService({
+                fs,
+                taskDirs: new TaskLocator({
+                    fs,
+                    tasksDir: folders.tasksDir,
+                    foldersConfig: folders.foldersConfig,
+                }).folderDirs(),
+                featuresDir: folders.featuresDir,
+                matrix: options.sectionMatrix,
+                severityOverrides: folders.severityOverrides,
+                runStore: this.runStoreService(),
+            });
         },
 
         checkService(): TaskCheckService | undefined {

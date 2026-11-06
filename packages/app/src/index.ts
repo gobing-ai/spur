@@ -556,6 +556,8 @@ export {
     PlanningDocumentService,
 } from './services/planning-document-service';
 export { BusPlanningEventEmitter, type PlanningEventMap } from './services/planning-events';
+export type { PlanningReadiness, PlanningReadinessContext } from './services/planning-readiness';
+export { PlanningReadinessService } from './services/planning-readiness';
 export type {
     CapturingEmitter,
     EntityRef,

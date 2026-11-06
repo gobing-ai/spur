@@ -17,6 +17,7 @@ import { stripFrontmatter } from '../../lib/frontmatter';
 import { markdownPreviewSafety } from '../../lib/markdown-safety';
 import MarkdownBody from '../task-kanban/MarkdownBody';
 import NewTaskPanel from '../task-kanban/NewTaskPanel';
+import PlanningReadinessPanel from '../task-kanban/PlanningReadinessPanel';
 import type { TaskSummary } from '../task-kanban/types';
 import { useTasks } from '../task-kanban/useTasks';
 import FloatingActionProgress from './FloatingActionProgress';
@@ -784,6 +785,8 @@ export default function FeatureDetail({
                     {actionFeedback.message}
                 </div>
             )}
+
+            <PlanningReadinessPanel taskWbs={linkedTasks.map((task) => task.wbs)} />
 
             {/* Body — MDEditor with edit/preview toggle (F841 R2) */}
             <div className="flex-1 flex flex-col overflow-hidden p-3" data-testid="feature-body-section">
