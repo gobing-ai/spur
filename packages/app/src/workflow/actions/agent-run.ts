@@ -30,7 +30,7 @@ import {
     SESSION_CAPABILITY_AXES,
     type SessionCapabilityRecord,
 } from '../../services/capability-attestation';
-import { permissionFailureEvidence } from '../../services/failure-classification';
+import { classifyDispatch, permissionFailureEvidence } from '../../services/failure-classification';
 import {
     checkExecutorIndependence,
     parseAgentRoutingIdentity,
@@ -64,6 +64,9 @@ const PARTIAL_ARTIFACT_TAIL_CHARS = 4000;
 export const AGENT_RUN_PROGRESS_INTERVAL_MS = 30_000;
 
 const KIND = 'agent.run';
+
+/** Why a fleet row's usage is honestly unavailable rather than a fabricated figure. */
+const FLEET_USAGE_NOTE = 'fleet members report no token usage';
 
 /** A declared `agent.run` post-condition (ADR-118). */
 type ContractName = 'answerFile' | 'escalationFile' | 'expectFile' | 'requireDiff' | 'requiresCapabilities';
@@ -365,20 +368,10 @@ export class AgentRunActionRunner implements ActionRunner {
             observed,
             ...(String(context.vars.wbs ?? '') !== '' ? { task: String(context.vars.wbs) } : {}),
         });
-        // 0942 R3: an early contract-violation return bypasses the success-path
-        // fallbackReason stamp — carry it here so a fleet-fallback row still names
-        // why the traditional surface ran.
-        return {
-            ok: false,
-            data: {
-                ...data,
-                outcome: 'contract-violation',
-                contract,
-                observed,
-                ...(this.fleetFallbackReason !== undefined ? { fallbackReason: this.fleetFallbackReason } : {}),
-            },
-            error,
-        };
+        // 0942 R3 / 1306: the fleet-fallback stamp is NOT applied here — shared
+        // finalization applies it to every row once, so an early contract-violation
+        // return and the success path cannot drift apart.
+        return { ok: false, data: { ...data, outcome: 'contract-violation', contract, observed }, error };
     }
 
     /**
@@ -488,7 +481,7 @@ export class AgentRunActionRunner implements ActionRunner {
                                   memberId: dispatch.memberId,
                                   messageId: dispatch.messageId,
                                   ...(dispatch.status === 'completed' ? { durationMs: dispatch.durationMs } : {}),
-                                  usage: unavailableAgentUsage('fleet members report no token usage'),
+                                  usage: unavailableAgentUsage(FLEET_USAGE_NOTE),
                               },
                           },
             };
@@ -498,17 +491,11 @@ export class AgentRunActionRunner implements ActionRunner {
                 result: {
                     ok: true,
                     data: {
-                        agent: dispatch.memberId,
-                        usage: unavailableAgentUsage('fleet members report no token usage'),
-                        ...(expectFile !== undefined ? { expectFile } : {}),
+                        // Fleet-only identity columns (R4) come from the shared row; the
+                        // trace parity test (agent-run-fleet.test.ts) pins the key set
+                        // against the subprocess row shape.
+                        ...fleetDispatchRow(dispatch, 'done', expectFile),
                         durationMs: dispatch.durationMs,
-                        reason: 'done',
-                        // Fleet-only identity columns (R4); the trace parity test
-                        // (agent-run-fleet.test.ts) pins the key set against the
-                        // subprocess row shape.
-                        surface: 'fleet',
-                        memberId: dispatch.memberId,
-                        messageId: dispatch.messageId,
                         promptPath: dispatch.promptPath,
                     },
                 },
@@ -522,15 +509,7 @@ export class AgentRunActionRunner implements ActionRunner {
             return {
                 result: {
                     ok: false,
-                    data: {
-                        agent: dispatch.memberId,
-                        usage: unavailableAgentUsage('fleet members report no token usage'),
-                        ...(expectFile !== undefined ? { expectFile } : {}),
-                        reason: 'failed-agent',
-                        surface: 'fleet',
-                        memberId: dispatch.memberId,
-                        messageId: dispatch.messageId,
-                    },
+                    data: fleetDispatchRow(dispatch, 'failed-agent', expectFile),
                     error: `agent.run (${dispatch.memberId}) fleet dispatch ${dispatch.status}${detail}`,
                 },
             };
@@ -543,15 +522,7 @@ export class AgentRunActionRunner implements ActionRunner {
             return {
                 result: {
                     ok: false,
-                    data: {
-                        agent: dispatch.memberId,
-                        usage: unavailableAgentUsage('fleet members report no token usage'),
-                        ...(expectFile !== undefined ? { expectFile } : {}),
-                        reason: 'outcome-unknown',
-                        surface: 'fleet',
-                        memberId: dispatch.memberId,
-                        messageId: dispatch.messageId,
-                    },
+                    data: fleetDispatchRow(dispatch, 'outcome-unknown', expectFile),
                     error: `fleet dispatch outcome unknown (member ${dispatch.memberId}, message ${dispatch.messageId})`,
                 },
             };
@@ -563,6 +534,7 @@ export class AgentRunActionRunner implements ActionRunner {
                 ok: false,
                 data: {
                     agent: role,
+                    // Nothing was dispatched, so there is no member identity to record.
                     usage: unavailableAgentUsage('fleet unavailable before dispatch'),
                     reason: 'failed-agent',
                     surface: 'fleet',
@@ -621,8 +593,62 @@ export class AgentRunActionRunner implements ActionRunner {
         execution?: { flags: Record<string, string | boolean>; deps?: AgentRunDeps },
     ): Promise<ActionResult> {
         const startedAt = new Date().toISOString();
-        const result = await this.dispatch(options, context, execution);
+        const invocation = normalizeAgentInvocation(options, context, execution?.flags);
+        const dispatched = await this.dispatch(options, context, execution);
+        const result = this.finalizeAgentDispatchResult(invocation, dispatched);
         return await this.recordReceipt(options, context, startedAt, result);
+    }
+
+    /**
+     * Shared completion decoration for every executor surface (D65 1306) — the one hop between
+     * a settled dispatch and {@link recordReceipt}. It adds only what the dispatching path
+     * cannot know (the fleet fallback reason) and what the row's own evidence already proves
+     * (the objective failure signal). It never rewrites a surface's reported fields, so
+     * `surface`, `usage`, `reason` and the redacted stream tails stay that surface's own words
+     * and no second failure vocabulary appears beside {@link classifyDispatch}.
+     *
+     * | Completion | Host | Fleet | Subprocess |
+     * | --- | --- | --- | --- |
+     * | success | pause row; host owns the receipt | `reason: done`, usage honestly unavailable | `exitCode: 0`, measured usage |
+     * | refusal (non-zero) | n/a — nothing dispatched | `reason: failed-agent`; a status-only receipt carries no evidence, so no signal is invented | classified from the redacted stderr tail |
+     * | timeout / cancellation | n/a | `outcome-unknown`, never re-dispatched | `signal` row → `timeout` signal, partial work kept |
+     * | contract failure | host `continue` validates | delegated member result | `outcome: contract-violation`, never classified |
+     * | missing receipt | host `continue` rejects | `no work-item result` → failed | a receipt-write failure never masks the dispatch failure |
+     * | fleet fallback | n/a | re-dispatched on the subprocess surface | row carries `fallbackReason` |
+     *
+     * Ownership exception (ADR-126 A4): a host pause is not a completion — the HOST writes that
+     * receipt and `spur workflow continue` validates it, so the pause row is returned untouched.
+     */
+    private finalizeAgentDispatchResult(invocation: NormalizedAgentInvocation, result: ActionResult): ActionResult {
+        if (invocation.surface === 'host' && result.pause === true) return result;
+        const data: Record<string, unknown> = { ...(result.data ?? {}) };
+        let decorated = false;
+        // 0942 R3: one stamp for every row — a declared fleet fallback names WHY the
+        // traditional surface ran, including the early contract-violation returns.
+        if (this.fleetFallbackReason !== undefined && data.fallbackReason === undefined) {
+            data.fallbackReason = this.fleetFallbackReason;
+            decorated = true;
+        }
+        // 1306: record the classified failure from the row's OWN already-redacted evidence.
+        // Reusing the single classifier keeps the provider vocabulary in one place; the
+        // signal is additive internal diagnostic data, never a new public enum, and the
+        // receipt outcome vocabulary (`receiptOutcomeOf`) is untouched. A contract
+        // violation exits 0, so it can never be mistaken for a provider failure.
+        if (!result.ok && data.failureSignal === undefined) {
+            const signal = asOptionalString(data.signal);
+            const classified = classifyDispatch({
+                exitCode: typeof data.exitCode === 'number' ? data.exitCode : 1,
+                stdout: asOptionalString(data.stdoutTail) ?? '',
+                stderr: asOptionalString(data.stderrTail) ?? result.error ?? '',
+                ...(signal !== undefined ? { signal } : {}),
+            });
+            if (classified !== undefined) {
+                data.failureSignal = classified;
+                decorated = true;
+            }
+        }
+        // An undecorated row keeps its exact identity, including an absent `data`.
+        return decorated ? { ...result, data } : result;
     }
 
     /**
@@ -650,7 +676,7 @@ export class AgentRunActionRunner implements ActionRunner {
         const outcome = receiptOutcomeOf(result);
         const files: string[] = [];
         for (const path of declaredExpectFiles(options)) {
-            if (await fs.exists(isAbsolute(path) ? path : join(cwd, path))) files.push(path);
+            if (await fs.exists(resolveUnder(cwd, path))) files.push(path);
         }
         const receipt: WorkItemReceipt = {
             runId: context.runId,
@@ -1218,6 +1244,12 @@ export class AgentRunActionRunner implements ActionRunner {
             // actions keep today's semantics and report usage honestly.
             const usage: NormalizedAgentUsage =
                 traced.usage ?? unavailableAgentUsage('dispatch result carried no usage');
+            // 1306: every declared post-condition row (ADR-118) reports the SAME dispatch
+            // evidence — only the violated contract differs. One builder and one filesystem
+            // handle for the whole post-exit chain, so a new contract cannot drift.
+            const postConditionData = (): Record<string, unknown> =>
+                buildResultData(exitCode, agentLabel, capture, answer, invocation, usage);
+            const artifactFs = createNodeFileSystem(cwd);
             let budgetFailure: string | undefined;
             if (ok && budget.budget !== undefined) {
                 const evaluation = evaluateAgentBudget(usage, budget.budget);
@@ -1323,17 +1355,16 @@ export class AgentRunActionRunner implements ActionRunner {
                     }
                     return {
                         ok: false,
-                        data: buildResultData(exitCode, agentLabel, capture, answer, invocation, usage),
+                        data: postConditionData(),
                         error: `${tripwire.reason}. Next decision required: ${tripwire.policy?.nextDecision ?? 'operator review required'}`,
                     };
                 }
             }
 
             if (capture && answerFile !== undefined) {
-                const target = isAbsolute(answerFile) ? answerFile : join(cwd, answerFile);
-                const fs = createNodeFileSystem(cwd);
-                await fs.ensureDir(dirname(target));
-                await fs.writeFile(target, answer);
+                const target = resolveUnder(cwd, answerFile);
+                await artifactFs.ensureDir(dirname(target));
+                await artifactFs.writeFile(target, answer);
             }
 
             // ADR-118: a declared answerFile is a post-condition — a clean exit
@@ -1346,7 +1377,7 @@ export class AgentRunActionRunner implements ActionRunner {
                     'answerFile',
                     'empty',
                     `agent.run (${agentLabel}) exited 0 but produced an empty answer for answerFile: ${answerFile}`,
-                    buildResultData(exitCode, agentLabel, capture, answer, invocation, usage),
+                    postConditionData(),
                 );
             }
 
@@ -1358,17 +1389,14 @@ export class AgentRunActionRunner implements ActionRunner {
             // normal completion, post-exit chain unchanged below.
             let escalated = false;
             if (ok && escalationFile !== undefined) {
-                const target = isAbsolute(escalationFile) ? escalationFile : join(cwd, escalationFile);
-                const fs = createNodeFileSystem(cwd);
-                const stat = await fs.stat(target);
+                const stat = await artifactFs.stat(resolveUnder(cwd, escalationFile));
                 escalated = stat !== null && stat.size > 0;
             }
 
             // R6-S2a: verify expected side-effect artifact exists after exit-0.
             if (ok && !escalated && expectFile !== undefined) {
-                const target = isAbsolute(expectFile) ? expectFile : join(cwd, expectFile);
-                const fs = createNodeFileSystem(cwd);
-                if (!(await fs.exists(target))) {
+                const target = resolveUnder(cwd, expectFile);
+                if (!(await artifactFs.exists(target))) {
                     await writePartialWorkArtifact(
                         context,
                         agentLabel,
@@ -1404,7 +1432,7 @@ export class AgentRunActionRunner implements ActionRunner {
                 // ADR-118: `expectFile empty` is a distinct miss from `missing` —
                 // the agent produced the file but left it with no content, which
                 // needs a different repair than a file it never wrote at all.
-                const expectStat = await fs.stat(target);
+                const expectStat = await artifactFs.stat(target);
                 if (expectStat !== null && expectStat.size === 0) {
                     return this.contractViolation(
                         context,
@@ -1412,7 +1440,7 @@ export class AgentRunActionRunner implements ActionRunner {
                         'expectFile',
                         'empty',
                         `agent.run (${agentLabel}) exited 0 but the expected file is empty: ${expectFile}`,
-                        buildResultData(exitCode, agentLabel, capture, answer, invocation, usage),
+                        postConditionData(),
                     );
                 }
             }
@@ -1454,7 +1482,7 @@ export class AgentRunActionRunner implements ActionRunner {
                                 'requireDiff',
                                 'empty',
                                 `agent.run '${stepLabel}' (${agentLabel}) exited 0 but produced zero non-corpus file changes, and the verification-only admission failed — ${admission.detail}. Fix the task corpus (task check must pass) or make a real change.`,
-                                buildResultData(exitCode, agentLabel, capture, answer, invocation, usage),
+                                postConditionData(),
                             );
                         }
                     } else {
@@ -1464,7 +1492,7 @@ export class AgentRunActionRunner implements ActionRunner {
                             'requireDiff',
                             'empty',
                             `agent.run '${stepLabel}' (${agentLabel}) exited 0 but produced zero non-corpus file changes — empty implement (no-op). The implement agent must change at least one file outside the configured task/feature folders; fix the implement input and re-run the pipeline.`,
-                            buildResultData(exitCode, agentLabel, capture, answer, invocation, usage),
+                            postConditionData(),
                         );
                     }
                 }
@@ -1484,7 +1512,7 @@ export class AgentRunActionRunner implements ActionRunner {
                         'requireDiff',
                         `out-of-scope: ${rogue.join(', ')}`,
                         `agent.run '${stepLabel}' (${agentLabel}) changed files outside task ${wbs}'s declared surfaces: ${rogue.join(', ')}. Implement only the target WBS; revert the out-of-scope changes (or name those paths in the task body). Set the run var implementScopeGuard: "off" to bypass.`,
-                        buildResultData(exitCode, agentLabel, capture, answer, invocation, usage),
+                        postConditionData(),
                     );
                 }
             }
@@ -1586,6 +1614,9 @@ export class AgentRunActionRunner implements ActionRunner {
             // whether the policy was declared on the step or applied by role default.
             const resumedDispatch =
                 ok && affinityOn && !freshSession && resumeSupported && storedSessionId !== undefined;
+            // 1306: the terminating signal rides the failure row so shared finalization can
+            // classify a timeout/cancellation from the row itself, without a second stream read.
+            if (!ok && traced.signal !== undefined) resultData.signal = traced.signal;
             resultData.session = resumedDispatch ? ('reused' as const) : ('fresh' as const);
             resultData.sessionSource = sessionDeclared ? ('declared' as const) : ('default' as const);
             // 0933 R26: surface the escalation on the result record — the pipeline
@@ -1596,8 +1627,8 @@ export class AgentRunActionRunner implements ActionRunner {
             }
             // B7 R1 (0894): record the actually dispatched model (pin or step override).
             if (model !== undefined) resultData.model = model;
-            // 0942 R3: a declared fleet fallback names WHY the traditional surface ran.
-            if (this.fleetFallbackReason !== undefined) resultData.fallbackReason = this.fleetFallbackReason;
+            // 0942 R3 / 1306: the `fallbackReason` stamp lives in shared finalization — one
+            // place for every row, success or early contract violation.
             // B7 R6/R7 (0895): trace columns — the dispatched executor, the session
             // the stage is associated with (accepted resume id, else the discovered
             // id), and the pin re-resolution outcome with its owner/reason.
@@ -1836,6 +1867,36 @@ function invocationTimeoutError(timeoutMs: number | undefined): string | undefin
 }
 
 /**
+ * The columns every dispatched fleet row repeats (0942 R4): member identity, the honest usage
+ * note and `surface: 'fleet'`, with the reason the control plane actually returned. Key order
+ * matches the subprocess row's parity contract; success-only columns are spread by the caller.
+ */
+function fleetDispatchRow(
+    dispatch: { memberId: string; messageId: string },
+    reason: string,
+    expectFile: string | undefined,
+): Record<string, unknown> {
+    return {
+        agent: dispatch.memberId,
+        usage: unavailableAgentUsage(FLEET_USAGE_NOTE),
+        ...(expectFile !== undefined ? { expectFile } : {}),
+        reason,
+        surface: 'fleet',
+        memberId: dispatch.memberId,
+        messageId: dispatch.messageId,
+    };
+}
+
+/**
+ * Resolve a declared artifact path against the dispatch cwd — one rule for every freshness
+ * check, post-condition read and receipt file row, so an absolute declaration is not joined
+ * onto the project root a second time.
+ */
+function resolveUnder(cwd: string, path: string): string {
+    return isAbsolute(path) ? path : join(cwd, path);
+}
+
+/**
  * Delete only the artifacts this surface already owns, in declaration order. Failing removal
  * stops admission so proof from a prior attempt cannot satisfy the current dispatch.
  */
@@ -1846,7 +1907,7 @@ async function removeStaleArtifacts(
 ): Promise<string | undefined> {
     const fs = createNodeFileSystem(cwd);
     for (const { kind, path } of artifacts) {
-        const target = isAbsolute(path) ? path : join(cwd, path);
+        const target = resolveUnder(cwd, path);
         if (!(await fs.exists(target))) continue;
         try {
             await fs.deleteFile(target);
