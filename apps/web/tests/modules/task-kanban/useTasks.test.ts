@@ -208,6 +208,120 @@ function privates(store: TaskStore): TaskStorePrivates {
     return store as unknown as TaskStorePrivates;
 }
 
+describe('TaskStore refresh ownership (1298)', () => {
+    /** A promise plus its resolver/rejecter, so a test controls completion order. */
+    function deferred<T>() {
+        let resolve!: (value: T) => void;
+        let reject!: (reason: unknown) => void;
+        const promise = new Promise<T>((res, rej) => {
+            resolve = res;
+            reject = rej;
+        });
+        return { promise, resolve, reject };
+    }
+
+    const rows = (wbs: string): TaskSummary[] => [{ wbs, name: wbs, status: 'todo', filePath: `/${wbs}.md` }];
+
+    test('a slow response from the previous folder cannot overwrite the new folder (success after switch)', async () => {
+        const slowA = deferred<{ data: unknown }>();
+        const fastB = deferred<{ data: unknown }>();
+        const store = new TaskStore(() => slowA.promise);
+        const unsubscribe = store.subscribe(() => {});
+
+        store.setListFn(() => fastB.promise);
+        fastB.resolve({ data: rows('0002') });
+        await fastB.promise;
+        await new Promise((r) => setTimeout(r, 0));
+        expect(store.getState().tasks).toEqual(rows('0002'));
+
+        // A's late success must be discarded, not committed over B.
+        slowA.resolve({ data: rows('0001') });
+        await slowA.promise;
+        await new Promise((r) => setTimeout(r, 0));
+        expect(store.getState().tasks).toEqual(rows('0002'));
+        unsubscribe();
+    });
+
+    test('a failing response from the previous folder cannot surface an error after the switch', async () => {
+        const slowA = deferred<{ data: unknown }>();
+        const fastB = deferred<{ data: unknown }>();
+        const store = new TaskStore(() => slowA.promise);
+        const unsubscribe = store.subscribe(() => {});
+
+        store.setListFn(() => fastB.promise);
+        fastB.resolve({ data: rows('0002') });
+        await fastB.promise;
+        await new Promise((r) => setTimeout(r, 0));
+
+        slowA.reject(new Error('folder A failed'));
+        await slowA.promise.catch(() => {});
+        await new Promise((r) => setTimeout(r, 0));
+        expect(store.getState().error).toBeNull();
+        expect(store.getState().tasks).toEqual(rows('0002'));
+        unsubscribe();
+    });
+
+    test('a new folder is not serialized behind a hung request from the old one', async () => {
+        const hung = deferred<{ data: unknown }>();
+        const store = new TaskStore(() => hung.promise);
+        const unsubscribe = store.subscribe(() => {});
+
+        let newFolderCalls = 0;
+        const listB = async () => {
+            newFolderCalls++;
+            return { data: rows('0002') };
+        };
+        store.setListFn(listB);
+        await new Promise((r) => setTimeout(r, 10));
+
+        expect(newFolderCalls).toBe(1);
+        expect(store.getState().tasks).toEqual(rows('0002'));
+        unsubscribe();
+    });
+
+    test('a disposed subscription cannot commit or emit', async () => {
+        const pendingA = deferred<{ data: unknown }>();
+        const store = new TaskStore(() => pendingA.promise);
+        let notifications = 0;
+        const unsubscribe = store.subscribe(() => {
+            notifications++;
+        });
+        const beforeUnsubscribe = notifications;
+        unsubscribe();
+
+        pendingA.resolve({ data: rows('0009') });
+        await pendingA.promise;
+        await new Promise((r) => setTimeout(r, 10));
+
+        expect(store.getState().tasks).toEqual([]);
+        expect(notifications).toBe(beforeUnsubscribe);
+    });
+
+    test('a burst of events coalesces behind the active request and the last change wins', async () => {
+        let release!: () => void;
+        let calls = 0;
+        const store = new TaskStore(async () => {
+            calls++;
+            const current = calls;
+            // First call blocks until the burst is queued; later calls resolve at once.
+            if (current === 1) await new Promise<void>((r) => (release = r));
+            return { data: rows(`000${current}`) };
+        });
+        const unsubscribe = store.subscribe(() => {});
+        const privates = store as unknown as { handleSSEMessage: () => void };
+
+        for (let i = 0; i < 100; i++) privates.handleSSEMessage();
+        expect(calls).toBe(1); // identical requests never overlap
+        release();
+        await new Promise((r) => setTimeout(r, 20));
+
+        // One trailing run after the burst: no per-event fan-out.
+        expect(calls).toBe(2);
+        expect(store.getState().tasks).toEqual(rows('0002'));
+        unsubscribe();
+    });
+});
+
 describe('TaskStore SSE callbacks', () => {
     test('handleSSEOpen sets connected=true and emits', () => {
         const listFn = async () => ({ data: [] });

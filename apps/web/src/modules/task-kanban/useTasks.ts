@@ -50,6 +50,13 @@ interface TaskState {
 
 type Listener = () => void;
 
+/** Identity of one refresh attempt: the folder source and subscription it speaks for. */
+interface RefreshToken {
+    generation: number;
+    lifetime: number;
+    promise: Promise<void>;
+}
+
 /**
  * Ref-counted task store with SSE stream + polling fallback.
  *
@@ -71,6 +78,14 @@ export class TaskStore {
     private eventSource: EventSource | undefined;
     private refCount = 0;
     private listFn: ListFn;
+    /** Bumped by `setListFn`: a response from an older folder can never commit. */
+    private sourceGeneration = 0;
+    /** Bumped on the first subscribe and on the final unsubscribe: a disposed subscription's response can never commit. */
+    private lifetime = 0;
+    /** The in-flight request for the current generation+lifetime; same-source refreshes coalesce behind it. */
+    private activeRequest: RefreshToken | null = null;
+    /** At most one trailing refresh is queued behind the active request. */
+    private pendingRefresh = false;
 
     constructor(listFn: ListFn = defaultListTasks) {
         this.listFn = listFn;
@@ -82,10 +97,15 @@ export class TaskStore {
      * Swap the list source (e.g. on folder change) without tearing down the SSE
      * connection or polling interval, then refresh from the new source. Keeping
      * the store stable avoids reconnect churn for an infrequent user action.
+     *
+     * The new source starts immediately: a hung request for the previous folder
+     * is abandoned, never awaited, and can never commit its result.
      */
     setListFn = (listFn: ListFn): void => {
         if (listFn === this.listFn) return;
         this.listFn = listFn;
+        this.sourceGeneration++;
+        this.pendingRefresh = false;
         void this.refresh();
     };
 
@@ -93,14 +113,22 @@ export class TaskStore {
         this.listeners.push(listener);
         this.refCount++;
         if (this.refCount === 1) {
+            // A fresh subscription owns its own lifetime: responses started for a
+            // previous subscriber set are discarded instead of reviving the store.
+            this.lifetime++;
             void this.refresh();
-            this.interval = setInterval(this.refresh, POLL_INTERVAL_MS);
-            this.connectSSE();
+            this.interval = setInterval(() => void this.refresh(), POLL_INTERVAL_MS);
+            void this.connectSSE();
         }
         return () => {
             this.listeners = this.listeners.filter((l) => l !== listener);
             this.refCount--;
             if (this.refCount === 0) {
+                // Invalidate in-flight work and any queued trailing refresh: a
+                // disposed subscription must not emit or overwrite visible state.
+                this.lifetime++;
+                this.pendingRefresh = false;
+                this.activeRequest = null;
                 if (this.interval) {
                     clearInterval(this.interval);
                     this.interval = undefined;
@@ -110,25 +138,63 @@ export class TaskStore {
         };
     };
 
-    private refresh = async () => {
-        try {
-            const r = await this.listFn();
-            // SAFETY: the oRPC list envelope's `data` is typed `unknown` by the JSONified
-            // transport, but the contract handler always returns a task array under `data`.
-            const tasks = (r.data as unknown as TaskSummary[]) ?? [];
-            this.state = {
-                tasks,
-                subtaskProgress: deriveSubtaskProgress(tasks),
-                loading: false,
-                error: null,
-                connected: this.state.connected,
-                lastSyncAt: Date.now(),
-            };
-        } catch (e) {
-            this.state = { ...this.state, loading: false, error: e as Error };
+    /** True while `token` still speaks for the current folder source and subscription. */
+    private isCurrent = (token: RefreshToken): boolean =>
+        token.generation === this.sourceGeneration && token.lifetime === this.lifetime;
+
+    /**
+     * Refresh ownership gate. A refresh for the current generation+lifetime
+     * coalesces behind the in-flight request and queues exactly one trailing run;
+     * a refresh after a folder change (or a new subscription) starts immediately.
+     */
+    private refresh = (): Promise<void> => {
+        const active = this.activeRequest;
+        if (active !== null && this.isCurrent(active)) {
+            this.pendingRefresh = true;
+            return active.promise;
         }
-        this.emit();
+        return this.startRequest();
     };
+
+    private startRequest(): Promise<void> {
+        const token: RefreshToken = {
+            generation: this.sourceGeneration,
+            lifetime: this.lifetime,
+            promise: Promise.resolve(),
+        };
+        const listFn = this.listFn;
+        token.promise = (async () => {
+            try {
+                const r = await listFn();
+                if (!this.isCurrent(token)) return;
+                // SAFETY: the oRPC list envelope's `data` is typed `unknown` by the JSONified
+                // transport, but the contract handler always returns a task array under `data`.
+                const tasks = (r.data as unknown as TaskSummary[]) ?? [];
+                this.state = {
+                    tasks,
+                    subtaskProgress: deriveSubtaskProgress(tasks),
+                    loading: false,
+                    error: null,
+                    connected: this.state.connected,
+                    lastSyncAt: Date.now(),
+                };
+            } catch (e) {
+                if (!this.isCurrent(token)) return;
+                this.state = { ...this.state, loading: false, error: e as Error };
+            }
+            this.emit();
+        })();
+        this.activeRequest = token;
+        void token.promise.finally(() => {
+            if (this.activeRequest === token) this.activeRequest = null;
+            const trailing = this.pendingRefresh;
+            this.pendingRefresh = false;
+            // The trailing run is a fresh look: it picks up whatever changed while
+            // the previous request was in flight, so the last event is never lost.
+            if (trailing && token.lifetime === this.lifetime) void this.refresh();
+        });
+        return token.promise;
+    }
 
     setTasks = (updater: TaskSummary[] | ((prev: TaskSummary[]) => TaskSummary[])) => {
         const next = typeof updater === 'function' ? updater(this.state.tasks) : updater;

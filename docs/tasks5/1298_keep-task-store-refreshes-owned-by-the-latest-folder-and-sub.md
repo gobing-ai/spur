@@ -1,10 +1,10 @@
 ---
 schema_version: 1
 name: Keep task-store refreshes owned by the latest folder and subscription
-status: todo
+status: done
 template: feature-impl
 created_at: 2026-11-05T20:01:23.914Z
-updated_at: "2026-11-05T20:37:46.830Z"
+updated_at: "2026-11-06T00:39:38.989Z"
 ac_altitude: task-local
 ac_numbering: task-local
 feature_id: F7
@@ -16,6 +16,8 @@ tags:
 estimate_hours: 6
 
 dependencies: []
+done_forced: "false"
+done_reason: unforced close; PASS artifact at .spur/memory/evidence/1298-verdict.json
 ---
 
 ## 1298. Keep task-store refreshes owned by the latest folder and subscription
@@ -42,8 +44,8 @@ Rubric: E6 D1 L2 C0 R1 = 10. Keep this candidate as one cohesive deliverable wit
 
 ### Requirements
 
-- [ ] R1. Task folder selection owns every committed response; implement the exact Given/When/Then contract below.
-- [ ] R2. Task refresh bursts retain eventual freshness; implement the exact Given/When/Then contract below.
+- [x] R1. Task folder selection owns every committed response; implement the exact Given/When/Then contract below.
+- [x] R2. Task refresh bursts retain eventual freshness; implement the exact Given/When/Then contract below.
 
 ### Acceptance Criteria
 
@@ -93,25 +95,71 @@ No production implementation occurs during this refinement. No new dependency, p
 
 ### Plan
 
-- [ ] 1. Write deferred A/B success/error, source-switch, final-unsubscribe and 100-event tests first.
-- [ ] 2. Add ownership checks before state writes/emits and coalesce only same-source refreshes.
-- [ ] 3. Verify a trailing event is never lost and source B can finish while A remains unresolved.
-- [ ] 4. Run the exact focused checks above, inspect the diff against R-items/feature AC, synchronize owners and record evidence through the task pipeline; do not fabricate completion.
+- [x] 1. Write deferred A/B success/error, source-switch, final-unsubscribe and 100-event tests first.
+- [x] 2. Add ownership checks before state writes/emits and coalesce only same-source refreshes.
+- [x] 3. Verify a trailing event is never lost and source B can finish while A remains unresolved.
+- [x] 4. Run the exact focused checks above, inspect the diff against R-items/feature AC, synchronize owners and record evidence through the task pipeline; do not fabricate completion.
 
 ### Solution
 
-<!-- Filled during implementation: file:line change map and concise rationale. -->
+| File | What changed and why |
+| --- | --- |
+| `apps/web/src/modules/task-kanban/useTasks.ts:54-59` | RefreshToken carries the folder generation and subscription lifetime one request speaks for. |
+| `apps/web/src/modules/task-kanban/useTasks.ts:96-113` | setListFn bumps sourceGeneration, clears the queued refresh, and starts the new source immediately so a hung old request is never awaited. |
+| `apps/web/src/modules/task-kanban/useTasks.ts:115-141` | subscribe opens a fresh lifetime on first subscriber and invalidates in-flight work plus timers on the final unsubscribe. |
+| `apps/web/src/modules/task-kanban/useTasks.ts:142-190` | refresh() coalesces same-token bursts behind the active promise with at most one trailing run; results and errors commit only while the token is current. |
+| `apps/web/tests/modules/task-kanban/useTasks.test.ts:211-299` | Deferred-promise regressions for late A success, late A error, hung A with a live B, a disposed subscription, and a 100-event burst. |
+
+Verification evidence:
+- `(cd apps/web && bun test tests/modules/task-kanban/useTasks.test.ts)` — 23 pass, 0 fail, including all five ownership regressions.
+- `bun run --filter @gobing-ai/spur-web typecheck` — exit 0.
+- Light gate: format, pre-rules, web typecheck and related tests PASS; post-check coverage provenance is deferred to the pipeline's canonical full gate.
 
 ### Testing
 
-<!-- Filled during verification: commands run, outcomes, coverage claim or N/A. -->
+**Pipeline verify results**
+
+- Verdict: PASS (from verdict artifact)
+
+| Requirement | Status | Evidence |
+|-------------|--------|----------|
+| R1 | MET | `apps/web/src/modules/task-kanban/useTasks.ts:96-190` commits only for the current sourceGeneration and lifetime; `apps/web/tests/modules/task-kanban/useTasks.test.ts:211-299` covers late success, late error, hung previous request and disposed subscription. |
+| R2 | MET | `apps/web/src/modules/task-kanban/useTasks.ts:150-190` coalesces same-token bursts with one trailing run; the burst test at `apps/web/tests/modules/task-kanban/useTasks.test.ts:300-327` proves two total calls for 100 events and the final state. |
+
+| Acceptance Criteria | Status | Evidence Type | Evidence |
+|---------------------|--------|---------------|----------|
+| AC1 — Task folder selection owns every committed response (req: R1) | MET | test | `apps/web/tests/modules/task-kanban/useTasks.test.ts:211-299` — deferred A/B success, A error, hung-A and disposed-subscription regressions; the file's 23 tests pass with 0 failures. |
+| AC2 — Task refresh bursts retain eventual freshness (req: R2) | MET | test | `apps/web/tests/modules/task-kanban/useTasks.test.ts:300-327` — 100 planning events produce one in-flight and one trailing call and the final state carries the last change. |
+- Coverage: N/A (verdict-based; verify pipeline does not measure code coverage)
 
 ### Review
 
-<!-- Filled during review: P1-P4 findings, residual risk, and final disposition. -->
+#### Review Report — 1298
+**Scope:** TaskStore refresh ownership in `useTasks.ts` plus five deferred-promise regressions
+**Dimensions:** functional, security, efficiency, correctness, usability, architecture
+**Verdict:** PASS
+**Confidence: MEDIUM**
+
+| # | Priority | Dimension | Finding | Location | Disposition |
+| --- | --- | --- | --- | --- | --- |
+| 1 | P4 (advisory) | architecture | Coalescing is keyed on the folder generation and subscription lifetime rather than on request identity, so a folder switch always starts immediately and can never queue behind a hung previous request. | `apps/web/src/modules/task-kanban/useTasks.ts:142-190` | ACCEPTED |
+
+##### Functional Traceability
+
+| Req | Status | Evidence |
+| --- | --- | --- |
+| R1 | MET | `apps/web/src/modules/task-kanban/useTasks.ts:96-190` gates every commit on the current generation and lifetime; late success, late error, hung-previous-request and disposed-subscription cases pass at `apps/web/tests/modules/task-kanban/useTasks.test.ts:339-389`. |
+| R2 | MET | `apps/web/src/modules/task-kanban/useTasks.ts:150-190` coalesces same-token refreshes behind the active promise with exactly one trailing run; the 100-event burst test proves 1 in-flight plus 1 trailing call and the final state. |
+
+**Next:** close through record/done; the accepted P4 records the ownership key choice.
 
 ### References
 
 <!-- Links to the parent feature, design docs, related tasks, or external references. -->
 
 ### History
+
+- 2026-11-06T00:34:53.274Z todo → wip (system)
+- 2026-11-06T00:39:11.260Z wip → testing (system)
+- 2026-11-06T00:39:38.980Z testing → done (system)
+
