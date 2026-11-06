@@ -1,10 +1,10 @@
 ---
 schema_version: 1
 name: Share planning-event invalidation across task and feature views
-status: todo
+status: done
 template: feature-impl
 created_at: 2026-11-05T20:01:23.915Z
-updated_at: "2026-11-05T20:37:53.064Z"
+updated_at: "2026-11-06T01:59:08.696Z"
 ac_altitude: task-local
 ac_numbering: task-local
 feature_id: F73
@@ -16,6 +16,8 @@ tags:
 estimate_hours: 6
 
 dependencies: ["1298"]
+done_forced: "false"
+done_reason: unforced close; PASS artifact at .spur/memory/evidence/1301-verdict.json
 ---
 
 ## 1301. Share planning-event invalidation across task and feature views
@@ -42,7 +44,7 @@ Rubric: E6 D1 L2 C0 R1 = 10. Keep this candidate as one cohesive deliverable wit
 
 ### Requirements
 
-- [ ] R1. Planning live updates share one owned subscription; implement the exact Given/When/Then contract below.
+- [x] R1. Planning live updates share one owned subscription; implement the exact Given/When/Then contract below.
 
 ### Acceptance Criteria
 
@@ -87,25 +89,100 @@ No production implementation occurs during this refinement. No new dependency, p
 
 ### Plan
 
-- [ ] 1. Write a rendered multi-consumer connection/ref-count/invalid-frame/action-progress proof first.
-- [ ] 2. Create the one subscription owner and migrate TaskStore, FeaturesShell and action progress without changing their data ownership.
-- [ ] 3. Test unmount, reconnection notification, irrelevant events and 100-event final freshness; record 60-second request/connection counts.
-- [ ] 4. Run the exact focused checks above, inspect the diff against R-items/feature AC, synchronize owners and record evidence through the task pipeline; do not fabricate completion.
+- [x] 1. Write a rendered multi-consumer connection/ref-count/invalid-frame/action-progress proof first.
+- [x] 2. Create the one subscription owner and migrate TaskStore, FeaturesShell and action progress without changing their data ownership.
+- [x] 3. Test unmount, reconnection notification, irrelevant events and 100-event final freshness; record 60-second request/connection counts.
+- [x] 4. Run the exact focused checks above, inspect the diff against R-items/feature AC, synchronize owners and record evidence through the task pipeline; do not fabricate completion.
+
+Implement-step evidence is in Solution. The light gate's post-check is blocked by sandbox Git object-write permissions; the parent pipeline owns the canonical full gate, Testing/Review and lifecycle completion.
 
 ### Solution
 
-<!-- Filled during implementation: file:line change map and concise rationale. -->
+| File | What changed and why |
+| --- | --- |
+| `apps/web/src/lib/planning-events.ts:20` | Browser-only lazy planning EventSource owner. Parses each frame once, drops malformed and non-planning frames, shares task/feature/queue-job events and connection notifications, and closes with the final listener. Separate registration identities and connection identity checks make unsubscribe idempotent and stale callbacks inert. |
+| `apps/web/src/modules/task-kanban/useTasks.ts:62-240` | TaskStore releases shared event/connection subscriptions instead of owning an EventSource. Preserves prerequisite 1298's source/lifetime refresh guards, one trailing refresh, 5s polling, connected and lastSyncAt behavior. |
+| `apps/web/src/modules/features/FeaturesShell.tsx:69` | Feature-list requests coalesce within the mounted generation, abort on teardown and discard superseded results/trailing work. Selected-detail nudges coalesce after the final list read; selection changes retain the subscription. |
+| `apps/web/src/modules/features/useFeatureActionProgress.ts:15-41` | Action progress consumes parsed shared planning frames while retaining the existing correlation reducer and feature-switch reset. |
+| `apps/web/tests/lib/planning-events.test.ts:17` | Proves parse-once/filtering, lazy ref-counted ownership, current/reconnected connection notifications, duplicate registration ownership, malformed input and late-callback cleanup. |
+| `apps/web/tests/modules/features/planning-live-views.test.ts:30-197` | Rendered task/feature/action journey proves one connection, 100-event trailing freshness, job matching, irrelevant process frames, selected-detail coalescing, cancellation and final-unmount cleanup. Writes repeatable JSON proof. |
+| `apps/web/tests/modules/task-kanban/useTasks.test.ts:326` | Existing direct-subscription tests now release their listeners, preventing test transport ownership from leaking into later rendered suites. |
+| `docs/03_ARCHITECTURE.md:165` and `docs/design/planning-record-contracts.md:322` | Synchronize the browser ownership mechanism and subscription contract; process/history/message streams retain their independent owners. |
+
+Implementation verification:
+- Red proof before production changes: rendered journey opened 3 streams instead of 1; the pending feature-list request overlapped after one event.
+- `(cd apps/web && bun test tests/lib/planning-events.test.ts tests/modules/features/planning-live-views.test.ts tests/modules/task-kanban/useTasks.test.ts tests/modules/features/useFeatureActionProgress.test.ts tests/modules/features/sse-helpers.test.ts --reporter=junit --reporter-outfile=../../.spur/run/1301/focused-tests.xml)` — 39 pass, 0 fail. JUnit evidence is `.spur/run/1301/focused-tests.xml`.
+- Controlled 60-second polling proof: 1 planning connection; 2 feature-list reads; 14 task-list reads (initial + trailing + twelve 5s polls); final rendered names Task version 100 / Feature version 100; closed after final unmount. Repeatable artifact: `.spur/run/1301/planning-live-proof.json`.
+- `bun run --filter @gobing-ai/spur-web typecheck` — PASS. Changed-path Biome — PASS.
+- `bun apps/cli/src/index.ts task gate 1301 light` — receipt FAIL: formatting, pre-check rules (51 rules), web typecheck and related tests PASS; post-check coverage provenance cannot capture the Git tree because sandbox permissions prohibit Git object writes (Operation not permitted). No bypass or gate weakening. The canonical full gate belongs to the parent pipeline.
+- Real Chromium probe unavailable: the browser process failed bootstrap_check_in with Permission denied (1100). The rendered happy-dom proofs above passed; no real-browser PASS is claimed. Scratch browser fixture/probe retained under `.spur/run/1301/` for retry outside this sandbox.
+- Commit unavailable under the same Git metadata/object write restriction; this implement step leaves a reviewable source diff and does not change task lifecycle status or author Testing/Review.
+- probe: not-applicable (no public surface changed: no CLI verb/flag, HTTP route, or plugin script entry changed).
+
+API evidence: existing repository consumer patterns plus https://developer.mozilla.org/en-US/docs/Web/API/EventSource and https://react.dev/reference/react/useEffect. Confidence: high for the focused rendered contract from passing tests/typechecking; real-browser execution and the canonical full gate remain unverified.
 
 ### Testing
 
-<!-- Filled during verification: commands run, outcomes, coverage claim or N/A. -->
+**Pipeline verify results**
+
+- Verdict: PASS (from verdict artifact)
+
+| Requirement | Status | Evidence |
+|-------------|--------|----------|
+| R1 | MET | `packages/app/src/services/planning-events.ts:20` owns one lazy stream; `packages/app/src/services/planning-events.ts:50` closes the final reference. `apps/web/src/modules/task-kanban/useTasks.ts:224`, `apps/web/src/modules/features/FeaturesShell.tsx:143` and `apps/web/src/modules/features/useFeatureActionProgress.ts:34` share it. Fresh focused check: 39 pass, 0 fail. |
+
+| Acceptance Criteria | Status | Evidence Type | Evidence |
+|---------------------|--------|---------------|----------|
+| AC1 — Planning live updates share one owned subscription (req: R1) | MET | test | Fresh passing tests at `apps/web/tests/modules/features/planning-live-views.test.ts:32` prove one stream across concurrent task/feature/action consumers, 100-event trailing freshness, connection notifications, ignored process frames and final-unmount cleanup. `apps/web/tests/modules/features/planning-live-views.test.ts:139` proves selected-detail coalescing; `apps/web/tests/modules/features/planning-live-views.test.ts:178` proves cancellation and discarded trailing work. `packages/app/tests/services/planning-events.test.ts:17` proves parse-once filtering, ref-counting and stale-callback rejection. `apps/web/src/lib/process-stream.ts:68` retains its independent sequence cursor and is unchanged in this diff. |
+- Coverage: N/A (verdict-based; verify pipeline does not measure code coverage)
 
 ### Review
 
-<!-- Filled during review: P1-P4 findings, residual risk, and final disposition. -->
+#### Review Report — 1301
+
+**Scope:** Working-tree fallback; no implementation commit tagged (1301). Reviewed four production files, four test/fixture files, two owning documents and the task record.
+**Dimensions:** functional, security, efficiency, correctness, usability, architecture.
+Confidence: MEDIUM
+
+##### Findings (ranked)
+
+| # | Priority | Dimension | Finding | Location | Disposition |
+| --- | --- | --- | --- | --- | --- |
+| 1 | P3 (minor) | correctness | Previous finding resolved: Solution now cites the browser subscription owner and its browser tests, matching the implementation claims at `apps/web/src/lib/planning-events.ts:20` and `apps/web/tests/lib/planning-events.test.ts:17`. | `docs/tasks5/1301_share-planning-event-invalidation-across-task-and-feature-vi.md:101`; `docs/tasks5/1301_share-planning-event-invalidation-across-task-and-feature-vi.md:105` | RESOLVED |
+| 2 | P4 (advisory) | architecture | No new P1–P3 findings across all six dimensions: shared parsing, listener ownership and late-callback guards remain centralized; query generations and trailing refreshes remain consumer-owned. Rendered tests exercise the task, feature and action consumers together. | `apps/web/src/lib/planning-events.ts:20`; `apps/web/src/modules/features/FeaturesShell.tsx:74`; `apps/web/tests/modules/features/planning-live-views.test.ts:32` | ACCEPTED |
+
+##### Verification
+
+- Fresh focused check, run inside apps/web: `bun test tests/lib/planning-events.test.ts tests/modules/features/planning-live-views.test.ts tests/modules/task-kanban/useTasks.test.ts tests/modules/features/useFeatureActionProgress.test.ts tests/modules/features/sse-helpers.test.ts --reporter=junit --reporter-outfile=../../.spur/run/1301/reviewer-focused-tests.xml` — exit 0; 39 pass, 0 fail, 147 assertions.
+- Fresh `bun run --filter @gobing-ai/spur-web typecheck` — exit 0. Fresh Biome check of all eight changed source/test files with `--error-on-warnings` — exit 0; no fixes applied.
+- Repeatable rendered proof: `.spur/run/1301/planning-live-proof.json:1` records one connection, two feature reads, fourteen task reads over a controlled 60-second polling window, version-100 final state and closure after final unmount.
+- Existing pipeline receipt `.spur/run/1301-check-receipt.json:1` records full-tier PASS for this run. Fresh `task gate 1301 status` returned reuse=false because sandbox permissions prevented Git tree capture. Receipt reuse is unconfirmed; the reviewer did not rerun the full gate.
+- Design conformance: shared browser transport, filtering, connection notifications, last-listener cleanup, task source/lifetime ownership, feature trailing reload and progress correlation match the frozen design. Process-stream implementation is unchanged.
+- Limits: rendered proofs use happy-dom and a fake transport; polling time is controlled. No fresh real-browser proof or feature-wide completion claim. `git diff --check` reports an extra blank line at the task file's EOF; source/test formatting passes.
+
+**Next:** Return this certified review to the pipeline; preserve its remaining gate and lifecycle guards.
+
+##### Functional Traceability
+
+| Req | Status | Evidence |
+| --- | --- | --- |
+| R1 | MET | `apps/web/src/lib/planning-events.ts:20` owns one lazy stream; `apps/web/src/lib/planning-events.ts:50` closes the final reference. `apps/web/src/modules/task-kanban/useTasks.ts:224`, `apps/web/src/modules/features/FeaturesShell.tsx:143` and `apps/web/src/modules/features/useFeatureActionProgress.ts:34` share it. Fresh focused check: 39 pass, 0 fail. |
+
+##### Acceptance Criteria Verification
+
+| AC | Status | Evidence Type | Evidence |
+| --- | --- | --- | --- |
+| AC1 — Planning live updates share one owned subscription (req: R1) | MET | test+static-ref | Fresh passing tests at `apps/web/tests/modules/features/planning-live-views.test.ts:32` prove one stream across concurrent task/feature/action consumers, 100-event trailing freshness, connection notifications, ignored process frames and final-unmount cleanup. `apps/web/tests/modules/features/planning-live-views.test.ts:139` proves selected-detail coalescing; `apps/web/tests/modules/features/planning-live-views.test.ts:178` proves cancellation and discarded trailing work. `apps/web/tests/lib/planning-events.test.ts:17` proves parse-once filtering, ref-counting and stale-callback rejection. `apps/web/src/lib/process-stream.ts:68` retains its independent sequence cursor and is unchanged in this diff. |
+
+Verdict: PASS
 
 ### References
 
 <!-- Links to the parent feature, design docs, related tasks, or external references. -->
 
 ### History
+
+- 2026-11-06T01:45:05.390Z todo → wip (system)
+- 2026-11-06T01:59:06.727Z wip → testing (system)
+- 2026-11-06T01:59:08.692Z testing → done (system)
+

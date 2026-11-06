@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from 'react';
-import { resolveApiUrl } from '../../lib/rpc-client';
+import { subscribePlanningEvents } from '../../lib/planning-events';
 import {
     type FeatureActionProgressState,
     INITIAL_PROGRESS_STATE,
@@ -7,13 +7,11 @@ import {
     reduceFeatureActionProgress,
 } from './sse-helpers';
 
-const getSseUrl = () => `${resolveApiUrl()}/events/planning`;
-
 /**
  * Hook that tracks feature action job progress via board SSE events.
  *
  * Correlates `queue.job.*` events by `runId` and updates status cleanly.
- * Tears down EventSource subscription on unmount (R4).
+ * Releases its shared planning subscription on unmount (R4).
  */
 export function useFeatureActionProgress(featureId: string) {
     const [progress, setProgress] = useState<FeatureActionProgressState>(INITIAL_PROGRESS_STATE);
@@ -34,23 +32,11 @@ export function useFeatureActionProgress(featureId: string) {
     }, []);
 
     useEffect(() => {
-        if (typeof EventSource === 'undefined' || !progress.runId) return;
-
-        const es = new EventSource(getSseUrl());
-        es.onmessage = (frame) => {
-            try {
-                const raw = JSON.parse(frame.data) as { eventName?: string; payload?: unknown };
-                const name = raw.eventName;
-                if (!isFeaturesSseEvent(name) || !name) return;
-                setProgress((prev) => reduceFeatureActionProgress(prev, name, raw.payload));
-            } catch {
-                // Ignore SSE JSON parse errors
-            }
-        };
-
-        return () => {
-            es.close();
-        };
+        if (!progress.runId) return;
+        return subscribePlanningEvents(({ eventName, payload }) => {
+            if (!isFeaturesSseEvent(eventName)) return;
+            setProgress((prev) => reduceFeatureActionProgress(prev, eventName, payload));
+        });
     }, [progress.runId]);
 
     return {

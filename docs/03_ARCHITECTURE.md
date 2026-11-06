@@ -2,10 +2,10 @@
 doc: 03_ARCHITECTURE
 owns: HOW — module boundaries, data flow, runtime model, invariants
 authority: derived
-version: 1.75.0
+version: 1.77.0
 derived_from: [01_PRD, 00_ADR]
 owner: Robin Min
-updated_at: 2026-10-26
+updated_at: 2026-11-05
 read_before: cross-module, seam, or schema work
 edit_rules: 99 §6.4
 sync: [T1]
@@ -161,6 +161,20 @@ The server/web tier is a local-first planning and operations board. Its bootstra
 `src/server-config.ts` is shared and runtime-agnostic. `src/bootstrap.ts` is the Bun composition
 root; `src/worker-app.ts` is the Worker-safe HTTP root. The Worker graph must not import
 `node:*`, `bun:*`, local filesystem, SQLite, scheduler, queue, or process-control implementations.
+
+Board task stores, the feature shell and feature action progress share the browser-only planning
+subscription owner in `apps/web/src/lib/planning-events.ts`. It lazily opens one EventSource and
+releases it after the last event or connection listener leaves. Task stores retain folder/lifetime
+ownership, trailing refreshes and 5s polling; the feature shell coalesces list/detail invalidation
+within its mounted generation. Process/history and message-plane streams retain their own owners.
+The listener contract is in [planning records](design/planning-record-contracts.md#74-section-status-matrix--planning-event-catalog).
+
+Daily readiness is an application read projection over a fresh operation-scoped planning snapshot,
+the existing target-todo task checker and persisted run links. A snapshot-backed filesystem view
+keeps checker corpus reads on those same bytes. Incomplete inputs suppress ready actions.
+Tasks and feature detail panels consume its additive contracted HTTP read and the same planning
+subscription; commands are displayed without dispatch. Shape and failure behavior live in
+[planning records](design/planning-record-contracts.md#daily-readiness-read).
 
 ### Desktop shell (`apps/desktop`)
 

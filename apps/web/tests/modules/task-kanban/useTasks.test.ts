@@ -327,12 +327,13 @@ describe('TaskStore SSE callbacks', () => {
         const listFn = async () => ({ data: [] });
         const store = new TaskStore(listFn);
         const result = { notified: false };
-        store.subscribe(() => {
+        const unsubscribe = store.subscribe(() => {
             result.notified = true;
         });
         privates(store).handleSSEOpen();
         expect(store.getState().connected).toBe(true);
         expect(result.notified).toBe(true);
+        unsubscribe();
     });
 
     test('handleSSEMessage triggers refresh', async () => {
@@ -353,12 +354,13 @@ describe('TaskStore SSE callbacks', () => {
         const listFn = async () => ({ data: [] });
         const store = new TaskStore(listFn);
         const result = { notified: false };
-        store.subscribe(() => {
+        const unsubscribe = store.subscribe(() => {
             result.notified = true;
         });
         privates(store).handleSSEError();
         expect(store.getState().connected).toBe(false);
         expect(result.notified).toBe(true);
+        unsubscribe();
     });
 
     test('setListFn swaps the source and refreshes; same fn is a no-op', async () => {

@@ -3,14 +3,19 @@ import { Button } from '@/ui';
 import ModuleIcon from '../../components/ModuleIcon';
 import { loadFeatures } from '../../lib/feature-client';
 import type { FeatureSummary } from '../../lib/feature-types';
-import { resolveApiUrl } from '../../lib/rpc-client';
+import { subscribePlanningEvents } from '../../lib/planning-events';
 import FeatureDetail from './FeatureDetail';
 import FeatureTree, { groupFeaturesByParent } from './FeatureTree';
 import NewFeaturePanel from './NewFeaturePanel';
 import { isFeaturesSseEvent } from './sse-helpers';
 import { FEATURE_STATUSES, FeatureStatusIcon } from './status-icons';
 
-const sseUrl = () => `${resolveApiUrl()}/events/planning`;
+interface FeatureLoadScope {
+    controller: AbortController;
+    active: Promise<void> | null;
+    pending: boolean;
+    refreshDetail: boolean;
+}
 
 function FilterIcon({ className = 'w-3.5 h-3.5' }: { className?: string }) {
     return (
@@ -61,23 +66,58 @@ export default function FeaturesShell() {
      * filter hides them (task 0525 R5).
      */
     const childrenByParent = useMemo(() => groupFeaturesByParent(features ?? []), [features]);
+    const selectedIdRef = useRef(selectedId);
+    useEffect(() => {
+        selectedIdRef.current = selectedId;
+    }, [selectedId]);
 
-    const load = useCallback(async (signal?: AbortSignal) => {
-        try {
-            const data = await loadFeatures(signal);
-            setFeatures(data);
-            setError(null);
-        } catch (err) {
-            if (signal?.aborted) return;
-            setError(err instanceof Error ? err.message : String(err));
+    const loadScope = useRef<FeatureLoadScope | null>(null);
+    const load = useCallback((): Promise<void> => {
+        const scope = loadScope.current;
+        if (!scope) return Promise.resolve();
+        if (scope.active) {
+            scope.pending = true;
+            return scope.active;
         }
+        // Keep one request in flight and one trailing refresh in this mounted generation.
+        scope.active = (async () => {
+            do {
+                scope.pending = false;
+                try {
+                    const data = await loadFeatures(scope.controller.signal);
+                    if (loadScope.current !== scope) return;
+                    setFeatures(data);
+                    setError(null);
+                } catch (err) {
+                    if (loadScope.current !== scope || scope.controller.signal.aborted) return;
+                    setError(err instanceof Error ? err.message : String(err));
+                }
+            } while (scope.pending);
+            // Detail is refreshed once after the final list read, not once per frame.
+            if (scope.refreshDetail) {
+                scope.refreshDetail = false;
+                setDetailRefreshKey((n) => n + 1);
+            }
+        })().finally(() => {
+            scope.active = null;
+        });
+        return scope.active;
     }, []);
 
     // Initial load.
     useEffect(() => {
-        const controller = new AbortController();
-        void load(controller.signal);
-        return () => controller.abort();
+        const scope: FeatureLoadScope = {
+            controller: new AbortController(),
+            active: null,
+            pending: false,
+            refreshDetail: false,
+        };
+        loadScope.current = scope;
+        void load();
+        return () => {
+            loadScope.current = null;
+            scope.controller.abort();
+        };
     }, [load]);
 
     // Dismiss the status-filter menu on outside click or Escape.
@@ -101,30 +141,22 @@ export default function FeaturesShell() {
 
     // Live tail: SSE-driven refetch on feature.* and queue.job.* events.
     useEffect(() => {
-        if (typeof EventSource === 'undefined') return;
-        const es = new EventSource(sseUrl());
-        es.onmessage = (frame) => {
-            try {
-                const raw: unknown = JSON.parse(frame.data);
-                const name = (raw as { eventName?: string }).eventName;
-                if (!isFeaturesSseEvent(name)) return;
-                void load();
-                // Also refresh the detail if a feature is selected and its data may have
-                // changed. `featureId` is unchanged in that case, so the panel needs an
-                // explicit nudge — fetching here instead would just discard the result.
-                // FeaturesShell keeps these three planning-event refresh paths intact (F841 R6)
-                if (
-                    selectedId &&
-                    (name === 'feature.updated' || name === 'feature.transitioned' || name === 'queue.job.completed')
-                ) {
-                    setDetailRefreshKey((n) => n + 1);
-                }
-            } catch {
-                // Malformed frame — drop silently.
+        return subscribePlanningEvents(({ eventName: name }) => {
+            if (!isFeaturesSseEvent(name)) return;
+            // Also refresh the detail if a feature is selected and its data may have
+            // changed. `featureId` is unchanged in that case, so the panel needs an
+            // explicit nudge — fetching here instead would just discard the result.
+            // FeaturesShell keeps these three planning-event refresh paths intact (F841 R6)
+            if (
+                selectedIdRef.current &&
+                (name === 'feature.updated' || name === 'feature.transitioned' || name === 'queue.job.completed')
+            ) {
+                const scope = loadScope.current;
+                if (scope) scope.refreshDetail = true;
             }
-        };
-        return () => es.close();
-    }, [load, selectedId]);
+            void load();
+        });
+    }, [load]);
 
     if (error) {
         return (

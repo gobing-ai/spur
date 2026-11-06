@@ -3,7 +3,7 @@ kind: design
 title: "Planning records and lifecycle contracts"
 status: implemented
 created_at: 2026-09-09
-updated_at: 2026-10-15
+updated_at: 2026-11-05
 related: ["1055", "1061", "1089", "1109"]
 tags: [contract, planning]
 ---
@@ -17,6 +17,33 @@ Original section numbers remain stable; unqualified section references resolve t
 
 Planning commands, records and lifecycle contracts. The historical section title is retained
 for existing references. Delivery state lives in the [feature index](../features/INDEX.md).
+
+### Daily readiness read
+
+`task.readiness` is the additive `GET /api/tasks/readiness` procedure, with an optional `folder`
+query matching a task folder relative to the project or absolute. Task list DTOs are unchanged.
+Its success envelope is `{ok:true,data:{tasks,pausedRuns,diagnostics}}`:
+
+- `tasks`: `{wbs,state,reasons,nextAction}` rows, ordered by WBS/path. State is `ready`, `blocked`,
+  or `not-startable`; reasons carry `{code,message,relatedWbs?}`. Only `todo` records with all
+  dependencies uniquely resolved to `done`, no target-todo checker errors and complete inputs are ready.
+  Other lifecycle states cannot start; blocked status and missing/deprecated/unfinished dependencies
+  explain why. The existing `TaskCheckService` supplies structural and transitive policy findings.
+- `nextAction`: only ready rows carry `{kind:"run-task",wbs,command:"/sp:dev-run <wbs>"}`.
+  Board panels display this command without executing it.
+- `pausedRuns`: `{runId,wbs}` links to existing run detail reads, scoped to the displayed tasks.
+- `diagnostics`: `{path,message}` for duplicate/unreadable inputs, unavailable policy or failed/bounded
+  run reads, including links whose run records are missing. A full 200-link per-task run page cannot
+  establish completeness. Any diagnostic suppresses
+  ready actions; a failed snapshot read returns diagnostics with no task rows, never a partial ready set.
+
+Each request builds one snapshot across configured task folders before applying the display filter;
+cross-folder dependencies retain their meaning. The checker reads its corpus bytes from that snapshot,
+while evidence files remain on the existing filesystem seam. No snapshot is retained after the read.
+Native disclosure panels in TasksShell and FeatureDetail use the shared planning subscription,
+coalesce in-flight invalidations, abort on unmount/folder change, discard old responses and remove
+previous ready actions while refreshing. FeatureDetail limits rows to its existing linked-task set.
+No foreground model call, new command verb, or automatic action is involved.
 
 <a id="71-spur-task-commands"></a>
 
@@ -318,6 +345,17 @@ events. All planning events are emitted by `PlanningWriteService` (design §7) a
 `planning_events` table (append-only ledger, rehydratable from `## History`). SSOT for the names is
 the code: `packages/app/src/services/planning-write-service.ts` (`PlanningEventName` union) and
 `packages/app/src/services/planning-events.ts` (`PlanningEventMap`). Document, never invent.
+
+**Board planning subscriptions.** Browser consumers use `subscribePlanningEvents(listener)` and
+`subscribePlanningConnection(listener)` from `apps/web/src/lib/planning-events.ts`; both return an
+idempotent unsubscribe. One lazy EventSource at `resolveApiUrl() + /events/planning` parses each
+frame once, drops malformed/non-planning frames and delivers `{ eventName, payload }` only for
+`task.*`, `feature.*` and `queue.job.*`. Connection listeners receive the current boolean on
+subscription and subsequent open/error notifications. Both listener kinds retain the connection;
+the last unsubscribe closes it and invalidates callbacks from that connection. Query consumers
+own invalidation: TaskStore retains its trailing refresh and polling fallback, FeaturesShell
+coalesces same-generation list reloads and selected-detail nudges, and action progress retains
+job/run-ID correlation. Other stream domains and their cursors are independent.
 
 | Event                  | Fired when                                                                             |
 | ---------------------- | -------------------------------------------------------------------------------------- |

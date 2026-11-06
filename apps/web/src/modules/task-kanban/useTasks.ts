@@ -1,10 +1,10 @@
 import { createContext, useContext, useEffect, useRef, useSyncExternalStore } from 'react';
-import { api, resolveApiUrl } from '../../lib/rpc-client';
+import { subscribePlanningConnection, subscribePlanningEvents } from '../../lib/planning-events';
+import { api } from '../../lib/rpc-client';
 import type { TaskSummary } from './types';
 
 const POLL_INTERVAL_MS = 5_000;
 type ListFn = (query?: { folder?: string; status?: string; parent?: string }) => Promise<{ data: unknown }>;
-const sseUrl = () => `${resolveApiUrl()}/events/planning`;
 const defaultListTasks: ListFn = async (query = {}) => api.task.list(query);
 
 /** Pure refresh factory — exported for unit testing without mocking the oRPC client. */
@@ -60,9 +60,9 @@ interface RefreshToken {
 /**
  * Ref-counted task store with SSE stream + polling fallback.
  *
- * On first subscriber: opens an EventSource against `/api/events/planning`,
+ * On first subscriber: subscribes to the shared `/api/events/planning` source,
  * starts a 5s polling interval as a safety net, and triggers an initial refresh.
- * On last unsubscribe: closes the SSE connection and clears the interval.
+ * On last unsubscribe: releases its planning listeners and clears the interval.
  */
 export class TaskStore {
     private state: TaskState = {
@@ -75,7 +75,8 @@ export class TaskStore {
     };
     private listeners: Listener[] = [];
     private interval: ReturnType<typeof setInterval> | undefined;
-    private eventSource: EventSource | undefined;
+    private unsubscribeEvents: (() => void) | undefined;
+    private unsubscribeConnection: (() => void) | undefined;
     private refCount = 0;
     private listFn: ListFn;
     /** Bumped by `setListFn`: a response from an older folder can never commit. */
@@ -118,7 +119,7 @@ export class TaskStore {
             this.lifetime++;
             void this.refresh();
             this.interval = setInterval(() => void this.refresh(), POLL_INTERVAL_MS);
-            void this.connectSSE();
+            this.connectSSE();
         }
         return () => {
             this.listeners = this.listeners.filter((l) => l !== listener);
@@ -220,26 +221,21 @@ export class TaskStore {
         this.state = { ...this.state, connected: false };
         this.emit();
     };
-    private async connectSSE(): Promise<void> {
-        if (this.eventSource) return;
-        if (typeof EventSource === 'undefined') return;
-
-        const es = new EventSource(sseUrl());
-        this.eventSource = es;
-
-        es.onopen = this.handleSSEOpen;
-
-        es.onmessage = this.handleSSEMessage;
-
-        es.onerror = this.handleSSEError;
+    private connectSSE(): void {
+        if (this.unsubscribeEvents) return;
+        this.unsubscribeEvents = subscribePlanningEvents(this.handleSSEMessage);
+        this.unsubscribeConnection = subscribePlanningConnection((connected) => {
+            if (connected) this.handleSSEOpen();
+            else this.handleSSEError();
+        });
     }
 
     private disconnectSSE(): void {
-        if (this.eventSource) {
-            this.eventSource.close();
-            this.eventSource = undefined;
-            this.state = { ...this.state, connected: false };
-        }
+        this.unsubscribeEvents?.();
+        this.unsubscribeConnection?.();
+        this.unsubscribeEvents = undefined;
+        this.unsubscribeConnection = undefined;
+        this.state = { ...this.state, connected: false };
     }
 
     private emit(): void {
