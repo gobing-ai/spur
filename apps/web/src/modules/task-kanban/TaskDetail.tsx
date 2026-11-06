@@ -4,6 +4,7 @@ import { Badge, Button, Checkbox, Loading, MDEditor, Select } from '@/ui';
 import { markdownPreviewSafety } from '../../lib/markdown-safety';
 import { api } from '../../lib/rpc-client';
 import MarkdownBody from './MarkdownBody';
+import { TaskRunEvidenceLink } from './TaskRunEvidenceLink';
 import { TASK_ACTION_LABELS, TASK_FSM_TRANSITIONS, TASK_STATUS_ACTIONS } from './task-actions';
 import type { TaskSummary } from './types';
 import { useTasks } from './useTasks';
@@ -227,6 +228,7 @@ export default function TaskDetail({ task, onTransition, onClose }: Props) {
                         >
                             {taskStatusIcon(task.status)} {task.status}
                         </span>
+                        <TaskRunEvidenceLink wbs={task.wbs} />
                         {task.priority && (
                             <span className="px-2 py-0.5 rounded-full bg-spur-surface-2 border border-spur-border text-xs text-spur-text-muted">
                                 {task.priority}

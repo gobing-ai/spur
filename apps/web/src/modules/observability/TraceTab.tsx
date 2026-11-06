@@ -1,8 +1,18 @@
 import { type WorkflowProgressProjectionDto, workflowProgressProjectionSchema } from '@gobing-ai/spur-contracts';
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { type ReactNode, useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useSearchParams } from 'react-router';
 import { Badge, Button, Card, CardBody, Loading } from '@/ui';
 import { fetchWithTimeout, resolveApiUrl } from '../../lib/rpc-client';
 import { timeRangeSince } from './ObservabilityFilters';
+import {
+    buildRecovery,
+    type EvidenceStatus,
+    parseLinkedRuns,
+    type RecoveryAction,
+    type RecoveryView,
+    redactForDisplay,
+    selectCause,
+} from './run-recovery';
 import { CopyValueButton, formatDuration } from './SystemEventsTab';
 import type { ObservabilityNavIntent, ObservabilityTabProps } from './tabs';
 
@@ -219,8 +229,41 @@ function runDuration(run: TraceRunEntry): string {
 
 interface RunDetailState {
     projection: WorkflowProgressProjectionDto | null;
+    actions: RecoveryAction[];
+    recordOutcome: RunRecordOutcome | null;
+    recordStatus: EvidenceStatus;
+    recordReason?: string;
     error: string | null;
     loading: boolean;
+}
+
+/** Action rows from `GET /api/runs/:runId`. Malformed rows are skipped. */
+function parseDetailActions(body: unknown): RecoveryAction[] {
+    if (body === null || typeof body !== 'object') return [];
+    const actions = (body as { actions?: unknown }).actions;
+    if (!Array.isArray(actions)) return [];
+    const parsed: RecoveryAction[] = [];
+    for (const row of actions) {
+        if (row === null || typeof row !== 'object') continue;
+        const record = row as Record<string, unknown>;
+        if (typeof record.node !== 'string' || typeof record.status !== 'string') continue;
+        parsed.push({
+            node: record.node,
+            status: record.status,
+            resultSummary: record.resultSummary ?? null,
+        });
+    }
+    return parsed;
+}
+
+/** Map a run-record read onto the evidence vocabulary. A failed read is `unread`, not `missing`. */
+function evidenceFromRecord(
+    outcome: RunRecordOutcome | null,
+    failed: boolean,
+): { status: EvidenceStatus; reason?: string } {
+    if (failed || outcome === null) return { status: 'unread' };
+    if (outcome.status === 'incomplete') return { status: 'incomplete', reason: outcome.reason };
+    return { status: outcome.status };
 }
 
 // ---------------------------------------------------------------------------
@@ -232,12 +275,18 @@ interface RunDetailState {
  * detail read from the shared `GET /api/runs/:runId/progress` projection.
  *
  * The shell owns `timeRange`; this tab only reads it. Filters are server-side so
- * paging stays consistent (E72 R2).
+ * paging stays consistent (E72 R2). A `wbs` search param switches the list to
+ * `GET /api/runs/by-wbs/:wbs` so the time window cannot hide linked runs (1307).
  */
 export default function TraceTab({ timeRange, onNavigate }: ObservabilityTabProps) {
+    const [params] = useSearchParams();
+    const linkedParam = params.get('wbs');
+    const linkedWbs = linkedParam !== null && linkedParam !== '' ? linkedParam : null;
     const [statusFilter, setStatusFilter] = useState<TraceStatusFilter>('all');
     const [workflowFilter, setWorkflowFilter] = useState('');
     const [runs, setRuns] = useState<TraceRunEntry[]>([]);
+    const [rejectedIds, setRejectedIds] = useState<string[]>([]);
+    const [taskStatus, setTaskStatus] = useState<string | null>(null);
     const [nextCursor, setNextCursor] = useState<string | null>(null);
     const [hasMore, setHasMore] = useState(false);
     const [listStatus, setListStatus] = useState<'loading' | 'ready' | 'error'>('loading');
@@ -257,10 +306,10 @@ export default function TraceTab({ timeRange, onNavigate }: ObservabilityTabProp
         [statusFilter, workflowFilter, since],
     );
 
-    // First page. Re-running it resets paging, so the effect keys on this
-    // callback: every filter and the shell `timeRange` change its identity
-    // (E72 R2), and Retry invokes it again after a failed fetch.
-    const loadFirstPage = useCallback(() => {
+    // First page of the time-windowed list. Re-running it resets paging, so the
+    // effect keys on this callback: every filter and the shell `timeRange` change
+    // its identity (E72 R2), and Retry invokes it again after a failed fetch.
+    const loadWindow = useCallback(() => {
         listAbortRef.current?.abort();
         const controller = new AbortController();
         listAbortRef.current = controller;
@@ -275,6 +324,8 @@ export default function TraceTab({ timeRange, onNavigate }: ObservabilityTabProp
                 if (!body) throw new Error('runs response failed schema validation');
                 if (controller.signal.aborted) return;
                 setRuns(body.runs);
+                setRejectedIds([]);
+                setTaskStatus(null);
                 setNextCursor(body.nextCursor);
                 setHasMore(body.hasMore);
                 setListStatus('ready');
@@ -286,10 +337,69 @@ export default function TraceTab({ timeRange, onNavigate }: ObservabilityTabProp
         })();
     }, [queryFilters]);
 
+    // Linked runs ignore the shell time window. Status and workflow stay client-side.
+    const loadLinked = useCallback(() => {
+        if (linkedWbs === null) return;
+        listAbortRef.current?.abort();
+        const controller = new AbortController();
+        listAbortRef.current = controller;
+        setListStatus('loading');
+        setListError(null);
+        const wbs = linkedWbs;
+        void (async () => {
+            try {
+                const base = resolveApiUrl();
+                const listUrl = `${base}/runs/by-wbs/${encodeURIComponent(wbs)}?limit=200`;
+                const taskUrl = /^\d{4}$/.test(wbs) ? `${base}/tasks/${wbs}` : null;
+                const [res, taskRes] = await Promise.all([
+                    fetchWithTimeout(new Request(listUrl, { signal: controller.signal })),
+                    taskUrl === null
+                        ? Promise.resolve(null)
+                        : fetchWithTimeout(new Request(taskUrl, { signal: controller.signal })).catch(() => null),
+                ]);
+                if (!res.ok) throw new Error(`runs fetch failed: ${res.status}`);
+                const parsed = parseLinkedRuns(await res.json());
+                if (!parsed) throw new Error('runs response failed schema validation');
+                if (controller.signal.aborted) return;
+                let status: string | null = null;
+                if (taskRes?.ok) {
+                    try {
+                        const body = (await taskRes.json()) as { data?: { status?: unknown } };
+                        status = typeof body.data?.status === 'string' ? body.data.status : null;
+                    } catch {
+                        status = null;
+                    }
+                }
+                setRuns(parsed.runs);
+                setRejectedIds(parsed.rejectedIds);
+                setTaskStatus(status);
+                setNextCursor(null);
+                setHasMore(false);
+                setListStatus('ready');
+            } catch (err) {
+                if (controller.signal.aborted) return;
+                setListError(err instanceof Error ? err.message : String(err));
+                setListStatus('error');
+            }
+        })();
+    }, [linkedWbs]);
+
+    const reloadList = useCallback(() => {
+        if (linkedWbs !== null) loadLinked();
+        else loadWindow();
+    }, [linkedWbs, loadLinked, loadWindow]);
+
     useEffect(() => {
-        loadFirstPage();
+        if (linkedWbs !== null) return;
+        loadWindow();
         return () => listAbortRef.current?.abort();
-    }, [loadFirstPage]);
+    }, [linkedWbs, loadWindow]);
+
+    useEffect(() => {
+        if (linkedWbs === null) return;
+        loadLinked();
+        return () => listAbortRef.current?.abort();
+    }, [linkedWbs, loadLinked]);
 
     // Load more: same filters, opaque keyset cursor (E72 R2).
     const loadMore = useCallback(async () => {
@@ -326,7 +436,14 @@ export default function TraceTab({ timeRange, onNavigate }: ObservabilityTabProp
 
             setDetailCache((prev) => {
                 const next = new Map(prev);
-                next.set(runId, { projection: null, error: null, loading: true });
+                next.set(runId, {
+                    projection: null,
+                    actions: [],
+                    recordOutcome: null,
+                    recordStatus: 'unread',
+                    error: null,
+                    loading: true,
+                });
                 return next;
             });
 
@@ -338,29 +455,62 @@ export default function TraceTab({ timeRange, onNavigate }: ObservabilityTabProp
                         return next;
                     });
                 };
+                const base = resolveApiUrl();
                 try {
-                    const res = await fetchWithTimeout(new Request(`${resolveApiUrl()}/runs/${runId}/progress`));
-                    if (res.status === 404) {
-                        store({ projection: null, error: 'Run not found', loading: false });
-                        return;
+                    // Progress, detail, and the run record are read together so expired
+                    // scratch is visible on expand. None of these routes mutate.
+                    const [progressRes, detailRes, recordRes] = await Promise.all([
+                        fetchWithTimeout(new Request(`${base}/runs/${runId}/progress`)),
+                        fetchWithTimeout(new Request(`${base}/runs/${runId}`)),
+                        fetchWithTimeout(new Request(`${base}/observability/run-record/${runId}`)),
+                    ]);
+                    let projection: WorkflowProgressProjectionDto | null = null;
+                    let error: string | null = null;
+                    if (progressRes.status === 404) error = 'Run not found';
+                    else if (!progressRes.ok) error = `run progress fetch failed: ${progressRes.status}`;
+                    else {
+                        try {
+                            const parsed = workflowProgressProjectionSchema.safeParse(await progressRes.json());
+                            if (!parsed.success) error = 'progress response failed schema validation';
+                            else projection = parsed.data;
+                        } catch (err) {
+                            error = err instanceof Error ? err.message : String(err);
+                        }
                     }
-                    if (!res.ok) {
-                        store({ projection: null, error: `run progress fetch failed: ${res.status}`, loading: false });
-                        return;
+                    let actions: RecoveryAction[] = [];
+                    if (detailRes.ok) {
+                        try {
+                            actions = parseDetailActions(await detailRes.json());
+                        } catch {
+                            actions = [];
+                        }
                     }
-                    const parsed = workflowProgressProjectionSchema.safeParse(await res.json());
-                    if (!parsed.success) {
-                        store({
-                            projection: null,
-                            error: 'progress response failed schema validation',
-                            loading: false,
-                        });
-                        return;
+                    let recordOutcome: RunRecordOutcome | null = null;
+                    let recordFailed = true;
+                    if (recordRes.ok) {
+                        try {
+                            recordOutcome = parseRunRecordOutcome(await recordRes.json());
+                            recordFailed = recordOutcome === null;
+                        } catch {
+                            recordFailed = true;
+                        }
                     }
-                    store({ projection: parsed.data, error: null, loading: false });
+                    const evidence = evidenceFromRecord(recordOutcome, recordFailed);
+                    store({
+                        projection,
+                        actions,
+                        recordOutcome,
+                        recordStatus: evidence.status,
+                        recordReason: evidence.reason,
+                        error,
+                        loading: false,
+                    });
                 } catch (err) {
                     store({
                         projection: null,
+                        actions: [],
+                        recordOutcome: null,
+                        recordStatus: 'unread',
                         error: err instanceof Error ? err.message : String(err),
                         loading: false,
                     });
@@ -382,7 +532,16 @@ export default function TraceTab({ timeRange, onNavigate }: ObservabilityTabProp
         return options;
     }, [runs, workflowFilter]);
 
-    const expandedRun = runs.find((run) => run.id === expandedRunId) ?? null;
+    const visibleRuns = useMemo(() => {
+        if (linkedWbs === null) return runs;
+        return runs.filter((run) => {
+            if (statusFilter !== 'all' && run.status !== statusFilter) return false;
+            if (workflowFilter !== '' && run.workflowName !== workflowFilter) return false;
+            return true;
+        });
+    }, [runs, linkedWbs, statusFilter, workflowFilter]);
+
+    const expandedRun = visibleRuns.find((run) => run.id === expandedRunId) ?? null;
     const detailState = expandedRunId === null ? undefined : detailCache.get(expandedRunId);
     const slowestIds = useMemo(
         () => (detailState?.projection ? slowestAttemptIds(detailState.projection) : new Set<string>()),
@@ -391,14 +550,18 @@ export default function TraceTab({ timeRange, onNavigate }: ObservabilityTabProp
 
     if (listStatus === 'loading' && runs.length === 0) {
         return (
-            <div className="flex items-center justify-center h-32 text-spur-text-muted text-sm">
+            <div
+                className="flex items-center justify-center h-32 text-spur-text-muted text-sm"
+                data-trace-tab
+                data-trace-linked-wbs={linkedWbs ?? undefined}
+            >
                 <Loading size="sm" /> Loading runs…
             </div>
         );
     }
 
     return (
-        <div className="flex flex-col gap-3" data-trace-tab>
+        <div className="flex flex-col gap-3" data-trace-tab data-trace-linked-wbs={linkedWbs ?? undefined}>
             {/* Filter bar (E72 R2) */}
             <div className="flex flex-wrap items-center gap-3 bg-base-200 rounded-xl border border-base-content/10 p-3">
                 <div className="flex items-center gap-2">
@@ -436,39 +599,43 @@ export default function TraceTab({ timeRange, onNavigate }: ObservabilityTabProp
                         ))}
                     </select>
                 </div>
-                <span className="text-xs text-spur-text-muted ml-auto">{runs.length} run(s)</span>
+                <span className="text-xs text-spur-text-muted ml-auto">{visibleRuns.length} run(s)</span>
             </div>
 
             {listError !== null && (
                 <div className="text-xs text-error" role="alert">
                     Failed to load runs: {listError}
-                    <Button variant="ghost" size="xs" className="ml-2" onClick={loadFirstPage}>
+                    <Button variant="ghost" size="xs" className="ml-2" onClick={reloadList}>
                         Retry
                     </Button>
                 </div>
             )}
 
-            {runs.length === 0 && listStatus === 'ready' && (
+            {rejectedIds.length > 0 && (
+                <ul className="flex flex-col gap-1" data-rejected-runs>
+                    {rejectedIds.map((id) => (
+                        <li key={id} data-rejected-run={id} className="text-xs text-warning">
+                            Linked run {id} was rejected and was not opened.
+                        </li>
+                    ))}
+                </ul>
+            )}
+
+            {visibleRuns.length === 0 && listStatus === 'ready' && (
                 <div className="p-4 text-sm text-spur-text-muted italic" data-trace-empty>
-                    No workflow runs in this window
+                    {linkedWbs === null ? 'No workflow runs in this window' : 'No linked runs for this task'}
                 </div>
             )}
 
-            {runs.length > 0 && (
+            {visibleRuns.length > 0 && (
                 <ul className="flex flex-col gap-1" data-trace-run-list>
-                    {runs.map((run) => {
+                    {visibleRuns.map((run) => {
                         const expanded = run.id === expandedRunId;
                         return (
                             <li key={run.id}>
                                 <Card variant="compact" className="bg-base-200 border border-base-content/10">
                                     <CardBody className="p-2 gap-1">
-                                        <button
-                                            type="button"
-                                            aria-expanded={expanded}
-                                            onClick={() => toggleRun(run.id)}
-                                            className="w-full text-left flex items-center gap-2 flex-wrap cursor-pointer"
-                                            data-run-row
-                                        >
+                                        <RunExpandButton expanded={expanded} runId={run.id} onToggle={toggleRun}>
                                             <span aria-hidden="true">{expanded ? '▼' : '▶'}</span>
                                             <span className="text-xs font-mono font-semibold">
                                                 {run.workflowName ?? 'unknown'}
@@ -487,7 +654,7 @@ export default function TraceTab({ timeRange, onNavigate }: ObservabilityTabProp
                                                     {run.agent}
                                                 </span>
                                             )}
-                                        </button>
+                                        </RunExpandButton>
 
                                         {expanded && detailState !== undefined && (
                                             <div className="mt-2 pl-4 border-l-2 border-base-content/10">
@@ -511,6 +678,16 @@ export default function TraceTab({ timeRange, onNavigate }: ObservabilityTabProp
                                                         projection={detailState.projection}
                                                         slowestIds={slowestIds}
                                                         onNavigate={onNavigate}
+                                                        recordOutcome={detailState.recordOutcome}
+                                                        recordFailed={detailState.recordStatus === 'unread'}
+                                                    />
+                                                )}
+                                                {!detailState.loading && (
+                                                    <RecoveryPanel
+                                                        run={run}
+                                                        detail={detailState}
+                                                        wbs={linkedWbs}
+                                                        taskStatus={taskStatus}
                                                     />
                                                 )}
                                             </div>
@@ -523,7 +700,7 @@ export default function TraceTab({ timeRange, onNavigate }: ObservabilityTabProp
                 </ul>
             )}
 
-            {hasMore && (
+            {linkedWbs === null && hasMore && (
                 <div className="flex justify-center">
                     <Button variant="outline" size="xs" onClick={() => void loadMore()} disabled={loadingMore}>
                         Load more
@@ -531,6 +708,45 @@ export default function TraceTab({ timeRange, onNavigate }: ObservabilityTabProp
                 </div>
             )}
         </div>
+    );
+}
+
+/** Row activator. Enter and Space toggle once; a following click is ignored. */
+function RunExpandButton({
+    expanded,
+    runId,
+    onToggle,
+    children,
+}: {
+    expanded: boolean;
+    runId: string;
+    onToggle: (runId: string) => void;
+    children: ReactNode;
+}) {
+    const keyed = useRef(false);
+    return (
+        <button
+            type="button"
+            aria-expanded={expanded}
+            data-run-id={runId}
+            data-run-row
+            className="w-full text-left flex items-center gap-2 flex-wrap cursor-pointer"
+            onKeyDown={(event) => {
+                if (event.key !== 'Enter' && event.key !== ' ') return;
+                event.preventDefault();
+                keyed.current = true;
+                onToggle(runId);
+            }}
+            onClick={() => {
+                if (keyed.current) {
+                    keyed.current = false;
+                    return;
+                }
+                onToggle(runId);
+            }}
+        >
+            {children}
+        </button>
     );
 }
 
@@ -543,11 +759,15 @@ function RunDetailPanel({
     projection,
     slowestIds,
     onNavigate,
+    recordOutcome,
+    recordFailed,
 }: {
     run: TraceRunEntry;
     projection: WorkflowProgressProjectionDto;
     slowestIds: Set<string>;
     onNavigate?: (intent: ObservabilityNavIntent) => void;
+    recordOutcome: RunRecordOutcome | null;
+    recordFailed: boolean;
 }) {
     const command = historyCommand(run);
     return (
@@ -695,7 +915,12 @@ function RunDetailPanel({
             )}
 
             {/* Bounded run-record text (E72 R4) */}
-            <RunRecordSection runId={run.id} traceStatus={projection.status} />
+            <RunRecordSection
+                runId={run.id}
+                traceStatus={projection.status}
+                preloaded={recordOutcome}
+                preloadFailed={recordFailed}
+            />
 
             {/* Cross-module links (E72 R6/R7) */}
             <div className="flex flex-col gap-1 border-t border-base-content/10 pt-2">
@@ -728,10 +953,21 @@ function RunDetailPanel({
 // RunRecordSection - bounded run-record inspection (0929 R1-R3)
 // ---------------------------------------------------------------------------
 
-function RunRecordSection({ runId, traceStatus }: { runId: string; traceStatus: string }) {
-    const [outcome, setOutcome] = useState<RunRecordOutcome | null>(null);
-    const [phase, setPhase] = useState<'idle' | 'loading' | 'error'>('idle');
-    const [error, setError] = useState<string | null>(null);
+function RunRecordSection({
+    runId,
+    traceStatus,
+    preloaded = null,
+    preloadFailed = false,
+}: {
+    runId: string;
+    traceStatus: string;
+    /** Record already read on expand. Present so this section does not fetch again. */
+    preloaded?: RunRecordOutcome | null;
+    preloadFailed?: boolean;
+}) {
+    const [outcome, setOutcome] = useState<RunRecordOutcome | null>(preloaded);
+    const [phase, setPhase] = useState<'idle' | 'loading' | 'error'>(preloadFailed ? 'error' : 'idle');
+    const [error, setError] = useState<string | null>(preloadFailed ? 'Run record could not be read.' : null);
 
     const load = useCallback(() => {
         setPhase('loading');
@@ -844,6 +1080,115 @@ function RunRecordSection({ runId, traceStatus }: { runId: string; traceStatus: 
                     )}
                 </div>
             )}
+        </div>
+    );
+}
+
+/** Copyable recovery text for one expanded run. Commands are not invoked. */
+function RecoveryPanel({
+    run,
+    detail,
+    wbs,
+    taskStatus,
+}: {
+    run: TraceRunEntry;
+    detail: RunDetailState;
+    wbs: string | null;
+    taskStatus: string | null;
+}) {
+    const cause =
+        detail.projection === null
+            ? null
+            : selectCause(
+                  {
+                      currentState: detail.projection.currentState,
+                      states: detail.projection.states.map((state) => ({
+                          state: state.state,
+                          status: state.status,
+                          actions: state.actions.map((action) => ({
+                              actionKey: action.actionKey,
+                              status: action.status,
+                          })),
+                      })),
+                  },
+                  detail.actions,
+              );
+    const view: RecoveryView = buildRecovery({
+        runId: run.id,
+        runStatus: run.status,
+        wbs,
+        taskStatus,
+        resultSummary: detail.actions.map((action) => action.resultSummary),
+        recordStatus: detail.recordStatus,
+        recordReason: detail.recordReason,
+    });
+    const summary = cause?.resultSummary ?? null;
+    return (
+        <div className="mt-2 space-y-1 text-[11px]" data-recovery-guidance={view.guidance.kind}>
+            {cause !== null && (
+                <div data-cause>
+                    <span className="font-mono">{cause.state}</span>
+                    {cause.actionKey !== null && <span className="font-mono"> {cause.actionKey}</span>}
+                    {cause.actionStatus !== null && <span> {cause.actionStatus}</span>}
+                </div>
+            )}
+            {summary !== null && (
+                <pre className="text-[10px] whitespace-pre-wrap" data-result-summary>
+                    {JSON.stringify(redactForDisplay(summary))}
+                </pre>
+            )}
+            <p data-evidence-notice data-reusable-as-fresh="false">
+                {view.evidence.message}
+            </p>
+            {view.proof !== null && <p data-proof-notice={view.proof.kind}>{view.proof.message}</p>}
+            {view.rejected && (
+                <p data-recovery-rejected="true">Work item belongs to a different run and was rejected.</p>
+            )}
+            {view.guidance.kind === 'continue' && (
+                <RecoveryCommand
+                    command={view.guidance.command}
+                    slot="continue"
+                    label="continue command"
+                    note={view.guidance.inputLabel}
+                />
+            )}
+            {view.guidance.kind === 'retry' && (
+                <>
+                    <RecoveryCommand command={view.guidance.traceCommand} slot="trace" label="trace command" />
+                    <RecoveryCommand command={view.guidance.retryCommand} slot="retry" label="retry command" />
+                </>
+            )}
+            {view.guidance.kind === 'inspection-only' && (
+                <div data-inspection-only>
+                    <p>{view.guidance.reason}</p>
+                    {view.guidance.traceCommand !== null && (
+                        <RecoveryCommand command={view.guidance.traceCommand} slot="trace" label="trace command" />
+                    )}
+                </div>
+            )}
+        </div>
+    );
+}
+
+/** One copyable command. The text sits in `code`, not in an action that runs it. */
+function RecoveryCommand({
+    command,
+    slot,
+    label,
+    note,
+}: {
+    command: string;
+    slot: string;
+    label: string;
+    note?: string;
+}) {
+    return (
+        <div className="flex items-center gap-2 flex-wrap">
+            <code className="font-mono text-[10px]" data-recovery-command={slot}>
+                {command}
+            </code>
+            {note !== undefined && <span data-recovery-input>{note}</span>}
+            <CopyValueButton value={command} label={label} />
         </div>
     );
 }

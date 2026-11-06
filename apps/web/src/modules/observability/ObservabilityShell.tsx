@@ -1,4 +1,5 @@
 import { useCallback, useState } from 'react';
+import { useSearchParams } from 'react-router';
 import ModuleIcon from '../../components/ModuleIcon';
 import { TimeRangePresets } from './ObservabilityFilters';
 import {
@@ -16,7 +17,14 @@ import {
  * module title, subtitle, honest liveness indicator chip, tab navigation, and shared timeRange.
  */
 export default function ObservabilityShell() {
-    const [activeId, setActiveId] = useState<string>(OBSERVABILITY_TABS[0]?.id ?? '');
+    const [params] = useSearchParams();
+    const requestedTab = params.get('tab');
+    // Read once: the task page navigates here on a fresh mount. Later tab clicks stay local.
+    const [activeId, setActiveId] = useState<string>(() =>
+        requestedTab !== null && OBSERVABILITY_TABS.some((tab) => tab.id === requestedTab)
+            ? requestedTab
+            : (OBSERVABILITY_TABS[0]?.id ?? ''),
+    );
     const [timeRange, setTimeRange] = useState<ObservabilityTimeRange>('4h');
     // Last cross-tab intent. Kept until the user picks a tab themselves, so the
     // target tab can apply it on mount (feature E72 R6).

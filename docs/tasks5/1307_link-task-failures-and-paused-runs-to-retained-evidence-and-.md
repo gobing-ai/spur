@@ -1,10 +1,10 @@
 ---
 schema_version: 1
 name: Link task failures and paused runs to retained evidence and safe recovery
-status: todo
+status: done
 template: feature-impl
 created_at: 2026-11-05T20:01:23.918Z
-updated_at: "2026-11-05T20:38:05.661Z"
+updated_at: "2026-11-06T06:31:38.235Z"
 ac_altitude: task-local
 ac_numbering: task-local
 feature_id: E71
@@ -16,6 +16,8 @@ tags:
 estimate_hours: 8
 
 dependencies: ["1306"]
+done_forced: "false"
+done_reason: unforced close; PASS artifact at .spur/memory/evidence/1307-verdict.json
 ---
 
 ## 1307. Link task failures and paused runs to retained evidence and safe recovery
@@ -42,8 +44,8 @@ Rubric: E8 D1 L2 C0 R1 = 12. Keep this candidate as one cohesive deliverable wit
 
 ### Requirements
 
-- [ ] R1. Run evidence and valid recovery are reachable from the affected task; implement the exact Given/When/Then contract below.
-- [ ] R2. Expired scratch is distinguished from durable recovery evidence; implement the exact Given/When/Then contract below.
+- [x] R1. Run evidence and valid recovery are reachable from the affected task; implement the exact Given/When/Then contract below.
+- [x] R2. Expired scratch is distinguished from durable recovery evidence; implement the exact Given/When/Then contract below.
 
 ### Acceptance Criteria
 
@@ -91,27 +93,96 @@ Output/handoff: 1308 can reuse stable evidence links without depending on naviga
 
 No production implementation occurs during this refinement. No new dependency, public noun/verb, workflow/IAM/env edit, production migration or new control guarantee is implied. Preserve successful outputs, validation, errors, redaction, proof freshness, cancellation, accessibility and one writer per tree. New unit or isolated policy failure cases must precede production code; prefer cross-layer/fixture journeys. Use the applicable harness gate once after focused checks and record real implementation results through Spur. Update owning contracts for actual surface changes, architecture for mechanisms, and an ADR before lasting boundary reversal. Save repeatable JUnit/JSON proof under the task run directory and durable evidence in the task Testing record. Scope is the named source seams and necessary callers/tests/docs; no speculative framework or broad cleanup.
 
+
+#### Repo gate conventions
+
+The post-check preset requires a TSDoc comment on every exported symbol (`every-export-has-tsdoc`),
+and per-file line and function coverage must stay at or above 90%. Give each new export a doc
+comment and exercise every new branch before reporting done.
+
 ### Plan
 
-- [ ] 1. Write task->linked-run->cause navigation fixtures including stale proof and expired scratch before UI changes.
-- [ ] 2. Expose redacted evidence and legal existing recovery guidance in the current detail/TraceTab surfaces.
-- [ ] 3. Verify two navigation steps, keyboard activation, wrong-run rejection and inspection-only fallback for unknown eligibility.
-- [ ] 4. Run the exact focused checks above, inspect the diff against R-items/feature AC, synchronize owners and record evidence through the task pipeline; do not fabricate completion.
+- [x] 1. Write task->linked-run->cause navigation fixtures including stale proof and expired scratch before UI changes.
+- [x] 2. Expose redacted evidence and legal existing recovery guidance in the current detail/TraceTab surfaces.
+- [x] 3. Verify two navigation steps, keyboard activation, wrong-run rejection and inspection-only fallback for unknown eligibility.
+- [x] 4. Run the exact focused checks above, inspect the diff against R-items/feature AC, synchronize owners and record evidence through the task pipeline; do not fabricate completion.
 
 ### Solution
 
-<!-- Filled during implementation: file:line change map and concise rationale. -->
+Task detail links to the existing Trace tab. Selecting a linked run reads the existing progress, run-detail, and run-record routes and shows redacted cause text plus a copyable recovery command. Nothing on the board calls continue, retry, or any other mutating route. A placeholder `<input>` is never a prefilled answer. Retry text appears only when the current task status is `todo` or `wip`. Unknown lifecycle, a non-failed/non-paused run, an unsafe run id, or a work item for another run stays inspection-only. Run-record statuses stay the current set (`record`, `incomplete`, `legacy`, `oversized`, `missing`), plus `unread` when that read fails. `reusableAsFresh` is always false.
+
+No new HTTP route, CLI verb, plugin script, public DTO, or dependency. `probe: not-applicable (no public surface changed)`.
+
+| Change | Evidence |
+| --- | --- |
+| Task detail link to `/board/observability?tab=trace&wbs=` | `apps/web/src/modules/task-kanban/TaskRunEvidenceLink.tsx:7` |
+| Link rendered in the task header chips | `apps/web/src/modules/task-kanban/TaskDetail.tsx:231` |
+| Shell selects the `tab` query once on mount | `apps/web/src/modules/observability/ObservabilityShell.tsx:20` |
+| Trace reads `wbs` and loads `GET /api/runs/by-wbs` outside the time window, plus current task status | `apps/web/src/modules/observability/TraceTab.tsx:341` |
+| Expand reads progress, detail, and the run record together | `apps/web/src/modules/observability/TraceTab.tsx:428` |
+| Copyable continue, trace, and retry guidance | `apps/web/src/modules/observability/run-recovery.ts:191` |
+| Rendered journey: two steps, keyboard, wrong-run rejection, expired scratch, stale proof | `apps/web/tests/modules/observability/run-recovery.test.ts:534` |
+| E72 contract names the existing navigation, not a new column | `docs/design/run-record-contract.md:98` |
+
+Focused checks this pass:
+
+- `(cd packages/app && bun test tests/services/run-store-service.test.ts tests/workflow/run-record.test.ts)` — 26 pass, 0 fail, exit 0.
+- `(cd apps/server && bun test tests/modules/runs/index.test.ts)` — 15 pass, 0 fail, exit 0.
+- `(cd apps/web && bun test tests/modules/observability/run-recovery.test.ts)` — 14 pass, 0 fail, 144 expects, exit 0. happy-dom rendered the journey. A live Board browser was not used; the fixture runs are injected fetch responses, not rows in the project database.
+- `bun run --filter @gobing-ai/spur-web typecheck` — exit 0.
+- `bunx biome check` on the six changed web files — exit 0, no fixes.
+- `bun apps/cli/src/index.ts task gate 1307 light` — format-lint, rules:pre (51 rules), web typecheck, and the web test passed. `rules:post` failed: `.coverage/lcov.info` no longer matches `.coverage/coverage-certification.json` (`lcov-mismatch`). The check names `bun run test:full` as the republish. That full suite belongs to the pipeline gate, so it was not run here. Source edits would also fail this post-check as a stale tree until that suite republishes.
+
+Testing and Review stay empty for the pipeline record and review hops. Status was not changed.
 
 ### Testing
 
-<!-- Filled during verification: commands run, outcomes, coverage claim or N/A. -->
+**Pipeline verify results**
+
+- Verdict: PASS (from verdict artifact)
+
+| Requirement | Status | Evidence |
+|-------------|--------|----------|
+| R1 | MET | `apps/web/src/modules/task-kanban/TaskRunEvidenceLink.tsx:7` links the task to Trace; `apps/web/src/modules/observability/TraceTab.tsx:341` loads linked runs; `apps/web/src/modules/observability/run-recovery.ts:191` builds copyable guidance; `apps/web/tests/modules/observability/run-recovery.test.ts:534` keyboard journey, apps/web bun test 14 pass 0 fail exit 0 |
+| R2 | MET | `apps/web/src/modules/observability/run-recovery.ts:359` reusableAsFresh is false; `apps/web/src/modules/observability/run-recovery.ts:390` names expired or missing scratch; `apps/web/src/modules/observability/run-recovery.ts:343` flags stale or missing proof; `apps/web/tests/modules/observability/run-recovery.test.ts:416` and `apps/web/tests/modules/observability/run-recovery.test.ts:614` |
+
+| Acceptance Criteria | Status | Evidence Type | Evidence |
+|---------------------|--------|---------------|----------|
+| AC1 — Run evidence and valid recovery are reachable from the affected task (req: R1) | MET | test | `apps/web/tests/modules/observability/run-recovery.test.ts:534` keyboard reaches redacted paused evidence in two steps and does not execute recovery; `apps/web/tests/modules/observability/run-recovery.test.ts:588` failed run shows trace plus retry only while the task can run |
+| AC2 — Expired scratch is distinguished from durable recovery evidence (req: R2) | MET | test | `apps/web/tests/modules/observability/run-recovery.test.ts:416` evidence and proof stay explicit and are never fresh receipts; `apps/web/tests/modules/observability/run-recovery.test.ts:614` completed run keeps retained provenance and refuses expired scratch and stale proof |
+- Coverage: N/A (verdict-based; verify pipeline does not measure code coverage)
 
 ### Review
 
-<!-- Filled during review: P1-P4 findings, residual risk, and final disposition. -->
+#### Review Report — 1307
+
+**Scope:** working tree; no `(1307)` commit. Files: `apps/web/src/modules/observability/ObservabilityShell.tsx`, `apps/web/src/modules/observability/TraceTab.tsx`, `apps/web/src/modules/observability/run-recovery.ts`, `apps/web/src/modules/task-kanban/TaskDetail.tsx`, `apps/web/src/modules/task-kanban/TaskRunEvidenceLink.tsx`, `apps/web/tests/modules/observability/run-recovery.test.ts`, `docs/design/run-record-contract.md`.
+**Dimensions:** functional, security, efficiency, correctness, usability, architecture
+**Verdict:** PASS
+Confidence: MEDIUM
+
+##### Findings (ranked)
+
+| # | Priority | Dimension | Finding | Location | Disposition |
+| --- | --- | --- | --- | --- | --- |
+| 1 | P4 (advisory) | architecture | No P1-P3 findings. Six dimensions reviewed on the working-tree diff. Recovery decisions live in one policy module; the Trace panel only renders copyable text and issues read requests. R1 and R2 trace to the rendered journey. | `apps/web/src/modules/observability/run-recovery.ts:191` | ACCEPTED |
+
+##### Functional Traceability
+
+| Req | Status | Evidence |
+| --- | --- | --- |
+| R1 | MET | `apps/web/src/modules/task-kanban/TaskRunEvidenceLink.tsx:7` opens Trace; `apps/web/tests/modules/observability/run-recovery.test.ts:534` two-step keyboard journey |
+| R2 | MET | `apps/web/src/modules/observability/run-recovery.ts:390` expired scratch stays non-fresh; `apps/web/tests/modules/observability/run-recovery.test.ts:614` |
+
+**Next:** none. Open P1-P3 count is zero.
 
 ### References
 
 <!-- Links to the parent feature, design docs, related tasks, or external references. -->
 
 ### History
+
+- 2026-11-06T06:20:45.147Z todo → wip (system)
+- 2026-11-06T06:31:36.096Z wip → testing (system)
+- 2026-11-06T06:31:38.228Z testing → done (system)
+
