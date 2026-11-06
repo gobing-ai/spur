@@ -1,8 +1,9 @@
 import { homedir } from 'node:os';
-import { join, resolve } from 'node:path';
+import { join, resolve, sep } from 'node:path';
 import type { Command } from '@commander-js/extra-typings';
 import { searchStatus, ZG_INDEX_HINT, ZG_INSTALL_HINT, ZG_REFRESH_HINT } from '@gobing-ai/spur-app';
 import { resolveAction } from '@gobing-ai/spur-app/sdlc-actions';
+import { shQuote } from '@gobing-ai/spur-app/shell-quote';
 import { misplacedGlobalKeys, SDLC_ACTIONS, type SdlcAction } from '@gobing-ai/spur-config';
 import {
     BUNDLED_GLOBAL_CONFIG,
@@ -76,16 +77,28 @@ interface BuilderFiles {
     packageJson?: string | null;
     lockfiles?: string[];
     availableManagers?: { npm: boolean; pnpm: boolean };
+    cargoManifest?: boolean;
+    goMod?: boolean;
+    pyproject?: boolean;
+    availableTools?: { cargo: boolean; go: boolean; make: boolean; bun: boolean };
+    root?: string;
+    candidateRoots?: string[];
 }
 
 interface BuilderBindings {
-    bindings: Partial<Record<SdlcAction, string>>;
+    bindings: Partial<Record<SdlcAction, string | string[]>>;
     sourceByAction: Partial<Record<SdlcAction, string>>;
     diagnostics: string[];
 }
 
 /** Select one declared JS manager, refusing contradictory or unsupported evidence. */
 function detectJsManager(files: BuilderFiles, manifest: Record<string, unknown>, diagnostics: string[]) {
+    // Root Bun projects use the preset; a child must bind only its declared scripts.
+    if (files.bunLock) {
+        if (files.availableTools?.bun === false)
+            diagnostics.push('bun is not available on PATH; install it before execution');
+        return { manager: 'bun', evidence: 'Bun lockfile' };
+    }
     const managers = new Set<string>();
     const evidence: string[] = [];
     for (const [lock, manager] of Object.entries(JS_LOCKFILES)) {
@@ -129,7 +142,7 @@ function detectJsManager(files: BuilderFiles, manifest: Record<string, unknown>,
     return { manager, evidence: evidence.join(', ') };
 }
 
-/** Init-only proposals: matching Make targets win; JS fallback uses exact reserved script names. */
+/** Init-only proposals: explicit Make/JS actions win over conservative native defaults. */
 function detectBuilderBindings(files: BuilderFiles): BuilderBindings {
     const result: BuilderBindings = { bindings: {}, sourceByAction: {}, diagnostics: [] };
     const targets = new Set(
@@ -140,9 +153,46 @@ function detectBuilderBindings(files: BuilderFiles): BuilderBindings {
         result.bindings[action] = `make ${action}`;
         result.sourceByAction[action] = `Makefile target ${action}`;
     }
+    if (targets.size > 0 && files.availableTools !== undefined) {
+        result.diagnostics.push(
+            files.availableTools.make
+                ? 'make is available on PATH'
+                : 'make is not available on PATH; bindings are proposals only; install it before execution',
+        );
+    }
+    detectJsBindings(files, result);
+    if (files.pyproject) {
+        result.diagnostics.push('Python commands require explicit bindings; project.scripts are not shell actions');
+    }
+    if (files.cargoManifest && files.goMod) {
+        result.diagnostics.push('conflicting language manifests: Cargo.toml, go.mod; native defaults remain unbound');
+        return result;
+    }
+    const tool = files.cargoManifest ? 'cargo' : files.goMod ? 'go' : null;
+    if (tool === null) return result;
+    if (files.availableTools?.[tool] !== true) {
+        result.diagnostics.push(`${tool} is not available on PATH; native defaults remain unbound`);
+        return result;
+    }
+    result.diagnostics.push(`${tool} is available on PATH`);
+    const defaults =
+        tool === 'cargo'
+            ? { build: 'cargo build', typecheck: 'cargo check', test: 'cargo test', check: ['typecheck', 'test'] }
+            : { build: 'go build ./...', test: 'go test ./...', check: ['build', 'test'] };
+    for (const action of SDLC_ACTIONS) {
+        const command = defaults[action as keyof typeof defaults];
+        if (command === undefined || result.bindings[action] !== undefined) continue;
+        result.bindings[action] = command;
+        result.sourceByAction[action] = tool === 'cargo' ? 'Cargo.toml (manifest default members)' : 'go.mod';
+    }
+    return result;
+}
+
+/** Add only exact reserved JS script names; script bodies are never copied or executed. */
+function detectJsBindings(files: BuilderFiles, result: BuilderBindings): void {
     if (files.packageJson == null) {
         result.diagnostics.push('no package.json; JavaScript actions remain unbound');
-        return result;
+        return;
     }
     let manifest: Record<string, unknown>;
     try {
@@ -151,12 +201,12 @@ function detectBuilderBindings(files: BuilderFiles): BuilderBindings {
         manifest = parsed as Record<string, unknown>;
     } catch {
         result.diagnostics.push('invalid package.json; JavaScript actions remain unbound');
-        return result;
+        return;
     }
     const selected = detectJsManager(files, manifest, result.diagnostics);
-    if (selected === null) return result;
+    if (selected === null) return;
     const scripts = manifest.scripts;
-    if (scripts === null || typeof scripts !== 'object' || Array.isArray(scripts)) return result;
+    if (scripts === null || typeof scripts !== 'object' || Array.isArray(scripts)) return;
     const declared = scripts as Record<string, unknown>;
     for (const action of SDLC_ACTIONS) {
         const script = declared[action];
@@ -164,7 +214,65 @@ function detectBuilderBindings(files: BuilderFiles): BuilderBindings {
         result.bindings[action] = `${selected.manager} run ${action}`;
         result.sourceByAction[action] = `package.json scripts.${action} (${selected.evidence})`;
     }
-    return result;
+}
+
+/** Read only known markers at one directory; detection never invokes a project tool. */
+async function readBuilderFiles(context: CliContext, root: string): Promise<BuilderFiles> {
+    const exists = (name: string) => context.fs.exists(join(context.cwd, root, name));
+    const read = async (name: string) =>
+        (await exists(name)) ? context.fs.readFile(join(context.cwd, root, name)) : null;
+    const lockfiles: string[] = [];
+    for (const lock of Object.keys(JS_LOCKFILES)) if (await exists(lock)) lockfiles.push(lock);
+    return {
+        root,
+        bunLock: (await exists('bun.lock')) || (await exists('bun.lockb')),
+        makefile: await read('Makefile'),
+        packageJson: await read('package.json'),
+        lockfiles,
+        cargoManifest: await exists('Cargo.toml'),
+        goMod: await exists('go.mod'),
+        pyproject: await exists('pyproject.toml'),
+    };
+}
+
+/** Select the root or one immediate child; conflicting roots require operator configuration. */
+async function discoverBuilderFiles(context: CliContext): Promise<BuilderFiles> {
+    const hasManifest = (files: BuilderFiles) =>
+        files.bunLock ||
+        files.makefile !== null ||
+        files.packageJson !== null ||
+        files.cargoManifest ||
+        files.goMod ||
+        files.pyproject;
+    let files = await readBuilderFiles(context, '.');
+    if (!hasManifest(files)) {
+        const candidates: BuilderFiles[] = [];
+        const canonicalRoot = context.fs.realPath?.(context.cwd) ?? context.cwd;
+        for (const entry of (await context.fs.readDir(context.cwd)).sort()) {
+            if (entry.startsWith('.') || ['node_modules', 'vendor', 'vendors'].includes(entry)) continue;
+            const path = join(context.cwd, entry);
+            if (!(await context.fs.stat(path))?.isDirectory()) continue;
+            // A symlink cannot make discovery inspect packages outside this project.
+            const canonicalPath = context.fs.realPath?.(path);
+            if (canonicalPath !== undefined && !canonicalPath.startsWith(`${canonicalRoot}${sep}`)) continue;
+            const child = await readBuilderFiles(context, entry);
+            if (hasManifest(child)) candidates.push(child);
+        }
+        if (candidates.length === 1) files = candidates[0] as BuilderFiles;
+        else if (candidates.length > 1) files.candidateRoots = candidates.map((child) => child.root as string);
+    }
+    // PATH lookup does not run a tool, Corepack shim, or install anything.
+    files.availableManagers = {
+        npm: Bun.which('npm', { PATH: context.env.PATH }) !== null,
+        pnpm: Bun.which('pnpm', { PATH: context.env.PATH }) !== null,
+    };
+    files.availableTools = {
+        cargo: Bun.which('cargo', { PATH: context.env.PATH }) !== null,
+        go: Bun.which('go', { PATH: context.env.PATH }) !== null,
+        make: Bun.which('make', { PATH: context.env.PATH }) !== null,
+        bun: Bun.which('bun', { PATH: context.env.PATH }) !== null,
+    };
+    return files;
 }
 
 /**
@@ -172,7 +280,9 @@ function detectBuilderBindings(files: BuilderFiles): BuilderBindings {
  * Bun lockfiles retain preset precedence; other stacks expose missing actions explicitly.
  */
 export function renderBuilderBlock(files: BuilderFiles): string[] {
-    if (files.bunLock) return ['builder:', '  preset: bun'];
+    if (files.bunLock && (files.root === undefined || files.root === '.')) return ['builder:', '  preset: bun'];
+    // Explicit relative paths bypass CDPATH and keep leading dashes out of cd's options.
+    const relativeRoot = files.root !== undefined && files.root !== '.' ? `./${files.root}` : files.root;
     const { bindings, sourceByAction, diagnostics } = detectBuilderBindings(files);
     const bound = SDLC_ACTIONS.filter((action) => bindings[action] !== undefined);
     const unbound = SDLC_ACTIONS.filter(
@@ -181,9 +291,23 @@ export function renderBuilderBlock(files: BuilderFiles): string[] {
     return [
         'builder:',
         '  preset: none',
+        // Keep an unusual directory name inside one YAML comment line.
+        ...(files.candidateRoots !== undefined
+            ? [
+                  `  # multiple candidate roots: ${files.candidateRoots.map((root) => root.replace(/[\r\n]/g, ' ')).join(', ')}; actions remain unbound`,
+              ]
+            : [`  # working directory: ${(files.root ?? '.').replace(/[\r\n]/g, ' ')}`]),
         ...diagnostics.map((message) => `  # ${message}`),
         ...(bound.length > 0 ? ['  actions:'] : []),
-        ...bound.flatMap((action) => [`    # source: ${sourceByAction[action]}`, `    ${action}: ${bindings[action]}`]),
+        ...bound.flatMap((action) => {
+            const binding = bindings[action] as string | string[];
+            const rendered = Array.isArray(binding)
+                ? JSON.stringify(binding)
+                : relativeRoot !== undefined && relativeRoot !== '.'
+                  ? JSON.stringify(`cd ${shQuote(relativeRoot)} && ${binding}`)
+                  : binding;
+            return [`    # source: ${sourceByAction[action]}`, `    ${action}: ${rendered}`];
+        }),
         ...(unbound.length > 0
             ? [
                   '  # Uncomment and bind each action this project supports:',
@@ -457,22 +581,7 @@ export function registerInitCommand(program: Command, context: CliContext, optio
             // The bootstrap block is seeded from config.example.yaml during scaffold below;
             // this minimal stub is enough to mark the project as initialized.
             // Detect the stack once, at init, and write it down (A92, ADR-139).
-            const bunLock =
-                (await context.fs.exists(join(context.cwd, 'bun.lock'))) ||
-                (await context.fs.exists(join(context.cwd, 'bun.lockb')));
-            const makefilePath = join(context.cwd, 'Makefile');
-            const makefile = (await context.fs.exists(makefilePath)) ? await context.fs.readFile(makefilePath) : null;
-            const packagePath = join(context.cwd, 'package.json');
-            const packageJson = (await context.fs.exists(packagePath)) ? await context.fs.readFile(packagePath) : null;
-            const lockfiles: string[] = [];
-            for (const lock of Object.keys(JS_LOCKFILES)) {
-                if (await context.fs.exists(join(context.cwd, lock))) lockfiles.push(lock);
-            }
-            // PATH lookup does not run a manager (including Corepack shims) or install anything.
-            const availableManagers = {
-                npm: Bun.which('npm', { PATH: context.env.PATH }) !== null,
-                pnpm: Bun.which('pnpm', { PATH: context.env.PATH }) !== null,
-            };
+            const builderFiles = await discoverBuilderFiles(context);
 
             const configYaml = `${[
                 `# Spur project configuration for ${projectName}`,
@@ -502,7 +611,7 @@ export function registerInitCommand(program: Command, context: CliContext, optio
                 '  # See docs/design/downstream-board-modules.md for the react/iframe schema.',
                 '  modules: []',
                 '',
-                ...renderBuilderBlock({ bunLock, makefile, packageJson, lockfiles, availableManagers }),
+                ...renderBuilderBlock(builderFiles),
             ].join('\n')}\n`;
 
             await context.fs.ensureDir(join(context.cwd, CLI_CONFIG.configDir));

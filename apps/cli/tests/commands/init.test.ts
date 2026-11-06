@@ -1,8 +1,8 @@
 import { describe, expect, test } from 'bun:test';
 import { existsSync } from 'node:fs';
-import { mkdtemp, readFile } from 'node:fs/promises';
+import { chmod, mkdir, mkdtemp, readFile, symlink } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
-import { join } from 'node:path';
+import { dirname, join } from 'node:path';
 import { resolveWorkflowFile } from '@gobing-ai/spur-app';
 import { type BuilderConfig, getEnvVars, spurConfigSchema } from '@gobing-ai/spur-config';
 import { bundledConfigRoot, parseConfigYaml } from '@gobing-ai/spur-config/loader';
@@ -631,5 +631,214 @@ describe('JavaScript action onboarding (1303)', () => {
         }).join('\n');
         expect(text).toContain('check: npm run check');
         expect(text).not.toContain('not available on PATH');
+    });
+});
+
+describe('language and package-root onboarding (1304)', () => {
+    // Failure cases: inferred Python commands; missing native tools; Make overrides lost;
+    // ambiguous package roots silently selected; recursive/outside discovery; shell/YAML
+    // injection through a child name; child commands running in the repository root;
+    // discovery executing tools; re-init replacing an operator's explicit actions.
+    async function scaffold(files: Record<string, string>, tools = ['cargo', 'go', 'make', 'bun']) {
+        const cwd = await createTempProjectStackNeutral();
+        const bin = await mkdtemp(join(tmpdir(), 'spur-tools-'));
+        for (const tool of tools) {
+            const path = join(bin, tool);
+            await Bun.write(path, '#!/bin/sh\nprintf "%s:%s:%s\\n" "$0" "$PWD" "$*" >> tool-ran\n');
+            await chmod(path, 0o755);
+        }
+        for (const [path, content] of Object.entries(files)) await Bun.write(join(cwd, path), content);
+        const { options } = await isolatedOptions(cwd);
+        options.env.PATH = bin;
+        expect(await main(['self', 'init', '--minimal'], options)).toBe(0);
+        const text = await readFile(join(cwd, '.spur/config.yaml'), 'utf8');
+        const builder = spurConfigSchema.parse(parseConfigYaml(text)).builder as BuilderConfig;
+        expect(existsSync(join(cwd, 'tool-ran'))).toBe(false);
+        return { cwd, bin, options, text, builder };
+    }
+
+    test('Cargo uses the selected manifest defaults and a check/test composite', async () => {
+        const { text, builder } = await scaffold({
+            'Cargo.toml': '[workspace]\nmembers = ["chosen", "other"]\ndefault-members = ["chosen"]\n',
+            'chosen/Cargo.toml': '[package]\nname = "chosen"\nversion = "0.1.0"\n',
+            'other/Cargo.toml': '[package]\nname = "other"\nversion = "0.1.0"\n',
+        });
+        expect(builder).toEqual({
+            preset: 'none',
+            actions: {
+                build: 'cargo build',
+                typecheck: 'cargo check',
+                test: 'cargo test',
+                check: ['typecheck', 'test'],
+            },
+        });
+        expect(text).toContain('working directory: .');
+        expect(text).toContain('cargo is available on PATH');
+        expect(text).toContain('source: Cargo.toml');
+        expect(text).not.toContain('--workspace');
+    });
+
+    test('Go compiles and tests ./... without inventing lint or typecheck', async () => {
+        const { builder, text } = await scaffold({ 'go.mod': 'module example.com/fixture\ngo 1.22\n' });
+        expect(builder.actions).toEqual({ build: 'go build ./...', test: 'go test ./...', check: ['build', 'test'] });
+        expect(text).toContain('go is available on PATH');
+        expect(text).toContain('#   lint: <command>');
+        expect(text).toContain('#   typecheck: <command>');
+    });
+
+    test.each(['Cargo.toml', 'go.mod'])('missing native tool stays unbound for %s', async (manifest) => {
+        const { builder, text } = await scaffold({ [manifest]: '' }, []);
+        expect(builder.actions).toEqual({});
+        expect(text).toContain('not available on PATH');
+        expect(text).toContain('remain unbound');
+    });
+
+    test('Python project.scripts are not shell actions; only matching Make targets bind', async () => {
+        const python = '[project.scripts]\ncheck = "fixture:main"\ntest = "pytest:main"\n';
+        const bare = await scaffold({ 'pyproject.toml': python });
+        expect(bare.builder.actions).toEqual({});
+        expect(bare.text).toContain('Python commands require explicit bindings');
+        const make = await scaffold({ 'pyproject.toml': python, Makefile: 'check:\n\t@echo explicit\ntest:\n' });
+        expect(make.builder.actions).toEqual({ test: 'make test', check: 'make check' });
+        expect(make.text).toContain('make is available on PATH');
+    });
+
+    test('Make wins each matching native action, including explicit check', async () => {
+        const { builder } = await scaffold({ 'Cargo.toml': '', Makefile: 'build:\ncheck:\n' });
+        expect(builder.actions).toEqual({
+            build: 'make build',
+            typecheck: 'cargo check',
+            test: 'cargo test',
+            check: 'make check',
+        });
+        const absent = await scaffold({ 'go.mod': '', Makefile: 'test:\n' }, []);
+        expect(absent.builder.actions).toEqual({ test: 'make test' });
+        expect(absent.text).toContain('make is not available on PATH');
+    });
+
+    test('conflicting native manifests keep only explicit Make actions', async () => {
+        const { builder, text } = await scaffold({ 'Cargo.toml': '', 'go.mod': '', Makefile: 'check:\n' });
+        expect(builder.actions).toEqual({ check: 'make check' });
+        expect(text).toContain('conflicting language manifests');
+    });
+
+    test('a root manifest wins even when it declares no commands', async () => {
+        const { builder, text } = await scaffold({ 'pyproject.toml': '', 'child/go.mod': '' });
+        expect(builder.actions).toEqual({});
+        expect(text).toContain('working directory: .');
+    });
+
+    test.each([
+        [
+            'Cargo.toml',
+            { build: 'cargo build', typecheck: 'cargo check', test: 'cargo test', check: ['typecheck', 'test'] },
+        ],
+        ['go.mod', { build: 'go build ./...', test: 'go test ./...', check: ['build', 'test'] }],
+        ['Makefile', { check: 'make check' }],
+        ['pyproject.toml', {}],
+    ])('selects a single immediate child with %s', async (manifest, actions) => {
+        const { builder, text, cwd } = await scaffold({
+            [`child/${manifest}`]: manifest === 'Makefile' ? 'check:\n' : '',
+        });
+        const expected = Object.fromEntries(
+            Object.entries(actions).map(([name, command]) => [
+                name,
+                typeof command === 'string' ? `cd ./child && ${command}` : command,
+            ]),
+        );
+        expect(builder.actions).toEqual(expected);
+        expect(text).toContain('working directory: child');
+        expect(existsSync(join(cwd, 'child/tool-ran'))).toBe(false);
+    });
+
+    test.each(['pnpm', 'bun'])('selected child JavaScript uses declared %s commands only', async (manager) => {
+        const { builder } = await scaffold({
+            'child/package.json': JSON.stringify({ packageManager: `${manager}@1.0.0`, scripts: { check: ':' } }),
+            ...(manager === 'bun' ? { 'child/bun.lock': '' } : {}),
+        });
+        expect(builder).toEqual({ preset: 'none', actions: { check: `cd ./child && ${manager} run check` } });
+    });
+
+    test('multiple mixed roots list sorted paths and propose no actions', async () => {
+        const { builder, text } = await scaffold({
+            'rust/Cargo.toml': '',
+            'go/go.mod': '',
+            'python/pyproject.toml': '',
+        });
+        expect(builder.actions).toEqual({});
+        expect(text).toContain('multiple candidate roots: go, python, rust');
+        expect(text).toContain('remain unbound');
+    });
+
+    test('does not recurse or select hidden, dependency, vendor or outside symlink roots', async () => {
+        const cwd = await createTempProjectStackNeutral();
+        const outside = await createTempProjectStackNeutral();
+        await Bun.write(join(outside, 'go.mod'), '');
+        await symlink(outside, join(cwd, 'linked'));
+        for (const directory of ['packages/deep', '.hidden', 'node_modules', 'vendors', 'vendor']) {
+            await Bun.write(join(cwd, directory, 'go.mod'), '');
+        }
+        await mkdir(join(cwd, 'empty'));
+        await Bun.write(join(cwd, 'README.md'), 'ordinary file');
+        const { options } = await isolatedOptions(cwd);
+        expect(await main(['self', 'init', '--minimal'], options)).toBe(0);
+        const text = await readFile(join(cwd, '.spur/config.yaml'), 'utf8');
+        expect((spurConfigSchema.parse(parseConfigYaml(text)).builder as BuilderConfig).actions).toEqual({});
+        expect(text).not.toContain('working directory: linked');
+    });
+
+    test('selected child execution ignores a competing CDPATH directory', async () => {
+        // Failure: cd child selects CDPATH/child and successfully executes the wrong project's code.
+        const { cwd, bin, options } = await scaffold({ 'child/Makefile': 'check:\n' }, ['make']);
+        const alternate = await mkdtemp(join(tmpdir(), 'spur-cdpath-'));
+        await mkdir(join(alternate, 'child'));
+        const env = {
+            PATH: `${bin}:${dirname(process.execPath)}:/usr/bin:/bin`,
+            CDPATH: alternate,
+            SPUR_GLOBAL_RULES_DIR: options.env.SPUR_GLOBAL_RULES_DIR,
+        };
+        const preview = await runCli(['--no-logo', 'self', 'exec', 'check', '--dry-run', '--json'], cwd, env);
+        expect(preview.code).toBe(0);
+        const executed = await runCli(['--no-logo', 'self', 'exec', 'check', '--json'], cwd, env);
+        expect(executed.code).toBe(0);
+        expect(existsSync(join(alternate, 'child/tool-ran'))).toBe(false);
+        expect(await readFile(join(cwd, 'child/tool-ran'), 'utf8')).toContain('/child:check');
+        expect(preview.json).toEqual([{ name: 'check', command: 'cd ./child && make check' }]);
+    });
+
+    test('four-action public journey quotes a child path and executes only inside it', async () => {
+        const child = "-child's: $(touch injected)";
+        const { cwd, bin, options, builder, text } = await scaffold({ [`${child}/go.mod`]: '' }, ['go']);
+        const prefix = "cd './-child'\\''s: $(touch injected)' && ";
+        expect(builder.actions.build).toBe(`${prefix}go build ./...`);
+        const env = {
+            PATH: `${bin}:${dirname(process.execPath)}:/usr/bin:/bin`,
+            SPUR_GLOBAL_RULES_DIR: options.env.SPUR_GLOBAL_RULES_DIR,
+        };
+        // Action 1 was self init; inspect, preview and accept/run are actions 2–4.
+        const list = await runCli(['--no-logo', 'self', 'exec', '--list', '--json'], cwd, env);
+        expect(list.code).toBe(0);
+        expect(list.json).toContainEqual({ name: 'check', reserved: true, source: 'config', steps: ['build', 'test'] });
+        const preview = await runCli(['--no-logo', 'self', 'exec', 'check', '--dry-run', '--json'], cwd, env);
+        expect(preview.code).toBe(0);
+        expect(preview.json).toEqual([
+            { name: 'build', command: `${prefix}go build ./...` },
+            { name: 'test', command: `${prefix}go test ./...` },
+        ]);
+        expect(existsSync(join(cwd, child, 'tool-ran'))).toBe(false);
+        const executed = await runCli(['--no-logo', 'self', 'exec', 'check', '--json'], cwd, env);
+        expect(executed.code).toBe(0);
+        const receipt = await readFile(join(cwd, child, 'tool-ran'), 'utf8');
+        expect(receipt).toContain(`${child}:build ./...`);
+        expect(receipt).toContain(`${child}:test ./...`);
+        expect(existsSync(join(cwd, 'tool-ran'))).toBe(false);
+        expect(existsSync(join(cwd, 'injected'))).toBe(false);
+        // New detection inputs never overwrite existing operator bindings on re-init.
+        const custom = '# operator config\nbuilder:\n  preset: none\n  actions:\n    check: explicit-command\n';
+        await Bun.write(join(cwd, '.spur/config.yaml'), custom);
+        await Bun.write(join(cwd, 'Cargo.toml'), '');
+        expect(await main(['self', 'init', '--minimal'], options)).toBe(0);
+        expect(await readFile(join(cwd, '.spur/config.yaml'), 'utf8')).toBe(custom);
+        expect(text).toContain('working directory:');
     });
 });

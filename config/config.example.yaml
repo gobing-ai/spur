@@ -240,9 +240,12 @@ redaction:
 #   #   none           — only the stack-neutral `spur rule run` presets are bound; declare the
 #   #                    rest in `actions` (see below) or they stay unbound.
 #   preset: bun
-#   # Fresh `spur self init` detects Bun first, then matching Make targets and exact JavaScript
-#   # scripts with unambiguous lockfile/packageManager evidence under preset: none. Generated
-#   # comments explain provenance, missing tools and unbound actions; re-init preserves config
+#   # Fresh `spur self init` detects root Bun first, then matching Make targets, exact declared
+#   # JavaScript scripts and Cargo/Go defaults under preset: none. Python needs explicit bindings.
+#   # A root manifest wins; otherwise one immediate child may be selected. Multiple roots stay
+#   # unbound with paths listed. Child commands prefix a shell-quoted cd; no cwd field is added.
+#   # Cargo/Go defaults require the tool on PATH; declared Make/JS proposals warn when unavailable.
+#   # Comments explain provenance, selected directory and unbound actions; re-init preserves config
 #   # unless --force is explicitly selected. Inspect with `spur self exec --list --json`.
 #   # action name -> one shell command, or a list of action names (composite, run in order,
 #   # fail-fast). A declared entry replaces the preset binding whole. Reserved names: build, dev,

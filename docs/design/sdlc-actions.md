@@ -176,13 +176,13 @@ the implementing task's design review.
 | Quality gate full tier / task-pipeline | `qualityGateCmd` default `${spurBin:-spur} self exec check`; `gateProbeCmd` default `${spurBin:-spur} self exec lint`; `formatCmd` default `${spurBin:-spur} self exec format`; `--vars` overrides still win. These vars run through `sh -c` (`quality-gate.ts:762`), and the CLI injects `spurBin` at run start, so the gate re-enters the same binary that drives the run, not whatever `spur` is first on `PATH` |
 | feature-verification (YAML + `feature-verification-run.ts`) | default `spur self exec check-feature`. `verificationCmd` is launched through the safe argv splitter with no shell (`feature-verification-run.ts:219`), so `$spurBin` cannot expand there; `spur` resolves on `PATH`. The splitter invariant is kept; the action body that `self exec` runs is project-owned config, the same trust boundary as a `package.json` script today |
 | wrapup-pipeline tripwire | run `$spurBin self exec test-repo-wide` only when `$spurBin self exec --list --json` shows it bound (spur-new declares it as a custom action) |
-| `spur self init` | seed `builder.preset` + `builder.actions`: Bun lockfiles select `bun`; otherwise `none` with matching Make targets, then unambiguous npm/pnpm scripts; provenance and unbound proposals are comments |
+| `spur self init` | seed `builder.preset` + `builder.actions`: root Bun lockfiles select `bun`; otherwise `none` with matching Make targets, declared JS scripts and conservative Cargo/Go defaults; select only the root or one immediate child; provenance, working directory and unbound proposals are comments |
 | sp plugin commands/skills | replace "run `bun run spur-check`" with "run `spur self exec check`" (and `lint`, `check-feature`, `autofix`) |
 
 #### 3.4.1 Init discovery and inspection
 
-Discovery reads only root manifests and target declarations; it never executes a discovered command
-or installs tools. A Bun lockfile keeps the existing `bun` preset behavior. Otherwise, each reserved
+Discovery reads manifests and target declarations at the selected root; it never executes a discovered command
+or installs tools. A root Bun lockfile keeps the existing `bun` preset behavior. Otherwise, each reserved
 action binds to an identically named Make target first, then an identically named, nonempty string
 script in `package.json`. Script bodies and custom script names are never copied into commands;
 there is no alias inference (for example, `test:full` does not bind `test-full`).
@@ -194,9 +194,31 @@ the manager without a lockfile. Multiple lockfiles for the same manager agree. C
 JS actions unbound. Invalid/missing manifests and scripts produce no inferred JS bindings. Valid
 commands have the fixed form `npm run <action>` or `pnpm run <action>` under `preset: none`.
 
-The generated YAML records declaration provenance, refusal reasons, missing manager availability
-(PATH lookup only), and commented proposals for actions without an effective binding. Availability
-warnings do not discard otherwise deterministic proposals. These comments add no schema fields.
+Language defaults require the matching executable on PATH. `Cargo.toml` proposes `build: cargo build`,
+`typecheck: cargo check`, `test: cargo test` and `check: [typecheck, test]`. Commands leave Cargo's
+[manifest/default-member selection](https://doc.rust-lang.org/cargo/commands/cargo-build.html#package-selection)
+intact. `go.mod` proposes `build: go build ./...`, `test: go test ./...` and `check: [build, test]`
+using the [Go build/test commands](https://pkg.go.dev/cmd/go);
+Go build is not a lint binding. Matching explicit Make targets and declared JS scripts take precedence
+per action, including an explicit `check`. Conflicting Cargo/Go manifests leave native defaults unbound.
+`pyproject.toml` alone supplies no shell commands: Python actions require matching Make targets or
+operator configuration; `project.scripts` is never treated as a shell action map. A missing Cargo/Go
+executable leaves native defaults unbound with a reason. Missing Make/JS tools retain declared
+proposals with availability warnings.
+
+A root manifest wins, even without declared actions. Otherwise discovery examines only immediate
+child directories (excluding hidden, dependency/vendor and outside-symlink roots). One candidate is
+selected; multiple candidates remain unbound with sorted paths listed for operator selection. Discovery
+never recurses or executes tools. Child commands prefix the selected relative root with `./` before
+shell quoting and YAML escaping, bypassing `CDPATH` lookup and leading-dash option parsing;
+composites retain action names. Each command therefore owns its directory even when
+the executor runs successive steps from the project root. A child with a Bun lockfile binds only its
+exact declared reserved scripts through `bun run`; it does not apply root-wide Bun preset defaults.
+No `cwd` config field is introduced.
+
+The generated YAML records declaration provenance, selected working directory, refusal reasons and tool availability
+(PATH lookup only), and commented proposals for actions without an effective binding. These
+comments add no schema fields.
 Stack-neutral rule defaults resolve normally and are excluded from unbound proposals. Inspect accepted
 bindings with `spur self exec --list --json` or `spur self exec <action> --dry-run --json`; no init preview
 flag is added.
