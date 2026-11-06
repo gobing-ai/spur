@@ -1,10 +1,10 @@
 ---
 schema_version: 1
 name: Converge planning Board procedures on existing validated oRPC transport
-status: todo
+status: done
 template: feature-impl
 created_at: 2026-11-05T20:01:23.915Z
-updated_at: "2026-11-05T20:37:50.983Z"
+updated_at: "2026-11-06T01:28:56.178Z"
 ac_altitude: task-local
 ac_numbering: task-local
 feature_id: F73
@@ -16,6 +16,8 @@ tags:
 estimate_hours: 8
 
 dependencies: []
+done_forced: "false"
+done_reason: unforced close; PASS artifact at .spur/memory/evidence/1300-verdict.json
 ---
 
 ## 1300. Converge planning Board procedures on existing validated oRPC transport
@@ -42,7 +44,7 @@ Rubric: E8 D1 L2 C0 R1 = 12. Keep this candidate as one cohesive deliverable wit
 
 ### Requirements
 
-- [ ] R1. Planning Board reads use validated shared transport contracts; implement the exact Given/When/Then contract below.
+- [x] R1. Planning Board reads use validated shared transport contracts; implement the exact Given/When/Then contract below.
 
 ### Acceptance Criteria
 
@@ -87,26 +89,76 @@ No production implementation occurs during this refinement. No new dependency, p
 
 ### Plan
 
-- [ ] 1. Write success/404/traversal/malformed-output/abort contract tests against the current raw routes first.
-- [ ] 2. Extract the current document read service and bind the exact paths/shapes with oRPC; keep legacy aliases.
-- [ ] 3. Replace manual client fetching behind existing helper exports and remove replaced parsing/error branches.
-- [ ] 4. Verify actual HTTP behavior plus typed-client output and retain error decoding/cancellation.
-- [ ] 5. Run the exact focused checks above, inspect the diff against R-items/feature AC, synchronize owners and record evidence through the task pipeline; do not fabricate completion.
+- [x] 1. Write success/404/traversal/malformed-output/abort contract tests against the current raw routes first.
+- [x] 2. Extract the current document read service and bind the exact paths/shapes with oRPC; keep legacy aliases.
+- [x] 3. Replace manual client fetching behind existing helper exports and remove replaced parsing/error branches.
+- [x] 4. Verify actual HTTP behavior plus typed-client output and retain error decoding/cancellation.
+- [x] 5. Run the exact focused checks above, inspect the diff against R-items/feature AC, synchronize owners and record evidence through the task pipeline; do not fabricate completion.
 
 ### Solution
 
-<!-- Filled during implementation: file:line change map and concise rationale. -->
+| File | What changed and why |
+| --- | --- |
+| `packages/contracts/src/planning-documents.ts:1-82` | New planList/planShow/designList/designShow contracts on the existing `/project/plans[/file]` and `/project/designs[/file]` paths with the exact pre-contract success payloads. |
+| `packages/contracts/src/index.ts:44` | Registers `planningDocuments` in the public contract and re-exports its DTOs. |
+| `packages/app/src/services/planning-document-service.ts:1-182` | One application owner for the allowlists, directory walk, title derivation and refusal codes; plans list newest-first, design satellites alphabetically, absent directories list empty. |
+| `apps/server/src/modules/planning-documents/handlers.ts:1-45` | Thin oRPC procedures mapping each refusal code to its HTTP status. |
+| `apps/server/src/context.ts:186,503-506` | `planningDocumentService()` accessor built from the context's own fs/cwd. |
+| `apps/server/src/modules/health/index.ts:700-794` | The four raw plan/design handlers delegate to the service; the `/api/plans` and `/api/designs` aliases and their envelopes are retained. |
+| `apps/web/src/lib/plan-client.ts:1-45` | Helpers now call the typed client and keep their exported signatures plus one narrow shape guard. |
+| `apps/web/src/lib/design-client.ts:1-45` | Same convergence for the design helpers. |
+| `packages/app/tests/services/planning-document-service.test.ts:1-116` | Shipping order, traversal refusal, missing-path, not-found and unavailable-context proofs. |
+| `apps/server/tests/modules/planning-documents/handlers.test.ts:1-70` | oRPC payload plus 403/404 status-mapping proof. |
+
+Verification evidence:
+- `(cd apps/server && bun test tests/modules/plans.test.ts tests/modules/designs.test.ts tests/modules/feature/handlers.test.ts)` — 26 pass, 0 fail (legacy aliases and envelopes unchanged).
+- `(cd apps/web && bun test tests/lib/plan-client.test.ts tests/lib/design-client.test.ts tests/lib/feature-client.test.ts)` — 42 pass, 0 fail.
+- `packages/app` planning-document-service suite — 7 pass; oRPC handler suite — 2 pass.
+- Typechecks for contracts, app, cli, server and web all exit 0; light-gate format, pre-rules and related tests PASS.
 
 ### Testing
 
-<!-- Filled during verification: commands run, outcomes, coverage claim or N/A. -->
+**Pipeline verify results**
+
+- Verdict: PASS (from verdict artifact)
+
+| Requirement | Status | Evidence |
+|-------------|--------|----------|
+| R1 | MET | `packages/contracts/src/planning-documents.ts:1-87` defines the four read contracts on the existing paths; `packages/app/src/services/planning-document-service.ts:1-183` owns allowlists, ordering and refusals; `apps/server/src/modules/planning-documents/handlers.ts:1-45` and the retained aliases at `apps/server/src/modules/health/index.ts:700-794` both delegate to it; `apps/web/src/lib/plan-client.ts:1-45` and `apps/web/src/lib/design-client.ts:1-45` use the typed client. |
+
+| Acceptance Criteria | Status | Evidence Type | Evidence |
+|---------------------|--------|---------------|----------|
+| AC1 — Planning Board reads use validated shared transport contracts (req: R1) | MET | test | `apps/server/tests/modules/planning-documents/handlers.test.ts:1-70` proves every refusal code maps to its documented status; `apps/server/tests/modules/plans.test.ts` and `apps/server/tests/modules/designs.test.ts` prove the legacy aliases and envelopes are unchanged (26 pass); `apps/web/tests/lib/plan-client.test.ts` and `apps/web/tests/lib/design-client.test.ts` prove cancellation and error decoding through the typed client (42 pass). |
+- Coverage: N/A (verdict-based; verify pipeline does not measure code coverage)
 
 ### Review
 
-<!-- Filled during review: P1-P4 findings, residual risk, and final disposition. -->
+#### Review Report — 1300
+**Scope:** plan/design read convergence — contract, app service, oRPC procedures, legacy aliases, two web clients
+**Dimensions:** functional, security, efficiency, correctness, usability, architecture
+**Verdict:** PASS
+**Confidence: MEDIUM**
+
+| # | Priority | Dimension | Finding | Location | Disposition |
+| --- | --- | --- | --- | --- | --- |
+| 1 | P4 (advisory) | architecture | The legacy `/api/plans` and `/api/designs` aliases still format their own `{ok,error}` envelopes around the shared service. That duplication is deliberate: the pre-contract wire shape is a published surface this task must not change. | `apps/server/src/modules/health/index.ts:742-752` | ACCEPTED |
+| 2 | P4 (advisory) | correctness | Clients keep one narrow `Array.isArray` / `typeof content` guard because the typed client does not validate responses client-side; removing it would turn a malformed payload into a silent type lie. | `apps/web/src/lib/plan-client.ts:33-44` | ACCEPTED |
+
+##### Functional Traceability
+
+| Req | Status | Evidence |
+| --- | --- | --- |
+| R1 | MET | `packages/contracts/src/planning-documents.ts:1-87` adds the four read contracts on the existing paths; `packages/app/src/services/planning-document-service.ts:1-183` is the single owner of allowlists, ordering and refusal codes; both the raw aliases at `apps/server/src/modules/health/index.ts:700-794` and the oRPC procedures in `apps/server/src/modules/planning-documents/handlers.ts` delegate to it; `apps/web/src/lib/plan-client.ts:1-45` and `apps/web/src/lib/design-client.ts:1-45` use the typed client. |
+
+**Next:** close through record/done; both accepted P4s record deliberate compatibility boundaries.
 
 ### References
 
 <!-- Links to the parent feature, design docs, related tasks, or external references. -->
 
 ### History
+
+- 2026-11-06T01:11:22.235Z todo → wip (system)
+- 2026-11-06T01:28:54.232Z wip → testing (system)
+- 2026-11-06T01:28:56.173Z testing → done (system)
+

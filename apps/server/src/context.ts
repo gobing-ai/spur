@@ -36,6 +36,7 @@ import {
     InboxService as InboxServiceImpl,
     LiveHistoryBoardService,
     systemEventProjectContext as makeSystemEventProjectContext,
+    PlanningDocumentService,
     type PlanningEventMap,
     PlanningWriteService as PlanningWriteServiceImpl,
     ProcessInventoryService as ProcessInventoryServiceImpl,
@@ -180,6 +181,9 @@ export interface ServerContext {
 
     /** Lazy, cached TaskService (planning layer). */
     taskService(): TaskService;
+
+    /** Lazy, cached PlanningDocumentService — the plan/design read owner (task 1300). */
+    planningDocumentService(): PlanningDocumentService;
 
     /** Absolute `.spur/run` artifact directory for this project (task 0966). */
     readonly runDir: string;
@@ -494,6 +498,11 @@ export function createServerContext(appRt: ApplicationRuntime, options: CreateSe
         async checkDbHealth(): Promise<boolean> {
             const db = await this.getDb();
             return dbHealthCheck(db);
+        },
+
+        planningDocumentService(): PlanningDocumentService {
+            // No cache: a read is cheap and a cached instance would pin one fs/cwd pairing.
+            return new PlanningDocumentService({ fs, cwd });
         },
 
         taskService(): TaskService {

@@ -6,6 +6,7 @@ import type { ServerContext } from './context';
 import { createFeatureHandlers } from './modules/feature';
 import { createHistoryHandlers } from './modules/history';
 import { createInboxHandlers } from './modules/inbox/handlers';
+import { createPlanningDocumentHandlers } from './modules/planning-documents';
 import { createSearchHandlers } from './modules/search';
 import { createTaskHandlers } from './modules/task';
 
@@ -45,6 +46,8 @@ export function createRouter(ctx?: ServerContext) {
         inbox: createInboxHandlers(ctx ?? stubCtx),
 
         search: createSearchHandlers(ctx ?? stubCtx),
+
+        planningDocuments: createPlanningDocumentHandlers(ctx ?? stubCtx),
 
         // Read-only project module catalog: the frozen startup snapshot, never a live re-read (AC5).
         board: {

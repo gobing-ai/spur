@@ -5,6 +5,8 @@ import {
     isPortLive,
     normalizeProjectPath,
     type OrchestratorBinding,
+    PlanningDocumentError,
+    PlanningDocumentService,
     ProjectRegistry,
     type ResolvedFleetMember,
     registeredWorkflowPaths,
@@ -708,89 +710,39 @@ export const healthModule: ServerModule = {
         app.get('/api/project/workflows', workflowsHandler);
         app.get('/api/workflows', workflowsHandler);
 
-        const designsHandler = async (c: { json: (data: unknown) => Response }) => {
-            if (!ctx) {
-                return c.json({ files: [], total: 0 });
+        // Constructed from ctx.fs/cwd rather than a new ServerContext method: every existing
+        // test stub and Worker context already carries those two fields.
+        const documents = () => new PlanningDocumentService({ fs: ctx?.fs, cwd: ctx?.cwd });
+
+        // Plan/design reads delegate to the shared application owner (task 1300). The legacy
+        // /api/plans and /api/designs aliases stay, and keep their original JSON envelopes, but
+        // the allowlist, directory walk and title derivation now live in one service.
+        const toResponse = (
+            c: { json: (data: unknown, status?: number) => Response },
+            result: { ok: true; path: string; title: string; content: string },
+        ) => c.json(result);
+
+        const documentError = (c: { json: (data: unknown, status?: number) => Response }, error: unknown): Response => {
+            if (error instanceof PlanningDocumentError) {
+                const status =
+                    error.code === 'unavailable'
+                        ? 503
+                        : error.code === 'missing-path'
+                          ? 400
+                          : error.code === 'denied'
+                            ? 403
+                            : error.code === 'not-found'
+                              ? 404
+                              : 500;
+                return c.json({ ok: false, error: error.message }, status);
             }
+            return c.json({ ok: false, error: error instanceof Error ? error.message : String(error) }, 500);
+        };
 
+        const designsHandler = async (c: { json: (data: unknown) => Response }) => {
+            if (!ctx) return c.json({ files: [], total: 0 });
             try {
-                const projectRoot = ctx.cwd ?? process.cwd();
-                const fs = ctx.fs ?? createNodeFileSystem(projectRoot);
-                const files: Array<{
-                    id: string;
-                    path: string;
-                    name: string;
-                    title: string;
-                    category: 'root' | 'architecture' | 'satellite';
-                }> = [];
-
-                // 1. Root DESIGN.md
-                const rootDesignPath = join(projectRoot, 'DESIGN.md');
-                if (await fs.exists(rootDesignPath)) {
-                    let title = 'UI/UX Design System';
-                    try {
-                        const content = await fs.readFile(rootDesignPath);
-                        const match = content.match(/^#\s+(.+)$/m);
-                        if (match?.[1]) title = match[1].trim();
-                    } catch {}
-                    files.push({
-                        id: 'DESIGN.md',
-                        path: 'DESIGN.md',
-                        name: 'DESIGN.md',
-                        title,
-                        category: 'root',
-                    });
-                }
-
-                // 2. docs/04_DESIGN.md
-                const doc04Path = join(projectRoot, 'docs', '04_DESIGN.md');
-                if (await fs.exists(doc04Path)) {
-                    let title = 'Concrete Surfaces & Contracts';
-                    try {
-                        const content = await fs.readFile(doc04Path);
-                        const match = content.match(/^#\s+(.+)$/m);
-                        if (match?.[1]) title = match[1].trim();
-                    } catch {}
-                    files.push({
-                        id: 'docs/04_DESIGN.md',
-                        path: 'docs/04_DESIGN.md',
-                        name: '04_DESIGN.md',
-                        title,
-                        category: 'architecture',
-                    });
-                }
-
-                // 3. docs/design/*.md
-                const designDir = join(projectRoot, 'docs', 'design');
-                if (await fs.exists(designDir)) {
-                    let mdFiles: string[] = [];
-                    try {
-                        const entries = await fs.readDir(designDir);
-                        mdFiles = entries.filter((f) => f.endsWith('.md'));
-                    } catch {}
-                    mdFiles.sort((a, b) => a.localeCompare(b));
-
-                    for (const filename of mdFiles) {
-                        const fullPath = join(designDir, filename);
-                        const relPath = `docs/design/${filename}`;
-                        let title = filename.replace(/\.md$/, '').replace(/-/g, ' ');
-                        try {
-                            const content = await fs.readFile(fullPath);
-                            const match = content.match(/^#\s+(.+)$/m);
-                            if (match?.[1]) title = match[1].trim();
-                        } catch {}
-
-                        files.push({
-                            id: relPath,
-                            path: relPath,
-                            name: filename,
-                            title,
-                            category: 'satellite',
-                        });
-                    }
-                }
-
-                return c.json({ files, total: files.length });
+                return c.json(await documents().listDesigns());
             } catch {
                 return c.json({ files: [], total: 0 });
             }
@@ -800,39 +752,11 @@ export const healthModule: ServerModule = {
             req: { query: (name: string) => string | undefined };
             json: (data: unknown, status?: number) => Response;
         }) => {
-            if (!ctx) {
-                return c.json({ ok: false, error: 'ServerContext unavailable' }, 503);
-            }
-            const reqPath = c.req.query('path');
-            if (!reqPath) {
-                return c.json({ ok: false, error: 'Missing path query parameter' }, 400);
-            }
-
-            // Path boundary check: strictly allowed design doc locations
-            const isAllowed =
-                reqPath === 'DESIGN.md' ||
-                reqPath === 'docs/04_DESIGN.md' ||
-                /^docs\/design\/[a-zA-Z0-9_-]+\.md$/.test(reqPath);
-
-            if (!isAllowed) {
-                return c.json({ ok: false, error: 'Access denied: path not allowed' }, 403);
-            }
-
+            if (!ctx) return c.json({ ok: false, error: 'ServerContext unavailable' }, 503);
             try {
-                const projectRoot = ctx.cwd ?? process.cwd();
-                const fs = ctx.fs ?? createNodeFileSystem(projectRoot);
-                const fullPath = join(projectRoot, reqPath);
-                if (!(await fs.exists(fullPath))) {
-                    return c.json({ ok: false, error: 'File not found' }, 404);
-                }
-                const content = await fs.readFile(fullPath);
-                let title = basename(reqPath, '.md');
-                const match = content.match(/^#\s+(.+)$/m);
-                if (match?.[1]) title = match[1].trim();
-
-                return c.json({ ok: true, path: reqPath, title, content });
-            } catch (err) {
-                return c.json({ ok: false, error: err instanceof Error ? err.message : String(err) }, 500);
+                return toResponse(c, await documents().showDesign(c.req.query('path')));
+            } catch (error) {
+                return documentError(c, error);
             }
         };
 
@@ -842,70 +766,9 @@ export const healthModule: ServerModule = {
         app.get('/api/designs/file', designFileHandler);
 
         const plansHandler = async (c: { json: (data: unknown) => Response }) => {
-            if (!ctx) {
-                return c.json({ files: [], total: 0 });
-            }
-
+            if (!ctx) return c.json({ files: [], total: 0 });
             try {
-                const projectRoot = ctx.cwd ?? process.cwd();
-                const fs = ctx.fs ?? createNodeFileSystem(projectRoot);
-                const files: Array<{
-                    id: string;
-                    path: string;
-                    name: string;
-                    title: string;
-                    category: 'roadmap' | 'plan';
-                }> = [];
-
-                // 1. docs/02_ROADMAP.md
-                const roadmapPath = join(projectRoot, 'docs', '02_ROADMAP.md');
-                if (await fs.exists(roadmapPath)) {
-                    let title = '02 Roadmap — Spur';
-                    try {
-                        const content = await fs.readFile(roadmapPath);
-                        const match = content.match(/^#\s+(.+)$/m);
-                        if (match?.[1]) title = match[1].trim();
-                    } catch {}
-                    files.push({
-                        id: 'docs/02_ROADMAP.md',
-                        path: 'docs/02_ROADMAP.md',
-                        name: '02_ROADMAP.md',
-                        title,
-                        category: 'roadmap',
-                    });
-                }
-
-                // 2. docs/plans/*.md (descending by filename)
-                const plansDir = join(projectRoot, 'docs', 'plans');
-                if (await fs.exists(plansDir)) {
-                    let mdFiles: string[] = [];
-                    try {
-                        const entries = await fs.readDir(plansDir);
-                        mdFiles = entries.filter((f) => f.endsWith('.md'));
-                    } catch {}
-                    mdFiles.sort((a, b) => b.localeCompare(a));
-
-                    for (const filename of mdFiles) {
-                        const fullPath = join(plansDir, filename);
-                        const relPath = `docs/plans/${filename}`;
-                        let title = filename.replace(/\.md$/, '').replace(/-/g, ' ');
-                        try {
-                            const content = await fs.readFile(fullPath);
-                            const match = content.match(/^#\s+(.+)$/m);
-                            if (match?.[1]) title = match[1].trim();
-                        } catch {}
-
-                        files.push({
-                            id: relPath,
-                            path: relPath,
-                            name: filename,
-                            title,
-                            category: 'plan',
-                        });
-                    }
-                }
-
-                return c.json({ files, total: files.length });
+                return c.json(await documents().listPlans());
             } catch {
                 return c.json({ files: [], total: 0 });
             }
@@ -915,36 +778,11 @@ export const healthModule: ServerModule = {
             req: { query: (name: string) => string | undefined };
             json: (data: unknown, status?: number) => Response;
         }) => {
-            if (!ctx) {
-                return c.json({ ok: false, error: 'ServerContext unavailable' }, 503);
-            }
-            const reqPath = c.req.query('path');
-            if (!reqPath) {
-                return c.json({ ok: false, error: 'Missing path query parameter' }, 400);
-            }
-
-            // Path boundary check: strictly allowed plan doc locations
-            const isAllowed = reqPath === 'docs/02_ROADMAP.md' || /^docs\/plans\/[a-zA-Z0-9_.-]+\.md$/.test(reqPath);
-
-            if (!isAllowed) {
-                return c.json({ ok: false, error: 'Access denied: path not allowed' }, 403);
-            }
-
+            if (!ctx) return c.json({ ok: false, error: 'ServerContext unavailable' }, 503);
             try {
-                const projectRoot = ctx.cwd ?? process.cwd();
-                const fs = ctx.fs ?? createNodeFileSystem(projectRoot);
-                const fullPath = join(projectRoot, reqPath);
-                if (!(await fs.exists(fullPath))) {
-                    return c.json({ ok: false, error: 'File not found' }, 404);
-                }
-                const content = await fs.readFile(fullPath);
-                let title = basename(reqPath, '.md');
-                const match = content.match(/^#\s+(.+)$/m);
-                if (match?.[1]) title = match[1].trim();
-
-                return c.json({ ok: true, path: reqPath, title, content });
-            } catch (err) {
-                return c.json({ ok: false, error: err instanceof Error ? err.message : String(err) }, 500);
+                return toResponse(c, await documents().showPlan(c.req.query('path')));
+            } catch (error) {
+                return documentError(c, error);
             }
         };
 

@@ -5,6 +5,7 @@ import { featureContract } from './feature';
 import { fleetContract, processesContract } from './fleet';
 import { historyContract } from './history';
 import { inboxContract } from './inbox';
+import { planningDocumentsContract } from './planning-documents';
 import { planningEventContract } from './planning-event';
 import { runsContract } from './runs';
 import { searchContract } from './search';
@@ -40,6 +41,7 @@ export const contract = {
     fleet: { ...fleetContract },
     processes: { ...processesContract },
     runs: { ...runsContract },
+    planningDocuments: { ...planningDocumentsContract },
     ...planningEventContract,
 };
 
@@ -56,6 +58,7 @@ export { featureCreateInputSchema, featureListResponseSchema, featureShowRespons
 export * from './fleet';
 export * from './history';
 export * from './observability';
+export * from './planning-documents';
 // Run progress projection wire schema (1069 / E72 R5) — the route is Hono-served;
 // the contract documents it for the generated OpenAPI.
 export * from './runs';

@@ -551,6 +551,10 @@ export type {
     EnsurePipelineRunLinkResult,
 } from './services/pipeline-run-link';
 export { ensurePipelineRunLink, TASK_FORWARD_CHAIN } from './services/pipeline-run-link';
+export {
+    PlanningDocumentError,
+    PlanningDocumentService,
+} from './services/planning-document-service';
 export { BusPlanningEventEmitter, type PlanningEventMap } from './services/planning-events';
 export type {
     CapturingEmitter,
