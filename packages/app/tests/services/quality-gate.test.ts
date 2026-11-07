@@ -280,6 +280,109 @@ const COVERAGE_ONLY_GATE = [
 ].join('\n');
 
 describe('coverage shortfall findings (0862 R2)', () => {
+    test.each([
+        '[test]\ncoverageThreshold = { lines = 0.9, functions = 0.9 }',
+        '[test.coverageThreshold]\nlines = 0.9\nfunctions = 0.9',
+        'test.coverageThreshold.lines = 9e-1\ntest.coverageThreshold.functions = 0.9',
+        'coverageThreshold = { lines = 0.9, functions = 0.9 }',
+        '# coverageThreshold = { lines = 0.1 }\n[test.coverageThreshold]\nlines = 0.9 # floor\nfunctions = 0.9',
+    ])('equivalent TOML forms retain the same failed gate and shortfall anchors: %s', (config) => {
+        const { dir, cleanup } = scratch('spur-qg-toml-');
+        try {
+            writeFileSync(join(dir, 'bunfig.toml'), config);
+            expect(parseCoverageThreshold(config)).toEqual({ functions: 0.9, lines: 0.9 });
+            const result = gate('run', dir, executable(dir, 'gate.sh', COVERAGE_ONLY_GATE));
+            expect(result.status).toBe('FAIL');
+            expect(readFileSync(join(dir, result.statusFile), 'utf8')).toBe('FAIL\n');
+            expect(readFileSync(join(dir, result.findingsFile), 'utf8')).toBe('src/short.ts:12 ');
+            expect(readFileSync(join(dir, result.logFile), 'utf8')).toContain(
+                'quality gate: coverage shortfall src/short.ts:12 funcs=50.00 lines=80.00',
+            );
+        } finally {
+            cleanup();
+        }
+    });
+
+    test.each([
+        ['empty', '', false],
+        ['absent', '[test]\ncoverage = true', false],
+        ['comment', '# coverageThreshold = { lines = 0.9 }', false],
+        ['unrelated namespace', '[build]\ncoverageThreshold = { lines = 0.9 }', false],
+        ['test takes precedence', 'coverageThreshold = { lines = 0.9 }\n[test]\ncoverage = true', false],
+        ['malformed', '[test]\ncoverageThreshold = { lines = nope }', true],
+        ['malformed suffix', '[test]\ncoverageThreshold = { lines = 0.9 }\nbroken = [', true],
+        ['empty threshold', '[test]\ncoverageThreshold = {}', true],
+        ['unsupported axis', '[test]\ncoverageThreshold = { statements = 0.9 }', true],
+        ['scalar', '[test]\ncoverageThreshold = 0.9', true],
+        ['array', '[test]\ncoverageThreshold = [0.9]', true],
+        ['string', '[test]\ncoverageThreshold = { lines = "0.9" }', true],
+        ['boolean', '[test]\ncoverageThreshold = { functions = true }', true],
+        ['negative', '[test]\ncoverageThreshold = { lines = -0.1 }', true],
+        ['above one', '[test]\ncoverageThreshold = { functions = 1.1 }', true],
+        ['infinite', '[test]\ncoverageThreshold = { lines = inf }', true],
+        ['NaN', '[test]\ncoverageThreshold = { functions = nan }', true],
+    ] as const)('%s settings keep failure status and distinguish absent from invalid', (_name, config, invalid) => {
+        const { dir, cleanup } = scratch('spur-qg-toml-invalid-');
+        const writes: string[] = [];
+        const originalWrite = process.stdout.write;
+        process.stdout.write = ((chunk: string): boolean => {
+            writes.push(chunk);
+            return true;
+        }) as typeof process.stdout.write;
+        try {
+            writeFileSync(join(dir, 'bunfig.toml'), config);
+            expect(parseCoverageThreshold(config)).toBeNull();
+            const result = runQualityGate(
+                'run',
+                { wbs: '1314', qualityGateCmd: executable(dir, 'gate.sh', COVERAGE_ONLY_GATE) },
+                { cwd: dir, captureGitTree: () => ({ ok: true, tree: TREE }) },
+            );
+            expect(result.status).toBe('FAIL');
+            expect(readFileSync(join(dir, result.statusFile), 'utf8')).toBe('FAIL\n');
+            const log = readFileSync(join(dir, result.logFile), 'utf8');
+            expect(log).not.toContain('coverage shortfall');
+            expect(log.includes('bunfig.toml:1')).toBe(invalid);
+            expect(readFileSync(join(dir, result.findingsFile), 'utf8')).toBe(invalid ? 'bunfig.toml:1 ' : '');
+            if (invalid) {
+                const diagnostics = log.split('\n').filter((line) => line.includes('bunfig.toml:1'));
+                expect(diagnostics).toHaveLength(1);
+                expect(diagnostics[0]).toContain('threshold diagnostics are unavailable');
+                expect(diagnostics[0]?.length).toBeLessThan(240);
+                expect(writes.join('')).toContain(diagnostics[0] ?? '');
+            }
+        } finally {
+            process.stdout.write = originalWrite;
+            cleanup();
+        }
+    });
+
+    test.each([
+        ['coverageThreshold = { functions = 0, lines = 1 }', { functions: 0, lines: 1 }],
+        ['[test]\ncoverageThreshold = { lines = 0.9, functions = "invalid" }', { lines: 0.9 }],
+        ['[test]\ncoverageThreshold = { functions = 0.8, lines = -1 }', { functions: 0.8 }],
+        ['coverageThreshold = { lines = 0.1 }\n[test.coverageThreshold]\nlines = 0.9', { lines: 0.9 }],
+    ])('narrows numeric axes and prefers the test namespace: %s', (config, expected) => {
+        expect(parseCoverageThreshold(config)).toEqual(expected);
+    });
+
+    test('an invalid axis still reports valid-axis shortfalls; successful gates stay silent', () => {
+        const { dir, cleanup } = scratch('spur-qg-toml-partial-');
+        try {
+            writeFileSync(join(dir, 'bunfig.toml'), '[test]\ncoverageThreshold = { lines = 0.9, functions = "bad" }');
+            const failed = gate('run', dir, executable(dir, 'fail.sh', COVERAGE_ONLY_GATE));
+            expect(failed.status).toBe('FAIL');
+            const findings = readFileSync(join(dir, failed.findingsFile), 'utf8');
+            expect(findings).toContain('src/short.ts:12');
+            expect(findings).toContain('bunfig.toml:1');
+            writeFileSync(join(dir, 'bunfig.toml'), 'broken = [');
+            const passed = gate('run', dir, executable(dir, 'pass.sh', 'echo " 0 fail"'));
+            expect(passed.status).toBe('PASS');
+            expect(readFileSync(join(dir, passed.logFile), 'utf8')).not.toContain('bunfig.toml:1');
+        } finally {
+            cleanup();
+        }
+    });
+
     test('a coverage-only failure names the under-threshold row as a findings anchor', () => {
         const { dir, cleanup } = scratch('spur-qg-coverage-');
         try {

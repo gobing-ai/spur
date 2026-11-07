@@ -3,7 +3,7 @@ kind: design
 title: "CLI grammar, initialization, agents, teams and rules"
 status: implemented
 created_at: 2026-09-09
-updated_at: 2026-10-26
+updated_at: 2026-11-06
 related: ["0822", "0850", "0856", "0857", "0860", "0861", "1064", "1080", "1081"]
 tags: [contract, cli, agent]
 ---
@@ -77,6 +77,15 @@ help rendering overrides remain.
 checks still receive the merged builder configuration; `status`, `light`, `deferred`, `run` and
 `recheck` do not create or migrate a database merely to inspect or record a gate receipt. The
 full modes retain the host-wide lock; light/status remain lock-free.
+
+For a failed full gate with a `0 fail` summary and no failing-test summary, coverage diagnostics
+read `bunfig.toml` with the native TOML parser. Inline and standard-table thresholds are equivalent.
+The `test.coverageThreshold` setting takes precedence whenever a `test` namespace exists; the
+legacy root `coverageThreshold` snippet applies otherwise. Only finite numeric `functions` and
+`lines` axes between 0 and 1 participate in shortfall findings. Missing settings stay silent.
+Malformed TOML or an explicitly invalid threshold adds one bounded `bunfig.toml:1` diagnostic to
+stdout, the gate log and findings; any valid axis still produces shortfalls. Diagnostics never
+change the original gate verdict or relax Bun coverage enforcement.
 
 <a id="101-shared-option-registry-0618"></a>
 

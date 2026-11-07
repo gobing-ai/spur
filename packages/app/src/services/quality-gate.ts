@@ -165,20 +165,49 @@ export interface CoverageThreshold {
     lines?: number;
 }
 
+/** Parse once, keeping absent settings distinct from unavailable threshold diagnostics. */
+function parseCoverageThresholdResult(bunfigText: string): {
+    threshold: CoverageThreshold | null;
+    diagnostic: string | null;
+} {
+    const unavailable = 'quality gate: bunfig.toml:1 threshold diagnostics are unavailable';
+    let config: object;
+    try {
+        config = Bun.TOML.parse(bunfigText);
+    } catch {
+        return { threshold: null, diagnostic: `${unavailable}; fix malformed TOML` };
+    }
+    // The legacy root snippet applies only when no test namespace exists.
+    const namespace = 'test' in config ? config.test : config;
+    if (typeof namespace !== 'object' || namespace === null || !('coverageThreshold' in namespace)) {
+        return { threshold: null, diagnostic: null };
+    }
+    const raw = namespace.coverageThreshold;
+    const invalid = `${unavailable}; set coverageThreshold functions/lines to finite numbers between 0 and 1`;
+    if (typeof raw !== 'object' || raw === null || Array.isArray(raw)) {
+        return { threshold: null, diagnostic: invalid };
+    }
+    const threshold: CoverageThreshold = {};
+    let invalidAxis = false;
+    for (const axis of ['functions', 'lines'] as const) {
+        if (!(axis in raw)) continue;
+        const value = (raw as Record<string, unknown>)[axis];
+        if (typeof value === 'number' && Number.isFinite(value) && value >= 0 && value <= 1) {
+            threshold[axis] = value;
+        } else {
+            invalidAxis = true;
+        }
+    }
+    const result = threshold.functions === undefined && threshold.lines === undefined ? null : threshold;
+    return { threshold: result, diagnostic: invalidAxis || result === null ? invalid : null };
+}
+
 /**
- * Parse `coverageThreshold = { lines = 0.9, functions = 0.9 }` out of bunfig text.
- * `null` when the setting is absent — the caller then skips the shortfall scan entirely.
+ * Read finite functions/lines floors in [0, 1] from native TOML, preferring the test namespace.
+ * The legacy root snippet remains supported; absent, malformed or wholly invalid settings return null.
  */
 export function parseCoverageThreshold(bunfigText: string): CoverageThreshold | null {
-    const block = bunfigText.match(/coverageThreshold\s*=\s*\{([^}]*)\}/);
-    if (!block) return null;
-    const threshold: CoverageThreshold = {};
-    for (const axis of ['functions', 'lines'] as const) {
-        const raw = block[1]?.match(new RegExp(`\\b${axis}\\s*=\\s*([\\d.]+)`))?.[1];
-        const value = raw === undefined ? Number.NaN : Number.parseFloat(raw);
-        if (Number.isFinite(value)) threshold[axis] = value;
-    }
-    return threshold.functions === undefined && threshold.lines === undefined ? null : threshold;
+    return parseCoverageThresholdResult(bunfigText).threshold;
 }
 
 /**
@@ -1300,7 +1329,13 @@ export function runQualityGate(
         const gateLog = existsSync(abs(logFile)) ? readFileSync(abs(logFile), 'utf8') : '';
         if (/^\s*0 fail\b/m.test(gateLog) && !/^\s*[1-9]\d*\s+fail\b/m.test(gateLog)) {
             const bunfigPath = cwd ? join(cwd, 'bunfig.toml') : 'bunfig.toml';
-            const threshold = existsSync(bunfigPath) ? parseCoverageThreshold(readFileSync(bunfigPath, 'utf8')) : null;
+            const { threshold, diagnostic } = existsSync(bunfigPath)
+                ? parseCoverageThresholdResult(readFileSync(bunfigPath, 'utf8'))
+                : { threshold: null, diagnostic: null };
+            if (diagnostic) {
+                process.stdout.write(`${diagnostic}\n`);
+                appendFileSync(abs(logFile), `${diagnostic}\n`);
+            }
             if (threshold) {
                 for (const shortfall of scanCoverageShortfalls(gateLog, threshold)) {
                     process.stdout.write(`${shortfall}\n`); // tee: stdout and the log
