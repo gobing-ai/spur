@@ -73,7 +73,6 @@ function runMarkdownSafetyProof(
     });
     const output = `${child.stdout.toString()}\n${child.stderr.toString()}`;
     if (child.exitCode !== 0) {
-        console.error(output.slice(-4000));
         throw new Error(`Markdown safety child proof exited ${child.exitCode}: ${output.slice(-4000)}`);
     }
     const summary = assertProofReport(readProofReport(REPORT));
