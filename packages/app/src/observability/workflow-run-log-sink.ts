@@ -41,6 +41,45 @@ const TRUNCATION_MARKER =
     '\n=== [truncated] consolidated run log reached its configured bound; further lines were not written ===\n';
 
 /**
+ * Atomically replace a run-record state file: same-directory temp file plus rename, so a
+ * reader never observes a partial JSON. Best-effort — a failing write degrades the record,
+ * never the run, and never leaves `.tmp` residue behind (0926 R1, R8 of 0925).
+ */
+function writeStateFile(statePath: string, state: Record<string, unknown>): void {
+    const temp = `${statePath}.tmp`;
+    try {
+        writeFileSync(temp, `${JSON.stringify(state, null, 2)}\n`);
+        renameSync(temp, statePath);
+    } catch {
+        try {
+            unlinkSync(temp);
+        } catch {
+            // Nothing to clean (temp was never created).
+        }
+    }
+}
+
+/**
+ * Project a terminal status into an EXISTING run record (task 1317 R4). Non-engine terminal
+ * writes (cancel, clean, the worker-lost reap) settle the DB row directly, so without this the
+ * `.state.json` copy keeps claiming the run is still live. The record's other fields — identity,
+ * `startedAt`, lineage — are carried over verbatim; an absent or unreadable record stays absent.
+ * Best-effort: a projection failure never undoes the DB write it follows.
+ */
+export function projectRunStateStatus(dir: string, runId: string, status: string, at: string): void {
+    const statePath = join(dir, `${runId}.state.json`);
+    let prior: Record<string, unknown>;
+    try {
+        const parsed: unknown = JSON.parse(readFileSync(statePath, 'utf8'));
+        if (parsed === null || typeof parsed !== 'object' || Array.isArray(parsed)) return;
+        prior = parsed as Record<string, unknown>;
+    } catch {
+        return;
+    }
+    writeStateFile(statePath, { ...prior, status, updatedAt: at, finalizedAt: at });
+}
+
+/**
  * Two-file workflow run record for logging-enabled runs (E7 / task 0925, on the
  * feature D2 / 0426 sink): a read-only subscriber on the
  * {@link WorkflowObservabilityBus} that appends the human run log to
@@ -248,19 +287,7 @@ export class WorkflowRunLogSink {
             ...(this.lineage?.startState !== undefined ? { startState: this.lineage.startState } : {}),
             ...(this.lineage?.continuedFrom !== undefined ? { continuedFrom: this.lineage.continuedFrom } : {}),
         };
-        const temp = `${this.statePath}.tmp`;
-        try {
-            writeFileSync(temp, `${JSON.stringify(state, null, 2)}\n`);
-            renameSync(temp, this.statePath);
-        } catch {
-            // Best-effort (R8): a failing state write degrades the record, never the
-            // run — and never leaves `.tmp` residue behind (0926 R1).
-            try {
-                unlinkSync(temp);
-            } catch {
-                // Nothing to clean (temp was never created).
-            }
-        }
+        writeStateFile(this.statePath, state);
     }
 
     private onSteering(ack: SteeringAck): void {

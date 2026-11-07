@@ -54,6 +54,11 @@ export function rowToTraceEntry(
         isDryRun = meta.dryRun === true;
         if (typeof meta.failureReason === 'string' && meta.failureReason !== '') {
             failureReason = meta.failureReason;
+        } else if (typeof meta.staleReason === 'string' && meta.staleReason !== '') {
+            // 1317 R3: a run settled outside the engine (cancel, clean, worker-lost reap) carries
+            // its reason in staleReason. Surface it as the run's reason line so a follower prints
+            // WHY the run ended, not just that it did.
+            failureReason = meta.staleReason;
         }
         // 0768 R1: identity is surfaced only when actually recorded — the key's
         // presence separates post-0768 rows (version: literal|null) from legacy rows.

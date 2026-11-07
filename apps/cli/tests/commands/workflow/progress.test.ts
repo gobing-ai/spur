@@ -10,7 +10,7 @@ import {
     projectWorkflowProgress,
     type WorkflowProgressProjection,
 } from '@gobing-ai/spur-app';
-import { createMigratedDb } from '@gobing-ai/spur-domain';
+import { createMigratedDb, RunDao } from '@gobing-ai/spur-domain';
 import { main } from '../../../src/index';
 import { createCapturedOutput, createTempProject } from '../../helpers';
 
@@ -196,6 +196,30 @@ terminalStates:
         const doc = JSON.parse(enveloped.messages.join('')) as { ok: boolean; error: { code: string } };
         expect(doc.ok).toBe(false);
         expect(doc.error.code).toBe('NOT_FOUND');
+        await rm(dir, { recursive: true, force: true });
+    });
+
+    test('1317 R1: the progress read path reaps a run whose recorded worker is gone', async () => {
+        const { dir, dbUrl } = await progressFixture();
+        const db = await createMigratedDb({ url: dbUrl });
+        const proc = Bun.spawn([process.execPath, '-e', ''], { stdout: 'ignore', stderr: 'ignore' });
+        const deadPid = proc.pid;
+        await proc.exited;
+        const now = Date.now();
+        await db.run(
+            "INSERT INTO runs (id, workflow_name, mode, status, pid, started_at, metadata_json, created_at, updated_at) VALUES ('progress-dead', 'progress-flow', 'async', 'running', ?, ?, '{}', ?, ?)",
+            [deadPid, now, now, now],
+        );
+        db.close();
+
+        const output = createCapturedOutput();
+        expect(await main(['workflow', 'progress', 'progress-dead', '--json'], { output, cwd: dir, dbUrl })).toBe(0);
+        // The reap is a DB write, so the row is the evidence: the command path leaves no run
+        // reading `running` next to a dead pid. (`interrupted` is not a projection status, so
+        // the payload itself still reports the reaped row as unknown.)
+        const after = await createMigratedDb({ url: dbUrl });
+        expect((await new RunDao(after).traceRowById('progress-dead'))?.status).toBe('interrupted');
+        after.close();
         await rm(dir, { recursive: true, force: true });
     });
 });

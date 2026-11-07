@@ -998,3 +998,45 @@ describe('formatTraceTimeline executor/session columns (task 0895 R2)', () => {
         expect(out).toContain('pinReresolvedReason=quota exhausted');
     });
 });
+
+// ---------------------------------------------------------------------------
+// 1317 — a follower stops at a dead worker instead of polling it.
+// ---------------------------------------------------------------------------
+
+describe('followTrace worker-lost reap (1317 R3)', () => {
+    test('a --follow watch stops at the reaped run with the worker-lost reason, not a timeout', async () => {
+        const dir = await createTempProject();
+        const wfDir = join(dir, '.spur', 'workflows');
+        await mkdir(wfDir, { recursive: true });
+        await writeFile(join(wfDir, 'test.yaml'), ACTION_WORKFLOW_YAML);
+        const dbUrl = join(dir, '.spur', 'trace-reap.sqlite');
+        // A worker that has already exited: its pid is recorded, its heartbeat is not.
+        const proc = Bun.spawn([process.execPath, '-e', ''], { stdout: 'ignore', stderr: 'ignore' });
+        const deadPid = proc.pid;
+        await proc.exited;
+        const db = await createMigratedDb({ url: dbUrl });
+        const now = Date.now();
+        await db.run(
+            "INSERT INTO runs (id, workflow_name, mode, status, pid, started_at, metadata_json, created_at, updated_at) VALUES ('trace-reap-run', 'test', 'async', 'running', ?, ?, '{}', ?, ?)",
+            [deadPid, now, now, now],
+        );
+        db.close();
+
+        const output = createCapturedOutput();
+        // A deadline shorter than one default poll interval: a watch that polled instead of
+        // reaping cannot finish in time, so exit 0 IS the terminal-follow evidence.
+        const exitCode = await main(
+            ['workflow', 'trace', 'trace-reap-run', '--follow', '--poll', '50', '--timeout', '1500'],
+            {
+                output,
+                cwd: dir,
+                dbUrl,
+            },
+        );
+
+        expect(exitCode).toBe(0);
+        const lines = output.messages.join('\n');
+        expect(lines).toContain('Run finalized: interrupted');
+        expect(lines).toContain(`worker-lost: pid ${deadPid} not alive`);
+    });
+});

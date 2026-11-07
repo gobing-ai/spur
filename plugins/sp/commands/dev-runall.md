@@ -17,9 +17,9 @@ Wraps the **sp:spur-dev** skill.
 | `--tasks` `<selector>` | Task selector to run. | required |
 | `--feature` `<id>` | Restrict to a feature. | omitted |
 | `--mode` `<sequential\|parallel\|auto>` | Batch execution order. `auto` computes the frozen batch's dependency waves and runs parallel only when a wave holds ≥2 independent tasks (see below). | sequential |
-| `--keep-going` | Continue past per-task failures. | off |
-| `--auto` | Skip objective HITL gates. | off |
-| `--agent` `<inline\|auto\|name>` | Who runs each task's pipeline stages. Interactive sequential omit/`inline` uses the host-session driver with unified inline semantics (task 0687 — see below). `auto`, a name, parallel mode, and headless invocation use subprocesses. The opt-in `fleet` selector (0942) maps each task run to `executor: 'fleet'` so `agent.run` stages dispatch through the fleet control plane (ADR-126) instead of a subprocess. | omit |
+| `--keep-going` | Continue past per-task failures (implied by `--auto`). | off |
+| `--auto` | Skip objective HITL gates, and treat the batch as unattended: `--auto` implies `--keep-going` (a failed task is `failed`, its in-batch dependents `skipped`, independents keep running). | off |
+| `--agent` `<inline\|auto\|name>` | Who runs each task's pipeline stages. Interactive sequential omit/`inline` uses the host-session driver with unified inline semantics (task 0687 — see below). `auto`, a name, parallel mode, and headless invocation use subprocesses; `auto` is resolved **once per batch** — the first run's implement `result.executor` is pinned for every later task, and only a `failed-agent` ending re-resolves it, exactly once (1318 R2/R3). The opt-in `fleet` selector (0942) maps each task run to `executor: 'fleet'` so `agent.run` stages dispatch through the fleet control plane (ADR-126) instead of a subprocess. | omit |
 | `--json` | Emit structured JSON. | off |
 | `--wrap` | Run the wrap hop **once for the batch** over the `done` subset only (Step 6 of execution-batch.md): `vars.feature` is passed only when every frozen task is `done`/`cancelled`; an empty done subset skips the wrap with a reason. The `--agent` selector is preserved into the `/sp:dev-wrap` handoff when supplied; omission remains omission. | off |
 | `--next` | Chain-to-completion via the next-router. | off |
@@ -50,8 +50,9 @@ see `execution-parallel-isolation.md`; `auto` picks one per batch — see below)
 (parallel-mode worker bound — at most <n> task pipelines at once, default 2; a dependent task starts
 only after its in-set dependencies are **integrated** onto the base ref), `--keep-going`
 (batch failure policy — skip a failed task's in-batch dependents, continue independents; default
-halts on first failure), `--auto`
-(sets `profile=auto` on each per-task run, skipping the HITL approve gate), `--agent <inline|auto|name>`
+halts on first failure, and `--auto` implies `--keep-going`), `--auto`
+(sets `profile=auto` on each per-task run, skipping the HITL approve gate; makes the batch
+unattended, so it also implies `--keep-going`), `--agent <inline|auto|name>`
 (names who runs the pipeline's stages — interactive sequential omit/`inline` uses the host driver;
 `auto` or a name is merged into each per-task `vars.agent` and `vars.implementAgent`; `fleet` maps each task run to `executor: 'fleet'` instead (fleet dispatch, 0942); parallel mode
 retains isolated subprocesses, ADR-047), `--json` (emit the

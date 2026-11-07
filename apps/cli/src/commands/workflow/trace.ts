@@ -130,6 +130,19 @@ function followDeadlineLine(runId: string, elapsedMs: number, status: string): s
 }
 
 /**
+ * The one terminal line a follow ends on, from any read that sees a settled run — the initial
+ * read included (1317 R3: a follower that finds the run already reaped by the worker-lost guard
+ * still reports WHY it ended, instead of stopping silently).
+ */
+function followFinalizedLine(timeline: WorkflowTraceTimeline): string {
+    const run = timeline.run;
+    const reason = run.failureReason ? ` — ${run.failureReason}` : '';
+    const duration = run.durationMs === null ? 'unavailable' : `${run.durationMs}ms`;
+    const next = run.nextAction === undefined ? '' : `\nNext: ${run.nextAction.label} — ${run.nextAction.value}`;
+    return `Run finalized: ${run.status}${reason} — outcome=${run.outcome} duration=${duration}${next}`;
+}
+
+/**
  * Replay persisted timeline rows, then poll for inserts/updates until the run is
  * terminal. Updated action rows are emitted again (in-flight → finished), while
  * identical snapshots are deduplicated by a stable serialized fingerprint.
@@ -169,7 +182,10 @@ export async function followTrace(
 
     write(formatTraceTimeline(timeline));
     const seen = new Set(timeline.events.map((event) => JSON.stringify(event)));
-    if (isTerminalTraceStatus(timeline.run.status)) return false;
+    if (isTerminalTraceStatus(timeline.run.status)) {
+        write(followFinalizedLine(timeline));
+        return false;
+    }
 
     while (true) {
         await wait(pollMs);
@@ -181,12 +197,7 @@ export async function followTrace(
             write(formatTimelineEvent(event));
         }
         if (isTerminalTraceStatus(next.run.status)) {
-            const reason = next.run.failureReason ? ` — ${next.run.failureReason}` : '';
-            const duration = next.run.durationMs === null ? 'unavailable' : `${next.run.durationMs}ms`;
-            write(`Run finalized: ${next.run.status}${reason} — outcome=${next.run.outcome} duration=${duration}`);
-            if (next.run.nextAction !== undefined) {
-                write(`Next: ${next.run.nextAction.label} — ${next.run.nextAction.value}`);
-            }
+            write(followFinalizedLine(next));
             return false;
         }
         const at = now();

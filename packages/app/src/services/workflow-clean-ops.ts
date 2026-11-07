@@ -1,13 +1,14 @@
 import { realpathSync, statSync } from 'node:fs';
 import { readdir, rm } from 'node:fs/promises';
 import { dirname, join, relative, resolve, sep } from 'node:path';
-import { ArtifactDao, RunDao, redirectRunStorageReferences } from '@gobing-ai/spur-domain';
+import { ArtifactDao, type DbAdapter, RunDao, redirectRunStorageReferences } from '@gobing-ai/spur-domain';
 import {
     createDefaultWorkflowEngineHost,
     DbWorkflowPersistenceAdapter,
     WorkflowService as EngineWorkflowService,
 } from '@gobing-ai/ts-dual-workflow-engine';
 import { createNodeFileSystem } from '@gobing-ai/ts-runtime';
+import { projectRunStateStatus } from '../observability/workflow-run-log-sink';
 import {
     type CheckpointMetadata,
     isTerminalCheckpointStatus,
@@ -21,9 +22,77 @@ import type {
     ScratchReclamationResult,
     SkippedCheckpoint,
 } from '../workflow/run-record';
+import { isPidAlive } from './project-process';
 import { migrateRunStorage, type RunStorageMigrationResult, runStoragePaths } from './run-storage';
 import { newestMtime } from './workflow-catalog-scan';
 import type { WorkflowAppServiceContext, WorkflowCleanResult } from './workflow-service';
+
+/** The reason strings a reap stamps into `metadata.staleReason` (1317 R1). */
+interface ReapReasons {
+    /** `running` → `interrupted` through the engine (resumable owner-lost path). */
+    interrupted: string;
+    /** `pending` → `failed` through the legacy finalize path. */
+    finalized: string;
+}
+
+/**
+ * Reap one non-terminal run: engine interrupt when the row can be interrupted, else the legacy
+ * finalize-to-failed path. Shared by `clean`'s age sweep and the worker-lost reaper so both use
+ * exactly the same guarded writes (1317 R1/R2). Returns the status the row settled on.
+ */
+async function reapRun(
+    db: DbAdapter,
+    engine: EngineWorkflowService,
+    run: { id: string; status: string },
+    reasons: ReapReasons,
+    cwd: string,
+): Promise<'interrupted' | 'failed'> {
+    const dao = new RunDao(db);
+    const interrupted =
+        run.status === 'running'
+            ? await engine.interruptRun(
+                  run.id,
+                  // 0937 review: the engine mirrors this reason into the closed-enum
+                  // runs.terminal_reason, so pass the declared value — the human detail
+                  // lands in metadata_json below under finalizeStale's key.
+                  'interrupted',
+              )
+            : undefined;
+    if (interrupted === undefined) {
+        await dao.finalizeStale(run.id, reasons.finalized);
+    } else {
+        await dao.mergeMetadata(run.id, { staleReason: reasons.interrupted });
+    }
+    // 1317 R4: the DB row is the lifecycle authority, but a run record that still reads
+    // `running` sends the next reader back to the DB for a status only this write knows.
+    projectRunStateStatus(
+        runStoragePaths(cwd).recordsDir,
+        run.id,
+        interrupted === undefined ? 'failed' : 'interrupted',
+        new Date().toISOString(),
+    );
+    return interrupted === undefined ? 'failed' : 'interrupted';
+}
+
+/**
+ * Reap a run whose recorded worker is gone (1317 R1): the run's status is whatever its worker
+ * last wrote, so a reader that finds a `running`/`pending` row next to a dead `runs.pid` reaps it
+ * here instead of polling a corpse. Rows with no recorded pid, a live pid, or a terminal/paused
+ * status are left untouched. Race-safe by construction: the reap only issues the existing
+ * status-guarded writes, so a run that settles in between keeps its terminal state (R2).
+ */
+export async function reapIfWorkerLost(db: DbAdapter, cwd: string, runId: string): Promise<boolean> {
+    const dao = new RunDao(db);
+    const row = await dao.traceRowById(runId);
+    if (row === undefined) return false;
+    if (row.status !== 'running' && row.status !== 'pending') return false;
+    const pid = await dao.getPid(runId);
+    if (pid === null || isPidAlive(pid)) return false;
+    const reason = `worker-lost: pid ${pid} not alive`;
+    const engine = new EngineWorkflowService(createDefaultWorkflowEngineHost({}), new DbWorkflowPersistenceAdapter(db));
+    await reapRun(db, engine, row, { interrupted: reason, finalized: reason }, cwd);
+    return true;
+}
 
 /**
  * `workflow clean` for {@link WorkflowAppService}: stale-run cleanup, run-storage migration and the
@@ -48,23 +117,16 @@ export class WorkflowCleanOps {
                 new DbWorkflowPersistenceAdapter(db),
             );
             for (const run of stale) {
-                const interrupted =
-                    run.status === 'running'
-                        ? await engine.interruptRun(
-                              run.id,
-                              // 0937 review: the engine mirrors this reason into the closed-enum
-                              // runs.terminal_reason, so pass the declared value — the human detail
-                              // lands in metadata_json below under finalizeStale's key.
-                              'interrupted',
-                          )
-                        : undefined;
-                if (interrupted === undefined) {
-                    await dao.finalizeStale(run.id, `stale: non-terminal > ${olderThanMinutes}m (spur workflow clean)`);
-                } else {
-                    await dao.mergeMetadata(run.id, {
-                        staleReason: `stale: owner lost > ${olderThanMinutes}m (spur workflow clean)`,
-                    });
-                }
+                await reapRun(
+                    db,
+                    engine,
+                    run,
+                    {
+                        interrupted: `stale: owner lost > ${olderThanMinutes}m (spur workflow clean)`,
+                        finalized: `stale: non-terminal > ${olderThanMinutes}m (spur workflow clean)`,
+                    },
+                    this.ctx.cwd,
+                );
             }
         }
         return {

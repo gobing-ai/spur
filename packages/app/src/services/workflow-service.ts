@@ -27,7 +27,7 @@ import type { AgentService } from './agent-service';
 import type { RuleService } from './rule-service';
 import type { RunStorageMigrationResult } from './run-storage';
 import type { SystemEventAction, SystemEventProjectContext } from './system-event-envelope';
-import { WorkflowCleanOps } from './workflow-clean-ops';
+import { reapIfWorkerLost, WorkflowCleanOps } from './workflow-clean-ops';
 import { WorkflowEngineFactory } from './workflow-engine-factory';
 import { WorkflowInspectOps } from './workflow-inspect-ops';
 import { WorkflowResumeOps } from './workflow-resume-ops';
@@ -549,6 +549,10 @@ export class WorkflowAppService {
     ): Promise<WorkflowTraceListResult | WorkflowTraceTimeline> {
         const db = await this.ctx.getDb();
         if (typeof runIdOrFilter === 'string') {
+            // 1317 R1: one guard on the single-run read path covers every follower (followTrace,
+            // followRunLog, the Board): a run whose recorded worker is gone is reaped here, so
+            // a reader can tell "slow" from "dead". The list branch is untouched — no N probes.
+            await reapIfWorkerLost(db, this.ctx.cwd, runIdOrFilter);
             return this.inspectOps.traceRun(db, runIdOrFilter);
         }
         return this.inspectOps.traceList(db, runIdOrFilter ?? {});

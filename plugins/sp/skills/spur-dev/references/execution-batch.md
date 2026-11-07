@@ -149,6 +149,13 @@ recorded in the batch report, and independent tasks keep running. The batch does
 - **without `--auto`:** unchanged halt behavior — the batch stops on the failing task (`--keep-going`
 still skips only its in-batch dependents).
 
+**`--auto` implies `--keep-going` (1318 R1).** An unattended batch never stops for a human: under
+`--auto` every per-task failure follows §4.2 whether or not the flag is passed — a failed,
+cancelled, `stale-evidence` or worker-lost (1317) task is recorded `failed`, its in-batch
+dependents are `skipped` with `dependency <wbs> failed`, and independent tasks keep running. The
+refine pass above is only the extra step before that, not an exception. Without `--auto` the §4.1
+stop-the-batch default is unchanged. No new flag.
+
 `--tasks <value>` (or the effective value after normalization) resolves to a frozen set of task WBS numbers. Resolution happens **once, at
 kickoff** — the driver never re-queries `spur task list` to recompute membership mid-batch (R2.1).
 
@@ -411,6 +418,18 @@ The host session remains the orchestrator for interactive sequential omit/inline
 owns explicit-executor and parallel paths; there the flag pins the per-task step executor, not the
 orchestrator.
 
+**Executor pin (1318 R2/R3).** `--agent auto` is resolved **once per batch**, not once per task:
+after the first task run, read the resolved implement executor from that run's implement `agent.run`
+trace event — `spur workflow trace <run> --json` → `.events[] | select(.node=="implement" and
+.actionKind=="agent.run") | .result.executor` — and dispatch every later task with
+`--agent <that executor>`. The report's header records `Executor pin: <name> (from <wbs>)`; an
+explicit `--agent <name>` records `(from --agent)` and needs no resolution. A task whose run ends
+with `terminalReason == "failed-agent"` is re-dispatched **exactly once** with `--agent auto`; a
+different resolved executor then becomes the pin for the remaining tasks, and a second
+`failed-agent` records the task `failed` under the failure policy with the pin kept. No other terminal reason
+is ever retried on a new executor. `--agent inline` (host driver) has no executor
+to pin, so R2/R3 do not apply.
+
 ### 3.3 Terminal-state inspection
 
 Each pipeline run ends in one of two terminal states:
@@ -528,10 +547,11 @@ belongs to a subagent or the operator, not to the batch controller's report loop
 
 ## Step 4 — Failure policy (R3)
 
-### 4.1 Stop-the-batch (default) (R3.1)
+### 4.1 Stop-the-batch (default unless `--auto`) (R3.1)
 
-By default, the **first** pipeline failure halts the batch. Remaining tasks in the plan are reported
-as `not-attempted`. The report lists succeeded, failed, and not-attempted tasks.
+By default — i.e. without `--auto` (1318 R1) — the **first** pipeline failure halts the batch.
+Remaining tasks in the plan are reported as `not-attempted`. The report lists succeeded, failed,
+and not-attempted tasks.
 
 **Run-failed / task-done (observed 2026-10-19, feature P1).** A run can fail *after* the task is
 already finished: the `done` state's close commands run last, and a lint or anchor rule can refuse
@@ -543,9 +563,10 @@ contract, not to a run whose last recorded state was superseded. Surface it in t
 way (never silently continue), and never re-run the pipeline just to flip a run row from `failed` to
 `done` — a second run re-executes model stages for a task that is already closed.
 
-### 4.2 `--keep-going` (R3.2)
+### 4.2 `--keep-going` (R3.2), or implied by `--auto`
 
-With `--keep-going`, a failed task does **not** halt the batch. Instead:
+With `--keep-going` — passed explicitly, or implied by `--auto` (1318 R1) — a failed task does
+**not** halt the batch. Instead:
 
 - The failed task's **in-batch dependents** (tasks in the plan that transitively depend on it) are
   marked `skipped` with the failed dependency as the reason — they cannot run because their dep did

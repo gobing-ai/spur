@@ -20,21 +20,29 @@ results). A `paused` task is non-terminal — the report marks it `paused` (neve
 the resume command. Unless `--no-summary`, follow it with the measured
 [execution summary](dev-operations.md#execution-summary), one `--progress <wbs>=<file>` per attempted run.
 
+Under `--auto` the report's mode field reads `Mode: --auto (keep-going)`, and `--auto` implies `--keep-going`:
+an unattended batch never stops for a human (1318 R1). For an `--agent auto` or
+`--agent <name>` batch, print the header `Executor pin: <name> (from <wbs>|--agent)` and fill the
+per-task `Executor` column with the pinned executor, or `A → B (failed-agent)` for a run that was
+re-dispatched once on a new executor (1318 R2–R4). Leave that line and column out for host-inline
+runs, which have no executor to pin.
+
 ```
 ## Batch Report — <selector>
 
 **Selector:** <value>
 **Plan:** <n> tasks (ordered: <wbs-list>) · <m> blocked · <p> not-attempted
-**Mode:** stop-the-batch | --keep-going | --auto
+**Mode:** stop-the-batch | --keep-going | --auto (keep-going)
+**Executor pin:** <name> (from <wbs>|--agent)   ← `--agent auto`/`--agent <name>` runs only
 **Verdict:** clean | halted | aborted
 
-| WBS | Status | Reason |
-|-----|--------|--------|
-| 0040 | done | — |
-| 0042 | failed | verify verdict PARTIAL (see .spur/run/0042-verdict.json) |
-| 0050 | not-attempted | batch halted after 0042 (stop-the-batch) |
-| 0051 | skipped | dependency 0040 failed (--keep-going) |
-| 0060 | blocked | unmet out-of-set dep: 0099 is wip |
+| WBS | Status | Executor | Reason |
+|-----|--------|----------|--------|
+| 0040 | done | claude | — |
+| 0042 | failed | codex-a → codex-b (failed-agent) | verify verdict PARTIAL (see .spur/run/0042-verdict.json) |
+| 0050 | not-attempted | — | batch halted after 0042 (stop-the-batch) |
+| 0051 | skipped | — | dependency 0040 failed (--keep-going) |
+| 0060 | blocked | — | unmet out-of-set dep: 0099 is wip |
 
 **Next:** <one-line action — pick up halted run / resolve 0099 / all green, feature H1 complete>
 

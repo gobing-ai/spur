@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, test } from 'bun:test';
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { createMigratedDb, RunDao } from '@gobing-ai/spur-domain';
@@ -78,6 +78,40 @@ describe('WorkflowRunOps', () => {
         });
         await ops.run(wfPath, { runId: 'ro-2' });
         expect(await ops.cancel('ro-2')).toEqual({ runId: 'ro-2', finalized: false, status: 'done', killed: false });
+    });
+
+    test('cancel projects the terminal status into an existing run record (1317 R4)', async () => {
+        await ops.run(wfPath, { runId: 'ro-4' });
+        const db = await ctx.getDb();
+        const dao = new RunDao(db);
+        const running = await dao.open({ status: 'running' });
+        const records = join(dir, '.spur', 'memory', 'runs');
+        mkdirSync(records, { recursive: true });
+        const statePath = join(records, `${running.id}.state.json`);
+        writeFileSync(
+            statePath,
+            JSON.stringify({
+                schemaVersion: 1,
+                runId: running.id,
+                status: 'running',
+                startedAt: '2026-01-01T00:00:00.000Z',
+            }),
+        );
+        // A cancelled run that owns no run record must not gain one.
+        const recordless = await dao.open({ status: 'running' });
+
+        expect((await ops.cancel(running.id)).finalized).toBe(true);
+        expect(await ops.cancel(recordless.id)).toEqual({
+            runId: recordless.id,
+            finalized: true,
+            status: 'failed',
+            killed: false,
+        });
+
+        const projected = JSON.parse(readFileSync(statePath, 'utf8'));
+        expect(projected.status).toBe('failed');
+        expect(projected.startedAt).toBe('2026-01-01T00:00:00.000Z');
+        expect(existsSync(join(records, `${recordless.id}.state.json`))).toBe(false);
     });
 
     test('stampPlanArtifactPath merges metadata; stampFailureReason ignores non-failed results', async () => {

@@ -138,6 +138,11 @@ Only declared where the command already has at least one HITL gate the flag can 
 taste gates (idea-eval, design-approval) — every gate there is reversible corpus writes. A gate
 without an actionable recommendation (missing eval recommendation, FAIL design check) still pauses.
 
+**Batch policy** (`dev-runall`): `--auto` implies `--keep-going` — an unattended batch never stops
+for a human. With `--agent auto` the driver also pins ONE executor for the batch — `Executor pin:
+<name>`, read from the first run's implement `result.executor` — and only a `failed-agent` ending
+re-resolves it, exactly once (1318 R1–R3).
+
 ### `--keep-going` — batch failure policy: skip dependents, continue independents
 
 **Anchor:** `#flag-keep-going`.
@@ -145,6 +150,10 @@ without an actionable recommendation (missing eval recommendation, FAIL design c
 Batch operation only (`dev-refineall`, `dev-runall`). When a task in the batch
 fails, skip its in-batch dependents and continue the independent ones, instead of the default
 halt-on-first-failure. Never silently retried; the failure is still reported.
+
+**Default:** off, except under `--auto` — `--auto` implies `--keep-going` (1318 R1), because an
+unattended batch that stops to wait for a human is the defect it was supposed to avoid. To stop at
+the first failure, run without `--auto`.
 
 ### `--defer-gate` — opt-in parallel-batch gate policy (task 1111 / H15)
 

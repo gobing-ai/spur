@@ -1,11 +1,13 @@
 import { createId, RunDao, TaskRunLinkDao } from '@gobing-ai/spur-domain';
 import { type WorkflowRunResult as EngineWorkflowRunResult, loadWorkflowDef } from '@gobing-ai/ts-dual-workflow-engine';
 import { createNodeFileSystem } from '@gobing-ai/ts-runtime';
+import { projectRunStateStatus } from '../observability/workflow-run-log-sink';
 import { computeDefinitionDigest } from '../workflow/composition-baseline';
 import { attachHostPause, selectsHostExecutor, withHostExecutorPause } from '../workflow/host-executor';
 import { assertStartStateStartable, readContinuedFrom, StartStateRefusedError } from '../workflow/start-state';
 import { registeredWorkflowPaths, resolveWorkflowDefinition, resolveWorkflowFile } from '../workflow/workflow-resolver';
 import { bridgeEventBus, dropRetiredActionBoundaryAliases, withWorkflowIdentity } from './event-bridge';
+import { runStoragePaths } from './run-storage';
 import type { WorkflowEngineFactory } from './workflow-engine-factory';
 import { signalSubprocess, workflowVersionLiteral } from './workflow-run-recording';
 import { mapFleetExecutorVar, mergeWorkflowRunVars, resolveDefaultAgentVar } from './workflow-run-vars';
@@ -305,7 +307,12 @@ export class WorkflowRunOps {
         // already terminal (or raced to terminal), status is unchanged and finalized
         // is false. A pre-existing `failed` row also stays untouched.
         const finalized = after?.status === 'failed' && isNonTerminal;
-        if (finalized) await releaseWorktreeRunLease(db, this.ctx.cwd, runId);
+        if (finalized) {
+            // 1317 R4: a cancel is a terminal write outside the engine, so the run record
+            // learns the outcome here — otherwise `.state.json` keeps claiming `running`.
+            projectRunStateStatus(runStoragePaths(this.ctx.cwd).recordsDir, runId, 'failed', new Date().toISOString());
+            await releaseWorktreeRunLease(db, this.ctx.cwd, runId);
+        }
         return { runId, finalized, status: after?.status ?? 'not_found', killed };
     }
 

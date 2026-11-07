@@ -135,6 +135,7 @@ export {
 // Consolidated all-in-one per-run workflow run log (feature D2 / task 0426)
 export {
     DEFAULT_RUN_LOG_MAX_BYTES,
+    projectRunStateStatus,
     type WorkflowRunLogConfig,
     WorkflowRunLogSink,
 } from './observability/workflow-run-log-sink';
@@ -968,6 +969,7 @@ export { TokenLedgerWatcher } from './services/token-ledger-watcher';
 export type { AnswerLintFinding } from './services/verify-answer-lint';
 export { ANSWER_LINT_MAX_FINDINGS, lintVerifyAnswer } from './services/verify-answer-lint';
 export { createWarmTurnDispatcher, type TurnSessionBinding } from './services/warm-turn-dispatch';
+export { reapIfWorkerLost } from './services/workflow-clean-ops';
 export type {
     CleanedRun,
     PausedRun,

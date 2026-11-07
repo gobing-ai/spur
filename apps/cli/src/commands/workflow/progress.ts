@@ -1,5 +1,5 @@
 import type { Command } from '@commander-js/extra-typings';
-import { projectWorkflowProgress, type WorkflowProgressProjection } from '@gobing-ai/spur-app';
+import { projectWorkflowProgress, reapIfWorkerLost, type WorkflowProgressProjection } from '@gobing-ai/spur-app';
 import type { CliContext } from '../../context';
 import { toEnvelopeJson, writeJsonError } from '../../output';
 import { SHARED_OPTIONS } from '../shared-options';
@@ -80,8 +80,12 @@ export function registerWorkflowProgressCommand(workflow: Command, context: CliC
             // D62 / 0867 R3: apps/cli stays a thin transport (ADR-021). The projection is
             // computed by `projectWorkflowProgress` and rendered here — no second
             // derivation path, and the human output is a rendering of the same object.
+            const db = await context.getDb();
+            // 1317 R1: the same reap guard as the service read path — a run whose recorded
+            // worker is gone must not project as merely slow.
+            await reapIfWorkerLost(db, context.cwd, runId);
             const projection = await projectWorkflowProgress(runId, {
-                db: await context.getDb(),
+                db,
                 projectRoot: context.cwd,
             });
             // R5: an unknown run id is the projection's own `orphan-row` diagnostic. Name
