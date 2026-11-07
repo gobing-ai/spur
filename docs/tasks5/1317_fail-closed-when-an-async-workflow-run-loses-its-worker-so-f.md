@@ -4,7 +4,7 @@ name: Fail closed when an async workflow run loses its worker so followers stop 
 status: done
 template: feature-impl
 created_at: 2026-11-07T08:04:43.866Z
-updated_at: "2026-11-07T08:49:42.620Z"
+updated_at: "2026-11-07T16:06:05.596Z"
 feature_id: D3
 
 priority: P1
@@ -149,12 +149,12 @@ Scope: the worker-lost reap seam, the run-record projection it shares with `canc
 
 | Priority | Finding | Location | Disposition |
 | --- | --- | --- | --- |
-| P3 | Each `trace(runId)` read now issues one extra `traceRowById` (`packages/app/src/services/workflow-service.ts:555`), plus `getPid` for `running`/`pending` rows only. At the 1 s `--follow` cadence that is two small indexed reads per second; the listing branch (`packages/app/src/services/workflow-service.ts:558`) pays nothing, so no N-row listing owes N probes. | `packages/app/src/services/workflow-service.ts:555` | DEFER(accepted residual: the liveness probe is the whole point of the read path, and a heartbeat column is deferred until a live-but-wedged worker is observed — see the task Q&A) |
-| P3 | `reapRun`'s `mergeMetadata` write (`packages/app/src/services/workflow-clean-ops.ts:64`) is not status-guarded; it is reached only after `interruptRun`'s guarded `WHERE status='running'` UPDATE returned an interrupted row, so the row was `running` at that instant. | `packages/app/src/services/workflow-clean-ops.ts:60-67` | DEFER(accepted residual: the same ordering the existing `clean` path already had (0901 R2); this task neither widens nor narrows it) |
+| P3 | Each `trace(runId)` read issued an extra `traceRowById` (`packages/app/src/services/workflow-service.ts:555`) plus `getPid` for `running`/`pending` rows, doubling a follower's per-poll read cost. | `packages/app/src/services/workflow-service.ts:555` | FIXED — the pid rides on `RunTraceRow` (`packages/domain/src/dao/run-dao.ts:52`) and `traceRun` accepts the probe's row (`packages/app/src/services/workflow-inspect-ops.ts:279`), so a poll costs exactly one row read; pinned by the "live-worker poll pays ONE row read" test (`packages/app/tests/services/workflow-clean-ops.test.ts:217`). |
+| P3 | `reapRun`'s metadata write (`packages/app/src/services/workflow-clean-ops.ts:64`) was not status-guarded, so a run settling between `interruptRun` and the write could still be stamped. | `packages/app/src/services/workflow-clean-ops.ts:64` | FIXED — `RunDao.mergeMetadataIfStatus` (`packages/domain/src/dao/run-dao.ts:160`) fences the patch with `WHERE status IN (...)`, and `reapRun` uses it; pinned by the race-fence tests (`packages/domain/tests/dao/run-dao.test.ts:201`). |
 
-Edge cases checked: a run with no recorded pid (sync runs) is never reaped; a live pid, including a recycled one (`kill(pid, 0)` erring toward alive on EPERM) is never reaped; a terminal or paused row is untouched; a `pending` row reaps to `failed` through `finalizeStale`; an absent `.state.json` gains none, and a projection failure cannot undo the DB write. Contract checks: no new noun/verb/flag, no migration, no enum change — `worker-lost` is a `staleReason` string and `interrupted` is an existing closed member. Gates: full project gate green (12510 tests across 809 files; `recommended-post-check` 2/2 rules), the four focused suites green.
+Edge cases checked: a run with no recorded pid (sync runs) is never reaped; a live pid, including a recycled one (`kill(pid, 0)` erring toward alive on EPERM) is never reaped; a terminal or paused row is untouched and keeps its metadata; a `pending` row reaps to `failed` through `finalizeStale`; an absent `.state.json` gains none, and a projection failure cannot undo the DB write. Contract checks: no new noun/verb/flag, no migration, no enum change — `worker-lost` is a `staleReason` string and `interrupted` is an existing closed member. Gates: full project gate green, the four focused suites green.
 
-Confidence: MEDIUM
+Confidence: HIGH
 Verdict: PASS
 
 ### References

@@ -97,6 +97,7 @@ export {
     RunDao,
     type RunDefinitionSource,
     type RunRecord,
+    type RunTraceRow,
 } from './run-dao';
 export {
     type InsertRunSessionInput,

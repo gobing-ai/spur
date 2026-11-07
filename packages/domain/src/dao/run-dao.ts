@@ -45,6 +45,23 @@ export interface CreateRunInput {
     agent?: string;
 }
 
+/**
+ * One run row as the trace/probe reads it (`traceRowById`). `pid` rides along so a
+ * worker-liveness probe costs one read instead of two (1319 R1).
+ */
+export interface RunTraceRow {
+    id: string;
+    workflow_name: string;
+    mode: string;
+    status: string;
+    agent: string | null;
+    started_at: string;
+    completed_at: string | null;
+    terminal_reason: string | null;
+    metadata_json: string;
+    pid: number | null;
+}
+
 /** DAO for workflow run persistence owned by Spur. */
 export class RunDao extends EntityDao<typeof runs, typeof runs.id> {
     constructor(adapter: DbAdapter) {
@@ -109,22 +126,9 @@ export class RunDao extends EntityDao<typeof runs, typeof runs.id> {
     }
 
     /** Fetch a single run row by id for trace timeline / run-store detail. */
-    traceRowById(runId: string): Promise<
-        | {
-              id: string;
-              workflow_name: string;
-              mode: string;
-              status: string;
-              agent: string | null;
-              started_at: string;
-              completed_at: string | null;
-              terminal_reason: string | null;
-              metadata_json: string;
-          }
-        | undefined
-    > {
+    traceRowById(runId: string): Promise<RunTraceRow | undefined> {
         return this.adapter.queryFirst(
-            'SELECT id, workflow_name, mode, status, agent, started_at, completed_at, terminal_reason, metadata_json FROM runs WHERE id = ?',
+            'SELECT id, workflow_name, mode, status, agent, started_at, completed_at, terminal_reason, metadata_json, pid FROM runs WHERE id = ?',
             runId,
         );
     }
@@ -146,6 +150,27 @@ export class RunDao extends EntityDao<typeof runs, typeof runs.id> {
     /** Stamp metadata_json for a run (merges patch into metadata_json). */
     stampMetadata(runId: string, metadata: Record<string, unknown>): Promise<void> {
         return this.mergeMetadata(runId, metadata);
+    }
+
+    /**
+     * Merge a metadata patch only while the row still holds one of `statuses` (1319 R2). The
+     * WHERE clause is the race fence: a run that reached a terminal state between the caller's
+     * probe and this write keeps its own metadata untouched.
+     */
+    mergeMetadataIfStatus(runId: string, patch: Record<string, unknown>, statuses: readonly string[]): Promise<void> {
+        if (statuses.length === 0) return Promise.resolve();
+        const placeholders = statuses.map((_, i) => `?${i + 3}`).join(', ');
+        return this.adapter.run(
+            `UPDATE runs
+             SET metadata_json = json_patch(
+                 COALESCE(NULLIF(metadata_json, ''), '{}'),
+                 ?1
+             )
+             WHERE id = ?2 AND status IN (${placeholders})`,
+            JSON.stringify(patch),
+            runId,
+            ...statuses,
+        );
     }
 
     /**

@@ -1,4 +1,4 @@
-import type { DbAdapter } from '@gobing-ai/spur-domain';
+import type { DbAdapter, RunTraceRow } from '@gobing-ai/spur-domain';
 import {
     type ActionCostAttribution,
     ActionRunDao,
@@ -272,9 +272,13 @@ export class WorkflowInspectOps {
         };
     }
 
-    async traceRun(db: DbAdapter, runId: string): Promise<WorkflowTraceTimeline> {
+    /**
+     * Project one run's persisted timeline. `preloadedRow` is the row the caller already read
+     * (the worker-liveness probe): passing it keeps a follower's poll at ONE row read (1319 R1).
+     */
+    async traceRun(db: DbAdapter, runId: string, preloadedRow?: RunTraceRow): Promise<WorkflowTraceTimeline> {
         const runDao = new RunDao(db);
-        const row = await runDao.traceRowById(runId);
+        const row = preloadedRow ?? (await runDao.traceRowById(runId));
         if (!row) throw new Error(`Run not found: ${runId}`);
         const run = rowToTraceEntry(row, this.ctx.cwd);
 

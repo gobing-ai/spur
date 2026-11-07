@@ -1,7 +1,13 @@
 import { realpathSync, statSync } from 'node:fs';
 import { readdir, rm } from 'node:fs/promises';
 import { dirname, join, relative, resolve, sep } from 'node:path';
-import { ArtifactDao, type DbAdapter, RunDao, redirectRunStorageReferences } from '@gobing-ai/spur-domain';
+import {
+    ArtifactDao,
+    type DbAdapter,
+    RunDao,
+    type RunTraceRow,
+    redirectRunStorageReferences,
+} from '@gobing-ai/spur-domain';
 import {
     createDefaultWorkflowEngineHost,
     DbWorkflowPersistenceAdapter,
@@ -61,7 +67,9 @@ async function reapRun(
     if (interrupted === undefined) {
         await dao.finalizeStale(run.id, reasons.finalized);
     } else {
-        await dao.mergeMetadata(run.id, { staleReason: reasons.interrupted });
+        // 1319 R2: the reason merges only while the row is still `interrupted`, so a run that
+        // settled between `interruptRun` and this write keeps its own metadata.
+        await dao.mergeMetadataIfStatus(run.id, { staleReason: reasons.interrupted }, ['interrupted']);
     }
     // 1317 R4: the DB row is the lifecycle authority, but a run record that still reads
     // `running` sends the next reader back to the DB for a status only this write knows.
@@ -75,23 +83,37 @@ async function reapRun(
 }
 
 /**
+ * What a worker-liveness probe found: the row it read (reusable by the caller's own projection, so
+ * a read costs ONE query — 1319 R1) and whether it reaped.
+ */
+export interface WorkerLostProbe {
+    /** The row read for the probe, or `undefined` when the run does not exist. */
+    row: RunTraceRow | undefined;
+    /** True when the row was reaped, so the caller must re-read it. */
+    reaped: boolean;
+}
+
+/**
  * Reap a run whose recorded worker is gone (1317 R1): the run's status is whatever its worker
  * last wrote, so a reader that finds a `running`/`pending` row next to a dead `runs.pid` reaps it
  * here instead of polling a corpse. Rows with no recorded pid, a live pid, or a terminal/paused
  * status are left untouched. Race-safe by construction: the reap only issues the existing
  * status-guarded writes, so a run that settles in between keeps its terminal state (R2).
+ *
+ * One query: the pid rides on the trace row (`RunTraceRow.pid`), and the returned row is the one
+ * the caller may project — a follower's poll therefore pays no read for the probe (1319 R1).
  */
-export async function reapIfWorkerLost(db: DbAdapter, cwd: string, runId: string): Promise<boolean> {
+export async function reapIfWorkerLost(db: DbAdapter, cwd: string, runId: string): Promise<WorkerLostProbe> {
     const dao = new RunDao(db);
     const row = await dao.traceRowById(runId);
-    if (row === undefined) return false;
-    if (row.status !== 'running' && row.status !== 'pending') return false;
-    const pid = await dao.getPid(runId);
-    if (pid === null || isPidAlive(pid)) return false;
+    if (row === undefined) return { row, reaped: false };
+    if (row.status !== 'running' && row.status !== 'pending') return { row, reaped: false };
+    const pid = row.pid;
+    if (pid === null || isPidAlive(pid)) return { row, reaped: false };
     const reason = `worker-lost: pid ${pid} not alive`;
     const engine = new EngineWorkflowService(createDefaultWorkflowEngineHost({}), new DbWorkflowPersistenceAdapter(db));
     await reapRun(db, engine, row, { interrupted: reason, finalized: reason }, cwd);
-    return true;
+    return { row, reaped: true };
 }
 
 /**

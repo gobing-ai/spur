@@ -160,7 +160,7 @@ describe('reapIfWorkerLost (1317 R1/R2/R5)', () => {
             }),
         );
 
-        expect(await reapIfWorkerLost(db, dir, run.id)).toBe(true);
+        expect((await reapIfWorkerLost(db, dir, run.id)).reaped).toBe(true);
 
         const row = await dao.traceRowById(run.id);
         expect(row?.status).toBe('interrupted');
@@ -171,7 +171,7 @@ describe('reapIfWorkerLost (1317 R1/R2/R5)', () => {
         expect(projected.startedAt).toBe('2026-01-01T00:00:00.000Z');
 
         // R2: a second read reaps nothing and leaves the settled row alone.
-        expect(await reapIfWorkerLost(db, dir, run.id)).toBe(false);
+        expect((await reapIfWorkerLost(db, dir, run.id)).reaped).toBe(false);
         expect((await dao.traceRowById(run.id))?.status).toBe('interrupted');
     });
 
@@ -186,7 +186,8 @@ describe('reapIfWorkerLost (1317 R1/R2/R5)', () => {
         await dao.setPid(terminal.id, deadPid);
         const before = await Promise.all([live.id, pidless.id, terminal.id].map((id) => dao.traceRowById(id)));
 
-        for (const id of [live.id, pidless.id, terminal.id]) expect(await reapIfWorkerLost(db, dir, id)).toBe(false);
+        for (const id of [live.id, pidless.id, terminal.id])
+            expect((await reapIfWorkerLost(db, dir, id)).reaped).toBe(false);
 
         const after = await Promise.all([live.id, pidless.id, terminal.id].map((id) => dao.traceRowById(id)));
         expect(after).toEqual(before);
@@ -199,7 +200,7 @@ describe('reapIfWorkerLost (1317 R1/R2/R5)', () => {
         const run = await dao.open({ status: 'pending' });
         await dao.setPid(run.id, pid);
 
-        expect(await reapIfWorkerLost(db, dir, run.id)).toBe(true);
+        expect((await reapIfWorkerLost(db, dir, run.id)).reaped).toBe(true);
 
         const row = await dao.traceRowById(run.id);
         expect(row?.status).toBe('failed');
@@ -209,11 +210,34 @@ describe('reapIfWorkerLost (1317 R1/R2/R5)', () => {
 
     test('an unknown run id reaps nothing', async () => {
         const db = await createMigratedDb({ url: ':memory:' });
-        expect(await reapIfWorkerLost(db, dir, 'run_missing')).toBe(false);
+        expect((await reapIfWorkerLost(db, dir, 'run_missing')).reaped).toBe(false);
     });
 });
 
 describe('WorkflowAppService.trace worker-lost reap (1317 R1/R3)', () => {
+    test('a live-worker poll pays ONE row read for the probe (1319 R1)', async () => {
+        const ctx = makeCtx();
+        const dao = new RunDao(await ctx.getDb());
+        const run = await dao.open({ status: 'running' });
+        await dao.setPid(run.id, process.pid);
+
+        // The probe's row is handed to the projection, so the guard adds no second read to a
+        // follower's poll: exactly one traceRowById per trace() call.
+        const reads: string[] = [];
+        const original = RunDao.prototype.traceRowById;
+        RunDao.prototype.traceRowById = async function (this: RunDao, runId: string) {
+            reads.push(runId);
+            return original.call(this, runId);
+        };
+        try {
+            const timeline = await new WorkflowAppService(ctx).trace(run.id);
+            expect(timeline.run.status).toBe('running');
+        } finally {
+            RunDao.prototype.traceRowById = original;
+        }
+        expect(reads).toEqual([run.id]);
+    });
+
     test('the single-run read path reaps before projecting, and the reason reaches the trace', async () => {
         const ctx = makeCtx();
         const dao = new RunDao(await ctx.getDb());

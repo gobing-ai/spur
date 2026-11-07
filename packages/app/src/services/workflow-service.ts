@@ -552,8 +552,9 @@ export class WorkflowAppService {
             // 1317 R1: one guard on the single-run read path covers every follower (followTrace,
             // followRunLog, the Board): a run whose recorded worker is gone is reaped here, so
             // a reader can tell "slow" from "dead". The list branch is untouched — no N probes.
-            await reapIfWorkerLost(db, this.ctx.cwd, runIdOrFilter);
-            return this.inspectOps.traceRun(db, runIdOrFilter);
+            // 1319 R1: the probe's row is handed to the projection, so a poll costs no extra read.
+            const probe = await reapIfWorkerLost(db, this.ctx.cwd, runIdOrFilter);
+            return this.inspectOps.traceRun(db, runIdOrFilter, probe.reaped ? undefined : probe.row);
         }
         return this.inspectOps.traceList(db, runIdOrFilter ?? {});
     }

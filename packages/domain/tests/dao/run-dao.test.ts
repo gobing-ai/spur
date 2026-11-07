@@ -198,6 +198,70 @@ describe('RunDao', () => {
         });
     });
 
+    describe('mergeMetadataIfStatus (1319 R2)', () => {
+        async function insertRun(adapter: Awaited<ReturnType<typeof setup>>, id: string, status: string) {
+            await adapter.run(
+                `INSERT INTO runs (id, workflow_name, mode, status, started_at, metadata_json, created_at, updated_at)
+                 VALUES (?, 'task-pipeline', 'state-machine', ?, '2026-06-01T00:00:00.000Z', '{}', 0, 0)`,
+                id,
+                status,
+            );
+        }
+
+        test('patches a row that still holds the guarded status', async () => {
+            const adapter = await setup();
+            const dao = new RunDao(adapter);
+            await insertRun(adapter, 'run_guard_ok', 'interrupted');
+
+            await dao.mergeMetadataIfStatus('run_guard_ok', { staleReason: 'worker-lost: pid 1 not alive' }, [
+                'interrupted',
+            ]);
+
+            const row = await dao.traceRowById('run_guard_ok');
+            expect(JSON.parse(row?.metadata_json ?? '{}').staleReason).toBe('worker-lost: pid 1 not alive');
+            adapter.close();
+        });
+
+        test('refuses a row that settled into another status (the race fence)', async () => {
+            const adapter = await setup();
+            const dao = new RunDao(adapter);
+            await insertRun(adapter, 'run_guard_done', 'done');
+
+            await dao.mergeMetadataIfStatus('run_guard_done', { staleReason: 'worker-lost: pid 1 not alive' }, [
+                'interrupted',
+            ]);
+
+            // The terminal row keeps its own metadata: a late reason never lands on a settled run.
+            const row = await dao.traceRowById('run_guard_done');
+            expect(JSON.parse(row?.metadata_json ?? '{}').staleReason).toBeUndefined();
+            expect(row?.status).toBe('done');
+            adapter.close();
+        });
+
+        test('an empty status set refuses every write', async () => {
+            const adapter = await setup();
+            const dao = new RunDao(adapter);
+            await insertRun(adapter, 'run_guard_empty', 'interrupted');
+
+            await dao.mergeMetadataIfStatus('run_guard_empty', { staleReason: 'x' }, []);
+
+            expect(
+                JSON.parse((await dao.traceRowById('run_guard_empty'))?.metadata_json ?? '{}').staleReason,
+            ).toBeUndefined();
+            adapter.close();
+        });
+
+        test('traceRowById carries the recorded pid (one read for the worker probe)', async () => {
+            const adapter = await setup();
+            const dao = new RunDao(adapter);
+            const run = await dao.open({ status: 'running' });
+            await dao.setPid(run.id, 4242);
+
+            expect((await dao.traceRowById(run.id))?.pid).toBe(4242);
+            adapter.close();
+        });
+    });
+
     describe('trace queries', () => {
         test('traceRows returns runs matching status filter', async () => {
             const adapter = await setup();
