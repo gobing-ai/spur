@@ -1,10 +1,10 @@
 ---
 schema_version: 1
 name: Classify executable shell positions without blocking literal read-only searches
-status: todo
+status: done
 template: feature-impl
 created_at: 2026-11-05T20:01:23.920Z
-updated_at: "2026-11-05T20:40:04.131Z"
+updated_at: "2026-11-07T00:58:01.227Z"
 ac_altitude: task-local
 ac_numbering: task-local
 feature_id: A6
@@ -16,6 +16,8 @@ tags:
 estimate_hours: 8
 
 dependencies: []
+done_forced: "false"
+done_reason: unforced close; PASS artifact at .spur/memory/evidence/1313-verdict.json
 ---
 
 ## 1313. Classify executable shell positions without blocking literal read-only searches
@@ -42,7 +44,7 @@ Rubric: E8 D1 L2 C1 R2 = 14. Keep this candidate as one cohesive deliverable wit
 
 ### Requirements
 
-- [ ] R1. Destructive-command policy distinguishes literal data from execution; implement the exact Given/When/Then contract below.
+- [x] R1. Destructive-command policy distinguishes literal data from execution; implement the exact Given/When/Then contract below.
 
 ### Acceptance Criteria
 
@@ -85,27 +87,118 @@ Output/handoff: Independent safety fix; no functional dependency on Markdown ren
 
 No production implementation occurs during this refinement. No new dependency, public noun/verb, workflow/IAM/env edit, production migration or new control guarantee is implied. Preserve successful outputs, validation, errors, redaction, proof freshness, cancellation, accessibility and one writer per tree. New unit or isolated policy failure cases must precede production code; prefer cross-layer/fixture journeys. Use the applicable harness gate once after focused checks and record real implementation results through Spur. Update owning contracts for actual surface changes, architecture for mechanisms, and an ADR before lasting boundary reversal. Save repeatable JUnit/JSON proof under the task run directory and durable evidence in the task Testing record. Scope is the named source seams and necessary callers/tests/docs; no speculative framework or broad cleanup.
 
+
+#### Repo gate conventions
+
+The post-check preset requires a TSDoc comment on every exported symbol (`every-export-has-tsdoc`),
+and per-file line and function coverage must stay at or above 90%. Give each new export a doc
+comment and exercise every new branch before reporting done.
+
+
+#### Repo gate conventions
+
+The post-check preset requires a TSDoc comment on every exported symbol (`every-export-has-tsdoc`),
+and per-file line and function coverage must stay at or above 90%. Give each new export a doc
+comment and exercise every new branch before reporting done.
+
 ### Plan
 
-- [ ] 1. Write literal-search positives plus destructive substitutions, nested sh, malformed quoting, git global options and escaped-token negative controls first.
-- [ ] 2. Implement the conservative command-position scanner and apply existing dangerous-command logic only to known executable regions; unknown regions retain conservative fallback.
-- [ ] 3. Exercise the shared function and real hook payload path, keeping every existing destructive positive control and standalone import rule.
-- [ ] 4. Run the exact focused checks above, inspect the diff against R-items/feature AC, synchronize owners and record evidence through the task pipeline; do not fabricate completion.
+- [x] 1. Write literal-search positives plus destructive substitutions, nested sh, malformed quoting, git global options and escaped-token negative controls first.
+- [x] 2. Implement the conservative command-position scanner and apply existing dangerous-command logic only to known executable regions; unknown regions retain conservative fallback.
+- [x] 3. Exercise the shared function and real hook payload path, keeping every existing destructive positive control and standalone import rule.
+- [x] 4. Run the exact focused checks above, inspect the diff against R-items/feature AC, synchronize owners and record evidence through the task pipeline; do not fabricate completion.
 
 ### Solution
 
-<!-- Filled during implementation: file:line change map and concise rationale. -->
+`classifyCommand` lexes quotes, escapes, command separators, substitutions, and `sh` / `bash` / `zsh -c` before the existing whole-string scan. A proven standalone `rg` or `grep` (exact argv0, optional `env` / `command` prefixes with known flags) treats its operands as data, including inside single quotes. Substitutions, backticks, and `-c` scripts are classified again. `--pre` keeps the invocation on the destructive scan. Unknown `env` flags leave argv0 at `env`. Malformed or unsupported syntax (`$'…'`, arithmetic, heredoc, process substitution, subshell, unclosed quotes) keeps the previous `rm` / git / SQL scan. Escape-normalized words are scanned as well, so `rm \-rf /` and `git\ push --force` still ask.
+
+- `plugins/sp/lib/destructive-policy.ts:18-24` documents the executable-position rules.
+- `plugins/sp/lib/destructive-policy.ts:197-619` is the private lexer and `classifyCommand`. `plugins/sp/lib/destructive-policy.ts:599-618` is the previous scan, including `stripGitGlobalOptions`.
+- `plugins/sp/scripts/hooks/careful-guard.ts:20-23` states the same rule. The hook still decides at `plugins/sp/scripts/hooks/careful-guard.ts:89`.
+- `plugins/sp/lib/destructive-policy.ts:603` extends the shared matrix (literal searches, nested shells, substitutions, `--pre`, escaped tokens, malformed syntax). Its parity describe spawns the hook for every row.
+- `plugins/sp/tests/hooks/careful-guard.test.ts:94-100` and `plugins/sp/tests/hooks/careful-guard.test.ts:132-138` cover the same allow/ask split on the hook payload.
+
+No new export, dependency, or public noun/verb. `plugins/sp/README.md` already names the policy module and describes the guard as asking on destructive commands, so that page stayed as written. No ADR.
+
+Checks from this tree:
+
+- `cd /Users/robin/xprojects/spur-new-runall-1300-1316-af3570ab/plugins/sp && bun test tests/hooks/destructive-policy.test.ts tests/hooks/careful-guard.test.ts` — 434 pass, 0 fail.
+- From the repo root, `bun test tests/hooks/destructive-policy.test.ts --test-name-pattern classification` — 182 pass, 0 fail. Measured coverage of `plugins/sp/lib/destructive-policy.ts`: 100% functions, 99.76% lines. The uncovered line is 272, the `continue` after a backtick escape; the allow row for an escaped backtick runs that statement. Both ratios are above the 90% per-file floor.
+- `bunx biome check` on the four plugin files — clean after format.
+- Light gate `rules:pre` (`bun apps/cli/src/index.ts rule run --preset recommended-pre-check --fail-on warning --no-logo`) — all 51 rules passed.
+- `bun apps/cli/src/index.ts rule run --preset recommended-post-check --fail-on warning --no-logo` — all 2 rules passed.
+- `bun scripts/spur-dev.ts script-contract-check` — `script-contract-check: hook-only script layout over plugins/sp — 0 violation(s) — PASS`.
+- `bun apps/cli/src/index.ts task gate 1313 light` — format-lint PASS, rules:pre PASS, `test:plugins/sp` PASS (434). `rules:post` FAIL: `coverage-provenance-check` reported `lcov-mismatch` because a root `bun test` in this step rewrote `.coverage/lcov.info` after certification (run `9770ed0a-b508-44ea-86ee-f5cef9190929`). The check names `bun run test:full` as the republish. This implement step does not run that full suite. Log: `.spur/run/1313-light-gate.log`.
+
+Probe from throwaway dir `/tmp/spur-1313-probe`.
+
+Allow, stdout empty, exit 0:
+
+```
+cd /tmp/spur-1313-probe && bun /Users/robin/xprojects/spur-new-runall-1300-1316-af3570ab/plugins/sp/scripts/hooks/careful-guard.ts < /tmp/spur-1313-probe/allow.json
+```
+
+stdin: `{"tool_name":"Bash","tool_input":{"command":"rg 'rm -rf /' ."}}`. Observed stdout: empty. Exit 0.
+
+Ask, exit 0:
+
+```
+cd /tmp/spur-1313-probe && bun /Users/robin/xprojects/spur-new-runall-1300-1316-af3570ab/plugins/sp/scripts/hooks/careful-guard.ts < /tmp/spur-1313-probe/ask.json
+```
+
+stdin: `{"tool_name":"Bash","tool_input":{"command":"sh -c 'rm -rf /'"}}`. Observed stdout:
+
+`{"hookSpecificOutput":{"hookEventName":"PreToolUse","permissionDecision":"ask","permissionDecisionReason":"This command looks like a recursive remove outside the project (rm -r on an absolute, ~, or ../ path) — a destructive operation. Confirm you intend to run it. Set SPUR_CAREFUL=off to disable this guard."},"systemMessage":"This command looks like a recursive remove outside the project (rm -r on an absolute, ~, or ../ path) — a destructive operation. Confirm you intend to run it. Set SPUR_CAREFUL=off to disable this guard."}`
+
+Testing, Review, and status stay with the pipeline. Status remains `todo`.
+
+
+Review follow-up (2026-11-06): a redirection `&` is no longer read as a pipeline separator, so `rg "rm -rf /" x 2>&1 | bash` keeps the pipe-into-executor rule; `-c` detection now steps over value-taking shell options (`-O extglob`, `--rcfile`). Regressions in `plugins/sp/tests/hooks/destructive-policy.test.ts`.
 
 ### Testing
 
-<!-- Filled during verification: commands run, outcomes, coverage claim or N/A. -->
+**Pipeline verify results**
+
+- Verdict: PASS (from verdict artifact)
+
+| Requirement | Status | Evidence |
+|-------------|--------|----------|
+| R1 | MET | `plugins/sp/lib/destructive-policy.ts:18-27` documents the executable-position contract; `:523-528` recognises every shell interpreter by basename and `:572-596` steps over value-taking options before `-c`; `:356-372` keeps a redirection's `&` inside its command. Independent re-review probed 4029 commands with no new permissive case; `plugins/sp/tests/hooks/destructive-policy.test.ts` holds the regressions (568 pass). |
+
+| Acceptance Criteria | Status | Evidence Type | Evidence |
+|---------------------|--------|---------------|----------|
+| AC1 — Destructive-command policy distinguishes literal data from execution (req: R1) | MET | test | `plugins/sp/tests/hooks/destructive-policy.test.ts` — 568 pass, 0 fail, covering literal-search exemption, pipe-into-executor, nested/path-qualified `-c` and redirection shapes; full gate PASS at `.spur/run/1313-check-receipt.json`; independent re-review verdict FIXED on both blocking findings. |
+- Coverage: N/A (verdict-based; verify pipeline does not measure code coverage)
 
 ### Review
 
-<!-- Filled during review: P1-P4 findings, residual risk, and final disposition. -->
+#### Review Report — 1313
+**Scope:** working-tree diff for 1313 (no `(1313)` commit): `plugins/sp/lib/destructive-policy.ts`, `plugins/sp/scripts/hooks/careful-guard.ts`, `plugins/sp/tests/hooks/destructive-policy.test.ts`, `plugins/sp/tests/hooks/careful-guard.test.ts`
+**Dimensions:** functional, security, efficiency, correctness, usability, architecture
+**Verdict:** PARTIAL
+Confidence: LOW
+
+##### Findings (ranked)
+
+| # | Priority | Dimension | Finding | Location | Disposition |
+| --- | --- | --- | --- | --- | --- |
+| 1 | P2 (major) | security | Path-qualified and wrapped `-c` scripts skip recursive classification. `isShellBin` (`plugins/sp/lib/destructive-policy.ts:522-524`) accepts only the exact words sh, bash, and zsh, and `classifySegment` tests `head.text` (`plugins/sp/lib/destructive-policy.ts:649-653`). Pipeline consumers already use the argv0 basename (`plugins/sp/lib/destructive-policy.ts:617-632`), so a search piped to `/bin/sh` asks (`plugins/sp/tests/hooks/destructive-policy.test.ts:157`). The `-c` path does not. Bare `sh -c` of an escape-normalized `r\m -rf /` asks; `/bin/sh -c`, `/usr/bin/bash -c`, `/bin/zsh -c` of `git\ push --force`, `/usr/bin/env sh -c`, `env /bin/sh -c`, and `command /bin/sh -c` of the same escaped script allow. `sudo`, `exec`, `nice`, and `xargs` before `sh -c` allow the same script. The same miss false-asks `/bin/sh -c` around a literal rg search that bare `sh -c` allows (`plugins/sp/tests/hooks/destructive-policy.test.ts:112`). AC1's no-false-prompt clause and its nested-execution clause are unmet for those spellings. | `plugins/sp/lib/destructive-policy.ts:649-653` | OPEN |
+
+The hook still decides only through `classifyCommand` at `plugins/sp/scripts/hooks/careful-guard.ts:89`. The lexer stays private in `plugins/sp/lib/destructive-policy.ts`. No separate architecture finding. Literal searches, bare nested shells, and the basename pipeline rule are covered by the shared matrix and the hook parity describe in `plugins/sp/tests/hooks/destructive-policy.test.ts:277-314`.
+
+##### Functional Traceability
+
+| Req | Status | Evidence |
+| --- | --- | --- |
+| R1 | PARTIAL | Literal rg/grep allow at `plugins/sp/tests/hooks/destructive-policy.test.ts:93` and hook payload `plugins/sp/tests/hooks/careful-guard.test.ts:133`. Bare `sh -c` still asks at `plugins/sp/tests/hooks/destructive-policy.test.ts:176`. Path-qualified `-c` does not re-lex: `plugins/sp/lib/destructive-policy.ts:522-524` and `plugins/sp/lib/destructive-policy.ts:649-653` compare the exact argv0, while pipeline consumers use the basename at `plugins/sp/lib/destructive-policy.ts:617-632`. Focused check `(cd plugins/sp && bun test tests/hooks/destructive-policy.test.ts tests/hooks/careful-guard.test.ts)` 476 pass, 0 fail. |
 
 ### References
 
 <!-- Links to the parent feature, design docs, related tasks, or external references. -->
 
 ### History
+
+- 2026-11-06T19:43:53.346Z todo → wip (system)
+- 2026-11-07T00:57:15.310Z wip → testing (system)
+- 2026-11-07T00:58:01.213Z testing → done (system)
+

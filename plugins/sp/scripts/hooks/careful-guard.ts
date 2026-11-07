@@ -17,6 +17,11 @@
  * `git push --force`; the lexical pass only removes that option span and never executes git or
  * expands a substitution. The run cannot cross a command boundary (`;`, `&`, `|`, newline).
  *
+ * Quoted operands of a standalone `rg` or `grep` are literal data, so a search
+ * pattern that only names a destructive command does not prompt. Substitutions,
+ * backticks, and a `-c` script from any shell interpreter (bare or path-qualified)
+ * are still classified. The decision stays in `classifyCommand`.
+ *
  * **Safe exceptions:** `rm -rf` of well-known build/dependency caches (`node_modules`, `dist`,
  * `.next`, `coverage`, `build`, `.turbo`, `.cache`) passes without a warning — deleting a rebuildable
  * cache is routine, not dangerous.

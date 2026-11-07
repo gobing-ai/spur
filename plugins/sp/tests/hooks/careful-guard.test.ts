@@ -91,6 +91,13 @@ describe('careful-guard — destructive-command pattern matrix', () => {
         'git --literal-pathspecs clean -fd',
         'git --namespace main reset --hard',
         'git --exec-path=/tmp/p reset --hard',
+        // Literal data is not a pass for real execution (task 1313).
+        'rg "$(rm -rf /)" .',
+        "sh -c 'rm -rf /'",
+        'bash -c "git reset --hard"',
+        'command rm -rf /',
+        'rm \\-rf /',
+        "rg 'safe'; rm -rf /",
     ])('asks before destructive command: %j', async (cmd) => {
         const d = await runGuard(bash(cmd));
         expect(d.permissionDecision).toBe('ask');
@@ -122,6 +129,13 @@ describe('careful-guard — destructive-command pattern matrix', () => {
         'git -p push origin main',
         'git --no-pager push --force-with-lease',
         'git --exec-path /tmp/p reset --hard', // separated optional-value: git prints and exits
+        // Quoted destructive vocabulary in a read-only search is data (task 1313).
+        "rg 'rm -rf /' .",
+        'rg "git reset --hard HEAD~3" src',
+        "grep -n 'git push --force' file.ts",
+        "rg '$(rm -rf /)' .",
+        "command rg 'DROP TABLE users' .",
+        'sh -c \'rg "rm -rf /" .\'',
     ])('allows safe/benign command: %j', async (cmd) => {
         const d = await runGuard(bash(cmd));
         expect(d.permissionDecision).toBe('allow');
