@@ -64,7 +64,13 @@ export interface SearchDeps {
 
 /** Production SearchDeps: Bun.which + NodeProcessExecutor with the design §3 budgets. */
 export const defaultSearchDeps: SearchDeps = {
-    which: (bin) => (typeof Bun !== 'undefined' && typeof Bun.which === 'function' ? Bun.which(bin) : null),
+    // `Bun.which(bin)` caches its answer for the process lifetime, so it would keep reporting a
+    // binary resolved from an earlier PATH. Passing PATH explicitly re-resolves against the PATH in
+    // force now, which is what a caller that changes PATH (tests, embedded use) expects.
+    which: (bin) =>
+        typeof Bun !== 'undefined' && typeof Bun.which === 'function'
+            ? Bun.which(bin, { PATH: process.env.PATH ?? '' })
+            : null,
     run: async (command, args, opts) => {
         const result = await new NodeProcessExecutor().run({
             command,
