@@ -43,19 +43,16 @@ describe('emit-migration-sql', () => {
         expect(source).toContain("from './migration-sql.generated'");
     });
 
-    test('escaping round-trips backticks, backslashes and template placeholders', async () => {
+    test('escaping round-trips backticks, backslashes and template placeholders', () => {
         const placeholder = ['$', '{not.interpolated}'].join('');
         const tricky = `-- a \`tick\`, a \\ slash and ${placeholder}\nSELECT '\`' AS q;\n`;
         const module = renderMigrationSqlModule(tricky);
-        const dir = await mkdtemp(join(tmpdir(), 'emit-migration-sql-'));
-        try {
-            const path = join(dir, 'probe.ts');
-            await Bun.write(path, module);
-            const loaded = (await import(path)) as { HISTORY_DIMENSION_MARTS_SCHEMA_SQL: string };
-            expect(loaded.HISTORY_DIMENSION_MARTS_SCHEMA_SQL).toBe(tricky);
-        } finally {
-            await rm(dir, { recursive: true, force: true });
-        }
+        // Evaluated in place rather than imported: bun instruments any imported file — a temp
+        // file under tmpdir(), or a `data:` URL — as its own row in the coverage table, and the
+        // escaping is what this pins. The static import at the top of this file already proves the
+        // generated module resolves and loads.
+        const literal = module.slice(module.indexOf('`'), module.lastIndexOf('`') + 1);
+        expect(new Function(`return ${literal};`)()).toBe(tricky);
     });
 
     test('regeneration is deterministic and an unchanged source does not rewrite the target', async () => {
