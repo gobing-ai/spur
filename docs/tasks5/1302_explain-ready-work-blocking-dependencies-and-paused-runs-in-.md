@@ -4,7 +4,7 @@ name: Explain ready work, blocking dependencies and paused runs in planning view
 status: done
 template: feature-impl
 created_at: 2026-11-05T20:01:23.916Z
-updated_at: "2026-11-06T03:54:08.994Z"
+updated_at: "2026-11-07T02:35:27.420Z"
 ac_altitude: task-local
 ac_numbering: task-local
 feature_id: F73
@@ -155,7 +155,7 @@ External API evidence checked against installed types and existing clients: http
 
 #### Implement re-entry verification
 
-Re-entered with `--mode implement 1302 --auto --escalation-file .spur/run/1302-escalation.md`. No escalation transcript exists. Preserved the existing 1302 implementation and all starting changes; no additional production edits were needed. The projection remains at `packages/app/src/services/planning-readiness.ts:59`, the additive contract at `packages/contracts/src/task.ts:155`, and the shared-subscription panel at `apps/web/src/modules/task-kanban/PlanningReadinessPanel.tsx:7`. The current exported readiness interfaces and DTO have TSDoc comments. This pass revalidates the implementation rather than treating earlier results as fresh evidence.
+Re-entered in implement mode to confirm the existing work. No escalation was needed. Preserved the existing 1302 implementation and all starting changes; no additional production edits were needed. The projection remains at `packages/app/src/services/planning-readiness.ts:59`, the additive contract at `packages/contracts/src/task.ts:155`, and the shared-subscription panel at `apps/web/src/modules/task-kanban/PlanningReadinessPanel.tsx:7`. The current exported readiness interfaces and DTO have TSDoc comments. This pass revalidates the implementation rather than treating earlier results as fresh evidence.
 
 - Fresh focused checks: app 217 PASS, server 33 PASS, web 37 PASS, CLI 38 PASS; zero failures. Exact test-file selections match the preceding implementation evidence. Repeatable JUnit receipts: `.spur/run/1302/app-resume.xml`, `.spur/run/1302/server-resume.xml`, `.spur/run/1302/web-resume.xml`, `.spur/run/1302/cli-resume.xml`; adjacent logs record commands' test output.
 - Fresh public-surface journey: `(cd apps/web && bun test ../../.spur/run/1302/readiness-journey.test.ts)` — 1 PASS, 0 failures, 11 assertions. Together with focused checks: 326 PASS. `.spur/run/1302/readiness-journey.json` records the throwaway project's exact CLI command/output, contracted HTTP result, rendered DOM, zero model/job dispatches and final stream cleanup. Rendering uses happy-dom.
