@@ -319,7 +319,9 @@ async function binDir(name: string, bins: string[]): Promise<string> {
     await rm(dir, { recursive: true, force: true });
     await mkdir(dir, { recursive: true });
     for (const bin of bins) {
-        const resolved = Bun.which(bin);
+        // `bun` is the running binary, not `Bun.which`: a version-manager shim (proto) on PATH cannot
+        // detect a version from the temp project root and exits before spur runs.
+        const resolved = bin === 'bun' ? process.execPath : Bun.which(bin);
         if (resolved !== null) await symlink(resolved, join(dir, bin));
     }
     return dir;
