@@ -421,8 +421,15 @@ async function sourceFreeSmoke(): Promise<OwnershipReport['offlineProof']> {
 function stable(report: OwnershipReport): unknown {
     // The commit that adds the frozen report changes HEAD. sourceRevision stays in
     // both artifacts; equality uses sourceDigests, which do not move with that commit.
-    const { measuredAt: _measuredAt, sourceRevision: _sourceRevision, ...rest } = report;
-    return rest;
+    // `apps/cli/spur.js` is a gitignored build artifact: a rebuild in any checkout changes its
+    // bytes without changing the ownership decision, so its digest is evidence for the run that
+    // measured it, never an invariant across runs.
+    const { measuredAt: _measuredAt, sourceRevision: _sourceRevision, offlineProof, sourceDigests, ...rest } = report;
+    return {
+        ...rest,
+        offlineProof: { ...offlineProof, bundleDigest: '' },
+        sourceDigests: { ...sourceDigests, 'apps/cli/spur.js': '' },
+    };
 }
 
 function renderMarkdown(report: OwnershipReport): string {

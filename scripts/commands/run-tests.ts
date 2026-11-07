@@ -32,9 +32,9 @@
  * isolated LCOV; only a canonical publisher can replace the shared artifact. Certifying adds
  * no second suite execution — the digests come from the run this process already drove.
  */
-import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdtempSync, readFileSync, realpathSync, rmSync, writeFileSync } from 'node:fs';
 import { availableParallelism, loadavg, tmpdir } from 'node:os';
-import { delimiter, dirname, join, resolve } from 'node:path';
+import { delimiter, dirname, join, resolve, sep } from 'node:path';
 import { getEnvVar, getEnvVars } from '@gobing-ai/spur-config';
 import { certifyCanonicalRun, startCanonicalRun } from './coverage-certification';
 import { windowsTestSuiteTermination } from './test-suite-termination';
@@ -48,11 +48,55 @@ interface TestConfig {
     [key: string]: unknown;
 }
 
+/**
+ * The suite must never take its scratch inside the repository under test. Every `mkdtemp()`
+ * project would then sit in the git work tree, so walk-up project-root and git detection latch
+ * onto this checkout instead of the scratch project — 46 tests that assert "outside a
+ * repository" behaviour went red on 2026-11-06 under `TMPDIR=<repo>/.spur/tmp`.
+ * The operator's TMPDIR survives untouched whenever it already lies outside the repository.
+ */
+function repositoryRoot(): string | undefined {
+    let dir = resolve(process.cwd());
+    while (!existsSync(join(dir, '.git'))) {
+        const parent = dirname(dir);
+        if (parent === dir) return undefined;
+        dir = parent;
+    }
+    return dir;
+}
+
+function testTempRoot(): string {
+    const repo = repositoryRoot();
+    if (repo === undefined) return tmpdir();
+    // macOS reaches the same directory as /tmp or /private/tmp, and a linked worktree can be the
+    // real path while the operator typed the symlinked one.
+    const roots = new Set([resolve(repo), realpathSync(repo)]);
+    const insideRepo = (candidate: string): boolean => {
+        const absolute = resolve(candidate);
+        return [...roots].some((root) => absolute === root || absolute.startsWith(`${root}${sep}`));
+    };
+    const ambient = tmpdir();
+    if (!insideRepo(ambient) && !insideRepo(realpathSync(ambient))) return ambient;
+    const fallback = ['/tmp', '/var/tmp'].find(
+        (candidate) => existsSync(candidate) && !insideRepo(candidate) && !insideRepo(realpathSync(candidate)),
+    );
+    // Failing loudly beats a red suite that reads as a code regression.
+    if (fallback === undefined) {
+        throw new Error(
+            `run-tests: TMPDIR (${ambient}) is inside the repository under test and no OS temp root is available`,
+        );
+    }
+    return fallback;
+}
+
+const tempRoot = testTempRoot();
+
 // One disposable registry for the whole run: registry paths must be visible to children,
 // and a per-file path would drift between workers.
-const registryDir = mkdtempSync(join(tmpdir(), 'spur-test-env-'));
+const registryDir = mkdtempSync(join(tempRoot, 'spur-test-env-'));
 const env: Record<string, string | undefined> = {
     ...getEnvVars(),
+    TMPDIR: tempRoot,
     // Config layers: never read the operator's ~/.config/spur or this checkout's live
     // .spur/config.yaml.
     SPUR_SKIP_GLOBAL_CONFIG: 'true',
@@ -71,6 +115,12 @@ const env: Record<string, string | undefined> = {
 // a test is a legitimate top-level process and must not trip the nested-run refusal
 // (task 0610 R4 / 0753 R3 — the guard itself is unchanged).
 delete env.SPUR_WORKFLOW_RUN_ACTIVE;
+// Same class: the dispatching pipeline's effective role leaks in as SPUR_ROLE, and agent
+// resolution then reads it as an inherited role — with an empty `agentConfig` that is
+// "No executors configured to serve role 'coder'", so a test that asserts inline
+// substitution fails on the caller's role instead of on its own fixture. Tests that need an
+// inherited role set SPUR_ROLE themselves.
+delete env.SPUR_ROLE;
 // "No backend" assertions must not reach the operator's live decision backend.
 delete env.TYPESAFE_API_KEY;
 delete env.TYPESAFE_BASE_URL;

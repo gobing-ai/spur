@@ -16,34 +16,14 @@
  */
 import { mock } from 'bun:test';
 
-// ── Working fetch seam inside the mock ──────────────────────────────────
-// Mirrors the real rpc-client's _testFetch closure so that tests using
-// setFetchForTesting + fetchWithTimeout work even when the module is mocked.
-let _testFetch: typeof fetch | undefined;
-
-function setFetchForTesting(fn: typeof fetch): void {
-    _testFetch = fn;
-}
-
-function resetFetchForTesting(): void {
-    _testFetch = undefined;
-}
-
-function fetchWithTimeout(request: Request, ms = 10_000): Promise<Response> {
-    const controller = new AbortController();
-    const handle = setTimeout(() => controller.abort(), ms);
-    const origSignal = request.signal;
-    if (origSignal) {
-        origSignal.addEventListener('abort', () => controller.abort(), { once: true });
-    }
-    const req = new Request(request, { signal: controller.signal });
-    const fetcher = _testFetch ?? fetch;
-    return fetcher(req).finally(() => clearTimeout(handle));
-}
-
-function apiFetchWithTimeout(request: Request): Promise<Response> {
-    return fetchWithTimeout(request);
-}
+// Import the dependency-free seam directly: rpc-client itself is mocked below.
+import {
+    apiFetchWithTimeout,
+    DEFAULT_FETCH_TIMEOUT_MS,
+    fetchWithTimeout,
+    resetFetchForTesting,
+    setFetchForTesting,
+} from '../../src/lib/rpc-fetch';
 
 function logTransportError(error: unknown): void {
     if (typeof globalThis !== 'undefined' && globalThis.dispatchEvent) {
@@ -82,6 +62,7 @@ const defaultApi = {
 export function buildFullRpcMock(overrides?: { api?: unknown }): Record<string, unknown> {
     return {
         resolveApiUrl: () => 'http://localhost:3000/api',
+        DEFAULT_FETCH_TIMEOUT_MS,
         fetchWithTimeout,
         apiFetchWithTimeout,
         setFetchForTesting,

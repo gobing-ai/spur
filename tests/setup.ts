@@ -140,6 +140,13 @@ process.env.PATH = `${fileURLToPath(new URL('./shims', import.meta.url))}:${proc
 // explicitly itself, so the guard stays fully covered (0753 R3: never relax the guard).
 delete process.env.SPUR_WORKFLOW_RUN_ACTIVE;
 
+// Same class (2026-11-06): a pipeline session exports SPUR_ROLE=<role>, and agent resolution
+// reads it as an inherited role. With an empty `agentConfig` that fails the dispatch with
+// "No executors configured to serve role 'coder'", so tests that assert inline/auto
+// substitution broke on the caller's role instead of their own fixture. Tests that need an
+// inherited role inject SPUR_ROLE explicitly (agent-service role attribution cases).
+delete process.env.SPUR_ROLE;
+
 // Decision-backend hermeticity: the default `typesafe` maker resolves whenever the host
 // exports TYPESAFE_API_KEY, so "no backend" tests (decision-events 1095) made a live call
 // and saw reason `error` instead of `no-backend`. Tests that need a backend pass the key

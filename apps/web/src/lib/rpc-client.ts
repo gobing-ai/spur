@@ -5,21 +5,17 @@ import type { JsonifiedClient } from '@orpc/openapi-client';
 import { OpenAPILink } from '@orpc/openapi-client/fetch';
 import { onError } from '@orpc/shared';
 
-// ── Injectable fetch seam for tests ───────────────────────────────────
-// Tests inject a mock fetch via setFetchForTesting instead of mutating
-// globalThis.fetch. This keeps the no-globalthis-fetch-mutation rule
-// enforceable (http-boundaries.yaml strict preset). ADR-005 §4 Type Seam.
-let _testFetch: typeof fetch | undefined;
+import { apiFetchWithTimeout } from './rpc-fetch';
 
-/** Replace the fetch implementation for the current test. Call resetFetchForTesting in afterEach. */
-export function setFetchForTesting(fn: typeof fetch): void {
-    _testFetch = fn;
-}
+/** Shared request deadline and injectable fetch seam; preserve the existing client import path. */
+export {
+    apiFetchWithTimeout,
+    DEFAULT_FETCH_TIMEOUT_MS,
+    fetchWithTimeout,
+    resetFetchForTesting,
+    setFetchForTesting,
+} from './rpc-fetch';
 
-/** Restore the platform fetch after a test. */
-export function resetFetchForTesting(): void {
-    _testFetch = undefined;
-}
 /**
  * Resolve the public API URL for browser, SSR, and test contexts.
  *
@@ -36,37 +32,6 @@ export function resolveApiUrl(
 ): string {
     if (envUrl) return envUrl;
     return origin && origin !== 'null' ? new URL('/api', origin).toString() : 'http://localhost:3000/api';
-}
-
-/** Default abort deadline for board API calls, in milliseconds. */
-export const DEFAULT_FETCH_TIMEOUT_MS = 30_000;
-
-/**
- * Timeout-wrapped fetch — aborts via `AbortController` after `ms` (default 30s).
- */
-export function fetchWithTimeout(request: Request, ms = DEFAULT_FETCH_TIMEOUT_MS): Promise<Response> {
-    const controller = new AbortController();
-    const handle = setTimeout(
-        () => controller.abort(new DOMException(`Request timed out after ${ms}ms`, 'TimeoutError')),
-        ms,
-    );
-    const origSignal = request.signal;
-    const onAbort = () => controller.abort(origSignal.reason);
-    if (origSignal.aborted) onAbort();
-    else origSignal.addEventListener('abort', onAbort, { once: true });
-    const req = new Request(request, { signal: controller.signal });
-    const fetcher = _testFetch ?? fetch;
-    return fetcher(req).finally(() => {
-        clearTimeout(handle);
-        origSignal.removeEventListener('abort', onAbort);
-    });
-}
-
-/**
- * Adapter: matches OpenAPILink's fetch signature and delegates to fetchWithTimeout.
- */
-export function apiFetchWithTimeout(request: Request): Promise<Response> {
-    return fetchWithTimeout(request, DEFAULT_FETCH_TIMEOUT_MS);
 }
 
 /** Typed oRPC OpenAPI client — derived from the contract so contract↔client drift fails at compile time. */
@@ -111,7 +76,7 @@ export function decodeApiError(
     });
 }
 
-/** Singleton typed oRPC client: 10s request timeout + a tracing/error interceptor. */
+/** Singleton typed oRPC client: 30s request timeout + a tracing/error interceptor. */
 export const api: ApiClient = createORPCClient(
     new OpenAPILink(contract, {
         url: resolveApiUrl(),
