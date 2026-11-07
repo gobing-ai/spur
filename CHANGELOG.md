@@ -1,5 +1,39 @@
 # Changelog
 
+## [0.4.27] - 2026-11-07
+
+### Added
+- embed the 0037 migration SQL as a generated mirror — the released `.sql` file is now the single authoring source for one pilot mirror, emitted into `packages/domain/src/migration-sql.generated.ts` by `build:bundle` instead of a handwritten twin (1312) (0fe3800b7)
+  <!-- src: scripts/commands/emit-migration-sql.ts:23, apps/cli/package.json:53 · confidence: HIGH -->
+- reap an async workflow run whose worker died, and keep an unattended batch running — a `running`/`pending` row with a dead `runs.pid` settles on read (`interrupted`, or `failed` when the engine cannot interrupt it), and under `--auto` a failed task no longer stops the batch while `--agent auto` resolves one executor per batch (1317, 1318) (9d5baaa39)
+  <!-- src: packages/app/src/services/workflow-clean-ops.ts:106, plugins/sp/skills/spur-dev/references/execution-batch.md:152 · confidence: HIGH -->
+
+### Fixed
+- check out full history in CI so the 1309 parity evidence can re-read its frozen revision, and name a shallow clone as the cause instead of surfacing git's misleading "exists on disk" path error (e630a676e)
+  <!-- src: .github/workflows/ci.yml:22, packages/domain/tests/analytics/history-parity-evidence.test.ts:751 · confidence: HIGH -->
+- resolve the running bun binary in the search fixture, because a version-manager shim on PATH cannot detect a version from the temp project root and exits before spur runs (2d91e8ea9)
+  <!-- src: apps/cli/tests/commands/self/search.test.ts:324 · confidence: HIGH -->
+
+### Changed
+- share one selector time-range builder across the history marts, replacing the per-file predicate duplication (1310) (eb60502c6)
+  <!-- src: packages/domain/src/analytics/selector-time-range.ts:18, packages/domain/src/analytics/history-board-marts.ts:11 · confidence: HIGH -->
+- pay one row read for the worker-liveness probe and fence the reap's metadata write — the pid rides on the trace row and the projection reuses the probe's row, while a `staleReason` now merges only while the run is still `interrupted` (1317 residuals) (ec610f35a)
+  <!-- src: packages/domain/src/dao/run-dao.ts:52, packages/app/src/services/workflow-inspect-ops.ts:279 · confidence: HIGH -->
+
+### Other
+- evaluate the migration-SQL probe in place instead of importing a temp module, so the coverage table no longer carries a throwaway `var/folders` row (8241ac99c)
+  <!-- src: scripts/commands/emit-migration-sql.test.ts:55 · confidence: HIGH -->
+- drop the duplicate console diagnostic from the markdown-safety proof, which already throws the same child-output tail (7cdb435e4)
+  <!-- src: apps/web/tests/modules/task-kanban/markdown-safety.test.ts:76 · confidence: HIGH -->
+- document the caller-owned-identifier guard on the shared selector time-range builder (ed4a97228)
+  <!-- src: packages/domain/src/analytics/selector-time-range.ts:14 · confidence: HIGH -->
+- recommend stopping a host-driven batch at a task terminal and resuming in a fresh session with `--continue`, since the persisted report and markers carry the state (ea75b88c0)
+  <!-- src: plugins/sp/skills/spur-dev/references/execution-batch.md:27 · confidence: HIGH -->
+- append the 1317/1318 batch learnings to `.spur/memory/learnings.md` (354730d77)
+- record the 1310 and 1312 closes, whose implementations had already shipped (b384e1de3)
+- file the worker-lost and keep-going batch tasks (1317, 1318) (f114ededf)
+- refresh verification evidence after the batch run (c5f09f7a3)
+
 ## [0.4.26] - 2026-11-06
 
 ### Added
