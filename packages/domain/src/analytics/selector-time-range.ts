@@ -11,6 +11,10 @@ const BOUND_SQL = {
 /** Caller-owned constant columns only (`alias.column` or `column`); never user input. */
 const COLUMN = /^[A-Za-z_][A-Za-z0-9_]*(\.[A-Za-z_][A-Za-z0-9_]*)?$/;
 
+/**
+ * Builds the inclusive `since`/`until` predicate fragments and their bound params for one column.
+ * Throws on a column that is not a caller-owned identifier, since the SQL is interpolated.
+ */
 export function buildTimeRangeClauses(
     range: { since: string | null; until: string | null },
     target: { column: string; grain: keyof typeof BOUND_SQL },
