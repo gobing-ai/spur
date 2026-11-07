@@ -743,7 +743,13 @@ function stable(report: ParityReport): unknown {
         cases: report.cases,
         predicateVectors: report.predicateVectors,
         surface: report.surface,
-        toolVersions: report.toolVersions,
+        // toolVersions is the runner's environment (Bun and SQLite builds), not a property of the
+        // measurement: pinning it in the committed artifact made the check fail on any runner whose
+        // SQLite patch level differed. Presence is asserted directly instead.
+        toolVersions: {
+            bun: report.toolVersions.bun.length > 0 ? 'present' : '',
+            sqlite: report.toolVersions.sqlite.length > 0 ? 'present' : '',
+        },
         timingShape: {
             sevenDay: {
                 warmups: report.timings.sevenDay.warmups,

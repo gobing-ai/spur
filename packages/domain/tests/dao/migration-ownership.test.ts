@@ -601,6 +601,19 @@ describe('1311 SQL normalization and decision', () => {
 
 describe('1311 migration ownership evidence', () => {
     test('publishes the 0037 ownership decision from fixtures', async () => {
+        // The frozen report proves the bundled CLI migrates without a drizzle folder, and a clean
+        // checkout has no gitignored build artifact. Build it here so the evidence is reproducible
+        // anywhere instead of depending on whatever tree last ran `build:bundle`.
+        if (!existsSync(resolve(REPO_ROOT, 'apps/cli/spur.js'))) {
+            const build = Bun.spawnSync(['bun', 'run', '--filter', '@gobing-ai/spur', 'build:bundle'], {
+                cwd: REPO_ROOT,
+                stdout: 'pipe',
+                stderr: 'pipe',
+            });
+            if (build.exitCode !== 0) {
+                throw new Error(`build:bundle failed before the offline proof:\n${build.stderr.toString()}`);
+            }
+        }
         const embeddedIds = CLI_MIGRATIONS.map((migration) => migration.id);
         const contiguous = idsMatchReleased(embeddedIds);
         const trackedMigrations = await loadSqlMigrations(resolve(REPO_ROOT, 'drizzle'));
