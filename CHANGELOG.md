@@ -1,5 +1,66 @@
 # Changelog
 
+## [0.4.26] - 2026-11-06
+
+### Added
+- add readiness explanations to the planning views — `GET /task/readiness` reports, per task, why it is not ready (blocking dependencies, paused runs) instead of a bare `ready: false`, with the projection computed in one pass (1302) (5cc899be6)
+  <!-- src: packages/app/src/services/planning-readiness.ts:25, packages/contracts/src/task.ts:155 · confidence: HIGH -->
+- bind JavaScript actions to the detected package manager during `spur self init` — lockfile evidence selects one manager and refuses contradictory evidence instead of guessing (1303) (7bf80ffe9)
+  <!-- src: apps/cli/src/commands/init.ts:94, apps/cli/src/commands/init.ts:124 · confidence: HIGH -->
+- extend `spur self init` onboarding to monorepos — a root manifest wins, otherwise one immediate child is selected, multiple roots stay unbound with their paths listed, and child commands prefix a shell-quoted `cd` (1304) (dffd0d361)
+  <!-- src: config/config.example.yaml:243 · confidence: HIGH -->
+- declare per-surface admission capabilities in `agent.run` — each dispatch surface states what it can enforce before a run is admitted, instead of inheriting an implicit policy (1305) (2e91387e9)
+  <!-- src: packages/app/src/workflow/actions/agent-run.ts:78 · confidence: HIGH -->
+- finalize `agent.run` results durably — every completing surface leaves the same receipt under `.spur/run/<runId>/receipts/<state>.json`, so a finished stage is never re-derived from memory (1306) (627f9d77f)
+  <!-- src: packages/app/src/workflow/actions/agent-run.ts:290 · confidence: HIGH -->
+- link failed and paused runs to their retained evidence — the trace view resolves `record`/`incomplete`/`legacy`/`oversized`/`missing`/`unread` evidence states and offers the matching recovery action (1307) (808f306df)
+  <!-- src: apps/web/src/modules/observability/run-recovery.ts:41, apps/web/src/modules/observability/run-recovery.ts:44 · confidence: HIGH -->
+- show outcome breakdowns in the observability summary — a dedicated outcomes panel renders the aggregated run outcomes the summary endpoint already returned (1308) (2f63548bb)
+  <!-- src: apps/web/src/modules/observability/SummaryOutcomes.tsx:20, apps/web/src/modules/observability/SummaryTab.tsx:14 · confidence: HIGH -->
+
+### Fixed
+- default feature sync to `pull` and disable the `push` option, so the board stops offering a direction it cannot complete (eb4cb7e9e)
+  <!-- src: apps/web/src/modules/features/FeatureDetail.tsx:96, apps/web/src/modules/features/FeatureDetail.tsx:874 · confidence: HIGH -->
+- keep capped exact-search failures and skipped fuzzy outputs in `spur self search` results — an exact-mode failure is reported rather than silently degrading, and a skipped fuzzy result keeps its hint (1299) (0cce6f0bc)
+  <!-- src: packages/app/src/services/search.ts:18, packages/app/src/services/search.ts:37 · confidence: HIGH -->
+- reject incomplete planning corpus reads with an explicit diagnostic instead of deriving lifecycle state from a partial snapshot (1296) (458c372dc)
+  <!-- src: packages/app/src/services/planning-snapshot.ts:49 · confidence: HIGH -->
+- own task-store refreshes by folder and subscription — a response from a superseded folder or subscription can never commit, fixing cross-folder stale writes (1298) (af3570ab3)
+  <!-- src: apps/web/src/modules/task-kanban/useTasks.ts:53, apps/web/src/modules/task-kanban/useTasks.ts:82 · confidence: HIGH -->
+- classify executable shell positions without blocking literal read-only searches — an interpreter is matched on its basename, a `-c` script survives value-taking options such as `-O extglob` and `--rcfile`, and a redirection's `&` no longer splits a pipeline away from its executor (1313) (1d9722a82)
+  <!-- src: plugins/sp/lib/destructive-policy.ts:18, plugins/sp/lib/destructive-policy.ts:603 · confidence: HIGH -->
+- match the write payload to the effective feature-sync rules, so the batch pipeline stops sending a direction the server rejects (ffafa8481)
+  <!-- src: apps/web/src/modules/features/FeatureDetail.tsx:877 · confidence: HIGH -->
+
+### Changed
+- converge plan and design reads on the shared oRPC planning-documents contract, removing the per-view fetch paths (1300) (9d9eaaa8c)
+  <!-- src: packages/contracts/src/planning-documents.ts:55 · confidence: HIGH -->
+- share one planning-event subscription across views — features and the task board subscribe through a single client, so N mounted views no longer open N event streams (1301) (875636728)
+  <!-- src: apps/web/src/lib/planning-events.ts:64, apps/web/src/lib/planning-events.ts:76 · confidence: HIGH -->
+- reuse one operation-scoped corpus snapshot across corpus reads, replacing the per-call re-parse (1297) (4a2231869)
+  <!-- src: packages/app/src/services/planning-snapshot.ts:6, packages/app/src/services/planning-snapshot.ts:19 · confidence: HIGH -->
+- parse coverage thresholds once with the native TOML parser, keeping "absent" distinct from "diagnostics unavailable" in the quality gate (1314) (4c9a06e42)
+  <!-- src: packages/app/src/services/quality-gate.ts:168, packages/app/src/services/quality-gate.ts:173 · confidence: HIGH -->
+- stop promising runtime module registration — the web registry exposes the composed module list it actually has, and the docs say so (1315) (1d2210ddb)
+  <!-- src: apps/web/src/modules/registry.ts:8, apps/web/src/modules/registry.ts:48 · confidence: HIGH -->
+- reduce duplicated test mocks behind one retained `fetch` seam with its own behavioral tests, shrinking `rpc-client` (1316) (ea13274c8)
+  <!-- src: apps/web/src/lib/rpc-fetch.ts:18, apps/web/tests/lib/rpc-fetch.test.ts:20 · confidence: HIGH -->
+
+### Other
+- run real-renderer Markdown and Mermaid security proofs in isolation, failing closed on missing or empty JUnit evidence (1295) (983690a09)
+  <!-- src: apps/web/tests/modules/task-kanban/markdown-safety.test.ts:90, apps/web/tests/modules/task-kanban/markdown-safety.test.ts:98 · confidence: HIGH -->
+- record the raw-rollup and mart analytic parity measurement that precedes any simplification (1309) (da6484006)
+  <!-- src: docs/reports/1309-analytics-parity.md:34 · confidence: HIGH -->
+- record migration SQL ownership and offline upgrade parity as the safety evidence for trimming migration artifacts (1311) (7887b2861)
+  <!-- src: docs/reports/1311-migration-ownership.md:34 · confidence: HIGH -->
+- plan the simplification and product-enhancement batch in the roadmap and feature records (f7a73cb06)
+  <!-- src: docs/02_ROADMAP.md:1 · confidence: MEDIUM -->
+- record 1294 solution and verification evidence (af6169164)
+- sync feature H16 after 1295 completion (883dceb6a)
+- declare the 1302 readiness surfaces in F73 and mark the stale change-map (73fed5205)
+- sync feature status after the 1300–1316 batch (4be7a86df)
+- drop a citation to a nonexistent escalation transcript in 1302 (dc5f5aad7)
+
 ## [0.4.25] - 2026-11-05
 
 ### Added
