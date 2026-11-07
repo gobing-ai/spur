@@ -3,6 +3,7 @@ import type { BoardCatalog } from '@gobing-ai/spur-contracts';
 import { createElement } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { composeBoardModules, NATIVE_MODULE_LOAD_TIMEOUT_MS } from '../../src/modules/compose';
+import { createRegistry } from '../../src/modules/registry';
 import type { WebModule } from '../../src/modules/types';
 import { registerHappyDom, teardownHappyDom } from '../happy-dom';
 
@@ -61,6 +62,55 @@ function reactDescriptor(id: string, overrides: Record<string, unknown> = {}) {
 }
 
 describe('composeBoardModules', () => {
+    it('preserves configured React and iframe contributions through registry toggles', async () => {
+        const component = () => createElement('p', null, 'Configured React tool');
+        const rightPanelComponent = () => null;
+        const composed = await composeBoardModules(
+            catalog({
+                modules: [
+                    reactDescriptor('docs', { order: 2, sidebarLabel: 'Native docs' }),
+                    {
+                        id: 'frame',
+                        name: 'Framed docs',
+                        icon: '▢',
+                        type: 'iframe',
+                        route: '/modules/frame',
+                        url: 'https://docs.example.test/',
+                        order: 1,
+                    },
+                ],
+            }),
+            BUILTINS,
+            { importEntry: async () => ({ webModule: { apiVersion: 1, component, rightPanelComponent } }) },
+        );
+        const registry = createRegistry([...composed.modules], { defaultModuleId: 'projects' });
+
+        expect(composed.hostDiagnostics).toEqual([]);
+        expect(registry.getEnabledModules()).toEqual(['tasks', 'projects', 'frame', 'docs']);
+        expect(registry.defaultModule?.id).toBe('projects');
+        const native = requireEntry(registry.getModule('docs'));
+        expect(native.component).toBe(component);
+        expect(native.rightPanelComponent).toBe(rightPanelComponent);
+        expect(native.sidebarLabel).toBe('Native docs');
+        expect(native.route).toBe('modules/docs');
+        expect(renderToStaticMarkup(createElement(native.component))).toContain('Configured React tool');
+        const framed = requireEntry(registry.getModule('frame'));
+        expect(framed.route).toBe('modules/frame');
+        expect(framed.contributionType).toBe('iframe');
+        expect(renderToStaticMarkup(createElement(framed.component))).toContain('framed-resource');
+
+        for (const id of ['projects', 'frame', 'docs']) registry.disableModule(id);
+        expect(registry.getEnabledModules()).toEqual(['tasks']);
+        expect(registry.defaultModule?.id).toBe('tasks');
+        expect(registry.getModule('docs')).toBeUndefined();
+        expect(registry.getModule('frame')).toBeUndefined();
+        for (const id of ['docs', 'frame', 'projects']) registry.enableModule(id);
+        expect(registry.getEnabledModules()).toEqual(['tasks', 'projects', 'frame', 'docs']);
+        expect(registry.defaultModule?.id).toBe('projects');
+        expect(registry.getModule('docs')).toBe(native);
+        expect(registry.getModule('frame')).toBe(framed);
+    });
+
     it('keeps built-ins and reports a catalog diagnostic when the catalog is unavailable', async () => {
         const composed = await composeBoardModules(null, BUILTINS);
 

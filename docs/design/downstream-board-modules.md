@@ -3,7 +3,7 @@ kind: design
 title: Downstream Board module configuration and contributions
 status: accepted
 created_at: 2026-09-27
-updated_at: 2026-09-28
+updated_at: 2026-11-06
 related: [A8, docs/plans/2026-09-27-dynamic-board-modules-brainstorm.md]
 tags: [contract, A8, web, config]
 ---
@@ -19,7 +19,7 @@ This scope includes compiled React libraries and iframe URLs. It excludes server
 ## 2. Context and constraints
 
 - Current `bootstrapOptionsSchema` accepts options and strips modules; the new declaration belongs to Spur's config loader, not ts-infra's generic bootstrap engine.
-- `WebModule` already supplies component and optional rightPanelComponent. The pure createRegistry validator is reusable; registerModuleRoot is a no-op and exported modules/defaultModule/routes are snapshots.
+- `WebModule` already supplies component and optional rightPanelComponent. The pure createRegistry validator is reusable; configured contributions are composed before registry construction. Runtime root registration and rescanning are unsupported; exported modules/defaultModule/routes are snapshots.
 - BoardApp creates its router once. Runtime contributions must be resolved before constructing that registry/router; imports naturally occur after the Bun listener opens.
 - The published CLI ships prebuilt Board assets and no public UI authoring export. Adding runtime facade assets and a type-only export is necessary for native contributions.
 - The Bun/Hono probe establishes that Bun can replace handlers after listening but Hono cannot append routes to its finalized matcher. UI-only contributions need fixed catalog/asset handlers, so v1 does not mutate live routes.

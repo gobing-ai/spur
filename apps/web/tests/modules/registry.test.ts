@@ -1,4 +1,5 @@
 import { describe, expect, test } from 'bun:test';
+import * as registryExports from '../../src/modules/registry';
 import {
     createRegistry,
     defaultModule,
@@ -6,7 +7,6 @@ import {
     enableModule,
     getEnabledModules,
     getModule,
-    registerModuleRoot,
 } from '../../src/modules/registry';
 import type { WebModule } from '../../src/modules/types';
 
@@ -22,6 +22,11 @@ function fixture(id: string, route: string = id): WebModule {
 }
 
 describe('createRegistry', () => {
+    test('does not advertise unsupported runtime root registration', () => {
+        expect('registerModuleRoot' in createRegistry([fixture('x')])).toBe(false);
+        expect('registerModuleRoot' in registryExports).toBe(false);
+    });
+
     test('modules / defaultModule / getModule resolve from an injected list', () => {
         const reg = createRegistry([fixture('a'), fixture('b')]);
         expect(reg.modules.map((m) => m.id)).toEqual(['a', 'b']);
@@ -86,12 +91,6 @@ describe('createRegistry', () => {
         expect(reg.defaultModule).toBeUndefined();
         expect(reg.getModule('anything')).toBeUndefined();
     });
-
-    test('registerModuleRoot is a no-op on a registry instance', () => {
-        const reg = createRegistry([fixture('x')]);
-        expect(() => reg.registerModuleRoot('')).not.toThrow();
-        expect(reg.modules.map((m) => m.id)).toEqual(['x']);
-    });
 });
 
 /**
@@ -147,11 +146,5 @@ describe('singleton registry instance', () => {
         const mod = getModule('tasks');
         expect(mod?.id).toBe('tasks');
         expect(mod?.name).toBe('Tasks');
-    });
-
-    test('registerModuleRoot module export is a no-op stub that returns without throwing', () => {
-        // The single-root architecture is fixed for v0; the export exists for API
-        // stability. Assert it does nothing harmful.
-        expect(() => registerModuleRoot('')).not.toThrow();
     });
 });

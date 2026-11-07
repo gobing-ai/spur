@@ -149,10 +149,12 @@ enabled set by adding its id to `disabledModules` in
 `enableModule(id)` restores it. This is the blacklist — the directory and its
 discovery contract stay intact; only the enabled flag flips.
 
-**Additional roots (future).** The first cut ships a single root
-(`apps/web/src/modules/`). `registerModuleRoot(dir)` is exported from
-`registry.ts` for the future multi-root case (extension folders); it is a no-op
-stub today and the single-root architecture is fixed for v0.
+**Project contributions.** Built-in discovery uses `apps/web/src/modules/`.
+Downstream React tools and iframe resources use configured `bootstrap.modules`
+and the existing composition step; see the [contribution contract](../design/downstream-board-modules.md).
+Configuration changes require a server restart and browser reload; runtime root
+registration and rescanning are unsupported.
+
 ### 5. Talk to the server through the single RPC seam
 
 Data comes from the Spur server via oRPC. **The only import is `{ api }` from

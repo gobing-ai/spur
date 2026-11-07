@@ -16,8 +16,6 @@ export interface Registry {
     enableModule(id: string): void;
     /** Snapshot of currently-enabled module ids in order. */
     getEnabledModules(): readonly string[];
-    /** Register an additional discovery root at runtime (rescans immediately). */
-    registerModuleRoot(dir: string): void;
 }
 
 interface RegistryOptions {
@@ -69,11 +67,6 @@ export function createRegistry(discovered: WebModule[], opts?: RegistryOptions):
         },
         getEnabledModules(): readonly string[] {
             return enabledList().map((m) => m.id);
-        },
-        registerModuleRoot(_dir: string): void {
-            // Runtime root registration is a future extension point; the discovery contract
-            // (config.ts → discover.ts → registry) is the swappable surface. Kept as a
-            // no-op stub today so the API surface is stable for callers wiring it early.
         },
     };
 }
@@ -142,9 +135,4 @@ export function enableModule(id: string): void {
 /** Snapshot of currently-enabled module ids in order. */
 export function getEnabledModules(): readonly string[] {
     return registry.getEnabledModules();
-}
-
-/** Register an additional discovery root at runtime. */
-export function registerModuleRoot(dir: string): void {
-    registry.registerModuleRoot(dir);
 }
