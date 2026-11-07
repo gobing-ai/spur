@@ -1,3 +1,4 @@
+import { getEnvVar } from '@gobing-ai/spur-config';
 import {
     type SearchHit,
     type SearchRequest,
@@ -69,7 +70,7 @@ export const defaultSearchDeps: SearchDeps = {
     // force now, which is what a caller that changes PATH (tests, embedded use) expects.
     which: (bin) =>
         typeof Bun !== 'undefined' && typeof Bun.which === 'function'
-            ? Bun.which(bin, { PATH: process.env.PATH ?? '' })
+            ? Bun.which(bin, { PATH: getEnvVar('PATH') ?? '' })
             : null,
     run: async (command, args, opts) => {
         const result = await new NodeProcessExecutor().run({
