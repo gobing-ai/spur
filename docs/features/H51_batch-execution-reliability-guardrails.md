@@ -2,11 +2,11 @@
 schema_version: 1
 id: "H51"
 name: "Batch execution reliability guardrails"
-status: done
+status: active
 priority: P2
 tags: []
 created_at: "2026-07-29T21:43:01.773Z"
-updated_at: "2026-07-29T21:48:11.848Z"
+updated_at: "2026-11-07T08:05:53.539Z"
 ---
 
 # H51: Batch execution reliability guardrails
@@ -89,6 +89,9 @@ Feature: Batch execution reliability guardrails
 ## Notes
 
 ## History
+
 - 2026-07-29T21:47:53.407Z backlog → active (system)
 - 2026-07-29T21:47:58.597Z active → verifying (system)
 - 2026-07-29T21:48:11.848Z verifying → done (system)
+- 2026-11-07T08:05:53.539Z done → active (system)
+
