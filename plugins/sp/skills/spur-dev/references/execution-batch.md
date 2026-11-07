@@ -23,6 +23,9 @@ see_also:
   [execution-batch-continuation.md](execution-batch-continuation.md) for `--continue`.
 - **Never re-derive the plan** — the frozen plan is the persisted report; a new selector match is
   `not-admitted`, not a plan change.
+- **Fresh session per segment** — when host context nears its limit, stop after a task terminal and
+  resume in a new session with `--continue`; the persisted report and markers carry the state. A
+  near-full context slows every later turn and degrades judgment.
 
 ## What this file owns
 
