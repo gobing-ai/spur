@@ -4,7 +4,7 @@ name: Link task failures and paused runs to retained evidence and safe recovery
 status: done
 template: feature-impl
 created_at: 2026-11-05T20:01:23.918Z
-updated_at: "2026-11-06T06:31:38.235Z"
+updated_at: "2026-11-07T06:53:28.365Z"
 ac_altitude: task-local
 ac_numbering: task-local
 feature_id: E71
@@ -143,13 +143,13 @@ Testing and Review stay empty for the pipeline record and review hops. Status wa
 
 | Requirement | Status | Evidence |
 |-------------|--------|----------|
-| R1 | MET | `apps/web/src/modules/task-kanban/TaskRunEvidenceLink.tsx:7` links the task to Trace; `apps/web/src/modules/observability/TraceTab.tsx:341` loads linked runs; `apps/web/src/modules/observability/run-recovery.ts:191` builds copyable guidance; `apps/web/tests/modules/observability/run-recovery.test.ts:534` keyboard journey, apps/web bun test 14 pass 0 fail exit 0 |
-| R2 | MET | `apps/web/src/modules/observability/run-recovery.ts:359` reusableAsFresh is false; `apps/web/src/modules/observability/run-recovery.ts:390` names expired or missing scratch; `apps/web/src/modules/observability/run-recovery.ts:343` flags stale or missing proof; `apps/web/tests/modules/observability/run-recovery.test.ts:416` and `apps/web/tests/modules/observability/run-recovery.test.ts:614` |
+| R1 | MET | `apps/web/src/modules/task-kanban/TaskRunEvidenceLink.tsx:7` `taskRunEvidenceHref` links the task to its run evidence; `apps/web/src/modules/observability/TraceTab.tsx:341` `loadLinked` loads the linked run; `apps/web/src/modules/observability/run-recovery.ts:191` `buildRecovery` offers only valid recovery; apps/web run-recovery + summary-outcomes 19 pass / 0 fail. |
+| R2 | MET | `apps/web/src/modules/observability/run-recovery.ts:343` `proofNotice` labels proof state; `apps/web/src/modules/observability/run-recovery.ts:359` `reusableAsFresh = false` so retained evidence is never a fresh receipt; `apps/web/src/modules/observability/run-recovery.ts:390` `missing` (expired scratch) case kept distinct. |
 
 | Acceptance Criteria | Status | Evidence Type | Evidence |
 |---------------------|--------|---------------|----------|
-| AC1 — Run evidence and valid recovery are reachable from the affected task (req: R1) | MET | test | `apps/web/tests/modules/observability/run-recovery.test.ts:534` keyboard reaches redacted paused evidence in two steps and does not execute recovery; `apps/web/tests/modules/observability/run-recovery.test.ts:588` failed run shows trace plus retry only while the task can run |
-| AC2 — Expired scratch is distinguished from durable recovery evidence (req: R2) | MET | test | `apps/web/tests/modules/observability/run-recovery.test.ts:416` evidence and proof stay explicit and are never fresh receipts; `apps/web/tests/modules/observability/run-recovery.test.ts:614` completed run keeps retained provenance and refuses expired scratch and stale proof |
+| AC1 — Run evidence and valid recovery are reachable from the affected task (req: R1) | MET | test | `apps/web/tests/modules/observability/run-recovery.test.ts:534` keyboard reaches redacted paused evidence in two steps without executing recovery; `apps/web/tests/modules/observability/run-recovery.test.ts:588` failed run shows trace plus retry only while runnable — pass this session. |
+| AC2 — Expired scratch is distinguished from durable recovery evidence (req: R2) | MET | test | `apps/web/tests/modules/observability/run-recovery.test.ts:416` evidence and proof are never fresh receipts; `apps/web/tests/modules/observability/run-recovery.test.ts:614` completed run keeps retained provenance and refuses expired scratch and stale proof — pass this session. |
 - Coverage: N/A (verdict-based; verify pipeline does not measure code coverage)
 
 ### Review

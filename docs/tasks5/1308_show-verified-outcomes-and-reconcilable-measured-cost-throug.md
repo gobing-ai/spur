@@ -4,7 +4,7 @@ name: Show verified outcomes and reconcilable measured cost through current run 
 status: done
 template: feature-impl
 created_at: 2026-11-05T20:01:23.918Z
-updated_at: "2026-11-06T07:24:03.298Z"
+updated_at: "2026-11-07T06:53:29.115Z"
 ac_altitude: task-local
 ac_numbering: task-local
 feature_id: E6
@@ -147,11 +147,11 @@ Task status stays `todo`. Testing and Review stay with the pipeline. Plan steps 
 
 | Requirement | Status | Evidence |
 |-------------|--------|----------|
-| R1 | MET | `packages/app/src/services/project-outcome.ts:67-90` keeps startedAt inside the summary window, folds exact-mapped USD, sets unknownUsdRows from historyRows minus usdRows, and counts unmapped or partial-USD runs; `apps/web/src/modules/observability/SummaryTab.tsx:453` mounts the block; `apps/web/src/modules/observability/SummaryOutcomes.tsx:41-78` shows task counts and the unknown bucket |
+| R1 | MET | `packages/app/src/services/project-outcome.ts:67-90` filters runs to the startedAt window and folds measured cost; `apps/web/src/modules/observability/SummaryTab.tsx:453` renders `SummaryOutcomes`; `apps/web/src/modules/observability/SummaryOutcomes.tsx:41-78` verified-task and cost cells; app 11, server observability 35, web 19 pass / 0 fail. |
 
 | Acceptance Criteria | Status | Evidence Type | Evidence |
 |---------------------|--------|---------------|----------|
-| AC1 — Outcome feedback reconciles measured cost and verified work (req: R1) | MET | test | `packages/app/tests/services/project-outcome-service.test.ts:220` partial USD and unknown run; `packages/app/tests/services/project-outcome-service.test.ts:197` until-bound exclusion; `packages/app/tests/services/project-outcome-service.test.ts:275` forced and unproved task counts; `apps/web/tests/modules/observability/summary-outcomes.test.ts:73` rendered unknown bucket and links; `apps/server/tests/modules/observability/index.test.ts:573` summary window probe. This turn: packages/app 69 pass / 0 fail, apps/web summary-outcomes 5 pass / 0 fail, apps/server observability 35 pass / 0 fail, packages/contracts observability 4 pass / 0 fail |
+| AC1 — Outcome feedback reconciles measured cost and verified work (req: R1) | MET | test | `packages/app/tests/services/project-outcome-service.test.ts:197` window by startedAt; `packages/app/tests/services/project-outcome-service.test.ts:220` partial USD keeps unknown rows; `packages/app/tests/services/project-outcome-service.test.ts:275` verified counts follow derivation; `apps/server/tests/modules/observability/index.test.ts:573` summary includes outcomes; `apps/web/tests/modules/observability/summary-outcomes.test.ts:73` UI shows USD, coverage and counts — pass this session. |
 - Coverage: N/A (verdict-based; verify pipeline does not measure code coverage)
 
 ### Review

@@ -4,7 +4,7 @@ name: Share executor result finalization while preserving receipts and partial w
 status: done
 template: feature-impl
 created_at: 2026-11-05T20:01:23.917Z
-updated_at: "2026-11-06T05:43:58.561Z"
+updated_at: "2026-11-07T06:52:00.870Z"
 ac_altitude: task-local
 ac_numbering: task-local
 feature_id: D65
@@ -210,11 +210,11 @@ One shared completion hop was added between the settled dispatch and the single 
 
 | Requirement | Status | Evidence |
 |-------------|--------|----------|
-| R1 | MET | `packages/app/src/workflow/actions/agent-run.ts:598` sends the settled row through `packages/app/src/workflow/actions/agent-run.ts:622-651` before `packages/app/src/workflow/actions/agent-run.ts:661`. Host pause returns at `packages/app/src/workflow/actions/agent-run.ts:623`. A failed row is not replaced when receipt write throws at `packages/app/src/workflow/actions/agent-run.ts:697`. Host resume still requires outcome done at `packages/app/src/workflow/receipt.ts:201`. |
+| R1 | MET | `packages/app/src/workflow/actions/agent-run.ts:598` dispatch routes through `finalizeAgentDispatchResult`; `packages/app/src/workflow/actions/agent-run.ts:622-623` host pause bypass; `packages/app/src/workflow/actions/agent-run.ts:661` `recordReceipt`; `packages/app/src/workflow/receipt.ts:201` refuses non-done outcomes; packages/app 268 + 26 pass / 0 fail. |
 
 | Acceptance Criteria | Status | Evidence Type | Evidence |
 |---------------------|--------|---------------|----------|
-| AC1 — Executor results share truthful finalization and failure context (req: R1) | MET | test | `packages/app/tests/workflow/actions/agent-run-completion.test.ts:118-274`; host resume `packages/app/tests/workflow/receipt.test.ts:170` and `packages/app/tests/services/workflow-host-executor.test.ts:154`. bun test of the task named executor files plus receipt.test.ts exited 0, 237 pass / 0 fail. |
+| AC1 — Executor results share truthful finalization and failure context (req: R1) | MET | test | `packages/app/tests/workflow/actions/agent-run-completion.test.ts:118` usage survives finalization; `packages/app/tests/workflow/receipt.test.ts:170` non-done outcomes refused; `packages/app/tests/services/workflow-host-executor.test.ts:154` missing receipt keeps run paused — pass this session. |
 - Coverage: N/A (verdict-based; verify pipeline does not measure code coverage)
 
 ### Review

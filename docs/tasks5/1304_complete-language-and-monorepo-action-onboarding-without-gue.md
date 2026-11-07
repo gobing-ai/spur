@@ -4,7 +4,7 @@ name: Complete language and monorepo action onboarding without guessing commands
 status: done
 template: feature-impl
 created_at: 2026-11-05T20:01:23.917Z
-updated_at: "2026-11-06T04:40:11.858Z"
+updated_at: "2026-11-07T06:51:59.416Z"
 ac_altitude: task-local
 ac_numbering: task-local
 feature_id: A92
@@ -134,11 +134,11 @@ comment and exercise every new branch before reporting done.
 
 | Requirement | Status | Evidence |
 |-------------|--------|----------|
-| R1 | MET | Conservative language defaults and explicit precedence: `apps/cli/src/commands/init.ts:146`; root ownership: `apps/cli/src/commands/init.ts:239`, `apps/cli/src/commands/init.ts:285`. Fresh 121-test CLI check covers missing tools, Python/Make, mixed roots, CDPATH and quoted child execution (`apps/cli/tests/commands/init.test.ts:689`, `apps/cli/tests/commands/init.test.ts:696`, `apps/cli/tests/commands/init.test.ts:762`, `apps/cli/tests/commands/init.test.ts:790`, `apps/cli/tests/commands/init.test.ts:809`). Native journey command `bun .spur/run/1304/probe.ts` passes four scenarios. |
+| R1 | MET | `apps/cli/src/commands/init.ts:146` `detectBuilderBindings`; `apps/cli/src/commands/init.ts:176-179` Cargo/Go defaults only when the tool is on PATH; `apps/cli/src/commands/init.ts:239` monorepo root discovery; `apps/cli/src/commands/init.ts:285` child-root path quoting; apps/cli 110 tests, 0 fail. |
 
 | Acceptance Criteria | Status | Evidence Type | Evidence |
 |---------------------|--------|---------------|----------|
-| AC1 — Language and monorepo onboarding retains execution ownership (req: R1) | MET | test | Fresh CLI tests verify Cargo/Go defaults, Python refusal/explicit Make, missing tools, ambiguous roots, inspection/preview without execution, quoted child ownership and config preservation: `apps/cli/tests/commands/init.test.ts:660`, `apps/cli/tests/commands/init.test.ts:681`, `apps/cli/tests/commands/init.test.ts:689`, `apps/cli/tests/commands/init.test.ts:696`, `apps/cli/tests/commands/init.test.ts:762`, `apps/cli/tests/commands/init.test.ts:790`, `apps/cli/tests/commands/init.test.ts:809`. Native command `bun .spur/run/1304/probe.ts` passes four scenarios; successful non-Bun checks take four operator actions (`.spur/run/1304/probe.json:19`). |
+| AC1 — Language and monorepo onboarding retains execution ownership (req: R1) | MET | test | `apps/cli/tests/commands/init.test.ts:660` Cargo; `apps/cli/tests/commands/init.test.ts:681` Go; `apps/cli/tests/commands/init.test.ts:689` missing tool unbound; `apps/cli/tests/commands/init.test.ts:762` mixed roots propose nothing; `apps/cli/tests/commands/init.test.ts:809` public journey executes only inside the child — pass this session. |
 - Coverage: N/A (verdict-based; verify pipeline does not measure code coverage)
 
 ### Review

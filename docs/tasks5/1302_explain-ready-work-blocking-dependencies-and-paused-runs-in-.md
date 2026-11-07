@@ -4,7 +4,7 @@ name: Explain ready work, blocking dependencies and paused runs in planning view
 status: done
 template: feature-impl
 created_at: 2026-11-05T20:01:23.916Z
-updated_at: "2026-11-07T02:35:27.420Z"
+updated_at: "2026-11-07T06:51:16.499Z"
 ac_altitude: task-local
 ac_numbering: task-local
 feature_id: F73
@@ -198,11 +198,11 @@ No escalation transcript exists and no operator decision was needed. No full gat
 
 | Requirement | Status | Evidence |
 |-------------|--------|----------|
-| R1 | MET | `packages/app/src/services/planning-readiness.ts:63` composes deterministic readiness and exact blockers; `packages/app/tests/services/planning-readiness.test.ts:22` covers ready, cross-folder/missing/unfinished/deprecated dependencies, incomplete sections and paused work; `apps/server/tests/modules/task/readiness.test.ts:8` verifies real HTTP/context/run wiring with zero model/job dispatches; `apps/web/tests/modules/task-kanban/readiness.test.ts:35` verifies displayed advice. Fresh CLI/HTTP/DOM journey passes. |
+| R1 | MET | `packages/app/src/services/planning-readiness.ts:63` derives readiness; `apps/server/src/modules/task/handlers.ts:39-41` exposes it read-only; `apps/web/src/modules/task-kanban/PlanningReadinessPanel.tsx:7` renders blockers; `packages/app/tests/services/planning-readiness.test.ts:22` and `apps/server/tests/modules/task/readiness.test.ts:8` pass (app 268 / server 62 pass, 0 fail). |
 
 | Acceptance Criteria | Status | Evidence Type | Evidence |
 |---------------------|--------|---------------|----------|
-| Scenario: AC1 — Daily readiness explains work and exact blockers (req: R1) | MET | test | `(cd apps/web && bun test apps/web/tests/modules/task-kanban/readiness.test.ts)` passes with 11 assertions across CLI checking, HTTP and rendered ready/blocker/incomplete/paused advice; `packages/app/tests/services/planning-readiness.test.ts:22` covers fixture states; `packages/app/tests/services/planning-readiness.test.ts:83` rejects ambiguous/unreadable inputs; `apps/server/tests/modules/task/readiness.test.ts:8` verifies zero model/job dispatches; `apps/web/tests/modules/task-kanban/readiness.test.ts:35` verifies display-only commands and paused links. Task-local AC identity retained. |
+| Scenario: AC1 — Daily readiness explains work and exact blockers (req: R1) | MET | test | `packages/app/tests/services/planning-readiness.test.ts:83` ambiguous/unreadable input never ready; `apps/server/tests/modules/task/readiness.test.ts:8` real wiring without dispatch; `apps/web/tests/modules/task-kanban/readiness.test.ts:35` disclosure without executing work — all pass this session. |
 - Coverage: N/A (verdict-based; verify pipeline does not measure code coverage)
 
 ### Review

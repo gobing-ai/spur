@@ -4,7 +4,7 @@ name: Unify executor admission and invocation policy across existing dispatch su
 status: done
 template: feature-impl
 created_at: 2026-11-05T20:01:23.917Z
-updated_at: "2026-11-06T05:01:25.781Z"
+updated_at: "2026-11-07T06:52:00.144Z"
 ac_altitude: task-local
 ac_numbering: task-local
 feature_id: D65
@@ -119,12 +119,12 @@ comment and exercise every new branch before reporting done.
 
 | Requirement | Status | Evidence |
 |-------------|--------|----------|
-| R1 | MET | `packages/app/src/workflow/actions/agent-run.ts:71-149`, `packages/app/src/workflow/actions/agent-run.ts:391-454`, `packages/app/src/workflow/actions/agent-run.ts:583-616`, `packages/app/src/workflow/actions/agent-run.ts:689-1096`, `packages/app/src/workflow/actions/agent-run.ts:1770-1858`, `packages/app/tests/workflow/actions/agent-run-admission.test.ts:15-248` |
+| R1 | MET | `packages/app/src/workflow/actions/agent-run.ts:78` declared admission capabilities per surface; `packages/app/src/workflow/actions/agent-run.ts:1801-1802` `normalizeAgentInvocation` parses options once; `packages/app/src/workflow/actions/agent-run.ts:596` and `packages/app/src/workflow/actions/agent-run.ts:715` both surfaces admit through it; packages/app 268 pass / 0 fail. |
 
 | Acceptance Criteria | Status | Evidence Type | Evidence |
 |---------------------|--------|---------------|----------|
-| AC1 — Executor surfaces apply the same declared admission contract (req: R1) | MET | test | `packages/app/tests/workflow/actions/agent-run-admission.test.ts:130-248` (48-case host × fleet × subprocess admission matrix pass); `packages/app/src/workflow/actions/agent-run.ts:71-149` |
-| R17 — Executor surfaces apply the same declared admission contract | MET | test | `packages/app/tests/workflow/actions/agent-run-admission.test.ts:130-248` (48-case host × fleet × subprocess admission matrix pass); `packages/app/src/workflow/actions/agent-run.ts:71-149` |
+| AC1 — Executor surfaces apply the same declared admission contract (req: R1) | MET | test | `packages/app/tests/workflow/actions/agent-run-admission.test.ts:130` admission matrix across every executor surface — pass this session. |
+| R17 — Executor surfaces apply the same declared admission contract | MET | test | `packages/app/tests/workflow/actions/agent-run-admission.test.ts:130` — same matrix; 268 pass / 0 fail. |
 - Coverage: N/A (verdict-based; verify pipeline does not measure code coverage)
 
 ### Review

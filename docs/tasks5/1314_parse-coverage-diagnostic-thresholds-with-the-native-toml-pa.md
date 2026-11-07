@@ -4,7 +4,7 @@ name: Parse coverage diagnostic thresholds with the native TOML parser
 status: done
 template: feature-impl
 created_at: 2026-11-05T20:01:23.921Z
-updated_at: "2026-11-07T01:09:20.519Z"
+updated_at: "2026-11-07T06:54:41.663Z"
 ac_altitude: task-local
 ac_numbering: task-local
 feature_id: C3
@@ -131,11 +131,11 @@ Gate limitation: `bun apps/cli/src/index.ts task gate 1314 light` records FAIL s
 
 | Requirement | Status | Evidence |
 |-------------|--------|----------|
-| R1 | MET | `packages/app/src/services/quality-gate.ts:169`, `packages/app/src/services/quality-gate.ts:1328`; fresh focused-behavior and cli-golden-path-present checks prove equivalent forms, actionable invalid-input diagnostics, silent absent settings and preserved failure status. |
+| R1 | MET | `packages/app/src/services/quality-gate.ts:169` `parseCoverageThresholdResult` normalizes TOML threshold forms; `packages/app/src/services/quality-gate.ts:1328` diagnostics only on gate failure; quality-gate 54 pass / 0 fail. |
 
 | Acceptance Criteria | Status | Evidence Type | Evidence |
 |---------------------|--------|---------------|----------|
-| Scenario: AC1 — Equivalent TOML threshold forms produce equivalent diagnostics (req: R1) | MET | test | `packages/app/tests/services/quality-gate.test.ts:283` covers equivalent forms; `packages/app/tests/services/quality-gate.test.ts:306` covers absent/malformed/invalid settings and bounded diagnostics; `packages/app/tests/services/quality-gate.test.ts:368` covers mixed axes and successful-gate silence. Fresh focused-behavior and cli-golden-path-present checks passed. |
+| Scenario: AC1 — Equivalent TOML threshold forms produce equivalent diagnostics (req: R1) | MET | test | `packages/app/tests/services/quality-gate.test.ts:283` and `packages/app/tests/services/quality-gate.test.ts:306` equivalent forms tables; `packages/app/tests/services/quality-gate.test.ts:368` invalid axis still reports valid-axis shortfalls, success stays silent — pass this session. |
 - Coverage: N/A (verdict-based; verify pipeline does not measure code coverage)
 
 ### Review

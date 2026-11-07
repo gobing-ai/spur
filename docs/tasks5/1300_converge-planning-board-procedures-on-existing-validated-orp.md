@@ -4,7 +4,7 @@ name: Converge planning Board procedures on existing validated oRPC transport
 status: done
 template: feature-impl
 created_at: 2026-11-05T20:01:23.915Z
-updated_at: "2026-11-06T01:28:56.178Z"
+updated_at: "2026-11-07T06:51:15.015Z"
 ac_altitude: task-local
 ac_numbering: task-local
 feature_id: F73
@@ -124,11 +124,11 @@ Verification evidence:
 
 | Requirement | Status | Evidence |
 |-------------|--------|----------|
-| R1 | MET | `packages/contracts/src/planning-documents.ts:1-87` defines the four read contracts on the existing paths; `packages/app/src/services/planning-document-service.ts:1-183` owns allowlists, ordering and refusals; `apps/server/src/modules/planning-documents/handlers.ts:1-45` and the retained aliases at `apps/server/src/modules/health/index.ts:700-794` both delegate to it; `apps/web/src/lib/plan-client.ts:1-45` and `apps/web/src/lib/design-client.ts:1-45` use the typed client. |
+| R1 | MET | `packages/contracts/src/planning-documents.ts:1` oRPC contract for plan/design reads; `apps/server/src/modules/planning-documents/handlers.ts:3` implements it; `apps/server/src/modules/health/index.ts:717-718` legacy aliases delegate to the shared owner; `apps/web/src/lib/plan-client.ts:2` and `apps/web/src/lib/design-client.ts:2` use the typed rpc client; server 62+9 pass / 0 fail, web 12 pass / 0 fail this session. |
 
 | Acceptance Criteria | Status | Evidence Type | Evidence |
 |---------------------|--------|---------------|----------|
-| AC1 — Planning Board reads use validated shared transport contracts (req: R1) | MET | test | `apps/server/tests/modules/planning-documents/handlers.test.ts:1-70` proves every refusal code maps to its documented status; `apps/server/tests/modules/plans.test.ts` and `apps/server/tests/modules/designs.test.ts` prove the legacy aliases and envelopes are unchanged (26 pass); `apps/web/tests/lib/plan-client.test.ts` and `apps/web/tests/lib/design-client.test.ts` prove cancellation and error decoding through the typed client (42 pass). |
+| AC1 — Planning Board reads use validated shared transport contracts (req: R1) | MET | test | `apps/server/tests/modules/planning-documents/handlers.test.ts:1` plus apps/server/tests/modules/plans.test.ts, apps/server/tests/modules/designs.test.ts, apps/web/tests/lib/plan-client.test.ts, apps/web/tests/lib/design-client.test.ts — all pass this session. |
 - Coverage: N/A (verdict-based; verify pipeline does not measure code coverage)
 
 ### Review

@@ -4,7 +4,7 @@ name: Keep task-store refreshes owned by the latest folder and subscription
 status: done
 template: feature-impl
 created_at: 2026-11-05T20:01:23.914Z
-updated_at: "2026-11-06T00:39:38.989Z"
+updated_at: "2026-11-07T06:50:41.186Z"
 ac_altitude: task-local
 ac_numbering: task-local
 feature_id: F7
@@ -123,13 +123,13 @@ Verification evidence:
 
 | Requirement | Status | Evidence |
 |-------------|--------|----------|
-| R1 | MET | `apps/web/src/modules/task-kanban/useTasks.ts:96-190` commits only for the current sourceGeneration and lifetime; `apps/web/tests/modules/task-kanban/useTasks.test.ts:211-299` covers late success, late error, hung previous request and disposed subscription. |
-| R2 | MET | `apps/web/src/modules/task-kanban/useTasks.ts:150-190` coalesces same-token bursts with one trailing run; the burst test at `apps/web/tests/modules/task-kanban/useTasks.test.ts:300-327` proves two total calls for 100 events and the final state. |
+| R1 | MET | `apps/web/src/modules/task-kanban/useTasks.ts:96-98` swaps the list source per folder; `apps/web/tests/modules/task-kanban/useTasks.test.ts:211` refresh ownership suite; apps/web focused run 104 pass / 0 fail. |
+| R2 | MET | `apps/web/src/modules/task-kanban/useTasks.ts:151-152` coalesces refreshes behind the active request; `apps/web/tests/modules/task-kanban/useTasks.test.ts:300` burst test passes. |
 
 | Acceptance Criteria | Status | Evidence Type | Evidence |
 |---------------------|--------|---------------|----------|
-| AC1 — Task folder selection owns every committed response (req: R1) | MET | test | `apps/web/tests/modules/task-kanban/useTasks.test.ts:211-299` — deferred A/B success, A error, hung-A and disposed-subscription regressions; the file's 23 tests pass with 0 failures. |
-| AC2 — Task refresh bursts retain eventual freshness (req: R2) | MET | test | `apps/web/tests/modules/task-kanban/useTasks.test.ts:300-327` — 100 planning events produce one in-flight and one trailing call and the final state carries the last change. |
+| AC1 — Task folder selection owns every committed response (req: R1) | MET | test | `apps/web/tests/modules/task-kanban/useTasks.test.ts:211` — stale folder responses never commit; 104 pass / 0 fail. |
+| AC2 — Task refresh bursts retain eventual freshness (req: R2) | MET | test | `apps/web/tests/modules/task-kanban/useTasks.test.ts:300` — last change wins after a burst; 104 pass / 0 fail. |
 - Coverage: N/A (verdict-based; verify pipeline does not measure code coverage)
 
 ### Review

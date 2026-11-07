@@ -4,7 +4,7 @@ name: Classify executable shell positions without blocking literal read-only sea
 status: done
 template: feature-impl
 created_at: 2026-11-05T20:01:23.920Z
-updated_at: "2026-11-07T00:58:01.227Z"
+updated_at: "2026-11-07T06:55:53.706Z"
 ac_altitude: task-local
 ac_numbering: task-local
 feature_id: A6
@@ -163,11 +163,11 @@ Review follow-up (2026-11-06): a redirection `&` is no longer read as a pipeline
 
 | Requirement | Status | Evidence |
 |-------------|--------|----------|
-| R1 | MET | `plugins/sp/lib/destructive-policy.ts:18-27` documents the executable-position contract; `:523-528` recognises every shell interpreter by basename and `:572-596` steps over value-taking options before `-c`; `:356-372` keeps a redirection's `&` inside its command. Independent re-review probed 4029 commands with no new permissive case; `plugins/sp/tests/hooks/destructive-policy.test.ts` holds the regressions (568 pass). |
+| R1 | MET | `plugins/sp/lib/destructive-policy.ts:18-27` documents executable-position lexing; `plugins/sp/lib/destructive-policy.ts:621` `classifyCommand` entry; `plugins/sp/tests/hooks/destructive-policy.test.ts:93-96` single-quoted rg/grep literals allow; `plugins/sp/tests/hooks/destructive-policy.test.ts:210-211` substitutions in operands ask; plugins/sp destructive-policy 568 pass / 0 fail. |
 
 | Acceptance Criteria | Status | Evidence Type | Evidence |
 |---------------------|--------|---------------|----------|
-| AC1 — Destructive-command policy distinguishes literal data from execution (req: R1) | MET | test | `plugins/sp/tests/hooks/destructive-policy.test.ts` — 568 pass, 0 fail, covering literal-search exemption, pipe-into-executor, nested/path-qualified `-c` and redirection shapes; full gate PASS at `.spur/run/1313-check-receipt.json`; independent re-review verdict FIXED on both blocking findings. |
+| AC1 — Destructive-command policy distinguishes literal data from execution (req: R1) | MET | test | `plugins/sp/tests/hooks/destructive-policy.test.ts:315` matrix runs each case (literals `:93-113` allow; `:153`, `:210`, `:220`, `:230` execution asks); `plugins/sp/tests/hooks/destructive-policy.test.ts:335` redirect does not hide the pipe; `plugins/sp/tests/hooks/destructive-policy.test.ts:389` Claude Code adapter parity — pass this session. |
 - Coverage: N/A (verdict-based; verify pipeline does not measure code coverage)
 
 ### Review
@@ -182,7 +182,7 @@ Confidence: LOW
 
 | # | Priority | Dimension | Finding | Location | Disposition |
 | --- | --- | --- | --- | --- | --- |
-| 1 | P2 (major) | security | Path-qualified and wrapped `-c` scripts skip recursive classification. `isShellBin` (`plugins/sp/lib/destructive-policy.ts:522-524`) accepts only the exact words sh, bash, and zsh, and `classifySegment` tests `head.text` (`plugins/sp/lib/destructive-policy.ts:649-653`). Pipeline consumers already use the argv0 basename (`plugins/sp/lib/destructive-policy.ts:617-632`), so a search piped to `/bin/sh` asks (`plugins/sp/tests/hooks/destructive-policy.test.ts:157`). The `-c` path does not. Bare `sh -c` of an escape-normalized `r\m -rf /` asks; `/bin/sh -c`, `/usr/bin/bash -c`, `/bin/zsh -c` of `git\ push --force`, `/usr/bin/env sh -c`, `env /bin/sh -c`, and `command /bin/sh -c` of the same escaped script allow. `sudo`, `exec`, `nice`, and `xargs` before `sh -c` allow the same script. The same miss false-asks `/bin/sh -c` around a literal rg search that bare `sh -c` allows (`plugins/sp/tests/hooks/destructive-policy.test.ts:112`). AC1's no-false-prompt clause and its nested-execution clause are unmet for those spellings. | `plugins/sp/lib/destructive-policy.ts:649-653` | OPEN |
+| 1 | P2 (major) | security | Path-qualified and wrapped `-c` scripts skip recursive classification. `isShellBin` (`plugins/sp/lib/destructive-policy.ts:522-524`) accepts only the exact words sh, bash, and zsh, and `classifySegment` tests `head.text` (`plugins/sp/lib/destructive-policy.ts:649-653`). Pipeline consumers already use the argv0 basename (`plugins/sp/lib/destructive-policy.ts:617-632`), so a search piped to `/bin/sh` asks (`plugins/sp/tests/hooks/destructive-policy.test.ts:157`). The `-c` path does not. Bare `sh -c` of an escape-normalized `r\m -rf /` asks; `/bin/sh -c`, `/usr/bin/bash -c`, `/bin/zsh -c` of `git\ push --force`, `/usr/bin/env sh -c`, `env /bin/sh -c`, and `command /bin/sh -c` of the same escaped script allow. `sudo`, `exec`, `nice`, and `xargs` before `sh -c` allow the same script. The same miss false-asks `/bin/sh -c` around a literal rg search that bare `sh -c` allows (`plugins/sp/tests/hooks/destructive-policy.test.ts:112`). AC1's no-false-prompt clause and its nested-execution clause are unmet for those spellings. | `plugins/sp/lib/destructive-policy.ts:649-653` | FIXED in 1d9722a82 — basename `isShellBin` (`plugins/sp/lib/destructive-policy.ts:540`) and wrapper-aware head (`:696`); guarded by `plugins/sp/tests/hooks/destructive-policy.test.ts:320`; all 13 listed spellings probed 2026-11-06 re-verify (ask/allow as required) |
 
 The hook still decides only through `classifyCommand` at `plugins/sp/scripts/hooks/careful-guard.ts:89`. The lexer stays private in `plugins/sp/lib/destructive-policy.ts`. No separate architecture finding. Literal searches, bare nested shells, and the basename pipeline rule are covered by the shared matrix and the hook parity describe in `plugins/sp/tests/hooks/destructive-policy.test.ts:277-314`.
 
@@ -191,6 +191,9 @@ The hook still decides only through `classifyCommand` at `plugins/sp/scripts/hoo
 | Req | Status | Evidence |
 | --- | --- | --- |
 | R1 | PARTIAL | Literal rg/grep allow at `plugins/sp/tests/hooks/destructive-policy.test.ts:93` and hook payload `plugins/sp/tests/hooks/careful-guard.test.ts:133`. Bare `sh -c` still asks at `plugins/sp/tests/hooks/destructive-policy.test.ts:176`. Path-qualified `-c` does not re-lex: `plugins/sp/lib/destructive-policy.ts:522-524` and `plugins/sp/lib/destructive-policy.ts:649-653` compare the exact argv0, while pipeline consumers use the basename at `plugins/sp/lib/destructive-policy.ts:617-632`. Focused check `(cd plugins/sp && bun test tests/hooks/destructive-policy.test.ts tests/hooks/careful-guard.test.ts)` 476 pass, 0 fail. |
+
+
+**Re-verify 2026-11-06 (forced `/sp:dev-verifyall`):** finding 1 is resolved. The current code classifies every path-qualified, `env`/`command`/`sudo`/`exec`/`nice`/`xargs`-wrapped and escape-normalized `-c` spelling above, and `/bin/sh -c` around a literal rg search now allows. Destructive-policy suite: 568 pass / 0 fail. The PARTIAL verdict above is historical; the current verdict lives in Testing.
 
 ### References
 

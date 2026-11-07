@@ -4,7 +4,7 @@ name: Reject incomplete planning inputs before deriving feature state
 status: done
 template: feature-impl
 created_at: 2026-11-05T20:01:23.912Z
-updated_at: "2026-11-05T23:53:40.507Z"
+updated_at: "2026-11-07T06:50:39.698Z"
 ac_altitude: task-local
 ac_numbering: task-local
 feature_id: F22
@@ -123,11 +123,11 @@ Verification evidence:
 
 | Requirement | Status | Evidence |
 |-------------|--------|----------|
-| R1 | MET | `packages/app/src/services/task-query-ops.ts:110-152` and `packages/app/src/services/feature-service.ts:303-332,895-925` reject unreadable inputs with paths; `packages/app/tests/services/feature-service.test.ts:267-291` proves sync writes nothing. |
+| R1 | MET | `packages/app/src/services/task-query-ops.ts:115` and `packages/app/src/services/task-query-ops.ts:152` throw `PlanningReadError` for unreadable folders/files; `packages/app/src/services/feature-service.ts:939` and `packages/app/src/services/feature-service.ts:960` refuse sync on unreadable linked tasks; `packages/app/src/errors.ts:8` defines the error; packages/app focused run 268 pass / 0 fail. |
 
 | Acceptance Criteria | Status | Evidence Type | Evidence |
 |---------------------|--------|---------------|----------|
-| AC1 — Incomplete planning input cannot silently drive lifecycle state (req: R1) | MET | test | `packages/app/tests/services/task-query-ops.test.ts:59-83` covers unreadable todo/readable done; `packages/app/tests/services/feature-service.test.ts:267-291` proves sync aborts; disposable CLI/oRPC refusal at `.spur/run/6c42d05a-03da-4637-ac8b-d5d138b5a00a/planning-read-refusal.json` names the file with bytes preserved. |
+| AC1 — Incomplete planning input cannot silently drive lifecycle state (req: R1) | MET | test | `packages/app/tests/services/task-query-ops.test.ts:59` unreadable todo beside done fails with its path; `packages/app/tests/services/feature-service.test.ts:267` sync aborts before any status write; `apps/cli/tests/commands/task/list.test.ts:201` CLI exits 1; command this session: chmod 000 todo beside done → `spur task list --folder <tmp> --json` exit 1 with `PlanningReadError: Failed to read planning input …/0002_todo.md: EACCES`. |
 - Coverage: N/A (verdict-based; verify pipeline does not measure code coverage)
 
 ### Review

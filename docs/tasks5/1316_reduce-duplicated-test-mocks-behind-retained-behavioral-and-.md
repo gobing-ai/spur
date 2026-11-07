@@ -4,7 +4,7 @@ name: Reduce duplicated test mocks behind retained behavioral and gate evidence
 status: done
 template: feature-impl
 created_at: 2026-11-05T20:01:23.921Z
-updated_at: "2026-11-07T02:13:52.868Z"
+updated_at: "2026-11-07T06:54:43.091Z"
 ac_altitude: task-local
 ac_numbering: task-local
 feature_id: H16
@@ -133,11 +133,11 @@ probe: not-applicable (no public surface changed)
 
 | Requirement | Status | Evidence |
 |-------------|--------|----------|
-| R1 | MET | `apps/web/src/lib/rpc-fetch.ts:1-46` shared seam re-exported at `apps/web/src/lib/rpc-client.ts:8-17`; divergent duplicate removed, mock imports real seam at `apps/web/tests/test-helpers/rpc-client-mock.ts:19-26`; proof `apps/web/tests/lib/rpc-fetch.test.ts:20-138` |
+| R1 | MET | `apps/web/src/lib/rpc-fetch.ts:1-46` dependency-free injectable fetch seam; `apps/web/src/lib/rpc-client.ts:8-17` client imports the seam at the same path; `apps/web/tests/test-helpers/rpc-client-mock.ts:19-26` mock reuses the real seam instead of a copy; apps/web 76 pass / 0 fail. |
 
 | Acceptance Criteria | Status | Evidence Type | Evidence |
 |---------------------|--------|---------------|----------|
-| AC1 — Test scaffolding shrinks only behind equivalent behavioral evidence (req: R1) | MET | test | `apps/web/tests/lib/rpc-fetch.test.ts:21-138` + isolated mock-identity proof `apps/web/tests/lib/rpc-fetch-mock.ts:7-29`; focused run `(cd apps/web && bun test apps/web/tests/lib/rpc-client.test.ts apps/web/tests/rpc-client.test.ts apps/web/tests/lib/feature-client.test.ts apps/web/tests/modules/features/feature-sync.test.ts apps/web/tests/lib/rpc-fetch.test.ts apps/web/tests/modules/task-kanban/markdown-safety.test.ts)` 63 pass / 0 fail; ordinary discovery `apps/web/tests/modules/task-kanban/markdown-safety.test.ts:12`; mutation probe 4 fail; full gate `spur self exec check` PASS |
+| AC1 — Test scaffolding shrinks only behind equivalent behavioral evidence (req: R1) | MET | test | `apps/web/tests/lib/rpc-fetch.test.ts:21` 30s deadline and TimeoutError for fetch and adapter; `apps/web/tests/lib/rpc-fetch.test.ts:85` method, headers and body preserved; `apps/web/tests/lib/rpc-fetch.test.ts:113` mock shares real fetch state without polluting siblings; `apps/web/tests/modules/task-kanban/markdown-safety.test.ts:12` expected safety probes retained — pass this session. |
 - Coverage: N/A (verdict-based; verify pipeline does not measure code coverage)
 
 ### Review

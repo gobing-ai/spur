@@ -4,7 +4,7 @@ name: Make feature sync and dependency controls match effective runner behavior
 status: done
 template: feature-impl
 created_at: 2026-11-05T20:01:23.909Z
-updated_at: "2026-11-05T22:57:58.390Z"
+updated_at: "2026-11-07T06:49:08.670Z"
 ac_altitude: task-local
 ac_numbering: task-local
 feature_id: F8
@@ -127,13 +127,13 @@ Verification evidence:
 
 | Requirement | Status | Evidence |
 |-------------|--------|----------|
-| R1 | MET | `apps/web/src/modules/features/FeatureDetail.tsx:95` defaults pull; `:415-416` reloads metadata with `{ body: false }`; `apps/web/tests/modules/features/feature-sync.test.ts:17-70` proves pull, disabled push and draft preservation. |
-| R2 | MET | `apps/web/src/modules/features/FeatureDetail.tsx:4,879-895` removes the inert control; `apps/web/tests/modules/features/feature-sync.test.ts:72-91` proves its absence; optional `skipDeps` remains in `apps/web/src/lib/feature-types.ts:58-63`. |
+| R1 | MET | `apps/web/src/modules/features/FeatureDetail.tsx:96` defaults `syncDirection` to pull; `apps/web/src/modules/features/FeatureDetail.tsx:415-417` dispatches the selected direction then reloads with `{ body: false }`; `apps/web/src/modules/features/FeatureDetail.tsx:874-877` disables push; `apps/web/tests/modules/features/feature-sync.test.ts:17` pull/disabled-push/draft test passes (web focused run 104 pass / 0 fail). |
+| R2 | MET | `apps/web/tests/modules/features/feature-sync.test.ts:71-91` proves the dependency control is absent; `apps/web/src/lib/feature-types.ts:62` keeps optional `skipDeps` input compatibility; `apps/server/tests/modules/feature/handlers.test.ts:333` push refusal. |
 
 | Acceptance Criteria | Status | Evidence Type | Evidence |
 |---------------------|--------|---------------|----------|
-| AC1 — Feature sync defaults to the supported direction and preserves drafts (req: R1) | MET | test | `apps/web/tests/modules/features/feature-sync.test.ts:17-70` — rendered pull/disabled-push/draft journey; 44 focused web tests and full 11848-test gate pass. |
-| AC2 — Feature dependency controls reflect effective action semantics (req: R2) | MET | test | `apps/web/tests/modules/features/feature-sync.test.ts:72-91` proves the control is absent; `apps/server/tests/modules/feature/handlers.test.ts` covers accepted action input and push refusal (25 focused server tests pass). |
+| AC1 — Feature sync defaults to the supported direction and preserves drafts (req: R1) | MET | test | `apps/web/tests/modules/features/feature-sync.test.ts:17` — pull default, disabled push, draft preserved; apps/web focused run 104 pass / 0 fail this session. |
+| AC2 — Feature dependency controls reflect effective action semantics (req: R2) | MET | test | `apps/web/tests/modules/features/feature-sync.test.ts:71` — unsupported control removed; `apps/server/tests/modules/feature/handlers.test.ts:333` push refusal. |
 - Coverage: N/A (verdict-based; verify pipeline does not measure code coverage)
 
 ### Review

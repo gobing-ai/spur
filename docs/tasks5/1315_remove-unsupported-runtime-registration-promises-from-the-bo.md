@@ -4,7 +4,7 @@ name: Remove unsupported runtime registration promises from the Board registry
 status: done
 template: feature-impl
 created_at: 2026-11-05T20:01:23.921Z
-updated_at: "2026-11-07T01:19:20.287Z"
+updated_at: "2026-11-07T06:54:42.377Z"
 ac_altitude: task-local
 ac_numbering: task-local
 feature_id: A8
@@ -133,11 +133,11 @@ probe: not-applicable (no public surface changed)
 
 | Requirement | Status | Evidence |
 |-------------|--------|----------|
-| R1 | MET | `apps/web/src/modules/registry.ts:6` and `apps/web/src/modules/registry.ts:33` remove the unsupported operation; `apps/web/tests/modules/registry.test.ts:25` rejects its presence on instances and exports; `apps/web/tests/modules/compose.test.ts:65` proves configured contribution compatibility. Fresh focused check: 50 pass / 0 fail. |
+| R1 | MET | `apps/web/src/modules/registry.ts:6` `Registry` interface carries no runtime root registration; `apps/web/src/modules/registry.ts:33` `createRegistry` from discovered modules only; apps/web 76 pass / 0 fail; emit-board-types 4 pass. |
 
 | Acceptance Criteria | Status | Evidence Type | Evidence |
 |---------------------|--------|---------------|----------|
-| AC1 — Board extension operations no longer promise unsupported registration (req: R1) | MET | test | `apps/web/tests/modules/registry.test.ts:25` proves no callable registration stub; `apps/web/tests/modules/compose.test.ts:65` exercises configured React/iframe composition, rendering, metadata, ordering, defaults and disable/re-enable identity. `apps/web/tests/modules/runtime-distribution.test.ts:51` verifies a fresh distribution; `scripts/commands/emit-board-types.test.ts:18` verifies unchanged public declarations. Fresh focused/declaration checks: 50 + 4 pass, 0 fail; web typecheck exit 0. |
+| AC1 — Board extension operations no longer promise unsupported registration (req: R1) | MET | test | `apps/web/tests/modules/registry.test.ts:25` no unsupported runtime root registration; `apps/web/tests/modules/compose.test.ts:65` configured React and iframe contributions survive toggles; `apps/web/tests/modules/runtime-distribution.test.ts:89` facade assets re-export the promised api; `scripts/commands/emit-board-types.test.ts:18` committed artifact equals generated — pass this session. |
 - Coverage: N/A (verdict-based; verify pipeline does not measure code coverage)
 
 ### Review

@@ -4,7 +4,7 @@ name: Share planning-event invalidation across task and feature views
 status: done
 template: feature-impl
 created_at: 2026-11-05T20:01:23.915Z
-updated_at: "2026-11-06T01:59:08.696Z"
+updated_at: "2026-11-07T06:51:15.775Z"
 ac_altitude: task-local
 ac_numbering: task-local
 feature_id: F73
@@ -129,11 +129,11 @@ API evidence: existing repository consumer patterns plus https://developer.mozil
 
 | Requirement | Status | Evidence |
 |-------------|--------|----------|
-| R1 | MET | `packages/app/src/services/planning-events.ts:20` owns one lazy stream; `packages/app/src/services/planning-events.ts:50` closes the final reference. `apps/web/src/modules/task-kanban/useTasks.ts:224`, `apps/web/src/modules/features/FeaturesShell.tsx:143` and `apps/web/src/modules/features/useFeatureActionProgress.ts:34` share it. Fresh focused check: 39 pass, 0 fail. |
+| R1 | MET | `apps/web/src/lib/planning-events.ts:64` `subscribePlanningEvents` owns one ref-counted stream; consumers `apps/web/src/modules/task-kanban/useTasks.ts:226`, `apps/web/src/modules/features/FeaturesShell.tsx:144`, `apps/web/src/modules/features/useFeatureActionProgress.ts:36`; apps/web focused run 104 pass / 0 fail. |
 
 | Acceptance Criteria | Status | Evidence Type | Evidence |
 |---------------------|--------|---------------|----------|
-| AC1 — Planning live updates share one owned subscription (req: R1) | MET | test | Fresh passing tests at `apps/web/tests/modules/features/planning-live-views.test.ts:32` prove one stream across concurrent task/feature/action consumers, 100-event trailing freshness, connection notifications, ignored process frames and final-unmount cleanup. `apps/web/tests/modules/features/planning-live-views.test.ts:139` proves selected-detail coalescing; `apps/web/tests/modules/features/planning-live-views.test.ts:178` proves cancellation and discarded trailing work. `packages/app/tests/services/planning-events.test.ts:17` proves parse-once filtering, ref-counting and stale-callback rejection. `apps/web/src/lib/process-stream.ts:68` retains its independent sequence cursor and is unchanged in this diff. |
+| AC1 — Planning live updates share one owned subscription (req: R1) | MET | test | `apps/web/tests/modules/features/planning-live-views.test.ts:33` one shared stream, coalesced and released; `apps/web/tests/modules/features/planning-live-views.test.ts:185` unmount aborts in-flight work; `apps/web/tests/lib/planning-events.test.ts:17` lazy open and ref-count; 104 pass / 0 fail. |
 - Coverage: N/A (verdict-based; verify pipeline does not measure code coverage)
 
 ### Review

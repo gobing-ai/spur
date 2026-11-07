@@ -4,7 +4,7 @@ name: Propose safe npm and pnpm bindings through existing init actions
 status: done
 template: feature-impl
 created_at: 2026-11-05T20:01:23.916Z
-updated_at: "2026-11-06T04:17:04.735Z"
+updated_at: "2026-11-07T06:51:58.647Z"
 ac_altitude: task-local
 ac_numbering: task-local
 feature_id: A92
@@ -130,11 +130,11 @@ Gate limitation: `bun apps/cli/src/index.ts task gate 1303 light` recorded FAIL.
 
 | Requirement | Status | Evidence |
 |-------------|--------|----------|
-| R1 | MET | Deterministic selection/refusal at `apps/cli/src/commands/init.ts:88`; exact declared bindings/provenance at `apps/cli/src/commands/init.ts:133`; effective unbound reporting at `apps/cli/src/commands/init.ts:178`. Fresh passing declaration/conflict/default/precedence/preservation cases at `apps/cli/tests/commands/init.test.ts:493`, `apps/cli/tests/commands/init.test.ts:530`, `apps/cli/tests/commands/init.test.ts:555`, `apps/cli/tests/commands/init.test.ts:591`, and `apps/cli/tests/commands/init.test.ts:613`. |
+| R1 | MET | `apps/cli/src/commands/init.ts:95` `detectJsManager` requires unambiguous npm/pnpm evidence; `apps/cli/src/commands/init.ts:128-134` leaves unsupported managers unbound with a diagnostic; `apps/cli/src/commands/init.ts:192` `detectJsBindings` proposes declared scripts; apps/cli focused run (list/refresh/search/init) 110 tests, 0 fail after the 1299 fixture fix. |
 
 | Acceptance Criteria | Status | Evidence Type | Evidence |
 |---------------------|--------|---------------|----------|
-| AC1 — JavaScript project onboarding proposes declared action bindings safely (req: R1) | MET | test | Fresh focused CLI check: 103 pass, 0 fail at `.spur/run/1303/review-final-cli.log:112`; resolver check: 13 pass, 0 fail at `.spur/run/1303/review-final-app.log:18`; public CLI probe: all three journeys pass at `.spur/run/1303-probe/summary.json:1`; effective-default consistency passes at `.spur/run/1303/review-final-consistency.json:1`. |
+| AC1 — JavaScript project onboarding proposes declared action bindings safely (req: R1) | MET | test | `apps/cli/tests/commands/init.test.ts:493` exact declared scripts per manager; `apps/cli/tests/commands/init.test.ts:591` Make targets override scripts; `apps/cli/tests/commands/init.test.ts:613` re-init preserves custom actions byte-for-byte — pass this session. |
 - Coverage: N/A (verdict-based; verify pipeline does not measure code coverage)
 
 ### Review

@@ -4,7 +4,7 @@ name: Reuse an operation-scoped planning snapshot across corpus readers
 status: done
 template: feature-impl
 created_at: 2026-11-05T20:01:23.913Z
-updated_at: "2026-11-06T00:22:24.079Z"
+updated_at: "2026-11-07T06:50:40.444Z"
 ac_altitude: task-local
 ac_numbering: task-local
 feature_id: F22
@@ -124,11 +124,11 @@ Verification evidence:
 
 | Requirement | Status | Evidence |
 |-------------|--------|----------|
-| R1 | MET | `packages/app/src/services/planning-snapshot.ts:72-180` parses once and records duplicate WBS/feature diagnostics; `packages/app/src/services/feature-service.ts:874-920` reuses one snapshot per syncAll; freshness proven by `packages/app/tests/services/planning-snapshot.test.ts:64-82`. |
+| R1 | MET | `packages/app/src/services/planning-snapshot.ts:72` `readPlanningSnapshot` parses the corpus once; `packages/app/src/services/feature-service.ts:874-876` `syncAllFeatures` reuses one snapshot; `packages/app/tests/services/planning-snapshot.test.ts:24-26` duplicate IDs retained with diagnostics; packages/app focused run 268 pass / 0 fail. |
 
 | Acceptance Criteria | Status | Evidence Type | Evidence |
 |---------------------|--------|---------------|----------|
-| AC1 — Corpus snapshots preserve identifiers and cross-folder relationships (req: R1) | MET | test | `packages/app/tests/services/planning-snapshot.test.ts:24-62` proves one parse per file, duplicate WBS/feature diagnostics and cross-folder dependency union; `packages/app/tests/services/feature-service.test.ts:295-320` proves syncAll reads each selected file once. |
+| AC1 — Corpus snapshots preserve identifiers and cross-folder relationships (req: R1) | MET | test | `packages/app/tests/services/planning-snapshot.test.ts:26` duplicate IDs and cross-folder links; `packages/app/tests/services/feature-service.test.ts:295` snapshot sync across features; 268 pass / 0 fail. |
 - Coverage: N/A (verdict-based; verify pipeline does not measure code coverage)
 
 ### Review

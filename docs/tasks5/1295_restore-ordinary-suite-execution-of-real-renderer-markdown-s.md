@@ -4,7 +4,7 @@ name: Restore ordinary-suite execution of real-renderer Markdown security proofs
 status: done
 template: feature-impl
 created_at: 2026-11-05T20:01:23.912Z
-updated_at: "2026-11-05T23:23:32.236Z"
+updated_at: "2026-11-07T06:50:38.911Z"
 ac_altitude: task-local
 ac_numbering: task-local
 feature_id: H16
@@ -119,11 +119,11 @@ Verification evidence:
 
 | Requirement | Status | Evidence |
 |-------------|--------|----------|
-| R1 | MET | `apps/web/tests/modules/task-kanban/markdown-safety-pipeline.tsx:128-262` covers all 12 real-renderer cases; `.spur/run/markdown-safety-proof-result-81498.json` records the parent wrapper's 12 tests, 1203 assertions and zero failures plus its missing/zero/failing-child controls. |
+| R1 | MET | `apps/web/tests/modules/task-kanban/markdown-safety.test.ts:12` pins the expected real-renderer probes; `apps/web/tests/modules/task-kanban/markdown-safety.test.ts:43-45` fails on zero, missing or failed child cases; `apps/web/tests/modules/task-kanban/markdown-safety-pipeline.tsx:128` holds the isolated real-renderer cases; apps/web focused run 104 pass / 0 fail this session (child probe diagnostic printed). |
 
 | Acceptance Criteria | Status | Evidence Type | Evidence |
 |---------------------|--------|---------------|----------|
-| AC1 — Routine tests execute every isolated Markdown security proof (req: R1) | MET | test | `apps/web/tests/modules/task-kanban/markdown-safety.test.ts` + `apps/web/tests/lib/markdown-safety.test.ts:1-55` — 13 pass, 0 fail; direct isolated `apps/web/tests/modules/task-kanban/markdown-safety-pipeline.tsx` — 12 pass, 1203 assertions, JUnit `.spur/run/1295-direct-child.junit.xml`. |
+| AC1 — Routine tests execute every isolated Markdown security proof (req: R1) | MET | test | `apps/web/tests/modules/task-kanban/markdown-safety.test.ts:90` all probes ran; `apps/web/tests/modules/task-kanban/markdown-safety.test.ts:98-114` missing JUnit, zero cases and failing child fail closed; 104 pass / 0 fail. |
 - Coverage: N/A (verdict-based; verify pipeline does not measure code coverage)
 
 ### Review

@@ -4,7 +4,7 @@ name: Preserve bounded exact-search failures and skipped fuzzy outcomes
 status: done
 template: feature-impl
 created_at: 2026-11-05T20:01:23.914Z
-updated_at: "2026-11-05T22:51:16.370Z"
+updated_at: "2026-11-07T06:50:41.937Z"
 ac_altitude: task-local
 ac_numbering: task-local
 feature_id: A34
@@ -131,13 +131,13 @@ Verification evidence:
 
 | Requirement | Status | Evidence |
 |-------------|--------|----------|
-| R1 | MET | `packages/app/src/services/search.ts:251-281` rejects timeout, cap, every non-exit outcome and malformed JSON; `packages/app/tests/services/search.test.ts:225-258` covers all four classes. |
-| R2 | MET | `packages/app/src/services/search.ts:209` preserves skipped-null versus successful-empty; `packages/app/tests/services/search.test.ts:450-476` covers unknown, failed and empty outcomes. |
+| R1 | MET | `packages/app/src/services/search.ts:244` bounds rg with `--max-count`; `packages/app/src/services/search.ts:262-272` raises `SearchError` rg-failed on bounded/abnormal outcomes instead of an empty success; `packages/app/tests/services/search.test.ts:245` bounded output is an explicit failure; packages/app 268 pass / 0 fail. |
+| R2 | MET | `packages/app/src/services/search.ts:197-202` and `packages/app/src/services/search.ts:217` carry fuzzy `skipped` entries into the result; `packages/app/tests/services/search.test.ts:450` failed fuzzy backend keeps the skipped route. |
 
 | Acceptance Criteria | Status | Evidence Type | Evidence |
 |---------------------|--------|---------------|----------|
-| AC1 — Bounded exact search never reports lost matches as an empty success (req: R1) | MET | test | `packages/app/tests/services/search.test.ts` + `packages/app/tests/services/search-zg.test.ts` — 65 pass, 0 fail (`cd packages/app && bun test …`); real-rg cap artifact `.spur/run/69b79df6-9fea-4023-8e0b-efe2f3159d2f/cap-repro/result.json` returns explicit `rg-failed` at 2 MiB. |
-| AC2 — Auto search preserves skipped fuzzy outcomes (req: R2) | MET | test | `apps/cli/tests/commands/self/search.test.ts` — 19 pass, 0 fail (`cd apps/cli && bun test …`); unknown/failed/empty fixtures at `packages/app/tests/services/search.test.ts:450-476` pass. |
+| AC1 — Bounded exact search never reports lost matches as an empty success (req: R1) | MET | test | `packages/app/tests/services/search.test.ts:245`; 268 pass / 0 fail. |
+| AC2 — Auto search preserves skipped fuzzy outcomes (req: R2) | MET | test | `packages/app/tests/services/search.test.ts:450`; `apps/cli/tests/commands/self/search.test.ts:344` CLI auto mode reports zg-not-installed and exits 0 — 19 pass / 0 fail after the fix. |
 - Coverage: N/A (verdict-based; verify pipeline does not measure code coverage)
 
 ### Review
