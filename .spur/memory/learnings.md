@@ -6864,3 +6864,57 @@ cheap fix for an absent lane.
   `Accepted (implemented YYYY-MM-DD)`, changing no decision text, date, or ID.
 - Do not re-churn `cli-contracts.md` heading anchors: the manual `<a id>` slugs and the `04` links
   already disagree, and a heading edit multiplies the mismatch.
+## 2026-11-07 — batch 1317, 1318 (feature D3 / H51)
+
+### 1317 — worker-lost reap on the read path
+
+- **A run's status is whatever its worker last wrote.** Any "is this run dead or just slow?" check
+  belongs on the *single-run read path* (`WorkflowAppService.trace(runId)`), because every follower
+  (`followTrace`, `followRunLog`, the Board, `workflow progress`) already routes through it. One
+  guard there beats a daemon that does not exist.
+- **Reap through the existing guarded writes.** `interruptRun` (`WHERE status='running'`) and
+  `finalizeStale` (`WHERE status IN ('running','pending')`) are already race-safe; a reaper that
+  adds its own status arithmetic loses that for free. `clean`'s per-run body was extractable
+  verbatim into one `reapRun` helper — do that instead of copying it.
+- **`kill(pid, 0)` errs toward alive.** EPERM, a recycled pid and a non-numeric pid all read as
+  alive, so the failure mode is "not reaped", never "green run killed". The step timeout remains
+  the bound for a live-but-wedged worker.
+- **A second status vocabulary is a bug factory.** `interrupted` was a legal `runs.status` but not
+  a `WorkflowProgressProjection.status`, so a reaped run projects as `unknown`. Test the *DB row*
+  when the vocabulary gap is out of scope; do not "fix" it by inventing a mapping.
+- **The run record is a summary, not the authority.** Non-engine terminal writes (cancel, clean,
+  reap) settle the row directly, so each owes one projection into `.state.json`; put that in one
+  exported function and call it after the DB write, never instead of it.
+- **`--follow` on an already-terminal run printed nothing.** Extract the finalized-line renderer and
+  call it from both the first read and the poll loop; a follower that reaps on the first read still
+  needs to say why the run ended.
+
+### 1318 — auto batches keep going, one pinned executor
+
+- **`--auto` and "stop for a human" are contradictory.** An unattended batch implies
+  `--keep-going`; the refine-then-skip precheck pass is one extra step inside that policy, not an
+  exception to it. No new flag — the attended profile keeps the stop-the-batch default.
+- **Batch-level flags must be resolved once per batch.** `--agent auto` re-resolved per task is
+  executor roulette: cold contexts, incomparable runs, `failed-agent` endings. Resolve from the
+  first implement `result.executor` and pin it; retry exactly once, only on `failed-agent`.
+- **Doc-contract tests catch cross-surface drift the prose author cannot see.** The new contract
+  test passed, then the repo's own `flag-contract-parity` C2 gate failed: the `--keep-going` default
+  cell said "off; on with `--auto`" while `dev-operations.md` said "halts on first failure". Fix the
+  *claim shape* (a Default cell is one value; the implication goes in the description), not just the
+  word the gate complained about.
+- **`--worktree` + git hooks:** the fresh tree's `.prototools` is untrusted, so `cog` cannot load
+  and the commit dies in `commit-msg`. `proto trust ./.prototools` in the worktree is the
+  non-bypassing fix; `--no-verify` is not.
+
+### Batch driver observations (host-inline, executor=host)
+
+- The engine loop is honest: `spur workflow run --vars '{"executor":"host"}'` → work item →
+  `spur workflow continue <run> --answer-text .spur/run/<run>/receipts/<state>.json`. The receipt
+  must be a real file with `{runId, state, executor:'host', outcome:'done'}`; the run id is refused
+  otherwise.
+- Both tasks' `done` state failed its final `command.gate` after the task itself was complete:
+  1317 because the verdict cited a test path without its workspace prefix (`tests/...` instead of
+  `packages/app/tests/...`), 1318 because `## Review` had no P1–P4 table. Both are *evidence-format*
+  defects, repaired through the owning surface and re-closed with the same verb — record them
+  `done (run-failed-recovered)`, never re-run the pipeline to flip a run row.
+
