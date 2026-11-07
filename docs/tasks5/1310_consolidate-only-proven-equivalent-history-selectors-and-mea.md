@@ -1,10 +1,10 @@
 ---
 schema_version: 1
 name: Consolidate only proven equivalent history selectors and measures
-status: wip
+status: done
 template: feature-impl
 created_at: 2026-11-05T20:01:23.919Z
-updated_at: "2026-11-07T07:18:34.391Z"
+updated_at: "2026-11-07T16:52:11.632Z"
 ac_altitude: task-local
 ac_numbering: task-local
 feature_id: E94
@@ -16,6 +16,8 @@ tags:
 estimate_hours: 8
 
 dependencies: ["1309"]
+done_forced: "false"
+done_reason: unforced close; PASS artifact at .spur/memory/evidence/1310-verdict.json
 ---
 
 ## 1310. Consolidate only proven equivalent history selectors and measures
@@ -152,4 +154,6 @@ Entry condition was met: `docs/reports/1309-history-parity.json` records schemaV
 - 2026-11-07T07:07:49.053Z todo → wip (system)
 - 2026-11-07T07:17:04.343Z wip → testing (system)
 - 2026-11-07T07:18:34.391Z testing → wip (system)
+- 2026-11-07T16:52:03.950Z wip → testing (system)
+- 2026-11-07T16:52:11.529Z testing → done (system)
 

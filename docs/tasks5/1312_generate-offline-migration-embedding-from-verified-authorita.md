@@ -1,10 +1,10 @@
 ---
 schema_version: 1
 name: Generate offline migration embedding from verified authoritative SQL
-status: testing
+status: done
 template: feature-impl
 created_at: 2026-11-05T20:01:23.920Z
-updated_at: "2026-11-07T07:17:05.354Z"
+updated_at: "2026-11-07T16:51:47.494Z"
 ac_altitude: task-local
 ac_numbering: task-local
 feature_id: A331
@@ -16,6 +16,8 @@ tags:
 estimate_hours: 8
 
 dependencies: ["1311"]
+done_forced: "false"
+done_reason: unforced close; PASS artifact at .spur/memory/evidence/1312-verdict.json
 ---
 
 ## 1312. Generate offline migration embedding from verified authoritative SQL
@@ -164,4 +166,5 @@ Entry condition was met: `docs/reports/1311-migration-ownership.json` records ca
 - 2026-11-07T07:07:49.268Z blocked → todo (system)
 - 2026-11-07T07:07:49.483Z todo → wip (system)
 - 2026-11-07T07:17:05.354Z wip → testing (system)
+- 2026-11-07T16:51:47.382Z testing → done (system)
 
